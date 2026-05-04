@@ -166,9 +166,9 @@ src/
 
 For full documentation with code examples:
 
-- **Core**: `~/SourceRoot/claude-local/reference/elysia/references/` (route, validation, lifecycle, plugin, cookie, macro, eden, websocket, testing, deployment)
-- **Plugins**: `~/SourceRoot/claude-local/reference/elysia/plugins/` (cors, jwt, openapi, opentelemetry, etc.)
-- **Integrations**: `~/SourceRoot/claude-local/reference/elysia/integrations/` (drizzle, better-auth, tanstack-start, etc.)
-- **Patterns**: `~/SourceRoot/claude-local/reference/elysia/patterns/mvc.md`
-- **Examples**: `~/SourceRoot/claude-local/reference/elysia/examples/` (14 .ts files)
+- **Core**: `~/SourceRoot/dotfiles/reference/elysia/references/` (route, validation, lifecycle, plugin, cookie, macro, eden, websocket, testing, deployment)
+- **Plugins**: `~/SourceRoot/dotfiles/reference/elysia/plugins/` (cors, jwt, openapi, opentelemetry, etc.)
+- **Integrations**: `~/SourceRoot/dotfiles/reference/elysia/integrations/` (drizzle, better-auth, tanstack-start, etc.)
+- **Patterns**: `~/SourceRoot/dotfiles/reference/elysia/patterns/mvc.md`
+- **Examples**: `~/SourceRoot/dotfiles/reference/elysia/examples/` (14 .ts files)
 - **Latest docs**: Fetch `https://elysiajs.com/llms.txt` for up-to-date API, then follow specific topic URLs

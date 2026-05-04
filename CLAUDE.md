@@ -1,4 +1,4 @@
-# claude-local — Claude Code Instructions
+# dotfiles — Claude Code Instructions
 
 ## What This Repo Is
 
@@ -7,8 +7,12 @@ outward — edit at either end, git always sees the change here.
 
 Also contains `localai/` — per-machine `mlx-audio` (TTS + STT only) bound to
 `127.0.0.1:8000`. Installed automatically by `make setup` on every Mac.
-LLM is no longer local — Hermes uses cloud Sonnet 4.6 via the IU unified
-endpoint. See `localai/README.md` and the `/localai` skill.
+LLM is not local — Hermes uses cloud Sonnet 4.6 via the IU unified endpoint.
+See `localai/README.md` and the `/localai` skill.
+
+**Companion repo: `~/SourceRoot/hermes-agent`** — Hermes Agent setup (Mac Mini-only).
+Pulls the `localai-helper` plist template from `localai/com.localai.helper.plist.template`
+in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 
 **After any edit: commit here.**
 
@@ -65,44 +69,6 @@ Two 1Password accounts are configured:
 1. Install 1Password + enable CLI integration (Settings → Developer → Enable CLI)
 2. `make setup` — will fail fast with instructions if 1Password isn't ready
 
-## Hermes Agent
-
-Config templates, skill files, and .env.tpl are versioned here under `hermes/`. Deployed to `~/.hermes/` on Mac Mini **only** via `make hermes` (separate from universal `make setup` — other Macs don't run Hermes).
-
-`make setup` installs `mlx-audio` (port 8000) on every Mac for Claude Code TTS/STT. `make hermes` is Mac Mini-only and additionally installs: Hermes config symlinks, `localai-helper` FastAPI plist (port 8001), and the cron entries for liveness + backup. Run `make hermes-status` to verify.
-
-**Symlinks into `~/.hermes/` (created by `make hermes`):**
-
-| File here | Live path | Notes |
-|-|-|-|
-| `hermes/config.yaml` | `~/.hermes/config.yaml` | symlink — edit here, live immediately |
-| `hermes/.env.tpl` | `~/.hermes/.env.tpl` | symlink |
-| `hermes/SOUL.md` | `~/.hermes/SOUL.md` | symlink |
-| `hermes/cron/` | `~/.hermes/cron/` | symlink — Hermes-driven (LLM) cron jobs |
-| `hermes/scripts/` | `~/.hermes/scripts/` | symlink — Hermes cron pre-run scripts (security check requires they live under `HERMES_HOME/scripts/`). Also holds host-level shell scripts. |
-| `hermes/hooks/` | `~/.hermes/hooks/` | symlink — add hooks here |
-| `hermes/skills/{name}/` | `~/.hermes/skills/{name}/` | symlink per skill (homelab-api, infrastructure, tasks, schedule, weather, slack) |
-| `hermes/USER.md` | `~/.hermes/memories/USER.md` | copied — Hermes writes to it |
-
-**Host-level scripts (called by macOS `crontab`, not symlinked):**
-- `hermes/scripts/hermes-liveness.sh` — every 5 min, checks gateway state + Slack connection, pings `$UPTIME_PUSH_HERMES` on success.
-- `hermes/scripts/hermes-backup.sh` — daily 03:00, rsyncs `~/.hermes/` → `homelab:/mnt/hdd/backups/hermes/`, pings `$UPTIME_PUSH_BACKUP` on success.
-
-**Hermes cron pre-run scripts (executed by `hermes-agent` before each cron run, *not* by macOS crontab):**
-- `hermes/scripts/briefing-context.py` — reads `briefing-state.json` and emits `BRIEFING_CITY` + `BRIEFING_SUPPRESSED` for the morning briefing prompt. Output is appended as `## Script Output` block.
-- `hermes/scripts/briefing-state.json` — *gitignored* runtime config (city + vacation flag). Edit locally; never commits. Seeded from `briefing-state.example.json` on first `make hermes`.
-
-**Homelab API integration:** `hermes/skills/homelab-api/SKILL.md` endpoint tables are regenerated from `https://api.jkrumm.com/docs/json` by the homelab `/docs` skill. Domain skills (infrastructure, tasks, schedule, weather, slack) are updated in the same pass if their endpoints changed.
-
-**API secret:** `op://common/api/SECRET` (account `tkrumm`) — wired in `.env.tpl`.
-
-**Local modifications to upstream (re-apply after `hermes update`):**
-- `~/.hermes/hermes-agent/tools/tts_tool.py` — thin client over `localai-helper:8001/v1/tts/synthesize`; replaces 1600-line multi-provider original. Source: `hermes/patches/tts_tool.py`. Re-apply: `cp ~/SourceRoot/claude-local/hermes/patches/tts_tool.py ~/.hermes/hermes-agent/tools/tts_tool.py`
-- `~/.hermes/hermes-agent/gateway/platforms/slack.py` — `format_message()` pre-steps: normalize `*` list markers to `-`, strip backticks from inline code containing emoji shortcodes
-- `~/.hermes/hermes-agent/gateway/platforms/slack.py` — `_resolve_thread_ts` synthetic-thread guard + defensive retry-without-thread on `cannot_reply_to_message` in `send()`. Mirrors upstream commits `4b5a88d71` and `41d9d0807` semantics. Source: `hermes/patches/slack-cannot-reply-to-message.patch`. Re-apply: `cd ~/.hermes/hermes-agent && git apply ~/SourceRoot/claude-local/hermes/patches/slack-cannot-reply-to-message.patch`. **Remove once Hermes v0.12+ ships** — both fixes will be upstream.
-- `~/.hermes/hermes-agent/gateway/config.py` — bridge `reply_in_thread`, `reply_broadcast`, `reply_to_mode` from `slack:` YAML section into platform `extra` dict (upstream still only bridges `require_mention`, `allow_bots`, `free_response_channels` as of 0.11.0). Note: `reply_to_mode` is consumed by telegram/discord only, not Slack — dropped from `slack:` section in `config.yaml`.
-- `~/.hermes/hermes-agent/cron/scheduler.py` — skip `resolve_channel_name` for raw Slack channel IDs in `_resolve_single_delivery_target`. Source: `hermes/patches/scheduler-skip-resolver-for-slack-ids.patch`. Re-apply: `cd ~/.hermes/hermes-agent && git apply ~/SourceRoot/claude-local/hermes/patches/scheduler-skip-resolver-for-slack-ids.patch`. Without this, `--deliver slack:<C…ID>` fails with `channel_not_found` for any channel that has exactly one thread session in the directory (prefix-match collision against compound `C…:thread_ts` entries).
-
 ## Editing Rules
 
 **Adding a skill:** create `skills/{name}/SKILL.md` here, then `make setup`.
@@ -145,7 +111,7 @@ cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.src == "fetch_usage")'
 
 **cmux** (`/Applications/cmux.app`) is the primary terminal — a macOS-native multiplexer built on top of Ghostty. It is **not tmux**. cmux reads `~/.config/ghostty/config` for terminal rendering (same syntax as Ghostty) and stores its own app preferences (appearance mode, sidebar, etc.) in macOS defaults under `com.cmuxterm.app`.
 
-**Config files (two separate files, both managed in claude-local):**
+**Config files (two separate files, both managed in dotfiles):**
 - `~/Library/Application Support/com.mitchellh.ghostty/config` — **primary cmux config** (font, theme, cursor, padding). This is what cmux actually reads.
 - `~/.config/ghostty/config` — shell integration + option key settings only; lower priority
 

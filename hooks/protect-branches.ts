@@ -29,7 +29,7 @@ interface HookInput {
 const PROTECTED = ["main", "master"];
 
 // Repos where direct pushes to main/master are allowed (infra/config repos, no PR workflow)
-const UNPROTECTED_REPOS = ["homelab", "homelab-private", "vps", "claude-local", "basalt-ui-playground", "sideclaw"];
+const UNPROTECTED_REPOS = ["homelab", "homelab-private", "vps", "dotfiles", "basalt-ui-playground", "sideclaw"];
 
 function getRepoName(cwd: string): string | null {
   const result = Bun.spawnSync(["git", "remote", "get-url", "origin"], {

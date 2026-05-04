@@ -1,4 +1,4 @@
-# claude-local
+# dotfiles
 
 Version-controlled source of truth for Johannes's local Claude Code setup.
 Config files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
@@ -52,7 +52,7 @@ Small tasks (infra, config): implement → `/ship` (auto-detects direct-to-maste
 ## Structure
 
 ```text
-claude-local/
+dotfiles/
 ├── config/          CLAUDE.md files, zshrc, zsh modules, gitconfig, ghostty,
 │                    settings.template.json, localias
 ├── rules/           7 global rules (→ ~/.claude/rules/)
@@ -66,8 +66,8 @@ claude-local/
 ## Bootstrap
 
 ```bash
-git clone git@github.com:jkrumm/claude-local.git ~/SourceRoot/claude-local
-cd ~/SourceRoot/claude-local
+git clone git@github.com:jkrumm/dotfiles.git ~/SourceRoot/dotfiles
+cd ~/SourceRoot/dotfiles
 make setup        # idempotent — safe to re-run after any change
 coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 ```
@@ -76,7 +76,7 @@ coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 
 ## Symlink Map
 
-| claude-local | Live path |
+| dotfiles | Live path |
 |-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` |
 | `config/sourceroot.CLAUDE.md` | `~/SourceRoot/CLAUDE.md` |

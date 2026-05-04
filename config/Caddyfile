@@ -1,4 +1,4 @@
-# Local development reverse proxy — version-controlled in claude-local
+# Local development reverse proxy — version-controlled in dotfiles
 #
 # Adding a service:
 #   name.test {

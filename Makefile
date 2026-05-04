@@ -1,4 +1,4 @@
-CLAUDE_LOCAL := $(shell pwd)
+DOTFILES_DIR := $(shell pwd)
 CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
 BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
@@ -11,7 +11,7 @@ BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 .PHONY: setup
 setup:
 	@echo ""
-	@echo "  Setting up claude-local..."
+	@echo "  Setting up dotfiles..."
 	@echo ""
 	@$(MAKE) --no-print-directory _check-prereqs
 	@$(MAKE) --no-print-directory _setup-brew
@@ -89,26 +89,26 @@ _setup-claude:
 _setup-config:
 	@echo "  Config..."
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/global.CLAUDE.md" \
+		SRC="$(DOTFILES_DIR)/config/global.CLAUDE.md" \
 		DST="$(CLAUDE_DIR)/CLAUDE.md"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/sourceroot.CLAUDE.md" \
+		SRC="$(DOTFILES_DIR)/config/sourceroot.CLAUDE.md" \
 		DST="$(SOURCEROOT)/CLAUDE.md"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/zshrc" \
+		SRC="$(DOTFILES_DIR)/config/zshrc" \
 		DST="$(HOME)/.zshrc"
 	@mkdir -p $(HOME)/.zsh
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/zsh" \
+		SRC="$(DOTFILES_DIR)/config/zsh" \
 		DST="$(HOME)/.zsh/conf.d"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/gitconfig" \
+		SRC="$(DOTFILES_DIR)/config/gitconfig" \
 		DST="$(HOME)/.gitconfig"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/gitconfig-personal" \
+		SRC="$(DOTFILES_DIR)/config/gitconfig-personal" \
 		DST="$(HOME)/.gitconfig-personal"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/gitconfig-work" \
+		SRC="$(DOTFILES_DIR)/config/gitconfig-work" \
 		DST="$(HOME)/.gitconfig-work"
 
 .PHONY: _setup-tools
@@ -179,7 +179,7 @@ _setup-caddy:
 	@brew list caddy &>/dev/null || brew install caddy
 	@echo "    ✓ caddy $$(caddy version 2>/dev/null | head -1)"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/Caddyfile" \
+		SRC="$(DOTFILES_DIR)/config/Caddyfile" \
 		DST="$(BREW_PREFIX)/etc/Caddyfile"
 	@# Clean up legacy Caddyfile.localai.conf from older Tailscale-fronted setup
 	@LEGACY="$(BREW_PREFIX)/etc/Caddyfile.localai.conf"; \
@@ -229,9 +229,9 @@ _setup-caddy:
 	@brew services start sleepwatcher >/dev/null 2>&1 || brew services restart sleepwatcher >/dev/null 2>&1 || true
 	@echo "    ✓ sleepwatcher service"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/scripts/wakeup.sh" \
+		SRC="$(DOTFILES_DIR)/scripts/wakeup.sh" \
 		DST="$(HOME)/.wakeup"
-	@chmod +x $(CLAUDE_LOCAL)/scripts/wakeup.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/wakeup.sh
 
 .PHONY: _setup-pnpm
 _setup-pnpm:
@@ -326,7 +326,7 @@ _setup-ssh:
 	@chmod 700 "$(HOME)/.ssh"
 	@HOSTNAME=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
 	if [ -n "$$HOSTNAME" ]; then \
-		sed "s/__IUMAC_HOSTNAME__/$$HOSTNAME/" "$(CLAUDE_LOCAL)/config/ssh_config" > "$(HOME)/.ssh/config"; \
+		sed "s/__IUMAC_HOSTNAME__/$$HOSTNAME/" "$(DOTFILES_DIR)/config/ssh_config" > "$(HOME)/.ssh/config"; \
 		chmod 600 "$(HOME)/.ssh/config"; \
 		echo "    ✓ ~/.ssh/config written (iumac → $$HOSTNAME)"; \
 	else \
@@ -337,43 +337,40 @@ _setup-ssh:
 _setup-rules:
 	@echo "  Rules (global → ~/.claude/rules/)..."
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/rules" \
+		SRC="$(DOTFILES_DIR)/rules" \
 		DST="$(CLAUDE_DIR)/rules"
 
 .PHONY: _setup-hooks
 _setup-hooks:
 	@echo "  Hooks..."
 	@mkdir -p $(CLAUDE_DIR)/hooks
-	@chmod +x $(CLAUDE_LOCAL)/hooks/*.ts
+	@chmod +x $(DOTFILES_DIR)/hooks/*.ts
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/hooks/notify.ts" \
+		SRC="$(DOTFILES_DIR)/hooks/notify.ts" \
 		DST="$(CLAUDE_DIR)/hooks/notify.ts"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/hooks/protect-branches.ts" \
+		SRC="$(DOTFILES_DIR)/hooks/protect-branches.ts" \
 		DST="$(CLAUDE_DIR)/hooks/protect-branches.ts"
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/hooks/docker-makefile.ts" \
+		SRC="$(DOTFILES_DIR)/hooks/docker-makefile.ts" \
 		DST="$(CLAUDE_DIR)/hooks/docker-makefile.ts"
 
 .PHONY: _setup-scripts
 _setup-scripts:
 	@echo "  Scripts..."
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/scripts/queue.ts" \
-		DST="$(CLAUDE_DIR)/queue.ts"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/scripts/statusline.sh" \
+		SRC="$(DOTFILES_DIR)/scripts/statusline.sh" \
 		DST="$(CLAUDE_DIR)/statusline.sh"
-	@chmod +x $(CLAUDE_LOCAL)/scripts/fetch_usage.py
+	@chmod +x $(DOTFILES_DIR)/scripts/fetch_usage.py
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/scripts/fetch_usage.py" \
+		SRC="$(DOTFILES_DIR)/scripts/fetch_usage.py" \
 		DST="$(CLAUDE_DIR)/fetch_usage.py"
 
 .PHONY: _setup-skills
 _setup-skills:
 	@echo "  Skills (SourceRoot-scoped → ~/SourceRoot/.claude/skills/)..."
 	@mkdir -p $(SOURCEROOT)/.claude/skills
-	@for skill in $(CLAUDE_LOCAL)/skills/*/; do \
+	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
 		$(MAKE) --no-print-directory _link SRC="$$skill" DST="$(SOURCEROOT)/.claude/skills/$$name"; \
 	done
@@ -382,13 +379,13 @@ _setup-skills:
 _setup-settings:
 	@echo "  Claude Code settings..."
 	@if [ ! -f "$(CLAUDE_DIR)/settings.json" ]; then \
-		jq 'del(._NOTE)' "$(CLAUDE_LOCAL)/config/settings.template.json" \
+		jq 'del(._NOTE)' "$(DOTFILES_DIR)/config/settings.template.json" \
 			> "$(CLAUDE_DIR)/settings.json"; \
 		echo "    ✓ settings.json created from template"; \
 	else \
 		jq --slurpfile existing "$(CLAUDE_DIR)/settings.json" \
 			'del(._NOTE) * {permissions: ($$existing[0].permissions // .permissions)} * ($$existing[0] | {model, effortLevel, alwaysThinkingEnabled} | with_entries(select(.value != null)))' \
-			"$(CLAUDE_LOCAL)/config/settings.template.json" \
+			"$(DOTFILES_DIR)/config/settings.template.json" \
 			> /tmp/claude-settings-merged.json \
 		&& mv /tmp/claude-settings-merged.json "$(CLAUDE_DIR)/settings.json"; \
 		echo "    ✓ settings.json merged (template applied, permissions + model/effort preserved)"; \
@@ -398,7 +395,7 @@ _setup-settings:
 _setup-gitignore:
 	@echo "  Global gitignore..."
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/gitignore_global" \
+		SRC="$(DOTFILES_DIR)/config/gitignore_global" \
 		DST="$(HOME)/.gitignore_global"
 	@git config --global core.excludesfile "~/.gitignore_global"
 	@echo "    ✓ git config core.excludesfile"
@@ -408,10 +405,10 @@ _setup-ghostty:
 	@echo "  Ghostty (Blueprint v6 themes)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(CLAUDE_LOCAL)/config/ghostty/config" \
+		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
 		DST="$(HOME)/.config/ghostty/config"
 	@# cmux primary config (path has spaces — inline instead of _link)
-	@_src="$(CLAUDE_LOCAL)/config/ghostty/config.cmux"; \
+	@_src="$(DOTFILES_DIR)/config/ghostty/config.cmux"; \
 	_dst="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config"; \
 	if [ -L "$$_dst" ] && [ "$$(readlink "$$_dst")" = "$$_src" ]; then \
 		echo "    · config.cmux (ok)"; \
@@ -425,10 +422,10 @@ _setup-ghostty:
 		echo "    ✓ config.cmux"; \
 	fi
 	@$(MAKE) --no-print-directory _copy \
-		SRC="$(CLAUDE_LOCAL)/config/ghostty/themes/basalt-ui-light" \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
 	@$(MAKE) --no-print-directory _copy \
-		SRC="$(CLAUDE_LOCAL)/config/ghostty/themes/basalt-ui-dark" \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
 	@# Clean up old unmanaged theme files
 	@for old in ayu-mirage basalt-ui; do \
@@ -522,7 +519,6 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/protect-branches.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/docker-makefile.ts"
 	@echo "  Scripts"
-	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/queue.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/statusline.sh"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/fetch_usage.py"
 	@echo "  Gitignore"
@@ -535,13 +531,13 @@ status:
 		echo "    ✗ config.cmux [not symlinked — run make setup]"; \
 	fi
 	@$(MAKE) --no-print-directory _check-copy \
-		SRC="$(CLAUDE_LOCAL)/config/ghostty/themes/basalt-ui-light" \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
 	@$(MAKE) --no-print-directory _check-copy \
-		SRC="$(CLAUDE_LOCAL)/config/ghostty/themes/basalt-ui-dark" \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
-	@echo "  Skills ($(shell ls $(CLAUDE_LOCAL)/skills/ | wc -l | xargs) — SourceRoot only)"
-	@for skill in $(CLAUDE_LOCAL)/skills/*/; do \
+	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — SourceRoot only)"
+	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
 		$(MAKE) --no-print-directory _check DST="$(SOURCEROOT)/.claude/skills/$$name"; \
 	done
@@ -612,13 +608,13 @@ _check-copy:
 
 .PHONY: github-config
 github-config:
-	@chmod +x $(CLAUDE_LOCAL)/scripts/github-config.sh
-	@$(CLAUDE_LOCAL)/scripts/github-config.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
+	@$(DOTFILES_DIR)/scripts/github-config.sh
 
 .PHONY: github-config-dry
 github-config-dry:
-	@chmod +x $(CLAUDE_LOCAL)/scripts/github-config.sh
-	@DRY_RUN=1 $(CLAUDE_LOCAL)/scripts/github-config.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
+	@DRY_RUN=1 $(DOTFILES_DIR)/scripts/github-config.sh
 
 # ============================================================================
 # cqueue — web dashboard (http://cqueue.local)
@@ -667,7 +663,7 @@ clean:
 # ============================================================================
 
 LAUNCHAGENTS  := $(HOME)/Library/LaunchAgents
-LOCALAI_DIR   := $(CLAUDE_LOCAL)/localai
+LOCALAI_DIR   := $(DOTFILES_DIR)/localai
 MLX_AUDIO_BIN := $(HOME)/.local/bin/mlx_audio.server
 MLX_AUDIO_PY  := $(HOME)/.local/share/uv/tools/mlx-audio/bin/python3
 MLX_SPEECH_BIN := $(HOME)/.local/bin/mlx-speech
@@ -744,10 +740,12 @@ _setup-localai:
 # Universal services (every Mac):
 #   com.localai.audio — mlx-audio :8000 (STT only, Parakeet)
 #   com.localai.fish  — Fish S2 Pro :8002 (TTS, both DE and EN)
-# Hermes-only (Mac Mini, installed via `make hermes`):
-#   com.localai.helper — :8001 FastAPI orchestration
+#
+# The Hermes-only `com.localai.helper` plist (FastAPI orchestration on :8001)
+# is rendered by hermes-agent's `make setup` — its template still lives here
+# under `localai/com.localai.helper.plist.template` for colocation with the
+# other localai plists.
 LOCALAI_AUDIO_PLISTS  := com.localai.audio com.localai.fish
-LOCALAI_HERMES_PLISTS := com.localai.helper
 
 # Render universal plists (audio only) and reload changed ones.
 .PHONY: localai-setup
@@ -774,9 +772,14 @@ _render-plists:
 		fi; \
 	done
 
+# `start`/`stop` cover the Hermes helper too if it's been installed by
+# hermes-agent — that's why we glob the LaunchAgents directory rather than just
+# iterating LOCALAI_AUDIO_PLISTS.
+LOCALAI_ALL_PLISTS := com.localai.audio com.localai.fish com.localai.helper
+
 .PHONY: start
 start:
-	@for label in $(LOCALAI_AUDIO_PLISTS) $(LOCALAI_HERMES_PLISTS); do \
+	@for label in $(LOCALAI_ALL_PLISTS); do \
 		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
 		[ -f "$$PLIST" ] || continue; \
 		launchctl load "$$PLIST" 2>/dev/null \
@@ -786,7 +789,7 @@ start:
 
 .PHONY: stop
 stop:
-	@for label in $(LOCALAI_AUDIO_PLISTS) $(LOCALAI_HERMES_PLISTS); do \
+	@for label in $(LOCALAI_ALL_PLISTS); do \
 		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
 		[ -f "$$PLIST" ] || continue; \
 		launchctl unload "$$PLIST" 2>/dev/null \
@@ -795,132 +798,13 @@ stop:
 	done
 
 # ============================================================================
-# Hermes — Mac Mini-only setup (FastAPI helper, config symlinks, cron)
-# Universal `make setup` does NOT include this.
-# ============================================================================
-
-HERMES_REPO := $(CLAUDE_LOCAL)/hermes
-HERMES_DIR  := $(HOME)/.hermes
-HERMES_SKILLS := homelab-api infrastructure schedule slack tasks weather
-
-.PHONY: hermes
-hermes:
-	@echo ""
-	@echo "  Setting up Hermes Agent (Mac Mini-only)..."
-	@echo ""
-	@$(MAKE) --no-print-directory _hermes-precheck
-	@$(MAKE) --no-print-directory _hermes-symlinks
-	@$(MAKE) --no-print-directory _hermes-helper
-	@$(MAKE) --no-print-directory _hermes-cron
-	@echo ""
-	@echo "  Done. Follow-up:"
-	@echo "    1. Create push monitors in UptimeKuma UI (Hermes Agent - Push, Hermes Backup - Push)"
-	@echo "    2. Store push URLs:"
-	@echo "         op item create --account tkrumm --vault hermes --category login \\"
-	@echo "           --title uptime-kuma agent-push-url=<url> backup-push-url=<url>"
-	@echo "    3. Rebuild ~/.hermes/.env (see hermes/README.md \"Rebuild .env\")"
-	@echo ""
-
-.PHONY: _hermes-precheck
-_hermes-precheck:
-	@echo "  Prerequisites..."
-	@if ! command -v hermes >/dev/null 2>&1; then \
-		echo "    ✗ hermes CLI not installed — run install per hermes/README.md §2"; \
-		exit 1; \
-	fi
-	@echo "    ✓ hermes $$(hermes --version 2>/dev/null | head -1)"
-	@mkdir -p "$(HERMES_DIR)"
-	@mkdir -p "$(HERMES_DIR)/memories"
-	@mkdir -p "$(HERMES_DIR)/skills"
-
-.PHONY: _hermes-symlinks
-_hermes-symlinks:
-	@echo "  Hermes config symlinks..."
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/config.yaml" \
-		DST="$(HERMES_DIR)/config.yaml"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/.env.tpl" \
-		DST="$(HERMES_DIR)/.env.tpl"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/SOUL.md" \
-		DST="$(HERMES_DIR)/SOUL.md"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/cron" \
-		DST="$(HERMES_DIR)/cron"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/scripts" \
-		DST="$(HERMES_DIR)/scripts"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(HERMES_REPO)/hooks" \
-		DST="$(HERMES_DIR)/hooks"
-	@for skill in $(HERMES_SKILLS); do \
-		$(MAKE) --no-print-directory _link \
-			SRC="$(HERMES_REPO)/skills/$$skill" \
-			DST="$(HERMES_DIR)/skills/$$skill"; \
-	done
-	@$(MAKE) --no-print-directory _copy \
-		SRC="$(HERMES_REPO)/USER.md" \
-		DST="$(HERMES_DIR)/memories/USER.md"
-	@if [[ ! -f "$(HERMES_REPO)/scripts/briefing-state.json" ]]; then \
-		echo "  Seeding briefing-state.json from .example..."; \
-		cp "$(HERMES_REPO)/scripts/briefing-state.example.json" \
-			"$(HERMES_REPO)/scripts/briefing-state.json"; \
-	fi
-
-.PHONY: _hermes-helper
-_hermes-helper:
-	@echo "  localai-helper (FastAPI orchestration on :8001)..."
-	@$(MAKE) --no-print-directory _render-plists PLISTS="$(LOCALAI_HERMES_PLISTS)"
-
-.PHONY: _hermes-cron
-_hermes-cron:
-	@echo "  Cron (liveness + backup, both ping UptimeKuma)..."
-	@chmod +x $(HERMES_REPO)/scripts/hermes-liveness.sh $(HERMES_REPO)/scripts/hermes-backup.sh
-	@LIVENESS="*/5 * * * * $(HERMES_REPO)/scripts/hermes-liveness.sh >> /tmp/hermes-liveness.log 2>&1"; \
-	BACKUP="0 3 * * * $(HERMES_REPO)/scripts/hermes-backup.sh >> /tmp/hermes-backup.log 2>&1"; \
-	CURRENT=$$(crontab -l 2>/dev/null || true); \
-	NEW=$$(echo "$$CURRENT" | grep -v "hermes-liveness.sh" | grep -v "hermes-backup.sh"); \
-	printf '%s\n%s\n%s\n' "$$NEW" "$$LIVENESS" "$$BACKUP" | sed '/^$$/d' | crontab -; \
-	echo "    ✓ crontab installed (*/5 liveness, 03:00 backup)"
-
-.PHONY: hermes-status
-hermes-status:
-	@echo ""
-	@echo "  Hermes setup status"
-	@command -v hermes >/dev/null 2>&1 \
-		&& echo "    ✓ hermes CLI" \
-		|| echo "    ✗ hermes CLI [not installed]"
-	@$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/config.yaml"
-	@$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/.env.tpl"
-	@$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/SOUL.md"
-	@$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/cron"
-	@$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/hooks"
-	@for skill in $(HERMES_SKILLS); do \
-		$(MAKE) --no-print-directory _check DST="$(HERMES_DIR)/skills/$$skill"; \
-	done
-	@[ -f "$(HERMES_DIR)/.env" ] \
-		&& echo "    ✓ .env (rebuilt from 1Password)" \
-		|| echo "    ✗ .env [missing — see hermes/README.md \"Rebuild .env\"]"
-	@[ -f "$(LAUNCHAGENTS)/com.localai.helper.plist" ] \
-		&& echo "    ✓ com.localai.helper.plist" \
-		|| echo "    ✗ com.localai.helper.plist [missing — run make hermes]"
-	@crontab -l 2>/dev/null | grep -q "hermes-liveness.sh" \
-		&& echo "    ✓ liveness cron" \
-		|| echo "    ✗ liveness cron [missing — run make hermes]"
-	@crontab -l 2>/dev/null | grep -q "hermes-backup.sh" \
-		&& echo "    ✓ backup cron" \
-		|| echo "    ✗ backup cron [missing — run make hermes]"
-	@echo ""
-
-# ============================================================================
 # Help
 # ============================================================================
 
 .PHONY: help
 help:
 	@echo ""
-	@echo "  claude-local"
+	@echo "  dotfiles"
 	@echo ""
 	@echo "  make setup              Idempotent full setup — symlinks, secrets, settings, browser"
 	@echo "  make clean              Purge brew/npm/pnpm/bun caches"
@@ -932,8 +816,7 @@ help:
 	@echo "  make start          Start mlx-audio (+ helper if installed)"
 	@echo "  make stop           Stop mlx-audio (+ helper if installed)"
 	@echo ""
-	@echo "  make hermes         Mac Mini-only — Hermes config symlinks, FastAPI helper, cron"
-	@echo "  make hermes-status  Verify Hermes symlinks, helper plist, crontab entries"
+	@echo "  Hermes Agent setup lives in ~/SourceRoot/hermes-agent — run make setup there."
 	@echo ""
 	@echo "  make up         Start cqueue dashboard"
 	@echo "  make down       Stop cqueue"

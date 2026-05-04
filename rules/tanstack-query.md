@@ -95,4 +95,4 @@ Guidelines for TanStack Query patterns — data fetching, caching, mutations, an
 
 ## Detailed Rules
 
-For full explanations with code examples, read individual rules in `~/SourceRoot/claude-local/reference/tanstack-query/`
+For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/tanstack-query/`

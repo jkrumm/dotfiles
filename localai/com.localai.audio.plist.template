@@ -5,7 +5,7 @@
   <key>Label</key><string>com.localai.audio</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/claude-local/localai/bin/start-mlx-audio.sh</string>
+    <string>__HOME__/SourceRoot/dotfiles/localai/bin/start-mlx-audio.sh</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

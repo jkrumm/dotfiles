@@ -85,5 +85,5 @@
     "typescript-lsp@claude-plugins-official": true
   },
 
-  "_NOTE": "Template — real ~/.claude/settings.json is NOT version-controlled. make setup creates from template or jq-merges (preserving permissions + model/effort). All skills are VCS'd in claude-local/skills/ and symlinked to ~/SourceRoot/.claude/skills/."
+  "_NOTE": "Template — real ~/.claude/settings.json is NOT version-controlled. make setup creates from template or jq-merges (preserving permissions + model/effort). All skills are VCS'd in dotfiles/skills/ and symlinked to ~/SourceRoot/.claude/skills/."
 }

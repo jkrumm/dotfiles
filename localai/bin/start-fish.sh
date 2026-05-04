@@ -9,7 +9,7 @@
 set -u
 
 PORT="${FISH_PORT:-8002}"
-ROOT="$HOME/SourceRoot/claude-local/localai/fish-s2-pro"
+ROOT="$HOME/SourceRoot/dotfiles/localai/fish-s2-pro"
 
 cd "$ROOT" || exit 1
 

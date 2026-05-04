@@ -8,7 +8,7 @@ model: haiku
 
 Per-machine `mlx-audio` (TTS + STT) bound to `127.0.0.1:8000`. Installed automatically by `make setup`. No Tailscale exposure, no Ollama, no LLM — Hermes uses cloud Sonnet 4.6 via the IU unified endpoint.
 
-**Full documentation:** Read `~/SourceRoot/claude-local/localai/README.md` first.
+**Full documentation:** Read `~/SourceRoot/dotfiles/localai/README.md` first.
 
 ## Stack Overview
 
@@ -35,7 +35,7 @@ Hermes calls `:8001/v1/tts/synthesize` (the helper) for all TTS. The helper hand
 Run the Makefile target — does everything (mlx-audio, deps, ffmpeg, m4a patch, plist install + load):
 
 ```bash
-cd ~/SourceRoot/claude-local
+cd ~/SourceRoot/dotfiles
 make _setup-localai
 ```
 
@@ -74,7 +74,7 @@ uv pip install --python ~/.local/share/uv/tools/mlx-audio/bin/python3 \
 
 # Re-apply m4a STT patch (uv tool upgrade overwrites server.py)
 patch -p1 -d ~/.local/share/uv/tools/mlx-audio/lib/python3.12/site-packages \
-  < ~/SourceRoot/claude-local/localai/patches/mlx-audio-m4a-stt.patch
+  < ~/SourceRoot/dotfiles/localai/patches/mlx-audio-m4a-stt.patch
 
 # Restart
 launchctl kickstart -k gui/$(id -u)/com.localai.audio

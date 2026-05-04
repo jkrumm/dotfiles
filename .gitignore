@@ -28,15 +28,6 @@ queue.md
 # LocalAI runtime data
 localai/monitor.db
 
-# Hermes runtime state (cron jobs registry + per-run output)
-hermes/cron/jobs.json
-hermes/cron/output/
-
-# Hermes briefing state — local-only city + vacation flag.
-# Edits (vacation_until before a trip, city when remote) shouldn't pollute
-# git history. Template lives next to it as briefing-state.example.json.
-hermes/scripts/briefing-state.json
-
 # Claude Code runtime state
 .claude/
 

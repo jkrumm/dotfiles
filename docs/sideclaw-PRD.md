@@ -2,31 +2,31 @@
 
 ## Problem
 
-The `cqueue` app is a useful dev sidebar but lives embedded inside `claude-local`, making it awkward to evolve independently and impossible to open-source. The LaunchAgent runs the app directly from the `claude-local` worktree, so any `git` operation on that repo can destabilize the running process. The app has outgrown its original scope and deserves a proper home.
+The `cqueue` app is a useful dev sidebar but lives embedded inside `dotfiles`, making it awkward to evolve independently and impossible to open-source. The LaunchAgent runs the app directly from the `dotfiles` worktree, so any `git` operation on that repo can destabilize the running process. The app has outgrown its original scope and deserves a proper home.
 
 ## Goals
 
 - Extract the entire `cqueue` app into a new standalone public repo `~/SourceRoot/sideclaw`
 - Rename everything: app, files, CLI entry points, plist label, localias proxy
-- Clean up all references in `claude-local` (hook, config, CLAUDE.md, aliases)
-- Stability improvement: the LaunchAgent points to `sideclaw/` — changes to `claude-local` no longer affect the running process
+- Clean up all references in `dotfiles` (hook, config, CLAUDE.md, aliases)
+- Stability improvement: the LaunchAgent points to `sideclaw/` — changes to `dotfiles` no longer affect the running process
 
 ## Non-Goals
 
 - Feature additions (actions, GitHub panel, new routes) — out of scope
 - UI framework migration (stays BlueprintJS)
-- Moving the Stop hook out of `claude-local`
+- Moving the Stop hook out of `dotfiles`
 - Packaging as Electron/Tauri
 
 ## Rename Map
 
 | Before | After |
 |-|-|
-| repo dir | `claude-local/cqueue/` → `~/SourceRoot/sideclaw/` |
+| repo dir | `dotfiles/cqueue/` → `~/SourceRoot/sideclaw/` |
 | app name | cqueue → sideclaw |
 | plist label | `com.jkrumm.cqueue` → `com.jkrumm.sideclaw` |
 | plist filename | `com.jkrumm.cqueue.plist` → `com.jkrumm.sideclaw.plist` |
-| WorkingDirectory in plist | `.../claude-local/cqueue` → `.../sideclaw` |
+| WorkingDirectory in plist | `.../dotfiles/cqueue` → `.../sideclaw` |
 | queue file | `cqueue.md` → `sc-queue.md` |
 | notes file | `cnotes.md` → `sc-note.md` |
 | localias proxy | `cqueue.local → 7705` → `sideclaw.local → 7705` |
@@ -43,7 +43,7 @@ Port stays **7705**.
 ~/SourceRoot/sideclaw/
 ```
 
-Copy all files from `claude-local/cqueue/` with renames applied. Initialize as a new git repo, push to GitHub as `jkrumm/sideclaw` (public).
+Copy all files from `dotfiles/cqueue/` with renames applied. Initialize as a new git repo, push to GitHub as `jkrumm/sideclaw` (public).
 
 ### 2. Code-level renames
 
@@ -68,7 +68,7 @@ find ~/SourceRoot ~/IuRoot -maxdepth 2 -name "cqueue.md" -exec sh -c 'mv "$1" "$
 find ~/SourceRoot ~/IuRoot -maxdepth 2 -name "cnotes.md" -exec sh -c 'mv "$1" "$(dirname "$1")/sc-note.md"' _ {} \;
 ```
 
-### 5. `claude-local` cleanup
+### 5. `dotfiles` cleanup
 
 - `hooks/notify.ts`: update `cqueue.md` → `sc-queue.md` (lines 191, 797)
 - `config/localias.yaml`: `cqueue.local` → `sideclaw.local`
@@ -87,7 +87,7 @@ New `CLAUDE.md` in sideclaw repo covering: stack, Makefile targets, LaunchAgent 
 
 - `sideclaw.local` opens the app in the browser
 - LaunchAgent starts on boot from `~/SourceRoot/sideclaw/`
-- `make reload` (from sideclaw) rebuilds and restarts without touching `claude-local`
+- `make reload` (from sideclaw) rebuilds and restarts without touching `dotfiles`
 - `hooks/notify.ts` pops tasks from `sc-queue.md` correctly
-- No stale references to `cqueue` or `cnotes` in `claude-local`
+- No stale references to `cqueue` or `cnotes` in `dotfiles`
 - GitHub repo `jkrumm/sideclaw` is public and has a clean initial commit

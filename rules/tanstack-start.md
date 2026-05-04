@@ -89,7 +89,7 @@ Guidelines for TanStack Start full-stack patterns — server functions, middlewa
 
 ## Detailed Rules
 
-For full explanations with code examples, read individual rules in `~/SourceRoot/claude-local/reference/tanstack-start/`
+For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/tanstack-start/`
 
 ---
 
@@ -124,4 +124,4 @@ Guidelines for integrating TanStack Query + Router + Start together. 4 rules acr
 
 ## Detailed Rules
 
-For full explanations with code examples, read individual rules in `~/SourceRoot/claude-local/reference/tanstack-integration/`
+For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/tanstack-integration/`

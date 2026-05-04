@@ -118,4 +118,4 @@ Comprehensive performance optimization guide for React and Next.js applications.
 
 ## Detailed Rules
 
-For full explanations with code examples, read individual rules in `~/SourceRoot/claude-local/reference/react-best-practices/`
+For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/react-best-practices/`

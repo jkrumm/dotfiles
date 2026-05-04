@@ -12,7 +12,7 @@
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/johannes.krumm/SourceRoot/claude-local/cqueue</string>
+  <string>/Users/johannes.krumm/SourceRoot/dotfiles/cqueue</string>
 
   <!-- Bun auto-loads .env from WorkingDirectory — no need to repeat vars here -->
 

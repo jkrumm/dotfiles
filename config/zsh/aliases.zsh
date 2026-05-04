@@ -19,7 +19,7 @@ alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 zed() { /opt/homebrew/bin/zed "${1:-.}" }                 # open dir (or cwd) in Zed
 
 # 1Password backup
-alias opbackup="~/SourceRoot/claude-local/scripts/backup-1password.py"
+alias opbackup="~/SourceRoot/dotfiles/scripts/backup-1password.py"
 
 # IU (work)
 alias start-iu-fe="~/IuRoot/prometheus-scripts/bash/start-frontends.sh"

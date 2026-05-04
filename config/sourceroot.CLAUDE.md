@@ -33,6 +33,8 @@ ROOT_PW=$(op read "op://Private/vps-server/password" --account tkrumm) && ssh vp
 | `homelab` | `~/SourceRoot/homelab` | Main homelab stack — 25+ containers |
 | `homelab-private` | `~/SourceRoot/homelab-private` | Additional private homelab services |
 | `vps` | `~/SourceRoot/vps` | VPS stack — 3 compose files |
+| `dotfiles` | `~/SourceRoot/dotfiles` | Claude Code dotfiles, hooks, skills, localai stack |
+| `hermes-agent` | `~/SourceRoot/hermes-agent` | Hermes Agent setup (Mac Mini-only) — config, skills, patches, cron |
 
 ### Secrets (1Password)
 
@@ -50,10 +52,10 @@ Use `/secrets` skill for vault ops.
 ## Local Dev Proxy
 
 All services use static ports with `.test` domains (HTTPS via Caddy + dnsmasq).
-Port assignments and domains are in `~/SourceRoot/claude-local/config/Caddyfile` — that's the source of truth.
+Port assignments and domains are in `~/SourceRoot/dotfiles/config/Caddyfile` — that's the source of truth.
 
 **Every app:** static port, kill port before starting (`npx kill-port PORT && ...`), `--strictPort`, entry in Caddyfile.
-**Adding a service:** add block to Caddyfile, run `caddy-reload`, commit in `claude-local`.
+**Adding a service:** add block to Caddyfile, run `caddy-reload`, commit in `dotfiles`.
 
 ---
 
@@ -108,6 +110,9 @@ optimizeDeps: { exclude: ['basalt-ui'] }
 | `/skill-creator` | Create, modify, and test skills | main | (inherits) |
 | `/localai [cmd]` | Manage local AI stack (setup, status, update, monitor, swap-model) | main | haiku |
 | `/hermes-validate` | Test Hermes skill routing, read session traces, fix SOUL.md/SKILL.md | main | (inherits) |
+| `/hermes-update` | Update upstream Hermes Agent, re-apply local patches, restart gateway | main | (inherits) |
+
+`/hermes-validate` and `/hermes-update` ship from `~/SourceRoot/hermes-agent/cc-skills/` (symlinked into `~/SourceRoot/.claude/skills/` by `make setup` there).
 
 ---
 
@@ -121,7 +126,7 @@ optimizeDeps: { exclude: ['basalt-ui'] }
 
 **Or use `/ship` directly** — it auto-detects state and runs the right steps.
 
-**Direct-to-master repos:** homelab, homelab-private, vps, claude-local, sideclaw, basalt-ui-playground — `/ship` skips PR flow.
+**Direct-to-master repos:** homelab, homelab-private, vps, dotfiles, hermes-agent, sideclaw, basalt-ui-playground — `/ship` skips PR flow.
 
 **`/pr create` automatically:** errors on default branch, proposes branch rename, runs `/commit` if uncommitted, offers `/git-cleanup` if ≥3 commits, runs `/check` pre-flight.
 

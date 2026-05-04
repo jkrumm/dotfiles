@@ -30,7 +30,7 @@ Three moving parts work together:
 Run this once:
 
 ```bash
-cd ~/SourceRoot/claude-local
+cd ~/SourceRoot/dotfiles
 make setup
 ```
 
@@ -69,7 +69,7 @@ After setup:
 Always edit `config/Caddyfile` here in the repo:
 
 ```bash
-vim ~/SourceRoot/claude-local/config/Caddyfile
+vim ~/SourceRoot/dotfiles/config/Caddyfile
 caddy reload
 ```
 

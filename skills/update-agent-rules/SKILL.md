@@ -14,7 +14,7 @@ Two layers — lightweight index files auto-load during development, full refere
 
 ### Layer 1: Index Rules (auto-load via `paths:`)
 
-Location: `~/SourceRoot/claude-local/rules/`
+Location: `~/SourceRoot/dotfiles/rules/`
 
 | File | Source Repo | Paths | Rules |
 |-|-|-|-|
@@ -28,7 +28,7 @@ Frontend rules load on `.tsx`/`.jsx` files (~5K tokens). Elysia rule loads on ba
 
 ### Layer 2: Full Reference (manual reads)
 
-Location: `~/SourceRoot/claude-local/reference/`
+Location: `~/SourceRoot/dotfiles/reference/`
 
 ```
 reference/
@@ -85,31 +85,31 @@ If the hashes match what's in the `source:` frontmatter, no update needed.
 Copy the original rule files — no modifications:
 
 ```bash
-CLAUDE_LOCAL=~/SourceRoot/claude-local
+DOTFILES_DIR=~/SourceRoot/dotfiles
 
 # React best practices
-rm -rf "$CLAUDE_LOCAL/reference/react-best-practices"
-mkdir -p "$CLAUDE_LOCAL/reference/react-best-practices"
-cp /tmp/agent-skills/skills/react-best-practices/rules/*.md "$CLAUDE_LOCAL/reference/react-best-practices/"
-rm -f "$CLAUDE_LOCAL/reference/react-best-practices/_template.md" "$CLAUDE_LOCAL/reference/react-best-practices/_sections.md"
+rm -rf "$DOTFILES_DIR/reference/react-best-practices"
+mkdir -p "$DOTFILES_DIR/reference/react-best-practices"
+cp /tmp/agent-skills/skills/react-best-practices/rules/*.md "$DOTFILES_DIR/reference/react-best-practices/"
+rm -f "$DOTFILES_DIR/reference/react-best-practices/_template.md" "$DOTFILES_DIR/reference/react-best-practices/_sections.md"
 
 # TanStack (all 4 packages)
 for skill in tanstack-query tanstack-router tanstack-start tanstack-integration; do
-  rm -rf "$CLAUDE_LOCAL/reference/$skill"
-  mkdir -p "$CLAUDE_LOCAL/reference/$skill"
-  cp "/tmp/tanstack-agent-skills/skills/$skill/rules/"*.md "$CLAUDE_LOCAL/reference/$skill/"
+  rm -rf "$DOTFILES_DIR/reference/$skill"
+  mkdir -p "$DOTFILES_DIR/reference/$skill"
+  cp "/tmp/tanstack-agent-skills/skills/$skill/rules/"*.md "$DOTFILES_DIR/reference/$skill/"
 done
 
 # Elysia (preserves subdirectory structure)
-rm -rf "$CLAUDE_LOCAL/reference/elysia"
+rm -rf "$DOTFILES_DIR/reference/elysia"
 for subdir in references plugins integrations patterns examples; do
-  mkdir -p "$CLAUDE_LOCAL/reference/elysia/$subdir"
+  mkdir -p "$DOTFILES_DIR/reference/elysia/$subdir"
 done
-cp /tmp/elysia-skills/elysia/references/*.md "$CLAUDE_LOCAL/reference/elysia/references/"
-cp /tmp/elysia-skills/elysia/plugins/*.md "$CLAUDE_LOCAL/reference/elysia/plugins/"
-cp /tmp/elysia-skills/elysia/integrations/*.md "$CLAUDE_LOCAL/reference/elysia/integrations/"
-cp /tmp/elysia-skills/elysia/patterns/*.md "$CLAUDE_LOCAL/reference/elysia/patterns/"
-cp /tmp/elysia-skills/elysia/examples/*.ts "$CLAUDE_LOCAL/reference/elysia/examples/"
+cp /tmp/elysia-skills/elysia/references/*.md "$DOTFILES_DIR/reference/elysia/references/"
+cp /tmp/elysia-skills/elysia/plugins/*.md "$DOTFILES_DIR/reference/elysia/plugins/"
+cp /tmp/elysia-skills/elysia/integrations/*.md "$DOTFILES_DIR/reference/elysia/integrations/"
+cp /tmp/elysia-skills/elysia/patterns/*.md "$DOTFILES_DIR/reference/elysia/patterns/"
+cp /tmp/elysia-skills/elysia/examples/*.ts "$DOTFILES_DIR/reference/elysia/examples/"
 ```
 
 ### 3. Update index rules
@@ -150,10 +150,10 @@ The elysia index file distills the SKILL.md to key concepts (method chaining, en
 ```bash
 # Verify file counts match upstream
 for d in react-best-practices tanstack-query tanstack-router tanstack-start tanstack-integration; do
-  echo "$d: $(ls ~/SourceRoot/claude-local/reference/$d/*.md | wc -l | tr -d ' ') files"
+  echo "$d: $(ls ~/SourceRoot/dotfiles/reference/$d/*.md | wc -l | tr -d ' ') files"
 done
 for subdir in references plugins integrations patterns examples; do
-  echo "elysia/$subdir: $(ls ~/SourceRoot/claude-local/reference/elysia/$subdir/* | wc -l | tr -d ' ') files"
+  echo "elysia/$subdir: $(ls ~/SourceRoot/dotfiles/reference/elysia/$subdir/* | wc -l | tr -d ' ') files"
 done
 
 # Verify rules are visible via symlink
@@ -165,7 +165,7 @@ rm -rf /tmp/agent-skills /tmp/tanstack-agent-skills /tmp/elysia-skills
 
 ### 5. Commit
 
-Commit in claude-local with: `docs: update frontend agent rules from upstream`
+Commit in dotfiles with: `docs: update frontend agent rules from upstream`
 
 ## Adding a New Rule Set
 
@@ -175,12 +175,12 @@ To add rules from a new agent-skills repo:
 2. Copy original rule files to `reference/{name}/`
 3. Create an index rule file in `rules/{name}.md` from the repo's SKILL.md — add `paths:` and `source:` frontmatter
 4. Verify symlink visibility via `~/.claude/rules/`
-5. Commit in claude-local
+5. Commit in dotfiles
 
 ## Troubleshooting
 
-**Rules not loading on .tsx files:** Check `~/.claude/rules/` symlink points to `~/SourceRoot/claude-local/rules/`. Run `make setup` if broken.
+**Rules not loading on .tsx files:** Check `~/.claude/rules/` symlink points to `~/SourceRoot/dotfiles/rules/`. Run `make setup` if broken.
 
 **Too much context:** The index files total ~5K tokens. If this grows with new rule sets, consider whether all need `**/*.tsx` or if some could use more specific paths (e.g., files importing specific packages).
 
-**Review skill not finding reference files:** Ensure paths in the review skill match `~/SourceRoot/claude-local/reference/`. The reference directory is NOT in `~/.claude/rules/` — it lives only in the claude-local repo.
+**Review skill not finding reference files:** Ensure paths in the review skill match `~/SourceRoot/dotfiles/reference/`. The reference directory is NOT in `~/.claude/rules/` — it lives only in the dotfiles repo.

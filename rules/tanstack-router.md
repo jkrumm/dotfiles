@@ -93,4 +93,4 @@ Guidelines for TanStack Router — type safety, data loading, navigation, and co
 
 ## Detailed Rules
 
-For full explanations with code examples, read individual rules in `~/SourceRoot/claude-local/reference/tanstack-router/`
+For full explanations with code examples, read individual rules in `~/SourceRoot/dotfiles/reference/tanstack-router/`
