@@ -11,11 +11,21 @@
 
 ## Workspaces
 
-### Personal Projects: `/Users/johannes.krumm/SourceRoot/`
+### Personal Projects: `~/SourceRoot/`
 - GitHub for version control and PRs
 - Has its own CLAUDE.md with conventions and workflow
-- Skills: `/commit`, `/pr`, `/check`, `/research`, `/review`, `/ship`, `/upgrade-deps`
+- Skills: `/cloudflare`, `/commit`, `/pr`, `/check`, `/research`, `/review`, `/ship`, `/upgrade-deps`
 - **1Password account:** `tkrumm` — always pass `--account tkrumm` to all `op` CLI commands
+
+### Dotfiles: `~/SourceRoot/dotfiles/` (canonical path)
+When I say "dotfiles" I mean **this repo**. It is the source of truth for personal global Claude Code configuration:
+- `dotfiles/skills/<name>/SKILL.md` → symlinked to `~/SourceRoot/.claude/skills/<name>/` by `make setup` (SourceRoot-scoped — visible to vps/homelab/dotfiles, hidden from IuRoot)
+- `dotfiles/rules/*.md` → universal conventions (attribution, commits, TS, security, code style)
+- `dotfiles/hooks/` → Claude Code hooks (e.g. docker-makefile.ts)
+- `dotfiles/config/global.CLAUDE.md` → this file (symlinked to `~/.claude/CLAUDE.md`)
+- `dotfiles/config/settings.template.json` → Claude Code settings template
+
+Edits to skills/rules/hooks/global-CLAUDE.md should happen in the dotfiles repo and be committed there — the symlinks ensure the runtime picks them up immediately.
 
 ### Work Projects: `/Users/johannes.krumm/IuRoot/`
 - Project-specific CLAUDE.md files (e.g., `epos.student-enrolment/CLAUDE.md`)
@@ -130,10 +140,13 @@ Flag explicitly rather than working around silently:
 
 ## CLAUDE.md Hierarchy
 
-- **Global** (`~/.claude/CLAUDE.md`): This file — personal preferences, workflow
-- **Global rules** (`~/.claude/rules/`): Universal conventions (attribution, commits, TS, security, code style)
-- **Workspace** (`/SourceRoot/CLAUDE.md`): Personal project conventions
-- **Project** (`/project/CLAUDE.md`): Project-specific patterns
-- **Project rules** (`/project/.claude/rules/`): Subdirectory patterns with `paths:` frontmatter
+- **Global** (`~/.claude/CLAUDE.md` → `dotfiles/config/global.CLAUDE.md`): This file — personal preferences, workflow
+- **Global rules** (`~/.claude/rules/` ← `dotfiles/rules/`): Universal conventions (attribution, commits, TS, security, code style)
+- **SourceRoot skills** (`~/SourceRoot/.claude/skills/` ← `dotfiles/skills/`): Personal-projects-scoped skills (`/cloudflare`, `/commit`, `/pr`, …)
+- **Workspace** (`~/SourceRoot/CLAUDE.md`): Personal project conventions
+- **Project** (`~/SourceRoot/<project>/CLAUDE.md`): Project-specific patterns
+- **Project rules** (`~/SourceRoot/<project>/.claude/rules/`): Subdirectory patterns with `paths:` frontmatter
+
+All `~/.claude/...` and `~/SourceRoot/.claude/...` paths are symlinks managed by `dotfiles/Makefile`. Edit in dotfiles, commit, the runtime sees the change immediately.
 
 Update CLAUDE.md in same commit as related code changes. CLAUDE.md-only changes use `docs:` prefix.
