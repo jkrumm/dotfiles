@@ -122,6 +122,18 @@ class TTSRequest(BaseModel):
     # multi-section briefings where a noticeably longer beat between sections
     # improves comprehension (~1.5–2.5s feels natural without sounding stalled).
     paragraph_pause_secs: float | None = None
+    # Longform mode: skip the 4000-char rewrite cap. The Haiku rewriter sees
+    # the full input, adds prosody tags AND inserts <<<CHUNK>>> markers at
+    # natural delivery beats. The chunker splits on those markers (with a
+    # sentence-boundary safety net for anything > max_chunk_chars). Use for
+    # multi-chapter podcasts / longform narration where the standard pipeline
+    # silently truncates past 4000 chars.
+    longform: bool = False
+    # Playback speed multiplier applied via ffmpeg atempo in post-process.
+    # 1.0 = no change. 0.95-0.97 takes the edge off Fish's slightly rushed
+    # default cadence on longform without losing intelligibility. Range
+    # clamped at synthesis time to ffmpeg atempo's safe band [0.5, 2.0].
+    speed: float = 1.0
 
 
 class TTSResponse(BaseModel):
@@ -136,15 +148,34 @@ class TTSResponse(BaseModel):
 
 
 def _detect_lang(text: str) -> str:
+    """Strong-signal language detection. de_chars (umlauts) are a *weak*
+    signal — German proper nouns like "München", "Düsseldorf",
+    "Telefonseelsorge" inflate the count without the surrounding text being
+    German. de_words (function words from _DE_WORDS: ist, der, die, und,
+    auch, etc.) are a *strong* signal — only native German prose hits them
+    at meaningful density. Native German prose lands at 15-25% function-word
+    density; English prose with proper nouns lands near 0%.
+
+    The previous heuristic (threshold-of-1 on either signal) flipped any
+    English text containing a single umlaut to German, which then
+    mispronounced every English word in every chunk. Now we trust de_chars
+    only on short text (avoids regressing "Fish S2 Pro läuft."); on longer
+    text we require non-trivial function-word density.
+    """
     words = re.findall(r"\b\w+\b", text.lower())
     de_chars = sum(1 for c in text if c in _DE_CHARS)
     de_words = sum(1 for w in words if w in _DE_WORDS)
-    # Threshold of 1 on either signal: short German phrases like "Fish S2 Pro
-    # läuft." (one umlaut, no strong DE word) used to fall through to English
-    # under the old threshold of 2. The cost is misclassifying rare English
-    # text containing an umlaut as German — we prefer the failure mode where
-    # German always picks the German reference clip.
-    return "de" if (de_chars >= 1 or de_words >= 1) else "en"
+    if de_chars + de_words == 0:
+        return "en"
+    total_words = len(words) or 1
+    # Short text (< 20 words) with any German signal → German. Preserves the
+    # "Fish S2 Pro läuft." behavior that motivated the original threshold.
+    if total_words < 20:
+        return "de"
+    # Longer text → require function-word density ≥ 5%. Native German
+    # easily clears this; English with proper nouns doesn't.
+    de_words_density = de_words / total_words * 100
+    return "de" if de_words_density >= 5.0 else "en"
 
 
 # ---------- markdown handling ----------
@@ -437,16 +468,287 @@ Output: [professional broadcast tone] [warm] All servers up, [pause] with one ex
 
 
 async def _rewrite_for_speech(text: str, lang: str) -> str:
+    """Rewrite for speech with prosody tags (no chunk markers).
+
+    Uses the same batched + parallel infrastructure as longform mode, just
+    with the standard system prompt and no <<<CHUNK>>> separator between
+    batches — the downstream _chunk_text handles algorithmic chunking on
+    the concatenated result. Inputs that fit in one batch (typical
+    briefings, ~2500 chars) make a single Haiku call; longer inputs split
+    on paragraph boundaries and rewrite in parallel.
+
+    No truncation cap — the previous text[:4000] silently dropped content
+    past 4000 chars on any caller. Now scales to any length without
+    sacrificing fidelity.
+    """
+    if not _ANTHROPIC_KEY:
+        return _strip_markdown(text)
     system = _SPEAKABLE_SYSTEM_DE if lang == "de" else _SPEAKABLE_SYSTEM_EN
-    result = await _haiku(
-        system=system,
-        user=text[:4000],
-        # Enriched output is ~1.2-1.5x input length (tags + connectors).
-        # 2048 tokens ≈ 6000 chars, plenty for the largest single rewrite
-        # we'd ever pass (the helper chunks AFTER rewrite).
-        max_tokens=2048,
-    )
-    return result or _strip_markdown(text)
+    batches = _batch_paragraphs(text, _LONGFORM_BATCH_CHARS)
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        results = await asyncio.gather(
+            *[_rewrite_batch(client, b, system) for b in batches]
+        )
+    # Concatenate batches with paragraph separators so _chunk_text's
+    # paragraph-aware splitter can still find natural break points. No
+    # <<<CHUNK>>> markers — that's the longform path's job.
+    joined = "\n\n".join(r for r in results if r)
+    return joined or _strip_markdown(text)
+
+
+# ---------- longform mode ----------
+
+# Marker the longform rewriter inserts at natural delivery beats. Chosen to be
+# obviously non-textual so the splitter can't false-positive on user prose.
+_LONGFORM_CHUNK_MARKER = "<<<CHUNK>>>"
+
+_LONGFORM_SYSTEM_EN = """You convert long-form text into spoken English with Fish S2 Pro prosody tags AND chunk markers for piecewise synthesis. Reply with ONLY the rewritten text — no commentary, no quotes.
+
+GROUND RULES:
+- Keep language: English. No greeting, no addressing the listener by name.
+- PRESERVE EVERY PIECE OF INFORMATION. This is a longform rewrite, NOT a summary. Do not condense, do not drop sentences, do not paraphrase aggressively. The input may be 30,000+ characters; your output should be similar length plus tags and markers.
+- Strip markdown: bullets become flowing sentences, no bold/italic, drop headers, omit URLs verbatim (describe what they point to instead), describe code/file paths in plain words.
+- Sound spoken, not written: shorter sentences, natural connectors ("then", "also", "by the way"), occasional rhetorical phrases.
+
+PROSODY TAGS — use them actively. Each tag affects the text that FOLLOWS until the next tag or strong punctuation.
+
+ANCHOR (place EXACTLY ONCE at the very start to set overall register):
+- [narrator tone] [warm] — default for longform podcasts and walkthroughs.
+- [professional broadcast tone] [warm] — for status-heavy or briefing-style longform.
+
+ALWAYS-SAFE (use generously — these carry most of the life):
+- [emphasis] — stresses the next word/phrase. 2–4 per paragraph on the MOST important word in each sentence (a number, a name, a key verb). Not on every sentence.
+- [pause] — ~1 s real beat. One between every meaningful topic shift, before any punchline. ~1 per 2–3 sentences. ([short pause] is barely audible — use [pause].)
+
+EMOTIONAL TAGS (use only when content calls for it):
+- [excited] — wins, plans, breakthroughs.
+- [delight] — pleasant surprises.
+- [chuckle] — actual humor.
+- [sigh] — frustration, exhaustion.
+- [whisper] / [low voice] — confidential asides, contrarian observations.
+- [serious] — warnings, risks.
+
+TAG PLACEMENT:
+- Don't stack 3+ tags adjacent (except the opening anchor).
+- Don't tag what punctuation already does (a question mark already raises pitch).
+- For raw lists: add connectors ("first, second, third") then [emphasis] on the headword.
+
+TECHNICALITIES — abstract spelling-heavy detail. Listeners cannot reread audio; reading character-by-character feels robotic.
+- Terminal commands ("ffmpeg -i input.m4a -c:a libopus -b:a 24k -ac 1") → describe what they do in one phrase: "an ffmpeg command re-encodes the audio to Opus." Skip the flags. If the listener needs the exact syntax, they're at a keyboard, not in the car.
+- Long alphanumeric IDs, hash strings, certificate fingerprints, container IDs, commit SHAs → either skip or abstract: "a certificate fingerprint", "the relevant commit". Never read out 40-character hex strings.
+- Paper / preprint numbers ("arXiv 2502.08177", "doi:10.1145/...") → "a 2025 arXiv paper", "a CHI 2024 paper". Read the year and venue, drop the identifier.
+- File paths ("~/Obsidian/Vault/Journal/JOURNAL.md") → name the purpose: "the journal schema document", "the helper config file". Drop the path.
+- API endpoint URLs → name the service: "the homelab API", "the OpenAI image endpoint". Drop the URL.
+- Acronyms that the listener already knows (HRV, RHR, SDK, API, LLM) → keep as-is; don't expand.
+- Acronyms or technical-spell-outs in the source ("M-D" for ".md", "T-S-R-P", "P-N-G") → only retain if essential to comprehension. "the schema document" beats "JOURNAL dot M-D" every time.
+- Numbers in prose: prefer spoken forms ("twenty-four kilobits per second" not "24 kbps"); skip exhaustive units when context is clear.
+
+The principle: a podcast listener should never need to rewind to parse a string of characters. If you'd write it as code in a doc, abstract it for audio.
+
+CHUNK MARKERS (this is the longform-specific part — critical):
+- Insert <<<CHUNK>>> on its own line between natural delivery beats.
+- A chunk is a coherent unit of thought — usually 1–4 sentences, target 300–700 characters, never more than 800.
+- Place chunk boundaries at:
+  * Topic transitions ("Now, on to —", "Chapter five —", "Here's the thing —")
+  * Strong punctuation that ends a thought
+  * Paragraph boundaries in the input
+  * Approximately every 300–700 characters of output
+- NEVER place a chunk boundary mid-sentence.
+- NEVER place a chunk boundary inside a tag (e.g. between [emphasis] and the word it modifies).
+- The opening anchor tag belongs at the start of the FIRST chunk.
+- Chunk boundaries are how Fish synthesizes piecewise — chunks too long crash the worker; chunks too short sound choppy. Stay in the 300–700 char band.
+- Per-chunk voice is auto-selected from chunk content. So a chunk that is heavily English (technical paragraph in an otherwise German narration, or vice-versa) renders in the right voice — group such content into its own chunk to get clean pronunciation.
+
+OUTPUT SHAPE:
+[narrator tone] [warm] First chunk text with [emphasis] tags and natural [pause] beats.
+<<<CHUNK>>>
+Second chunk text continues the thought naturally.
+<<<CHUNK>>>
+…and so on through the entire input.
+
+EXAMPLES (small):
+
+Input: "Welcome back. This is the rundown. Chapter one — the setup. You're sitting on a Mac Mini M2 Pro. Hermes runs on it. Briefings, watchdog, evening reports."
+Output: [narrator tone] [warm] Welcome back. This is the [emphasis] rundown.
+<<<CHUNK>>>
+Chapter [emphasis] one — the setup. [pause] You're sitting on a [emphasis] Mac Mini M2 Pro. Hermes runs on it. [pause] Briefings, watchdog, evening reports.
+"""
+
+_LONGFORM_SYSTEM_DE = """Du wandelst Langform-Text in gesprochenes Deutsch um, angereichert mit Fish S2 Pro Prosodie-Tags UND Chunk-Markern für stückweise Synthese. Antworte AUSSCHLIESSLICH mit dem umgeschriebenen Text — keine Erklärungen, keine Anführungszeichen.
+
+GRUNDREGELN:
+- Sprache: Deutsch beibehalten. Keine Begrüßung, keine Anrede mit Namen.
+- ALLE INFORMATIONEN ERHALTEN. Dies ist eine Langform-Umschreibung, KEINE Zusammenfassung. Nichts kürzen, nichts weglassen, nicht aggressiv paraphrasieren. Der Input kann 30.000+ Zeichen haben; der Output sollte ähnlich lang sein plus Tags und Marker.
+- Markdown entfernen: Aufzählungen zu fließenden Sätzen, kein Bold/Italic, keine Headers, URLs weg (in Worten beschreiben), Code/Pfade in einfache Worte umschreiben.
+- Klingen wie gesprochen, nicht wie geschrieben.
+
+PROSODIE-TAGS (siehe englisches Pendant — gleiche Tags, gleiche Platzierungsregeln):
+- ANKER einmal am Anfang: [narrator tone] [warm] für Podcasts/Walkthroughs, [professional broadcast tone] [warm] für status-lastige Langform.
+- [emphasis] auf das wichtigste Wort, 2–4 pro Absatz.
+- [pause] ~1 Sekunde, etwa einer pro 2–3 Sätze, vor Pointen und Themenwechseln.
+- Emotional-Tags ([excited], [sigh], [chuckle], [whisper], [serious]) sparsam und nur passend.
+
+TECHNIKALIEN — buchstabier-lastige Details abstrahieren. Hörer können Audio nicht nachlesen; Zeichen-für-Zeichen vorgelesen wirkt robotisch.
+- Terminal-Befehle ("ffmpeg -i input.m4a -c:a libopus") → beschreibe den Zweck: "Ein ffmpeg-Befehl kodiert die Audio in Opus um." Flags weglassen.
+- Lange alphanumerische IDs, Hash-Strings, Zertifikat-Fingerprints, Commit-SHAs → entweder weglassen oder abstrahieren: "ein Zertifikat-Fingerprint", "der relevante Commit". Niemals 40-stellige Hex-Strings vorlesen.
+- Paper- / Preprint-Nummern ("arXiv 2502.08177") → "ein arXiv-Paper aus 2025", "ein CHI 2024 Paper". Jahr und Venue lesen, ID weglassen.
+- Dateipfade ("~/Obsidian/Vault/Journal/JOURNAL.md") → den Zweck nennen: "das Journal-Schema-Dokument", "die Helper-Config".
+- API-Endpunkt-URLs → den Service nennen: "die Homelab-API", "der OpenAI Image-Endpunkt".
+- Bekannte Akronyme (HRV, API, LLM) → beibehalten, nicht ausschreiben.
+- Buchstabier-Akronyme im Source ("J-O-U-R-N-A-L dot M-D", "T-S-R-P") → nur beibehalten wenn unverzichtbar.
+- Zahlen in Prosa: gesprochene Form ("vierundzwanzig Kilobit pro Sekunde" statt "24 kbps").
+
+Prinzip: Ein Podcast-Hörer sollte nie zurückspulen müssen, um eine Zeichenkette zu parsen.
+
+CHUNK-MARKER (entscheidender Teil):
+- Setze <<<CHUNK>>> in eigener Zeile zwischen natürlichen Lieferpausen.
+- Ein Chunk ist eine zusammenhängende Gedankeneinheit — meist 1–4 Sätze, Ziel 300–700 Zeichen, nie mehr als 800.
+- Chunk-Grenzen platzieren bei:
+  * Themenwechseln ("Jetzt zu —", "Kapitel fünf —", "Aber hier ist die Sache —")
+  * Starken Satzzeichen, die einen Gedanken abschließen
+  * Absatzgrenzen im Input
+  * Etwa alle 300–700 Zeichen Output
+- NIE mitten im Satz einen Chunk-Marker setzen.
+- NIE einen Chunk-Marker innerhalb eines Tags setzen.
+- Der Anker-Tag gehört in den Anfang des ERSTEN Chunks.
+- Pro-Chunk wird die Stimme automatisch aus dem Chunk-Inhalt gewählt. Stark gemischtsprachige Passagen (z.B. ein technischer englischer Block in deutscher Erzählung) als eigenen Chunk gruppieren, damit jede Sprache in der richtigen Stimme rendert.
+
+OUTPUT-FORM (gleich wie Englisch):
+[narrator tone] [warm] Erster Chunk mit [emphasis] Tags und [pause] Beats.
+<<<CHUNK>>>
+Zweiter Chunk setzt den Gedanken fort.
+<<<CHUNK>>>
+…und so weiter durch den ganzen Input.
+"""
+
+
+# Each rewriter sub-call sees at most this many input chars. 3500 keeps Haiku's
+# output well under its 16k-token cap (3500 chars in → ~5000 tagged chars out
+# ≈ 1500 tokens), and parallel sub-calls amortize round-trip latency. Splits
+# happen on paragraph boundaries so prosody continuity isn't broken mid-thought.
+_LONGFORM_BATCH_CHARS = 3500
+
+
+def _batch_paragraphs(text: str, max_chars: int) -> list[str]:
+    """Greedy paragraph-aligned batching. Each batch ≤ max_chars unless a
+    single paragraph exceeds it (in which case it ships solo — the rewriter
+    handles oversized paragraphs fine, it just can't be merged with neighbors).
+    """
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text.strip()) if p.strip()]
+    if not paragraphs:
+        return [text]
+    batches: list[str] = []
+    bucket = ""
+    for para in paragraphs:
+        candidate = (bucket + "\n\n" + para) if bucket else para
+        if len(candidate) <= max_chars or not bucket:
+            bucket = candidate
+        else:
+            batches.append(bucket)
+            bucket = para
+    if bucket:
+        batches.append(bucket)
+    return batches
+
+
+async def _rewrite_batch(client: httpx.AsyncClient, batch: str, system: str) -> str:
+    """Single Haiku rewrite call. Returns batch unchanged on error so a partial
+    failure degrades gracefully instead of dropping content."""
+    try:
+        r = await client.post(
+            f"{_ANTHROPIC_URL.rstrip('/')}/v1/messages",
+            headers={
+                "x-api-key": _ANTHROPIC_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": _HAIKU,
+                # 3500 input chars ≈ 875 tokens; output with tags ~1500–2200
+                # tokens. 8k cap is comfortable headroom.
+                "max_tokens": 8192,
+                "system": system,
+                "messages": [{"role": "user", "content": batch}],
+            },
+        )
+        r.raise_for_status()
+        return r.json()["content"][0]["text"].strip()
+    except Exception:
+        return batch
+
+
+async def _rewrite_for_speech_longform(text: str, lang: str) -> str:
+    """Full-input rewrite that adds prosody tags AND <<<CHUNK>>> markers.
+
+    No 4000-char truncation. Splits the input into paragraph-aligned batches
+    of ~3500 chars and rewrites each in parallel via Haiku 4.5. Each batch's
+    output stays well under Haiku's 16k-token cap, so nothing gets silently
+    truncated. Concatenates with <<<CHUNK>>> at batch boundaries so the
+    splitter sees a clean break between batches.
+
+    Falls back per-batch to the original text on error so a partial failure
+    degrades to algorithmic chunking on that portion only.
+    """
+    if not _ANTHROPIC_KEY:
+        return text
+    system = _LONGFORM_SYSTEM_DE if lang == "de" else _LONGFORM_SYSTEM_EN
+    batches = _batch_paragraphs(text, _LONGFORM_BATCH_CHARS)
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        results = await asyncio.gather(
+            *[_rewrite_batch(client, b, system) for b in batches]
+        )
+    # Stitch batches with an explicit chunk marker. The model usually places
+    # one at the end of each batch, but enforcing it here guarantees the
+    # batch boundary is a synthesis boundary regardless of model variance.
+    sep = f"\n{_LONGFORM_CHUNK_MARKER}\n"
+    return sep.join(r for r in results if r)
+
+
+def _split_on_chunk_markers(
+    text: str, lang: str, max_chars: int
+) -> list[tuple[str, str]]:
+    """Split LLM-tagged text on <<<CHUNK>>> markers. Each split is a paragraph
+    break (so paragraph_pause_secs applies). Anything past max_chars gets a
+    sentence-boundary safety pass so Fish's Metal allocator doesn't crash on
+    chunks the model made too long.
+    """
+    parts = [p.strip() for p in text.split(_LONGFORM_CHUNK_MARKER) if p.strip()]
+    if not parts:
+        return [(text, "end")]
+    chunks: list[tuple[str, str]] = []
+    for part in parts:
+        if len(part) <= max_chars:
+            chunks.append((part, "paragraph"))
+            continue
+        # Oversized — split on sentences. All sub-chunks except the last keep
+        # the "sentence" break (no extra paragraph pause inside one logical
+        # chunk); the last sub-chunk gets the paragraph break so the inter-
+        # chunk pause still fires.
+        sentences = _split_sentences(part, lang)
+        bucket = ""
+        subs: list[str] = []
+        for s in sentences:
+            if not s:
+                continue
+            join = (bucket + " " + s).strip() if bucket else s
+            if len(join) <= max_chars:
+                bucket = join
+            else:
+                if bucket:
+                    subs.append(bucket)
+                bucket = s
+        if bucket:
+            subs.append(bucket)
+        for j, sub in enumerate(subs):
+            brk = "paragraph" if j == len(subs) - 1 else "sentence"
+            chunks.append((sub, brk))
+    if chunks:
+        last_text, _ = chunks[-1]
+        chunks[-1] = (last_text, "end")
+    return chunks or [(text, "end")]
+
+
+# ---------- standard helpers ----------
 
 
 async def _make_title(text: str, lang: str) -> str:
@@ -495,9 +797,13 @@ async def _synth_chunk(
     return _fade_edges(np.ascontiguousarray(audio))
 
 
-def _post_process(combined: np.ndarray, lang: str) -> bytes:
-    """Single ffmpeg pass: smile EQ (DE only) + loudnorm. Returns MP3 bytes."""
+def _post_process(combined: np.ndarray, lang: str, speed: float = 1.0) -> bytes:
+    """Single ffmpeg pass: atempo (if speed != 1.0) + smile EQ (DE only)
+    + loudnorm. Returns MP3 bytes. atempo runs first so EQ + loudnorm see
+    the final-rate audio."""
     chain_parts: list[str] = []
+    if abs(speed - 1.0) > 1e-3:
+        chain_parts.append(f"atempo={speed}")
     if lang == "de":
         chain_parts.append(_SMILE_EQ_CHAIN)
     chain_parts.append(_LOUDNORM)
@@ -536,13 +842,23 @@ async def synthesize(req: TTSRequest) -> TTSResponse:
     # 1. Language detection
     lang = req.lang_hint or _detect_lang(text)
 
-    # 2. Speakable rewrite — fires for anything substantial. The Haiku call
-    # not only strips markdown but also injects Fish S2 Pro prosody tags
-    # ([professional broadcast tone] [warm] anchor + [emphasis] on key words
-    # + [short pause] between topics). Skip for short replies (<80 chars)
-    # where tags add no value and the input is already speakable.
+    # 2. Speakable rewrite. Two paths:
+    #
+    #    Standard mode — Haiku rewrites the first 4000 chars only, injecting
+    #    prosody tags. The output is then chunked algorithmically by
+    #    _chunk_text. Default for briefings, watchdog, evening report.
+    #
+    #    Longform mode (req.longform=True) — Haiku rewrites the full input,
+    #    no truncation, and inserts <<<CHUNK>>> markers at semantic delivery
+    #    beats. _split_on_chunk_markers splits on those markers and applies
+    #    a sentence-boundary safety net for any chunk > max_chunk_chars.
+    #    Use for multi-chapter podcasts where the standard path silently
+    #    truncates past 4000 chars.
     if len(text) >= 80 and _ANTHROPIC_KEY:
-        spoken = await _rewrite_for_speech(text, lang)
+        if req.longform:
+            spoken = await _rewrite_for_speech_longform(text, lang)
+        else:
+            spoken = await _rewrite_for_speech(text, lang)
     else:
         spoken = _strip_markdown(text)
 
@@ -552,36 +868,49 @@ async def synthesize(req: TTSRequest) -> TTSResponse:
     else:
         title = re.sub(r'[<>:"/\\|?*]', "", spoken[:40]).strip() or "Voice memo"
 
-    # 4. Chunk at paragraph + sentence boundaries.
-    # When the caller passes paragraph_pause_secs, they're declaring the
-    # paragraphs are deliberate section beats — preserve them and don't
-    # let the phase-2 merge collapse short sections back into one chunk.
-    chunks = _chunk_text(
-        spoken,
-        lang,
-        req.max_chunk_chars,
-        preserve_paragraphs=req.paragraph_pause_secs is not None,
-    )
+    # 4. Chunk. Longform splits on the markers the rewriter inserted.
+    # Standard mode chunks at paragraph + sentence boundaries algorithmically.
+    if req.longform:
+        chunks = _split_on_chunk_markers(spoken, lang, req.max_chunk_chars)
+    else:
+        chunks = _chunk_text(
+            spoken,
+            lang,
+            req.max_chunk_chars,
+            preserve_paragraphs=req.paragraph_pause_secs is not None,
+        )
 
     # 5. Synthesize sequentially. Fish has an internal synth lock; concurrent
     # requests would just queue inside the server, so serializing here saves
     # the round-trip overhead.
+    #
+    # Per-chunk language detection — the request-level `lang` decided which
+    # rewriter system prompt and which Haiku title call to use, but each
+    # chunk's voice is selected from the chunk's own content. This lets a
+    # German briefing with a heavily English technical paragraph render that
+    # paragraph in the English voice (correct pronunciation), and vice
+    # versa. Falls back to the request-level lang if the chunk has no
+    # language signal at all.
     audio_parts: list[np.ndarray] = []
     pause_overrides = dict(_PAUSE_AFTER)
     if req.paragraph_pause_secs is not None and req.paragraph_pause_secs >= 0:
         pause_overrides["paragraph"] = float(req.paragraph_pause_secs)
     async with httpx.AsyncClient() as http:
         for chunk_text, brk in chunks:
-            part = await _synth_chunk(chunk_text, lang, http)
+            chunk_lang = _detect_lang(chunk_text) or lang
+            part = await _synth_chunk(chunk_text, chunk_lang, http)
             audio_parts.append(part)
             pause = pause_overrides.get(brk, 0.0)
             if pause > 0:
                 audio_parts.append(_silence(pause))
 
-    # 6. Concatenate → ffmpeg post-process (EQ + loudnorm) → MP3
+    # 6. Concatenate → ffmpeg post-process (atempo + EQ + loudnorm) → MP3
     combined = np.concatenate(audio_parts) if audio_parts else _silence(0.1)
-    duration_secs = round(len(combined) / _SAMPLE_RATE, 2)
-    mp3_bytes = await asyncio.to_thread(_post_process, combined, lang)
+    # Clamp speed to ffmpeg atempo's documented safe band. Outside [0.5, 2.0]
+    # atempo chains internally and quality degrades.
+    speed = max(0.5, min(2.0, float(req.speed)))
+    duration_secs = round(len(combined) / _SAMPLE_RATE / speed, 2)
+    mp3_bytes = await asyncio.to_thread(_post_process, combined, lang, speed)
     audio_b64 = base64.b64encode(mp3_bytes).decode()
 
     return TTSResponse(
