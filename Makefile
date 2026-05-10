@@ -20,6 +20,8 @@ setup:
 	@$(MAKE) --no-print-directory _setup-hooks
 	@$(MAKE) --no-print-directory _setup-scripts
 	@$(MAKE) --no-print-directory _setup-skills
+	@$(MAKE) --no-print-directory _setup-sourceroot-skill-links
+	@$(MAKE) --no-print-directory _setup-sourceroot-claude-local
 	@$(MAKE) --no-print-directory _setup-settings
 	@$(MAKE) --no-print-directory _setup-gitignore
 	@$(MAKE) --no-print-directory _setup-ghostty
@@ -373,6 +375,69 @@ _setup-skills:
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
 		$(MAKE) --no-print-directory _link SRC="$$skill" DST="$(SOURCEROOT)/.claude/skills/$$name"; \
+	done
+
+# Per-repo skill links so Zed's vendored Claude ACP (no --plugin-dir support)
+# sees the shared SourceRoot skills. Two strategies depending on the repo:
+#   - No existing .claude/skills/ → symlink the whole dir to ~/SourceRoot/.claude/skills.
+#   - Existing real .claude/skills/ (project-local skills committed to repo) →
+#     symlink each shared skill individually alongside the project's own skills,
+#     skipping any name collision with a local skill.
+# Lazy refresh also lives in c() — this just covers existing repos at setup time.
+.PHONY: _setup-sourceroot-skill-links
+_setup-sourceroot-skill-links:
+	@echo "  SourceRoot project skill links (Zed compatibility)..."
+	@SKILLS_DIR="$(SOURCEROOT)/.claude/skills"; \
+	for repo in $(SOURCEROOT)/*/; do \
+		name=$$(basename "$$repo"); \
+		[ "$$name" = "dotfiles" ] && continue; \
+		[ -d "$$repo/.git" ] || continue; \
+		LINK="$$repo.claude/skills"; \
+		if [ -L "$$LINK" ] && [ "$$(readlink "$$LINK")" = "$$SKILLS_DIR" ]; then \
+			echo "    · $$name (whole-dir link, ok)"; \
+		elif [ -d "$$LINK" ] && [ ! -L "$$LINK" ]; then \
+			added=0; kept=0; \
+			for skill in $$SKILLS_DIR/*/; do \
+				sname=$$(basename "$$skill"); \
+				dst="$$LINK/$$sname"; \
+				if [ -L "$$dst" ] && [ "$$(readlink "$$dst")" = "$$skill" ]; then \
+					kept=$$((kept+1)); \
+				elif [ -e "$$dst" ]; then \
+					kept=$$((kept+1)); \
+				else \
+					ln -sfn "$$skill" "$$dst"; \
+					added=$$((added+1)); \
+				fi; \
+			done; \
+			echo "    ✓ $$name (per-skill: +$$added, kept $$kept local)"; \
+		else \
+			mkdir -p "$$repo.claude"; \
+			ln -sfn "$$SKILLS_DIR" "$$LINK"; \
+			echo "    ✓ $$name (whole-dir link)"; \
+		fi; \
+	done
+
+# Per-repo CLAUDE.local.md so Zed's vendored Claude ACP (which doesn't walk
+# parent directories above the workspace root) sees the SourceRoot CLAUDE.md.
+# CLI already gets it via walk-up; this just covers Zed.
+# CLAUDE.local.md is officially supported and loads alongside CLAUDE.md.
+.PHONY: _setup-sourceroot-claude-local
+_setup-sourceroot-claude-local:
+	@echo "  SourceRoot CLAUDE.local.md (Zed compatibility)..."
+	@IMPORT_LINE='@~/SourceRoot/CLAUDE.md'; \
+	for repo in $(SOURCEROOT)/*/; do \
+		name=$$(basename "$$repo"); \
+		[ "$$name" = "dotfiles" ] && continue; \
+		[ -d "$$repo/.git" ] || continue; \
+		LOCAL="$$repo/CLAUDE.local.md"; \
+		if [ -f "$$LOCAL" ] && grep -qxF "$$IMPORT_LINE" "$$LOCAL"; then \
+			echo "    · $$name (ok)"; \
+		elif [ -f "$$LOCAL" ]; then \
+			echo "    ✗ $$name has CLAUDE.local.md without import — leaving alone"; \
+		else \
+			echo "$$IMPORT_LINE" > "$$LOCAL"; \
+			echo "    ✓ $$name"; \
+		fi; \
 	done
 
 .PHONY: _setup-settings

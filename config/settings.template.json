@@ -79,7 +79,6 @@
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "skipDangerousModePermissionPrompt": true,
-  "model": "sonnet",
 
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true

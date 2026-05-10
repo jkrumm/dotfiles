@@ -14,6 +14,12 @@ queue.md
 .claude/worktrees/
 .claude/settings.local.json
 
+# Per-repo skills symlink → ~/SourceRoot/.claude/skills (managed by dotfiles)
+.claude/skills
+
+# Per-repo CLAUDE.local.md import → ~/SourceRoot/CLAUDE.md (managed by dotfiles)
+CLAUDE.local.md
+
 # Editor
 .idea/
 *.iml

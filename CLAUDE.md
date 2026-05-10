@@ -40,6 +40,8 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
 | `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (see `rules/*.md`, e.g., attribution, commit conventions, formatting, research-first, security, TypeScript, code style) |
 | `skills/{name}/` | `~/SourceRoot/.claude/skills/{name}/` | SourceRoot-only |
+| `skills/` (each) | `<repo>/.claude/skills` for each `~/SourceRoot/<repo>/` | Per-project links so Zed's vendored Claude ACP (no `--plugin-dir`) sees shared skills. Whole-dir symlink when project has no local `.claude/skills/`; per-skill symlinks alongside local skills otherwise. Created by `make setup`, refreshed lazily on `c()` launch. Gitignored globally via `.claude/skills`. |
+| `config/sourceroot.CLAUDE.md` (via import) | `<repo>/CLAUDE.local.md` for each `~/SourceRoot/<repo>/` | One-line `@~/SourceRoot/CLAUDE.md` import. Zed's ACP doesn't walk parents above workspace root, so SourceRoot CLAUDE.md needs to be reachable from inside each repo. CLAUDE.local.md loads alongside committed CLAUDE.md (concatenated). Created by `make setup`, refreshed lazily on `c()`. Gitignored globally via `CLAUDE.local.md`. |
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
 
