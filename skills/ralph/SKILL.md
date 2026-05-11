@@ -39,16 +39,21 @@ Ask the user:
 - What is the overall goal? (e.g. "rewrite TypeScript server in Go")
 - What tech stack / toolchain is involved?
 - What are the validation commands? (build, test, lint, typecheck, E2E)
-- How many groups (rough estimate)? Groups should be ~1–3h of Claude work each.
+- How many groups (rough estimate)? Groups should fit in **45 min of autonomous Claude time** each (the `CLAUDE_TIMEOUT`), which usually maps to 1–2h of human work.
 - Any hard sequencing constraints (e.g. "Group 5 must pass E2E before Group 6")?
+- Does the migration have a **deploy-pause window** — groups whose output is correct but ships brokenness if deployed before the cutover? If yes, `RALPH_BRANCH` defaults to `migration/<name>` and the runner stays on it.
 
 ### Step 2 — Define groups
 
-Decompose the goal into 5–12 groups. Each group has a single clear focus. Rules:
+Decompose the goal into focused groups. Apply the split-trigger heuristics below — typical migrations end up in the 10–16 range, not the 5–12 range, once strictness baseline + cross-cutting concerns are extracted.
+
+Rules:
 - Group 1 is always the skeleton/foundation (no validation failures possible yet)
 - Groups build on previous — never require skipping a group
+- **Strictness baseline (TS strict, lint plugins, lefthook, React Compiler) lands as Group 3 or 4** — not at the end. See the dedicated section below.
 - E2E green checkpoints: at least one group explicitly validates full E2E before risky changes
 - Dangerous/breaking groups (delete old system, cut over production) go last
+- Apply the **split-trigger heuristics** below before finalizing the list
 
 Output a numbered list for user review before creating files.
 
@@ -656,6 +661,204 @@ Make both executable: `chmod +x scripts/ralph.sh scripts/ralph-reset.sh`
 
 ---
 
+## Pre-flight Setup (REQUIRED — bake into runner)
+
+Five issues silently break autonomous loops on macOS + 1Password + multi-day migrations. All are mechanical fixes that belong in `ralph.sh`, not in user instructions.
+
+### 1. Commit-signing biometric block
+
+If the user's git config has `commit.gpgsign = true` with `gpg.format = ssh` and `gpg.ssh.program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign`, **every commit hangs on Touch ID**. The autonomous loop will time out at the first commit.
+
+Detect this at runner startup. Disable signing **per-repo** for the loop's duration. Restore via `trap` on exit. Never `--no-gpg-sign` (that violates the user's commit rules); use the local config override instead.
+
+```bash
+ORIG_GPGSIGN=""
+GPGSIGN_TOUCHED=false
+
+disable_commit_signing() {
+  cd "$REPO_ROOT"
+  ORIG_GPGSIGN="$(git config --local --get commit.gpgsign || echo '__unset__')"
+  local effective
+  effective="$(git config --get commit.gpgsign || echo 'false')"
+  if [[ "$effective" == "true" ]]; then
+    log_warn "commit.gpgsign=true detected — disabling for the loop (would block on Touch ID)."
+    git config --local commit.gpgsign false
+    GPGSIGN_TOUCHED=true
+  fi
+}
+
+restore_commit_signing() {
+  $GPGSIGN_TOUCHED || return 0
+  cd "$REPO_ROOT" 2>/dev/null || return 0
+  if [[ "$ORIG_GPGSIGN" == "__unset__" ]]; then
+    git config --local --unset commit.gpgsign 2>/dev/null || true
+  else
+    git config --local commit.gpgsign "$ORIG_GPGSIGN"
+  fi
+  log_info "Restored commit.gpgsign (was: $ORIG_GPGSIGN)."
+}
+
+trap restore_commit_signing EXIT
+```
+
+Call `disable_commit_signing` from `main()` after `require_commands`. The trap handles every exit path (success, failure, SIGINT).
+
+### 2. Default-branch guard
+
+Autonomous commits to `master` / `main` are unsafe — `deploy.yml` typically fires on push, and the user's workflow assumes humans review before that happens. The runner must refuse to run when HEAD is on the default branch.
+
+This is a guard, **not** a branch-creator. Users normally invoke `/ralph setup` from a feature branch they already chose (e.g. `feat/v2`, `wip/migration`). Silently switching them to a hard-coded branch name fights that workflow. The right move is to fail loudly and let the user `git checkout -b <name>` themselves.
+
+```bash
+refuse_default_branch() {
+  cd "$REPO_ROOT"
+  local current
+  current="$(git rev-parse --abbrev-ref HEAD)"
+  case "$current" in
+    master|main)
+      log_error "Refusing to run on '$current' — autonomous commits to the default branch are unsafe."
+      log_error "Switch to a feature/migration branch first: git checkout -b <name>"
+      exit 1
+      ;;
+  esac
+  log_info "Running on branch: $current"
+}
+```
+
+Call from `main()` together with the signing fix. For migrations with a "deploy pause" window (groups that produce code that's correct in isolation but breaks production if shipped before the cutover lands), the same guard suffices — the user runs the loop on their existing branch and pushes manually only when ready. No long-lived `migration/<name>` branch needed unless the user explicitly wants one.
+
+### 3. 1Password CLI session pre-flight
+
+Groups that read secrets via `op run --account <acct>` (database URLs, API keys, OTLP credentials) hang on Touch ID the same way `op-ssh-sign` does, just on a different surface. The runner must verify the session is alive before launching the first group — otherwise group N is mid-flight when biometric prompts the user at 3am.
+
+```bash
+require_op_session() {
+  log_info "Verifying 1Password CLI session (op --account <acct>)..."
+  if ! gtimeout 5 op whoami --account <acct> >/dev/null 2>&1; then
+    log_error "1Password CLI session is not active."
+    log_error "Sign in once before launching: eval \$(op signin --account <acct>)"
+    exit 1
+  fi
+  log_success "op session active."
+}
+```
+
+Note the `gtimeout 5` — without it, a missing session can itself hang on Touch ID prompt. With it, the runner exits fast and tells the user what to do.
+
+### 4. Secrets pre-fetch (eliminate `op run` from the loop body)
+
+The `op whoami` check (step 3) only verifies a session **exists**. It doesn't guarantee that `op run` mid-loop won't prompt for Touch ID — that depends on the user's 1Password settings (auto-lock timer, "Require Touch ID for each command", etc.). At 3am when the user is asleep, **any** mid-loop biometric prompt halts everything.
+
+The robust pattern: **fetch every secret the loop needs during pre-flight, write to a mode-600 env file, source it into the runner's environment, and delete on exit.** Mid-loop, no `op` interaction. Groups that need a secret read the env var directly; groups that need an `op://`-backed config file generate it from the env var (e.g. docker-compose env interpolation).
+
+```bash
+SECRETS_FILE="$REPO_ROOT/.ralph-secrets.env"
+
+prefetch_secrets() {
+  log_info "Pre-fetching secrets via op (Touch ID may prompt)..."
+  local db_password
+  db_password="$(gtimeout 30 op read 'op://<vault>/<item>/<field>' --account <acct> 2>/dev/null || true)"
+  if [[ -z "$db_password" ]]; then
+    log_error "Failed to read secret. Make sure the 1Password app is unlocked."
+    exit 1
+  fi
+  umask 077
+  cat > "$SECRETS_FILE" <<EOF
+# Auto-generated by scripts/ralph.sh — DO NOT COMMIT. Deleted on runner exit.
+PROJECT_DB_PASSWORD=$db_password
+PROJECT_LOCAL_DATABASE_URL=postgres://user:$db_password@localhost:5433/db
+EOF
+  chmod 600 "$SECRETS_FILE"
+  # Export into runner env so subprocesses (claude -p) inherit it.
+  set -a
+  # shellcheck disable=SC1090
+  source "$SECRETS_FILE"
+  set +a
+  log_success "Secrets cached to .ralph-secrets.env (mode 600) and exported."
+}
+
+remove_secrets() {
+  [[ -f "$SECRETS_FILE" ]] || return 0
+  rm -f "$SECRETS_FILE"
+  log_info "Removed .ralph-secrets.env."
+}
+```
+
+**Add `.ralph-secrets.env` to `.gitignore`.** Mode-600 + auto-delete are belt-and-suspenders; the gitignore is the real safety net against accidental commit.
+
+**Patterns:**
+
+- **Single source of truth for shared values.** If local dev and production use the same DB password (e.g. you provisioned the local container with the production password rather than inventing a throwaway), pre-fetch *once* and reuse for both `PROJECT_LOCAL_DATABASE_URL` and `PROJECT_PROD_DATABASE_URL`. Don't make the agent invent local-only throwaway credentials — that's a footgun if the agent's hardcoded "throwaway" later collides with a real value.
+- **docker-compose env interpolation.** `POSTGRES_PASSWORD: ${PROJECT_DB_PASSWORD}` in `docker-compose.dev.yml` reads from the runner's exported env. Local devs running `make db-up` outside the loop should have the Makefile target source `.ralph-secrets.env` first — same mechanism.
+- **Subprocess inheritance is the whole point.** The `set -a; source; set +a` pattern auto-exports every variable defined in the file. Without `set -a`, `claude -p` child processes don't see the vars and you're back to needing `op run` per command.
+- **Group prompts reference env vars, not `op run`.** Rewrite group prompts so any DB URL / API key is `"$PROJECT_LOCAL_DATABASE_URL"` (proper double-quote interpolation), not `op run --env-file=...`.
+
+**What pre-fetch does NOT cover:** truly interactive groups like the production cutover, which the user runs hands-on-keyboard during the day. Those can `op run` directly — Touch ID will resolve in seconds. Pre-fetch is for the **autonomous overnight window**.
+
+### 5. Pre-push hook guard
+
+Shared-context tells Claude "commit only, don't push" but that's a soft constraint. An autonomous agent in retry could `git push` and fire `deploy.yml` mid-migration. Install a real `pre-push` hook at runner startup that exits 1; remove on `trap` exit.
+
+```bash
+install_push_guard() {
+  cd "$REPO_ROOT"
+  PRE_PUSH_HOOK="$(git rev-parse --git-path hooks)/pre-push"
+  if [[ -f "$PRE_PUSH_HOOK" ]]; then
+    PRE_PUSH_BACKUP="${PRE_PUSH_HOOK}.ralph-backup"
+    mv "$PRE_PUSH_HOOK" "$PRE_PUSH_BACKUP"
+  fi
+  cat > "$PRE_PUSH_HOOK" <<'HOOK'
+#!/usr/bin/env bash
+echo "[ralph] pre-push hook: autonomous push blocked." >&2
+exit 1
+HOOK
+  chmod +x "$PRE_PUSH_HOOK"
+}
+```
+
+Cheap belt-and-suspenders against agent free will.
+
+### Combined cleanup trap
+
+All pre-flight installers register a single cleanup hook:
+
+```bash
+cleanup_on_exit() {
+  restore_commit_signing
+  remove_push_guard
+  remove_secrets
+}
+trap cleanup_on_exit EXIT
+```
+
+Pre-flight order in `main()`:
+1. `require_commands` (claude, gtimeout, python3, bun, op)
+2. `refuse_default_branch`
+3. `require_op_session`
+4. `prefetch_secrets` — fetch + export into runner env
+5. `disable_commit_signing`
+6. `install_push_guard`
+7. `init_state`
+
+---
+
+## Pull tooling forward — don't trail with strictness
+
+A common pattern in PRDs: "we'll add max-strict TS, extended lint plugins, React Compiler, and pre-commit hooks at the end as Group N." This **always backfires**:
+
+- Groups 3 → (N-1) produce code without those rules.
+- Group N flips on `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + extended lint patterns.
+- A cascade of typecheck/lint errors appears across every file written in the prior groups.
+- Group N now has two jobs: add the tooling AND fix every cascading error. It silently triples in size.
+
+**Rule:** add **the rules themselves** as early as possible — right after the scaffold group, before any meaningful code lands. Tests and CI workflow can still live at the end (they have content-dependencies on the implementation). But TS strictness, lint plugins, lefthook, and React Compiler all belong in a small standalone group that runs early.
+
+This isn't a "nice to have" — it's load-bearing. Errors caught while writing the code that produced them are 10× cheaper than errors caught in a final sweep.
+
+In group-decomposition step (Step 2 of `/ralph setup`), explicitly extract a "strictness baseline" group and place it as Group 4 or earlier.
+
+---
+
 ## Key Design Decisions (battle-tested)
 
 ### Claude invocation flags
@@ -714,6 +917,18 @@ Each group should leave the repo in a **compilable, testable state**. Never have
 
 **Timeout risk:** The 45-minute `CLAUDE_TIMEOUT` is generous for most groups, but groups that combine heavy research + multiple integrations + validation can stretch close to the limit. A group that looks like "2h of work" on paper can push toward timeout when Claude spends significant time researching unfamiliar APIs before writing a line of code. If a group has more than ~5 major components *and* requires researching 3+ libraries from scratch, consider splitting it — not because 2h is too long conceptually, but because research time is unpredictable. The runner handles the timeout-after-completion edge case (emitting the signal before the clock runs out but not before cleanup finishes), so this is a soft concern, not a hard rule.
 
+### Split-trigger heuristics (when reviewing a draft group list)
+
+A group is a split candidate if **any** of these apply:
+
+1. **More than one architectural decision.** Pagination shape, error envelope, schema lib are three decisions — three groups, not one.
+2. **N independent sub-resources × M concerns.** "Migrate 7 routes to a new pagination + add 7 new summary endpoints + swap the validation lib across 16 files" reads as 1 group on paper and 4–5 hours of unfocused churn in practice. Each concern is its own group; routes within a concern can be batched.
+3. **Touches the same file as another planned group.** Coordination overhead is high; consolidate or sequence explicitly with a "Depends on" link.
+4. **Adds new lint or TS rules.** Anything that flips strictness across the codebase is its own group, because the cascade is the work, not the rule flip.
+5. **Library version upgrade + feature change in the same group.** Separate the upgrade from the feature so a failure surface is one variable.
+
+Conversely, **mechanical fan-out of one pattern across N files is fine** — Claude can churn through 16 nearly-identical route migrations in <30 min if the pattern is established. The cost is decisions, not keystrokes.
+
 ---
 
 ## After All Groups Complete
@@ -726,6 +941,37 @@ Each group should leave the repo in a **compilable, testable state**. Never have
 
 ---
 
+## Babysitter Pattern (recommended for overnight runs)
+
+The runner is self-managing for retries but has no external observer. Stuck states (group in_progress with no log activity), repeated retries on the same group, or completion all go unnoticed until the human checks back. For multi-hour autonomous runs, pair the runner with a **lightweight babysitter**.
+
+**How:** the user invokes `/loop` in a Claude Code session with a babysit prompt; that session uses `ScheduleWakeup` to re-fire every 20–30 minutes. Each iteration:
+
+1. Reads `.ralph-tasks.json` and prints status.
+2. Tails the most recent `.ralph-logs/group-N.log` (last 40 lines).
+3. Detects "no progress in 60 min" — the group is `in_progress` but the log mtime is older than an hour. Probably stuck.
+4. Detects "approaching max retries" — `attempts: 2` after a failure means one more chance before auto-blocked.
+5. Detects "completion" — all 12 groups `complete`. Ends the loop.
+6. Surfaces anomalies briefly. Schedules the next wakeup.
+
+**Concrete invocation** (run after kicking off the ralph loop):
+
+```
+/loop Babysit the ralph migration loop running in this repo. Every 30 minutes:
+1. Run `./scripts/ralph.sh --status` and quote the output.
+2. Show the last 40 lines of the most recent in-progress group's log (`.ralph-logs/group-N.log`).
+3. Compute time-since-last-log-write — if >60min and status is in_progress, flag as "STUCK".
+4. If any group has attempts >= 2, flag as "AT RISK".
+5. If all groups are complete, end the loop with a summary.
+6. Report concisely (~100 words). Don't suggest fixes unless asked.
+```
+
+**Why not full intervention from the babysitter?** Stuck-state recovery (e.g. `./scripts/ralph.sh --reset N`) usually needs human judgment about what went wrong. The babysitter's job is detection + reporting, not autonomous repair. The cost of a false-positive auto-reset is high (you lose validated work); the cost of waking the human a few minutes late is low.
+
+The 30-minute cadence is chosen so cache stays warm across iterations (each wake under 5 min from prior cache, see the ScheduleWakeup tool's cache-window guidance — 1200–1800s is the sweet spot for idle observability ticks).
+
+---
+
 ## Anti-Patterns to Avoid
 
 - **God groups**: one group does everything — split it
@@ -734,3 +980,12 @@ Each group should leave the repo in a **compilable, testable state**. Never have
 - **Skipping the notes template**: the notes file is the institutional memory — don't skip it
 - **Overly prescriptive prompts**: include key interfaces and constraints, not a full implementation spec — leave Claude room to find better approaches
 - **E2E-only validation**: E2E is slow and fragile for early groups; use unit tests until the system is wired together
+- **Strictness baseline at the end**: adding `noUncheckedIndexedAccess`, extended lint plugins, or React Compiler as the final group creates a cascade-error pit. Land the rules early — Group 3 or 4 — even if tests/CI stay at the end.
+- **Operating on `master` / `main`**: autonomous commits to the default branch are unsafe — `deploy.yml` typically fires on push. The runner must refuse to start there. Use a simple guard, not a long-lived branch creator (users normally checkout their own feature branch first).
+- **Committing without disabling 1Password signing**: on macOS with `op-ssh-sign` and `commit.gpgsign=true`, every commit hangs on Touch ID. Always disable per-repo signing at runner startup; restore via `trap` on exit. Never use `--no-gpg-sign` (violates user commit rules).
+- **No `op whoami` pre-flight**: if any group invokes `op run`, an inactive 1Password session blocks mid-loop at 3am. Verify at startup with a `gtimeout 5 op whoami` check; exit fast and tell the user how to sign in.
+- **`op run` in group prompts**: even with a warm session, mid-loop `op` invocations risk Touch ID prompts (depends on per-command biometric settings). Pre-fetch every loop-needed secret at startup, write to `.ralph-secrets.env` (mode 600, gitignored, trap-cleaned), source it into runner env so `claude -p` children inherit it, and rewrite group prompts to reference env vars instead of `op run`. Reserve `op run` for hands-on-keyboard groups (cutover, manual).
+- **Inventing throwaway local creds**: don't make the agent hardcode local dev passwords (e.g. `argo:argo`). If the production secret is in 1Password, pre-fetch it once and reuse for both local container (`POSTGRES_PASSWORD: ${PROJECT_DB_PASSWORD}`) and prod. One source of truth eliminates a class of "the agent invented something that collides" footguns.
+- **No push-block hook**: shared context says "commit don't push" but an autonomous agent can violate it. Drop a `pre-push` hook that exits 1 at runner startup; restore on exit trap.
+- **Cutover-only data migration testing**: when a migration involves data (DB ports, schema changes), don't wait until cutover to first exercise the migration script. Pull production data snapshot to local and run the migration script during the early group that introduces the new system. Every later group develops against realistic data and the cutover becomes "run the same script again" — high confidence, low risk surface.
+- **No babysitter on overnight runs**: a stuck group can burn 3 × 45min before the runner marks it blocked, then sit idle until you check back. A 30-min `/loop` babysitter detects stuck states in time to act. See the Babysitter Pattern section above.
