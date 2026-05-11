@@ -21,10 +21,11 @@ Examples: language rewrites, database migrations, API redesigns, CI/CD overhauls
 ## Invocation
 
 ```
-/ralph setup      # Scaffold a new RALPH loop for the current project
-/ralph run        # Start/continue running pending groups
-/ralph status     # Print group status from state file
-/ralph reset N    # Reset group N to pending
+/ralph setup       # Scaffold a new RALPH loop for the current project
+/ralph run         # Start/continue running pending groups
+/ralph status      # Print group status from state file
+/ralph reset N     # Reset group N to pending
+/ralph babysitter  # Dynamic /loop observer — status checks + Slack updates every 30 min
 ```
 
 ---
@@ -954,21 +955,115 @@ The runner is self-managing for retries but has no external observer. Stuck stat
 5. Detects "completion" — all 12 groups `complete`. Ends the loop.
 6. Surfaces anomalies briefly. Schedules the next wakeup.
 
-**Concrete invocation** (run after kicking off the ralph loop):
-
-```
-/loop Babysit the ralph migration loop running in this repo. Every 30 minutes:
-1. Run `./scripts/ralph.sh --status` and quote the output.
-2. Show the last 40 lines of the most recent in-progress group's log (`.ralph-logs/group-N.log`).
-3. Compute time-since-last-log-write — if >60min and status is in_progress, flag as "STUCK".
-4. If any group has attempts >= 2, flag as "AT RISK".
-5. If all groups are complete, end the loop with a summary.
-6. Report concisely (~100 words). Don't suggest fixes unless asked.
-```
-
 **Why not full intervention from the babysitter?** Stuck-state recovery (e.g. `./scripts/ralph.sh --reset N`) usually needs human judgment about what went wrong. The babysitter's job is detection + reporting, not autonomous repair. The cost of a false-positive auto-reset is high (you lose validated work); the cost of waking the human a few minutes late is low.
 
 The 30-minute cadence is chosen so cache stays warm across iterations (each wake under 5 min from prior cache, see the ScheduleWakeup tool's cache-window guidance — 1200–1800s is the sweet spot for idle observability ticks).
+
+---
+
+## How to Run Babysitter (`/ralph babysitter`)
+
+When the user invokes `/ralph babysitter`, you (the assistant) **become** the babysitter for that Claude Code session. The user is expected to have already launched `./scripts/ralph.sh` in a separate terminal — `.ralph-secrets.env` exists in the repo root with `RALPH_SLACK_WEBHOOK_URL` set by the runner's pre-fetch.
+
+### Per-iteration playbook
+
+Each time the babysitter fires (initial invocation + every `ScheduleWakeup`), do this exactly:
+
+#### Step 1 — Source secrets
+
+```bash
+[ -f .ralph-secrets.env ] || { echo "no secrets file — runner not started?"; exit 1; }
+source .ralph-secrets.env
+```
+
+If the file isn't there, the loop never started or already finished + cleaned up. Stop scheduling further wakeups.
+
+#### Step 2 — Read state + recent log
+
+```bash
+./scripts/ralph.sh --status
+```
+
+Find the current `in_progress` group from `.ralph-tasks.json`. Tail its log:
+
+```bash
+ls -t .ralph-logs/*.log 2>/dev/null | head -1 | xargs tail -n 60
+```
+
+#### Step 3 — Compute flags
+
+- **STUCK:** `in_progress` group's log file's mtime is >60 minutes old. Use:
+  ```bash
+  log_age=$(( $(date +%s) - $(stat -f %m .ralph-logs/group-N.log) ))
+  ```
+- **AT RISK:** any group with `attempts >= 2` (one shot left before auto-block).
+- **BLOCKED:** any group with status `blocked` since the previous tick.
+- **COMPLETE:** all groups status `complete`.
+
+#### Step 4 — Post to Slack
+
+Always post a status, even if uneventful — the user wants to see steady ticks, not silence. Use the homelab watchdog payload shape:
+
+```bash
+post_slack() {
+  local title="$1" body="$2" color="${3:-#36a64f}"   # green default
+  curl -fsS --max-time 10 \
+    -H "Content-type: application/json" \
+    --data "$(jq -n --arg title "$title" --arg body "$body" --arg color "$color" '{
+      attachments: [{
+        color: $color,
+        blocks: [
+          {type: "header", text: {type: "plain_text", text: $title, emoji: true}},
+          {type: "section", text: {type: "mrkdwn", text: $body}}
+        ]
+      }]
+    }')" \
+    "$RALPH_SLACK_WEBHOOK_URL" > /dev/null
+}
+```
+
+Color codes: `#36a64f` green (normal tick), `#ECB22E` amber (AT RISK), `#E01E5A` red (STUCK / BLOCKED), `#2EB67D` teal (COMPLETE).
+
+Message body should include:
+- Current group + attempt count
+- One-line status summary ("3 complete, 1 in-progress, 11 pending")
+- Any flag (STUCK / AT RISK / BLOCKED)
+- For STUCK/AT-RISK/BLOCKED: the last 5 lines of the log
+
+#### Step 5 — Schedule next tick or end
+
+```
+If COMPLETE → post final summary, do NOT call ScheduleWakeup, end.
+If BLOCKED  → post alert, do NOT call ScheduleWakeup (human action needed), end.
+Otherwise   → call ScheduleWakeup with delaySeconds=1800.
+```
+
+The next wakeup re-fires this same skill — the prompt argument is the literal sentinel `<<autonomous-loop-dynamic>>` so the runtime re-injects `/ralph babysitter` instructions.
+
+### Stop conditions (no further wakeups)
+
+- All groups complete.
+- Any group blocked (human needed).
+- `.ralph-secrets.env` missing (runner ended).
+- User explicitly cancelled.
+
+### Concrete first-iteration response template
+
+```
+🤖 *RALPH babysitter started.*
+
+Status: 0/15 complete, Group 1 (Workspace move) in progress (attempt 1).
+Last log activity: 2 min ago. No flags. Scheduling next tick in 30 min.
+```
+
+Keep main-session output concise (~100 words). Slack carries the detail.
+
+### Why a skill, not a raw `/loop` prompt
+
+Encoding the babysitter as a skill (rather than a copy-pasted `/loop` prompt) means:
+- One source of truth — fix Slack payload here, every project benefits.
+- Slack webhook discovery via the runner's secrets file is automatic.
+- The user types `/ralph babysitter` after launching the loop — no copy-paste.
 
 ---
 
