@@ -85,9 +85,3 @@ nb() {
 
   git checkout -b "$1" "origin/$default_branch"
 }
-
-# rebuild-vps <container> — rebuild a docker container on the VPS
-#   e.g. rebuild-vps fpp-server
-rebuild-vps() {
-  ssh vps "cd sideproject-docker-stack && ./rebuild-container.sh $1"
-}
