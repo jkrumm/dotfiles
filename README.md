@@ -54,7 +54,7 @@ Small tasks (infra, config): implement → `/ship` (auto-detects direct-to-maste
 ```text
 dotfiles/
 ├── config/          CLAUDE.md files, zshrc, zsh modules, gitconfig, ghostty,
-│                    settings.template.json, localias
+│                    Caddyfile, settings.template.json
 ├── rules/           7 global rules (→ ~/.claude/rules/)
 ├── hooks/           notify.ts (all 4 events), protect-branches.ts
 ├── scripts/         queue.ts (cq CLI), statusline.sh, fetch_usage.py

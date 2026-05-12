@@ -159,20 +159,6 @@ No action needed — it's automatic.
 
 ---
 
-## Migrating from Localias
-
-`config/localias.yaml` is archived. The port reference is still there if needed, but all routing now goes through Caddy.
-
-**Old domains:**
-- `http://sideclaw.local:7705` (no specific port in URL needed anymore)
-
-**New domains:**
-- `https://sideclaw.test` (works in browser address bar, no port)
-
-Update any bookmarks or `.env` files that hardcoded the old domains.
-
----
-
 ## Why *.test?
 
 - `.local` is mDNS (Bonjour) — macOS doesn't consult `/etc/hosts` or dnsmasq for HTTPS connections to `.local`
