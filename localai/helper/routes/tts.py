@@ -833,8 +833,55 @@ def _post_process(combined: np.ndarray, lang: str, speed: float = 1.0) -> bytes:
     return proc.stdout
 
 
+# How long the Fish pipeline has to produce final audio before the request
+# falls back to Supertonic. A briefing on a healthy Mac renders in 30–60 s
+# including Haiku rewrite + chunking + per-chunk synth + ffmpeg loudnorm.
+# 120 s gives 2× headroom. Past that, Fish is wedged (Metal weights evicted
+# under memory pressure) and the cron's 600 s idle watchdog is closing in —
+# better to ship lower-quality audio than fail the whole job.
+_FISH_DEADLINE_SECS = 120.0
+
+
 @router.post("/v1/tts/synthesize", response_model=TTSResponse)
 async def synthesize(req: TTSRequest) -> TTSResponse:
+    """Primary TTS endpoint. Tries Fish-S2-Pro (highest Elo open-weights TTS)
+    with a hard deadline; on timeout or Fish-side connection error, falls back
+    to Supertonic-3 via routes.tts_fast.synthesize_fast. Both paths return the
+    same TTSResponse shape so callers stay engine-agnostic.
+
+    Fish failures we fall back from:
+      - asyncio.TimeoutError       — Fish wedged past _FISH_DEADLINE_SECS
+      - httpx.RequestError         — connection refused / read timeout / DNS
+      - httpx.HTTPStatusError      — Fish returned 5xx
+
+    We do NOT fall back from HTTPException (user input errors, 4xx from Haiku
+    rewrite, etc.) — those propagate so the caller sees the real cause.
+    """
+    try:
+        return await asyncio.wait_for(
+            _synthesize_fish(req),
+            timeout=_FISH_DEADLINE_SECS,
+        )
+    except (asyncio.TimeoutError, httpx.RequestError, httpx.HTTPStatusError) as exc:
+        # Import locally to avoid a circular import at module load
+        # (tts_fast imports TTSResponse + _detect_lang from this module).
+        from routes.tts_fast import synthesize_fast
+        print(
+            f"[tts] Fish path failed ({type(exc).__name__}: {exc}); "
+            f"falling back to Supertonic-3 — request: {len(req.text)} chars, "
+            f"lang_hint={req.lang_hint}"
+        )
+        return await synthesize_fast(
+            req.text,
+            lang_hint=req.lang_hint,
+            speed=0.9,
+        )
+
+
+async def _synthesize_fish(req: TTSRequest) -> TTSResponse:
+    """Original Fish-S2-Pro pipeline. Extracted so the public synthesize
+    endpoint can wrap it with a deadline + fallback. Behavior unchanged from
+    the pre-fallback version."""
     text = req.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is required")

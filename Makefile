@@ -777,6 +777,15 @@ _setup-localai:
 		uv pip install --quiet --python "$(MLX_AUDIO_PY)" pysbd \
 			&& echo "    ✓ pysbd installed"; \
 	fi
+	@# supertonic — ONNX/CPU fallback TTS (~99M, ~900 MB RSS).
+	@# Used by helper /v1/tts/synthesize/fast and as automatic fallback
+	@# when the Fish-S2-Pro primary path times out or errors.
+	@if "$(MLX_AUDIO_PY)" -c "import supertonic" 2>/dev/null; then \
+		echo "    · supertonic (ok)"; \
+	else \
+		uv pip install --quiet --python "$(MLX_AUDIO_PY)" supertonic \
+			&& echo "    ✓ supertonic installed"; \
+	fi
 	@brew list ffmpeg &>/dev/null && echo "    · ffmpeg (ok)" || (brew install ffmpeg >/dev/null 2>&1 && echo "    ✓ ffmpeg installed")
 	@# m4a STT patch — required for MacWhisper / Slack voice memos.
 	@# Detect by grepping for a unique post-patch marker (reverse dry-run was unreliable).
