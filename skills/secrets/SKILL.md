@@ -1,21 +1,29 @@
 ---
 name: secrets
 description: 1Password secrets management — vault structure, op:// references, .env.tpl patterns, adding/rotating secrets, cron setup, troubleshooting
-model: haiku
 ---
 
 # Secrets Management — 1Password
 
 ## Account Selection
 
-Always pass `--account` to every `op` CLI command — there are multiple 1Password accounts configured:
+Two 1Password accounts are configured:
 
-| Workspace | Account flag |
+| Workspace | Account |
 |-|-|
-| `~/SourceRoot/` (personal) | `--account tkrumm` |
-| `~/IuRoot/` (work) | `--account careerpartner` |
+| `~/SourceRoot/` (personal) | `tkrumm` |
+| `~/IuRoot/` (work) | `careerpartner` |
 
-Never omit `--account` — without it, `op` may pick the wrong account or prompt interactively.
+**Preferred:** use the workspace-aware helpers from `~/.zsh/conf.d/secrets.zsh` (sourced by `~/.zshrc`). They resolve the account from `$PWD` and are worktree-safe via `git rev-parse --git-common-dir`:
+
+```bash
+op_account_for_cwd                # → "tkrumm" or "careerpartner"
+op_run vault list                 # → op vault list --account <resolved>
+op_run read "op://vault/item/field"
+op_run run --env-file=.env.tpl -- bun test
+```
+
+If invoking `op` directly, always pass `--account` explicitly — without it, `op` may pick the wrong account or prompt interactively.
 
 ## Discovery First
 
@@ -23,13 +31,13 @@ Before answering questions about vault contents, **always query the live state**
 
 ```bash
 # List vaults accessible to current session
-op vault list --account tkrumm
+op_run vault list
 
 # List items in a vault
-op item list --vault <vault> --account tkrumm
+op_run item list --vault <vault>
 
 # Show item fields
-op item get <item> --vault <vault> --account tkrumm --format=json | jq '.fields[] | select(.value != "") | .label'
+op_run item get <item> --vault <vault> --format=json | jq '.fields[] | select(.value != "") | .label'
 ```
 
 Vault contents change over time. The patterns below are stable; the specific items are not.
@@ -72,7 +80,7 @@ CONFIG_VAR=some-value
 ## Reading a Single Secret
 
 ```bash
-op read "op://vault/item/field" --account tkrumm
+op_run read "op://vault/item/field"
 ```
 
 ## Vault Design Principles

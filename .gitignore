@@ -28,8 +28,10 @@ queue.md
 # LocalAI runtime data
 localai/monitor.db
 
-# Claude Code runtime state
-.claude/
+# Claude Code runtime state (but keep committed skills + rules)
+.claude/*
+!.claude/skills/
+!.claude/rules/
 
 # Python
 __pycache__/

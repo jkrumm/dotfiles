@@ -10,14 +10,12 @@ queue.md
 # macOS
 .DS_Store
 
-# Claude Code worktrees and local settings
+# Claude Code runtime state (per-machine)
 .claude/worktrees/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
-# Per-repo skills symlink → ~/SourceRoot/.claude/skills (managed by dotfiles)
-.claude/skills
-
-# Per-repo CLAUDE.local.md import → ~/SourceRoot/CLAUDE.md (managed by dotfiles)
+# CLAUDE.local.md — Claude Code's officially-supported local override file (per-machine, not committed)
 CLAUDE.local.md
 
 # Editor

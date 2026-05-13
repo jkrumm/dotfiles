@@ -1,7 +1,6 @@
 ---
 name: update-agent-rules
 description: Update agent rules (React, TanStack, Elysia best practices) from upstream GitHub repos. Use this skill when the user wants to update, sync, check versions, add new rule sets, or troubleshoot the rules setup. Also trigger when the user mentions "agent skills", "agent rules", "react rules", "tanstack rules", "elysia rules", or asks about the rules architecture.
-model: haiku
 ---
 
 # Update Agent Rules

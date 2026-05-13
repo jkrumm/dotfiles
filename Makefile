@@ -20,14 +20,13 @@ setup:
 	@$(MAKE) --no-print-directory _setup-hooks
 	@$(MAKE) --no-print-directory _setup-scripts
 	@$(MAKE) --no-print-directory _setup-skills
-	@$(MAKE) --no-print-directory _setup-sourceroot-skill-links
-	@$(MAKE) --no-print-directory _setup-sourceroot-claude-local
 	@$(MAKE) --no-print-directory _setup-settings
 	@$(MAKE) --no-print-directory _setup-gitignore
 	@$(MAKE) --no-print-directory _setup-ghostty
 	@$(MAKE) --no-print-directory _setup-tools
 	@$(MAKE) --no-print-directory _setup-caddy
 	@$(MAKE) --no-print-directory _setup-browser
+	@$(MAKE) --no-print-directory _setup-sideclaw-mcp
 	@$(MAKE) --no-print-directory _setup-pnpm
 	@$(MAKE) --no-print-directory _setup-viteplus
 	@$(MAKE) --no-print-directory _setup-op-token
@@ -93,9 +92,6 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/global.CLAUDE.md" \
 		DST="$(CLAUDE_DIR)/CLAUDE.md"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/sourceroot.CLAUDE.md" \
-		DST="$(SOURCEROOT)/CLAUDE.md"
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/zshrc" \
 		DST="$(HOME)/.zshrc"
@@ -370,74 +366,11 @@ _setup-scripts:
 
 .PHONY: _setup-skills
 _setup-skills:
-	@echo "  Skills (SourceRoot-scoped → ~/SourceRoot/.claude/skills/)..."
-	@mkdir -p $(SOURCEROOT)/.claude/skills
+	@echo "  Skills (global → ~/.claude/skills/)..."
+	@mkdir -p $(CLAUDE_DIR)/skills
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
-		$(MAKE) --no-print-directory _link SRC="$$skill" DST="$(SOURCEROOT)/.claude/skills/$$name"; \
-	done
-
-# Per-repo skill links so Zed's vendored Claude ACP (no --plugin-dir support)
-# sees the shared SourceRoot skills. Two strategies depending on the repo:
-#   - No existing .claude/skills/ → symlink the whole dir to ~/SourceRoot/.claude/skills.
-#   - Existing real .claude/skills/ (project-local skills committed to repo) →
-#     symlink each shared skill individually alongside the project's own skills,
-#     skipping any name collision with a local skill.
-# Lazy refresh also lives in c() — this just covers existing repos at setup time.
-.PHONY: _setup-sourceroot-skill-links
-_setup-sourceroot-skill-links:
-	@echo "  SourceRoot project skill links (Zed compatibility)..."
-	@SKILLS_DIR="$(SOURCEROOT)/.claude/skills"; \
-	for repo in $(SOURCEROOT)/*/; do \
-		name=$$(basename "$$repo"); \
-		[ "$$name" = "dotfiles" ] && continue; \
-		[ -d "$$repo/.git" ] || continue; \
-		LINK="$$repo.claude/skills"; \
-		if [ -L "$$LINK" ] && [ "$$(readlink "$$LINK")" = "$$SKILLS_DIR" ]; then \
-			echo "    · $$name (whole-dir link, ok)"; \
-		elif [ -d "$$LINK" ] && [ ! -L "$$LINK" ]; then \
-			added=0; kept=0; \
-			for skill in $$SKILLS_DIR/*/; do \
-				sname=$$(basename "$$skill"); \
-				dst="$$LINK/$$sname"; \
-				if [ -L "$$dst" ] && [ "$$(readlink "$$dst")" = "$$skill" ]; then \
-					kept=$$((kept+1)); \
-				elif [ -e "$$dst" ]; then \
-					kept=$$((kept+1)); \
-				else \
-					ln -sfn "$$skill" "$$dst"; \
-					added=$$((added+1)); \
-				fi; \
-			done; \
-			echo "    ✓ $$name (per-skill: +$$added, kept $$kept local)"; \
-		else \
-			mkdir -p "$$repo.claude"; \
-			ln -sfn "$$SKILLS_DIR" "$$LINK"; \
-			echo "    ✓ $$name (whole-dir link)"; \
-		fi; \
-	done
-
-# Per-repo CLAUDE.local.md so Zed's vendored Claude ACP (which doesn't walk
-# parent directories above the workspace root) sees the SourceRoot CLAUDE.md.
-# CLI already gets it via walk-up; this just covers Zed.
-# CLAUDE.local.md is officially supported and loads alongside CLAUDE.md.
-.PHONY: _setup-sourceroot-claude-local
-_setup-sourceroot-claude-local:
-	@echo "  SourceRoot CLAUDE.local.md (Zed compatibility)..."
-	@IMPORT_LINE='@~/SourceRoot/CLAUDE.md'; \
-	for repo in $(SOURCEROOT)/*/; do \
-		name=$$(basename "$$repo"); \
-		[ "$$name" = "dotfiles" ] && continue; \
-		[ -d "$$repo/.git" ] || continue; \
-		LOCAL="$$repo/CLAUDE.local.md"; \
-		if [ -f "$$LOCAL" ] && grep -qxF "$$IMPORT_LINE" "$$LOCAL"; then \
-			echo "    · $$name (ok)"; \
-		elif [ -f "$$LOCAL" ]; then \
-			echo "    ✗ $$name has CLAUDE.local.md without import — leaving alone"; \
-		else \
-			echo "$$IMPORT_LINE" > "$$LOCAL"; \
-			echo "    ✓ $$name"; \
-		fi; \
+		$(MAKE) --no-print-directory _link SRC="$$skill" DST="$(CLAUDE_DIR)/skills/$$name"; \
 	done
 
 .PHONY: _setup-settings
@@ -507,6 +440,17 @@ _setup-browser:
 	@claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
+.PHONY: _setup-sideclaw-mcp
+_setup-sideclaw-mcp:
+	@echo "  sideclaw MCP..."
+	@if [ -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
+		claude mcp remove sideclaw --scope user 2>/dev/null || true; \
+		claude mcp add sideclaw --scope user -- bun run $(SOURCEROOT)/sideclaw/server/mcp.ts; \
+		echo "    ✓ sideclaw MCP registered (check, review, ship tools)"; \
+	else \
+		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
+	fi
+
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy
 _copy:
@@ -548,7 +492,6 @@ status:
 	@echo ""
 	@echo "  Config"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/CLAUDE.md"
-	@$(MAKE) --no-print-directory _check DST="$(SOURCEROOT)/CLAUDE.md"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.zshrc"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.zsh/conf.d"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig"
@@ -601,10 +544,10 @@ status:
 	@$(MAKE) --no-print-directory _check-copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
-	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — SourceRoot only)"
+	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — global)"
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
-		$(MAKE) --no-print-directory _check DST="$(SOURCEROOT)/.claude/skills/$$name"; \
+		$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/skills/$$name"; \
 	done
 	@echo "  Tools"
 	@for tool in jq gh fzf zoxide wtp fnm bun uv age coderabbit fallow; do \
@@ -641,6 +584,14 @@ status:
 		echo "    ✓ chrome-devtools MCP (deferred loading)"; \
 	else \
 		echo "    ✗ chrome-devtools MCP [not registered — run make setup]"; \
+	fi
+	@echo "  sideclaw MCP"
+	@if [ ! -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
+		echo "    · sideclaw not cloned — skipping"; \
+	elif claude mcp list 2>/dev/null | grep -q "sideclaw"; then \
+		echo "    ✓ sideclaw MCP registered"; \
+	else \
+		echo "    ✗ sideclaw MCP [not registered — run make setup]"; \
 	fi
 	@echo ""
 
@@ -883,7 +834,7 @@ help:
 	@echo "  make setup              Idempotent full setup — symlinks, secrets, settings, browser"
 	@echo "  make clean              Purge brew/npm/pnpm/bun caches"
 	@echo "  make status             Verify symlink health + Keychain secrets"
-	@echo "  make github-config      Apply branch protection + merge settings to all repos"
+	@echo "  make github-config      Apply branch protection + merge settings + shared secrets to all repos"
 	@echo "  make github-config-dry  Preview without applying"
 	@echo ""
 	@echo "  make localai-setup  Render audio plist from template + reload if changed"

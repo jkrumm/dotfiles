@@ -23,11 +23,10 @@ Config files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
 
 | Layer | Tokens | Content |
 |-|-|-|
-| Global CLAUDE.md | ~800 | Personal context, model routing, workflow |
-| Global rules (7 files) | ~1,200 | Attribution, commits, TS, code style, security, formatting, research |
-| SourceRoot CLAUDE.md | ~700 | Infra, basalt-ui, skills table, git pipeline |
+| Global CLAUDE.md | ~2,000 | Personal context, workspaces (SourceRoot + IuRoot + Obsidian), 1P routing, skills, workflow |
+| Global rules (8 files) | ~1,400 | Attribution, commits, TS, code style, security, formatting, research, docker-makefile |
 | Chrome DevTools (deferred) | ~400 | Tool names only — schemas loaded on demand |
-| **Total baseline** | **~3,100** | Down from ~8,000+ with 4 MCPs |
+| **Total baseline** | **~3,800** | Single CLAUDE.md (no workspace-level intermediate layer) |
 
 ### Model Routing
 
@@ -53,13 +52,15 @@ Small tasks (infra, config): implement → `/ship` (auto-detects direct-to-maste
 
 ```text
 dotfiles/
-├── config/          CLAUDE.md files, zshrc, zsh modules, gitconfig, ghostty,
+├── config/          global.CLAUDE.md, zshrc, zsh modules, gitconfig, ghostty,
 │                    Caddyfile, settings.template.json
-├── rules/           7 global rules (→ ~/.claude/rules/)
-├── hooks/           notify.ts (all 4 events), protect-branches.ts
-├── scripts/         queue.ts (cq CLI), statusline.sh, fetch_usage.py
-├── skills/          20 Claude Code skills (→ ~/SourceRoot/.claude/skills/)
-├── cqueue/          Web dashboard for cqueue.md (Docker)
+├── rules/           8 global rules (→ ~/.claude/rules/)
+├── hooks/           notify.ts (all 4 events), protect-branches.ts, docker-makefile.ts
+├── scripts/         statusline.sh, fetch_usage.py, github-config.sh, wakeup.sh
+├── skills/          22 global Claude Code skills (→ ~/.claude/skills/)
+├── .claude/skills/  Per-repo skills (e.g. /localai)
+├── cqueue/          Web dashboard for sc-queue.md (host-native, LaunchAgent)
+├── localai/         Per-machine mlx-audio + Fish-S2-Pro TTS/STT stack
 └── Makefile         Bootstrap + idempotent setup
 ```
 
@@ -79,44 +80,38 @@ coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 | dotfiles | Live path |
 |-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| `config/sourceroot.CLAUDE.md` | `~/SourceRoot/CLAUDE.md` |
 | `rules/` | `~/.claude/rules/` |
+| `skills/{name}/` | `~/.claude/skills/{name}/` |
 | `config/zshrc` | `~/.zshrc` |
 | `config/zsh/` | `~/.zsh/conf.d/` |
 | `config/gitconfig*` | `~/.gitconfig*` |
 | `config/gitignore_global` | `~/.gitignore_global` |
 | `config/ghostty/` | `~/.config/ghostty/` |
 | `hooks/notify.ts` | `~/.claude/hooks/notify.ts` |
-| `scripts/queue.ts` | `~/.claude/queue.ts` |
+| `hooks/protect-branches.ts` | `~/.claude/hooks/protect-branches.ts` |
+| `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` |
-| `skills/{name}/` | `~/SourceRoot/.claude/skills/{name}/` |
 
-**Not symlinked:** `~/.claude/settings.json` (machine-specific permissions).
+**Not symlinked:** `~/.claude/settings.json` (machine-specific permissions — jq-merged from template).
 
-## Skills (20)
+## Skills
 
-| Skill | Model | Context | Purpose |
-|-|-|-|-|
-| `/grill` | opus | main | Question until clear direction, generate PRD |
-| `/implement` | sonnet | main | Guided implementation with research + explore + check |
-| `/ralph` | sonnet | main | Autonomous multi-group implementation loop |
-| `/ship` | haiku | main | Full flow: check → review → commit → PR → CodeRabbit → merge → release |
-| `/commit` | haiku | main | Smart conventional commits |
-| `/pr` | haiku | main | GitHub PR workflow (create, status, merge) |
-| `/git-cleanup` | haiku | main | Squash and group noisy branch commits |
-| `/check` | haiku | subprocess | Validation: format, lint, typecheck, test |
-| `/review` | sonnet | subprocess | Multi-angle code review + CodeRabbit CLI |
-| `/research` | sonnet | subprocess | WebSearch + WebFetch |
-| `/browse` | haiku | fork | Chrome DevTools debugging (isolated MCP) |
-| `/analyze` | haiku | subprocess | Deep static analysis (knip, jscpd, dep-cruiser) |
-| `/otel` | haiku | subprocess | Debug OTEL traces/logs in ClickHouse |
-| `/secrets` | haiku | main | 1Password vault ops |
-| `/upgrade-deps` | inherits | main | Dependency upgrade assistant |
-| `/frontend-design` | inherits | main | Production-grade frontend interfaces |
-| `/excalidraw-diagram` | haiku | main | Create Excalidraw diagrams |
-| `/read-drawing` | haiku | subprocess | Interpret Excalidraw diagrams |
-| `/skill-creator` | inherits | main | Create, modify, and test skills |
+**22 global skills** at `~/.claude/skills/` — load everywhere (SourceRoot, IuRoot, anywhere). Source of truth: `skills/{name}/SKILL.md` in this repo.
+
+Execution modes (full table with mode + worker model in `config/global.CLAUDE.md`):
+
+| Mode | Examples | Cost profile |
+|-|-|-|
+| **inline** | `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`, `frontend-design`, `skill-creator`, `upgrade-deps`, `excalidraw-diagram`, `cloudflare`, `ralph` (sonnet) | Runs on session model — no model switch, no fork |
+| **subprocess** (`claude -p`) | `analyze`, `otel`, `read-drawing` | API credits via Keychain, output isolated |
+| **MCP (sideclaw)** | `check`, `review`, `research` | Schema-validated JSON, quota-aware Max↔IU routing |
+| **fork** (`context: fork`) | `browse` | Wraps the chrome-devtools MCP — Max quota |
+
+**Per-repo skills** (committed in their repo's `.claude/skills/`, auto-load when Claude starts inside):
+- `dotfiles/.claude/skills/localai/` — manage the mlx-audio + Fish-S2-Pro stack
+- `hermes-agent/.claude/skills/{hermes-update,hermes-validate}/` — manage Hermes
+- Project-committed skills in other SourceRoot repos (release-fpp, audit, docs, prowlarr, raycast-extension, etc.)
 
 ## API Keys (Keychain-cached)
 

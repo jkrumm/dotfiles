@@ -6,7 +6,6 @@ description: >
   health issues, or any observability question in local dev or VPS production. Works against both environments.
   Invoke with: what to investigate + which environment (local/prod) + any known context (service name,
   trace ID, error message, time range). Returns a concise findings report directly to the main agent.
-model: haiku
 ---
 
 # OTEL Debug Skill
@@ -38,7 +37,7 @@ No password. SSH key auth configured via ~/.ssh/config.
 
 ## Query Script (preferred)
 
-SCRIPT=~/SourceRoot/.claude/skills/otel/scripts/query.py
+SCRIPT=~/.claude/skills/otel/scripts/query.py
 
 Presets:
   python3 $SCRIPT --env [ENV] --preset health

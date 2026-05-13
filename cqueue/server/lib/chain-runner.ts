@@ -1,11 +1,10 @@
 import { existsSync } from "fs";
+import { homedir } from "os";
 import { join } from "path";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HOME = process.env.HOME ?? "/Users/johannes.krumm";
-const PERSONAL_REPOS_PATH = process.env.PERSONAL_REPOS_PATH ?? "";
-const PLUGIN_DIR = join(HOME, "SourceRoot/.claude");
+const HOME = process.env.HOME ?? homedir();
 
 // Prefer standalone install over cmux-bundled; fall back to PATH resolution
 const CLAUDE_BIN = existsSync(join(HOME, ".local/bin/claude"))
@@ -65,10 +64,6 @@ function close(jobId: string) {
 
 // ── Job execution ─────────────────────────────────────────────────────────────
 
-function isPersonalRepo(worktreePath: string): boolean {
-  return PERSONAL_REPOS_PATH ? worktreePath.startsWith(PERSONAL_REPOS_PATH) : false;
-}
-
 export async function startJob(skill: string, worktreePath: string): Promise<string> {
   const id = crypto.randomUUID();
   const job: ChainJob = {
@@ -92,10 +87,6 @@ async function runJob(job: ChainJob) {
     "-p", job.skill,
     "--dangerously-skip-permissions",
   ];
-
-  if (isPersonalRepo(job.worktreePath)) {
-    args.push("--plugin-dir", PLUGIN_DIR);
-  }
 
   const proc = Bun.spawn([CLAUDE_BIN, ...args], {
     cwd: job.worktreePath,

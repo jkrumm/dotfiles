@@ -1,7 +1,6 @@
 ---
 name: pr
 description: GitHub PR workflow - create, status, merge with intelligent conflict handling
-model: haiku
 ---
 
 # PR Skill (GitHub)

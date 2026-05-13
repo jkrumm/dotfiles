@@ -1,7 +1,6 @@
 ---
 name: analyze
 description: Deep static analysis (dead code, duplication, circular deps, complexity) via fallow + claude -p subprocess
-model: haiku
 ---
 
 # Analyze — Deep Static Analysis

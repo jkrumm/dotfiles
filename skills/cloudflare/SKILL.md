@@ -5,7 +5,7 @@ description: Cloudflare API operations across VPS and HomeLab — DNS records, t
 
 # Cloudflare API Skill
 
-Source of truth: `~/SourceRoot/dotfiles/skills/cloudflare/`. Symlinked into `~/SourceRoot/.claude/skills/cloudflare/` by `dotfiles/Makefile` so it's available across all SourceRoot personal projects.
+Source of truth: `~/SourceRoot/dotfiles/skills/cloudflare/`. Symlinked into `~/.claude/skills/cloudflare/` by `dotfiles/Makefile` so it's globally available.
 
 Handles DNS + tunnel operations for **both** the VPS and the HomeLab from a single skill. Pick a target — `vps` or `homelab` — based on the user's request or the current repo (`cwd` under `~/SourceRoot/vps/` → vps; under `~/SourceRoot/homelab/` → homelab).
 

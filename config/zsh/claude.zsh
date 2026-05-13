@@ -1,12 +1,10 @@
-# Claude Code launcher — workspace-aware with cqueue /clear restart loop
+# Claude Code launcher — with cqueue /clear restart loop
 #
 # Usage: c [claude-args...]
 #
-# Workspace detection:
-#   ~/SourceRoot/*  → ensures <repo>/.claude/skills points at shared skills
-#                     (lazy symlink for Zed parity), then plain claude
-#   ~/IuRoot/*      → loads per-project .claude/ skills via --plugin-dir
-#   elsewhere       → plain claude with ENABLE_TOOL_SEARCH
+# Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
+# automatically — no --plugin-dir needed. Workspace detection lives in skills
+# themselves (e.g. SourceRoot/IuRoot 1Password account routing).
 #
 # Queue restart: when the stop hook writes a next task to .queue-restart,
 # the session is restarted with fresh context and the task injected.
@@ -23,39 +21,7 @@ c() {
     jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
       && mv /tmp/.claude.json.tmp ~/.claude.json
 
-    if [[ "$PWD" == "$HOME/SourceRoot"* ]]; then
-      # Lazy: ensure project sees the shared SourceRoot skills under
-      # .claude/skills/ AND has CLAUDE.local.md importing ~/SourceRoot/CLAUDE.md.
-      # Both needed for Zed's vendored Claude ACP, which can't accept --plugin-dir
-      # and doesn't walk parent dirs above the workspace root. Mirrors the
-      # _setup-sourceroot-* targets in Makefile.
-      local repo_root
-      repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
-      if [[ -n "$repo_root" && "$repo_root" != "$HOME/SourceRoot/dotfiles" && "$repo_root" == "$HOME/SourceRoot/"* ]]; then
-        local skills_dir="$HOME/SourceRoot/.claude/skills"
-        local link="$repo_root/.claude/skills"
-        if [[ -L "$link" || ! -e "$link" ]]; then
-          if [[ ! -L "$link" ]]; then
-            mkdir -p "$repo_root/.claude"
-            ln -sfn "$skills_dir" "$link"
-          fi
-        else
-          for skill in "$skills_dir"/*/; do
-            local sname dst
-            sname=$(basename "$skill")
-            dst="$link/$sname"
-            [[ ! -e "$dst" && ! -L "$dst" ]] && ln -sfn "$skill" "$dst"
-          done
-        fi
-        local claude_local="$repo_root/CLAUDE.local.md"
-        [[ ! -f "$claude_local" ]] && echo '@~/SourceRoot/CLAUDE.md' > "$claude_local"
-      fi
-      ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${claude_args[@]}"
-    elif [[ "$PWD" == "$HOME/IuRoot"* ]]; then
-      ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions --plugin-dir "$(git rev-parse --show-toplevel 2>/dev/null || echo '.')/.claude" "${claude_args[@]}"
-    else
-      ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${claude_args[@]}"
-    fi
+    ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${claude_args[@]}"
 
     if [[ -f "$restart_marker" ]]; then
       local next_task

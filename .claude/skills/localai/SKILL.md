@@ -1,7 +1,6 @@
 ---
 name: localai
 description: Manage per-machine mlx-audio (TTS + STT) on 127.0.0.1:8000 — install, status, swap STT model, troubleshoot
-model: haiku
 ---
 
 # LocalAI Stack Management

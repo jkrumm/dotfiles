@@ -20,8 +20,7 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 
 | File here | Live path | Notes |
 |-|-|-|
-| `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions |
-| `config/sourceroot.CLAUDE.md` | `~/SourceRoot/CLAUDE.md` | SourceRoot workspace |
+| `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
 | `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, claude, git, keybindings, path, secrets, tools |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
@@ -38,10 +37,11 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 | `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` | PreToolUse — blocks raw docker commands when Makefile exists |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
-| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (see `rules/*.md`, e.g., attribution, commit conventions, formatting, research-first, security, TypeScript, code style) |
-| `skills/{name}/` | `~/SourceRoot/.claude/skills/{name}/` | SourceRoot-only |
-| `skills/` (each) | `<repo>/.claude/skills` for each `~/SourceRoot/<repo>/` | Per-project links so Zed's vendored Claude ACP (no `--plugin-dir`) sees shared skills. Whole-dir symlink when project has no local `.claude/skills/`; per-skill symlinks alongside local skills otherwise. Created by `make setup`, refreshed lazily on `c()` launch. Gitignored globally via `.claude/skills`. |
-| `config/sourceroot.CLAUDE.md` (via import) | `<repo>/CLAUDE.local.md` for each `~/SourceRoot/<repo>/` | One-line `@~/SourceRoot/CLAUDE.md` import. Zed's ACP doesn't walk parents above workspace root, so SourceRoot CLAUDE.md needs to be reachable from inside each repo. CLAUDE.local.md loads alongside committed CLAUDE.md (concatenated). Created by `make setup`, refreshed lazily on `c()`. Gitignored globally via `CLAUDE.local.md`. |
+| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, formatting, research-first, security, TypeScript, code style, docker-makefile, visx-charts) |
+| `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
+
+**Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):
+- `.claude/skills/localai/` — manage the local mlx-audio / Fish S2 Pro stack (this repo's own infrastructure).
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
 
@@ -73,13 +73,13 @@ Two 1Password accounts are configured:
 
 ## Editing Rules
 
-**Adding a skill:** create `skills/{name}/SKILL.md` here, then `make setup`.
-Never create directly in `~/SourceRoot/.claude/skills/` — won't be in VCS.
+**Adding a global skill:** create `skills/{name}/SKILL.md` here, then `make setup` — it gets symlinked into `~/.claude/skills/{name}/` and loads in every session.
+
+**Adding a per-repo (dotfiles-only) skill:** create `.claude/skills/{name}/SKILL.md` here directly (committed, no symlink). Loads only when Claude starts inside this repo. Used for skills that manage this repo's infrastructure (e.g. `localai`).
 
 **Adding a global rule:** create `rules/{name}.md` here. The entire `rules/` dir is symlinked to `~/.claude/rules/`. Rules without `paths:` frontmatter load every session. Rules with `paths:` load lazily.
 
-**Skills scope:** loaded only in SourceRoot via `--plugin-dir ~/SourceRoot/.claude`
-in `c()`. Not available in IuRoot — intentional. IuRoot uses per-project `.claude/`.
+**Skills scope:** global skills load everywhere (SourceRoot, IuRoot, anywhere) via `~/.claude/skills/`. Workspace-specific behavior (e.g. SourceRoot vs IuRoot 1Password account) is handled inside the skill via the `op_account_for_cwd` helper or explicit `$PWD` guards.
 
 **settings.json changes:** update `config/settings.template.json`, then `make setup`
 to merge into the live file. Never edit the live settings.json for persistent changes.
@@ -128,5 +128,5 @@ cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.src == "fetch_usage")'
 - `sc-queue.md` blocks separated by `\n---\n`. Block types: plain text (◆), `/slash` (⚡), `STOP` (⏹).
 - Stop hook: JSON `{"decision":"block","reason":task}` to stdout + `process.exit(0)` continues session. Queue empties = natural stop.
 - STOP exits with code 0 synchronously — no async notification call before exit.
-- Skills have optional `model:` frontmatter (`haiku` for fast forks, default = sonnet).
-- `c()` in zshrc: sets `--plugin-dir` and `--dangerously-skip-permissions` per workspace.
+- Skills route via four modes: **inline** (no `model:` frontmatter — run on session model), **subprocess** (skill body shells `claude -p` with Keychain API key), **MCP/sideclaw** (registered tool with JSON schema + heartbeat + quota routing), **fork** (`context: fork` — wrap deferred MCP tools). See global CLAUDE.md `Token Efficiency` for the decision tree.
+- `c()` in `config/zsh/claude.zsh`: writes Claude Code theme to `~/.claude.json`, then invokes `claude --dangerously-skip-permissions` with the cqueue restart loop. No `--plugin-dir` — global skills load from `~/.claude/skills/` automatically.

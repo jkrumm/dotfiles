@@ -1,7 +1,6 @@
 ---
 name: commit
 description: Smart git commit with conventional commits, OpenSpec awareness, and intelligent splitting for GitHub
-model: haiku
 ---
 
 # Smart Commit Skill (GitHub)

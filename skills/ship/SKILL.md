@@ -1,7 +1,6 @@
 ---
 name: ship
 description: Full deployment flow — auto-detects state, runs check/review/commit/PR/CodeRabbit iteration/merge/release. Smart direct-to-master vs PR detection.
-model: haiku
 ---
 
 # Ship — Full Deployment Orchestrator

@@ -1,7 +1,6 @@
 ---
 name: git-cleanup
 description: Semantically group and squash branch commits before PR — eliminates noise commits, proposes logical groupings, executes via pure git soft reset. Use before /pr create when branch has multiple commits or noisy history.
-model: haiku
 ---
 
 # Git Cleanup Skill

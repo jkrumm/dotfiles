@@ -1,7 +1,6 @@
 ---
 name: read-drawing
 description: Read and interpret Excalidraw diagrams (.excalidraw + .svg) via claude -p subprocess. Isolates large diagram files from main context.
-model: haiku
 ---
 
 # Read Drawing Skill
