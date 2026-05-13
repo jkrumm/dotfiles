@@ -54,9 +54,9 @@
  * }
  *
  * Project Path Patterns (line ~107):
- * - SourceRoot: /Users/johannes.krumm/SourceRoot/repo/project
+ * - SourceRoot: ~/SourceRoot/repo/project
  *   Extracts: "repo/project" (2 levels)
- * - IuRoot: /Users/johannes.krumm/IuRoot/project
+ * - IuRoot: ~/IuRoot/project
  *   Extracts: "project" (1 level)
  *
  * Available macOS Sounds:
