@@ -9,14 +9,14 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ## Skill Architecture (Token Efficiency)
 
-**Principle:** Keep main thread focused on coordination. Use forked skills for heavy operations.
+**Principle:** Keep main thread focused on coordination. Delegate heavy operations to MCP-routed skills.
 
 ### Available Skills
 
-| Skill | Use For | Context |
-|-------|---------|---------|
-| **`/research`** | Major version research, breaking changes, migration guides | fork |
-| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | subprocess |
+| Skill | Use For | Mode |
+|-------|---------|------|
+| **`/research`** | Major version research, breaking changes, migration guides | MCP (sideclaw) |
+| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | MCP (sideclaw) |
 
 ### Delegation Rules
 
@@ -34,8 +34,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ### Token Savings
 
-- Research responses: ~80% savings via `/research` skill
-- Validation output: ~70% savings via `/check` skill
+Both `/research` and `/check` route through sideclaw — verbose output stays in the worker subprocess, only structured JSON returns to the main thread. Quota-aware (Max → IU at ≥70% utilization).
 
 ---
 

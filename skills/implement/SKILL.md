@@ -36,13 +36,13 @@ For Quick tasks: skip the formality, just implement and validate. State the tier
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
 | Explore | Skip | Explore subagent | Explore subagent |
-| Research | Skip | subprocess if needed | subprocess if needed |
+| Research | Skip | `/research` (MCP) if needed | `/research` (MCP) if needed |
 | Plan | 1-liner | 3-5 bullets | 3-5 bullets, wait for approval |
 | Implement | Inline | Inline | Sonnet subagent |
-| Validate (static) | `/check` subprocess | `/check` subprocess | `/check` subprocess |
+| Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
-Never do exploration or research inline in Standard/Heavy tiers. Always fork.
+Never do exploration or research inline in Standard/Heavy tiers. Use the Explore subagent for codebase navigation and `/research` (MCP) for external lookups.
 
 ---
 
@@ -149,7 +149,7 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 ## Rules
 
 - State the tier (Quick/Standard/Heavy) upfront
-- Never do exploration or research inline in Standard/Heavy — always fork
+- Never do exploration or research inline in Standard/Heavy — use Explore subagent + `/research` (MCP)
 - Never echo full subagent output — summarize in ≤5 bullets
 - Always run `/check` before declaring done
 - Assess runtime validation need — don't skip it silently
