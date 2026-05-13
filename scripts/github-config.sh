@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Apply consistent branch protection and merge settings to all GitHub repos.
+# Apply consistent branch protection, merge settings, and shared secrets to all
+# GitHub repos.
 #
 # Strategy:
 #   Public repos → GitHub Rulesets (modern, supports bypass actors)
@@ -13,6 +14,7 @@
 #   - No branch deletion
 #   - Rebase merge only (no merge commits, no squash)
 #   - Auto-delete merged branches
+#   - Shared secrets (config/github-secrets.json) synced from 1Password
 #
 # Bypass actors (see github-ruleset.json):
 #   - RepositoryRole/Admin (actor_id: 5) — you, pushing directly from terminal
@@ -31,17 +33,24 @@
 #   master directly, and PR review prevents them from landing workflow changes
 #   that abuse a PAT secret.
 #
+# ADDING A SHARED SECRET:
+#   Append an entry to config/github-secrets.json with {name, op_ref}. Values are
+#   read live from 1Password at runtime (account: tkrumm); only op:// refs live
+#   in git. Re-run `make github-config` to fan it out to every repo. Rotating a
+#   secret = update the field in 1P, re-run, done.
+#
 # Usage:
 #   ./scripts/github-config.sh              # all repos for jkrumm
 #   GITHUB_OWNER=other ./scripts/github-config.sh
 #   DRY_RUN=1 ./scripts/github-config.sh   # preview without applying
 #
-# Prerequisites: gh CLI authenticated (gh auth status)
+# Prerequisites: gh CLI authenticated (gh auth status); op CLI signed into tkrumm
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RULESET_FILE="$SCRIPT_DIR/../config/github-ruleset.json"
+SECRETS_FILE="$SCRIPT_DIR/../config/github-secrets.json"
 OWNER="${GITHUB_OWNER:-jkrumm}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -59,6 +68,45 @@ echo ""
 echo "  GitHub Config — $OWNER"
 [ "$DRY_RUN" = "1" ] && echo "  DRY RUN — no changes will be made"
 echo ""
+
+# Resolve shared secrets from 1Password once, up front. The values land in a
+# tempfile cleaned up on exit. Skipping the whole feature is fine — branch
+# protection + merge settings still apply.
+SECRETS_TMP=""
+have_secrets=0
+if [ -f "$SECRETS_FILE" ]; then
+  if ! command -v op >/dev/null 2>&1; then
+    echo "  ⚠ op CLI not found — secret sync skipped"
+    echo ""
+  elif ! command -v jq >/dev/null 2>&1; then
+    echo "  ⚠ jq not found — secret sync skipped"
+    echo ""
+  else
+    secret_count=$(jq '.secrets | length' "$SECRETS_FILE")
+    if [ "$secret_count" -gt 0 ]; then
+      echo "  Resolving $secret_count secret(s) from 1Password..."
+      SECRETS_TMP=$(mktemp)
+      trap 'rm -f "$SECRETS_TMP"' EXIT
+
+      resolve_failed=0
+      while IFS=$'\t' read -r name op_ref; do
+        if value=$(op read "$op_ref" --account tkrumm 2>/dev/null) && [ -n "$value" ]; then
+          printf '%s\t%s\n' "$name" "$value" >> "$SECRETS_TMP"
+          echo "    ✓ $name ← $op_ref"
+        else
+          echo "    ✗ $name ← $op_ref (read failed)" >&2
+          resolve_failed=1
+        fi
+      done < <(jq -r '.secrets[] | "\(.name)\t\(.op_ref)"' "$SECRETS_FILE")
+
+      if [ -s "$SECRETS_TMP" ]; then
+        have_secrets=1
+      fi
+      [ "$resolve_failed" = "1" ] && echo "  ⚠ some secrets failed to resolve — continuing with the rest"
+      echo ""
+    fi
+  fi
+fi
 
 repos=$(gh repo list "$OWNER" \
   --limit 200 \
@@ -78,6 +126,11 @@ while IFS=" " read -r repo is_private; do
     [ "$is_private" = "true" ] \
       && echo "  [dry] $OWNER/$repo (private → hook only, no API on free tier)" \
       || echo "  [dry] $OWNER/$repo (public → ruleset)"
+    if [ "$have_secrets" = "1" ]; then
+      while IFS=$'\t' read -r name _value; do
+        echo "         would sync secret: $name"
+      done < "$SECRETS_TMP"
+    fi
     continue
   fi
 
@@ -127,6 +180,16 @@ while IFS=" " read -r repo is_private; do
     echo "    ✓ rebase-only merge, auto-delete branches"
   else
     echo "    ✗ merge settings update failed" >&2
+  fi
+
+  if [ "$have_secrets" = "1" ]; then
+    while IFS=$'\t' read -r name value; do
+      if printf '%s' "$value" | gh secret set "$name" --repo "$OWNER/$repo" >/dev/null 2>&1; then
+        echo "    ✓ secret: $name"
+      else
+        echo "    ✗ secret: $name (set failed)" >&2
+      fi
+    done < "$SECRETS_TMP"
   fi
 
 done <<< "$repos"
