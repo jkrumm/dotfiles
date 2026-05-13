@@ -1,38 +1,36 @@
 # /// script
 # requires-python = ">=3.14"
-# dependencies = [
-#   "cryptography",
-#   "requests",
-# ]
 # ///
-"""Fetch Claude.ai subscription usage stats via web API.
+"""Fetch Claude Code subscription usage via the official OAuth /api/oauth/usage endpoint.
 
-Reads Chrome cookies from macOS Keychain + SQLite, calls the Claude.ai
-usage endpoint, and writes /tmp/claude_sl/usage_api.json for statusline.sh.
+Reads the OAuth access token from macOS Keychain (entry "Claude Code-credentials"),
+calls Anthropic's usage endpoint, writes /tmp/claude_sl/usage_api.json for
+statusline.sh. Same output shape as the legacy Chrome-cookie scraper —
+statusline.sh and sideclaw quota.ts both consume this file unchanged.
+
+The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
+we keep the existing cache rather than blanking it.
 
 Run via: uv run ~/.claude/fetch_usage.py
 """
 
 import json
-import shutil
-import sqlite3
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
 CACHE_DIR = Path("/tmp/claude_sl")
 CACHE_FILE = CACHE_DIR / "usage_api.json"
-COOKIE_DB = Path.home() / "Library/Application Support/Google/Chrome/Default/Cookies"
-CLAUDE_CFG = Path.home() / ".claude.json"
 LOG_DIR = Path.home() / ".claude" / "logs"
+
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+CQUEUE_URL = "http://localhost:7705/api/usage"
+KEYCHAIN_SERVICE = "Claude Code-credentials"
+ANTHROPIC_BETA = "oauth-2025-04-20"
 
 
 def log_event(src: str, event: str, level: str, data: dict) -> None:
@@ -62,52 +60,16 @@ def cleanup_old_logs(keep_days: int = 3) -> None:
         pass
 
 
-def _aes_key() -> bytes:
+def _oauth_token() -> str:
+    """Pull the Claude Code OAuth access token from macOS Keychain."""
     result = subprocess.run(
-        ["security", "find-generic-password", "-s", "Chrome Safe Storage", "-w"],
+        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
         capture_output=True,
         text=True,
         check=True,
     )
-    password = result.stdout.strip().encode("utf-8")
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA1(),
-        length=16,
-        salt=b"saltysalt",
-        iterations=1003,
-        backend=default_backend(),
-    )
-    return kdf.derive(password)
-
-
-def _decrypt(encrypted: bytes, key: bytes) -> str:
-    if not encrypted.startswith(b"v10"):
-        return encrypted.decode("utf-8", errors="replace")
-    cipher = Cipher(algorithms.AES(key), modes.CBC(b" " * 16), backend=default_backend())
-    plaintext = cipher.decryptor().update(encrypted[3:])
-    pad = plaintext[-1]
-    plaintext = plaintext[: -pad if 1 <= pad <= 16 else len(plaintext)]
-    return plaintext[32:].decode("utf-8", errors="replace")  # skip Chrome's 32-byte prefix
-
-
-def _chrome_cookies() -> dict[str, str]:
-    tmp = Path("/tmp/chrome_cookies_fetch.db")
-    shutil.copy2(COOKIE_DB, tmp)
-    try:
-        conn = sqlite3.connect(str(tmp))
-        rows = conn.execute(
-            "SELECT name, encrypted_value FROM cookies WHERE host_key LIKE '%claude.ai%'"
-        ).fetchall()
-        conn.close()
-    finally:
-        tmp.unlink(missing_ok=True)
-    key = _aes_key()
-    return {name: _decrypt(enc, key) for name, enc in rows}
-
-
-def _org_id() -> str:
-    with open(CLAUDE_CFG) as f:
-        return json.load(f)["oauthAccount"]["organizationUuid"]
+    payload = json.loads(result.stdout.strip())
+    return payload["claudeAiOauth"]["accessToken"]
 
 
 def _to_epoch(ts: str | None) -> int | None:
@@ -119,30 +81,39 @@ def _to_epoch(ts: str | None) -> int | None:
         return None
 
 
+def _http_get_json(url: str, headers: dict, timeout: int = 10) -> tuple[dict, int, int]:
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    t0 = time.time()
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = resp.read()
+        status = resp.status
+    return json.loads(body), status, round((time.time() - t0) * 1000)
+
+
+def _http_post_json(url: str, payload: dict, timeout: int = 1) -> None:
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=timeout):
+        pass
+
+
 def fetch() -> None:
     CACHE_DIR.mkdir(exist_ok=True)
     cleanup_old_logs()
 
-    cookies = _chrome_cookies()
-    log_event("fetch_usage", "cookies_ok", "info", {"count": len(cookies)})
+    token = _oauth_token()
+    log_event("fetch_usage", "token_ok", "info", {"prefix": token[:8]})
 
-    org_id = _org_id()
-    log_event("fetch_usage", "fetch_start", "info", {"org_id": org_id[:8] + "..."})
-
-    t0 = time.time()
-    resp = requests.get(
-        f"https://claude.ai/api/organizations/{org_id}/usage",
+    data, status, latency_ms = _http_get_json(
+        USAGE_URL,
         headers={
-            "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": ANTHROPIC_BETA,
             "Accept": "application/json",
-            "Referer": "https://claude.ai/",
         },
-        timeout=10,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    latency_ms = round((time.time() - t0) * 1000)
 
     def extract(key: str) -> dict:
         w = data.get(key) or {}
@@ -163,7 +134,7 @@ def fetch() -> None:
     log_event("fetch_usage", "fetch_success", "info", {
         "five_hour_pct": five_h_pct,
         "seven_day_pct": round(seven_d_pct) if seven_d_pct is not None else None,
-        "http_status": resp.status_code,
+        "http_status": status,
         "latency_ms": latency_ms,
     })
 
@@ -178,15 +149,11 @@ def fetch() -> None:
         now_ts = result["fetched_at"]
         reset_epoch = five_h.get("resets_at_epoch")
         mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
-        requests.post(
-            "http://localhost:7705/api/usage",
-            json={
-                "five_hour_pct": round(five_h.get("utilization") or 0),
-                "five_hour_mins_left": mins_left,
-                "seven_day_pct": round(seven_d.get("utilization")) if seven_d.get("utilization") is not None else None,
-            },
-            timeout=1,
-        )
+        _http_post_json(CQUEUE_URL, {
+            "five_hour_pct": round(five_h.get("utilization") or 0),
+            "five_hour_mins_left": mins_left,
+            "seven_day_pct": round(seven_d.get("utilization")) if seven_d.get("utilization") is not None else None,
+        })
     except Exception:
         pass
 
@@ -194,12 +161,25 @@ def fetch() -> None:
 if __name__ == "__main__":
     try:
         fetch()
+    except urllib.error.HTTPError as e:
+        # 429: keep existing cache rather than blanking — endpoint is rate-limited
+        # per-token and statusline tolerates stale data better than missing data.
+        if e.code == 429:
+            log_event("fetch_usage", "rate_limited", "warning", {"http_status": 429})
+            sys.exit(0)
+        log_event("fetch_usage", "fetch_error", "error", {
+            "error": str(e),
+            "type": type(e).__name__,
+            "http_status": e.code,
+        })
+        CACHE_DIR.mkdir(exist_ok=True)
+        CACHE_FILE.write_text(json.dumps({"error": str(e), "fetched_at": 0}))
+        sys.exit(1)
     except Exception as e:
         log_event("fetch_usage", "fetch_error", "error", {
             "error": str(e),
             "type": type(e).__name__,
         })
-        # Write minimal error record so statusline knows a fetch was attempted
         CACHE_DIR.mkdir(exist_ok=True)
         CACHE_FILE.write_text(json.dumps({"error": str(e), "fetched_at": 0}))
         sys.exit(1)
