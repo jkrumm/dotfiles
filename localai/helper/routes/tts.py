@@ -871,10 +871,20 @@ async def synthesize(req: TTSRequest) -> TTSResponse:
             f"falling back to Supertonic-3 — request: {len(req.text)} chars, "
             f"lang_hint={req.lang_hint}"
         )
+        # Fish is wedged. Translate the input to English and synthesize in
+        # Sam's voice — much better degradation than reading German text in
+        # an English-tuned embedding, which sounds like mispronounced German.
+        # The trade-off: a request that explicitly wanted German content
+        # (e.g. a morning briefing) gets it in English when Fish is down.
+        # Acceptable because the alternative is unintelligible audio, and a
+        # real German briefing requires Fish to be healthy anyway.
         return await synthesize_fast(
             req.text,
             lang_hint=req.lang_hint,
-            speed=0.9,
+            speed=0.95,
+            english_only=True,
+            polish=True,
+            paragraph_pause_secs=req.paragraph_pause_secs,
         )
 
 
