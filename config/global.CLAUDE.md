@@ -195,10 +195,12 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
-| `/localai [cmd]` | inline | Manage local AI stack. **SourceRoot-only** (self-guards on `$PWD`). |
+| `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
 
 **Per-repo skills** that only load when Claude is started inside their repo:
-- `~/SourceRoot/hermes-agent/.claude/skills/` — `/hermes-validate`, `/hermes-update` (managed by hermes-agent's own `make setup`).
+- `~/SourceRoot/dotfiles/.claude/skills/` — `/localai` (manage mlx-audio + Fish-S2-Pro stack)
+- `~/SourceRoot/hermes-agent/.claude/skills/` — `/hermes-validate`, `/hermes-update` (manage Hermes Agent)
+- Other SourceRoot repos with their own project skills (e.g. `homelab/.claude/skills/{audit,docs,upgrade-stack}/`, `vps/.claude/skills/{audit,docs}/`, `sideclaw/.claude/skills/claude-cli/`, `free-planning-poker/.claude/skills/release-fpp/`, `homelab-private/.claude/skills/prowlarr/`, `ticktick-raycast/.claude/skills/{raycast-extension,ticktick-api}/`).
 
 ---
 

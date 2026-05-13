@@ -57,7 +57,7 @@ dotfiles/
 ├── rules/           8 global rules (→ ~/.claude/rules/)
 ├── hooks/           notify.ts (all 4 events), protect-branches.ts, docker-makefile.ts
 ├── scripts/         statusline.sh, fetch_usage.py, github-config.sh, wakeup.sh
-├── skills/          22 global Claude Code skills (→ ~/.claude/skills/)
+├── skills/          21 global Claude Code skills (→ ~/.claude/skills/)
 ├── .claude/skills/  Per-repo skills (e.g. /localai)
 ├── cqueue/          Web dashboard for sc-queue.md (host-native, LaunchAgent)
 ├── localai/         Per-machine mlx-audio + Fish-S2-Pro TTS/STT stack
@@ -97,7 +97,7 @@ coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 
 ## Skills
 
-**22 global skills** at `~/.claude/skills/` — load everywhere (SourceRoot, IuRoot, anywhere). Source of truth: `skills/{name}/SKILL.md` in this repo.
+**21 global skills** at `~/.claude/skills/` — load everywhere (SourceRoot, IuRoot, anywhere). Source of truth: `skills/{name}/SKILL.md` in this repo.
 
 Execution modes (full table with mode + worker model in `config/global.CLAUDE.md`):
 
