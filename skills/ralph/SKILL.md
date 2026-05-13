@@ -26,6 +26,7 @@ Examples: language rewrites, database migrations, API redesigns, CI/CD overhauls
 /ralph status      # Print group status from state file
 /ralph reset N     # Reset group N to pending
 /ralph babysitter  # Dynamic /loop observer — status checks + Slack updates every 30 min
+/ralph cleanup     # Distill notes into docs/migrations/<name>.md, then delete all ralph artifacts (one-way)
 ```
 
 ---
@@ -182,6 +183,8 @@ fix(<scope>): <description>
 ```
 
 Stage only modified files. Commit before signaling completion.
+
+**Use raw `git` only — never invoke interactive skills.** Use `git add <files>` + `git commit -m "..."` directly. **Do not invoke `/commit`, `/commit --split`, `/pr`, `/check`, `/review`, `/ship`, or any other slash-command skill** from inside a group. These skills are interactive workflows that present proposals and wait for user confirmation; in `claude -p` headless mode the confirmation never comes, the skill prints a strategy, the model returns "success" with no side effect, and the group exits with no commit and no `RALPH_TASK_COMPLETE` signal. The runner then resets the group to `pending`, the working tree is left dirty, and the babysitter has to wake the human. If a group genuinely needs to split into multiple commits, do `git add <subset> && git commit -m "..."` once per logical commit.
 
 ---
 
@@ -754,6 +757,7 @@ The robust pattern: **fetch every secret the loop needs during pre-flight, write
 
 ```bash
 SECRETS_FILE="$REPO_ROOT/.ralph-secrets.env"
+SECRETS_INSTALLED=false   # only the invocation that wrote the file may delete it
 
 prefetch_secrets() {
   log_info "Pre-fetching secrets via op (Touch ID may prompt)..."
@@ -775,15 +779,23 @@ EOF
   # shellcheck disable=SC1090
   source "$SECRETS_FILE"
   set +a
+  SECRETS_INSTALLED=true
   log_success "Secrets cached to .ralph-secrets.env (mode 600) and exported."
 }
 
 remove_secrets() {
+  # Only delete the file if THIS invocation created it. Side-channel invocations
+  # like `./scripts/ralph.sh --status` and `--reset N` skip prefetch and must not
+  # strip the secrets out from under a running runner (its env is already loaded,
+  # but the babysitter still needs the file to recover RALPH_SLACK_WEBHOOK_URL).
+  $SECRETS_INSTALLED || return 0
   [[ -f "$SECRETS_FILE" ]] || return 0
   rm -f "$SECRETS_FILE"
   log_info "Removed .ralph-secrets.env."
 }
 ```
+
+**Why the sentinel matters:** the cleanup trap fires on every exit, including `--status` and `--reset`. Without the `$SECRETS_INSTALLED` guard, a babysitter or human running `./scripts/ralph.sh --status` to peek at progress will silently delete the secrets file the active runner installed. The running process is unaffected (its env was sourced before the trap was registered) — but the babysitter loses `RALPH_SLACK_WEBHOOK_URL`, and re-fetching from 1Password forces a Touch ID prompt every 30 min, which defeats the whole point of pre-fetching. Apply the same `<name>_INSTALLED` sentinel pattern to `install_push_guard` / `remove_push_guard` (and any future pre-flight installer).
 
 **Add `.ralph-secrets.env` to `.gitignore`.** Mode-600 + auto-delete are belt-and-suspenders; the gitignore is the real safety net against accidental commit.
 
@@ -801,6 +813,8 @@ remove_secrets() {
 Shared-context tells Claude "commit only, don't push" but that's a soft constraint. An autonomous agent in retry could `git push` and fire `deploy.yml` mid-migration. Install a real `pre-push` hook at runner startup that exits 1; remove on `trap` exit.
 
 ```bash
+PUSH_GUARD_INSTALLED=false
+
 install_push_guard() {
   cd "$REPO_ROOT"
   PRE_PUSH_HOOK="$(git rev-parse --git-path hooks)/pre-push"
@@ -814,6 +828,19 @@ echo "[ralph] pre-push hook: autonomous push blocked." >&2
 exit 1
 HOOK
   chmod +x "$PRE_PUSH_HOOK"
+  PUSH_GUARD_INSTALLED=true
+}
+
+remove_push_guard() {
+  # Same sentinel discipline as remove_secrets: --status / --reset must not
+  # uninstall a hook the running runner is depending on.
+  $PUSH_GUARD_INSTALLED || return 0
+  cd "$REPO_ROOT" 2>/dev/null || return 0
+  PRE_PUSH_HOOK="$(git rev-parse --git-path hooks)/pre-push"
+  rm -f "$PRE_PUSH_HOOK"
+  if [[ -f "${PRE_PUSH_HOOK}.ralph-backup" ]]; then
+    mv "${PRE_PUSH_HOOK}.ralph-backup" "$PRE_PUSH_HOOK"
+  fi
 }
 ```
 
@@ -939,6 +966,7 @@ Conversely, **mechanical fan-out of one pattern across N files is fine** — Cla
 3. Run full E2E suite
 4. Review `docs/ralph/RALPH_NOTES.md` — capture gotchas in CLAUDE.md if broadly applicable
 5. `/pr` — create PR
+6. After PR merges and you're confident you'll never want to `--reset N` and re-run a single group: **`/ralph cleanup`** — distills notes into `docs/migrations/<name>.md` and deletes every ralph artifact in one commit. One-way.
 
 ---
 
@@ -980,11 +1008,25 @@ If the file isn't there, the loop never started or already finished + cleaned up
 
 #### Step 2 — Read state + recent log
 
+**Never invoke `./scripts/ralph.sh` (any subcommand) from the babysitter** — even `--status` runs the script's cleanup trap, which can interact badly with the live runner. Read `.ralph-tasks.json` directly:
+
 ```bash
-./scripts/ralph.sh --status
+python3 - <<'PYEOF'
+import json
+with open('.ralph-tasks.json') as f:
+    state = json.load(f)
+total = len(state['groups'])
+done = sum(1 for g in state['groups'] if g['status'] == 'complete')
+in_prog = [g for g in state['groups'] if g['status'] == 'in_progress']
+blocked = sum(1 for g in state['groups'] if g['status'] == 'blocked')
+pending = total - done - blocked - len(in_prog)
+print(f"TOTAL={total} DONE={done} INPROG={len(in_prog)} BLOCKED={blocked} PENDING={pending}")
+for g in in_prog:
+    print(f"INPROG_GROUP={g['id']} TITLE={g['title']} ATTEMPTS={g['attempts']} STARTED={g.get('started_at')}")
+PYEOF
 ```
 
-Find the current `in_progress` group from `.ralph-tasks.json`. Tail its log:
+Then tail the active log:
 
 ```bash
 ls -t .ralph-logs/*.log 2>/dev/null | head -1 | xargs tail -n 60
@@ -1067,6 +1109,132 @@ Encoding the babysitter as a skill (rather than a copy-pasted `/loop` prompt) me
 
 ---
 
+## How to Run Cleanup (`/ralph cleanup`)
+
+When the user invokes `/ralph cleanup`, you (the assistant) distill the migration's learning notes into a single archival summary, then delete every ralph artifact. **One-way operation.** After this you cannot `--reset N` and re-run a single group; the whole scaffold is gone.
+
+### Step 1 — Verify completion + scope
+
+Read `.ralph-tasks.json` directly via python (**never** invoke `./scripts/ralph.sh` — the cleanup-trap risk is the same as for the babysitter, even with the sentinel patches in place). Refuse to proceed unless every group is `status: complete`.
+
+```bash
+python3 - <<'PYEOF'
+import json, sys
+with open('.ralph-tasks.json') as f:
+    state = json.load(f)
+incomplete = [g for g in state['groups'] if g['status'] != 'complete']
+if incomplete:
+    print("INCOMPLETE:", [(g['id'], g['status']) for g in incomplete])
+    sys.exit(1)
+print(f"OK_TO_CLEANUP groups={len(state['groups'])}")
+PYEOF
+```
+
+If incomplete: surface the offending groups to the user and stop. Do **not** offer a `--force` flag implicitly; if the user wants to abandon mid-run, they should ask explicitly and you should confirm they understand they're discarding institutional memory.
+
+Also refuse if a `ralph.sh` process is still running (`pgrep -fl ralph.sh`). The cleanup must follow runner exit, not race it.
+
+### Step 2 — Decide the archive filename
+
+Default: derive a slug from the user's working description (e.g. "v2 migration" → `v2-migration.md`) or from the current branch (`feat/v2` → `v2.md`). Ask the user to confirm the filename before writing — the archive is the migration's permanent record, the name matters.
+
+Target path: `docs/migrations/<slug>.md`. Create `docs/migrations/` if missing.
+
+### Step 3 — Generate the summary
+
+Collect inputs:
+- `docs/ralph/shared-context.md` (goal + tech stack)
+- `docs/ralph/RALPH_NOTES.md` (the per-group learning notes — the load-bearing source)
+- `docs/ralph/RALPH_REPORT.md` (final status)
+- `git log --oneline <first-ralph-commit>..HEAD` (commit history)
+
+Delegate the distillation to a haiku subprocess — structured input → structured markdown output is exactly its sweet spot, and the main thread stays cheap. Prompt template:
+
+```
+You are summarizing a completed multi-group code migration into one archival
+markdown file. The inputs are the shared context, the per-group learning notes,
+the final status report, and the git log for the migration range.
+
+Output exactly this shape (no preamble, no AI attribution):
+
+# <Project> — <migration name> (<YYYY-MM-DD> → <YYYY-MM-DD>)
+
+## Goal
+<2–4 sentences, distilled from shared-context.md>
+
+## Outcome
+<1 paragraph — what landed, what state the codebase is in now>
+
+## Groups
+| # | Title | Outcome |
+|-|-|-|
+(one line per group, "Outcome" is one short clause)
+
+## Architectural decisions that survived
+- <bullet — pulled from "Deviations from prompt" where Claude chose differently and it stuck>
+
+## Notable gotchas worth remembering
+- <bullet — only the cross-cutting ones; per-group quirks belong in commit messages>
+
+## Deferred work
+- <bullet — from "Future improvements" sections>
+
+## Tests added
+<count + categories, one sentence>
+
+Be concise. The goal is a reference document a future human can read in 60 seconds.
+Do not invent details. If a section is empty, write "—" and move on.
+```
+
+Invoke via:
+```bash
+ANTHROPIC_API_KEY=$(security find-generic-password -s claude-sdk-api-key -w) \
+ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
+  claude -p --model haiku "$prompt_with_inputs_inlined" > docs/migrations/<slug>.md
+```
+
+Show the user the generated file and ask them to confirm before proceeding to deletion. This is the only point where they can still bail.
+
+### Step 4 — Delete artifacts
+
+After user confirmation:
+```bash
+rm -rf scripts/ralph.sh scripts/ralph-reset.sh
+rm -rf docs/ralph/
+rm -rf .ralph-tasks.json .ralph-logs/ .ralph-secrets.env
+# Remove .gitignore entries that referenced ralph artifacts
+```
+
+For `.gitignore`: use `sed` to delete the three lines (`.ralph-tasks.json`, `.ralph-logs/`, `.ralph-secrets.env`) only if they exist — don't strip user's other entries. Prefer reading the file, removing exact-match lines, and writing back via the Edit tool.
+
+Verify nothing ralph-related survives:
+```bash
+git ls-files | grep -iE 'ralph' || echo "tracked: clean"
+ls -la | grep -iE 'ralph' || echo "untracked: clean"
+```
+
+### Step 5 — Commit
+
+Single commit:
+```
+chore(ralph): finalize <migration-name> + cleanup
+
+Archived migration summary to docs/migrations/<slug>.md.
+Removed scripts/ralph.sh, scripts/ralph-reset.sh, docs/ralph/, and
+gitignored state/log/secrets paths.
+```
+
+Stage explicitly — never `git add -A` after a bulk delete (you'll catch unrelated untracked files). Use `git add docs/migrations/<slug>.md .gitignore` then `git add -u` to capture the deletions.
+
+### What NOT to do
+
+- **Never run `./scripts/ralph.sh cleanup`** — cleanup is a Claude-driven playbook, not a bash subcommand. The script's EXIT trap is unsafe for any control-plane operation.
+- **Never delete before writing the summary.** If summary generation fails or the user disagrees with the output, you need the source notes to retry.
+- **Never delete commits or rewrite history.** Cleanup removes artifacts going forward; the per-group commits in git history are the audit trail.
+- **Never run cleanup while `pgrep ralph.sh` returns a PID.** The trap-vs-runner race is the same as the babysitter case.
+
+---
+
 ## Anti-Patterns to Avoid
 
 - **God groups**: one group does everything — split it
@@ -1084,3 +1252,5 @@ Encoding the babysitter as a skill (rather than a copy-pasted `/loop` prompt) me
 - **No push-block hook**: shared context says "commit don't push" but an autonomous agent can violate it. Drop a `pre-push` hook that exits 1 at runner startup; restore on exit trap.
 - **Cutover-only data migration testing**: when a migration involves data (DB ports, schema changes), don't wait until cutover to first exercise the migration script. Pull production data snapshot to local and run the migration script during the early group that introduces the new system. Every later group develops against realistic data and the cutover becomes "run the same script again" — high confidence, low risk surface.
 - **No babysitter on overnight runs**: a stuck group can burn 3 × 45min before the runner marks it blocked, then sit idle until you check back. A 30-min `/loop` babysitter detects stuck states in time to act. See the Babysitter Pattern section above.
+- **Babysitter shelling into `ralph.sh`**: invoking `./scripts/ralph.sh --status` (or `--reset`) from the babysitter is unsafe — the script's EXIT trap runs `remove_secrets` / `remove_push_guard` regardless of subcommand. The running runner is unaffected (env was sourced before the trap), but the babysitter loses `.ralph-secrets.env` (and with it `RALPH_SLACK_WEBHOOK_URL`), forcing a Touch ID prompt on every subsequent tick. Fix in two places: gate cleanup with a `<name>_INSTALLED` sentinel that only `prefetch_secrets` / `install_push_guard` flip true, AND make the babysitter read `.ralph-tasks.json` directly via python rather than calling the script at all.
+- **Invoking interactive slash-skills (`/commit`, `/commit --split`, `/pr`, `/check`, `/review`, `/ship`) from inside a group**: these are interactive Claude Code workflows that propose a plan and *wait for user confirmation*. In `claude -p` headless mode there is no user — the model prints the proposal, the tool call returns "success" without producing a commit/PR/etc., and the group exits with no `RALPH_TASK_COMPLETE` signal. The runner then resets the group to pending, the working tree is left dirty with all of the group's actual work uncommitted, and the human gets paged. Symptom in the log: `RESULT_OBJ` shows `subtype: "success"`, but the last few text blocks discuss a "split commit strategy" instead of acting; final tool calls are `git status` / `Skill: ...` rather than `git commit`. Fix: group prompts must use raw shell (`git add <files> && git commit -m "..."`) and shared-context.md must explicitly forbid `/commit` and friends. Build/check tasks should run the underlying tool directly (`bun test`, `bun run typecheck`, `bun run lint`), never `/check`.
