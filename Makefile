@@ -34,6 +34,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-localai
+	@$(MAKE) --no-print-directory _setup-orbstack-block
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
@@ -451,6 +452,22 @@ _setup-sideclaw-mcp:
 		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
 	fi
 
+.PHONY: _setup-orbstack-block
+_setup-orbstack-block:
+	@echo "  OrbStack phone-home block (/etc/hosts)..."
+	@if [ ! -d "/Applications/OrbStack.app" ]; then \
+		echo "    · OrbStack not installed — skipping"; \
+	elif grep -q "OrbStack phone-home block" /etc/hosts 2>/dev/null; then \
+		echo "    · /etc/hosts entries (ok)"; \
+	else \
+		echo "    Appending block to /etc/hosts (sudo)..."; \
+		printf '\n' | sudo tee -a /etc/hosts >/dev/null \
+			&& sudo tee -a /etc/hosts < "$(DOTFILES_DIR)/config/orbstack-hosts.txt" >/dev/null \
+			&& sudo dscacheutil -flushcache \
+			&& sudo killall -HUP mDNSResponder 2>/dev/null || true; \
+		echo "    ✓ /etc/hosts entries added + DNS cache flushed"; \
+	fi
+
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy
 _copy:
@@ -584,6 +601,14 @@ status:
 		echo "    ✓ chrome-devtools MCP (deferred loading)"; \
 	else \
 		echo "    ✗ chrome-devtools MCP [not registered — run make setup]"; \
+	fi
+	@echo "  OrbStack phone-home block"
+	@if [ ! -d "/Applications/OrbStack.app" ]; then \
+		echo "    · OrbStack not installed — skipping"; \
+	elif grep -q "OrbStack phone-home block" /etc/hosts 2>/dev/null; then \
+		echo "    ✓ /etc/hosts entries"; \
+	else \
+		echo "    ✗ /etc/hosts entries [missing — run make setup]"; \
 	fi
 	@echo "  sideclaw MCP"
 	@if [ ! -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \

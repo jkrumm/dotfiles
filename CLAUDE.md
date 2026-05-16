@@ -45,6 +45,8 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
 
+**Appended (not symlinked):** `/etc/hosts` — `_setup-orbstack-block` appends `config/orbstack-hosts.txt` if `/Applications/OrbStack.app` exists and the marker line is absent. Sinkholes `api-license.orbstack.dev`, `api-misc.orbstack.dev`, and the Sentry DSN host to `0.0.0.0`/`::`. `api-updates.orbstack.dev` is intentionally left reachable. Idempotent. Re-audit endpoints after each OrbStack update — the audit command is documented inside the txt file.
+
 **Not symlinked:** `~/.claude/settings.json` — machine-specific permissions.
 `make setup` creates from template if missing, otherwise jq-merges:
 template wins on structural keys (hooks, statusLine, plugins, env); permissions + model/effortLevel/alwaysThinkingEnabled preserved from live file.

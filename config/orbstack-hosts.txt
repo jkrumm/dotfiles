@@ -1,0 +1,14 @@
+# --- OrbStack phone-home block ---
+# Blocks license enforcement, misc telemetry, and Sentry crash reports.
+# Auto-update host (api-updates.orbstack.dev) intentionally NOT blocked.
+# Re-audit endpoints after each OrbStack update:
+#   strings -a /Applications/OrbStack.app/Contents/MacOS/OrbStack \
+#     "/Applications/OrbStack.app/Contents/Frameworks/OrbStack Helper.app/Contents/MacOS/OrbStack Helper" \
+#     | grep -ohE '[a-zA-Z0-9.-]+\.(orbstack\.dev|ingest[a-z.]*sentry\.io)' | sort -u
+0.0.0.0	api-license.orbstack.dev
+0.0.0.0	api-misc.orbstack.dev
+0.0.0.0	o120089.ingest.us.sentry.io
+::	api-license.orbstack.dev
+::	api-misc.orbstack.dev
+::	o120089.ingest.us.sentry.io
+# --- end OrbStack block ---
