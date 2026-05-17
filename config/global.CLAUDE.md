@@ -118,11 +118,9 @@ Helper lives in `~/.zsh/conf.d/secrets.zsh`. Skills that touch 1Password (`/secr
 - Challenge immature or over-engineered solutions.
 
 ### Scope Discipline
-- **ONLY implement what I explicitly ask for.**
-- Research/plan fully, THEN build piece by piece.
-- Wait for me to ask for each specific piece — don't drive ahead.
-- Don't add features, refactorings, or improvements I didn't request.
-- If unclear about scope, ask instead of assuming more work.
+- Stay within the requested scope — don't sprawl into unrelated refactors, features, or cleanups.
+- For non-trivial work, plan briefly before building.
+- If scope is genuinely ambiguous, ask; otherwise proceed.
 
 ### When Uncertain
 State the question, list 2 options with tradeoffs, give tendency, ask.
