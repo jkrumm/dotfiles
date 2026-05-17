@@ -17,8 +17,9 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 
 - **1Password account:** `tkrumm` — always pass `--account tkrumm` to every `op` CLI command.
 - **VCS:** GitHub. No ticket prefixes.
-- **Direct-to-master repos** (`/ship` skips PR flow): `dotfiles`, `homelab`, `homelab-private`, `vps`, `hermes-agent`, `sideclaw`, `basalt-ui-playground`, `argo`.
-- **Feature-branch + PR repos**: `basalt-ui` (NPM published — separate commits), `rollhook`, `rollhook-action`, `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`.
+- **Default: direct-to-master.** Every SourceRoot repo skips the PR flow unless it's on the small PR-required denylist.
+- **PR-required repos** (`/ship` uses PR flow; `protect-branches.ts` enforces): `basalt-ui` (NPM published — also always a separate commit), `free-planning-poker`, `rollhook`, `rollhook-action`. Everything else is direct-to-master.
+- **All `~/IuRoot/` repos require PRs** (against `main`). Detected by path — no list to maintain.
 
 #### Repository map
 

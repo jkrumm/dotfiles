@@ -1,16 +1,24 @@
 #!/usr/bin/env bun
 
 /**
- * PreToolUse hook: Claude Code must never commit or push to protected branches.
+ * PreToolUse hook: enforce PR workflow only for repos that actually need it.
  *
- * Protected branches: main, master
+ * Default: every repo is direct-to-master — the hook does nothing.
+ * Exception: a small denylist of repos where Claude Code must go through a PR.
  *
- * BLOCKED:
+ * PR-required repos:
+ *   - basalt-ui            (NPM published — broken main blocks next release)
+ *   - free-planning-poker  (live web app)
+ *   - rollhook             (production deployment tool)
+ *   - rollhook-action      (consumed via GitHub Marketplace)
+ *   - any repo under ~/IuRoot/  (work, PR workflow against `main`)
+ *
+ * For PR-required repos, BLOCKED:
  *   git push ... main/master      — any push targeting a protected branch
  *   git push (no ref)             — when currently on main/master
  *   git push --force / -f         — unconditional force push to any branch
  *
- * ALLOWED:
+ * For PR-required repos, ALLOWED:
  *   git commit (anywhere)                      — local commits are always fine
  *   git push origin feature-branch             — normal push to feature branch
  *   git push --force-with-lease origin feat/*  — safe force to feature branch
@@ -28,8 +36,8 @@ interface HookInput {
 
 const PROTECTED = ["main", "master"];
 
-// Repos where direct pushes to main/master are allowed (infra/config repos, no PR workflow)
-const UNPROTECTED_REPOS = ["homelab", "homelab-private", "vps", "dotfiles", "hermes-agent", "basalt-ui-playground", "sideclaw", "argo"];
+// Repos where Claude Code must go through a PR (everything else is direct-to-master).
+const PR_REQUIRED_REPOS = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action"];
 
 function getRepoName(cwd: string): string | null {
   const result = Bun.spawnSync(["git", "remote", "get-url", "origin"], {
@@ -42,6 +50,19 @@ function getRepoName(cwd: string): string | null {
   // Handles both SSH (git@github.com:user/repo.git) and HTTPS formats
   const match = url.match(/\/([^/]+?)(?:\.git)?$/);
   return match?.[1] ?? null;
+}
+
+function isIuRootRepo(cwd: string): boolean {
+  // Work repos live under ~/IuRoot/ (and ~/IuRoot/<repo>.worktrees/<branch>).
+  // toplevel resolves both cases; symlinks normalised via realpath.
+  const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) return false;
+  const top = result.stdout.toString().trim();
+  return top.includes("/IuRoot/");
 }
 
 function getCurrentBranch(cwd: string): string | null {
@@ -70,12 +91,15 @@ const input: HookInput = JSON.parse(await Bun.stdin.text());
 
 if (input.tool_name !== "Bash") process.exit(0);
 
-// Skip protection for infra/config repos that use direct-to-main workflow
-const repoName = getRepoName(input.cwd ?? process.cwd());
-if (repoName && UNPROTECTED_REPOS.includes(repoName)) process.exit(0);
+const cwd = input.cwd ?? process.cwd();
+
+// Default: direct-to-master is fine. Only enforce PR workflow for the denylist.
+const repoName = getRepoName(cwd);
+const requiresPR =
+  (repoName !== null && PR_REQUIRED_REPOS.includes(repoName)) || isIuRootRepo(cwd);
+if (!requiresPR) process.exit(0);
 
 const command = (input.tool_input?.command ?? "").trim();
-const cwd = input.cwd ?? process.cwd();
 
 // ── git push ──────────────────────────────────────────────────────────────────
 

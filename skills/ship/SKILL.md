@@ -27,14 +27,21 @@ gh pr view --json state,statusCheckRollup,reviews,url 2>/dev/null
 
 ## Flow Decision
 
-### Direct-to-Master Repos
-If the repo name matches: `homelab`, `homelab-private`, `vps`, `dotfiles`, `sideclaw` — OR if on the default branch with small changes:
+### Direct-to-Master Repos (default)
+
+Every SourceRoot repo ships direct-to-master **unless** it's on the PR-required list below. This is also enforced by `hooks/protect-branches.ts`, so the rule lives in one place.
+
 1. Run `/check` (skip for `homelab`, `homelab-private`, `vps`, `dotfiles` — config/infra repos with no lint/typecheck)
 2. Run `/commit` (if uncommitted changes)
 3. `git push`
 4. Done
 
-### PR Flow (all other repos)
+### PR Flow (the exception list)
+
+Use the PR flow when **either** of the following is true:
+
+- Repo name is one of: `basalt-ui` (NPM published), `free-planning-poker`, `rollhook`, `rollhook-action`.
+- Working directory is under `~/IuRoot/` (work repos; default branch is `main`).
 Based on detected state, pick up from the right step:
 
 **Step 1 — Uncommitted changes exist:**
