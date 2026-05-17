@@ -6,7 +6,7 @@ theme = dark:basalt-ui-dark,light:basalt-ui-light
 
 # ── Font (matches Warp settings) ─────────────────────────────────────────────
 font-family = JetBrains Mono
-font-size = 13
+font-size = 15
 
 # ── Cursor — Warp default is solid block, no blink ───────────────────────────
 cursor-style = block
