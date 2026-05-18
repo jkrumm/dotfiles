@@ -73,6 +73,32 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
+# free-planning-poker — web (Next.js), server (Bun WS), analytics (FastAPI),
+# logdy UI. Ports 7723-7726 reserved; 7724-7726 are logdy ingest sockets and
+# don't need .test hosts. Caddy auto-handles WebSocket upgrades for fpp-server.
+#
+# fpp.test rewrites Host → localhost:7720 because Next.js dev server checks
+# the Host header on dev-only endpoints (/__nextjs_original-stack-frames,
+# _next/webpack-hmr); a foreign host returns 403 / drops the WS upgrade.
+fpp.test {
+	import local
+	reverse_proxy localhost:7720 {
+		header_up Host localhost:7720
+	}
+}
+fpp-server.test {
+	import local
+	reverse_proxy localhost:7721
+}
+fpp-analytics.test {
+	import local
+	reverse_proxy localhost:7722
+}
+fpp-logdy.test {
+	import local
+	reverse_proxy localhost:7723
+}
+
 # LocalAI stack runs on each Mac as 127.0.0.1:8000 (mlx-audio).
 # Hermes connects to localhost:8000 directly. Other clients (Hermes Python
 # SDK, scripts) work fine with mlx-audio's NDJSON Content-Type.
@@ -101,7 +127,6 @@ whisper.test {
 		reverse_proxy localhost:8000
 	}
 }
-
 
 # ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
 # Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a
