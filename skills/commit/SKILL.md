@@ -11,7 +11,6 @@ Generate conventional commit messages with intelligent analysis of changes, Open
 
 ## Arguments
 
-- `ticket` - Optional ticket number (JK-XX). Auto-detected if not provided.
 - `--amend` - Amend last commit + force push (for follow-up fixes)
 - `--split` - Force splitting analysis for multiple commits
 - `--no-split` - Force single commit
@@ -19,15 +18,14 @@ Generate conventional commit messages with intelligent analysis of changes, Open
 
 ## Context Detection
 
-**Ticket Number Format:**
-- `JK-XX` (e.g., JK-61) - Personal projects
+**SourceRoot personal projects do not use ticket numbers.** All scopes are module/component names (e.g. `auth`, `booking`, `basalt-ui`) — never ticket IDs.
 
-**Ticket Detection Priority:**
-1. Explicit argument: `/commit JK-123`
-2. OpenSpec: `.openspec/changes/*/proposal.md` (if directory exists)
-3. Branch name: `feat/JK-123-*` pattern
-4. Recent commits: `Refs: JK-XX` in messages
-5. None: Quick fix, no ticket (valid for small changes)
+If a SourceRoot scope ever needs a ticket reference (e.g. cross-linking an upstream issue), put it in the body as plain text — not in the scope, not as `Refs:` footer. The `Refs:` convention is for ticketed IuRoot work only.
+
+**OpenSpec context** (if `.openspec/changes/` directory exists):
+- Match changed files to any spec that might be relevant
+- Extract the change purpose if found
+- Do NOT extract a ticket reference for SourceRoot — even if a proposal contains one
 
 **Special Handling:**
 - `basalt-ui` package changes → ALWAYS separate commit(s) (NPM published)
@@ -49,11 +47,11 @@ Analyze git changes for commit preparation:
 5. Check for OpenSpec context (if `.openspec/changes/` directory exists):
    - Look in `.openspec/changes/` for active specifications
    - Match changed files to any spec that might be relevant
-   - Extract the change purpose and ticket reference if found
+   - Extract the change purpose (not a ticket — SourceRoot has none)
 
 6. Analyze the changes:
    - Identify the primary purpose (feat/fix/refactor/docs/test/chore/build/ci/perf/style)
-   - Determine appropriate scope (module/component name OR ticket ID)
+   - Determine appropriate scope (module/component name only — never a ticket ID)
    - Check if changes span multiple logical concerns
    - Identify if basalt-ui package is involved (check file paths)
 
@@ -125,9 +123,9 @@ git push --force-with-lease
 **Rules:**
 - **Subject**: Max 50 chars, imperative mood, no period, lowercase after colon
 - **Type**: feat|fix|docs|style|refactor|perf|test|build|ci|chore
-- **Scope**: Module/component name, lowercase, hyphenated if multi-word
+- **Scope**: Module/component name, lowercase, hyphenated if multi-word. Omit entirely if the change spans the whole repo or there's no natural scope. SourceRoot personal projects do not use ticket IDs as scope
 - **Body**: Explain WHY (diff shows what), wrap at 72 chars, bullet points for multiple points
-- **Footer**: `Refs: JK-XX` if ticket found, `BREAKING CHANGE:` if applicable
+- **Footer**: `BREAKING CHANGE:` if applicable. No `Refs:` footer — SourceRoot has no ticket tracker
 
 **CRITICAL: NO AI ATTRIBUTION**
 - Do NOT add `Co-Authored-By: Claude...` or similar
@@ -208,7 +206,7 @@ fi
 ```
 Commit created successfully.
 
-Branch 'feat/JK-123-user-auth' is 3 commits ahead of main.
+Branch 'feat/user-auth' is 3 commits ahead of main.
 📂 Working in worktree (created via wtp)
 
 Run `/pr create` to create a PR?
@@ -226,7 +224,7 @@ When `basalt-ui` package files are detected:
 
 ## Commit Message Examples
 
-**Feature with ticket:**
+**Feature with module scope:**
 ```
 feat(auth): add refresh token rotation
 
@@ -236,8 +234,6 @@ Tokens are rotated on each refresh to prevent replay attacks.
 - Add TokenRotationService with configurable intervals
 - Update AuthMiddleware to handle expired tokens gracefully
 - Store refresh token family for revocation tracking
-
-Refs: JK-42
 ```
 
 **Bug fix:**
@@ -246,11 +242,9 @@ fix(api): handle null response from external service
 
 External payment API occasionally returns null on timeout.
 Previously caused unhandled exception in OrderService.
-
-Refs: JK-128
 ```
 
-**basalt-ui component:**
+**basalt-ui component (breaking change):**
 ```
 feat(basalt-ui): add DateRangePicker component
 
@@ -260,12 +254,20 @@ Supports presets, custom ranges, and timezone awareness.
 BREAKING CHANGE: DatePicker prop `range` removed, use DateRangePicker instead
 ```
 
-**Refactoring (no ticket):**
+**Refactoring:**
 ```
 refactor(booking): extract validation logic to dedicated service
 
 Reduces BookingService complexity from 450 to 180 lines.
 Validation rules now testable in isolation.
+```
+
+**Repo-wide change (no scope):**
+```
+chore: bump dependency lockfile
+
+Routine `npm update` to pick up patch versions.
+No code changes; nothing semver-major.
 ```
 
 ## Dry Run Mode
