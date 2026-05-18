@@ -102,3 +102,21 @@ whisper.test {
 	}
 }
 
+
+# ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
+# Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a
+# non-443 port and forwards over the AWS Client VPN tunnel. /etc/hosts pin
+# (managed by `make vpn-web-install` in ~/IuRoot/prometheus-scripts/vpn)
+# routes the hostname to 127.0.0.1 so Caddy gets the request first.
+# Browser sees Caddy's local-CA cert; Caddy verifies the real upstream cert.
+
+metabase.iu-aws.de {
+	tls internal
+	reverse_proxy https://127.0.0.1:24443 {
+		header_up Host metabase.iu-aws.de
+		transport http {
+			tls
+			tls_server_name metabase.iu-aws.de
+		}
+	}
+}
