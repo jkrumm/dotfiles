@@ -1,10 +1,7 @@
 # Claude Code per-repo AI files — never commit these
-sc-queue.md
 sc-note.md
-queue.md
 
 # sideclaw atomic write temp files
-.sc-queue.md.tmp
 .sc-note.md.tmp
 
 # macOS

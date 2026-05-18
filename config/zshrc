@@ -27,13 +27,6 @@ fi
 # c [args]           launch Claude Code — auto-detects workspace, loads skills
 #                    SourceRoot → ~/SourceRoot/.claude skills
 #                    IuRoot    → per-project .claude/ skills
-# cq add "task"      append task to queue (single-line)
-# cq add             append multi-line task via stdin (Ctrl+D to finish)
-# cq list            show all pending tasks with index
-# cq status          pending count
-# cq edit            open cqueue.md in $EDITOR
-# cq stop            append STOP sentinel — ends queue processing
-# cq clear           empty the queue
 #
 # ── AI shell helpers ─────────────────────────────────────────────────────────
 # ai "<desc>"        generate zsh command from description → confirm → run

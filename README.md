@@ -59,7 +59,6 @@ dotfiles/
 ├── scripts/         statusline.sh, fetch_usage.py, github-config.sh, wakeup.sh
 ├── skills/          21 global Claude Code skills (→ ~/.claude/skills/)
 ├── .claude/skills/  Per-repo skills (e.g. /localai)
-├── cqueue/          Web dashboard for sc-queue.md (host-native, LaunchAgent)
 ├── localai/         Per-machine mlx-audio + Fish-S2-Pro TTS/STT stack
 └── Makefile         Bootstrap + idempotent setup
 ```
@@ -125,9 +124,8 @@ Execution modes (full table with mode + worker model in `config/global.CLAUDE.md
 
 | Tool | Purpose |
 |-|-|
-| **cq** | Per-repo task queue (`cqueue.md`). Stop hook injects next task |
-| **notify.ts** | All 4 Claude Code events: timing, notifications, queue, session end |
-| **statusline.sh** | Model/context/tokens/duration, cwd/branch, queue preview |
+| **notify.ts** | All 4 Claude Code events: timing, notifications, session end |
+| **statusline.sh** | Model/context/tokens/duration, cwd/branch |
 | **coderabbit** | Local code review CLI (free: 3 reviews/hr) |
 | **wtp** | Git worktree management with post-create hooks |
 
@@ -135,5 +133,4 @@ Execution modes (full table with mode + worker model in `config/global.CLAUDE.md
 
 | File | Purpose |
 |-|-|
-| `cqueue.md` | Task queue — cq CLI + Stop hook |
-| `cnotes.md` | Session notes — future cqueue dashboard |
+| `sc-note.md` | Session notes — surfaced by the sideclaw dashboard |

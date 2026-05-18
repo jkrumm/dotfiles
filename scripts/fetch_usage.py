@@ -28,7 +28,7 @@ CACHE_FILE = CACHE_DIR / "usage_api.json"
 LOG_DIR = Path.home() / ".claude" / "logs"
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-CQUEUE_URL = "http://localhost:7705/api/usage"
+SIDECLAW_URL = "http://localhost:7705/api/usage"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 ANTHROPIC_BETA = "oauth-2025-04-20"
 
@@ -142,14 +142,14 @@ def fetch() -> None:
     tmp.write_text(json.dumps(result))
     tmp.rename(CACHE_FILE)
 
-    # Push to cqueue UI (localhost:7705) — fail silently if not running
+    # Push to sideclaw UI (localhost:7705) — fail silently if not running
     try:
         five_h = result["five_hour"]
         seven_d = result["seven_day"]
         now_ts = result["fetched_at"]
         reset_epoch = five_h.get("resets_at_epoch")
         mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
-        _http_post_json(CQUEUE_URL, {
+        _http_post_json(SIDECLAW_URL, {
             "five_hour_pct": round(five_h.get("utilization") or 0),
             "five_hour_mins_left": mins_left,
             "seven_day_pct": round(seven_d.get("utilization")) if seven_d.get("utilization") is not None else None,

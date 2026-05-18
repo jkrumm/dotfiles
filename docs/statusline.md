@@ -17,7 +17,6 @@ The script receives a JSON payload on stdin with session context and prints
 ```
 Claude Sonnet 4.6 | 86k/170k 51% | +660 -52 | 308k | 23min
 ~/SourceRoot/basalt-ui | * feat/add-button
-⚡ /commit --split · +2 more
 ```
 
 **Line 1** — Session metrics:
@@ -31,11 +30,6 @@ Claude Sonnet 4.6 | 86k/170k 51% | +660 -52 | 308k | 23min
 **Line 2** — Location:
 - CWD (home-shortened, worktree-aware: `WT·SE proj/path` for student-enrolment worktrees)
 - Git branch + status: `✓` clean, `*` dirty, `!!` merge conflicts
-
-**Line 3** — Queue (only shown when `queue.md` is non-empty):
-- `⚡ /command · +N more` — slash command up next
-- `◆ task preview · +N more` — regular task up next
-- `⏹ stopped · N total` — queue is stopped
 
 ## Context Color Coding
 

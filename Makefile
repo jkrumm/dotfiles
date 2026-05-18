@@ -163,7 +163,7 @@ _setup-tools:
 		npm install -g fallow 2>/dev/null || true; \
 		command -v fallow >/dev/null 2>&1 && echo "    ✓ fallow installed" || echo "    · fallow (use npx fallow as fallback)"; \
 	fi
-	@# bun — JS runtime (cq alias, hooks)
+	@# bun — JS runtime (hooks, claude-cli skill)
 	@if command -v bun >/dev/null 2>&1; then \
 		echo "    · bun $$(bun --version) (ok)"; \
 	else \
@@ -658,34 +658,6 @@ github-config-dry:
 	@DRY_RUN=1 $(DOTFILES_DIR)/scripts/github-config.sh
 
 # ============================================================================
-# cqueue — web dashboard (http://cqueue.local)
-# ============================================================================
-
-.PHONY: up
-up:
-	cd cqueue && docker compose up -d --build
-
-.PHONY: down
-down:
-	cd cqueue && docker compose down
-
-.PHONY: rebuild
-rebuild:
-	cd cqueue && docker compose up -d --build --force-recreate
-
-.PHONY: logs
-logs:
-	cd cqueue && docker compose logs -f
-
-.PHONY: shell
-shell:
-	cd cqueue && docker compose exec cqueue sh
-
-.PHONY: ps
-ps:
-	cd cqueue && docker compose ps
-
-# ============================================================================
 # Clean — purge caches (brew, npm, pnpm, bun)
 # ============================================================================
 
@@ -867,13 +839,6 @@ help:
 	@echo "  make stop           Stop mlx-audio (+ helper if installed)"
 	@echo ""
 	@echo "  Hermes Agent setup lives in ~/SourceRoot/hermes-agent — run make setup there."
-	@echo ""
-	@echo "  make up         Start cqueue dashboard"
-	@echo "  make down       Stop cqueue"
-	@echo "  make rebuild    Force-recreate cqueue container"
-	@echo "  make logs       Tail cqueue logs"
-	@echo "  make shell      Shell into cqueue container"
-	@echo "  make ps         Container status"
 	@echo ""
 
 .DEFAULT_GOAL := help

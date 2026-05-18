@@ -26,7 +26,7 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
 | `config/gitconfig-personal` | `~/.gitconfig-personal` | jkrumm@pm.me + 1Password signing |
 | `config/gitconfig-work` | `~/.gitconfig-work` | johannes.krumm@iu.org + 1Password signing |
-| `config/gitignore_global` | `~/.gitignore_global` | sc-queue.md, sc-note.md |
+| `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
 | `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | Blueprint v6 light/dark terminal themes (copied, not symlinked — cmux symlink bug) |
@@ -98,18 +98,13 @@ cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq .
 # Hook stop decisions only
 cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.event == "stop_decision")'
 
-# Question detection results (why queue fired or paused)
-cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.event == "question_detect" or .event == "haiku_call" or .event == "haiku_skip")'
-
 # fetch_usage errors
 cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.src == "fetch_usage")'
 ```
 
 **Key events to check when debugging:**
-- Queue fires on a question → look for `question_detect` (check `reason`, `has_question_mark`) and `haiku_skip` (check `no_api_key`)
-- Haiku not called → `haiku_skip` with `reason: "no_api_key"` means `ANTHROPIC_API_KEY` not in hook env
 - fetch_usage broken → `fetch_error` with `type` field shows which exception class failed
-- Unexpected stop behavior → `stop_decision` shows exact decision taken
+- Notification routing → `received` shows which event fired with cwd/session context
 
 ## Terminal Setup
 
@@ -127,8 +122,5 @@ cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.src == "fetch_usage")'
 
 ## Key Technical Facts
 
-- `sc-queue.md` blocks separated by `\n---\n`. Block types: plain text (◆), `/slash` (⚡), `STOP` (⏹).
-- Stop hook: JSON `{"decision":"block","reason":task}` to stdout + `process.exit(0)` continues session. Queue empties = natural stop.
-- STOP exits with code 0 synchronously — no async notification call before exit.
 - Skills route via four modes: **inline** (no `model:` frontmatter — run on session model), **subprocess** (skill body shells `claude -p` with Keychain API key), **MCP/sideclaw** (registered tool with JSON schema + heartbeat + quota routing), **fork** (`context: fork` — wrap deferred MCP tools). See global CLAUDE.md `Token Efficiency` for the decision tree.
-- `c()` in `config/zsh/claude.zsh`: writes Claude Code theme to `~/.claude.json`, then invokes `claude --dangerously-skip-permissions` with the cqueue restart loop. No `--plugin-dir` — global skills load from `~/.claude/skills/` automatically.
+- `c()` in `config/zsh/claude.zsh`: writes Claude Code theme to `~/.claude.json`, then invokes `claude --dangerously-skip-permissions`. No `--plugin-dir` — global skills load from `~/.claude/skills/` automatically.

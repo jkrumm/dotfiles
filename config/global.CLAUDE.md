@@ -29,7 +29,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
-| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` tools, quota-aware Max↔IU routing. Hosts personal queue, notes, todos, Excalidraw integration. |
+| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` tools, quota-aware Max↔IU routing. Hosts notes and Excalidraw integration. |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
 | `basalt-ui` | Tailwind v4 design system (NPM: `basalt-ui`). **Always commit separately from consumer apps.** |
 | `basalt-ui-playground` | Component preview / dev environment for basalt-ui. |
@@ -212,12 +212,6 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 ```
 
 Or just `/ship` — auto-detects state. `/pr create` errors on default branch, proposes branch rename, runs `/commit` if uncommitted, offers `/git-cleanup` if ≥3 commits, runs `/check` pre-flight. `/pr status` warns on uncommitted/unpushed work, shows CodeRabbit feedback, offers to implement fixes.
-
----
-
-## Task Queue (`sc-queue.md`)
-
-Per-repo `sc-queue.md` for unattended multi-task sessions. The Stop hook pops the next task and injects it as the next user message. Blocks separated by `\n---\n`. Append `STOP` as a standalone block to end the session.
 
 ---
 

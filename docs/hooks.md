@@ -4,7 +4,7 @@
 
 A single Bun script (`~/.claude/hooks/notify.ts`) handles all four Claude Code
 hook events. It provides rich macOS notifications, workspace identification by
-sound, session timing, and the cq task queue injection mechanism.
+sound, and session timing.
 
 ## Hook Events Handled
 
@@ -12,7 +12,7 @@ sound, session timing, and the cq task queue injection mechanism.
 |-|-|-|
 | `SessionStart` | Claude session opens (startup/resume/clear/compact) | Record session start time, capture project/branch context |
 | `Notification` | Claude needs user input (idle_prompt) or permission | Send "Input Required" notification with context |
-| `Stop` | Claude finishes a task | **Check queue first** → inject next task or send completion notification |
+| `Stop` | Claude finishes a task | Send completion notification with project/branch/duration |
 | `SessionEnd` | Claude session closes | Send session summary with total duration |
 
 ## Registration
@@ -82,29 +82,9 @@ interface NotificationState {
 }
 ```
 
-## Queue Integration (Stop Event)
-
-See `docs/cq.md` for full details. The critical sequence in `handleStopEvent`:
-
-```
-1. findQueueFile(input.cwd)   → resolves {git-root}/cqueue.md
-2. popQueueTask(queueFile)    → removes + returns first block
-3a. "STOP"  → stderr message + process.exit(0)             ← session ends
-3b. task    → JSON {"decision":"block","reason":task} to stdout + exit(0) ← continues session
-3c. null    → normal stop notification                     ← session ends
-```
-
 ## Exit Codes
 
 | Code | Meaning |
 |-|-|
-| 0 | Normal — session ends. But if stdout contains `{"decision":"block","reason":"..."}`, session continues with reason as feedback |
+| 0 | Normal — session ends |
 | non-zero | Hook error — shown in Claude UI |
-
-## Debug Output
-
-A temporary debug line writes to stderr on every Stop event:
-```
-[cq] cwd=/path/to/repo | file=/path/to/repo/queue.md | task="task preview..."
-```
-This appears in Claude's "Stop hook error" panel. Remove once queue injection is confirmed stable.

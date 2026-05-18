@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# Claude Code Statusline — 2–3 line layout
+# Claude Code Statusline — 2 line layout
 #
 # Line 1: Model · Context (usable) · Session lines · Total tokens · Duration · Usage (5h/wk/mo)
 # Line 2: CWD · Git branch & dirty flag
-# Line 3: Queue status — only shown when <git-root>/cqueue.md has tasks
 
 input=$(cat)
 
@@ -144,45 +143,9 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
   git_section=" | ${status_icon} ${branch}"
 fi
 
-# ── Queue (read sc-queue.md from git root of session cwd) ───────────────────────
-queue_line=""
-git_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
-queue_file=""
-[ -n "$git_root" ] && queue_file="${git_root}/sc-queue.md"
-if [ -n "$queue_file" ] && [ -f "$queue_file" ]; then
-  # Strip comment lines and blank lines to get task content
-  content=$(grep -v '^#' "$queue_file" | sed '/^[[:space:]]*$/d')
-  if [ -n "$content" ]; then
-    seps=$(echo "$content" | grep -c '^---$' 2>/dev/null)
-    seps=${seps:-0}
-    queue_count=$((seps + 1))
-    # First task = everything before the first --- separator
-    first_task=$(echo "$content" | sed '/^---$/,$d' | head -1)
-
-    if [ "$first_task" = "STOP" ]; then
-      queue_line="⏹ stopped · ${queue_count} total"
-    elif echo "$first_task" | grep -q '^/'; then
-      preview="${first_task:0:40}"
-      if [ "$queue_count" -gt 1 ]; then
-        queue_line="⚡ ${preview} · +$((queue_count - 1)) more"
-      else
-        queue_line="⚡ ${preview}"
-      fi
-    else
-      preview="${first_task:0:40}"
-      if [ "$queue_count" -gt 1 ]; then
-        queue_line="◆ ${preview} · +$((queue_count - 1)) more"
-      else
-        queue_line="◆ ${preview}"
-      fi
-    fi
-  fi
-fi
-
 # ── Output ─────────────────────────────────────────────────────────────────────
 line1="${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored} | +${lines_added} -${lines_removed} | ${tokens_fmt} | ${duration}"
 [ -n "$usage_parts" ] && line1="${line1} | ${usage_parts}"
 echo -e "$line1"
 echo -e "${cwd_display}${git_section}"
-[ -n "$queue_line" ] && echo -e "${queue_line}"
 exit 0
