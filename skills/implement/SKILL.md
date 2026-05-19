@@ -13,6 +13,17 @@ Context-aware implementation flow. Scales its approach based on task complexity 
 - The task touches one or many files — complexity is handled by scaling the approach
 - You want research + explore + implement + validate in one coordinated flow
 
+## Default Stance: Action Bias
+
+**When the user runs `/implement`, they've already decided to ship it.** Scope is assumed clear; the agent decides along the way. Default to action — don't gate on confirmation, don't propose alternatives, don't ask "should I proceed?". Research and minor judgment calls happen inline as needed.
+
+**Only stop to ask when:**
+- A genuinely **major** uncertainty exists (architectural fork, breaking change, data migration risk, security implication)
+- A **decision the user must own** is still open (which of two incompatible patterns to follow, which library to adopt, naming of a public API)
+- The task as stated is **internally inconsistent** or contradicts something visible in the codebase
+
+Otherwise: pick the obvious option, note it in the plan bullet, and go. The user can redirect in the sign-off step.
+
 ---
 
 ## Complexity Tiers
@@ -31,18 +42,25 @@ For Quick tasks: skip the formality, just implement and validate. State the tier
 
 ## Subagent Delegation Rules
 
-**Primary goal: keep the main agent's context window small.**
+**Primary goal: keep the orchestrator's context window small.**
+
+All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. Burn fan-out on Sonnet/Haiku freely; reserve Opus for hard reasoning.
 
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
-| Explore | Skip | Explore subagent | Explore subagent |
-| Research | Skip | `/research` (MCP) if needed | `/research` (MCP) if needed |
-| Plan | 1-liner | 3-5 bullets | 3-5 bullets, wait for approval |
-| Implement | Inline | Inline | Sonnet subagent |
+| Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
+| Research | Skip | `/research` (MCP) if external libs | `/research` (MCP) if external libs |
+| Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
+| Implement | Inline | Inline | `Agent` with `subagent_type: general-purpose` — see model choice below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
-Never do exploration or research inline in Standard/Heavy tiers. Use the Explore subagent for codebase navigation and `/research` (MCP) for external lookups.
+**Heavy implementer model choice:**
+- **Mechanical fan-out, clear plan, large diff**: `model: sonnet` — fast, follows specs tightly
+- **Novel hard logic, complex decomposition, multi-system reasoning**: `model: opus, effort: high` — keep the heavy thinking in an isolated bubble so the orchestrator's cache stays warm
+- **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast
+
+Never do exploration or research inline in Standard/Heavy tiers.
 
 ---
 
@@ -50,28 +68,29 @@ Never do exploration or research inline in Standard/Heavy tiers. Use the Explore
 
 ### 0. Assess + Create Tasks (Standard/Heavy only)
 
-State the tier. Then create tasks:
+State the tier. Then use `TaskCreate` (native deferred tool) to create one task per phase:
 
-```
-TaskCreate: "Explore codebase"
-TaskCreate: "Research (if needed)"
-TaskCreate: "Plan"
-TaskCreate: "Implement"
-TaskCreate: "Validate"
-```
+- "Explore codebase"
+- "Research" (if needed)
+- "Plan"
+- "Implement"
+- "Validate"
+
+Mark each complete via `TaskUpdate` as soon as it's done — don't batch.
 
 ### 1. Explore + Research (parallel subagents, Standard/Heavy)
 
-Launch both in a single message if research is needed, otherwise just explore:
+Launch both in a single message (multiple `Agent` tool calls in one block — they run concurrently):
 
-**Explore agent prompt** — be specific about what to find:
+**`Agent` with `subagent_type: Explore`** — be specific about what to find:
 - Which files are relevant to this task
 - Existing patterns to follow (naming, structure, error handling)
 - Any related code that could conflict or should be reused
 - Return: file paths + line numbers + key patterns found
+- For broad searches across multiple naming conventions, set search breadth to "medium" or "very thorough" in the prompt
 
-**Research subprocess** — only if the task involves:
-- External libraries (use `/research <query>`)
+**`/research <query>` via the `Skill` tool** — only if the task involves:
+- External libraries
 - APIs that may have changed
 - Patterns not visible in the codebase
 
@@ -79,23 +98,23 @@ Mark both tasks complete when done. Summarize findings in 3-5 bullets max — do
 
 ### 2. Plan
 
-State your approach in 3-5 bullets. Include:
+State your approach in 3-5 bullets and **proceed**. Include:
 - Which files you'll change and why
 - Patterns you'll follow from the exploration findings
-- Anything uncertain (ask the user before proceeding)
+- Any obvious-call decisions made (one line each — "going with X over Y because Z")
 
-Wait for user approval on Heavy tasks or non-obvious plans.
+**Do not wait for approval by default.** Only pause when a major uncertainty / user-owned decision (per the Action Bias section) is genuinely open. Otherwise, state the plan and start implementing in the same turn.
 
 ### 3. Implement
 
 **Quick / Standard (≤8 files): implement inline.**
 
-**Heavy (9+ files or high complexity): delegate to a sonnet subagent.** The subagent prompt must include:
+**Heavy (9+ files or high complexity): delegate via `Agent` with `subagent_type: general-purpose`.** Pick the model per the heavy implementer rules above (sonnet for fan-out, opus+high for hard logic). The subagent has zero prior context, so the prompt must include:
 - The full task description
-- Exploration findings (file paths, patterns)
+- Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)
 - Explicit constraints: no extra features, no refactoring untouched code, follow existing patterns
-- Return: list of files changed + brief summary of what changed
+- Return contract: list of files changed + brief summary of what changed
 
 During implementation (inline or subagent):
 - Follow existing patterns exactly — match naming, structure, error handling
@@ -149,12 +168,13 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 ## Rules
 
 - State the tier (Quick/Standard/Heavy) upfront
-- Never do exploration or research inline in Standard/Heavy — use Explore subagent + `/research` (MCP)
+- Never do exploration or research inline in Standard/Heavy — use `Agent` with `subagent_type: Explore` + `/research` (MCP)
+- Never switch the **orchestrator's** model mid-session (kills prompt cache). Switch freely **inside** subagents — they have their own cache
 - Never echo full subagent output — summarize in ≤5 bullets
 - Always run `/check` before declaring done
 - Assess runtime validation need — don't skip it silently
 - Check `Makefile` before `package.json` for server start commands
 - Never start long-lived servers — ask the user to run them with `!`
 - Always ask for human sign-off at the end
-- If blocked, ask the user — don't guess
+- **Action bias is the default**: small decisions are the agent's to make. Only escalate major uncertainty or user-owned decisions (see Default Stance section)
 - Implementation subagent must receive all context upfront (it has no prior conversation)
