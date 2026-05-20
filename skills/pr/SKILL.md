@@ -480,7 +480,7 @@ fi
 gh pr merge --rebase --delete-branch --admin
 ```
 
-**Why `--admin`?** Branch protection requires approvals, but as a solo dev with all checks passing, we bypass this to streamline the workflow.
+**Why `--admin`?** PR-required repos carry the `protect-default-branch` ruleset (require PR; 0 approvals). `--admin` lets the owner merge via your admin bypass even if a rule (e.g. the PR requirement or a pending check) would otherwise block — solo-dev streamlining, no second reviewer exists.
 
 ### Post-merge: Worktree Cleanup
 

@@ -29,7 +29,7 @@ gh pr view --json state,statusCheckRollup,reviews,url 2>/dev/null
 
 ### Direct-to-Master Repos (default)
 
-Every SourceRoot repo ships direct-to-master **unless** it's on the PR-required list below. This is also enforced by `hooks/protect-branches.ts`, so the rule lives in one place.
+Every SourceRoot repo ships direct-to-master **unless** it's on the PR-required list. That list is a single source of truth in `config/pr-required-repos.json` (symlinked to `~/.claude/pr-required-repos.json`), shared by `hooks/protect-branches.ts` and `scripts/github-config.sh`. If unsure whether a repo is PR-required, read that file rather than trusting the snapshot below.
 
 1. Run `/check` (skip for `homelab`, `homelab-private`, `vps`, `dotfiles` — config/infra repos with no lint/typecheck)
 2. Run `/commit` (if uncommitted changes)
@@ -40,7 +40,7 @@ Every SourceRoot repo ships direct-to-master **unless** it's on the PR-required 
 
 Use the PR flow when **either** of the following is true:
 
-- Repo name is one of: `basalt-ui` (NPM published), `free-planning-poker`, `rollhook`, `rollhook-action`.
+- Repo name is listed in `config/pr-required-repos.json` (snapshot: `basalt-ui` (NPM published), `free-planning-poker`, `rollhook`, `rollhook-action`).
 - Working directory is under `~/IuRoot/` (work repos; default branch is `main`).
 Based on detected state, pick up from the right step:
 
