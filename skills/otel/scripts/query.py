@@ -15,6 +15,10 @@ Usage:
 import sys
 import subprocess
 import argparse
+import urllib.request
+import urllib.error
+import urllib.parse
+import socket
 
 PRESETS = {
     "health": {
@@ -182,8 +186,48 @@ def build_sql(preset_name: str, args) -> str:
     return sql
 
 
-def run_query(sql: str, env: str, fmt: str = "TabSeparatedWithNamesAndTypes") -> tuple:
-    """Execute SQL via docker exec (local) or SSH+docker exec (prod). Returns (stdout, stderr)."""
+def _http_port_open(host: str, port: int, timeout: float = 0.3) -> bool:
+    """Quick TCP probe — does ClickHouse HTTP appear to be reachable?"""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _run_http(sql: str, fmt: str) -> tuple:
+    """Query ClickHouse via HTTP on localhost:8123. Works without docker exec —
+    used when the sandbox blocks raw docker commands, or when the container's
+    8123 port is bound to the host (see vps/compose.dev.yml). FORMAT is
+    appended to the SQL itself rather than passed as a header so it survives
+    statements that already declare their own format."""
+    url = "http://127.0.0.1:8123/"
+    body = f"{sql.rstrip(';').rstrip()} FORMAT {fmt}".encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST",
+                                 headers={"Content-Type": "text/plain"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read().decode("utf-8", errors="replace"), ""
+    except urllib.error.HTTPError as e:
+        return "", e.read().decode("utf-8", errors="replace").strip() or f"HTTP {e.code}"
+    except urllib.error.URLError as e:
+        return "", f"HTTP transport failed: {e.reason}. Is ClickHouse :8123 exposed? (see vps/compose.dev.yml)"
+    except socket.timeout:
+        return "", "HTTP query timed out after 60s"
+
+
+def run_query(sql: str, env: str, fmt: str = "TabSeparatedWithNamesAndTypes",
+              transport: str = "auto") -> tuple:
+    """Execute SQL against ClickStack. Returns (stdout, stderr).
+
+    transport:
+      - 'auto'  (default): HTTP if :8123 reachable, else fall back to docker exec
+      - 'http'  : force HTTP (localhost:8123). Local-only; prod still needs ssh+docker.
+      - 'exec'  : force docker exec (legacy path). Required if HTTP port isn't exposed.
+    """
+    if env == "local" and transport in ("http", "auto") and _http_port_open("127.0.0.1", 8123):
+        return _run_http(sql, fmt)
+
     if env == "local":
         cmd = ["docker", "exec", "-i", "clickstack", "clickhouse-client", f"--format={fmt}"]
     else:
@@ -253,6 +297,10 @@ def main():
                    help="Search pattern for 'log-search' preset")
     p.add_argument("--json", action="store_true",
                    help="Output raw ClickHouse JSON instead of markdown table")
+    p.add_argument("--transport", choices=["auto", "http", "exec"], default="auto",
+                   help="Local transport: 'auto' (HTTP if :8123 reachable, else docker exec), "
+                        "'http' (force localhost:8123), 'exec' (force docker exec). "
+                        "Prod always uses ssh+docker exec.")
     p.add_argument("sql", nargs="?",
                    help="Raw SQL query (alternative to --preset)")
     args = p.parse_args()
@@ -275,7 +323,7 @@ def main():
         sys.exit(1)
 
     fmt = "JSON" if args.json else "TabSeparatedWithNamesAndTypes"
-    stdout, stderr = run_query(sql, args.env, fmt)
+    stdout, stderr = run_query(sql, args.env, fmt, args.transport)
 
     if stderr:
         print(f"ERROR: {stderr}", file=sys.stderr)

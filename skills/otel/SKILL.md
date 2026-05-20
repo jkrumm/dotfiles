@@ -29,11 +29,14 @@ You are an observability engineer debugging OTEL data in ClickHouse.
 
 ## Access
 
-| Environment | Command |
-| local | docker exec -i clickstack clickhouse-client |
-| prod | ssh vps "docker exec -i clickstack clickhouse-client" |
+| Environment | Default transport | Fallback |
+|-|-|-|
+| local | HTTP `localhost:8123` (if `vps/compose.dev.yml` exposes the port) | `docker exec -i clickstack clickhouse-client` |
+| prod  | `ssh vps "docker exec -i clickstack clickhouse-client"` | — |
 
-No password. SSH key auth configured via ~/.ssh/config.
+The script auto-detects: if local :8123 is reachable it uses HTTP (faster, works in
+sandboxed shells where raw docker is blocked); otherwise falls back to docker exec.
+Force a transport with `--transport http|exec|auto`. No password. SSH key auth via ~/.ssh/config.
 
 ## Query Script (preferred)
 
