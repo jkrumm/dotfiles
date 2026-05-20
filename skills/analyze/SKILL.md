@@ -124,7 +124,8 @@ Prioritize actionable findings. Skip sections with zero issues. If all clean, sa
 
 SCOPE: [SCOPE]
 PROMPT_END
-ANTHROPIC_API_KEY=$(security find-generic-password -s claude-sdk-api-key -w) \
+env -u ANTHROPIC_API_KEY \
+ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
 ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
   claude -p --model claude-haiku-4-5-20251001 --dangerously-skip-permissions < "$TMPFILE"
 rm -f "$TMPFILE"

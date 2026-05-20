@@ -1188,7 +1188,8 @@ Do not invent details. If a section is empty, write "—" and move on.
 
 Invoke via:
 ```bash
-ANTHROPIC_API_KEY=$(security find-generic-password -s claude-sdk-api-key -w) \
+env -u ANTHROPIC_API_KEY \
+ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
 ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
   claude -p --model haiku "$prompt_with_inputs_inlined" > docs/migrations/<slug>.md
 ```

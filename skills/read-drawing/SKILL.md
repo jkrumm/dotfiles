@@ -81,7 +81,8 @@ FILE PATH: [FILE_PATH]
 **Step 3** — Run the subprocess and clean up:
 
 ```bash
-ANTHROPIC_API_KEY=$(security find-generic-password -s claude-sdk-api-key -w) \
+env -u ANTHROPIC_API_KEY \
+ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
 ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
   claude -p --model claude-haiku-4-5-20251001 < /tmp/claude-read-drawing-<timestamp>
 rm -f /tmp/claude-read-drawing-<timestamp>

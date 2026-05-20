@@ -153,9 +153,10 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 **Never** put `model: haiku|sonnet` in skill frontmatter when the skill body already shells out to `claude -p` with its own `--model` flag — that creates a redundant main-thread switch for trivial orchestration.
 
 ### API offloading (manual)
-For ad-hoc heavy work outside a skill:
+For ad-hoc heavy work outside a skill. Use `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`) and strip any inherited key: with a logged-in Max session the `claude` CLI sends its Max OAuth bearer to the IU gateway → 401. `AUTH_TOKEN` forces `Authorization: Bearer <IU-token>`, which the gateway accepts and which takes precedence over the login.
 ```bash
-ANTHROPIC_API_KEY=$(security find-generic-password -s claude-sdk-api-key -w) \
+env -u ANTHROPIC_API_KEY \
+ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
 ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
   claude -p --model haiku "task here"
 ```
