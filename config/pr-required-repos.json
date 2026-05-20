@@ -1,0 +1,9 @@
+{
+  "$comment": "Single source of truth for repos that require a PR workflow to master. Consumed by hooks/protect-branches.ts (blocks Claude from pushing to master) and scripts/github-config.sh (applies the FULL require-PR ruleset; everything else gets the LITE ruleset). IuRoot repos are PR-required by path and handled separately in the hook. Add a repo here to enforce PRs in both layers at once. Symlinked to ~/.claude/pr-required-repos.json by `make setup`.",
+  "repos": [
+    "basalt-ui",
+    "free-planning-poker",
+    "rollhook",
+    "rollhook-action"
+  ]
+}

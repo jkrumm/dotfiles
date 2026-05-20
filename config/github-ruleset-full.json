@@ -1,4 +1,5 @@
 {
+  "$comment": "FULL ruleset — require PR to master. Applied by github-config.sh to PR-required repos (config/pr-required-repos.json) AND any repo that has a collaborator (so others can't push to master). Admin bypass keeps direct push + release-CI working for you. GitHub strips $comment on apply.",
   "name": "protect-default-branch",
   "target": "branch",
   "enforcement": "active",

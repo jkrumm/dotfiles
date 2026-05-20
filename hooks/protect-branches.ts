@@ -37,7 +37,26 @@ interface HookInput {
 const PROTECTED = ["main", "master"];
 
 // Repos where Claude Code must go through a PR (everything else is direct-to-master).
-const PR_REQUIRED_REPOS = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action"];
+// Single source of truth: ~/.claude/pr-required-repos.json (symlinked from
+// dotfiles/config/pr-required-repos.json), shared with scripts/github-config.sh.
+// Fallback array is used only if that file is missing/unreadable — failing safe
+// (keep protecting the known apps) rather than failing open.
+const PR_REQUIRED_FALLBACK = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action"];
+
+async function loadPrRequiredRepos(): Promise<string[]> {
+  try {
+    const f = Bun.file(`${process.env.HOME}/.claude/pr-required-repos.json`);
+    if (await f.exists()) {
+      const data = (await f.json()) as { repos?: unknown };
+      if (Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string")) {
+        return data.repos as string[];
+      }
+    }
+  } catch {
+    // fall through to fallback
+  }
+  return PR_REQUIRED_FALLBACK;
+}
 
 function getRepoName(cwd: string): string | null {
   const result = Bun.spawnSync(["git", "remote", "get-url", "origin"], {
@@ -95,8 +114,9 @@ const cwd = input.cwd ?? process.cwd();
 
 // Default: direct-to-master is fine. Only enforce PR workflow for the denylist.
 const repoName = getRepoName(cwd);
+const prRequiredRepos = await loadPrRequiredRepos();
 const requiresPR =
-  (repoName !== null && PR_REQUIRED_REPOS.includes(repoName)) || isIuRootRepo(cwd);
+  (repoName !== null && prRequiredRepos.includes(repoName)) || isIuRootRepo(cwd);
 if (!requiresPR) process.exit(0);
 
 const command = (input.tool_input?.command ?? "").trim();

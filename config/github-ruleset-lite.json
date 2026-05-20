@@ -1,0 +1,24 @@
+{
+  "$comment": "LITE ruleset — no PR requirement. Applied by github-config.sh to direct-to-master repos (public, not in pr-required-repos.json, no collaborators). A normal fast-forward push to master violates no rule, so there is NO bypass warning — clean direct pushes. Still blocks force-push, branch deletion, and non-linear history for everyone non-admin. Same name as the full ruleset so switching a repo full<->lite updates it in place. GitHub strips $comment on apply.",
+  "name": "protect-default-branch",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main", "refs/heads/master"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "non_fast_forward" },
+    { "type": "deletion" },
+    { "type": "required_linear_history" }
+  ]
+}

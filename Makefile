@@ -353,6 +353,10 @@ _setup-hooks:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/docker-makefile.ts" \
 		DST="$(CLAUDE_DIR)/hooks/docker-makefile.ts"
+	@# Shared PR-required denylist — read by protect-branches.ts, also drives github-config.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/pr-required-repos.json" \
+		DST="$(CLAUDE_DIR)/pr-required-repos.json"
 
 .PHONY: _setup-scripts
 _setup-scripts:

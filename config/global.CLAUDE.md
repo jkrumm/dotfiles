@@ -18,7 +18,8 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 - **1Password account:** `tkrumm` — always pass `--account tkrumm` to every `op` CLI command.
 - **VCS:** GitHub. No ticket prefixes.
 - **Default: direct-to-master.** Every SourceRoot repo skips the PR flow unless it's on the small PR-required denylist.
-- **PR-required repos** (`/ship` uses PR flow; `protect-branches.ts` enforces): `basalt-ui` (NPM published — also always a separate commit), `free-planning-poker`, `rollhook`, `rollhook-action`. Everything else is direct-to-master.
+- **PR-required repos** (`/ship` uses PR flow; `protect-branches.ts` enforces): `basalt-ui` (NPM published — also always a separate commit), `free-planning-poker`, `rollhook`, `rollhook-action`. Everything else is direct-to-master. The list is a single source of truth in `dotfiles/config/pr-required-repos.json` (symlinked to `~/.claude/pr-required-repos.json`), read by both the hook and `github-config.sh` — edit that file, not the code.
+- **GitHub branch protection has two tiers** (applied by `make github-config`): PR-required repos + any repo with a collaborator get the **full** ruleset (require PR to master); all other public repos get the **lite** ruleset (no PR rule, just no-force/no-deletion/linear) so direct pushes are clean with no bypass warning. Random people can never push to your repos regardless; private repos can't be protected server-side on the free tier (gap is documented in the script).
 - **All `~/IuRoot/` repos require PRs** (against `main`). Detected by path — no list to maintain.
 
 #### Repository map

@@ -2,60 +2,83 @@
 # Apply consistent branch protection, merge settings, and shared secrets to all
 # GitHub repos.
 #
-# Strategy:
-#   Public repos → GitHub Rulesets (modern, supports bypass actors)
-#   Private repos on free tier → No API protection available (requires GitHub Pro)
-#                                 Claude Code hook (protect-branches.ts) still applies
+# Two ruleset tiers, chosen per repo so the GitHub layer matches the Claude hook
+# (hooks/protect-branches.ts) instead of blanketing every repo with require-PR:
 #
-# Enforces per repo:
-#   - Pull request required to merge to main/master (0 approvals — solo dev)
-#   - No force pushes (Rulesets: admin bypass; Classic: enforce_admins=false)
-#   - Linear history required before merge
-#   - No branch deletion
-#   - Rebase merge only (no merge commits, no squash)
-#   - Auto-delete merged branches
-#   - Shared secrets (config/github-secrets.json) synced from 1Password
+#   FULL (github-ruleset-full.json) — require PR to master.
+#     Applied to: repos in config/pr-required-repos.json (the real apps) AND any
+#     repo that has a collaborator (so others can't push to master).
 #
-# Bypass actors (see github-ruleset.json):
-#   - RepositoryRole/Admin (actor_id: 5) — you, pushing directly from terminal
+#   LITE (github-ruleset-lite.json) — no PR rule, just no-force / no-deletion /
+#     linear-history. Applied to every other PUBLIC repo (direct-to-master, solo).
+#     A normal push violates no rule, so there is NO admin-bypass warning — clean
+#     direct pushes, and the GitHub layer agrees with the hook.
 #
-#   NOTE: Integration/GitHub Actions bypass is NOT available for personal account
-#   repos — only orgs/enterprise. CI workflows that push to master (e.g. semantic-
-#   release) must authenticate as you via a PAT (RELEASE_TOKEN secret) rather than
-#   the default GITHUB_TOKEN (github-actions[bot] has no bypass rights).
-#   PAT requirements: fine-grained, contents:write on the target repo, owned by
-#   jkrumm so it carries admin bypass rights.
+# Both tiers share the ruleset name "protect-default-branch", so flipping a repo
+# full<->lite updates it in place.
 #
-# WHEN ADDING COLLABORATORS:
-#   Bump required_approving_review_count from 0 to 1 in github-ruleset.json,
-#   then re-run this script. PR review gates all workflow changes before they
-#   land. The PAT approach is safe with collaborators — they cannot push to
-#   master directly, and PR review prevents them from landing workflow changes
-#   that abuse a PAT secret.
+# WHY the split: a require-PR rule with admin bypass prints
+# "Bypassed rule violations ... Changes must be made through a pull request" on
+# every successful direct push. On direct-to-master repos that warning is noise
+# that confuses tooling. LITE removes the PR rule there, so the warning is gone.
+#
+# SECURITY MODEL:
+#   - Random people can never push to your repos at all (basic GitHub access
+#     control) — the ruleset is irrelevant to them.
+#   - Collaborators (write access you granted) are blocked from master only on
+#     FULL-tier repos. That's why any repo with a collaborator auto-gets FULL.
+#   - You (RepositoryRole/Admin, actor_id 5) bypass always — direct push + the
+#     release-CI PAT keep working.
+#
+# PRIVATE REPOS — free-tier gap:
+#   Rulesets and classic branch protection on PRIVATE repos require GitHub Pro.
+#   Nothing can be applied via API on the free tier. While you are the sole
+#   collaborator this is fine. If you ever add a collaborator to a private repo,
+#   they could push to master with nothing stopping them server-side — upgrade to
+#   Pro or keep private repos solo. The Claude hook only runs on your machine, so
+#   it protects against nobody else.
+#
+# CI that pushes to master (e.g. semantic-release on FULL-tier repos):
+#   Must authenticate as you via a PAT (RELEASE_TOKEN secret), not the default
+#   GITHUB_TOKEN — github-actions[bot] has no bypass rights on personal repos.
+#   Fine-grained PAT, contents:write on the target repo, owned by jkrumm.
+#
+# Enforced merge settings (all public repos): rebase-only, auto-delete branches.
+#
+# ADDING A PR-REQUIRED REPO:
+#   Add its name to config/pr-required-repos.json. That one file drives BOTH the
+#   Claude hook (blocks your pushes) and this script (applies FULL). Re-run.
 #
 # ADDING A SHARED SECRET:
-#   Append an entry to config/github-secrets.json with {name, op_ref}. Values are
-#   read live from 1Password at runtime (account: tkrumm); only op:// refs live
-#   in git. Re-run `make github-config` to fan it out to every repo. Rotating a
-#   secret = update the field in 1P, re-run, done.
+#   Append to config/github-secrets.json {name, op_ref}. Values read live from
+#   1Password (account: tkrumm); only op:// refs live in git. Re-run.
 #
 # Usage:
 #   ./scripts/github-config.sh              # all repos for jkrumm
 #   GITHUB_OWNER=other ./scripts/github-config.sh
-#   DRY_RUN=1 ./scripts/github-config.sh   # preview without applying
+#   DRY_RUN=1 ./scripts/github-config.sh    # preview tiers without applying
 #
-# Prerequisites: gh CLI authenticated (gh auth status); op CLI signed into tkrumm
+# Prerequisites: gh CLI authenticated (gh auth status); jq; op CLI (for secrets)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RULESET_FILE="$SCRIPT_DIR/../config/github-ruleset.json"
+RULESET_FULL="$SCRIPT_DIR/../config/github-ruleset-full.json"
+RULESET_LITE="$SCRIPT_DIR/../config/github-ruleset-lite.json"
+PR_REQUIRED_FILE="$SCRIPT_DIR/../config/pr-required-repos.json"
 SECRETS_FILE="$SCRIPT_DIR/../config/github-secrets.json"
 OWNER="${GITHUB_OWNER:-jkrumm}"
 DRY_RUN="${DRY_RUN:-0}"
 
-if [ ! -f "$RULESET_FILE" ]; then
-  echo "Error: ruleset file not found at $RULESET_FILE" >&2
+for f in "$RULESET_FULL" "$RULESET_LITE" "$PR_REQUIRED_FILE"; do
+  if [ ! -f "$f" ]; then
+    echo "Error: required config not found at $f" >&2
+    exit 1
+  fi
+done
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required (ruleset processing + denylist lookup)." >&2
   exit 1
 fi
 
@@ -63,6 +86,43 @@ if ! gh auth status &>/dev/null; then
   echo "Error: not authenticated with gh CLI. Run: gh auth login" >&2
   exit 1
 fi
+
+# Repo is in the PR-required denylist (config/pr-required-repos.json).
+is_pr_required() {
+  jq -e --arg r "$1" '.repos | index($r)' "$PR_REQUIRED_FILE" >/dev/null 2>&1
+}
+
+# Repo has at least one collaborator other than the owner.
+has_collaborator() {
+  local count
+  count=$(gh api "repos/$OWNER/$1/collaborators" \
+    --jq "[.[] | select(.login != \"$OWNER\")] | length" 2>/dev/null || echo 0)
+  [ "${count:-0}" -gt 0 ]
+}
+
+# Decide tier for a public repo. Echoes "tier|reason" (parsed by the caller —
+# can't use a global because callers invoke this in a command substitution).
+choose_tier() {
+  if is_pr_required "$1"; then echo "full|PR-required (denylist)"; return; fi
+  if has_collaborator "$1"; then echo "full|has collaborator"; return; fi
+  echo "lite|direct-to-master"
+}
+
+# Apply a ruleset file to a repo, creating or updating the "protect-default-branch"
+# ruleset in place. $comment is stripped before sending (GitHub rejects it).
+apply_ruleset() {
+  local repo="$1" file="$2" body existing_id
+  body=$(jq 'del(.["$comment"])' "$file")
+  existing_id=$(gh api "repos/$OWNER/$repo/rulesets" \
+    --jq '.[] | select(.name=="protect-default-branch") | .id' 2>/dev/null | head -1 || echo "")
+  if [ -n "$existing_id" ]; then
+    printf '%s' "$body" | gh api "repos/$OWNER/$repo/rulesets/$existing_id" \
+      -X PUT --input - --silent 2>/dev/null
+  else
+    printf '%s' "$body" | gh api "repos/$OWNER/$repo/rulesets" \
+      -X POST --input - --silent 2>/dev/null
+  fi
+}
 
 echo ""
 echo "  GitHub Config — $OWNER"
@@ -77,9 +137,6 @@ have_secrets=0
 if [ -f "$SECRETS_FILE" ]; then
   if ! command -v op >/dev/null 2>&1; then
     echo "  ⚠ op CLI not found — secret sync skipped"
-    echo ""
-  elif ! command -v jq >/dev/null 2>&1; then
-    echo "  ⚠ jq not found — secret sync skipped"
     echo ""
   else
     secret_count=$(jq '.secrets | length' "$SECRETS_FILE")
@@ -123,9 +180,12 @@ failed=0
 
 while IFS=" " read -r repo is_private; do
   if [ "$DRY_RUN" = "1" ]; then
-    [ "$is_private" = "true" ] \
-      && echo "  [dry] $OWNER/$repo (private → hook only, no API on free tier)" \
-      || echo "  [dry] $OWNER/$repo (public → ruleset)"
+    if [ "$is_private" = "true" ]; then
+      echo "  [dry] $OWNER/$repo — PRIVATE (no ruleset; free-tier gap, hook only)"
+    else
+      sel=$(choose_tier "$repo"); tier="${sel%%|*}"; reason="${sel#*|}"
+      echo "  [dry] $OWNER/$repo — $(printf '%s' "$tier" | tr '[:lower:]' '[:upper:]') ($reason)"
+    fi
     if [ "$have_secrets" = "1" ]; then
       while IFS=$'\t' read -r name _value; do
         echo "         would sync secret: $name"
@@ -137,37 +197,20 @@ while IFS=" " read -r repo is_private; do
   echo "  → $OWNER/$repo"
 
   if [ "$is_private" = "true" ]; then
-    # Private repos: GitHub Rulesets AND classic branch protection both require
-    # GitHub Pro on private repos. Nothing can be applied via API on free tier.
-    # Protection is provided solely by the Claude Code hook (hooks/protect-branches.ts).
-    echo "    ⚠ private repo — GitHub API protection requires Pro subscription"
-    echo "    · Claude Code hook (protect-branches.ts) still blocks pushes to main/master"
+    echo "    ⚠ private repo — server-side protection needs GitHub Pro (free-tier gap)"
+    echo "    · solo here, so OK; Claude hook still blocks your pushes if PR-required"
     ((ok++)) || true
   else
-    # Public repo: use Rulesets
-    existing_id=$(gh api "repos/$OWNER/$repo/rulesets" \
-      --jq '.[] | select(.name=="protect-default-branch") | .id' 2>/dev/null || echo "")
-
-    ruleset_ok=false
-    if [ -n "$existing_id" ]; then
-      if gh api "repos/$OWNER/$repo/rulesets/$existing_id" \
-          -X PUT --input "$RULESET_FILE" --silent 2>/dev/null; then
-        echo "    ✓ ruleset updated (id: $existing_id)"
-        ruleset_ok=true
-      else
-        echo "    ✗ ruleset update failed" >&2
-      fi
+    sel=$(choose_tier "$repo"); tier="${sel%%|*}"; reason="${sel#*|}"
+    file="$RULESET_LITE"
+    [ "$tier" = "full" ] && file="$RULESET_FULL"
+    if apply_ruleset "$repo" "$file"; then
+      echo "    ✓ ${tier} ruleset ($reason)"
+      ((ok++)) || true
     else
-      new_id=$(gh api "repos/$OWNER/$repo/rulesets" \
-        -X POST --input "$RULESET_FILE" --jq '.id' 2>/dev/null || echo "")
-      if [ -n "$new_id" ]; then
-        echo "    ✓ ruleset created (id: $new_id)"
-        ruleset_ok=true
-      else
-        echo "    ✗ ruleset creation failed" >&2
-      fi
+      echo "    ✗ ${tier} ruleset failed" >&2
+      ((failed++)) || true
     fi
-    if $ruleset_ok; then ((ok++)) || true; else ((failed++)) || true; fi
   fi
 
   # Apply merge strategy regardless of protection method
