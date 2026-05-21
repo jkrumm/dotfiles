@@ -22,7 +22,9 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, claude, git, keybindings, path, secrets, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, claude, git, keybindings, opencode, path, secrets, tools |
+| `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
+| `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
 | `config/gitconfig-personal` | `~/.gitconfig-personal` | jkrumm@pm.me + 1Password signing |
 | `config/gitconfig-work` | `~/.gitconfig-work` | johannes.krumm@iu.org + 1Password signing |
@@ -43,6 +45,7 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 
 **Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):
 - `.claude/skills/localai/` — manage the local mlx-audio / Fish S2 Pro stack (this repo's own infrastructure).
+- `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
 
@@ -73,6 +76,22 @@ Two 1Password accounts are configured:
 **New machine setup:**
 1. Install 1Password + enable CLI integration (Settings → Developer → Enable CLI)
 2. `make setup` — will fail fast with instructions if 1Password isn't ready
+
+## OpenCode (Claude Code fallback)
+
+OpenCode CLI is wired as a fallback for when the Claude Code Max subscription is
+exhausted. It runs against the **IU unified endpoint** using the same credential
+as the Agent SDK (`op://common/anthropic`).
+
+- **Two providers** in `config/opencode/opencode.json` (both keyed off one IU credential):
+  - `iu` — OpenAI-compatible gateway (`…/openai/v1`). Holds the **default `iu/Kimi-K2.6`** (EU-resident) and **small `iu/claude-haiku-4-5-eu`**, plus the zoo: Kimi-K2.6/K2.5, GPT-5.5, Gemini 3.1 Pro / 3.5 Flash / 2.5 Pro, GLM-5, MiniMax-M2.5, Qwen3-Coder-480B, DeepSeek-V3.2, and the EU/GDPR Claude aliases `claude-sonnet-4-6-eu` / `claude-haiku-4-5-eu`.
+  - `iu-anthropic` — native Anthropic API (`…/anthropic/v1`), best Claude fidelity (prompt caching): `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5`. Native routing is **not** EU-guaranteed — use the `iu/*-eu` aliases for GDPR.
+- **Reliability — the model alias is the host selector.** Each id maps to one or more backend "sinks" (`owned_by`); more = more redundant. `claude-opus-4-6` (3 backends) > `claude-opus-4-7` (1, occasionally slow); `Kimi-K2.5` (2 backends) but **not EU**; `Kimi-K2.6` (1 backend, Sweden Central, throttle-prone) but **EU**. The AI SDK auto-retries 429s. Run `/iu-endpoint` for live health + backend counts. There is **no** `/bedrock` passthrough (404) — Bedrock is only an internal backing; `/azure`, `/gemini`, `/replicate` transports exist but `/openai/v1` already fronts the richest catalog. `*-codex` models return empty over chat-completions (responses API only) — don't configure them.
+- **EU data residency / GDPR.** Serving region is exposed in response headers (`x-ms-region`, `x-middleware-forwarded-server`); `/iu-endpoint` shows it as an EU/US column. Verified **EU**: `Kimi-K2.6` (Azure Sweden Central), the `*-eu` Claude aliases **over the openai-compat transport** (route to the "GDPR ONLY" gateway), `gpt-5.5` (Sweden). **NOT EU-safe**: `Kimi-K2.5` (Nebius + Azure US-East-2), native `iu-anthropic` Claude (can route US), Nebius-served models (`GLM-5`, `DeepSeek` — region not exposed, shown `?`). Default is `iu/Kimi-K2.6` so the fallback is EU by default. Hermes Kimi switch: `.claude/skills/iu-endpoint/hermes-kimi-handover.md` (K2.6 primary + `claude-sonnet-4-6-eu` fallback).
+- **Secrets:** `opencode.json` contains no key and no hostname — only `{env:IU_*}` placeholders. The `opencode()` wrapper in `config/zsh/opencode.zsh` injects `IU_API_KEY` + both base URLs into the OpenCode process **only** (not the interactive shell), read just-in-time from the existing `claude-sdk-*` Keychain entries. Both base URLs are derived from `claude-sdk-base-url` (`…/anthropic` → `…/anthropic/v1` and `…/openai/v1`), so no new Keychain entry or 1Password field is needed.
+- **Why `IU_*` and not `ANTHROPIC_*`:** exporting `ANTHROPIC_*` would push Claude Code itself onto IU API billing instead of the Max subscription. Distinct names keep Claude Code on the subscription; OpenCode is the deliberate fallback.
+- **CLAUDE.md compatibility:** `instructions` loads `~/.claude/CLAUDE.md`, the always-on global rules listed individually, and per-project `.claude/rules/*.md`; per-project `CLAUDE.md` auto-loads via OpenCode's native fallback. A minimal global `AGENTS.md` takes control of the global slot (and disables the duplicate `~/.claude/CLAUDE.md` auto-fallback). OpenCode ignores `paths:` frontmatter, so the path-scoped framework rules (`react-best-practices`, `tanstack-*`, `elysia`) are deliberately excluded from the global list; put them in a project's `CLAUDE.md`/`.claude/rules/` when needed.
+- **Usage:** `oc` (TUI) · `ocr "<prompt>"` (one-shot) · `opencode -m iu/Kimi-K2.6 …` (pick model). Adding a model = edit `opencode.json`, no `make setup` needed (symlinked).
 
 ## Editing Rules
 

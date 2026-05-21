@@ -33,6 +33,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-sdk-keys
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-rules
+	@$(MAKE) --no-print-directory _setup-opencode
 	@$(MAKE) --no-print-directory _setup-localai
 	@$(MAKE) --no-print-directory _setup-orbstack-block
 	@echo ""
@@ -537,6 +538,14 @@ status:
 		|| echo "    ✗ TAVILY_API_KEY [not cached — run make setup]"
 	@echo "  Rules"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/rules"
+	@echo "  OpenCode"
+	@if command -v opencode >/dev/null 2>&1 || [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
+		echo "    ✓ opencode binary"; \
+	else \
+		echo "    ✗ opencode [not installed — run make setup]"; \
+	fi
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/opencode.json"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/AGENTS.md"
 	@echo "  Settings"
 	@if [ -f "$(CLAUDE_DIR)/settings.json" ]; then \
 		echo "    ✓ settings.json (hooks + statusline wired)"; \
@@ -687,6 +696,31 @@ MLX_SPEECH_BIN := $(HOME)/.local/bin/mlx-speech
 
 # Install mlx-audio + Python deps + ffmpeg + apply m4a STT patch.
 # Idempotent — skips work that's already done.
+.PHONY: _setup-opencode
+_setup-opencode:
+	@echo "  OpenCode (IU unified-endpoint fallback)..."
+	@if [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
+		echo "    · opencode $$($(HOME)/.opencode/bin/opencode --version 2>/dev/null || echo ok) (ok)"; \
+	else \
+		echo "    Installing OpenCode..."; \
+		curl -fsSL https://opencode.ai/install | bash >/dev/null 2>&1 \
+			&& echo "    ✓ OpenCode installed" \
+			|| echo "    ✗ OpenCode install failed — install manually: https://opencode.ai/docs"; \
+	fi
+	@mkdir -p $(HOME)/.config/opencode
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/opencode/opencode.json" \
+		DST="$(HOME)/.config/opencode/opencode.json"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/opencode/AGENTS.md" \
+		DST="$(HOME)/.config/opencode/AGENTS.md"
+	@# Reuses claude-sdk-* Keychain entries (same op://common/anthropic credential).
+	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
+		echo "    · IU credential (Keychain, shared with Agent SDK) ok"; \
+	else \
+		echo "    ✗ claude-sdk-api-key not in Keychain — run make setup (_setup-sdk-keys)"; \
+	fi
+
 .PHONY: _setup-localai
 _setup-localai:
 	@echo "  LocalAI (mlx-audio TTS + STT on 127.0.0.1:8000)..."

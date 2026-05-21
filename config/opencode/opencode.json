@@ -1,0 +1,153 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "iu/Kimi-K2.6",
+  "small_model": "iu/claude-haiku-4-5-eu",
+  "autoupdate": false,
+  "instructions": [
+    "~/.claude/CLAUDE.md",
+    "~/.claude/rules/attribution.md",
+    "~/.claude/rules/code-style.md",
+    "~/.claude/rules/commit-conventions.md",
+    "~/.claude/rules/docker-makefile.md",
+    "~/.claude/rules/formatting.md",
+    "~/.claude/rules/research-first.md",
+    "~/.claude/rules/security.md",
+    "~/.claude/rules/typescript.md",
+    "~/.claude/rules/visx-charts.md",
+    ".claude/rules/*.md"
+  ],
+  "provider": {
+    "iu-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "IU Unified (Anthropic native)",
+      "options": {
+        "baseURL": "{env:IU_ANTHROPIC_BASE_URL}",
+        "apiKey": "{env:IU_API_KEY}"
+      },
+      "models": {
+        "claude-opus-4-7": {
+          "name": "Claude Opus 4.7 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 32000 }
+        },
+        "claude-opus-4-6": {
+          "name": "Claude Opus 4.6 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 32000 }
+        },
+        "claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 64000 }
+        },
+        "claude-haiku-4-5": {
+          "name": "Claude Haiku 4.5 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 32000 }
+        }
+      }
+    },
+    "iu": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "IU Unified (OpenAI-compatible)",
+      "options": {
+        "baseURL": "{env:IU_OPENAI_BASE_URL}",
+        "apiKey": "{env:IU_API_KEY}"
+      },
+      "models": {
+        "claude-sonnet-4-6-eu": {
+          "name": "Claude Sonnet 4.6 EU/GDPR (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 64000 }
+        },
+        "claude-haiku-4-5-eu": {
+          "name": "Claude Haiku 4.5 EU/GDPR (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 200000, "output": 32000 }
+        },
+        "Kimi-K2.6": {
+          "name": "Kimi K2.6 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "limit": { "context": 256000, "output": 32000 }
+        },
+        "Kimi-K2.5": {
+          "name": "Kimi K2.5 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "limit": { "context": 256000, "output": 32000 }
+        },
+        "gpt-5.5": {
+          "name": "GPT-5.5 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 272000, "output": 64000 }
+        },
+        "gemini-3.1-pro-preview": {
+          "name": "Gemini 3.1 Pro (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 1000000, "output": 64000 }
+        },
+        "gemini-2.5-pro": {
+          "name": "Gemini 2.5 Pro (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 1000000, "output": 64000 }
+        },
+        "gemini-3.5-flash": {
+          "name": "Gemini 3.5 Flash (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 1000000, "output": 32000 }
+        },
+        "GLM-5": {
+          "name": "GLM-5 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "limit": { "context": 200000, "output": 32000 }
+        },
+        "MiniMax-M2.5": {
+          "name": "MiniMax M2.5 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "limit": { "context": 200000, "output": 32000 }
+        },
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct": {
+          "name": "Qwen3 Coder 480B (IU)",
+          "tool_call": true,
+          "reasoning": false,
+          "attachment": false,
+          "limit": { "context": 256000, "output": 32000 }
+        },
+        "deepseek-ai/DeepSeek-V3.2": {
+          "name": "DeepSeek V3.2 (IU)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "limit": { "context": 128000, "output": 16000 }
+        }
+      }
+    }
+  }
+}
