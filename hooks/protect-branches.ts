@@ -13,6 +13,12 @@
  *   - rollhook-action      (consumed via GitHub Marketplace)
  *   - any repo under ~/IuRoot/  (work, PR workflow against `main`)
  *
+ * Escape hatch — `directToMain` in pr-required-repos.json:
+ *   Repos listed there are NEVER PR-required even if they'd otherwise match
+ *   (e.g. a greenfield single-operator agent under ~/IuRoot/ that pushes
+ *   straight to main). The directToMain list wins over both the denylist and
+ *   the ~/IuRoot/ path rule.
+ *
  * For PR-required repos, BLOCKED:
  *   git push ... main/master      — any push targeting a protected branch
  *   git push (no ref)             — when currently on main/master
@@ -43,19 +49,31 @@ const PROTECTED = ["main", "master"];
 // (keep protecting the known apps) rather than failing open.
 const PR_REQUIRED_FALLBACK = ["basalt-ui", "free-planning-poker", "rollhook", "rollhook-action"];
 
-async function loadPrRequiredRepos(): Promise<string[]> {
+interface RepoConfig {
+  prRequired: string[];
+  directToMain: string[];
+}
+
+async function loadRepoConfig(): Promise<RepoConfig> {
   try {
     const f = Bun.file(`${process.env.HOME}/.claude/pr-required-repos.json`);
     if (await f.exists()) {
-      const data = (await f.json()) as { repos?: unknown };
-      if (Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string")) {
-        return data.repos as string[];
-      }
+      const data = (await f.json()) as { repos?: unknown; directToMain?: unknown };
+      const prRequired =
+        Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string")
+          ? (data.repos as string[])
+          : PR_REQUIRED_FALLBACK;
+      const directToMain =
+        Array.isArray(data.directToMain) &&
+        data.directToMain.every((r) => typeof r === "string")
+          ? (data.directToMain as string[])
+          : [];
+      return { prRequired, directToMain };
     }
   } catch {
     // fall through to fallback
   }
-  return PR_REQUIRED_FALLBACK;
+  return { prRequired: PR_REQUIRED_FALLBACK, directToMain: [] };
 }
 
 function getRepoName(cwd: string): string | null {
@@ -114,9 +132,13 @@ const cwd = input.cwd ?? process.cwd();
 
 // Default: direct-to-master is fine. Only enforce PR workflow for the denylist.
 const repoName = getRepoName(cwd);
-const prRequiredRepos = await loadPrRequiredRepos();
+const { prRequired, directToMain } = await loadRepoConfig();
+// directToMain is the explicit escape hatch — it wins over both the denylist
+// and the ~/IuRoot/ path rule (e.g. a greenfield agent that pushes to main).
+const isDirectToMain = repoName !== null && directToMain.includes(repoName);
 const requiresPR =
-  (repoName !== null && prRequiredRepos.includes(repoName)) || isIuRootRepo(cwd);
+  !isDirectToMain &&
+  ((repoName !== null && prRequired.includes(repoName)) || isIuRootRepo(cwd));
 if (!requiresPR) process.exit(0);
 
 const command = (input.tool_input?.command ?? "").trim();

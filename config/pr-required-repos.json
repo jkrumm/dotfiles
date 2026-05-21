@@ -1,9 +1,12 @@
 {
-  "$comment": "Single source of truth for repos that require a PR workflow to master. Consumed by hooks/protect-branches.ts (blocks Claude from pushing to master) and scripts/github-config.sh (applies the FULL require-PR ruleset; everything else gets the LITE ruleset). IuRoot repos are PR-required by path and handled separately in the hook. Add a repo here to enforce PRs in both layers at once. Symlinked to ~/.claude/pr-required-repos.json by `make setup`.",
+  "$comment": "Single source of truth for repos that require a PR workflow to master. Consumed by hooks/protect-branches.ts (blocks Claude from pushing to master) and scripts/github-config.sh (applies the FULL require-PR ruleset; everything else gets the LITE ruleset). IuRoot repos are PR-required by path and handled separately in the hook. Add a repo to `repos` to enforce PRs in both layers at once. `directToMain` is the inverse escape hatch: repos listed there are NEVER PR-required even when they'd otherwise match (e.g. a greenfield single-operator agent under ~/IuRoot/) — the hook lets Claude push straight to main. github-config.sh ignores `directToMain` (it only reads `.repos`, and is GitHub-only anyway). Symlinked to ~/.claude/pr-required-repos.json by `make setup`.",
   "repos": [
     "basalt-ui",
     "free-planning-poker",
     "rollhook",
     "rollhook-action"
+  ],
+  "directToMain": [
+    "prometheus-feuer-agent"
   ]
 }
