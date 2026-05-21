@@ -30,7 +30,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
-| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` tools, quota-aware Max↔IU routing. Hosts notes and Excalidraw integration. |
+| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` / `implement` tools, all running on Kimi-K2.6 (EU/GDPR) via a local LiteLLM bridge so workers never touch Max quota. Hosts notes and Excalidraw integration. |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
 | `basalt-ui` | Tailwind v4 design system (NPM: `basalt-ui`). **Always commit separately from consumer apps.** |
 | `basalt-ui-playground` | Component preview / dev environment for basalt-ui. |
@@ -142,7 +142,7 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 |-|-|-|
 | **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that benefit from session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the current session model. Zero switch cost. Output lands in main context — keep it short. |
 | **subprocess** (`claude -p` shelled from the skill body, API key via Keychain) | Read-heavy work with large isolated output that doesn't need structured guarantees: `analyze`, `otel`, `read-drawing`. | Free of Max quota (API credits). Output fully isolated. Cold spawn ~500ms. No prompt cache reuse across calls. |
-| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output + heartbeat + Max↔IU quota routing: `check`, `review`, `research`. | Schema-validated structured output. Quota-aware routing at ≥70% Max utilization. Best for things `/ship` parses programmatically. |
+| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output + heartbeat: `check`, `review`, `research`, `implement`. | Schema-validated structured output. Workers run on Kimi-K2.6 (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. |
 | **fork** (`context: fork`) | Wrap deferred MCP tools whose responses are token-heavy: `browse` (chrome-devtools). | Burns Max quota (uses Agent tool). Use only when sideclaw can't host the MCP and inline output would bloat main. |
 
 ### Routing decisions
@@ -182,7 +182,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/git-cleanup` | inline | Group noisy branch commits. |
 | `/check` | MCP (sideclaw) | Format, lint, typecheck, test. |
 | `/review` | MCP (sideclaw) | Multi-angle review + CodeRabbit CLI. |
-| `/research <query>` | MCP (sideclaw) | Context7 + WebSearch + WebFetch with cross-verification. |
+| `/research <query>` | MCP (sideclaw) | Context7 + Tavily + curl with cross-verification (runs on Kimi-K2.6). |
 | `/grill` | inline | Question until clear direction, generate PRD. |
 | `/implement` | inline (sonnet subagent) | Guided implementation with research + explore + check. |
 | `/browse` | fork (haiku) | Chrome DevTools debugging. |
@@ -244,7 +244,7 @@ Worktrees land at `<repo>.worktrees/<branch>` — adjacent to the repo, so the 1
 
 ### Validation
 - Check `package.json` (or repo Makefile) for available scripts.
-- Use `/check` for validation (sideclaw MCP — schema-validated, quota-aware).
+- Use `/check` for validation (sideclaw MCP — schema-validated, runs on the Kimi-K2.6 EU bridge).
 - Fix errors in changed files only (don't refactor untouched code).
 - I validate running apps manually (don't run `dev` servers for me).
 

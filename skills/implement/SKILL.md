@@ -51,13 +51,13 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`.
 | Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
 | Research | Skip | `/research` (MCP) if external libs | `/research` (MCP) if external libs |
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
-| Implement | Inline | Inline | `Agent` with `subagent_type: general-purpose` — see model choice below |
+| Implement | Inline | Inline or `mcp__sideclaw__implement` | `mcp__sideclaw__implement` (off Max) for mechanical work; `Agent` for hard logic — see below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
-**Heavy implementer model choice:**
-- **Mechanical fan-out, clear plan, large diff**: `model: sonnet` — fast, follows specs tightly
-- **Novel hard logic, complex decomposition, multi-system reasoning**: `model: opus, effort: high` — keep the heavy thinking in an isolated bubble so the orchestrator's cache stays warm
+**Heavy implementer choice (cost-aware — you orchestrate on Max, the worker edits off Max):**
+- **Mechanical fan-out, clear plan, large diff**: prefer **`mcp__sideclaw__implement`** — it runs the edits on Kimi-K2.6 (EU/GDPR) via the LiteLLM bridge, off your Max quota, self-verifies against the repo's checks, and returns a structured report (`applied`, `filesChanged`, `checkPassed`, `notes`). Pass a precise `task` + `context` (file paths, the plan, conventions to follow); review the diff before committing.
+- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Max — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high` in an isolated bubble so the orchestrator's cache stays warm. Kimi is a literal executor, not a planner.
 - **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast
 
 Never do exploration or research inline in Standard/Heavy tiers.
@@ -107,14 +107,14 @@ State your approach in 3-5 bullets and **proceed**. Include:
 
 ### 3. Implement
 
-**Quick / Standard (≤8 files): implement inline.**
+**Quick (≤2 files): implement inline.**
 
-**Heavy (9+ files or high complexity): delegate via `Agent` with `subagent_type: general-purpose`.** Pick the model per the heavy implementer rules above (sonnet for fan-out, opus+high for hard logic). The subagent has zero prior context, so the prompt must include:
-- The full task description
+**Standard / Heavy mechanical work: prefer `mcp__sideclaw__implement`** (off Max, Kimi EU). **Heavy novel logic: `Agent` with `subagent_type: general-purpose`, `model: opus`** (on Max). Either way the executor has zero prior context, so the `task` + `context` must include:
+- The full task description and acceptance criteria
 - Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)
 - Explicit constraints: no extra features, no refactoring untouched code, follow existing patterns
-- Return contract: list of files changed + brief summary of what changed
+- For `mcp__sideclaw__implement`: it self-verifies and returns `applied`/`filesChanged`/`checkPassed`/`notes` — read `notes` for assumptions and pre-existing failures, then review the diff yourself
 
 During implementation (inline or subagent):
 - Follow existing patterns exactly — match naming, structure, error handling

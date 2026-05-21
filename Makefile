@@ -35,6 +35,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-opencode
 	@$(MAKE) --no-print-directory _setup-localai
+	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-orbstack-block
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -693,6 +694,10 @@ LOCALAI_DIR   := $(DOTFILES_DIR)/localai
 MLX_AUDIO_BIN := $(HOME)/.local/bin/mlx_audio.server
 MLX_AUDIO_PY  := $(HOME)/.local/share/uv/tools/mlx-audio/bin/python3
 MLX_SPEECH_BIN := $(HOME)/.local/bin/mlx-speech
+LITELLM_DIR   := $(DOTFILES_DIR)/litellm
+LITELLM_BIN   := $(HOME)/.local/share/uv/tools/litellm/bin/litellm
+# Source dir for _render-plists; overridden per-call for non-localai services.
+PLIST_DIR     ?= $(LOCALAI_DIR)
 
 # Install mlx-audio + Python deps + ffmpeg + apply m4a STT patch.
 # Idempotent — skips work that's already done.
@@ -813,11 +818,11 @@ localai-setup:
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="$(LOCALAI_AUDIO_PLISTS)"
 
-# Internal: render any plist list from $(LOCALAI_DIR) templates.
+# Internal: render any plist list from $(PLIST_DIR) templates (default localai).
 .PHONY: _render-plists
 _render-plists:
 	@for label in $(PLISTS); do \
-		SRC="$(LOCALAI_DIR)/$$label.plist.template"; \
+		SRC="$(PLIST_DIR)/$$label.plist.template"; \
 		DST="$(LAUNCHAGENTS)/$$label.plist"; \
 		TMP="$$(mktemp)"; \
 		sed "s|__HOME__|$(HOME)|g" "$$SRC" > "$$TMP"; \
@@ -858,6 +863,52 @@ stop:
 	done
 
 # ============================================================================
+# LiteLLM — Anthropic↔OpenAI bridge for IU (Kimi-K2.6 etc.), bound to 127.0.0.1:4000
+# ============================================================================
+# Translates `claude -p` Anthropic Messages calls into OpenAI chat/completions
+# against the IU unified endpoint, so worker sessions can run on Kimi-K2.6 (EU)
+# with claude-sonnet-4-6-eu failover. Consumed by sideclaw. See
+# docs/kimi-litellm-bridge.md.
+
+.PHONY: _setup-litellm
+_setup-litellm:
+	@echo "  LiteLLM (Anthropic↔OpenAI bridge on 127.0.0.1:4000)..."
+	@if ! command -v uv >/dev/null 2>&1; then \
+		echo "    ✗ uv not installed — run _setup-tools first"; exit 1; \
+	fi
+	@if [ -x "$(LITELLM_BIN)" ]; then \
+		echo "    · litellm installed (ok)"; \
+	else \
+		echo "    Installing litellm[proxy] via uv (~1-2 min)..."; \
+		uv tool install "litellm[proxy]" >/dev/null 2>&1 || { echo "    ✗ uv tool install failed"; exit 1; }; \
+		echo "    ✓ litellm installed"; \
+	fi
+	@mkdir -p "$(HOME)/.config/litellm"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/litellm/config.yaml" \
+		DST="$(HOME)/.config/litellm/config.yaml"
+	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
+		echo "    · IU credential (Keychain, shared with Agent SDK) ok"; \
+	else \
+		echo "    ✗ claude-sdk-api-key not in Keychain — run make setup (_setup-sdk-keys)"; \
+	fi
+	@$(MAKE) --no-print-directory litellm-setup
+
+# Render the litellm plist from its template + reload if changed.
+.PHONY: litellm-setup
+litellm-setup:
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.litellm.proxy" PLIST_DIR="$(LITELLM_DIR)"
+
+.PHONY: litellm-restart
+litellm-restart:
+	@launchctl kickstart -k gui/$$(id -u)/com.litellm.proxy && echo "  · litellm restarted"
+
+.PHONY: litellm-logs
+litellm-logs:
+	@tail -f /tmp/litellm.log
+
+# ============================================================================
 # Help
 # ============================================================================
 
@@ -875,6 +926,10 @@ help:
 	@echo "  make localai-setup  Render audio plist from template + reload if changed"
 	@echo "  make start          Start mlx-audio (+ helper if installed)"
 	@echo "  make stop           Stop mlx-audio (+ helper if installed)"
+	@echo ""
+	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
+	@echo "  make litellm-restart  Restart the LiteLLM bridge"
+	@echo "  make litellm-logs     Tail /tmp/litellm.log"
 	@echo ""
 	@echo "  Hermes Agent setup lives in ~/SourceRoot/hermes-agent — run make setup there."
 	@echo ""

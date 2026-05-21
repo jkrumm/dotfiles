@@ -1,0 +1,41 @@
+# LiteLLM proxy — Anthropic↔OpenAI bridge for the IU unified endpoint.
+#
+# Lets `claude -p` (Anthropic Messages API) drive models that IU exposes only on
+# its OpenAI-compatible transport — primarily Kimi-K2.6 (EU/GDPR, Azure Sweden).
+# Started as a LaunchAgent via litellm/bin/start-litellm.sh, which injects
+# IU_API_KEY + IU_OPENAI_BASE_URL from the macOS Keychain and forces the
+# chat/completions route. Full background: docs/kimi-litellm-bridge.md.
+#
+# Selection is by the `model` field; all three are EU/GDPR-resident on the IU
+# OpenAI transport. Never hardcode the IU base URL or key here — both arrive via
+# os.environ (Keychain-sourced in the wrapper) so this file stays secret-free.
+
+model_list:
+  # Primary worker. Capital K is mandatory — the IU gateway 404s on `kimi-k2.6`.
+  - model_name: Kimi-K2.6
+    litellm_params:
+      model: openai/Kimi-K2.6
+      api_base: os.environ/IU_OPENAI_BASE_URL
+      api_key: os.environ/IU_API_KEY
+  # Failover target. Kimi-K2.6 is single-backend (Azure Sweden) and intermittently
+  # 5xx/429s; this Claude alias is the GDPR-resident fallback.
+  - model_name: claude-sonnet-4-6-eu
+    litellm_params:
+      model: openai/claude-sonnet-4-6-eu
+      api_base: os.environ/IU_OPENAI_BASE_URL
+      api_key: os.environ/IU_API_KEY
+  # Cheap, non-reasoning auxiliary. IU maps max_completion_tokens internally.
+  - model_name: gpt-5-mini
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_base: os.environ/IU_OPENAI_BASE_URL
+      api_key: os.environ/IU_API_KEY
+
+litellm_settings:
+  # `claude -p` sends reasoning_effort and other params Kimi rejects — drop them.
+  drop_params: true
+  num_retries: 2
+  request_timeout: 600
+  # Transparent failover: a failed Kimi-K2.6 call retries on claude-sonnet-4-6-eu.
+  fallbacks:
+    - Kimi-K2.6: ["claude-sonnet-4-6-eu"]
