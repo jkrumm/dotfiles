@@ -887,6 +887,9 @@ _setup-litellm:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/litellm/config.yaml" \
 		DST="$(HOME)/.config/litellm/config.yaml"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/litellm/usage_logger.py" \
+		DST="$(HOME)/.config/litellm/usage_logger.py"
 	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
 		echo "    · IU credential (Keychain, shared with Agent SDK) ok"; \
 	else \

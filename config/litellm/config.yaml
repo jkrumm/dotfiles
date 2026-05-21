@@ -39,3 +39,6 @@ litellm_settings:
   # Transparent failover: a failed Kimi-K2.6 call retries on claude-sonnet-4-6-eu.
   fallbacks:
     - Kimi-K2.6: ["claude-sonnet-4-6-eu"]
+  # Per-request usage → JSONL for usage-tracker. usage_logger.py is symlinked
+  # next to this file (~/.config/litellm/) by `make` so litellm resolves it.
+  callbacks: ["usage_logger.usage_logger_instance"]
