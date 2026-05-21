@@ -32,6 +32,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
 | `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` / `implement` tools, all running on Kimi-K2.6 (EU/GDPR) via a local LiteLLM bridge so workers never touch Max quota. Hosts notes and Excalidraw integration. |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
+| `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM bridge, Hermes, Feuer, OpenCode) normalize into one `usage_record` table with central pricing; LaunchAgent ingests every 15 min. Staging layer for an eventual Argo dashboard. |
 | `basalt-ui` | Tailwind v4 design system (NPM: `basalt-ui`). **Always commit separately from consumer apps.** |
 | `basalt-ui-playground` | Component preview / dev environment for basalt-ui. |
 | `argo` | Personal API server + dashboard — the AI-agent backbone. Hermes and other agents call it to read TickTick tasks, Gmail, calendar (personal + work), Teams messages, Garmin health (HRV, sleep, recovery, daily metrics), strength training (workouts, e1RM, volume), and homelab/VPS state (UptimeKuma, Docker). Elysia + Bun + Postgres + Drizzle; OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
@@ -141,8 +142,8 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 | Mode | When to use | Cost profile |
 |-|-|-|
 | **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that benefit from session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the current session model. Zero switch cost. Output lands in main context — keep it short. |
-| **subprocess** (`claude -p` shelled from the skill body, API key via Keychain) | Read-heavy work with large isolated output that doesn't need structured guarantees: `analyze`, `otel`, `read-drawing`. | Free of Max quota (API credits). Output fully isolated. Cold spawn ~500ms. No prompt cache reuse across calls. |
-| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output + heartbeat: `check`, `review`, `research`, `implement`. | Schema-validated structured output. Workers run on Kimi-K2.6 (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. |
+| **subprocess** (`claude -p` shelled from the skill body via the `claude_iu` / `claude_bridge` zsh helpers in `claude.zsh` — never hand-rolled env blocks) | Read-heavy work with large isolated output that doesn't need structured guarantees: `analyze`, `read-drawing`. | Free of Max quota (IU per-token). Output fully isolated. Cold spawn ~500ms. No prompt cache reuse across calls. `claude_iu` = IU native (haiku, used by analyze/read-drawing); `claude_bridge` = LiteLLM bridge → Kimi-K2.6 (EU/GDPR), available for EU-bound subprocess work. |
+| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output + heartbeat: `check`, `review`, `research`, `implement`, `otel`. | Schema-validated structured output (`runSession` Zod-validates worker output via `zodValidator` — Kimi ignores `--json-schema`). Workers run on Kimi-K2.6 (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. |
 | **fork** (`context: fork`) | Wrap deferred MCP tools whose responses are token-heavy: `browse` (chrome-devtools). | Burns Max quota (uses Agent tool). Use only when sideclaw can't host the MCP and inline output would bloat main. |
 
 ### Routing decisions
@@ -187,7 +188,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/implement` | inline (sonnet subagent) | Guided implementation with research + explore + check. |
 | `/browse` | fork (haiku) | Chrome DevTools debugging. |
 | `/analyze` | subprocess (haiku) | Deep static analysis (fallow). |
-| `/otel [env] [intent]` | subprocess (haiku) | Debug OTEL traces/logs/metrics in ClickHouse. |
+| `/otel [env] [intent]` | MCP (sideclaw) | Debug OTEL traces/logs/metrics in ClickHouse (worker uses `query.py`, kept in dotfiles). |
 | `/read-drawing` | subprocess (haiku) | Interpret Excalidraw + parse JSON. |
 | `/secrets` | inline | 1Password vault ops (uses `op_account_for_cwd`). |
 | `/cloudflare` | inline | Cloudflare config (uses `op_account_for_cwd`). |
