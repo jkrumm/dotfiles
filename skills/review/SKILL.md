@@ -7,9 +7,9 @@ description: Multi-angle code review via sideclaw MCP tool (Kimi, off Max). Add 
 
 ## Default (off Max) — sideclaw multi-angle
 
-Call `mcp__sideclaw__review` with `cwd` set to the current working directory.
-Parse args for `scope` (default `uncommitted`): e.g. `head`, `HEAD~3`, `path/to/file.ts`.
-Strip any leading flags (like `--deep`) before extracting the scope.
+`mcp__sideclaw__review` is **asynchronous** (background job on Kimi, off Max):
+1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head`, `HEAD~3`, `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
+2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes (loop while `stillRunning: true`); read `result` on `status: "done"`. The submit call does **not** return the findings.
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
 plus a triage router that adds content-driven angles — security, performance,

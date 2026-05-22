@@ -143,7 +143,7 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 |-|-|-|
 | **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that benefit from session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the current session model. Zero switch cost. Output lands in main context — keep it short. |
 | **subprocess** (`claude -p` shelled from the skill body via the `claude_iu` / `claude_bridge` zsh helpers in `claude.zsh` — never hand-rolled env blocks) | Read-heavy work with large isolated output that doesn't need structured guarantees: `analyze`, `read-drawing`. | Free of Max quota (IU per-token). Output fully isolated. Cold spawn ~500ms. No prompt cache reuse across calls. `claude_iu` = IU native (haiku, used by analyze/read-drawing); `claude_bridge` = LiteLLM bridge → Kimi-K2.6 (EU/GDPR), available for EU-bound subprocess work. |
-| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output + heartbeat: `check`, `review`, `research`, `implement`, `otel`. | Schema-validated structured output (`runSession` Zod-validates worker output via `zodValidator` — Kimi ignores `--json-schema`). Workers run on Kimi-K2.6 (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. |
+| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output: `check`, `review`, `research`, `implement`, `otel`. | Schema-validated structured output (`runSession` Zod-validates worker output via `zodValidator` — Kimi ignores `--json-schema`). Workers run on Kimi-K2.6 (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. **`check`/`review`/`research`/`implement` are async** — see the async-job contract below. |
 | **fork** (`context: fork`) | Wrap deferred MCP tools whose responses are token-heavy: `browse` (chrome-devtools). | Burns Max quota (uses Agent tool). Use only when sideclaw can't host the MCP and inline output would bloat main. |
 
 ### Routing decisions
@@ -165,6 +165,13 @@ Delegate-by-default rules:
 - **Library/API/version questions → `/research`** (`mcp__sideclaw__research`). Never answer from memory (see `research-first` rule).
 - **Exploration → `Agent` (Explore subagent).** Never read 10 files into the orchestrator to find one thing.
 - **Anything past a one-line edit → reach for `/implement`.** It encodes the tier scaling and the delegation choices — don't reinvent that judgment ad hoc.
+
+**sideclaw async-job contract (important).** `mcp__sideclaw__{check,review,research,implement}` are **asynchronous**: the call returns `{ jobId, status }` immediately — **not** the result. The job runs in sideclaw's always-on HTTP server (durable across `/mcp` reconnects) on Kimi, off Max. To get the result:
+1. Submit → note the `jobId`.
+2. Call **`mcp__sideclaw__job_wait({ jobId })`** — it blocks ~50s with heartbeats and returns the result when the job finishes. If it returns `stillRunning: true`, call it again with the same `jobId` (loop until false). Use `job_status` for a non-blocking peek while doing other work.
+3. Read `result` (the tool's structured output) when `status: "done"`; read `error` on `"failed"`/`"interrupted"`.
+
+This is what makes long (10-min+) offload safe — a worker run never blocks/destabilizes the MCP transport. **Parallel fan-out:** submit N jobs in one turn (each returns a jobId), then `job_wait` each; a global concurrency cap queues the excess so you can't 429 the bridge. Don't treat the submit call as the answer.
 
 The orchestrator holds the plan and the verdicts, not the raw material.
 

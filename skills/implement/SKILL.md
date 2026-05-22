@@ -7,6 +7,8 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration. Not a full `/ralph` loop, but capable of handling substantial tasks while keeping the main agent's context window lean.
 
+> **sideclaw tools are async.** `mcp__sideclaw__{implement,check,review,research}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. Submit independent groups in one turn (parallel jobIds), then `job_wait` each. See the async-job contract in global CLAUDE.md.
+
 ## When to Use
 
 - You have a clear task (from `/grill`, a PRD, or a direct request)
