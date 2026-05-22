@@ -1,92 +1,49 @@
 ---
 name: read-drawing
-description: Read and interpret Excalidraw diagrams (.excalidraw + .svg) via claude -p subprocess. Isolates large diagram files from main context.
+description: Read and interpret Excalidraw diagrams (.excalidraw + .svg) via the sideclaw read_drawing MCP tool. Off Max, stronger vision model, structural JSON ground truth.
 ---
 
 # Read Drawing Skill
 
-Launches a `claude -p` subprocess to interpret an Excalidraw diagram. Large JSON/SVG content stays isolated — only the semantic context block returns to main context.
-
-## IMPORTANT — Subprocess Only
-
-Always run via `claude -p`. Never execute inline. Never use the Agent tool.
-If the API key lookup fails, report the error — do not fall back to inline execution.
+Thin wrapper over the sideclaw `read_drawing` MCP tool. The whole pipeline —
+SVG→PNG rasterization (headless Chrome), the vision read (`gemini-3-pro-preview`,
+off Max), and the deterministic `.excalidraw` JSON parse (frames, bindings,
+groups — the structural ground truth) — lives in sideclaw and runs as a single
+stateless IU OpenAI-transport call. No `claude -p` subprocess, no Haiku agent.
 
 ## Usage
 
 ```
+/read-drawing /path/to/diagram          # resolves <base>.svg + <base>.excalidraw
 /read-drawing /path/to/diagram.svg
 /read-drawing /path/to/diagram.excalidraw
-/read-drawing /path/to/diagram          # resolves both automatically
 ```
 
 ## Execution
 
-**Step 1** — Generate a unique temp path for this invocation: `/tmp/claude-read-drawing-<timestamp>`
-(Use current epoch ms. This avoids conflicts if skill runs in parallel.)
-
-**Step 2** — Write the prompt below to that path using the Write tool. Replace `[FILE_PATH]` with the actual file path argument.
+Call the MCP tool directly:
 
 ```
-You are a diagram interpreter. Read and interpret the Excalidraw diagram at the path below.
-
-Step 1 — Resolve files:
-Strip extension to get base path. Check which exist: <base>.svg, <base>.excalidraw
-
-Step 2 — Visual read (if .svg exists):
-Use the Read tool on the .svg file. It renders as an image. Observe:
-- Overall layout, composition, flow direction
-- Color coding and visual hierarchy
-- Shape types and spatial groupings
-- Apparent purpose from visual structure alone
-
-Step 3 — Semantic analysis (if .excalidraw exists):
-Read the JSON file. Apply these schema rules:
-- text.containerId → text is the label for that shape (pair them)
-- arrow.startBinding.elementId → source; endBinding.elementId → target
-- Resolve element IDs to their labels when describing flows
-- element.groupIds[] → shared ID = same logical component
-- element.frameId → element lives inside this named frame/section
-- strokeStyle: "dashed" = optional/async/secondary flow
-- type: "diamond" = decision; "ellipse" = actor/endpoint; "rectangle" = process/component
-- Free-floating text (no containerId) = annotation, section title
-
-Label resolution:
-1. Collect text elements where containerId != null → that shape's label
-2. Standalone text (containerId == null) → annotation or title
-3. Sort shapes by y coordinate → reading order top-to-bottom
-
-Step 4 — Synthesize. Produce this output (under 2000 chars):
-
-### Diagram: [filename or inferred title]
-
-**Visual:** [1-2 sentences from SVG perception]
-
-**Purpose:** [what this diagram communicates]
-
-**Components:**
-- [type] "label" — role
-
-**Flows:**
-- "A" → "B" — meaning
-- "B" → "C" [dashed] — optional path
-
-**Groups/Sections:** [if present]
-
-**Implementation insight:** [the key actionable takeaway — what to build or understand]
-
-FILE PATH: [FILE_PATH]
+mcp__sideclaw__read_drawing({ path: "<the file or base path argument>" })
 ```
 
-**Step 3** — Run the subprocess and clean up:
+It returns `{ synthesis, structure, svgPath, excalidrawPath, model, latencyMs, usage }`:
+- `synthesis` — merged prose (Diagram / Visual / Purpose / Components / Flows /
+  Groups / Implementation-insight) combining the vision gestalt with the JSON
+  ground truth.
+- `structure` — the deterministic parse (components, flows with resolved
+  bindings, groups, frames, annotations). Authoritative for structure where the
+  image and JSON disagree.
 
-```bash
-claude_iu --model claude-haiku-4-5-20251001 < /tmp/claude-read-drawing-<timestamp>
-rm -f /tmp/claude-read-drawing-<timestamp>
-```
+Report the `synthesis` to the user; surface `structure` details when the exact
+wiring (which arrow binds what, frame membership) matters.
 
-`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` against the IU
-endpoint off Max quota. Keep this on the **native** transport, not the Kimi
-bridge: diagram interpretation needs the multimodal Claude path, which the
-OpenAI-compat bridge does not reliably serve. If IU credentials are missing it
-errors with a `make setup` hint; do not fall back to inline execution.
+## Notes
+
+- For an arbitrary single image (screenshot, photo, non-Excalidraw SVG) use
+  `mcp__sideclaw__read_image` instead.
+- The vision model routes to a non-EU vendor — fine for git-committed/non-sensitive
+  diagrams, not for PII.
+- If the sideclaw MCP server is unavailable, report it (the tool needs the
+  sideclaw MCP registered: `make setup` in `~/SourceRoot/dotfiles`). Do not fall
+  back to an inline `claude -p` read.
