@@ -8,7 +8,7 @@ description: Multi-angle code review via sideclaw MCP tool (Kimi, off Max). Add 
 ## Default (off Max) — sideclaw multi-angle
 
 `mcp__sideclaw__review` is **asynchronous** (background job on Kimi, off Max):
-1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head`, `HEAD~3`, `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
+1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
 2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes (loop while `stillRunning: true`); read `result` on `status: "done"`. The submit call does **not** return the findings.
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
@@ -43,3 +43,8 @@ not routine reviews — it spends Max.
 Present one consolidated verdict — outcome, blocking, improvements, discussions,
 testGaps, summary — noting the catching reviewer per finding. Don't echo each
 tool's raw output; synthesize.
+
+**Kimi worker caveats when consuming findings:**
+- **Line numbers are unreliable** — Kimi often cites lines that don't exist (e.g. L688 in a 600-line file). The *substance* is usually accurate; the location isn't. Before reporting or acting on a finding, **grep for the symbol/code, not the cited line.**
+- **Angle reviewers explore the live tree**, not just the diff (they have Bash/Read/Grep). A finding may reference current code outside the reviewed scope — useful, but verify it's in-scope before treating it as introduced by the change.
+- Before claiming a finding is wrong, verify it in the actual code — don't dismiss it on the bad line number alone.
