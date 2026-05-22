@@ -34,7 +34,7 @@ Assess the task first and pick the appropriate tier:
 |-|-|-|
 | **Quick** | 1-2 files, clear pattern, no research needed | Skip tasks, skip explore subagent, implement inline, run `/check` |
 | **Standard** | 3-8 files, some unknowns, familiar libraries | Full process below — explore subagent, plan, inline impl, `/check` |
-| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation delegated to sonnet subagent + runtime validation |
+| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation offloaded (parallel `mcp__sideclaw__implement` for independent groups, or an Opus subagent for hard logic) + runtime validation |
 
 For Quick tasks: skip the formality, just implement and validate. State the tier upfront.
 
@@ -51,14 +51,16 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`.
 | Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
 | Research | Skip | `/research` (MCP) if external libs | `/research` (MCP) if external libs |
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
-| Implement | Inline | Inline or `mcp__sideclaw__implement` | `mcp__sideclaw__implement` (off Max) for mechanical work; `Agent` for hard logic — see below |
+| Implement | Inline | Inline or `mcp__sideclaw__implement` | `mcp__sideclaw__implement` (off Max), one call per independent file group in parallel, for mechanical work; `Agent` for hard logic — see below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
 **Heavy implementer choice (cost-aware — you orchestrate on Max, the worker edits off Max):**
 - **Mechanical fan-out, clear plan, large diff**: prefer **`mcp__sideclaw__implement`** — it runs the edits on Kimi-K2.6 (EU/GDPR) via the LiteLLM bridge, off your Max quota, self-verifies against the repo's checks, and returns a structured report (`applied`, `filesChanged`, `checkPassed`, `notes`). Pass a precise `task` + `context` (file paths, the plan, conventions to follow); review the diff before committing.
+- **Independent file groups**: split the work and fire **multiple `mcp__sideclaw__implement` calls in a single turn** (one per group) — they run as concurrent Kimi workers off Max while you await. Only split where groups don't touch the same files (avoid write conflicts); keep coupled changes in one call.
 - **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Max — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high` in an isolated bubble so the orchestrator's cache stays warm. Kimi is a literal executor, not a planner.
-- **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast
+- **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast.
+- **Need branch isolation?** Decide it **up front, at the orchestrator level** — not mid-flow. Create the worktree with `wtp add <branch>` and run the whole `/implement` flow there; the sideclaw worker inherits the `cwd` you pass, so it already edits inside the worktree. Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
 
 Never do exploration or research inline in Standard/Heavy tiers.
 

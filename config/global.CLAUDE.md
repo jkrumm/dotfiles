@@ -135,7 +135,7 @@ Never add AI or tool attribution to any artifact — code comments, commits, PR 
 ## Token Efficiency
 
 ### Orchestrator role
-The main session is the **orchestrator**. Keep its context clean: hold the plan, the user's intent, and the cross-skill state. Push verbose work (logs, diffs, fetch bodies, test output) into one of the four execution modes below. **Don't switch the orchestrator's model mid-session** — that invalidates the prompt cache for at least one turn and is the biggest avoidable cost in a long conversation.
+The main session is the **orchestrator**. Keep its context clean: hold the plan, the user's intent, and the cross-skill state. Push verbose work (logs, diffs, fetch bodies, test output) into one of the four execution modes below. The orchestrator **decides and verifies** — it should not be the thing grinding through reads, multi-file edits, and validation loops. Delegate by default (see **Offloading discipline** below). **Don't switch the orchestrator's model mid-session** — that invalidates the prompt cache for at least one turn and is the biggest avoidable cost in a long conversation.
 
 ### Four execution modes for skills
 
@@ -153,6 +153,39 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 - Does it need a live MCP server the main session has registered (e.g. chrome-devtools)? → **fork**
 
 **Never** put `model: haiku|sonnet` in skill frontmatter when the skill body already shells out to `claude -p` with its own `--model` flag — that creates a redundant main-thread switch for trivial orchestration.
+
+### Offloading discipline — delegate by default
+
+The orchestrator's turns are the scarcest, most expensive resource (Max quota + context). **Bias hard toward pushing work off it.** Before doing multi-file edits, deep reads, or validation inline, ask: *can a Kimi worker or subagent do this and hand back only the conclusion?* If the work is fully describable by inputs and the output is verbose, it belongs in a worker.
+
+Delegate-by-default rules:
+- **Mechanical edits with a settled plan → `mcp__sideclaw__implement`** (Kimi, off Max). Don't hand-edit 3+ files yourself once the plan is clear — write the task + context, offload, review the returned diff.
+- **Any validation → `mcp__sideclaw__check`.** Never run format/lint/tsc/test loops inline.
+- **Code review → `/review`** (`mcp__sideclaw__review`, off Max, dynamic angle router).
+- **Library/API/version questions → `/research`** (`mcp__sideclaw__research`). Never answer from memory (see `research-first` rule).
+- **Exploration → `Agent` (Explore subagent).** Never read 10 files into the orchestrator to find one thing.
+- **Anything past a one-line edit → reach for `/implement`.** It encodes the tier scaling and the delegation choices — don't reinvent that judgment ad hoc.
+
+The orchestrator holds the plan and the verdicts, not the raw material.
+
+### Parallel & background orchestration
+
+Cheapest parallelism first — escalate a tier only when the one below can't do the job:
+
+| Tier | Mechanism | Max cost | Use when |
+|-|-|-|-|
+| 1 | **Parallel `mcp__sideclaw__*` calls in one turn** | ~0 (Kimi workers) | Independent verifiable work: check N repos, review + research at once, implement N independent file groups. The default for fan-out. |
+| 2 | **subprocess** (`claude_iu` / `claude_bridge`) | ~0 (IU per-token) | Read-heavy isolated output. |
+| 3 | **Background `Agent`** (`run_in_background: true`) driving sideclaw MCP tools | Moderate (thin Max orchestrator) | Long, multi-step work you want to detach from and resume (`SendMessage`). Keep the bg agent thin — it delegates to Kimi workers, doesn't grind itself. |
+| 4 | **Foreground `Agent` / subagent on Opus** | Full Max (isolated cache) | Novel hard logic needing the best model. |
+| 5 | **Agent teams / `/ultrareview`** | N× Max or $$$ cloud | Genuinely hard parallel reasoning only. Rarely worth it for personal-infra repos. |
+
+Key facts:
+- **Parallel MCP calls are free parallelism** — emit several `mcp__sideclaw__*` tool_use blocks in a single turn; they run as concurrent Kimi workers while the orchestrator just awaits. Under-used — prefer it over serial calls whenever the units are independent.
+- **Background agents and agent teams run on Max** — they buy detachment and coordination, not cheap parallelism. A background agent that fans out to sideclaw MCP keeps its own Max cost low.
+- **Worktree isolation is an up-front, orchestrator-level decision — not something `/implement` does mid-flow.** If a task needs an isolated branch (parallel streams, risky change), create the worktree at the start (`wtp add <branch>`) and run the *whole* session there — orchestrator and every sideclaw worker (they inherit the `cwd` you pass) work in the same tree. Don't spawn worktree-isolated sub-agents ad hoc; that splits work across trees you then have to reconcile.
+- **`Task*` tools** (TaskCreate/List/Update) are a built-in coordination layer (lead creates, workers claim, deps unblock) — not MCP-backed, they don't reach sideclaw.
+- **Routines / `/schedule`** run in Anthropic's cloud and **cannot reach the local sideclaw MCP** (localhost) or the LiteLLM bridge — don't route sideclaw offload through them.
 
 ### API offloading (manual)
 For ad-hoc heavy work outside a skill. Use `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`) and strip any inherited key: with a logged-in Max session the `claude` CLI sends its Max OAuth bearer to the IU gateway → 401. `AUTH_TOKEN` forces `Authorization: Bearer <IU-token>`, which the gateway accepts and which takes precedence over the login.
@@ -182,10 +215,10 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/ship` | inline | Full flow: check → review → commit → PR → CodeRabbit → merge → release. |
 | `/git-cleanup` | inline | Group noisy branch commits. |
 | `/check` | MCP (sideclaw) | Format, lint, typecheck, test. |
-| `/review` | MCP (sideclaw) | Multi-angle review + CodeRabbit CLI. |
+| `/review` | MCP (sideclaw) | Multi-angle review (dynamic angle router) + CodeRabbit CLI. `--deep` adds native correctness + security on Max. |
 | `/research <query>` | MCP (sideclaw) | Context7 + Tavily + curl with cross-verification (runs on Kimi-K2.6). |
 | `/grill` | inline | Question until clear direction, generate PRD. |
-| `/implement` | inline (sonnet subagent) | Guided implementation with research + explore + check. |
+| `/implement` | inline (sonnet subagent) | Guided implementation; tiers scale to parallel sideclaw offload + subagents. |
 | `/browse` | fork (haiku) | Chrome DevTools debugging. |
 | `/analyze` | subprocess (haiku) | Deep static analysis (fallow). |
 | `/otel [env] [intent]` | MCP (sideclaw) | Debug OTEL traces/logs/metrics in ClickHouse (worker uses `query.py`, kept in dotfiles). |

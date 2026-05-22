@@ -1,9 +1,45 @@
 ---
 name: review
-description: Multi-angle code review via sideclaw MCP tool
+description: Multi-angle code review via sideclaw MCP tool (Kimi, off Max). Add --deep to also run Anthropic's native correctness + security review on Max.
 ---
 
-# Review — via sideclaw MCP
+# Review
+
+## Default (off Max) — sideclaw multi-angle
 
 Call `mcp__sideclaw__review` with `cwd` set to the current working directory.
-Pass skill arguments as `scope` (default: `uncommitted`). Examples: `head`, `HEAD~3`, `path/to/file.ts`.
+Parse args for `scope` (default `uncommitted`): e.g. `head`, `HEAD~3`, `path/to/file.ts`.
+Strip any leading flags (like `--deep`) before extracting the scope.
+
+This runs the deterministic floor (architect, senior-dev, and file-type angles)
+plus a triage router that adds content-driven angles — security, performance,
+concurrency, data-migration, api-contract — when the diff warrants them. All on
+Kimi-K2.6 via the bridge, **zero Max quota**. Use this by default.
+
+## `--deep` — add native correctness + security (on Max)
+
+When the args contain `--deep`, ALSO run Anthropic's native reviewers and merge
+them with the sideclaw result. These run on the orchestrator's Max model and are
+tuned for real correctness bugs — complementary to sideclaw's architecture /
+framework / style angles. **Reserve `--deep` for pre-ship gates or risky changes**,
+not routine reviews — it spends Max.
+
+1. Run the sideclaw review (as above).
+2. Invoke the native **`code-review`** skill at high effort over the same scope
+   (Skill tool, `args: "high"`). It targets correctness bugs the angle reviewers
+   may miss.
+3. **Conditionally** invoke the native **`security-review`** skill if the diff
+   touches security-sensitive surface — auth/authz, secrets or credentials,
+   crypto, SQL/command/path construction from input, file uploads, shelling out,
+   or env-var handling. Skip it otherwise.
+4. Merge all findings into one verdict, deduplicated against the sideclaw
+   findings. Map native **Important** → blocking, **Nit** → improvements. Keep
+   sideclaw's outcome classification (`clean` / `actionable` / `needs-human`); if
+   the native pass surfaces a blocking bug, the merged outcome is at least
+   `actionable`.
+
+## Output
+
+Present one consolidated verdict — outcome, blocking, improvements, discussions,
+testGaps, summary — noting the catching reviewer per finding. Don't echo each
+tool's raw output; synthesize.
