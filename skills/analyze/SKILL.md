@@ -124,9 +124,12 @@ Prioritize actionable findings. Skip sections with zero issues. If all clean, sa
 
 SCOPE: [SCOPE]
 PROMPT_END
-env -u ANTHROPIC_API_KEY \
-ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
-ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
-  claude -p --model claude-haiku-4-5-20251001 --dangerously-skip-permissions < "$TMPFILE"
+claude_iu --model claude-haiku-4-5-20251001 --dangerously-skip-permissions < "$TMPFILE"
 rm -f "$TMPFILE"
 ```
+
+`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` against the IU
+endpoint off Max quota (IU per-token). Analyzed code is local/non-sensitive, so
+haiku on the native transport is fine — no need for the EU bridge here. If the IU
+credentials are missing it errors with a `make setup` hint; do not fall back to
+inline execution.

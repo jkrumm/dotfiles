@@ -81,9 +81,12 @@ FILE PATH: [FILE_PATH]
 **Step 3** — Run the subprocess and clean up:
 
 ```bash
-env -u ANTHROPIC_API_KEY \
-ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
-ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
-  claude -p --model claude-haiku-4-5-20251001 < /tmp/claude-read-drawing-<timestamp>
+claude_iu --model claude-haiku-4-5-20251001 < /tmp/claude-read-drawing-<timestamp>
 rm -f /tmp/claude-read-drawing-<timestamp>
 ```
+
+`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` against the IU
+endpoint off Max quota. Keep this on the **native** transport, not the Kimi
+bridge: diagram interpretation needs the multimodal Claude path, which the
+OpenAI-compat bridge does not reliably serve. If IU credentials are missing it
+errors with a `make setup` hint; do not fall back to inline execution.

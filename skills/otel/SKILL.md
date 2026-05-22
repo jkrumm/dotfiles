@@ -1,114 +1,31 @@
 ---
 name: otel
 description: >
-  Query and debug OpenTelemetry data (traces, logs, metrics) stored in ClickHouse via HyperDX/ClickStack.
-  ALWAYS use this skill when investigating: application errors, slow/missing traces, log anomalies, service
-  health issues, or any observability question in local dev or VPS production. Works against both environments.
-  Invoke with: what to investigate + which environment (local/prod) + any known context (service name,
-  trace ID, error message, time range). Returns a concise findings report directly to the main agent.
+  Query and debug OpenTelemetry data (traces, logs, metrics) in ClickHouse (HyperDX/ClickStack) via the
+  sideclaw MCP `otel` tool. Use when investigating application errors, slow or missing traces, log anomalies,
+  service health, or any observability question in local dev or VPS production (local + prod both supported).
 ---
 
-# OTEL Debug Skill
+# OTEL Debug — via sideclaw MCP
 
-Launches a `claude -p` subprocess to query ClickHouse OTEL data. Only the findings report returns to main context.
+Call `mcp__sideclaw__otel` with:
+- `investigation` — what to look into (error message, service, trace id, anomaly, time range).
+- `environment` — `local` or `prod`.
+- `cwd` (optional) — defaults to $HOME. OTEL access is host-level, so this rarely matters.
 
-## IMPORTANT — Subprocess Only
+The worker runs **read-only** on Kimi-K2.6 via the LiteLLM bridge (EU/GDPR, off Max
+quota) and queries ClickHouse through `~/.claude/skills/otel/scripts/query.py`. Only
+the structured result (`status`, `environment`, `timeRange`, `findings`,
+`recommendations`) returns to the caller — the raw query output stays in the worker.
 
-Always run via `claude -p`. Never execute inline. Never use the Agent tool.
-If the API key lookup fails, report the error — do not fall back to inline execution.
+Inspect `status` first: `errors` = active error spans/logs, `degraded` = elevated
+latency or warnings, `healthy` = data flowing normally.
 
-## Execution
+**Reliability:** Kimi-K2.6 is single-backend (Azure Sweden) and occasionally
+throttles — a query can take 1–6 min. The tool's 8-min timeout absorbs most of it;
+on a hard timeout, retry. If the LiteLLM bridge is down, the tool errors with a
+`make litellm-restart` hint.
 
-**Step 1** — Generate a unique temp path for this invocation: `/tmp/claude-otel-<timestamp>`
-(Use current epoch ms. This avoids conflicts if skill runs in parallel.)
-
-**Step 2** — Write the prompt below to that path using the Write tool. Replace `[ENV]` with `local` or `prod` and `[INVESTIGATION]` with the investigation description.
-
-```
-You are an observability engineer debugging OTEL data in ClickHouse.
-
-## Access
-
-| Environment | Default transport | Fallback |
-|-|-|-|
-| local | HTTP `localhost:8123` (if `vps/compose.dev.yml` exposes the port) | `docker exec -i clickstack clickhouse-client` |
-| prod  | `ssh vps "docker exec -i clickstack clickhouse-client"` | — |
-
-The script auto-detects: if local :8123 is reachable it uses HTTP (faster, works in
-sandboxed shells where raw docker is blocked); otherwise falls back to docker exec.
-Force a transport with `--transport http|exec|auto`. No password. SSH key auth via ~/.ssh/config.
-
-## Query Script (preferred)
-
-SCRIPT=~/.claude/skills/otel/scripts/query.py
-
-Presets:
-  python3 $SCRIPT --env [ENV] --preset health
-  python3 $SCRIPT --env [ENV] --preset errors --since 2h
-  python3 $SCRIPT --env [ENV] --preset slow --since 6h
-  python3 $SCRIPT --env [ENV] --preset services --since 1h
-  python3 $SCRIPT --env [ENV] --preset trace --trace-id [ID]
-  python3 $SCRIPT --env [ENV] --preset trace-logs --trace-id [ID]
-  python3 $SCRIPT --env [ENV] --preset log-search --pattern "[text]" --since 3h
-  python3 $SCRIPT --list-presets
-
-Raw SQL:
-  python3 $SCRIPT --env [ENV] "SELECT count() FROM default.otel_traces WHERE ..."
-
-## Schema
-
-Tables: default.otel_traces, default.otel_logs, default.otel_metrics_gauge/sum/histogram
-
-otel_traces key columns:
-- Timestamp (DateTime64 ns), TraceId, SpanId, ParentSpanId
-- SpanName, SpanKind (SERVER/CLIENT/INTERNAL), ServiceName
-- Duration (UInt64, nanoseconds — divide by 1e6 for ms)
-- StatusCode (STATUS_CODE_OK/ERROR/UNSET), StatusMessage
-- SpanAttributes Map(String,String): http.route, http.status_code, db.statement
-- ResourceAttributes Map(String,String): host.name, deployment.environment
-
-otel_logs key columns:
-- TimestampTime (DateTime, use in WHERE — partition key)
-- SeverityText (INFO/WARN/ERROR), SeverityNumber (17-20=ERROR)
-- ServiceName, Body (log message)
-- LogAttributes Map(String,String)
-
-Map access: SpanAttributes['http.status_code'], mapContains(SpanAttributes, 'http.route')
-
-## Debugging Workflow
-
-1. Health check: --preset health (confirms data flow, latest data time)
-2. Services overview: --preset services --since 1h
-3. Error drill-down: --preset errors --since 1h
-4. Trace waterfall: --preset trace --trace-id [ID]
-5. Log correlation: --preset trace-logs --trace-id [ID]
-
-## Output Format (under 1200 chars)
-
-## OTEL Findings — [env] / [time range]
-
-**Status:** [healthy / degraded / errors detected]
-
-**Key findings:**
-- [service]: [X errors / Y% error rate / Zms p95]
-- [specific issue with trace ID or log excerpt]
-- [anomalies or patterns]
-
-**Recommended next steps:**
-- [actionable suggestion]
-
-Only include raw table output if prose cannot convey it. Max 5-10 rows if tables included.
-
-INVESTIGATION: [INVESTIGATION]
-ENVIRONMENT: [ENV]
-```
-
-**Step 3** — Run the subprocess and clean up:
-
-```bash
-env -u ANTHROPIC_API_KEY \
-ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
-ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
-  claude -p --model claude-haiku-4-5-20251001 --dangerously-skip-permissions < /tmp/claude-otel-<timestamp>
-rm -f /tmp/claude-otel-<timestamp>
-```
+**Maintenance:** the ClickHouse query script (`scripts/query.py`) is the canonical
+access path and lives here in dotfiles, not in sideclaw — add presets / schema
+changes there. The sideclaw worker invokes it by absolute `$HOME` path.
