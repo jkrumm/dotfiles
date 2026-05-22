@@ -77,5 +77,49 @@ class UsageLogger(CustomLogger):
             # Logging must never break the proxy.
             pass
 
+    async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
+        """Append a token-less error record so usage-tracker can compute the bridge
+        error rate. Kimi-K2.6 is single-backend (Azure Sweden) and intermittently
+        5xx/429s, so this rate reflects every consumer's experience, not just one.
+        A failed attempt the fallback later rescues still logs here (the rescue is a
+        separate success event) — the right signal for Kimi availability.
+        """
+        try:
+            sl = kwargs.get("standard_logging_object") if isinstance(kwargs, dict) else None
+            exception = kwargs.get("exception") if isinstance(kwargs, dict) else None
+
+            request_id = _get(sl, "litellm_call_id", "") or (
+                _get(kwargs, "litellm_call_id", "") if isinstance(kwargs, dict) else ""
+            )
+            model = _get(sl, "model", "") or (
+                _get(kwargs, "model", "") if isinstance(kwargs, dict) else ""
+            )
+
+            err_info = _get(sl, "error_information", None)
+            error_type = (
+                _get(err_info, "error_class", "")
+                or (type(exception).__name__ if exception is not None else "")
+                or "error"
+            )
+            error_code = _get(err_info, "error_code", "") or None
+            status_code = getattr(exception, "status_code", None) if exception is not None else None
+
+            record = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "request_id": request_id,
+                "model": model,
+                "event": "error",
+                "error_type": error_type,
+                "error_code": error_code,
+                "status_code": status_code,
+            }
+
+            os.makedirs(os.path.dirname(self._LOG_PATH), exist_ok=True)
+            with open(self._LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+        except Exception:
+            # Logging must never break the proxy.
+            pass
+
 
 usage_logger_instance = UsageLogger()

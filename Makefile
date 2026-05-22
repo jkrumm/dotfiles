@@ -36,6 +36,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-opencode
 	@$(MAKE) --no-print-directory _setup-localai
 	@$(MAKE) --no-print-directory _setup-litellm
+	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory _setup-orbstack-block
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -632,6 +633,14 @@ status:
 	else \
 		echo "    ✗ sideclaw MCP [not registered — run make setup]"; \
 	fi
+	@echo "  usage-tracker"
+	@if [ ! -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
+		echo "    · usage-tracker not cloned — skipping"; \
+	elif launchctl list 2>/dev/null | grep -q "com.jkrumm.usage-tracker"; then \
+		echo "    ✓ ingest LaunchAgent loaded (com.jkrumm.usage-tracker)"; \
+	else \
+		echo "    ✗ ingest LaunchAgent [not loaded — run make setup]"; \
+	fi
 	@echo ""
 
 .PHONY: _check
@@ -912,6 +921,27 @@ litellm-logs:
 	@tail -f /tmp/litellm.log
 
 # ============================================================================
+# usage-tracker — local SQLite token/cost telemetry across all AI tools
+# ============================================================================
+# Separate repo (~/SourceRoot/usage-tracker). It owns its own LaunchAgent
+# template + installer; here we just install deps and hand off to its installer,
+# so the plist (absolute bun + repo paths) stays the repo's concern. Skips
+# cleanly if the repo isn't cloned, mirroring _setup-sideclaw-mcp.
+
+.PHONY: _setup-usage-tracker
+_setup-usage-tracker:
+	@echo "  usage-tracker (token/cost telemetry, 15-min ingest)..."
+	@if [ -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
+		( cd "$(SOURCEROOT)/usage-tracker" \
+			&& bun install >/dev/null 2>&1 \
+			&& bash launchd/install-agent.sh >/dev/null ) \
+			&& echo "    ✓ deps installed + LaunchAgent loaded (com.jkrumm.usage-tracker)" \
+			|| echo "    ✗ usage-tracker setup failed — run 'make install-agent' in the repo"; \
+	else \
+		echo "    · usage-tracker not cloned at $(SOURCEROOT)/usage-tracker — skipping"; \
+	fi
+
+# ============================================================================
 # Help
 # ============================================================================
 
@@ -933,6 +963,9 @@ help:
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"
 	@echo "  make litellm-logs     Tail /tmp/litellm.log"
+	@echo ""
+	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
+	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."
 	@echo ""
 	@echo "  Hermes Agent setup lives in ~/SourceRoot/hermes-agent — run make setup there."
 	@echo ""
