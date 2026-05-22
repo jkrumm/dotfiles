@@ -159,7 +159,7 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 The orchestrator's turns are the scarcest, most expensive resource (Max quota + context). **Bias hard toward pushing work off it.** Before doing multi-file edits, deep reads, or validation inline, ask: *can a Kimi worker or subagent do this and hand back only the conclusion?* If the work is fully describable by inputs and the output is verbose, it belongs in a worker.
 
 Delegate-by-default rules:
-- **Mechanical edits with a settled plan → `mcp__sideclaw__implement`** (Kimi, off Max). Don't hand-edit 3+ files yourself once the plan is clear — write the task + context, offload, review the returned diff.
+- **Mechanical edits with a settled plan → `mcp__sideclaw__implement`** (Kimi, off Max). Don't hand-edit 3+ files yourself once the plan is clear — write the task + context, offload, review the returned diff. **It's a literal executor:** it does exactly what the spec says, no more — so give acceptance criteria + exact file paths + the precise mapping/shape. Vague specs get vague results. **Fitness check before routing:** offload only work that is (a) fully specified, (b) independently verifiable, and (c) latency-tolerant — a worker run is 10–20 min wall-clock even for ~50-line changes, so it's worth it *only* when you parallelize other work alongside it. Small (1-2 file), coupled, or latency-sensitive edits stay inline; don't sit and wait on a worker. Verify every returned line against source before committing — Kimi's report is not a substitute for review.
 - **Any validation → `mcp__sideclaw__check`.** Never run format/lint/tsc/test loops inline.
 - **Code review → `/review`** (`mcp__sideclaw__review`, off Max, dynamic angle router).
 - **Library/API/version questions → `/research`** (`mcp__sideclaw__research`). Never answer from memory (see `research-first` rule).
@@ -172,6 +172,8 @@ Delegate-by-default rules:
 3. Read `result` (the tool's structured output) when `status: "done"`; read `error` on `"failed"`/`"interrupted"`.
 
 This is what makes long (10-min+) offload safe — a worker run never blocks/destabilizes the MCP transport. **Parallel fan-out:** submit N jobs in one turn (each returns a jobId), then `job_wait` each; a global concurrency cap queues the excess so you can't 429 the bridge. Don't treat the submit call as the answer.
+
+**File ownership while a job runs.** Treat a running `implement` job as the *exclusive owner* of the files it touches until it reaches a terminal state. Do NOT run your own validation (`check`, a test suite, a build) over those paths while the job is still editing — you'll race its half-written intermediate state and hit spurious failures (a fixture `FileExistsError`, a type error mid-edit) that vanish once it settles. Parallelize on *disjoint* files only; for the job's own files, wait for `done` before touching or validating them. If a job's `status` stays `running` long past when you expect (the result is opaque mid-flight — there's no per-turn progress signal yet), don't trust the lifecycle blindly: peek at the files/`git status` to see whether the work actually landed.
 
 The orchestrator holds the plan and the verdicts, not the raw material.
 
