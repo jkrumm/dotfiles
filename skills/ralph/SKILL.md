@@ -76,16 +76,20 @@ Output a numbered list for user review before creating files.
       ...
 ```
 
-State and logs are gitignored:
+State, logs, lock, and secrets are gitignored:
 ```
 .ralph-tasks.json
 .ralph-logs/
+.ralph-lock
+.ralph-secrets.env
 ```
 
 Add to `.gitignore`:
 ```
 .ralph-tasks.json
 .ralph-logs/
+.ralph-lock
+.ralph-secrets.env
 ```
 
 ### Step 4 — Write shared-context.md
@@ -353,69 +357,95 @@ require_commands() {
 
 # ── State management ──────────────────────────────────────────────────────────
 
+# All python helpers use a QUOTED heredoc (`<<'PYEOF'`) and pass dynamic values
+# through argv — never string-interpolate shell into the Python source. An unquoted
+# heredoc lets the shell expand `$(...)`, backticks, and `$N` inside the script body
+# AND inside any interpolated data (titles, notes, dates). That is the "generate_report
+# backtick bug": a group title or report value containing a backtick or `$(...)` was
+# executed by the shell at report time. Quoted heredoc + argv eliminates the whole class.
 init_state() {
   [[ -f "$STATE_FILE" ]] && { log_info "Resuming from existing state."; return; }
   log_info "Initializing task state..."
-  python3 - <<PYEOF
-import json
-titles = [$(printf '"%s", ' "${GROUP_TITLES[@]:1}" | sed 's/, $//')]
+  python3 - "$STATE_FILE" "${GROUP_TITLES[@]:1}" <<'PYEOF'
+import json, sys, datetime
+state_file = sys.argv[1]
+titles = sys.argv[2:]
 groups = [{"id": i+1, "title": t, "status": "pending", "attempts": 0,
            "started_at": None, "completed_at": None}
           for i, t in enumerate(titles)]
-state = {"groups": groups, "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
-with open("$STATE_FILE", "w") as f:
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+state = {"groups": groups, "created_at": now}
+with open(state_file, "w") as f:
     json.dump(state, f, indent=2)
 print("State initialized.")
 PYEOF
 }
 
 get_field() {
-  python3 -c "
-import json
-with open('$STATE_FILE') as f:
+  python3 - "$STATE_FILE" "$1" "$2" <<'PYEOF'
+import json, sys
+state_file, gid, field = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+with open(state_file) as f:
     state = json.load(f)
 for g in state['groups']:
-    if g['id'] == $1:
-        print(g.get('$2', ''))
+    if g['id'] == gid:
+        print(g.get(field, ''))
         break
-"
+PYEOF
 }
 
 set_field() {
-  python3 - <<PYEOF
-import json
-with open('$STATE_FILE') as f:
+  python3 - "$STATE_FILE" "$1" "$2" "$3" <<'PYEOF'
+import json, sys
+state_file, gid, field, raw = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+val = {'True': True, 'False': False, 'None': None}.get(raw, raw)
+with open(state_file) as f:
     state = json.load(f)
 for g in state['groups']:
-    if g['id'] == $1:
-        val = '$3'
-        if val in ('True', 'False', 'None'):
-            val = {'True': True, 'False': False, 'None': None}[val]
-        g['$2'] = val
+    if g['id'] == gid:
+        g[field] = val
         break
-with open('$STATE_FILE', 'w') as f:
+with open(state_file, 'w') as f:
     json.dump(state, f, indent=2)
 PYEOF
 }
 
 inc_attempts() {
-  python3 - <<PYEOF
-import json
-with open('$STATE_FILE') as f:
+  python3 - "$STATE_FILE" "$1" <<'PYEOF'
+import json, sys
+state_file, gid = sys.argv[1], int(sys.argv[2])
+with open(state_file) as f:
     state = json.load(f)
 for g in state['groups']:
-    if g['id'] == $1:
+    if g['id'] == gid:
         g['attempts'] = g.get('attempts', 0) + 1
         break
-with open('$STATE_FILE', 'w') as f:
+with open(state_file, 'w') as f:
+    json.dump(state, f, indent=2)
+PYEOF
+}
+
+# Roll an attempt back — used when a run fails for a reason that isn't the group's
+# fault (e.g. the Max usage limit), so the group keeps its full retry budget.
+dec_attempts() {
+  python3 - "$STATE_FILE" "$1" <<'PYEOF'
+import json, sys
+state_file, gid = sys.argv[1], int(sys.argv[2])
+with open(state_file) as f:
+    state = json.load(f)
+for g in state['groups']:
+    if g['id'] == gid:
+        g['attempts'] = max(0, g.get('attempts', 0) - 1)
+        break
+with open(state_file, 'w') as f:
     json.dump(state, f, indent=2)
 PYEOF
 }
 
 print_status() {
-  python3 - <<PYEOF
-import json
-with open('$STATE_FILE') as f:
+  python3 - "$STATE_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
     state = json.load(f)
 icons = {'complete': '✅', 'blocked': '🚫', 'pending': '⬜', 'in_progress': '🔄'}
 total = len(state['groups'])
@@ -437,10 +467,22 @@ validate() {
   local label=${1:-""}
   log_info "Validation${label:+ ($label)}..."
   cd "$REPO_ROOT"
-  # CUSTOMIZE: replace with your project's validation commands
-  if ! <build command> 2>&1; then log_error "Build failed"; return 1; fi
-  if ! <test command> 2>&1; then log_error "Tests failed"; return 1; fi
-  log_success "Validation passed"
+  mkdir -p "$LOGS_DIR"
+  local vlog="$LOGS_DIR/validate${label:+-${label// /-}}.log"
+  # CUSTOMIZE: replace with your project's validation commands.
+  # All command output (build, bundler, test chatter) is captured to $vlog and
+  # surfaced ONLY on failure — the runner's grouped [ralph] logs stay readable
+  # instead of drowning in successful-build noise. On failure the tail is printed
+  # so the actual errors still propagate.
+  if ! {
+        <build command> &&
+        <test command>
+      } > "$vlog" 2>&1; then
+    log_error "Validation failed — last 40 lines of $vlog:"
+    tail -n 40 "$vlog" >&2
+    return 1
+  fi
+  log_success "Validation passed (full output: $vlog)"
   return 0
 }
 
@@ -500,6 +542,19 @@ run_group() {
   grep -q "RALPH_TASK_COMPLETE: Group $group_id" "$log_file" && return 0
   grep -q "RALPH_TASK_BLOCKED: Group $group_id" "$log_file" && return 2
 
+  # Session / usage-limit detection (return 3). When the Max 5-hour limit is hit,
+  # claude -p exits WITHOUT the completion signal and without doing the work.
+  # Retrying just slams the same wall and silently eats the group's retry budget,
+  # so surface it as a distinct outcome — main() pauses the loop and rolls the
+  # attempt back rather than burning attempts 1→3 against a locked account.
+  # Only treat this as a limit hit when there's no completion signal (checked above),
+  # so a group that genuinely finished before the limit landed still counts as done.
+  if grep -qiE "Claude AI usage limit reached|usage limit reached|5-hour limit|limit will reset" "$log_file"; then
+    log_error "Claude usage/session limit reached — pausing loop (this attempt does not count)."
+    grep -iE "usage limit|limit will reset|reset at" "$log_file" | tail -n 2 >&2 || true
+    return 3
+  fi
+
   [[ $exit_code -eq 124 ]] && { log_error "Timed out after ${CLAUDE_TIMEOUT}s"; return 1; }
 
   log_warn "Claude finished but no completion signal in log."
@@ -509,19 +564,21 @@ run_group() {
 # ── Report ────────────────────────────────────────────────────────────────────
 
 generate_report() {
-  python3 - <<PYEOF
-import json
-with open('$STATE_FILE') as f:
+  python3 - "$STATE_FILE" "$REPORT_FILE" <<'PYEOF'
+import json, sys, datetime
+state_file, report_file = sys.argv[1], sys.argv[2]
+with open(state_file) as f:
     state = json.load(f)
 icons = {'complete': '✅', 'blocked': '🚫', 'pending': '⬜', 'in_progress': '🔄'}
 total = len(state['groups'])
 done = sum(1 for g in state['groups'] if g['status'] == 'complete')
 blocked = sum(1 for g in state['groups'] if g['status'] == 'blocked')
 pending = total - done - blocked
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 lines = [
     "# RALPH Report",
     "",
-    f"Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    f"Generated: {now}",
     f"Groups: {total} total | {done} complete | {pending} pending | {blocked} blocked",
     "", "## Status", "",
 ]
@@ -534,9 +591,9 @@ if done == total:
     lines += ["All groups complete.", "", "1. Review: `git log --oneline -20`", "2. Run full E2E", "3. Create PR: `/pr`"]
 elif pending > 0:
     lines.append("Run `./scripts/ralph.sh` to continue.")
-with open('$REPORT_FILE', 'w') as f:
+with open(report_file, 'w') as f:
     f.write('\n'.join(lines) + '\n')
-print(f"Report: $REPORT_FILE")
+print(f"Report: {report_file}")
 PYEOF
 }
 
@@ -569,19 +626,27 @@ main() {
   if $do_reset; then
     log_info "Resetting Group $target_group to pending..."
     set_field "$target_group" "status" "pending"
-    python3 - <<PYEOF
-import json
-with open('$STATE_FILE') as f:
+    python3 - "$STATE_FILE" "$target_group" <<'PYEOF'
+import json, sys
+state_file, gid = sys.argv[1], int(sys.argv[2])
+with open(state_file) as f:
     state = json.load(f)
 for g in state['groups']:
-    if g['id'] == $target_group:
+    if g['id'] == gid:
         g['attempts'] = 0; break
-with open('$STATE_FILE', 'w') as f:
+with open(state_file, 'w') as f:
     json.dump(state, f, indent=2)
 PYEOF
   fi
 
   print_status; echo ""
+
+  # Singleton lock — acquire only on the actual run path (after the --status
+  # early-exit above). This is the real fix for the post-completion fork bomb:
+  # a re-entrant or concurrent `./scripts/ralph.sh` is refused instead of stacking
+  # a second runner on top of the first (which corrupts state and can spawn a
+  # cascade of nested processes). Side-channel --status / --reset never reach here.
+  acquire_lock
 
   local groups_to_run=()
   if [[ -n "$target_group" ]]; then
@@ -649,6 +714,15 @@ PYEOF
     elif [[ $run_result -eq 2 ]]; then
       log_warn "Group $group_id blocked. See: .ralph-logs/group-$group_id.log"
       set_field "$group_id" "status" "blocked"
+    elif [[ $run_result -eq 3 ]]; then
+      # Usage / session limit — not the group's fault. Roll the attempt back, leave
+      # the group pending, and stop the loop. Re-running after the limit resets
+      # resumes cleanly at this group with its full retry budget intact.
+      set_field "$group_id" "status" "pending"
+      dec_attempts "$group_id"
+      log_error "Group $group_id paused: Claude usage/session limit reached."
+      log_error "Re-run ./scripts/ralph.sh once the limit resets — it resumes here."
+      break
     else
       log_error "Group $group_id failed (attempt $((attempts + 1)) / $MAX_RETRIES)"
       set_field "$group_id" "status" "pending"
@@ -873,6 +947,55 @@ remove_push_guard() {
 
 Cheap belt-and-suspenders against agent free will.
 
+### 6. Singleton lock (fork-bomb guard)
+
+The runner has no concept of "am I already running." A re-entrant or concurrent
+`./scripts/ralph.sh` — a stray second terminal, a babysitter that shells the script,
+a finished loop accidentally re-launched — stacks a second runner on the same state
+file. Two runners racing the same `.ralph-tasks.json` corrupt it, double-attempt
+groups, and (observed in the wild) cascade into **hundreds of nested `ralph.sh`
+processes** — a post-completion fork bomb. The narrow signal-detection and trap
+fixes don't prevent this; a **PID lockfile** does, by refusing the second invocation.
+
+```bash
+LOCK_FILE="$REPO_ROOT/.ralph-lock"
+LOCK_ACQUIRED=false
+
+acquire_lock() {
+  cd "$REPO_ROOT"
+  if [[ -f "$LOCK_FILE" ]]; then
+    local other_pid
+    other_pid="$(cat "$LOCK_FILE" 2>/dev/null || echo '')"
+    if [[ -n "$other_pid" ]] && kill -0 "$other_pid" 2>/dev/null; then
+      log_error "Another ralph.sh is already running (PID $other_pid)."
+      log_error "Refusing a second runner — concurrent loops corrupt state and can fork-bomb."
+      log_error "If you are certain that PID is dead: rm $LOCK_FILE"
+      exit 1
+    fi
+    log_warn "Stale lock from dead PID '$other_pid' — reclaiming."
+  fi
+  echo "$$" > "$LOCK_FILE"
+  LOCK_ACQUIRED=true
+  log_info "Acquired runner lock (PID $$)."
+}
+
+release_lock() {
+  # Mirror the sentinel discipline: only release a lock THIS process acquired,
+  # and only if it still points at us — never delete a lock a concurrent runner
+  # now owns. Side-channel --status / --reset never call acquire_lock, so
+  # LOCK_ACQUIRED stays false and this is a no-op for them.
+  $LOCK_ACQUIRED || return 0
+  [[ -f "$LOCK_FILE" && "$(cat "$LOCK_FILE" 2>/dev/null)" == "$$" ]] || return 0
+  rm -f "$LOCK_FILE"
+}
+```
+
+`acquire_lock` is called on the **run path only** — after the `--status` early-exit
+in `main()`, so a read-only status peek never locks (and never refuses while a real
+runner holds the lock). Add `.ralph-lock` to `.gitignore`. The stale-lock reclaim
+(`kill -0` on a dead PID) means a crashed runner doesn't wedge the next legitimate
+start.
+
 ### Combined cleanup trap
 
 All pre-flight installers register a single cleanup hook:
@@ -882,6 +1005,7 @@ cleanup_on_exit() {
   restore_commit_signing
   remove_push_guard
   remove_secrets
+  release_lock
 }
 trap cleanup_on_exit EXIT
 ```
@@ -894,6 +1018,8 @@ Pre-flight order in `main()`:
 5. `disable_commit_signing`
 6. `install_push_guard`
 7. `init_state`
+8. `acquire_lock` — **run path only**, after the `--status` early-exit (last, so a
+   refused run leaves the other guards' cleanup untouched)
 
 ---
 
@@ -1070,6 +1196,22 @@ ls -t .ralph-logs/*.log 2>/dev/null | head -1 | xargs tail -n 60
 - **AT RISK:** any group with `attempts >= 2` (one shot left before auto-block).
 - **BLOCKED:** any group with status `blocked` since the previous tick.
 - **COMPLETE:** all groups status `complete`.
+- **FORK BOMB / runner health:** count the live runner processes — but mind the
+  counting trap. `pgrep -fl ralph.sh | wc -l` (or `ps | grep ralph.sh`) is wrong
+  three ways: it can self-match the grep, it matches child `claude`/`python3`
+  processes whose argv mentions a ralph path, and an unbounded count is read as
+  "running" when it actually means "fork-bombed." Match the **script path** and
+  count distinct PIDs:
+  ```bash
+  runner_count=$(pgrep -f '/ralph\.sh' | wc -l | tr -d ' ')
+  ```
+  Interpret: `0` → runner exited (stop scheduling wakeups — the loop is done or
+  crashed; cross-check `.ralph-tasks.json`); `1` → healthy; `>1` → **re-entrant /
+  fork-bomb** — post a RED alert with the count and the offending PIDs
+  (`pgrep -f '/ralph\.sh'`), tell the user to investigate, and stop scheduling
+  (the singleton lock should now prevent this, but a count >1 means the lock was
+  bypassed and needs a human). Never act on the raw `wc -l` of an unanchored
+  pattern.
 
 #### Step 4 — Post to Slack
 
@@ -1098,15 +1240,20 @@ Color codes: `#36a64f` green (normal tick), `#ECB22E` amber (AT RISK), `#E01E5A`
 Message body should include:
 - Current group + attempt count
 - One-line status summary ("3 complete, 1 in-progress, 11 pending")
-- Any flag (STUCK / AT RISK / BLOCKED)
-- For STUCK/AT-RISK/BLOCKED: the last 5 lines of the log
+- Any flag (STUCK / AT RISK / BLOCKED / FORK BOMB)
+- Runner count (`runner_count` from Step 3) when it isn't exactly 1
+- For STUCK/AT-RISK/BLOCKED/FORK-BOMB: the last 5 lines of the log
 
 #### Step 5 — Schedule next tick or end
 
 ```
-If COMPLETE → post final summary, do NOT call ScheduleWakeup, end.
-If BLOCKED  → post alert, do NOT call ScheduleWakeup (human action needed), end.
-Otherwise   → call ScheduleWakeup with delaySeconds=1800.
+If COMPLETE   → post final summary, do NOT call ScheduleWakeup, end.
+If BLOCKED    → post alert, do NOT call ScheduleWakeup (human action needed), end.
+If FORK BOMB  → post RED alert (runner_count >1 + offending PIDs), do NOT
+                call ScheduleWakeup (human must investigate), end.
+If runner_count==0 and not COMPLETE → runner exited/crashed; post alert,
+                do NOT call ScheduleWakeup, end.
+Otherwise     → call ScheduleWakeup with delaySeconds=1800.
 ```
 
 The next wakeup re-fires this same skill — the prompt argument is the literal sentinel `<<autonomous-loop-dynamic>>` so the runtime re-injects `/ralph babysitter` instructions.
@@ -1115,6 +1262,8 @@ The next wakeup re-fires this same skill — the prompt argument is the literal 
 
 - All groups complete.
 - Any group blocked (human needed).
+- `runner_count > 1` (re-entrant / fork-bomb — human needed).
+- `runner_count == 0` while groups remain (runner exited/crashed).
 - `.ralph-secrets.env` missing (runner ended).
 - User explicitly cancelled.
 
@@ -1161,7 +1310,7 @@ PYEOF
 
 If incomplete: surface the offending groups to the user and stop. Do **not** offer a `--force` flag implicitly; if the user wants to abandon mid-run, they should ask explicitly and you should confirm they understand they're discarding institutional memory.
 
-Also refuse if a `ralph.sh` process is still running (`pgrep -fl ralph.sh`). The cleanup must follow runner exit, not race it.
+Also refuse if a `ralph.sh` process is still running — match the script path, not a bare name (`pgrep -f '/ralph\.sh'`), to avoid the self-match / child-process counting trap. The cleanup must follow runner exit, not race it.
 
 ### Step 2 — Decide the archive filename
 
@@ -1233,11 +1382,11 @@ After user confirmation:
 ```bash
 rm -rf scripts/ralph.sh scripts/ralph-reset.sh
 rm -rf docs/ralph/
-rm -rf .ralph-tasks.json .ralph-logs/ .ralph-secrets.env
+rm -rf .ralph-tasks.json .ralph-logs/ .ralph-secrets.env .ralph-lock
 # Remove .gitignore entries that referenced ralph artifacts
 ```
 
-For `.gitignore`: use `sed` to delete the three lines (`.ralph-tasks.json`, `.ralph-logs/`, `.ralph-secrets.env`) only if they exist — don't strip user's other entries. Prefer reading the file, removing exact-match lines, and writing back via the Edit tool.
+For `.gitignore`: delete the four lines (`.ralph-tasks.json`, `.ralph-logs/`, `.ralph-lock`, `.ralph-secrets.env`) only if they exist — don't strip the user's other entries. Prefer reading the file, removing exact-match lines, and writing back via the Edit tool.
 
 Verify nothing ralph-related survives:
 ```bash
@@ -1263,7 +1412,7 @@ Stage explicitly — never `git add -A` after a bulk delete (you'll catch unrela
 - **Never run `./scripts/ralph.sh cleanup`** — cleanup is a Claude-driven playbook, not a bash subcommand. The script's EXIT trap is unsafe for any control-plane operation.
 - **Never delete before writing the summary.** If summary generation fails or the user disagrees with the output, you need the source notes to retry.
 - **Never delete commits or rewrite history.** Cleanup removes artifacts going forward; the per-group commits in git history are the audit trail.
-- **Never run cleanup while `pgrep ralph.sh` returns a PID.** The trap-vs-runner race is the same as the babysitter case.
+- **Never run cleanup while `pgrep -f '/ralph\.sh'` returns a PID.** The trap-vs-runner race is the same as the babysitter case. (Match the script path, not a bare `ralph.sh`, to dodge the self-match / child-process counting trap.)
 
 ---
 
@@ -1286,3 +1435,8 @@ Stage explicitly — never `git add -A` after a bulk delete (you'll catch unrela
 - **No babysitter on overnight runs**: a stuck group can burn 3 × 45min before the runner marks it blocked, then sit idle until you check back. A 30-min `/loop` babysitter detects stuck states in time to act. See the Babysitter Pattern section above.
 - **Babysitter shelling into `ralph.sh`**: invoking `./scripts/ralph.sh --status` (or `--reset`) from the babysitter is unsafe — the script's EXIT trap runs `remove_secrets` / `remove_push_guard` regardless of subcommand. The running runner is unaffected (env was sourced before the trap), but the babysitter loses `.ralph-secrets.env` (and with it `RALPH_SLACK_WEBHOOK_URL`), forcing a Touch ID prompt on every subsequent tick. Fix in two places: gate cleanup with a `<name>_INSTALLED` sentinel that only `prefetch_secrets` / `install_push_guard` flip true, AND make the babysitter read `.ralph-tasks.json` directly via python rather than calling the script at all.
 - **Invoking interactive slash-skills (`/commit`, `/commit --split`, `/pr`, `/check`, `/review`, `/ship`) from inside a group**: these are interactive Claude Code workflows that propose a plan and *wait for user confirmation*. In `claude -p` headless mode there is no user — the model prints the proposal, the tool call returns "success" without producing a commit/PR/etc., and the group exits with no `RALPH_TASK_COMPLETE` signal. The runner then resets the group to pending, the working tree is left dirty with all of the group's actual work uncommitted, and the human gets paged. Symptom in the log: `RESULT_OBJ` shows `subtype: "success"`, but the last few text blocks discuss a "split commit strategy" instead of acting; final tool calls are `git status` / `Skill: ...` rather than `git commit`. Fix: group prompts must use raw shell (`git add <files> && git commit -m "..."`) and shared-context.md must explicitly forbid `/commit` and friends. Build/check tasks should run the underlying tool directly (`bun test`, `bun run typecheck`, `bun run lint`), never `/check`.
+- **No singleton lock (fork-bomb risk)**: the runner has no "am I already running" guard. A re-entrant or concurrent `./scripts/ralph.sh` — second terminal, accidental re-launch after completion, a babysitter that shells the script — stacks a second runner on the same state file. Observed in the wild: a post-completion re-invocation cascaded into **hundreds of nested `ralph.sh` processes**. The fix is a PID lockfile (`acquire_lock`/`release_lock`, `.ralph-lock`) that refuses the second invocation; signal-detection and traps don't prevent this. Acquire on the run path only (after the `--status` early-exit), reclaim stale locks via `kill -0`. See Pre-flight Setup §6.
+- **Unquoted python heredocs (the "generate_report backtick bug")**: writing state/report helpers as `python3 - <<PYEOF … '$STATE_FILE' … $(date …) …` lets the shell expand `$(...)`, backticks, and `$N` inside the heredoc — including inside interpolated data like group titles or report values. A title or note containing a backtick or `$(...)` is then executed by the shell at report time (a code-injection + breakage vector). Always use a **quoted** delimiter (`<<'PYEOF'`) and pass dynamic values through **argv** (`python3 - "$STATE_FILE" "$1" <<'PYEOF'` → `sys.argv`); compute timestamps in Python (`datetime.now(timezone.utc)`), not via `$(date)` in the body.
+- **Retrying through a usage/session limit**: when the Max 5-hour limit hits, `claude -p` exits without the completion signal and without doing the work. Treated as a generic failure, the runner burns attempts 1→3 slamming the same wall, then auto-blocks the group for nothing. Detect the limit in the log (`grep -qiE "usage limit reached|limit will reset"`), return a distinct code, roll the attempt back (`dec_attempts`), leave the group pending, and stop the loop with a "re-run after reset" message. See `run_group` (return 3) + the `main()` handler.
+- **Validation output flooding the runner log**: piping build/bundler/test output straight to the terminal (`<build> 2>&1`) buries the grouped `[ralph]` info logs under successful-build chatter, making the run unreadable and the actual errors hard to find. Capture all validation output to a per-label file under `.ralph-logs/` and surface it **only on failure** (`tail -n 40 "$vlog" >&2`); on success print just the grouped one-liner. Errors still propagate; noise doesn't.
+- **The `pgrep` counting trap (babysitter / cleanup)**: `pgrep -fl ralph.sh | wc -l` (or `ps | grep ralph.sh`) to decide "is the runner alive" is wrong three ways — it self-matches the grep, it matches child `claude`/`python3` processes whose argv mentions a ralph path, and an unbounded count reads as "running" when it actually means "fork-bombed." Match the **script path** (`pgrep -f '/ralph\.sh'`), count distinct PIDs, and bound the result: `0` = exited, `1` = healthy, `>1` = re-entrant/fork-bomb (RED alert, stop scheduling, page human).
