@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Root LaunchDaemon that maintains /var/run/docker.sock -> Colima's engine
+      socket at every boot. This is what OrbStack's privileged helper did, and it
+      is the single mechanism that works for ALL docker consumers using the default
+      socket path: the docker CLI, the Raycast Docker extension (which sanitizes
+      env vars, so DOCKER_HOST/context can't reach it), IDEs, Testcontainers, and
+      scripts. Reboot-safe; the target path is stable across colima/brew upgrades
+      and colima restarts. Installed to /Library/LaunchDaemons by `make setup`
+      (_setup-colima).
+    -->
+    <key>Label</key>
+    <string>com.colima.docker-socket</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/ln</string>
+        <string>-sf</string>
+        <string>__HOME__/.colima/default/docker.sock</string>
+        <string>/var/run/docker.sock</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

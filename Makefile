@@ -513,10 +513,26 @@ _setup-colima:
 	@tmp=$$(mktemp); jq '.currentContext = "colima"' "$(HOME)/.docker/config.json" > "$$tmp" \
 		&& mv "$$tmp" "$(HOME)/.docker/config.json"
 	@echo "    · docker context → colima"
-	@# GUI apps (Raycast Docker, IDEs) don't inherit the shell DOCKER_HOST — set it
-	@# in the login (launchd) session via a LaunchAgent so they find colima's socket.
-	@$(MAKE) --no-print-directory _render-plists \
-		PLISTS="com.colima.dockerhost" PLIST_DIR="$(DOTFILES_DIR)/colima"
+	@# Maintain /var/run/docker.sock → colima socket via a root LaunchDaemon (what
+	@# OrbStack's privileged helper did). Single mechanism covering every default-
+	@# socket consumer: docker CLI, Raycast Docker extension (sanitizes env, so
+	@# DOCKER_HOST/context can't reach it), IDEs, Testcontainers. Needs sudo.
+	@DAEMON=/Library/LaunchDaemons/com.colima.docker-socket.plist; \
+	TMP=$$(mktemp); sed "s|__HOME__|$(HOME)|g" \
+		"$(DOTFILES_DIR)/colima/com.colima.docker-socket.plist.template" > "$$TMP"; \
+	if sudo cmp -s "$$TMP" "$$DAEMON" 2>/dev/null; then \
+		echo "    · docker-socket LaunchDaemon (ok)"; \
+	else \
+		sudo cp "$$TMP" "$$DAEMON" && sudo chown root:wheel "$$DAEMON" && sudo chmod 644 "$$DAEMON" \
+			&& sudo launchctl bootout system "$$DAEMON" 2>/dev/null; \
+		sudo launchctl bootstrap system "$$DAEMON" \
+			&& echo "    ✓ docker-socket LaunchDaemon installed" \
+			|| echo "    ✗ docker-socket LaunchDaemon failed"; \
+	fi; \
+	rm -f "$$TMP"
+	@# Create the symlink now too (bootstrap's RunAtLoad also recreates it at boot).
+	@sudo ln -sf "$(HOME)/.colima/default/docker.sock" /var/run/docker.sock 2>/dev/null \
+		&& echo "    · /var/run/docker.sock → colima" || true
 
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy

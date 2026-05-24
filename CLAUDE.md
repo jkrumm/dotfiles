@@ -25,8 +25,9 @@ enforced via phone-home) and Docker Desktop (heavy). `make setup` brews
 helper supplies `docker-credential-osxkeychain`, which OrbStack used to provide and the
 CLI needs for `"credsStore": "osxkeychain"`), wires the Compose plugin path into
 `~/.docker/config.json`, creates the VM (`vz` + Rosetta amd64 emulation + virtiofs
-mounts), pins the `colima` docker context, and registers the **brew service**
-(`RunAtLoad` + `KeepAlive`) so it's always-on and auto-starts at login.
+mounts), pins the `colima` docker context, registers the **brew service**
+(`RunAtLoad` + `KeepAlive`) so it's always-on and auto-starts at login, and installs the
+`com.colima.docker-socket` LaunchDaemon (see **Docker socket** below).
 
 Resources are set by `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` (defaults
 **2 / 4 / 60**). These are **ceilings, not reservations**: idle VM holds ~1.3GB on the
@@ -43,18 +44,17 @@ No GUI ships with Colima by design — use the **Raycast "Manage Docker" extensi
 not raw `docker`/`compose`. Colima provides no auto-domains; local HTTPS routing is
 handled by the existing Caddy + dnsmasq `*.test` setup.
 
-**Socket gotcha:** Colima's docker socket is `~/.colima/default/docker.sock`, not
-`/var/run/docker.sock` (which OrbStack used to supply). Three layers cover the
-consumers — all reboot-safe and sudo-free:
-1. **Pinned `colima` context** → the docker CLI.
-2. **`DOCKER_HOST` in `config/zsh/tools.zsh`** → shell tools + Testcontainers (read it from env).
-3. **`com.colima.dockerhost` LaunchAgent** (`colima/com.colima.dockerhost.plist.template`,
-   rendered by `_setup-colima`) → `launchctl setenv DOCKER_HOST` at login so **GUI apps**
-   (Raycast Docker extension, IDEs) find the socket. GUI apps inherit the launchd env,
-   *not* the shell's — so this is the only thing that reaches them. After first setup, a
-   GUI app must be **fully quit + relaunched** once to pick up the new launchd env.
-
-Avoid the `/var/run/docker.sock` symlink workaround — it needs sudo and isn't reboot-safe.
+**Docker socket:** Colima's engine socket is `~/.colima/default/docker.sock`. A root
+**LaunchDaemon** (`com.colima.docker-socket`, template in `colima/`, installed to
+`/Library/LaunchDaemons` by `_setup-colima`) maintains `/var/run/docker.sock` → that
+socket at every boot — exactly what OrbStack's privileged helper did. This single
+mechanism makes the standard default socket work for **everything**: the docker CLI, the
+Raycast Docker extension (which sanitizes extension env vars, so `DOCKER_HOST`/context
+*cannot* reach it — the `/var/run` socket is the only thing that does), IDEs,
+Testcontainers, and scripts. The CLI additionally has the `colima` context pinned.
+Reboot-, brew-upgrade-, and colima-restart-safe (the symlink target path is stable).
+Installing the daemon needs sudo (like the Caddy step). A GUI app that was already running
+during first install must be quit + relaunched once to retry the socket.
 
 ## Symlink Map
 
