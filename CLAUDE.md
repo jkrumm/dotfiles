@@ -44,12 +44,17 @@ not raw `docker`/`compose`. Colima provides no auto-domains; local HTTPS routing
 handled by the existing Caddy + dnsmasq `*.test` setup.
 
 **Socket gotcha:** Colima's docker socket is `~/.colima/default/docker.sock`, not
-`/var/run/docker.sock`. The CLI works via the pinned `colima` context, but GUI tools
-and anything hardcoding the default socket (Raycast Docker extension, IDEs,
-Testcontainers) must be pointed at the colima path. After the OrbStack→Colima
-migration, `/var/run/docker.sock` is left as a *dangling* symlink to the removed
-OrbStack; `sudo ln -sf ~/.colima/default/docker.sock /var/run/docker.sock` repoints it
-for default-socket tools (not guaranteed to survive reboot — prefer per-tool config).
+`/var/run/docker.sock` (which OrbStack used to supply). Three layers cover the
+consumers — all reboot-safe and sudo-free:
+1. **Pinned `colima` context** → the docker CLI.
+2. **`DOCKER_HOST` in `config/zsh/tools.zsh`** → shell tools + Testcontainers (read it from env).
+3. **`com.colima.dockerhost` LaunchAgent** (`colima/com.colima.dockerhost.plist.template`,
+   rendered by `_setup-colima`) → `launchctl setenv DOCKER_HOST` at login so **GUI apps**
+   (Raycast Docker extension, IDEs) find the socket. GUI apps inherit the launchd env,
+   *not* the shell's — so this is the only thing that reaches them. After first setup, a
+   GUI app must be **fully quit + relaunched** once to pick up the new launchd env.
+
+Avoid the `/var/run/docker.sock` symlink workaround — it needs sudo and isn't reboot-safe.
 
 ## Symlink Map
 

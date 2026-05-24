@@ -513,6 +513,10 @@ _setup-colima:
 	@tmp=$$(mktemp); jq '.currentContext = "colima"' "$(HOME)/.docker/config.json" > "$$tmp" \
 		&& mv "$$tmp" "$(HOME)/.docker/config.json"
 	@echo "    · docker context → colima"
+	@# GUI apps (Raycast Docker, IDEs) don't inherit the shell DOCKER_HOST — set it
+	@# in the login (launchd) session via a LaunchAgent so they find colima's socket.
+	@$(MAKE) --no-print-directory _render-plists \
+		PLISTS="com.colima.dockerhost" PLIST_DIR="$(DOTFILES_DIR)/colima"
 
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy

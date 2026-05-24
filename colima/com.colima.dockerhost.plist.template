@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Sets DOCKER_HOST in the launchd (GUI) session so GUI apps — Raycast Docker
+      extension, IDEs, Testcontainers launched from GUI — find Colima's socket.
+      GUI apps do NOT inherit the shell DOCKER_HOST from ~/.zshrc; this fills that
+      gap reboot-safely (no /var/run/docker.sock symlink, no sudo).
+      Rendered by `make setup` (_setup-colima) via _render-plists.
+    -->
+    <key>Label</key>
+    <string>com.colima.dockerhost</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/launchctl</string>
+        <string>setenv</string>
+        <string>DOCKER_HOST</string>
+        <string>unix://__HOME__/.colima/default/docker.sock</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
