@@ -7,8 +7,8 @@ BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 # These are ceilings (not reservations): idle VM holds ~1.3GB regardless;
 # CPU is time-shared (free when idle). Bump for heavy stacks like clickstack:
 #   COLIMA_MEMORY=10 make colima-restart
-COLIMA_CPU    ?= 2
-COLIMA_MEMORY ?= 4
+COLIMA_CPU    ?= 4
+COLIMA_MEMORY ?= 8
 COLIMA_DISK   ?= 60
 
 # ============================================================================
