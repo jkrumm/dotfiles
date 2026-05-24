@@ -43,6 +43,14 @@ No GUI ships with Colima by design — use the **Raycast "Manage Docker" extensi
 not raw `docker`/`compose`. Colima provides no auto-domains; local HTTPS routing is
 handled by the existing Caddy + dnsmasq `*.test` setup.
 
+**Socket gotcha:** Colima's docker socket is `~/.colima/default/docker.sock`, not
+`/var/run/docker.sock`. The CLI works via the pinned `colima` context, but GUI tools
+and anything hardcoding the default socket (Raycast Docker extension, IDEs,
+Testcontainers) must be pointed at the colima path. After the OrbStack→Colima
+migration, `/var/run/docker.sock` is left as a *dangling* symlink to the removed
+OrbStack; `sudo ln -sf ~/.colima/default/docker.sock /var/run/docker.sock` repoints it
+for default-socket tools (not guaranteed to survive reboot — prefer per-tool config).
+
 ## Symlink Map
 
 | File here | Live path | Notes |
