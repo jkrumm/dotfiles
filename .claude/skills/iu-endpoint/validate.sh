@@ -16,7 +16,7 @@ if [[ -z "$KEY" || -z "$BASE" ]]; then
   echo "ERROR: claude-sdk-api-key / claude-sdk-base-url missing in Keychain — run 'make setup' in dotfiles" >&2
   exit 1
 fi
-HOST="${BASE%/anthropic}"                       # https://unified-endpoint-main.app.iu-it.org
+HOST="${BASE%/anthropic}"                       # https://<iu-unified-endpoint>
 OPENAI="$HOST/openai/v1"
 ANTHRO="$HOST/anthropic/v1"
 

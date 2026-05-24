@@ -14,7 +14,7 @@ with an EU-compliant fallback. Hermes touches personal data (calendar, health,
 email via argo), so EU data residency is required.
 
 ENDPOINT (OpenAI-compatible, single key, same as the Agent SDK):
-- POST https://unified-endpoint-main.app.iu-it.org/openai/v1/chat/completions
+- POST https://<iu-unified-endpoint>/openai/v1/chat/completions
 - Auth: `Authorization: Bearer <key>`
 - Secret: op://common/anthropic (API_KEY; BASE_URL = ".../anthropic"). Derive the
   OpenAI-compat base by replacing the "/anthropic" suffix with "/openai/v1". On dev

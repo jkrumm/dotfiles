@@ -65,7 +65,7 @@ model_list:
   - model_name: Kimi-K2.6
     litellm_params:
       model: openai/Kimi-K2.6
-      api_base: https://unified-endpoint-main.app.iu-it.org/openai/v1
+      api_base: https://<iu-unified-endpoint>/openai/v1
       api_key: os.environ/IU_API_KEY
 
 litellm_settings:
