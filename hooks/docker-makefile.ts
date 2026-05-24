@@ -10,6 +10,9 @@
  *
  * Read-only docker commands (ps, logs, inspect, images) are always allowed —
  * they don't involve orchestration context that Makefiles encode.
+ *
+ * `docker exec` is also always allowed: it runs commands inside an
+ * already-running container and carries no Compose orchestration context.
  */
 
 interface HookInput {
@@ -22,8 +25,9 @@ interface HookInput {
 // not as part of a filename like "docker-makefile.ts"
 const DOCKER_PATTERN = /(?:^|[|;&]\s*|(?:&&|\|\|)\s*)(?:sudo\s+)?(docker\s+compose|docker-compose|docker)\b/;
 
-// Read-only commands that don't need Makefile orchestration
-const READONLY_SUBCOMMANDS = /(?:^|[|;&]\s*|(?:&&|\|\|)\s*)(?:sudo\s+)?(docker|docker-compose|docker\s+compose)\s+(ps|logs|inspect|images|stats|top|port|version|info)\b/;
+// Commands that don't need Makefile orchestration: read-only inspection plus
+// `docker exec` (runs inside an already-running container, no Compose context).
+const ALLOWED_SUBCOMMANDS = /(?:^|[|;&]\s*|(?:&&|\|\|)\s*)(?:sudo\s+)?(docker|docker-compose|docker\s+compose)\s+(ps|logs|inspect|images|stats|top|port|version|info|exec)\b/;
 
 function findGitRoot(cwd: string): string | null {
   const result = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
@@ -93,8 +97,8 @@ const command = (input.tool_input?.command ?? "").trim();
 // Not a docker command — allow
 if (!DOCKER_PATTERN.test(command)) process.exit(0);
 
-// Read-only docker commands are always fine
-if (READONLY_SUBCOMMANDS.test(command)) process.exit(0);
+// Read-only inspection + `docker exec` are always fine
+if (ALLOWED_SUBCOMMANDS.test(command)) process.exit(0);
 
 // Check for Makefile in project root
 const cwd = input.cwd ?? process.cwd();
