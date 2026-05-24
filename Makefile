@@ -470,8 +470,11 @@ _setup-sideclaw-mcp:
 .PHONY: _setup-colima
 _setup-colima:
 	@echo "  Colima (Docker runtime — replaces OrbStack/Docker Desktop)..."
-	@# Docker CLI + Compose plugin + lazydocker TUI + colima VM.
-	@for pkg in colima docker docker-compose lazydocker; do \
+	@# Docker CLI + Compose plugin + credential helper (osxkeychain) + lazydocker TUI + colima VM.
+	@# docker-credential-helper provides docker-credential-osxkeychain, which the
+	@# CLI needs because ~/.docker/config.json sets "credsStore": "osxkeychain"
+	@# (OrbStack used to supply this binary).
+	@for pkg in colima docker docker-compose docker-credential-helper lazydocker; do \
 		brew list $$pkg &>/dev/null || brew install $$pkg; \
 	done
 	@echo "    ✓ colima $$(colima version 2>/dev/null | head -1 | sed 's/colima version //') · docker $$(docker --version 2>/dev/null | sed 's/Docker version //;s/,.*//')"

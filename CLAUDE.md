@@ -21,7 +21,9 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 The Docker runtime on every Mac is **Colima** (Lima + Apple Virtualization.Framework),
 installed by `make setup` (`_setup-colima`) — it replaced OrbStack (commercial license
 enforced via phone-home) and Docker Desktop (heavy). `make setup` brews
-`colima docker docker-compose lazydocker`, wires the Compose plugin path into
+`colima docker docker-compose docker-credential-helper lazydocker` (the credential
+helper supplies `docker-credential-osxkeychain`, which OrbStack used to provide and the
+CLI needs for `"credsStore": "osxkeychain"`), wires the Compose plugin path into
 `~/.docker/config.json`, creates the VM (`vz` + Rosetta amd64 emulation + virtiofs
 mounts), pins the `colima` docker context, and registers the **brew service**
 (`RunAtLoad` + `KeepAlive`) so it's always-on and auto-starts at login.
