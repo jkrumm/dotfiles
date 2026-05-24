@@ -31,3 +31,9 @@ source "$_wtp_cache"
 
 # bun completions
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# Docker runtime — Colima (see dotfiles CLAUDE.md "Docker runtime: Colima").
+# The docker CLI already works via the pinned `colima` context; this points
+# shell tools + Testcontainers at colima's socket directly (they read DOCKER_HOST).
+# Reboot-safe and sudo-free — unlike a /var/run/docker.sock symlink. Overridable.
+export DOCKER_HOST="${DOCKER_HOST:-unix://$HOME/.colima/default/docker.sock}"
