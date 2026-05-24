@@ -3,6 +3,14 @@ CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
 BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 
+# Colima (Docker runtime VM — replaces OrbStack/Docker Desktop).
+# These are ceilings (not reservations): idle VM holds ~1.3GB regardless;
+# CPU is time-shared (free when idle). Bump for heavy stacks like clickstack:
+#   COLIMA_MEMORY=10 make colima-restart
+COLIMA_CPU    ?= 2
+COLIMA_MEMORY ?= 4
+COLIMA_DISK   ?= 60
+
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
 # Existing real files are backed up to <file>.bak before being replaced.
@@ -37,7 +45,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-localai
 	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
-	@$(MAKE) --no-print-directory _setup-orbstack-block
+	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
@@ -459,21 +467,49 @@ _setup-sideclaw-mcp:
 		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
 	fi
 
-.PHONY: _setup-orbstack-block
-_setup-orbstack-block:
-	@echo "  OrbStack phone-home block (/etc/hosts)..."
-	@if [ ! -d "/Applications/OrbStack.app" ]; then \
-		echo "    · OrbStack not installed — skipping"; \
-	elif grep -q "OrbStack phone-home block" /etc/hosts 2>/dev/null; then \
-		echo "    · /etc/hosts entries (ok)"; \
+.PHONY: _setup-colima
+_setup-colima:
+	@echo "  Colima (Docker runtime — replaces OrbStack/Docker Desktop)..."
+	@# Docker CLI + Compose plugin + lazydocker TUI + colima VM.
+	@for pkg in colima docker docker-compose lazydocker; do \
+		brew list $$pkg &>/dev/null || brew install $$pkg; \
+	done
+	@echo "    ✓ colima $$(colima version 2>/dev/null | head -1 | sed 's/colima version //') · docker $$(docker --version 2>/dev/null | sed 's/Docker version //;s/,.*//')"
+	@# Wire the Compose plugin into the docker CLI search path (idempotent).
+	@mkdir -p "$(HOME)/.docker"
+	@[ -f "$(HOME)/.docker/config.json" ] || echo '{}' > "$(HOME)/.docker/config.json"
+	@if jq -e '.cliPluginsExtraDirs | index("$(BREW_PREFIX)/lib/docker/cli-plugins")' "$(HOME)/.docker/config.json" >/dev/null 2>&1; then \
+		echo "    · compose plugin path (ok)"; \
 	else \
-		echo "    Appending block to /etc/hosts (sudo)..."; \
-		printf '\n' | sudo tee -a /etc/hosts >/dev/null \
-			&& sudo tee -a /etc/hosts < "$(DOTFILES_DIR)/config/orbstack-hosts.txt" >/dev/null \
-			&& sudo dscacheutil -flushcache \
-			&& sudo killall -HUP mDNSResponder 2>/dev/null || true; \
-		echo "    ✓ /etc/hosts entries added + DNS cache flushed"; \
+		tmp=$$(mktemp); \
+		jq '.cliPluginsExtraDirs = ((.cliPluginsExtraDirs // []) + ["$(BREW_PREFIX)/lib/docker/cli-plugins"] | unique)' \
+			"$(HOME)/.docker/config.json" > "$$tmp" && mv "$$tmp" "$(HOME)/.docker/config.json"; \
+		echo "    ✓ compose plugin path added to ~/.docker/config.json"; \
 	fi
+	@# Create the VM with our config if it doesn't exist yet (sized via COLIMA_* vars),
+	@# then hand it off to the brew service to manage.
+	@if [ -f "$(HOME)/.colima/default/colima.yaml" ]; then \
+		echo "    · colima VM config (ok)"; \
+	else \
+		echo "    Creating colima VM ($(COLIMA_CPU) CPU / $(COLIMA_MEMORY)GB / $(COLIMA_DISK)GB, vz+rosetta)..."; \
+		colima start --vm-type vz --vz-rosetta --mount-type virtiofs \
+			--cpu $(COLIMA_CPU) --memory $(COLIMA_MEMORY) --disk $(COLIMA_DISK) >/dev/null 2>&1 \
+			&& colima stop >/dev/null 2>&1 \
+			&& echo "    ✓ colima VM created" \
+			|| echo "    ✗ colima create failed — run: make colima-start"; \
+	fi
+	@# Always-on: brew service (RunAtLoad + KeepAlive) reads the persisted config.
+	@if brew services list 2>/dev/null | grep -E '^colima' | grep -q started; then \
+		echo "    · colima service (started, auto-starts at login)"; \
+	else \
+		brew services start colima >/dev/null 2>&1 \
+			&& echo "    ✓ colima service started (auto-starts at login)" \
+			|| echo "    ✗ colima service failed — run: brew services start colima"; \
+	fi
+	@# Pin the docker CLI to the colima context (persists across reboots).
+	@tmp=$$(mktemp); jq '.currentContext = "colima"' "$(HOME)/.docker/config.json" > "$$tmp" \
+		&& mv "$$tmp" "$(HOME)/.docker/config.json"
+	@echo "    · docker context → colima"
 
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy
@@ -617,14 +653,21 @@ status:
 	else \
 		echo "    ✗ chrome-devtools MCP [not registered — run make setup]"; \
 	fi
-	@echo "  OrbStack phone-home block"
-	@if [ ! -d "/Applications/OrbStack.app" ]; then \
-		echo "    · OrbStack not installed — skipping"; \
-	elif grep -q "OrbStack phone-home block" /etc/hosts 2>/dev/null; then \
-		echo "    ✓ /etc/hosts entries"; \
-	else \
-		echo "    ✗ /etc/hosts entries [missing — run make setup]"; \
-	fi
+	@echo "  Colima (Docker runtime)"
+	@for tool in colima docker lazydocker; do \
+		command -v $$tool >/dev/null 2>&1 \
+			&& echo "    ✓ $$tool" \
+			|| echo "    ✗ $$tool [not installed — run make setup]"; \
+	done
+	@docker compose version >/dev/null 2>&1 \
+		&& echo "    ✓ docker compose plugin" \
+		|| echo "    ✗ docker compose plugin [run make setup]"
+	@brew services list 2>/dev/null | grep -E '^colima' | grep -q started \
+		&& echo "    ✓ colima service (auto-starts at login)" \
+		|| echo "    ✗ colima service [not started — run: make colima-start]"
+	@colima status >/dev/null 2>&1 \
+		&& echo "    ✓ colima VM running" \
+		|| echo "    ✗ colima VM [not running — run: make colima-start]"
 	@echo "  sideclaw MCP"
 	@if [ ! -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
 		echo "    · sideclaw not cloned — skipping"; \
@@ -679,6 +722,37 @@ github-config:
 github-config-dry:
 	@chmod +x $(DOTFILES_DIR)/scripts/github-config.sh
 	@DRY_RUN=1 $(DOTFILES_DIR)/scripts/github-config.sh
+
+# ============================================================================
+# Colima — Docker runtime VM management (replaces OrbStack/Docker Desktop)
+# ============================================================================
+# Resources via COLIMA_CPU / COLIMA_MEMORY / COLIMA_DISK (see top of file).
+# Always-on via brew service (RunAtLoad + KeepAlive) — manage with these targets,
+# not bare `colima stop` (KeepAlive would relaunch it).
+# GUI: Raycast "Manage Docker" extension + `lazydocker` TUI.
+
+.PHONY: colima-start
+colima-start:
+	@brew services start colima
+
+.PHONY: colima-stop
+colima-stop:
+	@brew services stop colima
+
+# Apply current COLIMA_CPU/MEMORY to the persisted config + restart the service.
+# (Disk can only grow via recreate — not handled here.)
+.PHONY: colima-restart
+colima-restart:
+	@if [ -f "$(HOME)/.colima/default/colima.yaml" ]; then \
+		sed -i '' 's/^cpu: .*/cpu: $(COLIMA_CPU)/; s/^memory: .*/memory: $(COLIMA_MEMORY)/' \
+			"$(HOME)/.colima/default/colima.yaml"; \
+	fi
+	@brew services restart colima
+
+.PHONY: colima-status
+colima-status:
+	@brew services list | grep -E '^colima' || echo "  colima service: not registered"
+	@colima status
 
 # ============================================================================
 # Clean — purge caches (brew, npm, pnpm, bun)
@@ -955,6 +1029,11 @@ help:
 	@echo "  make status             Verify symlink health + Keychain secrets"
 	@echo "  make github-config      Apply branch protection + merge settings + shared secrets to all repos"
 	@echo "  make github-config-dry  Preview without applying"
+	@echo ""
+	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
+	@echo "  make colima-stop     Stop the Docker runtime service"
+	@echo "  make colima-restart  Restart + apply current COLIMA_CPU/MEMORY ceilings"
+	@echo "  make colima-status   Show service + VM status"
 	@echo ""
 	@echo "  make localai-setup  Render audio plist from template + reload if changed"
 	@echo "  make start          Start mlx-audio (+ helper if installed)"

@@ -16,6 +16,31 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 
 **After any edit: commit here.**
 
+## Docker runtime: Colima
+
+The Docker runtime on every Mac is **Colima** (Lima + Apple Virtualization.Framework),
+installed by `make setup` (`_setup-colima`) — it replaced OrbStack (commercial license
+enforced via phone-home) and Docker Desktop (heavy). `make setup` brews
+`colima docker docker-compose lazydocker`, wires the Compose plugin path into
+`~/.docker/config.json`, creates the VM (`vz` + Rosetta amd64 emulation + virtiofs
+mounts), pins the `colima` docker context, and registers the **brew service**
+(`RunAtLoad` + `KeepAlive`) so it's always-on and auto-starts at login.
+
+Resources are set by `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` (defaults
+**2 / 4 / 60**). These are **ceilings, not reservations**: idle VM holds ~1.3GB on the
+host regardless of the cap, and CPU is time-shared (free when idle). Bump for heavy
+stacks (e.g. ClickHouse + Redpanda): `COLIMA_MEMORY=10 make colima-restart`.
+
+Manage with `make colima-{start,stop,restart,status}` — these wrap **`brew services`**,
+not bare `colima stop` (KeepAlive would relaunch it). `colima-restart` also applies the
+current `COLIMA_CPU/MEMORY` to the persisted config (disk only grows via recreate).
+
+No GUI ships with Colima by design — use the **Raycast "Manage Docker" extension**
+(start/stop/restart containers) and **`lazydocker`** (TUI: logs/stats/exec). The
+`docker-makefile` rule still applies — drive containers via repo Makefile targets,
+not raw `docker`/`compose`. Colima provides no auto-domains; local HTTPS routing is
+handled by the existing Caddy + dnsmasq `*.test` setup.
+
 ## Symlink Map
 
 | File here | Live path | Notes |
@@ -48,8 +73,6 @@ in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
-
-**Appended (not symlinked):** `/etc/hosts` — `_setup-orbstack-block` appends `config/orbstack-hosts.txt` if `/Applications/OrbStack.app` exists and the marker line is absent. Sinkholes `api-license.orbstack.dev`, `api-misc.orbstack.dev`, and the Sentry DSN host to `0.0.0.0`/`::`. `api-updates.orbstack.dev` is intentionally left reachable. Idempotent. Re-audit endpoints after each OrbStack update — the audit command is documented inside the txt file.
 
 **Not symlinked:** `~/.claude/settings.json` — machine-specific permissions.
 `make setup` creates from template if missing, otherwise jq-merges:
