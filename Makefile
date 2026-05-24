@@ -45,6 +45,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-localai
 	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
+	@$(MAKE) --no-print-directory _setup-audio-proxy
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -1036,6 +1037,18 @@ _setup-usage-tracker:
 			|| echo "    ✗ usage-tracker setup failed — run 'make install-agent' in the repo"; \
 	else \
 		echo "    · usage-tracker not cloned at $(SOURCEROOT)/usage-tracker — skipping"; \
+	fi
+
+_setup-audio-proxy:
+	@echo "  audio-proxy (IU audio STT/TTS proxy on 127.0.0.1:7716)..."
+	@if [ -f "$(SOURCEROOT)/audio-proxy/package.json" ]; then \
+		( cd "$(SOURCEROOT)/audio-proxy" \
+			&& bun install >/dev/null 2>&1 \
+			&& bash launchd/install-agent.sh >/dev/null ) \
+			&& echo "    ✓ deps installed + LaunchAgent loaded (com.jkrumm.audio-proxy)" \
+			|| echo "    ✗ audio-proxy setup failed — run 'make install-agent' in the repo"; \
+	else \
+		echo "    · audio-proxy not cloned at $(SOURCEROOT)/audio-proxy — skipping"; \
 	fi
 
 # ============================================================================
