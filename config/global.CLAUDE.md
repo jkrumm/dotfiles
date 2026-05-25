@@ -38,6 +38,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `argo` | Personal API server + dashboard — the AI-agent backbone. Hermes and other agents call it to read TickTick tasks, Gmail, calendar (personal + work), Teams messages, Garmin health (HRV, sleep, recovery, daily metrics), strength training (workouts, e1RM, volume), and homelab/VPS state (UptimeKuma, Docker). Elysia + Bun + Postgres + Drizzle; OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
+| `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast` | Smaller personal apps / utilities. |
 
 #### Infrastructure
@@ -138,6 +139,8 @@ Never add AI or tool attribution to any artifact — code comments, commits, PR 
 The main session is the **orchestrator**. Keep its context clean: hold the plan, the user's intent, and the cross-skill state. Push verbose work (logs, diffs, fetch bodies, test output) into one of the four execution modes below. The orchestrator **decides and verifies** — it should not be the thing grinding through reads, multi-file edits, and validation loops. Delegate by default (see **Offloading discipline** below). **Don't switch the orchestrator's model mid-session** — that invalidates the prompt cache for at least one turn and is the biggest avoidable cost in a long conversation.
 
 ### Four execution modes for skills
+
+> The **why** behind this framework (model tiers, the cache argument, EU/GDPR routing) is consolidated in `modelpick/docs/decisions/execution-modes.md`. The directives below are the operational contract — keep them here.
 
 | Mode | When to use | Cost profile |
 |-|-|-|

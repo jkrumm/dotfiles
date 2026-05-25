@@ -1,5 +1,7 @@
 # IU Unified Endpoint — Multimodal Exploration
 
+> **Decision rationale moved.** The vision/image model choices (gemini-3-pro for dense diagrams, gpt-image-2, EU/US residency table, the stateless-HTTP-vs-agent-loop placement) now live in `modelpick/docs/decisions/vision-and-image.md`. This file retains the operational exploration notes and wiring.
+
 *Exploration / decision memo. Not yet implemented. Written 2026-05-22 after empirically
 verifying that the IU unified endpoint serves image, vision, TTS, and STT — not just chat.*
 

@@ -1,5 +1,7 @@
 # Claude Code ↔ Kimi K2.6 via IU Endpoint
 
+> **Decision rationale moved.** Why Kimi-K2.6 is the EU/GDPR worker model, the non-obvious bridge fixes as lessons, and the `claude-sonnet-4-6-eu` fallback now live in `modelpick/docs/decisions/kimi-bridge.md`. This file retains the operational bridge setup (config, keys, deployment).
+
 > **Status: in production.** The bridge now runs as a LaunchAgent installed by dotfiles
 > `make setup` (or `make litellm-setup`), not the manual `/tmp` venv this doc first
 > documented. Source of truth:

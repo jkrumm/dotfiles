@@ -1,5 +1,7 @@
 # LocalAI Stack — Per-Machine TTS + STT
 
+> **Model-selection rationale moved.** Why Fish S2 Pro (TTS) + Parakeet (STT), the rejected-alternatives eval, and the reference-clip-quality insight now live in `modelpick/docs/decisions/audio-stack.md`. This file retains the operational stack (ports, services, warm-up, wiring).
+
 Each Mac runs three local services:
 - `mlx-audio` :8000 — STT only (Parakeet)
 - `fish-s2-pro` :8002 — TTS (Fish S2 Pro, both DE and EN)

@@ -1,5 +1,7 @@
 # Handover: switch Hermes brain to Kimi K2.6 (EU / GDPR)
 
+> **Decision rationale moved.** The Sonnet→Kimi switch decision and EU-safe fallback strategy now live in `modelpick/docs/decisions/hermes-brain.md`. This file retains the operational handover steps.
+
 Paste the block below into a fresh Claude Code session started inside
 `~/SourceRoot/hermes-agent`. It is GDPR-aware: Kimi-K2.6 is EU-resident (Azure
 Sweden Central) and the fallback is the EU/GDPR-routed Claude alias — **not** Kimi

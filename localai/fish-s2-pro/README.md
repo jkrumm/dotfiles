@@ -1,5 +1,7 @@
 # Fish S2 Pro — Production TTS
 
+> **Selection rationale moved.** Why Fish S2 Pro, the expressiveness/emotion-tag case, the German tier-2 limitation, and the reference-clip tuning insight now live in `modelpick/docs/decisions/audio-stack.md`. This file retains operational config (endpoints, voice IDs, EQ chain, budgets).
+
 The Hermes / Claude Code text-to-speech engine on this Mac. Replaces Voxtral.
 Runs as `com.localai.fish` on `127.0.0.1:8002`, launchd-managed, model warm-loaded
 at boot. Called by `localai-helper:8001` for orchestrated TTS.
