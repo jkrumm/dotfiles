@@ -58,8 +58,8 @@ dotfiles/
 ├── hooks/           notify.ts (all 4 events), protect-branches.ts, docker-makefile.ts
 ├── scripts/         statusline.sh, fetch_usage.py, github-config.sh, wakeup.sh
 ├── skills/          21 global Claude Code skills (→ ~/.claude/skills/)
-├── .claude/skills/  Per-repo skills (e.g. /localai)
-├── localai/         Per-machine mlx-audio + Fish-S2-Pro TTS/STT stack
+├── .claude/skills/  Per-repo skills (e.g. /iu-endpoint)
+├── localai/         RETIRED mlx-audio + Fish-S2-Pro TTS/STT stack (→ cloud audio-proxy)
 └── Makefile         Bootstrap + idempotent setup
 ```
 
@@ -108,7 +108,7 @@ Execution modes (full table with mode + worker model in `config/global.CLAUDE.md
 | **fork** (`context: fork`) | `browse` | Wraps the chrome-devtools MCP — Max quota |
 
 **Per-repo skills** (committed in their repo's `.claude/skills/`, auto-load when Claude starts inside):
-- `dotfiles/.claude/skills/localai/` — manage the mlx-audio + Fish-S2-Pro stack
+- `dotfiles/.claude/skills/localai/` — **retired** (mlx-audio + Fish-S2-Pro stack, replaced by the cloud audio-proxy); `dotfiles/.claude/skills/iu-endpoint/` — validate the IU endpoint + discover models
 - `hermes-agent/.claude/skills/{hermes-update,hermes-validate}/` — manage Hermes
 - Project-committed skills in other SourceRoot repos (release-fpp, audit, docs, prowlarr, raycast-extension, etc.)
 

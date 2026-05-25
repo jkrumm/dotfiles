@@ -26,7 +26,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 
 | Repo | Purpose |
 |-|-|
-| `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack. Source of truth. |
+| `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack (retired — see `audio-proxy`). Source of truth. |
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
@@ -219,7 +219,7 @@ Don't echo back file contents you just read. Don't narrate tool calls. Keep expl
 
 ## Skills
 
-Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`). They load in every Claude Code session regardless of cwd. Per-repo skills (e.g. `/localai`, `/hermes-update`) live committed in their repo's `.claude/skills/` and load only when Claude is started inside that repo.
+Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`). They load in every Claude Code session regardless of cwd. Per-repo skills (e.g. `/iu-endpoint`, `/hermes-update`) live committed in their repo's `.claude/skills/` and load only when Claude is started inside that repo.
 
 | Skill | Mode | Notes |
 |-|-|-|
@@ -246,7 +246,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
 
 **Per-repo skills** that only load when Claude is started inside their repo:
-- `~/SourceRoot/dotfiles/.claude/skills/` — `/localai` (manage mlx-audio + Fish-S2-Pro stack)
+- `~/SourceRoot/dotfiles/.claude/skills/` — `/iu-endpoint` (validate IU endpoint + discover models); `/localai` (**retired** — local mlx-audio/Fish stack, replaced by the cloud audio-proxy)
 - `~/SourceRoot/hermes-agent/.claude/skills/` — `/hermes-validate`, `/hermes-update` (manage Hermes Agent)
 - Other SourceRoot repos with their own project skills (e.g. `homelab/.claude/skills/{audit,docs,upgrade-stack}/`, `vps/.claude/skills/{audit,docs}/`, `sideclaw/.claude/skills/claude-cli/`, `free-planning-poker/.claude/skills/release-fpp/`, `homelab-private/.claude/skills/prowlarr/`, `ticktick-raycast/.claude/skills/{raycast-extension,ticktick-api}/`).
 

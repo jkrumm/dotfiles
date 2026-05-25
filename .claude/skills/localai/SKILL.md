@@ -1,9 +1,11 @@
 ---
 name: localai
-description: Manage per-machine mlx-audio (TTS + STT) on 127.0.0.1:8000 — install, status, swap STT model, troubleshoot
+description: RETIRED — manage the (now decommissioned) per-machine mlx-audio TTS/STT stack; TTS/STT moved to the cloud audio-proxy (:7716)
 ---
 
 # LocalAI Stack Management
+
+> **⚠️ RETIRED 2026-05-25.** This stack is no longer installed or running. TTS/STT moved to the cloud **audio-proxy** (`~/SourceRoot/audio-proxy`, :7716, `https://audio-proxy.test/v1`) in front of the IU unified audio endpoint. Files are kept for an easy re-add. Tear down a live install with `make localai-teardown`. The commands below only apply if the stack is reinstated.
 
 Per-machine `mlx-audio` (TTS + STT) bound to `127.0.0.1:8000`. Installed automatically by `make setup`. No Tailscale exposure, no Ollama, no LLM — Hermes uses cloud Sonnet 4.6 via the IU unified endpoint.
 

@@ -5,14 +5,22 @@
 VCS source of truth for Johannes's Claude Code setup. Everything is symlinked
 outward — edit at either end, git always sees the change here.
 
-Also contains `localai/` — per-machine `mlx-audio` (TTS + STT only) bound to
-`127.0.0.1:8000`. Installed automatically by `make setup` on every Mac.
-LLM is not local — Hermes uses cloud Sonnet 4.6 via the IU unified endpoint.
-See `localai/README.md` and the `/localai` skill.
+TTS/STT runs in the cloud via the **audio-proxy** repo (`~/SourceRoot/audio-proxy`,
+OpenAI-compatible on `127.0.0.1:7716`, installed by `make setup` → `_setup-audio-proxy`),
+which fronts the IU unified audio endpoint. Hermes and MacWhisper point at it
+(`https://audio-proxy.test/v1`). LLM is also cloud — Hermes uses Sonnet 4.6 via the IU
+unified endpoint.
+
+The `localai/` directory (per-machine `mlx-audio` STT + Fish S2 Pro TTS, :8000/:8001/:8002)
+is **RETIRED** (2026-05-25): no longer in the `make setup` chain and not running. Files are
+kept, not deleted, for an easy re-add. Tear down a live install with `make localai-teardown`.
+See `localai/README.md` and the `/localai` skill (both marked retired).
 
 **Companion repo: `~/SourceRoot/hermes-agent`** — Hermes Agent setup (Mac Mini-only).
-Pulls the `localai-helper` plist template from `localai/com.localai.helper.plist.template`
-in this repo, but otherwise self-contained. See `hermes-agent/CLAUDE.md`.
+Historically pulled the `localai-helper` plist template from
+`localai/com.localai.helper.plist.template` here; now that Hermes consumes the cloud
+audio-proxy, that helper is retired too — clean it up in hermes-agent's own setup. See
+`hermes-agent/CLAUDE.md`.
 
 **After any edit: commit here.**
 
@@ -84,7 +92,7 @@ during first install must be quit + relaunched once to retry the socket.
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
 
 **Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):
-- `.claude/skills/localai/` — manage the local mlx-audio / Fish S2 Pro stack (this repo's own infrastructure).
+- `.claude/skills/localai/` — **RETIRED** (local mlx-audio / Fish S2 Pro stack, replaced by the cloud audio-proxy). Kept for an easy re-add.
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
@@ -135,7 +143,7 @@ as the Agent SDK (`op://common/anthropic`).
 
 **Adding a global skill:** create `skills/{name}/SKILL.md` here, then `make setup` — it gets symlinked into `~/.claude/skills/{name}/` and loads in every session.
 
-**Adding a per-repo (dotfiles-only) skill:** create `.claude/skills/{name}/SKILL.md` here directly (committed, no symlink). Loads only when Claude starts inside this repo. Used for skills that manage this repo's infrastructure (e.g. `localai`).
+**Adding a per-repo (dotfiles-only) skill:** create `.claude/skills/{name}/SKILL.md` here directly (committed, no symlink). Loads only when Claude starts inside this repo. Used for skills that manage this repo's infrastructure (e.g. `iu-endpoint`).
 
 **Adding a global rule:** create `rules/{name}.md` here. The entire `rules/` dir is symlinked to `~/.claude/rules/`. Rules without `paths:` frontmatter load every session. Rules with `paths:` load lazily.
 

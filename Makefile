@@ -42,7 +42,9 @@ setup:
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-opencode
-	@$(MAKE) --no-print-directory _setup-localai
+	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
+	@# audio-proxy (~/SourceRoot/audio-proxy, :7716). Targets kept below for an
+	@# easy re-add; tear down a live install with `make localai-teardown`.
 	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory _setup-audio-proxy
@@ -794,6 +796,12 @@ clean:
 
 # ============================================================================
 # LocalAI — mlx-audio (TTS + STT) on every Mac, bound to 127.0.0.1:8000
+# ----------------------------------------------------------------------------
+# RETIRED 2026-05-25 — superseded by the cloud audio-proxy (~/SourceRoot/
+# audio-proxy, :7716, _setup-audio-proxy). No longer run by `make setup`.
+# Targets below are kept intact so the stack can be re-added later by
+# re-listing `_setup-localai` in the setup chain. To tear down a machine that
+# still has it installed, run `make localai-teardown`.
 # ============================================================================
 
 LAUNCHAGENTS  := $(HOME)/Library/LaunchAgents
@@ -969,6 +977,22 @@ stop:
 			|| true; \
 	done
 
+# Retire a live install: unload (RunAtLoad+KeepAlive means we must also delete
+# the installed plists or launchd relaunches at next login) and remove the
+# rendered LaunchAgents. Leaves the templates, venvs, models, and uv tools
+# untouched so the stack can be re-added later. Does not uninstall mlx-audio /
+# mlx-speech (cheap to keep; `uv tool uninstall mlx-audio mlx-speech` to reclaim).
+.PHONY: localai-teardown
+localai-teardown:
+	@for label in $(LOCALAI_ALL_PLISTS); do \
+		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
+		[ -f "$$PLIST" ] || { echo "  · $$label (not installed)"; continue; }; \
+		launchctl unload "$$PLIST" 2>/dev/null || true; \
+		rm -f "$$PLIST"; \
+		echo "  ✓ $$label torn down (unloaded + plist removed)"; \
+	done
+	@echo "  Templates + venvs/models kept. Cloud audio-proxy (:7716) is the replacement."
+
 # ============================================================================
 # LiteLLM — Anthropic↔OpenAI bridge for IU (Kimi-K2.6 etc.), bound to 127.0.0.1:4000
 # ============================================================================
@@ -1071,9 +1095,9 @@ help:
 	@echo "  make colima-restart  Restart + apply current COLIMA_CPU/MEMORY ceilings"
 	@echo "  make colima-status   Show service + VM status"
 	@echo ""
-	@echo "  make localai-setup  Render audio plist from template + reload if changed"
-	@echo "  make start          Start mlx-audio (+ helper if installed)"
-	@echo "  make stop           Stop mlx-audio (+ helper if installed)"
+	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the cloud"
+	@echo "  audio-proxy (~/SourceRoot/audio-proxy, :7716). make setup no longer"
+	@echo "  installs it. make localai-teardown removes a live install."
 	@echo ""
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"

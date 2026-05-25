@@ -106,34 +106,25 @@ fpp-logdy.test {
 	reverse_proxy localhost:7723
 }
 
-# LocalAI stack runs on each Mac as 127.0.0.1:8000 (mlx-audio).
-# Hermes connects to localhost:8000 directly. Other clients (Hermes Python
-# SDK, scripts) work fine with mlx-audio's NDJSON Content-Type.
+# whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
+# :8002) was replaced by the cloud audio-proxy. Point MacWhisper Base URL at
+# https://audio-proxy.test/v1 instead (block above). Kept commented for an easy
+# re-add if the local stack ever returns.
 #
-# MacWhisper exception: its custom-OpenAI provider chokes on
-# Content-Type `application/x-ndjson` (raises "Daten fehlen") even though
-# the body is a single JSON object. The block below proxies STT through
-# Caddy and rewrites Content-Type → `application/json` so MacWhisper
-# accepts it. Point MacWhisper Base URL at https://whisper.test and use
-# any Parakeet model (e.g. mlx-community/parakeet-tdt-0.6b-v3).
-whisper.test {
-	import local
-	# /v1/audio/transcriptions → localai-helper :8001 (transforms response
-	# from Parakeet's {text, sentences} to OpenAI verbose_json
-	# {text, segments, language, duration} so MacWhisper can parse it).
-	# Everything else → mlx-audio :8000 directly.
-	handle /v1/audio/transcriptions* {
-		reverse_proxy localhost:8001 {
-			transport http {
-				versions 1.1
-			}
-			flush_interval -1
-		}
-	}
-	handle /v1/* {
-		reverse_proxy localhost:8000
-	}
-}
+# whisper.test {
+# 	import local
+# 	handle /v1/audio/transcriptions* {
+# 		reverse_proxy localhost:8001 {
+# 			transport http {
+# 				versions 1.1
+# 			}
+# 			flush_interval -1
+# 		}
+# 	}
+# 	handle /v1/* {
+# 		reverse_proxy localhost:8000
+# 	}
+# }
 
 # ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
 # Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a
