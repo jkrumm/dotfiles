@@ -16,6 +16,17 @@ def _get(obj, key, default=0):
     return default if val is None else val
 
 
+def _duration_ms(start_time, end_time):
+    """Compute request latency. Both args are datetimes from LiteLLM callbacks."""
+    if start_time is None or end_time is None:
+        return None
+    try:
+        delta = end_time - start_time
+        return int(delta.total_seconds() * 1000)
+    except Exception:
+        return None
+
+
 class UsageLogger(CustomLogger):
     """Append per-request token usage to a JSONL file for usage-tracker ingestion.
 
@@ -61,6 +72,9 @@ class UsageLogger(CustomLogger):
 
             record = {
                 "ts": datetime.now(timezone.utc).isoformat(),
+                "ts_start": start_time.isoformat() if start_time else None,
+                "ts_end": end_time.isoformat() if end_time else None,
+                "duration_ms": _duration_ms(start_time, end_time),
                 "request_id": request_id,
                 "model": model,
                 "input_tokens": input_tokens,
@@ -106,6 +120,9 @@ class UsageLogger(CustomLogger):
 
             record = {
                 "ts": datetime.now(timezone.utc).isoformat(),
+                "ts_start": start_time.isoformat() if start_time else None,
+                "ts_end": end_time.isoformat() if end_time else None,
+                "duration_ms": _duration_ms(start_time, end_time),
                 "request_id": request_id,
                 "model": model,
                 "event": "error",
