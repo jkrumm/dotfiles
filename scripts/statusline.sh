@@ -12,9 +12,15 @@ model=$(echo "$input" | jq -r '.model.display_name // "Unknown"')
 effort=$(jq -r '.effortLevel // "auto"' "$HOME/.claude/settings.json" 2>/dev/null || echo "auto")
 
 # ── Working directory ──────────────────────────────────────────────────────────
+# Show just the project name (last path segment). For worktrees, the last segment
+# is the project (wtp's layout: <repo>.worktrees/<branch>/<repo>), so basename
+# collapses both regular repos and worktree checkouts to the same display.
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // "~"')
-cwd_display="${cwd/#$HOME/~}"
-cwd_display="${cwd_display/#~\/IuRoot\/worktrees\/student-enrolment\//WT·SE }"
+if [ "$cwd" = "$HOME" ]; then
+  cwd_display="~"
+else
+  cwd_display=$(basename "$cwd")
+fi
 
 # ── Context window ─────────────────────────────────────────────────────────────
 total_input=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
