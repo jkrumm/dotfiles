@@ -277,6 +277,9 @@ Git worktree management via **wtp** (`brew install satococoa/tap/wtp`):
 
 Worktrees land at `<repo>.worktrees/<branch>` — adjacent to the repo, so the 1Password routing helper still resolves the right account via the worktree's main repo path.
 
+### Node.js runtime
+Use **fnm**, not nvm, for Node version management. Ensure you don't suggest nvm commands or rely on nvm-specific paths.
+
 ---
 
 ## Development Workflow
