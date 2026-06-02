@@ -123,6 +123,9 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/gitconfig-work" \
 		DST="$(HOME)/.gitconfig-work"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/bunfig.toml" \
+		DST="$(HOME)/.bunfig.toml"
 
 .PHONY: _setup-tools
 _setup-tools:

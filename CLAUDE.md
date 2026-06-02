@@ -76,6 +76,7 @@ during first install must be quit + relaunched once to retry the socket.
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
 | `config/gitconfig-personal` | `~/.gitconfig-personal` | jkrumm@pm.me + 1Password signing |
 | `config/gitconfig-work` | `~/.gitconfig-work` | johannes.krumm@iu.org + 1Password signing |
+| `config/bunfig.toml` | `~/.bunfig.toml` | Global Bun config — supply-chain `minimumReleaseAge` cooldown (Bun is every SourceRoot repo's package manager) |
 | `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
 | `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
@@ -88,7 +89,7 @@ during first install must be quit + relaunched once to retry the socket.
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Single source of truth for PR-required repos — read by `protect-branches.ts` (hook) and `scripts/github-config.sh` (full vs lite ruleset tier). |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
-| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, formatting, research-first, security, TypeScript, code style, docker-makefile, visx-charts) |
+| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, visx-charts) |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
 
 **Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):

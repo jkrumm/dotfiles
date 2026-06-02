@@ -8,6 +8,7 @@
     "~/.claude/rules/attribution.md",
     "~/.claude/rules/code-style.md",
     "~/.claude/rules/commit-conventions.md",
+    "~/.claude/rules/dependency-hygiene.md",
     "~/.claude/rules/docker-makefile.md",
     "~/.claude/rules/formatting.md",
     "~/.claude/rules/research-first.md",
