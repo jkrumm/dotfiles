@@ -13,3 +13,9 @@
     path = ~/.gitconfig-work
 [coderabbit]
 	machineId = cli/d4c65f7026bd473385c80773b16542c2
+[credential "https://github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
