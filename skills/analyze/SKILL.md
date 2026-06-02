@@ -124,12 +124,12 @@ Prioritize actionable findings. Skip sections with zero issues. If all clean, sa
 
 SCOPE: [SCOPE]
 PROMPT_END
-claude_iu --model claude-haiku-4-5-20251001 --dangerously-skip-permissions < "$TMPFILE"
+claude_bridge --model DeepSeek-V4-Flash --dangerously-skip-permissions < "$TMPFILE"
 rm -f "$TMPFILE"
 ```
 
-`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` against the IU
-endpoint off Max quota (IU per-token). Analyzed code is local/non-sensitive, so
-haiku on the native transport is fine — no need for the EU bridge here. If the IU
-credentials are missing it errors with a `make setup` hint; do not fall back to
-inline execution.
+`claude_bridge` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` through the local
+LiteLLM bridge to DeepSeek-V4-Flash (the fast tier, EU/GDPR on Azure Spain) off Max
+quota (IU per-token). The bridge needs no web access — analysis is pure `npx fallow`
++ Bash — so the no-WebSearch/WebFetch constraint doesn't bite. If the bridge is down
+it errors with a `make litellm-restart` hint; do not fall back to inline execution.

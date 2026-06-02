@@ -58,9 +58,9 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`.
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
 **Heavy implementer choice (cost-aware — you orchestrate on Max, the worker edits off Max):**
-- **Mechanical fan-out, clear plan, large diff**: prefer **`mcp__sideclaw__implement`** — it runs the edits on Kimi-K2.6 (EU/GDPR) via the LiteLLM bridge, off your Max quota, self-verifies against the repo's checks, and returns a structured report (`applied`, `filesChanged`, `checkPassed`, `notes`). Pass a precise `task` + `context` (file paths, the plan, conventions to follow); review the diff before committing.
-- **Independent file groups**: split the work and fire **multiple `mcp__sideclaw__implement` calls in a single turn** (one per group) — they run as concurrent Kimi workers off Max while you await. Only split where groups don't touch the same files (avoid write conflicts); keep coupled changes in one call.
-- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Max — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high` in an isolated bubble so the orchestrator's cache stays warm. Kimi is a literal executor, not a planner.
+- **Mechanical fan-out, clear plan, large diff**: prefer **`mcp__sideclaw__implement`** — it runs the edits on DeepSeek-V4-Pro (EU/GDPR) via the LiteLLM bridge, off your Max quota, self-verifies against the repo's checks, and returns a structured report (`applied`, `filesChanged`, `checkPassed`, `notes`). Pass a precise `task` + `context` (file paths, the plan, conventions to follow); review the diff before committing.
+- **Independent file groups**: split the work and fire **multiple `mcp__sideclaw__implement` calls in a single turn** (one per group) — they run as concurrent workers off Max while you await. Only split where groups don't touch the same files (avoid write conflicts); keep coupled changes in one call.
+- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Max — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high` in an isolated bubble so the orchestrator's cache stays warm. The worker is a literal executor, not a planner.
 - **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast.
 - **Need branch isolation?** Decide it **up front, at the orchestrator level** — not mid-flow. Create the worktree with `wtp add <branch>` and run the whole `/implement` flow there; the sideclaw worker inherits the `cwd` you pass, so it already edits inside the worktree. Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
 
@@ -113,7 +113,7 @@ State your approach in 3-5 bullets and **proceed**. Include:
 
 **Quick (≤2 files): implement inline.**
 
-**Standard / Heavy mechanical work: prefer `mcp__sideclaw__implement`** (off Max, Kimi EU). **Heavy novel logic: `Agent` with `subagent_type: general-purpose`, `model: opus`** (on Max). Either way the executor has zero prior context, so the `task` + `context` must include:
+**Standard / Heavy mechanical work: prefer `mcp__sideclaw__implement`** (off Max, DeepSeek EU). **Heavy novel logic: `Agent` with `subagent_type: general-purpose`, `model: opus`** (on Max). Either way the executor has zero prior context, so the `task` + `context` must include:
 - The full task description and acceptance criteria
 - Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)

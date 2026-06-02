@@ -25,7 +25,7 @@ c() {
 # flags + a prompt (positional or via stdin), e.g.
 #
 #   claude_iu     --model haiku --dangerously-skip-permissions < prompt.txt
-#   claude_bridge --model Kimi-K2.6 --dangerously-skip-permissions < prompt.txt
+#   claude_bridge --model DeepSeek-V4-Pro --dangerously-skip-permissions < prompt.txt
 #
 # ANTHROPIC_API_KEY is stripped: claude v2.x rejects it ("Not logged in") and it
 # would shadow ANTHROPIC_AUTH_TOKEN.
@@ -47,12 +47,13 @@ claude_iu() {
     claude -p "$@"
 }
 
-# Local LiteLLM bridge (LaunchAgent on :4000) → Kimi-K2.6 (EU/GDPR, Azure Sweden),
-# with native failover to claude-sonnet-4-6-eu. Defaults --model to Kimi-K2.6 if
-# the caller omits it (the bridge 404s on an unmapped model name). The bridge
-# derives its own IU creds; the token here is a dummy claude v2.x requires.
-# Constraint: no WebSearch/WebFetch (they make internal Anthropic calls the bridge
-# can't serve). See dotfiles/docs/kimi-litellm-bridge.md.
+# Local LiteLLM bridge (LaunchAgent on :4000) → DeepSeek-V4-Pro (EU/GDPR, Azure Spain),
+# with native failover to claude-sonnet-4-6-eu. Defaults --model to DeepSeek-V4-Pro if
+# the caller omits it (the bridge 404s on an unmapped model name). Pass
+# --model DeepSeek-V4-Flash for the fast/cheap tier. The bridge derives its own IU
+# creds; the token here is a dummy claude v2.x requires. Constraint: no
+# WebSearch/WebFetch (they make internal Anthropic calls the bridge can't serve).
+# See dotfiles/docs/deepseek-litellm-bridge.md.
 claude_bridge() {
   local url="${LITELLM_BRIDGE_URL:-http://127.0.0.1:4000}"
   if ! curl -fsS -m 3 "${url}/health/liveliness" >/dev/null 2>&1; then
@@ -60,7 +61,7 @@ claude_bridge() {
     return 1
   fi
   local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model Kimi-K2.6 "${args[@]}")
+  [[ " $* " == *" --model "* ]] || args=(--model DeepSeek-V4-Pro "${args[@]}")
   env -u ANTHROPIC_API_KEY \
     ANTHROPIC_AUTH_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}" \
     ANTHROPIC_BASE_URL="$url" \

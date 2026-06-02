@@ -93,10 +93,10 @@ class UsageLogger(CustomLogger):
 
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
         """Append a token-less error record so usage-tracker can compute the bridge
-        error rate. Kimi-K2.6 is single-backend (Azure Sweden) and intermittently
-        5xx/429s, so this rate reflects every consumer's experience, not just one.
-        A failed attempt the fallback later rescues still logs here (the rescue is a
-        separate success event) — the right signal for Kimi availability.
+        error rate. The worker tier is single-backend and intermittently 5xx/429s,
+        so this rate reflects every consumer's experience, not just one. A failed
+        attempt the fallback later rescues still logs here (the rescue is a separate
+        success event) — the right signal for bridge availability.
         """
         try:
             sl = kwargs.get("standard_logging_object") if isinstance(kwargs, dict) else None

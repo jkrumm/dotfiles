@@ -13,9 +13,9 @@ We empirically verified (see the memo) that its **OpenAI transport** (`/openai/v
 - **Image generation** — `gpt-image-2`.
 
 These are **stateless single HTTPS calls** — *not* Claude Code agent sessions. They must **not** go
-through the LiteLLM/Kimi bridge, `session-runner.ts`, `claude -p`, or the read-only allowlist machinery.
+through the LiteLLM bridge, `session-runner.ts`, `claude -p`, or the read-only allowlist machinery.
 They are plain `fetch` calls to the IU OpenAI transport. That makes them cheap (IU per-token, zero Max,
-zero Kimi worker) and fast (a single call, well under the 60s MCP SDK timeout — see "sync vs async" below).
+zero bridge worker) and fast (a single call, well under the 60s MCP SDK timeout — see "sync vs async" below).
 
 ## Goal
 
@@ -106,7 +106,7 @@ stay for future flexibility, but it is not a residency knob — don't add EU-awa
 - **Sync vs async:** a single vision call measured **~10–27s** for `gemini-3-pro-preview` (dense diagram),
   i.e. under the 60s MCP SDK timeout — so these can be **synchronous** MCP tools, no `job_wait` machinery.
   Confirm against your transport limits; if you'd rather route through the durable job store for
-  consistency, that's your call — but don't add the Kimi/session-runner path, these are direct fetches.
+  consistency, that's your call — but don't add the bridge worker/session-runner path, these are direct fetches.
 - **Conventions:** follow `.claude/rules/mcp-tools.md` for tool authoring; wrappers in
   `server/mcp/tools/`, schemas/logic where your other tools keep them, register in `server/mcp.ts`.
 - **Failure modes to handle:** transient `503` (single-backend throttle — retry with small backoff;

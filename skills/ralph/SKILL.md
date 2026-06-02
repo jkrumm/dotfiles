@@ -316,10 +316,10 @@ CLAUDE_TIMEOUT=2700  # 45 minutes per group
 # Model + transport (override via env at launch, e.g. RALPH_TRANSPORT=bridge ./scripts/ralph.sh run).
 #   max    → sonnet on the Max subscription. Best quality/ceiling for autonomous
 #            multi-hour groups; burns Max quota heavily.
-#   bridge → every group routed through the local LiteLLM bridge to Kimi-K2.6
+#   bridge → every group routed through the local LiteLLM bridge to DeepSeek-V4-Pro
 #            (EU/GDPR), IU per-token billing, ZERO Max quota. Caveats: no
-#            WebSearch/WebFetch (research-phase groups lose web), Kimi is
-#            single-backend (throttle-prone across a long loop — leans on retries),
+#            WebSearch/WebFetch (research-phase groups lose web), the worker model
+#            can throttle under load across a long loop (leans on retries),
 #            and a lower implementation ceiling than sonnet. Use for cost-sensitive
 #            or EU-bound loops; keep `max` for quality-critical migrations.
 RALPH_MODEL="${RALPH_MODEL:-sonnet}"
@@ -1060,7 +1060,7 @@ env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
 
 **Model choice:** `--model` and `--effort` must be set explicitly. The `/model` and `/effort` commands in an interactive Claude Code session are session-level only — they are **not** inherited by spawned `claude -p` subprocesses. Without explicit flags, each group silently uses whatever the global default is. Sonnet + high effort is the right default for RALPH: good quality at materially lower cost and latency than Opus for 45-minute autonomous runs. Override per-group if needed (e.g. bump to `opus` for a particularly complex migration group).
 
-**Transport choice (`RALPH_TRANSPORT`):** the default `max` runs `$RALPH_MODEL` on the Max subscription — best quality, but a full autonomous loop (45 min × N groups) is the single heaviest Max-quota consumer in this setup. Set `RALPH_TRANSPORT=bridge` to route every group through the local LiteLLM bridge to **Kimi-K2.6 (EU/GDPR)** at IU per-token billing — **zero Max quota**. The bridge trade-offs are real: no `WebSearch`/`WebFetch` (research-phase groups that lean on web must be restructured to use Bash + `curl`/Context7), Kimi is single-backend (Azure Sweden) so a long loop leans hard on the runner's retry logic, and its implementation ceiling is below sonnet. The runner health-checks the bridge before each group and aborts with a `make litellm-restart` hint if it's down. Rule of thumb: `max` for quality-critical or web-heavy migrations; `bridge` for cost-sensitive, EU-bound, or overnight loops where retries absorb the throttling.
+**Transport choice (`RALPH_TRANSPORT`):** the default `max` runs `$RALPH_MODEL` on the Max subscription — best quality, but a full autonomous loop (45 min × N groups) is the single heaviest Max-quota consumer in this setup. Set `RALPH_TRANSPORT=bridge` to route every group through the local LiteLLM bridge to **DeepSeek-V4-Pro (EU/GDPR, Azure Spain)** at IU per-token billing — **zero Max quota**. The bridge trade-offs are real: no `WebSearch`/`WebFetch` (research-phase groups that lean on web must be restructured to use Bash + `curl`/Context7), the worker model can throttle under load so a long loop leans hard on the runner's retry logic, and its implementation ceiling is below sonnet. The runner health-checks the bridge before each group and aborts with a `make litellm-restart` hint if it's down. Rule of thumb: `max` for quality-critical or web-heavy migrations; `bridge` for cost-sensitive, EU-bound, or overnight loops where retries absorb the throttling.
 
 ### Completion signal detection
 

@@ -994,12 +994,12 @@ localai-teardown:
 	@echo "  Templates + venvs/models kept. Cloud audio-proxy (:7716) is the replacement."
 
 # ============================================================================
-# LiteLLM — Anthropic↔OpenAI bridge for IU (Kimi-K2.6 etc.), bound to 127.0.0.1:4000
+# LiteLLM — Anthropic↔OpenAI bridge for IU (DeepSeek-V4-Pro etc.), bound to 127.0.0.1:4000
 # ============================================================================
 # Translates `claude -p` Anthropic Messages calls into OpenAI chat/completions
-# against the IU unified endpoint, so worker sessions can run on Kimi-K2.6 (EU)
+# against the IU unified endpoint, so worker sessions can run on DeepSeek-V4-Pro
 # with claude-sonnet-4-6-eu failover. Consumed by sideclaw. See
-# docs/kimi-litellm-bridge.md.
+# docs/deepseek-litellm-bridge.md.
 
 .PHONY: _setup-litellm
 _setup-litellm:

@@ -2,8 +2,8 @@
 # LiteLLM proxy wrapper — Anthropic↔OpenAI bridge on 127.0.0.1:4000.
 #
 # Started by ~/Library/LaunchAgents/com.litellm.proxy.plist via launchd.
-# Lets `claude -p` reach IU's OpenAI-only models (Kimi-K2.6 etc.) by translating
-# Anthropic /v1/messages → OpenAI /chat/completions. See docs/kimi-litellm-bridge.md.
+# Lets `claude -p` reach IU's OpenAI-only models (DeepSeek-V4-Pro etc.) by translating
+# Anthropic /v1/messages → OpenAI /chat/completions. See docs/deepseek-litellm-bridge.md.
 #
 # Reads the IU credential from the Keychain (the same entry `make setup` caches
 # for claude offloading) and derives the OpenAI-compatible base URL from it.
@@ -31,7 +31,7 @@ export IU_API_KEY="$KEY"
 export IU_OPENAI_BASE_URL="${BASE%/anthropic}/openai/v1"
 
 # LiteLLM's Anthropic passthrough defaults to the OpenAI Responses API, which IU
-# does not serve for Kimi. Force chat/completions instead. (See bridge doc.)
+# does not serve for these models. Force chat/completions instead. (See bridge doc.)
 export LITELLM_USE_CHAT_COMPLETIONS_URL_FOR_ANTHROPIC_MESSAGES=true
 
 exec "$HOME/.local/share/uv/tools/litellm/bin/litellm" \

@@ -16,7 +16,7 @@ This unlocks three concrete improvements, in rough order of value:
 
 1. **`read-drawing` and `browse` can read images with stronger models than Anthropic Haiku** —
    and the read step is a *stateless HTTP call*, so it belongs as a sideclaw HTTP tool, not a `claude -p` agent session.
-2. **A new general `vision`/`read-image` capability** in sideclaw — one direct fetch, no Kimi worker, no Max quota.
+2. **A new general `vision`/`read-image` capability** in sideclaw — one direct fetch, no bridge worker, no Max quota.
 3. **TTS/STT could move off the local `mlx-audio`/Fish stack to hosted IU models** — *but only the
    Azure-Sweden (EU) audio models pass the GDPR bar*; the OpenAI-vendor ones (US) do not. See the residency table.
 
@@ -76,7 +76,7 @@ There are **two fundamentally different shapes of work**, and they want differen
 
 | Shape | Examples | Right home | Cost |
 |-|-|-|-|
-| **Stateless single HTTP call** | read one image, generate one image, TTS a string, transcribe a file | **sideclaw HTTP tool** — direct `fetch` to the IU transport | ~0 (IU per-token, no Max, no Kimi worker) |
+| **Stateless single HTTP call** | read one image, generate one image, TTS a string, transcribe a file | **sideclaw HTTP tool** — direct `fetch` to the IU transport | ~0 (IU per-token, no Max, no bridge worker) |
 | **Multi-step agent session** | drive Chrome, navigate + click + inspect + screenshot | agent loop (Claude Code subprocess / MCP session) | depends on driver model |
 
 Today both `read-drawing` and `browse` conflate these:
@@ -88,8 +88,8 @@ Today both `read-drawing` and `browse` conflate these:
 
 So the migration isn't "move the skill into sideclaw" wholesale — it's **split each skill into (a) the
 stateless vision/audio call, which becomes a cheap sideclaw HTTP tool, and (b) the orchestration, which
-stays where it makes sense.** sideclaw's worker model (Kimi-K2.6) is text-only and irrelevant here —
-these new tools are *direct fetches*, they never spawn a Kimi or Claude session.
+stays where it makes sense.** sideclaw's worker model (DeepSeek-V4-Pro) is irrelevant here —
+these new tools are *direct fetches*, they never spawn a bridge worker or Claude session.
 
 ## Direction 1 — `read-drawing` → sideclaw `read_image` / `read_drawing` tool
 

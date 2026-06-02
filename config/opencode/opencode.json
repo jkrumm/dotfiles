@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "iu/Kimi-K2.6",
-  "small_model": "iu/gpt-5-mini",
+  "model": "iu/DeepSeek-V4-Pro",
+  "small_model": "iu/DeepSeek-V4-Flash",
   "autoupdate": false,
   "instructions": [
     "~/.claude/CLAUDE.md",
@@ -76,6 +76,20 @@
           "reasoning": true,
           "attachment": true,
           "limit": { "context": 200000, "output": 32000 }
+        },
+        "DeepSeek-V4-Pro": {
+          "name": "DeepSeek V4 Pro (IU) — coding/worker default, EU (Azure Spain)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": true,
+          "limit": { "context": 1000000, "output": 64000 }
+        },
+        "DeepSeek-V4-Flash": {
+          "name": "DeepSeek V4 Flash (IU) — fast/cheap, EU (Azure Spain)",
+          "tool_call": true,
+          "reasoning": false,
+          "attachment": true,
+          "limit": { "context": 1000000, "output": 32000 }
         },
         "Kimi-K2.6": {
           "name": "Kimi K2.6 (IU)",

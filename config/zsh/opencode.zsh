@@ -8,7 +8,7 @@
 # hostname — only {env:IU_*} placeholders resolved here.
 #
 #   opencode                       launch TUI (default: iu-anthropic/claude-sonnet-4-6)
-#   opencode -m iu/Kimi-K2.6       pick any model (provider/model)
+#   opencode -m iu/DeepSeek-V4-Pro  pick any model (provider/model)
 #   opencode run "..."             one-shot prompt
 #   oc / ocr                       short aliases (oc = opencode, ocr = opencode run)
 

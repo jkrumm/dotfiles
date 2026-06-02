@@ -5,7 +5,7 @@ description: Deep technical research via sideclaw MCP tool — Context7, WebSear
 
 # Research — via sideclaw MCP
 
-`mcp__sideclaw__research` is **asynchronous** (runs as a background job on Kimi, off Max):
+`mcp__sideclaw__research` is **asynchronous** (runs as a background job on DeepSeek, off Max):
 
 1. Call `mcp__sideclaw__research` with `query` set to the user's question. Optionally pass `cwd` (defaults to $HOME) and `depth` (`quick` | `standard` | `deep`, default `standard`) → returns `{ jobId }`.
 2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes (loop while `stillRunning: true`).
