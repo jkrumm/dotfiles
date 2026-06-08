@@ -86,8 +86,11 @@ Adding a brew package: `brew install X` → `make brew-dump` → review diff →
 the machine.
 
 **Hardening** lives in `config/zsh/brew.zsh`: `HOMEBREW_REQUIRE_TAP_TRUST=1`
-(refuse untrusted third-party taps — bun + wtp are allow-listed via `brew trust`),
-`HOMEBREW_NO_INSECURE_REDIRECT=1`, `HOMEBREW_NO_ANALYTICS=1` (also `brew analytics
+(refuse untrusted third-party taps). `_setup-packages` auto-runs `brew trust` on exactly
+the taps the Brewfile declares **before** `brew bundle` — otherwise a declared-but-untrusted
+tap makes bundle refuse and abort the whole manifest on a fresh machine (this once silently
+skipped colima/docker). Self-maintaining: trust follows the vetted manifest, no hardcoded list.
+Other hardening: `HOMEBREW_NO_INSECURE_REDIRECT=1`, `HOMEBREW_NO_ANALYTICS=1` (also `brew analytics
 off`). Auto-*update* (metadata refresh) stays on; auto-*upgrade* is the npm-style
 risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`).
 

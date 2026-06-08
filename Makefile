@@ -97,6 +97,13 @@ _setup-packages:
 	@# Single source of truth for every brew-managed package (taps, formulae, casks).
 	@# Idempotent: installs only what is missing. npm-global + uv tools are installed
 	@# later by their own steps (they need Node/uv on PATH, not ready this early).
+	@# HOMEBREW_REQUIRE_TAP_TRUST=1 (config/zsh/brew.zsh) makes `brew bundle` REFUSE any
+	@# declared third-party tap that isn't trusted yet — which aborts the ENTIRE bundle on
+	@# a fresh machine (silently skipping colima/docker/etc.). Trust exactly the taps the
+	@# Brewfile declares first — self-maintaining, no hardcoded list, only the vetted manifest.
+	@grep -E '^tap "' $(DOTFILES_DIR)/Brewfile | sed -E 's/^tap "([^"]+)".*/\1/' | while read -r t; do \
+		brew trust "$$t" >/dev/null 2>&1 && echo "    · trusted tap $$t" || true; \
+	done
 	@brew bundle install --file=$(DOTFILES_DIR)/Brewfile --no-upgrade \
 		&& echo "    ✓ Brewfile satisfied" \
 		|| echo "    ✗ brew bundle failed — run: make brew-check"
@@ -515,6 +522,12 @@ _setup-colima:
 	@# Create the symlink now too (bootstrap's RunAtLoad also recreates it at boot).
 	@sudo ln -sf "$(HOME)/.colima/default/docker.sock" /var/run/docker.sock 2>/dev/null \
 		&& echo "    · /var/run/docker.sock → colima" || true
+	@# Migration aid: if OrbStack is still installed, Colima now drives Docker but OrbStack
+	@# lingers (and its stale /usr/local/bin/docker symlink shadows brew's). Don't auto-remove
+	@# here — the Mac Mini may hold live containers. Flag it; remove via `make orbstack-remove`.
+	@brew list --cask orbstack >/dev/null 2>&1 \
+		&& echo "    ! OrbStack still installed — migrate any containers, then run: make orbstack-remove" \
+		|| true
 
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy
@@ -758,6 +771,33 @@ colima-restart:
 colima-status:
 	@brew services list | grep -E '^colima' || echo "  colima service: not registered"
 	@colima status
+
+# Migrate off OrbStack → Colima. Guarded: refuses unless Colima is already running (so
+# Docker never goes down), and aborts if OrbStack still holds containers (override with
+# FORCE=1 once they're migrated or discarded). Also clears OrbStack's stale root-owned
+# /usr/local/bin/docker symlink, which otherwise shadows brew's docker. Needs sudo for that.
+.PHONY: orbstack-remove
+orbstack-remove:
+	@if ! brew list --cask orbstack >/dev/null 2>&1; then \
+		echo "  · OrbStack not installed — nothing to do"; exit 0; \
+	fi; \
+	if ! colima status >/dev/null 2>&1; then \
+		echo "  ✗ Colima not running — run 'make colima-start' first so Docker stays up"; exit 1; \
+	fi; \
+	if [ "$(FORCE)" != "1" ]; then \
+		n=$$(docker --context orbstack ps -aq 2>/dev/null | grep -c . || true); \
+		if [ -n "$$n" ] && [ "$$n" != "0" ]; then \
+			echo "  ✗ OrbStack still has $$n container(s) — migrate them, then re-run with FORCE=1"; exit 1; \
+		fi; \
+	fi; \
+	osascript -e 'quit app "OrbStack"' 2>/dev/null || true; \
+	brew uninstall --cask orbstack --zap && echo "  ✓ OrbStack uninstalled + zapped"; \
+	if [ -L /usr/local/bin/docker ] && ! readlink /usr/local/bin/docker | grep -q Cellar; then \
+		sudo rm -f /usr/local/bin/docker \
+			&& echo "  ✓ removed stale /usr/local/bin/docker symlink" \
+			|| echo "  ! couldn't remove /usr/local/bin/docker (sudo) — rm it manually"; \
+	fi; \
+	echo "  Done. Verify: docker context show (-> colima) && docker ps"
 
 # ============================================================================
 # Brew — Brewfile manifest (the git history of Brewfile is the supply-chain
@@ -1103,6 +1143,7 @@ help:
 	@echo "  make colima-stop     Stop the Docker runtime service"
 	@echo "  make colima-restart  Restart + apply current COLIMA_CPU/MEMORY ceilings"
 	@echo "  make colima-status   Show service + VM status"
+	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the cloud"
 	@echo "  audio-proxy (~/SourceRoot/audio-proxy, :7716). make setup no longer"
