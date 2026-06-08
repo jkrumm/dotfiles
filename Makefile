@@ -23,6 +23,7 @@ setup:
 	@echo ""
 	@$(MAKE) --no-print-directory _check-prereqs
 	@$(MAKE) --no-print-directory _setup-brew
+	@$(MAKE) --no-print-directory _setup-packages
 	@$(MAKE) --no-print-directory _setup-claude
 	@$(MAKE) --no-print-directory _setup-config
 	@$(MAKE) --no-print-directory _setup-hooks
@@ -90,6 +91,16 @@ _setup-brew:
 		echo "    ✓ Homebrew installed"; \
 	fi
 
+.PHONY: _setup-packages
+_setup-packages:
+	@echo "  Brew packages (Brewfile)..."
+	@# Single source of truth for every brew-managed package (taps, formulae, casks).
+	@# Idempotent: installs only what is missing. npm-global + uv tools are installed
+	@# later by their own steps (they need Node/uv on PATH, not ready this early).
+	@brew bundle install --file=$(DOTFILES_DIR)/Brewfile --no-upgrade \
+		&& echo "    ✓ Brewfile satisfied" \
+		|| echo "    ✗ brew bundle failed — run: make brew-check"
+
 .PHONY: _setup-claude
 _setup-claude:
 	@echo "  Claude Code..."
@@ -130,30 +141,12 @@ _setup-config:
 .PHONY: _setup-tools
 _setup-tools:
 	@echo "  Tools..."
-	@# jq — required by this Makefile itself
-	@brew list jq &>/dev/null || brew install jq
-	@echo "    ✓ jq $$(jq --version)"
-	@# gh — GitHub CLI (used by /pr skill)
-	@brew list gh &>/dev/null || brew install gh
-	@echo "    ✓ gh $$(gh --version | head -1)"
-	@# fzf — fuzzy finder (Ctrl+R, Ctrl+T, Alt+C)
-	@brew list fzf &>/dev/null || brew install fzf
-	@echo "    ✓ fzf $$(fzf --version)"
-	@# zoxide — smart cd (j command)
-	@brew list zoxide &>/dev/null || brew install zoxide
-	@echo "    ✓ zoxide $$(zoxide --version)"
-	@# wtp — git worktree manager
-	@brew list satococoa/tap/wtp &>/dev/null || brew install satococoa/tap/wtp
-	@echo "    ✓ wtp $$(wtp --version 2>/dev/null || echo ok)"
-	@# fnm — node version manager
-	@brew list fnm &>/dev/null || brew install fnm
-	@echo "    ✓ fnm $$(fnm --version)"
-	@# uv — Python runner (required by statusline.sh + fetch_usage.py)
-	@brew list uv &>/dev/null || brew install uv
-	@echo "    ✓ uv $$(uv --version)"
-	@# python@3.14 — ensure current version; remove older if no dependents
-	@brew list python@3.14 &>/dev/null || brew install python@3.14
-	@echo "    ✓ python $$(python3.14 --version 2>/dev/null || echo ok)"
+	@# Brew CLIs (jq gh fzf zoxide wtp fnm uv age python@3.14 bun) come from the
+	@# Brewfile via _setup-packages. Confirm they resolve; flag drift if not.
+	@for t in jq gh fzf zoxide wtp fnm uv age bun; do \
+		command -v $$t >/dev/null 2>&1 && echo "    ✓ $$t" || echo "    ✗ $$t [missing — run: make brew-check]"; \
+	done
+	@# python@3.14 ships from the Brewfile; prune older pythons if nothing depends on them
 	@for old in python@3.11 python@3.12 python@3.13; do \
 		if brew list "$$old" &>/dev/null; then \
 			if [ -z "$$(brew uses --installed "$$old" 2>/dev/null)" ]; then \
@@ -163,36 +156,22 @@ _setup-tools:
 			fi; \
 		fi; \
 	done
-	@# age — encryption for 1Password backup
-	@brew list age &>/dev/null || brew install age
-	@echo "    ✓ age $$(age --version)"
-	@# coderabbit — local code review CLI (used by /review and /ship skills)
-	@if command -v coderabbit >/dev/null 2>&1; then \
-		echo "    · coderabbit $$(coderabbit --version 2>/dev/null || echo ok)"; \
-	else \
-		brew install coderabbit 2>/dev/null || curl -fsSL https://cli.coderabbit.ai/install.sh | sh; \
-		echo "    ✓ coderabbit installed (run: coderabbit auth login)"; \
-	fi
-	@# fallow — project-graph static analyzer (dead code, dupes, complexity — replaces knip/jscpd)
+	@# coderabbit cask ships from the Brewfile; auth is a manual one-time step
+	@command -v coderabbit >/dev/null 2>&1 \
+		&& echo "    · coderabbit (run: coderabbit auth login)" \
+		|| echo "    ✗ coderabbit [missing — run: make brew-check]"
+	@# fallow — npm global (not brew: needs Node on PATH). Static analyzer for /analyze.
 	@if command -v fallow >/dev/null 2>&1; then \
-		echo "    · fallow $$(fallow --version 2>/dev/null | head -1) (ok)"; \
+		echo "    · fallow (ok)"; \
 	else \
 		npm install -g fallow 2>/dev/null || true; \
 		command -v fallow >/dev/null 2>&1 && echo "    ✓ fallow installed" || echo "    · fallow (use npx fallow as fallback)"; \
-	fi
-	@# bun — JS runtime (hooks, claude-cli skill)
-	@if command -v bun >/dev/null 2>&1; then \
-		echo "    · bun $$(bun --version) (ok)"; \
-	else \
-		echo "    Installing bun..."; \
-		curl -fsSL https://bun.sh/install | bash; \
-		echo "    ✓ bun installed"; \
 	fi
 
 .PHONY: _setup-caddy
 _setup-caddy:
 	@echo "  Caddy (local HTTPS reverse proxy)..."
-	@brew list caddy &>/dev/null || brew install caddy
+	@# caddy installed via Brewfile (_setup-packages); this step links config + runs the service
 	@echo "    ✓ caddy $$(caddy version 2>/dev/null | head -1)"
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/Caddyfile" \
@@ -221,8 +200,8 @@ _setup-caddy:
 			|| echo "    ✗ CA trust failed — re-run: sudo caddy trust"; \
 	fi
 	@echo "  dnsmasq (wildcard *.test → 127.0.0.1)..."
-	@brew list dnsmasq &>/dev/null || brew install dnsmasq
-	@echo "    ✓ dnsmasq installed"
+	@# dnsmasq installed via Brewfile (_setup-packages); this step configures + runs it
+	@echo "    ✓ dnsmasq present"
 	@# Add wildcard entry (idempotent)
 	@if grep -q "address=/.test/127.0.0.1" "$(BREW_PREFIX)/etc/dnsmasq.conf" 2>/dev/null; then \
 		echo "    · *.test wildcard (ok)"; \
@@ -240,8 +219,7 @@ _setup-caddy:
 	@sudo brew services restart dnsmasq >/dev/null 2>&1 \
 		&& echo "    ✓ dnsmasq service" \
 		|| echo "    ✗ dnsmasq service failed — check: sudo brew services list"
-	@# sleepwatcher fires wakeup.sh on sleep wake → caddy reload
-	@brew list sleepwatcher &>/dev/null || brew install sleepwatcher
+	@# sleepwatcher (from Brewfile) fires wakeup.sh on sleep wake → caddy reload
 	@brew services start sleepwatcher >/dev/null 2>&1 || brew services restart sleepwatcher >/dev/null 2>&1 || true
 	@echo "    ✓ sleepwatcher service"
 	@$(MAKE) --no-print-directory _link \
@@ -476,13 +454,11 @@ _setup-sideclaw-mcp:
 .PHONY: _setup-colima
 _setup-colima:
 	@echo "  Colima (Docker runtime — replaces OrbStack/Docker Desktop)..."
-	@# Docker CLI + Compose plugin + credential helper (osxkeychain) + lazydocker TUI + colima VM.
-	@# docker-credential-helper provides docker-credential-osxkeychain, which the
-	@# CLI needs because ~/.docker/config.json sets "credsStore": "osxkeychain"
-	@# (OrbStack used to supply this binary).
-	@for pkg in colima docker docker-compose docker-credential-helper lazydocker; do \
-		brew list $$pkg &>/dev/null || brew install $$pkg; \
-	done
+	@# colima + docker CLI + Compose plugin + credential helper (osxkeychain) + lazydocker
+	@# TUI all ship from the Brewfile (_setup-packages). docker-credential-helper provides
+	@# docker-credential-osxkeychain, which the CLI needs because ~/.docker/config.json sets
+	@# "credsStore": "osxkeychain" (OrbStack used to supply this binary). This step wires the
+	@# Compose plugin path, creates the VM, and installs the socket LaunchDaemon.
 	@echo "    ✓ colima $$(colima version 2>/dev/null | head -1 | sed 's/colima version //') · docker $$(docker --version 2>/dev/null | sed 's/Docker version //;s/,.*//')"
 	@# Wire the Compose plugin into the docker CLI search path (idempotent).
 	@mkdir -p "$(HOME)/.docker"
@@ -784,6 +760,32 @@ colima-status:
 	@colima status
 
 # ============================================================================
+# Brew — Brewfile manifest (the git history of Brewfile is the supply-chain
+# audit trail; see the Brewfile header). Brewfile is brew-native only
+# (taps + formulae + casks); npm/uv tools stay Makefile-managed.
+# ============================================================================
+
+.PHONY: brew-check
+brew-check:
+	@echo "  Checking machine against Brewfile..."
+	@brew bundle check --verbose --file=$(DOTFILES_DIR)/Brewfile
+
+.PHONY: brew-diff
+brew-diff:
+	@echo "  Installed but NOT declared in Brewfile (dry-run — review, then add or remove):"
+	@brew bundle cleanup --file=$(DOTFILES_DIR)/Brewfile
+
+.PHONY: brew-dump
+brew-dump:
+	@brew bundle dump --describe --formulae --casks --taps --force --file=/tmp/Brewfile.gen
+	@# Strip restart_service: service lifecycle is owned by the _setup-* config steps
+	@# (they handle root vs user correctly); the Brewfile stays install-only/declarative.
+	@sed -i '' 's/, restart_service: :changed//' /tmp/Brewfile.gen
+	@awk '/^[^#[:space:]]/{exit} {print}' $(DOTFILES_DIR)/Brewfile > /tmp/Brewfile.head
+	@cat /tmp/Brewfile.head /tmp/Brewfile.gen > $(DOTFILES_DIR)/Brewfile
+	@echo "  ✓ Brewfile regenerated — REVIEW THE DIFF: git -C $(DOTFILES_DIR) diff Brewfile"
+
+# ============================================================================
 # Clean — purge caches (brew, npm, pnpm, bun)
 # ============================================================================
 
@@ -895,7 +897,7 @@ _setup-localai:
 		uv pip install --quiet --python "$(MLX_AUDIO_PY)" supertonic \
 			&& echo "    ✓ supertonic installed"; \
 	fi
-	@brew list ffmpeg &>/dev/null && echo "    · ffmpeg (ok)" || (brew install ffmpeg >/dev/null 2>&1 && echo "    ✓ ffmpeg installed")
+	@command -v ffmpeg >/dev/null 2>&1 && echo "    · ffmpeg (ok)" || echo "    ✗ ffmpeg [from Brewfile — run: make brew-check]"
 	@# m4a STT patch — required for MacWhisper / Slack voice memos.
 	@# Detect by grepping for a unique post-patch marker (reverse dry-run was unreliable).
 	@PATCH="$(LOCALAI_DIR)/patches/mlx-audio-m4a-stt.patch"; \
@@ -1092,6 +1094,10 @@ help:
 	@echo "  make status             Verify symlink health + Keychain secrets"
 	@echo "  make github-config      Apply branch protection + merge settings + shared secrets to all repos"
 	@echo "  make github-config-dry  Preview without applying"
+	@echo ""
+	@echo "  make brew-check         Verify the machine matches the Brewfile (read-only)"
+	@echo "  make brew-diff          List installed packages not declared in the Brewfile (dry-run)"
+	@echo "  make brew-dump          Regenerate the Brewfile from the machine — then review the git diff"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"

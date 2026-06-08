@@ -64,13 +64,40 @@ Reboot-, brew-upgrade-, and colima-restart-safe (the symlink target path is stab
 Installing the daemon needs sudo (like the Caddy step). A GUI app that was already running
 during first install must be quit + relaunched once to retry the socket.
 
+## Homebrew (Brewfile + supply-chain hardening)
+
+All brew-managed packages are declared in **`Brewfile`** (repo root) — the single
+source of truth (full machine manifest: taps + formulae + casks). `make setup`
+installs from it in one `brew bundle install` step (`_setup-packages`), so the
+per-tool `brew install` lines are gone from the Makefile; each `_setup-*` step now
+only *configures* (links config, runs services, wires the VM). **npm-global and uv
+tools stay Makefile-managed** (fallow, litellm, etc.) — they need Node/uv on PATH,
+not ready that early in bootstrap — so the Brewfile is deliberately brew-native only.
+
+Keep it honest (the Brewfile's **git history is the supply-chain audit trail** —
+nothing joins the manifest without a reviewed diff):
+
+- `make brew-check` — verify machine == Brewfile (read-only).
+- `make brew-diff` — list installed-but-undeclared packages (dry-run).
+- `make brew-dump` — regenerate from machine (brew-native only; preserves the header), then **review the git diff** before committing.
+
+Adding a brew package: `brew install X` → `make brew-dump` → review diff → commit
+(or edit `Brewfile` → `brew bundle install`). Source of truth is the **file**, not
+the machine.
+
+**Hardening** lives in `config/zsh/brew.zsh`: `HOMEBREW_REQUIRE_TAP_TRUST=1`
+(refuse untrusted third-party taps — bun + wtp are allow-listed via `brew trust`),
+`HOMEBREW_NO_INSECURE_REDIRECT=1`, `HOMEBREW_NO_ANALYTICS=1` (also `brew analytics
+off`). Auto-*update* (metadata refresh) stays on; auto-*upgrade* is the npm-style
+risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`).
+
 ## Symlink Map
 
 | File here | Live path | Notes |
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, claude, git, keybindings, opencode, path, secrets, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, secrets, tools |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
 | `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
