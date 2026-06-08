@@ -21,17 +21,22 @@ Visx exposes low-level primitives so we can build exactly the chart we want. The
 
 1. **Is it the second instance of an existing pattern?** Extract a kind component into `charts/kinds/` and migrate both call sites. (Rule of Three: don't extract on the first, don't wait past the third.)
 2. **Is it genuinely unique (like a dual-panel MACD)?** Stay bespoke — compose the primitives directly. Keep it in the page's chart file, not in `charts/kinds/`.
-3. **Does it add a new semantic color / shape / sizing?** Add it to `tokens.ts` (`VX`), not inline.
+3. **Does it add a new color?** Add a `{light,dark}` pair to `palette.ts`, wire the var in `theme-vars.ts`, expose the `VX.*` ref in `tokens.ts` — never inline a hex. New non-color sizing goes straight in `tokens.ts`.
 
-## Tokens (`tokens.ts`)
+## Tokens & palette (CSS-variable architecture)
 
-Two concerns, separated:
+The mature pattern is **one palette data file → CSS custom properties → thin token refs**. Three layers, separated:
 
-- **Semantic palette** (`good / bad / warn / goodSolid / badSolid / grid / crosshair / …`) — theme-agnostic, used directly.
-- **Per-metric series colors** (`VX.series.hrv`, `.restingHr`, …) — also theme-agnostic, give each metric a stable identity.
-- **Theme-dependent neutrals** (line, axis, tooltip bg/text) — accessed via `useVxTheme()` which reads `ThemeContext`.
+1. **Palette data** (`palette.ts`): a designed hue set (e.g. Blueprint v6 — muted, UI-tuned, never raw Material/AntD/Tailwind defaults) plus every semantic/series/status entry as a per-theme `{ light, dark }` **pair**. Pure data: no React, no UI-lib import, no browser API. This is the single source of truth — the app's UI-chrome theme (Mantine/etc.) is reskinned from the *same* file so charts and chrome share one identity.
+2. **CSS variables** (`theme-vars.ts`): emits the pairs as `--vx-*` custom properties under the light/dark selectors the UI lib already toggles (e.g. `[data-mantine-color-scheme]`). Resolution is then pure CSS.
+3. **Tokens** (`tokens.ts`): `VX.*` are just `var(--vx-*)` strings (colors) plus non-color sizing constants.
 
-Per-theme pairs live on `VX` as `fooDark`/`fooLight`; `useVxTheme` resolves. Consumers **only** consume the resolved hook.
+Consequences worth internalizing:
+
+- Series colors are **not** theme-agnostic — a hue keeps its identity but shifts shade across themes (lighter on dark to avoid glow/bleed, deeper on light). The pair lives in `palette.ts`, not in two `fooDark`/`fooLight` keys on `VX`.
+- Because tokens are CSS vars, `VX.*` works identically in components **and** non-component files (`constants.ts`, `formulas.ts`) — no hook required. `useVxTheme()` is kept only as a back-compat convenience returning the same var refs.
+- Apply opacity with an `alpha(token, a)` helper (`color-mix(in srgb, token a%, transparent)`), never `rgba()` — the hue must keep resolving per scheme.
+- A **single palette source** makes a DEV-only theme lab trivial: override `--vx-*` on the root element to retune the whole app live, persist to localStorage, export values to bake back in.
 
 ## Kind components
 
@@ -48,12 +53,16 @@ A "kind" is a recurring chart shape reusable across datasets. Props are declarat
 
 ## Dark/light mode
 
-Theme reactivity is a `ThemeContext` — toggling updates charts live. `useVxTheme()` is the only correct way to read it. Palette entries that don't change between themes (semantic good/bad, series colors) live directly on `VX`.
+Theme reactivity is **pure CSS**: the `--vx-*` variables are redeclared under the light/dark selector, so toggling the UI lib's color scheme restyles every chart with no React re-render. Charts read `VX.*` (var refs) directly; `useVxTheme()` returns the same refs for back-compat. Don't branch on color scheme in JS, and never read `localStorage.getItem('theme')`.
+
+## Area gradients
+
+Soft single-hue fills under a line read as "modern" and are cheap to centralize: one `AreaGradient` primitive emitting a vertical `<linearGradient>` whose stops are `color-mix` of a CSS-var color, with global strength knobs (`--vx-area-top` / `--vx-area-bottom`). Default the fill **on** for plain metric lines and **off** when the chart already carries zone/threshold fills (avoid double-fill clutter). Keep stacked-area bands opaque — fading them to transparent leaks lower bands and hurts readability.
 
 ## Guardrails
 
 - `no-restricted-imports` bans `@visx/tooltip` in chart files (enforce in lint config).
-- Raw hex literals in chart files should be caught by review — oxlint doesn't support `no-restricted-syntax`, but once a rule exists in markdown and the primitives are ergonomic, the violation should look weird in diff.
+- **Enforce the palette mechanically.** oxlint has no `no-restricted-syntax`, so add a tiny guard script (scan chart + app source for raw hex / `rgb()` / `hsl()`, allow a `theme-allow` escape comment) and wire it into `lint`. A markdown rule alone drifts — a failing build doesn't. Exempt the palette/token files themselves.
 - `ChartCard`/`ChartLegend`/`ChartTooltip` contract is social/markdown-enforced. It's easier to compose them than work around them.
 
 ## Rule of thumb

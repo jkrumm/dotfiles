@@ -241,6 +241,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/upgrade-deps` | inline | Dependency upgrade assistant. |
 | `/excalidraw-diagram` | inline | Create Excalidraw diagrams. |
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
+| `/dataviz` | inline | Professional data-viz / chart styling (visx + Mantine, centralized palette). |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
