@@ -80,6 +80,14 @@ audio-proxy.test {
 	reverse_proxy localhost:7716
 }
 
+# photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
+# Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
+# Caddy streams SSE (/events/*) fine by default — no special flush config needed.
+photoflow.test {
+	import local
+	reverse_proxy localhost:7717
+}
+
 # free-planning-poker — web (Next.js), server (Bun WS), analytics (FastAPI),
 # logdy UI. Ports 7723-7726 reserved; 7724-7726 are logdy ingest sockets and
 # don't need .test hosts. Caddy auto-handles WebSocket upgrades for fpp-server.
