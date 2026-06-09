@@ -67,7 +67,7 @@ basalt-ui-playground-api.test {
 	reverse_proxy localhost:7713
 }
 
-# argo — dashboard on :7715, proxies /api internally to localhost:4000
+# argo — dashboard on :7715, Vite proxies /api internally to localhost:4040
 argo.test {
 	import local
 	reverse_proxy localhost:7715
