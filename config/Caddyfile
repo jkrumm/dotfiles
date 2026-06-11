@@ -66,6 +66,11 @@ basalt-ui-playground-api.test {
 	import local
 	reverse_proxy localhost:7713
 }
+# in-monorepo Mantine-pivot playground (apps/playground, @basalt-ui/playground)
+basalt-playground.test {
+	import local
+	reverse_proxy localhost:7714
+}
 
 # argo — dashboard on :7715, Vite proxies /api internally to localhost:4040
 argo.test {
