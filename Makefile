@@ -325,14 +325,57 @@ _setup-ssh:
 	@echo "  SSH config (~/.ssh/config)..."
 	@mkdir -p "$(HOME)/.ssh"
 	@chmod 700 "$(HOME)/.ssh"
-	@HOSTNAME=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
-	if [ -n "$$HOSTNAME" ]; then \
-		sed "s/__IUMAC_HOSTNAME__/$$HOSTNAME/" "$(DOTFILES_DIR)/config/ssh_config" > "$(HOME)/.ssh/config"; \
+	@IUMAC=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
+	MACMINI=$$(op read "op://Private/mac-mini-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
+	if [ -n "$$IUMAC" ]; then \
+		sed -e "s/__IUMAC_HOSTNAME__/$$IUMAC/" -e "s/__MACMINI_HOSTNAME__/$$MACMINI/" \
+			"$(DOTFILES_DIR)/config/ssh_config" > "$(HOME)/.ssh/config"; \
 		chmod 600 "$(HOME)/.ssh/config"; \
-		echo "    ✓ ~/.ssh/config written (iumac → $$HOSTNAME)"; \
+		echo "    ✓ ~/.ssh/config written (iumac → $$IUMAC, mac-mini → $${MACMINI:-unset})"; \
+		[ -z "$$MACMINI" ] && echo "    ! mac-mini hostname missing (op://Private/mac-mini-server/hostname)" || true; \
 	else \
 		echo "    ✗ Could not read iumac-server hostname from 1Password — skipping"; \
 	fi
+
+.PHONY: remote-access _setup-remote-access
+# Opt-in per machine — NOT in the default `setup` chain, because enabling an SSH
+# server is a deliberate per-host decision. Run `make remote-access` on a Mac you
+# want to control remotely (over Tailscale): installs trusted keys + key-only
+# sshd hardening; the Remote Login / Screen Sharing toggles are best-effort
+# (TCC/SIP usually require System Settings) and reachability is Tailscale-only.
+remote-access: _setup-remote-access
+_setup-remote-access:
+	@echo "  Remote access (SSH + Screen Sharing over Tailscale)..."
+	@mkdir -p "$(HOME)/.ssh"; chmod 700 "$(HOME)/.ssh"
+	@touch "$(HOME)/.ssh/authorized_keys"; chmod 600 "$(HOME)/.ssh/authorized_keys"
+	@# Install trusted public keys (append-if-missing; never clobbers existing keys).
+	@grep -E '^ssh-' "$(DOTFILES_DIR)/config/ssh/authorized_keys" | while IFS= read -r key; do \
+		grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
+	done; \
+	echo "    ✓ authorized_keys ($$(grep -cE '^ssh-' "$(HOME)/.ssh/authorized_keys" 2>/dev/null) trusted key(s))"
+	@# Key-only sshd hardening — only with at least one trusted key (avoid lockout).
+	@if ! grep -qE '^ssh-' "$(HOME)/.ssh/authorized_keys" 2>/dev/null; then \
+		echo "    ! sshd hardening skipped — no trusted keys (would lock out SSH)"; \
+	else \
+		DROPIN=/etc/ssh/sshd_config.d/200-hardening.conf; \
+		TMP=$$(mktemp); sed "s/__SSH_USER__/$$(id -un)/" \
+			"$(DOTFILES_DIR)/config/sshd/200-hardening.conf.template" > "$$TMP"; \
+		if sudo cmp -s "$$TMP" "$$DROPIN" 2>/dev/null; then \
+			echo "    · sshd hardening drop-in (ok)"; \
+		else \
+			sudo cp "$$TMP" "$$DROPIN" && sudo chown root:wheel "$$DROPIN" && sudo chmod 644 "$$DROPIN" \
+				&& echo "    ✓ sshd hardening installed (key-only, AllowUsers $$(id -un))" \
+				|| echo "    ✗ sshd hardening failed"; \
+		fi; \
+		rm -f "$$TMP"; \
+	fi
+	@# Toggles: TCC/SIP usually block enabling these from a CLI — best-effort, else manual.
+	@sudo launchctl enable system/com.apple.screensharing >/dev/null 2>&1 || true
+	@sudo systemsetup -setremotelogin on >/dev/null 2>&1 || true
+	@echo "    ↳ Verify: System Settings → General → Sharing → Remote Login ON, Screen"
+	@echo "      Sharing ON, 'Allow access for' = your user only, VNC password OFF."
+	@echo "    ↳ Reachable only via Tailscale (tag:mac ACL). Ensure NO router WAN"
+	@echo "      port-forward exists for 22/5900."
 
 .PHONY: _setup-rules
 _setup-rules:

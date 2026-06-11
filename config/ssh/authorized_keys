@@ -1,0 +1,6 @@
+# Trusted SSH public keys, installed into ~/.ssh/authorized_keys by
+# `make remote-access` (append-if-missing; never clobbers existing keys).
+# Public keys only — safe to commit. Keys are served by the 1Password SSH agent.
+#
+# jkrumm — personal 1Password SSH key (Mac mini + MacBook)
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMNsgZhHFzXUs7+T8jfw1gwBL3ECgsw0ClOMEZ8gykIo jkrumm

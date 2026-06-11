@@ -1,0 +1,16 @@
+# SSH hardening drop-in — installed to /etc/ssh/sshd_config.d/200-hardening.conf
+# by `make remote-access`. __SSH_USER__ is replaced with the local login user.
+#
+# Inbound SSH is key-only (public keys in ~/.ssh/authorized_keys, served by the
+# 1Password SSH agent on the client). The host is reachable only over Tailscale,
+# where the tag:mac ACL restricts source to your own Macs. macOS runs no
+# Tailscale SSH server, so this fronts native sshd.
+#
+# NOTE: macOS sets UsePAM yes (100-macos.conf), so BOTH PasswordAuthentication
+# and KbdInteractiveAuthentication must be off to actually disable passwords.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AllowAgentForwarding yes
+AllowUsers __SSH_USER__

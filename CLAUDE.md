@@ -126,11 +126,35 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 - `.claude/skills/localai/` — **RETIRED** (local mlx-audio / Fish S2 Pro stack, replaced by the cloud audio-proxy). Kept for an easy re-add.
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 
-**Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from `config/ssh_config` template; hostname injected from `op://Private/iumac-server/hostname`.
+**Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from the `config/ssh_config` template; the `iumac` and `mac-mini` host aliases get their hostnames injected from `op://Private/{iumac,mac-mini}-server/hostname` (keeps tailnet names out of git). `mac-mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password.
 
 **Not symlinked:** `~/.claude/settings.json` — machine-specific permissions.
 `make setup` creates from template if missing, otherwise jq-merges:
 template wins on structural keys (hooks, statusLine, plugins, env); permissions + model/effortLevel/alwaysThinkingEnabled preserved from live file.
+
+## Remote access (Mac mini, over Tailscale)
+
+The Mac mini is the always-on home base (Hermes + Feuer run here), reached from the
+MacBook over Tailscale — never the public internet. `make remote-access` (opt-in per
+machine, **not** in the default `setup` chain — enabling an SSH server is a deliberate
+per-host call) makes a Mac remotely controllable:
+
+- Installs trusted public keys from `config/ssh/authorized_keys` into `~/.ssh/authorized_keys`
+  (append-if-missing; public keys, safe to commit — served by the 1Password SSH agent).
+- Installs the key-only sshd hardening drop-in (`config/sshd/200-hardening.conf.template`
+  → `/etc/ssh/sshd_config.d/200-hardening.conf`, `__SSH_USER__` injected): no root, no
+  passwords (both `PasswordAuthentication` and `KbdInteractiveAuthentication` off —
+  required under macOS `UsePAM yes`), `AllowUsers <you>`, agent forwarding on. Guarded on
+  `authorized_keys` being non-empty so it can't lock out SSH.
+- Remote Login + Screen Sharing toggles are best-effort (TCC/SIP usually need System
+  Settings → General → Sharing); set "Allow access for" to your user only, VNC password off.
+
+Two boundaries gate access: the Tailscale ACL (`tag:mac → tag:mac` on 22/5900, in
+`homelab-private`) restricts the source to your own Macs, and sshd is key-only. Keep the
+router free of any WAN port-forward for 22/5900 — that would bypass both. **Work (Feuer)
+secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
+password), not a token at rest. The personal-side Hermes path will use a scoped 1Password
+service account (token in Keychain) — planned, not yet wired.
 
 ## Secrets Strategy
 

@@ -1,3 +1,11 @@
 Host iumac
     HostName __IUMAC_HOSTNAME__
     User johannes.krumm
+
+# Personal Mac mini (always-on home base — Hermes + Feuer live here). Reachable
+# over Tailscale (tag:mac ACL). ForwardAgent lets the Mac mini do git/ssh with
+# approval popping on this machine's 1Password.
+Host mac-mini
+    HostName __MACMINI_HOSTNAME__
+    User jkrumm
+    ForwardAgent yes
