@@ -3,8 +3,13 @@
 
 # [SERVICE ACCOUNT — disabled] export OP_SERVICE_ACCOUNT_TOKEN=$(security find-generic-password -a "$USER" -s "op-service-account-token" -w 2>/dev/null)
 
-# 1Password SSH agent — required for op-ssh-sign (git commit signing) and SSH key auth
-export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
+# 1Password SSH agent — required for op-ssh-sign (git commit signing) and SSH key auth.
+# Skip inside an SSH session ($SSH_CONNECTION set) so a forwarded agent (ForwardAgent)
+# wins — lets the always-on Mac mini do git/ssh with approval on the connecting
+# machine's 1Password. Local + Screen Sharing sessions still use the local agent.
+if [[ -z "$SSH_CONNECTION" ]]; then
+  export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
+fi
 
 # ANTHROPIC_* intentionally not exported — Claude Code would prefer API credits over subscription if set
 # export ANTHROPIC_API_KEY=$(security find-generic-password -a "$USER" -s "anthropic-api-key" -w 2>/dev/null)
