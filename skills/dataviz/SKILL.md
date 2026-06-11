@@ -7,6 +7,16 @@ This skill guides the design of data visualizations and analytics dashboards tha
 
 Use it when the user is building or restyling charts, picking a palette, or complains that charts look childish, inconsistent across tabs, or "AI default."
 
+## Check for a project DESIGN.md first (the law)
+
+Before applying any of the generic guidance below, look for a **`DESIGN.md` at the repo root**
+(the emerging Google-spec convention: YAML token front matter + Markdown prose; sibling to
+`AGENTS.md`/`CLAUDE.md`). If it exists, **it is the law** — this skill is only the _method_. Load
+it, obey its palette/token/restraint rules and its earned-color policy verbatim, and never
+introduce a color, scale, or pattern it forbids. This skill's defaults (Blueprint v6, single hue
+per metric, neutral structure) are what a _good_ DESIGN.md encodes — but the project file wins on
+every conflict. The reference instantiation is `~/SourceRoot/argo/DESIGN.md`.
+
 ## Aesthetic direction (decide first)
 
 Professional dataviz is **restraint**, not decoration. Commit to these before touching code:
