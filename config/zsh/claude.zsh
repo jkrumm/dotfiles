@@ -3,8 +3,10 @@
 # Usage: c [claude-args...]
 #
 # Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
-# automatically — no --plugin-dir needed. Workspace detection lives in skills
-# themselves (e.g. SourceRoot/IuRoot 1Password account routing).
+# automatically. Additionally, if the current git repo ships local plugins under
+# plugins/*/.claude-plugin (e.g. basalt-ui), they're loaded live via --plugin-dir so
+# skill edits apply without publishing — a no-op in repos without them. Workspace
+# detection lives in skills themselves (e.g. SourceRoot/IuRoot 1Password routing).
 
 c() {
   # Auto-sync Claude Code theme with macOS appearance (no "system" theme exists)
@@ -14,7 +16,19 @@ c() {
   jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
     && mv /tmp/.claude.json.tmp ~/.claude.json
 
-  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "$@"
+  # Local Claude Code plugin dev: load any plugins this repo ships under
+  # plugins/*/.claude-plugin live from disk, so SKILL.md edits apply without
+  # publishing. No-op outside such repos. (/N) = dirs-only + nullglob.
+  local -a plugin_args=()
+  local git_root pdir
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -n "$git_root" ]]; then
+    for pdir in "$git_root"/plugins/*/.claude-plugin(/N); do
+      plugin_args+=(--plugin-dir "${pdir:h}")
+    done
+  fi
+
+  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "$@"
 }
 
 # ── Off-Max `claude -p` transports ────────────────────────────────────────────
