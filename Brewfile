@@ -21,6 +21,8 @@ brew "aom"
 brew "python@3.14"
 # B2 Cloud Storage Command-Line Tools
 brew "b2-tools"
+# Limit max battery charge on Apple silicon (MacBook only — see `make batt-setup`)
+brew "batt"
 # Powerful, enterprise-ready, open source web server with automatic HTTPS
 brew "caddy"
 # Container runtimes on MacOS (and Linux) with minimal setup

@@ -367,6 +367,44 @@ _setup-remote-access:
 	@echo "    ↳ Reachable only via Tailscale (tag:mac ACL). Ensure NO router WAN"
 	@echo "      port-forward exists for 22/5900."
 
+.PHONY: batt-setup batt-limit batt-status
+# MacBook-only battery charge limiter (https://github.com/charlie0129/batt).
+# The binary ships via the Brewfile (harmless on a battery-less Mac like the
+# mac-mini); the root LaunchDaemon + charge cap are opt-in per machine and gated
+# below on the machine actually having an internal battery. The daemon runs with
+# --always-allow-non-root-access, so `batt limit` needs no sudo after setup.
+# Default cap 80% (long-term battery health); LIMIT=100 lifts it for a full
+# charge (e.g. before travel): `make batt-limit LIMIT=100`.
+# batt is keg-only (not symlinked into bin), so call it via its opt path.
+LIMIT ?= 80
+BATT := $(BREW_PREFIX)/opt/batt/bin/batt
+batt-setup:
+	@if ! pmset -g batt | grep -q InternalBattery; then \
+		echo "  batt: no internal battery (not a MacBook) — skipping."; exit 0; fi
+	@[ -x "$(BATT)" ] || { echo "  batt missing — run 'make setup' (Brewfile installs it)"; exit 1; }
+	@echo "  Battery charge limiter (batt)..."
+	@sudo brew services start batt >/dev/null 2>&1 || true
+	@sleep 1
+	@$(BATT) limit $(LIMIT) >/dev/null 2>&1 \
+		&& echo "    ✓ daemon running, charge limit set to $(LIMIT)%" \
+		|| echo "    ✗ failed to set limit — check the daemon (/tmp/batt.log)"
+	@# Daily reset agent: any boost (e.g. 100% via Raycast) expires next morning (09:00 → 80%).
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.batt-reset" PLIST_DIR="$(DOTFILES_DIR)/battery"
+	@# Raycast Script Commands: self-authored, no deps. Symlink the dir; Raycast must be pointed at it once.
+	@ln -sfn "$(DOTFILES_DIR)/raycast" "$(HOME)/.raycast-scripts" \
+		&& echo "    ✓ Raycast scripts → ~/.raycast-scripts (Battery Limit / Battery Status)"
+	@echo "    ↳ One-time in Raycast: Settings → Extensions → Script Commands →"
+	@echo "      Add Directories → ~/.raycast-scripts"
+batt-limit:
+	@if ! pmset -g batt | grep -q InternalBattery; then \
+		echo "  batt: no internal battery — nothing to do."; exit 0; fi
+	@$(BATT) limit $(LIMIT) >/dev/null 2>&1 \
+		&& echo "  ✓ charge limit set to $(LIMIT)%" \
+		|| { echo "  ✗ daemon not running — run 'make batt-setup' first"; exit 1; }
+batt-status:
+	@$(BATT) status 2>/dev/null || echo "  batt daemon not running — run 'make batt-setup'"
+
 .PHONY: _setup-rules
 _setup-rules:
 	@echo "  Rules (global → ~/.claude/rules/)..."
@@ -1194,6 +1232,10 @@ help:
 	@echo "  make colima-restart  Restart + apply current COLIMA_CPU/MEMORY ceilings"
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
+	@echo ""
+	@echo "  make batt-setup       MacBook-only: start the charge-limiter daemon + cap at 80% (LIMIT=N)"
+	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
+	@echo "  make batt-status      Show the battery charge-limiter status"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
 	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"

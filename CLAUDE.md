@@ -120,6 +120,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
 | `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, visx-charts) |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
+| `raycast/` | `~/.raycast-scripts` (dir symlink) | Raycast Script Commands (battery limiter). MacBook-only via `make batt-setup`; point Raycast at the dir once. |
 
 **Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):
 - `.claude/skills/localai/` — **RETIRED** (local mlx-audio / Fish S2 Pro stack, replaced by the VPS audio-gateway). Kept for an easy re-add.
@@ -154,6 +155,46 @@ router free of any WAN port-forward for 22/5900 — that would bypass both. **Wo
 secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
 password), not a token at rest. The personal-side Hermes path will use a scoped 1Password
 service account (token in Keychain) — planned, not yet wired.
+
+## Battery charge limiter (MacBook only)
+
+The MacBook holds its charge at a cap (default **80%**) to slow Li-ion wear, via
+[`batt`](https://github.com/charlie0129/batt) (charlie0129) — a root LaunchDaemon
+(`/Library/LaunchDaemons/cc.chlc.batt.plist`, started by `brew services`) that
+controls the SMC and reads its cap from `$(brew --prefix)/opt/batt/bin/batt`'s
+config (`{brew}/etc/batt.json`). The daemon runs with `--always-allow-non-root-access`,
+so `batt limit` needs no sudo after setup.
+
+The **binary** ships via the Brewfile (declared/audited like everything else; it's
+keg-only, hence called by its `opt/batt/bin` path), but it's harmless on a
+battery-less Mac. The **daemon + cap are opt-in per machine** — like `remote-access`,
+not in the default `setup` chain — and every target self-gates on the machine having
+an internal battery (`pmset -g batt | grep InternalBattery`), so they no-op on the
+Mac mini.
+
+`make batt-setup` wires three things on a MacBook (idempotent): the daemon + cap, a
+daily-reset LaunchAgent, and Raycast control.
+
+- **Daily auto-reset.** `battery/com.jkrumm.batt-reset.plist.template` → a user
+  LaunchAgent that runs `batt limit 80` at **09:00** daily (`RunAtLoad` false, so
+  installing it never clobbers a live boost). This is what makes a 100% boost
+  *temporary* — it expires the next morning. Changing the resting default means
+  editing both this plist's hardcoded `80` and the Makefile `LIMIT ?= 80`.
+- **Raycast control.** Self-authored **Script Commands** (no extension/build, no
+  deps — `raycast/battery-{limit,status}.sh`) symlinked as `~/.raycast-scripts`.
+  "Battery Limit" offers an 80/90/100 dropdown; "Battery Status" shows state.
+  One-time: point Raycast at the dir (Settings → Extensions → Script Commands → Add
+  Directories → `~/.raycast-scripts`).
+
+| Command | Purpose |
+|-|-|
+| `make batt-setup` | One-time per MacBook: daemon + 80% cap + daily-reset agent + Raycast symlink. `LIMIT=N` to set a different initial cap. |
+| `make batt-limit LIMIT=100` | Change the cap now (or just flip it in Raycast). Default `LIMIT=80`. |
+| `make batt-status` | Show charging state + current limits. |
+
+To remove entirely: `sudo brew services stop batt`,
+`launchctl unload ~/Library/LaunchAgents/com.jkrumm.batt-reset.plist`,
+`rm ~/.raycast-scripts`, then drop `brew "batt"` from the Brewfile (`brew uninstall batt`).
 
 ## Secrets Strategy
 
