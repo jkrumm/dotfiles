@@ -45,11 +45,12 @@ setup:
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-opencode
 	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
-	@# audio-proxy (~/SourceRoot/audio-proxy, :7716). Targets kept below for an
-	@# easy re-add; tear down a live install with `make localai-teardown`.
+	@# audio-gateway (~/SourceRoot/audio-gateway, VPS container). Targets kept
+	@# below for an easy re-add; tear down a live install with `make localai-teardown`.
+	@# _setup-audio-proxy RETIRED 2026-06-17 — macOS LaunchAgent replaced by the
+	@# VPS audio-gateway (audio-gateway.jkrumm.com). Target kept below for reference.
 	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
-	@$(MAKE) --no-print-directory _setup-audio-proxy
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -895,8 +896,8 @@ clean:
 # ============================================================================
 # LocalAI — mlx-audio (TTS + STT) on every Mac, bound to 127.0.0.1:8000
 # ----------------------------------------------------------------------------
-# RETIRED 2026-05-25 — superseded by the cloud audio-proxy (~/SourceRoot/
-# audio-proxy, :7716, _setup-audio-proxy). No longer run by `make setup`.
+# RETIRED 2026-05-25 — superseded by the VPS audio-gateway (~/SourceRoot/
+# audio-gateway, Docker container). No longer run by `make setup`.
 # Targets below are kept intact so the stack can be re-added later by
 # re-listing `_setup-localai` in the setup chain. To tear down a machine that
 # still has it installed, run `make localai-teardown`.
@@ -1089,7 +1090,7 @@ localai-teardown:
 		rm -f "$$PLIST"; \
 		echo "  ✓ $$label torn down (unloaded + plist removed)"; \
 	done
-	@echo "  Templates + venvs/models kept. Cloud audio-proxy (:7716) is the replacement."
+	@echo "  Templates + venvs/models kept. VPS audio-gateway is the replacement."
 
 # ============================================================================
 # LiteLLM — Anthropic↔OpenAI bridge for IU (DeepSeek-V4-Pro etc.), bound to 127.0.0.1:4000
@@ -1161,6 +1162,14 @@ _setup-usage-tracker:
 		echo "    · usage-tracker not cloned at $(SOURCEROOT)/usage-tracker — skipping"; \
 	fi
 
+# ============================================================================
+# audio-proxy — OpenAI-compatible audio proxy on 127.0.0.1:7716 (macOS LaunchAgent)
+# ----------------------------------------------------------------------------
+# RETIRED 2026-06-17 — superseded by the VPS audio-gateway (~/SourceRoot/
+# audio-gateway, Docker container at audio-gateway.jkrumm.com, reached over the
+# tailnet). No longer run by `make setup`. GitHub repo archived.
+# Target body kept intact for reference; re-add to the setup chain to restore.
+# ============================================================================
 _setup-audio-proxy:
 	@echo "  audio-proxy (IU audio STT/TTS proxy on 127.0.0.1:7716)..."
 	@if [ -f "$(SOURCEROOT)/audio-proxy/package.json" ]; then \
@@ -1198,9 +1207,10 @@ help:
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
 	@echo ""
-	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the cloud"
-	@echo "  audio-proxy (~/SourceRoot/audio-proxy, :7716). make setup no longer"
-	@echo "  installs it. make localai-teardown removes a live install."
+	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by audio-gateway."
+	@echo "  audio-proxy (:7716, macOS LaunchAgent) is RETIRED — replaced by the VPS"
+	@echo "  audio-gateway (audio-gateway.jkrumm.com). make setup no longer installs"
+	@echo "  either. make localai-teardown removes a live localai install."
 	@echo ""
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"

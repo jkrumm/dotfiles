@@ -73,16 +73,10 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
-# audio-proxy — OpenAI-compatible proxy in front of the IU unified audio
-# endpoint (STT + TTS). Point MacWhisper Base URL at https://audio-proxy.test/v1.
-audio-proxy.test {
-	import local
-	reverse_proxy localhost:7716
-}
-
 # audio-gateway — consolidated OpenAI-compatible audio service (STT + expressive
-# Gemini TTS) on :7714. Single source of truth for audio; replaces audio-proxy
-# (above, kept on :7716 until retired). Point local clients at https://audio-gateway.test/v1.
+# Gemini TTS) on :7714. Single source of truth for audio; VPS container reached
+# over the tailnet at audio-gateway.jkrumm.com; local dev on :7714.
+# Point local clients at https://audio-gateway.test/v1.
 audio-gateway.test {
 	import local
 	reverse_proxy localhost:7714
@@ -129,8 +123,8 @@ modelpick.test {
 }
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
-# :8002) was replaced by the cloud audio-proxy. Point MacWhisper Base URL at
-# https://audio-proxy.test/v1 instead (block above). Kept commented for an easy
+# :8002) was replaced by the VPS audio-gateway. Point local clients at
+# https://audio-gateway.test/v1 instead. Kept commented for an easy
 # re-add if the local stack ever returns.
 #
 # whisper.test {

@@ -26,14 +26,14 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 
 | Repo | Purpose |
 |-|-|
-| `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack (retired — see `audio-proxy`). Source of truth. |
+| `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack (retired — see `audio-gateway`). Source of truth. |
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
 | `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` tools, all running on DeepSeek-V4-Pro via a local LiteLLM bridge so workers never touch Max quota. (`implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
 | `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM bridge, Hermes, Feuer, OpenCode, audio-proxy) normalize into one `usage_record` table with central pricing; LaunchAgent ingests every 15 min. Staging layer for an eventual Argo dashboard. |
-| `audio-proxy` | OpenAI-compatible audio proxy on `:7716` (macOS LaunchAgent) in front of the IU unified audio endpoint. STT: downgrades `gpt-4o-transcribe` to `json` and synthesizes the rich envelope (timestamps) clients demand, plus language steering. TTS: passthrough, plus a native **Gemini 3.1 Flash** expressive pipeline (prep-LLM chunking → per-chunk synth → ffmpeg MP3/Opus, default voice Charon) that Hermes consumes. Logs usage to local SQLite (ingested by `usage-tracker`). |
+| `audio-gateway` | OpenAI-compatible audio service (STT + expressive Gemini TTS) — VPS Docker container at `audio-gateway.jkrumm.com`, reached over the tailnet. Consumed by Hermes (Mac mini) and Argo. Source at `~/SourceRoot/audio-gateway`. Replaces `audio-proxy` (macOS LaunchAgent on `:7716`, **RETIRED** 2026-06-17 — LaunchAgent removed, GitHub repo archived). |
 | `basalt-ui` | Tailwind v4 design system (NPM: `basalt-ui`). **Always commit separately from consumer apps.** |
 | `argo` | Personal API server + dashboard — the AI-agent backbone. Hermes and other agents call it to read TickTick tasks, Gmail, calendar (personal + work), Teams messages, Garmin health (HRV, sleep, recovery, daily metrics), strength training (workouts, e1RM, volume), and homelab/VPS state (UptimeKuma, Docker). Elysia + Bun + Postgres + Drizzle; OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
@@ -238,7 +238,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
 
 **Per-repo skills** that only load when Claude is started inside their repo:
-- `~/SourceRoot/dotfiles/.claude/skills/` — `/iu-endpoint` (validate IU endpoint + discover models); `/localai` (**retired** — local mlx-audio/Fish stack, replaced by the cloud audio-proxy)
+- `~/SourceRoot/dotfiles/.claude/skills/` — `/iu-endpoint` (validate IU endpoint + discover models); `/localai` (**retired** — local mlx-audio/Fish stack, replaced by the cloud audio-gateway)
 - `~/SourceRoot/hermes-agent/.claude/skills/` — `/hermes-validate`, `/hermes-update` (manage Hermes Agent)
 - Other SourceRoot repos with their own project skills (e.g. `homelab/.claude/skills/{audit,docs,upgrade-stack}/`, `vps/.claude/skills/{audit,docs}/`, `sideclaw/.claude/skills/claude-cli/`, `free-planning-poker/.claude/skills/release-fpp/`, `homelab-private/.claude/skills/prowlarr/`, `ticktick-raycast/.claude/skills/{raycast-extension,ticktick-api}/`).
 
