@@ -80,6 +80,14 @@ audio-proxy.test {
 	reverse_proxy localhost:7716
 }
 
+# audio-gateway — consolidated OpenAI-compatible audio service (STT + expressive
+# Gemini TTS) on :7714. Single source of truth for audio; replaces audio-proxy
+# (above, kept on :7716 until retired). Point local clients at https://audio-gateway.test/v1.
+audio-gateway.test {
+	import local
+	reverse_proxy localhost:7714
+}
+
 # photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
 # Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
 # Caddy streams SSE (/events/*) fine by default — no special flush config needed.
@@ -112,6 +120,12 @@ fpp-analytics.test {
 fpp-logdy.test {
 	import local
 	reverse_proxy localhost:7723
+}
+
+# modelpick — model-choice decider/dashboard (TanStack Start, SSR) on :7727.
+modelpick.test {
+	import local
+	reverse_proxy localhost:7727
 }
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
