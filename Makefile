@@ -40,6 +40,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-viteplus
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-sdk-keys
+	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
@@ -510,6 +511,23 @@ _setup-sideclaw-mcp:
 		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
 	fi
 
+# research-gateway is a REMOTE HTTP MCP (research.jkrumm.com/mcp) — unlike the
+# stdio servers above, it needs a bearer token. The secret never lands in git:
+# resolve it from 1Password at provision time and pass it to `claude mcp add`,
+# which writes the resolved header into ~/.claude.json (untracked). Re-run after
+# rotating op://vps/research-gateway/API_SECRET. Runs after _setup-op-token so op is authed.
+.PHONY: _setup-research-gateway-mcp
+_setup-research-gateway-mcp:
+	@echo "  research-gateway MCP (remote HTTP — bearer via 1Password)..."
+	@TOKEN="$$(op read --account tkrumm op://vps/research-gateway/API_SECRET 2>/dev/null)"; \
+	if [ -n "$$TOKEN" ]; then \
+		claude mcp remove research-gateway --scope user 2>/dev/null || true; \
+		claude mcp add research-gateway --scope user --transport http https://research.jkrumm.com/mcp --header "Authorization: Bearer $$TOKEN"; \
+		echo "    ✓ research-gateway MCP registered (research tool)"; \
+	else \
+		echo "    · could not read op://vps/research-gateway/API_SECRET — skipping (op not authed?)"; \
+	fi
+
 .PHONY: _setup-colima
 _setup-colima:
 	@echo "  Colima (Docker runtime — replaces OrbStack/Docker Desktop)..."
@@ -747,6 +765,12 @@ status:
 		echo "    ✓ sideclaw MCP registered"; \
 	else \
 		echo "    ✗ sideclaw MCP [not registered — run make setup]"; \
+	fi
+	@echo "  research-gateway MCP"
+	@if claude mcp list 2>/dev/null | grep -q "research-gateway"; then \
+		echo "    ✓ research-gateway MCP registered"; \
+	else \
+		echo "    ✗ research-gateway MCP [not registered — run make setup]"; \
 	fi
 	@echo "  usage-tracker"
 	@if [ ! -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
