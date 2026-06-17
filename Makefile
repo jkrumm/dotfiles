@@ -645,6 +645,8 @@ status:
 		|| echo "    ✗ TAVILY_API_KEY [not cached — run make setup]"
 	@echo "  Rules"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/rules"
+	@echo "  Agents"
+	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/agents"
 	@echo "  OpenCode"
 	@if command -v opencode >/dev/null 2>&1 || [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
 		echo "    ✓ opencode binary"; \
