@@ -30,12 +30,11 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
-| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` / `implement` tools, all running on DeepSeek-V4-Pro (EU/GDPR) via a local LiteLLM bridge so workers never touch Max quota. Hosts notes and Excalidraw integration. |
+| `sideclaw` | Claude Code MCP daemon — `check` / `review` / `research` tools, all running on DeepSeek-V4-Pro via a local LiteLLM bridge so workers never touch Max quota. (`implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
 | `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM bridge, Hermes, Feuer, OpenCode, audio-proxy) normalize into one `usage_record` table with central pricing; LaunchAgent ingests every 15 min. Staging layer for an eventual Argo dashboard. |
 | `audio-proxy` | OpenAI-compatible audio proxy on `:7716` (macOS LaunchAgent) in front of the IU unified audio endpoint. STT: downgrades `gpt-4o-transcribe` to `json` and synthesizes the rich envelope (timestamps) clients demand, plus language steering. TTS: passthrough, plus a native **Gemini 3.1 Flash** expressive pipeline (prep-LLM chunking → per-chunk synth → ffmpeg MP3/Opus, default voice Charon) that Hermes consumes. Logs usage to local SQLite (ingested by `usage-tracker`). |
 | `basalt-ui` | Tailwind v4 design system (NPM: `basalt-ui`). **Always commit separately from consumer apps.** |
-| `basalt-ui-playground` | Component preview / dev environment for basalt-ui. |
 | `argo` | Personal API server + dashboard — the AI-agent backbone. Hermes and other agents call it to read TickTick tasks, Gmail, calendar (personal + work), Teams messages, Garmin health (HRV, sleep, recovery, daily metrics), strength training (workouts, e1RM, volume), and homelab/VPS state (UptimeKuma, Docker). Elysia + Bun + Postgres + Drizzle; OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
@@ -130,54 +129,54 @@ Helper lives in `~/.zsh/conf.d/secrets.zsh`. Skills that touch 1Password (`/secr
 State the question, list 2 options with tradeoffs, give tendency, ask.
 
 ### No Attribution
-Never add AI or tool attribution to any artifact — code comments, commits, PR descriptions, docs. This includes Claude, CodeRabbit, SonarQube, Copilot, or any other tooling. See `~/.claude/rules/attribution.md`.
+Never add AI/tool attribution to any artifact (code, commits, PRs, docs). Full rule: always-on `~/.claude/rules/attribution.md`.
 
 ---
 
 ## Token Efficiency
 
 ### Orchestrator role
-The main session is the **orchestrator**. Keep its context clean: hold the plan, the user's intent, and the cross-skill state. Push verbose work (logs, diffs, fetch bodies, test output) into one of the four execution modes below. The orchestrator **decides and verifies** — it should not be the thing grinding through reads, multi-file edits, and validation loops. Delegate by default (see **Offloading discipline** below). **Don't switch the orchestrator's model mid-session** — that invalidates the prompt cache for at least one turn and is the biggest avoidable cost in a long conversation.
+The main session is the **orchestrator**. Keep its context clean: hold the plan, the user's intent, and the cross-skill state. Push verbose work (logs, diffs, fetch bodies, test output) into one of the execution modes below. The orchestrator **decides and verifies** — it should not be the thing grinding through reads, multi-file edits, and validation loops. Delegate by default (see **Offloading discipline** below). **Don't switch the orchestrator's model mid-session** — that invalidates the prompt cache for at least one turn and is the biggest avoidable cost in a long conversation.
 
-### Four execution modes for skills
+### Execution modes
 
-> The **why** behind this framework (model tiers, the cache argument, EU/GDPR routing) is consolidated in `modelpick/docs/decisions/execution-modes.md`. The directives below are the operational contract — keep them here.
+> The **why** behind this framework (model tiers, the cache argument) is consolidated in `modelpick/docs/decisions/execution-modes.md`. The directives below are the operational contract — keep them here.
 
-| Mode | When to use | Cost profile |
+| Mode | When to use | Cost / notes |
 |-|-|-|
-| **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that benefit from session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the current session model. Zero switch cost. Output lands in main context — keep it short. |
-| **subprocess** (`claude -p` shelled from the skill body via the `claude_iu` / `claude_bridge` zsh helpers in `claude.zsh` — never hand-rolled env blocks) | Read-heavy work with large isolated output that doesn't need structured guarantees: `analyze`. | Free of Max quota (IU per-token). Output fully isolated. Cold spawn ~500ms. No prompt cache reuse across calls. `claude_iu` = IU native Anthropic transport (Claude models like haiku); `claude_bridge` = LiteLLM bridge → DeepSeek-V4-Pro / -Flash (EU/GDPR, Azure Spain), used for EU-bound subprocess work (`analyze` runs on `DeepSeek-V4-Flash`). |
-| **MCP (sideclaw)** | Heavy work that benefits from JSON-schema output: `check`, `review`, `research`, `implement`, `otel`. | Schema-validated structured output (`runSession` Zod-validates worker output via `zodValidator` — the worker ignores `--json-schema`). Workers run on DeepSeek-V4-Pro (EU) via the LiteLLM bridge — IU per-token billing, zero Max quota. Best for things `/ship` parses programmatically. **`check`/`review`/`research`/`implement` are async** — see the async-job contract below. |
-| **fork** (`context: fork`) | Wrap deferred MCP tools whose responses are token-heavy: `browse` (chrome-devtools). | Burns Max quota (uses Agent tool). Use only when sideclaw can't host the MCP and inline output would bloat main. |
+| **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that need session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the session model. Output lands in main context — keep it short. |
+| **native subagent** (`Agent` tool / `~/.claude/agents/`) | The primary offload. `@implementer` (Sonnet, settled implementation), `Explore` (Haiku, read-only search), an Opus subagent (novel-hard logic). | On Max but **own prompt cache** — no orchestrator-cache penalty. Fresh isolated context; returns a summary; edits hit the live checkout. |
+| **MCP (sideclaw)** | Heavy work that benefits from schema-validated output, off Max: `check`, `review`, `research`, `otel`. | DeepSeek-V4-Pro via the LiteLLM bridge — zero Max quota; `runSession` Zod-validates the output. **Async** — see the job contract below. |
+
+*Niche:* `/analyze` shells `claude_bridge` (DeepSeek subprocess, isolated output, off Max); `/browse` forks chrome-devtools (deferred MCP, on Max). Details live in those two skills.
 
 ### Routing decisions
-- Does the skill need the orchestrator's conversation context? → **inline**
-- Is the work fully describable by inputs and the output verbose? → **subprocess**
-- Do callers parse the output programmatically, or does the run last >30s? → **MCP (sideclaw)**
-- Does it need a live MCP server the main session has registered (e.g. chrome-devtools)? → **fork**
-
-**Never** put `model: haiku|sonnet` in skill frontmatter when the skill body already shells out to `claude -p` with its own `--model` flag — that creates a redundant main-thread switch for trivial orchestration.
+- Needs the orchestrator's conversation context? → **inline**
+- Settled, self-contained, verifiable work to keep off the orchestrator's context? → **native subagent** (`@implementer` / `Explore` / Opus)
+- Parsed output, or a long (>30s) verifiable run you want off Max? → **MCP (sideclaw)**
 
 ### Offloading discipline — delegate by default
 
-The orchestrator's turns are the scarcest, most expensive resource (Max quota + context). **Bias hard toward pushing work off it.** Before doing multi-file edits, deep reads, or validation inline, ask: *can a DeepSeek worker or subagent do this and hand back only the conclusion?* If the work is fully describable by inputs and the output is verbose, it belongs in a worker.
+**Bias hard toward pushing work off the orchestrator** (the *Orchestrator role* above is the why). Before doing multi-file edits, deep reads, or validation inline, ask: *can a worker or subagent do this and hand back only the conclusion?* If the work is fully describable by inputs and the output is verbose, delegate it.
 
 Delegate-by-default rules:
-- **Mechanical edits with a settled plan → `mcp__sideclaw__implement`** (DeepSeek, off Max). Don't hand-edit 3+ files yourself once the plan is clear — write the task + context, offload, review the returned diff. **It's a literal executor:** it does exactly what the spec says, no more — so give acceptance criteria + exact file paths + the precise mapping/shape. Vague specs get vague results. **Fitness check before routing:** offload only work that is (a) fully specified, (b) independently verifiable, and (c) latency-tolerant — a worker run is 10–20 min wall-clock even for ~50-line changes, so it's worth it *only* when you parallelize other work alongside it. Small (1-2 file), coupled, or latency-sensitive edits stay inline; don't sit and wait on a worker. Verify every returned line against source before committing — the worker's report is not a substitute for review. **On non-Node repos (Python/uv, Rust, Go), pass `validateCmd`** (the exact self-verify command, e.g. `.venv/bin/pyrefly check && .venv/bin/pytest -q`) — without it the worker burns its whole turn budget, and may hit the 20-min timeout, hunting for the test runner before its edits ever validate.
+- **Settled multi-file edits → the native `@implementer` subagent** (Sonnet 4.6, effort `high`; defined at `~/.claude/agents/implementer.md`). It runs on Max but in its **own prompt cache** — switching model *inside* a named subagent does **not** invalidate the Opus orchestrator's cache (only forks share the parent's), so the "never switch the orchestrator's model mid-session" rule does not apply here. It loads the full CLAUDE.md hierarchy, so it writes house-style code an external worker can't. Give it a complete brief — exact paths, the change/shape, acceptance criteria, intent, scope limits; it's a literal executor *with judgment*, not a planner. **Fitness check:** delegate work that is (a) fully specified and (b) independently verifiable — the latency term is **gone** (Sonnet returns in seconds-to-minutes, not the 10–20 min DeepSeek async), so offload to protect orchestrator **context**, not to save quota. Small/coupled/tight-iteration edits stay inline. It runs the repo's own validators itself; still verify every returned line against source before committing — the report is a claim, not proof.
 - **Any validation → `mcp__sideclaw__check`.** Never run format/lint/tsc/test loops inline. It auto-detects Node/Bun, Python/uv, Makefile, Rust, and Go; on non-Node repos pass `commands` (e.g. `['.venv/bin/ruff check', '.venv/bin/pytest -q']`) to skip ecosystem discovery.
 - **Code review → `/review`** (`mcp__sideclaw__review`, off Max, dynamic angle router).
 - **Library/API/version questions → `/research`** (`mcp__sideclaw__research`). Never answer from memory (see `research-first` rule).
 - **Exploration → `Agent` (Explore subagent).** Never read 10 files into the orchestrator to find one thing.
 - **Anything past a one-line edit → reach for `/implement`.** It encodes the tier scaling and the delegation choices — don't reinvent that judgment ad hoc.
 
-**sideclaw async-job contract (important).** `mcp__sideclaw__{check,review,research,implement}` are **asynchronous**: the call returns `{ jobId, status }` immediately — **not** the result. The job runs in sideclaw's always-on HTTP server (durable across `/mcp` reconnects) on DeepSeek, off Max. To get the result:
+**Reaching `@implementer` (native subagent vs the `/implement` skill).** The Opus orchestrator *can* auto-delegate to `@implementer` by `description` match, but auto-delegation is unreliable — it often just does the work inline. Fire it deterministically via **explicit `@implementer`** or **`/implement`** (which invokes it at its implement step). The two are **complementary, not competing** — there is no native "auto-run a workflow for everything" (workflows / `ultracode` are explicit opt-in), so hand-orchestrating isn't fighting a smarter native path. Division of labor: small fully-specified edit → inline or `@implementer`; multi-step feature needing research-gating + validation → `/implement`; independent parallel groups → parallel `@implementer` on disjoint file groups. Don't run the full `/implement` pipeline on a one-file change. **Research reaches the worker via the brief first** — a subagent can't see research you already did, so bake resolved library facts (versions / signatures / imports) into the brief; the implementer's own `/research` (Skill → sideclaw → Context7) is a conditional fallback for what the brief omits. Its `description` deliberately omits "use proactively" so the literal-executor never grabs under-specified or mid-planning work.
+
+**sideclaw async-job contract (important).** `mcp__sideclaw__{check,review,research}` are **asynchronous**: the call returns `{ jobId, status }` immediately — **not** the result. The job runs in sideclaw's always-on HTTP server (durable across `/mcp` reconnects) on DeepSeek, off Max. To get the result:
 1. Submit → note the `jobId`.
 2. Call **`mcp__sideclaw__job_wait({ jobId })`** — it blocks ~50s with heartbeats and returns the result when the job finishes. If it returns `stillRunning: true`, call it again with the same `jobId` (loop until false). Use `job_status` for a non-blocking peek while doing other work.
 3. Read `result` (the tool's structured output) when `status: "done"`; read `error` on `"failed"`/`"interrupted"`.
 
 This is what makes long (10-min+) offload safe — a worker run never blocks/destabilizes the MCP transport. **Parallel fan-out:** submit N jobs in one turn (each returns a jobId), then `job_wait` each; a global concurrency cap queues the excess so you can't 429 the bridge. Don't treat the submit call as the answer.
 
-**File ownership while a job runs.** Treat a running `implement` job as the *exclusive owner* of the files it touches until it reaches a terminal state. Do NOT run your own validation (`check`, a test suite, a build) over those paths while the job is still editing — you'll race its half-written intermediate state and hit spurious failures (a fixture `FileExistsError`, a type error mid-edit) that vanish once it settles. Parallelize on *disjoint* files only; for the job's own files, wait for `done` before touching or validating them. If a job's `status` stays `running` long past when you expect (the result is opaque mid-flight — there's no per-turn progress signal yet), don't trust the lifecycle blindly: peek at the files/`git status` to see whether the work actually landed.
+**File ownership while an `@implementer` subagent runs.** A running `@implementer` subagent is the *exclusive owner* of the files it touches until it returns — its `Edit`/`Write` land in your **live checkout** by default. Do NOT run your own validation (`/check`, a test suite, a build) or edits over those paths mid-flight — you'll race its half-written state and hit spurious failures that vanish once it settles. Parallelize implementers on *disjoint* files only. (sideclaw's remaining `check`/`review`/`research` jobs are read-only, so this caveat doesn't apply to them.)
 
 The orchestrator holds the plan and the verdicts, not the raw material.
 
@@ -187,7 +186,7 @@ Cheapest parallelism first — escalate a tier only when the one below can't do 
 
 | Tier | Mechanism | Max cost | Use when |
 |-|-|-|-|
-| 1 | **Parallel `mcp__sideclaw__*` calls in one turn** | ~0 (DeepSeek workers) | Independent verifiable work: check N repos, review + research at once, implement N independent file groups. The default for fan-out. |
+| 1 | **Parallel `mcp__sideclaw__*` calls in one turn** | ~0 (DeepSeek workers) | Independent verifiable work: check N repos, review + research at once. The default for fan-out. |
 | 2 | **subprocess** (`claude_iu` / `claude_bridge`) | ~0 (IU per-token) | Read-heavy isolated output. |
 | 3 | **Background `Agent`** (`run_in_background: true`) driving sideclaw MCP tools | Moderate (thin Max orchestrator) | Long, multi-step work you want to detach from and resume (`SendMessage`). Keep the bg agent thin — it delegates to DeepSeek workers, doesn't grind itself. |
 | 4 | **Foreground `Agent` / subagent on Opus** | Full Max (isolated cache) | Novel hard logic needing the best model. |
@@ -195,19 +194,11 @@ Cheapest parallelism first — escalate a tier only when the one below can't do 
 
 Key facts:
 - **Parallel MCP calls are free parallelism** — emit several `mcp__sideclaw__*` tool_use blocks in a single turn; they run as concurrent DeepSeek workers while the orchestrator just awaits. Under-used — prefer it over serial calls whenever the units are independent.
+- **Implementation fan-out is parallel `@implementer` (Sonnet) subagents** on *disjoint* file groups — N× Sonnet on Max (detachment, not free); the retired sideclaw `implement` is no longer a lane.
 - **Background agents and agent teams run on Max** — they buy detachment and coordination, not cheap parallelism. A background agent that fans out to sideclaw MCP keeps its own Max cost low.
-- **Worktree isolation is an up-front, orchestrator-level decision — not something `/implement` does mid-flow.** If a task needs an isolated branch (parallel streams, risky change), create the worktree at the start (`wtp add <branch>`) and run the *whole* session there — orchestrator and every sideclaw worker (they inherit the `cwd` you pass) work in the same tree. Don't spawn worktree-isolated sub-agents ad hoc; that splits work across trees you then have to reconcile.
+- **Worktree isolation is opt-in and up-front — only when you ask for it.** Subagent edits hit your live checkout by default (see *File ownership* above). If a task needs an isolated branch (parallel streams, a risky change), say so at the start: use Claude Code's native worktree feature for the session, or set `isolation: worktree` on a one-off `Agent` call. Don't spawn worktree-isolated sub-agents ad hoc mid-flow; that splits work across trees you then have to reconcile.
 - **`Task*` tools** (TaskCreate/List/Update) are a built-in coordination layer (lead creates, workers claim, deps unblock) — not MCP-backed, they don't reach sideclaw.
 - **Routines / `/schedule`** run in Anthropic's cloud and **cannot reach the local sideclaw MCP** (localhost) or the LiteLLM bridge — don't route sideclaw offload through them.
-
-### API offloading (manual)
-For ad-hoc heavy work outside a skill. Use `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`) and strip any inherited key: with a logged-in Max session the `claude` CLI sends its Max OAuth bearer to the IU gateway → 401. `AUTH_TOKEN` forces `Authorization: Bearer <IU-token>`, which the gateway accepts and which takes precedence over the login.
-```bash
-env -u ANTHROPIC_API_KEY \
-ANTHROPIC_AUTH_TOKEN=$(security find-generic-password -s claude-sdk-api-key -w) \
-ANTHROPIC_BASE_URL=$(security find-generic-password -s claude-sdk-base-url -w) \
-  claude -p --model haiku "task here"
-```
 
 ### File reading
 Read files with purpose. Use Grep to locate relevant sections before reading entire large files. Never re-read a file you've already read in this session. For files over 500 lines, use offset/limit.
@@ -231,11 +222,11 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/review` | MCP (sideclaw) | Multi-angle review (dynamic angle router) + CodeRabbit CLI. `--deep` adds native correctness + security on Max. |
 | `/research <query>` | MCP (sideclaw) | Context7 + Tavily + curl with cross-verification (runs on DeepSeek-V4-Pro). |
 | `/grill` | inline | Question until clear direction, generate PRD. |
-| `/implement` | inline (sonnet subagent) | Guided implementation; tiers scale to parallel sideclaw offload + subagents. |
+| `/implement` | inline | Guided implementation; inline orchestration delegating execution to the native `@implementer` Sonnet subagent (replaces the retired sideclaw implement). |
 | `/browse` | fork (haiku) | Chrome DevTools debugging. |
-| `/analyze` | subprocess (haiku) | Deep static analysis (fallow). |
+| `/analyze` | subprocess | Deep static analysis (fallow + `claude_bridge` → DeepSeek). |
 | `/otel [env] [intent]` | MCP (sideclaw) | Debug OTEL traces/logs/metrics in ClickHouse (worker uses `query.py`, kept in dotfiles). |
-| `/read-drawing` | subprocess (haiku) | Interpret Excalidraw + parse JSON. |
+| `/read-drawing` | MCP (sideclaw) | Interpret Excalidraw (gemini-3.5-flash vision + structural JSON parse). |
 | `/secrets` | inline | 1Password vault ops (uses `op_account_for_cwd`). |
 | `/cloudflare` | inline | Cloudflare config (uses `op_account_for_cwd`). |
 | `/upgrade-deps` | inline | Dependency upgrade assistant. |
@@ -267,16 +258,8 @@ Or just `/ship` — auto-detects state. `/pr create` errors on default branch, p
 
 ## Shell Commands
 
-Git worktree management via **wtp** (`brew install satococoa/tap/wtp`):
-
-| Command | Purpose |
-|-|-|
-| `wtp add <branch>` | Create worktree with hooks |
-| `wtp cd <name>` | Navigate to worktree |
-| `wtp remove <name> --with-branch` | Remove worktree + branch |
-| `gback` | Alias for `git reset --soft HEAD~1` |
-
-Worktrees land at `<repo>.worktrees/<branch>` — adjacent to the repo, so the 1Password routing helper still resolves the right account via the worktree's main repo path.
+- `gback` — alias for `git reset --soft HEAD~1`.
+- **Worktrees:** use Claude Code's **native** worktree feature, and only when explicitly requested up front (see *Worktree isolation* above). Not `wtp`.
 
 ### Node.js runtime
 Use **fnm**, not nvm, for Node version management. Ensure you don't suggest nvm commands or rely on nvm-specific paths.
@@ -295,7 +278,7 @@ Use **fnm**, not nvm, for Node version management. Ensure you don't suggest nvm 
 
 ### Validation
 - Check `package.json` (or repo Makefile) for available scripts.
-- Use `/check` for validation (sideclaw MCP — schema-validated, runs on the DeepSeek-V4-Pro EU bridge).
+- Use `/check` for validation (sideclaw MCP — schema-validated, runs on the DeepSeek-V4-Pro bridge).
 - Fix errors in changed files only (don't refactor untouched code).
 - I validate running apps manually (don't run `dev` servers for me).
 

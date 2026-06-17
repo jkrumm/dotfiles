@@ -1,3 +1,8 @@
+---
+description: visx charting conventions — ChartCard/ChartLegend/ChartTooltip primitives, kind-registry, centralized CSS-variable palette + tokens, theme reactivity
+paths: ["**/charts/**", "**/*chart*.tsx", "**/*chart*.ts", "**/*Chart*.tsx", "**/*Chart*.ts"]
+---
+
 # Visx Charts — Library Conventions
 
 Applies to any project using [visx](https://airbnb.io/visx) for charting. Keeps charts visually consistent and makes AI contributions predictable. Project-specific primitives/tokens live alongside the project — this file captures the discipline.

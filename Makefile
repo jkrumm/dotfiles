@@ -42,6 +42,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-sdk-keys
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-rules
+	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-opencode
 	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
 	@# audio-proxy (~/SourceRoot/audio-proxy, :7716). Targets kept below for an
@@ -383,6 +384,13 @@ _setup-rules:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/rules" \
 		DST="$(CLAUDE_DIR)/rules"
+
+.PHONY: _setup-agents
+_setup-agents:
+	@echo "  Agents (global → ~/.claude/agents/)..."
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/agents" \
+		DST="$(CLAUDE_DIR)/agents"
 
 .PHONY: _setup-hooks
 _setup-hooks:

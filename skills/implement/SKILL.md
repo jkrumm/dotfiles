@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration. Not a full `/ralph` loop, but capable of handling substantial tasks while keeping the main agent's context window lean.
 
-> **sideclaw tools are async.** `mcp__sideclaw__{implement,check,review,research}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. Submit independent groups in one turn (parallel jobIds), then `job_wait` each. See the async-job contract in global CLAUDE.md.
+> **sideclaw tools are async.** `mcp__sideclaw__{check,review,research}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. **Implementation runs on the native `@implementer` Sonnet subagent** (synchronous, on Max, its own prompt cache — no orchestrator-cache penalty), not on sideclaw. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 
@@ -36,7 +36,7 @@ Assess the task first and pick the appropriate tier:
 |-|-|-|
 | **Quick** | 1-2 files, clear pattern, no research needed | Skip tasks, skip explore subagent, implement inline, run `/check` |
 | **Standard** | 3-8 files, some unknowns, familiar libraries | Full process below — explore subagent, plan, inline impl, `/check` |
-| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation offloaded (parallel `mcp__sideclaw__implement` for independent groups, or an Opus subagent for hard logic) + runtime validation |
+| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation delegated to the `@implementer` Sonnet subagent (parallel, one per **disjoint** file group; an Opus subagent for novel-hard logic) + runtime validation |
 
 For Quick tasks: skip the formality, just implement and validate. State the tier upfront.
 
@@ -46,23 +46,24 @@ For Quick tasks: skip the formality, just implement and validate. State the tier
 
 **Primary goal: keep the orchestrator's context window small.**
 
-All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. Burn fan-out on Sonnet/Haiku freely; reserve Opus for hard reasoning.
+All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. The `@implementer` subagent runs Sonnet 4.6 at high effort (the implementor-tier default — ≈ Opus on SWE-bench at ~1/5 the cost). Fan out Sonnet implementers on **disjoint** file groups freely; reserve Opus subagents for novel-hard reasoning. Note: parallel subagents run on Max — they buy detachment and context isolation, not free parallelism.
 
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
 | Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
 | Research | Skip | `/research` (MCP) if external libs | `/research` (MCP) if external libs |
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
-| Implement | Inline | Inline or `mcp__sideclaw__implement` | `mcp__sideclaw__implement` (off Max), one call per independent file group in parallel, for mechanical work; `Agent` for hard logic — see below |
+| Implement | Inline | Inline or `@implementer` (Sonnet) subagent | `@implementer` (Sonnet) subagent, one call per independent file group in parallel; `Agent` with `subagent_type: general-purpose, model: opus` for novel-hard logic — see below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
 | Validate (runtime) | Only if obvious | Assess need | Always assess |
 
-**Heavy implementer choice (cost-aware — you orchestrate on Max, the worker edits off Max):**
-- **Mechanical fan-out, clear plan, large diff**: prefer **`mcp__sideclaw__implement`** — it runs the edits on DeepSeek-V4-Pro (EU/GDPR) via the LiteLLM bridge, off your Max quota, self-verifies against the repo's checks, and returns a structured report (`applied`, `filesChanged`, `checkPassed`, `notes`). Pass a precise `task` + `context` (file paths, the plan, conventions to follow); review the diff before committing.
-- **Independent file groups**: split the work and fire **multiple `mcp__sideclaw__implement` calls in a single turn** (one per group) — they run as concurrent workers off Max while you await. Only split where groups don't touch the same files (avoid write conflicts); keep coupled changes in one call.
-- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Max — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high` in an isolated bubble so the orchestrator's cache stays warm. The worker is a literal executor, not a planner.
+**Heavy implementer choice (delegate to protect orchestrator CONTEXT — implementation now runs on Max/Sonnet):**
+- **Settled multi-file work**: delegate to **`@implementer`** (native Sonnet 4.6, effort high). Pass a complete brief — exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). It loads the CLAUDE.md rules automatically (house-style fidelity a foreign worker can't match) and returns a diff summary. It has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, to save orchestrator context. Review the actual diff before committing.
+- **Independent file groups**: fire **multiple `@implementer` calls in one turn** (one per group). Parallelize **only on disjoint file sets** — never two implementers on the same file. Remember parallel = N× Sonnet-on-Max (detachment, not free).
+- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Opus — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`. The worker is a literal executor, not a planner.
+- **Mass mechanical migration (codemod across many files)**: parallel `@implementer` subagents on disjoint groups, or the `for f in ...; claude -p ... --allowedTools` fan-out (optionally pointed at the IU endpoint to keep it off Max). The retired sideclaw implement worker is **not** an option.
 - **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast.
-- **Need branch isolation?** Decide it **up front, at the orchestrator level** — not mid-flow. Create the worktree with `wtp add <branch>` and run the whole `/implement` flow there; the sideclaw worker inherits the `cwd` you pass, so it already edits inside the worktree. Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
+- **Need branch isolation?** Decide it **up front, at the orchestrator level** — not mid-flow. A subagent inherits the orchestrator's `cwd`, and **by default its `Edit`/`Write` land in your LIVE checkout** — so create the worktree with `wtp add <branch>` and run the whole `/implement` flow there (or set `isolation: worktree` on a one-off `Agent` call for a single risky run). Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
 
 Never do exploration or research inline in Standard/Heavy tiers.
 
@@ -113,12 +114,12 @@ State your approach in 3-5 bullets and **proceed**. Include:
 
 **Quick (≤2 files): implement inline.**
 
-**Standard / Heavy mechanical work: prefer `mcp__sideclaw__implement`** (off Max, DeepSeek EU). **Heavy novel logic: `Agent` with `subagent_type: general-purpose`, `model: opus`** (on Max). Either way the executor has zero prior context, so the `task` + `context` must include:
+**Standard / Heavy settled work: delegate to the `@implementer` subagent** (native Sonnet 4.6, high effort). **Heavy novel-hard logic: `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`.** Either way the executor has zero prior context, so the `task` + `context` must include:
 - The full task description and acceptance criteria
 - Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)
 - Explicit constraints: no extra features, no refactoring untouched code, follow existing patterns
-- For `mcp__sideclaw__implement`: it self-verifies and returns `applied`/`filesChanged`/`checkPassed`/`notes` — read `notes` for assumptions and pre-existing failures, then review the diff yourself
+- The `@implementer` subagent returns a diff summary + validation result + assumptions — treat it as a **claim**: review the actual diff against source before committing. It has `Read`/`Grep`, so pass file pointers rather than pre-extracted snippets to save orchestrator context
 
 During implementation (inline or subagent):
 - Follow existing patterns exactly — match naming, structure, error handling
@@ -182,3 +183,4 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 - Always ask for human sign-off at the end
 - **Action bias is the default**: small decisions are the agent's to make. Only escalate major uncertainty or user-owned decisions (see Default Stance section)
 - Implementation subagent must receive all context upfront (it has no prior conversation)
+- The `@implementer` subagent runs Sonnet at high effort and loads CLAUDE.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits

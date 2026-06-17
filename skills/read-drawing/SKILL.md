@@ -6,7 +6,7 @@ description: Read and interpret Excalidraw diagrams (.excalidraw + .svg) via the
 # Read Drawing Skill
 
 Thin wrapper over the sideclaw `read_drawing` MCP tool. The whole pipeline —
-SVG→PNG rasterization (headless Chrome), the vision read (`gemini-3-pro-preview`,
+SVG→PNG rasterization (headless Chrome), the vision read (`gemini-3.5-flash`,
 off Max), and the deterministic `.excalidraw` JSON parse (frames, bindings,
 groups — the structural ground truth) — lives in sideclaw and runs as a single
 stateless IU OpenAI-transport call. No `claude -p` subprocess, no Haiku agent.
