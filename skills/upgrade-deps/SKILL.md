@@ -15,7 +15,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 | Skill | Use For | Mode |
 |-------|---------|------|
-| **`/research`** | Major version research, breaking changes, migration guides | MCP (sideclaw) |
+| **`/research`** | Major version research, breaking changes, migration guides | MCP (research-gateway) |
 | **`/check`** | Post-upgrade validation (format, lint, tsc, build) | MCP (sideclaw) |
 
 ### Delegation Rules
@@ -34,7 +34,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ### Token Savings
 
-Both `/research` and `/check` route through sideclaw — verbose output stays in the worker subprocess, only structured JSON returns to the main thread. Quota-aware (Max → IU at ≥70% utilization).
+`/research` routes through the **research-gateway** MCP (hosted VPS service on IU models, off Max — a blocking call) and `/check` routes through **sideclaw** (DeepSeek, off Max — async job). Verbose work stays off the main thread; only the structured result returns.
 
 ---
 

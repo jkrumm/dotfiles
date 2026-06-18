@@ -10,10 +10,6 @@ OpenAI-compatible VPS container at `audio-gateway.jkrumm.com`, reached over the 
 It fronts the IU unified audio endpoint (STT + expressive Gemini TTS). Hermes and Argo
 point at it. LLM is also cloud — Hermes uses Sonnet 4.6 via the IU unified endpoint.
 
-The `audio-proxy` repo (`~/SourceRoot/audio-proxy`, macOS LaunchAgent on `:7716`) is
-**RETIRED** (2026-06-17): LaunchAgent booted out, plist removed, GitHub repo archived.
-`make setup` no longer installs it (`_setup-audio-proxy` target is kept for reference).
-
 The `localai/` directory (per-machine `mlx-audio` STT + Fish S2 Pro TTS, :8000/:8001/:8002)
 is **RETIRED** (2026-05-25): no longer in the `make setup` chain and not running. Files are
 kept, not deleted, for an easy re-add. Tear down a live install with `make localai-teardown`.
@@ -171,11 +167,10 @@ Two 1Password accounts are configured:
 
 **API keys** cached in macOS Keychain by `make setup`:
 - `CLAUDE_SDK_API_KEY` + `CLAUDE_SDK_BASE_URL` — from `op://common/anthropic/API_KEY` and `BASE_URL`. Used for API offloading via `claude -p`.
-- `TAVILY_API_KEY` — from `op://common/tavily/API_KEY`. Used by `/research` skill for web search.
 
 **Chrome DevTools MCP** — registered globally with deferred tool loading (~400 tokens overhead). Used exclusively via `/browse` skill (haiku fork) to isolate expensive MCP responses from main context.
 
-**MCP-per-project policy** — keep project MCPs minimal. Global servers are only `sideclaw` + `chrome-devtools`, both deferred (names only in context, schemas via ToolSearch). The **only** repo running real project-level MCPs is `prometheus-scripts/jupyter` (db/datadog/marimo, in a git-ignored `.mcp.json`). `epos_fe.spa-orchestrator`'s `.mcp.json` (nitrox + Figma Desktop) is declarative IDE config, not always-on. No other repo has or needs project MCPs — don't add one without a deliberate reason. (Note: jupyter's datadog block hardcodes keys in the git-ignored file; the sibling `db` server uses `op run` — migrate datadog to `op run` when convenient.)
+**MCP-per-project policy** — keep project MCPs minimal. Global servers are only `sideclaw`, `chrome-devtools`, and `research-gateway` (the remote research MCP), all deferred (names only in context, schemas via ToolSearch). The **only** repo running real project-level MCPs is `prometheus-scripts/jupyter` (db/datadog/marimo, in a git-ignored `.mcp.json`). `epos_fe.spa-orchestrator`'s `.mcp.json` (nitrox + Figma Desktop) is declarative IDE config, not always-on. No other repo has or needs project MCPs — don't add one without a deliberate reason. (Note: jupyter's datadog block hardcodes keys in the git-ignored file; the sibling `db` server uses `op run` — migrate datadog to `op run` when convenient.)
 
 **CodeRabbit CLI** — requires one-time auth: `coderabbit auth login` (GitHub OAuth). Free tier: 3 reviews/hour. Used by `/review` and `/ship` skills.
 

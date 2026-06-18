@@ -48,8 +48,6 @@ setup:
 	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
 	@# audio-gateway (~/SourceRoot/audio-gateway, VPS container). Targets kept
 	@# below for an easy re-add; tear down a live install with `make localai-teardown`.
-	@# _setup-audio-proxy RETIRED 2026-06-17 — macOS LaunchAgent replaced by the
-	@# VPS audio-gateway (audio-gateway.jkrumm.com). Target kept below for reference.
 	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory _setup-colima
@@ -309,17 +307,6 @@ _setup-sdk-keys:
 			echo "    ✓ CLAUDE_SDK_BASE_URL cached in Keychain"; \
 		else \
 			echo "    ✗ Could not read op://common/anthropic/BASE_URL — skipping"; \
-		fi; \
-	fi
-	@if security find-generic-password -s tavily-api-key -w >/dev/null 2>&1; then \
-		echo "    · TAVILY_API_KEY (ok)"; \
-	else \
-		KEY=$$(op read "op://common/tavily/API_KEY" --account tkrumm 2>/dev/null || echo ""); \
-		if [ -n "$$KEY" ]; then \
-			security add-generic-password -a "$$USER" -s tavily-api-key -w "$$KEY" -T /usr/bin/security; \
-			echo "    ✓ TAVILY_API_KEY cached in Keychain"; \
-		else \
-			echo "    ✗ Could not read op://common/tavily/API_KEY — skipping"; \
 		fi; \
 	fi
 
@@ -659,9 +646,6 @@ status:
 	@security find-generic-password -s claude-sdk-base-url -w >/dev/null 2>&1 \
 		&& echo "    ✓ CLAUDE_SDK_BASE_URL (Keychain)" \
 		|| echo "    ✗ CLAUDE_SDK_BASE_URL [not cached — run make setup]"
-	@security find-generic-password -s tavily-api-key -w >/dev/null 2>&1 \
-		&& echo "    ✓ TAVILY_API_KEY (Keychain)" \
-		|| echo "    ✗ TAVILY_API_KEY [not cached — run make setup]"
 	@echo "  Rules"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/rules"
 	@echo "  Agents"
@@ -1187,26 +1171,6 @@ _setup-usage-tracker:
 	fi
 
 # ============================================================================
-# audio-proxy — OpenAI-compatible audio proxy on 127.0.0.1:7716 (macOS LaunchAgent)
-# ----------------------------------------------------------------------------
-# RETIRED 2026-06-17 — superseded by the VPS audio-gateway (~/SourceRoot/
-# audio-gateway, Docker container at audio-gateway.jkrumm.com, reached over the
-# tailnet). No longer run by `make setup`. GitHub repo archived.
-# Target body kept intact for reference; re-add to the setup chain to restore.
-# ============================================================================
-_setup-audio-proxy:
-	@echo "  audio-proxy (IU audio STT/TTS proxy on 127.0.0.1:7716)..."
-	@if [ -f "$(SOURCEROOT)/audio-proxy/package.json" ]; then \
-		( cd "$(SOURCEROOT)/audio-proxy" \
-			&& bun install >/dev/null 2>&1 \
-			&& bash launchd/install-agent.sh >/dev/null ) \
-			&& echo "    ✓ deps installed + LaunchAgent loaded (com.jkrumm.audio-proxy)" \
-			|| echo "    ✗ audio-proxy setup failed — run 'make install-agent' in the repo"; \
-	else \
-		echo "    · audio-proxy not cloned at $(SOURCEROOT)/audio-proxy — skipping"; \
-	fi
-
-# ============================================================================
 # Help
 # ============================================================================
 
@@ -1231,10 +1195,9 @@ help:
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
 	@echo ""
-	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by audio-gateway."
-	@echo "  audio-proxy (:7716, macOS LaunchAgent) is RETIRED — replaced by the VPS"
-	@echo "  audio-gateway (audio-gateway.jkrumm.com). make setup no longer installs"
-	@echo "  either. make localai-teardown removes a live localai install."
+	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
+	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"
+	@echo "  removes a live localai install."
 	@echo ""
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"

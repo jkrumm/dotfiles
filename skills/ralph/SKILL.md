@@ -143,7 +143,7 @@ You are implementing: **<goal>**. Read this fully before starting your group.
 
 Always start by:
 1. Explore the codebase with Glob/Grep/Read — understand existing patterns
-2. Research unfamiliar libraries with Context7 or Tavily Search + WebFetch
+2. Research unfamiliar libraries with the `/research` skill (research-gateway) or Context7
 3. Read relevant existing code before writing new code
 4. The group prompt is direction, not prescription — use a better approach if you find one
 
@@ -223,7 +223,7 @@ Each `group-N.md` follows this template:
 ## Research & Exploration First
 
 1. [Specific file to read — always read before writing]
-2. [Library to research via Context7 or Tavily]
+2. [Library to research via the `/research` skill or Context7]
 3. [Existing pattern to understand]
 4. [Edge case to investigate]
 

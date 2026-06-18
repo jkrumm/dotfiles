@@ -15,7 +15,7 @@ Config files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
 | Lean context | CLAUDE.md files <150 lines each, conventions in `.claude/rules/` |
 | Model routing | Opus for strategy, Sonnet for implementation, Haiku for all delegation |
 | Fresh over fork | Haiku subagents with fresh context, not conversation forks |
-| No MCPs in main | Chrome DevTools MCP with deferred loading (~400 tokens). Research/search via CLI/API |
+| Deferred MCPs only | Chrome DevTools, sideclaw, and research-gateway MCPs registered but deferred — names only, schemas on demand |
 | API offloading | `claude -p` with Keychain-cached API key for expensive repetitive tasks |
 | Rules > CLAUDE.md | Focused `.claude/rules/*.md` files (96% adherence vs 92% for monolithic CLAUDE.md) |
 
@@ -34,7 +34,8 @@ Config files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
 |-|-|-|
 | Opus | Strategy, planning, PRD, architecture | `/grill`, main conversation |
 | Sonnet | Implementation, complex code changes | `/ralph`, `/implement` |
-| Sonnet | Reasoning-heavy subprocesses | `/review`, `/research` (subprocess, subscription) |
+| Sonnet | Reasoning-heavy subprocesses | `/review` |
+| IU (off Max) | Agentic research | `/research` → research-gateway MCP (hosted on the VPS) |
 | Haiku | Mechanical subprocesses + orchestration | `/check`, `/analyze`, `/otel`, `/read-drawing` (subprocess, API) + `/browse` (fork) + `/commit`, `/pr`, `/ship`, `/secrets`, `/git-cleanup` (main) |
 
 ### Workflow
@@ -72,7 +73,7 @@ make setup        # idempotent — safe to re-run after any change
 coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 ```
 
-`make setup` handles: symlinks, Homebrew tools, 1Password auth, API key caching (Anthropic SDK + Tavily → Keychain), Chrome DevTools MCP registration, settings.json merge.
+`make setup` handles: symlinks, Homebrew tools, 1Password auth, API key caching (Anthropic SDK → Keychain), Chrome DevTools + research-gateway MCP registration, settings.json merge.
 
 ## Symlink Map
 
@@ -104,7 +105,8 @@ Execution modes (full table with mode + worker model in `config/global.CLAUDE.md
 |-|-|-|
 | **inline** | `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`, `frontend-design`, `skill-creator`, `upgrade-deps`, `excalidraw-diagram`, `cloudflare`, `ralph` (sonnet) | Runs on session model — no model switch, no fork |
 | **subprocess** (`claude -p`) | `analyze`, `otel`, `read-drawing` | API credits via Keychain, output isolated |
-| **MCP (sideclaw)** | `check`, `review`, `research` | Schema-validated JSON, quota-aware Max↔IU routing |
+| **MCP (sideclaw)** | `check`, `review` | Schema-validated JSON, off Max (DeepSeek) |
+| **MCP (research-gateway)** | `research` | Hosted VPS service (blocking call), IU models off Max |
 | **fork** (`context: fork`) | `browse` | Wraps the chrome-devtools MCP — Max quota |
 
 **Per-repo skills** (committed in their repo's `.claude/skills/`, auto-load when Claude starts inside):
@@ -118,7 +120,6 @@ Execution modes (full table with mode + worker model in `config/global.CLAUDE.md
 |-|-|-|
 | `claude-sdk-api-key` | `op://common/anthropic/API_KEY` | API offloading via `claude -p` |
 | `claude-sdk-base-url` | `op://common/anthropic/BASE_URL` | Custom API endpoint |
-| `tavily-api-key` | `op://common/tavily/API_KEY` | Web search in `/research` skill |
 
 ## Key Tooling
 

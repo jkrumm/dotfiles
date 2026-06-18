@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration. Not a full `/ralph` loop, but capable of handling substantial tasks while keeping the main agent's context window lean.
 
-> **sideclaw tools are async.** `mcp__sideclaw__{check,review,research}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. **Implementation runs on the native `@implementer` Sonnet subagent** (synchronous, on Max, its own prompt cache — no orchestrator-cache penalty), not on sideclaw. See the async-job contract in global CLAUDE.md.
+> **sideclaw tools are async.** `mcp__sideclaw__{check,review}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. (`/research` is the separate **research-gateway** MCP — a blocking call, no jobId.) **Implementation runs on the native `@implementer` Sonnet subagent** (synchronous, on Max, its own prompt cache — no orchestrator-cache penalty), not on sideclaw. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 

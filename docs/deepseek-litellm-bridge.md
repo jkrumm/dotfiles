@@ -99,7 +99,7 @@ DeepSeek-V4-Pro`; pass `--model DeepSeek-V4-Flash` for the fast tier).
 | **`structured_output` / `--json-schema`** | Models over the bridge ignore `--json-schema`; `structured_output` comes back empty. sideclaw validates extracted JSON with a Zod `zodValidator` instead. |
 | **Empty `result` envelope** | Bridge workers routinely end a session on a tool call, leaving the `result` field empty on `subtype: "success"`. sideclaw's `session-runner` recovers JSON from the last assistant text; `implement` reconciles against `git status`. |
 | **Single-backend throttling** | The worker tier is single-backend and intermittently 5xx/429s under burst; LiteLLM `fallbacks` transparently retry on the Claude-eu alias, and sideclaw caps angle concurrency. |
-| **No `WebSearch`/`WebFetch`** | They make internal Anthropic-model calls the bridge can't serve. `research` uses Tavily + `curl` + Context7 via Bash instead. |
+| **No `WebSearch`/`WebFetch`** | They make internal Anthropic-model calls the bridge can't serve, so bridge workers can't browse the web. (Web research now runs on the standalone `research-gateway` service, not over this bridge.) |
 
 ## What does NOT work
 
