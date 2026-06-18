@@ -5,14 +5,15 @@ description: Deep technical research via the research-gateway MCP — agentic Ta
 
 # Research — via research-gateway MCP
 
-`mcp__research-gateway__research` is a **blocking** call. The standalone research-gateway service (Elysia + Bun on the VPS) runs the agentic loop on IU models, off Max, and returns when the report is ready — there is no jobId / job_wait.
+The standalone research-gateway service (Elysia + Bun on the VPS, Tailscale-only) runs the agentic loop on IU models, off Max. It uses an **async job contract** (mirrors sideclaw's `check`/`review`): submit → wait → read. No single call blocks for the whole run, so long/deep research can't trip the MCP HTTP transport's ~60s first-byte timeout.
 
-1. Call `mcp__research-gateway__research` with `query` set to the user's question, optionally `depth` (`quick` | `standard` | `deep`, default `standard`). The call blocks until the report is done.
-2. Read the result. `structuredContent` is a `ResearchReport`:
+1. **Submit.** Call `mcp__research-gateway__research` with `query` set to the user's question, optionally `depth` (`quick` | `standard` | `deep`, default `standard`). It returns IMMEDIATELY with `{ jobId, status }` — **not** the report. Note the `jobId`; do not treat this response as the answer.
+2. **Wait.** Call `mcp__research-gateway__job_wait({ jobId })`. It blocks up to ~50s (with progress heartbeats) and returns the job state. If `stillRunning` is `true`, call `job_wait` again with the same `jobId` — loop until `stillRunning` is `false`. (`job_status({ jobId })` is a non-blocking peek if you want to do other work between checks.)
+3. **Read the result.** When `status` is `done`, the `result` field (also `structuredContent`) is a `ResearchReport`:
    - `report` — narrative, cited answer in markdown
    - `citations` — `[{ claim, url }]`, each key claim tied to a source
    - `sources` — deduplicated list of all URLs consulted
 
-   The text content already inlines the report plus a Citations and Sources section, so text-only clients still get the full picture.
+   On `done`, the text content already inlines the report plus a Citations and Sources section, so text-only clients still get the full picture. When `status` is `error`, `error` holds the failure message.
 
-Depth: `quick` = fast, snippet-level; `standard` (default) balances quality and speed; `deep` = most thorough but slowest. A `deep` call can approach a client's tool-call timeout, so prefer `standard` unless the question needs the extra depth. If the gateway is at capacity the call returns an error (`isError`) — retry shortly.
+Depth: `quick` = fast, snippet-level; `standard` (default) balances quality and speed; `deep` = most thorough but slowest. Submit is instant at every depth — only the number of `job_wait` loops grows with depth, so `deep` is now safe to use. If the gateway is at capacity, `research` returns an error (`isError`) — retry shortly.
