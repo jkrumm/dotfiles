@@ -17,7 +17,7 @@ Visx exposes low-level primitives so we can build exactly the chart we want. The
 2. **ChartLegend** — never hand-rolled legend markup. Supports `line | bar | split | splitLine` shapes and optional highlight state.
 3. **ChartTooltip** + `TooltipHeader` + `TooltipRow` + `TooltipBody` — never import `@visx/tooltip` directly.
 4. **AxisLeftNumeric** + **AxisBottomDate** — never raw `<AxisLeft>`/`<AxisBottom>` (they miss theme tokens + smart ticks).
-5. **HoverOverlay** for mouse capture, **HoverContext** for cross-chart crosshair sync, **useChartTooltip** for tip state.
+5. **HoverOverlay** for mouse capture, **HoverContext** for cross-chart crosshair sync, **useChartTooltip** for tip state. Wrap a group of date-aligned charts in a sync provider (basalt-ui: `<ChartHoverSync>`) to cast a ghost crosshair across all siblings on hover; without it the cursor stays per-chart.
 6. **Theme-aware colors** via `useVxTheme()` (re-renders on toggle) + `VX` tokens. **Never** raw hex literals in chart files. **Never** `localStorage.getItem('theme')`.
 
 **Exemption:** sparklines (tiny inline charts without legend/tooltip) live under `charts/sparklines/` and don't have to compose `ChartCard`/`ChartLegend`/`ChartTooltip` — but still must use VX tokens and `useVxTheme`.
@@ -56,6 +56,8 @@ A "kind" is a recurring chart shape reusable across datasets. Props are declarat
 
 **Anti-pattern:** a single `<Chart type="..." config={...} />` component that switches by kind. That's the Recharts trap. Prefer N small kinds.
 
+**Shipped kinds (basalt-ui):** beyond the line/bar/area/donut basics, basalt-ui ships `MultiLine` (N series on a shared y-axis — legend-hover dimming, dashed MA companions, per-point markers, zones/refLines, fixed or auto domain; also z-score/σ via a symmetric domain + zero refLine), `DualPanel` (line pane + signed-histogram pane on one x-scale and cursor, optional fill-between), and `Heatmap` (category×category intensity grid with per-cell tooltip + optional gradient legend strip).
+
 ## Dark/light mode
 
 Theme reactivity is **pure CSS**: the `--vx-*` variables are redeclared under the light/dark selector, so toggling the UI lib's color scheme restyles every chart with no React re-render. Charts read `VX.*` (var refs) directly; `useVxTheme()` returns the same refs for back-compat. Don't branch on color scheme in JS, and never read `localStorage.getItem('theme')`.
@@ -68,6 +70,7 @@ Soft single-hue fills under a line read as "modern" and are cheap to centralize:
 
 - `no-restricted-imports` bans `@visx/tooltip` in chart files (enforce in lint config).
 - **Enforce the palette mechanically.** oxlint has no `no-restricted-syntax`, so add a tiny guard script (scan chart + app source for raw hex / `rgb()` / `hsl()`, allow a `theme-allow` escape comment) and wire it into `lint`. A markdown rule alone drifts — a failing build doesn't. Exempt the palette/token files themselves.
+- **Enforce "no raw axes" mechanically too.** Raw `<AxisLeft>`/`<AxisBottom>`/`<AxisRight>` in a `/charts/` file is now a build failure (basalt-ui: the `basalt check-theme` `raw-visx-axis` guard; escape via `theme-allow`) — use the tokenized axis primitives. Previously markdown-only.
 - `ChartCard`/`ChartLegend`/`ChartTooltip` contract is social/markdown-enforced. It's easier to compose them than work around them.
 
 ## Rule of thumb
