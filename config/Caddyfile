@@ -49,27 +49,10 @@ hyperdx.test {
 	reverse_proxy localhost:7707
 }
 
-# basalt-ui
-basalt.test {
-	import local
-	reverse_proxy localhost:7710
-}
-basalt-example.test {
-	import local
-	reverse_proxy localhost:7711
-}
-basalt-ui-playground.test {
-	import local
-	reverse_proxy localhost:7712
-}
-basalt-ui-playground-api.test {
-	import local
-	reverse_proxy localhost:7713
-}
-# in-monorepo Mantine-pivot playground (apps/playground, @basalt-ui/playground)
+# basalt-ui — in-monorepo Mantine-pivot playground (apps/playground, @basalt-ui/playground)
 basalt-playground.test {
 	import local
-	reverse_proxy localhost:7714
+	reverse_proxy localhost:7710
 }
 
 # argo — dashboard on :7715, Vite proxies /api internally to localhost:4040
