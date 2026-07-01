@@ -18,12 +18,14 @@ Location: `~/SourceRoot/dotfiles/rules/`
 | File | Source Repo | Paths | Rules |
 |-|-|-|-|
 | `react-best-practices.md` | `vercel-labs/agent-skills` | `**/*.tsx`, `**/*.jsx` | 69 rules — async, bundle, server, client, re-render, rendering, JS perf, advanced |
-| `tanstack-query.md` | `DeckardGer/tanstack-agent-skills` | `**/*.tsx`, `**/*.jsx` | 21 rules — query keys, caching, mutations, error handling, prefetching, SSR |
-| `tanstack-router.md` | `DeckardGer/tanstack-agent-skills` | `**/*.tsx`, `**/*.jsx` | 15 rules — type safety, route org, data loading, search params, navigation |
-| `tanstack-start.md` | `DeckardGer/tanstack-agent-skills` | `**/*.tsx`, `**/*.jsx` | 13+4 rules — server functions, security, middleware, auth + integration patterns |
+| `tanstack-query.md` | `DeckardGer/tanstack-agent-skills` | `**/routeTree.gen.ts`, `**/routes/**/*.ts(x)`, `**/router.tsx` | 21 rules — query keys, caching, mutations, error handling, prefetching, SSR |
+| `tanstack-router.md` | `DeckardGer/tanstack-agent-skills` | `**/routeTree.gen.ts`, `**/routes/**/*.ts(x)`, `**/router.tsx` | 15 rules — type safety, route org, data loading, search params, navigation |
+| `tanstack-start.md` | `DeckardGer/tanstack-agent-skills` | `**/routeTree.gen.ts`, `**/routes/**/*.ts(x)`, `**/router.tsx` | 13+4 rules — server functions, security, middleware, auth + integration patterns |
 | `elysia.md` | `elysiajs/skills` | `**/api/**/*.ts`, `**/server/**/*.ts` | Key concepts — method chaining, encapsulation, validation, MVC, plugins |
 
-Frontend rules load on `.tsx`/`.jsx` files (~5K tokens). Elysia rule loads on backend `.ts` files in `api/` or `server/` dirs (~3.5K tokens). Zero cross-contamination.
+`react-best-practices.md` stays on the broad `.tsx`/`.jsx` glob — it's genuinely React/Next.js-generic, not tied to any router. The three TanStack files scope to `routeTree.gen.ts`/`routes/`/`router.tsx` instead: that combination is essentially unique to a TanStack Router/Start project, whereas `**/*.tsx` alone matches Next.js, Remix, CRA, or any incidental `.tsx` file — which was firing all three TanStack rule sets in repos that never touch TanStack.
+
+Frontend rules load on their scoped paths (~5K tokens). Elysia rule loads on backend `.ts` files in `api/` or `server/` dirs (~3.5K tokens). Zero cross-contamination.
 
 ### Layer 2: Full Reference (manual reads)
 
@@ -135,7 +137,7 @@ Update the index files in `rules/` to reflect changes. Preserve the Claude Code 
 ```yaml
 ---
 description: <keep existing or update if scope changed>
-paths: ["**/*.tsx", "**/*.jsx"]
+paths: <keep the existing scoped globs — preserve per-file, see the table above>
 source: {org}/{repo}@{new-short-sha} ({new-date})
 ---
 ```
@@ -178,8 +180,10 @@ To add rules from a new agent-skills repo:
 
 ## Troubleshooting
 
-**Rules not loading on .tsx files:** Check `~/.claude/rules/` symlink points to `~/SourceRoot/dotfiles/rules/`. Run `make setup` if broken.
+**Rules not loading on expected files:** Check `~/.claude/rules/` symlink points to `~/SourceRoot/dotfiles/rules/`. Run `make setup` if broken.
 
-**Too much context:** The index files total ~5K tokens. If this grows with new rule sets, consider whether all need `**/*.tsx` or if some could use more specific paths (e.g., files importing specific packages).
+**Rules firing in unrelated repos:** `paths:` only matches file globs — it can't detect actual dependency usage, so a blanket `**/*.tsx` fires in any React-ish repo regardless of whether it uses that specific library. Scope to a file/directory convention that's essentially unique to the framework (e.g. `routeTree.gen.ts` for TanStack Router/Start) instead of the file extension alone.
+
+**Too much context:** The index files total ~5K tokens. If this grows with new rule sets, prefer scoped paths over `**/*.tsx` from the start.
 
 **Review skill not finding reference files:** Ensure paths in the review skill match `~/SourceRoot/dotfiles/reference/`. The reference directory is NOT in `~/.claude/rules/` — it lives only in the dotfiles repo.

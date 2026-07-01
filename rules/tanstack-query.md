@@ -1,6 +1,6 @@
 ---
 description: TanStack Query (React Query) — query keys, caching, mutations, error handling, prefetching, SSR, performance
-paths: ["**/*.tsx", "**/*.jsx"]
+paths: ["**/routeTree.gen.ts", "**/routes/**/*.ts", "**/routes/**/*.tsx", "**/router.tsx"]
 source: DeckardGer/tanstack-agent-skills@0e8bcdc (2026-04-03)
 ---
 

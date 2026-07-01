@@ -1,6 +1,6 @@
 ---
 description: TanStack Router — type-safe routing, search params, loaders, code splitting, navigation patterns
-paths: ["**/*.tsx", "**/*.jsx"]
+paths: ["**/routeTree.gen.ts", "**/routes/**/*.ts", "**/routes/**/*.tsx", "**/router.tsx"]
 source: DeckardGer/tanstack-agent-skills@0e8bcdc (2026-04-03)
 ---
 
