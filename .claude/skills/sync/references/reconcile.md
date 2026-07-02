@@ -7,7 +7,9 @@ means a normal fast-forward push (never `--force`).
 ## Terminology
 
 For each side you have from recon: `branch`, `dirty` (count), `ahead`, `behind`,
-`upstream` (bool), `unpushed_branches`, `detached` (bool), `remote`.
+`upstream` (enum: `"true"` tracks-and-exists / `"gone"` upstream-deleted-stale /
+`"false"` never-tracked-new), `unpushed_branches`, `local_only` (count),
+`detached` (bool), `remote`.
 
 "Current-branch work" = `dirty>0 OR ahead>0` — this drives the reconcile decision.
 
@@ -29,7 +31,8 @@ Side branches are a **separate concern** from the checked-out branch:
 | clean, in sync | has work | yes | Symmetric: commit wip on R → push → L pulls. |
 | has work | has work | yes | **Reconcile** (both diverged): commit wip on BOTH. One side pushes; the other `git pull --rebase` onto it, resolve conflicts, push; first side `pull --ff-only`. Pick the side with fewer local commits to rebase (less to replay). |
 | any work | any work | **no** (different branches) | **Preserve both**: commit wip on each side, `push -u` each branch. Do NOT switch anyone. Queue an "align?" question. |
-| local-only branch, remote exists | — | — | `push -u origin <branch>` to create upstream, then normal reconcile. |
+| current branch `upstream:"false"` (new) | — | — | `push -u origin <branch>` to create upstream, then normal reconcile. |
+| current branch `upstream:"gone"` (stale, merged/deleted) | — | — | **Do NOT push -u** — the branch is dead. Move off it: `git switch <main>` (or `git switch -C <main> origin/<main>`), then reconcile main. Report it. If it may hold unmerged local work, confirm before leaving it. |
 | no remote at all | — | — | **Skip**, report: no transport bus. |
 | detached HEAD | any | — | **Skip**, report: refuse to auto-reconcile a detached head. |
 
@@ -43,6 +46,11 @@ is on `master`/`main`, the branch-protection hook will reject the push. Instead:
 3. Leave master untouched. Report: "moved master work to branch `sync/…` (PR-required)."
 
 Never push wip commits to a protected master.
+
+**Only `master`/`main` are protected.** Pushing a *side branch* on a PR-required repo
+(e.g. `basalt-ui feat/new-theme`) is a plain push, completely unaffected by the
+hook. Don't route side-branch work through a `sync/…` branch — that dance is only for
+work sitting on the protected branch itself.
 
 ## Same-branch reconcile — exact sequence
 
@@ -77,6 +85,12 @@ which is the signal you skipped the rebase step.
   question.
 - If a rebase gets messy, `git rebase --abort` and fall back to reporting the repo
   as "needs manual reconcile" rather than leaving it half-rebased.
+- **Don't trust commit messages — diff the content.** Two commits with the *same
+  message* can be different patches (a rebased/amended/cherry-picked duplicate of
+  work already on the remote). Before treating a local commit as "new work to
+  preserve," check whether its change is already upstream: `git cherry -v <upstream>`
+  or compare `git patch-id`. A stale duplicate should be dropped in the rebase, not
+  replayed as a conflict.
 
 ## Subagent brief template (Phase 3)
 
@@ -89,27 +103,42 @@ repo exclusively; do all its git work.
 Local (MacBook) path:  <L.path>
 Remote (Mac mini):     ssh mac-mini 'cd ~/<root>/<repo> && <git cmd>'
 
-Current state:
+Current state (recon snapshot — may be stale, re-verify first):
   MacBook: branch=<L.branch> dirty=<L.dirty> ahead=<L.ahead> behind=<L.behind>
-           unpushed=<L.unpushed_branches>
+           upstream=<L.upstream> unpushed=<L.unpushed_branches>
   Mac mini: branch=<R.branch> dirty=<R.dirty> ahead=<R.ahead> behind=<R.behind>
-           unpushed=<R.unpushed_branches>
+           upstream=<R.upstream> unpushed=<R.unpushed_branches>
 
 Do this reconcile: <the specific plan line, e.g. "both sides have work on master;
 commit wip on both, mini pushes first, MacBook pulls --rebase and pushes, mini
 pulls --ff-only">
 
 Rules:
-- Uncommitted work → one commit: `wip(sync): snapshot from <host> <date>`. Never
-  force-push. Also push the specific side branches listed in `unpushed_branches`
-  (they track a remote and are ahead). Do NOT touch no-upstream local branches
-  (the `local_only` graveyard).
-- PR-required repo on master/main → move work to `sync/<host>-<date>` branch, push
-  that, leave master alone. PR-required list: <paste from pr-required-repos.json>.
+- FIRST re-verify: `git fetch` both sides and re-check ahead/behind/upstream. This is
+  an active repo; if state moved from the snapshot above, adapt (and say so).
+- Uncommitted work → one commit: `git commit --no-verify -m "wip(sync): snapshot
+  from <host> <date>"`. ALWAYS `--no-verify` — a wip snapshot must not run
+  pre-commit hooks (they waste time and FAIL on the mini: `ssh` is a non-login shell
+  with a bare PATH, so lefthook/husky `bunx` → exit 127). Never force-push.
+- Push the side branches listed in `unpushed_branches` (they track a remote and are
+  ahead) — a plain push each, own step. Do NOT touch no-upstream local branches (the
+  `local_only` graveyard). Side-branch pushes are unaffected by PR-required master
+  protection.
+- `upstream=gone` on the current branch → the branch is stale (merged/deleted). Do
+  NOT push -u. Move off it onto the live main branch and reconcile that. `upstream=
+  false` → genuinely new → `push -u`.
+- PR-required repo with work ON master/main → move that work to `sync/<host>-<date>`
+  branch, push that, leave master alone. PR-required list: <paste from
+  pr-required-repos.json>.
 - Conflicts: auto-resolve mechanical ones (lockfiles, dup imports, formatting);
-  STOP and report file+hunks+recommendation for genuine semantic conflicts. Abort a
-  messy rebase rather than leaving it half-done.
+  STOP and report file+hunks+recommendation for genuine semantic conflicts. Don't
+  trust commit messages — diff content (`git cherry -v`) to spot stale duplicates.
+  Abort a messy rebase rather than leaving it half-done.
 - Different branches on each machine: push BOTH, do not switch either checkout.
+- If a mini command genuinely needs node/bun on PATH (rare — plain git doesn't),
+  wrap it: `ssh mac-mini 'zsh -lic "cd ~/<root>/<repo> && <cmd>"'` (login shell
+  sources the profile with fnm/bun shims; `bash -lic` does NOT — the mini's shell is
+  zsh).
 
 Return ONE line: `<repo>: <what you did> [wip commits: N] [needs user: yes/no + why]`.
 ```

@@ -23,11 +23,15 @@ pull the other side → reconcile.
 
 **The user has chosen these defaults (do not re-litigate them):**
 
-- **Uncommitted work becomes a plain real commit** — `wip(sync): snapshot from
-  <host> <YYYY-MM-DD>` — normal push, normal rebase-pull. **Never force-push.**
-  These wip commits are allowed to accumulate in history; the user squashes them
-  later with `/git-cleanup` or `gback` when resuming. Do not try to write clever
-  per-file commit messages; keep the wip commit uniform and fast.
+- **Uncommitted work becomes a plain real commit** — `git commit --no-verify -m
+  "wip(sync): snapshot from <host> <YYYY-MM-DD>"` — normal push, normal rebase-pull.
+  **Never force-push.** Always use `--no-verify`: a wip snapshot is a transport
+  commit, not a quality-gated one, and pre-commit hooks (lefthook/husky calling
+  `bunx`/node) both waste time AND fail outright on the mini, where `ssh mac-mini
+  '<cmd>'` runs a non-login shell with a bare PATH (no fnm/bun shims) → `bunx:
+  command not found` (exit 127). `--no-verify` sidesteps that entirely. These wip
+  commits accumulate in history; squash later with `/git-cleanup` or `gback` when
+  resuming. Keep the message uniform and fast — no clever per-file messages.
 - **Bidirectional by default** — reconcile both directions in one run; per repo,
   figure out who is ahead.
 - **Different branches per machine → preserve both.** Commit+push *both* branches
@@ -86,6 +90,12 @@ must be true before proceeding.
 Each line is JSON: `{root, repo, path, branch, detached, dirty, upstream, ahead,
 behind, remote, head, head_date, head_msg, unpushed_branches, local_only}`.
 
+- `upstream` — string enum for the checked-out branch:
+  - `"true"` — tracks a remote branch that exists → normal reconcile.
+  - `"gone"` — HAD an upstream but the remote ref is deleted (merged MR, pruned
+    branch). The branch is **stale/dead** — do NOT `push -u` to resurrect it. The
+    right action is to move off it onto the live main branch (see reconcile.md).
+  - `"false"` — never tracked anything → a genuinely new local branch → `push -u`.
 - `unpushed_branches` — comma list of `branch:N`: **non-current** branches that
   already track a remote and are N commits ahead. This is real unpushed work on a
   side branch — push it.
@@ -95,9 +105,16 @@ behind, remote, head, head_date, head_msg, unpushed_branches, local_only}`.
   the user explicitly asks to review/prune them. Mass-pushing hundreds of dead
   branches to pollute the remote is the classic wrong move here.
 
-The **checked-out branch** is always synced regardless of upstream status (that's
-the reconcile/mismatch logic below) — so a brand-new local current branch still
-gets `push -u`. The graveyard rule only applies to *non-current* branches.
+The **checked-out branch** is synced according to its `upstream` value above (new
+`"false"` branch → `push -u`; `"gone"` → move off, don't resurrect). The graveyard
+rule only applies to *non-current* branches.
+
+**Staleness — recon is a snapshot, not a lock.** On active work repos (IuRoot
+especially: teammates, CI, MRs merging), remote state can move between recon and
+execution. Immediately before executing a repo's plan, **re-fetch and re-check that
+one repo's ahead/behind/upstream**. If it moved materially from the plan, re-plan
+that repo (and re-confirm if the action changed). Never trust a minutes-old snapshot
+for the mutating step.
 
 Read both files. Match repos by **`(root, repo)`** (same relative path on both
 machines). This handles that folder names, not remotes, define identity —
@@ -113,7 +130,18 @@ Classify every repo, then print a plan grouped by action. See
   the second pusher rebases onto the first. Subagent handles it.
 - **Different branch per machine** → push both branches, flag mismatch, queue an
   "align?" question for after execution.
-- **No upstream / local-only branch with a remote** → `push -u` to create it.
+- **Current branch `upstream:"false"`** (new local branch) → `push -u` to create it.
+- **Current branch `upstream:"gone"`** (merged/deleted upstream — stale branch) → do
+  NOT push it. The action is to **move off it** onto the live main branch
+  (`git switch <main>` or `git switch -C <main> origin/<main>`), then reconcile that.
+  Flag it in the report; if the branch might hold unmerged local work, confirm before
+  leaving it. This reads identically to `"false"` in older recon output — the enum
+  now disambiguates them, so treat them oppositely.
+- **Non-current side branches** (`unpushed_branches`) → each gets its **own plan line
+  item**, even on a repo whose current branch is "trivial"/clean. It's easy to
+  under-scope a repo as "just a fast-forward" and silently drop its side-branch
+  pushes — don't. A side-branch push is a plain push; on a PR-required repo it is
+  **unaffected** by the master-protection hook (only pushes to `master`/`main` are).
 - **No remote at all** → report, skip (can't sync without a bus).
 - **PR-required repo (`config/pr-required-repos.json`) with work on `master`/`main`**
   → the branch-protection hook blocks pushing master. Move the work to a
@@ -135,7 +163,11 @@ PLAN — MacBook ⇄ Mac mini
    student-enrolment     push BOTH branches (feat/enable-reimport ⇄ fix/gasthoerer-…) — ALIGN?
  TRIVIAL (inline):
    dotfiles              MacBook 1 dirty → wip commit + push; mini ff
- SKIP (already synced):  argo(?), homelab, vps, modelpick, …
+ SIDE BRANCHES (plain push, own line even on "trivial" repos):
+   basalt-ui             push feat/new-theme:20, feat/pencil:1, master:1 (PR-req: side pushes OK)
+ STALE / MOVE OFF:
+   student-enrolment     MacBook on feat/enable-reimport [upstream gone] → switch to main
+ SKIP (already synced):  homelab, vps, modelpick, …
  MacBook-only:           photo-flow, busplan, open-news, snow-finder, …
  mini-only:              hermes-agent, audio-gateway, research-gateway, argo-old(detached), …
  QUESTIONS AFTER EXECUTE: align student-enrolment branch?

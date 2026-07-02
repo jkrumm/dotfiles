@@ -46,10 +46,17 @@ for rootname in "$@"; do
       head_date=$(git log -1 --format=%cI 2>/dev/null)
       head_msg=$(git log -1 --format=%s 2>/dev/null)
 
+      # upstream: "true"  = tracks a remote branch that exists → normal reconcile
+      #           "gone"  = HAD an upstream but the remote ref is deleted (merged MR,
+      #                     pruned branch) → the branch is stale/dead, do NOT push -u;
+      #                     the action is "move off it" (see reconcile.md).
+      #           "false" = never tracked anything → a genuinely new local branch.
       if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
         upstream=true
         ahead=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo 0)
         behind=$(git rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
+      elif [ -n "$(git config --get "branch.$branch.merge" 2>/dev/null)" ]; then
+        upstream=gone; ahead=0; behind=0
       else
         upstream=false; ahead=0; behind=0
       fi
@@ -74,7 +81,7 @@ for rootname in "$@"; do
         fi
       done < <(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
 
-      printf '{"root":"%s","repo":"%s","path":"%s","branch":"%s","detached":%s,"dirty":%s,"upstream":%s,"ahead":%s,"behind":%s,"remote":"%s","head":"%s","head_date":"%s","head_msg":"%s","unpushed_branches":"%s","local_only":%s}\n' \
+      printf '{"root":"%s","repo":"%s","path":"%s","branch":"%s","detached":%s,"dirty":%s,"upstream":"%s","ahead":%s,"behind":%s,"remote":"%s","head":"%s","head_date":"%s","head_msg":"%s","unpushed_branches":"%s","local_only":%s}\n' \
         "$(esc "$rootname")" "$(esc "$name")" "$(esc "$d")" "$(esc "$branch")" "$detached" \
         "${dirty:-0}" "$upstream" "${ahead:-0}" "${behind:-0}" "$(esc "$remote")" \
         "$(esc "$head_sha")" "$(esc "$head_date")" "$(esc "$head_msg")" "$unpushed" "$local_only"
