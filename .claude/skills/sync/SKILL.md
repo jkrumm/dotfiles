@@ -145,7 +145,10 @@ Classify every repo, then print a plan grouped by action. See
 - **No remote at all** → report, skip (can't sync without a bus).
 - **PR-required repo (`config/pr-required-repos.json`) with work on `master`/`main`**
   → the branch-protection hook blocks pushing master. Move the work to a
-  `sync/<host>-<YYYY-MM-DD>` branch, push that, and report it instead.
+  `sync/<host>-<YYYY-MM-DD>` branch, push that, and report it instead. Then ask which
+  landing the user wants — a real PR to `origin/master`, or local-sync-only (rebase
+  the branch onto master, fast-forward both machines' *local* master to it, delete
+  the branch, remote master untouched). Don't assume; see `references/reconcile.md`.
 - **Detached HEAD** → report, skip (never auto-reconcile a detached head).
 - **Repo on only one machine** → report under "MacBook-only" / "mini-only" and do
   NOT touch it (user's explicit call: sync is strictly machine-to-machine). Still

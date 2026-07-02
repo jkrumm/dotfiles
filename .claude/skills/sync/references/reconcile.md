@@ -47,6 +47,26 @@ is on `master`/`main`, the branch-protection hook will reject the push. Instead:
 
 Never push wip commits to a protected master.
 
+**When reporting this, always surface both landing options up front — don't wait to
+be asked** (learned from a run where the assumed default, "user will open a PR
+later," wasn't what the user wanted):
+
+- **A. Real PR** — user opens/merges a PR for `sync/…` in the normal way (or you run
+  `gh pr create` + `gh pr merge` on their say-so). Lands on remote `origin/master`.
+  Right when the work is genuine feature/fix content that should ship.
+- **B. Local-sync-only, no PR** — the branch was purely a transport to get commits
+  from one machine's local checkout to the other's; remote `master` should stay
+  untouched. Sequence: rebase the branch onto the current master tip (force-push the
+  rebased branch — you own it, it was never shared beyond this sync), then on **each**
+  machine `git switch master && git merge --ff-only sync/…` so both local masters end
+  up byte-identical and equally ahead of `origin/master`. Finish by deleting the
+  branch everywhere (`git branch -d` on both machines, `git push origin --delete`).
+  Right when the content is local-only tooling/config, or work still being drafted
+  that isn't ready to ship yet.
+
+Ask which one applies rather than assuming — the answer depends on what the commits
+actually are, not on the repo's PR-required status alone.
+
 **Only `master`/`main` are protected.** Pushing a *side branch* on a PR-required repo
 (e.g. `basalt-ui feat/new-theme`) is a plain push, completely unaffected by the
 hook. Don't route side-branch work through a `sync/…` branch — that dance is only for
@@ -91,6 +111,30 @@ which is the signal you skipped the rebase step.
   preserve," check whether its change is already upstream: `git cherry -v <upstream>`
   or compare `git patch-id`. A stale duplicate should be dropped in the rebase, not
   replayed as a conflict.
+- **`modify/delete` conflict → check whether the concern was fully retired, not just
+  moved.** `git cherry -v`/patch-id compares patches at the *same path* — it's blind
+  when the upstream side renamed or restructured the file (git's rename detection
+  needs enough content similarity; a heavily-edited file during a big refactor commit
+  often falls under that threshold and shows as a plain delete). Before assuming a
+  rename and hunting for the new path, check whether the entire concern was retired
+  instead — a dependency/subsystem swap (e.g. "replace Sentry with OpenTelemetry")
+  can legitimately delete the file outright with nothing to reapply to. Verify with
+  the **tracked ref**, not a guess: `git show <upstream-ref>:package.json | grep -i
+  <pkg>`, `git ls-tree -r <upstream-ref> --name-only | grep -i <concern>`, `git log
+  --oneline -i --grep=<concern> <upstream-ref>`. If the concern is gone, the
+  conflicting commit is stale — drop it (`git rebase --skip`, or `git rebase --onto
+  <upstream> <bad-commit> <branch>` to drop it from history cleanly) rather than
+  replaying it or chasing a rename that doesn't exist.
+- **Never verify "is this already applied" by reading the working tree mid-conflict
+  or right after an abort.** A conflicted `modify/delete` leaves the *modified* side's
+  file sitting in the working tree as untracked cruft ("Version X left in tree") —
+  and `git rebase --abort` does not reliably clean up files it created as new/untracked
+  during the conflict. Reading that file can produce a confident but wrong "the fix is
+  already upstream" conclusion (this happened once — the file actually didn't exist
+  in tracked history at all). After any abort, run `git status --short` (and `git
+  clean -ndx` if unsure) before trusting the tree, and prefer `git show
+  <ref>:<path>` / `git ls-tree <ref>` over `cat`/`grep` on working-tree files whenever
+  the question is "what does ref X actually contain."
 
 ## Subagent brief template (Phase 3)
 
@@ -129,7 +173,10 @@ Rules:
   false` → genuinely new → `push -u`.
 - PR-required repo with work ON master/main → move that work to `sync/<host>-<date>`
   branch, push that, leave master alone. PR-required list: <paste from
-  pr-required-repos.json>.
+  pr-required-repos.json>. Don't assume it becomes a PR — the orchestrator will ask
+  the user whether this lands as a real PR or is local-sync-only (see the two-option
+  writeup above); if it's local-sync-only, you may be asked to come back and do the
+  rebase-onto-master + ff-merge-both-locals + delete-branch dance instead.
 - Conflicts: auto-resolve mechanical ones (lockfiles, dup imports, formatting);
   STOP and report file+hunks+recommendation for genuine semantic conflicts. Don't
   trust commit messages — diff content (`git cherry -v`) to spot stale duplicates.
