@@ -125,6 +125,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 **Per-repo skills** (not symlinked — committed to the repo, load only when Claude is started inside that repo):
 - `.claude/skills/localai/` — **RETIRED** (local mlx-audio / Fish S2 Pro stack, replaced by the VPS audio-gateway). Kept for an easy re-add.
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
+- `.claude/skills/sync/` — bidirectionally sync all git repos between this MacBook (orchestrator) and the always-on Mac mini over SSH, using the git remote as transport. `scripts/recon.sh` scans both machines' git state ($HOME-relative, so it works despite differing usernames); a per-repo reconcile plan is confirmed once, then subagents commit wip work, push, rebase, and resolve conflicts. Skips the stale local-branch graveyard (`local_only` count, never mass-pushed), preserves diverged branches, handles PR-required-master. Run from a dotfiles session (`/sync`); MacBook-only.
 
 **Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from the `config/ssh_config` template; the `iumac` and `mac-mini` host aliases get their hostnames injected from `op://Private/{iumac,mac-mini}-server/hostname` (keeps tailnet names out of git). `mac-mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password.
 

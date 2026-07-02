@@ -1,16 +1,16 @@
 ---
 name: sync
 description: >-
-  Bidirectionally sync all git repositories between this MacBook and the always-on
-  Mac mini (over SSH), using GitHub/GitLab as the transport. Commits and pushes
-  uncommitted/unstaged work on both machines, then rebases/fast-forwards each side
-  so they converge — with per-repo subagents that resolve rebases and merge
-  conflicts intelligently. Use this whenever the user mentions syncing machines,
-  syncing repos, "catch up" the laptop to the Mac mini (or push laptop work back),
-  is about to travel or just got back, has uncommitted work scattered across many
-  repos, or asks to reconcile branches that diverged between the MacBook and the
-  Mac mini. Trigger even when the user just says "sync", "sync my machines", or
-  "get my repos up to date" without naming git explicitly.
+  Bidirectionally sync ALL git repos across two machines — this MacBook and the
+  always-on Mac mini — over SSH, using GitHub/GitLab as the transport. Commits and
+  pushes uncommitted work on both sides, then rebases/fast-forwards each so they
+  converge, with per-repo subagents resolving rebases and merge conflicts. This is
+  a MULTI-repo, TWO-machine operation — distinct from /commit, /ship, or
+  /git-cleanup, which act on a single repo. Use whenever the user wants to sync
+  their machines/repos, "catch up" the laptop to the Mac mini or push laptop work
+  back, is about to travel or just got back, has uncommitted work scattered across
+  many repos, or wants to reconcile branches that diverged between the two machines.
+  Trigger even on a bare "sync", "sync my machines", or "get my repos up to date".
 ---
 
 # sync — MacBook ⇄ Mac mini repo reconciliation
@@ -52,8 +52,11 @@ Gather git state on both machines with the bundled script. It takes root *names*
 relative to `$HOME` so the same call works despite different usernames
 (`johannes.krumm` here, `jkrumm` on the mini).
 
+This is a **dotfiles-local skill** — it only loads when Claude is started inside
+`~/SourceRoot/dotfiles`, so paths below are relative to that repo root.
+
 ```bash
-SKILL=~/.claude/skills/sync
+SKILL=~/SourceRoot/dotfiles/.claude/skills/sync
 # Local (MacBook)
 bash "$SKILL/scripts/recon.sh" SourceRoot IuRoot > /tmp/sync-macbook.jsonl
 # Remote (Mac mini) — pipe the script over stdin, runs there
@@ -170,4 +173,5 @@ receiving machine to get your working tree back, or `/git-cleanup` to squash."
   is SSH-key git. `student-enrolment` is the flagship mismatch case.
 - Keep the orchestrator context clean: recon output goes to `/tmp`, per-repo grind
   goes to subagents. The orchestrator holds the plan and the verdicts.
-- This skill is symlinked from `dotfiles/skills/sync/`; edit there and it's tracked.
+- This skill lives at `dotfiles/.claude/skills/sync/` (committed, not symlinked) and
+  loads only in dotfiles sessions. Edit it there.
