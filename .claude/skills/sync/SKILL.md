@@ -38,6 +38,15 @@ pull the other side → reconcile.
   get a single go-ahead before doing anything with side effects. Then run it all,
   stopping only on a genuine merge conflict a subagent can't confidently resolve.
 
+## Scoping (args)
+
+If the user passes repo name(s) as arguments (e.g. `/sync basalt-ui` or
+`/sync epos.student-enrolment free-planning-poker`), still run recon across
+**everything** (so the full report is accurate), but in Phase 3 only **execute** on
+the named repos — list the rest as "out of scope this run." No args = reconcile all
+in-scope repos. This is the safe way to validate one repo at a time before trusting
+a full sweep.
+
 ## Phase 0 — Preflight
 
 1. Confirm you are on the MacBook (`hostname` — the mini is `Minivonohannes3…`).
