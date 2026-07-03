@@ -220,6 +220,32 @@ Two 1Password accounts are configured:
 1. Install 1Password + enable CLI integration (Settings → Developer → Enable CLI)
 2. `make setup` — will fail fast with instructions if 1Password isn't ready
 
+## Claude Code Launchers
+
+Three ways to start an agentic coding session — `c`/`ca` defined in
+`config/zsh/claude.zsh`, `oc` in `config/zsh/opencode.zsh`:
+
+| Command | Backend | Model | Setup |
+|-|-|-|-|
+| `c` | Claude Max subscription | Opus/Sonnet/Haiku via `/model` | Native — full skills/hooks/subagents/CLAUDE.md |
+| `ca` | Local LiteLLM bridge (`:4000`) | DeepSeek-V4-Pro (hardcoded default) | Identical to `c` — same `~/.claude` config dir, only auth + model change |
+| `oc` (`opencode`) | IU unified endpoint | whatever `opencode.json` configures | Separate harness — own plugin/hook/agent system, see below |
+
+`ca` exists so the exact same Claude Code setup (skills, hooks, native subagents
+like `@implementer`) runs off Max — at work, or to spare quota — billed as cheap
+IU/DeepSeek tokens instead. It's deliberately inflexible: no WebSearch/WebFetch
+(the bridge can't serve those Anthropic-only tool calls), and no built-in model
+switching — change the `--model DeepSeek-V4-Pro` default in the file by hand if
+needed. Rationale: `modelpick/docs/decisions/ca-launcher.md`.
+
+An already-open shell keeps whatever `c`/`ca` definition it loaded at startup —
+`source ~/.zshrc` (or open a new terminal) after editing `claude.zsh`.
+
+`usage-tracker` (`~/SourceRoot/usage-tracker`) ingests all three automatically —
+`ca`'s billing classification, pricing, and dedup against the bridge's own
+request log all fall out of its existing `claude-code`/`litellm` collector
+split, no extra wiring needed.
+
 ## OpenCode (Claude Code fallback)
 
 OpenCode CLI is wired as a fallback for when the Claude Code Max subscription is
