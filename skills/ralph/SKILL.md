@@ -44,6 +44,7 @@ Ask the user:
 - How many groups (rough estimate)? Groups should fit in **45 min of autonomous Claude time** each (the `CLAUDE_TIMEOUT`), which usually maps to 1–2h of human work.
 - Any hard sequencing constraints (e.g. "Group 5 must pass E2E before Group 6")?
 - Does the migration have a **deploy-pause window** — groups whose output is correct but ships brokenness if deployed before the cutover? If yes, `RALPH_BRANCH` defaults to `migration/<name>` and the runner stays on it.
+- **Which 1Password account does this workspace use?** Do NOT guess. Read the user's global CLAUDE.md (`~/.claude/CLAUDE.md`), find the "1Password routing" section, and resolve based on the repo path: SourceRoot repos → `tkrumm`, IuRoot repos → `careerpartner`. The `op_account_for_cwd` helper encodes this logic. The runner's `require_op_session` and `prefetch_secrets` must use the correct account — a typo like `tkrmm` for `tkrumm` silently breaks the session check.
 
 ### Step 2 — Define groups
 
@@ -317,15 +318,28 @@ CLAUDE_TIMEOUT=2700  # 45 minutes per group
 #   max    → sonnet on the Max subscription. Best quality/ceiling for autonomous
 #            multi-hour groups; burns Max quota heavily.
 #   bridge → every group routed through the local LiteLLM bridge to DeepSeek-V4-Pro
-#            (EU/GDPR), IU per-token billing, ZERO Max quota. Caveats: no
-#            WebSearch/WebFetch (research-phase groups lose web), the worker model
-#            can throttle under load across a long loop (leans on retries),
-#            and a lower implementation ceiling than sonnet. Use for cost-sensitive
-#            or EU-bound loops; keep `max` for quality-critical migrations.
-RALPH_MODEL="${RALPH_MODEL:-sonnet}"
+#            (EU/GDPR), IU per-token billing, ZERO Max quota — the same lane the
+#            `ca` launcher (config/zsh/claude.zsh, dotfiles) uses interactively.
+#            Caveats: no WebSearch/WebFetch (research-phase groups lose web), the
+#            worker model can throttle under load across a long loop (leans on
+#            retries), and a lower implementation ceiling than sonnet. Use for
+#            cost-sensitive or EU-bound loops; keep `max` for quality-critical
+#            migrations.
 RALPH_EFFORT="${RALPH_EFFORT:-high}"
 RALPH_TRANSPORT="${RALPH_TRANSPORT:-max}"            # max | bridge
 LITELLM_BRIDGE_URL="${LITELLM_BRIDGE_URL:-http://127.0.0.1:4000}"
+LITELLM_BRIDGE_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}"
+# RALPH_MODEL defaults per transport: a bare tier alias like "sonnet" is only
+# guaranteed to resolve against api.anthropic.com. Against the bridge, pass the
+# literal LiteLLM model id (config/litellm/config.yaml, dotfiles) the same way
+# `ca`/`claude_bridge` default their --model — an unmapped name 404s.
+if [[ -z "${RALPH_MODEL:-}" ]]; then
+  if [[ "$RALPH_TRANSPORT" == "bridge" ]]; then
+    RALPH_MODEL="DeepSeek-V4-Pro"
+  else
+    RALPH_MODEL="sonnet"
+  fi
+fi
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
@@ -513,12 +527,34 @@ run_group() {
   # bridge mode appends the LiteLLM routing vars; ANTHROPIC_API_KEY is stripped in
   # both modes (max uses the OAuth login; the key would shadow the bridge token).
   local -a group_env=(CLAUDE_CODE_ENABLE_TASKS=true CLAUDECODE=)
+  local -a claude_flags=()
   if [[ "$RALPH_TRANSPORT" == "bridge" ]]; then
     if ! curl -fsS -m 3 "${LITELLM_BRIDGE_URL}/health/liveliness" >/dev/null 2>&1; then
       log_error "RALPH_TRANSPORT=bridge but LiteLLM bridge unreachable at $LITELLM_BRIDGE_URL — run 'make litellm-restart' in dotfiles."
       return 1
     fi
-    group_env+=(ANTHROPIC_BASE_URL="$LITELLM_BRIDGE_URL" ANTHROPIC_AUTH_TOKEN=sk-litellm-master-key CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1)
+    group_env+=(
+      ANTHROPIC_BASE_URL="$LITELLM_BRIDGE_URL"
+      ANTHROPIC_AUTH_TOKEN="$LITELLM_BRIDGE_TOKEN"
+      # Subagents/background tasks (Explore, @implementer — CLAUDE_CODE_ENABLE_TASKS=true
+      # above means groups CAN spawn them) resolve by TIER, not by the top-level --model.
+      # Without these pins each tier falls back to its hardcoded claude-* default, which
+      # the bridge doesn't map → "400 Invalid model name" the instant a subagent spawns
+      # mid-group. Mirrors `ca`/`claude_bridge` in config/zsh/claude.zsh (dotfiles).
+      ANTHROPIC_DEFAULT_OPUS_MODEL=DeepSeek-V4-Pro
+      ANTHROPIC_DEFAULT_SONNET_MODEL=DeepSeek-V4-Pro
+      ANTHROPIC_DEFAULT_HAIKU_MODEL=DeepSeek-V4-Flash
+      ANTHROPIC_DEFAULT_FABLE_MODEL=DeepSeek-V4-Pro
+      # Claude Code hardcodes a 200k context window for any model over a custom
+      # ANTHROPIC_BASE_URL. This restores DeepSeek's real 1M so long research- and
+      # edit-heavy groups don't auto-compact early (same fix as `ca`).
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
+      CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+    )
+    # DeepSeek over the bridge tends to self-invoke EnterPlanMode. In headless -p
+    # mode there is no user to exit plan mode, so the group would present a plan
+    # and never implement it — silently burning a retry with no completion signal.
+    claude_flags+=(--disallowedTools EnterPlanMode)
   fi
 
   local exit_code=0
@@ -526,6 +562,7 @@ run_group() {
     -p "$full_prompt" \
     --model "$RALPH_MODEL" \
     --effort "$RALPH_EFFORT" \
+    "${claude_flags[@]}" \
     --dangerously-skip-permissions \
     --output-format stream-json \
     --verbose \
@@ -836,6 +873,8 @@ Call from `main()` together with the signing fix. For migrations with a "deploy 
 
 Groups that read secrets via `op run --account <acct>` (database URLs, API keys, OTLP credentials) hang on Touch ID the same way `op-ssh-sign` does, just on a different surface. The runner must verify the session is alive before launching the first group — otherwise group N is mid-flight when biometric prompts the user at 3am.
 
+**Account resolution:** Replace `<acct>` with the actual 1Password account short name for this workspace. Resolve it from the user's global CLAUDE.md "1Password routing" section — SourceRoot repos use `tkrumm`, IuRoot repos use `careerpartner`. Never guess the account name; a typo produces a silent `op whoami` failure that looks like an expired session.
+
 ```bash
 require_op_session() {
   log_info "Verifying 1Password CLI session (op --account <acct>)..."
@@ -855,6 +894,8 @@ Note the `gtimeout 5` — without it, a missing session can itself hang on Touch
 The `op whoami` check (step 3) only verifies a session **exists**. It doesn't guarantee that `op run` mid-loop won't prompt for Touch ID — that depends on the user's 1Password settings (auto-lock timer, "Require Touch ID for each command", etc.). At 3am when the user is asleep, **any** mid-loop biometric prompt halts everything.
 
 The robust pattern: **fetch every secret the loop needs during pre-flight, write to a mode-600 env file, source it into the runner's environment, and delete on exit.** Mid-loop, no `op` interaction. Groups that need a secret read the env var directly; groups that need an `op://`-backed config file generate it from the env var (e.g. docker-compose env interpolation).
+
+**Account resolution:** Same rule as §3 — replace `<acct>` with the resolved account from CLAUDE.md's 1Password routing section (`tkrumm` for SourceRoot, `careerpartner` for IuRoot). Every `op read` call in this block uses the same account.
 
 ```bash
 SECRETS_FILE="$REPO_ROOT/.ralph-secrets.env"
@@ -1059,6 +1100,7 @@ env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
   -p "$full_prompt" \
   --model "$RALPH_MODEL" \          # explicit — don't inherit interactive session model
   --effort "$RALPH_EFFORT" \        # explicit — don't inherit interactive session effort
+  "${claude_flags[@]}" \            # bridge mode adds --disallowedTools EnterPlanMode
   --dangerously-skip-permissions \  # lets Claude run tools without prompting
   --output-format stream-json \     # writes to log file in real-time (text format buffers)
   --verbose \                       # includes tool use in log output
@@ -1068,9 +1110,16 @@ env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
 
 `group_env` always carries `CLAUDE_CODE_ENABLE_TASKS=true` + `CLAUDECODE=` (suppress interactive UI noise) and, in bridge mode, the LiteLLM routing vars.
 
-**Model choice:** `--model` and `--effort` must be set explicitly. The `/model` and `/effort` commands in an interactive Claude Code session are session-level only — they are **not** inherited by spawned `claude -p` subprocesses. Without explicit flags, each group silently uses whatever the global default is. Sonnet + high effort is the right default for RALPH: good quality at materially lower cost and latency than Opus for 45-minute autonomous runs. Override per-group if needed (e.g. bump to `opus` for a particularly complex migration group).
+**Model choice:** `--model` and `--effort` must be set explicitly. The `/model` and `/effort` commands in an interactive Claude Code session are session-level only — they are **not** inherited by spawned `claude -p` subprocesses. Without explicit flags, each group silently uses whatever the global default is. Sonnet + high effort is the right default for RALPH on `max`; DeepSeek-V4-Pro is the right default on `bridge` (see below). Override per-group if needed (e.g. bump to `opus` for a particularly complex migration group).
 
-**Transport choice (`RALPH_TRANSPORT`):** the default `max` runs `$RALPH_MODEL` on the Max subscription — best quality, but a full autonomous loop (45 min × N groups) is the single heaviest Max-quota consumer in this setup. Set `RALPH_TRANSPORT=bridge` to route every group through the local LiteLLM bridge to **DeepSeek-V4-Pro (EU/GDPR, Azure Spain)** at IU per-token billing — **zero Max quota**. The bridge trade-offs are real: no `WebSearch`/`WebFetch` (research-phase groups that lean on web must be restructured to use Bash + `curl`/Context7), the worker model can throttle under load so a long loop leans hard on the runner's retry logic, and its implementation ceiling is below sonnet. The runner health-checks the bridge before each group and aborts with a `make litellm-restart` hint if it's down. Rule of thumb: `max` for quality-critical or web-heavy migrations; `bridge` for cost-sensitive, EU-bound, or overnight loops where retries absorb the throttling.
+**Transport choice (`RALPH_TRANSPORT`):** the default `max` runs `$RALPH_MODEL` (default `sonnet`) on the Max subscription — best quality, but a full autonomous loop (45 min × N groups) is the single heaviest Max-quota consumer in this setup. Set `RALPH_TRANSPORT=bridge` to route every group through the local LiteLLM bridge to **DeepSeek-V4-Pro (EU/GDPR, Azure Spain)** at IU per-token billing — **zero Max quota** — the same lane the `ca` launcher (`config/zsh/claude.zsh`, dotfiles) uses interactively. `RALPH_MODEL` then defaults to the literal bridge model id `DeepSeek-V4-Pro` instead of the tier alias `sonnet` (an unmapped name 404s against the bridge — see `config/litellm/config.yaml`).
+
+Three fixes make bridge mode safe for RALPH's fully-autonomous, subagent-capable groups — all mirrored from `ca`/`claude_bridge` (dotfiles `config/zsh/claude.zsh`), which hit and fixed the same issues for interactive/one-shot bridge use:
+- **Tier pins** (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL`): groups run with `CLAUDE_CODE_ENABLE_TASKS=true`, so they can spawn Explore/`@implementer` subagents. Subagents resolve by tier, not by the top-level `--model` — without these pins, the first subagent spawn 400s on an unmapped `claude-*` default the instant it fires, mid-group.
+- **1M context window** (`CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000`): Claude Code hardcodes 200k for any model behind a custom `ANTHROPIC_BASE_URL`. Without this, long research/edit-heavy groups hit DeepSeek's *true* 1M ceiling far too early and auto-compact mid-group.
+- **`--disallowedTools EnterPlanMode`**: DeepSeek over the bridge tends to self-invoke plan mode. In headless `-p` mode there's no user to call `ExitPlanMode`, so the group would present a plan and never implement it — a silent retry burn with no completion signal, same failure shape as the interactive-skill anti-pattern above.
+
+The bridge's remaining trade-offs are real and not fixed by the above: no `WebSearch`/`WebFetch` (research-phase groups that lean on web must be restructured to use Bash + `curl`/Context7), the worker model can still throttle under load so a long loop leans hard on the runner's retry logic, and its implementation ceiling is below sonnet. The runner health-checks the bridge before each group and aborts with a `make litellm-restart` hint if it's down. Rule of thumb: `max` for quality-critical or web-heavy migrations; `bridge` for cost-sensitive, EU-bound, or overnight loops where retries absorb the throttling.
 
 ### Completion signal detection
 
