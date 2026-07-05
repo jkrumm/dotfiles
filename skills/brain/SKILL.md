@@ -5,7 +5,12 @@ description: Read and write the second brain — an OKF-native private knowledge
 
 # Brain — second-brain interaction skill
 
-Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`). Agents both read and write by traversing the file tree — there is no database and no API. The full traversal contract is in the repo's `AGENTS.md`; this skill encodes the behavioral instructions.
+Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`). Two layers:
+
+- **`knowledge/`** — the OKF agent memory. Terse, structured, cross-linked concept docs. Agents read and write it by traversing the tree. The canonical store.
+- **`compiled/`** — human-readable pieces in the author's voice, distilled from `knowledge/` via `/distill`. Derived output.
+
+There is no database and no API — it is a filesystem. The full contract is in the repo's `AGENTS.md`; this skill encodes the behavioral instructions. Validation uses `bun scripts/okf-lint.mjs`.
 
 ## Prerequisites
 
@@ -13,55 +18,45 @@ The brain repo must be cloned at `~/SourceRoot/brain`. If it does not exist, tel
 
 > The brain repo is not found at `~/SourceRoot/brain`. Clone it from `jkrumm/brain` (private GitHub repo) and try again.
 
-Validation uses `bun scripts/okf-lint.mjs` — Bun must be available.
-
 ## How to read
 
-1. Start at `/Users/jkrumm/SourceRoot/brain/index.md` and follow bundle-relative absolute links (e.g. `[x](/notes/x.md)`).
-2. Use `type` and `tags` frontmatter to route: `type` tells you what kind of document you are looking at; `tags` help you filter within a directory.
-3. Never default-traverse `journal/` or `inbox/`. Only read these directories on an explicit request (e.g. "check today's journal", "process the inbox").
-4. For broad searches across the repo, delegate to the Explore subagent rather than reading files inline. Scope the search to the relevant directory (`notes/`, `wiki/`, `content/`) unless the user explicitly asks for a full-repo search.
+1. Start at `/Users/jkrumm/SourceRoot/brain/index.md` and follow links in `[text](/knowledge/x.md)` form.
+2. Default-traverse `knowledge/` and `compiled/`. Use `type` and `tags` to route.
+3. **Never** default-traverse `inbox/` — read it only on an explicit ingestion request.
+4. For broad searches, delegate to the Explore subagent scoped to `knowledge/` (or `compiled/`) rather than reading files inline.
 
-## How to write
+## How to write knowledge
 
-- Prefer editing existing concepts and fixing cross-links over creating orphans. Before creating a new note, check whether an existing concept document already covers the topic and can be extended.
-- Every new note gets frontmatter with `type` + `description` + at least one outbound link to another concept or to the nearest `index.md`. Include `timestamp` (ISO 8601) when the content has a temporal anchor.
-- Update the nearest `index.md` — if you added, renamed, or removed a concept document in a directory, the index must reflect it.
-- Append a line to `log.md` with the date, a one-line summary of the change, and a link to the affected file(s).
-- Cross-link with bundle-relative absolute paths (e.g. `/notes/some-concept.md`). These are stable across file moves, unlike relative links.
-- Before committing, run the quality gate: `cd ~/SourceRoot/brain && bun scripts/okf-lint.mjs`. If it fails, fix the issues before committing. Do not commit a write that fails the lint.
+- Prefer editing an existing concept over creating an orphan. Check for an existing doc first.
+- Frontmatter: `type` + `description` required; add `title`, `tags`, `timestamp` (ISO 8601) where meaningful.
+- Links: only `[text](/knowledge/x.md)` form (leading slash, `.md`). Every new doc gets ≥1 outbound link.
+- Update the nearest `index.md`. Append a line to root `log.md`.
+- Run `bun scripts/okf-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
 ## How to capture
 
-For quick captures (a stray thought, a URL, a one-line reminder):
+For a quick capture (a stray thought, a URL, a one-line reminder), write it to `inbox/` as a dated staging file (e.g. `inbox/2026-07-05-idea.md`) with `type: Capture` + `timestamp` + `description`. Do not distill it inline — captures are promoted deliberately (see Ingestion).
 
-1. Write directly to `inbox/` as a staging markdown file named by date-topic (e.g. `inbox/2026-07-05-idea.md`).
-2. Frontmatter: `type: Capture`, `timestamp` (ISO 8601), and a `description` summarizing the capture.
+## How to compile (human-readable output)
 
-For promotion from inbox to a permanent note:
+Compiled pieces are produced by `/distill` against `voice.md`, one named piece at a time. **Never auto-generate `compiled/` docs in bulk.** Each carries `status: personal|draft|published` + `source` (link to the knowledge doc it was distilled from). The voice pass, first-person content, and publish decision are always the human's — never automated.
 
-1. Distill the capture into a concept document in `notes/` with full OKF frontmatter.
-2. Add cross-links to related concepts and the nearest `index.md`.
-3. Update the index, append to `log.md`, and either delete the inbox file or add a `migrated-to: /notes/<target>.md` frontmatter field.
+## Ingestion (the careful contract)
 
-## How to find
+Content enters the brain deliberately, in reviewed batches — **never via an autonomous loop** (v1 was scrapped for that; see `docs/post-mortem-v1.md`). When the user explicitly asks to ingest or migrate:
 
-| What | Where | Traversal rule |
-|-|-|-|
-| Evergreen concept documents | `notes/` | Default-traversed |
-| Curated human reference (future Argo surface) | `wiki/` | Default-traversed |
-| Blog drafts | `content/` | Read only when frontmatter has `status: published` |
-| Daily notes | `journal/` | Explicit request only |
-| Inbox / staging captures | `inbox/` | Explicit request only |
+1. Connectors (`scripts/karakeep-pull.mjs`, Notion extraction, the Obsidian vault) drop **raw** captures into `inbox/` only.
+2. Promote one concept at a time: read the capture, decide keep/skip (log skips with a reason — no silent drops), distill into a `knowledge/` concept doc with full frontmatter + links, then remove or mark the inbox source.
+3. Show the user the `git diff` before it lands. Small batches, hand-reviewed.
 
-When the user asks to "find" or "look up" something without specifying a scope, default to searching `notes/` and `wiki/`. Only search `inbox/` or `journal/` if the user explicitly names them or the context makes it obvious (e.g. "what did I journal about yesterday?").
+Do not touch `inbox/` or run ingestion unless explicitly asked.
 
-## Observation: Obsidian vault is separate
+## Obsidian vault is a separate source
 
-The Obsidian vault at `~/Obsidian/Vault` is a separate surface — it syncs via LiveSync, is not versioned with git, and is not the brain. Do not assume files in the Obsidian vault live in the brain repo or vice versa. If the user wants to migrate content from the vault into the brain, that is an explicit migration task — ask before touching vault files.
+The Obsidian vault at `~/Obsidian/Vault` is a **migration source**, not the brain. Migrate from it in small hand-reviewed batches on explicit request; never bulk-import. Do not assume vault files live in the brain repo or vice versa, and do not touch the vault unless the task is explicitly about it.
 
 ## Safety
 
-- Scope commits to one logical concern. Review `git diff --stat` before pushing.
-- The brain-sync LaunchAgent (`com.jkrumm.brain-sync`) snapshots the repo every 10 minutes via `launchd/`. Do not fight it — if you see a dirty working tree from a sync snapshot, let it complete or wait for the next cycle. Your writes will be snapshotted on the next cycle.
-- Never commit the `inbox/` or `journal/` directories from automated tooling unless the user asks. These are staging areas.
+- Scope commits to one concern. Review `git diff --stat` before pushing.
+- There is no auto-sync. Commit deliberately (or via `/commit`) when a write is done, and push to back up to GitHub.
+- Never commit secrets, real hostnames, or real IPs — use placeholders.
