@@ -43,13 +43,12 @@ Compiled pieces are produced by `/distill` against `voice.md`, one named piece a
 
 ## Ingestion (the careful contract)
 
-Content enters the brain deliberately, in reviewed batches — **never via an autonomous loop** (v1 was scrapped for that; see `docs/post-mortem-v1.md`). When the user explicitly asks to ingest or migrate:
+**AGENTS.md → Ingestion is canonical** — read it before any migration. The full promotion runbook, the three wikilink cases, provenance/no-re-migration, and "migration preserves, does not recommend" all live there. The non-negotiables:
 
-1. Connectors (`scripts/karakeep-pull.mjs`, Notion extraction, the Obsidian vault) drop **raw** captures into `inbox/` only.
-2. Promote one concept at a time: read the capture, decide keep/skip (log skips with a reason — no silent drops), distill into a `knowledge/` concept doc with full frontmatter + links, then remove or mark the inbox source.
-3. Show the user the `git diff` before it lands. Small batches, hand-reviewed.
-
-Do not touch `inbox/` or run ingestion unless explicitly asked.
+- **Never an autonomous loop.** v1 was scrapped for exactly that (`docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
+- Connectors and the vault drop **raw** captures into `inbox/` only — never straight into `knowledge/`. Log every skip with a reason; no silent drops.
+- Show the user the `git diff` before it lands. Small batches.
+- Do not touch `inbox/` or run ingestion unless explicitly asked.
 
 ## Obsidian vault is a separate source
 
