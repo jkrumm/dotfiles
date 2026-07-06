@@ -40,7 +40,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
-| `brain` | Private second brain — a git-backed Obsidian vault (PARA structure, two-layer knowledge/compiled) at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Agent door: `obsidian-cli`. LiveSync is continuous cross-device backup; `git diff` is the deliberate review gate. Direct-to-master; validated by `vault-lint`. |
+| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas`/`05_Resources` = curated human surface (light lint) that links down into `wiki/`. Agent door: `obsidian-cli`. LiveSync is continuous cross-device backup; `git diff` is the deliberate review gate. Direct-to-master; validated by `vault-lint`. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast` | Smaller personal apps / utilities. |
 
 #### Infrastructure
