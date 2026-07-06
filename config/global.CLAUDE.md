@@ -11,7 +11,7 @@
 
 ## Workspaces
 
-The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, and rules are **global** (`~/.claude/`); workspace conventions live in this file; each repo can still add its own `CLAUDE.md`.
+The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks, and rules are **global** (`~/.claude/`); workspace conventions live in this file; each repo can still add its own `CLAUDE.md`.
 
 ### `~/SourceRoot/` — Personal projects
 
@@ -40,7 +40,7 @@ The Mac has three workspace "regions" plus the Obsidian vault. Skills, hooks, an
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
-| `brain` | Private OKF-native second brain — a filesystem knowledge base agents read/write by traversal (`knowledge/` agent memory + `compiled/` voiced layer, `git diff` as the review gate). Has the `/brain` skill and a dedicated memory dir; direct-to-master; validated by `okf-lint`. Migrated in small hand-reviewed batches from the Obsidian vault. |
+| `brain` | Private second brain — a git-backed Obsidian vault (PARA structure, two-layer knowledge/compiled) at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Agent door: `obsidian-cli`. LiveSync is continuous cross-device backup; `git diff` is the deliberate review gate. Direct-to-master; validated by `vault-lint`. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast` | Smaller personal apps / utilities. |
 
 #### Infrastructure
@@ -94,9 +94,9 @@ Other IuRoot repos exist but are rarely touched directly (`epos.crm-bridge`, `ep
 
 ---
 
-### `~/Obsidian/Vault/` — PKM vault (not a git repo)
+### `~/Obsidian/Vault/` — cold backup (not the live vault)
 
-Personal knowledge management, journaling, project notes. Has its own `CLAUDE.md` and vault-only skills (`/daily`, `/inbox-process`, `/capture`, `/briefing`, `/journal-import`). Self-contained — start Claude inside the vault to use them. Tasks managed externally in TickTick.
+The live vault relocated into `~/SourceRoot/brain` (git-backed, LiveSync-synced, see the `brain` repo-map row and the `/brain` skill). `~/Obsidian/Vault` is retained only as a cold backup — leave it closed, do not read/write it. Tasks managed externally in TickTick.
 
 ---
 
@@ -235,6 +235,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/excalidraw-diagram` | inline | Create Excalidraw diagrams. |
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
 | `/dataviz` | inline | Professional data-viz / chart styling (visx + Mantine, centralized palette). |
+| `/brain` | inline | Second brain (`~/SourceRoot/brain` vault). `obsidian-cli` agent door with filesystem fallback; full contract in the repo's `AGENTS.md`. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
