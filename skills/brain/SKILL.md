@@ -10,7 +10,7 @@ Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`
 Two layers, two physical trees:
 
 - **Agentic knowledge — `wiki/`.** A top-level, domain-organized tree (e.g. `wiki/health/peptides/`) of atomic, terse, **English**, cross-linked concept notes agents read and write by traversal. **Strict** discipline: `type` + `description` frontmatter, `[[wikilinks]]` that resolve, a per-level `index.md` MOC.
-- **Curated human surface — `03_Projects`, `04_Areas`, `05_Resources`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human.
+- **Curated human surface — `03_Projects`, `04_Areas`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human. There is no PARA `Resources` tier — reference material is a `wiki/` concept note or a page under an Area.
 
 `00_Inbox`, `01_Journal`, `02_Daily`, `09_Templates` keep a loose capture schema (`title`/`date`/`tags`) and are excluded from lint/MOC checks.
 
@@ -39,7 +39,7 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 - Update the nearest `wiki/` `index.md` MOC. Append a line to root `log.md`.
 - Run `node .scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
-Curating a **human page** (`03_Projects`/`04_Areas`/`05_Resources`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page.
+Curating a **human page** (`03_Projects`/`04_Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page.
 
 ## How to capture
 
