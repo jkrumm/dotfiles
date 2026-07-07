@@ -405,6 +405,24 @@ batt-limit:
 batt-status:
 	@$(BATT) status 2>/dev/null || echo "  batt daemon not running — run 'make batt-setup'"
 
+# ~/SourceRoot/brain nightly git safety-net snapshot (refs/snapshots/<ts>, 03:30).
+# A separate snapshot stream — never touches reviewed master, HEAD, the index,
+# or the working tree. LiveSync stays the real backup; this is a git-level net
+# so an un-reviewed day of vault edits is never lost. Self-guards on a missing
+# vault; the script's `git add -A` respects .gitignore, so secrets stay out.
+.PHONY: brain-snapshot-setup brain-snapshot-teardown
+brain-snapshot-setup:
+	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
+		echo "  brain-snapshot: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-snapshot" PLIST_DIR="$(DOTFILES_DIR)/brain"
+	@echo "    ↳ nightly at 03:30 → refs/snapshots/<ts>; inspect: git -C ~/SourceRoot/brain for-each-ref refs/snapshots"
+brain-snapshot-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-snapshot.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ brain-snapshot torn down (unloaded + plist removed; refs/snapshots left intact)"
+
 .PHONY: _setup-rules
 _setup-rules:
 	@echo "  Rules (global → ~/.claude/rules/)..."
@@ -1236,6 +1254,9 @@ help:
 	@echo "  make batt-setup       MacBook-only: start the charge-limiter daemon + cap at 80% (LIMIT=N)"
 	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
 	@echo "  make batt-status      Show the battery charge-limiter status"
+	@echo ""
+	@echo "  make brain-snapshot-setup     Load the nightly brain vault git safety-net snapshot (refs/snapshots/<ts>)"
+	@echo "  make brain-snapshot-teardown  Unload + remove the snapshot LaunchAgent"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
 	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"
