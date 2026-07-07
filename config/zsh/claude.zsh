@@ -33,28 +33,56 @@ c() {
 }
 
 # Same launcher as `c` — same skills/agents/hooks/CLAUDE.md, since it's the same
-# ~/.claude config dir — but routed through the local LiteLLM bridge (:4000) on
-# DeepSeek-V4-Pro instead of the Max subscription. Cheap/open-weight lane, not
-# the direct IU Anthropic endpoint (that's `claude_iu`/headless only). To use a
+# ~/.claude config dir — but routed through the IU unified endpoint's native
+# Anthropic transport (real Claude models, API-billed per-token) instead of the
+# Max subscription. Default model: claude-sonnet-5 (latest Sonnet tier). To use a
 # different model permanently, change the --model default below; a one-off
-# `ca --model X` also works for anything the bridge maps
-# (config/litellm/config.yaml). Billing classification, no-double-count, and
-# pricing all fall out of the existing bridge plumbing automatically — see
-# usage-tracker's models.ts/pricing.ts, no extra tracking work needed.
+# `ca --model claude-opus-4-8` also works for any model the IU Anthropic endpoint
+# serves (run /iu-endpoint for the live catalog).
 #
-# Same constraint as `claude_bridge`: no WebSearch/WebFetch (they call
-# api.anthropic.com directly, which the bridge can't serve).
+# Full Anthropic protocol fidelity — no LiteLLM translation tax. Prompt caching
+# works (first turn builds the cache, subsequent turns read at ~10% cost), tool
+# use is native, WebSearch/WebFetch work, and tier differentiation is real.
+#
+# Default effort: high (matches --model, overridable with `ca --effort xhigh`).
+# Effort is a plain request parameter (`claude --help` lists --effort), not
+# gated by account/auth — it works the same over this custom base URL as it
+# does on the Max subscription.
+#
+# Subagents/background tasks resolve by TIER (opus/sonnet/haiku/fable). A custom
+# main-model name can't be classified into a tier, so each tier falls back to its
+# hardcoded Anthropic default (claude-opus-4-8, …) which the IU endpoint may not
+# serve. ANTHROPIC_DEFAULT_*_MODEL below pins every tier to the IU catalog:
+# sonnet-5 for the workhorse tiers, haiku-4-5 for background (title-gen,
+# compaction, fast reads). No opus/fable override — the sonnet fallback is cheap
+# enough and those tiers are rarely invoked.
+#
+# Context window: over any non-api.anthropic.com ANTHROPIC_BASE_URL, Claude Code
+# can't verify 1M support and budgets Sonnet 5 at 200k, even though it natively
+# has 1M (docs: code.claude.com/docs/en/model-config#sonnet-5-context-window).
+# CLAUDE_CODE_MAX_CONTEXT_TOKENS is not a real Claude Code env var — don't
+# reintroduce it. The documented fix is the `[1m]` suffix (stripped before the
+# model ID reaches the provider): --model claude-sonnet-5[1m], plus the same
+# suffix on every ANTHROPIC_DEFAULT_*_MODEL tier that resolves to Sonnet 5.
 #
 # claude v2.x rejects ANTHROPIC_API_KEY in this flow ("Not logged in") — must
 # be ANTHROPIC_AUTH_TOKEN. Env auth takes precedence over the cached claude.ai
 # OAuth login for this process only — `c` and `ca` don't fight each other.
 #
+# IU creds are read from the macOS Keychain (same as claude_iu / opencode).
+# The LiteLLM bridge is NOT used here — it's only for sideclaw workers
+# (claude_bridge / mcp__sideclaw__*). ToolSearch stays on (ENABLE_TOOL_SEARCH)
+# because the IU endpoint isn't api.anthropic.com and ToolSearch is off by
+# default on non-first-party hosts.
+#
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
 ca() {
-  local url="${LITELLM_BRIDGE_URL:-http://127.0.0.1:4000}"
-  if ! curl -fsS -m 3 "${url}/health/liveliness" >/dev/null 2>&1; then
-    print -ru2 "ca: LiteLLM bridge unreachable at ${url} — run 'make litellm-restart' in dotfiles"
+  local key base
+  key=$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null)
+  base=$(security find-generic-password -s claude-sdk-base-url -w 2>/dev/null)
+  if [[ -z "$key" || -z "$base" ]]; then
+    print -ru2 "ca: IU credentials missing in Keychain — run 'make setup' in dotfiles"
     return 1
   fi
 
@@ -74,12 +102,16 @@ ca() {
   fi
 
   local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model DeepSeek-V4-Pro "${args[@]}")
+  [[ " $* " == *" --model "* ]] || args=(--model "claude-sonnet-5[1m]" "${args[@]}")
+  [[ " $* " == *" --effort "* ]] || args=(--effort high "${args[@]}")
 
   env -u ANTHROPIC_API_KEY \
-    ANTHROPIC_AUTH_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}" \
-    ANTHROPIC_BASE_URL="$url" \
-    CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1 \
+    ANTHROPIC_AUTH_TOKEN="$key" \
+    ANTHROPIC_BASE_URL="$base" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="claude-sonnet-5[1m]" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-5[1m]" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5 \
+    ANTHROPIC_DEFAULT_FABLE_MODEL="claude-sonnet-5[1m]" \
     ENABLE_TOOL_SEARCH=true \
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
@@ -129,9 +161,15 @@ claude_bridge() {
   fi
   local -a args=("$@")
   [[ " $* " == *" --model "* ]] || args=(--model DeepSeek-V4-Pro "${args[@]}")
+  # Pin subagent/background tiers to bridge-known names (see `ca` above) so any
+  # -p flow that spawns a subagent can't fall back to an unmapped claude-* default.
   env -u ANTHROPIC_API_KEY \
     ANTHROPIC_AUTH_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}" \
     ANTHROPIC_BASE_URL="$url" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL=DeepSeek-V4-Pro \
+    ANTHROPIC_DEFAULT_SONNET_MODEL=DeepSeek-V4-Pro \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL=DeepSeek-V4-Flash \
+    ANTHROPIC_DEFAULT_FABLE_MODEL=DeepSeek-V4-Pro \
     CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1 \
     claude -p "${args[@]}"
 }
