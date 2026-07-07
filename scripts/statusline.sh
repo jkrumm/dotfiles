@@ -2,10 +2,19 @@
 
 # Claude Code Statusline — 2 line layout
 #
-# Line 1: Model · Context (usable) · Session lines · Total tokens · Duration · Usage (5h/wk/mo)
+# Line 1: Auth (MAX/IU) · Model · Context (usable) · Duration · Usage (5h/wk/mo)
 # Line 2: CWD · Git branch & dirty flag
 
 input=$(cat)
+
+# ── Auth mode (MAX subscription vs IU direct API) ───────────────────────────────
+# `c()` exports ANTHROPIC_BASE_URL="" (Max subscription); `ca()` exports it set to
+# the IU unified endpoint. Inherited live by this subprocess — no log lookup needed.
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+  auth_mode="IU"
+else
+  auth_mode="MAX"
+fi
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 model=$(echo "$input" | jq -r '.model.display_name // "Unknown"')
@@ -23,8 +32,6 @@ else
 fi
 
 # ── Context window ─────────────────────────────────────────────────────────────
-total_input=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
-total_output=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
 context_size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
 used_percentage=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
 
@@ -50,20 +57,6 @@ else
 fi
 reset="\033[0m"
 pct_colored=$(printf "${color}%d%%${reset}" "$usable_pct")
-
-# ── Session lines changed (Claude's edits this session) ────────────────────────
-lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
-lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
-
-# ── Total tokens (cumulative) ──────────────────────────────────────────────────
-total_tokens=$((total_input + total_output))
-if [ "$total_tokens" -ge 1000000 ]; then
-  tokens_fmt=$(awk "BEGIN {printf \"%.1fM\", $total_tokens/1000000}")
-elif [ "$total_tokens" -ge 1000 ]; then
-  tokens_fmt=$(awk "BEGIN {printf \"%.0fk\", $total_tokens/1000}")
-else
-  tokens_fmt="$total_tokens"
-fi
 
 # ── Duration ───────────────────────────────────────────────────────────────────
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
@@ -150,7 +143,7 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ── Output ─────────────────────────────────────────────────────────────────────
-line1="${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored} | +${lines_added} -${lines_removed} | ${tokens_fmt} | ${duration}"
+line1="${auth_mode} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored} | ${duration}"
 [ -n "$usage_parts" ] && line1="${line1} | ${usage_parts}"
 echo -e "$line1"
 echo -e "${cwd_display}${git_section}"
