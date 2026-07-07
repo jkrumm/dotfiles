@@ -5,7 +5,7 @@ description: Read and write the second brain — a git-backed Obsidian vault at 
 
 # Brain — second-brain interaction skill
 
-Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`): one folder that is **both** an Obsidian vault and the git-backed second brain, shared by Claude Code (this skill) and Hermes (`obsidian` skill). The full traversal + write + ingestion contract is in the repo's `AGENTS.md` — read it before any non-trivial write; this skill encodes the behavioral instructions. Validation uses `node scripts/vault-lint.mjs`.
+Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`): one folder that is **both** an Obsidian vault and the git-backed second brain, shared by Claude Code (this skill) and Hermes (`obsidian` skill). The full traversal + write + ingestion contract is in the repo's `AGENTS.md` — read it before any non-trivial write; this skill encodes the behavioral instructions. Validation uses `node .scripts/vault-lint.mjs`.
 
 Two layers, two physical trees:
 
@@ -37,7 +37,7 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 - Frontmatter: `type` + `description` required on every `wiki/` note; add `title`, `tags`, `timestamp` (ISO 8601) where meaningful.
 - Links: `[[wikilinks]]` only. Every new note gets ≥1 outbound link.
 - Update the nearest `wiki/` `index.md` MOC. Append a line to root `log.md`.
-- Run `node scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
+- Run `node .scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
 Curating a **human page** (`03_Projects`/`04_Areas`/`05_Resources`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page.
 
@@ -53,7 +53,7 @@ Compiled pieces live on the curated surface (an Area/Project folder note, or a h
 
 **AGENTS.md → Ingestion is canonical** — read it before any migration. The full promotion runbook, the three wikilink cases, provenance/no-re-migration, and "migration preserves, does not recommend" all live there. The non-negotiables:
 
-- **Never an autonomous loop.** v1 was scrapped for exactly that (`docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
+- **Never an autonomous loop.** v1 was scrapped for exactly that (`.docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
 - Connectors and the vault drop **raw** captures into `00_Inbox/` only — never straight into an evergreen Area/Project/Resource. Log every skip with a reason in `log.md`; no silent drops.
 - Show the user the `git diff` before it lands. Small batches.
 - Do not touch `00_Inbox/`/`inbox/` or run ingestion unless explicitly asked.

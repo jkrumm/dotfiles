@@ -88,4 +88,4 @@ Never skipped. Remind the human:
 - Never skip the voice-pass gate. If the human wants to skip it, flag that the voice pass is the single highest-leverage step for making the output sound like them.
 - Never publish. The model writes to `content/<project>/` with `status: draft`. The human decides when and where to publish.
 - Output always goes to the brain repo at `~/SourceRoot/brain/content/<project>/`. If the project directory does not exist, create it and add an `index.md` listing the draft.
-- After writing, run `cd ~/SourceRoot/brain && bun scripts/okf-lint.mjs` and fix any issues before declaring the step complete.
+- After writing, run `cd ~/SourceRoot/brain && node .scripts/vault-lint.mjs` and fix any issues before declaring the step complete.
