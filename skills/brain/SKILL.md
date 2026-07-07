@@ -28,7 +28,7 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 
 1. Start at `/Users/jkrumm/SourceRoot/brain/index.md` and follow `[[wikilinks]]`.
 2. Route by folder and by `type`/`tags` frontmatter. Each `wiki/` domain level has an `index.md` MOC; each curated Area/Project has a folder note (`{name}.md`) as its local MOC — open the MOC before reading children individually.
-3. **Never** default-traverse `inbox/` or `00_Inbox/` — read them only on an explicit ingestion request.
+3. **Never** default-traverse `00_Inbox/` — read them only on an explicit ingestion request.
 4. For broad search, use `obsidian search` / `obsidian backlinks` (or `obsidian orphans` / `obsidian deadends` for graph health) rather than reading many files inline; delegate wide fan-out reads to the Explore subagent.
 
 ## How to write knowledge (`wiki/`)
@@ -39,7 +39,7 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 - Update the nearest `wiki/` `index.md` MOC. Append a line to root `log.md`.
 - Run `node .scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
-Curating a **human page** (`03_Projects`/`04_Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page.
+Curating a **human page** (`03_Projects`/`04_Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page. When adding a subfolder that will hold more than one note, create its folder note (`{foldername}.md`) in the same write — see the vault's `AGENTS.md` → Reserved filenames; a pure attachment/spec bucket already covered by the parent's folder note doesn't need one.
 
 ## How to capture
 
@@ -56,7 +56,7 @@ Compiled pieces live on the curated surface (an Area/Project folder note, or a h
 - **Never an autonomous loop.** v1 was scrapped for exactly that (`.docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
 - Connectors and the vault drop **raw** captures into `00_Inbox/` only — never straight into an evergreen Area/Project/Resource. Log every skip with a reason in `log.md`; no silent drops.
 - Show the user the `git diff` before it lands. Small batches.
-- Do not touch `00_Inbox/`/`inbox/` or run ingestion unless explicitly asked.
+- Do not touch `00_Inbox/` or run ingestion unless explicitly asked.
 
 ## Safety
 
