@@ -2,7 +2,7 @@
 
 # Claude Code Statusline — 2 line layout
 #
-# Line 1: Auth (MAX/IU) · Model · Context (usable) · Duration · Usage (5h/wk/mo)
+# Line 1: Auth (MAX/IU) · Model · Context (usable) · Session tokens · Duration · Usage (5h/wk/mo)
 # Line 2: CWD · Git branch & dirty flag
 
 input=$(cat)
@@ -57,6 +57,60 @@ else
 fi
 reset="\033[0m"
 pct_colored=$(printf "${color}%d%%${reset}" "$usable_pct")
+
+# ── Session tokens (main loop + all subagents, cache reads excluded) ───────────
+# Subagent transcripts carry the *same* sessionId as their parent (usage-tracker's
+# claude-code collector relies on this — see collectors/claude-code.ts) and live
+# alongside the main transcript at <project>/<sessionId>/subagents/*.jsonl. Sum
+# usage across all of them for a true per-session total, not just the main loop.
+# cache_read_input_tokens is the FULL accumulated prior context re-read from
+# cache on *every* turn (Anthropic prompt-caching docs), so summing it across a
+# transcript counts the same tokens again and again — it also doesn't count
+# toward Anthropic's rate/quota limits for most models. Only input_tokens +
+# output_tokens + cache_creation_input_tokens are genuinely new per turn.
+session_id=$(echo "$input" | jq -r '.session_id // empty')
+transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
+tokens_fmt=""
+if [ -n "$session_id" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+  subagents_dir="$(dirname "$transcript_path")/${session_id}/subagents"
+  shopt -s nullglob
+  sub_files=("$subagents_dir"/*.jsonl)
+  shopt -u nullglob
+
+  # Cheap size signature to skip re-parsing multi-MB transcripts on every render.
+  main_size=$(stat -f%z "$transcript_path" 2>/dev/null || echo 0)
+  sub_size=0
+  if [ ${#sub_files[@]} -gt 0 ]; then
+    sub_size=$(stat -f%z "${sub_files[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}')
+  fi
+  sig="${main_size}:${#sub_files[@]}:${sub_size}"
+
+  _tok_cache_dir="/tmp/claude_sl"
+  _tok_cache="${_tok_cache_dir}/tokens_${session_id}.json"
+  mkdir -p "$_tok_cache_dir"
+
+  cached_sig=""
+  cached_total=""
+  if [ -f "$_tok_cache" ]; then
+    cached_sig=$(jq -r '.sig // empty' "$_tok_cache" 2>/dev/null)
+    cached_total=$(jq -r '.total // empty' "$_tok_cache" 2>/dev/null)
+  fi
+
+  if [ "$cached_sig" = "$sig" ] && [ -n "$cached_total" ]; then
+    total_tokens="$cached_total"
+  else
+    total_tokens=$(jq '. as $l | select($l.type=="assistant" and $l.message.usage != null) | ($l.message.usage.input_tokens // 0) + ($l.message.usage.output_tokens // 0) + ($l.message.usage.cache_creation_input_tokens // 0)' "$transcript_path" "${sub_files[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}')
+    printf '{"sig":"%s","total":%d}' "$sig" "$total_tokens" > "$_tok_cache"
+  fi
+
+  if [ "$total_tokens" -ge 1000000 ]; then
+    tokens_fmt=$(LC_NUMERIC=C awk "BEGIN {printf \"%.1fM\", $total_tokens/1000000}")
+  elif [ "$total_tokens" -ge 1000 ]; then
+    tokens_fmt=$(LC_NUMERIC=C awk "BEGIN {printf \"%.0fk\", $total_tokens/1000}")
+  else
+    tokens_fmt="$total_tokens"
+  fi
+fi
 
 # ── Duration ───────────────────────────────────────────────────────────────────
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
@@ -143,7 +197,9 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ── Output ─────────────────────────────────────────────────────────────────────
-line1="${auth_mode} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored} | ${duration}"
+line1="${auth_mode} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
+[ -n "$tokens_fmt" ] && line1="${line1} | Σ${tokens_fmt}"
+line1="${line1} | ${duration}"
 [ -n "$usage_parts" ] && line1="${line1} | ${usage_parts}"
 echo -e "$line1"
 echo -e "${cwd_display}${git_section}"
