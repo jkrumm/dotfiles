@@ -302,7 +302,7 @@ Two layers — no workspace-level intermediate file:
 - **Per-project** (`<repo>/CLAUDE.md`): project-specific conventions. Loads when Claude is started inside the repo.
 
 Global rules (always-on conventions):
-- `~/.claude/rules/` ← `dotfiles/rules/` — attribution, commits, TypeScript, security, code style, formatting, docker-makefile, dependency-hygiene, research-first, visx-charts.
+- `~/.claude/rules/` ← `dotfiles/rules/` — attribution, commits, TypeScript, security, code style, formatting, docker-makefile, makefile-conventions, dependency-hygiene, research-first, visx-charts.
 
 Global skills:
 - `~/.claude/skills/` ← `dotfiles/skills/` (global skills).
