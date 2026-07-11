@@ -463,6 +463,11 @@ function handleSessionStartEvent(
   state.chatContext = extractChatContext(input.transcript_path);
   saveState(state);
 
+  logEvent("hook", "session_env", "info", {
+    session: input.session_id,
+    base_url: process.env.ANTHROPIC_BASE_URL || null,
+  });
+
   // No notification for session start (silent tracking)
   // Date injection: Claude Code already injects # currentDate automatically.
   // Research reminder: handled by ~/.claude/rules/research-first.md (always loaded).
