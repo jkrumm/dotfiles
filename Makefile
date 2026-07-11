@@ -405,23 +405,24 @@ batt-limit:
 batt-status:
 	@$(BATT) status 2>/dev/null || echo "  batt daemon not running — run 'make batt-setup'"
 
-# ~/SourceRoot/brain nightly git safety-net snapshot (refs/snapshots/<ts>, 03:30).
-# A separate snapshot stream — never touches reviewed master, HEAD, the index,
-# or the working tree. LiveSync stays the real backup; this is a git-level net
-# so an un-reviewed day of vault edits is never lost. Self-guards on a missing
-# vault; the script's `git add -A` respects .gitignore, so secrets stay out.
-.PHONY: brain-snapshot-setup brain-snapshot-teardown
-brain-snapshot-setup:
+# ~/SourceRoot/brain nightly auto-commit + push to GitHub (03:30). Backstop for
+# direct Obsidian edits never committed during a Claude Code session — commits
+# any dirty working tree straight to master (claude_iu/Haiku writes the commit
+# message) and pushes. LiveSync stays the continuous cross-device sync; this
+# is what keeps GitHub actually current. Self-guards on a missing vault; the
+# script's `git add -A` respects .gitignore, so secrets stay out.
+.PHONY: brain-backup-setup brain-backup-teardown
+brain-backup-setup:
 	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
-		echo "  brain-snapshot: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
+		echo "  brain-backup: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
 	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-snapshot" PLIST_DIR="$(DOTFILES_DIR)/brain"
-	@echo "    ↳ nightly at 03:30 → refs/snapshots/<ts>; inspect: git -C ~/SourceRoot/brain for-each-ref refs/snapshots"
-brain-snapshot-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-snapshot.plist"; \
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-backup" PLIST_DIR="$(DOTFILES_DIR)/brain"
+	@echo "    ↳ nightly at 03:30 → commit + push to origin/master; log: /tmp/brain-backup.log"
+brain-backup-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-backup.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
 	rm -f "$$PLIST"; \
-	echo "  ✓ brain-snapshot torn down (unloaded + plist removed; refs/snapshots left intact)"
+	echo "  ✓ brain-backup torn down (unloaded + plist removed)"
 
 .PHONY: _setup-rules
 _setup-rules:
@@ -1255,8 +1256,8 @@ help:
 	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
 	@echo "  make batt-status      Show the battery charge-limiter status"
 	@echo ""
-	@echo "  make brain-snapshot-setup     Load the nightly brain vault git safety-net snapshot (refs/snapshots/<ts>)"
-	@echo "  make brain-snapshot-teardown  Unload + remove the snapshot LaunchAgent"
+	@echo "  make brain-backup-setup       Load the nightly brain vault auto-commit + push to GitHub"
+	@echo "  make brain-backup-teardown    Unload + remove the brain-backup LaunchAgent"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
 	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"
