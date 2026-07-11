@@ -14,10 +14,12 @@
 > - `litellm/bin/start-litellm.sh` — wrapper: injects `IU_API_KEY` + derives
 >   `IU_OPENAI_BASE_URL` from Keychain, sets `LITELLM_USE_CHAT_COMPLETIONS_URL_FOR_ANTHROPIC_MESSAGES=true`, binds `127.0.0.1:4000`.
 > - `litellm/com.litellm.proxy.plist.template` — always-on LaunchAgent (RunAtLoad + KeepAlive).
-> - Consumer: **sideclaw** (`server/mcp/session-runner.ts`, `DEFAULT_MODEL = "DeepSeek-V4-Pro"`)
->   routes all `check`/`review`/`research`/`implement` workers here. `claude_bridge` (dotfiles
->   `config/zsh/claude.zsh`) defaults to `DeepSeek-V4-Pro` too. `make litellm-restart` /
->   `make litellm-logs` to operate.
+> - **Consumers:** **sideclaw** (`server/mcp/session-runner.ts`, `DEFAULT_MODEL = "DeepSeek-V4-Pro"`)
+>   routes all `check`/`review` workers here. `claude_bridge` (dotfiles
+>   `config/zsh/claude.zsh`) also defaults to `DeepSeek-V4-Pro` for headless `-p` offload.
+>   **The interactive `ca` launcher no longer uses the bridge** — as of 2026-07-06 it goes
+>   direct to the IU native Anthropic endpoint (real Claude models with prompt caching, no
+>   translation tax). See the `ca()` comment block in `config/zsh/claude.zsh`.
 
 > **Worker-model history.** The bridge mechanism below was validated on 2026-05-21 with
 > **Kimi-K2.6** (Azure Sweden); the worker model was switched to **DeepSeek-V4-Pro** on
@@ -100,6 +102,8 @@ DeepSeek-V4-Pro`; pass `--model DeepSeek-V4-Flash` for the fast tier).
 | **Empty `result` envelope** | Bridge workers routinely end a session on a tool call, leaving the `result` field empty on `subtype: "success"`. sideclaw's `session-runner` recovers JSON from the last assistant text; `implement` reconciles against `git status`. |
 | **Single-backend throttling** | The worker tier is single-backend and intermittently 5xx/429s under burst; LiteLLM `fallbacks` transparently retry on the Claude-eu alias, and sideclaw caps angle concurrency. |
 | **No `WebSearch`/`WebFetch`** | They make internal Anthropic-model calls the bridge can't serve, so bridge workers can't browse the web. (Web research now runs on the standalone `research-gateway` service, not over this bridge.) |
+| **Subagent model tiers** | `--model`/`ANTHROPIC_MODEL` only sets the *main* model. Subagents (Explore, `@implementer`) and background tasks (title-gen, compaction) resolve by **tier** (opus/sonnet/haiku/fable); a custom main-model name can't be classified, so each tier falls back to its hardcoded Anthropic default (`claude-opus-4-8`, …) → `400 Invalid model name` the moment a subagent spawns. Fix: `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL` pin every tier to a bridge-known name (set in `ca`/`claude_bridge` in `config/zsh/claude.zsh`). The main chat works without this, which is why the pong smoke test misses it — validate a subagent spawn, not just a turn. |
+| **Context window (200k → 1M)** | Claude Code hardcodes a **200k** window for *any* model over a custom `ANTHROPIC_BASE_URL` — the `isFirstPartyAnthropicBaseUrl()` gate ([claude-code#46416](https://github.com/anthropics/claude-code/issues/46416)) only trusts `api.anthropic.com` to self-report a window, so it never reads one from the bridge (neither `/v1/models` transport carries a context field anyway). That throttled DeepSeek's real **1M** and auto-compacted at ~200k. Fix: **`CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000`** (set in `ca`) — proven via `-p --output-format json`: `modelUsage.DeepSeek-V4-Pro.contextWindow` goes `200000 → 1000000`. It's global (all tiers) but **keeps the DeepSeek model name**, so usage-tracker dedup is untouched — unlike the `[1m]` name-trick, which forces a `claude-*` id → classified Max-quota → double-count + misbill. Auto-compaction stays on; since the bridge has no prompt caching, you only pay for the bigger window when you actually fill it (a full uncached re-send each turn) — lower the number to bound cost. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` does **not** work here (capped at the model's *actual* window, which is the 200k default). |
 
 ## What does NOT work
 
