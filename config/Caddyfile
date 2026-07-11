@@ -110,6 +110,14 @@ modelpick.test {
 	reverse_proxy localhost:7727
 }
 
+# jkrumm.com — personal portfolio homepage (Astro 7 static, motion reveals) on
+# :7728. Hard-assigned port; the dev script runs `bunx kill-port 7728` first and
+# astro.config sets strictPort so a clash fails loudly instead of drifting.
+jkrumm.test {
+	import local
+	reverse_proxy localhost:7728
+}
+
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
 # https://audio-gateway.test/v1 instead. Kept commented for an easy
