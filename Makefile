@@ -1301,6 +1301,13 @@ secrets-seed:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
 
+# Rotate the mini age key + re-seal the cache under a fresh recipient (use if the
+# private key may be exposed). Never prints the key; reseeds atomically. MINI-only.
+.PHONY: secrets-rotate
+secrets-rotate:
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-rotate.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" DOTFILES_DIR="$(DOTFILES_DIR)" $(DOTFILES_DIR)/scripts/secrets-rotate.sh
+
 # Lint the shim + its harness. Static-only, runs on ANY machine (no cache/age key needed).
 .PHONY: secrets-lint
 secrets-lint:
