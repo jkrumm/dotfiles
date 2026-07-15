@@ -99,7 +99,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, secrets, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, secrets, secrets-cache, tools |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
 | `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
@@ -112,6 +112,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | Blueprint v6 light/dark terminal themes (copied, not symlinked — cmux symlink bug) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
+| `scripts/secrets-run` | `~/.local/bin/secrets-run` | Headless secrets runtime entrypoint — `op` (MacBook) or `cache` (mini) backend, see Secrets Strategy below |
 | `hooks/notify.ts` | `~/.claude/hooks/notify.ts` | All 4 hook events |
 | `hooks/protect-branches.ts` | `~/.claude/hooks/protect-branches.ts` | PreToolUse — blocks push to protected branches |
 | `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` | PreToolUse — blocks raw docker commands when Makefile exists |
@@ -219,6 +220,23 @@ Two 1Password accounts are configured:
 **New machine setup:**
 1. Install 1Password + enable CLI integration (Settings → Developer → Enable CLI)
 2. `make setup` — will fail fast with instructions if 1Password isn't ready
+
+**Headless secrets (agent host, no human at the keyboard).** The always-on Mac
+mini runs agents from a SOPS+age encrypted cache instead of live 1Password
+resolvers; the MacBook seeds that cache via biometric 1Password. Tooling
+(`scripts/secrets-run`, `scripts/secrets-seed.sh`, this repo's Makefile
+targets) lives here; the data half — varlock schemas per profile, the
+encrypted cache, `.sops.yaml` — lives in the private
+`~/SourceRoot/dotfiles-private` repo (see its `docs/design.md` for the full
+model and runbook). Two backends, selected per machine by
+`~/.config/secrets/backend`:
+- **`op`** (MacBook) — `secrets-run` calls `varlock run`/`load` directly; resolvers fire via 1Password desktop-app biometric.
+- **`cache`** (mini) — `secrets-run` decrypts the profile's SOPS+age cache in memory, preflights completeness against the schema, then hands the ambient env to `varlock run` for validation/redaction. Never touches disk with plaintext, fails closed on any missing piece.
+
+Ritual: `make secrets-seed` (optionally `PROFILES=name1,name2`) resolves each
+profile through 1Password (biometric) and reseals it into the cache — run
+from the MacBook (or on the mini itself over Screen Sharing) whenever secrets
+rotate or the cache goes stale (`secrets-run` warns after 14 days).
 
 ## Claude Code Launchers
 

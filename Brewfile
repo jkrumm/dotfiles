@@ -15,6 +15,10 @@ tap "oven-sh/bun"
 tap "satococoa/tap"
 # Simple, modern, secure file encryption
 brew "age"
+# Editor of encrypted files (paired with age for the headless secrets cache)
+brew "sops"
+# Schema-validated .env loader — resolver plugins (1Password, etc.) + secret redaction
+brew "varlock"
 # Codec library for encoding and decoding AV1 video streams
 brew "aom"
 # Interpreted, interactive, object-oriented programming language

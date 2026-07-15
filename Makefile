@@ -3,6 +3,10 @@ CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
 BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 
+# Data half of the headless secrets system (schemas + encrypted cache) —
+# see ~/SourceRoot/dotfiles-private, override for testing/alternate checkouts.
+SECRETS_PRIVATE_REPO ?= $(HOME)/SourceRoot/dotfiles-private
+
 # Colima (Docker runtime VM — replaces OrbStack/Docker Desktop).
 # These are ceilings (not reservations): idle VM holds ~1.3GB regardless;
 # CPU is time-shared (free when idle). Bump for heavy stacks like clickstack:
@@ -39,6 +43,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-pnpm
 	@$(MAKE) --no-print-directory _setup-viteplus
 	@$(MAKE) --no-print-directory _setup-op-token
+	@$(MAKE) --no-print-directory _setup-secrets
 	@$(MAKE) --no-print-directory _setup-sdk-keys
 	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
 	@$(MAKE) --no-print-directory _setup-ssh
@@ -283,6 +288,30 @@ _setup-op-token:
 	@# TOKEN=$$(security find-generic-password -a "$$USER" -s "op-service-account-token" -w 2>/dev/null); \
 	@# KEY=$$(OP_SERVICE_ACCOUNT_TOKEN="$$TOKEN" op read "op://CLI/Anthropic/credential" 2>/dev/null); \
 	@# security add-generic-password -U -a "$$USER" -s "anthropic-api-key" -w "$$KEY" -T /usr/bin/security
+
+.PHONY: _setup-secrets
+_setup-secrets:
+	@echo "  Secrets (headless SOPS+age cache — tooling only, see $(SECRETS_PRIVATE_REPO))..."
+	@mkdir -p "$(HOME)/.local/bin"
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-run
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/secrets-run" \
+		DST="$(HOME)/.local/bin/secrets-run"
+	@mkdir -p "$(HOME)/.config/secrets"
+	@if [ -f "$(HOME)/.config/secrets/backend" ]; then \
+		echo "    · backend marker (ok, $$(cat $(HOME)/.config/secrets/backend))"; \
+	else \
+		echo "op" > "$(HOME)/.config/secrets/backend"; \
+		echo "    ✓ backend marker written (default: op — run 'make secrets-backend-cache' on the mini)"; \
+	fi
+	@if command -v varlock >/dev/null 2>&1; then \
+		varlock telemetry disable >/dev/null 2>&1 || true; \
+		echo "    · varlock telemetry disabled"; \
+		varlock install-plugin @varlock/1password-plugin@2.0.0 >/dev/null 2>&1 || true; \
+		echo "    · varlock 1Password plugin pinned @2.0.0 (install-plugin is idempotent)"; \
+	else \
+		echo "    ✗ varlock not installed — run make setup again after brew installs it"; \
+	fi
 
 .PHONY: _setup-sdk-keys
 _setup-sdk-keys:
@@ -821,6 +850,37 @@ status:
 	else \
 		echo "    ✗ ingest LaunchAgent [not loaded — run make setup]"; \
 	fi
+	@echo "  Secrets (headless SOPS+age cache)"
+	@command -v sops >/dev/null 2>&1 && echo "    ✓ sops" || echo "    ✗ sops [not installed — run make setup]"
+	@command -v varlock >/dev/null 2>&1 && echo "    ✓ varlock" || echo "    ✗ varlock [not installed — run make setup]"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.local/bin/secrets-run"
+	@if [ -f "$(HOME)/.config/secrets/backend" ]; then \
+		BACKEND=$$(cat "$(HOME)/.config/secrets/backend"); \
+		echo "    · backend marker: $$BACKEND"; \
+		if [ "$$BACKEND" = "cache" ]; then \
+			if [ -f "$(HOME)/.config/sops/age/keys.txt" ]; then \
+				PERMS=$$(stat -f "%OLp" "$(HOME)/.config/sops/age/keys.txt" 2>/dev/null); \
+				if [ "$$PERMS" = "600" ]; then \
+					echo "    ✓ age key (0600)"; \
+				else \
+					echo "    ✗ age key [permissions $$PERMS, expected 0600 — chmod 600 ~/.config/sops/age/keys.txt]"; \
+				fi; \
+			else \
+				echo "    ✗ age key [missing — run make secrets-backend-cache]"; \
+			fi; \
+			if [ -d "$(SECRETS_PRIVATE_REPO)/cache" ] && [ -n "$$(ls -A $(SECRETS_PRIVATE_REPO)/cache/*.enc.env 2>/dev/null)" ]; then \
+				for f in $(SECRETS_PRIVATE_REPO)/cache/*.enc.env; do \
+					NAME=$$(basename "$$f" .enc.env); \
+					AGE_DAYS=$$(( ( $$(date +%s) - $$(stat -f %m "$$f") ) / 86400 )); \
+					echo "    · cache/$$NAME.enc.env (~$${AGE_DAYS}d old)"; \
+				done; \
+			else \
+				echo "    · no cache files yet in $(SECRETS_PRIVATE_REPO)/cache — run make secrets-seed"; \
+			fi; \
+		fi; \
+	else \
+		echo "    ✗ backend marker [missing — run make setup]"; \
+	fi
 	@echo ""
 
 .PHONY: _check
@@ -1228,6 +1288,51 @@ _setup-usage-tracker:
 	fi
 
 # ============================================================================
+# Secrets — headless SOPS+age cache (see ~/SourceRoot/dotfiles-private)
+# ============================================================================
+# Tooling lives here (public); schemas + the encrypted cache live in the
+# private repo. Two backends per machine, selected by ~/.config/secrets/backend:
+#   op    (MacBook, human present)  — varlock resolvers fire via 1Password biometric
+#   cache (mini, headless)          — sops+age decrypt in memory, no prompts
+# `secrets-run` (symlinked by `make setup`) is the runtime entrypoint for both.
+
+.PHONY: secrets-seed
+secrets-seed:
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" PROFILES="$(PROFILES)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
+
+.PHONY: secrets-backend-cache
+secrets-backend-cache:
+	@mkdir -p "$(HOME)/.config/secrets"
+	@echo "cache" > "$(HOME)/.config/secrets/backend"
+	@echo "  ✓ backend marker set to 'cache' (this machine now decrypts headlessly)"
+	@if [ -f "$(HOME)/.config/sops/age/keys.txt" ]; then \
+		echo "  ✓ age key present ($(HOME)/.config/sops/age/keys.txt)"; \
+	else \
+		echo "  ✗ age key missing — generate one: age-keygen -o $(HOME)/.config/sops/age/keys.txt"; \
+		echo "    then add its public key as a recipient in $(SECRETS_PRIVATE_REPO)/.sops.yaml and reseed"; \
+	fi
+
+# Weekly staleness reminder for the SOPS+age secrets cache — pushes a heartbeat
+# to an Uptime Kuma push monitor (green while fresh, red once past the max
+# age). Never an automated reseed; just nudges the human to run
+# `make secrets-seed`. See scripts/secrets-freshness-check.sh.
+.PHONY: secrets-freshness-setup secrets-freshness-teardown
+secrets-freshness-setup:
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.secrets-freshness" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ weekly Mon 09:15 → push cache staleness to Uptime Kuma"
+secrets-freshness-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.secrets-freshness.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ secrets-freshness torn down (unloaded + plist removed)"
+
+.PHONY: secrets-freshness-check
+secrets-freshness-check:
+	@bash $(DOTFILES_DIR)/scripts/secrets-freshness-check.sh
+
+# ============================================================================
 # Help
 # ============================================================================
 
@@ -1266,6 +1371,11 @@ help:
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"
 	@echo "  make litellm-logs     Tail /tmp/litellm.log"
+	@echo ""
+	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (PROFILES=name1,name2 to limit)"
+	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
+	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
+	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."
