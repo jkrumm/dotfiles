@@ -54,7 +54,7 @@ Compiled pieces live on the curated surface (an Area/Project folder note, or a h
 **AGENTS.md → Ingestion is canonical** — read it before any migration. The full promotion runbook, the three wikilink cases, provenance/no-re-migration, and "migration preserves, does not recommend" all live there. The non-negotiables:
 
 - **Never an autonomous loop.** v1 was scrapped for exactly that (`.docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
-- Connectors and the vault drop **raw** captures into `00_Inbox/` only — never straight into an evergreen Area/Project/Resource. Log every skip with a reason in `log.md`; no silent drops.
+- Connectors and the vault drop **raw** captures into `00_Inbox/` only — never straight into `wiki/` or an evergreen Area/Project. Log every skip with a reason in `log.md`; no silent drops.
 - Show the user the `git diff` before it lands. Small batches.
 - Do not touch `00_Inbox/` or run ingestion unless explicitly asked.
 
