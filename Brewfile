@@ -19,6 +19,8 @@ brew "age"
 brew "sops"
 # Schema-validated .env loader — resolver plugins (1Password, etc.) + secret redaction
 brew "varlock"
+# Shell script static analysis — gates the secrets-run shim (make secrets-lint)
+brew "shellcheck"
 # Codec library for encoding and decoding AV1 video streams
 brew "aom"
 # Interpreted, interactive, object-oriented programming language

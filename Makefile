@@ -1297,6 +1297,20 @@ secrets-seed:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
 
+# Lint the shim + its harness. Static-only, runs on ANY machine (no cache/age key needed).
+.PHONY: secrets-lint
+secrets-lint:
+	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle' (it's in the Brewfile)"; exit 1; }
+	@shellcheck $(DOTFILES_DIR)/scripts/secrets-run $(DOTFILES_DIR)/scripts/secrets-run.test.sh
+	@echo "  ✓ shellcheck clean (secrets-run + harness)"
+
+# Functional regression suite for the shim. MINI-ONLY: the harness preflight requires the
+# `cache` backend + an age key. Lints first. Run after any change to secrets-run.
+.PHONY: secrets-test
+secrets-test: secrets-lint
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-run.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-run.test.sh
+
 .PHONY: secrets-backend-cache
 secrets-backend-cache:
 	@mkdir -p "$(HOME)/.config/secrets"
