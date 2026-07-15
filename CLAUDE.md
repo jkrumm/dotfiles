@@ -112,7 +112,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | Blueprint v6 light/dark terminal themes (copied, not symlinked — cmux symlink bug) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
-| `scripts/secrets-run` | `~/.local/bin/secrets-run` | Headless secrets runtime entrypoint — `op` (MacBook) or `cache` (mini) backend, see Secrets Strategy below |
+| `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim — `op` (MacBook) or `cache` (mini) backend, see Headless secrets below |
 | `hooks/notify.ts` | `~/.claude/hooks/notify.ts` | All 4 hook events |
 | `hooks/protect-branches.ts` | `~/.claude/hooks/protect-branches.ts` | PreToolUse — blocks push to protected branches |
 | `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` | PreToolUse — blocks raw docker commands when Makefile exists |
@@ -221,22 +221,23 @@ Two 1Password accounts are configured:
 1. Install 1Password + enable CLI integration (Settings → Developer → Enable CLI)
 2. `make setup` — will fail fast with instructions if 1Password isn't ready
 
-**Headless secrets (agent host, no human at the keyboard).** The always-on Mac
-mini runs agents from a SOPS+age encrypted cache instead of live 1Password
-resolvers; the MacBook seeds that cache via biometric 1Password. Tooling
-(`scripts/secrets-run`, `scripts/secrets-seed.sh`, this repo's Makefile
-targets) lives here; the data half — varlock schemas per profile, the
-encrypted cache, `.sops.yaml` — lives in the private
-`~/SourceRoot/dotfiles-private` repo (see its `docs/design.md` for the full
-model and runbook). Two backends, selected per machine by
-`~/.config/secrets/backend`:
-- **`op`** (MacBook) — `secrets-run` calls `varlock run`/`load` directly; resolvers fire via 1Password desktop-app biometric.
-- **`cache`** (mini) — `secrets-run` decrypts the profile's SOPS+age cache in memory, preflights completeness against the schema, then hands the ambient env to `varlock run` for validation/redaction. Never touches disk with plaintext, fails closed on any missing piece.
+**Headless secrets (agent host, no human at the keyboard).** `secrets-run` is a
+drop-in `op` shim: apps keep their own `.env.tpl` of `op://` references and run
+via `secrets-run run --env-file=<tpl> -- <cmd>` (mirrors `op run`); only the
+backend differs per machine (`~/.config/secrets/backend`). Tooling
+(`scripts/secrets-run`, `scripts/secrets-seed.sh`, this repo's Makefile targets)
+lives here; the data half — `headless.refs` (the explicit list of refs the mini
+may cache), the encrypted cache, `.sops.yaml` — lives in the private
+`~/SourceRoot/dotfiles-private` repo (see its `docs/design.md` for the full model
+and runbook). Two backends:
+- **`op`** (MacBook) — `secrets-run` passes through to live `op` (biometric); native output redaction.
+- **`cache`** (mini) — `secrets-run` resolves each `op://` ref from a single SOPS+age cache (`op://ref → value`, decrypted in memory), injecting only the template's declared keys and masking resolved values from piped output. No plaintext on disk, no 1Password/network call, fails closed on any missing ref.
 
-Ritual: `make secrets-seed` (optionally `PROFILES=name1,name2`) resolves each
-profile through 1Password (biometric) and reseals it into the cache — run
-from the MacBook (or on the mini itself over Screen Sharing) whenever secrets
-rotate or the cache goes stale (`secrets-run` warns after 14 days).
+Ritual: `make secrets-seed` reads `dotfiles-private/headless.refs`, resolves every
+ref through 1Password (biometric, one pass), and reseals the cache — run from the
+mini (present-human) or the MacBook whenever secrets rotate or the cache goes
+stale (`secrets-run` warns after 14 days). varlock is retained only as the
+`dotfiles-private` pre-commit leak scanner, not in the seed/runtime path.
 
 ## Claude Code Launchers
 

@@ -306,11 +306,9 @@ _setup-secrets:
 	fi
 	@if command -v varlock >/dev/null 2>&1; then \
 		varlock telemetry disable >/dev/null 2>&1 || true; \
-		echo "    · varlock telemetry disabled"; \
-		varlock install-plugin @varlock/1password-plugin@2.0.0 >/dev/null 2>&1 || true; \
-		echo "    · varlock 1Password plugin pinned @2.0.0 (install-plugin is idempotent)"; \
+		echo "    · varlock present (used only as the dotfiles-private pre-commit scan gate)"; \
 	else \
-		echo "    ✗ varlock not installed — run make setup again after brew installs it"; \
+		echo "    · varlock not installed (optional — only the pre-commit scan uses it)"; \
 	fi
 
 .PHONY: _setup-sdk-keys
@@ -868,14 +866,11 @@ status:
 			else \
 				echo "    ✗ age key [missing — run make secrets-backend-cache]"; \
 			fi; \
-			if [ -d "$(SECRETS_PRIVATE_REPO)/cache" ] && [ -n "$$(ls -A $(SECRETS_PRIVATE_REPO)/cache/*.enc.env 2>/dev/null)" ]; then \
-				for f in $(SECRETS_PRIVATE_REPO)/cache/*.enc.env; do \
-					NAME=$$(basename "$$f" .enc.env); \
-					AGE_DAYS=$$(( ( $$(date +%s) - $$(stat -f %m "$$f") ) / 86400 )); \
-					echo "    · cache/$$NAME.enc.env (~$${AGE_DAYS}d old)"; \
-				done; \
+			if [ -f "$(SECRETS_PRIVATE_REPO)/cache/secrets.enc.json" ]; then \
+				AGE_DAYS=$$(( ( $$(date +%s) - $$(stat -f %m "$(SECRETS_PRIVATE_REPO)/cache/secrets.enc.json") ) / 86400 )); \
+				echo "    · cache/secrets.enc.json (~$${AGE_DAYS}d old)"; \
 			else \
-				echo "    · no cache files yet in $(SECRETS_PRIVATE_REPO)/cache — run make secrets-seed"; \
+				echo "    · no cache yet at $(SECRETS_PRIVATE_REPO)/cache — run make secrets-seed"; \
 			fi; \
 		fi; \
 	else \
@@ -1290,16 +1285,17 @@ _setup-usage-tracker:
 # ============================================================================
 # Secrets — headless SOPS+age cache (see ~/SourceRoot/dotfiles-private)
 # ============================================================================
-# Tooling lives here (public); schemas + the encrypted cache live in the
-# private repo. Two backends per machine, selected by ~/.config/secrets/backend:
-#   op    (MacBook, human present)  — varlock resolvers fire via 1Password biometric
+# Tooling lives here (public); the ref-list (headless.refs) + the encrypted
+# cache live in the private repo. secrets-run is a drop-in `op` shim whose
+# backend is selected per machine by ~/.config/secrets/backend:
+#   op    (MacBook, human present)  — passthrough to live `op` (biometric)
 #   cache (mini, headless)          — sops+age decrypt in memory, no prompts
 # `secrets-run` (symlinked by `make setup`) is the runtime entrypoint for both.
 
 .PHONY: secrets-seed
 secrets-seed:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.sh
-	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" PROFILES="$(PROFILES)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/secrets-seed.sh
 
 .PHONY: secrets-backend-cache
 secrets-backend-cache:
@@ -1372,7 +1368,7 @@ help:
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"
 	@echo "  make litellm-logs     Tail /tmp/litellm.log"
 	@echo ""
-	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (PROFILES=name1,name2 to limit)"
+	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (reads dotfiles-private/headless.refs)"
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"

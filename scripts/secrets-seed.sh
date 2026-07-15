@@ -4,23 +4,24 @@ set -euo pipefail
 umask 077
 ulimit -c 0 2>/dev/null || true  # no core dumps — they would capture resolved plaintext from memory
 
-# secrets-seed — resolve each profile's varlock schema (biometric 1Password
-# resolvers fire here) and seal the result into the SOPS+age cache that
-# secrets-run consumes headlessly on the mini. Run from a MacBook (human
-# present); running on the mini itself (Screen Sharing) is also supported —
-# the split is about *when* a human approves, not which keyboard they use.
+# secrets-seed — resolve every op:// reference in dotfiles-private/headless.refs
+# via biometric `op read` (human present) and seal them into a single SOPS+age
+# cache (cache/secrets.enc.json) as an `op://ref -> value` map. That cache is what
+# secrets-run reads headlessly on the mini. Run from the mini (present-human) or a
+# MacBook — the split is about *when* a human approves, not which keyboard.
 #
-# Plaintext only ever exists in pipe buffers / process memory: never a temp
-# file, never argv, never xtrace. See dotfiles-private/docs/design.md (D5).
+# Plaintext only ever exists in pipe buffers / process memory: never a temp file,
+# never argv, never xtrace. See dotfiles-private/docs/design.md (D5).
 #
 # Usage:
-#   scripts/secrets-seed.sh                    # seed every profiles/*.env.schema
-#   PROFILES="baseline,work" scripts/secrets-seed.sh   # seed a subset (space or comma separated)
+#   scripts/secrets-seed.sh
 
 SECRETS_PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
 BACKEND_MARKER="$HOME/.config/secrets/backend"
+REFS_FILE="$SECRETS_PRIVATE_REPO/headless.refs"
 REMOTE_HOST="mac-mini"
 REMOTE_REPO_REL="SourceRoot/dotfiles-private"
+OP_ACCOUNT="tkrumm"   # tkrumm-only; careerpartner (IU) refs are out of scope headless
 # Trusted age recipient, read from 1Password (human-controlled, NOT from the
 # mini-writable dotfiles-private repo). Verifies .sops.yaml has not been swapped
 # to an attacker's recipient — a compromised mini could otherwise push a poisoned
@@ -41,103 +42,95 @@ indent() {
 
 [[ -d "$SECRETS_PRIVATE_REPO" ]] \
   || die "private secrets repo not found at $SECRETS_PRIVATE_REPO — clone dotfiles-private or set SECRETS_PRIVATE_REPO"
-[[ -d "$SECRETS_PRIVATE_REPO/profiles" ]] \
-  || die "no profiles/ directory in $SECRETS_PRIVATE_REPO — private repo not yet initialized"
-command -v varlock >/dev/null 2>&1 || die "varlock not installed — brew install varlock"
+[[ -f "$REFS_FILE" ]] \
+  || die "no headless.refs at $REFS_FILE — the ref-list is the seed's input (see docs/runbook.md)"
 command -v sops >/dev/null 2>&1 || die "sops not installed — brew install sops"
+command -v jq >/dev/null 2>&1 || die "jq not installed — brew install jq"
 command -v op >/dev/null 2>&1 || die "op (1Password CLI) not installed — brew install --cask 1password-cli"
 
-# cd so .sops.yaml (recipient config) and profiles/cache paths resolve relatively.
+# cd so .sops.yaml (recipient config) resolves relatively and filename-override
+# matches its path_regex.
 cd "$SECRETS_PRIVATE_REPO"
 
-# --- enumerate profiles ------------------------------------------------------
-profiles=()
-if [[ -n "${PROFILES:-}" ]]; then
-  raw_profiles=()
-  IFS=', ' read -r -a raw_profiles <<<"$PROFILES"
-  for p in ${raw_profiles[@]+"${raw_profiles[@]}"}; do
-    [[ -n "$p" ]] && profiles+=("$p")
-  done
-else
-  for f in profiles/*.env.schema; do
-    [[ -f "$f" ]] || continue
-    profiles+=("$(basename "$f" .env.schema)")
-  done
+# --- collect + validate refs -------------------------------------------------
+# One op:// ref per non-comment line. Refs are NOT secret (they name vault/item/
+# field, no values), so sorting/printing them is fine.
+refs=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line#"${line%%[![:space:]]*}"}"                 # ltrim
+  line="${line%"${line##*[![:space:]]}"}"                 # rtrim
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  refs+=("$line")
+done < "$REFS_FILE"
+[[ ${#refs[@]} -gt 0 ]] || die "headless.refs has no references"
+
+# Dedupe (order irrelevant for a map).
+deduped=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && deduped+=("$line")
+done < <(printf '%s\n' "${refs[@]}" | sort -u)
+refs=("${deduped[@]}")
+
+# Validate shape + enforce the two hard rules (design.md, PRD §6):
+#   1. every entry is an op:// reference;
+#   2. op://Private/... is refused unconditionally — Private is human-only and
+#      must never enter the headless cache (fail-safe against a fat-finger).
+bad=()
+for ref in "${refs[@]}"; do
+  [[ "$ref" == op://* ]] || { bad+=("not an op:// reference: $ref"); continue; }
+  # Case-insensitive vault check: `op` may match vault names case-insensitively,
+  # so guard Private/PRIVATE/pRivate alike (not just the literal spelling).
+  vault="${ref#op://}"; vault="${vault%%/*}"
+  vault_lc=$(printf '%s' "$vault" | tr '[:upper:]' '[:lower:]')
+  [[ "$vault_lc" == "private" ]] \
+    && bad+=("op://Private is forbidden in the headless cache: $ref")
+done
+if [[ ${#bad[@]} -gt 0 ]]; then
+  echo "  ✗ headless.refs policy violation:" >&2
+  printf '      - %s\n' "${bad[@]}" >&2
+  die "refusing to seed — fix headless.refs (op:// refs only; never op://Private)."
 fi
-[[ ${#profiles[@]} -gt 0 ]] || die "no profiles to seed (profiles/*.env.schema empty, or PROFILES matched nothing)"
+# Print the ref list before resolving. Refs are non-secret (vault/item/field, no
+# values), and this is the human-review checkpoint the explicit-list model relies
+# on: the person seeding can eyeball exactly what is about to be cached — and Ctrl-C
+# on an unexpected or maliciously-added ref — before any value is read or sealed.
+echo "  ${#refs[@]} reference(s) to seed from headless.refs:"
+printf '      %s\n' "${refs[@]}"
 
-# Validate profile names BEFORE any use: they are interpolated into file paths
-# and into the remote ssh command string in deliver_remote_cache. A name with
-# shell metacharacters would be RCE on the mini; a name with `../` would be path
-# traversal out of cache/. Names come from filenames or a user-supplied
-# PROFILES= — neither is trusted. Restrict to a safe charset.
-for p in "${profiles[@]}"; do
-  [[ "$p" =~ ^[A-Za-z0-9_-]+$ ]] \
-    || die "invalid profile name '$p' — only letters, digits, '_' and '-' are allowed"
-done
-
-schema_paths=()
-for p in "${profiles[@]}"; do
-  schema="profiles/$p.env.schema"
-  [[ -f "$schema" ]] || die "no schema for profile '$p' at $SECRETS_PRIVATE_REPO/$schema"
-  schema_paths+=("$schema")
-done
-
-# --- tier gate (PRD §6): the T0-only blast-radius bound is the primary §5 ----
-# compensating control. Enforce it here, not by a review-only comment: every
-# declared item in a seeded schema must carry a `# tier: T0` or `# tier: T1`
-# marker in its attached comment block. A missing/other tier aborts the seed —
-# no unmarked (or T2/T3) item ever reaches the cache.
-validate_schema_tiers() {
-  local schema="$1" line pending_tier="" bad=()
-  while IFS= read -r line; do
-    if [[ -z "$line" || "$line" == '# ---'* ]]; then
-      pending_tier=""
-      continue
-    fi
-    if [[ "$line" =~ ^#[[:space:]]*tier:[[:space:]]*([A-Za-z0-9]+) ]]; then
-      pending_tier="${BASH_REMATCH[1]}"
-      continue
-    fi
-    [[ "$line" == \#* ]] && continue
-    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
-      case "$pending_tier" in
-        T0 | T1) : ;;
-        "") bad+=("${line%%=*} (no tier: marker)") ;;
-        *) bad+=("${line%%=*} (tier: $pending_tier — only T0/T1 allowed)") ;;
-      esac
-      pending_tier=""
-    fi
-  done <"$schema"
-  if [[ ${#bad[@]} -gt 0 ]]; then
-    echo "    ✗ tier policy violation in $schema:" >&2
-    printf '        - %s\n' "${bad[@]}" >&2
-    die "refusing to seed — every item needs a '# tier: T0|T1' marker (PRD §6). T2/T3 must never enter the cache."
-  fi
-}
-
-for schema in "${schema_paths[@]}"; do
-  validate_schema_tiers "$schema"
-done
-
-# --- op signin guards (rules/makefile-conventions.md pattern) ---------------
+# --- op sign-in guard (rules/makefile-conventions.md pattern) ---------------
 echo "  1Password sign-in..."
-op whoami --account tkrumm >/dev/null 2>&1 || op signin --account tkrumm
-echo "    ✓ tkrumm"
-if grep -l "account=careerpartner" "${schema_paths[@]}" >/dev/null 2>&1; then
-  op whoami --account careerpartner >/dev/null 2>&1 || op signin --account careerpartner
-  echo "    ✓ careerpartner"
+op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$OP_ACCOUNT"
+echo "    ✓ $OP_ACCOUNT"
+
+# --- Private-vault fail-safe, part 2: deny by UUID too (needs op) ------------
+# The pre-sign-in check above rejects op://Private/... by NAME. A ref can also
+# target the Private vault by its UUID (op://<uuid>/item/field), bypassing a
+# name-only check. Resolve Private's canonical id once and reject any ref whose
+# vault segment matches it, closing the UUID bypass (a compromised mini poisoning
+# headless.refs so the next biometric seed caches a genuinely-private secret).
+private_id=$(op vault get "Private" --account "$OP_ACCOUNT" --format json 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)
+if [[ -n "$private_id" ]]; then
+  uuid_bad=()
+  for ref in "${refs[@]}"; do
+    v="${ref#op://}"; v="${v%%/*}"
+    [[ "$v" == "$private_id" ]] && uuid_bad+=("$ref")
+  done
+  if [[ ${#uuid_bad[@]} -gt 0 ]]; then
+    echo "  ✗ headless.refs references the Private vault by UUID:" >&2
+    printf '      - %s\n' "${uuid_bad[@]}" >&2
+    die "refusing to seed — Private is human-only and must never enter the headless cache."
+  fi
+else
+  echo "    ! could not resolve the Private vault id — UUID-form Private guard skipped" >&2
 fi
 
 # --- recipient pinning (defends against a swapped .sops.yaml recipient) ------
 # Assert the recipient SET in .sops.yaml is exactly {trusted}: an attacker with
 # write access to the repo could otherwise *append* a second recipient (sops
-# supports many) so the cache is also encrypted to their key, while the first
-# recipient still matches. So we reject on any extra recipient, not just a
-# mismatched first one.
+# supports many) so the cache is also encrypted to their key while the first still
+# matches. Reject on any extra recipient, not just a mismatched first one.
 echo "  Verifying age recipient..."
-expected_recipient=$(op read "$TRUSTED_RECIPIENT_REF" --account tkrumm 2>/dev/null || true)
-# `|| true` so a no-match under pipefail doesn't abort into a false negative.
+expected_recipient=$(op read "$TRUSTED_RECIPIENT_REF" --account "$OP_ACCOUNT" 2>/dev/null || true)
 all_recipients=$(grep -Eo 'age1[0-9a-z]+' .sops.yaml 2>/dev/null || true)
 if [[ -n "$expected_recipient" ]]; then
   recipient_count=$(printf '%s\n' "$all_recipients" | grep -c . || true)
@@ -157,137 +150,118 @@ if [[ -f "$BACKEND_MARKER" ]]; then
 fi
 deliver_local=0
 [[ "$local_backend" == "cache" ]] && deliver_local=1
-
 if ((deliver_local)); then
   echo "  Delivery: local (this machine is the cache backend)"
 else
   echo "  Delivery: ssh $REMOTE_HOST"
 fi
 
-# Extract declared item names from a schema (comments excluded).
-schema_declared_keys() {
-  local schema="$1" line
-  while IFS= read -r line; do
-    [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
-    printf '%s\n' "${line%%=*}"
-  done <"$schema"
+# --- resolve every ref (biometric) into an in-memory value array -------------
+# Values live only in the vals[] shell array (process memory, never disk — R1).
+# A single failing op read aborts before any crypto (cache stays untouched).
+echo "  Resolving references..."
+vals=()
+rerr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
+for ref in "${refs[@]}"; do
+  if ! v=$(op read --account "$OP_ACCOUNT" "$ref" 2>"$rerr"); then
+    echo "    ✗ op read failed for $ref:" >&2
+    indent <"$rerr" >&2
+    rm -f "$rerr"
+    die "aborting — cache untouched"
+  fi
+  # v1 constraint: single-line values only. A multi-line value would misalign the
+  # newline-paired jq fold below and silently corrupt the cache — refuse it.
+  case "$v" in
+    *$'\n'*) rm -f "$rerr"; die "value for $ref is multi-line — unsupported (v1: single-line values only); remove it from headless.refs" ;;
+  esac
+  # Heads-up (not fatal): a value shorter than the runtime redaction floor won't be
+  # masked from a command's output on the mini (secrets-run REDACT_MIN_LEN). Print
+  # only the ref + length, never the value.
+  if [[ ${#v} -lt "${REDACT_MIN_LEN:-5}" ]]; then
+    echo "    ! $ref resolves to a ${#v}-char value — too short to be redacted at runtime (secrets-run won't mask it)" >&2
+  fi
+  vals+=("$v")
+done
+rm -f "$rerr"
+echo "    ✓ resolved ${#vals[@]} value(s)"
+
+# --- assemble plaintext JSON (in pipes) and encrypt --------------------------
+# builtin printf emits ref/value pairs into a pipe (no argv exposure); jq folds
+# them into a map; sops seals it. Plaintext never lands as a file, never as argv.
+seeded_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+emit_pairs() {
+  local i
+  for ((i = 0; i < ${#refs[@]}; i++)); do
+    printf '%s\n%s\n' "${refs[$i]}" "${vals[$i]}"
+  done
 }
 
+serr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
+if ! ciphertext=$(emit_pairs \
+  | jq -Rn --arg seeded "$seeded_at" '
+      [inputs] as $l
+      | reduce range(0; ($l | length); 2) as $i ({}; . + {($l[$i]): $l[$i + 1]})
+      | . + {"_seeded_at": $seeded}
+    ' \
+  | sops --encrypt --input-type json --output-type json --filename-override "cache/secrets.enc.json" /dev/stdin 2>"$serr"); then
+  echo "    ✗ encrypt failed:" >&2
+  indent <"$serr" >&2
+  rm -f "$serr"
+  die "aborting — cache untouched"
+fi
+rm -f "$serr"
+
+# --- sanity checks on the ciphertext (before delivery) -----------------------
+[[ "$ciphertext" == *'ENC['* ]] \
+  || die "ciphertext sanity check failed — no ENC[ marker, aborting (cache untouched)"
+
+# Every ref must be present as an (encrypted) key in the ciphertext. Keys are
+# plaintext in SOPS-JSON (only values are encrypted), so this confirms nothing
+# was silently dropped between resolve and seal.
+missing_keys=()
+for ref in "${refs[@]}"; do
+  grep -qF "\"$ref\"" <<<"$ciphertext" || missing_keys+=("$ref")
+done
+if [[ ${#missing_keys[@]} -gt 0 ]]; then
+  echo "    ✗ ciphertext missing key(s): ${missing_keys[*]}" >&2
+  die "aborting — cache untouched"
+fi
+
+# --- deliver atomically (temp + mv; no partial cache is ever observable) -----
+# The temp name is PID-unique so two overlapping `make secrets-seed` runs can't
+# interleave writes to a shared temp before either `mv` fires (mv onto the final
+# path is itself atomic, so the last writer simply wins cleanly).
 deliver_local_cache() {
-  local profile="$1" ciphertext="$2" tmp final
   mkdir -p cache
-  tmp="cache/$profile.enc.env.tmp"
-  final="cache/$profile.enc.env"
+  local tmp="cache/secrets.enc.json.$$.tmp"
   printf '%s\n' "$ciphertext" >"$tmp"
   chmod 600 "$tmp"
-  mv "$tmp" "$final"
+  mv "$tmp" "cache/secrets.enc.json"
 }
 
-# $profile is interpolated into the remote command string, so it MUST be safe:
-# it is charset-validated to ^[A-Za-z0-9_-]+$ up front (no shell metacharacters,
-# no `/` or `..`), which is what makes this interpolation injection-proof. The
-# remote side re-guards against `/`/`..` as belt-and-suspenders. The ciphertext
-# rides on stdin (so it can't be positional); $HOME/$tmp/$final expand remotely.
-# shellcheck disable=SC2029
+# The remote path is fixed (no untrusted interpolation); ciphertext rides stdin.
+# $$ (the local seed's PID) makes the remote temp unique too.
 deliver_remote_cache() {
-  local profile="$1" ciphertext="$2"
-  printf '%s\n' "$ciphertext" | ssh "$REMOTE_HOST" "
+  printf '%s\n' "$ciphertext" | ssh "$REMOTE_HOST" '
     set -e
     umask 077
-    p='$profile'
-    case \"\$p\" in */*|*..*) echo \"invalid profile: \$p\" >&2; exit 1 ;; esac
-    dir=\"\$HOME/$REMOTE_REPO_REL/cache\"
-    mkdir -p \"\$dir\"
-    cat > \"\$dir/\$p.enc.env.tmp\"
-    mv \"\$dir/\$p.enc.env.tmp\" \"\$dir/\$p.enc.env\"
-    chmod 600 \"\$dir/\$p.enc.env\"
-  "
+    dir="$HOME/'"$REMOTE_REPO_REL"'/cache"
+    tmp="$dir/secrets.enc.json.'"$$"'.tmp"
+    mkdir -p "$dir"
+    cat > "$tmp"
+    chmod 600 "$tmp"
+    mv "$tmp" "$dir/secrets.enc.json"
+  '
 }
 
-# --- seed each profile --------------------------------------------------------
-summary=()
-failed=0
-
-for p in "${profiles[@]}"; do
-  schema="profiles/$p.env.schema"
-  echo ""
-  echo "  Profile: $p"
-
-  # Capture stdout (the dotenv payload that gets sealed) SEPARATELY from stderr,
-  # so no varlock warning/info line is ever woven into the encrypted cache.
-  resolved=""
-  resolve_err=""
-  resolve_err=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
-  if ! resolved=$(varlock load --path "$schema" --format env --skip-cache 2>"$resolve_err"); then
-    echo "    ✗ varlock load failed:"
-    indent <"$resolve_err"
-    rm -f "$resolve_err"
-    summary+=("✗ $p — varlock load failed")
-    failed=1
-    continue
-  fi
-  rm -f "$resolve_err"
-
-  seeded_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  dotenv_blob="$resolved
-_SECRETS_SEEDED_AT=$seeded_at"
-
-  ciphertext=""
-  if ! ciphertext=$(printf '%s\n' "$dotenv_blob" | sops --encrypt --input-type dotenv --output-type dotenv --filename-override "cache/$p.enc.env" /dev/stdin 2>&1); then
-    echo "    ✗ sops encrypt failed:"
-    printf '%s\n' "$ciphertext" | indent
-    summary+=("✗ $p — sops encrypt failed")
-    failed=1
-    continue
-  fi
-
-  if [[ "$ciphertext" != *'ENC['* ]]; then
-    echo "    ✗ ciphertext sanity check failed — no ENC[ marker found, aborting (cache untouched)"
-    summary+=("✗ $p — ciphertext sanity check failed")
-    failed=1
-    continue
-  fi
-
-  missing_keys=()
-  while IFS= read -r key; do
-    [[ -n "$key" ]] || continue
-    grep -q "^${key}=" <<<"$ciphertext" || missing_keys+=("$key")
-  done < <(schema_declared_keys "$schema")
-
-  if [[ ${#missing_keys[@]} -gt 0 ]]; then
-    echo "    ✗ ciphertext missing declared key(s): ${missing_keys[*]} — aborting (cache untouched)"
-    summary+=("✗ $p — missing key(s): ${missing_keys[*]}")
-    failed=1
-    continue
-  fi
-
-  if ((deliver_local)); then
-    if ! deliver_local_cache "$p" "$ciphertext"; then
-      echo "    ✗ local write failed"
-      summary+=("✗ $p — local write failed")
-      failed=1
-      continue
-    fi
-  else
-    if ! deliver_remote_cache "$p" "$ciphertext"; then
-      echo "    ✗ delivery to $REMOTE_HOST failed"
-      summary+=("✗ $p — ssh delivery to $REMOTE_HOST failed")
-      failed=1
-      continue
-    fi
-  fi
-
-  echo "    ✓ sealed + delivered ($seeded_at)"
-  summary+=("✓ $p")
-done
+if ((deliver_local)); then
+  deliver_local_cache || die "local write failed"
+else
+  deliver_remote_cache || die "delivery to $REMOTE_HOST failed"
+fi
 
 echo ""
-echo "  Summary"
-for line in ${summary[@]+"${summary[@]}"}; do
-  echo "    $line"
-done
-echo ""
+echo "  ✓ sealed + delivered ${#refs[@]} secret(s) ($seeded_at)"
 echo "  · Shells already open keep their old baseline env until a new shell is opened."
 echo ""
-
-((failed == 0)) || exit 1

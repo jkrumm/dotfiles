@@ -19,12 +19,11 @@ set -euo pipefail
 #
 # Usage: secrets-freshness-check.sh
 #   SECRETS_FRESHNESS_MAX_AGE_DAYS  (default 8 — one day of slack past a weekly ritual)
-#   SECRETS_FRESHNESS_PUSH_URL      Uptime Kuma push URL; if unset, the script tries
-#                                   `secrets-run --export baseline` to read
-#                                   UPTIME_PUSH_SECRETS_FRESHNESS from the cache.
+#   SECRETS_FRESHNESS_PUSH_URL      Uptime Kuma push URL; if unset, read from the
+#                                   chmod-600 PUSH_URL_FILE below.
 
 SECRETS_PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
-CACHE_DIR="$SECRETS_PRIVATE_REPO/cache"
+CACHE_FILE="$SECRETS_PRIVATE_REPO/cache/secrets.enc.json"
 MAX_AGE_DAYS="${SECRETS_FRESHNESS_MAX_AGE_DAYS:-8}"
 # The push URL lives in a chmod-600 file OUTSIDE the cache on purpose: a health
 # monitor's liveness must not depend on the very thing it monitors. If the URL
@@ -55,19 +54,15 @@ push() {
          "${push_url}${sep}status=${status}&msg=$(printf '%s' "$msg" | sed 's/ /%20/g')" 2>/dev/null
 }
 
-# Newest cache mtime = last seed time.
+# Cache mtime = last seed time (the seed writes it atomically: temp + mv).
 newest_epoch=0
-if [[ -d "$CACHE_DIR" ]]; then
-  for f in "$CACHE_DIR"/*.enc.env; do
-    [[ -f "$f" ]] || continue
-    m=$(stat -f %m "$f" 2>/dev/null || echo 0)
-    ((m > newest_epoch)) && newest_epoch=$m
-  done
+if [[ -f "$CACHE_FILE" ]]; then
+  newest_epoch=$(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
 fi
 
 if [[ "$newest_epoch" -eq 0 ]]; then
   push down "no secrets cache present — run make secrets-seed"
-  echo "! no cache files in $CACHE_DIR — pushed down" >&2
+  echo "! no cache at $CACHE_FILE — pushed down" >&2
   exit 0
 fi
 
