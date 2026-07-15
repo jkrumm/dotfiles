@@ -189,6 +189,15 @@ assert_not_contains "disk: no plaintext secret in cache file" "$LONG" "$(cat "$T
 : > "$TESTREPO/empty.env.tpl"
 if run export --env-file="$TESTREPO/empty.env.tpl" >/dev/null 2>&1; then ok "export: empty template is a no-op"; else bad "export: empty template is a no-op"; fi
 
+# === 16. PATH self-sufficiency for headless callers (design.md D12) ==========
+# cron/launchd invoke the shim with a minimal PATH (/usr/bin:/bin) lacking the Homebrew
+# bin dirs where sops/jq live. The shim must prepend Homebrew to its own PATH and still
+# resolve — no caller PATH ceremony. (An empty PATH is out of scope: the `env bash`
+# shebang can't even load under it, and system tools like `tr` live in /usr/bin.)
+minpath_out="$(env PATH="/usr/bin:/bin" SECRETS_PRIVATE_REPO="$TESTREPO" \
+  SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" "$SHIM" read op://test/app/token 2>/dev/null)"
+assert_eq "path: resolves under minimal PATH lacking Homebrew (D12)" "$LONG" "$minpath_out"
+
 # --- summary -----------------------------------------------------------------
 echo
 echo "  $pass passed, $fail failed"
