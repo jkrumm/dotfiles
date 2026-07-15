@@ -198,6 +198,38 @@ minpath_out="$(env PATH="/usr/bin:/bin" SECRETS_PRIVATE_REPO="$TESTREPO" \
   SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" "$SHIM" read op://test/app/token 2>/dev/null)"
 assert_eq "path: resolves under minimal PATH lacking Homebrew (D12)" "$LONG" "$minpath_out"
 
+# === 17. multiple --env-file merge (op run parity: later file wins) ==========
+# `op run` accepts repeated --env-file and applies them in order; a later file
+# OVERRIDES an earlier one for any duplicate key. The shim must mirror that.
+# File A declares TOKEN(long) + SHARED(short); file B declares QUOTED + SHARED(long).
+# Merged: TOKEN from A, QUOTED from B, SHARED overridden to the long value by B.
+cat > "$TESTREPO/mf-a.env.tpl" <<'EOF'
+TOKEN=op://test/app/token
+SHARED=op://test/app/short
+EOF
+cat > "$TESTREPO/mf-b.env.tpl" <<'EOF'
+QUOTED=op://test/app/quoted
+SHARED=op://test/app/token
+EOF
+# Assert by LENGTH (secret values are redacted on the piped stream; a number is not):
+# SHARED length distinguishes last-wins (=len LONG) from first-wins (=len SHORT).
+out="$(run run --env-file="$TESTREPO/mf-a.env.tpl" --env-file="$TESTREPO/mf-b.env.tpl" \
+  -- bash -c 'printf "T=%s|Q=%s|S=%s" "${#TOKEN}" "${#QUOTED}" "${#SHARED}"' 2>/dev/null)"
+assert_contains "multi: key from first --env-file injected"  "T=${#LONG}"   "$out"
+assert_contains "multi: key from second --env-file injected" "Q=${#QUOTED}" "$out"
+assert_contains "multi: later --env-file overrides dup key"  "S=${#LONG}"   "$out"
+
+# space-form (`--env-file <path>`) is accepted repeatedly too
+out="$(run run --env-file "$TESTREPO/mf-a.env.tpl" --env-file "$TESTREPO/mf-b.env.tpl" \
+  -- bash -c 'printf "S=%s" "${#SHARED}"' 2>/dev/null)"
+assert_contains "multi: repeated space-form --env-file merges" "S=${#LONG}" "$out"
+
+# export over multiple files: a dup key is emitted ONCE (deduped), last value wins.
+exp="$(run export --env-file="$TESTREPO/mf-a.env.tpl" --env-file="$TESTREPO/mf-b.env.tpl" 2>/dev/null)"
+assert_eq "export multi: dup key emitted once" "1" "$(printf '%s\n' "$exp" | grep -c '^export SHARED=')"
+got="$(env -i bash -c "$exp"'; printf %s "${#SHARED}"')"
+assert_eq "export multi: last file wins on dup key" "${#LONG}" "$got"
+
 # --- summary -----------------------------------------------------------------
 echo
 echo "  $pass passed, $fail failed"
