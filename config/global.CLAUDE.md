@@ -111,6 +111,34 @@ op_run              # convenience: invokes `op --account "$(op_account_for_cwd)"
 
 Helper lives in `~/.zsh/conf.d/secrets.zsh`. Skills that touch 1Password (`/secrets`, `/cloudflare`, `/otel`) call the helper instead of hardcoding `tkrumm`. SourceRoot-only infra scripts (e.g. `dotfiles/scripts/github-config.sh`) may keep `tkrumm` hardcoded.
 
+### Headless secrets — the `secrets-run` shim (mini vs MacBook)
+
+The always-on **Mac mini is headless**: `op` is **not** interactively signed in, so a direct
+`op read` / `op run` there **hangs** on the biometric prompt (no human to approve it). Secrets
+instead resolve from an age-encrypted, `op://`-keyed **cache** via **`secrets-run`** — a drop-in
+`op` shim. The active backend is injected into context each session by a SessionStart hook
+(`machine-role.ts`); trust it over guessing.
+
+- **`cache` backend (mini)** — `secrets-run` decrypts the offline cache; no `op`, no network, no
+  prompt. **Do not call `op` directly on the mini** (it hangs). Use the shim.
+- **`op` backend (MacBook, human present)** — `secrets-run` passes through to live biometric `op`.
+
+Same app code + same `op://` refs on both machines; only `~/.config/secrets/backend`
+(`cache`|`op`) differs. Interface mirrors `op`:
+
+```bash
+secrets-run read op://vault/item/field                       # ~ op read
+secrets-run run [--env-file=<tpl>]... -- <cmd>               # ~ op run (--env-file repeats; last wins)
+```
+
+Which refs the mini may hold offline is the **explicit allowlist** `dotfiles-private/headless.refs`
+— editing it + `make secrets-seed` (biometric, present-human, MacBook or interactive-mini) seals the
+cache. **Tiering guardrail:** only T0/T1 refs are ever cached; `op://Private/*` and T2/prod are
+refused by the seed (argo's `op://vps/argo/*` is an owner-classified personal exception). Full model:
+`dotfiles-private/{PRD.md,docs/design.md,docs/runbook.md}`; ops via **`/secrets`**. **Any edit to
+`secrets-run` → full guardrail:** `make secrets-test` + `shellcheck` + design.md/security-review.md
+in the same change + an adversarial `/review` (it is the sole secret path on the mini).
+
 ---
 
 ## AI Interaction Preferences

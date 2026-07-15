@@ -25,6 +25,44 @@ op_run run --env-file=.env.tpl -- bun test
 
 If invoking `op` directly, always pass `--account` explicitly — without it, `op` may pick the wrong account or prompt interactively.
 
+## Headless secrets — the `secrets-run` cache backend (Mac mini)
+
+The always-on **Mac mini is headless**: `op` is **not** interactively signed in, so a direct
+`op read` / `op run` there **hangs** on the biometric prompt. Secrets resolve instead from an
+age-encrypted, `op://`-keyed **cache** through **`secrets-run`** — a drop-in `op` shim
+(`dotfiles/scripts/secrets-run`). Per-machine backend marker `~/.config/secrets/backend`:
+
+| Backend | Machine | Behavior |
+|-|-|-|
+| `cache` | Mac mini (headless) | decrypts the offline cache (`dotfiles-private/cache/secrets.enc.json`); no `op`, no network, no prompt |
+| `op` | MacBook (human present) | passes through to live biometric `op` |
+
+Same app code + same `op://` refs on both; only the marker differs. A SessionStart hook injects
+the active backend into context each session. **On the mini, never call `op` directly — use the shim:**
+
+```bash
+secrets-run read op://vault/item/field                 # ~ op read (one value)
+secrets-run run [--env-file=<tpl>]... -- <cmd>          # ~ op run (--env-file repeats; last file wins)
+secrets-run export [--env-file=<tpl>]...                # emit `export K=V` lines (defaults to baseline.env.tpl)
+```
+
+**The allowlist + seed.** Which refs the mini may hold offline is the explicit list
+`dotfiles-private/headless.refs` (grouped by consumer with `# --- <app> ---` headers). It **is**
+the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op://Private/*`** (name
++ UUID) and T2/prod. To add a consumer: append its tpl's `op://` refs → `make secrets-seed`.
+
+- **`make secrets-seed`** resolves every ref via biometric `op read` (present-human) and seals one
+  age-encrypted cache. **It is interactive** — run it where a human can approve the biometric: on the
+  MacBook, or on the mini via an interactive terminal (in a Claude session, have the user run it with
+  the `!` prefix — it can't be driven from a non-interactive tool call, it will hang).
+- **`make secrets-test`** (mini-only) / **`make secrets-lint`** (anywhere) validate the shim.
+- **`make secrets-freshness-check`** pushes the Uptime Kuma staleness heartbeat `up` — run after a reseed.
+
+**Guardrail — any edit to `secrets-run`:** `make secrets-test` + `shellcheck` + update
+`dotfiles-private/docs/{design.md,security-review.md}` in the same change + an adversarial `/review`.
+It is the **sole secret path** on the mini; treat it accordingly. Full model:
+`dotfiles-private/{PRD.md,docs/design.md,docs/runbook.md}`.
+
 ## Discovery First
 
 Before answering questions about vault contents, **always query the live state** — don't rely on memorized vault structures:

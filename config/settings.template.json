@@ -42,33 +42,63 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/protect-branches.ts" },
-          { "type": "command", "command": "~/.claude/hooks/docker-makefile.ts" }
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/protect-branches.ts"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/docker-makefile.ts"
+          }
         ]
       }
     ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",
-        "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.ts"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/machine-role.ts"
+          }
+        ]
       }
     ],
     "Notification": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.ts"
+          }
+        ]
       }
     ],
     "Stop": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.ts"
+          }
+        ]
       }
     ],
     "SessionEnd": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.ts"
+          }
+        ]
       }
     ]
   },
@@ -80,10 +110,8 @@
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",
   "skipDangerousModePermissionPrompt": true,
-
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
   },
-
   "_NOTE": "Template — real ~/.claude/settings.json is NOT version-controlled. make setup creates from template or jq-merges (preserving permissions + model/effort). Global skills are VCS'd in dotfiles/skills/ and symlinked to ~/.claude/skills/ (auto-loaded everywhere). Per-repo skills live committed at <repo>/.claude/skills/."
 }
