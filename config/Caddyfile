@@ -70,6 +70,15 @@ audio-gateway.test {
 	reverse_proxy localhost:7714
 }
 
+# image-gen — stateless image-generation gateway (Elysia + Bun) on :7716.
+# Local dev for the image-gen monorepo (`bun run dev` at its root also starts the
+# Tauri app; Vite on :1420 is Tauri-internal, not proxied). VPS container reached
+# over the tailnet at image.<domain>.
+image-gen.test {
+	import local
+	reverse_proxy localhost:7716
+}
+
 # photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
 # Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
 # Caddy streams SSE (/events/*) fine by default — no special flush config needed.
@@ -116,6 +125,16 @@ modelpick.test {
 jkrumm.test {
 	import local
 	reverse_proxy localhost:7728
+}
+
+# rb — personal learning tracker. Always-on Docker stack on the mini: web (Vite)
+# on :7730, api (Elysia) on :4050; both publish to 127.0.0.1 only and Vite proxies
+# /api internally. Primary access is `tailscale serve` on the host (real *.ts.net
+# LE cert, reachable from every device) — rb.test is just the local convenience
+# door and the port reservation.
+rb.test {
+	import local
+	reverse_proxy localhost:7730
 }
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
