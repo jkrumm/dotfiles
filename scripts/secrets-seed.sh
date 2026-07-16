@@ -19,9 +19,12 @@ ulimit -c 0 2>/dev/null || true  # no core dumps — they would capture resolved
 SECRETS_PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
 BACKEND_MARKER="$HOME/.config/secrets/backend"
 REFS_FILE="$SECRETS_PRIVATE_REPO/headless.refs"
+IU_REFS_FILE="$SECRETS_PRIVATE_REPO/headless.iu.refs"
 REMOTE_HOST="mac-mini"
 REMOTE_REPO_REL="SourceRoot/dotfiles-private"
-OP_ACCOUNT="tkrumm"   # tkrumm-only; careerpartner (IU) refs are out of scope headless
+OP_ACCOUNT="tkrumm"          # personal; keys BARE in the cache (see cache_key below)
+IU_OP_ACCOUNT="careerpartner"  # IU work; keys NAMESPACED (both accounts own a `Private` vault)
+DEFAULT_OP_ACCOUNT="$OP_ACCOUNT"
 # Trusted age recipient, read from 1Password (human-controlled, NOT from the
 # mini-writable dotfiles-private repo). Verifies .sops.yaml has not been swapped
 # to an attacker's recipient — a compromised mini could otherwise push a poisoned
@@ -53,72 +56,121 @@ command -v op >/dev/null 2>&1 || die "op (1Password CLI) not installed — brew 
 cd "$SECRETS_PRIVATE_REPO"
 
 # --- collect + validate refs -------------------------------------------------
-# One op:// ref per non-comment line. Refs are NOT secret (they name vault/item/
-# field, no values), so sorting/printing them is fine.
+# Two ref-lists, one per account, each with its OWN Private-vault policy:
+#
+#   headless.refs     tkrumm         op://Private/* FORBIDDEN. That vault is the
+#                                    human-only personal vault — the fail-safe stands.
+#   headless.iu.refs  careerpartner  op://Private/* ALLOWED. careerpartner's `Private`
+#                                    is the IU *work* vault holding service identity
+#                                    (feuer tokens, dashboard admin tokens, Artifactory)
+#                                    — non-human-only by nature, so the personal-vault
+#                                    rationale does not transfer. Owner-classified
+#                                    (design.md D14, security-review.md).
+#
+# The IU list is OPTIONAL: absent → seed personal-only, exactly as before.
+#
+# refs[] and accts[] stay index-aligned (bash 3.2: no nested arrays).
+# Refs are NOT secret (they name vault/item/field, no values), so printing them is fine.
 refs=()
-while IFS= read -r line || [[ -n "$line" ]]; do
-  line="${line#"${line%%[![:space:]]*}"}"                 # ltrim
-  line="${line%"${line##*[![:space:]]}"}"                 # rtrim
-  [[ -z "$line" || "$line" == \#* ]] && continue
-  refs+=("$line")
-done < "$REFS_FILE"
+accts=()
+
+collect_refs() {  # $1=file  $2=account  $3=1 if op://Private is allowed
+  local file="$1" acct="$2" allow_private="$3" line vault vault_lc
+  local found=0
+  local bad=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"                 # ltrim
+    line="${line%"${line##*[![:space:]]}"}"                 # rtrim
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    # Dedupe within this account (a map has one slot per key anyway).
+    local i dup=0
+    for ((i = 0; i < ${#refs[@]}; i++)); do
+      [[ "${refs[$i]}" == "$line" && "${accts[$i]}" == "$acct" ]] && { dup=1; break; }
+    done
+    ((dup)) && continue
+    if [[ "$line" != op://* ]]; then
+      bad+=("not an op:// reference: $line")
+      continue
+    fi
+    if [[ "$allow_private" != 1 ]]; then
+      # Case-insensitive vault check: `op` may match vault names case-insensitively,
+      # so guard Private/PRIVATE/pRivate alike (not just the literal spelling).
+      vault="${line#op://}"; vault="${vault%%/*}"
+      vault_lc=$(printf '%s' "$vault" | tr '[:upper:]' '[:lower:]')
+      if [[ "$vault_lc" == "private" ]]; then
+        bad+=("op://Private is forbidden in the headless cache: $line")
+        continue
+      fi
+    fi
+    refs+=("$line")
+    accts+=("$acct")
+    found=$((found + 1))
+  done < "$file"
+  if [[ ${#bad[@]} -gt 0 ]]; then
+    echo "  ✗ $(basename "$file") policy violation:" >&2
+    printf '      - %s\n' "${bad[@]}" >&2
+    die "refusing to seed — fix $(basename "$file") (op:// refs only$([[ "$allow_private" == 1 ]] || printf '; never op://Private'))."
+  fi
+  # Print this list before resolving. This is the human-review checkpoint the
+  # explicit-list model relies on: the person seeding can eyeball exactly what is
+  # about to be cached — and Ctrl-C on an unexpected or maliciously-added ref —
+  # before any value is read or sealed.
+  echo "  $found reference(s) to seed from $(basename "$file") (account $acct):"
+  local j
+  for ((j = ${#refs[@]} - found; j < ${#refs[@]}; j++)); do
+    printf '      %s\n' "${refs[$j]}"
+  done
+}
+
+collect_refs "$REFS_FILE" "$OP_ACCOUNT" 0
+seed_iu=0
+if [[ -f "$IU_REFS_FILE" ]]; then
+  collect_refs "$IU_REFS_FILE" "$IU_OP_ACCOUNT" 1
+  seed_iu=1
+fi
 [[ ${#refs[@]} -gt 0 ]] || die "headless.refs has no references"
 
-# Dedupe (order irrelevant for a map).
-deduped=()
-while IFS= read -r line; do
-  [[ -n "$line" ]] && deduped+=("$line")
-done < <(printf '%s\n' "${refs[@]}" | sort -u)
-refs=("${deduped[@]}")
-
-# Validate shape + enforce the two hard rules (design.md, PRD §6):
-#   1. every entry is an op:// reference;
-#   2. op://Private/... is refused unconditionally — Private is human-only and
-#      must never enter the headless cache (fail-safe against a fat-finger).
-bad=()
-for ref in "${refs[@]}"; do
-  [[ "$ref" == op://* ]] || { bad+=("not an op:// reference: $ref"); continue; }
-  # Case-insensitive vault check: `op` may match vault names case-insensitively,
-  # so guard Private/PRIVATE/pRivate alike (not just the literal spelling).
-  vault="${ref#op://}"; vault="${vault%%/*}"
-  vault_lc=$(printf '%s' "$vault" | tr '[:upper:]' '[:lower:]')
-  [[ "$vault_lc" == "private" ]] \
-    && bad+=("op://Private is forbidden in the headless cache: $ref")
-done
-if [[ ${#bad[@]} -gt 0 ]]; then
-  echo "  ✗ headless.refs policy violation:" >&2
-  printf '      - %s\n' "${bad[@]}" >&2
-  die "refusing to seed — fix headless.refs (op:// refs only; never op://Private)."
-fi
-# Print the ref list before resolving. Refs are non-secret (vault/item/field, no
-# values), and this is the human-review checkpoint the explicit-list model relies
-# on: the person seeding can eyeball exactly what is about to be cached — and Ctrl-C
-# on an unexpected or maliciously-added ref — before any value is read or sealed.
-echo "  ${#refs[@]} reference(s) to seed from headless.refs:"
-printf '      %s\n' "${refs[@]}"
-
 # --- op sign-in guard (rules/makefile-conventions.md pattern) ---------------
+# Each account signs in separately — `op` sessions are per-account.
 echo "  1Password sign-in..."
 op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$OP_ACCOUNT"
 echo "    ✓ $OP_ACCOUNT"
+if ((seed_iu)); then
+  op whoami --account "$IU_OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$IU_OP_ACCOUNT"
+  echo "    ✓ $IU_OP_ACCOUNT"
+fi
 
 # --- Private-vault fail-safe, part 2: deny by UUID too (needs op) ------------
-# The pre-sign-in check above rejects op://Private/... by NAME. A ref can also
-# target the Private vault by its UUID (op://<uuid>/item/field), bypassing a
-# name-only check. Resolve Private's canonical id once and reject any ref whose
-# vault segment matches it, closing the UUID bypass (a compromised mini poisoning
-# headless.refs so the next biometric seed caches a genuinely-private secret).
+# The collect check above rejects op://Private/... by NAME. A ref can also target
+# the Private vault by its UUID (op://<uuid>/item/field), bypassing a name-only
+# check. Resolve Private's canonical id once and reject any ref whose vault segment
+# matches it, closing the UUID bypass (a compromised mini poisoning headless.refs so
+# the next biometric seed caches a genuinely-private secret).
+#
+# Matched against TKRUMM's Private id only — careerpartner's Private vault is allowed
+# by policy, so there is nothing to guard for it, and the two accounts' `Private`
+# vaults are different vaults that merely share a name.
+#
+# But checked against EVERY ref, whatever list it came from. Scoping this to
+# tkrumm-labeled refs would leave a bypass: a tkrumm Private ref smuggled into
+# headless.iu.refs is labeled `careerpartner`, so it passes the by-name check (the
+# vault segment is a UUID, not the literal "private") and would skip a
+# tkrumm-only UUID guard. It would then be read with `--account careerpartner`, where
+# op should reject a vault id it does not own — but that is op's behavior, not ours,
+# and this script is the sole secret path on the mini. Do not delegate the fail-safe
+# to an assumption. Vault UUIDs are globally unique, so a legitimate careerpartner ref
+# can never collide with tkrumm's Private id: no false positives.
 private_id=$(op vault get "Private" --account "$OP_ACCOUNT" --format json 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)
 if [[ -n "$private_id" ]]; then
   uuid_bad=()
-  for ref in "${refs[@]}"; do
-    v="${ref#op://}"; v="${v%%/*}"
-    [[ "$v" == "$private_id" ]] && uuid_bad+=("$ref")
+  for ((i = 0; i < ${#refs[@]}; i++)); do
+    v="${refs[$i]#op://}"; v="${v%%/*}"
+    [[ "$v" == "$private_id" ]] && uuid_bad+=("${refs[$i]} (from the ${accts[$i]} list)")
   done
   if [[ ${#uuid_bad[@]} -gt 0 ]]; then
-    echo "  ✗ headless.refs references the Private vault by UUID:" >&2
+    echo "  ✗ a ref list references tkrumm's Private vault by UUID:" >&2
     printf '      - %s\n' "${uuid_bad[@]}" >&2
-    die "refusing to seed — Private is human-only and must never enter the headless cache."
+    die "refusing to seed — tkrumm's Private is human-only and must never enter the headless cache."
   fi
 else
   echo "    ! could not resolve the Private vault id — UUID-form Private guard skipped" >&2
@@ -162,9 +214,10 @@ fi
 echo "  Resolving references..."
 vals=()
 rerr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
-for ref in "${refs[@]}"; do
-  if ! v=$(op read --account "$OP_ACCOUNT" "$ref" 2>"$rerr"); then
-    echo "    ✗ op read failed for $ref:" >&2
+for ((i = 0; i < ${#refs[@]}; i++)); do
+  ref="${refs[$i]}"
+  if ! v=$(op read --account "${accts[$i]}" "$ref" 2>"$rerr"); then
+    echo "    ✗ op read failed for $ref (account ${accts[$i]}):" >&2
     indent <"$rerr" >&2
     rm -f "$rerr"
     die "aborting — cache untouched"
@@ -190,10 +243,49 @@ echo "    ✓ resolved ${#vals[@]} value(s)"
 # them into a map; sops seals it. Plaintext never lands as a file, never as argv.
 seeded_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# MUST mirror secrets-run's cache_key() exactly — the seal side and the lookup side
+# agreeing on this string is the whole contract. Default account keys BARE (so a
+# cache sealed before multi-account support still resolves and the live mini needs
+# no flag-day reseed); every other account is namespaced, because both accounts own
+# a vault named `Private` and a flat keyspace could not tell them apart.
+# `.1password.com` is stripped so the two spellings `op` accepts for one account
+# (`careerpartner` / `careerpartner.1password.com`) cannot key two different entries.
+# MUST stay byte-identical to secrets-run's copy (cross-checked by the D-verify
+# harness, which greps both bodies and asserts they match).
+normalize_account() {  # $1=account → prints its canonical short form
+  local a
+  # Case-fold FIRST: `op` matches account identifiers case-insensitively, so
+  # `CareerPartner` and `careerpartner` are one account to op — but two different
+  # strings to a cache key. Folding before the suffix strip also catches a
+  # `.1Password.com` spelling. Without this the op backend (which delegates the
+  # match to op) and the cache backend (which string-compares) disagree on the same
+  # input — precisely the divergence this shim exists to prevent.
+  # bash 3.2 has no ${var,,}, hence tr.
+  a=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  a="${a%.1password.com}"
+  # '|' separates account from ref in a namespaced key. An account containing one
+  # would make the key ambiguous (account `a|b` + ref `c` vs account `a` + ref `b|c`),
+  # so refuse rather than seal something that cannot be looked up unambiguously.
+  case "$a" in
+    *'|'*) die "invalid OP_ACCOUNT '$1' — an account name may not contain '|'" ;;
+  esac
+  printf '%s' "$a"
+}
+
+cache_key() {  # $1=account  $2=ref
+  local acct
+  acct=$(normalize_account "$1")
+  if [[ "$acct" == "$DEFAULT_OP_ACCOUNT" ]]; then
+    printf '%s' "$2"
+  else
+    printf '%s|%s' "$acct" "$2"
+  fi
+}
+
 emit_pairs() {
   local i
   for ((i = 0; i < ${#refs[@]}; i++)); do
-    printf '%s\n%s\n' "${refs[$i]}" "${vals[$i]}"
+    printf '%s\n%s\n' "$(cache_key "${accts[$i]}" "${refs[$i]}")" "${vals[$i]}"
   done
 }
 
@@ -220,8 +312,9 @@ rm -f "$serr"
 # plaintext in SOPS-JSON (only values are encrypted), so this confirms nothing
 # was silently dropped between resolve and seal.
 missing_keys=()
-for ref in "${refs[@]}"; do
-  grep -qF "\"$ref\"" <<<"$ciphertext" || missing_keys+=("$ref")
+for ((i = 0; i < ${#refs[@]}; i++)); do
+  key=$(cache_key "${accts[$i]}" "${refs[$i]}")
+  grep -qF "\"$key\"" <<<"$ciphertext" || missing_keys+=("$key")
 done
 if [[ ${#missing_keys[@]} -gt 0 ]]; then
   echo "    ✗ ciphertext missing key(s): ${missing_keys[*]}" >&2

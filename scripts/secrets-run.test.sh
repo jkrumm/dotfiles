@@ -58,9 +58,22 @@ LONG='s3cr3t-token-abcdefghijklmnop'   # >= REDACT_MIN_LEN → redacted
 SHORT='ab'                             # <  REDACT_MIN_LEN → NOT redacted
 QUOTED="a'b'c"                         # exercises export single-quote escaping
 INJECT='--require /tmp/evil.js'        # forged extra key; must never become an env var
+# Multi-account (D14). The personal account keys BARE; careerpartner keys NAMESPACED
+# as `careerpartner|<ref>`. COLLIDE_* is the crux: the SAME ref op://Private/collide/token
+# exists in BOTH accounts with DIFFERENT values, because both accounts really do own a
+# vault named `Private`. A flat keyspace would return one value for both.
+IU='iu-feuer-token-abcdefghijkl'
+COLLIDE_PERSONAL='personal-private-value-aaaa'
+COLLIDE_IU='iu-private-value-bbbb'
 jq -n \
   --arg t "$LONG" --arg s "$SHORT" --arg q "$QUOTED" --arg e "$INJECT" \
-  '{"op://test/app/token":$t,"op://test/app/short":$s,"op://test/app/quoted":$q,"op://test/injected/evil":$e,"_seeded_at":"2026-07-15T00:00:00Z"}' \
+  --arg iu "$IU" --arg cp "$COLLIDE_PERSONAL" --arg ci "$COLLIDE_IU" \
+  '{"op://test/app/token":$t,"op://test/app/short":$s,"op://test/app/quoted":$q,
+    "op://test/injected/evil":$e,
+    "op://Private/collide/token":$cp,
+    "careerpartner|op://Private/feuer/api-server-key":$iu,
+    "careerpartner|op://Private/collide/token":$ci,
+    "_seeded_at":"2026-07-15T00:00:00Z"}' \
   | sops --encrypt --age "$RECIPIENT" --input-type json --output-type json /dev/stdin \
       > "$TESTREPO/cache/secrets.enc.json"   # --age (not .sops.yaml) → cwd-independent
 
@@ -229,6 +242,112 @@ exp="$(run export --env-file="$TESTREPO/mf-a.env.tpl" --env-file="$TESTREPO/mf-b
 assert_eq "export multi: dup key emitted once" "1" "$(printf '%s\n' "$exp" | grep -c '^export SHARED=')"
 got="$(env -i bash -c "$exp"'; printf %s "${#SHARED}"')"
 assert_eq "export multi: last file wins on dup key" "${#LONG}" "$got"
+
+# === 18. multi-account keyspace (D14) ========================================
+# Personal (default) refs key BARE; careerpartner refs key `careerpartner|<ref>`.
+run_iu() { OP_ACCOUNT=careerpartner run "$@"; }
+
+# An IU ref resolves only under the IU account...
+assert_eq "account: IU ref resolves under OP_ACCOUNT=careerpartner" \
+  "$IU" "$(run_iu read op://Private/feuer/api-server-key 2>/dev/null)"
+# ...and is INVISIBLE to the default account (no cross-account bleed).
+if run read op://Private/feuer/api-server-key >/dev/null 2>&1; then
+  bad "account: IU ref not visible to personal account"
+else ok "account: IU ref not visible to personal account"; fi
+
+# THE collision test: one ref, two accounts, two different values. Both must be
+# reachable and each must return ITS OWN value. This is what a flat keyspace
+# could not do, and the reason the namespace exists at all.
+assert_eq "account: colliding op://Private ref → personal value" \
+  "$COLLIDE_PERSONAL" "$(run read op://Private/collide/token 2>/dev/null)"
+assert_eq "account: colliding op://Private ref → IU value" \
+  "$COLLIDE_IU" "$(run_iu read op://Private/collide/token 2>/dev/null)"
+
+# Account-spelling normalization: `op` accepts both `careerpartner` and
+# `careerpartner.1password.com` for one account, and IU call sites use BOTH
+# (feuer's Makefile vs analysis/op-env.sh). They must key the SAME entry — a
+# regression here is a silent cache miss, not a loud error.
+assert_eq "account: .1password.com spelling normalizes to the same key" \
+  "$IU" "$(OP_ACCOUNT=careerpartner.1password.com run read op://Private/feuer/api-server-key 2>/dev/null)"
+
+# An unseeded account must fail CLOSED, and say which ref-list to fix.
+err="$(run_iu read op://Private/feuer/nope 2>&1 || true)"
+assert_contains "account: unseeded IU ref fails closed" "not in cache" "$err"
+assert_contains "account: missing IU ref names headless.iu.refs" "headless.iu.refs" "$err"
+# ...while a personal miss still names the personal list.
+err="$(run read op://test/nope/x 2>&1 || true)"
+assert_contains "account: missing personal ref names headless.refs" "headless.refs" "$err"
+
+# `run` (not just `read`) must inject under an account too.
+cat > "$TESTREPO/iu.env.tpl" <<'EOF'
+FEUER_TOKEN=op://Private/feuer/api-server-key
+EOF
+out="$(run_iu run --env-file="$TESTREPO/iu.env.tpl" -- bash -c 'printf "F=%s" "${#FEUER_TOKEN}"' 2>/dev/null)"
+assert_contains "account: run injects IU ref under OP_ACCOUNT" "F=${#IU}" "$out"
+# The same template under the personal account must fail closed, not inject empty.
+if run run --env-file="$TESTREPO/iu.env.tpl" -- true >/dev/null 2>&1; then
+  bad "account: IU template under personal account fails closed"
+else ok "account: IU template under personal account fails closed"; fi
+
+# `export` is the third verb and shares cache_lookup — cover it under an account too.
+exp="$(run_iu export --env-file="$TESTREPO/iu.env.tpl" 2>/dev/null)"
+got="$(env -i bash -c "$exp"'; printf %s "$FEUER_TOKEN"')"
+assert_eq "account: export resolves IU ref under OP_ACCOUNT" "$IU" "$got"
+
+# Account names are CASE-INSENSITIVE to `op`, so they must be to the cache too —
+# otherwise the op backend (op matches case-insensitively) and the cache backend
+# (string compare) disagree on the same input. Both directions:
+assert_eq "account: mixed-case IU account folds to the same key" \
+  "$IU" "$(OP_ACCOUNT=CareerPartner run read op://Private/feuer/api-server-key 2>/dev/null)"
+assert_eq "account: mixed-case + domain spelling folds to the same key" \
+  "$IU" "$(OP_ACCOUNT=CareerPartner.1Password.com run read op://Private/feuer/api-server-key 2>/dev/null)"
+# ...and the DEFAULT account still keys bare under any spelling of itself.
+assert_eq "account: default keys bare under domain spelling" \
+  "$LONG" "$(OP_ACCOUNT=tkrumm.1password.com run read op://test/app/token 2>/dev/null)"
+assert_eq "account: default keys bare under mixed case" \
+  "$LONG" "$(OP_ACCOUNT=TKRUMM run read op://test/app/token 2>/dev/null)"
+
+# '|' separates account from ref in a namespaced key, so an account containing one
+# would make the key ambiguous — refuse it rather than seal an unlookup-able entry.
+if OP_ACCOUNT='ev|il' run read op://test/app/token >/dev/null 2>&1; then
+  bad "account: '|' in OP_ACCOUNT is refused"
+else ok "account: '|' in OP_ACCOUNT is refused"; fi
+
+# === 19. seal/lookup contract: the two cache_key impls must not drift =========
+# cache_key()/normalize_account() are hand-duplicated in secrets-run and
+# secrets-seed.sh. That duplication is deliberate (sourcing a shared file would add
+# a runtime dependency to the mini's SOLE secret path), but it means the seal side
+# and the lookup side agreeing is a convention — and a convention on a secrets cache
+# is exactly what silently rots. If they ever diverge, the seed seals under one key
+# and the shim looks up another: every ref misses. Assert the bodies are identical.
+extract_fn() {  # $1=file $2=fn-name → prints the body, comments/blank lines stripped
+  awk -v fn="$2" '
+    $0 ~ "^" fn "\\(\\) \\{" { inside = 1 }
+    inside { sub(/[[:space:]]*#.*$/, ""); if ($0 ~ /[^[:space:]]/) print }
+    inside && /^\}/ { exit }
+  ' "$1"
+}
+SEED="$(dirname "$SHIM")/secrets-seed.sh"
+if [[ -f "$SEED" ]]; then
+  for fn in normalize_account cache_key; do
+    a="$(extract_fn "$SHIM" "$fn")"
+    b="$(extract_fn "$SEED" "$fn")"
+    [[ -n "$a" ]] || { bad "drift: $fn found in secrets-run"; continue; }
+    [[ -n "$b" ]] || { bad "drift: $fn found in secrets-seed.sh"; continue; }
+    if [[ "$fn" == cache_key ]]; then
+      # The shim reads $OP_ACCOUNT implicitly; the seed takes the account as $1 and
+      # the ref as $2. Normalize that ONE known signature difference away, then the
+      # remaining logic must match byte-for-byte.
+      a="${a//normalize_account \"\$OP_ACCOUNT\"/normalize_account \"\$ACCT\"}"
+      a="${a//\"\$1\"/\"\$REF\"}"
+      b="${b//normalize_account \"\$1\"/normalize_account \"\$ACCT\"}"
+      b="${b//\"\$2\"/\"\$REF\"}"
+    fi
+    assert_eq "drift: $fn identical in secrets-run and secrets-seed.sh" "$a" "$b"
+  done
+else
+  bad "drift: secrets-seed.sh not found next to the shim"
+fi
 
 # --- summary -----------------------------------------------------------------
 echo
