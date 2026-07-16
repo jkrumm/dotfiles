@@ -1312,15 +1312,19 @@ secrets-rotate:
 .PHONY: secrets-lint
 secrets-lint:
 	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle' (it's in the Brewfile)"; exit 1; }
-	@shellcheck $(DOTFILES_DIR)/scripts/secrets-run $(DOTFILES_DIR)/scripts/secrets-run.test.sh
-	@echo "  ✓ shellcheck clean (secrets-run + harness)"
+	@shellcheck $(DOTFILES_DIR)/scripts/secrets-run $(DOTFILES_DIR)/scripts/secrets-run.test.sh \
+		$(DOTFILES_DIR)/scripts/secrets-seed.sh $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+	@echo "  ✓ shellcheck clean (secrets-run + secrets-seed + harnesses)"
 
-# Functional regression suite for the shim. MINI-ONLY: the harness preflight requires the
-# `cache` backend + an age key. Lints first. Run after any change to secrets-run.
+# Functional regression suite for the shim + the seed. MINI-ONLY: both harnesses'
+# preflight requires the `cache` backend (+ secrets-run.test.sh needs an age key).
+# Lints first. Run after any change to secrets-run or secrets-seed.sh.
 .PHONY: secrets-test
 secrets-test: secrets-lint
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-run.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-run.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 
 .PHONY: secrets-backend-cache
 secrets-backend-cache:
