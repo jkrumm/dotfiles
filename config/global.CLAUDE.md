@@ -30,7 +30,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
-| `sideclaw` | Claude Code MCP daemon — `check` / `review` tools, running on DeepSeek-V4-Pro via a local LiteLLM bridge so workers never touch Max quota. (`research` migrated 2026-06 to the standalone `research-gateway` service; `implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
+| `sideclaw` | Claude Code MCP daemon — `check` / `review` tools, workers on claude-sonnet-5/claude-haiku-4-5 via the IU unified endpoint (metered, off Max quota) by default; `SIDECLAW_WORKER_BACKEND=max` opts a given install onto Max instead. LiteLLM/DeepSeek bridge retained but dormant. (`research` migrated 2026-06 to the standalone `research-gateway` service; `implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
 | `research-gateway` | Standalone agentic research HTTP service (Elysia + Bun + AI SDK v6) on the VPS at `research.jkrumm.com` — **Tailscale-only** (grey-cloud DNS-only A record → VPS Tailscale IP, not behind the Cloudflare Tunnel; same pattern as `audio-gateway`). Replaces sideclaw's `/research`. One research brain over a bearer-auth'd typed contract (REST + OpenAPI) plus a bearer MCP facade at `/mcp` exposing an async job trio — `research` (submit → jobId) + `job_wait`/`job_status`, mirroring sideclaw's submit→poll contract so long/deep research never trips the client's ~60s MCP HTTP timeout; bearer is defense-in-depth over the tailnet gate. Runs on IU models, off Max; consumed via the `/research` skill (Mac/tailnet only — cloud routines can't reach it). |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
 | `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM bridge, Hermes, Feuer, OpenCode) normalize into one `usage_record` table with central pricing; LaunchAgent ingests every 15 min. Staging layer for an eventual Argo dashboard. |
@@ -176,7 +176,7 @@ The main session is the **orchestrator**. Keep its context clean: hold the plan,
 |-|-|-|
 | **inline** (no `model:` frontmatter) | Conversational/orchestrating skills that need session context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Runs on the session model. Output lands in main context — keep it short. |
 | **native subagent** (`Agent` tool / `~/.claude/agents/`) | The primary offload. `@implementer` (Sonnet, settled implementation), `Explore` (Haiku, read-only search), an Opus subagent (novel-hard logic). | On Max but **own prompt cache** — no orchestrator-cache penalty. Fresh isolated context; returns a summary; edits hit the live checkout. |
-| **MCP (sideclaw)** | Heavy work that benefits from schema-validated output, off Max: `check`, `review`, `otel`. | DeepSeek-V4-Pro via the LiteLLM bridge — zero Max quota; `runSession` Zod-validates the output. **Async** — see the job contract below. |
+| **MCP (sideclaw)** | Heavy work that benefits from schema-validated output, off Max: `check`, `review`, `otel`. | claude-sonnet-5/claude-haiku-4-5 via the IU unified endpoint — zero Max quota by default (flag-selectable onto Max per install); `runSession` Zod-validates the output. **Async** — see the job contract below. |
 
 *Niche:* `/analyze` shells `claude_bridge` (DeepSeek subprocess, isolated output, off Max); `/browse` forks chrome-devtools (deferred MCP, on Max). Details live in those two skills.
 
@@ -216,14 +216,14 @@ Cheapest parallelism first — escalate a tier only when the one below can't do 
 
 | Tier | Mechanism | Max cost | Use when |
 |-|-|-|-|
-| 1 | **Parallel `mcp__sideclaw__*` calls in one turn** | ~0 (DeepSeek workers) | Independent verifiable work: check N repos, review several at once. The default for fan-out. |
+| 1 | **Parallel `mcp__sideclaw__*` calls in one turn** | ~0 (IU workers; Max if `SIDECLAW_WORKER_BACKEND=max`) | Independent verifiable work: check N repos, review several at once. The default for fan-out. |
 | 2 | **subprocess** (`claude_iu` / `claude_bridge`) | ~0 (IU per-token) | Read-heavy isolated output. |
-| 3 | **Background `Agent`** (`run_in_background: true`) driving sideclaw MCP tools | Moderate (thin Max orchestrator) | Long, multi-step work you want to detach from and resume (`SendMessage`). Keep the bg agent thin — it delegates to DeepSeek workers, doesn't grind itself. |
+| 3 | **Background `Agent`** (`run_in_background: true`) driving sideclaw MCP tools | Moderate (thin Max orchestrator) | Long, multi-step work you want to detach from and resume (`SendMessage`). Keep the bg agent thin — it delegates to sideclaw workers, doesn't grind itself. |
 | 4 | **Foreground `Agent` / subagent on Opus** | Full Max (isolated cache) | Novel hard logic needing the best model. |
 | 5 | **Agent teams / `/ultrareview`** | N× Max or $$$ cloud | Genuinely hard parallel reasoning only. Rarely worth it for personal-infra repos. |
 
 Key facts:
-- **Parallel MCP calls are free parallelism** — emit several `mcp__sideclaw__*` tool_use blocks in a single turn; they run as concurrent DeepSeek workers while the orchestrator just awaits. Under-used — prefer it over serial calls whenever the units are independent.
+- **Parallel MCP calls are free parallelism** — emit several `mcp__sideclaw__*` tool_use blocks in a single turn; they run as concurrent IU workers while the orchestrator just awaits. Under-used — prefer it over serial calls whenever the units are independent. (Under `SIDECLAW_WORKER_BACKEND=max` they bill Max instead — the fan-out is still parallel, just no longer free.)
 - **Implementation fan-out is parallel `@implementer` (Sonnet) subagents** on *disjoint* file groups — N× Sonnet on Max (detachment, not free); the retired sideclaw `implement` is no longer a lane.
 - **Background agents and agent teams run on Max** — they buy detachment and coordination, not cheap parallelism. A background agent that fans out to sideclaw MCP keeps its own Max cost low.
 - **Worktree isolation is opt-in and up-front — only when you ask for it.** Subagent edits hit your live checkout by default (see *File ownership* above). If a task needs an isolated branch (parallel streams, a risky change), say so at the start: use Claude Code's native worktree feature for the session, or set `isolation: worktree` on a one-off `Agent` call. Don't spawn worktree-isolated sub-agents ad hoc mid-flow; that splits work across trees you then have to reconcile.
