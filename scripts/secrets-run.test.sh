@@ -65,14 +65,23 @@ INJECT='--require /tmp/evil.js'        # forged extra key; must never become an 
 IU='iu-feuer-token-abcdefghijkl'
 COLLIDE_PERSONAL='personal-private-value-aaaa'
 COLLIDE_IU='iu-private-value-bbbb'
+# A vault name containing a SPACE. Not an edge case for IU: `op://Prometheus Internal/...`
+# is the shared team vault and accounts for the large majority of headless.iu.refs, so
+# every DB cred on the mini depends on the space surviving seal → lookup → emit. `op`
+# allows spaces in vault names and refs are never shell-quoted inside the cache key, so
+# any unquoted expansion or word-splitting bug in the parser would word-split this ref
+# and silently miss. Cheap to assert; a regression here would strand the whole IU stack.
+SPACED='pi-se-prod-pw-abcdefghij'
 jq -n \
   --arg t "$LONG" --arg s "$SHORT" --arg q "$QUOTED" --arg e "$INJECT" \
   --arg iu "$IU" --arg cp "$COLLIDE_PERSONAL" --arg ci "$COLLIDE_IU" \
+  --arg sp "$SPACED" \
   '{"op://test/app/token":$t,"op://test/app/short":$s,"op://test/app/quoted":$q,
     "op://test/injected/evil":$e,
     "op://Private/collide/token":$cp,
     "careerpartner|op://Private/feuer/api-server-key":$iu,
     "careerpartner|op://Private/collide/token":$ci,
+    "careerpartner|op://Prometheus Internal/se-prod/password":$sp,
     "_seeded_at":"2026-07-15T00:00:00Z"}' \
   | sops --encrypt --age "$RECIPIENT" --input-type json --output-type json /dev/stdin \
       > "$TESTREPO/cache/secrets.enc.json"   # --age (not .sops.yaml) → cwd-independent
@@ -306,6 +315,24 @@ assert_eq "account: default keys bare under domain spelling" \
   "$LONG" "$(OP_ACCOUNT=tkrumm.1password.com run read op://test/app/token 2>/dev/null)"
 assert_eq "account: default keys bare under mixed case" \
   "$LONG" "$(OP_ACCOUNT=TKRUMM run read op://test/app/token 2>/dev/null)"
+
+# A vault name with a SPACE must survive every verb. `op://Prometheus Internal/...` is
+# the bulk of headless.iu.refs (every IU DB cred), so a word-splitting regression in the
+# ref parser would strand the mini's whole IU stack — silently, as a cache miss.
+assert_eq "account: space in vault name resolves (read)" \
+  "$SPACED" "$(run_iu read 'op://Prometheus Internal/se-prod/password' 2>/dev/null)"
+cat > "$TESTREPO/spaced.env.tpl" <<'EOF'
+DB_SE_PROD_PASS=op://Prometheus Internal/se-prod/password
+EOF
+# `run`: assert by LENGTH — the piped stream is redacted, so a number proves the exact
+# value landed in the child's env (same trick as the injection test above).
+out="$(run_iu run --env-file="$TESTREPO/spaced.env.tpl" -- bash -c 'printf "P=%s" "${#DB_SE_PROD_PASS}"' 2>/dev/null)"
+assert_contains "account: space in vault name injects (run)" "P=${#SPACED}" "$out"
+# `export` is the verb the IU render sites actually use (op run --no-masking has no
+# secrets-run equivalent), so cover it directly: it must emit the value UNREDACTED.
+exp="$(run_iu export --env-file="$TESTREPO/spaced.env.tpl" 2>/dev/null)"
+got="$(env -i bash -c "$exp"'; printf %s "$DB_SE_PROD_PASS"')"
+assert_eq "account: space in vault name exports unredacted" "$SPACED" "$got"
 
 # '|' separates account from ref in a namespaced key, so an account containing one
 # would make the key ambiguous — refuse it rather than seal an unlookup-able entry.
