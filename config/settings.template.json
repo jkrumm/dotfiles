@@ -34,7 +34,11 @@
       "Bash(docker logs *)",
       "WebSearch"
     ],
-    "deny": [],
+    "deny": [
+      "Artifact",
+      "EnterPlanMode",
+      "ExitPlanMode"
+    ],
     "defaultMode": "default"
   },
   "hooks": {
@@ -110,8 +114,10 @@
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",
   "skipDangerousModePermissionPrompt": true,
+  "disableArtifact": true,
+  "disableClaudeAiConnectors": true,
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
   },
-  "_NOTE": "Template — real ~/.claude/settings.json is NOT version-controlled. make setup creates from template or jq-merges (preserving permissions + model/effort). Global skills are VCS'd in dotfiles/skills/ and symlinked to ~/.claude/skills/ (auto-loaded everywhere). Per-repo skills live committed at <repo>/.claude/skills/."
+  "_NOTE": "Template — real ~/.claude/settings.json is NOT version-controlled. make setup creates from template or jq-merges (preserving permissions + model/effort). Global skills are VCS'd in dotfiles/skills/ and symlinked to ~/.claude/skills/ (auto-loaded everywhere). Per-repo skills live committed at <repo>/.claude/skills/. CONTEXT TRIM: permissions.deny holds BARE tool names — a bare name drops the tool's schema from the system prompt entirely; a scoped rule (e.g. Bash(rm *)) does NOT (schema stays, call is blocked). Denied: Artifact (unused; large schema — paired with disableArtifact), EnterPlanMode/ExitPlanMode (plan mode unused). disableClaudeAiConnectors: no claude.ai MCP connectors are configured — kills the auto-fetch (surface reduction, not a token saving). Deliberately NOT denied: most other candidates (NotebookEdit, SendMessage, CronCreate/Delete/List, RemoteTrigger, PushNotification, DesignSync) are already DEFERRED — names only, ~5 tokens each — so denying them costs capability for no real saving; SendMessage is load-bearing for resuming background agents. disableBundledSkills would be the largest saving but removes /code-review, /verify, /schedule et al — declined. NOTE: the merge takes permissions from the LIVE file, so editing deny here does not propagate to an existing machine — edit ~/.claude/settings.json too."
 }
