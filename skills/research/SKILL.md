@@ -11,8 +11,11 @@ The standalone research-gateway service (Elysia + Bun on the VPS, Tailscale-only
 2. **Wait.** Call `mcp__research-gateway__job_wait({ jobId })`. It blocks up to ~50s (with progress heartbeats) and returns the job state. If `stillRunning` is `true`, call `job_wait` again with the same `jobId` — loop until `stillRunning` is `false`. (`job_status({ jobId })` is a non-blocking peek if you want to do other work between checks.)
 3. **Read the result.** When `status` is `done`, the `result` field (also `structuredContent`) is a `ResearchReport`:
    - `report` — narrative, cited answer in markdown
-   - `citations` — `[{ claim, url }]`, each key claim tied to a source
+   - `citations` — `[{ claim, url, confidence }]`, each key claim tied to a source, carrying the researching worker's `high` | `medium` | `low` confidence in that specific claim
    - `sources` — deduplicated list of all URLs consulted
+   - `unverified` — `[{ topic, url, reason }]`, things the run could NOT confirm against a source (unreachable, paywalled, thin). Empty on a clean run.
+
+   **Read `confidence` and `unverified` before passing a claim on.** A citation only means a worker tied that claim to that URL — it is not proof the page supports it. Treat `low` confidence and anything in `unverified` as a lead to check, not a fact; for a crisp value (version number, EOL date, API signature) where the report names a primary source, opening that source directly is a cheap confirmation.
 
    On `done`, the text content already inlines the report plus a Citations and Sources section, so text-only clients still get the full picture. When `status` is `error`, `error` holds the failure message.
 
