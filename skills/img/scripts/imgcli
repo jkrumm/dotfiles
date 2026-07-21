@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# imgcli — upload to and address the image CDN (imgproxy + B2 + Cloudflare).
+#
+# Secrets resolve through `secrets-run`, the op shim: live biometric `op` on the
+# MacBook, the age-encrypted offline cache on the headless mini. Same refs on
+# both. Nothing here embeds a hostname, bucket, or credential — this repo is
+# public.
+#
+# Infra side lives in ~/SourceRoot/vps/apps/imgproxy/ (docs/image-cdn.md).
+
+set -euo pipefail
+
+REF_ITEM="op://common/b2-images-write"
+REF_BUCKET_ITEM="op://common/backblaze-s3"
+
+die() { printf 'imgcli: %s\n' "$*" >&2; exit 1; }
+
+need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
+
+# --- config -----------------------------------------------------------------
+# Resolved once per invocation and exported for the aws CLI.
+load_config() {
+  need secrets-run
+  need aws
+
+  AWS_ACCESS_KEY_ID=$(secrets-run read "$REF_ITEM/B2_KEY_ID")
+  AWS_SECRET_ACCESS_KEY=$(secrets-run read "$REF_ITEM/B2_APP_KEY")
+  CDN_BASE=$(secrets-run read "$REF_ITEM/CDN_BASE")
+  PREFIX=$(secrets-run read "$REF_ITEM/BUCKET_PREFIX")
+  BUCKET=$(secrets-run read "$REF_BUCKET_ITEM/BUCKET")
+  ENDPOINT=$(secrets-run read "$REF_BUCKET_ITEM/ENDPOINT")
+  AWS_DEFAULT_REGION=$(secrets-run read "$REF_BUCKET_ITEM/REGION")
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION
+
+  [ -n "$BUCKET" ] && [ -n "$CDN_BASE" ] || die "config incomplete"
+}
+
+s3() { aws s3 "$@" --endpoint-url "$ENDPOINT"; }
+s3api() { aws s3api "$@" --endpoint-url "$ENDPOINT"; }
+
+# Strip any leading img/ the caller may have included, so both `blog/x.jpg` and
+# `img/blog/x.jpg` address the same object.
+norm_key() { printf '%s' "${1#"$PREFIX"}" | sed 's#^/##'; }
+
+# Prefixes whose contents are meant to be non-discoverable get random names;
+# curated ones keep the filename the caller chose.
+is_opaque_prefix() {
+  case "$1" in
+    gen/*|misc/*|gen|misc) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Reads a fixed number of bytes and filters, rather than piping an endless
+# stream into `head` — under `set -o pipefail` the SIGPIPE that `head` sends
+# when it exits early would kill the whole script.
+rand_name() {
+  local s
+  s=$(LC_ALL=C head -c 512 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9')
+  [ ${#s} -ge 16 ] || die "could not generate a random name"
+  printf '%s' "${s:0:16}"
+}
+
+dims_of() {
+  # macOS sips; returns "WxH" or empty when not an image sips understands.
+  local w h
+  w=$(sips -g pixelWidth "$1" 2>/dev/null | awk '/pixelWidth/{print $2}')
+  h=$(sips -g pixelHeight "$1" 2>/dev/null | awk '/pixelHeight/{print $2}')
+  [ -n "$w" ] && [ -n "$h" ] && printf '%sx%s' "$w" "$h"
+}
+
+human() {
+  awk -v b="$1" 'BEGIN{
+    split("B KB MB GB",u," "); i=1
+    while (b>=1024 && i<4) { b/=1024; i++ }
+    printf (i==1 ? "%d%s" : "%.1f%s"), b, u[i]
+  }'
+}
+
+# --- commands ---------------------------------------------------------------
+
+cmd_upload() {
+  local file="" dest="" name="" copy=0 open=0 json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name) name="$2"; shift 2 ;;
+      --copy) copy=1; shift ;;
+      --open) open=1; shift ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$file" ]; then file="$1"; else dest="$1"; fi; shift ;;
+    esac
+  done
+  [ -n "$file" ] || die "usage: imgcli upload <file> [prefix/] [--name N] [--copy] [--open] [--json]"
+  [ -f "$file" ] || die "no such file: $file"
+
+  load_config
+  dest="${dest:-misc/}"
+  dest="$(norm_key "$dest")"
+  case "$dest" in */|"") : ;; *) dest="$dest/" ;; esac
+
+  local base ext
+  base="$(basename "$file")"
+  ext="${base##*.}"
+  if [ -n "$name" ]; then
+    base="$name"
+  elif is_opaque_prefix "$dest"; then
+    base="$(rand_name).${ext}"
+  fi
+
+  local key="${dest}${base}"
+  local dims; dims="$(dims_of "$file" || true)"
+
+  # Dimensions ride along as object metadata so `ls` can show them without
+  # downloading anything.
+  local meta=()
+  if [ -n "$dims" ]; then
+    meta=(--metadata "width=${dims%x*},height=${dims#*x}")
+  fi
+
+  s3api put-object \
+    --bucket "$BUCKET" \
+    --key "${PREFIX}${key}" \
+    --body "$file" \
+    "${meta[@]}" >/dev/null
+
+  local url="${CDN_BASE}/${key}"
+  if [ "$json" = 1 ]; then
+    printf '{"key":"%s","url":"%s","dimensions":"%s","bytes":%s}\n' \
+      "$key" "$url" "${dims:-}" "$(wc -c <"$file" | tr -d ' ')"
+  else
+    printf '%s\n' "$url"
+    [ -n "$dims" ] && printf '  %s  %s\n' "$dims" "$(human "$(wc -c <"$file" | tr -d ' ')")"
+  fi
+
+  [ "$copy" = 1 ] && printf '%s' "$url" | pbcopy && printf '  (copied)\n'
+  [ "$open" = 1 ] && open "$url"
+  return 0
+}
+
+cmd_sync() {
+  local dir="" dest="" json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$dir" ]; then dir="$1"; else dest="$1"; fi; shift ;;
+    esac
+  done
+  [ -n "$dir" ] && [ -n "$dest" ] || die "usage: imgcli sync <dir> <prefix/> [--json]"
+  [ -d "$dir" ] || die "no such directory: $dir"
+
+  load_config
+  dest="$(norm_key "$dest")"
+  case "$dest" in */) : ;; *) dest="$dest/" ;; esac
+
+  # s3 sync skips unchanged files by size+mtime. Metadata (dimensions) is not
+  # attached here — sync is for bulk curated exports where `info` can fetch
+  # dimensions on demand.
+  s3 sync "$dir" "s3://${BUCKET}/${PREFIX}${dest}" --no-progress \
+    --exclude '.*' --exclude '*/.*'
+
+  [ "$json" = 1 ] || printf '\nsynced → %s/%s\n' "$CDN_BASE" "${dest%/}"
+}
+
+cmd_ls() {
+  local dest="" json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) dest="$1"; shift ;;
+    esac
+  done
+  load_config
+  dest="$(norm_key "${dest:-}")"
+
+  local out
+  out=$(s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PREFIX}${dest}" \
+        --query 'Contents[].{k:Key,s:Size,m:LastModified}' --output json 2>/dev/null || echo '[]')
+  [ "$out" = "null" ] && out='[]'
+
+  CDN_BASE="$CDN_BASE" PREFIX="$PREFIX" JSON="$json" python3 - "$out" <<'PY'
+import sys, json, os
+rows = json.loads(sys.argv[1]) or []
+base, prefix = os.environ['CDN_BASE'], os.environ['PREFIX']
+as_json = os.environ['JSON'] == '1'
+
+def human(b):
+    for u in ('B','KB','MB','GB'):
+        if b < 1024: return f"{b:.0f}{u}" if u=='B' else f"{b:.1f}{u}"
+        b /= 1024
+    return f"{b:.1f}TB"
+
+items = []
+for r in rows:
+    key = r['k'][len(prefix):] if r['k'].startswith(prefix) else r['k']
+    if not key or key.endswith('/'):
+        continue
+    items.append({'key': key, 'bytes': r['s'], 'modified': r['m'],
+                  'url': f"{base}/{key}"})
+
+if as_json:
+    print(json.dumps(items, indent=2)); sys.exit()
+
+if not items:
+    print('(empty)'); sys.exit()
+
+w = max(len(i['key']) for i in items)
+print(f"{'KEY'.ljust(w)}  {'SIZE':>8}  MODIFIED")
+print('-' * (w + 32))
+for i in items:
+    print(f"{i['key'].ljust(w)}  {human(i['bytes']):>8}  {i['modified'][:16].replace('T',' ')}")
+print(f"\n{len(items)} object(s)   base: {base}/")
+PY
+}
+
+cmd_info() {
+  local key="${1:-}" json="${2:-}"
+  [ -n "$key" ] || die "usage: imgcli info <key> [--json]"
+  load_config
+  key="$(norm_key "$key")"
+
+  local out
+  out=$(s3api head-object --bucket "$BUCKET" --key "${PREFIX}${key}" --output json 2>/dev/null) \
+    || die "not found: $key"
+
+  CDN_BASE="$CDN_BASE" KEY="$key" JSON="${json:-}" python3 - "$out" <<'PY'
+import sys, json, os
+d = json.loads(sys.argv[1])
+key, base = os.environ['KEY'], os.environ['CDN_BASE']
+md = d.get('Metadata', {})
+info = {
+    'key': key,
+    'url': f"{base}/{key}",
+    'bytes': d.get('ContentLength'),
+    'content_type': d.get('ContentType'),
+    'modified': str(d.get('LastModified')),
+    'source_dimensions': (f"{md['width']}x{md['height']}" if 'width' in md and 'height' in md else None),
+    'renditions': {
+        'thumb_400':  f"{base}/rs:fill:400:400/{key}",
+        'web_800':    f"{base}/rs:fit:800/{key}",
+        'web_1600':   f"{base}/rs:fit:1600/{key}",
+        'og_jpg':     f"{base}/rs:fill:1200:630/f:jpg/{key}",
+        'original':   f"{base}/{key}",
+    },
+}
+if os.environ['JSON'] == '--json':
+    print(json.dumps(info, indent=2)); sys.exit()
+print(f"key         {info['key']}")
+print(f"url         {info['url']}")
+print(f"size        {info['bytes']} bytes  ({info['content_type']})")
+print(f"source dim  {info['source_dimensions'] or '(unknown — uploaded outside imgcli)'}")
+print(f"modified    {info['modified']}")
+print("\nrenditions")
+for k, v in info['renditions'].items():
+    print(f"  {k:<12} {v}")
+PY
+}
+
+cmd_url() {
+  local key="${1:-}"; shift || true
+  [ -n "$key" ] || die "usage: imgcli url <key> [transform ...]  e.g. imgcli url blog/x.jpg rs:fit:800 f:jpg"
+  load_config
+  key="$(norm_key "$key")"
+  local ops=""
+  for op in "$@"; do ops="${ops}${op}/"; done
+  printf '%s/%s%s\n' "$CDN_BASE" "$ops" "$key"
+}
+
+cmd_transforms() {
+  cat <<'EOF'
+imgproxy processing options — prepend to the key, slash-separated, any order:
+
+  https://<cdn>/rs:fit:800/f:jpg/blog/photo.jpg
+                └── options ──┘ └── key ──┘
+
+RESIZE
+  rs:fit:W:H        fit inside WxH, preserve aspect (most common)
+  rs:fill:W:H       fill WxH exactly, cropping overflow
+  rs:fill-down:W:H  like fill but never enlarges
+  rs:force:W:H      stretch to exactly WxH, ignoring aspect
+  w:400 / h:300     set one dimension only
+  s:800:600         shorthand for size
+  dpr:2             multiply all dimensions (retina)
+  el:1              allow enlarging beyond source resolution
+
+CROP & POSITION
+  c:W:H             crop to WxH before resizing
+  g:sm              smart gravity (content-aware; use with rs:fill)
+  g:no|so|ea|we|ce  north/south/east/west/center
+  g:fp:0.5:0.3      focus point, fractions of width/height
+  pd:20             pad 20px
+  ex:1              extend to requested size if source is smaller
+  rot:90            rotate 90/180/270
+  t:10              trim border, tolerance 10
+
+FORMAT & QUALITY
+  f:jpg|png|webp|avif   force output format
+  q:80                  quality 1-100
+  mb:100000             cap output at ~N bytes (auto-lowers quality)
+
+EFFECTS
+  bl:5              blur, sigma 5
+  sh:0.5            sharpen
+  bg:255:255:255    background colour for transparency/padding
+
+OTHER
+  cb:v2             cache buster — changes the URL, forces a fresh render
+  fn:name           filename in Content-Disposition
+  att:1             serve as attachment (download)
+  sm:1              strip metadata (already the server default)
+
+NOT AVAILABLE — verified 404 against this deployment
+  px:N              pixelate — imgproxy Pro only
+  pr:name           presets — none configured server-side
+  wm:*              watermark — accepted but a no-op, no watermark configured
+
+NOTES
+  - Omit all options to get the untouched original.
+  - Format is auto-negotiated (AVIF/WebP) from the Accept header unless f: is set.
+  - Prefer f:jpg over the @jpg extension form: @jpg is NOT edge-cached by
+    Cloudflare (the path stops ending in a recognised extension).
+  - EXIF/GPS is stripped from every rendition by default — originals in the
+    bucket keep theirs, but nothing served through the CDN exposes location.
+  - rs:fit:N bounds the LONGEST side to N; it does not force width.
+EOF
+}
+
+usage() {
+  cat <<'EOF'
+imgcli — image CDN upload and addressing
+
+  imgcli upload <file> [prefix/] [--name N] [--copy] [--open] [--json]
+  imgcli sync   <dir> <prefix/> [--json]
+  imgcli ls     [prefix/] [--json]
+  imgcli info   <key> [--json]
+  imgcli url    <key> [transform ...]
+  imgcli transforms
+
+PREFIXES
+  fuji/   curated camera exports   — readable names kept
+  blog/   article images           — readable names kept
+  gen/    generated / ad-hoc       — random names auto-assigned
+  misc/   everything else          — random names auto-assigned  (default)
+
+Keys are given without the bucket's img/ prefix; `blog/x.jpg` and
+`img/blog/x.jpg` both work. Uploads cannot delete: the credential has no
+deleteFiles capability by design.
+EOF
+}
+
+case "${1:-}" in
+  upload) shift; cmd_upload "$@" ;;
+  sync)   shift; cmd_sync "$@" ;;
+  ls)     shift; cmd_ls "$@" ;;
+  info)   shift; cmd_info "$@" ;;
+  url)    shift; cmd_url "$@" ;;
+  transforms) cmd_transforms ;;
+  ""|-h|--help|help) usage ;;
+  *) die "unknown command: $1 (try --help)" ;;
+esac
