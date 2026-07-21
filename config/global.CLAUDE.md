@@ -29,7 +29,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 | `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack (retired — see `audio-gateway`). Source of truth. |
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
-| `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). |
+| `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). Also hosts the **image CDN** — imgproxy over a private B2 `img/` prefix at `img.jkrumm.com`, consumed via the `/img` skill (`docs/image-cdn.md`). |
 | `sideclaw` | Claude Code MCP daemon — `check` / `review` tools, workers on claude-sonnet-5/claude-haiku-4-5, currently on **Max** (`SIDECLAW_WORKER_BACKEND=max` set in this install's `.env`); unset/non-`max` falls back to the IU unified endpoint (metered, off Max quota). LiteLLM/DeepSeek bridge retained but dormant. (`research` migrated 2026-06 to the standalone `research-gateway` service; `implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
 | `research-gateway` | Standalone agentic research HTTP service (Elysia + Bun + AI SDK v6) on the VPS at `research.jkrumm.com` — **Tailscale-only** (grey-cloud DNS-only A record → VPS Tailscale IP, not behind the Cloudflare Tunnel; same pattern as `audio-gateway`). Replaces sideclaw's `/research`. One research brain over a bearer-auth'd typed contract (REST + OpenAPI) plus a bearer MCP facade at `/mcp` exposing an async job trio — `research` (submit → jobId) + `job_wait`/`job_status`, mirroring sideclaw's submit→poll contract so long/deep research never trips the client's ~60s MCP HTTP timeout; bearer is defense-in-depth over the tailnet gate. Runs on IU models, off Max; consumed via the `/research` skill (Mac/tailnet only — cloud routines can't reach it). |
 | `hermes-agent` | Hermes — Mac Mini-only personal AI (Slack interface, Sonnet 4.6 brain, seven skill domains). |
@@ -273,6 +273,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/excalidraw-diagram` | inline | Create Excalidraw diagrams. |
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
 | `/dataviz` | inline | Professional data-viz / chart styling (visx + Mantine, centralized palette). |
+| `/img` | inline | Image CDN — upload to the B2 `img/` prefix and mint imgproxy transform URLs via `imgcli`. `--json` on every command for agent use. Secrets via `secrets-run`; infra in `vps/apps/imgproxy/`. |
 | `/brain` | inline | Second brain (`~/SourceRoot/brain` vault). `obsidian-cli` agent door with filesystem fallback; full contract in the repo's `AGENTS.md`. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
