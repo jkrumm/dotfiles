@@ -168,6 +168,9 @@ State the question, list 2 options with tradeoffs, give tendency, ask.
 ### No Attribution
 Never add AI/tool attribution to any artifact (code, commits, PRs, docs). Full rule: always-on `~/.claude/rules/attribution.md`.
 
+### Writing voice
+Any prose written for a human reader — articles, docs pages, product/website copy, briefings, vault pages, README prose, book summaries — follows **`~/SourceRoot/brain/voice.md`**: load it before writing. It defines the core voice (verdict-first, blunt, numbers over adjectives), three registers (peer-technical / broad / personal-agent, picked by reader not venue), non-prose media selection (table/diagram/chart/code over narrating), and banned AI patterns. Chat replies and code comments are exempt; commits follow `commit-conventions.md`. `/distill` already loads it at its Draft step.
+
 ---
 
 ## Token Efficiency
