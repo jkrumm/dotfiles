@@ -266,8 +266,13 @@ normalize_account() {  # $1=account → prints its canonical short form
   # '|' separates account from ref in a namespaced key. An account containing one
   # would make the key ambiguous (account `a|b` + ref `c` vs account `a` + ref `b|c`),
   # so refuse rather than seal something that cannot be looked up unambiguously.
+  # '/' and ':' are refused for a second reason: accounts_holding_ref() distinguishes a
+  # namespaced key from a bare one (a bare key IS a literal `op://…` ref) by requiring
+  # the account part to carry no '://'. Enforcing it here makes that discriminator a
+  # guarantee, not an accident of which accounts happen to be in use.
   case "$a" in
-    *'|'*) die "invalid OP_ACCOUNT '$1' — an account name may not contain '|'" ;;
+    *'|'* | *'/'* | *':'*)
+      die "invalid OP_ACCOUNT '$1' — an account name may not contain '|', '/' or ':'" ;;
   esac
   printf '%s' "$a"
 }

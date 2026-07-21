@@ -72,13 +72,29 @@ COLLIDE_IU='iu-private-value-bbbb'
 # any unquoted expansion or word-splitting bug in the parser would word-split this ref
 # and silently miss. Cheap to assert; a regression here would strand the whole IU stack.
 SPACED='pi-se-prod-pw-abcdefghij'
+# A ref containing a literal '|'. 1Password does not forbid pipes in vault/item/field
+# names, and a bare (default-account) cache key IS the raw ref — so this is the input
+# that breaks any "the first '|' separates account from ref" parser. Sealed BARE.
+PIPED='pipe-ref-value-0123456789'
+# THE SUFFIX-COLLISION DECOY. A bare-sealed ref that ends with "|op://test/decoy/x".
+# A parser that accepts any pipe-free prefix as an account reads this as account
+# `op://z` holding `op://test/decoy/x` — a ref never sealed for anyone. Worse, that
+# bogus account's cache_key() reconstructs this very key, so acting on the advice
+# would hand back THIS value for an unrelated ref. Must never be attributed.
+DECOY='decoy-value-must-never-surface'
+# An ACCOUNT name containing a space — normalize_account permits it, so the emitted
+# remediation must be shell-quoted before a human pastes it.
+SPACED_ACCT='spaced-account-value-abcdef'
 jq -n \
   --arg t "$LONG" --arg s "$SHORT" --arg q "$QUOTED" --arg e "$INJECT" \
   --arg iu "$IU" --arg cp "$COLLIDE_PERSONAL" --arg ci "$COLLIDE_IU" \
-  --arg sp "$SPACED" \
+  --arg sp "$SPACED" --arg pp "$PIPED" --arg dc "$DECOY" --arg sa "$SPACED_ACCT" \
   '{"op://test/app/token":$t,"op://test/app/short":$s,"op://test/app/quoted":$q,
     "op://test/injected/evil":$e,
     "op://Private/collide/token":$cp,
+    "op://v|t/item/field":$pp,
+    "op://z|op://test/decoy/x":$dc,
+    "sp ace|op://spaced/acct/ref":$sa,
     "careerpartner|op://Private/feuer/api-server-key":$iu,
     "careerpartner|op://Private/collide/token":$ci,
     "careerpartner|op://Prometheus Internal/se-prod/password":$sp,
@@ -286,6 +302,186 @@ assert_contains "account: missing IU ref names headless.iu.refs" "headless.iu.re
 # ...while a personal miss still names the personal list.
 err="$(run read op://test/nope/x 2>&1 || true)"
 assert_contains "account: missing personal ref names headless.refs" "headless.refs" "$err"
+
+# CROSS-ACCOUNT DIAGNOSIS. A ref that IS seeded, just under the other account, must
+# not be reported as un-seeded: the "add to <list> and reseed" advice is wrong there
+# and sends the reader to re-seal a cache that already holds the value. Regression
+# for the 2026-07-20 misdiagnosis (a day lost re-seeding + reading secrets out of a
+# stale build artifact) — the fix is one env var, so the error must say exactly that.
+err="$(run read op://Private/feuer/api-server-key 2>&1 || true)"
+assert_contains "cross-account: names the account that holds it" "careerpartner" "$err"
+assert_contains "cross-account: gives the OP_ACCOUNT fix" "OP_ACCOUNT=careerpartner" "$err"
+assert_contains "cross-account: says no reseed needed" "no reseed needed" "$err"
+if [[ "$err" == *"add to headless.refs and reseed"* ]]; then
+  bad "cross-account: must NOT advise a pointless reseed"
+else ok "cross-account: must NOT advise a pointless reseed"; fi
+
+# The same diagnosis must reach the `run`/template path, not just `read` — that is
+# where it actually bit (a whole .env.tpl of IU refs under the default account).
+cat > "$TESTREPO/xacct.env.tpl" <<'EOF'
+FEUER_TOKEN=op://Private/feuer/api-server-key
+EOF
+err="$(run run --env-file="$TESTREPO/xacct.env.tpl" -- true 2>&1 || true)"
+assert_contains "cross-account: template path gives the OP_ACCOUNT fix" "OP_ACCOUNT=careerpartner" "$err"
+
+# A genuinely-absent ref must still get the reseed advice even when OTHER refs in the
+# same template are cross-account — a half-match is a real gap, so the safe hint wins.
+cat > "$TESTREPO/mixed.env.tpl" <<'EOF'
+FEUER_TOKEN=op://Private/feuer/api-server-key
+GENUINELY_ABSENT=op://test/nope/x
+EOF
+err="$(run run --env-file="$TESTREPO/mixed.env.tpl" -- true 2>&1 || true)"
+# Assert the FULL reseed phrase, not just "reseed" — cross_account_advice() ends with
+# "(no reseed needed)", so a bare substring check passes on the very regression it
+# is meant to catch.
+assert_contains "cross-account: mixed template falls back to reseed advice" \
+  "add to headless.refs and reseed" "$err"
+if [[ "$err" == *"already seeded under account"* ]]; then
+  bad "cross-account: mixed template must NOT take the cross-account branch"
+else ok "cross-account: mixed template must NOT take the cross-account branch"; fi
+
+# N>1 aggregation: the real incident was a 67-ref template ENTIRELY under the wrong
+# account. A single-ref test cannot exercise common_other_account()'s agreement loop.
+# Both refs must be careerpartner-ONLY: op://Private/collide/token would resolve here,
+# since it also exists bare under the default account, and so would not be missing.
+cat > "$TESTREPO/multi.env.tpl" <<'EOF'
+FEUER_TOKEN=op://Private/feuer/api-server-key
+SE_PROD_PW=op://Prometheus Internal/se-prod/password
+EOF
+err="$(run run --env-file="$TESTREPO/multi.env.tpl" -- true 2>&1 || true)"
+assert_contains "cross-account: N>1 refs under one account still diagnosed" "OP_ACCOUNT=careerpartner" "$err"
+assert_contains "cross-account: N>1 reports the full count" "2 ref(s)" "$err"
+
+# PRESENCE, NOT VALUES. The whole security argument for the cross-account probe is
+# that it reads cache KEYS only. Assert no fixture secret VALUE reaches the error text.
+for v in "$IU" "$COLLIDE_IU" "$COLLIDE_PERSONAL"; do
+  if [[ "$err" == *"$v"* ]]; then
+    bad "cross-account: diagnostic must never echo a secret value"; break
+  fi
+done
+[[ "$err" != *"$IU"* && "$err" != *"$COLLIDE_IU"* && "$err" != *"$COLLIDE_PERSONAL"* ]] \
+  && ok "cross-account: diagnostic must never echo a secret value"
+
+# A ref may itself contain '|' (1Password does not forbid it in vault/item/field
+# names) and bare keys ARE the raw ref — so "split on the first '|'" would read the
+# bare key `op://v|t/item/field` as account `op://v`, and report NO holder for a ref
+# the default account plainly has. Regression for that mis-split (review 2026-07-21).
+PIPE_REF='op://v|t/item/field'
+assert_eq "pipe-ref: resolves under the default account" \
+  "$PIPED" "$(run read "$PIPE_REF" 2>/dev/null)"
+err="$(run_iu read "$PIPE_REF" 2>&1 || true)"
+assert_contains "pipe-ref: cross-account probe still finds the bare holder" "tkrumm" "$err"
+assert_contains "pipe-ref: and advises the account switch, not a reseed" "OP_ACCOUNT=tkrumm" "$err"
+
+# Suffix collision: `op://test/decoy/x` was never sealed for ANY account — only a bare
+# ref ENDING in "|op://test/decoy/x" was. It must be reported as a genuine gap, never
+# attributed to the pseudo-account `op://z`, because acting on that advice would return
+# the decoy's value for a ref nobody sealed.
+err="$(run read op://test/decoy/x 2>&1 || true)"
+assert_contains "collision: unsealed ref gets the reseed advice" "reseed: make secrets-seed" "$err"
+if [[ "$err" == *"op://z"* ]]; then
+  bad "collision: must not name a ref fragment as an account"
+else ok "collision: must not name a ref fragment as an account"; fi
+if [[ "$err" == *"$DECOY"* ]]; then
+  bad "collision: decoy value must never reach the error text"
+else ok "collision: decoy value must never reach the error text"; fi
+# ...and the same under a non-default account, which takes the namespaced lookup path.
+err="$(run_iu read op://test/decoy/x 2>&1 || true)"
+if [[ "$err" == *"op://z"* ]]; then
+  bad "collision: no ref-fragment account under a namespaced lookup"
+else ok "collision: no ref-fragment account under a namespaced lookup"; fi
+
+# Holder-set INTERSECTION. op://Private/collide/token is held by BOTH accounts; the IU
+# feuer ref by careerpartner only. Under a third account both are missing, and exactly
+# one account (careerpartner) holds them all — an implementation that demands a single
+# holder per ref would bail to the reseed advice here.
+cat > "$TESTREPO/intersect.env.tpl" <<'EOF'
+COLLIDE=op://Private/collide/token
+FEUER_TOKEN=op://Private/feuer/api-server-key
+EOF
+err="$(OP_ACCOUNT=thirdparty run run --env-file="$TESTREPO/intersect.env.tpl" -- true 2>&1 || true)"
+assert_contains "intersect: one account holding every missing ref is found" \
+  "OP_ACCOUNT=careerpartner" "$err"
+
+# An account name may contain a SPACE (normalize_account refuses only '|', '/' and ':').
+# Two things must survive it: the holder-set intersection (comm -12 is line-oriented, so
+# a space is harmless but worth pinning), and the emitted remediation, which a human is
+# invited to paste — unquoted, `OP_ACCOUNT=sp ace secrets-run` would run `ace`.
+err="$(OP_ACCOUNT=other run read 'op://spaced/acct/ref' 2>&1 || true)"
+assert_contains "spaced-account: holder found across the space" "sp ace" "$err"
+assert_contains "spaced-account: remediation is shell-quoted" 'OP_ACCOUNT=sp\ ace' "$err"
+
+# normalize_account must refuse the characters the collision guard depends on.
+for badc in 'a/b' 'a:b' 'a|b'; do
+  if OP_ACCOUNT="$badc" run read op://test/app/token >/dev/null 2>&1; then
+    bad "normalize: OP_ACCOUNT '$badc' must be refused"
+  else ok "normalize: OP_ACCOUNT '$badc' must be refused"; fi
+done
+
+# === diagnostics module (split out of the shim) ==============================
+# The module is SOURCED from the shim's real directory on the miss path only. Two
+# properties the split introduced, neither exercised by the tests above.
+
+# 1. It must load through a SYMLINK. This is not academic: the shim is invoked in real
+#    life as ~/.local/bin/secrets-run, a symlink into dotfiles/scripts. Resolving the
+#    symlink's own directory instead of the target's would look in ~/.local/bin and
+#    silently lose the advice exactly where it is used.
+LINKDIR="$TESTREPO/linkdir"; mkdir -p "$LINKDIR"
+ln -sf "$SHIM" "$LINKDIR/secrets-run"
+err="$(SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+  "$LINKDIR/secrets-run" read op://Private/feuer/api-server-key 2>&1 || true)"
+assert_contains "diagnostics: module loads through a symlinked shim" "OP_ACCOUNT=careerpartner" "$err"
+
+# 2. A missing module must DEGRADE, never break. Secret resolution is the sole secret
+#    path and must not depend on the error-path module; a miss must still fail closed
+#    and still name the ref — only the remediation advice is lost.
+BAREDIR="$TESTREPO/baredir"; mkdir -p "$BAREDIR"
+cp "$SHIM" "$BAREDIR/secrets-run"        # copied WITHOUT secrets-run-diagnostics.sh
+bare() { SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" "$BAREDIR/secrets-run" "$@"; }
+assert_eq "diagnostics: absent module leaves resolution working" \
+  "$LONG" "$(bare read op://test/app/token 2>/dev/null)"
+err="$(bare read op://test/nope/x 2>&1 || true)"
+assert_contains "diagnostics: absent module still fails closed" "not in cache" "$err"
+assert_contains "diagnostics: absent module still names the ref" "op://test/nope/x" "$err"
+if bare read op://test/nope/x >/dev/null 2>&1; then
+  bad "diagnostics: absent module must not turn a miss into a success"
+else ok "diagnostics: absent module must not turn a miss into a success"; fi
+
+# 3. A symlink CYCLE must not hang. The mini is headless — a wedged secret lookup has
+#    nobody to Ctrl-C it — so the walk is hop-capped and degrades to "module unavailable"
+#    rather than spinning. Guarded by `timeout`/`gtimeout` where available; the assertion
+#    is that the process terminates at all.
+CYCDIR="$TESTREPO/cycdir"; mkdir -p "$CYCDIR"
+ln -sf "$CYCDIR/link-b" "$CYCDIR/link-a"
+ln -sf "$CYCDIR/link-a" "$CYCDIR/link-b"
+TIMEOUT_BIN=""
+command -v timeout  >/dev/null 2>&1 && TIMEOUT_BIN=timeout
+command -v gtimeout >/dev/null 2>&1 && TIMEOUT_BIN=gtimeout
+if [[ -n "$TIMEOUT_BIN" ]]; then
+  if SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+     "$TIMEOUT_BIN" 10 "$CYCDIR/link-a" read op://test/app/token >/dev/null 2>&1; then
+    ok "diagnostics: symlink cycle terminates (did not hang)"
+  elif [[ $? -eq 124 ]]; then
+    bad "diagnostics: symlink cycle HUNG (hop cap missing or broken)"
+  else
+    ok "diagnostics: symlink cycle terminates (did not hang)"
+  fi
+else
+  ok "diagnostics: symlink cycle test skipped (no timeout binary)"
+fi
+
+# format_missing_list() elision: no "+N more" at exactly the cap, correct count above it.
+mk_tpl() {  # $1=path $2=count — a template of N guaranteed-absent refs
+  : > "$1"; for ((n = 1; n <= $2; n++)); do printf 'K%d=op://test/absent%d/x\n' "$n" "$n" >> "$1"; done
+}
+mk_tpl "$TESTREPO/eight.env.tpl" 8
+err="$(run run --env-file="$TESTREPO/eight.env.tpl" -- true 2>&1 || true)"
+if [[ "$err" == *"more)"* ]]; then bad "elide: exactly 8 refs are not elided"
+else ok "elide: exactly 8 refs are not elided"; fi
+mk_tpl "$TESTREPO/twelve.env.tpl" 12
+err="$(run run --env-file="$TESTREPO/twelve.env.tpl" -- true 2>&1 || true)"
+assert_contains "elide: 12 refs elide the trailing 4" "(+4 more)" "$err"
+assert_contains "elide: 12 refs still report the true total" "12 ref(s)" "$err"
 
 # `run` (not just `read`) must inject under an account too.
 cat > "$TESTREPO/iu.env.tpl" <<'EOF'
