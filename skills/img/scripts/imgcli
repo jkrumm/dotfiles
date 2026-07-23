@@ -167,7 +167,7 @@ for item in d.get("published", []):
 
 for item in d.get("skipped", []):
     if str(item.get("id")) == target and item.get("key"):
-        print(f"already published ({item.get(\"reason\", \"skipped\")})", file=sys.stderr)
+        print("already published (%s)" % item.get("reason", "skipped"), file=sys.stderr)
         print(item["key"])
         sys.exit(0)
 
