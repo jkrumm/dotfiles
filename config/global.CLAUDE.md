@@ -28,6 +28,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 |-|-|
 | `dotfiles` | This setup — Claude Code config, hooks, skills, rules, localai stack (retired — see `audio-gateway`). Source of truth. |
 | `homelab` | Main homelab stack (25+ containers) + Uptime Kuma config. |
+| `image-share` | Private image layer on the HomeLab — filesystem-truth index over the photo trees + service-owned ingest root, token-role public share pages, bearer OpenAPI admin/agent API (ingest `POST /api/images`, publish-to-CDN `POST /api/publish`); consumed via the `/img` skill (`imgcli share`/`publish`); deploy config lives in `homelab`. |
 | `homelab-private` | **Private stack** (do not reference outside this repo): media pipeline behind ProtonVPN, Jellyfin, **Tailscale ACLs**. **Never reference services, hostnames, or details of this repo from anywhere else** — not in `homelab`, not in CLAUDE.md, not in commits outside this repo. Self-contained. |
 | `vps` | Production VPS (Cloudflare Tunnel, three compose stacks: networking, infra, monitoring). Also hosts the **image CDN** — imgproxy over a private B2 `img/` prefix at `img.jkrumm.com`, consumed via the `/img` skill (`docs/image-cdn.md`). |
 | `sideclaw` | Claude Code MCP daemon — `check` / `review` tools, workers on claude-sonnet-5/claude-haiku-4-5, currently on **Max** (`SIDECLAW_WORKER_BACKEND=max` set in this install's `.env`); unset/non-`max` falls back to the IU unified endpoint (metered, off Max quota). LiteLLM/DeepSeek bridge retained but dormant. (`research` migrated 2026-06 to the standalone `research-gateway` service; `implement` retired 2026-06 — implementation moved to the native Sonnet 4.6 `@implementer` subagent on Max.) Hosts notes and Excalidraw integration. |
@@ -273,7 +274,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/excalidraw-diagram` | inline | Create Excalidraw diagrams. |
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
 | `/dataviz` | inline | Professional data-viz / chart styling (visx + Mantine, centralized palette). |
-| `/img` | inline | Image CDN — upload to the B2 `img/` prefix and mint imgproxy transform URLs via `imgcli`. `--json` on every command for agent use. Secrets via `secrets-run`; infra in `vps/apps/imgproxy/`. |
+| `/img` | inline | Image stack — public CDN (upload to the B2 `img/` prefix, mint imgproxy transform URLs) + private layer (`imgcli share`/`publish` → `image-share`). `--json` on every command for agent use. Secrets via `secrets-run`; infra in `vps/apps/imgproxy/` + `image-share`. |
 | `/brain` | inline | Second brain (`~/SourceRoot/brain` vault). `obsidian-cli` agent door with filesystem fallback; full contract in the repo's `AGENTS.md`. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |

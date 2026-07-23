@@ -12,6 +12,10 @@ set -euo pipefail
 
 REF_ITEM="op://common/b2-images-write"
 REF_BUCKET_ITEM="op://common/backblaze-s3"
+# Private layer (image-share, homelab). Resolved lazily inside share/publish
+# only, so every other command keeps working on a mini that hasn't cached
+# these refs yet.
+REF_SHARE_ITEM="op://homelab/image-share"
 
 die() { printf 'imgcli: %s\n' "$*" >&2; exit 1; }
 
@@ -75,6 +79,100 @@ human() {
     while (b>=1024 && i<4) { b/=1024; i++ }
     printf (i==1 ? "%d%s" : "%.1f%s"), b, u[i]
   }'
+}
+
+# --- private layer (image-share) --------------------------------------------
+# Bearer-auth'd HTTP service on the homelab. Ingests files into a durable
+# private copy and, on publish, hands them off to the same B2/imgproxy CDN
+# `upload`/`sync` write to directly.
+
+is_valid_publish_prefix() {
+  case "$1" in
+    fuji|blog|gen|misc) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+load_share_config() {
+  need secrets-run
+  need curl
+
+  SHARE_BASE=$(secrets-run read "$REF_SHARE_ITEM/BASE_URL") \
+    || die "could not resolve image-share secrets — add $REF_SHARE_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
+  SHARE_SECRET=$(secrets-run read "$REF_SHARE_ITEM/API_SECRET") \
+    || die "could not resolve image-share secrets — add $REF_SHARE_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
+
+  [ -n "$SHARE_BASE" ] && [ -n "$SHARE_SECRET" ] || die "image-share config incomplete"
+}
+
+# Reads a single field out of a JSON object on stdin. No jq dependency, same
+# call shape as the python blocks cmd_info/cmd_ls already use.
+json_field() {
+  local json="$1" field="$2"
+  python3 -c 'import json, sys; d = json.load(sys.stdin); print(d[sys.argv[1]])' "$field" <<<"$json"
+}
+
+# POST /api/images — shared by `share` and `publish` (publish always stages
+# through the private layer first).
+share_ingest() {
+  local file="$1" dir="$2"
+  local args=(-sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/images" \
+    -H "Authorization: Bearer ${SHARE_SECRET}" \
+    -F "file=@${file}")
+  [ -n "$dir" ] && args+=(-F "dir=${dir}")
+
+  local out status body
+  out="$(curl "${args[@]}")" || die "image-share ingest request failed (network error)"
+  status="${out##*$'\n'}"
+  body="${out%$'\n'"${status}"}"
+  [ "$status" = "201" ] || die "image-share ingest failed (HTTP $status): $body"
+  printf '%s' "$body"
+}
+
+# POST /api/publish for a single already-ingested image id.
+share_publish() {
+  local id="$1" prefix="$2"
+  case "$id" in
+    '' | *[!0-9]*) die "image-share ingest returned a non-numeric id: $id" ;;
+  esac
+  local payload
+  payload="$(printf '{"imageIds":[%s],"prefix":"%s"}' "$id" "$prefix")"
+
+  local out status body
+  out="$(curl -sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/publish" \
+    -H "Authorization: Bearer ${SHARE_SECRET}" \
+    -H "Content-Type: application/json" \
+    -d "$payload")" || die "image-share publish request failed (network error)"
+  status="${out##*$'\n'}"
+  body="${out%$'\n'"${status}"}"
+  [ "$status" = "200" ] || die "image-share publish failed (HTTP $status): $body"
+  printf '%s' "$body"
+}
+
+# Pulls the CDN key for `id` out of a /api/publish response — from `published`
+# normally, or from `skipped` when the image was already published before
+# (that is success, not an error). Prints a note to stderr in the latter case.
+publish_result_key() {
+  local body="$1" id="$2"
+  ID="$id" python3 -c '
+import json, os, sys
+
+d = json.loads(sys.argv[1])
+target = os.environ["ID"]
+
+for item in d.get("published", []):
+    if str(item.get("id")) == target:
+        print(item["key"])
+        sys.exit(0)
+
+for item in d.get("skipped", []):
+    if str(item.get("id")) == target and item.get("key"):
+        print(f"already published ({item.get(\"reason\", \"skipped\")})", file=sys.stderr)
+        print(item["key"])
+        sys.exit(0)
+
+sys.exit(1)
+' "$body"
 }
 
 # --- commands ---------------------------------------------------------------
@@ -327,36 +425,143 @@ NOTES
 EOF
 }
 
+cmd_share() {
+  local file="" dir="" copy=0 json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir) dir="$2"; shift 2 ;;
+      --copy) copy=1; shift ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$file" ]; then file="$1"; else die "unexpected argument: $1"; fi; shift ;;
+    esac
+  done
+  [ -n "$file" ] || die "usage: imgcli share <file> [--dir <dir>] [--copy] [--json]"
+  [ -f "$file" ] || die "no such file: $file"
+
+  load_share_config
+
+  local body id root relpath adminurl
+  body="$(share_ingest "$file" "$dir")"
+  id="$(json_field "$body" id)"
+  root="$(json_field "$body" root)"
+  relpath="$(json_field "$body" relPath)"
+  adminurl="$(json_field "$body" adminFileUrl)"
+
+  if [ "$json" = 1 ]; then
+    printf '{"id":"%s","root":"%s","relPath":"%s","adminFileUrl":"%s"}\n' \
+      "$id" "$root" "$relpath" "$adminurl"
+  else
+    printf 'id            %s\n' "$id"
+    printf 'relPath       %s\n' "$relpath"
+    printf 'admin file    %s\n' "$adminurl"
+  fi
+
+  [ "$copy" = 1 ] && printf '%s' "$adminurl" | pbcopy && printf '  (copied)\n'
+  return 0
+}
+
+cmd_publish() {
+  local file="" prefix="" dir="" copy=0 open=0 json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir) dir="$2"; shift 2 ;;
+      --copy) copy=1; shift ;;
+      --open) open=1; shift ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$file" ]; then file="$1"; else prefix="$1"; fi; shift ;;
+    esac
+  done
+  [ -n "$file" ] || die "usage: imgcli publish <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]"
+  [ -f "$file" ] || die "no such file: $file"
+
+  prefix="${prefix:-gen/}"
+  prefix="${prefix%/}"
+  is_valid_publish_prefix "$prefix" \
+    || die "unknown publish prefix: $prefix (must be one of: fuji, blog, gen, misc)"
+
+  load_config
+  load_share_config
+
+  local ingest_body id
+  ingest_body="$(share_ingest "$file" "$dir")"
+  id="$(json_field "$ingest_body" id)"
+
+  local publish_body key
+  publish_body="$(share_publish "$id" "$prefix")"
+  key="$(publish_result_key "$publish_body" "$id")" \
+    || die "image-share publish did not return image $id in published or skipped: $publish_body"
+  key="$(norm_key "$key")"
+
+  local url="${CDN_BASE}/${key}"
+  local embed_url="${CDN_BASE}/rs:fit:800/f:jpg/${key}"
+  local markdown="![](${embed_url})"
+
+  if [ "$json" = 1 ]; then
+    printf '{"id":"%s","key":"%s","cdnUrl":"%s","markdown":"%s","renditions":{"thumb_400":"%s","web_800":"%s","web_1600":"%s","og_jpg":"%s","original":"%s"}}\n' \
+      "$id" "$key" "$url" "$markdown" \
+      "${CDN_BASE}/rs:fill:400:400/${key}" \
+      "${CDN_BASE}/rs:fit:800/${key}" \
+      "${CDN_BASE}/rs:fit:1600/${key}" \
+      "${CDN_BASE}/rs:fill:1200:630/f:jpg/${key}" \
+      "$url"
+  else
+    printf 'key         %s\n' "$key"
+    printf 'cdnUrl      %s\n' "$url"
+    printf '\n%s\n' "$markdown"
+  fi
+
+  [ "$copy" = 1 ] && printf '%s' "$url" | pbcopy && printf '  (copied)\n'
+  [ "$open" = 1 ] && open "$url"
+  return 0
+}
+
 usage() {
   cat <<'EOF'
-imgcli — image CDN upload and addressing
+imgcli — image CDN upload and addressing, plus the private image-share layer
 
-  imgcli upload <file> [prefix/] [--name N] [--copy] [--open] [--json]
-  imgcli sync   <dir> <prefix/> [--json]
-  imgcli ls     [prefix/] [--json]
-  imgcli info   <key> [--json]
-  imgcli url    <key> [transform ...]
+  imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]
+  imgcli sync    <dir> <prefix/> [--json]
+  imgcli ls      [prefix/] [--json]
+  imgcli info    <key> [--json]
+  imgcli url     <key> [transform ...]
   imgcli transforms
+  imgcli share   <file> [--dir <dir>] [--copy] [--json]
+  imgcli publish <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]
 
-PREFIXES
+PREFIXES (upload, sync, publish)
   fuji/   curated camera exports   — readable names kept
   blog/   article images           — readable names kept
-  gen/    generated / ad-hoc       — random names auto-assigned
-  misc/   everything else          — random names auto-assigned  (default)
+  gen/    generated / ad-hoc       — random names auto-assigned  (publish default)
+  misc/   everything else          — random names auto-assigned  (upload default)
 
 Keys are given without the bucket's img/ prefix; `blog/x.jpg` and
 `img/blog/x.jpg` both work. Uploads cannot delete: the credential has no
 deleteFiles capability by design.
+
+PRIVATE LAYER
+  share    ingests a file into the private image-share service on the
+           homelab (durable copy, shareable later via token pages).
+  publish  ingests, then publishes to the public CDN — for generated or
+           final images headed for notes/articles. Always lands in the
+           private layer first.
+
+  Both need op://homelab/image-share/{BASE_URL,API_SECRET}; on the headless
+  mini these must be seeded first (dotfiles-private/headless.refs +
+  `make secrets-seed`).
 EOF
 }
 
 case "${1:-}" in
-  upload) shift; cmd_upload "$@" ;;
-  sync)   shift; cmd_sync "$@" ;;
-  ls)     shift; cmd_ls "$@" ;;
-  info)   shift; cmd_info "$@" ;;
-  url)    shift; cmd_url "$@" ;;
+  upload)     shift; cmd_upload "$@" ;;
+  sync)       shift; cmd_sync "$@" ;;
+  ls)         shift; cmd_ls "$@" ;;
+  info)       shift; cmd_info "$@" ;;
+  url)        shift; cmd_url "$@" ;;
   transforms) cmd_transforms ;;
+  share)      shift; cmd_share "$@" ;;
+  publish)    shift; cmd_publish "$@" ;;
   ""|-h|--help|help) usage ;;
   *) die "unknown command: $1 (try --help)" ;;
 esac

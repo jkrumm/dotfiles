@@ -44,6 +44,8 @@ Expand around the seeds using `voice.md` as a style guide. Load it from the brai
 
 Formulaic or background sections are fine where needed (context the reader genuinely lacks), but keep them tight. The seeds carry the weight. Write in the author's voice, not the model's defaults.
 
+Figures/images for the piece go through the `/img` skill: upload, mint an `f:jpg` rendition URL, embed as markdown.
+
 ### 5. Voice Pass
 
 **This step is human-owned. The model never performs it.** Remind the human to:
