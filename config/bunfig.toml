@@ -18,3 +18,10 @@
 # exists in a just-published version, temporarily lower this or add the package
 # to an excludes list (`minimumReleaseAgeExcludes`).
 minimumReleaseAge = 259200
+
+# First-party exemptions. The cooldown is a guard against THIRD-PARTY supply-chain
+# compromise — a hijacked maintainer account, a typosquat, a malicious transitive
+# bump. It buys nothing for a package published from this machine's own source by
+# its own author, and it would stall every consumer repo for 3 days after each
+# release. Only ever list packages published from ~/SourceRoot with npm provenance.
+minimumReleaseAgeExcludes = ["basalt-ui"]
