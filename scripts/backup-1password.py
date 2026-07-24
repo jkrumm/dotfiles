@@ -8,7 +8,8 @@
 Run manually: opbackup (alias)
 Frequency: weekly (Uptime Kuma push monitor reminds if overdue at 8 days)
 
-Vaults backed up: Private, common, homelab, vps  (Shared skipped — see SKIP_VAULTS)
+Vaults backed up: every vault `op vault list` returns, minus SKIP_VAULTS (Shared) —
+                  a new vault is picked up with no code change
 Archived items:   excluded automatically (op item list omits them by default)
 
 How it works:
@@ -140,7 +141,7 @@ def main():
         subprocess.run(["curl", "-fsS", push_url], capture_output=True, check=True)
 
         size_kb = os.path.getsize(tmp_path) // 1024
-        print(f"  Done: {total} items from {len(vaults)} vaults ({size_kb} KB) → homelab")
+        print(f"  Done: {total} items from {len(backup)} vaults ({size_kb} KB) → homelab")
     finally:
         os.unlink(tmp_path)
 
