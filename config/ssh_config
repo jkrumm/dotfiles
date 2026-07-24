@@ -13,7 +13,8 @@ Host mac-mini
 # Infrastructure servers (HomeLab + VPS) — reached over Tailscale; MagicDNS
 # resolves the short names on the tailnet. The Unix user is `jkrumm`; without
 # this, ssh defaults to the local Mac login (johannes.krumm), which doesn't
-# exist on the boxes and auth fails. Key auth is served by the 1Password SSH agent.
+# exist on the boxes and auth fails. Auth to these hosts is Tailscale SSH
+# (keyless, tailnet-gated, works headless) — no key or 1Password agent involved.
 Host homelab
     HostName homelab
     User jkrumm

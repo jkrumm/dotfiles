@@ -11,7 +11,7 @@
 
 ## Workspaces
 
-The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks, and rules are **global** (`~/.claude/`); workspace conventions live in this file; each repo can still add its own `CLAUDE.md`.
+The Mac has two workspace "regions". Skills, hooks, and rules are **global** (`~/.claude/`); workspace conventions live in this file; each repo can still add its own `CLAUDE.md`.
 
 ### `~/SourceRoot/` — Personal projects
 
@@ -20,7 +20,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 - **Default: direct-to-master.** Every SourceRoot repo skips the PR flow unless it's on the small PR-required denylist.
 - **PR-required repos** (`/ship` uses PR flow; `protect-branches.ts` enforces): `basalt-ui` (NPM published — also always a separate commit), `free-planning-poker`, `rollhook`, `rollhook-action`. Everything else is direct-to-master. The list is a single source of truth in `dotfiles/config/pr-required-repos.json` (symlinked to `~/.claude/pr-required-repos.json`), read by both the hook and `github-config.sh` — edit that file, not the code.
 - **GitHub branch protection has two tiers** (applied by `make github-config`): PR-required repos + any repo with a collaborator get the **full** ruleset (require PR to master); all other public repos get the **lite** ruleset (no PR rule, just no-force/no-deletion/linear) so direct pushes are clean with no bypass warning. Random people can never push to your repos regardless; private repos can't be protected server-side on the free tier (gap is documented in the script).
-- **All `~/IuRoot/` repos require PRs** (against `main`). Detected by path — no list to maintain.
+- **All `~/IuRoot/` repos require PRs** (against `main`). Detected by path, except repos listed in `directToMain` in `pr-required-repos.json` (currently `prometheus-feuer-agent`).
 
 #### Repository map
 
@@ -42,7 +42,9 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
 | `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli`. LiveSync is continuous cross-device backup; `git diff` is the deliberate review gate. Direct-to-master; validated by `vault-lint`. |
-| `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast` | Smaller personal apps / utilities. |
+| `image-gen` | Personal image-generation studio (gpt-image family) — gateway runs on the mini; its refs are cached in `dotfiles-private/headless.refs`. |
+| `rb` | Personal single-user learning tracker — always-on Docker on the mini, Tailscale-only. |
+| `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods` | Smaller personal apps / utilities. |
 
 #### Infrastructure
 
@@ -51,7 +53,7 @@ The Mac has three workspace "regions" plus a cold Obsidian backup. Skills, hooks
 | HomeLab | `ssh homelab` | `~/homelab`, `~/homelab-private` | `homelab` + `common` |
 | VPS | `ssh vps` | `~/vps` | `vps` + `common` |
 
-SSH config in `~/.ssh/config` (Tailscale-IP key auth, generated from template). For sudo:
+SSH config in `~/.ssh/config` (generated from template; servers reached via Tailscale SSH — keyless, MagicDNS names). For sudo:
 
 ```bash
 ROOT_PW=$(op read "op://Private/homelab-server/password" --account tkrumm) && ssh homelab "echo '$ROOT_PW' | sudo -S <cmd>"
@@ -274,6 +276,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/excalidraw-diagram` | inline | Create Excalidraw diagrams. |
 | `/frontend-design` | inline | Production-grade frontend interfaces. |
 | `/dataviz` | inline | Professional data-viz / chart styling (visx + Mantine, centralized palette). |
+| `/distill` | inline | Human-owned 7-step prose pipeline (loads brain voice.md at Draft). |
 | `/img` | inline | Image stack — public CDN (upload to the B2 `img/` prefix, mint imgproxy transform URLs) + private layer (`imgcli share`/`publish` → `image-share`). `--json` on every command for agent use. Secrets via `secrets-run`; infra in `vps/apps/imgproxy/` + `image-share`. |
 | `/brain` | inline | Second brain (`~/SourceRoot/brain` vault). `obsidian-cli` agent door with filesystem fallback; full contract in the repo's `AGENTS.md`. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
@@ -281,7 +284,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |
 
 **Per-repo skills** that only load when Claude is started inside their repo:
-- `~/SourceRoot/dotfiles/.claude/skills/` — `/iu-endpoint` (validate IU endpoint + discover models); `/localai` (**retired** — local mlx-audio/Fish stack, replaced by the cloud audio-gateway)
+- `~/SourceRoot/dotfiles/.claude/skills/` — `/iu-endpoint` (validate IU endpoint + discover models); `/localai` (**retired** — local mlx-audio/Fish stack, replaced by the cloud audio-gateway); `/sync` (bidirectional MacBook↔mini repo sync over SSH; MacBook-only)
 - `~/SourceRoot/hermes-agent/.claude/skills/` — `/hermes-validate`, `/hermes-update` (manage Hermes Agent)
 - Other SourceRoot repos with their own project skills (e.g. `homelab/.claude/skills/{audit,docs,upgrade-stack}/`, `vps/.claude/skills/{audit,docs}/`, `sideclaw/.claude/skills/claude-cli/`, `free-planning-poker/.claude/skills/release-fpp/`, `homelab-private/.claude/skills/prowlarr/`, `ticktick-raycast/.claude/skills/{raycast-extension,ticktick-api}/`).
 
@@ -321,7 +324,7 @@ Use **fnm**, not nvm, for Node version management. Ensure you don't suggest nvm 
 
 ### Validation
 - Check `package.json` (or repo Makefile) for available scripts.
-- Use `/check` for validation (sideclaw MCP — schema-validated, runs on the DeepSeek-V4-Pro bridge).
+- Use `/check` for validation (sideclaw MCP — schema-validated, claude-sonnet-5/claude-haiku-4-5 workers, currently on Max — see Execution modes).
 - Fix errors in changed files only (don't refactor untouched code).
 - I validate running apps manually (don't run `dev` servers for me).
 
@@ -342,7 +345,7 @@ Two layers — no workspace-level intermediate file:
 - **Per-project** (`<repo>/CLAUDE.md`): project-specific conventions. Loads when Claude is started inside the repo.
 
 Global rules (always-on conventions):
-- `~/.claude/rules/` ← `dotfiles/rules/` — attribution, commits, TypeScript, security, code style, formatting, docker-makefile, makefile-conventions, dependency-hygiene, research-first, visx-charts.
+- `~/.claude/rules/` ← `dotfiles/rules/` — attribution, commits, TypeScript, security, code style, formatting, docker-makefile, dependency-hygiene, research-first, plus the path-scoped ones that load lazily via `paths:` frontmatter rather than always-on: makefile-conventions, visx-charts, and the upstream-synced elysia, react-best-practices, tanstack-query, tanstack-router, tanstack-start.
 
 Global skills:
 - `~/.claude/skills/` ← `dotfiles/skills/` (global skills).

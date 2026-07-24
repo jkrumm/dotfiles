@@ -116,6 +116,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `hooks/notify.ts` | `~/.claude/hooks/notify.ts` | All 4 hook events |
 | `hooks/protect-branches.ts` | `~/.claude/hooks/protect-branches.ts` | PreToolUse — blocks push to protected branches |
 | `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` | PreToolUse — blocks raw docker commands when Makefile exists |
+| `hooks/machine-role.ts` | `~/.claude/hooks/machine-role.ts` | SessionStart — injects this machine's secrets backend + outbound-access routing (cache/mini vs op/MacBook) |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Single source of truth for PR-required repos — read by `protect-branches.ts` (hook) and `scripts/github-config.sh` (full vs lite ruleset tier). |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
@@ -155,8 +156,9 @@ Two boundaries gate access: the Tailscale ACL (`tag:mac → tag:mac` on 22/5900,
 `homelab-private`) restricts the source to your own Macs, and sshd is key-only. Keep the
 router free of any WAN port-forward for 22/5900 — that would bypass both. **Work (Feuer)
 secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
-password), not a token at rest. The personal-side Hermes path will use a scoped 1Password
-service account (token in Keychain) — planned, not yet wired.
+password), not a token at rest. The personal-side Hermes path resolves secrets from the
+`secrets-run` cache (Hermes cache-only since 2026-07-16, zero plaintext secrets on the
+mini — see Headless secrets below); no service-account token at rest.
 
 ## Headless outbound access (Mac mini only)
 
