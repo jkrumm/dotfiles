@@ -33,6 +33,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-hooks
 	@$(MAKE) --no-print-directory _setup-scripts
 	@$(MAKE) --no-print-directory _setup-skills
+	@$(MAKE) --no-print-directory _setup-imgcli
 	@$(MAKE) --no-print-directory _setup-settings
 	@$(MAKE) --no-print-directory _setup-gitignore
 	@$(MAKE) --no-print-directory _setup-ghostty
@@ -534,6 +535,15 @@ _setup-skills:
 		$(MAKE) --no-print-directory _link SRC="$$skill" DST="$(CLAUDE_DIR)/skills/$$name"; \
 	done
 
+.PHONY: _setup-imgcli
+_setup-imgcli:
+	@echo "  imgcli (→ ~/.local/bin, same PATH lane as secrets-run)..."
+	@mkdir -p "$(HOME)/.local/bin"
+	@chmod +x $(DOTFILES_DIR)/skills/img/scripts/imgcli
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/skills/img/scripts/imgcli" \
+		DST="$(HOME)/.local/bin/imgcli"
+
 .PHONY: _setup-settings
 _setup-settings:
 	@echo "  Claude Code settings..."
@@ -806,6 +816,7 @@ status:
 		name=$$(basename "$$skill"); \
 		$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/skills/$$name"; \
 	done
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.local/bin/imgcli"
 	@echo "  Tools"
 	@for tool in jq gh fzf zoxide wtp fnm bun uv age coderabbit fallow; do \
 		command -v $$tool >/dev/null 2>&1 \
