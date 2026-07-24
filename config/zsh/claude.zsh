@@ -2,6 +2,7 @@
 #
 # Usage: c  [claude-args...]   — Max subscription (default)
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
+#        cf [claude-args...]   — Max subscription, defaults to Fable model
 #        ca [claude-args...]   — LiteLLM bridge (DeepSeek-V4-Pro etc.), same setup
 #
 # Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
@@ -31,6 +32,30 @@ c() {
   fi
 
   ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "$@"
+}
+
+# Same as `c` (Max subscription, same config dir) but starts on Fable instead
+# of whatever /model last left the session on.
+cf() {
+  local appearance claude_theme
+  appearance=$(defaults read -g AppleInterfaceStyle 2>/dev/null)
+  [[ "$appearance" == "Dark" ]] && claude_theme="dark-ansi" || claude_theme="light-ansi"
+  jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
+    && mv /tmp/.claude.json.tmp ~/.claude.json
+
+  local -a plugin_args=()
+  local git_root pdir
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -n "$git_root" ]]; then
+    for pdir in "$git_root"/plugins/*/.claude-plugin(/N); do
+      plugin_args+=(--plugin-dir "${pdir:h}")
+    done
+  fi
+
+  local -a args=("$@")
+  [[ " $* " == *" --model "* ]] || args=(--model fable "${args[@]}")
+
+  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
 
 # Same as `c` (Max subscription, same config dir) but starts on Sonnet instead
