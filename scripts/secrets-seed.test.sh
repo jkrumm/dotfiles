@@ -20,7 +20,7 @@ set -uo pipefail
 # ref-lists) in a temp dir and stubs `op` on PATH, so no real 1Password account,
 # biometric prompt, or network call is ever made. Never touches the real
 # dotfiles-private repo, its cache, or any real secret. Run on the mini (backend =
-# cache) so the seed's local-delivery branch is hermetic (no `ssh mac-mini`).
+# cache) so the seed's local-delivery branch is hermetic (no `ssh mini`).
 #
 # Usage: scripts/secrets-seed.test.sh   (exit 0 = all pass)
 
@@ -43,7 +43,7 @@ assert_not_contains() { case "$3" in *"$2"*) bad "$1" "[$3] unexpectedly contain
 # --- preflight ---------------------------------------------------------------
 [[ -x "$SEED" ]]              || { echo "✗ seed not found/executable at $SEED"; exit 2; }
 [[ "$(tr -d '[:space:]' <"$BACKEND_MARKER" 2>/dev/null)" == "cache" ]] \
-                             || { echo "✗ backend marker is not 'cache' — run on the mini (avoids ssh mac-mini)"; exit 2; }
+                             || { echo "✗ backend marker is not 'cache' — run on the mini (avoids ssh mini)"; exit 2; }
 command -v sops       >/dev/null || { echo "✗ sops missing"; exit 2; }
 command -v jq         >/dev/null || { echo "✗ jq missing"; exit 2; }
 command -v age-keygen >/dev/null || { echo "✗ age-keygen missing"; exit 2; }
@@ -375,7 +375,7 @@ assert_contains "12. empty: refusal explains no references were found" "no refer
 assert_cache_absent "12. empty: cache untouched"
 
 # --- guards deliberately NOT covered here (documented, not silently skipped) --
-# - deliver_remote_cache (ssh mac-mini): needs a live SSH target; local delivery
+# - deliver_remote_cache (ssh mini): needs a live SSH target; local delivery
 #   (exercised throughout, since the preflight pins backend=cache) proves the same
 #   ciphertext-assembly, sanity-check, and atomic-mv logic identically — only the
 #   transport differs, and the transport is a fixed, non-interpolated `ssh` call.

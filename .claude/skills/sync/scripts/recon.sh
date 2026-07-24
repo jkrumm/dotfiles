@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # recon.sh — emit one JSON line of git state per repo under the given roots.
 # Designed to run identically on the local MacBook and over SSH on the Mac mini
-# (pipe it in: `ssh mac-mini 'bash -s -- SourceRoot IuRoot' < recon.sh`).
+# (pipe it in: `ssh mini 'bash -s -- SourceRoot IuRoot' < recon.sh`).
 #
 # Roots are given as NAMES relative to $HOME (e.g. SourceRoot IuRoot) so the same
 # invocation works on any machine regardless of the absolute home path.

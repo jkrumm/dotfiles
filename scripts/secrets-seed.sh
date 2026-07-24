@@ -20,7 +20,7 @@ SECRETS_PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}
 BACKEND_MARKER="$HOME/.config/secrets/backend"
 REFS_FILE="$SECRETS_PRIVATE_REPO/headless.refs"
 IU_REFS_FILE="$SECRETS_PRIVATE_REPO/headless.iu.refs"
-REMOTE_HOST="mac-mini"
+REMOTE_HOST="mini"
 REMOTE_REPO_REL="SourceRoot/dotfiles-private"
 OP_ACCOUNT="tkrumm"          # personal; keys BARE in the cache (see cache_key below)
 IU_OP_ACCOUNT="careerpartner"  # IU work; keys NAMESPACED (both accounts own a `Private` vault)
@@ -195,7 +195,7 @@ else
   echo "      (add that field alongside the age-key backup per docs/runbook.md to enable this check)" >&2
 fi
 
-# --- delivery target: local (we are the mini) or ssh mac-mini ---------------
+# --- delivery target: local (we are the mini) or ssh mini ---------------
 local_backend="op"
 if [[ -f "$BACKEND_MARKER" ]]; then
   local_backend=$(tr -d '[:space:]' <"$BACKEND_MARKER")

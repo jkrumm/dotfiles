@@ -17,7 +17,7 @@ description: >-
 
 Keep every git repo consistent across the two machines. The **MacBook is always
 the orchestrator** (this skill runs here); the **Mac mini is always the remote
-peer**, reached with `ssh mac-mini`. GitHub/GitLab is the transport — nothing is
+peer**, reached with `ssh mini`. GitHub/GitLab is the transport — nothing is
 copied machine-to-machine directly, so the flow is: commit local work → push →
 pull the other side → reconcile.
 
@@ -27,7 +27,7 @@ pull the other side → reconcile.
   "wip(sync): snapshot from <host> <YYYY-MM-DD>"` — normal push, normal rebase-pull.
   **Never force-push.** Always use `--no-verify`: a wip snapshot is a transport
   commit, not a quality-gated one, and pre-commit hooks (lefthook/husky calling
-  `bunx`/node) both waste time AND fail outright on the mini, where `ssh mac-mini
+  `bunx`/node) both waste time AND fail outright on the mini, where `ssh mini
   '<cmd>'` runs a non-login shell with a bare PATH (no fnm/bun shims) → `bunx:
   command not found` (exit 127). `--no-verify` sidesteps that entirely. These wip
   commits accumulate in history; squash later with `/git-cleanup` or `gback` when
@@ -56,7 +56,7 @@ a full sweep.
 1. Confirm you are on the MacBook (`hostname` — the mini is `Minivonohannes3…`).
    If run on the mini, stop and tell the user this skill orchestrates *from* the
    MacBook.
-2. Confirm the mini is reachable: `ssh -o ConnectTimeout=8 mac-mini 'echo ok'`.
+2. Confirm the mini is reachable: `ssh -o ConnectTimeout=8 mini 'echo ok'`.
    If it fails, report and stop — no half-sync.
 
 ## Phase 1 — Recon (read-only, safe)
@@ -73,7 +73,7 @@ SKILL=~/SourceRoot/dotfiles/.claude/skills/sync
 # Local (MacBook)
 bash "$SKILL/scripts/recon.sh" SourceRoot IuRoot > /tmp/sync-macbook.jsonl
 # Remote (Mac mini) — pipe the script over stdin, runs there
-ssh mac-mini 'bash -s -- SourceRoot IuRoot' < "$SKILL/scripts/recon.sh" > /tmp/sync-mini.jsonl
+ssh mini 'bash -s -- SourceRoot IuRoot' < "$SKILL/scripts/recon.sh" > /tmp/sync-mini.jsonl
 ```
 
 The default does a parallel `git fetch --prune` per repo first, so `ahead`/`behind`
@@ -189,7 +189,7 @@ After confirmation, split the work:
   in parallel across *disjoint* repos (each repo is independent, so this is safe
   fan-out). Give each the brief from `references/reconcile.md` (the "Subagent brief"
   template): both-sides state, the house rules above, and the specific reconcile it
-  must perform. Each subagent runs git locally *and* `ssh mac-mini` for the mini
+  must perform. Each subagent runs git locally *and* `ssh mini` for the mini
   side, resolves rebases/conflicts with judgment, and returns a one-line result.
 
 **Conflict policy for subagents:** auto-resolve the obvious mechanical stuff

@@ -342,16 +342,32 @@ _setup-ssh:
 	@echo "  SSH config (~/.ssh/config)..."
 	@mkdir -p "$(HOME)/.ssh"
 	@chmod 700 "$(HOME)/.ssh"
-	@IUMAC=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
-	MACMINI=$$(op read "op://Private/mac-mini-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
-	if [ -n "$$IUMAC" ]; then \
-		sed -e "s/__IUMAC_HOSTNAME__/$$IUMAC/" -e "s/__MACMINI_HOSTNAME__/$$MACMINI/" \
-			"$(DOTFILES_DIR)/config/ssh_config" > "$(HOME)/.ssh/config"; \
-		chmod 600 "$(HOME)/.ssh/config"; \
-		echo "    ✓ ~/.ssh/config written (iumac → $$IUMAC, mac-mini → $${MACMINI:-unset})"; \
-		[ -z "$$MACMINI" ] && echo "    ! mac-mini hostname missing (op://Private/mac-mini-server/hostname)" || true; \
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	TPL="$(DOTFILES_DIR)/config/ssh_config"; OUT="$(HOME)/.ssh/config"; \
+	if [ "$$BACKEND" = "cache" ]; then \
+		sed '/--- op-only/,/--- end op-only/d' "$$TPL" > "$$OUT"; \
+		chmod 600 "$$OUT"; \
+		echo "    ✓ ~/.ssh/config written (headless: homelab + vps only)"; \
+		echo "      · Mac aliases omitted — their hostnames live in op://Private/* (never cached)"; \
 	else \
-		echo "    ✗ Could not read iumac-server hostname from 1Password — skipping"; \
+		IUMAC=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
+		MINI=$$(op read "op://Private/mac-mini-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
+		if [ -n "$$IUMAC" ] && [ -n "$$MINI" ]; then \
+			sed -e "/--- op-only/d" -e "/--- end op-only/d" \
+				-e "s/__IUMAC_HOSTNAME__/$$IUMAC/" -e "s/__MINI_HOSTNAME__/$$MINI/" \
+				"$$TPL" > "$$OUT"; \
+			chmod 600 "$$OUT"; \
+			echo "    ✓ ~/.ssh/config written (iumac, mini, homelab, vps)"; \
+		else \
+			echo "    ✗ Could not read Mac hostnames from 1Password (iumac=$${IUMAC:+ok}$${IUMAC:-MISSING}, mini=$${MINI:+ok}$${MINI:-MISSING})"; \
+			echo "      ~/.ssh/config left unchanged — fix op://Private/{iumac,mac-mini}-server/hostname and re-run"; \
+		fi; \
+	fi
+	@# colima injects its own Include into ~/.ssh/config on `colima start`; the
+	@# render above would drop it (docker-over-ssh then breaks until next start).
+	@if [ -f "$(HOME)/.colima/ssh_config" ] && ! grep -q '\.colima/ssh_config' "$(HOME)/.ssh/config" 2>/dev/null; then \
+		printf '\nInclude %s/.colima/ssh_config\n' "$(HOME)" >> "$(HOME)/.ssh/config"; \
+		echo "    ✓ colima Include re-appended"; \
 	fi
 
 .PHONY: remote-access _setup-remote-access
@@ -424,7 +440,7 @@ _setup-git-headless:
 .PHONY: batt-setup batt-limit batt-status
 # MacBook-only battery charge limiter (https://github.com/charlie0129/batt).
 # The binary ships via the Brewfile (harmless on a battery-less Mac like the
-# mac-mini); the root LaunchDaemon + charge cap are opt-in per machine and gated
+# mini); the root LaunchDaemon + charge cap are opt-in per machine and gated
 # below on the machine actually having an internal battery. The daemon runs with
 # --always-allow-non-root-access, so `batt limit` needs no sudo after setup.
 # Default cap 80% (long-term battery health); LIMIT=100 lifts it for a full

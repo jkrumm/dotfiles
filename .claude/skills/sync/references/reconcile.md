@@ -89,7 +89,7 @@ S1: git pull --ff-only                       # S1 catches up; all three in sync
 ```
 
 Run the S1 side and the S2 side each in the correct machine (local git vs
-`ssh mac-mini 'cd ~/<root>/<repo> && …'`). Never interleave a push from both sides
+`ssh mini 'cd ~/<root>/<repo> && …'`). Never interleave a push from both sides
 before the rebase — the second plain push would be rejected as non-fast-forward,
 which is the signal you skipped the rebase step.
 
@@ -145,7 +145,7 @@ Reconcile the git repo <repo> between this MacBook and the Mac mini. You own thi
 repo exclusively; do all its git work.
 
 Local (MacBook) path:  <L.path>
-Remote (Mac mini):     ssh mac-mini 'cd ~/<root>/<repo> && <git cmd>'
+Remote (Mac mini):     ssh mini 'cd ~/<root>/<repo> && <git cmd>'
 
 Current state (recon snapshot — may be stale, re-verify first):
   MacBook: branch=<L.branch> dirty=<L.dirty> ahead=<L.ahead> behind=<L.behind>
@@ -183,7 +183,7 @@ Rules:
   Abort a messy rebase rather than leaving it half-done.
 - Different branches on each machine: push BOTH, do not switch either checkout.
 - If a mini command genuinely needs node/bun on PATH (rare — plain git doesn't),
-  wrap it: `ssh mac-mini 'zsh -lic "cd ~/<root>/<repo> && <cmd>"'` (login shell
+  wrap it: `ssh mini 'zsh -lic "cd ~/<root>/<repo> && <cmd>"'` (login shell
   sources the profile with fnm/bun shims; `bash -lic` does NOT — the mini's shell is
   zsh).
 
