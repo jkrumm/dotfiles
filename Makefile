@@ -264,7 +264,19 @@ _setup-viteplus:
 	fi
 
 .PHONY: _setup-op-token
+# Biometric sign-in has no meaning on the cache backend: `op` is not signed in
+# there and the fallback below (`op vault list`) blocks forever on a Touch ID
+# prompt no human can answer — the one unattended hang in `make setup`. Secrets
+# on that machine come from the offline cache via secrets-run, so skip outright.
 _setup-op-token:
+	@if [ "$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || true)" = "cache" ]; then \
+		echo "  1Password CLI: skipped (cache backend — secrets resolve offline via secrets-run)"; \
+	else \
+		$(MAKE) --no-print-directory _setup-op-token-live; \
+	fi
+
+.PHONY: _setup-op-token-live
+_setup-op-token-live:
 	@echo "  1Password CLI (personal account: tkrumm)..."
 	@if [ ! -S "$$HOME/.config/op/op-daemon.sock" ]; then \
 		echo "    ✗ op daemon socket missing — is 1Password app running?"; \
@@ -318,7 +330,7 @@ _setup-sdk-keys:
 	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
 		echo "    · CLAUDE_SDK_API_KEY (ok)"; \
 	else \
-		KEY=$$(op read "op://common/anthropic/API_KEY" --account tkrumm 2>/dev/null || echo ""); \
+		KEY=$$(OP_ACCOUNT=tkrumm $(DOTFILES_DIR)/scripts/secrets-run read "op://common/anthropic/API_KEY" 2>/dev/null || echo ""); \
 		if [ -n "$$KEY" ]; then \
 			security add-generic-password -a "$$USER" -s claude-sdk-api-key -w "$$KEY" -T /usr/bin/security; \
 			echo "    ✓ CLAUDE_SDK_API_KEY cached in Keychain"; \
@@ -329,7 +341,7 @@ _setup-sdk-keys:
 	@if security find-generic-password -s claude-sdk-base-url -w >/dev/null 2>&1; then \
 		echo "    · CLAUDE_SDK_BASE_URL (ok)"; \
 	else \
-		URL=$$(op read "op://common/anthropic/BASE_URL" --account tkrumm 2>/dev/null || echo ""); \
+		URL=$$(OP_ACCOUNT=tkrumm $(DOTFILES_DIR)/scripts/secrets-run read "op://common/anthropic/BASE_URL" 2>/dev/null || echo ""); \
 		if [ -n "$$URL" ]; then \
 			security add-generic-password -a "$$USER" -s claude-sdk-base-url -w "$$URL" -T /usr/bin/security; \
 			echo "    ✓ CLAUDE_SDK_BASE_URL cached in Keychain"; \
@@ -630,7 +642,7 @@ _setup-sideclaw-mcp:
 .PHONY: _setup-research-gateway-mcp
 _setup-research-gateway-mcp:
 	@echo "  research-gateway MCP (remote HTTP — bearer via 1Password)..."
-	@TOKEN="$$(op read --account tkrumm op://vps/research-gateway/API_SECRET 2>/dev/null)"; \
+	@TOKEN="$$(OP_ACCOUNT=tkrumm $(DOTFILES_DIR)/scripts/secrets-run read op://vps/research-gateway/API_SECRET 2>/dev/null)"; \
 	if [ -n "$$TOKEN" ]; then \
 		claude mcp remove research-gateway --scope user 2>/dev/null || true; \
 		claude mcp add research-gateway --scope user --transport http https://research.jkrumm.com/mcp --header "Authorization: Bearer $$TOKEN"; \
