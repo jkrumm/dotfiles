@@ -113,7 +113,8 @@ json_field() {
 # through the private layer first).
 share_ingest() {
   local file="$1" dir="$2"
-  local args=(-sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/images" \
+  local args=(-sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 \
+    -X POST "${SHARE_BASE}/api/images" \
     -H "Authorization: Bearer ${SHARE_SECRET}" \
     -F "file=@${file}")
   [ -n "$dir" ] && args+=(-F "dir=${dir}")
@@ -136,7 +137,7 @@ share_publish() {
   payload="$(printf '{"imageIds":[%s],"prefix":"%s"}' "$id" "$prefix")"
 
   local out status body
-  out="$(curl -sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/publish" \
+  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/publish" \
     -H "Authorization: Bearer ${SHARE_SECRET}" \
     -H "Content-Type: application/json" \
     -d "$payload")" || die "image-share publish request failed (network error)"
@@ -155,7 +156,7 @@ share_upload() {
   [ -n "$name" ] && filepart="file=@${file};filename=${name}"
 
   local out status body
-  out="$(curl -sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/b2/upload" \
+  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/b2/upload" \
     -H "Authorization: Bearer ${SHARE_SECRET}" \
     -F "$filepart" \
     -F "prefix=${prefix}")" || die "image-share upload request failed (network error)"
@@ -167,14 +168,16 @@ share_upload() {
 
 # Pulls the CDN key for `id` out of a /api/publish response — from `published`
 # normally, or from `skipped` when the image was already published before
-# (that is success, not an error). Prints a note to stderr in the latter case.
+# (that is success, not an error). Prints a note to stderr in the latter case,
+# unless `json` is set — --json output must be the JSON object and nothing else.
 publish_result_key() {
-  local body="$1" id="$2"
-  ID="$id" python3 -c '
+  local body="$1" id="$2" json="$3"
+  ID="$id" JSON="$json" python3 -c '
 import json, os, sys
 
 d = json.loads(sys.argv[1])
 target = os.environ["ID"]
+as_json = os.environ["JSON"] == "1"
 
 for item in d.get("published", []):
     if str(item.get("id")) == target:
@@ -183,7 +186,8 @@ for item in d.get("published", []):
 
 for item in d.get("skipped", []):
     if str(item.get("id")) == target and item.get("key"):
-        print("already published (%s)" % item.get("reason", "skipped"), file=sys.stderr)
+        if not as_json:
+            print(item.get("reason", "already published"), file=sys.stderr)
         print(item["key"])
         sys.exit(0)
 
@@ -455,7 +459,7 @@ cmd_share() {
   adminurl="$(json_field "$body" adminFileUrl)"
 
   if [ "$json" = 1 ]; then
-    printf '{"id":"%s","root":"%s","relPath":"%s","adminFileUrl":"%s"}\n' \
+    printf '{"id":%s,"root":"%s","relPath":"%s","adminFileUrl":"%s"}\n' \
       "$id" "$root" "$relpath" "$adminurl"
   else
     printf 'id            %s\n' "$id"
@@ -510,7 +514,7 @@ cmd_publish() {
 
   local publish_body key
   publish_body="$(share_publish "$image_id" "$prefix")"
-  key="$(publish_result_key "$publish_body" "$image_id")" \
+  key="$(publish_result_key "$publish_body" "$image_id" "$json")" \
     || die "image-share publish did not return image $image_id in published or skipped: $publish_body"
   key="$(norm_key "$key")"
 
@@ -519,7 +523,7 @@ cmd_publish() {
   local markdown="![](${embed_url})"
 
   if [ "$json" = 1 ]; then
-    printf '{"id":"%s","key":"%s","cdnUrl":"%s","markdown":"%s","renditions":{"thumb_400":"%s","web_800":"%s","web_1600":"%s","og_jpg":"%s","original":"%s"}}\n' \
+    printf '{"id":%s,"key":"%s","cdnUrl":"%s","markdown":"%s","renditions":{"thumb_400":"%s","web_800":"%s","web_1600":"%s","og_jpg":"%s","original":"%s"}}\n' \
       "$image_id" "$key" "$url" "$markdown" \
       "${CDN_BASE}/rs:fill:400:400/${key}" \
       "${CDN_BASE}/rs:fit:800/${key}" \
@@ -538,13 +542,15 @@ cmd_publish() {
 }
 
 cmd_library() {
-  local root="" dir="" stem="" min_rating="" recursive=0 json=0
+  local root="" dir="" stem="" min_rating="" page="1" limit="50" recursive=0 json=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --root) root="$2"; shift 2 ;;
       --dir) dir="$2"; shift 2 ;;
       --stem) stem="$2"; shift 2 ;;
       --min-rating) min_rating="$2"; shift 2 ;;
+      --page) page="$2"; shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
       --recursive) recursive=1; shift ;;
       --json) json=1; shift ;;
       -*) die "unknown flag: $1" ;;
@@ -558,13 +564,12 @@ cmd_library() {
 
   load_share_config
 
-  local args=(-sS -G -w '\n%{http_code}' "${SHARE_BASE}/api/library/images" \
+  local args=(-sS -G -w '\n%{http_code}' --connect-timeout 5 --max-time 120 \
+    "${SHARE_BASE}/api/library/images" \
     -H "Authorization: Bearer ${SHARE_SECRET}" \
-    --data-urlencode "page=1" --data-urlencode "limit=50")
+    --data-urlencode "page=${page}" --data-urlencode "limit=${limit}")
   [ -n "$root" ] && args+=(--data-urlencode "root=${root}")
   [ -n "$dir" ] && args+=(--data-urlencode "dir=${dir}")
-  # stem is a filter image-share is adding server-side; harmless no-op until
-  # that ships (unknown query keys are ignored, not rejected).
   [ -n "$stem" ] && args+=(--data-urlencode "stem=${stem}")
   [ -n "$min_rating" ] && args+=(--data-urlencode "minRating=${min_rating}")
   [ "$recursive" = 1 ] && args+=(--data-urlencode "recursive=true")
@@ -592,7 +597,7 @@ for r in rows:
     print(f"{r['id']:>6}  {r['relPath']:<50} {r['kind']:<6} rating={rating if rating is not None else '-'}  {r.get('captureAt') or '-'}")
 
 print(f"\n{len(rows)} of {total} shown"
-      + ('  (more available — narrow --dir/--stem or increase pagination)' if total > len(rows) else ''))
+      + ('  (more available — narrow --dir/--stem or use --page/--limit)' if total > len(rows) else ''))
 PY
 }
 
@@ -639,7 +644,7 @@ print(json.dumps(body))
 ')"
 
   local out status body
-  out="$(curl -sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/shares" \
+  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/shares" \
     -H "Authorization: Bearer ${SHARE_SECRET}" \
     -H "Content-Type: application/json" \
     -d "$payload")" || die "image-share create request failed (network error)"
@@ -663,7 +668,7 @@ if label:
 print(json.dumps(body))
 ')"
     local tout tstatus tbody
-    tout="$(curl -sS -w '\n%{http_code}' -X POST "${SHARE_BASE}/api/shares/${share_id}/tokens" \
+    tout="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/shares/${share_id}/tokens" \
       -H "Authorization: Bearer ${SHARE_SECRET}" \
       -H "Content-Type: application/json" \
       -d "$token_payload")" || die "image-share token mint request failed (network error)"
@@ -718,12 +723,11 @@ cmd_rm() {
   encoded="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$key")"
 
   local out status body
-  out="$(curl -sS -w '\n%{http_code}' -X DELETE "${SHARE_BASE}/api/b2/${encoded}" \
+  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X DELETE "${SHARE_BASE}/api/b2/${encoded}" \
     -H "Authorization: Bearer ${SHARE_SECRET}")" || die "image-share delete request failed (network error)"
   status="${out##*$'\n'}"
   body="${out%$'\n'"${status}"}"
-  [ "$status" = "200" ] \
-    || die "image-share delete failed (HTTP $status): $body — needs the scoped delete-capable B2 key deployed server-side"
+  [ "$status" = "200" ] || die "image-share delete failed (HTTP $status): $body"
 
   if [ "$json" = 1 ]; then
     printf '{"deleted":true,"key":"%s"}\n' "$key"
@@ -747,7 +751,7 @@ imgcli — image CDN upload and addressing, plus the private image-share layer
   imgcli share   <file> [--dir <dir>] [--copy] [--json]
   imgcli publish <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]
   imgcli publish --id <imageId> [prefix/] [--copy] [--open] [--json]
-  imgcli library [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--recursive] [--json]
+  imgcli library [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--page n] [--limit n] [--recursive] [--json]
   imgcli link    <imageId> [<imageId>...] [--role view|download|full] [--label <text>] [--expires <ISO date>] [--json]
 
 PREFIXES (upload, sync, publish)
@@ -760,9 +764,6 @@ Keys are given without the bucket's img/ prefix; `blog/x.jpg` and
 `img/blog/x.jpg` both work. `upload` is now service-routed (POST /api/b2/upload)
 so the CDN index (GET /api/b2) is never stale for it; `sync` is the one
 remaining direct-B2 lane (bulk photo mirrors), pending its own migration.
-
-`rm` needs the scoped delete-capable B2 key deployed server-side (rolling out
-separately) — until then it errors.
 
 PRIVATE LAYER
   share    ingests a file into the private image-share service on the

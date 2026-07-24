@@ -57,12 +57,12 @@ imgcli ls      [prefix/] [--json]
 imgcli info    <key> [--json]           # size, source dimensions, ready-made renditions
 imgcli url     <key> [transform ...]
 imgcli transforms                       # full processing-option reference
-imgcli rm      <key> [--yes] [--json]   # delete from the CDN — needs a rollout, see below
+imgcli rm      <key> [--yes] [--json]   # delete from the CDN
 
 imgcli share    <file> [--dir <dir>] [--copy] [--json]
 imgcli publish  <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]
 imgcli publish  --id <imageId> [prefix/] [--copy] [--open] [--json]
-imgcli library  [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--recursive] [--json]
+imgcli library  [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--page n] [--limit n] [--recursive] [--json]
 imgcli link     <imageId> [<imageId>...] [--role view|download|full] [--label <text>] [--expires <ISO date>] [--json]
 ```
 
@@ -93,11 +93,11 @@ it to a service-routed batch endpoint is a known follow-up, not yet done.
 ### rm
 
 `DELETE /api/b2/:key` through image-share. Prompts for confirmation unless
-`--yes`. **Needs the scoped delete-capable B2 key deployed server-side**
-(rolling out separately, tracked in image-share) — until that lands, the
-server rejects the delete and `rm` reports the HTTP error as-is. The upload
-credential itself still has no `deleteFiles` capability by design; this is a
-separate, more narrowly scoped key for the service to hold.
+`--yes`. image-share holds its own scoped `image-share-b2` key with
+`deleteFiles` capability, so this actually deletes the object. The direct-B2
+upload credential (`sync`/`ls`/`info`/`url`) still has no `deleteFiles`
+capability by design and never will — that's a separate, more narrowly scoped
+key held only by the service.
 
 ### share
 
@@ -123,11 +123,10 @@ straight from its id with no local file involved.
 ### library
 
 Read-only browse of the private index (`GET /api/library/images`), filterable
-by `--root` (`fuji|raws|share`), `--dir`, `--stem` (matches the filename stem;
-server-side support is rolling out, harmless no-op until it ships — see
-Constraints), `--min-rating`, and `--recursive` to include sub-directories.
-Fetches the first page (50 rows) and notes when more exist rather than paging
-automatically. Use it to find the `imageId` for `publish --id` or `link`.
+by `--root` (`fuji|raws|share`), `--dir`, `--stem` (matches the filename stem),
+`--min-rating`, and `--recursive` to include sub-directories. Defaults to
+page 1 of 50 rows and notes when more exist; page through with `--page`/
+`--limit`. Use it to find the `imageId` for `publish --id` or `link`.
 
 ### link
 
@@ -224,22 +223,18 @@ there — add them to `dotfiles-private/headless.refs` and run
 
 ## Constraints worth knowing
 
-- **`rm` needs a server-side rollout.** The route (`DELETE /api/b2/:key`)
-  exists, but image-share's own S3 credential currently lacks delete
-  capability; a scoped delete-capable key is rolling out separately. Until
-  it's deployed, `rm` will surface the server's error as-is. The direct-B2
-  upload credential (`sync`/`ls`/`info`/`url`) still has no `deleteFiles`
-  capability by design and never will — that's unrelated to this rollout.
-- **`--stem` on `library` is forward-compatible, not yet enforced.** The
-  filter is being added server-side; until it ships, passing `--stem` is a
-  harmless no-op (unknown query keys are ignored, not rejected) rather than an
-  error.
+- **`rm` actually deletes.** image-share holds its own scoped `image-share-b2`
+  key with `deleteFiles` capability, so `DELETE /api/b2/:key` removes the
+  object from B2. The direct-B2 upload credential (`sync`/`ls`/`info`/`url`)
+  still has no `deleteFiles` capability by design and never will.
 - **The bucket also holds database backups** under a different prefix. The
   upload key is scoped to `img/` server-side and cannot see them. Do not
   "fix" a permission error by widening that key.
 - **EXIF/GPS is stripped** from everything served through the CDN. Originals in
   the bucket keep their metadata.
-- **Max source:** 100 MP, 50 MB. Larger files upload fine but fail to render.
+- **Max source: 100 MP, 50 MB.** Service-routed lanes (`upload`, `share`,
+  `publish`) reject anything over 50 MB with a 400. Only `sync` — the direct-B2
+  lane — bypasses that check.
 - **Publish is one-way staging, not a mirror.** Re-running `publish` on the
   same file re-ingests it (a new private-layer copy) before publishing; it
   does not deduplicate against a prior local file, only against a prior
