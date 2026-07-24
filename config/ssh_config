@@ -1,24 +1,28 @@
-# --- op-only ---------------------------------------------------------------
-# The two Mac hosts carry tailnet hostnames injected from 1Password, so these
-# blocks are rendered only on the `op` backend (present human, biometric). On
-# the cache backend (the mini) `_setup-ssh` deletes this whole region: the mini
-# reaches neither Mac, and an unsubstituted placeholder hostname would be worse
-# than an absent alias. The sentinel lines themselves are always stripped.
-Host iumac
-    HostName __IUMAC_HOSTNAME__
-    User johannes.krumm
+# Every host here is a MagicDNS short name on the tailnet — that is the whole
+# point of naming the machines `mini` / `iumac` / `homelab` / `vps`. No hostname
+# is injected from 1Password any more: MagicDNS resolves the short name, so the
+# tailnet FQDN never has to enter git or a secrets store to make ssh work, and
+# this file renders identically on a headless machine with no `op` available.
+#
+# If a short name ever fails to resolve (a client whose DNS does not honour the
+# tailnet search domain), ssh the full MagicDNS FQDN directly — the fix belongs
+# in that machine's DNS config, not here.
 
-# Personal Mac mini (always-on home base — Hermes + Feuer live here). Reachable
-# over Tailscale (tag:mac ACL). ForwardAgent lets the mini do git/ssh with
-# approval popping on this machine's 1Password.
+# Personal Mac mini (always-on home base — Hermes + Feuer live here). Reached
+# over Tailscale (tag:mac ACL) with OpenSSH, not Tailscale SSH: remote dev needs
+# agent forwarding, ControlMaster and full-speed transfer. ForwardAgent lets the
+# mini do git/ssh with approval popping on the connecting machine's 1Password.
 Host mini
-    HostName __MINI_HOSTNAME__
+    HostName mini
     User jkrumm
     ForwardAgent yes
-# --- end op-only -----------------------------------------------------------
 
-# Infrastructure servers (HomeLab + VPS) — reached over Tailscale; MagicDNS
-# resolves the short names on the tailnet. The Unix user is `jkrumm`; without
+# The IU work laptop.
+Host iumac
+    HostName iumac
+    User johannes.krumm
+
+# Infrastructure servers (HomeLab + VPS). The Unix user is `jkrumm`; without
 # this, ssh defaults to the local Mac login (johannes.krumm), which doesn't
 # exist on the boxes and auth fails. Auth to these hosts is Tailscale SSH
 # (keyless, tailnet-gated, works headless) — no key or 1Password agent involved.

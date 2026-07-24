@@ -342,27 +342,11 @@ _setup-ssh:
 	@echo "  SSH config (~/.ssh/config)..."
 	@mkdir -p "$(HOME)/.ssh"
 	@chmod 700 "$(HOME)/.ssh"
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	TPL="$(DOTFILES_DIR)/config/ssh_config"; OUT="$(HOME)/.ssh/config"; \
-	if [ "$$BACKEND" = "cache" ]; then \
-		sed '/--- op-only/,/--- end op-only/d' "$$TPL" > "$$OUT"; \
-		chmod 600 "$$OUT"; \
-		echo "    ✓ ~/.ssh/config written (headless: homelab + vps only)"; \
-		echo "      · Mac aliases omitted — their hostnames live in op://Private/* (never cached)"; \
-	else \
-		IUMAC=$$(op read "op://Private/iumac-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
-		MINI=$$(op read "op://Private/mac-mini-server/hostname" --account tkrumm 2>/dev/null || echo ""); \
-		if [ -n "$$IUMAC" ] && [ -n "$$MINI" ]; then \
-			sed -e "/--- op-only/d" -e "/--- end op-only/d" \
-				-e "s/__IUMAC_HOSTNAME__/$$IUMAC/" -e "s/__MINI_HOSTNAME__/$$MINI/" \
-				"$$TPL" > "$$OUT"; \
-			chmod 600 "$$OUT"; \
-			echo "    ✓ ~/.ssh/config written (iumac, mini, homelab, vps)"; \
-		else \
-			echo "    ✗ Could not read Mac hostnames from 1Password (iumac=$${IUMAC:+ok}$${IUMAC:-MISSING}, mini=$${MINI:+ok}$${MINI:-MISSING})"; \
-			echo "      ~/.ssh/config left unchanged — fix op://Private/{iumac,mac-mini}-server/hostname and re-run"; \
-		fi; \
-	fi
+	@# No rendering and no secrets: every Host is a MagicDNS short name, so this
+	@# is a plain install that works identically headless. (Not a symlink —
+	@# colima appends its Include to this file and must not write into the repo.)
+	@install -m 600 "$(DOTFILES_DIR)/config/ssh_config" "$(HOME)/.ssh/config"
+	@echo "    ✓ ~/.ssh/config written (mini, iumac, homelab, vps — all MagicDNS)"
 	@# colima injects its own Include into ~/.ssh/config on `colima start`; the
 	@# render above would drop it (docker-over-ssh then breaks until next start).
 	@if [ -f "$(HOME)/.colima/ssh_config" ] && ! grep -q '\.colima/ssh_config' "$(HOME)/.ssh/config" 2>/dev/null; then \
@@ -1351,6 +1335,18 @@ secrets-rotate:
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-rotate.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" DOTFILES_DIR="$(DOTFILES_DIR)" $(DOTFILES_DIR)/scripts/secrets-rotate.sh
 
+# Tailscale serve/funnel bindings — declared in dotfiles-private per machine
+# (tailscale-serve.<machine>.conf), applied here. Serve config pins the machine's
+# MagicDNS name, so a device rename orphans every binding; re-applying is the fix.
+.PHONY: tailscale-serve tailscale-serve-check
+tailscale-serve:
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-serve.sh
+
+tailscale-serve-check:
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-serve.sh --check
+
 # Lint the shim + its harness. Static-only, runs on ANY machine (no cache/age key needed).
 .PHONY: secrets-lint
 secrets-lint:
@@ -1445,6 +1441,9 @@ help:
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
+	@echo ""
+	@echo "  make tailscale-serve        Apply this machine's declared serve/funnel bindings"
+	@echo "  make tailscale-serve-check  Report drift between declared and live bindings"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."

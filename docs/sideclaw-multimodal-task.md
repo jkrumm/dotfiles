@@ -4,6 +4,10 @@
 > You (sideclaw) are the expert on your own architecture, async-job model, logging, and usage
 > telemetry — apply your own conventions; this brief specifies *what* and *why*, not your internals.
 > Full background + verified curl evidence: `~/SourceRoot/dotfiles/docs/iu-multimodal-exploration.md`.
+>
+> **`generate_image` retired 2026-07** — superseded by the `image-gen` gateway (same upstream, with
+> contract validation and a library/sidecar this tool never had). The sections below describing it are
+> kept as historical record of how it was built; `read_image` and `read_drawing` remain live.
 
 ## Context
 

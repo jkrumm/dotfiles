@@ -46,23 +46,20 @@ s3api() { aws s3api "$@" --endpoint-url "$ENDPOINT"; }
 # `img/blog/x.jpg` address the same object.
 norm_key() { printf '%s' "${1#"$PREFIX"}" | sed 's#^/##'; }
 
-# Prefixes whose contents are meant to be non-discoverable get random names;
-# curated ones keep the filename the caller chose.
-is_opaque_prefix() {
-  case "$1" in
-    gen/*|misc/*|gen|misc) return 0 ;;
-    *) return 1 ;;
+# Normalizes an upload/publish prefix argument to the bare enum value the
+# image-share service expects (fuji|blog|gen|misc): strips an optional
+# leading img/ and trailing slash, defaults to misc. Opaque naming for
+# gen/misc now happens server-side (lib/naming.ts), so this is the only
+# prefix handling left on the client.
+norm_upload_prefix() {
+  local p="${1:-misc}"
+  p="${p#img/}"
+  p="${p%/}"
+  [ -n "$p" ] || p="misc"
+  case "$p" in
+    fuji|blog|gen|misc) printf '%s' "$p" ;;
+    *) die "unknown prefix: $p (must be one of: fuji, blog, gen, misc)" ;;
   esac
-}
-
-# Reads a fixed number of bytes and filters, rather than piping an endless
-# stream into `head` — under `set -o pipefail` the SIGPIPE that `head` sends
-# when it exits early would kill the whole script.
-rand_name() {
-  local s
-  s=$(LC_ALL=C head -c 512 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9')
-  [ ${#s} -ge 16 ] || die "could not generate a random name"
-  printf '%s' "${s:0:16}"
 }
 
 dims_of() {

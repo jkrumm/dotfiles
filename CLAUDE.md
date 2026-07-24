@@ -129,7 +129,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 - `.claude/skills/sync/` — bidirectionally sync all git repos between this MacBook (orchestrator) and the always-on Mac mini over SSH, using the git remote as transport. `scripts/recon.sh` scans both machines' git state ($HOME-relative, so it works despite differing usernames); a per-repo reconcile plan is confirmed once, then subagents commit wip work, push, rebase, and resolve conflicts. Skips the stale local-branch graveyard (`local_only` count, never mass-pushed), preserves diverged branches, handles PR-required-master. Run from a dotfiles session (`/sync`); MacBook-only.
 
-**Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from the `config/ssh_config` template. The `iumac` and `mini` host aliases get their hostnames injected from `op://Private/{iumac,mac-mini}-server/hostname` (keeps tailnet names out of git; the 1P item titles still carry the old `mac-mini` name — renaming them is a MacBook task, see `dotfiles-private/docs/macbook-todo.md`). `mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password. Those two blocks are `op`-backend only: on the cache backend (`_setup-ssh` reads `~/.config/secrets/backend`) they are deleted from the render, so `make setup` completes headless on the mini instead of hanging on `op read` — the mini needs only `homelab`/`vps`, which carry no secrets. Also generated: `~/.gitconfig-headless` — written only by `make git-headless` on the mini (machine-local, never symlinked), see Headless outbound access below.
+**Generated (not symlinked):** `~/.ssh/config` — installed by `_setup-ssh` from `config/ssh_config`. All four hosts (`mini`, `iumac`, `homelab`, `vps`) are **MagicDNS short names**, so there is no rendering, no secret, and no `op` call: the file installs identically on a headless machine. That is the payoff of giving every machine one canonical short name — the old version injected the two Mac hostnames from `op://Private/*-server/hostname`, which hung `make setup` on the mini (no biometric prompt to answer). Copied rather than symlinked because colima appends its own `Include` to this file, which the target re-appends after each install. `mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password. Also generated: `~/.gitconfig-headless` — written only by `make git-headless` on the mini (machine-local, never symlinked), see Headless outbound access below.
 
 **Not symlinked:** `~/.claude/settings.json` — machine-specific permissions.
 `make setup` creates from template if missing, otherwise jq-merges:
@@ -180,6 +180,22 @@ the mini over plain OpenSSH (`make remote-access` above) because remote dev need
 agent/port forwarding and full-speed transfers that Tailscale SSH doesn't provide.
 The full per-path access model + break-glass runbook lives in
 `dotfiles-private/docs/access-model.md`.
+
+## Inbound exposure — `tailscale serve` / Funnel
+
+Serve bindings are imperative daemon state **keyed on the machine's MagicDNS
+name**, so renaming a device orphans every binding at once and nothing in git
+says what was supposed to be exposed. They are declared instead, per machine, in
+`dotfiles-private/tailscale-serve.<machine>.conf` (private repo — it is an
+exposure map, and `funnel yes` means the public internet):
+
+```
+make tailscale-serve         # converge live state onto the declared state
+make tailscale-serve-check   # report drift, change nothing, exit 1 if any
+```
+
+Applying does `tailscale serve reset` first — a rename leaves bindings under the
+old name that no per-port `off` can address — then re-adds every declared row.
 
 ## Battery charge limiter (MacBook only)
 
