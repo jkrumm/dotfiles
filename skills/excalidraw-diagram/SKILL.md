@@ -21,7 +21,7 @@ seeds, versionNonces, and bindings computed. The same file opens cleanly in:
 
 | Target                                | How                                                       |
 |---------------------------------------|-----------------------------------------------------------|
-| sideclaw DiagramPanel                 | Open at `http://sideclaw.local`                           |
+| sideclaw DiagramPanel                 | Open at `https://sideclaw.test`                           |
 | Obsidian Excalidraw plugin (zsviczian)| Drop the file anywhere in the vault                       |
 | excalidraw.com                        | Drag-and-drop the file onto the canvas, or *File → Open*  |
 | Any third-party Excalidraw renderer   | Standard v2 envelope — no plugin-specific fields          |
@@ -34,7 +34,7 @@ You don't pick the target — the file is universal.
 2. **Research** (if technical) — look up actual specs, event names, formats.
 3. **Design the visual argument** — pattern variety, multi-zoom, evidence.
 4. **Resolve the output path** — ask the user where the file should land, or
-   infer from context (sideclaw notes dir, Obsidian vault path, working dir).
+   infer from context (brain vault path, working dir).
 5. **Call `mcp__sideclaw__excalidraw_diagram`** with the prompt + outputPath.
 6. **Open the result** — read the path back to the user. They open it in their
    editor of choice.
@@ -50,10 +50,9 @@ You don't pick the target — the file is universal.
 
 Ask the user briefly if it's unclear. Defaults that usually work:
 
-- If cwd is under `/Users/jkrumm/Obsidian/Vault` → put it in a sensible
-  subfolder of the vault.
-- If cwd is `~/SourceRoot/sideclaw` → drop in `notes/` (sideclaw's diagram
-  area).
+- If cwd is under `~/SourceRoot/brain` (the live vault) → put it in a sensible
+  subfolder, co-located with the note it belongs to. Never write to
+  `~/Obsidian/Vault` (cold backup, closed).
 - Otherwise → ask. Don't dump diagram files in random project repos.
 
 Always pass an **absolute path** ending in `.excalidraw`.
@@ -195,8 +194,8 @@ The tool returns `{ outputPath, elementCount, viewport, hydratedBytes }`.
 
 ### Step 6: Hand the file to the user
 Tell the user where it landed and how to open it (browser at
-`http://sideclaw.local` for sideclaw, drop into vault for Obsidian, drag onto
-canvas for excalidraw.com).
+`https://sideclaw.test` for sideclaw, drop into the brain vault for Obsidian,
+drag onto canvas for excalidraw.com).
 
 If the user wants edits, call again with `mode: "extend"` and the same path.
 
@@ -241,4 +240,4 @@ If the user wants edits, call again with `mode: "extend"` and the same path.
 - **Skipping the design assessment.** A request like "draw the auth flow" is
   too vague to produce a good diagram — clarify depth and patterns first.
 - **Writing diagram files to arbitrary project repos.** Ask the user where —
-  most diagrams belong in `notes/` (sideclaw) or the Obsidian vault.
+  most diagrams belong in the brain vault.

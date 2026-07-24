@@ -8,7 +8,7 @@ model: opus
 
 A human-owned 7-step pipeline for producing writing that sounds like the author, not the model. This skill runs on Opus because prose quality demands the best model. It is not a content generator — it is a scaffold that keeps the human in control at every gate.
 
-Output lands in the brain repo at `~/SourceRoot/brain/content/<project>/` with `status: draft` frontmatter. Publishing is always the human's decision.
+Output lands in the brain repo as a curated-surface page under `03_Projects/` or `04_Areas/` (per `brain/AGENTS.md`), with `status: draft` and `source` (wikilink into the `wiki/` note(s) it distills) frontmatter. Publishing is always the human's decision.
 
 ## Pipeline
 
@@ -88,6 +88,6 @@ Never skipped. Remind the human:
 
 - Never write first-person content. Placeholder opinions are marked with a `[CONFIRM: ...]` inline tag for the human to replace.
 - Never skip the voice-pass gate. If the human wants to skip it, flag that the voice pass is the single highest-leverage step for making the output sound like them.
-- Never publish. The model writes to `content/<project>/` with `status: draft`. The human decides when and where to publish.
-- Output always goes to the brain repo at `~/SourceRoot/brain/content/<project>/`. If the project directory does not exist, create it and add an `index.md` listing the draft.
+- Never publish. The model writes the page with `status: draft`. The human decides when and where to publish.
+- Output always goes to the brain repo, as a curated-surface page under the relevant `03_Projects/` or `04_Areas/` folder (light discipline — wikilinks must resolve, no forced schema beyond `status`/`source`).
 - After writing, run `cd ~/SourceRoot/brain && node .scripts/vault-lint.mjs` and fix any issues before declaring the step complete.

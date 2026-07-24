@@ -487,10 +487,8 @@ gh pr merge --rebase --delete-branch --admin
 ```bash
 if [[ -n "$feature_branch" ]]; then
   echo "Removing feature worktree and branch..."
-  wtp remove "$feature_branch" --with-branch || {
-    git worktree remove "$feature_branch" --force
-    git branch -D "$feature_branch"
-  }
+  git worktree remove "$feature_branch" --force
+  git branch -D "$feature_branch"
 fi
 
 # Update main worktree ONLY if clean

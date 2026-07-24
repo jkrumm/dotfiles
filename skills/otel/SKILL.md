@@ -13,18 +13,18 @@ Call `mcp__sideclaw__otel` with:
 - `environment` — `local` or `prod`.
 - `cwd` (optional) — defaults to $HOME. OTEL access is host-level, so this rarely matters.
 
-The worker runs **read-only** on DeepSeek-V4-Pro via the LiteLLM bridge (EU/GDPR, off Max
-quota) and queries ClickHouse through `~/.claude/skills/otel/scripts/query.py`. Only
-the structured result (`status`, `environment`, `timeRange`, `findings`,
-`recommendations`) returns to the caller — the raw query output stays in the worker.
+The worker runs **read-only** on claude-sonnet-5[1m], currently on Max per
+`SIDECLAW_WORKER_BACKEND=max` (IU unified endpoint fallback when unset — non-EU
+routing, so treat prod log content accordingly), and queries ClickHouse through
+`~/.claude/skills/otel/scripts/query.py`. Only the structured result (`status`,
+`environment`, `timeRange`, `findings`, `recommendations`) returns to the caller —
+the raw query output stays in the worker.
 
 Inspect `status` first: `errors` = active error spans/logs, `degraded` = elevated
 latency or warnings, `healthy` = data flowing normally.
 
-**Reliability:** the worker model serves from Azure Spain (EU) and can throttle
-under load — a query can take 1–6 min. The tool's 8-min timeout absorbs most of it;
-on a hard timeout, retry. If the LiteLLM bridge is down, the tool errors with a
-`make litellm-restart` hint.
+**Reliability:** a query can take 1–6 min under load. The tool's 8-min timeout
+absorbs most of it; on a hard timeout, retry.
 
 **Maintenance:** the ClickHouse query script (`scripts/query.py`) is the canonical
 access path and lives here in dotfiles, not in sideclaw — add presets / schema

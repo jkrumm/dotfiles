@@ -1,23 +1,23 @@
 ---
 name: review
-description: Multi-angle code review via sideclaw MCP tool (claude-sonnet-5 via the IU unified endpoint, off Max by default). Add --deep to also run Anthropic's native correctness + security review on Max.
+description: Multi-angle code review via sideclaw MCP tool (claude-sonnet-5, currently on Max per SIDECLAW_WORKER_BACKEND=max; IU unified endpoint fallback when unset). Add --deep to also run Anthropic's native correctness + security review, also on Max.
 ---
 
 # Review
 
-## Default (off Max) — sideclaw multi-angle
+## Default (currently on Max) — sideclaw multi-angle
 
-`mcp__sideclaw__review` is **asynchronous** (background job on claude-sonnet-5 via the IU unified endpoint, off Max by default — flag-selectable onto Max per install):
+`mcp__sideclaw__review` is **asynchronous** (background job on claude-sonnet-5, currently on Max per `SIDECLAW_WORKER_BACKEND=max`; falls back to the IU unified endpoint when unset):
 1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
 2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes (loop while `stillRunning: true`); read `result` on `status: "done"`. The submit call does **not** return the findings.
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
 plus a triage router that adds content-driven angles — security, performance,
 concurrency, data-migration, api-contract — when the diff warrants them. All on
-claude-sonnet-5 via the IU unified endpoint, **zero Max quota by default**. Use
-this by default.
+claude-sonnet-5, **currently on Max** per `SIDECLAW_WORKER_BACKEND=max` (IU
+unified endpoint fallback when unset). Use this by default.
 
-## `--deep` — add native correctness + security (on Max)
+## `--deep` — add native correctness + security (also on Max)
 
 When the args contain `--deep`, ALSO run Anthropic's native reviewers and merge
 them with the sideclaw result. These run on the orchestrator's Max model and are

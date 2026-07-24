@@ -207,7 +207,7 @@ fi
 Commit created successfully.
 
 Branch 'feat/user-auth' is 3 commits ahead of main.
-📂 Working in worktree (created via wtp)
+📂 Working in worktree
 
 Run `/pr create` to create a PR?
 ```
