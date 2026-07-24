@@ -394,6 +394,33 @@ _setup-remote-access:
 	@echo "    ↳ Reachable only via Tailscale (tag:mac ACL). Ensure NO router WAN"
 	@echo "      port-forward exists for 22/5900."
 
+.PHONY: git-headless _setup-git-headless
+# Headless GitHub pushes for the Mac mini — opt-in, NOT in the default `setup`
+# chain (mirrors remote-access/batt-setup: a deliberate per-host call). The mini
+# can't use the 1Password SSH agent (the biometric prompt hangs with no human),
+# so git talks to GitHub over HTTPS with the `gh` keyring token instead: this
+# writes ~/.gitconfig-headless (machine-local, never symlinked) rewriting
+# git@github.com: remotes to https://github.com/; config/gitconfig includes it
+# unconditionally (a no-op wherever the file doesn't exist, i.e. every MacBook).
+# homelab/VPS need nothing — Tailscale SSH is keyless and headless-safe already.
+# Self-gates on the cache backend; requires a one-time `gh auth login` (keyring).
+git-headless: _setup-git-headless
+_setup-git-headless:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "  git-headless: backend is not 'cache' (present-human machine) — skipping."; \
+		exit 0; \
+	fi; \
+	echo "  Headless GitHub access (Mac mini only)..."; \
+	gh auth status >/dev/null 2>&1 || { echo "    ✗ gh not authenticated — run 'gh auth login' (keyring) first."; exit 1; }; \
+	GITCFG="$(HOME)/.gitconfig-headless"; \
+	if [ -f "$$GITCFG" ] && grep -qF "insteadOf = git@github.com:" "$$GITCFG" 2>/dev/null; then \
+		echo "    · ~/.gitconfig-headless (ok)"; \
+	else \
+		printf '[url "https://github.com/"]\n    insteadOf = git@github.com:\n' > "$$GITCFG"; \
+		echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the gh keyring token"; \
+	fi
+
 .PHONY: batt-setup batt-limit batt-status
 # MacBook-only battery charge limiter (https://github.com/charlie0129/batt).
 # The binary ships via the Brewfile (harmless on a battery-less Mac like the

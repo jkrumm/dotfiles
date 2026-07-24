@@ -19,3 +19,11 @@
 [credential "https://gist.github.com"]
 	helper = 
 	helper = !/opt/homebrew/bin/gh auth git-credential
+
+# Written ONLY by `make git-headless` on the headless Mac mini (never symlinked,
+# machine-local) — rewrites git@github.com: SSH remotes to HTTPS, so pushes use
+# the headless-safe `gh` keyring token instead of the biometric 1Password SSH
+# agent. Git silently ignores a missing include path, so this is a no-op
+# everywhere else (MacBook, fresh mini before git-headless has run).
+[include]
+	path = ~/.gitconfig-headless

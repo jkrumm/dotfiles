@@ -128,7 +128,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 - `.claude/skills/iu-endpoint/` — validate the IU unified endpoint + discover newer/better models for OpenCode and Hermes (`validate.sh` probes transports, health-checks configured models with backend-redundancy, diffs the live catalog).
 - `.claude/skills/sync/` — bidirectionally sync all git repos between this MacBook (orchestrator) and the always-on Mac mini over SSH, using the git remote as transport. `scripts/recon.sh` scans both machines' git state ($HOME-relative, so it works despite differing usernames); a per-repo reconcile plan is confirmed once, then subagents commit wip work, push, rebase, and resolve conflicts. Skips the stale local-branch graveyard (`local_only` count, never mass-pushed), preserves diverged branches, handles PR-required-master. Run from a dotfiles session (`/sync`); MacBook-only.
 
-**Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from the `config/ssh_config` template; the `iumac` and `mac-mini` host aliases get their hostnames injected from `op://Private/{iumac,mac-mini}-server/hostname` (keeps tailnet names out of git). `mac-mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password.
+**Generated (not symlinked):** `~/.ssh/config` — written by `_setup-ssh` from the `config/ssh_config` template; the `iumac` and `mac-mini` host aliases get their hostnames injected from `op://Private/{iumac,mac-mini}-server/hostname` (keeps tailnet names out of git). `mac-mini` sets `ForwardAgent yes` so the always-on Mac mini can do git/ssh ops with approval popping on the connecting machine's 1Password. Also generated: `~/.gitconfig-headless` — written only by `make git-headless` on the mini (machine-local, never symlinked), see Headless outbound access below.
 
 **Not symlinked:** `~/.claude/settings.json` — machine-specific permissions.
 `make setup` creates from template if missing, otherwise jq-merges:
@@ -157,6 +157,27 @@ router free of any WAN port-forward for 22/5900 — that would bypass both. **Wo
 secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
 password), not a token at rest. The personal-side Hermes path will use a scoped 1Password
 service account (token in Keychain) — planned, not yet wired.
+
+## Headless outbound access (Mac mini only)
+
+With no human present, anything authenticated by the 1Password SSH agent hangs on
+the biometric prompt — so the mini never uses key auth outbound:
+
+- **homelab + VPS → Tailscale SSH.** tailscaled on the servers authenticates the
+  tailnet identity (`tag:mac` ACL); OpenSSH-level auth is `none`. `ssh homelab` /
+  `ssh vps` work headless with zero keys, zero agents, zero prompts. No dedicated
+  key exists for this path — a stolen mini holds no server credential; revocation
+  is removing the device in the Tailscale admin.
+- **GitHub → HTTPS + `gh` keyring token.** GitHub is off the tailnet, so this is
+  the one outbound path that needs a headless credential: `make git-headless`
+  (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`, rewriting
+  `git@github.com:` remotes to HTTPS so pushes use the `gh` token.
+
+Inbound is the reverse direction and a different key entirely: the MacBook reaches
+the mini over plain OpenSSH (`make remote-access` above) because remote dev needs
+agent/port forwarding and full-speed transfers that Tailscale SSH doesn't provide.
+The full per-path access model + break-glass runbook lives in
+`dotfiles-private/docs/access-model.md`.
 
 ## Battery charge limiter (MacBook only)
 
