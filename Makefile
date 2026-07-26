@@ -205,7 +205,9 @@ _setup-caddy:
 	@# LaunchDaemon plist sets HOME=/opt/homebrew/var/lib so CA lands there
 	@sudo brew services restart caddy >/dev/null 2>&1 \
 		&& echo "    ✓ caddy service" \
-		|| echo "    ✗ caddy service failed — check: sudo brew services list"
+		|| $(MAKE) --no-print-directory _daemon-running-or-fail \
+			LABEL=homebrew.mxcl.caddy NAME="caddy service" \
+			HINT="sudo brew services restart caddy"
 	@# Trust Caddy local CA — caddy trust handles keychain install + NSS
 	@if security dump-trust-settings -d 2>/dev/null | grep -q "Caddy"; then \
 		echo "    · Caddy CA trusted (ok)"; \
@@ -233,7 +235,9 @@ _setup-caddy:
 	fi
 	@sudo brew services restart dnsmasq >/dev/null 2>&1 \
 		&& echo "    ✓ dnsmasq service" \
-		|| echo "    ✗ dnsmasq service failed — check: sudo brew services list"
+		|| $(MAKE) --no-print-directory _daemon-running-or-fail \
+			LABEL=homebrew.mxcl.dnsmasq NAME="dnsmasq service" \
+			HINT="sudo brew services restart dnsmasq"
 	@# sleepwatcher (from Brewfile) fires wakeup.sh on sleep wake → caddy reload
 	@brew services start sleepwatcher >/dev/null 2>&1 || brew services restart sleepwatcher >/dev/null 2>&1 || true
 	@echo "    ✓ sleepwatcher service"
@@ -828,7 +832,7 @@ _setup-colima:
 			&& sudo launchctl bootout system "$$DAEMON" 2>/dev/null; \
 		sudo launchctl bootstrap system "$$DAEMON" \
 			&& echo "    ✓ docker-socket LaunchDaemon installed" \
-			|| echo "    ✗ docker-socket LaunchDaemon failed"; \
+			|| $(MAKE) --no-print-directory _socket-daemon-healthy-or-fail; \
 	fi; \
 	rm -f "$$TMP"
 	@# Create the symlink now too (bootstrap's RunAtLoad also recreates it at boot).
@@ -840,6 +844,34 @@ _setup-colima:
 	@brew list --cask orbstack >/dev/null 2>&1 \
 		&& echo "    ! OrbStack still installed — migrate any containers, then run: make orbstack-remove" \
 		|| true
+
+# Fallback reporters for the root-daemon steps above. `sudo brew services` and
+# `sudo launchctl bootstrap` fail whenever sudo can't prompt — but the daemon is
+# almost always already loaded and healthy from an earlier run, so re-registration
+# failing is not a broken service. Assert the end state rather than the mechanism:
+# an already-healthy daemon reads ·, only a genuinely dead one reads ✗. Printing
+# ✗ for the benign case trains you to ignore ✗. `launchctl print` needs no sudo.
+
+# Long-running daemons (caddy, dnsmasq): the product is the process itself.
+.PHONY: _daemon-running-or-fail
+_daemon-running-or-fail:
+	@if launchctl print system/$(LABEL) 2>/dev/null | grep -qE '^[[:space:]]*state = running'; then \
+		echo "    · $(NAME) (already running — re-registration skipped)"; \
+	else \
+		echo "    ✗ $(NAME) failed — check: $(HINT)"; \
+	fi
+
+# The socket daemon is a one-shot: it recreates the symlink at boot and exits, so
+# `state = running` is never true for it. Its product is the symlink — assert that,
+# plus that the daemon is still loaded so the symlink survives the next reboot.
+.PHONY: _socket-daemon-healthy-or-fail
+_socket-daemon-healthy-or-fail:
+	@if launchctl print system/com.colima.docker-socket >/dev/null 2>&1 \
+		&& [ "$$(readlink /var/run/docker.sock 2>/dev/null)" = "$(HOME)/.colima/default/docker.sock" ]; then \
+		echo "    · docker-socket LaunchDaemon (already loaded — reinstall skipped)"; \
+	else \
+		echo "    ✗ docker-socket LaunchDaemon failed — check: sudo launchctl print system/com.colima.docker-socket"; \
+	fi
 
 # Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
 .PHONY: _copy
