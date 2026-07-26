@@ -117,12 +117,32 @@ else
 fi
 
 # --- Credentials -------------------------------------------------------------
-if ssh "$HOST" 'printf "protocol=https\nhost=github.com\n\n" | "$HOME/.local/bin/git-credential-secrets-cache" get 2>/dev/null | grep -q "^password=."' 2>/dev/null; then
-  # Resolvability only — this deliberately does not call GitHub. See
-  # devhost-health-check.sh check_git_push for why.
-  ok "github credential" "resolves from the secrets cache (scope untested)"
-else
+if ! ssh "$HOST" 'printf "protocol=https\nhost=github.com\n\n" | "$HOME/.local/bin/git-credential-secrets-cache" get 2>/dev/null | grep -q "^password=."' 2>/dev/null; then
   bad "github credential" "unresolvable — 'make git-headless' / 'make secrets-seed'"
+else
+  ok "github credential" "resolves from the secrets cache"
+
+  # Scope, not just resolvability. A resolvable token that lacks `Contents:
+  # write` fails ONLY on a real push — that is exactly how the previous
+  # read-only PAT hid, presenting as `Permission to jkrumm/dotfiles.git denied`
+  # mid-work. `--dry-run` still performs the git-receive-pack request GitHub
+  # authorizes, so it proves write rights while updating nothing.
+  #
+  # This check lives HERE and deliberately not in devhost-health-check.sh: that
+  # one runs every 5 minutes with maxretries 0, so a GitHub outage or a flaky
+  # link would page as "dev host down". The heartbeat asserts the weaker claim
+  # on purpose; the doctor is on-demand and can afford the network call.
+  probe=$(ssh "$HOST" 'cd "$HOME/SourceRoot/dotfiles" 2>/dev/null \
+    && GIT_TERMINAL_PROMPT=0 git push --dry-run origin HEAD:refs/heads/doctor-push-probe 2>&1' 2>/dev/null)
+  case "$probe" in
+    *"[new branch]"*|*"Everything up-to-date"*)
+      ok "github push rights" "verified by dry-run (nothing written)" ;;
+    *denied*|*403*|*"Authentication failed"*)
+      bad "github push rights" "token resolves but cannot push — needs Contents: read and write" ;;
+    *)
+      # Don't fail on an unreachable network: that is not a dev-host fault.
+      skip "github push rights" "inconclusive — ${probe:-no output from git}" ;;
+  esac
 fi
 
 echo ""

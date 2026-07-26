@@ -191,7 +191,7 @@ the biometric prompt — so the mini never uses key auth outbound:
   tailnet, so this is the one outbound path that needs a headless credential:
   `make git-headless` (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`,
   rewriting `git@github.com:` remotes to HTTPS and pointing the credential helper at
-  `scripts/git-credential-secrets-cache`, which resolves `op://hermes/github/token`
+  `scripts/git-credential-secrets-cache`, which resolves `op://mini/github/token`
   from the secrets cache. This replaced the `gh` keyring token: that token expired,
   and `gh auth git-credential get` exits **0 with an empty body** on expiry, so git
   fell through to prompting and reported
@@ -200,10 +200,16 @@ the biometric prompt — so the mini never uses key auth outbound:
   helper has no session dependency (no login keychain, no GUI session, no forwarded
   agent), so it resolves identically from a LaunchAgent, a `claude --bg` daemon that
   outlived its ssh connection, a herdr pane, and an interactive shell.
-  **As of this writing the cached `op://hermes/github/token` is read-only** (a
-  fine-grained PAT that returns 403 `Permission to jkrumm/dotfiles.git denied` on
-  push) — a write-scoped token still has to be minted and seeded before headless
-  push actually works.
+  The push credential is **`op://mini/github/token`, deliberately not Hermes's
+  `op://hermes/github/token`** — the latter is read-only and returned 403
+  `Permission to jkrumm/dotfiles.git denied`, which is what sent this whole path
+  looking like a transport bug. Be honest about what the split buys: it does *not*
+  contain a compromised agent, since anything on the mini with `secrets-run` reads
+  every cached ref. It contains accident — Hermes's `.env.tpl` still points at the
+  read-only token, so Hermes cannot push through its configured credential — and it
+  lets the two rotate independently. Headless push verified end to end on
+  2026-07-26 with a real `git push --dry-run` from the mini; resolvability is not
+  the same claim (see the health-check note below).
 
 Inbound is the reverse direction and a different key entirely: the MacBook reaches
 the mini over plain OpenSSH (`make remote-access` above) because remote dev needs
@@ -360,6 +366,15 @@ it does not fail together with the other four (a token can expire while the host
 is perfectly healthy), and it is folded in anyway because a second Kuma push
 monitor was not worth it for one component. The failing component is named in
 the push `msg`.
+
+**The heartbeat asserts resolvability, not push rights** — and says "credential
+ready", not "push ready", on purpose. It makes no network call to GitHub, because
+at a 300s cadence with `maxretries 0` a GitHub outage or a flaky link would page
+as "dev host down". The stronger claim costs a real `git push --dry-run`, so it
+lives in the on-demand `make remote-dev-doctor` instead. That split has already
+earned itself: on 2026-07-26 the credential resolved fine on the mini while the
+deployed helper still pointed at Hermes's read-only token, and only the doctor's
+dry-run saw it.
 
 The push token lives in a chmod-600 `~/.config/uptime-kuma/devhost-push-url`,
 not 1Password, so monitoring never depends on the secrets cache being seeded — a

@@ -426,7 +426,7 @@ _setup-remote-access:
 # doesn't exist, i.e. every MacBook). homelab/VPS need nothing — Tailscale SSH
 # is keyless and headless-safe already. Self-gates on the cache backend.
 #
-# Credentials come from `secrets-run` (op://hermes/github/token, already in
+# Credentials come from `secrets-run` (op://mini/github/token, declared in
 # headless.refs), NOT the `gh` keyring. The keyring was the original design and
 # failed in the worst way on 2026-07-26: the token expired, `gh auth
 # git-credential get` returned 0 with an empty body, and git reported
@@ -450,7 +450,7 @@ _setup-git-headless:
 		DST="$$HELPER"; \
 	chmod +x "$(DOTFILES_DIR)/scripts/git-credential-secrets-cache"; \
 	if ! printf 'protocol=https\nhost=github.com\n\n' | "$$HELPER" get 2>/dev/null | grep -q '^password=.'; then \
-		echo "    ✗ helper cannot resolve op://hermes/github/token from the cache."; \
+		echo "    ✗ helper cannot resolve op://mini/github/token from the cache."; \
 		echo "      fix: run 'make secrets-seed' from the MacBook (biometric), then retry."; \
 		exit 1; \
 	fi; \
