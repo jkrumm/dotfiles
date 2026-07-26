@@ -414,12 +414,23 @@ _setup-remote-access:
 # Headless GitHub pushes for the Mac mini — opt-in, NOT in the default `setup`
 # chain (mirrors remote-access/batt-setup: a deliberate per-host call). The mini
 # can't use the 1Password SSH agent (the biometric prompt hangs with no human),
-# so git talks to GitHub over HTTPS with the `gh` keyring token instead: this
-# writes ~/.gitconfig-headless (machine-local, never symlinked) rewriting
-# git@github.com: remotes to https://github.com/; config/gitconfig includes it
-# unconditionally (a no-op wherever the file doesn't exist, i.e. every MacBook).
-# homelab/VPS need nothing — Tailscale SSH is keyless and headless-safe already.
-# Self-gates on the cache backend; requires a one-time `gh auth login` (keyring).
+# so git talks to GitHub over HTTPS: this writes ~/.gitconfig-headless
+# (machine-local, never symlinked) rewriting git@github.com: remotes to
+# https://github.com/ and pointing the credential helper at the secrets cache.
+# config/gitconfig includes it unconditionally (a no-op wherever the file
+# doesn't exist, i.e. every MacBook). homelab/VPS need nothing — Tailscale SSH
+# is keyless and headless-safe already. Self-gates on the cache backend.
+#
+# Credentials come from `secrets-run` (op://hermes/github/token, already in
+# headless.refs), NOT the `gh` keyring. The keyring was the original design and
+# failed in the worst way on 2026-07-26: the token expired, `gh auth
+# git-credential get` returned 0 with an empty body, and git reported
+# `could not read Username for 'https://github.com'` — which reads as a
+# transport fault and cost a whole misdirected diagnosis. The cache has no
+# session dependency (no keychain, no GUI login, no forwarded agent), so it
+# resolves identically from a LaunchAgent, a `claude --bg` daemon that outlived
+# its ssh connection, and an interactive shell. See
+# scripts/git-credential-secrets-cache.
 git-headless: _setup-git-headless
 _setup-git-headless:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
@@ -428,14 +439,20 @@ _setup-git-headless:
 		exit 0; \
 	fi; \
 	echo "  Headless GitHub access (Mac mini only)..."; \
-	gh auth status >/dev/null 2>&1 || { echo "    ✗ gh not authenticated — run 'gh auth login' (keyring) first."; exit 1; }; \
+	HELPER="$(HOME)/.local/bin/git-credential-secrets-cache"; \
+	$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/git-credential-secrets-cache" \
+		DST="$$HELPER"; \
+	chmod +x "$(DOTFILES_DIR)/scripts/git-credential-secrets-cache"; \
+	if ! printf 'protocol=https\nhost=github.com\n\n' | "$$HELPER" get 2>/dev/null | grep -q '^password=.'; then \
+		echo "    ✗ helper cannot resolve op://hermes/github/token from the cache."; \
+		echo "      fix: run 'make secrets-seed' from the MacBook (biometric), then retry."; \
+		exit 1; \
+	fi; \
+	echo "    ✓ credential helper resolves a GitHub token from the cache"; \
 	GITCFG="$(HOME)/.gitconfig-headless"; \
-	if [ -f "$$GITCFG" ] && grep -qF "insteadOf = git@github.com:" "$$GITCFG" 2>/dev/null; then \
-		echo "    · ~/.gitconfig-headless (ok)"; \
-	else \
-		printf '[url "https://github.com/"]\n    insteadOf = git@github.com:\n' > "$$GITCFG"; \
-		echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the gh keyring token"; \
-	fi
+	printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n\n[credential "https://github.com"]\n\thelper = \n\thelper = %s\n' "$$HELPER" > "$$GITCFG"; \
+	echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the secrets cache"
 
 .PHONY: batt-setup batt-limit batt-status
 # MacBook-only battery charge limiter (https://github.com/charlie0129/batt).

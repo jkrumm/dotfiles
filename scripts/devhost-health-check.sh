@@ -13,10 +13,18 @@ set -euo pipefail
 # the mini pushes outbound over the already-granted `tag:mac → tag:homelab`
 # tcp:443. Same pattern as MacMini Secret Seed - Push and the Hermes monitors.
 #
-# ONE composite monitor, not four: herdr/sshd/tailscaled/mosh all fail together
-# when the mini sleeps or drops off the tailnet, so four monitors would just be
-# four simultaneous pages saying the same thing. The failing component is named
-# in the push `msg`, which is where the diagnosis belongs.
+# ONE composite monitor, not five: herdr/sshd/tailscaled/mosh all fail together
+# when the mini sleeps or drops off the tailnet, so separate monitors would just
+# be simultaneous pages saying the same thing. The failing component is named in
+# the push `msg`, which is where the diagnosis belongs.
+#
+# `check_git_push` is the deliberate exception to that reasoning: it fails on
+# its own schedule (a token expires while the host is perfectly healthy) rather
+# than with the other four. It is folded in anyway because the alternative —
+# a second Uptime Kuma push monitor — needs the browser to create (the API
+# can't make push monitors on UK 2.x), and a check that exists only in a plan
+# catches nothing. Revisit if it ever pages independently often enough to be
+# noise.
 #
 # Fail-loud, never fail-silent: if the push URL can't be resolved we exit
 # non-zero WITHOUT pushing, so Uptime Kuma's own missed-heartbeat fires. A
@@ -32,6 +40,7 @@ set -euo pipefail
 HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
 MOSH_SERVER_BIN="${MOSH_SERVER_BIN:-/opt/homebrew/bin/mosh-server}"
 TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 
 # The push token is low-sensitivity (it can only spoof a heartbeat) but still
 # lives in a chmod-600 file rather than 1Password on purpose: monitoring must not
@@ -94,11 +103,37 @@ check_mosh() {
   echo "mosh ready"
 }
 
+check_git_push() {
+  # A dev host that cannot push is not a working dev host, and this is the one
+  # component here that fails SILENTLY and INDEPENDENTLY of the other four.
+  # That breaks the "one composite monitor" reasoning above slightly — it is
+  # included anyway because the alternative was finding out during real work,
+  # which is exactly what happened on 2026-07-26 when the old `gh` keyring token
+  # expired unnoticed. The msg names the component, so the page is still
+  # diagnosable.
+  #
+  # Ask the credential helper the same question git asks, rather than checking
+  # the token some other way: the previous failure was precisely a helper that
+  # exited 0 while returning nothing, which every liveness check short of this
+  # one would have called healthy.
+  #
+  # Deliberately NO network call to GitHub. Validating the token upstream would
+  # make a GitHub outage or a flaky link page as "dev host down", and the
+  # monitor runs with maxretries 0. Local resolvability is the honest signal;
+  # a server-side revocation surfaces on first push, not here.
+  [[ -x "$GIT_CRED_HELPER_BIN" ]] || { echo "git credential helper missing (run: make git-headless)"; return 1; }
+  local out
+  out=$(printf 'protocol=https\nhost=github.com\n\n' | "$GIT_CRED_HELPER_BIN" get 2>/dev/null) || true
+  /usr/bin/grep -q '^password=.' <<<"$out" \
+    || { echo "github credential unresolvable (reseed: make secrets-seed from the MacBook)"; return 1; }
+  echo "git push ready"
+}
+
 # --- Run --------------------------------------------------------------------
 
 details=()
 failure=""
-for component in check_tailscale check_sshd check_herdr check_mosh; do
+for component in check_tailscale check_sshd check_herdr check_mosh check_git_push; do
   if detail=$("$component"); then
     details+=("$detail")
   else

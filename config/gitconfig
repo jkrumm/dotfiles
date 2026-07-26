@@ -21,9 +21,13 @@
 	helper = !/opt/homebrew/bin/gh auth git-credential
 
 # Written ONLY by `make git-headless` on the headless Mac mini (never symlinked,
-# machine-local) — rewrites git@github.com: SSH remotes to HTTPS, so pushes use
-# the headless-safe `gh` keyring token instead of the biometric 1Password SSH
-# agent. Git silently ignores a missing include path, so this is a no-op
-# everywhere else (MacBook, fresh mini before git-headless has run).
+# machine-local) — rewrites git@github.com: SSH remotes to HTTPS and repoints
+# the credential helper at the age-encrypted secrets cache, so pushes need
+# neither the biometric 1Password SSH agent nor the macOS keychain. It must stay
+# BELOW the [credential] blocks above: the file resets the helper chain with an
+# empty `helper =` and then sets its own, which only overrides if git reads it
+# last. Git silently ignores a missing include path, so this is a no-op
+# everywhere else (MacBook, fresh mini before git-headless has run) and the gh
+# keyring above remains the MacBook's helper.
 [include]
 	path = ~/.gitconfig-headless
