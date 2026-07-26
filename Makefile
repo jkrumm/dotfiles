@@ -455,6 +455,44 @@ _setup-git-headless:
 	printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n\n[credential "https://github.com"]\n\thelper = \n\thelper = %s\n' "$$HELPER" > "$$GITCFG"; \
 	echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the secrets cache"
 
+.PHONY: mosh-firewall
+# Allow mosh-server through the macOS Application Firewall. Opt-in per host and
+# NOT in the default `setup` chain — it needs sudo and only matters on a machine
+# people mosh INTO (the mini).
+#
+# Why this is needed at all, and why it is so hard to diagnose without it: the
+# ALF is per-process, and "Automatically allow downloaded signed software" does
+# NOT cover Homebrew binaries (no Developer ID signature). With mosh-server
+# missing from the allowlist, the ssh handshake SUCCEEDS, mosh-server starts,
+# binds its UDP port and prints MOSH CONNECT — and then every datagram is
+# dropped. The client just says "did not make a successful connection to
+# <ip>:<port>. Please verify that UDP port ... is not firewalled", which reads
+# exactly like a missing Tailscale ACL grant. Measured on the mini 2026-07-26:
+# /usr/bin/nc (Apple-signed) got UDP through on both the LAN and the tailnet
+# path while mosh-server got nothing, which is what isolates it to the ALF
+# rather than the network.
+#
+# socketfilterfw stores the RESOLVED path, and /opt/homebrew/bin/mosh-server is
+# a symlink into a version-stamped Cellar dir — so a `brew upgrade mosh` moves
+# the binary and silently un-allows it. That is why devhost-health-check.sh
+# asserts allowlist membership: the upgrade is the likely regression, and it is
+# otherwise invisible until the next time you try to mosh in.
+mosh-firewall:
+	@SFW=/usr/libexec/ApplicationFirewall/socketfilterfw; \
+	BIN=$$(readlink -f "$$(brew --prefix)/bin/mosh-server" 2>/dev/null || echo ""); \
+	if [ -z "$$BIN" ] || [ ! -x "$$BIN" ]; then \
+		echo "  ✗ mosh-server not found — is mosh installed? (brew bundle install)"; exit 1; \
+	fi; \
+	echo "  Application Firewall → allow mosh-server..."; \
+	echo "    path: $$BIN"; \
+	sudo "$$SFW" --add "$$BIN" >/dev/null; \
+	sudo "$$SFW" --unblock "$$BIN" >/dev/null; \
+	if "$$SFW" --listapps 2>/dev/null | grep -qF "$$BIN"; then \
+		echo "    ✓ mosh-server allowed to receive incoming connections"; \
+	else \
+		echo "    ✗ still not in the allowlist — check: $$SFW --listapps"; exit 1; \
+	fi
+
 .PHONY: batt-setup batt-limit batt-status
 # MacBook-only battery charge limiter (https://github.com/charlie0129/batt).
 # The binary ships via the Brewfile (harmless on a battery-less Mac like the

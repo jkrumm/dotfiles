@@ -41,6 +41,7 @@ HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
 MOSH_SERVER_BIN="${MOSH_SERVER_BIN:-/opt/homebrew/bin/mosh-server}"
 TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
+ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 
 # The push token is low-sensitivity (it can only spoof a heartbeat) but still
 # lives in a chmod-600 file rather than 1Password on purpose: monitoring must not
@@ -98,8 +99,28 @@ check_herdr() {
 
 check_mosh() {
   # mosh-server is spawned per-connection, so presence of the binary is the
-  # only thing worth asserting; a missing one means the Brewfile drifted.
+  # only thing worth asserting about the process itself; a missing one means the
+  # Brewfile drifted.
   [[ -x "$MOSH_SERVER_BIN" ]] || { echo "mosh-server missing"; return 1; }
+
+  # The Application Firewall is per-process and does NOT auto-allow Homebrew
+  # binaries (no Developer ID signature), so mosh-server must be in its
+  # allowlist or every datagram is dropped AFTER a successful ssh handshake —
+  # the client blames a firewalled UDP port, which reads like a missing
+  # Tailscale ACL grant and sent one diagnosis entirely the wrong way.
+  #
+  # This is asserted on every run rather than trusted from `make mosh-firewall`
+  # because socketfilterfw stores the RESOLVED path and the brew symlink points
+  # into a version-stamped Cellar dir: `brew upgrade mosh` silently un-allows
+  # it. The upgrade is the regression this is here to catch.
+  local real
+  real=$(/usr/bin/readlink -f "$MOSH_SERVER_BIN" 2>/dev/null || echo "$MOSH_SERVER_BIN")
+  if [[ -x "$ALF_BIN" ]]; then
+    local apps
+    apps=$("$ALF_BIN" --listapps 2>/dev/null) || true
+    /usr/bin/grep -qF "$real" <<<"$apps" \
+      || { echo "mosh-server not in the Application Firewall allowlist — UDP will be dropped (fix: make mosh-firewall)"; return 1; }
+  fi
   echo "mosh ready"
 }
 
