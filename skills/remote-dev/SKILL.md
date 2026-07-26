@@ -145,7 +145,9 @@ reports on itself over the already-granted outbound path.
 
 | Symptom | Cause |
 |-|-|
-| `mosh mini` hangs after a clean ssh handshake | ACL missing `udp:60000-61000` |
+| `mosh mini` hangs after a clean ssh handshake | ACL missing `udp:60000-61000`. Verified present 2026-07-26 — check the Application Firewall row below first, it presents identically |
+| `herdr --remote mini` asks "restart the remote server now? [y/N]", warning it "may not survive SSH connection loss" | **Answer `N`.** False positive for this host: the server is the brew service, PID owned by launchd (PPID 1), so no ssh disconnect can reach it — verified continuously up across a whole session of opening and closing connections. Answering `y` restarts it outside `brew services` supervision *and* kills every process in every pane |
+| mosh prints `Error: vector` and exits | The client's terminal has no window size (a 0×0 pty). Real terminals are fine; this bites scripted/automated launches — set `TIOCSWINSZ` before exec |
 | Doubled keystrokes over ssh | `TERM=xterm-ghostty` reaching a host without that terminfo (cmux #2969). `ssh_config` pins `SetEnv TERM=xterm-256color` |
 | `launchctl print … sshd` says `state = not running` | socket-activation idle, **not** a fault. Check `netstat -an \| grep '\.22 .*LISTEN'` |
 | `ssh localhost` fails on the mini | By design — the mini holds no private key material. Inbound auth is the *connecting* machine's key, so the mini **cannot test its own inbound ssh**. Verify from the MacBook |
