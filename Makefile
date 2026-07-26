@@ -1453,15 +1453,19 @@ DEVHOST_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/devhost-push-url
 .PHONY: devhost-health-setup devhost-health-teardown devhost-health-check
 devhost-health-setup:
 	@# Assert the push URL exists rather than installing an agent that can only
-	@# fail: the Kuma monitor has to be created first (push monitors must be made
-	@# in the UI — uptime-kuma-api can't create them on UK 2.x).
+	@# fail: the Kuma monitor has to exist first so it can hand out a push token.
 	@if [ ! -r "$(DEVHOST_PUSH_URL_FILE)" ]; then \
 		echo "  ✗ no push URL at $(DEVHOST_PUSH_URL_FILE)"; \
-		echo "    1. Uptime Kuma UI → new Push monitor 'MacMini Dev Host - Push'"; \
-		echo "       in group 'Local', Heartbeat Interval 600s (must exceed the"; \
-		echo "       agent's 300s cadence so one skipped run does not page)."; \
+		echo "    1. Declare the monitor in homelab/uptime-kuma/monitors.yaml"; \
+		echo "       (group 'Local', interval 600, maxretries 0), then from"; \
+		echo "       ~/SourceRoot/homelab run: make uk-sync"; \
+		echo "       600s must exceed the agent's 300s cadence so one skipped"; \
+		echo "       run does not page; maxretries 0 keeps time-to-DOWN at 10min."; \
 		echo "    2. mkdir -p $(dir $(DEVHOST_PUSH_URL_FILE))"; \
-		echo "    3. Write the base push URL to $(DEVHOST_PUSH_URL_FILE), chmod 600"; \
+		echo "    3. Read the monitor's pushToken back off the Kuma API and write"; \
+		echo "       <base>/api/push/<token> to $(DEVHOST_PUSH_URL_FILE), chmod 600."; \
+		echo "       Print the token alone — 'op run' masks secret values in its"; \
+		echo "       own stdout, so a full URL comes back partly concealed."; \
 		echo "    4. Re-run: make devhost-health-setup"; \
 		exit 1; \
 	fi

@@ -128,7 +128,7 @@ One composite heartbeat (herdr + sshd + tailscaled + mosh) pushes to the
 ```bash
 make devhost-health-check      # run once, prints per-component status
 make devhost-health-setup      # install the LaunchAgent (mini only)
-tail /tmp/devhost-health.log
+tail ~/Library/Logs/devhost-health.log
 ```
 
 Push, not probe: the ACL grants `tag:homelab → tag:vps` but **not**

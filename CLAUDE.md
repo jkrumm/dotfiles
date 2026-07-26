@@ -314,8 +314,14 @@ The push token lives in a chmod-600 `~/.config/uptime-kuma/devhost-push-url`,
 not 1Password, so monitoring never depends on the secrets cache being seeded — a
 stale cache would otherwise take the monitor down with it. Kuma's monitor
 interval (600s) must stay longer than the agent's cadence (300s) so one skipped
-run doesn't page. Two traps worth remembering, both hit while building this:
-`set -o pipefail` + `grep -q` turns a SIGPIPE into a false failure, and a
+run doesn't page. **`maxretries` must be 0**: time-to-DOWN is
+`interval + maxretries × retry_interval`, so inheriting the default 3 would page
+at 40 minutes, not 10 — the other push monitors in `monitors.yaml` still do.
+Three traps worth remembering, all hit while building this:
+`set -o pipefail` + `grep -q` turns a SIGPIPE into a false failure; `op run`
+masks injected secret values in its *own* stdout, so a remote script that prints
+a full push URL returns the domain as `<concealed by 1Password>` (print the token
+alone and assemble the URL locally); and a
 LaunchAgent has no shell aliases — `tailscale` is an alias to the app bundle and
 must be called by absolute path.
 
