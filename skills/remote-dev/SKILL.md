@@ -151,6 +151,12 @@ reports on itself over the already-granted outbound path.
 ## Rules
 
 - Manage the herdr server with `brew services`, never a bare `herdr server stop`.
+- **Never run `herdr update`.** It downloads and installs over the
+  brew-managed binary, so the version stops matching the Brewfile — the repo's
+  supply-chain audit trail — and `make brew-check` starts reporting drift.
+  Upgrade with `brew upgrade herdr`, deliberately, one package at a time.
+  herdr is pre-1.0 and ships often; that cadence is a reason to gate upgrades
+  through the manifest, not to bypass it.
 - Never run a validation loop or an edit over files a running `@implementer`
   subagent owns — that applies here too, across panes.
 - Do not add `tailscale serve` bindings for dev servers; use Caddy. Tailscale
