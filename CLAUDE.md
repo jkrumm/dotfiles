@@ -99,7 +99,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, secrets, secrets-cache, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, remote-dev, secrets, secrets-cache, tools |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
 | `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
@@ -245,18 +245,28 @@ fallback if herdr (pre-1.0) breaks. On the mini it runs as a **brew service**
 
 There are **two mutually exclusive ways in**, and they trade different things —
 persistence is not one of them, since the server and its panes live on the mini
-either way:
+either way. `config/zsh/remote-dev.zsh` gives each a one-command entry point:
 
-- `mosh mini`, then `herdr` there — UDP, roams, survives lid-close *without
-  reattaching*. mosh cannot multiplex, so it is always *one* connection into
-  herdr, never N. Needs the ACL's `udp:60000-61000` grant or it hangs after a
-  successful ssh handshake.
-- `herdr --remote mini` — herdr's native attach over **ssh**, client-side on the
-  MacBook (local keybindings, local image paste). TCP, so a roam or lid-close
-  ends the connection and you re-run it.
+- `dev [session]` → `mosh mini`, then `herdr` there — UDP, roams, survives
+  lid-close *without reattaching*. mosh cannot multiplex, so it is always *one*
+  connection into herdr, never N. Needs the ACL's `udp:60000-61000` grant or it
+  hangs after a successful ssh handshake. Pins
+  `--experimental-remote-ip=remote` so mosh reuses `ssh_config`'s
+  `ControlMaster` instead of popping its own 1Password approval per launch
+  (mosh's default proxy mode passes `-S none`, disabling multiplexing).
+- `desk [session]` → `herdr --remote mini` — herdr's native attach over
+  **ssh**, client-side on the MacBook (local keybindings, local image paste).
+  TCP, so a roam or lid-close ends the connection and you re-run it.
 
 `herdr attach` is not a command; sessions are `herdr --session <name>` /
 `herdr session list|attach|stop`.
+
+**`make remote-dev-doctor`** (`scripts/remote-dev-doctor.sh`) verifies this whole
+path from the MacBook — reachability, ssh, ControlMaster reuse, agent
+forwarding, mosh, and herdr — read-only, currently 10/10. It complements rather
+than duplicates the mini-side heartbeat below: that one runs *on* the mini and
+structurally cannot see inbound auth or the mosh UDP path, since the mini holds
+no key material and cannot ssh to itself.
 
 **`make herdr-setup`** wires the two halves. It installs herdr's first-party
 Claude Code integration (`herdr integration install claude` → a SessionStart
@@ -284,6 +294,13 @@ symlinks — the vite-plus and cargo installers also append to that file). It is
 only file a non-interactive `ssh host -- cmd` sources (zsh's non-interactive
 non-login path skips `/etc/zprofile`'s `path_helper`), and mosh depends on it to find
 `mosh-server` when it launches over ssh before handing off to UDP.
+
+`_setup-zshenv` now puts **`~/.local/bin`** on that non-interactive PATH too,
+not just Homebrew — `claude`, `secrets-run`, and `imgcli` all live there and
+none of them are Homebrew-managed, so remote automation no longer needs to
+hand-prefix PATH to reach them. The target also strips the superseded
+Homebrew-only block from machines that ran the earlier version, so re-running
+`make setup` converges rather than duplicating.
 
 Independent of all four layers: **`claude --bg` reparents to PID 1** as
 `claude daemon run` and survives ssh/herdr/lid-close on its own (`claude agents`,

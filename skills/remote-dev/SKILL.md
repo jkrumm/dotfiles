@@ -26,19 +26,32 @@ Plus one thing that rides on top of all four and depends on none of them:
 
 ## Connecting from the MacBook
 
+The normal way in is two shell functions (`config/zsh/remote-dev.zsh`):
+
+```bash
+dev [session]   # moshes into the mini, lands in herdr there
+desk [session]  # herdr --remote mini — client stays on the MacBook
+```
+
 Two mutually exclusive shapes. **Persistence is identical either way** — the
 herdr server and its panes live on the mini regardless. This is purely a
 client-experience choice.
 
 ```bash
-mosh mini            # then run `herdr` there. Client runs ON THE MINI.
-herdr --remote mini  # herdr's native attach over ssh. Client runs LOCALLY.
+mosh mini            # then run `herdr` there. Client runs ON THE MINI. `dev` expands to this.
+herdr --remote mini  # herdr's native attach over ssh. Client runs LOCALLY. `desk` expands to this.
 ```
 
 | | transport | client on | roaming |
 |-|-|-|-|
-| `mosh mini` → `herdr` | mosh/UDP | mini | survives lid-close with **no reattach** |
-| `herdr --remote mini` | ssh/TCP | MacBook | connection ends; re-run to reattach |
+| `dev` (`mosh mini` → `herdr`) | mosh/UDP | mini | survives lid-close with **no reattach** |
+| `desk` (`herdr --remote mini`) | ssh/TCP | MacBook | connection ends; re-run to reattach |
+
+`dev` pins `--experimental-remote-ip=remote` — load-bearing, not cosmetic. mosh's
+default proxy mode passes `-S none` to ssh (disabling multiplexing), so every
+launch opened a fresh connection and popped its own 1Password biometric
+approval — exactly the friction the `ControlMaster` block in `ssh_config`
+exists to remove. `remote` mode reuses the master.
 
 **`--remote` at the desk, mosh on the road.** mosh does not forward the SSH
 agent (upstream refuses it), nor port forwarding, OSC 52 clipboard, or
@@ -141,6 +154,16 @@ Push, not probe: the ACL grants `tag:homelab → tag:vps` but **not**
 `tag:homelab → tag:mac`, so Uptime Kuma cannot reach the mini at all. The mini
 reports on itself over the already-granted outbound path.
 
+**`make remote-dev-doctor`** (`scripts/remote-dev-doctor.sh`) is the MacBook-side
+counterpart — it verifies the path FROM the MacBook, which the mini-side
+heartbeat structurally cannot: the mini holds no key material and cannot ssh to
+itself, so it can't see inbound auth, `ControlMaster` reuse, agent forwarding,
+or the mosh UDP path. Read-only, currently 10/10 passing: tailscale reachability
+(direct vs DERP), ssh, ControlMaster, agent forwarding, mosh installed locally,
+`mosh-server` on the mini's non-interactive PATH, `mosh-server` in the mini's
+Application Firewall allowlist, herdr server running, the agent-state hook
+present, and a resolvable GitHub credential.
+
 ## Failure modes specific to this host
 
 | Symptom | Cause |
@@ -155,9 +178,10 @@ reports on itself over the already-granted outbound path.
 | `op signin` "worked" but the next command says not signed in | The session lives in the shell that ran it. Chain them: `op signin --account tkrumm && <cmd>` |
 | Agent died when the lid closed | It was `kind: interactive`. Use `claude --bg` |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes do not |
-| `claude: command not found` over non-interactive ssh to the mini | Stripped PATH — `claude` lives at `~/.local/bin/claude`, not under `/opt/homebrew/bin`. `make setup`'s `~/.zshenv` block adds Homebrew but **not** `~/.local/bin`; prefix `export PATH=$HOME/.local/bin:$PATH` for `claude` specifically |
+| `claude: command not found` over non-interactive ssh to the mini | **Fixed** — `make setup`'s `_setup-zshenv` block now puts both Homebrew and `~/.local/bin` on the non-interactive PATH. If it recurs, that block is missing: re-run `make setup` on the mini |
 | mosh connects over ssh then hangs / "did not make a successful connection to \<ip\>:\<port\>" | `mosh-server` missing from the mini's Application Firewall allowlist. Fix: `make mosh-firewall`. Re-run after `brew upgrade mosh` |
 | `git push` on the mini fails with `could not read Username for 'https://github.com'` | The credential helper returned nothing. Fix: `make git-headless`, and reseed with `make secrets-seed` if the cache is stale. The helper exits 0 with an empty body when the token is unresolvable, which is why the failure looks like a transport fault |
+| Any remote-dev symptom you can't immediately place | Run `make remote-dev-doctor` first — it names the failing layer instead of guessing |
 
 ## Rules
 
