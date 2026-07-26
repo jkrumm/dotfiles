@@ -152,9 +152,17 @@ per-host call) makes a Mac remotely controllable:
 - Remote Login + Screen Sharing toggles are best-effort (TCC/SIP usually need System
   Settings → General → Sharing); set "Allow access for" to your user only, VNC password off.
 
-Two boundaries gate access: the Tailscale ACL (`tag:mac → tag:mac` on 22/5900, in
-`homelab-private`) restricts the source to your own Macs, and sshd is key-only. Keep the
-router free of any WAN port-forward for 22/5900 — that would bypass both. **Work (Feuer)
+Two boundaries gate access: the Tailscale ACL (`tag:mac → tag:mac` on 22/5900 — plus
+UDP 60000-61000 for mosh, see Remote dev below — in `homelab-private`) restricts the
+source to your own Macs, and sshd is key-only. Keep the router free of any WAN
+port-forward for 22/5900 — that would bypass both.
+
+**The mini cannot verify its own inbound SSH.** It holds no private key material at all
+(`~/.ssh/*.pub` is empty) and the 1Password agent can't sign headlessly, so `ssh localhost`
+fails by design — inbound auth is always the *connecting* machine's key. Verify this path
+from the MacBook, never from the mini. Relatedly: `launchctl print system/com.openssh.sshd`
+reporting `state = not running` is socket-activation idle, not a fault — check
+`netstat -an | grep '\.22 .*LISTEN'` instead. **Work (Feuer)
 secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
 password), not a token at rest. The personal-side Hermes path resolves secrets from the
 `secrets-run` cache (Hermes cache-only since 2026-07-16, zero plaintext secrets on the
@@ -196,6 +204,99 @@ make tailscale-serve-check   # report drift, change nothing, exit 1 if any
 
 Applying does `tailscale serve reset` first — a rename leaves bindings under the
 old name that no per-port `off` can address — then re-adds every declared row.
+
+Both current rows are deliberate: `:7730` (rb, tailnet-only) and `:8443`
+(**Funnel — public internet**, the IU dashboard). The Funnel is gated by
+`tag:iu-dashboard-funnel`, an *additive* single-device tag: Funnel is a
+whole-device capability, so granting it to `tag:mac` would expose the work
+MacBook too. Don't "clean up" that row — the tag exists to make it safe.
+
+## Remote dev — MacBook → mini
+
+The mini is the dev host; the MacBook is a thin client. Full plan and the
+end-to-end mental model: **`docs/remote-dev.md`**. Four layers, none of which
+substitutes for another — most design confusion here comes from collapsing them:
+
+| Layer | Tool | Solves |
+|-|-|-|
+| Reachability | Tailscale | stable address, NAT traversal |
+| Transport | **mosh** | keystrokes survive lid-close + roaming |
+| Persistence + UI | **herdr** (on the mini) | panes stay alive, per-pane agent state |
+| Service exposure | Caddy | dev servers over the tailnet with working WebSockets |
+
+`herdr` owns the workspace model because it runs on the *mini* and survives
+lid-close; **cmux is demoted to the window herdr renders in**, and tmux is the
+fallback if herdr (pre-1.0) breaks. On the mini it runs as a **brew service**
+(`RunAtLoad` + `KeepAlive`, same mechanism as colima) — manage it with
+`brew services`, not `herdr server stop`, which KeepAlive would just undo.
+
+There are **two mutually exclusive ways in**, and they trade different things —
+persistence is not one of them, since the server and its panes live on the mini
+either way:
+
+- `mosh mini`, then `herdr` there — UDP, roams, survives lid-close *without
+  reattaching*. mosh cannot multiplex, so it is always *one* connection into
+  herdr, never N. Needs the ACL's `udp:60000-61000` grant or it hangs after a
+  successful ssh handshake.
+- `herdr --remote mini` — herdr's native attach over **ssh**, client-side on the
+  MacBook (local keybindings, local image paste). TCP, so a roam or lid-close
+  ends the connection and you re-run it.
+
+`herdr attach` is not a command; sessions are `herdr --session <name>` /
+`herdr session list|attach|stop`.
+
+Independent of all four layers: **`claude --bg` reparents to PID 1** as
+`claude daemon run` and survives ssh/herdr/lid-close on its own (`claude agents`,
+`claude attach|logs|stop <id>`). Use it for anything that must not die — it is
+what bounds the risk of herdr being new. That risk is measured, not assumed:
+`kill -9` on the herdr server brings the workspace back by name but with a new
+`terminal_id`, so **a herdr crash restores the layout and loses every process
+running in it**. Note `--bg` takes the positional prompt;
+it conflicts with `-p`. Phone access is Claude Remote Control (official, no relay).
+
+`config/ssh_config` carries the desk path: a `Host *` keepalive block, real
+`ControlMaster` on `Host mini` (multiplexes herdr/cmux's several connections into
+one handshake and one biometric approval), and `SetEnv TERM=xterm-256color` —
+which fixes cmux #2969, doubled keystrokes when `TERM=xterm-ghostty` reaches a
+host with no such terminfo. `_setup-ssh` creates `~/.ssh/cm`; ssh won't.
+
+herdr layers its own ssh hardening on top for `--remote` only
+(`[remote] manage_ssh_config = true`): a generated config that **includes
+`~/.ssh/config` first** — so the values above still win — plus its own
+per-attach control socket. The repo's `ControlMaster` still earns its place;
+it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
+
+## Dev-host health heartbeat (mini only)
+
+One composite Uptime Kuma push monitor — `MacMini Dev Host - Push`, group
+`Local` — covers herdr, sshd, tailscaled and mosh-server. Driven by
+`scripts/devhost-health-check.sh` via the `com.jkrumm.devhost-health`
+LaunchAgent every 5 minutes. Opt-in per machine like `remote-access`:
+
+| Command | Purpose |
+|-|-|
+| `make devhost-health-setup` | Install the agent. Refuses unless the push URL exists, and prints the ordered runbook to create it. |
+| `make devhost-health-check` | Run once, print per-component status. |
+| `make devhost-health-teardown` | Unload + remove. |
+
+**Push, not probe** — the ACL grants `tag:homelab → tag:vps` but *not*
+`tag:homelab → tag:mac`, so Uptime Kuma physically cannot reach the mini.
+Opening an inbound grant purely for monitoring would be new attack surface for a
+check the mini can report on itself over the already-granted outbound path. Same
+pattern as `MacMini Secret Seed - Push` and the Hermes monitors.
+
+**One monitor, not four.** herdr/sshd/tailscaled/mosh all fail together when the
+mini sleeps or drops off the tailnet; four monitors would be four simultaneous
+pages saying one thing. The failing component is named in the push `msg`.
+
+The push token lives in a chmod-600 `~/.config/uptime-kuma/devhost-push-url`,
+not 1Password, so monitoring never depends on the secrets cache being seeded — a
+stale cache would otherwise take the monitor down with it. Kuma's monitor
+interval (600s) must stay longer than the agent's cadence (300s) so one skipped
+run doesn't page. Two traps worth remembering, both hit while building this:
+`set -o pipefail` + `grep -q` turns a SIGPIPE into a false failure, and a
+LaunchAgent has no shell aliases — `tailscale` is an alias to the app bundle and
+must be called by absolute path.
 
 ## Battery charge limiter (MacBook only)
 
@@ -356,6 +457,14 @@ cat ~/.claude/logs/$(date +%Y-%m-%d).jsonl | jq 'select(.src == "fetch_usage")'
 ## Terminal Setup
 
 **cmux** (`/Applications/cmux.app`) is the primary terminal — a macOS-native multiplexer built on top of Ghostty. It is **not tmux**. cmux reads `~/.config/ghostty/config` for terminal rendering (same syntax as Ghostty) and stores its own app preferences (appearance mode, sidebar, etc.) in macOS defaults under `com.cmuxterm.app`.
+
+**Scope note (2026-07-26):** cmux is a *client-side* app — it runs on whichever Mac you're
+sitting at and dies with it. For remote dev on the mini it is deliberately **not** the
+workspace owner; herdr is, because herdr runs on the mini and survives lid-close (see
+*Remote dev* above). Locally cmux is still the full multiplexer. One cross-cutting gotcha:
+cmux exports `TERM=xterm-ghostty`, which produces doubled keystrokes on any SSH target
+lacking that terminfo (cmux #2969) — `config/ssh_config` pins `SetEnv TERM=xterm-256color`
+to neutralise it.
 
 **Config files (two separate files, both managed in dotfiles):**
 - `~/Library/Application Support/com.mitchellh.ghostty/config` — **primary cmux config** (font, theme, cursor, padding). This is what cmux actually reads.

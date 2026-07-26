@@ -30,29 +30,13 @@ MAX_AGE_DAYS="${SECRETS_FRESHNESS_MAX_AGE_DAYS:-8}"
 # came from the cache, a broken/missing cache (exactly the alert condition) would
 # leave us unable to push at all. The base URL (no query) is a low-sensitivity
 # Uptime Kuma push token, never committed to git.
+# shellcheck source=lib/kuma-push.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/kuma-push.sh"
+
 PUSH_URL_FILE="${SECRETS_FRESHNESS_PUSH_URL_FILE:-$HOME/.config/secrets/freshness-push-url}"
+push_url=$(kuma_resolve_push_url "${SECRETS_FRESHNESS_PUSH_URL:-}" "$PUSH_URL_FILE") || exit 1
 
-# Resolve the push URL: explicit env wins, else the local chmod-600 file.
-push_url="${SECRETS_FRESHNESS_PUSH_URL:-}"
-if [[ -z "$push_url" && -r "$PUSH_URL_FILE" ]]; then
-  push_url=$(tr -d '[:space:]' <"$PUSH_URL_FILE")
-fi
-[[ -n "$push_url" ]] || {
-  echo "✗ no push URL (set SECRETS_FRESHNESS_PUSH_URL or write the base push URL to $PUSH_URL_FILE) — not pushing; Kuma will alert on the missed heartbeat" >&2
-  exit 1
-}
-
-# Uptime Kuma push endpoint: <base>/api/push/<token>?status=up|down&msg=...&ping=
-push() {
-  local status="$1" msg="$2" sep="?"
-  [[ "$push_url" == *\?* ]] && sep="&"
-  curl -fsS --max-time 15 -o /dev/null \
-    --data-urlencode "status=$status" \
-    --data-urlencode "msg=$msg" \
-    -G "$push_url" 2>/dev/null \
-    || curl -fsS --max-time 15 -o /dev/null \
-         "${push_url}${sep}status=${status}&msg=$(printf '%s' "$msg" | sed 's/ /%20/g')" 2>/dev/null
-}
+push() { kuma_push "$push_url" "$1" "$2"; }
 
 # Cache mtime = last seed time (the seed writes it atomically: temp + mv).
 newest_epoch=0

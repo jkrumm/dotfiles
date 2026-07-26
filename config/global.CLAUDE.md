@@ -52,6 +52,22 @@ The Mac has two workspace "regions". Skills, hooks, and rules are **global** (`~
 |-|-|-|-|
 | HomeLab | `ssh homelab` | `~/homelab`, `~/homelab-private` | `homelab` + `common` |
 | VPS | `ssh vps` | `~/vps` | `vps` + `common` |
+| Mac mini | `ssh mini` / `mosh mini` | all SourceRoot repos | n/a (cache backend) |
+
+The **mini is the always-on remote dev host** — agents run there and outlive the
+MacBook. Stack is Tailscale → mosh → herdr (owns the workspace model, on the mini)
+→ Caddy; `claude --bg` daemons survive independently of all of it. cmux is the
+client window, tmux the fallback. Unlike homelab/vps this is **OpenSSH, not
+Tailscale SSH** (remote dev needs agent forwarding + ControlMaster).
+
+**Use `/remote-dev`** for anything touching this stack — it carries the operating
+contract: the two mutually exclusive ways in (`mosh mini` then herdr, vs
+`herdr --remote mini` — same persistence, different client), herdr's socket API,
+and the headless-Mac failure modes. Two facts worth holding in the orchestrator
+without loading the skill: a herdr crash **restores the layout and loses every
+process in it**, so durable work belongs in `claude --bg`, not a pane; and a
+`kind: interactive` session dies with its connection. Full model:
+`dotfiles/docs/remote-dev.md`.
 
 SSH config in `~/.ssh/config` (generated from template; servers reached via Tailscale SSH — keyless, MagicDNS names). For sudo:
 
@@ -279,6 +295,7 @@ Skills live globally at `~/.claude/skills/` (symlinked from `dotfiles/skills/`).
 | `/distill` | inline | Human-owned 7-step prose pipeline (loads brain voice.md at Draft). |
 | `/img` | inline | Image stack — public CDN (upload to the B2 `img/` prefix, mint imgproxy transform URLs) + private layer (`imgcli share`/`publish` → `image-share`). `--json` on every command for agent use. Secrets via `secrets-run`; infra in `vps/apps/imgproxy/` + `image-share`. |
 | `/brain` | inline | Second brain (`~/SourceRoot/brain` vault). `obsidian-cli` agent door with filesystem fallback; full contract in the repo's `AGENTS.md`. |
+| `/remote-dev` | inline | Operate the mini as dev host — mosh vs `herdr --remote`, herdr workspaces + socket API, `claude --bg` durable agents, the Uptime Kuma heartbeat, and the headless-Mac failure modes. |
 | `/skill-creator` | inline | Create, modify, and test skills. |
 | `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
 | `/update-agent-rules` | inline | Sync upstream agent rules (React, TanStack, Elysia best practices) into `dotfiles/rules/`. |

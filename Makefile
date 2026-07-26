@@ -355,6 +355,9 @@ _setup-ssh:
 	@echo "  SSH config (~/.ssh/config)..."
 	@mkdir -p "$(HOME)/.ssh"
 	@chmod 700 "$(HOME)/.ssh"
+	@# ControlMaster socket dir (ssh will not create it; connections fail without it).
+	@mkdir -p "$(HOME)/.ssh/cm"
+	@chmod 700 "$(HOME)/.ssh/cm"
 	@# No rendering and no secrets: every Host is a MagicDNS short name, so this
 	@# is a plain install that works identically headless. (Not a symlink —
 	@# colima appends its Include to this file and must not write into the repo.)
@@ -1420,6 +1423,49 @@ secrets-freshness-teardown:
 secrets-freshness-check:
 	@bash $(DOTFILES_DIR)/scripts/secrets-freshness-check.sh
 
+# Remote-dev readiness heartbeat (herdr + sshd + tailscaled + mosh) pushed to
+# Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this
+# belongs on the dev host (the mini), not on a laptop that is meant to be
+# closed half the day and would just page about itself.
+DEVHOST_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/devhost-push-url
+.PHONY: devhost-health-setup devhost-health-teardown devhost-health-check
+devhost-health-setup:
+	@# Assert the push URL exists rather than installing an agent that can only
+	@# fail: the Kuma monitor has to be created first (push monitors must be made
+	@# in the UI — uptime-kuma-api can't create them on UK 2.x).
+	@if [ ! -r "$(DEVHOST_PUSH_URL_FILE)" ]; then \
+		echo "  ✗ no push URL at $(DEVHOST_PUSH_URL_FILE)"; \
+		echo "    1. Uptime Kuma UI → new Push monitor 'MacMini Dev Host - Push'"; \
+		echo "       in group 'Local', Heartbeat Interval 600s (must exceed the"; \
+		echo "       agent's 300s cadence so one skipped run does not page)."; \
+		echo "    2. mkdir -p $(dir $(DEVHOST_PUSH_URL_FILE))"; \
+		echo "    3. Write the base push URL to $(DEVHOST_PUSH_URL_FILE), chmod 600"; \
+		echo "    4. Re-run: make devhost-health-setup"; \
+		exit 1; \
+	fi
+	@# Secure the token or refuse. Ignoring a failed chmod would let the agent go
+	@# live with a group/world-readable push URL — anyone local could then forge
+	@# healthy heartbeats and mask a real outage, which is worse than no monitor.
+	@if [ ! -f "$(DEVHOST_PUSH_URL_FILE)" ]; then \
+		echo "  ✗ $(DEVHOST_PUSH_URL_FILE) is not a regular file — refusing"; exit 1; \
+	fi
+	@chmod 600 "$(DEVHOST_PUSH_URL_FILE)" || { \
+		echo "  ✗ cannot chmod 600 $(DEVHOST_PUSH_URL_FILE) — refusing to install a forgeable heartbeat"; exit 1; }
+	@PERMS=$$(stat -f '%Lp' "$(DEVHOST_PUSH_URL_FILE)"); \
+	if [ "$$PERMS" != "600" ]; then \
+		echo "  ✗ $(DEVHOST_PUSH_URL_FILE) is mode $$PERMS, expected 600 — refusing"; exit 1; \
+	fi
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.devhost-health" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ every 5 min → push herdr/sshd/tailscale/mosh readiness to Uptime Kuma"
+devhost-health-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.devhost-health.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ devhost-health torn down (unloaded + plist removed)"
+devhost-health-check:
+	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
+
 # ============================================================================
 # Help
 # ============================================================================
@@ -1464,6 +1510,11 @@ help:
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
+	@echo ""
+	@echo "  Remote dev host (mini only — opt-in, like remote-access)"
+	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
+	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
+	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
 	@echo ""
 	@echo "  make tailscale-serve        Apply this machine's declared serve/funnel bindings"
 	@echo "  make tailscale-serve-check  Report drift between declared and live bindings"

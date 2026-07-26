@@ -63,6 +63,10 @@ brew "gnupg"
 brew "golangci-lint"
 # OpenType text shaping engine
 brew "harfbuzz"
+# Agent multiplexer — owns the workspace model on the mini (remote persistence
+# + per-pane agent state). Runs as a brew service there; needed on BOTH ends,
+# since the MacBook can attach either through mosh or with `herdr --remote`.
+brew "herdr"
 # TIFF library and utilities
 brew "libtiff"
 # New file format for still image compression
@@ -85,6 +89,11 @@ brew "libraw"
 brew "logdy"
 # Modern and intuitive terminal-based text editor
 brew "micro"
+# Roaming UDP terminal — one of two ways into the mini (the other is herdr's own
+# `--remote`, which is ssh). Survives lid-close and network changes that kill TCP,
+# and predictive echo hides latency on bad links. Cannot multiplex or
+# port-forward: always one mosh connection into herdr.
+brew "mosh"
 # Libraries for security-enabled client and server applications
 brew "nss"
 # Package compiler and linker metadata toolkit
@@ -101,6 +110,9 @@ brew "sleepwatcher"
 brew "terminal-notifier"
 # OCR (Optical Character Recognition) engine
 brew "tesseract"
+# Terminal multiplexer — deliberate fallback, not the daily driver. herdr owns
+# the workspace model; tmux is what you reattach with if herdr (pre-1.0) breaks.
+brew "tmux"
 # Validating, recursive, caching DNS resolver
 brew "unbound"
 # Extremely fast Python package installer and resolver, written in Rust
