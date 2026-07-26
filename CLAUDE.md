@@ -245,6 +245,27 @@ either way:
 `herdr attach` is not a command; sessions are `herdr --session <name>` /
 `herdr session list|attach|stop`.
 
+**`make herdr-setup`** wires the two halves. It installs herdr's first-party
+Claude Code integration (`herdr integration install claude` → a SessionStart
+hook at `~/.claude/hooks/herdr-agent-state.sh`), which is what makes a pane
+report real agent status instead of `agent_status: "unknown"` — the entire
+reason to prefer herdr over tmux. It then starts the **server only on the dev
+host**, detected by the `cache` backend marker, the same signal `git-headless`
+uses; a thin client gets the hook and no server.
+
+Two non-obvious constraints, both load-bearing:
+
+- The hook's settings entry lives in **`config/settings.template.json`**, not
+  just wherever herdr wrote it. `make setup` merges settings.json with the
+  template winning on `hooks`, so an entry added only by `herdr integration
+  install` is deleted on the next `make setup`. The target re-runs the merge
+  afterwards so the template's version is the one that survives.
+- The tracked command is **guarded** (`test -f … && bash … || true`). herdr's
+  own version calls the script unconditionally, which fails 127 on every
+  session start on a machine where the integration was never installed. The
+  script is `managed by herdr` and overwritten on reinstall, so it is
+  deliberately not tracked in this repo — only the guarded call to it is.
+
 Independent of all four layers: **`claude --bg` reparents to PID 1** as
 `claude daemon run` and survives ssh/herdr/lid-close on its own (`claude agents`,
 `claude attach|logs|stop <id>`). Use it for anything that must not die — it is

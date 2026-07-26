@@ -70,6 +70,16 @@
             "command": "~/.claude/hooks/machine-role.ts"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f ~/.claude/hooks/herdr-agent-state.sh && bash ~/.claude/hooks/herdr-agent-state.sh session || true",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Notification": [

@@ -71,14 +71,28 @@ usable *from* an agent rather than only by a human:
 ```bash
 herdr workspace list|create|focus|close
 herdr pane list|current|zoom
-herdr agent list                       # per-agent status
-herdr agent read <id>                  # read an agent's terminal output
-herdr agent prompt <id> "<text>"       # submit a prompt
-herdr agent wait <id> --state <state>  # block until it reaches a state
+herdr agent list                             # per-agent status
+herdr agent read <target> [--source visible|recent|detection]
+herdr agent prompt <target> "<text>" [--wait]
+herdr agent wait <target> --until <status>   # idle|working|blocked|done|unknown
+herdr agent start <name> --kind claude --pane <id>
 ```
 
 `herdr workspace create` works with **zero clients attached** — the server is
 genuinely headless.
+
+### Agent status needs the integration hook
+
+`make herdr-setup` installs herdr's first-party Claude Code integration. Without
+it every pane reports `agent_status: "unknown"`, which throws away the one thing
+herdr has over tmux. It is safe on any machine — the hook exits 0 immediately
+unless `HERDR_ENV` / `HERDR_SOCKET_PATH` / `HERDR_PANE_ID` are set.
+
+The settings entry is tracked in `dotfiles/config/settings.template.json`,
+because `make setup` merges settings.json with the **template winning on
+`hooks`** — an entry added only by `herdr integration install claude` gets
+deleted on the next `make setup`. If pane status ever goes back to `unknown`,
+that is the first thing to check.
 
 ## Durable agents — `claude --bg`
 

@@ -1423,6 +1423,28 @@ secrets-freshness-teardown:
 secrets-freshness-check:
 	@bash $(DOTFILES_DIR)/scripts/secrets-freshness-check.sh
 
+# herdr wiring. Two halves with different scopes:
+#   - the Claude Code agent-state hook, which makes a pane report real agent
+#     status instead of "unknown". Harmless everywhere (it exits 0 unless
+#     HERDR_ENV/HERDR_SOCKET_PATH/HERDR_PANE_ID are set), so install it on any
+#     machine. Its settings.json entry lives in config/settings.template.json —
+#     `make setup` merges with the template winning on `hooks`, so an entry only
+#     added by `herdr integration install` would be deleted on the next run.
+#   - the herdr *server*, which belongs only on the dev host. Detected the same
+#     way as git-headless: the cache backend marker means this is the mini.
+.PHONY: herdr-setup
+herdr-setup:
+	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
+	@herdr integration install claude
+	@$(MAKE) --no-print-directory _setup-settings
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "cache" ]; then \
+		brew services start herdr >/dev/null 2>&1 || true; \
+		echo "    ✓ herdr server registered (brew services — RunAtLoad + KeepAlive)"; \
+	else \
+		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
+	fi
+
 # Remote-dev readiness heartbeat (herdr + sshd + tailscaled + mosh) pushed to
 # Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this
 # belongs on the dev host (the mini), not on a laptop that is meant to be
@@ -1511,7 +1533,8 @@ help:
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
 	@echo ""
-	@echo "  Remote dev host (mini only — opt-in, like remote-access)"
+	@echo "  Remote dev"
+	@echo "  make herdr-setup                Install the Claude agent-state hook (+ server on the dev host)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
