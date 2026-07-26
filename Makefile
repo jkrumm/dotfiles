@@ -1540,6 +1540,12 @@ secrets-test: secrets-lint
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 
+# Hook regression suite. Hooks are symlinked live into ~/.claude/hooks, so a bug
+# here gates real tool calls immediately — run after any hook edit.
+.PHONY: hooks-test
+hooks-test:
+	@bun test $(DOTFILES_DIR)/hooks/
+
 .PHONY: secrets-backend-cache
 secrets-backend-cache:
 	@mkdir -p "$(HOME)/.config/secrets"

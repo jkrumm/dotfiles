@@ -509,6 +509,16 @@ as the Agent SDK (`op://common/anthropic`).
 
 **Skills scope:** global skills load everywhere (SourceRoot, IuRoot, anywhere) via `~/.claude/skills/`. Workspace-specific behavior (e.g. SourceRoot vs IuRoot 1Password account) is handled inside the skill via the `op_account_for_cwd` helper or explicit `$PWD` guards.
 
+**Editing a hook:** hooks are symlinked live into `~/.claude/hooks/`, so a change
+takes effect on the *next tool call* — there is no install step and no staging. Run
+**`make hooks-test`** (`bun test hooks/`) after any edit. `docker-makefile.ts` is
+covered because it once blocked `grep -n 'foo\|docker-socket' Makefile`: it regexed
+the raw command string, so the `|` inside the quoted grep pattern read as a pipe and
+`docker-socket` read as the binary. It now tokenizes with quote/escape state and only
+inspects tokens in command position. When adding a hook that gates commands, prefer
+the same shape — a mention is not an invocation, and a false block trains you to
+distrust the hook.
+
 **settings.json changes:** update `config/settings.template.json`, then `make setup`
 to merge into the live file. Never edit the live settings.json for persistent changes.
 
