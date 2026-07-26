@@ -162,11 +162,20 @@ port-forward for 22/5900 — that would bypass both.
 fails by design — inbound auth is always the *connecting* machine's key. Verify this path
 from the MacBook, never from the mini. Relatedly: `launchctl print system/com.openssh.sshd`
 reporting `state = not running` is socket-activation idle, not a fault — check
-`netstat -an | grep '\.22 .*LISTEN'` instead. **Work (Feuer)
-secrets stay biometric-gated**: redeploy via Screen Sharing (unlock 1Password by account
-password), not a token at rest. The personal-side Hermes path resolves secrets from the
-`secrets-run` cache (Hermes cache-only since 2026-07-16, zero plaintext secrets on the
-mini — see Headless secrets below); no service-account token at rest.
+`netstat -an | grep '\.22 .*LISTEN'` instead.
+
+**Both work and personal secrets resolve headlessly on the mini** — the gate is
+*tkrumm's* `Private` vault, not work-vs-personal. Personal: Hermes is cache-only since
+2026-07-16. Work: `headless.iu.refs` deliberately allows careerpartner's `op://Private/*`
+(Feuer's service identity, Artifactory, Jira, dashboard tokens) plus read-only
+`se-prod`/`care-prod` DB passwords, each an owner-classified T2 exception justified at the
+ref, and each with a named always-on consumer on the mini. So an agent there reaches work
+credentials with no human present — a standing accepted exposure, enumerated in
+`dotfiles-private/docs/security-review.md`. What stays human-only is tkrumm's `Private`
+(Tailscale API key, the mini's own root password), refused by the seed unconditionally.
+The cache is encrypted at rest and decrypted in memory, so "no plaintext secret on the
+mini" still holds — that is a different claim from "biometric-gated". See Headless
+secrets below.
 
 ## Headless outbound access (Mac mini only)
 
