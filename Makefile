@@ -455,6 +455,15 @@ _setup-git-headless:
 	printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n\n[credential "https://github.com"]\n\thelper = \n\thelper = %s\n' "$$HELPER" > "$$GITCFG"; \
 	echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the secrets cache"
 
+.PHONY: remote-dev-doctor
+# Verify the MacBook→mini path FROM the MacBook. Complements — does not
+# duplicate — `devhost-health-check`, which runs ON the mini and structurally
+# cannot see inbound auth, ControlMaster reuse, agent forwarding or the mosh
+# UDP path (the mini holds no key material and cannot ssh to itself).
+# Read-only; safe to run any time.
+remote-dev-doctor:
+	@bash $(DOTFILES_DIR)/scripts/remote-dev-doctor.sh
+
 .PHONY: mosh-firewall
 # Allow mosh-server through the macOS Application Firewall. Opt-in per host and
 # NOT in the default `setup` chain — it needs sudo and only matters on a machine
@@ -617,7 +626,12 @@ _setup-scripts:
 _setup-zshenv:
 	@echo "  zshenv (non-interactive PATH — ssh/mosh remote commands)..."
 	@ZSHENV="$(HOME)/.zshenv"; \
-	MARKER="# >>> dotfiles: homebrew PATH >>>"; \
+	MARKER="# >>> dotfiles: non-interactive PATH >>>"; \
+	LEGACY="# >>> dotfiles: homebrew PATH >>>"; \
+	if [ -f "$$ZSHENV" ] && grep -qF "$$LEGACY" "$$ZSHENV"; then \
+		sed -i '' '/# >>> dotfiles: homebrew PATH >>>/,/# <<< dotfiles: homebrew PATH <<</d' "$$ZSHENV"; \
+		echo "    ✓ removed superseded PATH block (homebrew-only)"; \
+	fi; \
 	if [ -f "$$ZSHENV" ] && grep -qF "$$MARKER" "$$ZSHENV"; then \
 		echo "    · ~/.zshenv PATH block (ok)"; \
 	else \
@@ -632,7 +646,13 @@ _setup-zshenv:
 			echo "  *\":$$BREW_PREFIX/bin:\"*) ;;"; \
 			echo "  *) export PATH=\"$$BREW_PREFIX/bin:$$BREW_PREFIX/sbin:\$$PATH\" ;;"; \
 			echo "esac"; \
-			echo "# <<< dotfiles: homebrew PATH <<<"; \
+			echo "# ~/.local/bin holds claude, secrets-run and imgcli — none of them"; \
+			echo "# Homebrew-managed, all of them needed by remote automation."; \
+			echo "case \":\$$PATH:\" in"; \
+			echo "  *\":\$$HOME/.local/bin:\"*) ;;"; \
+			echo "  *) export PATH=\"\$$HOME/.local/bin:\$$PATH\" ;;"; \
+			echo "esac"; \
+			echo "# <<< dotfiles: non-interactive PATH <<<"; \
 		} >> "$$ZSHENV"; \
 		echo "    ✓ ~/.zshenv PATH block appended"; \
 	fi
