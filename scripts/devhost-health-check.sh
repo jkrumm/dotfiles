@@ -20,11 +20,11 @@ set -euo pipefail
 #
 # `check_git_push` is the deliberate exception to that reasoning: it fails on
 # its own schedule (a token expires while the host is perfectly healthy) rather
-# than with the other four. It is folded in anyway because the alternative —
-# a second Uptime Kuma push monitor — needs the browser to create (the API
-# can't make push monitors on UK 2.x), and a check that exists only in a plan
-# catches nothing. Revisit if it ever pages independently often enough to be
-# noise.
+# than with the other four. It is folded in anyway because a second monitor was
+# not worth it for one component — `make uk-sync` can create push monitors
+# declaratively on UK 2.x (the old "needs the browser" premise was wrong), so
+# this is a judgement call, not a limitation. Revisit if it ever pages
+# independently often enough to be noise.
 #
 # Fail-loud, never fail-silent: if the push URL can't be resolved we exit
 # non-zero WITHOUT pushing, so Uptime Kuma's own missed-heartbeat fires. A
