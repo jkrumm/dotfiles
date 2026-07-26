@@ -71,19 +71,20 @@ host with no such terminfo). TERM is the one variable `SetEnv` passes without se
 
 ## Steps
 
-### 0. Tailscale ACL — blocking for mosh
+### 0. Tailscale ACL — DONE
 
-The tailnet has **no UDP grants at all**; Mac↔Mac is `tcp:22` + `tcp:5900`. mosh
-authenticates over ssh and then moves the session to UDP 60000-61000, so without a grant
-the handshake succeeds and the session then hangs — it reads as a broken mosh, not a
-blocked port. The grant is edited (ACL repo, Mac↔Mac rule) but **not applied**: applying
-needs the Tailscale API key from `op://Private/*`, which never enters the mini's cache by
-design. Apply from the MacBook, biometric-gated.
+The `udp:60000-61000` grant sits on the Mac↔Mac rule
+(`homelab-private/config/tailscale-acl.jsonc:60`) and **is applied** — the mini's live
+packet filter carries an IPProto 17 rule for ports 60000-61000 with both Macs as sources,
+confirmed via `tailscale debug netmap`. mosh authenticates over ssh and then moves the
+session to UDP 60000-61000, so a missing grant would read as a broken mosh rather than a
+blocked port — worth knowing even now that it's applied, since the symptom is identical
+if the grant ever regresses.
 
 Nothing else in this plan depends on it — steps 1-3 work over plain ssh; only mosh needs
 this.
 
-### 1. Install — mini DONE, MacBook open
+### 1. Install — DONE on both
 
 `make setup` on the MacBook (`brew bundle` picks up the three new formulae). mosh needs
 `mosh-server` present on the mini and `mosh` on the MacBook; both come from the same
@@ -92,9 +93,41 @@ Brewfile entry. herdr must be installed on **both** ends for `herdr --remote`.
 On the mini (2026-07-26): herdr 0.7.5, mosh 1.4.0 and tmux 3.7b are installed, and
 `make _setup-ssh` has been run — `~/.ssh/cm` exists and `ssh -G mini` confirms
 `controlmaster auto` / `controlpersist 600` / `serveraliveinterval 15` /
-`setenv TERM=xterm-256color`, with colima's `Include` preserved. The full `make setup`
-was *not* run there; it needs a human for the caddy/dnsmasq/colima sudo prompts, and
-nothing in this plan depends on the rest of that chain.
+`setenv TERM=xterm-256color`, with colima's `Include` preserved. The sudo-gated steps
+(caddy, dnsmasq, the `com.colima.docker-socket` LaunchDaemon) were already in place on
+the mini from an earlier run; what still needs a present human there is the biometric
+half (`make secrets-seed`), not this plan.
+
+On the MacBook (2026-07-26): herdr 0.7.5, mosh 1.4.0_40, tmux 3.7b are installed from the
+Brewfile; `~/.ssh/config` was regenerated with `Host mini` (the stale `mac-mini` host is
+gone, colima's `Include` preserved) and `~/.ssh/cm` created — `ssh -G mini` confirms
+`controlmaster auto` / `controlpersist 600` / `serveraliveinterval 15` /
+`setenv TERM=xterm-256color` / `forwardagent yes`.
+
+**Two newly-fixed, load-bearing gotchas — both were real outages of the mosh path
+today:**
+
+- **Non-interactive PATH.** zsh reads *only* `~/.zshenv` for a non-interactive
+  non-login shell, which is what `ssh host -- cmd` gets and what mosh uses to launch
+  `mosh-server`. macOS runs `path_helper` from `/etc/zprofile`, a login file, so
+  `ssh mini 'herdr status'` landed with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and no
+  Homebrew — mosh reported "Did not find mosh server startup message. (Have you
+  installed mosh on your server?)" while `/opt/homebrew/bin/mosh-server` was installed
+  and healthy. `make setup` now appends an idempotent guarded PATH block to
+  `~/.zshenv` (`_setup-zshenv`). Not symlinked: the vite-plus and cargo installers
+  append to that file and would clobber a symlink.
+- **Application Firewall.** The macOS ALF is per-process and does **not** auto-allow
+  Homebrew binaries (no Developer ID signature), despite "Automatically allow
+  downloaded signed software" being enabled. With `mosh-server` absent from the
+  allowlist the ssh handshake succeeds, mosh-server starts, binds its UDP port and
+  prints `MOSH CONNECT` — and then every datagram is dropped, with the client blaming
+  a firewalled UDP port. That reads exactly like a missing ACL grant and misdirected
+  the diagnosis. Isolated by sending UDP from the MacBook to `/usr/bin/nc`
+  (Apple-signed) on the mini: it arrives over *both* the LAN and the tailnet, while
+  mosh-server gets nothing. Fix is `make mosh-firewall` (sudo, mini-only).
+  `socketfilterfw` stores the resolved path, and the brew symlink points into a
+  version-stamped Cellar dir, so `brew upgrade mosh` silently un-allows it — which is
+  why `devhost-health-check.sh` now asserts allowlist membership on every run.
 
 ### 2. herdr on the mini — DONE
 
@@ -204,22 +237,28 @@ Enable Claude Remote Control against a session on the mini. Optionally add cmux 
 (needs the `cmux-relay` helper on the mini, connects over the existing tailnet) if you
 want a shell rather than just the agent.
 
-### 6. Monitoring — DONE on the mini, needs the Kuma UI
+### 6. Monitoring — DONE
 
 One composite push monitor, `MacMini Dev Host - Push` (group `Local`), covering herdr +
-sshd + tailscaled + mosh. `scripts/devhost-health-check.sh` via the
+sshd + tailscaled + mosh (binary and Application Firewall allowlist membership) + the
+GitHub push credential — five components. `scripts/devhost-health-check.sh` via the
 `com.jkrumm.devhost-health` LaunchAgent, every 5 minutes; `make devhost-health-setup`
 installs it and refuses until the push URL exists.
 
 **Push, not probe** — the ACL grants `tag:homelab → tag:vps` but not
 `tag:homelab → tag:mac`, so Uptime Kuma cannot reach the mini. The alternative was an
 inbound grant: new attack surface for a check the mini can just do itself.
-**One monitor, not four** — those four components fail together whenever the mini sleeps
-or leaves the tailnet, so splitting them buys four simultaneous pages and no extra
-information. The failing component is named in the push `msg`.
+**One monitor, not five** — herdr/sshd/tailscaled/mosh fail together whenever the mini
+sleeps or leaves the tailnet, so splitting them buys simultaneous pages and no extra
+information. The GitHub push credential is the deliberate exception — it does not fail
+with the rest (a token can expire on a perfectly healthy host) — folded in anyway because
+a second Kuma push monitor wasn't worth it for one component. The failing component is
+named in the push `msg`.
 
-Remaining step needs a browser (push monitors can't be created by the API on UK 2.x): see
-`dotfiles-private/docs/macbook-todo.md` 5.3.
+The monitor is live — `MacMini Dev Host - Push` (id 204, group `Local`, interval 600,
+maxretries 0), created declaratively by `make uk-sync` from
+`homelab/uptime-kuma/monitors.yaml`. `uptime-kuma-api` creates push monitors fine on
+UK 2.x, so there was never a UI-only step. The LaunchAgent's last run exited 0.
 
 ### 7. The operating contract lives in a skill
 
@@ -269,8 +308,11 @@ so the mini cannot even SSH to itself. Inbound auth depends entirely on the MacB
 
 Everything that does *not* depend on inbound ssh has now been verified locally: the
 installs, the ssh config, the herdr server and its crash semantics, the ACL grant landing
-in the live packet filter, and every component of the health check. What is genuinely left
-for the MacBook is the client half — mosh, `herdr --remote`, and the lid-close test.
+in the live packet filter, and every component of the health check. What is left is
+exactly three interactive tests — `mosh mini`, `herdr --remote mini`, and the lid-close
+reattach. A non-interactive probe cannot stand in for the first: `mosh mini -- true`
+fails at `sign_and_send_pubkey … agent refused operation` because the 1Password agent
+will not sign without a human, long before mosh is even reached.
 
 Note the device is still named `iu-mac-book` on the tailnet while `ssh_config` says
 `Host iumac` — the rename is open work (see the MacBook handover doc). `ssh iumac` will
@@ -285,9 +327,12 @@ affect MacBook → mini, which is the direction this plan needs.
 - `claude --bg` a long task, stop herdr entirely, confirm the daemon is still running.
 - `mosh mini` connects at all — if it hangs after the ssh handshake, step 0 was not applied.
   (Step 0 *is* applied as of 2026-07-26: `udp:60000-61000` confirmed present in the mini's
-  live packet filter via `tailscale debug netmap`, IPProto 17.)
-- `make devhost-health-check` on the mini prints four green components, and the Kuma
-  monitor goes green within one interval.
+  live packet filter via `tailscale debug netmap`, IPProto 17.) Both `make mosh-firewall`
+  and the `_setup-zshenv` PATH block are prerequisites — either missing reproduces the
+  same "hangs after handshake" symptom for a different reason.
+- `make devhost-health-check` on the mini prints **five** green components (herdr, sshd,
+  tailscaled, mosh, GitHub push credential — not four), and the Kuma monitor goes green
+  within one interval.
 - `tailscale serve status` still shows both existing rows (`:7730` tailnet, `:8443` Funnel).
   This plan must not change them.
 - Only if you built step 4: a dev server over Caddy keeps HMR alive past 60s (the #18827

@@ -69,7 +69,8 @@ process in it**, so durable work belongs in `claude --bg`, not a pane; and a
 `kind: interactive` session dies with its connection. Full model:
 `dotfiles/docs/remote-dev.md`.
 
-SSH config in `~/.ssh/config` (generated from template; servers reached via Tailscale SSH — keyless, MagicDNS names). For sudo:
+SSH config in `~/.ssh/config` (generated from template, MagicDNS short names; homelab +
+vps are keyless Tailscale SSH, the mini is OpenSSH with a key). For sudo:
 
 ```bash
 ROOT_PW=$(op read "op://Private/homelab-server/password" --account tkrumm) && ssh homelab "echo '$ROOT_PW' | sudo -S <cmd>"

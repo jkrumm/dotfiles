@@ -178,10 +178,23 @@ the biometric prompt — so the mini never uses key auth outbound:
   `ssh vps` work headless with zero keys, zero agents, zero prompts. No dedicated
   key exists for this path — a stolen mini holds no server credential; revocation
   is removing the device in the Tailscale admin.
-- **GitHub → HTTPS + `gh` keyring token.** GitHub is off the tailnet, so this is
-  the one outbound path that needs a headless credential: `make git-headless`
-  (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`, rewriting
-  `git@github.com:` remotes to HTTPS so pushes use the `gh` token.
+- **GitHub → HTTPS + a secrets-cache-backed credential helper.** GitHub is off the
+  tailnet, so this is the one outbound path that needs a headless credential:
+  `make git-headless` (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`,
+  rewriting `git@github.com:` remotes to HTTPS and pointing the credential helper at
+  `scripts/git-credential-secrets-cache`, which resolves `op://hermes/github/token`
+  from the secrets cache. This replaced the `gh` keyring token: that token expired,
+  and `gh auth git-credential get` exits **0 with an empty body** on expiry, so git
+  fell through to prompting and reported
+  `could not read Username for 'https://github.com'` — which reads as a transport
+  fault and sent the diagnosis chasing SSH agent forwarding instead. The cache-backed
+  helper has no session dependency (no login keychain, no GUI session, no forwarded
+  agent), so it resolves identically from a LaunchAgent, a `claude --bg` daemon that
+  outlived its ssh connection, a herdr pane, and an interactive shell.
+  **As of this writing the cached `op://hermes/github/token` is read-only** (a
+  fine-grained PAT that returns 403 `Permission to jkrumm/dotfiles.git denied` on
+  push) — a write-scoped token still has to be minted and seeded before headless
+  push actually works.
 
 Inbound is the reverse direction and a different key entirely: the MacBook reaches
 the mini over plain OpenSSH (`make remote-access` above) because remote dev needs
@@ -266,6 +279,12 @@ Two non-obvious constraints, both load-bearing:
   script is `managed by herdr` and overwritten on reinstall, so it is
   deliberately not tracked in this repo — only the guarded call to it is.
 
+`~/.zshenv` is now managed too (`_setup-zshenv`, idempotent, appends rather than
+symlinks — the vite-plus and cargo installers also append to that file). It is the
+only file a non-interactive `ssh host -- cmd` sources (zsh's non-interactive
+non-login path skips `/etc/zprofile`'s `path_helper`), and mosh depends on it to find
+`mosh-server` when it launches over ssh before handing off to UDP.
+
 Independent of all four layers: **`claude --bg` reparents to PID 1** as
 `claude daemon run` and survives ssh/herdr/lid-close on its own (`claude agents`,
 `claude attach|logs|stop <id>`). Use it for anything that must not die — it is
@@ -290,9 +309,11 @@ it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
 ## Dev-host health heartbeat (mini only)
 
 One composite Uptime Kuma push monitor — `MacMini Dev Host - Push`, group
-`Local` — covers herdr, sshd, tailscaled and mosh-server. Driven by
-`scripts/devhost-health-check.sh` via the `com.jkrumm.devhost-health`
-LaunchAgent every 5 minutes. Opt-in per machine like `remote-access`:
+`Local` — covers **five** components: tailscaled, sshd, herdr, mosh (both the
+binary and its Application Firewall allowlist membership), and the GitHub push
+credential. Driven by `scripts/devhost-health-check.sh` via the
+`com.jkrumm.devhost-health` LaunchAgent every 5 minutes. Opt-in per machine like
+`remote-access`:
 
 | Command | Purpose |
 |-|-|
@@ -306,9 +327,13 @@ Opening an inbound grant purely for monitoring would be new attack surface for a
 check the mini can report on itself over the already-granted outbound path. Same
 pattern as `MacMini Secret Seed - Push` and the Hermes monitors.
 
-**One monitor, not four.** herdr/sshd/tailscaled/mosh all fail together when the
-mini sleeps or drops off the tailnet; four monitors would be four simultaneous
-pages saying one thing. The failing component is named in the push `msg`.
+**One monitor, not five.** herdr/sshd/tailscaled/mosh all fail together when the
+mini sleeps or drops off the tailnet; five monitors would be five simultaneous
+pages saying one thing. The deliberate exception is the GitHub push credential:
+it does not fail together with the other four (a token can expire while the host
+is perfectly healthy), and it is folded in anyway because a second Kuma push
+monitor was not worth it for one component. The failing component is named in
+the push `msg`.
 
 The push token lives in a chmod-600 `~/.config/uptime-kuma/devhost-push-url`,
 not 1Password, so monitoring never depends on the secrets cache being seeded — a

@@ -46,7 +46,8 @@ sixel/kitty graphics — and its predictive echo only engages on a laggy link, s
 over a LAN-latency tailnet hop it buys nothing ssh wasn't already doing. Its
 value is specific and real: a bad link, and roaming without reattaching.
 
-`herdr attach` is **not a command**.
+`herdr attach` is **not a command** — the real forms are `herdr session attach <name>`
+and `herdr agent attach <target>`.
 
 mosh needs the ACL's `udp:60000-61000` grant. Without it the ssh handshake
 succeeds and the session then hangs forever — it reads as a broken mosh, not a
@@ -77,7 +78,7 @@ usable *from* an agent rather than only by a human:
 herdr workspace list|create|focus|close
 herdr pane list|current|zoom
 herdr agent list                             # per-agent status
-herdr agent read <target> [--source visible|recent|detection]
+herdr agent read <target> [--source visible|recent|recent-unwrapped|detection]  # default: recent
 herdr agent prompt <target> "<text>" [--wait]
 herdr agent wait <target> --until <status>   # idle|working|blocked|done|unknown
 herdr agent start <name> --kind claude --pane <id>
@@ -93,6 +94,11 @@ it every pane reports `agent_status: "unknown"`, which throws away the one thing
 herdr has over tmux. It is safe on any machine — the hook exits 0 immediately
 unless `HERDR_ENV` / `HERDR_SOCKET_PATH` / `HERDR_PANE_ID` are set.
 
+`make herdr-setup` is opt-in and **not** part of the `setup` chain. It has not been
+run on the MacBook, which has the guarded settings entry but no
+`~/.claude/hooks/herdr-agent-state.sh` — that is exactly what the `test -f` guard
+below covers. Run it there too if you want pane status from a MacBook-side client.
+
 The settings entry is tracked in `dotfiles/config/settings.template.json`,
 because `make setup` merges settings.json with the **template winning on
 `hooks`** — an entry added only by `herdr integration install claude` gets
@@ -102,8 +108,8 @@ that is the first thing to check.
 ## Durable agents — `claude --bg`
 
 ```bash
-claude --bg '<task>'        # positional prompt; CONFLICTS with -p
-claude agents               # list; check `kind` — interactive vs background
+claude --bg '<task>'         # positional prompt; CONFLICTS with -p
+claude agents --json         # list; check `kind` — interactive vs background. The bare form needs a TTY
 claude attach|logs|stop <id>
 ```
 
@@ -117,8 +123,8 @@ every process inside it is gone. herdr is pre-1.0. So:
 > Anything that must not die goes in `claude --bg`, not in a herdr pane.
 
 An interactive session is exactly the kind that dies with its connection. If the
-user says "my agent should keep running", check `claude agents` for `kind:
-interactive` before assuming it will.
+user says "my agent should keep running", check `claude agents --json` for
+`kind: interactive` before assuming it will.
 
 ## Monitoring
 
@@ -147,6 +153,9 @@ reports on itself over the already-granted outbound path.
 | `op signin` "worked" but the next command says not signed in | The session lives in the shell that ran it. Chain them: `op signin --account tkrumm && <cmd>` |
 | Agent died when the lid closed | It was `kind: interactive`. Use `claude --bg` |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes do not |
+| `claude: command not found` over non-interactive ssh to the mini | Stripped PATH — `claude` lives at `~/.local/bin/claude`, not under `/opt/homebrew/bin`. `make setup`'s `~/.zshenv` block adds Homebrew but **not** `~/.local/bin`; prefix `export PATH=$HOME/.local/bin:$PATH` for `claude` specifically |
+| mosh connects over ssh then hangs / "did not make a successful connection to \<ip\>:\<port\>" | `mosh-server` missing from the mini's Application Firewall allowlist. Fix: `make mosh-firewall`. Re-run after `brew upgrade mosh` |
+| `git push` on the mini fails with `could not read Username for 'https://github.com'` | The credential helper returned nothing. Fix: `make git-headless`, and reseed with `make secrets-seed` if the cache is stale. The helper exits 0 with an empty body when the token is unresolvable, which is why the failure looks like a transport fault |
 
 ## Rules
 
