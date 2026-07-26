@@ -143,6 +143,20 @@ client experience, not persistence. `--remote` gives local keybindings
 (`--remote-keybindings`), local image paste, and a local-feeling UI; mosh gives a session
 that never needs reattaching on a bad link. Test both on the MacBook and keep one.
 
+Two things bias this toward `--remote` at the desk, and they are worth knowing before
+picking:
+
+- **mosh does not forward the SSH agent** (upstream refuses it), and does not carry port
+  forwarding, OSC 52 clipboard, or sixel/kitty graphics. `ssh_config` sets
+  `ForwardAgent yes` on `mini` on purpose — though the practical bite is small here,
+  because the mini reaches GitHub over HTTPS + the `gh` token, not over a forwarded key.
+- **mosh's predictive echo only engages on a laggy link.** On a LAN-latency tailnet hop it
+  is doing nothing ssh wasn't, so at the desk it costs the features above and buys
+  nothing. Its value is real but specific: a genuinely bad link, and a session that
+  survives roaming without reattaching.
+
+Read that as: `--remote` at the desk, mosh on the road — not a single winner.
+
 Note `herdr` does its own ssh hardening for `--remote`: `[remote] manage_ssh_config = true`
 (default) generates a config that **includes `~/.ssh/config` first** — so the values in
 step "Already done" still win — then adds `ServerAlive*` as fallbacks and a private
@@ -213,6 +227,38 @@ Remaining step needs a browser (push monitors can't be created by the API on UK 
 connection forms, herdr's socket API, `claude --bg`, the health check, and a failure-mode
 table. This document is the *design*; the skill is the *usage*. Keep it that way — when
 something here turns into a routine command, it belongs in the skill.
+
+## What actually takes this down
+
+The four layers all assume the mini is *booted into a user session*. Everything
+in this design — herdr, Colima, Caddy, every LaunchAgent, every `claude --bg`
+daemon — is user-scoped and starts at login. Verified on the mini 2026-07-26:
+
+```
+fdesetup status   → FileVault is On
+pmset -g          → autorestart 0
+autoLoginUser     → unset
+```
+
+So a reboot or a power blip leaves the mini sitting at the **pre-boot FileVault
+unlock screen**: no user session, therefore no agents, no herdr, no Tailscale
+login-item, and nothing in this plan can reach it. The most likely outage on the
+box is the one that is *not* remotely recoverable. That is the real ceiling on
+"always-on", and it is worth knowing before trusting the host with long work.
+
+Options, none free:
+
+- **Planned reboots**: `sudo fdesetup authrestart` unlocks the next boot in
+  advance, so updates and deliberate restarts stay remote. This is the one that
+  costs nothing — use it instead of `sudo reboot`.
+- **Power loss**: `sudo pmset -a autorestart 1` makes the Mac power back on, but
+  it still stops at FileVault. It shortens the outage only if someone unlocks.
+- **Turning FileVault off** would make the host fully remote-recoverable at the
+  cost of at-rest encryption on a machine holding the secrets cache. Not
+  recommended; noted so the trade is explicit rather than accidental.
+
+Accepting the constraint is defensible — the mini is at home and the fix is
+walking to it. Pretending it does not exist is not.
 
 ## Blocking constraint
 

@@ -40,8 +40,13 @@ herdr --remote mini  # herdr's native attach over ssh. Client runs LOCALLY.
 | `mosh mini` → `herdr` | mosh/UDP | mini | survives lid-close with **no reattach** |
 | `herdr --remote mini` | ssh/TCP | MacBook | connection ends; re-run to reattach |
 
-Pick mosh for a bad link, `--remote` for local keybindings and local image
-paste. `herdr attach` is **not a command**.
+**`--remote` at the desk, mosh on the road.** mosh does not forward the SSH
+agent (upstream refuses it), nor port forwarding, OSC 52 clipboard, or
+sixel/kitty graphics — and its predictive echo only engages on a laggy link, so
+over a LAN-latency tailnet hop it buys nothing ssh wasn't already doing. Its
+value is specific and real: a bad link, and roaming without reattaching.
+
+`herdr attach` is **not a command**.
 
 mosh needs the ACL's `udp:60000-61000` grant. Without it the ssh handshake
 succeeds and the session then hangs forever — it reads as a broken mosh, not a
