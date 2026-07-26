@@ -140,14 +140,18 @@ check_git_push() {
   #
   # Deliberately NO network call to GitHub. Validating the token upstream would
   # make a GitHub outage or a flaky link page as "dev host down", and the
-  # monitor runs with maxretries 0. Local resolvability is the honest signal;
-  # a server-side revocation surfaces on first push, not here.
+  # monitor runs with maxretries 0.
+  #
+  # So this asserts RESOLVABILITY, not push rights, and the message says
+  # "credential ready" rather than "push ready" on purpose — a check that claims
+  # more than it tested is the same silent-rot failure it exists to prevent. An
+  # under-scoped or server-side-revoked token still surfaces on first push.
   [[ -x "$GIT_CRED_HELPER_BIN" ]] || { echo "git credential helper missing (run: make git-headless)"; return 1; }
   local out
   out=$(printf 'protocol=https\nhost=github.com\n\n' | "$GIT_CRED_HELPER_BIN" get 2>/dev/null) || true
   /usr/bin/grep -q '^password=.' <<<"$out" \
     || { echo "github credential unresolvable (reseed: make secrets-seed from the MacBook)"; return 1; }
-  echo "git push ready"
+  echo "git credential ready"
 }
 
 # --- Run --------------------------------------------------------------------
