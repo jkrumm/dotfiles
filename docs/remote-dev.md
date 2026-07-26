@@ -37,6 +37,34 @@ Two independent extras that ride on top:
   phone    ──Claude Remote Control──────────►  session on the mini
 ```
 
+### `mini` is two routes, and the resolver picks silently
+
+Accepted, not fixed — but know it is happening. The bare name `mini` resolves
+**LAN-first**: the router's `mini.<lan-domain>` (IPv6) answers before the
+MagicDNS `mini.<tailnet>.ts.net`. `ssh_config` sets `HostName mini`, so it never
+pins either one.
+
+The consequence is that the *same command* takes two different paths depending
+on where you are sitting:
+
+| Where | Path | Gated by the Tailscale ACL? |
+|-|-|-|
+| At home | LAN, direct to the router's address | **No** — the tailnet is not in the path at all |
+| Travelling | Tailnet, via MagicDNS | Yes |
+
+So the `tag:mac → tag:mac` ACL is real protection on the road and simply inert
+at home, and the switch between them is invisible — no error, no log line, just a
+different route. Two practical follow-ons: at home you are relying on sshd's
+key-only config as the *sole* boundary (it is a good one, which is why this is
+acceptable), and any ACL change you make cannot be verified from the couch,
+because at home you are not exercising the ACL. Test ACL edits from off-network,
+or against the MagicDNS FQDN explicitly.
+
+Pinning `HostName` to the MagicDNS FQDN would collapse this to one always-gated
+route, at the cost of pushing LAN-speed transfers through WireGuard. That trade
+was considered and declined — the speed is worth more than uniformity for a host
+that is ten feet away.
+
 ## Why not the alternatives
 
 - **herdr over tmux** — tmux persists terminals; herdr persists *agent workspaces* and
