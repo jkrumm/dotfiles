@@ -75,7 +75,20 @@ vps are keyless Tailscale SSH, the mini is OpenSSH with a key). For sudo:
 ```bash
 ROOT_PW=$(op read "op://Private/homelab-server/password" --account tkrumm) && ssh homelab "echo '$ROOT_PW' | sudo -S <cmd>"
 ROOT_PW=$(op read "op://Private/vps-server/password" --account tkrumm) && ssh vps "echo '$ROOT_PW' | sudo -S <cmd>"  # VPS has NOPASSWD sudo
+ROOT_PW=$(op read "op://Private/mac-mini-server/password" --account tkrumm) && ssh mini "echo '$ROOT_PW' | sudo -S <cmd>"
 ```
+
+`sudo -S` reads the password from stdin, so none of these need `ssh -t` — which
+matters, because a `!`-prefixed command in a Claude Code session gets no TTY and
+`ssh -t` there fails with "Pseudo-terminal will not be allocated". That is how
+the mini's missing sudo path was found: `make mosh-firewall` had no way to
+prompt.
+
+**The mini's password is deliberately MacBook-only.** It is an `op://Private/*`
+ref, which `headless.refs` refuses unconditionally for the `tkrumm` account, so
+it never enters the mini's own secrets cache — a stolen mini cannot escalate to
+its own root. Reading it is biometric-gated on a present-human machine, which is
+the whole point. Do not "fix" the seed refusal to make this more convenient.
 
 #### Local dev proxy
 
