@@ -32,6 +32,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-config
 	@$(MAKE) --no-print-directory _setup-hooks
 	@$(MAKE) --no-print-directory _setup-scripts
+	@$(MAKE) --no-print-directory _setup-zshenv
 	@$(MAKE) --no-print-directory _setup-skills
 	@$(MAKE) --no-print-directory _setup-imgcli
 	@$(MAKE) --no-print-directory _setup-settings
@@ -557,6 +558,46 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/fetch_usage.py" \
 		DST="$(CLAUDE_DIR)/fetch_usage.py"
+
+.PHONY: _setup-zshenv
+# ~/.zshenv is the ONLY startup file zsh reads for a non-interactive,
+# non-login shell — which is exactly what `ssh host -- <cmd>` gets, and what
+# mosh uses to launch `mosh-server` on the remote end. macOS runs path_helper
+# from /etc/zprofile, but that is a LOGIN file, so a bare `ssh mini 'herdr …'`
+# lands with PATH=/usr/bin:/bin:/usr/sbin:/sbin and no Homebrew at all.
+#
+# That broke mosh outright on the mini (2026-07-26): `mosh mini` reported
+# "Did not find mosh server startup message. (Have you installed mosh on your
+# server?)" while /opt/homebrew/bin/mosh-server was installed and fine. It also
+# silently forces every remote automation to hand-prefix the PATH.
+#
+# The file is NOT symlinked: third-party installers (vite-plus, cargo) append
+# to it and would clobber a symlink into the repo. Append an idempotent guarded
+# block instead, and prepend rather than append to PATH so brew wins over any
+# system binary of the same name — matching what config/zsh/path.zsh already
+# does for interactive shells.
+_setup-zshenv:
+	@echo "  zshenv (non-interactive PATH — ssh/mosh remote commands)..."
+	@ZSHENV="$(HOME)/.zshenv"; \
+	MARKER="# >>> dotfiles: homebrew PATH >>>"; \
+	if [ -f "$$ZSHENV" ] && grep -qF "$$MARKER" "$$ZSHENV"; then \
+		echo "    · ~/.zshenv PATH block (ok)"; \
+	else \
+		BREW_PREFIX="$$(/usr/bin/env brew --prefix 2>/dev/null || echo /opt/homebrew)"; \
+		{ \
+			echo ""; \
+			echo "$$MARKER"; \
+			echo "# Managed by dotfiles (make setup). zsh reads ONLY this file for"; \
+			echo "# non-interactive non-login shells — \`ssh host -- cmd\` and mosh's"; \
+			echo "# mosh-server launch. Without it neither can see Homebrew."; \
+			echo "case \":\$$PATH:\" in"; \
+			echo "  *\":$$BREW_PREFIX/bin:\"*) ;;"; \
+			echo "  *) export PATH=\"$$BREW_PREFIX/bin:$$BREW_PREFIX/sbin:\$$PATH\" ;;"; \
+			echo "esac"; \
+			echo "# <<< dotfiles: homebrew PATH <<<"; \
+		} >> "$$ZSHENV"; \
+		echo "    ✓ ~/.zshenv PATH block appended"; \
+	fi
 
 .PHONY: _setup-skills
 _setup-skills:
