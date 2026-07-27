@@ -21,6 +21,11 @@ Two independent extras that ride on top:
   SSH death, herdr death, and lid-close *independently of every layer above*. This is
   the safety net: use it for anything that must not die. It bounds the blast radius of
   herdr being pre-1.0.
+  **But it cannot be *launched* independently** (found 2026-07-27): Max credentials
+  live in the login keychain, which an ssh session cannot reach, so
+  `ssh mini 'claude --bg …'` comes up `Not logged in`, silently falls back to API
+  billing, and still lists healthy. It must be spawned from something inside the GUI
+  session — which is what `rd bg` does, via a throwaway herdr pane. See step 3b.
 - **Claude Remote Control** — phone/browser window onto a session running on the mini.
   Official, no relay to run.
 
@@ -226,6 +231,48 @@ covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
 
 Session naming, if you want more than the default: `herdr --session <name>`,
 `herdr session list|attach|stop`.
+
+### 3b. Driving work without a terminal — `rd` — DONE 2026-07-27
+
+Steps 1-3 all answer *how do I get a terminal on the mini*. That turned out to be
+the less common question. The MacBook now holds no project repos at all
+(`~/SourceRoot` = `dotfiles`, `dotfiles-private`, `photo-flow`), so the daily
+motion is "start work over there and check on it", which needs no terminal.
+
+`scripts/remote-dev.sh`, exposed as `rd` with `work`/`agents`/`repos` shorthands:
+
+```bash
+repos [filter]         # what's on the host, branch + dirty
+work <repo>            # herdr workspace + claude, idempotent
+rd bg <repo> '<task>'  # durable daemon
+agents                 # both lanes, deduped on session id
+rd read <agent>        # watch without attaching
+rd say <agent> '…'     # steer without attaching
+```
+
+Four decisions worth keeping:
+
+- **One command surface, two machines.** It routes off `~/.config/secrets/backend`
+  — the same "am I the dev host" signal `git-headless` and `herdr-setup` already
+  use — running locally on the mini and over one ssh hop from the MacBook. Adding
+  a second definition of that predicate would be the start of the usual drift.
+- **Repo names, not paths.** `$HOME` differs (`$USER` differs), and the MacBook has
+  nothing to point at anyway. Resolution happens on the far side across both
+  `~/SourceRoot` and `~/IuRoot`.
+- **`work` is idempotent.** A second `work argo` refocuses the existing agent rather
+  than opening a second one on the same checkout. Two agents in one tree is the
+  file-ownership hazard from CLAUDE.md, except across panes where you cannot see it
+  happening.
+- **`rd bg` spawns through a herdr pane, not over ssh.** This is the keychain
+  constraint from the top of this document, and it is the single least obvious thing
+  in the whole stack: the ssh path *appears* to work. Verified both directions —
+  identical command, `Not logged in` over ssh, `Claude Max` through a pane. The pane
+  is closed once the daemon exists, since `--bg` has reparented by then.
+
+`agents` dedupes the two lanes on the Claude session id (herdr exposes it as
+`agent_session.value`, the daemon as `sessionId`): a Claude running in a herdr pane
+is one process that both lanes report, and showing it twice reads as two agents
+racing one checkout.
 
 ### 4. Caddy — for *new* dev servers only
 

@@ -60,15 +60,39 @@ MacBook. Stack is Tailscale → mosh → herdr (owns the workspace model, on the
 client window, tmux the fallback. Unlike homelab/vps this is **OpenSSH, not
 Tailscale SSH** (remote dev needs agent forwarding + ControlMaster).
 
+**This MacBook holds no project repos.** As of 2026-07-27 `~/SourceRoot` here is
+`dotfiles`, `dotfiles-private` and `photo-flow` — nothing else. Every other repo
+lives on the mini and is reached there. Don't clone one back to "just look at
+it"; that is how the two trees diverged the first time. What was unique to the
+MacBook is preserved in `~/SourceRoot-archive` (git bundles + un-gitted
+projects, see its README).
+
+Two separate questions, and collapsing them is the usual confusion:
+
+| Question | Answer |
+|-|-|
+| Go *look* at the mini | `dev` (mosh, roams) · `desk` (`herdr --remote`) |
+| Put work *on* the mini, check on it | `rd` — needs no terminal at all |
+
+`rd` (`dotfiles/scripts/remote-dev.sh`, shorthands `work` / `agents` / `repos`)
+routes itself off the secrets-backend marker, so the same words work on both
+machines: `repos [filter]`, `work <repo>` (herdr workspace + claude, idempotent),
+`rd bg <repo> '<task>'` (durable daemon), `agents` (both lanes, deduped),
+`rd read <agent>`, `rd say <agent> '…'`. Commands take a repo **name**, never a
+path — resolution happens on the host.
+
 **Use `/remote-dev`** for anything touching this stack — it carries the operating
 contract: the two mutually exclusive ways in (`dev`, wrapping `mosh mini` then
 herdr, vs `desk`, wrapping `herdr --remote mini` — same persistence, different
-client), herdr's socket API, and the headless-Mac failure modes. `dev` is the
-one-command way in; `make remote-dev-doctor` verifies the whole MacBook→mini path
-when something's off. Two facts worth holding in the orchestrator without
-loading the skill: a herdr crash **restores the layout and loses every
-process in it**, so durable work belongs in `claude --bg`, not a pane; and a
-`kind: interactive` session dies with its connection. Full model:
+client), herdr's socket API, and the headless-Mac failure modes.
+`make remote-dev-doctor` verifies the whole MacBook→mini path when something's
+off. Three facts worth holding in the orchestrator without loading the skill: a
+herdr crash **restores the layout and loses every process in it**, so durable
+work belongs in a `--bg` daemon, not a pane; a `kind: interactive` session dies
+with its connection; and **never `ssh mini 'claude --bg …'`** — an ssh session
+cannot reach the login keychain, so the daemon comes up `Not logged in`, silently
+falls back to API billing, and still looks healthy in `claude agents`. `rd bg`
+spawns through a herdr pane precisely to avoid that. Full model:
 `dotfiles/docs/remote-dev.md`.
 
 SSH config in `~/.ssh/config` (generated from template, MagicDNS short names; homelab +

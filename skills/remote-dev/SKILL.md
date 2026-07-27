@@ -24,6 +24,34 @@ machine you are on. The SessionStart hook says: `Backend: cache` = the mini,
 Plus one thing that rides on top of all four and depends on none of them:
 `claude --bg`.
 
+## Two different questions
+
+Keep these apart — collapsing them is what makes this stack feel complicated:
+
+| Question | Answer |
+|-|-|
+| How do I *go look* at the mini? | `dev` / `desk` — the transport layers below |
+| How do I *put work on* the mini and check on it? | `rd` — no terminal needed at all |
+
+Most days are the second one. The MacBook holds no repos any more, so `rd`
+resolves every path on the host; that is why its commands take a repo **name**,
+never a path.
+
+```bash
+repos [filter]         # what's on the dev host, with branch + dirty count
+work <repo>            # herdr workspace + claude for that repo (idempotent)
+rd bg <repo> <task…>   # durable claude --bg daemon
+agents                 # every agent on the host, both lanes, deduped
+rd read <agent>        # read its output without attaching
+rd say <agent> "…"     # send it a prompt
+```
+
+`work`, `agents`, `repos` are shorthands; `bg`/`read`/`say` stay behind `rd`
+because the bare names are a zsh builtin, a zsh builtin and `/usr/bin/say`.
+
+`rd` routes itself off the secrets-backend marker — local exec on the mini, one
+ssh hop from the MacBook — so the same words work on both machines.
+
 ## Connecting from the MacBook
 
 The normal way in is two shell functions (`config/zsh/remote-dev.zsh`):
@@ -121,13 +149,34 @@ that is the first thing to check.
 ## Durable agents — `claude --bg`
 
 ```bash
-claude --bg '<task>'         # positional prompt; CONFLICTS with -p
+rd bg <repo> '<task>'        # the supported way — see the keychain trap below
 claude agents --json         # list; check `kind` — interactive vs background. The bare form needs a TTY
 claude attach|logs|stop <id>
 ```
 
 `--bg` reparents to PID 1 as `claude daemon run`, so it survives ssh death,
 herdr death and lid-close **independently of every layer above**.
+
+### It survives independently; it cannot be *launched* independently
+
+`--bg` is freestanding once running, which is not the same as freestanding at
+spawn time — and the difference fails silently.
+
+> **Never `ssh mini 'claude --bg …'` directly.** Claude Code's Max credentials
+> live in the **login keychain**, which an ssh session cannot reach. The daemon
+> starts anyway, prints `Not logged in · Please run /login`, falls back to
+> **API Usage Billing**, and still looks healthy in `claude agents`. You get a
+> running agent that is off Max and doing nothing.
+
+The herdr server is a brew service under launchd **inside the user's GUI
+session**, so anything it spawns inherits keychain access. `rd bg` therefore
+launches through a throwaway herdr pane and closes it once the daemon exists.
+Verified both directions 2026-07-27: identical command, `Not logged in` over
+ssh, `Claude Max` through a pane.
+
+The same reasoning covers anything else on the mini that needs the login
+keychain — a LaunchAgent, a cron line, a daemon started from a script. Being on
+the tailnet is not the same as being in the GUI session.
 
 **This matters more than it looks.** A `kill -9` of the herdr server brings the
 workspace back by name but with a new `terminal_id` — the layout is restored and
@@ -176,7 +225,9 @@ present, and a resolvable GitHub credential.
 | `ssh localhost` fails on the mini | By design — the mini holds no private key material. Inbound auth is the *connecting* machine's key, so the mini **cannot test its own inbound ssh**. Verify from the MacBook |
 | A direct `op read` / `op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run`. `op whoami` fails fast, so preflight guards are safe |
 | `op signin` "worked" but the next command says not signed in | The session lives in the shell that ran it. Chain them: `op signin --account tkrumm && <cmd>` |
-| Agent died when the lid closed | It was `kind: interactive`. Use `claude --bg` |
+| Agent died when the lid closed | It was `kind: interactive`. Use `rd bg` |
+| A `--bg` agent runs but does nothing; `claude logs` shows `Not logged in · Please run /login` and the banner says *API Usage Billing* instead of *Claude Max* | It was spawned over ssh, which cannot reach the login keychain. Spawn through a herdr pane — that is exactly what `rd bg` does. Never `ssh mini 'claude --bg …'` |
+| `rd` says "herdr server is not running" | `brew services restart herdr` on the mini; `make remote-dev-doctor` to confirm the rest of the path |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes do not |
 | `claude: command not found` over non-interactive ssh to the mini | **Fixed** — `make setup`'s `_setup-zshenv` block now puts both Homebrew and `~/.local/bin` on the non-interactive PATH. If it recurs, that block is missing: re-run `make setup` on the mini |
 | mosh connects over ssh then hangs / "did not make a successful connection to \<ip\>:\<port\>" | `mosh-server` missing from the mini's Application Firewall allowlist. Fix: `make mosh-firewall`. Re-run after `brew upgrade mosh` |

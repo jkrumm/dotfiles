@@ -326,6 +326,36 @@ what bounds the risk of herdr being new. That risk is measured, not assumed:
 running in it**. Note `--bg` takes the positional prompt;
 it conflicts with `-p`. Phone access is Claude Remote Control (official, no relay).
 
+**Surviving independently is not the same as launching independently, and the
+difference is silent.** Claude Code's Max credentials live in the **login
+keychain**, which an ssh session cannot reach — so `ssh mini 'claude --bg …'`
+starts a daemon that prints `Not logged in · Please run /login`, falls back to
+*API Usage Billing*, and still lists healthy in `claude agents`. The herdr server
+is a brew service under launchd inside the user's GUI session, so what it spawns
+inherits keychain access. Verified both directions 2026-07-27. Anything on the
+mini needing the login keychain (LaunchAgent, cron, script-spawned daemon) has
+the same constraint: on the tailnet ≠ in the GUI session.
+
+**`scripts/remote-dev.sh` (`rd`) is the layer above the four.** The transport
+layers answer "how do I get a terminal"; `rd` answers "how do I put work on the
+mini and check on it", which needs no terminal. It routes off the
+`~/.config/secrets/backend` marker — local exec on the mini, one ssh hop from the
+MacBook — so one command surface serves both machines:
+
+| Command | Does |
+|-|-|
+| `repos [filter]` | repos on the host, branch + dirty count |
+| `work <repo>` | herdr workspace + claude, **idempotent** (refocuses rather than stacking two agents on one checkout) |
+| `rd bg <repo> '<task>'` | durable daemon, spawned *through* a herdr pane for the keychain reason above |
+| `agents` | both lanes, deduped on session id |
+| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching |
+
+`work`, `agents` and `repos` get bare shorthands; `bg`, `read` and `say` stay
+behind `rd` because those names are a zsh builtin, a zsh builtin and
+`/usr/bin/say`. Commands take a repo **name**, never a path — the MacBook has no
+project repos to point at, and `$HOME` differs between the machines, so
+resolution happens on the host.
+
 `config/ssh_config` carries the desk path: a `Host *` keepalive block, real
 `ControlMaster` on `Host mini` (multiplexes herdr/cmux's several connections into
 one handshake and one biometric approval), and `SetEnv TERM=xterm-256color` —
