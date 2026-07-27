@@ -3,7 +3,7 @@
 # Two design constraints come from the herdr setup, not from taste:
 #
 # 1. COLORS ARE ANSI NAMES, NEVER HEX. The terminal auto-switches between
-#    zinc-dark (#09090b) and zinc-light (#fafafa) with macOS appearance. A hex
+#    one-zinc-dark (#1f1f23) and one-zinc-light (#f2f2f5) with macOS appearance. A hex
 #    color that reads well on one is unreadable on the other; "blue"/"cyan"/
 #    "green" resolve through the terminal's palette, so they follow the switch
 #    for free — and unlike herdr's sidebar, which can only take strict hex,

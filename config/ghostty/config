@@ -6,8 +6,7 @@ shell-integration-features = cursor,sudo,title
 # "left" means only the left Option key acts as Alt; right Option still types special chars
 macos-option-as-alt = left
 
-# Auto-switch between the neutral zinc pair with macOS appearance.
-# Kept in sync with config.cmux (the file cmux actually reads). herdr runs
-# one-dark/one-light instead — see config/herdr/config.toml for why the terminal
-# and herdr deliberately do NOT share a palette.
-theme = light:zinc-light,dark:zinc-dark
+# Auto-switch the One Zinc pair with macOS appearance.
+# Kept in sync with config.cmux (the file cmux actually reads). herdr runs its
+# built-in one-dark/one-light for its own chrome — see config/herdr/config.toml.
+theme = light:one-zinc-light,dark:one-zinc-dark

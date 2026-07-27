@@ -728,7 +728,7 @@ _setup-gitignore:
 
 .PHONY: _setup-ghostty
 _setup-ghostty:
-	@echo "  Ghostty (Zinc Dark / Zinc Light themes)..."
+	@echo "  Ghostty (One Zinc Dark / One Zinc Light themes)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
@@ -748,25 +748,26 @@ _setup-ghostty:
 		echo "    ✓ config.cmux"; \
 	fi
 	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
-	@# zinc-{dark,light} are the active pair; basalt-ui-{dark,light} stay
+	@# one-zinc-{dark,light} are the active pair; basalt-ui-{dark,light} stay
 	@# installed as the tracked alternative.
 	@$(MAKE) --no-print-directory _copy \
-		SRC="$(DOTFILES_DIR)/config/ghostty/themes/zinc-light" \
-		DST="$(HOME)/.config/ghostty/themes/zinc-light"
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-zinc-light" \
+		DST="$(HOME)/.config/ghostty/themes/one-zinc-light"
 	@$(MAKE) --no-print-directory _copy \
-		SRC="$(DOTFILES_DIR)/config/ghostty/themes/zinc-dark" \
-		DST="$(HOME)/.config/ghostty/themes/zinc-dark"
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-zinc-dark" \
+		DST="$(HOME)/.config/ghostty/themes/one-zinc-dark"
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
-	@# Clean up old unmanaged theme files. one-{dark,light} were hand-authored
-	@# here briefly on 2026-07-27 and are superseded by zinc-{dark,light}, so
-	@# retire any copy an earlier `make setup` installed. (herdr still uses the
-	@# built-in one-dark for its own chrome — that is herdr's, not a file here.)
-	@for old in ayu-mirage basalt-ui one-dark one-light; do \
+	@# Retire superseded theme files an earlier `make setup` installed. Both the
+	@# hand-authored one-{dark,light} and the zinc-{dark,light} pair (whose
+	@# near-black #09090b background this replaces) are gone as of 2026-07-27.
+	@# herdr still uses its BUILT-IN one-dark for chrome — that is herdr's own,
+	@# not a file here, so nothing below affects it.
+	@for old in ayu-mirage basalt-ui one-dark one-light zinc-dark zinc-light; do \
 		if [ -f "$(HOME)/.config/ghostty/themes/$$old" ] && [ ! -L "$(HOME)/.config/ghostty/themes/$$old" ]; then \
 			mv "$(HOME)/.config/ghostty/themes/$$old" "$(HOME)/.config/ghostty/themes/$$old.bak"; \
 			echo "    ✓ backed up old $$old theme"; \
@@ -1663,6 +1664,54 @@ herdr-setup:
 		&& echo "    ✓ config.toml reloaded into the running server" \
 		|| echo "    · no running server to reload (config applies on next launch)"
 
+# The look: one command, both machines. Three programs paint one screen and none
+# of them can see the other two — the terminal paints pane content from its ANSI
+# palette, herdr paints its own chrome, starship paints the prompt inside that.
+# Applying the theme therefore means touching all three, and forgetting one is
+# how they drift apart. `make theme` is the canonical verb for that; it is a
+# subset of `make setup` and safe to run repeatedly on either machine.
+#
+# Deliberately NOT split into apply/reload variants — a theme change you cannot
+# see is indistinguishable from one that did not apply, so the reload is part of
+# applying it. Terminates: no watchers, no tailing.
+.PHONY: theme
+theme:
+	@echo ""
+	@echo "  Applying One Zinc (terminal) + One Dark/One Light (herdr chrome)"
+	@echo ""
+	@$(MAKE) --no-print-directory _setup-ghostty
+	@# herdr's config.toml is symlinked, so the file is already current — this
+	@# only needs to push it into a running server.
+	@mkdir -p $(HOME)/.config/herdr
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/herdr/config.toml" \
+		DST="$(HOME)/.config/herdr/config.toml"
+	@if command -v herdr >/dev/null 2>&1; then \
+		herdr config check || exit 1; \
+		herdr server reload-config >/dev/null 2>&1 \
+			&& echo "    ✓ herdr reloaded live (panes kept)" \
+			|| echo "    · no running herdr server (applies on next launch)"; \
+	else \
+		echo "    · herdr not installed here — skipped"; \
+	fi
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/starship.toml" \
+		DST="$(HOME)/.config/starship.toml"
+	@# Assert rather than trust: ghostty validates its own config, but it does
+	@# NOT validate theme VALUES — a bad hex silently falls back to defaults. So
+	@# check the files the config actually names are present and non-empty.
+	@for t in one-zinc-dark one-zinc-light; do \
+		f="$(HOME)/.config/ghostty/themes/$$t"; \
+		[ -s "$$f" ] || { echo "  ✗ theme $$t missing or empty at $$f"; exit 1; }; \
+	done
+	@if command -v ghostty >/dev/null 2>&1; then \
+		ghostty +validate-config --config-file="$(HOME)/.config/ghostty/config" >/dev/null \
+			&& echo "    ✓ ghostty config valid"; \
+	fi
+	@echo ""
+	@echo "  Done. cmux picks up the terminal palette on reload (Cmd+Shift+,)."
+	@echo ""
+
 # Remote-dev readiness heartbeat (herdr + sshd + tailscaled + mosh) pushed to
 # Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this
 # belongs on the dev host (the mini), not on a laptop that is meant to be
@@ -1756,6 +1805,7 @@ help:
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
 	@echo ""
 	@echo "  Remote dev"
+	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-setup                Install the Claude agent-state hook (+ server on the dev host)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"

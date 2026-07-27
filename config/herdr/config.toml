@@ -19,27 +19,32 @@
 #   herdr server reload-config    # or prefix+shift+R inside herdr
 
 [theme]
-# One Dark / One Light for herdr's CHROME. The terminal deliberately does NOT
-# match — it runs the neutral zinc pair (config/ghostty/themes/zinc-{dark,light}).
+# One Dark / One Light for herdr's CHROME. The terminal runs One Zinc
+# (config/ghostty/themes/one-zinc-{dark,light}) — the same Atom One hue family,
+# muted, on basalt-ui zinc surfaces. They agree without being the same file.
 #
-# That mismatch is the design, not an oversight, and it is what an earlier
-# version of this file got wrong. herdr marks the focused workspace row by
-# painting a background and, in one-dark, leaves the sidebar itself transparent.
-# So the highlight is the only painted surface, and it lands on one-dark's own
-# #282C34. Set the TERMINAL to One Dark too and that is also the terminal's
-# background: the active row renders backdrop-on-backdrop and looks unfocused.
-# Matching the palettes is precisely what breaks it.
+# HOW THE SIDEBAR ACTUALLY RENDERS (measured, not assumed — pty capture of a
+# herdr client with three workspaces, one focused, both themes):
 #
-# Measured separation of herdr's active row #282C34 against terminal backgrounds:
+#              focused row          unfocused rows
+#   one-dark   bg #282C34, fg #ABB2BF, bold    no bg, fg #969CA8, regular
+#   one-light  bg #F5F5F6, fg #383A42, bold    no bg, fg #686B77, regular
 #
-#   zinc-dark   #09090b   1.42  ✓ clear      ← what we use
-#   zinc-900    #18181b   1.27  ✓ clear
-#   basalt-ui   #1c2127   1.16  ~ faint
-#   One Dark    #282c34   1.00  ✗ invisible
+# The sidebar itself is never painted in either theme, so the focused row's
+# background lands directly on the TERMINAL's background. But it is one of three
+# cues — background, brighter foreground, and bold — which is why that
+# background may be subtle. Current separation: 1.17 dark, 1.03 light.
 #
-# THE CONSTRAINT IS THE TERMINAL'S DARK BACKGROUND, and it lives in
-# config/ghostty/themes/zinc-dark. Lighten it past ~#1a1d23 and this highlight
-# quietly degrades with nothing in any log to say so.
+# An earlier revision of this file believed the background was the only cue and
+# drove the terminal to near-black (#09090b) to maximise it. That is where the
+# "black black" terminal came from. Do not reintroduce that trade.
+#
+# Also measured, and the reason there is no per-mode surface override below:
+# [theme.custom] is a SINGLE GLOBAL BLOCK. It applies to whichever theme is
+# active, so it cannot hold one value for light and another for dark. A row
+# highlight that works on both a dark and a light canvas does not exist as one
+# colour — hence the terminal background, which ghostty does switch per mode,
+# stays the differentiator.
 name = "one-dark"
 
 # Follow the host terminal's reported light/dark appearance. herdr probes with
@@ -48,9 +53,10 @@ name = "one-dark"
 # UDP proxy, in which case `name` above is the fallback — hence it is the dark
 # member rather than unset.
 #
-# Light mode needs no help: `one-light` paints its own sidebar (#F5F5F6)
-# distinct from its active row (#FAFAFA), so the highlight works there whatever
-# the terminal does. Only one-dark has the transparent-sidebar dependency.
+# Both themes behave the same way (see the table above) — an earlier note here
+# claimed one-light painted its own sidebar and so needed no care. It does not;
+# one-light is transparent exactly like one-dark, it just paints the focused row
+# #F5F5F6 instead of #282C34.
 auto_switch = true
 dark_name = "one-dark"
 light_name = "one-light"
@@ -62,12 +68,20 @@ light_name = "one-light"
 # #B48EAD (nord). No theme choice avoids the purple; only an explicit style does.
 #
 # Inline token styles accept strict hex only, so this value cannot adapt and has
-# to clear both surfaces it can land on: the terminal's #09090b in dark mode
-# (sidebar transparent) and herdr's own #F5F5F6 in light mode. #2f8f5b measures
-# 4.93 and 3.71 — the best worst-case of the greens tried (#4d9375 → 3.35,
-# #40a02b → 3.07). Green because starship renders the branch green too, so the
-# sidebar and the prompt agree.
+# to clear both surfaces it can land on — the sidebar is transparent in both
+# themes, so those surfaces are the TERMINAL's two backgrounds: #1f1f23 dark and
+# #f2f2f5 light. Greens measured against that pair:
+#
+#   #358a5c   3.86 / 3.80   ← best worst-case, what we use
+#   #2f8f5b   4.07 / 3.61
+#   #3f9d6b   4.89 / 3.01
+#   #4a9e70   5.02 / 2.93
+#
+# Green because starship renders the branch green too, so the sidebar and the
+# prompt agree. This is also the only place magenta showed up in herdr's chrome,
+# which is why `mauve` itself is left alone — one targeted override beats a
+# global one whose other uses are unknown.
 rows = [
   ["state_icon", "workspace"],
-  [{ token = "branch", fg = "#2f8f5b" }, "git_status"],
+  [{ token = "branch", fg = "#358a5c" }, "git_status"],
 ]

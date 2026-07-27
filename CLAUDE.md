@@ -640,62 +640,85 @@ to neutralise it.
 - Theme files: copied (not symlinked) to `~/.config/ghostty/themes/` — cmux has a bug where it skips symlinked theme files
 - Claude Code: `c()` in `claude.zsh` writes `theme` key to `~/.claude.json` via `jq` on each launch
 
-## The look: neutral zinc terminal, One Dark herdr chrome
+## The look: One Zinc terminal, One Dark/One Light herdr chrome
 
 Three programs paint one screen and none of them can see the other two. herdr
 paints its **chrome** (sidebar, borders, tab row) from its own built-in theme;
 the outer terminal paints **pane content** from its ANSI palette; starship
 paints the **prompt** inside that. All three follow macOS appearance.
 
+**`make theme` applies all three and reloads herdr live.** Run it on both
+machines — it is a subset of `make setup`, idempotent, and safe to repeat.
+Applying only one layer is how they drift apart.
+
 | Layer | File | Setting |
 |-|-|-|
-| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:zinc-dark,light:zinc-light` |
+| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
 | herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "one-light"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
-**The terminal and herdr deliberately do NOT share a palette**, which is the
-opposite of the obvious instinct and the single most important thing on this
-page. Read the first bullet before "fixing" it.
+**One Zinc = Atom One's hues, muted to ~72% saturation, on basalt-ui's zinc
+surfaces.** Two design systems used for what each is good at: basalt-ui's zinc
+ramp is a true neutral (no blue cast like One Dark's `#282c34`, no plum like
+Catppuccin's `#1e1e2e`), while Atom One's hues are what herdr's chrome already
+renders. Backgrounds are middle-ground on purpose — `#1f1f23` dark (between
+basalt's zinc-900 `#18181b` and zinc-800 `#27272a`), `#f2f2f5` light (basalt's
+own `--vx-surface-bg`). **Never black, never white**; `#09090b` was tried and
+lasted one commit.
+
+How the sidebar actually renders — measured in a pty capture with three
+workspaces, one focused, per theme, not assumed:
+
+| Theme | Focused row | Unfocused rows |
+|-|-|-|
+| `one-dark` | bg `#282C34`, fg `#ABB2BF`, **bold** | no bg, fg `#969CA8`, regular |
+| `one-light` | bg `#F5F5F6`, fg `#383A42`, **bold** | no bg, fg `#686B77`, regular |
 
 Five decisions that are not taste:
 
-- **Matching the two palettes breaks the focused-workspace highlight.** herdr
-  marks the active row by painting a background and, in `one-dark`, leaves the
-  sidebar itself transparent. So that highlight is the only painted surface and
-  it lands on one-dark's own `#282C34` — which, if the terminal is *also* One
-  Dark, is exactly the terminal's background. The row renders
-  backdrop-on-backdrop and looks unfocused. Measured separation of `#282C34`
-  against candidate terminal backgrounds: zinc-dark `#09090b` **1.42 ✓**,
-  zinc-900 `#18181b` 1.27 ✓, basalt-ui `#1c2127` 1.16 faint, One Dark `#282c34`
-  **1.00 invisible**. **The constraint lives in `config/ghostty/themes/zinc-dark`
-  — lighten that background past ~`#1a1d23` and the highlight silently degrades**
-  with nothing in any log to say so.
-- **Light mode needs no such care.** `one-light` paints its own sidebar
-  (`#F5F5F6`) distinct from its active row (`#FAFAFA`), so it works whatever the
-  terminal does. Only `one-dark` has the transparent-sidebar dependency — an
-  asymmetry found by capturing a herdr client in a pty, one run per theme.
+- **The focused row has three cues, not one** — background, brighter foreground,
+  and bold. The sidebar is never painted in either theme, so that background
+  lands on the *terminal's* background, but because it is one cue of three it is
+  allowed to be subtle: currently 1.17 dark, 1.03 light. **An earlier revision
+  believed the background was the only cue and drove the terminal to `#09090b` to
+  maximise that one ratio.** That is where the black-black terminal came from.
+  Verify with a pty capture before trading anything else away for it.
+- **`[theme.custom]` cannot fix this per-mode.** herdr does expose the sidebar
+  colours (`panel_bg`, `surface0/1`, `surface_dim`, `overlay0/1`, `accent`,
+  `text`, `subtext0`, `mauve`, `green`, `yellow`, `red`, `blue`, `teal`, `peach`)
+  — the focused row is `surface_dim` — but it is a **single global block applied
+  to whichever theme is active**, so it cannot hold one value for light and
+  another for dark. No single colour is a highlight on both a dark and a light
+  canvas. That is why the *terminal* background, which ghostty does switch per
+  mode, stays the differentiator.
 - **`nord`, `dracula` and `vesper` are not options** — herdr ships no light
   sibling for any of them, so `auto_switch` has nothing to switch to.
-  (`catppuccin` and `vesper` are the only built-ins that paint two distinct
-  surface tiers; everything else collides when matched.)
 - **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
-  which is the obvious-looking choice. On the `dev` path herdr renders *on the
-  mini* and would have to negotiate the palette through mosh's UDP proxy. A
-  named theme needs no negotiation and looks identical over both transports.
+  which is the obvious-looking choice. It emits only basic ANSI codes there, so
+  palette 8 would have to serve as both the row highlight and the comment gray;
+  and on the `dev` path herdr renders *on the mini* and would have to negotiate
+  the palette through mosh's UDP proxy. A named theme needs no negotiation and
+  looks identical over both transports.
 - **starship uses ANSI names, herdr's one override uses hex — asymmetric on
   purpose.** starship's names resolve through the active palette, so they follow
   the switch for free. herdr's inline sidebar token styles accept strict hex
-  only, so the single `branch` override (`#2f8f5b`) has to clear both surfaces it
-  can land on: the terminal's `#09090b` in dark mode (4.93) and herdr's own
-  `#F5F5F6` in light (3.71). It is styled at all because herdr renders `branch`
-  in the theme's mauve slot, and that is universal — `#C678DD` one-dark,
+  only, so the single `branch` override (`#358a5c`) has to clear both surfaces it
+  can land on — the sidebar is transparent in both themes, so those are the
+  terminal's two backgrounds: 3.86 on `#1f1f23`, 3.80 on `#f2f2f5`, the best
+  worst-case of the greens tried. It is styled at all because herdr renders
+  `branch` in the theme's mauve slot, and that is universal — `#C678DD` one-dark,
   `#CBA6F7` catppuccin, `#BB9AF7` tokyo-night, `#B48EAD` nord. **No theme choice
-  avoids the purple; only an explicit style does.**
+  avoids the purple; only an explicit style does.** `mauve` itself is left
+  unoverridden — this is the only place it showed up, and a targeted override
+  beats a global one whose other uses are unknown.
 
-Ghostty theme names are **exact filenames**. `zinc-dark` resolves because the
+Ghostty theme names are **exact filenames**. `one-zinc-dark` resolves because the
 file is named that; bundled themes with spaces and capitals must be written in
 full (`Catppuccin Mocha`, never `catppuccin-mocha`, which errors and falls back
-to no theme at all). Verify with `ghostty +validate-config --config-file=…`.
+to no theme at all). Verify with `ghostty +validate-config --config-file=…` —
+but note it validates *syntax*, not theme **values**: a bad hex falls back to
+defaults silently, which is why `make theme` also asserts the theme files exist
+and are non-empty.
 - **Font is `JetBrainsMono Nerd Font Mono`, the "Mono" family specifically.**
   herdr's state icons and starship's glyphs are Nerd Font codepoints (tofu
   without it), and the Mono variant forces single-width glyphs so an icon can't

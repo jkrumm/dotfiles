@@ -1,0 +1,46 @@
+# One Zinc Light — muted Atom One Light hues on basalt-ui zinc surfaces.
+#
+# Sibling of one-zinc-dark, same split: surfaces from basalt-ui's zinc ramp,
+# accents from Atom One Light desaturated to ~72%.
+#
+# BACKGROUND #f2f2f5 is basalt-ui's own --vx-surface-bg for light mode. Never
+# pure white: #ffffff and #fafafa both read as glare next to the zinc chrome,
+# and this file deliberately sits a step below them.
+#
+# herdr's one-light paints its focused sidebar row at #F5F5F6 and leaves the
+# sidebar transparent, so that row lands on this background — separation 1.03.
+# As in the dark member that is not the only cue: herdr renders the focused row
+# bold in #383A42 against #686B77 for unfocused rows. Subtle-by-design; a light
+# UI whose selected row shouts is a light UI done wrong.
+#
+# Bright means DEEPER here, not lighter — that is what reads as emphasis on a
+# light surface. Themes that copy the dark member's lifted pastels into slots
+# 9-14 wash out completely on #f2f2f5.
+background = #f2f2f5
+foreground = #262629
+cursor-color = #3969d2
+cursor-text = #f2f2f5
+selection-background = #e2e2e5
+selection-foreground = #262629
+
+# Normal colors (0-7) — Atom One Light hues at 72% saturation, each >= 4.5.
+# palette 7 is a light gray by definition, used for dim fills rather than text.
+palette = 0=#383a42
+palette = 1=#bf453b
+palette = 2=#4a7a49
+palette = 3=#8e6818
+palette = 4=#3969d2
+palette = 5=#784b81
+palette = 6=#1a769f
+palette = 7=#a1a1aa
+
+# Bright colors (8-15) — deepened to >= 7.0, never a duplicate of the normal.
+# palette 8 is the dim/comment gray (4.73) and is meant to recede.
+palette = 8=#6b6b73
+palette = 9=#8a372f
+palette = 10=#385838
+palette = 11=#674d15
+palette = 12=#2a4e9e
+palette = 13=#694470
+palette = 14=#185772
+palette = 15=#ffffff

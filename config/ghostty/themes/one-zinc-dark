@@ -1,0 +1,50 @@
+# One Zinc Dark — muted Atom One hues on basalt-ui zinc surfaces.
+#
+# Two design systems, each used for what it is actually good at:
+#   surfaces  → basalt-ui's zinc ramp (true neutral, no blue or plum cast)
+#   accents   → Atom One Dark's hues, desaturated to ~72%
+#
+# BACKGROUND #1f1f23 sits deliberately BETWEEN basalt-ui's two dark steps —
+# zinc-900 #18181b (its BP.black canvas) and zinc-800 #27272a (its
+# --vx-surface-bg). Never black: #09090b was tried and is oppressive.
+#
+# herdr paints its focused sidebar row at #282C34 and leaves the sidebar
+# transparent, so that row lands on this background — separation here is 1.17.
+# That is intentionally subtle and NOT the only focus cue: herdr also renders
+# the focused row bold and in #ABB2BF against #969CA8 for unfocused rows
+# (measured in a pty capture). Three cues, so the background does not have to
+# shout. An earlier revision drove this file to near-black chasing that one
+# ratio alone — do not repeat it.
+#
+# Accents are muted, not merely dark: saturation is scaled to 72% of Atom One's
+# originals and each is then lifted until it clears 4.5 contrast on #1f1f23.
+# Magenta gets extra treatment — 42% saturation plus a hue shift toward violet —
+# because vivid magenta is unwanted here. It stays distinct from red and blue.
+background = #1f1f23
+foreground = #d4d4d8
+cursor-color = #75addb
+cursor-text = #1f1f23
+selection-background = #38383b
+selection-foreground = #e5e5e9
+
+# Normal colors (0-7) — Atom One hues at 72% saturation, each >= 4.5 on the bg.
+# palette 0 is a dark fill (1.45), not text, so the contrast floor exempts it.
+palette = 0=#3a3a40
+palette = 1=#d07c83
+palette = 2=#9ab983
+palette = 3=#d6bc8a
+palette = 4=#75addb
+palette = 5=#ae95c0
+palette = 6=#65aab3
+palette = 7=#d4d4d8
+
+# Bright colors (8-15) — lifted to >= 6.0, never a duplicate of the normal.
+# palette 8 is the dim/comment gray and is meant to recede (3.40).
+palette = 8=#71717a
+palette = 9=#ed7b85
+palette = 10=#a6d382
+palette = 11=#dea56f
+palette = 12=#63bde9
+palette = 13=#be9ad8
+palette = 14=#5ec3ce
+palette = 15=#fafafa

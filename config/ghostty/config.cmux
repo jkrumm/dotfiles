@@ -1,23 +1,25 @@
 # cmux / Ghostty config — tuned for Warp-like feel
 # Reload: Cmd+Shift+, inside cmux (or restart)
 
-# ── Themes (Zinc Dark / Zinc Light) ──────────────────────────────────────────
-# Neutral Tailwind-zinc grays for PANE CONTENT. herdr paints its own chrome from
-# one-dark/one-light instead — the two are deliberately NOT the same palette.
+# ── Themes (One Zinc Dark / One Zinc Light) ──────────────────────────────────
+# Muted Atom One hues on basalt-ui zinc surfaces, for PANE CONTENT. herdr paints
+# its own chrome from its built-in one-dark/one-light — same hue family, so the
+# two agree without having to be the same file.
 #
-# That is load-bearing, not laziness: herdr's one-dark leaves the sidebar
-# transparent and marks the focused row by painting #282C34, so the row is only
-# visible when the terminal behind it is darker. zinc-dark's #09090b gives 1.42;
-# setting this to One Dark's own #282c34 would give 1.00 and hide the highlight
-# completely. Full measurements in config/herdr/config.toml → [theme].
+# The backgrounds are middle-ground on purpose: #1f1f23 dark (between basalt's
+# zinc-900 and zinc-800), #f2f2f5 light (basalt's own --vx-surface-bg). Never
+# black, never white. herdr's focused sidebar row lands on these at 1.17 / 1.03
+# separation, which is subtle by design — it also renders that row bold and in a
+# brighter fg, so the background is not the only cue. Full reasoning and the pty
+# measurements behind it are in each theme file's header.
 #
 # Ghostty theme names are EXACT FILENAMES. These resolve because the files are
-# literally named zinc-dark / zinc-light; bundled themes with spaces and capitals
-# must be written that way ("Catppuccin Mocha", not catppuccin-mocha).
+# literally named one-zinc-dark / one-zinc-light; bundled themes with spaces and
+# capitals must be written that way ("Catppuccin Mocha", not catppuccin-mocha).
 #
-# The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want
-# it back — but check the separation number above before swapping.
-theme = dark:zinc-dark,light:zinc-light
+# The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want it
+# back.
+theme = dark:one-zinc-dark,light:one-zinc-light
 
 # ── Font ─────────────────────────────────────────────────────────────────────
 # Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs
