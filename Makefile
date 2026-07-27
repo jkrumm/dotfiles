@@ -468,6 +468,15 @@ _setup-git-headless:
 remote-dev-doctor:
 	@bash $(DOTFILES_DIR)/scripts/remote-dev-doctor.sh
 
+.PHONY: caddy-tailnet
+# Expose dev ports over the tailnet via Caddy. Runs ON the dev host (the mini).
+# Opt-in per machine and NOT in the default `setup` chain — only one machine is
+# the dev host, and the generated include names that machine's MagicDNS name and
+# Tailscale IP, which is why it stays untracked and machine-local.
+# Port list: ~/.config/caddy-tailnet.ports (seeded on first run).
+caddy-tailnet:
+	@bash $(DOTFILES_DIR)/scripts/caddy-tailnet.sh
+
 .PHONY: mosh-firewall
 # Allow mosh-server through the macOS Application Firewall. Opt-in per host and
 # NOT in the default `setup` chain — it needs sudo and only matters on a machine

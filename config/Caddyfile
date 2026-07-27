@@ -14,6 +14,34 @@
 #
 # One-time setup: make setup  (sudo required for dnsmasq + Caddy services only)
 
+# Global options.
+#
+# The rolling log is not cosmetic: launchd redirects Caddy's stdout+stderr to a
+# single file with no rotation, and on an always-on host that grows without
+# bound (the mini reached 111 MB, this MacBook 13 MB, before this block existed).
+# Caddy's own roller replaces that — the launchd file now only catches startup
+# lines.
+{
+	log {
+		output file /opt/homebrew/var/log/caddy-access.log {
+			roll_size 10MiB
+			roll_keep 5
+			roll_keep_for 720h
+		}
+	}
+}
+
+# Machine-local site blocks — NOT tracked here, and deliberately so.
+#
+# Tailnet exposure is per-machine (only the mini is the dev host) and every such
+# block necessarily names a MagicDNS hostname and a Tailscale IP, which the
+# security rule keeps out of git. An empty glob is valid, so this line is a no-op
+# on a machine with nothing local to add.
+#
+# The mini's copy lives at Caddyfile.d/tailnet.caddy — see `make caddy-tailnet`
+# and docs/remote-dev.md step 4.
+import /opt/homebrew/etc/Caddyfile.d/*.caddy
+
 (local) {
 	tls internal
 }
