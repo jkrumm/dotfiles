@@ -36,13 +36,27 @@ selection-foreground = #e5e5e9
 # dull blue directly beside a saturated one of the identical hue reads as wrong
 # rather than as calm. Matching herdr exactly is what fixes it; the terminal's
 # blue text and herdr's highlight are now the same blue.
+#
+# CYAN IS SHIFTED OFF ATOM ONE'S HUE — 187 -> 197, sky blue rather than
+# turquoise. That is a taste call, but it is not only a terminal one: herdr
+# paints parts of its own chrome with the INDEXED ANSI colours rather than its
+# truecolor theme (measured in a pty capture — `[preview]` and the footer render
+# as `38;5;6`, and no teal token appears anywhere in the chrome). So palette 6 is
+# the single knob for both programs; there is no herdr-side `teal` override to
+# make, and adding one would do nothing.
+#
+# 197 is chosen, not rounded to: it lands within 1.5 degrees of the light theme's
+# cyan, which was already at 198, so the two modes now agree. It also keeps 10
+# degrees of daylight from blue at 207 — enough, because the two differ far more
+# in saturation (34% vs 82%) than in hue: muted steel beside vivid azure.
+# Going further blue would close that gap without making cyan any less turquoise.
 palette = 0=#3a3a40
 palette = 1=#d07c83
 palette = 2=#9ab983
 palette = 3=#d6bc8a
 palette = 4=#61afef
 palette = 5=#ae95c0
-palette = 6=#65aab3
+palette = 6=#76a8bc
 palette = 7=#d4d4d8
 
 # Bright colors (8-15) — lifted to >= 6.0, never a duplicate of the normal.
@@ -56,11 +70,16 @@ palette = 7=#d4d4d8
 #
 # Note yellow drifts 39 -> 29 for the same structural reason, but that one is
 # Atom One's intent (its bright yellow is an orange), so it is left alone.
+#
+# Bright cyan follows the same discipline as bright blue: same hue (197) and the
+# same saturation as its normal, only lighter (60% -> 68% L). Atom One's own
+# bright cyan #56b6c2 is not a source here at all — the pair is generated from
+# the normal, so the two can never drift apart the way blue once did.
 palette = 8=#71717a
 palette = 9=#ed7b85
 palette = 10=#a6d382
 palette = 11=#dea56f
 palette = 12=#88c2f2
 palette = 13=#be9ad8
-palette = 14=#5ec3ce
+palette = 14=#92b9c9
 palette = 15=#fafafa

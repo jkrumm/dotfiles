@@ -25,6 +25,11 @@ selection-foreground = #262629
 
 # Normal colors (0-7) — Atom One Light hues at 72% saturation, each >= 4.5.
 # palette 7 is a light gray by definition, used for dim fills rather than text.
+#
+# Cyan (#1a769f, hue 198) is untouched by the 2026-07-27 de-turquoising of the
+# dark member — Atom One Light's cyan was already a deep sky blue rather than a
+# turquoise, so this file is what the dark one was moved TO MATCH, not the other
+# way round. Leave it; it is now the reference for the pair.
 palette = 0=#383a42
 palette = 1=#bf453b
 palette = 2=#4a7a49
