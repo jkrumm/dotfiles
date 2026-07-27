@@ -188,6 +188,33 @@ An interactive session is exactly the kind that dies with its connection. If the
 user says "my agent should keep running", check `claude agents --json` for
 `kind: interactive` before assuming it will.
 
+## Reaching a dev server on the mini
+
+A dev server bound to `127.0.0.1:PORT` on the mini is reachable from any Mac on
+the tailnet as `https://<mini-magicdns>:PORT`, with a real cert.
+
+```bash
+# on the mini
+vim ~/.config/caddy-tailnet.ports   # PORT [label], one per line
+make caddy-tailnet                  # regenerate + reload, prints the URLs
+```
+
+Do **not** use `tailscale serve` for dev servers — issue #18827 drops WebSockets
+every 10-40s, which is HMR breaking on a timer. `serve` stays right for the
+always-on rows (`:7730` rb, `:8443` IU dashboard Funnel).
+
+Three failure modes, all silent:
+
+| Symptom | Cause |
+|-|-|
+| Connection **times out**, nothing in any log | The Tailscale ACL has no grant for that port. `tag:mac → tag:mac` covers `tcp:22`, `tcp:5900`, `tcp:7700-7799`, `udp:60000-61000` — anything else needs adding, exactly as rb's `:7730` did |
+| Caddy won't start, or the dev server can't bind its port | The generated block is missing `bind <tailnet-ip>`, so Caddy took `0.0.0.0:PORT` and collided with the dev server on `127.0.0.1:PORT` |
+| **403** from the app itself | Vite 5.4.12+ DNS-rebinding guard. Add the MagicDNS host to `server.allowedHosts` (rb does a `.ts.net` suffix match) |
+
+Changing the ACL needs **both** machines: the repo is on the mini, but
+`tailscale-acl-push` needs the Tailscale API key, which is `op://Private/*` and
+refused by the mini's cache by design. Edit on the mini, push from the MacBook.
+
 ## Monitoring
 
 One composite heartbeat (herdr + sshd + tailscaled + mosh) pushes to the

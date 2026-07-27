@@ -274,6 +274,43 @@ Four decisions worth keeping:
 is one process that both lanes report, and showing it twice reads as two agents
 racing one checkout.
 
+### 4b. Tailnet dev ports — BUILT 2026-07-27
+
+`make caddy-tailnet` on the mini. Reads `~/.config/caddy-tailnet.ports` and
+regenerates `$(brew --prefix)/etc/Caddyfile.d/tailnet.caddy`, which the tracked
+Caddyfile picks up through an `import` glob (valid when it matches nothing, so
+the MacBook is unaffected). Result: a dev server on `127.0.0.1:PORT` on the mini
+is `https://<mini-magicdns>:PORT` from any Mac on the tailnet.
+
+Four things that were not obvious, each of which cost a debugging cycle:
+
+- **The generated file is untracked on purpose.** It names the MagicDNS hostname
+  and the Tailscale IP. Regenerate per machine; never copy it between them.
+- **`bind <tailnet-ip>` is load-bearing.** Without it Caddy takes `0.0.0.0:PORT`
+  and collides with the dev server already on `127.0.0.1:PORT`. Binding only the
+  tailnet IP lets the port number mean the same thing inside and outside.
+- **The ACL gates it, and failure is silent.** `tag:mac → tag:mac` was
+  `tcp:22, tcp:5900, udp:60000-61000`; ports outside that just time out, with
+  nothing in any log. Added `tcp:7700-7799` (the dev-server block). This is the
+  same lesson rb's dedicated `tcp:7730` grant already encoded — the ACL checks
+  the *listener*, so every new listening port needs a grant.
+- **Certs come from tailscaled, not ACME.** `tls { get_certificate tailscale }`,
+  supported natively in Caddy 2.11. On macOS there is no
+  `/var/run/tailscaled.socket` — the app exposes a TCP port via
+  `/Library/Tailscale/ipnport` plus a root-readable `sameuserproof-<port>` token.
+  Caddy can read it **because it runs as root**; a non-root Caddy silently
+  cannot.
+
+Client-side, each Vite app needs `server.allowedHosts` to accept the MagicDNS
+Host header or it answers 403 (rb already does a `.ts.net` suffix match — copy
+that shape).
+
+**Applying an ACL change now needs both machines.** The repo lives on the mini,
+but `tailscale-acl-push` needs the Tailscale API key, which is `op://Private/*`
+and refused by the mini's cache unconditionally and by design. So the edit
+happens where the repo is and the push happens where the human is. That is a
+real cost of the thin-client split, not an oversight.
+
 ### 4. Caddy — for *new* dev servers only
 
 **Leave the two existing bindings alone.** Both are deliberate and working:
