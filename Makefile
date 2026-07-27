@@ -15,6 +15,17 @@ COLIMA_CPU    ?= 4
 COLIMA_MEMORY ?= 8
 COLIMA_DISK   ?= 60
 
+# herdr-notes — persistent per-workspace markdown pane, installed by
+# `make herdr-setup` and bound to prefix+e in config/herdr/config.toml.
+# Pinned to a COMMIT rather than a tag: git tags are mutable, the repo is young
+# and third-party (not herdr's author), and `herdr plugin install` executes the
+# repo's own build command — so every upgrade has to be a reviewed diff here,
+# not whatever `v0.1.1` happens to point at today. Bump = read the diff, then
+# move both lines together.
+HERDR_NOTES_SOURCE  := alexarthurs/herdr-notes
+HERDR_NOTES_REF     := d0a8e67f6083ed41dd4fe25e546ed6404767c6be
+HERDR_NOTES_VERSION := 0.1.1
+
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
 # Existing real files are backed up to <file>.bak before being replaced.
@@ -1660,6 +1671,9 @@ secrets-freshness-check:
 #     added by `herdr integration install` would be deleted on the next run.
 #   - the herdr *server*, which belongs only on the dev host. Detected the same
 #     way as git-headless: the cache backend marker means this is the mini.
+#   - the herdr-notes plugin, which is installed everywhere for the same reason
+#     as the hook: inert until you press the key, and gating it on the server
+#     would leave the shared keybinding dead on a machine running herdr locally.
 .PHONY: herdr-setup
 herdr-setup:
 	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
@@ -1671,6 +1685,20 @@ herdr-setup:
 		echo "    ✓ herdr server registered (brew services — RunAtLoad + KeepAlive)"; \
 	else \
 		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
+	fi
+	@# herdr-notes. Reinstalled only when the pin moves: `plugin install` always
+	@# re-clones and re-runs `cargo build --release`, so an unguarded call would
+	@# put a minute of Rust build into every `make herdr-setup`. Compares the
+	@# resolved commit, not the version — a moved tag must still trigger a rebuild.
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		echo "    · cargo missing — herdr-notes skipped (it builds from source)"; \
+	elif [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr-notes") | .source.resolved_commit')" = "$(HERDR_NOTES_REF)" ]; then \
+		echo "    ✓ herdr-notes $(HERDR_NOTES_VERSION) installed (toggle: prefix+e)"; \
+	else \
+		echo "    → building herdr-notes $(HERDR_NOTES_VERSION) from source (cargo, ~1 min)"; \
+		herdr plugin install $(HERDR_NOTES_SOURCE) --ref $(HERDR_NOTES_REF) -y >/dev/null \
+			&& echo "    ✓ herdr-notes $(HERDR_NOTES_VERSION) installed (toggle: prefix+e)" \
+			|| { echo "  ✗ herdr-notes install failed"; exit 1; }; \
 	fi
 	@# Pick up config/herdr/config.toml (linked by `make setup`) without dropping
 	@# panes. Silent no-op when no server is running — the MacBook usually has none.
@@ -1830,7 +1858,7 @@ help:
 	@echo ""
 	@echo "  Remote dev"
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
-	@echo "  make herdr-setup                Install the Claude agent-state hook (+ server on the dev host)"
+	@echo "  make herdr-setup                Claude agent-state hook + herdr-notes plugin (+ server on the dev host)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"

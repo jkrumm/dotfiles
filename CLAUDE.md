@@ -110,7 +110,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings. Loaded FIRST, so `config.appsupport` overrides it |
 | `config/ghostty/config.appsupport` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Font, theme, cursor, padding. Ghostty's own macOS config path — read by **both** cmux and bare Ghostty, and it WINS over the file above |
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
-| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override). The **file** only — the same dir holds herdr's sockets and logs |
+| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override) + the `prefix+e` notes binding. The **file** only — the same dir holds herdr's sockets and logs |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
@@ -334,6 +334,44 @@ Two non-obvious constraints, both load-bearing:
   session start on a machine where the integration was never installed. The
   script is `managed by herdr` and overwritten on reinstall, so it is
   deliberately not tracked in this repo — only the guarded call to it is.
+
+### Notes — the `herdr-notes` plugin
+
+A persistent markdown note **per workspace**, docked on the right edge, toggled
+with **`prefix+e`**. Third-party (`alexarthurs/herdr-notes`, MIT), installed and
+**commit-pinned** by `make herdr-setup` — `HERDR_NOTES_REF` in the Makefile, not
+a tag, because tags move and `herdr plugin install` runs the repo's own
+`cargo build --release`. Upgrading is a reviewed diff of that pin; there is no
+`plugin update`, only reinstall. The step is guarded on `resolved_commit`, so
+re-running `herdr-setup` doesn't put a Rust build in the path every time.
+
+Installed vs *open* are separate, and this is the part that surprises:
+
+- **Installed + enabled is permanent** — herdr registers plugins per user,
+  globally, surviving server restarts and reboots. Nothing to re-run.
+- **The pane is not.** The plugin ships actions, not keys; without the
+  `[[keys.command]]` block in `config/herdr/config.toml` the only way in is
+  `herdr plugin action invoke herdr-notes.open-notes`. The binding is the whole
+  point of tracking it here.
+
+Three facts about where it lives, all verified rather than assumed:
+
+- **Plugin commands are spawned by the server**, so the pane and its note are
+  always on the **mini** — the same note whether you came in via `dev` (mosh) or
+  `desk` (client on the MacBook). Keys are handled client-side on the `desk`
+  path, but the action is dispatched over the socket.
+- **The shared config.toml is safe on a machine without the plugin.** herdr's
+  keybind parser does not resolve plugin ids at load — `herdr config check`
+  returns `ok` for an action id that does not exist (probed directly), so the
+  key is inert rather than an error. The install is still unconditional in
+  `herdr-setup`: it's inert until pressed, and gating it on the dev-host marker
+  would leave the binding dead on a machine running herdr locally.
+- **Notes are untracked, unsynced, unbackuped.** One `<workspace-id>.json` per
+  workspace in herdr's `HERDR_PLUGIN_STATE_DIR` (created on first write, so it
+  does not exist until you type something; `herdr plugin config-dir herdr-notes`
+  prints only the config sibling). Keyed to the *stable* workspace id — renames
+  keep the note, closing a workspace orphans the file. Scratch space, not the
+  brain: anything worth keeping goes to `/brain`.
 
 `~/.zshenv` is now managed too (`_setup-zshenv`, idempotent, appends rather than
 symlinks — the vite-plus and cargo installers also append to that file). It is the

@@ -85,3 +85,26 @@ rows = [
   ["state_icon", "workspace"],
   [{ token = "branch", fg = "#358a5c" }, "git_status"],
 ]
+
+# herdr-notes — one persistent markdown note per workspace, docked on the right.
+# Installed and version-pinned by `make herdr-setup`; see CLAUDE.md → "Notes".
+#
+# The plugin ships actions, not keys. Without this block it is installed and
+# enabled and still never in front of you — the only way in would be
+# `herdr plugin action invoke herdr-notes.open-notes` from a shell.
+#
+# `prefix+e` because every obvious mnemonic is already a 0.7.5 default: `n` is
+# next_tab, `shift+n` is new_workspace, `w`/`shift+w` are workspace navigate and
+# rename. `e` is free and matches the plugin's own key for entering edit mode.
+#
+# Safe in a file symlinked to BOTH machines even though the plugin is only built
+# where a herdr server runs. Verified, not assumed: herdr's keybind parser does
+# not resolve plugin ids at load, so `config check` returns ok for an action id
+# that does not exist and the key is simply inert. And plugin commands are
+# spawned by the SERVER, so on the `desk` path — client on the MacBook, server on
+# the mini — the pane opens on the mini where the note actually lives.
+[[keys.command]]
+key = "prefix+e"
+type = "plugin_action"
+command = "herdr-notes.open-notes"
+description = "toggle notes"
