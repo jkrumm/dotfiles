@@ -203,9 +203,9 @@ One tracked file makes the question moot. Note it links the **file**, never the 
 `~/.config/herdr/` also holds `herdr.sock`, `herdr-client.sock` and the rotating logs,
 which are machine-local runtime state.
 
-That split is also why the theme is a **named** built-in (`catppuccin`/`catppuccin-latte`)
-rather than herdr's `terminal` theme, which inherits the host terminal's ANSI palette. On
-the `dev` path herdr renders on the mini, so `terminal` would mean negotiating the palette
+That split is also why the theme is a **named** built-in (`one-dark`/`one-light`) rather
+than herdr's `terminal` theme, which inherits the host terminal's ANSI palette. On the
+`dev` path herdr renders on the mini, so `terminal` would mean negotiating the palette
 through mosh's UDP proxy. A named theme needs no negotiation and looks the same over both
 transports.
 
@@ -215,10 +215,11 @@ client is local, so this is reliable; over mosh the probe may not survive the UD
 which case `name` is the fallback. That is why `name` is set to the dark member rather than
 left unset.
 
-Catppuccin rather than One Dark is a measured choice, not a preference — it is the only
-theme whose focused-workspace highlight stays visible when herdr and the terminal are set
-to the same palette. Full reasoning and the per-theme measurements are in `CLAUDE.md` →
-*The look* and in the config's `[theme]` block.
+**herdr and the terminal deliberately run different palettes** — herdr on One Dark, the
+terminal on a neutral zinc pair. Matching them is what breaks the focused-workspace
+highlight: herdr paints that row at `#282C34` and leaves the sidebar transparent, so a
+One Dark *terminal* would put the same colour directly behind it. Measurements and the
+full reasoning are in `CLAUDE.md` → *The look* and in the config's `[theme]` block.
 
 Apply a change to the running server without dropping panes:
 

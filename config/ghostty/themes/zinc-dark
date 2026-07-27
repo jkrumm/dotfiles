@@ -1,0 +1,44 @@
+# Zinc Dark — neutral grays, no color cast in the chrome.
+#
+# Grays are Tailwind's zinc scale (950/700/500/300), which is the point: zinc is
+# a true neutral, unlike One Dark's slate #282c34 or Catppuccin's plum #1e1e2e,
+# both of which read as tinted next to it.
+#
+# The background is deliberately DARKER than herdr's own #282C34. herdr paints
+# the focused workspace row at that value and leaves the sidebar transparent, so
+# the active row is only visible if the terminal behind it is darker. #09090b
+# gives ratio 1.42 — a clear separation. Anything at or above ~#1a1d23 makes the
+# highlight faint, and #282c34 itself makes it invisible. Do not lighten this
+# background without re-checking that.
+#
+# Accents are muted on purpose — a neutral theme with saturated ANSI colors just
+# looks like a colorful theme with a gray background. They are still distinct
+# because terminals lean on them semantically (git diff, ls, grep, errors).
+# Every value below measured >= 4.5 contrast on #09090b except palette 0, which
+# is meant to be dark, and palette 8, the dim-text gray, at 4.12.
+background = #09090b
+foreground = #d4d4d8
+cursor-color = #7aa6cc
+cursor-text = #09090b
+selection-background = #3f3f46
+selection-foreground = #fafafa
+
+# Normal colors (0-7) — muted accents on a zinc ramp
+palette = 0=#3f3f46
+palette = 1=#cb7676
+palette = 2=#4d9375
+palette = 3=#e6cc77
+palette = 4=#6394bf
+palette = 5=#c39bb5
+palette = 6=#5eaab5
+palette = 7=#d4d4d8
+
+# Bright colors (8-15) — same hues lifted, never duplicated from the normals
+palette = 8=#71717a
+palette = 9=#e0908f
+palette = 10=#5aa17f
+palette = 11=#f0dc9a
+palette = 12=#7aa6cc
+palette = 13=#d4b3c8
+palette = 14=#7ec0c9
+palette = 15=#fafafa

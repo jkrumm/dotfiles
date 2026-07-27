@@ -109,7 +109,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
 | `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
-| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `basalt-ui-{dark,light}` only — the active Catppuccin pair is **bundled with ghostty**, nothing to install. Copied, not symlinked — cmux symlink bug |
+| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override). The **file** only — the same dir holds herdr's sockets and logs |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
@@ -640,46 +640,44 @@ to neutralise it.
 - Theme files: copied (not symlinked) to `~/.config/ghostty/themes/` — cmux has a bug where it skips symlinked theme files
 - Claude Code: `c()` in `claude.zsh` writes `theme` key to `~/.claude.json` via `jq` on each launch
 
-## The look: One Dark / One Light across terminal, herdr and prompt
+## The look: neutral zinc terminal, One Dark herdr chrome
 
-Three programs paint one screen and none of them can see the other two, so the
-palette is kept in agreement by hand. herdr paints its **chrome** (sidebar,
-borders, tab row) from its own built-in theme; the outer terminal paints **pane
-content** from its ANSI palette; starship paints the **prompt** inside that.
-They only look like one product because all three are set to Catppuccin, and all
-three follow macOS appearance:
+Three programs paint one screen and none of them can see the other two. herdr
+paints its **chrome** (sidebar, borders, tab row) from its own built-in theme;
+the outer terminal paints **pane content** from its ANSI palette; starship
+paints the **prompt** inside that. All three follow macOS appearance.
 
 | Layer | File | Setting |
 |-|-|-|
-| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:Catppuccin Mocha,light:Catppuccin Latte` |
-| herdr | `config/herdr/config.toml` | `name = "catppuccin"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
+| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:zinc-dark,light:zinc-light` |
+| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "one-light"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
-**Change one, change all three.** The `basalt-ui-{dark,light}` pair is still
-tracked and installed if you want Blueprint v6 back; swapping means editing the
-two ghostty configs and herdr's `[theme]` block together.
+**The terminal and herdr deliberately do NOT share a palette**, which is the
+opposite of the obvious instinct and the single most important thing on this
+page. Read the first bullet before "fixing" it.
 
-Five decisions in there that are not taste:
+Five decisions that are not taste:
 
-- **Catppuccin, because it is the only theme whose sidebar highlight survives
-  the pairing.** herdr marks the focused workspace row by painting a background;
-  in most themes it leaves the sidebar itself transparent, so that highlight is
-  the only painted surface and it lands on the theme's own background — which is
-  exactly what the matching terminal theme paints as *its* background. The active
-  row then renders backdrop-on-backdrop and looks identical to the inactive ones.
-  Measured per theme by capturing a herdr client in a pty: catppuccin paints
-  `#181825` mantle for the sidebar and `#1E1E2E` base for the active row (two
-  tiers, works); one-dark, tokyo-night, nord, gruvbox, solarized, kanagawa,
-  rose-pine and dracula all paint a single value and collide. This is structural
-  — herdr's `[theme.custom]` vocabulary *is* Catppuccin's (`surface0`,
-  `surface1`, `surface_dim`, `overlay0`, `text`, `subtext0`, `mauve`, `peach`,
-  `teal`), so the engine is Catppuccin-native and the rest are mappings onto it.
-  **A One Dark setup lived here briefly and had to hand-patch `surface_dim`.**
-- **`nord`, `dracula` and `vesper` are not viable at all** — herdr ships no light
+- **Matching the two palettes breaks the focused-workspace highlight.** herdr
+  marks the active row by painting a background and, in `one-dark`, leaves the
+  sidebar itself transparent. So that highlight is the only painted surface and
+  it lands on one-dark's own `#282C34` — which, if the terminal is *also* One
+  Dark, is exactly the terminal's background. The row renders
+  backdrop-on-backdrop and looks unfocused. Measured separation of `#282C34`
+  against candidate terminal backgrounds: zinc-dark `#09090b` **1.42 ✓**,
+  zinc-900 `#18181b` 1.27 ✓, basalt-ui `#1c2127` 1.16 faint, One Dark `#282c34`
+  **1.00 invisible**. **The constraint lives in `config/ghostty/themes/zinc-dark`
+  — lighten that background past ~`#1a1d23` and the highlight silently degrades**
+  with nothing in any log to say so.
+- **Light mode needs no such care.** `one-light` paints its own sidebar
+  (`#F5F5F6`) distinct from its active row (`#FAFAFA`), so it works whatever the
+  terminal does. Only `one-dark` has the transparent-sidebar dependency — an
+  asymmetry found by capturing a herdr client in a pty, one run per theme.
+- **`nord`, `dracula` and `vesper` are not options** — herdr ships no light
   sibling for any of them, so `auto_switch` has nothing to switch to.
-- **Ghostty theme names are exact filenames**, case and spaces included.
-  `catppuccin-mocha` does *not* resolve — it errors and falls back to no theme.
-  Only `Catppuccin Mocha` works. Verified with `ghostty +validate-config`.
+  (`catppuccin` and `vesper` are the only built-ins that paint two distinct
+  surface tiers; everything else collides when matched.)
 - **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
   which is the obvious-looking choice. On the `dev` path herdr renders *on the
   mini* and would have to negotiate the palette through mosh's UDP proxy. A
@@ -687,11 +685,17 @@ Five decisions in there that are not taste:
 - **starship uses ANSI names, herdr's one override uses hex — asymmetric on
   purpose.** starship's names resolve through the active palette, so they follow
   the switch for free. herdr's inline sidebar token styles accept strict hex
-  only, so the single `branch` override (`#40a02b`) has to serve both
-  backgrounds: 4.91 contrast on Mocha, 2.96 on Latte. It is styled at all because
-  herdr renders `branch` in the theme's mauve slot, and that is universal, not a
-  Catppuccin quirk — `#CBA6F7` catppuccin, `#C678DD` one-dark, `#BB9AF7`
-  tokyo-night, `#B48EAD` nord. No theme choice avoids the purple.
+  only, so the single `branch` override (`#2f8f5b`) has to clear both surfaces it
+  can land on: the terminal's `#09090b` in dark mode (4.93) and herdr's own
+  `#F5F5F6` in light (3.71). It is styled at all because herdr renders `branch`
+  in the theme's mauve slot, and that is universal — `#C678DD` one-dark,
+  `#CBA6F7` catppuccin, `#BB9AF7` tokyo-night, `#B48EAD` nord. **No theme choice
+  avoids the purple; only an explicit style does.**
+
+Ghostty theme names are **exact filenames**. `zinc-dark` resolves because the
+file is named that; bundled themes with spaces and capitals must be written in
+full (`Catppuccin Mocha`, never `catppuccin-mocha`, which errors and falls back
+to no theme at all). Verify with `ghostty +validate-config --config-file=…`.
 - **Font is `JetBrainsMono Nerd Font Mono`, the "Mono" family specifically.**
   herdr's state icons and starship's glyphs are Nerd Font codepoints (tofu
   without it), and the Mono variant forces single-width glyphs so an icon can't

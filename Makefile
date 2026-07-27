@@ -728,7 +728,7 @@ _setup-gitignore:
 
 .PHONY: _setup-ghostty
 _setup-ghostty:
-	@echo "  Ghostty (Catppuccin Mocha / Latte — bundled; basalt-ui copied)..."
+	@echo "  Ghostty (Zinc Dark / Zinc Light themes)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
@@ -747,10 +747,15 @@ _setup-ghostty:
 		ln -sfn "$$_src" "$$_dst"; \
 		echo "    ✓ config.cmux"; \
 	fi
-	@# The ACTIVE pair is Catppuccin Mocha/Latte, which ghostty BUNDLES — so
-	@# there is nothing to install for it. Only hand-authored themes need
-	@# copying, and only basalt-ui-{dark,light} is left (the tracked
-	@# alternative). Themes are COPIED, not symlinked — cmux skips symlinks.
+	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
+	@# zinc-{dark,light} are the active pair; basalt-ui-{dark,light} stay
+	@# installed as the tracked alternative.
+	@$(MAKE) --no-print-directory _copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/zinc-light" \
+		DST="$(HOME)/.config/ghostty/themes/zinc-light"
+	@$(MAKE) --no-print-directory _copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/zinc-dark" \
+		DST="$(HOME)/.config/ghostty/themes/zinc-dark"
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
@@ -758,8 +763,9 @@ _setup-ghostty:
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
 	@# Clean up old unmanaged theme files. one-{dark,light} were hand-authored
-	@# here until 2026-07-27 and are now superseded by ghostty's bundled
-	@# Catppuccin pair, so retire any copy an earlier `make setup` installed.
+	@# here briefly on 2026-07-27 and are superseded by zinc-{dark,light}, so
+	@# retire any copy an earlier `make setup` installed. (herdr still uses the
+	@# built-in one-dark for its own chrome — that is herdr's, not a file here.)
 	@for old in ayu-mirage basalt-ui one-dark one-light; do \
 		if [ -f "$(HOME)/.config/ghostty/themes/$$old" ] && [ ! -L "$(HOME)/.config/ghostty/themes/$$old" ]; then \
 			mv "$(HOME)/.config/ghostty/themes/$$old" "$(HOME)/.config/ghostty/themes/$$old.bak"; \

@@ -6,8 +6,8 @@ shell-integration-features = cursor,sudo,title
 # "left" means only the left Option key acts as Alt; right Option still types special chars
 macos-option-as-alt = left
 
-# Auto-switch between Catppuccin Latte/Mocha with macOS appearance.
-# Kept in sync with config.cmux (the file cmux actually reads) and with herdr's
-# [theme] block — see config/herdr/config.toml for why all three must agree.
-# Names are exact bundled filenames; the lowercase-hyphen form does not resolve.
-theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+# Auto-switch between the neutral zinc pair with macOS appearance.
+# Kept in sync with config.cmux (the file cmux actually reads). herdr runs
+# one-dark/one-light instead — see config/herdr/config.toml for why the terminal
+# and herdr deliberately do NOT share a palette.
+theme = light:zinc-light,dark:zinc-dark

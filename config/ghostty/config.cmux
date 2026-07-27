@@ -1,19 +1,23 @@
 # cmux / Ghostty config — tuned for Warp-like feel
 # Reload: Cmd+Shift+, inside cmux (or restart)
 
-# ── Themes (Catppuccin Mocha / Latte) ────────────────────────────────────────
-# Ghostty's OWN bundled themes — nothing hand-authored to maintain. Paired with
-# herdr's built-in catppuccin/catppuccin-latte (config/herdr/config.toml), which
-# is the only theme whose sidebar highlight survives the pairing; the reasoning
-# and the measurements are in that file's [theme] block.
+# ── Themes (Zinc Dark / Zinc Light) ──────────────────────────────────────────
+# Neutral Tailwind-zinc grays for PANE CONTENT. herdr paints its own chrome from
+# one-dark/one-light instead — the two are deliberately NOT the same palette.
 #
-# NAMES ARE EXACT FILENAMES — case and spaces included. `catppuccin-mocha` does
-# NOT resolve ("theme not found", then a silent fall back to no theme at all);
-# only "Catppuccin Mocha" does. Verified with `ghostty +validate-config`.
+# That is load-bearing, not laziness: herdr's one-dark leaves the sidebar
+# transparent and marks the focused row by painting #282C34, so the row is only
+# visible when the terminal behind it is darker. zinc-dark's #09090b gives 1.42;
+# setting this to One Dark's own #282c34 would give 1.00 and hide the highlight
+# completely. Full measurements in config/herdr/config.toml → [theme].
+#
+# Ghostty theme names are EXACT FILENAMES. These resolve because the files are
+# literally named zinc-dark / zinc-light; bundled themes with spaces and capitals
+# must be written that way ("Catppuccin Mocha", not catppuccin-mocha).
 #
 # The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want
-# it back — swap the names here and the two in herdr's [theme] block together.
-theme = dark:Catppuccin Mocha,light:Catppuccin Latte
+# it back — but check the separation number above before swapping.
+theme = dark:zinc-dark,light:zinc-light
 
 # ── Font ─────────────────────────────────────────────────────────────────────
 # Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs
