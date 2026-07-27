@@ -4,7 +4,7 @@
 #
 # 1. COLORS ARE ANSI NAMES, NEVER HEX. The terminal auto-switches between
 #    one-dark (#282c34) and one-light (#fafafa) with macOS appearance. A hex
-#    color that reads well on one is unreadable on the other; "blue"/"purple"/
+#    color that reads well on one is unreadable on the other; "blue"/"cyan"/
 #    "green" resolve through the terminal's palette, so they follow the switch
 #    for free. This is the same reason herdr uses named built-in themes rather
 #    than a hand-rolled palette.
@@ -44,7 +44,7 @@ add_newline = true
 # exactly on the connection where you most need to know which machine you are
 # about to run something on.
 ssh_only = false
-format = "[$hostname](bold purple) "
+format = "[$hostname](bold cyan) "
 
 [directory]
 truncation_length = 3
@@ -56,7 +56,7 @@ read_only_style = "red"
 
 [git_branch]
 symbol = " "
-style = "bold purple"
+style = "bold green"
 format = "[$symbol$branch]($style) "
 
 [git_status]
