@@ -1,0 +1,120 @@
+# starship — cross-shell prompt, symlinked to ~/.config/starship.toml.
+#
+# Two design constraints come from the herdr setup, not from taste:
+#
+# 1. COLORS ARE ANSI NAMES, NEVER HEX. The terminal auto-switches between
+#    one-dark (#282c34) and one-light (#fafafa) with macOS appearance. A hex
+#    color that reads well on one is unreadable on the other; "blue"/"purple"/
+#    "green" resolve through the terminal's palette, so they follow the switch
+#    for free. This is the same reason herdr uses named built-in themes rather
+#    than a hand-rolled palette.
+#
+# 2. TWO LINES. herdr splits panes down to ~half width. A single-line prompt
+#    with a path and git state leaves almost no room to type before wrapping;
+#    putting the input on its own line makes narrow panes usable.
+#
+# Glyphs are Nerd Font codepoints — they need JetBrainsMono Nerd Font Mono
+# (config/ghostty/config.cmux) or they render as tofu.
+
+format = """
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$nodejs\
+$bun\
+$python\
+$rust\
+$golang\
+$docker_context\
+$cmd_duration\
+$line_break\
+$character"""
+
+# Never let a slow module stall the prompt. scan_timeout guards the filesystem
+# walk that decides which language modules apply; command_timeout guards the
+# version shell-outs (`node --version` under fnm is the usual suspect).
+scan_timeout = 30
+command_timeout = 500
+add_newline = true
+
+[hostname]
+# ssh_only = false is load-bearing, not cosmetic. The `dev` path reaches the
+# mini over MOSH, which is not ssh — with the default the hostname would vanish
+# exactly on the connection where you most need to know which machine you are
+# about to run something on.
+ssh_only = false
+format = "[$hostname](bold purple) "
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+style = "bold blue"
+format = "[$path]($style)[$read_only]($read_only_style) "
+read_only = " 󰌾"
+read_only_style = "red"
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "[$symbol$branch]($style) "
+
+[git_status]
+style = "yellow"
+# No trailing space in the outer group — every status item below already ends
+# with one, and doubling it leaves a visible gap before the newline.
+format = "([$all_status$ahead_behind]($style))"
+conflicted = "= "
+ahead = "⇡${count} "
+behind = "⇣${count} "
+diverged = "⇕⇡${ahead_count}⇣${behind_count} "
+untracked = "?${count} "
+stashed = "$${count} "
+modified = "!${count} "
+staged = "+${count} "
+renamed = "»${count} "
+deleted = "✘${count} "
+
+[nodejs]
+symbol = " "
+style = "green"
+format = "[$symbol($version )]($style)"
+
+[bun]
+symbol = "󰚩 "
+style = "yellow"
+format = "[$symbol($version )]($style)"
+
+[python]
+symbol = " "
+style = "yellow"
+format = "[$symbol($version )(\\($virtualenv\\) )]($style)"
+
+[rust]
+symbol = " "
+style = "red"
+format = "[$symbol($version )]($style)"
+
+[golang]
+symbol = " "
+style = "cyan"
+format = "[$symbol($version )]($style)"
+
+[docker_context]
+symbol = " "
+style = "blue"
+# The colima context is pinned on every machine, so surfacing it always would
+# be constant noise. only_with_files keeps it to directories that actually have
+# a compose file — i.e. the repos where the context could matter.
+only_with_files = true
+format = "[$symbol$context]($style) "
+
+[cmd_duration]
+min_time = 2000
+style = "bold yellow"
+format = "[took $duration]($style) "
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold green)"

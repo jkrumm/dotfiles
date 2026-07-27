@@ -109,7 +109,9 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
 | `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
-| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | Blueprint v6 light/dark terminal themes (copied, not symlinked — cmux symlink bug) |
+| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-{dark,light}` (active, paired with herdr) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
+| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme + UI. The **file** only — the same dir holds herdr's sockets and logs |
+| `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim — `op` (MacBook) or `cache` (mini) backend, see Headless secrets below |
@@ -634,9 +636,59 @@ to neutralise it.
 
 **Theme auto-switching:**
 - cmux app chrome: `appearanceMode = system` (stored in plist — follows macOS appearance)
-- Terminal colors: `theme = dark:basalt-ui-dark,light:basalt-ui-light` in the cmux config above
+- Terminal colors: `theme = dark:one-dark,light:one-light` in the cmux config above
 - Theme files: copied (not symlinked) to `~/.config/ghostty/themes/` — cmux has a bug where it skips symlinked theme files
 - Claude Code: `c()` in `claude.zsh` writes `theme` key to `~/.claude.json` via `jq` on each launch
+
+## The look: One Dark / One Light across terminal, herdr and prompt
+
+Three programs paint one screen and none of them can see the other two, so the
+palette is kept in agreement by hand. herdr paints its **chrome** (sidebar,
+borders, tab row) from its own built-in theme; the outer terminal paints **pane
+content** from its ANSI palette; starship paints the **prompt** inside that.
+They only look like one product because all three are set to One:
+
+| Layer | File | Setting |
+|-|-|-|
+| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:one-dark,light:one-light` |
+| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch`, `dark_name`/`light_name` |
+| Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
+
+**Change one, change all three.** The `basalt-ui-{dark,light}` pair is still
+tracked and installed if you want Blueprint v6 back; swapping means editing the
+two ghostty configs and herdr's `[theme]` block together.
+
+Four decisions in there that are not taste:
+
+- **`one-{dark,light}` are hand-authored, not upstream copies.** Ghostty's
+  bundled "One Half Dark" repeats its normal colors verbatim in slots 9-14, so
+  bright text is indistinguishable from normal — bad in a terminal, where
+  `ls`/`grep`/`diff` lean on bright. "One Half Light" does the opposite and fills
+  brights with the *dark* theme's pastels, which vanish on `#fafafa`. Both are
+  fixed here; the rationale is in each theme file's header.
+- **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
+  which is the obvious-looking choice. On the `dev` path herdr renders *on the
+  mini* and would have to negotiate the palette through mosh's UDP proxy. A
+  named theme needs no negotiation and looks identical over both transports.
+- **Colors outside the theme files are ANSI names, never hex** — starship's
+  styles and herdr's `ui.accent`. macOS appearance flips the background between
+  `#282c34` and `#fafafa`; a hex tuned for one is unreadable on the other, while
+  a named color resolves through the active palette. This is also why herdr's
+  sidebar rows use bare tokens instead of `{ token, fg = "#..." }` — inline
+  token styles accept strict hex only.
+- **Font is `JetBrainsMono Nerd Font Mono`, the "Mono" family specifically.**
+  herdr's state icons and starship's glyphs are Nerd Font codepoints (tofu
+  without it), and the Mono variant forces single-width glyphs so an icon can't
+  push herdr's column-aligned sidebar rows out of alignment. The plain
+  `font-jetbrains-mono` cask stays declared because the Nerd Font one does *not*
+  register a family named "JetBrains Mono" — dropping it would silently break
+  any editor still configured with that name.
+
+Applying a herdr config change to a live server without dropping panes:
+`herdr server reload-config` (or `prefix+shift+R` inside herdr). `make
+herdr-setup` does it for you. Validate first with `herdr config check` — it
+catches unknown keys and TOML errors, but **not** bad theme *values*, which
+fall back to defaults silently.
 
 ## Key Technical Facts
 

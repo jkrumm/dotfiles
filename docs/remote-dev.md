@@ -188,6 +188,39 @@ A related check that needs no client at all: `herdr workspace create …` succee
 clients attached, which is the actual proof that the server is headless and holds state on
 its own. Everything past that (detach, roam, reattach) is inherently MacBook-side.
 
+### 2b. herdr's config is tracked, and must be identical on both machines — DONE 2026-07-27
+
+`config/herdr/config.toml` is symlinked to `~/.config/herdr/config.toml` by `make setup`
+on **both** machines. That is not redundancy. Which machine reads the config depends on
+how you came in, and the two paths disagree:
+
+| Entry | herdr process that renders | Config read from |
+|-|-|-|
+| `dev` (mosh) | the **mini** — output streams over UDP | the mini's |
+| `desk` (`herdr --remote`) | the **MacBook** client, which also handles keys (`--remote-keybindings` defaults to `local`) | the MacBook's |
+
+One tracked file makes the question moot. Note it links the **file**, never the directory:
+`~/.config/herdr/` also holds `herdr.sock`, `herdr-client.sock` and the rotating logs,
+which are machine-local runtime state.
+
+That split is also why the theme is a **named** built-in (`one-dark`/`one-light`) rather
+than herdr's `terminal` theme, which inherits the host terminal's ANSI palette. On the
+`dev` path herdr renders on the mini, so `terminal` would mean negotiating the palette
+through mosh's UDP proxy. A named theme needs no negotiation and looks the same over both
+transports. Same reasoning for `auto_switch`: it works on the `desk` path (local client,
+direct terminal) and may not survive the mosh proxy, which is why `name` is set to the dark
+member rather than left unset — that is the fallback you actually get.
+
+Apply a change to the running server without dropping panes:
+
+```
+herdr config check            # unknown keys + TOML errors; NOT bad theme values
+herdr server reload-config    # → {"status":"applied","diagnostics":[]}
+```
+
+The full palette rationale (why the One themes are hand-authored, why every color outside
+the theme files is an ANSI name and not hex) is in `CLAUDE.md` → *The look*.
+
 ### 3. Connect from the MacBook — a real fork, decide by testing
 
 `herdr attach` is **not a command** (an earlier draft of this plan invented it). The real

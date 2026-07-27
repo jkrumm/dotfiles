@@ -152,6 +152,19 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/bunfig.toml" \
 		DST="$(HOME)/.bunfig.toml"
+	@mkdir -p $(HOME)/.config
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/starship.toml" \
+		DST="$(HOME)/.config/starship.toml"
+	@# herdr: link the FILE, never the directory — ~/.config/herdr also holds
+	@# herdr.sock, herdr-client.sock and the rotating logs, which are
+	@# machine-local runtime state. Linked here rather than in the opt-in
+	@# `herdr-setup` because the config governs the client too, and the
+	@# MacBook runs a client (desk path) without ever running a server.
+	@mkdir -p $(HOME)/.config/herdr
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/herdr/config.toml" \
+		DST="$(HOME)/.config/herdr/config.toml"
 
 .PHONY: _setup-tools
 _setup-tools:
@@ -715,7 +728,7 @@ _setup-gitignore:
 
 .PHONY: _setup-ghostty
 _setup-ghostty:
-	@echo "  Ghostty (Blueprint v6 themes)..."
+	@echo "  Ghostty (One Dark / One Light themes)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
@@ -734,6 +747,15 @@ _setup-ghostty:
 		ln -sfn "$$_src" "$$_dst"; \
 		echo "    ✓ config.cmux"; \
 	fi
+	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
+	@# one-{dark,light} are the active pair (matched to herdr's built-ins);
+	@# basalt-ui-{dark,light} stay installed as the tracked alternative.
+	@$(MAKE) --no-print-directory _copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-light" \
+		DST="$(HOME)/.config/ghostty/themes/one-light"
+	@$(MAKE) --no-print-directory _copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-dark" \
+		DST="$(HOME)/.config/ghostty/themes/one-dark"
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
@@ -928,6 +950,8 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig-personal"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig-work"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/starship.toml"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/herdr/config.toml"
 	@echo "  1Password (personal account)"
 	@if op whoami >/dev/null 2>&1; then \
 		echo "    ✓ op session active ($$(op whoami --format=json 2>/dev/null | jq -r '.email // "unknown"'))"; \
@@ -1629,6 +1653,12 @@ herdr-setup:
 	else \
 		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
 	fi
+	@# Pick up config/herdr/config.toml (linked by `make setup`) without dropping
+	@# panes. Silent no-op when no server is running — the MacBook usually has none.
+	@herdr config check
+	@herdr server reload-config >/dev/null 2>&1 \
+		&& echo "    ✓ config.toml reloaded into the running server" \
+		|| echo "    · no running server to reload (config applies on next launch)"
 
 # Remote-dev readiness heartbeat (herdr + sshd + tailscaled + mosh) pushed to
 # Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this

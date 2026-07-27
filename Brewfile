@@ -106,6 +106,10 @@ brew "restic"
 brew "ripgrep"
 # Monitors sleep, wakeup, and idleness of a Mac
 brew "sleepwatcher"
+# Cross-shell prompt — config/starship.toml. Uses ANSI color names rather than
+# hex so it follows the one-dark/one-light terminal switch without a second
+# config; see that file's header.
+brew "starship"
 # Send macOS User Notifications from the command-line
 brew "terminal-notifier"
 # OCR (Optical Character Recognition) engine
@@ -133,7 +137,16 @@ cask "clipgrab"
 cask "coderabbit"
 # All-in-one toolbox for developers
 cask "devutils"
+# Both are declared on purpose — the Nerd Font cask does NOT register a family
+# called "JetBrains Mono", it registers "JetBrainsMono Nerd Font [Mono]". Any
+# app still configured with the plain name (editors, IDEs) would silently fall
+# back to a system font if the plain cask were dropped.
 cask "font-jetbrains-mono"
+# Terminal font. herdr's sidebar state icons and starship's prompt glyphs are
+# Nerd Font codepoints and render as tofu without it. Ghostty is pointed at the
+# "Mono" family so glyphs stay single-width and cannot push herdr's
+# column-aligned sidebar rows out of alignment.
+cask "font-jetbrains-mono-nerd-font"
 # Horizontal and vertical rulers
 cask "free-ruler"
 # Keep your computer awake

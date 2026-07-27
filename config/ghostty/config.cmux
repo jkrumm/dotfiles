@@ -1,11 +1,20 @@
 # cmux / Ghostty config — tuned for Warp-like feel
 # Reload: Cmd+Shift+, inside cmux (or restart)
 
-# ── Themes (Blueprint v6 light/dark) ─────────────────────────────────────────
-theme = dark:basalt-ui-dark,light:basalt-ui-light
+# ── Themes (One Dark / One Light) ────────────────────────────────────────────
+# Paired with herdr's built-in one-dark/one-light (config/herdr/config.toml).
+# herdr paints its chrome from its own palette and pane CONTENT from this one,
+# so both ends must name the same theme or the sidebar fights the shell.
+# The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want
+# it back — swap the names here and the two in herdr's [theme] block together.
+theme = dark:one-dark,light:one-light
 
-# ── Font (matches Warp settings) ─────────────────────────────────────────────
-font-family = JetBrains Mono
+# ── Font ─────────────────────────────────────────────────────────────────────
+# Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs
+# are Nerd Font codepoints and render as tofu without it. "Mono" (not "Propo")
+# is deliberate — it forces single-width glyphs, so icons can't push herdr's
+# column-aligned sidebar rows out of alignment.
+font-family = JetBrainsMono Nerd Font Mono
 font-size = 16
 
 # ── Cursor — Warp default is solid block, no blink ───────────────────────────
