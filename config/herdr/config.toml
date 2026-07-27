@@ -47,11 +47,38 @@
 # stays the differentiator.
 name = "one-dark"
 
-# Follow the host terminal's reported light/dark appearance. herdr probes with
-# OSC 10/11 + DEC mode 2031 (confirmed in a pty capture); on the `desk` path the
-# client is local so this is reliable, over mosh the probe may not survive the
-# UDP proxy, in which case `name` above is the fallback — hence it is the dark
-# member rather than unset.
+# Follow the host terminal's reported light/dark appearance. THE SIGNAL IS DEC
+# MODE 2031, AND ONLY THAT — measured by driving herdr in a pty three times and
+# varying only the reply:
+#
+#   probe answered                    focused row   theme
+#   nothing                           #282C34       one-dark (fallback)
+#   OSC 10/11 with a light background #282C34       one-dark — NO EFFECT
+#   CSI ?2031h -> CSI ?997;2n         #F5F5F6       one-light
+#
+# herdr does query OSC 10/11, which is why an earlier version of this comment
+# credited them. They do not drive the theme. What does is an UNSOLICITED
+# terminal notification: herdr sends `CSI ?2031h` and waits for the terminal to
+# volunteer `CSI ?997;1n` (dark) / `;2n` (light). Debugging this means asking
+# whether that report arrives, not what the background colour is.
+#
+# WHICH MEANS THE ENTRY PATH DECIDES, because the two paths render in different
+# places and only one has a terminal in front of it:
+#
+#   desk (herdr --remote) → client renders ON THE MACBOOK, straight into
+#                           Ghostty. 2031 works; the theme follows the Mac.
+#   dev  (mosh)           → client renders ON THE MINI. The enable has to cross
+#                           mosh to Ghostty and the report has to come back, and
+#                           mosh is a state-synchronizing emulator with its own
+#                           terminal model rather than a byte tunnel. Presumed
+#                           swallowed — not measured, since it cannot be
+#                           reproduced from the mini alone.
+#
+# So `name` below is the no-report fallback, and there is no value that is right:
+# the MacBook auto-switches with the time of day, and the mini is headless (every
+# mosh session originates from the MacBook anyway, so its own appearance never
+# matters). Dark is kept as the coin-flip. The actual fix for a light-mode
+# MacBook is to come in via `desk`, where the probe is not proxied at all.
 #
 # Both themes behave the same way (see the table above) — an earlier note here
 # claimed one-light painted its own sidebar and so needed no care. It does not;
@@ -61,30 +88,68 @@ auto_switch = true
 dark_name = "one-dark"
 light_name = "one-light"
 
+[ui]
+# Tuned for MANY workspaces. Everything here is a departure from a default that
+# is fine at three spaces and stops being fine at twenty.
+#
+# agent_panel_sort: default "spaces" groups the agent list by workspace, which
+# duplicates the spaces list directly above it — the sidebar renders the section
+# header as `grouped`. "priority" turns it into an attention queue instead, so
+# the agent that is blocked on input rises to the top rather than sitting
+# wherever its repo happens to sort. The one setting here that changes what you
+# LOOK AT rather than how much space it takes.
+agent_panel_sort = "priority"
+
+# One tab per workspace is the normal shape here, so the tab row is a constant
+# reminder of a dimension not in use. It only hides at exactly one tab; creating
+# a second brings the row back, and the keybinding still works when hidden.
+hide_tab_bar_when_single_tab = true
+
+# With claude + notes + a terminal in one workspace, the borders are the only
+# thing distinguishing the panes. Notes names itself (the plugin runs
+# `pane rename`); this is what labels the rest. Manual pane names still win.
+show_agent_labels_on_pane_borders = true
+
 [ui.sidebar.spaces]
-# The single override in this file. herdr renders the `branch` token in the
-# theme's mauve slot, and that is universal rather than a one-dark quirk —
+# BRANCH IS DROPPED. herdr's built-in space tokens are state_icon, state_text,
+# workspace, branch and git_status (confirmed against the reference config
+# embedded in the 0.7.5 binary), and its DEFAULT rows are literally
+#   [["state_icon", "workspace"], ["branch", "git_status"]]
+# — so this block is not a tweak of the default, it IS the default minus one
+# token. It has to stay: deleting the block restores branch rather than removing
+# it. That is the trap if this ever looks redundant.
+#
+# Why drop it: the branch is already in the prompt of every pane inside the
+# workspace, and starship renders it there with more context (ahead/behind,
+# stash). In the sidebar it was one more column of text on a row that is mostly
+# scanned for *which repo*, not which branch.
+#
+# This retires the file's one colour override along with it. Kept here because
+# the reasoning generalises to any token restored later: herdr renders `branch`
+# in the theme's MAUVE slot, and that is universal rather than a one-dark quirk —
 # measured as #C678DD (one-dark), #CBA6F7 (catppuccin), #BB9AF7 (tokyo-night),
 # #B48EAD (nord). No theme choice avoids the purple; only an explicit style does.
-#
-# Inline token styles accept strict hex only, so this value cannot adapt and has
-# to clear both surfaces it can land on — the sidebar is transparent in both
-# themes, so those surfaces are the TERMINAL's two backgrounds: #1f1f23 dark and
-# #f2f2f5 light. Greens measured against that pair:
-#
-#   #358a5c   3.86 / 3.80   ← best worst-case, what we use
-#   #2f8f5b   4.07 / 3.61
-#   #3f9d6b   4.89 / 3.01
-#   #4a9e70   5.02 / 2.93
-#
-# Green because starship renders the branch green too, so the sidebar and the
-# prompt agree. This is also the only place magenta showed up in herdr's chrome,
-# which is why `mauve` itself is left alone — one targeted override beats a
-# global one whose other uses are unknown.
+# Inline styles accept strict hex, so such a value cannot adapt per mode and must
+# clear both terminal backgrounds (#1f1f23 dark, #f2f2f5 light) — #358a5c was the
+# best worst-case green tried, at 3.86 / 3.80.
 rows = [
   ["state_icon", "workspace"],
-  [{ token = "branch", fg = "#358a5c" }, "git_status"],
+  ["git_status"],
 ]
+
+[ui.sidebar.agents]
+# Same edit as the spaces block above, same reason. herdr's default is
+#   [["state_icon", "workspace", "tab"], ["agent"]]
+# and the `agent` token renders the detected agent's name — which is `claude`
+# for every single row, because that is the only agent used here. At twenty
+# workspaces that is twenty lines spelling out a constant. The state_icon
+# already carries the information that actually varies.
+#
+# Restore `["agent"]` the day a second agent kind shows up (codex, gemini and
+# friends are all in herdr's detection manifest); until then it is a caption on
+# a photo of itself. `state_text` is the other candidate for that second row if
+# the spinner glyph ever proves too subtle.
+rows = [["state_icon", "workspace", "tab"]]
 
 # herdr-notes — one persistent markdown note per workspace, docked on the right.
 # Installed and version-pinned by `make herdr-setup`; see CLAUDE.md → "Notes".
