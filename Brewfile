@@ -133,6 +133,13 @@ brew "satococoa/tap/wtp"
 cask "audacity"
 # Downloads videos and audio from websites
 cask "clipgrab"
+# The daily-driver terminal — a macOS-native multiplexer built ON Ghostty, so it
+# reads Ghostty's own config paths and shares the look declared in
+# config/ghostty/. Was installed by hand for a long time and therefore invisible
+# to `brew bundle` / `make brew-check`; adopted into the manifest 2026-07-27
+# (`brew install --cask --adopt cmux` if a stray /Applications/cmux.app exists).
+# It also supplies the `ghostty` binary that lands on PATH — see the ghostty cask.
+cask "cmux"
 # AI code review CLI
 cask "coderabbit"
 # All-in-one toolbox for developers
@@ -147,6 +154,19 @@ cask "font-jetbrains-mono"
 # "Mono" family so glyphs stay single-width and cannot push herdr's
 # column-aligned sidebar rows out of alignment.
 cask "font-jetbrains-mono-nerd-font"
+# Bare Ghostty, alongside cmux rather than instead of it — the plain terminal for
+# when the multiplexer is not wanted, and the upstream reference when a rendering
+# question is "is this cmux or is this Ghostty?".
+#
+# It needs NO config of its own. Measured on Ghostty 1.3.1: both config paths are
+# read and MERGED, with ~/Library/Application Support/com.mitchellh.ghostty/config
+# winning conflicts over ~/.config/ghostty/config. dotfiles owns both, so Ghostty
+# resolves the same One Zinc theme, font and padding as cmux automatically.
+#
+# The cask installs NO binary on PATH (app bundle + manpages + completions only),
+# so `ghostty` on PATH stays cmux's bundled copy. `make theme` therefore resolves
+# /Applications/Ghostty.app explicitly rather than trusting PATH.
+cask "ghostty"
 # Horizontal and vertical rulers
 cask "free-ruler"
 # Keep your computer awake

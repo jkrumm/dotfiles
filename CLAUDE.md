@@ -107,9 +107,9 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/gitconfig-work` | `~/.gitconfig-work` | johannes.krumm@iu.org + 1Password signing |
 | `config/bunfig.toml` | `~/.bunfig.toml` | Global Bun config — supply-chain `minimumReleaseAge` cooldown (Bun is every SourceRoot repo's package manager) |
 | `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
-| `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
-| `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
-| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
+| `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings. Loaded FIRST, so `config.appsupport` overrides it |
+| `config/ghostty/config.appsupport` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Font, theme, cursor, padding. Ghostty's own macOS config path — read by **both** cmux and bare Ghostty, and it WINS over the file above |
+| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override). The **file** only — the same dir holds herdr's sockets and logs |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
@@ -653,7 +653,7 @@ Applying only one layer is how they drift apart.
 
 | Layer | File | Setting |
 |-|-|-|
-| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
+| Terminal | `config/ghostty/config.appsupport` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
 | herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "one-light"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 

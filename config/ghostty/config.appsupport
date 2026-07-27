@@ -1,5 +1,21 @@
-# cmux / Ghostty config — tuned for Warp-like feel
-# Reload: Cmd+Shift+, inside cmux (or restart)
+# Shared terminal config — read by BOTH cmux and bare Ghostty.
+# Installed to ~/Library/Application Support/com.mitchellh.ghostty/config.
+# Reload: Cmd+Shift+, inside cmux (or restart the app).
+#
+# That path is Ghostty's OWN macOS config location (note the bundle id — cmux's
+# is com.cmuxterm.app); cmux is built on Ghostty and reuses it. So this file is
+# not cmux-specific, which is why it is no longer called config.cmux.
+#
+# Precedence, measured on Ghostty 1.3.1 and cmux's bundled 1.3.2 rather than
+# assumed — both binaries agree:
+#
+#   ~/.config/ghostty/config      loaded first   (config/ghostty/config)
+#   …/com.mitchellh.ghostty/config loaded second → WINS on conflicting keys
+#
+# The two are MERGED, not replaced: keys unique to either file all survive. Put
+# anything that must win here; the sibling holds shell integration and the
+# option-key behaviour. Both apps therefore render the same One Zinc look with no
+# per-app configuration.
 
 # ── Themes (One Zinc Dark / One Zinc Light) ──────────────────────────────────
 # Muted Atom One hues on basalt-ui zinc surfaces, for PANE CONTENT. herdr paints

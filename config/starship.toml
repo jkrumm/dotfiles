@@ -14,7 +14,7 @@
 #    putting the input on its own line makes narrow panes usable.
 #
 # Glyphs are Nerd Font codepoints — they need JetBrainsMono Nerd Font Mono
-# (config/ghostty/config.cmux) or they render as tofu.
+# (config/ghostty/config.appsupport) or they render as tofu.
 
 format = """
 $hostname\

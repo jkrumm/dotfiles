@@ -734,10 +734,10 @@ _setup-ghostty:
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
 		DST="$(HOME)/.config/ghostty/config"
 	@# cmux primary config (path has spaces — inline instead of _link)
-	@_src="$(DOTFILES_DIR)/config/ghostty/config.cmux"; \
+	@_src="$(DOTFILES_DIR)/config/ghostty/config.appsupport"; \
 	_dst="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config"; \
 	if [ -L "$$_dst" ] && [ "$$(readlink "$$_dst")" = "$$_src" ]; then \
-		echo "    · config.cmux (ok)"; \
+		echo "    · config.appsupport (ok)"; \
 	else \
 		if [ -e "$$_dst" ] && [ ! -L "$$_dst" ]; then \
 			mv "$$_dst" "$$_dst.bak"; \
@@ -745,7 +745,7 @@ _setup-ghostty:
 		fi; \
 		mkdir -p "$$(dirname "$$_dst")"; \
 		ln -sfn "$$_src" "$$_dst"; \
-		echo "    ✓ config.cmux"; \
+		echo "    ✓ config.appsupport"; \
 	fi
 	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
 	@# one-zinc-{dark,light} are the active pair; basalt-ui-{dark,light} stay
@@ -1001,16 +1001,31 @@ status:
 	@echo "  Ghostty"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/ghostty/config"
 	@if [ -L "$(HOME)/Library/Application Support/com.mitchellh.ghostty/config" ]; then \
-		echo "    ✓ config.cmux"; \
+		echo "    ✓ config.appsupport"; \
 	else \
-		echo "    ✗ config.cmux [not symlinked — run make setup]"; \
+		echo "    ✗ config.appsupport [not symlinked — run make setup]"; \
 	fi
+	@# The ACTIVE pair first — status previously verified only the tracked
+	@# alternative, so a missing one-zinc theme (the thing both terminals
+	@# actually render) would have reported clean.
+	@$(MAKE) --no-print-directory _check-copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-zinc-light" \
+		DST="$(HOME)/.config/ghostty/themes/one-zinc-light"
+	@$(MAKE) --no-print-directory _check-copy \
+		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-zinc-dark" \
+		DST="$(HOME)/.config/ghostty/themes/one-zinc-dark"
 	@$(MAKE) --no-print-directory _check-copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
 	@$(MAKE) --no-print-directory _check-copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
+	@# Both terminals read the same config; report which of them exist here.
+	@for app in cmux Ghostty; do \
+		[ -d "/Applications/$$app.app" ] \
+			&& echo "    ✓ $$app.app" \
+			|| echo "    · $$app.app [not installed — brew bundle install]"; \
+	done
 	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — global)"
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
@@ -1704,9 +1719,18 @@ theme:
 		f="$(HOME)/.config/ghostty/themes/$$t"; \
 		[ -s "$$f" ] || { echo "  ✗ theme $$t missing or empty at $$f"; exit 1; }; \
 	done
-	@if command -v ghostty >/dev/null 2>&1; then \
-		ghostty +validate-config --config-file="$(HOME)/.config/ghostty/config" >/dev/null \
-			&& echo "    ✓ ghostty config valid"; \
+	@# Resolve a ghostty binary rather than trusting PATH. The ghostty CASK ships
+	@# no binary (app bundle + manpages + completions only), so `which ghostty`
+	@# returns cmux's BUNDLED copy — validation would silently stop happening the
+	@# day cmux is uninstalled. Prefer the standalone app, fall back to PATH.
+	@GB="/Applications/Ghostty.app/Contents/MacOS/ghostty"; \
+	[ -x "$$GB" ] || GB="$$(command -v ghostty 2>/dev/null)"; \
+	if [ -n "$$GB" ] && [ -x "$$GB" ]; then \
+		"$$GB" +validate-config --config-file="$(HOME)/.config/ghostty/config" >/dev/null || exit 1; \
+		"$$GB" +validate-config --config-file="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config" >/dev/null || exit 1; \
+		echo "    ✓ ghostty config valid ($$GB)"; \
+	else \
+		echo "    · no ghostty binary found — config not validated"; \
 	fi
 	@echo ""
 	@echo "  Done. cmux picks up the terminal palette on reload (Cmd+Shift+,)."

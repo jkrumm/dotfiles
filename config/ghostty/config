@@ -7,6 +7,8 @@ shell-integration-features = cursor,sudo,title
 macos-option-as-alt = left
 
 # Auto-switch the One Zinc pair with macOS appearance.
-# Kept in sync with config.cmux (the file cmux actually reads). herdr runs its
-# built-in one-dark/one-light for its own chrome — see config/herdr/config.toml.
+# Kept in sync with config.appsupport, which is loaded AFTER this file by both
+# cmux and bare Ghostty and therefore wins on any key set in both (measured, see
+# that file's header). herdr runs its built-in one-dark/one-light for its own
+# chrome — see config/herdr/config.toml.
 theme = light:one-zinc-light,dark:one-zinc-dark
