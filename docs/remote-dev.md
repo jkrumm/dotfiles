@@ -207,9 +207,15 @@ That split is also why the theme is a **named** built-in (`one-dark`/`one-light`
 than herdr's `terminal` theme, which inherits the host terminal's ANSI palette. On the
 `dev` path herdr renders on the mini, so `terminal` would mean negotiating the palette
 through mosh's UDP proxy. A named theme needs no negotiation and looks the same over both
-transports. Same reasoning for `auto_switch`: it works on the `desk` path (local client,
-direct terminal) and may not survive the mosh proxy, which is why `name` is set to the dark
-member rather than left unset — that is the fallback you actually get.
+transports.
+
+`auto_switch` is **off** (2026-07-27): herdr is pinned to `one-dark` and does not follow
+macOS appearance. Verified by capturing a herdr client in a pty — it emits `OSC 10`/`OSC 11`
+background queries plus DEC mode `2031`, which is the appearance probe, and over mosh those
+queries would have to round-trip through the UDP proxy to be answered at all. Pinning
+sidesteps that entirely, and lets every UI color be chosen for a dark background alone.
+The cost, stated plainly: the terminal still auto-switches, and herdr paints its own
+background, so macOS light mode would leave a dark sidebar framing light panes.
 
 Apply a change to the running server without dropping panes:
 

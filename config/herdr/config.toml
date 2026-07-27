@@ -30,11 +30,23 @@ onboarding = false
 # looks the same over both transports.
 name = "one-dark"
 
-# Follow the host terminal's reported light/dark appearance. Reliable on the
-# `desk` path (local client, direct terminal). Over mosh the appearance report
-# may not survive the proxy — in which case `name` above is what you get, which
-# is why it is set to the dark member rather than left unset.
-auto_switch = true
+# PINNED DARK, deliberately (2026-07-27). herdr does not follow the host
+# terminal's light/dark appearance.
+#
+# The cost is real and worth stating: the TERMINAL still auto-switches
+# (`theme = dark:one-dark,light:one-light` in config/ghostty/config.cmux), and
+# herdr paints its own background rather than inheriting one. So if macOS ever
+# flips to light, pane CONTENT goes light while herdr's chrome stays dark — a
+# dark sidebar framing light panes. Pinning is only correct because light mode
+# is not actually used here.
+#
+# What it buys: every color in the UI can be chosen for a dark background
+# alone. Nothing has to clear a contrast bar on #fafafa it would never meet, so
+# the vivid One Dark values are usable — see `branch` under [ui.sidebar.spaces].
+#
+# To go back to following appearance: set auto_switch = true and revert that
+# branch color to #50a14f, which is the compromise value that survives both.
+auto_switch = false
 dark_name = "one-dark"
 light_name = "one-light"
 
@@ -78,11 +90,14 @@ width = "90%"
 height = "90%"
 
 [ui]
-# Named, NOT hex. `auto_switch` above flips the whole UI between one-dark and
-# one-light; a hex accent tuned for #282c34 washes out on #fafafa. "blue"
-# resolves through the active palette, so it follows the switch for free. Same
-# rule as config/starship.toml — see its header.
-accent = "blue"
+# Hex, now that [theme] is pinned dark — this is One Dark's own blue, the exact
+# value config/ghostty/themes/one-dark paints as palette 4, so herdr's accent
+# and the terminal's blue are the same pixel. A named "blue" would resolve to
+# whatever the active palette calls blue, which is close but not identical.
+#
+# This is only safe BECAUSE auto_switch is false. Turn it back on and this must
+# return to "blue" — #61afef scores 2.26 on #fafafa.
+accent = "#61afef"
 
 sidebar_width = 30
 sidebar_min_width = 20
@@ -132,24 +147,21 @@ row_gap = 0
 # Branch and dirty-state per workspace, so `rd repos` isn't needed to answer
 # "did I leave that checkout dirty".
 # `branch` is styled because herdr's contextual default for that token is
-# PURPLE, which is not wanted. Overriding costs the theme-awareness that bare
-# tokens get for free — inline token styles accept strict hex only, so this one
-# value has to survive both backgrounds on its own.
+# PURPLE, which is not wanted. Inline token styles accept strict hex only, so
+# this value cannot adapt — which is fine now that [theme] is pinned dark.
 #
-# #50a14f (One Light's green) is the pick. Measured WCAG contrast:
+# #98c379 is One Dark's own green. Measured WCAG contrast on #282c34:
 #
-#   color                       on #282c34   on #fafafa   worst
-#   One Dark green   #98c379         6.94         1.93     1.93  ✗ dies on light
-#   One Dark purple  #c678dd         4.75         2.82     2.82  (the default)
-#   One Light green  #50a14f         4.37         3.07     3.07  ✓
+#   One Dark green   #98c379   6.94   ← this, only viable because we pinned dark
+#   One Dark purple  #c678dd   4.75   (herdr's default)
+#   One Light green  #50a14f   4.37   (the both-backgrounds compromise, dropped)
 #
-# It reads duller than One Dark's #98c379 on a dark background — that is the
-# price of one hex serving both. It also matches starship's green branch, so
-# the sidebar and the prompt name the branch in the same color.
-# If you ever pin `auto_switch = false` above, switch this to #98c379.
+# It also matches starship's green branch, so the sidebar and the prompt name
+# the branch in the same color. If auto_switch is ever turned back on, this
+# MUST go back to #50a14f — #98c379 scores 1.93 on #fafafa, effectively invisible.
 rows = [
   ["state_icon", "workspace"],
-  [{ token = "branch", fg = "#50a14f" }, "git_status"],
+  [{ token = "branch", fg = "#98c379" }, "git_status"],
 ]
 
 [ui.toast]

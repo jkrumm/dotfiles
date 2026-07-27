@@ -651,7 +651,7 @@ They only look like one product because all three are set to One:
 | Layer | File | Setting |
 |-|-|-|
 | Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:one-dark,light:one-light` |
-| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch`, `dark_name`/`light_name` |
+| herdr | `config/herdr/config.toml` | `name = "one-dark"`, **`auto_switch = false`** — pinned dark |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
 **Change one, change all three.** The `basalt-ui-{dark,light}` pair is still
@@ -670,12 +670,19 @@ Four decisions in there that are not taste:
   which is the obvious-looking choice. On the `dev` path herdr renders *on the
   mini* and would have to negotiate the palette through mosh's UDP proxy. A
   named theme needs no negotiation and looks identical over both transports.
-- **Colors outside the theme files are ANSI names, never hex** — starship's
-  styles and herdr's `ui.accent`. macOS appearance flips the background between
-  `#282c34` and `#fafafa`; a hex tuned for one is unreadable on the other, while
-  a named color resolves through the active palette. This is also why herdr's
-  sidebar rows use bare tokens instead of `{ token, fg = "#..." }` — inline
-  token styles accept strict hex only.
+- **starship's colors are ANSI names, never hex.** The terminal still flips
+  between `#282c34` and `#fafafa` with macOS appearance, and a hex tuned for one
+  is unreadable on the other; a named color resolves through the active palette.
+- **herdr is pinned dark (`auto_switch = false`) and therefore uses hex.**
+  Asymmetric with starship on purpose. herdr paints its own background rather
+  than inheriting the terminal's, so pinning has a real cost: in macOS light
+  mode, pane *content* goes light while herdr's chrome stays dark. That is
+  accepted because light mode isn't used here, and it buys colors chosen for a
+  dark background alone — `ui.accent = "#61afef"` and the sidebar `branch`
+  token at `#98c379` (6.94 contrast) instead of the washed-out `#50a14f` (4.37)
+  that a both-backgrounds compromise forces. **Turning `auto_switch` back on
+  means reverting both**, or they drop to ~2.0 contrast on `#fafafa`.
+  `branch` is styled at all because herdr's contextual default for it is purple.
 - **Font is `JetBrainsMono Nerd Font Mono`, the "Mono" family specifically.**
   herdr's state icons and starship's glyphs are Nerd Font codepoints (tofu
   without it), and the Mono variant forces single-width glyphs so an icon can't
