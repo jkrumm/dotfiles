@@ -149,8 +149,14 @@ echo ""
 if (( fail == 0 )); then
   echo "  $pass passed, $skipped skipped — remote dev is ready."
   echo ""
-  echo "  dev            mosh in, herdr there (survives lid-close, no reattach)"
-  echo "  desk           herdr --remote (local keybindings; answer N to the restart prompt)"
+  echo "  Go look at it:"
+  echo "    dev          mosh in, herdr there (survives lid-close, no reattach)"
+  echo "    desk         herdr --remote (local keybindings; answer N to the restart prompt)"
+  echo ""
+  echo "  Put work on it (no terminal needed):"
+  echo "    repos        what's on the host      work <repo>   workspace + claude"
+  echo "    agents       both lanes, deduped     rd bg <repo> '<task>'   durable daemon"
+  echo "    rd help      full surface"
   echo ""
   exit 0
 fi
