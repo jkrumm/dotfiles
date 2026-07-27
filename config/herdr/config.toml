@@ -50,6 +50,33 @@ auto_switch = false
 dark_name = "one-dark"
 light_name = "one-light"
 
+# THE ACTIVE SIDEBAR ROW NEEDS THIS OR IT IS INVISIBLE.
+#
+# herdr marks the focused workspace row by painting a background; every other
+# row emits no background at all and shows the terminal through. In herdr's
+# one-dark theme that highlight is `surface_dim` = #282C34 — which is exactly
+# what config/ghostty/themes/one-dark sets as the terminal BACKGROUND. Two
+# programs independently picked the same authentic One Dark value for different
+# jobs, so the highlight renders as backdrop-on-backdrop and the active row
+# looks identical to the inactive ones.
+#
+# Note what caused it: unifying the two palettes did. Before that the terminal
+# was basalt-ui (#1c2127) and herdr was on its default theme, so the two
+# disagreed by accident and the highlight worked by accident. Matching them
+# removed the accident.
+#
+# Verified empirically, not guessed — forcing each [theme.custom] token to
+# #FF00FF in turn and capturing a herdr client in a pty showed `surface_dim`
+# is the only one that repaints the active row (the full token set is accent,
+# panel_bg, surface0, surface1, surface_dim, overlay0, overlay1, text,
+# subtext0, mauve, green, yellow, red, blue, teal, peach).
+#
+# #3E4451 is One Dark's selection background, and the same value
+# config/ghostty/themes/one-dark uses for `selection-background` — so a focused
+# row in the sidebar and selected text in a pane are the same color.
+[theme.custom]
+surface_dim = "#3E4451"
+
 [terminal]
 # $SHELL, then /bin/sh. Left empty on purpose: the mini and the MacBook should
 # both just use zsh as configured, not a pinned absolute path that breaks if
