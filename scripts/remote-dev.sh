@@ -59,6 +59,17 @@ resolve_repo() {
   echo "$path"
 }
 
+# herdr validates agent names: a leading lowercase letter, then only
+# [a-z0-9_-], 1-32 chars. Repo names are not so constrained — `work jkrumm.com`
+# failed that check *after* the workspace had already been created, so the error
+# was both cryptic and left an orphan workspace behind on the host.
+agent_name() {
+  local s
+  s=$(printf %s "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')
+  s=$(printf %s "$s" | sed 's/^[^a-z]*//')
+  printf %s "${s:0:32}"
+}
+
 # --- subcommands -------------------------------------------------------------
 
 cmd_repos() {
@@ -107,17 +118,36 @@ for a in agents:
     return 0
   fi
 
+  local agent
+  agent=$(agent_name "$name")
+  [[ -n $agent ]] || die "'$name' has no usable herdr agent name — rename the repo or start it by hand"
+
   local pane
   pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus" \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
   [[ -n $pane ]] || die "herdr workspace create failed for $path"
 
-  local out
-  out=$(host_run "herdr agent start '$name' --kind claude --pane '$pane'")
+  # `herdr workspace create` returns as soon as the pane exists, which is before
+  # its shell is up — starting the agent immediately loses the race and reports
+  # `agent_pane_busy: not an available shell`. It reads like the pane is
+  # occupied, i.e. the exact opposite of the truth. One second is enough in
+  # practice; the loop is there so a loaded host degrades into a wait rather
+  # than a spurious failure.
+  local out="" i=0
+  while (( i < 10 )); do
+    sleep 1; i=$((i+1))
+    out=$(host_run "herdr agent start '$agent' --kind claude --pane '$pane'")
+    echo "$out" | grep -q 'agent_pane_busy' || break
+  done
+
   if echo "$out" | grep -q '"type":"agent_started"'; then
-    echo "→ started claude '$name' in pane $pane  ($path)"
-    note "   'dev' to attach · 'rd read $name' to watch · 'rd say $name \"...\"' to steer"
+    echo "→ started claude '$agent' in pane $pane  ($path)"
+    note "   'dev' to attach · 'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
   else
+    # Roll the workspace back. Leaving it costs a stale entry in every later
+    # `herdr workspace list` and, worse, makes the next `work` look like it
+    # half-succeeded.
+    host_run "herdr workspace close '${pane%%:*}'" >/dev/null 2>&1
     die "agent start failed: $out"
   fi
 }
@@ -157,8 +187,21 @@ cmd_bg() {
   local wsid=${pane%%:*}
 
   # --bg takes the positional prompt and conflicts with -p.
-  local esc=${task//\'/\'\\\'\'}
-  host_run "herdr pane run '$pane' claude --bg '$esc'" >/dev/null 2>&1
+  #
+  # There are TWO shells between here and Claude, and the obvious quoting loses
+  # to the second one silently. `herdr pane run` accepts argv but joins it back
+  # into a line for the pane's shell to parse, so a prompt quoted for the ssh
+  # hop arrives at the pane unquoted and word-splits: 'read the repo and
+  # summarize…' reached Claude as the one-word prompt `read`. The daemon then
+  # started, reported healthy in `agents`, and sat there asking what to read.
+  #
+  # base64 removes the problem rather than escaping around it — the alphabet has
+  # no shell metacharacters, so the payload survives both parses byte-identical
+  # no matter what the task contains. The literal double quotes inside the
+  # single-quoted argv element are what keep the pane-side expansion one word.
+  local b64
+  b64=$(printf %s "$task" | base64 | tr -d '\n')
+  host_run "herdr pane run '$pane' claude --bg '\"\$(echo $b64 | base64 -d)\"'" >/dev/null 2>&1
 
   local id="" i=0
   while (( i < 24 )); do
@@ -257,6 +300,49 @@ PY
 cmd_read() {
   local name="${1:-}"
   [[ -n $name ]] || die "usage: read <agent>   (see 'agents')"
+
+  # The two lanes need completely different read paths, and getting this wrong
+  # was actively misleading: `rd bg` hands you a session id, but that id is not
+  # a herdr agent — the launcher pane is closed the moment the daemon exists —
+  # so the socket API answered `agent_not_found` for an agent that was running
+  # perfectly well.
+  #
+  # `claude logs` is not the alternative. It attaches a full-screen TUI, so it
+  # cannot be piped, read from another machine, or used by an agent. The
+  # scriptable surface is the session transcript Claude Code already writes per
+  # project, which is append-only and readable while the daemon runs.
+  local sid
+  sid=$(host_run 'claude agents --json' | TARGET="$name" python3 -c "
+import json, os, sys
+t = os.environ['TARGET']
+try: agents = json.load(sys.stdin)
+except Exception: sys.exit(0)
+for a in agents:
+    if a.get('kind') != 'background':
+        continue
+    if a.get('id') == t or (a.get('sessionId') or '').startswith(t):
+        print(a['sessionId']); break
+" 2>/dev/null)
+
+  if [[ -n $sid ]]; then
+    # shellcheck disable=SC2016  # $HOME expands on the dev host, not here
+    host_run "tail -n 300 \"\$HOME\"/.claude/projects/*/$sid.jsonl 2>/dev/null" | python3 -c '
+import json, sys
+out = []
+for line in sys.stdin:
+    try: d = json.loads(line)
+    except Exception: continue
+    if d.get("type") != "assistant": continue
+    for b in d.get("message", {}).get("content", []):
+        if b.get("type") == "text" and b.get("text", "").strip():
+            out.append(b["text"].strip())
+        elif b.get("type") == "tool_use":
+            out.append("\033[2m· " + str(b.get("name")) + "\033[0m")
+print("\n\n".join(out[-12:]) if out else "  (no assistant output yet)")
+'
+    return 0
+  fi
+
   host_run "herdr agent read '$name' --source ${2:-recent}"
 }
 
