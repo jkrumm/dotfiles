@@ -217,6 +217,35 @@ agent/port forwarding and full-speed transfers that Tailscale SSH doesn't provid
 The full per-path access model + break-glass runbook lives in
 `dotfiles-private/docs/access-model.md`.
 
+## Tailnet ACL — as code
+
+Moved out of `homelab-private` on 2026-07-27. The ACL is **tailnet-wide, not
+homelab's**: it governs Mac↔Mac ssh/screen-sharing, mosh, the dev-port block,
+rb, the phone and the e-reader. Living in homelab-private also put it on the one
+machine that *cannot* apply it — the API key is `op://Private/Tailscale`, which
+the mini's cache refuses unconditionally by design, so a change needed the repo
+(mini) and the biometric human (MacBook) at the same time. `dotfiles-private` is
+on the MacBook, which collapses that back to one machine.
+
+Same split as serve: tooling here, declared state private.
+
+```bash
+make tailscale-acl-diff    # ALWAYS first — push overwrites the whole tailnet ACL
+make tailscale-acl-pull    # fetch live INTO dotfiles-private/tailscale-acl.jsonc
+make tailscale-acl-push    # validate + apply (prompts; ACL_PUSH_YES=1 to bypass)
+```
+
+`pull` **writes the file** — it previously only printed to stdout despite the
+name, so "normalise the formatting with pull" silently did nothing and the local
+file kept drifting in whitespace from the live ACL (every diff then rendered the
+whole file, hiding real changes). It stages through a temp file, so a failed
+fetch cannot truncate the source of truth.
+
+**Every listening port needs a grant, and the failure is silent.** A port with
+no grant does not refuse — it times out, with nothing in any log on either end.
+That is how the dev-port work went missing for a full debugging cycle; rb's
+dedicated `tcp:7730` grant encodes the same lesson.
+
 ## Inbound exposure — `tailscale serve` / Funnel
 
 Serve bindings are imperative daemon state **keyed on the machine's MagicDNS

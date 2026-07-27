@@ -1530,6 +1530,28 @@ tailscale-serve-check:
 	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-serve.sh --check
 
+# Tailnet-wide ACL as code — declared in dotfiles-private/tailscale-acl.jsonc,
+# applied here. Moved out of homelab-private 2026-07-27: the ACL governs Mac↔Mac
+# ssh/mosh/dev-ports, rb, phone and e-reader, none of which is homelab's, and
+# living there put it on the one machine that CANNOT apply it (the API key is
+# op://Private, refused by the mini's cache by design).
+#
+# ALWAYS `tailscale-acl-diff` before `-push`: push overwrites the whole tailnet
+# ACL, and a bad rule can lock you out of every host at once. Push prompts for
+# confirmation; ACL_PUSH_YES=1 bypasses it for non-interactive use.
+.PHONY: tailscale-acl-pull tailscale-acl-diff tailscale-acl-push
+tailscale-acl-pull:
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh pull
+
+tailscale-acl-diff:
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh diff
+
+tailscale-acl-push:
+	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh
+	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-acl-sync.sh push
+
 # Lint the shim + its harness. Static-only, runs on ANY machine (no cache/age key needed).
 .PHONY: secrets-lint
 secrets-lint:
@@ -1708,6 +1730,10 @@ help:
 	@echo ""
 	@echo "  make tailscale-serve        Apply this machine's declared serve/funnel bindings"
 	@echo "  make tailscale-serve-check  Report drift between declared and live bindings"
+	@echo ""
+	@echo "  make tailscale-acl-diff     Diff live tailnet ACL vs dotfiles-private (ALWAYS run first)"
+	@echo "  make tailscale-acl-pull     Fetch live ACL into dotfiles-private (normalises formatting)"
+	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."
