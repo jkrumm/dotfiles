@@ -1,13 +1,19 @@
 # cmux / Ghostty config — tuned for Warp-like feel
 # Reload: Cmd+Shift+, inside cmux (or restart)
 
-# ── Themes (One Dark / One Light) ────────────────────────────────────────────
-# Paired with herdr's built-in one-dark/one-light (config/herdr/config.toml).
-# herdr paints its chrome from its own palette and pane CONTENT from this one,
-# so both ends must name the same theme or the sidebar fights the shell.
+# ── Themes (Catppuccin Mocha / Latte) ────────────────────────────────────────
+# Ghostty's OWN bundled themes — nothing hand-authored to maintain. Paired with
+# herdr's built-in catppuccin/catppuccin-latte (config/herdr/config.toml), which
+# is the only theme whose sidebar highlight survives the pairing; the reasoning
+# and the measurements are in that file's [theme] block.
+#
+# NAMES ARE EXACT FILENAMES — case and spaces included. `catppuccin-mocha` does
+# NOT resolve ("theme not found", then a silent fall back to no theme at all);
+# only "Catppuccin Mocha" does. Verified with `ghostty +validate-config`.
+#
 # The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want
 # it back — swap the names here and the two in herdr's [theme] block together.
-theme = dark:one-dark,light:one-light
+theme = dark:Catppuccin Mocha,light:Catppuccin Latte
 
 # ── Font ─────────────────────────────────────────────────────────────────────
 # Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs

@@ -728,7 +728,7 @@ _setup-gitignore:
 
 .PHONY: _setup-ghostty
 _setup-ghostty:
-	@echo "  Ghostty (One Dark / One Light themes)..."
+	@echo "  Ghostty (Catppuccin Mocha / Latte — bundled; basalt-ui copied)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
@@ -747,23 +747,20 @@ _setup-ghostty:
 		ln -sfn "$$_src" "$$_dst"; \
 		echo "    ✓ config.cmux"; \
 	fi
-	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
-	@# one-{dark,light} are the active pair (matched to herdr's built-ins);
-	@# basalt-ui-{dark,light} stay installed as the tracked alternative.
-	@$(MAKE) --no-print-directory _copy \
-		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-light" \
-		DST="$(HOME)/.config/ghostty/themes/one-light"
-	@$(MAKE) --no-print-directory _copy \
-		SRC="$(DOTFILES_DIR)/config/ghostty/themes/one-dark" \
-		DST="$(HOME)/.config/ghostty/themes/one-dark"
+	@# The ACTIVE pair is Catppuccin Mocha/Latte, which ghostty BUNDLES — so
+	@# there is nothing to install for it. Only hand-authored themes need
+	@# copying, and only basalt-ui-{dark,light} is left (the tracked
+	@# alternative). Themes are COPIED, not symlinked — cmux skips symlinks.
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-light" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-light"
 	@$(MAKE) --no-print-directory _copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
-	@# Clean up old unmanaged theme files
-	@for old in ayu-mirage basalt-ui; do \
+	@# Clean up old unmanaged theme files. one-{dark,light} were hand-authored
+	@# here until 2026-07-27 and are now superseded by ghostty's bundled
+	@# Catppuccin pair, so retire any copy an earlier `make setup` installed.
+	@for old in ayu-mirage basalt-ui one-dark one-light; do \
 		if [ -f "$(HOME)/.config/ghostty/themes/$$old" ] && [ ! -L "$(HOME)/.config/ghostty/themes/$$old" ]; then \
 			mv "$(HOME)/.config/ghostty/themes/$$old" "$(HOME)/.config/ghostty/themes/$$old.bak"; \
 			echo "    ✓ backed up old $$old theme"; \

@@ -109,8 +109,8 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/gitignore_global` | `~/.gitignore_global` | sc-note.md, CLAUDE.local.md |
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings |
 | `config/ghostty/config.cmux` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Primary cmux config — font, theme, cursor, padding |
-| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-{dark,light}` (active, paired with herdr) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
-| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme + UI. The **file** only — the same dir holds herdr's sockets and logs |
+| `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `basalt-ui-{dark,light}` only — the active Catppuccin pair is **bundled with ghostty**, nothing to install. Copied, not symlinked — cmux symlink bug |
+| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override). The **file** only — the same dir holds herdr's sockets and logs |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
@@ -646,43 +646,52 @@ Three programs paint one screen and none of them can see the other two, so the
 palette is kept in agreement by hand. herdr paints its **chrome** (sidebar,
 borders, tab row) from its own built-in theme; the outer terminal paints **pane
 content** from its ANSI palette; starship paints the **prompt** inside that.
-They only look like one product because all three are set to One:
+They only look like one product because all three are set to Catppuccin, and all
+three follow macOS appearance:
 
 | Layer | File | Setting |
 |-|-|-|
-| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:one-dark,light:one-light` |
-| herdr | `config/herdr/config.toml` | `name = "one-dark"`, **`auto_switch = false`** — pinned dark |
+| Terminal | `config/ghostty/config.cmux` (+ `config`) | `theme = dark:Catppuccin Mocha,light:Catppuccin Latte` |
+| herdr | `config/herdr/config.toml` | `name = "catppuccin"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
 **Change one, change all three.** The `basalt-ui-{dark,light}` pair is still
 tracked and installed if you want Blueprint v6 back; swapping means editing the
 two ghostty configs and herdr's `[theme]` block together.
 
-Four decisions in there that are not taste:
+Five decisions in there that are not taste:
 
-- **`one-{dark,light}` are hand-authored, not upstream copies.** Ghostty's
-  bundled "One Half Dark" repeats its normal colors verbatim in slots 9-14, so
-  bright text is indistinguishable from normal — bad in a terminal, where
-  `ls`/`grep`/`diff` lean on bright. "One Half Light" does the opposite and fills
-  brights with the *dark* theme's pastels, which vanish on `#fafafa`. Both are
-  fixed here; the rationale is in each theme file's header.
+- **Catppuccin, because it is the only theme whose sidebar highlight survives
+  the pairing.** herdr marks the focused workspace row by painting a background;
+  in most themes it leaves the sidebar itself transparent, so that highlight is
+  the only painted surface and it lands on the theme's own background — which is
+  exactly what the matching terminal theme paints as *its* background. The active
+  row then renders backdrop-on-backdrop and looks identical to the inactive ones.
+  Measured per theme by capturing a herdr client in a pty: catppuccin paints
+  `#181825` mantle for the sidebar and `#1E1E2E` base for the active row (two
+  tiers, works); one-dark, tokyo-night, nord, gruvbox, solarized, kanagawa,
+  rose-pine and dracula all paint a single value and collide. This is structural
+  — herdr's `[theme.custom]` vocabulary *is* Catppuccin's (`surface0`,
+  `surface1`, `surface_dim`, `overlay0`, `text`, `subtext0`, `mauve`, `peach`,
+  `teal`), so the engine is Catppuccin-native and the rest are mappings onto it.
+  **A One Dark setup lived here briefly and had to hand-patch `surface_dim`.**
+- **`nord`, `dracula` and `vesper` are not viable at all** — herdr ships no light
+  sibling for any of them, so `auto_switch` has nothing to switch to.
+- **Ghostty theme names are exact filenames**, case and spaces included.
+  `catppuccin-mocha` does *not* resolve — it errors and falls back to no theme.
+  Only `Catppuccin Mocha` works. Verified with `ghostty +validate-config`.
 - **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
   which is the obvious-looking choice. On the `dev` path herdr renders *on the
   mini* and would have to negotiate the palette through mosh's UDP proxy. A
   named theme needs no negotiation and looks identical over both transports.
-- **starship's colors are ANSI names, never hex.** The terminal still flips
-  between `#282c34` and `#fafafa` with macOS appearance, and a hex tuned for one
-  is unreadable on the other; a named color resolves through the active palette.
-- **herdr is pinned dark (`auto_switch = false`) and therefore uses hex.**
-  Asymmetric with starship on purpose. herdr paints its own background rather
-  than inheriting the terminal's, so pinning has a real cost: in macOS light
-  mode, pane *content* goes light while herdr's chrome stays dark. That is
-  accepted because light mode isn't used here, and it buys colors chosen for a
-  dark background alone — `ui.accent = "#61afef"` and the sidebar `branch`
-  token at `#98c379` (6.94 contrast) instead of the washed-out `#50a14f` (4.37)
-  that a both-backgrounds compromise forces. **Turning `auto_switch` back on
-  means reverting both**, or they drop to ~2.0 contrast on `#fafafa`.
-  `branch` is styled at all because herdr's contextual default for it is purple.
+- **starship uses ANSI names, herdr's one override uses hex — asymmetric on
+  purpose.** starship's names resolve through the active palette, so they follow
+  the switch for free. herdr's inline sidebar token styles accept strict hex
+  only, so the single `branch` override (`#40a02b`) has to serve both
+  backgrounds: 4.91 contrast on Mocha, 2.96 on Latte. It is styled at all because
+  herdr renders `branch` in the theme's mauve slot, and that is universal, not a
+  Catppuccin quirk — `#CBA6F7` catppuccin, `#C678DD` one-dark, `#BB9AF7`
+  tokyo-night, `#B48EAD` nord. No theme choice avoids the purple.
 - **Font is `JetBrainsMono Nerd Font Mono`, the "Mono" family specifically.**
   herdr's state icons and starship's glyphs are Nerd Font codepoints (tofu
   without it), and the Mono variant forces single-width glyphs so an icon can't
