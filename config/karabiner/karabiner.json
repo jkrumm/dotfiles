@@ -63,6 +63,14 @@
                                 },
                                 "to": [{ "shell_command": "open https://argo.jkrumm.com" }],
                                 "type": "basic"
+                            },
+                            {
+                                "from": {
+                                    "key_code": "d",
+                                    "modifiers": { "mandatory": ["left_control", "left_option", "left_shift"] }
+                                },
+                                "to": [{ "shell_command": "open -b com.goodsnooze.MacWhisper" }],
+                                "type": "basic"
                             }
                         ]
                     },
@@ -123,20 +131,6 @@
                                     "modifiers": { "mandatory": ["left_control", "left_option", "left_shift"] }
                                 },
                                 "to": [{ "shell_command": "open -b dev.zed.Zed" }],
-                                "type": "basic"
-                            },
-                            {
-                                "conditions": [
-                                    {
-                                        "bundle_identifiers": ["^com\\.mitchellh\\.ghostty$", "^com\\.cmuxterm\\.app$"],
-                                        "type": "frontmost_application_unless"
-                                    }
-                                ],
-                                "from": {
-                                    "key_code": "w",
-                                    "modifiers": { "mandatory": ["left_control", "left_option", "left_shift"] }
-                                },
-                                "to": [{ "shell_command": "open -b com.goodsnooze.MacWhisper" }],
                                 "type": "basic"
                             }
                         ]
