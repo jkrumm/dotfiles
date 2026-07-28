@@ -386,11 +386,61 @@ Why Caddy rather than more `tailscale serve` rows: issue #18827 (open) drops Web
 through serve/funnel every 10-40s, which is HMR breaking on a timer. Caddy proxies
 upgrades transparently. If an existing binding ever shows that symptom, this is the fix.
 
-### 5. Phone
+### 5. Phone — BUILT, ACL grant outstanding
 
-Enable Claude Remote Control against a session on the mini. Optionally add cmux Remote
-(needs the `cmux-relay` helper on the mini, connects over the existing tailnet) if you
-want a shell rather than just the agent.
+Three tiers, not one — each solves a different piece of "check on this from my phone":
+
+| Tier | What | Reach |
+|-|-|-|
+| ntfy push | Notification hooks fire a push when an agent needs input | Outbound only — tells you something happened, doesn't let you act |
+| Claude Remote Control | First-party, zero inbound (phone dials out to Anthropic's relay) | One Claude session at a time |
+| Collie | herdr plugin + Bun bridge, phone-friendly PWA over the tailnet | The whole herd — every pane, every agent, one URL |
+
+Claude Remote Control is enabled and covers the common case (babysit one running
+agent). It does not scale past one session, and it cannot see herdr's pane/workspace
+model at all — for the actual "which of my 5-8 agents is blocked" question, that's
+Collie's job.
+
+**Collie over granting the phone ssh+mosh.** Moshi is a perfectly good mosh client, but
+the grant behind it is a full interactive shell as `jkrumm` — the whole secrets cache,
+including the `careerpartner` work refs, reachable from a device that can be lost,
+stolen, or picked up by a kid. Collie's bridge is loopback-bound and fronted by
+`tailscale serve`; the phone gets one scoped web surface, not a login shell with
+`secrets-run` sitting right there. See CLAUDE.md's "Collie — the phone control
+surface" for the full model (what it is, why `COLLIE_SKIP_SERVE=1` is mandatory, the
+LaunchAgent it needed because macOS has no systemd) — not duplicated here.
+
+**Outstanding: the ACL grant, MacBook-only.** Collie is installed and declared in
+`dotfiles-private/tailscale-serve.mini.conf` (`8788  http://127.0.0.1:8787  no`) — run
+`make collie-setup` to put the bridge under a real LaunchAgent (it starts out on
+`collie-ctl.sh`'s bare-`nohup` fallback, which does not survive a reboot). Either way,
+that serve row is inert until the tailnet ACL grants `tag:phone` a path to it. That
+grant can only be applied from the MacBook: the
+ACL API key is `op://Private/Tailscale`, which the mini's secrets cache refuses
+unconditionally by design (same reason the ACL itself lives in `dotfiles-private`
+rather than `homelab-private` — see `## Tailnet ACL — as code` in CLAUDE.md). The
+exact grant to add, in `dotfiles-private/tailscale-acl.jsonc`:
+
+```jsonc
+{
+  "src": ["tag:phone"],
+  "dst": ["tag:mac"],
+  "ip": ["tcp:8788"]
+}
+```
+
+The port is deliberately **8788, not 443** — `tailscale serve`'s default port is
+shared by every future serve row that doesn't say otherwise, so a grant on 443 would
+mean "whatever gets published next", not "collie". A dedicated port keeps the grant
+scoped to exactly one service, permanently — same reasoning as rb's dedicated
+`tcp:7730` grant. It also sits outside `7700-7799`, which is already granted
+`tag:mac → tag:mac` for dev servers, so reusing that range would hand collie to the
+work MacBook through an unrelated rule. `src` is narrowed to `tag:phone` alone — the
+MacBook already has `dev`/`desk` and doesn't need the web UI; add `tag:mac` only if
+browser access from the laptop is wanted. `tag:client` (the two TVs and the tablet)
+must never be granted.
+`tag:client` (the two TVs and the tablet) must never be added here. Apply with
+`make tailscale-acl-diff` (review) then `make tailscale-acl-push` from the MacBook.
 
 ### 6. Monitoring — DONE
 

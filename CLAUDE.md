@@ -437,12 +437,107 @@ herdr layers its own ssh hardening on top for `--remote` only
 per-attach control socket. The repo's `ControlMaster` still earns its place;
 it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
 
+## Collie — the phone control surface
+
+[Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
+that mirrors the herd on a phone: open a URL, see which agent is blocked, type
+a reply. Third-party, installed and **commit-pinned** by `make collie-setup` —
+`COLLIE_REF`/`COLLIE_VERSION` in the Makefile, same discipline as
+`HERDR_NOTES_REF` and for the same reason (`plugin install` re-clones + builds
+every time; upgrading is a reviewed diff of the pin, not `plugin update`,
+which doesn't exist). Chosen over granting the phone raw ssh+mosh: no port-22
+grant, no SSH key on a device that can be lost or stolen.
+
+**It is remote shell access by design, not "just a web UI".** One bridge call
+types arbitrary keystrokes into a live pane — Collie's own README says to
+treat the URL like a root login, and that framing should not get softened by
+how it looks (a phone-friendly PWA). Granting it is granting a shell.
+
+**The real gate is the ACL, not `COLLIE_TRUSTED_USER`.** Every node on this
+tailnet is tagged (`tag:mac`, `tag:phone`, `tag:client`, …), so `tailscale
+serve` has no human login to inject into `Tailscale-User-Login` — the
+trusted-user check cannot tell our own devices apart from each other. That is
+why the `.env` leaves `COLLIE_TRUSTED_USER` unset and the grant is scoped to
+`tag:phone` specifically. **`tag:client` (the two TVs and the tablet) must
+never be granted** — a television driving coding agents is not a theoretical
+failure mode once the check itself can't discriminate.
+
+The `.env` (written once by hand, not templated — `make collie-setup` never
+touches it) carries four settings, each closing a specific gap:
+- `COLLIE_MULTI_SESSION=off` — the default `on` fronts **every** named herdr
+  session through one URL; this pins the bridge to the primary session only.
+- `COLLIE_PUBLIC_HOSTS=mini.<tailnet>.ts.net:8788,mini.<tailnet>.ts.net` — defeats
+  DNS rebinding, and **both entries are required**. `isHostAllowed`
+  (`bridge/server.ts`) matches the full `Host` header by exact string, and the
+  browser sends the ported host once the tailnet front door isn't on 443 — so
+  the bare name alone 403s every phone request while every loopback check still
+  passes clean. Verified matrix: `<name>:8788` → 200, bare `<name>` → 200,
+  `evil.example.com` → 403, `<name>:9999` → 403.
+- `COLLIE_SKIP_SERVE=1` — **mandatory**, not a preference. `collie-ctl.sh`
+  publishes itself imperatively (`tailscale serve --bg 8787`), but this repo
+  owns serve as *declared* state (`## Inbound exposure` above) and
+  `make tailscale-serve` runs `tailscale serve reset` first — an imperative
+  binding is silently wiped on the next convergence. Collie stays
+  loopback-only; the front door is the row in
+  `dotfiles-private/tailscale-serve.mini.conf`
+  (`8788  http://127.0.0.1:8787  no`). **Never funnel it.**
+  The tailnet port is **8788, not tailscale serve's default 443**: on 443 the
+  ACL grant would have to name the default port every future serve row lands on
+  unless it says otherwise, silently sharing one grant with whatever gets
+  published next — a dedicated port keeps the grant meaning exactly one
+  service, permanently (same lesson as rb's dedicated `tcp:7730` grant). It
+  also sits outside `7700-7799`, already granted `tag:mac → tag:mac` for dev
+  servers, so reusing that range would hand collie to the work MacBook through
+  an unrelated rule. An additive single-device tag (the `tag:iu-dashboard-funnel`
+  pattern) was considered to narrow the grant's `dst` from `tag:mac` to the mini
+  alone, and rejected: it requires re-tagging the device, and with a
+  collie-only port nothing listens on 8788 on the work MacBook anyway. The
+  bridge itself is still bound to loopback `127.0.0.1:8787` — only the
+  `tailscale serve` front door moved.
+- `COLLIE_HOST=127.0.0.1` — no interface binding beyond loopback; `serve`
+  terminates TLS on the tailnet and proxies in.
+
+**The LaunchAgent exists because macOS has no systemd.** `collie-ctl.sh`
+writes a systemd unit on Linux and falls back to a bare `nohup` on macOS,
+which does not survive a reboot — `collie/com.jkrumm.collie.plist.template`
+(rendered by `make collie-setup`, `RunAtLoad` + `KeepAlive`, same always-on
+shape as the herdr brew service) closes that gap. One trap already cost a
+debugging cycle here: invoking the plugin action through herdr
+(`herdr plugin action invoke start --plugin herdr.collie`) fails with
+`error: bun not found`, because a herdr-server-spawned command does not
+inherit Homebrew's PATH — the same class of failure as the
+mosh-server/`~/.zshenv` gap already documented above. The plist pins `PATH`
+explicitly for exactly that reason.
+
+**The plist sources the `.env`, and must.** The worse trap sits next to the PATH
+one and is silent where PATH is loud. The bridge reads `process.env` only
+(`bridge/config.ts`) and never parses `.env` itself — on Linux systemd feeds it
+in with `EnvironmentFile=-`, and launchd has no equivalent. A plist that execs
+`bun` directly therefore starts a bridge with `COLLIE_PUBLIC_HOSTS`,
+`COLLIE_MULTI_SESSION` and `COLLIE_SKIP_SERVE` **all unset** — every hardening
+setting above quietly off, DNS-rebinding guard included — while `launchctl list`
+shows status 0 and the UI works perfectly. So `ProgramArguments` runs
+`bash -c 'set -a; . .env; set +a; exec bun …'` instead. It was caught only
+because the acceptance check is behavioural: a spoofed `Host` header must still
+return 403 after any change to how the bridge is started. It had gone back to
+200. Re-run that assertion, not just `launchctl list`, whenever this plist or
+the `.env` moves.
+
+| Command | Does |
+|-|-|
+| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): install/refresh the pinned plugin, render + load the LaunchAgent |
+| `make collie-status` | Read-only: LaunchAgent state, bridge health, `tailscale serve status` |
+| `make collie-teardown` | Unload the LaunchAgent, uninstall the plugin — leaves `tailscale-serve.mini.conf` untouched (declared state, not this target's to change) |
+
+Upgrading is moving `COLLIE_REF` in a reviewed diff — there is no
+`plugin update`.
+
 ## Dev-host health heartbeat (mini only)
 
 One composite Uptime Kuma push monitor — `MacMini Dev Host - Push`, group
-`Local` — covers **five** components: tailscaled, sshd, herdr, mosh (both the
-binary and its Application Firewall allowlist membership), and the GitHub push
-credential. Driven by `scripts/devhost-health-check.sh` via the
+`Local` — covers **six** components: tailscaled, sshd, herdr, mosh (both the
+binary and its Application Firewall allowlist membership), the GitHub push
+credential, and collie. Driven by `scripts/devhost-health-check.sh` via the
 `com.jkrumm.devhost-health` LaunchAgent every 5 minutes. Opt-in per machine like
 `remote-access`:
 
@@ -458,13 +553,20 @@ Opening an inbound grant purely for monitoring would be new attack surface for a
 check the mini can report on itself over the already-granted outbound path. Same
 pattern as `MacMini Secret Seed - Push` and the Hermes monitors.
 
-**One monitor, not five.** herdr/sshd/tailscaled/mosh all fail together when the
-mini sleeps or drops off the tailnet; five monitors would be five simultaneous
-pages saying one thing. The deliberate exception is the GitHub push credential:
-it does not fail together with the other four (a token can expire while the host
-is perfectly healthy), and it is folded in anyway because a second Kuma push
-monitor was not worth it for one component. The failing component is named in
-the push `msg`.
+**One monitor, not six.** herdr/sshd/tailscaled/mosh all fail together when the
+mini sleeps or drops off the tailnet; six monitors would be six simultaneous
+pages saying one thing. Two components are deliberate exceptions, each folded in
+anyway because a second Kuma push monitor wasn't worth it for one component. The
+GitHub push credential can expire while the host is otherwise perfectly healthy.
+Collie is the second exception, on its own schedule for a different reason:
+`collie-setup` is opt-in per machine, so it can fail (or be absent) independently
+of the other five. Its check also asserts *behaviour*, not just liveness — the
+bridge answers 200 on loopback **and** a spoofed `Host` header must return 403.
+That second assertion exists because the bridge's hardening lives in a `.env`
+that launchd does not load on its own, so a mis-started bridge answers every
+liveness probe fine while the DNS-rebinding guard is silently gone — liveness
+alone cannot see that gap; only the behavioural check can. The failing
+component is named in the push `msg`.
 
 **The heartbeat asserts resolvability, not push rights** — and says "credential
 ready", not "push ready", on purpose. It makes no network call to GitHub, because

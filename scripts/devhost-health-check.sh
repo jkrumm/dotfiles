@@ -42,6 +42,9 @@ MOSH_SERVER_BIN="${MOSH_SERVER_BIN:-/opt/homebrew/bin/mosh-server}"
 TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
+CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
+COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/com.jkrumm.collie.plist}"
+COLLIE_URL="${COLLIE_URL:-http://127.0.0.1:8787}"
 
 # The push token is low-sensitivity (it can only spoof a heartbeat) but still
 # lives in a chmod-600 file rather than 1Password on purpose: monitoring must not
@@ -154,11 +157,42 @@ check_git_push() {
   echo "git credential ready"
 }
 
+check_collie() {
+  # Opt-in per machine (`make collie-setup`), so absence is not a failure —
+  # a machine that never wired the phone surface must not page forever.
+  [[ -f "$COLLIE_PLIST" ]] || { echo "collie not installed (skipped)"; return 0; }
+
+  # Two assertions, and the second is the point of this check existing.
+  #
+  # Liveness alone is not enough here. The bridge is remote shell access, and
+  # its hardening lives entirely in a `.env` that launchd does NOT load on its
+  # own — the bridge reads process.env only, systemd's `EnvironmentFile=` has no
+  # launchd equivalent, and a plist that execs bun directly starts a bridge with
+  # COLLIE_PUBLIC_HOSTS unset. That failure is invisible to every liveness
+  # signal: `launchctl list` reports status 0, the UI works, and the
+  # DNS-rebinding guard is simply gone. So assert the BEHAVIOUR, not the config.
+  #
+  # Both calls are loopback-only. No tailnet hop, no external dependency — a
+  # network wobble must not page this monitor (same reasoning as check_git_push
+  # deliberately not calling GitHub).
+  local code
+  code=$("$CURL_BIN" -s -o /dev/null -w '%{http_code}' --max-time 3 "$COLLIE_URL/" 2>/dev/null) || true
+  [[ "$code" == "200" ]] \
+    || { echo "collie bridge not answering (got ${code:-000}; check: make collie-status)"; return 1; }
+
+  code=$("$CURL_BIN" -s -H 'Host: evil.example.com' -o /dev/null -w '%{http_code}' \
+    --max-time 3 "$COLLIE_URL/api/snapshot" 2>/dev/null) || true
+  [[ "$code" == "403" ]] \
+    || { echo "collie hardening LOST — spoofed Host got ${code:-000}, expected 403 (the .env did not reach the process)"; return 1; }
+
+  echo "collie up (rebind guard active)"
+}
+
 # --- Run --------------------------------------------------------------------
 
 details=()
 failure=""
-for component in check_tailscale check_sshd check_herdr check_mosh check_git_push; do
+for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_collie; do
   if detail=$("$component"); then
     details+=("$detail")
   else

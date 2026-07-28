@@ -26,6 +26,15 @@ HERDR_NOTES_SOURCE  := alexarthurs/herdr-notes
 HERDR_NOTES_REF     := d0a8e67f6083ed41dd4fe25e546ed6404767c6be
 HERDR_NOTES_VERSION := 0.1.1
 
+# Collie — phone web-UI control surface for the herd (herdr plugin + Bun
+# bridge), installed by `make collie-setup`. Pinned to a COMMIT for the same
+# reason as herdr-notes: `herdr plugin install` re-clones + rebuilds the repo
+# every time, so an upgrade has to be a reviewed diff of this pin, not
+# whatever tag happens to move.
+COLLIE_SOURCE  := AltanS/collie
+COLLIE_REF     := 8c898a013d65fe1c33eb9b947d4d5e3b32eb936f
+COLLIE_VERSION := 0.17.0
+
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
 # Existing real files are backed up to <file>.bak before being replaced.
@@ -1707,6 +1716,124 @@ herdr-setup:
 		&& echo "    ✓ config.toml reloaded into the running server" \
 		|| echo "    · no running server to reload (config applies on next launch)"
 
+# Collie — phone web-UI control surface for the herd (herdr plugin + Bun
+# bridge). See CLAUDE.md "Collie — the phone control surface" for the full
+# model: what it is, the ACL gate, why COLLIE_SKIP_SERVE=1 is mandatory here.
+# Opt-in per machine, NOT in the default `setup` chain — same policy as
+# remote-access/devhost-health-setup/batt-setup. Gated on the dev-host marker
+# (same signal herdr-setup and git-headless use) because Collie only makes
+# sense pointed at the mini's herdr server.
+.PHONY: collie-setup collie-status collie-teardown
+collie-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — collie-setup skipped"; \
+		exit 0; \
+	fi
+	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
+	@command -v bun >/dev/null 2>&1 || { echo "  ✗ bun not installed — run: brew bundle install"; exit 1; }
+	@# Install/refresh only when the pin moved: `plugin install` re-clones and
+	@# rebuilds every time (mirrors the herdr-notes guard, same reason).
+	@if [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .source.resolved_commit')" = "$(COLLIE_REF)" ]; then \
+		echo "    ✓ collie $(COLLIE_VERSION) plugin installed"; \
+	else \
+		echo "    → installing collie $(COLLIE_VERSION) ($(COLLIE_REF))"; \
+		herdr plugin install $(COLLIE_SOURCE) --ref $(COLLIE_REF) -y >/dev/null \
+			&& echo "    ✓ collie $(COLLIE_VERSION) installed" \
+			|| { echo "  ✗ collie plugin install failed"; exit 1; }; \
+	fi
+	@# Renders + loads the LaunchAgent. Two non-obvious steps inside the block
+	@# below, both found by running this for real rather than with `make -n`:
+	@#   1. `collie-ctl.sh stop` first. On macOS collie-ctl has no systemd and
+	@#      falls back to a bare nohup that survives this target and keeps port
+	@#      8787 — the LaunchAgent then crash-loops on EADDRINUSE under KeepAlive.
+	@#   2. A health assert after loading. `launchctl load` exits 0 for a job
+	@#      that immediately dies, so trusting its return code reports a
+	@#      crash-looping bridge as "✓ survives reboot".
+	@# Comments must stay OUT of the block: make joins backslash-continued lines
+	@# before handing them to sh, so a `#` inside would swallow the rest.
+	@PLUGIN_ROOT=$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .plugin_root'); \
+	[ -n "$$PLUGIN_ROOT" ] || { echo "  ✗ could not resolve herdr.collie plugin_root"; exit 1; }; \
+	BUN_BIN=$$(command -v bun); \
+	CONFIG_DIR=$$(herdr plugin config-dir herdr.collie 2>/dev/null); \
+	[ -n "$$CONFIG_DIR" ] || CONFIG_DIR="$(HOME)/.config/herdr/plugins/config/herdr.collie"; \
+	mkdir -p "$$CONFIG_DIR" "$(LAUNCHAGENTS)"; \
+	SOCKET="$(HOME)/.config/herdr/herdr.sock"; \
+	TMP=$$(mktemp); \
+	sed -e "s|__BUN__|$$BUN_BIN|g" \
+		-e "s|__PLUGIN_ROOT__|$$PLUGIN_ROOT|g" \
+		-e "s|__CONFIG_DIR__|$$CONFIG_DIR|g" \
+		-e "s|__SOCKET__|$$SOCKET|g" \
+		"$(DOTFILES_DIR)/collie/com.jkrumm.collie.plist.template" > "$$TMP"; \
+	DST="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
+	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null 2>&1; then \
+		rm "$$TMP"; \
+		echo "    · LaunchAgent up to date"; \
+	else \
+		mv "$$TMP" "$$DST"; \
+		echo "    ✓ LaunchAgent rendered ($$DST)"; \
+	fi; \
+	bash "$$PLUGIN_ROOT/scripts/collie-ctl.sh" stop >/dev/null 2>&1 || true; \
+	launchctl unload "$$DST" 2>/dev/null || true; \
+	launchctl load "$$DST" || { echo "  ✗ launchctl load failed"; exit 1; }; \
+	if [ "$$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 1 --retry-connrefused --max-time 20 http://127.0.0.1:8787/ 2>/dev/null)" = "200" ]; then \
+		echo "    ✓ bridge loaded (RunAtLoad + KeepAlive — survives reboot; bare nohup does not)"; \
+	else \
+		echo "  ✗ LaunchAgent loaded but the bridge is not answering on 127.0.0.1:8787"; \
+		echo "    check: launchctl list | grep collie   and   $$CONFIG_DIR/collie.log"; \
+		exit 1; \
+	fi
+	@echo "    ↳ Front door is declared state, not this target: the tailnet binding is"
+	@echo "      a row in dotfiles-private/tailscale-serve.mini.conf, applied by"
+	@echo "      'make tailscale-serve'. URL: https://mini.<tailnet>.ts.net"
+	@echo "    ↳ The phone additionally needs an ACL grant (tag:phone → tcp:8788),"
+	@echo "      applied from the MacBook only — see dotfiles-private's tailscale-acl.jsonc"
+	@echo "      + 'make tailscale-acl-diff/push'."
+
+# Read-only. `tailscale` is an alias to the app bundle in interactive shells,
+# not in make — call it by absolute path (same trap devhost-health-check.sh hit).
+collie-status:
+	@echo "  LaunchAgent:"
+	@ROW=$$(launchctl list 2>/dev/null | awk '$$3=="com.jkrumm.collie" {print $$1" "$$2}'); \
+	if [ -z "$$ROW" ]; then \
+		echo "    ✗ not loaded — run: make collie-setup"; \
+	else \
+		set -- $$ROW; \
+		if [ "$$1" = "-" ]; then \
+			echo "    ✗ loaded but NOT running (last exit $$2) — check $(HOME)/.config/herdr/plugins/config/herdr.collie/collie.log"; \
+		else \
+			echo "    ✓ loaded and running (pid $$1, last exit $$2)"; \
+		fi; \
+	fi
+	@echo "  Bridge health (http://127.0.0.1:8787):"
+	@CODE=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/ 2>/dev/null || echo "000"); \
+	if [ "$$CODE" = "000" ]; then echo "    ✗ unreachable"; else echo "    ✓ HTTP $$CODE"; fi
+	@# Behavioural, not configural: proves COLLIE_PUBLIC_HOSTS actually reached the
+	@# process. A plist that execs bun without sourcing the .env silently drops
+	@# every hardening setting and still answers 200 on the line above.
+	@echo "  DNS-rebinding guard (spoofed Host must be rejected):"
+	@CODE=$$(curl -s -H "Host: evil.example.com" -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/api/snapshot 2>/dev/null || echo "000"); \
+	if [ "$$CODE" = "403" ]; then echo "    ✓ 403 — COLLIE_PUBLIC_HOSTS in effect"; \
+	else echo "    ✗ got $$CODE, expected 403 — the .env did not reach the process"; fi
+	@echo "  tailscale serve:"
+	@/Applications/Tailscale.app/Contents/MacOS/Tailscale serve status 2>/dev/null \
+		| sed 's/^/    /' || echo "    · tailscale not reachable"
+
+collie-teardown:
+	@DST="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
+	launchctl unload "$$DST" 2>/dev/null || true; \
+	rm -f "$$DST"; \
+	echo "  ✓ LaunchAgent unloaded + removed"
+	@if command -v herdr >/dev/null 2>&1 && herdr plugin list --json 2>/dev/null | jq -e '.result.plugins[]? | select(.plugin_id=="herdr.collie")' >/dev/null 2>&1; then \
+		herdr plugin uninstall herdr.collie >/dev/null 2>&1 \
+			&& echo "  ✓ herdr.collie plugin uninstalled" \
+			|| echo "  ✗ herdr plugin uninstall failed"; \
+	else \
+		echo "  · herdr.collie plugin not installed"; \
+	fi
+	@echo "  · dotfiles-private/tailscale-serve.mini.conf left untouched — that is"
+	@echo "    declared state, not this target's to change."
+
 # The look: one command, both machines. Three programs paint one screen and none
 # of them can see the other two — the terminal paints pane content from its ANSI
 # palette, herdr paints its own chrome, starship paints the prompt inside that.
@@ -1862,6 +1989,10 @@ help:
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
+	@echo ""
+	@echo "  make collie-setup       Dev-host only: install the phone control-surface bridge as a LaunchAgent"
+	@echo "  make collie-status      Show LaunchAgent + bridge + tailscale serve state (read-only)"
+	@echo "  make collie-teardown    Unload the LaunchAgent + uninstall the plugin (leaves serve config untouched)"
 	@echo ""
 	@echo "  make tailscale-serve        Apply this machine's declared serve/funnel bindings"
 	@echo "  make tailscale-serve-check  Report drift between declared and live bindings"
