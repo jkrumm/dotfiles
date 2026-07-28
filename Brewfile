@@ -175,9 +175,16 @@ cask "free-ruler"
 # live in config/herdr/config.toml; the reasoning is in the brain wiki note
 # "terminal key encoding".
 #
-# MacBook-only in practice (the mini is headless and has no keyboard), declared
-# in the shared manifest anyway — same call as `batt`, which is equally inert on
-# a machine that can't use it. Needs Accessibility granted by hand once.
+# Wanted on BOTH machines, unlike `batt`. The mini is headless most of the time
+# but is worked at directly often enough, and that headful-at-the-mini case is
+# the best one for Hyper — local Ghostty into a local herdr, no ssh and no mosh
+# in between, so nothing can eat the key encoding.
+#
+# Setup is per-machine and cannot be automated from here: Accessibility (and
+# Input Monitoring) are TCC grants, and Caps Lock has to be set to "No Action"
+# in System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys, per
+# keyboard. Until that last one is done macOS eats Caps Lock itself and Hyperkey
+# never sees a key-down — the symptom is Caps Lock simply toggling as normal.
 #
 # Flagged `auto_updates`, so brew will not upgrade it and the pinned-version
 # discipline elsewhere in this file does not apply to it.

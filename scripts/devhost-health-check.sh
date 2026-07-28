@@ -20,11 +20,23 @@ set -euo pipefail
 #
 # `check_git_push` is the deliberate exception to that reasoning: it fails on
 # its own schedule (a token expires while the host is perfectly healthy) rather
-# than with the other four. It is folded in anyway because a second monitor was
-# not worth it for one component — `make uk-sync` can create push monitors
-# declaratively on UK 2.x (the old "needs the browser" premise was wrong), so
-# this is a judgement call, not a limitation. Revisit if it ever pages
-# independently often enough to be noise.
+# than with the other four. It is folded in anyway because a second monitor
+# wasn't worth it for one component. Revisit if it ever pages independently
+# often enough to be noise.
+#
+# CORRECTION (2026-07-28): an earlier version of this comment claimed
+# `make uk-sync` can create push monitors declaratively on UK 2.x and that the
+# "needs the browser" premise was wrong. That is FALSE, and it mattered — it was
+# the stated reason folding a component in was "a judgement call, not a
+# limitation". uptime-kuma-api 1.2.1 cannot create push monitors against UK 2.x
+# (homelab/uptime-kuma/sync.py says so at the call site), and it could not
+# obtain the push token regardless — Kuma generates that server-side. uk-sync
+# manages an EXISTING push monitor's interval/timeout/retries; creating one is
+# still a manual step in the UI. Budget one browser visit per new monitor.
+#
+# Collie is NOT in the loop below for that reason turned around: it genuinely
+# does not fail with the other five, so it got its own monitor rather than an
+# exception. See the block after the composite push at the bottom.
 #
 # Fail-loud, never fail-silent: if the push URL can't be resolved we exit
 # non-zero WITHOUT pushing, so Uptime Kuma's own missed-heartbeat fires. A
@@ -192,7 +204,7 @@ check_collie() {
 
 details=()
 failure=""
-for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_collie; do
+for component in check_tailscale check_sshd check_herdr check_mosh check_git_push; do
   if detail=$("$component"); then
     details+=("$detail")
   else
@@ -222,4 +234,35 @@ if (( push_rc != 0 )); then
   echo "✗ push to Uptime Kuma failed (rc=$push_rc) — Kuma will alert on the missed heartbeat" >&2
 fi
 
-[[ -z "$failure" && $push_rc -eq 0 ]] || exit 1
+# --- Collie: its OWN monitor, driven by this same agent ----------------------
+# Collie is deliberately NOT a component of the composite above. It does not
+# fail with the other five — it is opt-in per machine and can be absent, down or
+# mis-hardened while the dev host is perfectly healthy — so folding it in would
+# mark the dev host DOWN and implicate herdr/sshd/tailscaled when nothing is
+# wrong with them. That is the same reasoning that keeps the composite composite,
+# applied in the other direction.
+#
+# One SCHEDULER, two monitors: this agent already runs every 300s, so a second
+# LaunchAgent would be pure duplication. Only the push target differs.
+#
+# The push URL file is optional and its absence is silent by design: a machine
+# that never ran `make collie-setup` has no collie and no monitor, and must not
+# fail this script. Kuma's own missed-heartbeat covers the case where the
+# monitor exists but this stops running.
+collie_push_rc=0
+COLLIE_PUSH_URL_FILE="${COLLIE_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/collie-push-url}"
+if [[ -f "$COLLIE_PUSH_URL_FILE" ]]; then
+  collie_url=$(kuma_resolve_push_url "${COLLIE_PUSH_URL:-}" "$COLLIE_PUSH_URL_FILE") || collie_url=""
+  if [[ -n "$collie_url" ]]; then
+    if collie_detail=$(check_collie); then
+      kuma_push "$collie_url" up "$collie_detail" || collie_push_rc=$?
+      echo "✓ collie monitor: $collie_detail"
+    else
+      kuma_push "$collie_url" down "$collie_detail" || collie_push_rc=$?
+      echo "✗ collie monitor: $collie_detail" >&2
+      failure="${failure:-$collie_detail}"
+    fi
+  fi
+fi
+
+[[ -z "$failure" && $push_rc -eq 0 && $collie_push_rc -eq 0 ]] || exit 1

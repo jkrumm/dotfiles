@@ -532,14 +532,29 @@ the `.env` moves.
 Upgrading is moving `COLLIE_REF` in a reviewed diff — there is no
 `plugin update`.
 
+**Monitoring is opt-in and needs one browser step.** Collie reports to its own
+Kuma monitor, `MacMini Collie - Push` (declared in
+`homelab/uptime-kuma/monitors.yaml`), pushed by the existing
+`com.jkrumm.devhost-health` LaunchAgent — see the heartbeat section below for
+why it is a separate monitor rather than a sixth component. To wire it:
+
+1. Create a **Push** monitor named `MacMini Collie - Push` in the Uptime Kuma
+   UI, group `Local` (push monitors cannot be created by `uk-sync` — see below).
+2. Copy its push URL into `~/.config/uptime-kuma/collie-push-url`, `chmod 600`.
+3. `make uk-sync` from `homelab` to apply the declared interval/retries.
+
+Until step 2 the collie push is skipped silently, which is deliberate: a machine
+that never ran `collie-setup` has no collie and must not fail the heartbeat.
+
 ## Dev-host health heartbeat (mini only)
 
-One composite Uptime Kuma push monitor — `MacMini Dev Host - Push`, group
-`Local` — covers **six** components: tailscaled, sshd, herdr, mosh (both the
-binary and its Application Firewall allowlist membership), the GitHub push
-credential, and collie. Driven by `scripts/devhost-health-check.sh` via the
-`com.jkrumm.devhost-health` LaunchAgent every 5 minutes. Opt-in per machine like
-`remote-access`:
+**Two** Uptime Kuma push monitors, one agent. `MacMini Dev Host - Push` (group
+`Local`) is the composite and covers **five** components: tailscaled, sshd,
+herdr, mosh (both the binary and its Application Firewall allowlist membership)
+and the GitHub push credential. `MacMini Collie - Push` is separate — see
+**One scheduler, two monitors** below for why. Both are driven by
+`scripts/devhost-health-check.sh` via the `com.jkrumm.devhost-health`
+LaunchAgent every 5 minutes. Opt-in per machine like `remote-access`:
 
 | Command | Purpose |
 |-|-|
@@ -553,20 +568,38 @@ Opening an inbound grant purely for monitoring would be new attack surface for a
 check the mini can report on itself over the already-granted outbound path. Same
 pattern as `MacMini Secret Seed - Push` and the Hermes monitors.
 
-**One monitor, not six.** herdr/sshd/tailscaled/mosh all fail together when the
-mini sleeps or drops off the tailnet; six monitors would be six simultaneous
-pages saying one thing. Two components are deliberate exceptions, each folded in
-anyway because a second Kuma push monitor wasn't worth it for one component. The
-GitHub push credential can expire while the host is otherwise perfectly healthy.
-Collie is the second exception, on its own schedule for a different reason:
-`collie-setup` is opt-in per machine, so it can fail (or be absent) independently
-of the other five. Its check also asserts *behaviour*, not just liveness — the
-bridge answers 200 on loopback **and** a spoofed `Host` header must return 403.
-That second assertion exists because the bridge's hardening lives in a `.env`
-that launchd does not load on its own, so a mis-started bridge answers every
-liveness probe fine while the DNS-rebinding guard is silently gone — liveness
-alone cannot see that gap; only the behavioural check can. The failing
-component is named in the push `msg`.
+**One monitor, not five.** herdr/sshd/tailscaled/mosh all fail together when the
+mini sleeps or drops off the tailnet; five monitors would be five simultaneous
+pages saying one thing. The failing component is named in the push `msg`, which
+is where the diagnosis belongs. `check_git_push` is the one deliberate exception
+— a token expires while the host is perfectly healthy — folded in anyway because
+a second monitor wasn't worth it for one component.
+
+**One scheduler, two monitors.** Collie is deliberately *not* a sixth component,
+and the reason is the same rule pointed the other way: it genuinely does **not**
+fail with the other five. It's opt-in per machine and can be absent, down or
+mis-hardened while herdr/sshd/tailscaled/mosh are all fine — so folding it in
+would mark the dev host DOWN and implicate four healthy components. It gets
+`MacMini Collie - Push` instead. What it does *not* get is its own agent: the
+existing LaunchAgent already runs every 300s, so a second one would be pure
+duplication. Only the push target differs, and the URL file's absence is silent
+by design so a machine without collie never fails the script.
+
+Its check asserts **behaviour, not liveness** — the bridge answers 200 on
+loopback *and* a spoofed `Host` header must return 403. That second assertion is
+the whole point: collie's hardening lives in a `.env` that launchd does not load
+on its own, so a mis-started bridge passes every liveness probe with its
+DNS-rebinding guard silently gone. `launchctl list` says status 0 and the UI
+works. Only the behavioural check sees it.
+
+**Creating a push monitor is still a manual browser step**, and an earlier
+version of this file claimed otherwise. `uptime-kuma-api` 1.2.1 cannot create
+push monitors against UK 2.x (`homelab/uptime-kuma/sync.py` says so at the call
+site), and could not obtain the push token regardless — Kuma generates that
+server-side. `make uk-sync` manages an *existing* push monitor's
+interval/timeout/retries. So: create it in the UI, copy the push URL into a
+chmod-600 file, then let uk-sync own its settings. Budget one browser visit per
+new monitor rather than assuming it's declarative.
 
 **The heartbeat asserts resolvability, not push rights** — and says "credential
 ready", not "push ready", on purpose. It makes no network call to GitHub, because
