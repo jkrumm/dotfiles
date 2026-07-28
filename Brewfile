@@ -169,6 +169,19 @@ cask "font-jetbrains-mono-nerd-font"
 cask "ghostty"
 # Horizontal and vertical rulers
 cask "free-ruler"
+# Caps Lock -> Hyper (⌃⌥⇧⌘), which is what makes herdr's direct keybindings
+# possible: no app, no macOS shortcut and no readline binding uses all four
+# modifiers at once, so it is the only collision-free namespace left. Bindings
+# live in config/herdr/config.toml; the reasoning is in the brain wiki note
+# "terminal key encoding".
+#
+# MacBook-only in practice (the mini is headless and has no keyboard), declared
+# in the shared manifest anyway — same call as `batt`, which is equally inert on
+# a machine that can't use it. Needs Accessibility granted by hand once.
+#
+# Flagged `auto_updates`, so brew will not upgrade it and the pinned-version
+# discipline elsewhere in this file does not apply to it.
+cask "hyperkey"
 # Keep your computer awake
 cask "jiggler"
 # Knowledge base that works on top of a local folder of plain text Markdown files

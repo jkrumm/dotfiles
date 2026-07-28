@@ -151,6 +151,70 @@ rows = [
 # the spinner glyph ever proves too subtle.
 rows = [["state_icon", "workspace", "tab"]]
 
+[keys]
+# HYPER IS A HELD PREFIX. Every binding below is the letter herdr already uses
+# after `prefix`, with Caps Lock held instead of the prefix tapped first:
+# `ctrl+b b` and `Caps+b` do the same thing. That is the whole design — nothing
+# new to memorise, one motion instead of two, and the prefix keeps working.
+#
+# Caps Lock becomes Hyper (⌃⌥⇧⌘) via Hyperkey (hyperkey.app — free, Mac App
+# Store, by Rectangle's author, no kext, needs Accessibility). Without it every
+# Hyper binding here is simply inert and the `prefix+` half still works, so this
+# block is safe on a machine that never installs it.
+#
+# WRITE `cmd+ctrl+alt+shift+X`, NEVER `hyper+X`. This is the trap, and it is
+# silent. herdr really does know `hyper` as a modifier — it is Kitty keyboard
+# protocol bit 16, and the parser is genuinely validating rather than permissive
+# (measured: `frobnicate+b`, `ctrl+notakey` and `zzzz` are all REJECTED, while
+# `hyper+b` and `meta+b` are accepted). But macOS has no Hyper modifier;
+# Hyperkey emits the four real flags, which are bits 1+2+4+8 = 15. So `hyper+X`
+# passes `herdr config check` with `ok` and then never fires.
+#
+# WHY THIS IS THE `desk` PATH ONLY, and why the prefix stays. Measured in a pty,
+# not assumed:
+#
+#   herdr pushes `CSI > 7 u` on startup — the Kitty keyboard protocol, flags
+#   1+2+4 (disambiguate escape codes, report event types, report alternate
+#   keys). That push is what lets a four-modifier chord be encoded at all.
+#   herdr's own docs claim it does not implement the protocol. The capture says
+#   otherwise; believe the capture.
+#
+#   mosh SWALLOWS that push (captured client-side with a passing visible-text
+#   control, so the zero is real and not a broken harness). Same mechanism, and
+#   now the same measurement, as the DEC 2031 theme probe in the [theme] block
+#   above — mosh is a state-synchronising emulator, not a byte tunnel, so any
+#   capability negotiated by escape sequence never reaches Ghostty.
+#
+# So: `desk` (herdr --remote, client in Ghostty on the Mac) gets Hyper. `dev`
+# (mosh) gets the prefix, which is fine — mosh is the travel path. A single
+# key language across both would have to be built from ctrl+alt / ctrl+letter /
+# F-keys, and each of those collides with the shell or Claude Code. Hyper
+# collides with nothing by construction: no app, no macOS shortcut and no
+# readline binding uses all four modifiers at once.
+#
+# `ctrl+alt+X` was the other candidate and is deliberately NOT bound as a third
+# alias. It is genuinely free (unbound in all 93 Ghostty defaults) and it does
+# survive mosh — but the prefix already covers the mosh path, so it would add a
+# third way to do everything and buy nothing.
+
+# Panes — the biggest daily win: no prefix dance to move between claude, notes
+# and a terminal in the same workspace.
+focus_pane_left  = ["prefix+h", "cmd+ctrl+alt+shift+h"]
+focus_pane_down  = ["prefix+j", "cmd+ctrl+alt+shift+j"]
+focus_pane_up    = ["prefix+k", "cmd+ctrl+alt+shift+k"]
+focus_pane_right = ["prefix+l", "cmd+ctrl+alt+shift+l"]
+zoom             = ["prefix+z", "cmd+ctrl+alt+shift+z"]
+split_vertical   = ["prefix+v", "cmd+ctrl+alt+shift+v"]
+close_pane       = ["prefix+x", "cmd+ctrl+alt+shift+x"]
+
+# Workspaces and tabs.
+workspace_picker = ["prefix+w", "cmd+ctrl+alt+shift+w"]
+goto             = ["prefix+g", "cmd+ctrl+alt+shift+g"]
+toggle_sidebar   = ["prefix+b", "cmd+ctrl+alt+shift+b"]
+new_tab          = ["prefix+c", "cmd+ctrl+alt+shift+c"]
+next_tab         = ["prefix+n", "cmd+ctrl+alt+shift+n"]
+previous_tab     = ["prefix+p", "cmd+ctrl+alt+shift+p"]
+
 # herdr-notes — one persistent markdown note per workspace, docked on the right.
 # Installed and version-pinned by `make herdr-setup`; see CLAUDE.md → "Notes".
 #
@@ -168,8 +232,11 @@ rows = [["state_icon", "workspace", "tab"]]
 # that does not exist and the key is simply inert. And plugin commands are
 # spawned by the SERVER, so on the `desk` path — client on the MacBook, server on
 # the mini — the pane opens on the mini where the note actually lives.
+# The array form works on `keys.command` too, and it is really supported rather
+# than silently dropped — verified by putting a bogus key INSIDE the array and
+# watching the checker reject that element specifically.
 [[keys.command]]
-key = "prefix+e"
+key = ["prefix+e", "cmd+ctrl+alt+shift+e"]
 type = "plugin_action"
 command = "herdr-notes.open-notes"
 description = "toggle notes"
