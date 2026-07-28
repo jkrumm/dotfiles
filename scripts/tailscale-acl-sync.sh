@@ -43,7 +43,21 @@ require_tool curl
 require_tool jq
 require_tool op
 
-[ -f "$ACL_FILE" ] || die "ACL file not found: $ACL_FILE"
+# `pull` BOOTSTRAPS this file, so it must NOT require it to already exist —
+# an unconditional guard here made the very first pull on a fresh checkout
+# impossible, which is exactly how the 2026-07-27 ACL move stalled half-done:
+# the tooling landed in this repo while the declared state stayed uncommitted,
+# and the one command able to create it refused to run.
+#
+# diff and push still require it, and deliberately so: both compare against a
+# declared state, and treating "no file" as "empty ACL" would let a push wipe
+# every grant on the tailnet.
+case "${1:-}" in
+  diff|push)
+    [ -f "$ACL_FILE" ] \
+      || die "ACL file not found: $ACL_FILE (bootstrap it first: make tailscale-acl-pull)"
+    ;;
+esac
 op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 \
   || die "1Password not signed in for account '$OP_ACCOUNT' — run 'op signin --account $OP_ACCOUNT'"
 
