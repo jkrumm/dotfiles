@@ -157,32 +157,41 @@ rows = [["state_icon", "workspace", "tab"]]
 # `ctrl+b b` and `Caps+b` do the same thing. That is the whole design — nothing
 # new to memorise, one motion instead of two, and the prefix keeps working.
 #
-# Caps Lock becomes ⌃⌥⇧ via Hyperkey (hyperkey.app — free, Mac App Store, by
-# Rectangle's author, no kext, needs BOTH Accessibility and Input Monitoring).
-# Without it every chord here is simply inert and the `prefix+` half still
-# works, so this block is safe on a machine that never installs it.
+# Caps Lock becomes ⌃⌥⇧ via Karabiner-Elements — the rule is
+# config/karabiner/karabiner.json, installed by `_setup-karabiner`. Without it
+# every chord here is simply inert and the `prefix+` half still works, so this
+# block is safe on a machine that never sets it up.
 #
-# THREE MODIFIERS, NOT FOUR — CMD IS DELIBERATELY DROPPED. Hyperkey's headline
-# is "all four" (⌃⌥⇧⌘, `hyperFlags = 1966080`). That was tried first and the
-# chords never arrived. Measured with a raw-byte probe in a bare Ghostty window:
+# NOT HYPERKEY, AND NOT A PREFERENCE. Hyperkey was tried first and never
+# intercepted a single Caps Lock key-down on the mini, with both Bedienungshilfen
+# and Eingabeüberwachung granted. The cause is structural: Hyperkey drives a
+# CGEventTap, and on macOS 26 a CGEventTap no longer receives events from
+# EXTERNAL keyboards. A Mac mini has no other kind. Karabiner grabs the device
+# at HID level instead — `hid queue value monitor is started (grabbed)` in
+# /var/log/karabiner/core_service.log is the line that confirms it.
 #
-#   plain b            -> `b`, then CSI-u `98;1:3u`   (mods=0, release event)
-#   ctrl+alt+shift+6   -> CSI-u `54;8:3u`             (mods=7 = shift+alt+ctrl)
+# THREE MODIFIERS, NOT FOUR — CMD IS DELIBERATELY DROPPED. The "hyper key"
+# convention is all four (⌃⌥⇧⌘). Measured with a raw-byte probe in a bare
+# Ghostty window, after the Karabiner rule was live:
+#
+#   plain b     -> `b`, then CSI-u `98;1:3u`   (mods=0, release event)
+#   Caps+b      -> CSI-u `98;8:3u`             (mods=7 = shift+alt+ctrl)
 #
 # So Ghostty encodes a three-modifier chord through the Kitty protocol exactly
 # as needed. What is NOT established is that it ever emits the super/cmd bit —
 # macOS terminals traditionally never send ⌘ to the pty, and no capture here
-# ever showed bit 8. Rather than depend on an unproven bit, Hyperkey is set to
-# `hyperFlags = 917504` (shift 131072 + ctrl 262144 + alt 524288) and the
-# bindings below use `ctrl+alt+shift+X`. Still collision-free: nothing in the
-# shell, in Claude Code, or in Ghostty's 93 defaults uses that trio.
+# ever showed bit 8. Dropping cmd also keeps Ghostty's own ⌘ binds intact;
+# most `super+<letter>` chords are bound by default, copy and paste included.
+# Still collision-free: nothing in the shell, in Claude Code, or in Ghostty's
+# 93 defaults uses `ctrl+alt+<letter>`.
 #
 # NEVER WRITE `hyper+X`. The trap, and it is silent. herdr really does know
 # `hyper` as a modifier — it is Kitty keyboard protocol bit 16, and the parser
 # is genuinely validating rather than permissive (measured: `frobnicate+b`,
 # `ctrl+notakey` and `zzzz` are all REJECTED, while `hyper+b` and `meta+b` are
-# accepted). But macOS has no Hyper modifier and cannot produce bit 16 —
-# Hyperkey emits real flags. So `hyper+X` passes `config check` and never fires.
+# accepted). But macOS has no Hyper modifier and cannot produce bit 16 — every
+# remapper emits real flags, Karabiner included. So `hyper+X` passes
+# `config check` and never fires.
 #
 # WHY THIS IS THE `desk` PATH ONLY, and why the prefix stays. Measured in a pty,
 # not assumed:

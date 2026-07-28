@@ -169,28 +169,49 @@ cask "font-jetbrains-mono-nerd-font"
 cask "ghostty"
 # Horizontal and vertical rulers
 cask "free-ruler"
-# Caps Lock -> Hyper (⌃⌥⇧⌘), which is what makes herdr's direct keybindings
-# possible: no app, no macOS shortcut and no readline binding uses all four
-# modifiers at once, so it is the only collision-free namespace left. Bindings
-# live in config/herdr/config.toml; the reasoning is in the brain wiki note
+# Keep your computer awake
+cask "jiggler"
+# Caps Lock -> ctrl+alt+shift, held. That chord is what makes herdr's direct
+# keybindings possible — no app, no macOS shortcut and no readline binding uses
+# all three at once, so it is the only collision-free namespace left. The rule
+# is config/karabiner/karabiner.json (installed by `_setup-karabiner`), the
+# bindings are config/herdr/config.toml, the reasoning is in the brain wiki note
 # "terminal key encoding".
+#
+# NOT Hyperkey, and this is a macOS 26 fact rather than a preference. Hyperkey
+# (and BetterTouchTool, and Raycast's hyper key) drive a CGEventTap, and on
+# Tahoe a CGEventTap no longer receives events from EXTERNAL keyboards. A Mac
+# mini has no other kind. Measured 2026-07-28: Hyperkey 1.56 with both
+# Bedienungshilfen and Eingabeüberwachung granted never saw a single Caps Lock
+# key-down. Karabiner grabs the device at HID level instead, which still works.
 #
 # Wanted on BOTH machines, unlike `batt`. The mini is headless most of the time
 # but is worked at directly often enough, and that headful-at-the-mini case is
 # the best one for Hyper — local Ghostty into a local herdr, no ssh and no mosh
 # in between, so nothing can eat the key encoding.
 #
-# Setup is per-machine and cannot be automated from here: Accessibility (and
-# Input Monitoring) are TCC grants, and Caps Lock has to be set to "No Action"
-# in System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys, per
-# keyboard. Until that last one is done macOS eats Caps Lock itself and Hyperkey
-# never sees a key-down — the symptom is Caps Lock simply toggling as normal.
+# The MacBook sits on the OPPOSITE macOS 26 regression: since 26.4, DriverKit
+# virtual HID cannot see the BUILT-IN keyboard (com.apple.iohid.protectedDevice-
+# Access), which is the one that broke Karabiner for everyone else. The two
+# failures are complementary, so the escape hatch is Karabiner 16.0's
+# "Enable CGEventTap fallback" (Settings → Expert) — CGEventTap still works for
+# built-in keyboards, exactly where IOHIDDeviceOpen now fails. Untested here;
+# the mini needs `effective=false` and has it.
+#
+# Setup is per-machine and cannot be automated from here — two approvals, both
+# requiring a human at that Mac:
+#   1. Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen →
+#      Treibererweiterungen → org.pqrs.Karabiner-DriverKit-VirtualHIDDevice.
+#      It only appears AFTER Karabiner-Elements.app has been launched once —
+#      launching is what registers the extension.
+#   2. Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung →
+#      Karabiner-Core-Service (named karabiner_grabber before 16.x).
+# Leave Sondertasten on "Feststelltaste". "Keine Aktion" takes the key away
+# from Karabiner too and yields a dead key, not a Hyper key.
 #
 # Flagged `auto_updates`, so brew will not upgrade it and the pinned-version
 # discipline elsewhere in this file does not apply to it.
-cask "hyperkey"
-# Keep your computer awake
-cask "jiggler"
+cask "karabiner-elements"
 # Knowledge base that works on top of a local folder of plain text Markdown files
 cask "obsidian"
 # Monitors the computer system and optimises its performance

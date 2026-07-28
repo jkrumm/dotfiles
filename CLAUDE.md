@@ -111,6 +111,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/ghostty/config.appsupport` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Font, theme, cursor, padding. Ghostty's own macOS config path — read by **both** cmux and bare Ghostty, and it WINS over the file above |
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override) + the `prefix+e` notes binding. The **file** only — the same dir holds herdr's sockets and logs |
+| `config/karabiner/karabiner.json` | `~/.config/karabiner/karabiner.json` | Caps Lock → ctrl+alt+shift. **Copied, never symlinked** — Karabiner rewrites this file on every UI change, and `_setup-karabiner` refuses to overwrite a diverged live copy |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |

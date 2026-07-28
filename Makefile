@@ -69,6 +69,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-sdk-keys
 	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
 	@$(MAKE) --no-print-directory _setup-ssh
+	@$(MAKE) --no-print-directory _setup-karabiner
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-opencode
@@ -406,6 +407,28 @@ _setup-ssh:
 	@if [ -f "$(HOME)/.colima/ssh_config" ] && ! grep -q '\.colima/ssh_config' "$(HOME)/.ssh/config" 2>/dev/null; then \
 		printf '\nInclude %s/.colima/ssh_config\n' "$(HOME)" >> "$(HOME)/.ssh/config"; \
 		echo "    ✓ colima Include re-appended"; \
+	fi
+
+.PHONY: _setup-karabiner
+_setup-karabiner:
+	@echo "  Karabiner-Elements (Caps Lock -> Hyper)..."
+	@if [ ! -d /Applications/Karabiner-Elements.app ]; then \
+		echo "    - not installed, skipping (Brewfile installs it; the pkg needs sudo)"; \
+	else \
+		mkdir -p "$(HOME)/.config/karabiner"; \
+		if [ ! -f "$(HOME)/.config/karabiner/karabiner.json" ]; then \
+			install -m 600 "$(DOTFILES_DIR)/config/karabiner/karabiner.json" "$(HOME)/.config/karabiner/karabiner.json"; \
+			echo "    ✓ karabiner.json installed"; \
+		elif cmp -s "$(DOTFILES_DIR)/config/karabiner/karabiner.json" "$(HOME)/.config/karabiner/karabiner.json"; then \
+			echo "    ✓ karabiner.json matches the repo"; \
+		else \
+			echo "    ! karabiner.json differs from the repo — NOT overwritten."; \
+			echo "      Karabiner rewrites this file on every UI change, so the live copy"; \
+			echo "      is authoritative until you decide otherwise. Compare, then pick one:"; \
+			echo "        diff $(DOTFILES_DIR)/config/karabiner/karabiner.json $(HOME)/.config/karabiner/karabiner.json"; \
+			echo "        cp $(HOME)/.config/karabiner/karabiner.json $(DOTFILES_DIR)/config/karabiner/  # adopt live"; \
+			echo "        cp $(DOTFILES_DIR)/config/karabiner/karabiner.json $(HOME)/.config/karabiner/  # adopt repo"; \
+		fi; \
 	fi
 
 .PHONY: remote-access _setup-remote-access
