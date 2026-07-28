@@ -24,15 +24,15 @@ set -euo pipefail
 # wasn't worth it for one component. Revisit if it ever pages independently
 # often enough to be noise.
 #
-# CORRECTION (2026-07-28): an earlier version of this comment claimed
-# `make uk-sync` can create push monitors declaratively on UK 2.x and that the
-# "needs the browser" premise was wrong. That is FALSE, and it mattered — it was
-# the stated reason folding a component in was "a judgement call, not a
-# limitation". uptime-kuma-api 1.2.1 cannot create push monitors against UK 2.x
-# (homelab/uptime-kuma/sync.py says so at the call site), and it could not
-# obtain the push token regardless — Kuma generates that server-side. uk-sync
-# manages an EXISTING push monitor's interval/timeout/retries; creating one is
-# still a manual step in the UI. Budget one browser visit per new monitor.
+# `make uk-sync` CAN create push monitors — settled by doing it on 2026-07-28,
+# when it created "MacMini Collie - Push" (id=205) against uptime-kuma:2 with
+# uptime-kuma-api 1.2.1. Worth recording how this went wrong twice, because the
+# failure mode was documentation rather than code: seven comments in
+# homelab/uptime-kuma/monitors.yaml plus one in sync.py asserted the opposite,
+# so a stale note got treated as a constraint and briefly "corrected" the
+# accurate claim here into a false one. The token is fetchable too
+# (api.get_monitor(id)["pushToken"]), so wiring a new monitor needs no browser.
+# Read the call site, not the comment above it.
 #
 # Collie is NOT in the loop below for that reason turned around: it genuinely
 # does not fail with the other five, so it got its own monitor rather than an

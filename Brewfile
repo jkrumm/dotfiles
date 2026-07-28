@@ -171,11 +171,17 @@ cask "ghostty"
 cask "free-ruler"
 # Keep your computer awake
 cask "jiggler"
-# Caps Lock -> ctrl+alt+shift, held. That chord is what makes herdr's direct
-# keybindings possible — no app, no macOS shortcut and no readline binding uses
-# all three at once, so it is the only collision-free namespace left. The rule
-# is config/karabiner/karabiner.json (installed by `_setup-karabiner`), the
-# bindings are config/herdr/config.toml, the reasoning is in the brain wiki note
+# Caps Lock -> ctrl+alt+shift, held. No app, no macOS shortcut and no readline
+# binding uses all three at once, so it is the only collision-free namespace
+# left on the platform. Two consumers share it: herdr's direct keybindings
+# inside a terminal (config/herdr/config.toml), and global Hyper+letter app
+# launchers everywhere else — both in config/karabiner/karabiner.json, installed
+# by `_setup-karabiner`. The five letters herdr also uses are scoped with
+# `frontmost_application_unless` on the two terminal bundle ids, so inside
+# Ghostty/cmux herdr wins and outside them the app launches.
+#
+# The keymap is documented in the brain: "Keyboard — the Hyper layer"
+# (04_Areas/Engineering/keyboard.md); the reasoning is in the wiki note
 # "terminal key encoding".
 #
 # NOT Hyperkey, and this is a macOS 26 fact rather than a preference. Hyperkey

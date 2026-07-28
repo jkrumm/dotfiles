@@ -111,7 +111,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `config/ghostty/config.appsupport` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Font, theme, cursor, padding. Ghostty's own macOS config path — read by **both** cmux and bare Ghostty, and it WINS over the file above |
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override) + the `prefix+e` notes binding. The **file** only — the same dir holds herdr's sockets and logs |
-| `config/karabiner/karabiner.json` | `~/.config/karabiner/karabiner.json` | Caps Lock → ctrl+alt+shift. **Copied, never symlinked** — Karabiner rewrites this file on every UI change, and `_setup-karabiner` refuses to overwrite a diverged live copy |
+| `config/karabiner/karabiner.json` | `~/.config/karabiner/karabiner.json` | Caps Lock → ctrl+alt+shift, plus the global `Hyper+letter` app launchers. **Copied, never symlinked** — Karabiner rewrites this file on every UI change, and `_setup-karabiner` refuses to overwrite a diverged live copy |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — runs `caddy reload` on wake |
@@ -533,16 +533,15 @@ the `.env` moves.
 Upgrading is moving `COLLIE_REF` in a reviewed diff — there is no
 `plugin update`.
 
-**Monitoring is opt-in and needs one browser step.** Collie reports to its own
-Kuma monitor, `MacMini Collie - Push` (declared in
+**Monitoring is opt-in, and wiring it is scripted end to end.** Collie reports
+to its own Kuma monitor, `MacMini Collie - Push` (id=205, declared in
 `homelab/uptime-kuma/monitors.yaml`), pushed by the existing
 `com.jkrumm.devhost-health` LaunchAgent — see the heartbeat section below for
-why it is a separate monitor rather than a sixth component. To wire it:
+why it is a separate monitor rather than a sixth component. On a fresh machine:
 
-1. Create a **Push** monitor named `MacMini Collie - Push` in the Uptime Kuma
-   UI, group `Local` (push monitors cannot be created by `uk-sync` — see below).
-2. Copy its push URL into `~/.config/uptime-kuma/collie-push-url`, `chmod 600`.
-3. `make uk-sync` from `homelab` to apply the declared interval/retries.
+1. `make uk-sync` from `homelab` — creates the monitor if absent, no browser.
+2. Fetch its `pushToken` and write `https://uptime.jkrumm.com/api/push/<token>`
+   into `~/.config/uptime-kuma/collie-push-url`, `chmod 600` (snippet below).
 
 Until step 2 the collie push is skipped silently, which is deliberate: a machine
 that never ran `collie-setup` has no collie and must not fail the heartbeat.
@@ -593,14 +592,29 @@ on its own, so a mis-started bridge passes every liveness probe with its
 DNS-rebinding guard silently gone. `launchctl list` says status 0 and the UI
 works. Only the behavioural check sees it.
 
-**Creating a push monitor is still a manual browser step**, and an earlier
-version of this file claimed otherwise. `uptime-kuma-api` 1.2.1 cannot create
-push monitors against UK 2.x (`homelab/uptime-kuma/sync.py` says so at the call
-site), and could not obtain the push token regardless — Kuma generates that
-server-side. `make uk-sync` manages an *existing* push monitor's
-interval/timeout/retries. So: create it in the UI, copy the push URL into a
-chmod-600 file, then let uk-sync own its settings. Budget one browser visit per
-new monitor rather than assuming it's declarative.
+**Push monitors are fully declarative — no browser step.** `make uk-sync`
+creates them, proven on 2026-07-28 when it created `MacMini Collie - Push`
+(id=205) against `uptime-kuma:2` with `uptime-kuma-api` 1.2.1. The push token is
+retrievable in the same session, so create-and-wire is one scripted pass:
+
+```bash
+# on homelab, monitor id from the uk-sync output
+op run --env-file=.env.tpl -- uptime-kuma/.venv/bin/python -c \
+  'import os; from uptime_kuma_api import UptimeKumaApi
+   api=UptimeKumaApi("http://localhost:3010")
+   api.login("jkrumm", os.environ["UPTIME_KUMA_PASSWORD"])
+   print(api.get_monitor(<id>)["pushToken"])'
+# → https://uptime.jkrumm.com/api/push/<token> into a chmod-600 file
+```
+
+Note `--username` defaults to `jkrumm` in sync.py, not `admin` — an ad-hoc
+script that assumes otherwise fails the login and returns an empty token rather
+than an error. Only `active` is genuinely unsupported for push monitors.
+
+Seven comments in `homelab/uptime-kuma/monitors.yaml` and one in `sync.py`
+asserted the opposite for months. They were stale, believed, and reasoned
+from — all now corrected. Treat a "this isn't supported" comment as a claim to
+re-test, not a constraint, especially where the call site says otherwise.
 
 **The heartbeat asserts resolvability, not push rights** — and says "credential
 ready", not "push ready", on purpose. It makes no network call to GitHub, because
