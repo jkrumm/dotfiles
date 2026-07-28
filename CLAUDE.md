@@ -121,6 +121,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` | PreToolUse — blocks raw docker commands when Makefile exists |
 | `hooks/machine-role.ts` | `~/.claude/hooks/machine-role.ts` | SessionStart — injects this machine's secrets backend + outbound-access routing (cache/mini vs op/MacBook) |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Single source of truth for PR-required repos — read by `protect-branches.ts` (hook) and `scripts/github-config.sh` (full vs lite ruleset tier). |
+| `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte terminal key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run in a **bare** terminal, never inside herdr |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
 | `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, makefile-conventions, visx-charts) |

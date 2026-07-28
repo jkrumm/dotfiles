@@ -674,6 +674,15 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/fetch_usage.py" \
 		DST="$(CLAUDE_DIR)/fetch_usage.py"
+	@# keyprobe is the ONLY unambiguous test for the Hyper key, and both brain
+	@# cards tell you to run it — so it has to exist on every machine, not just
+	@# the one where it was first written. ~/.local/bin so it is on PATH for
+	@# non-interactive shells too (see _setup-zshenv).
+	@mkdir -p "$(HOME)/.local/bin"
+	@chmod +x $(DOTFILES_DIR)/scripts/keyprobe.py
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/keyprobe.py" \
+		DST="$(HOME)/.local/bin/keyprobe"
 
 .PHONY: _setup-zshenv
 # ~/.zshenv is the ONLY startup file zsh reads for a non-interactive,
