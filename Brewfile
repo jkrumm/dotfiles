@@ -45,6 +45,8 @@ brew "docker-buildx"
 brew "docker-compose"
 # Platform keystore credential helper for Docker
 brew "docker-credential-helper"
+# Opinionated Dockerfile linter — the verifier behind rules/dockerfile.md
+brew "droast"
 # Play, record, convert, and stream select audio and video codecs
 brew "ffmpeg"
 # Fast and simple Node.js version manager
