@@ -764,7 +764,10 @@ _setup-agents:
 _setup-hooks:
 	@echo "  Hooks..."
 	@mkdir -p $(CLAUDE_DIR)/hooks
-	@chmod +x $(DOTFILES_DIR)/hooks/*.ts
+	@# Hooks only — NOT *.test.ts. A bare *.ts glob also chmods the test file,
+	@# which is imported by bun and never executed, so every `make setup` left
+	@# a stray 100644 -> 100755 mode change in `git status`.
+	@find $(DOTFILES_DIR)/hooks -maxdepth 1 -name '*.ts' ! -name '*.test.ts' -exec chmod +x {} +
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/notify.ts" \
 		DST="$(CLAUDE_DIR)/hooks/notify.ts"
