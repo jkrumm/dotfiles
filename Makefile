@@ -146,6 +146,10 @@ _setup-packages:
 	@brew bundle install --file=$(DOTFILES_DIR)/Brewfile --no-upgrade \
 		&& echo "    ✓ Brewfile satisfied" \
 		|| echo "    ✗ brew bundle failed — run: make brew-check"
+	@# A fresh machine needs caddy/mosh pinned from the first bundle install —
+	@# otherwise the first bare `brew upgrade` anyone runs reverts the caddy DNS
+	@# module before `make caddy-dns-build` has ever run once. See brew-upgrade.sh.
+	@bash $(DOTFILES_DIR)/scripts/brew-upgrade.sh --pins-only
 
 .PHONY: _setup-claude
 _setup-claude:
@@ -1429,6 +1433,24 @@ brew-dump:
 	@cat /tmp/Brewfile.head /tmp/Brewfile.gen > $(DOTFILES_DIR)/Brewfile
 	@echo "  ✓ Brewfile regenerated — REVIEW THE DIFF: git -C $(DOTFILES_DIR) diff Brewfile"
 
+.PHONY: brew-upgrade brew-upgrade-dry
+# Guarded `brew upgrade` — see scripts/brew-upgrade.sh for the full rationale.
+# Blanket-upgrading homebrew/core formulae is NOT the npm-style supply-chain
+# risk (reviewed PRs, Homebrew-CI-built bottles) — the real hazard here is
+# SILENT CONFIG REVERT on exactly two packages: `brew upgrade caddy` drops the
+# xcaddy-built dns.providers.cloudflare module (wildcard cert renewal fails
+# ~60 days later, fix: make caddy-dns-build), and `brew upgrade mosh` moves the
+# binary to a new Cellar path, silently dropping it from the Application
+# Firewall allowlist (fix: make mosh-firewall). `brew pin` is the actual
+# enforcement — it makes a bare, hand-typed `brew upgrade` skip both too, not
+# just this target — this script converges the pins and asserts both
+# invariants afterward. Third-party taps and casks are reported, never
+# auto-upgraded — that's /upgrade-deps' job.
+brew-upgrade:
+	@bash $(DOTFILES_DIR)/scripts/brew-upgrade.sh
+brew-upgrade-dry:
+	@bash $(DOTFILES_DIR)/scripts/brew-upgrade.sh --dry-run
+
 # ============================================================================
 # Clean — purge caches (brew, npm, pnpm, bun)
 # ============================================================================
@@ -2109,6 +2131,8 @@ help:
 	@echo "  make brew-check         Verify the machine matches the Brewfile (read-only)"
 	@echo "  make brew-diff          List installed packages not declared in the Brewfile (dry-run)"
 	@echo "  make brew-dump          Regenerate the Brewfile from the machine — then review the git diff"
+	@echo "  make brew-upgrade       Upgrade outdated homebrew/core formulae (skips pinned caddy/mosh + casks + third-party taps, then asserts the invariants)"
+	@echo "  make brew-upgrade-dry   Preview without upgrading"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
