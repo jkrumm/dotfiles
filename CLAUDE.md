@@ -124,7 +124,7 @@ risk and is **never** enabled — upgrade one package at a time (`/upgrade-deps`
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte terminal key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run in a **bare** terminal, never inside herdr |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
-| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, makefile-conventions, visx-charts) |
+| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, dockerfile, makefile-conventions, visx-charts) |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
 | `raycast/` | `~/.raycast-scripts` (dir symlink) | Raycast Script Commands (battery limiter). MacBook-only via `make batt-setup`; point Raycast at the dir once. |
 
@@ -439,6 +439,241 @@ herdr layers its own ssh hardening on top for `--remote` only
 per-attach control socket. The repo's `ControlMaster` still earns its place;
 it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
 
+### Two dev-server doors: port-based (`.ts.net`) and clean (`.mini.jkrumm.com`)
+
+**`config/Caddyfile` is the single app registry.** Every `<name>.test {
+reverse_proxy localhost:PORT }` block in the tracked Caddyfile automatically
+gets a clean door at `https://<name>.$DEV_DOMAIN` — a new app needs **zero**
+work beyond the `.test` block it already needs. `~/.config/caddy-tailnet.ports`
+survives as an **opt-out + flags** file (`exclude <name>`, and the `portdoor` /
+`host=rewrite` flags), not a second list. Before this it *was* a second list,
+and the two drifted silently: 17 apps in one, 4 in the other, and an app
+reached the tailnet only if you remembered to edit both.
+
+The Caddyfile is read by handing it to **`caddy adapt` and walking the route
+JSON** (`scripts/lib/caddy-registry.py`) — never by regexing it, which the live
+file defeats three separate ways: the non-`.test` `metabase.iu-aws.de` block,
+snippet imports, and `fpp.test`'s `header_up Host` variant. That last one is
+carried over automatically, so an app whose `.test` block rewrites Host gets the
+same treatment on the tailnet door without a flag. Two guards run before the
+parse and both are fatal: the machine-local include is stripped (it holds the
+Cloudflare token and must never enter the parse path), and any *other* file
+import aborts — adapting happens from stdin, so a surviving relative import
+would resolve against the wrong directory and silently return a short app list
+rather than an error. The extractor also refuses to emit an empty registry,
+because a future Caddyfile restructure that broke the walker would otherwise
+tear down every dev door quietly instead of failing.
+
+**A `.test` block the extractor can't reduce to one name and one port is
+SKIPPED, and the summary says so.** A block with two `reverse_proxy` handlers
+(the retired `whisper.test` split `/v1/audio/transcriptions*` from `/v1/*` — so
+this is a real pattern, not a hypothetical), a multi-host match, or a
+non-loopback upstream cannot be routed by name, so it gets no tailnet door. It
+is never guessed at; a wrong upstream in a generated proxy is worse than a
+missing door. Split such an app into one block per port to give it doors.
+
+The generator's every input *and* output is overridable
+(`CADDY_TAILNET_{CADDYFILE,PORTS,CONF,OUT,PAGE_DIR,NO_RELOAD}`) so it can be
+exercised against scratch files. That is a safety property, not a convenience:
+when only the inputs were overridable, the obvious way to test a change —
+scratch PORTS/CONF — still rewrote the **real** include and reloaded Caddy from
+it, which with an empty scratch `DEV_DOMAIN` deletes the clean door for every
+app at once. An `OUT` outside `Caddyfile.d` now implies `NO_RELOAD`.
+
+`make caddy-tailnet` (`scripts/caddy-tailnet.sh`) generates **two** doors onto
+the same dev servers, not one, and the second is additive — the first stays,
+permanently, as the zero-dependency fallback:
+
+1. **Port-based**: `https://<mini-magicdns>:<port>` — the original mechanism.
+   Cert comes straight from tailscaled (`tls { get_certificate tailscale }`),
+   so it has no DNS provider, no Cloudflare, and no ACME in its path. This is
+   the fallback that must survive door 2 breaking, but it is **opt-in per app**
+   (`portdoor`), and that asymmetry is deliberate — see below.
+2. **Clean**: `https://<app>.mini.jkrumm.com` — one wildcard Caddy site block
+   (`*.mini.jkrumm.com { … }`) on `:443` of the tailnet IP, `host` matchers
+   fanning out to `localhost:<port>` per app, secured by a single wildcard
+   Let's Encrypt cert via Cloudflare DNS-01. **Default-on for every app.**
+   Opt-in per *machine*: only generated once `~/.config/caddy-tailnet.conf`
+   sets `DEV_DOMAIN` and a chmod-600 Cloudflare token file exists — an
+   un-seeded machine silently gets door 1 only, which is a valid state, not
+   an error.
+
+| Command | Purpose |
+|-|-|
+| `make caddy-tailnet` | Dev-host only: regenerate both doors from `config/Caddyfile` + `~/.config/caddy-tailnet.{ports,conf}`, validate, reload. |
+| `make caddy-dns-build` | Dev-host only, one-time (or after any `brew upgrade caddy`): build + install Caddy with the Cloudflare DNS module — prerequisite for door 2. |
+
+**Only the clean door defaults on, and the reason is port squatting.** A port
+door makes Caddy bind the app's *own port number* on the tailnet interface, so
+it collides with anything else holding that address: `tailscale serve` (rb's
+`:7730` row) and any dev server that binds `0.0.0.0` rather than loopback
+(sideclaw does; Docker published ports do by default). Auto-generating 17 of
+them would have Caddy squat ports that `docker compose` then fails to bind
+days later, with a confusing error — so the port door stays a per-app opt-in.
+The clean door has no such failure mode: every app shares one `:443` listener,
+which is exactly why it is the one that scales to "every app, no work".
+
+**Upstreams dial `localhost:<port>`, never `127.0.0.1:<port>`.** A dev server
+does not reliably bind the IPv4 loopback. Vite, finding its port already held
+on some other address, silently falls back to binding **`::1` alone** and still
+prints a cheerful `ready` line — after which a hardcoded `127.0.0.1` upstream
+502s against an app that is plainly running. Observed with basalt-playground on
+7710 while a port door held the tailnet IP. `localhost` resolves to both
+families and Go's dialer tries each, so it covers the app whichever way it
+binds; it is also what the tracked `.test` blocks already use.
+
+**One site block for every app, never one per app.** Caddy 2.10+ issues a
+single wildcard cert that covers every `host {}` matcher inside one site
+block; N site blocks would each provision their own cert and race Let's
+Encrypt's ~50-certs-per-registered-domain-per-week limit for zero benefit.
+The `host=rewrite` flag is the escape hatch for a dev server that validates
+the `Host` header on dev-only endpoints and can't be allowlisted — same shape
+as the `fpp.test` block in `config/Caddyfile`, and **carried over from that
+block automatically**, so it needs setting by hand only to force it on for an
+app whose `.test` block doesn't already do it.
+
+**The landing page at `https://mini.jkrumm.com`** (also `apps.mini.jkrumm.com`)
+lists every app with its port, both doors, and live status — and is served from
+the wildcard block's bare `handle {}` fallback too, so a *typo'd* name shows you
+what exists instead of a bare 404.
+
+**The apex is a second subject on the same site block, not a third door** —
+`*.mini.jkrumm.com, mini.jkrumm.com { … }`. A wildcard answers for exactly one
+label below the name, in DNS *and* in the cert, so the apex needs its own A
+record (`mini.jkrumm.com → <tailnet-ip>`, grey-cloud) and Caddy provisions a
+separate `CN=mini.jkrumm.com` cert for it. Sharing the block is what makes it
+free otherwise: the apex matches no `host` matcher, falls through to the
+landing-page fallback, and inherits the `/_up/*` probes. `check_dev_vhosts`
+asserts **both** A records against the live tailnet IP, because they drift
+independently — and apex drift is the quiet one, where every app door keeps
+working and only the front page dies.
+
+**Adding the apex record is not the same as being able to resolve it.** Any
+lookup made *before* the record existed is negatively cached, at two independent
+layers, and neither expires when you expect:
+
+- **The LAN router.** MagicDNS declares no resolvers of its own here, so it
+  forwards to the system default — the Fritz!Box — which served NODATA with a
+  flat 1800s SOA for `mini.jkrumm.com` while answering fine for every sibling
+  (`argo.jkrumm.com`, `apps.mini.jkrumm.com`). This is *not* DNS rebind
+  protection: verified by `dig @192.168.1.1 localtest.me` → `127.0.0.1` and
+  `100-87-73-3.nip.io` → `100.87.73.3`, both unfiltered. It cleared on its own
+  in ~4 minutes; a mixed-case query (`MiNi.JkRumm.com`) also forces a miss,
+  because its cache keys are case-sensitive.
+- **macOS `mDNSResponder`, which is the one that actually bites.** `dig` talks
+  to `100.100.100.100` directly and reported the record as soon as the router
+  did — while `curl` and every browser on the same machine still failed with
+  "could not resolve host" for far longer. **`dscacheutil -flushcache` does not
+  clear it**; only `sudo killall -HUP mDNSResponder` does, which on the mini
+  means the MacBook-only root password (see Secrets). Chrome caches on top of
+  that again — `chrome://net-internals/#dns`.
+
+So `check_dev_vhosts` can honestly report `DNS in sync` while the browser in
+front of you still says ERR_NAME_NOT_RESOLVED: it uses `dig`, deliberately, to
+assert what is *published* rather than what one client has cached. Verify the
+door itself out-of-band and it separates cleanly —
+`curl --resolve mini.jkrumm.com:443:<tailnet-ip> https://mini.jkrumm.com/`
+returned 200 with `CN=mini.jkrumm.com` before any cache had caught up.
+
+Status is same-origin by construction — no daemon, no CORS. The generator emits
+a `handle /_up/<name>` probe route per app in the *same* site block, so the
+page just fetches `/_up/<name>` and reads the code. Three details are
+load-bearing:
+
+- **`rewrite * /` inside each probe.** Without it the upstream receives
+  `/_up/<name>` and a perfectly healthy dev server answers 404 — indistinguishable
+  from a real failure. With it, a live app returns its real status.
+- **The probes nest inside the fallback `handle {}`**, not at the top of the
+  block. At the top they would shadow `/_up/*` on every real app's own
+  subdomain. Relatedly, the bare `handle {}` must be written **last**: handles
+  in one group are mutually exclusive and first-match, so a bare one written
+  earlier swallows every named host above it.
+- **502 vs 403 is the whole point.** `502` means Caddy could not dial the port
+  (dev server not running); `403` means it is running and rejecting the door's
+  Host header. That second state is the most common failure here and it looks
+  exactly like a proxy fault, so the page names the fix outright: add
+  `.mini.jkrumm.com` to Vite/Astro `server.allowedHosts`, or `*.mini.jkrumm.com`
+  to Next's `allowedDevOrigins` — **Next does not understand a leading dot**, it
+  globs whole segments.
+
+**`servers { protocols h1 h2 }` in the global options block is load-bearing,
+not incidental.** HTTP/3 is unusable over Tailscale: quic-go's 1280-byte
+initial packet exceeds the tailnet MTU once headers are added
+(caddyserver/caddy#7885), so h3 connections fail — Chrome-only, intermittent,
+exactly the kind of bug you don't want to rediscover by accident. Disabled
+explicitly for every site block Caddy serves, not just the tailnet ones.
+
+**`bind 127.0.0.1` on every `.test` block is what makes the clean door safe to
+grant broadly on `:443`.** Before this change, the local dev proxy's `(local)`
+snippet (and the `http://*.test` redirect, and `metabase.iu-aws.de`) took the
+default `0.0.0.0`, which made this Caddy reachable over the LAN *and* the
+tailnet — and on the mini it collided with the tailnet wildcard block's own
+`:443` listener. After the change, nothing but the deliberate tailnet-bound
+site blocks listens on the tailnet interface's `:443` at all, which is the
+premise the ACL grant below relies on.
+
+**`make caddy-dns-build` is the prerequisite, and it has a sharp trap.** Stock
+Homebrew Caddy ships zero DNS provider modules
+(`caddy list-modules | grep dns.providers` is empty), so DNS-01 is impossible
+until Caddy is rebuilt with `github.com/caddy-dns/cloudflare` via `xcaddy`
+(installed via `go install`, not Homebrew — pinned in the Makefile like
+`COLLIE_REF`/`HERDR_NOTES_REF`) and installed over
+`$(brew --prefix)/opt/caddy/bin/caddy`, the exact path the brew LaunchDaemon
+plist execs. Dev-host only, same gate `collie-setup` uses. **A later
+`brew upgrade caddy` silently reverts this binary and the module vanishes —
+nothing errors until the wildcard cert fails to renew ~60 days later.** That
+is why `devhost-health-check.sh`'s `check_dev_vhosts` asserts the module is
+present on every 5-minute run (folded into the composite push monitor, not a
+new one — same `check_git_push` exception: it doesn't fail *with*
+herdr/sshd/tailscaled/mosh, but didn't warrant a monitor of its own), and why
+re-running `caddy-dns-build` is the fix after any caddy upgrade. It also
+checks the wildcard cert has >21 days left (probed locally via `openssl
+s_client` against the tailnet IP — never an outbound call to Cloudflare or
+Let's Encrypt, same restraint as `check_git_push`'s comment) and that the
+published `health.$DEV_DOMAIN` A record still matches the live tailnet IP,
+catching the silent-drift failure mode where a device rename or re-key leaves
+every clean URL dead with nothing in any log.
+
+**The ACL grant needs an additive tag, same pattern as Funnel and Collie.**
+`tag:devhost → tag:mac/tag:phone/tag:tablet` on `tcp:443` in
+`dotfiles-private/tailscale-acl.jsonc` — `dst` is the additive `tag:devhost`,
+not `tag:mac`, because both Macs run this same Caddy config and a
+`tag:mac → tag:mac` grant on 443 would hand the work MacBook the personal
+Caddy too (which also fronts `metabase.iu-aws.de`). `tag:tablet` is new for
+the same reason as the Collie grant's `tag:phone` scoping: `tag:client`
+buckets the two TVs *and* the tablet as one group, and only the tablet should
+reach dev servers — additive on the tablet alone so it keeps its existing
+`tag:client` grants, and the TVs must never gain this. Port 443 rather than a
+dedicated port (Collie's `tcp:8788` pattern) because the entire point of this
+door is a portless URL — the dedicated-port trick that scopes every other
+grant here is simply unavailable. **Both re-taggings (mini `+tag:devhost`,
+tablet `+tag:tablet`) are console-only actions** — `make tailscale-acl-push`
+can declare the grant, but cannot tag a physical device, so the grant is
+inert until both are applied by hand in the admin console.
+
+**Two halves, and each is silently useless without the other**: the tag is
+applied in the console, the grant is applied by `make tailscale-acl-push` from
+the MacBook. Tagging the mini while the grant sits unpushed in
+`dotfiles-private` looks exactly like tagging having no effect — the tag is
+right there in the machine list, and every device still times out.
+
+**Verify the live filter from the mini itself, with no API key.**
+`tailscale debug netmap` carries this node's effective *inbound* rules, so it
+settles "is the grant actually pushed?" on the machine that cannot run
+`tailscale-acl-diff` (`op://Private/*`, refused by the cache — the target now
+says so instead of suggesting `op signin`, which would hang there):
+
+```bash
+/Applications/Tailscale.app/Contents/MacOS/Tailscale debug netmap \
+  | python3 -c 'import json,sys
+for i,r in enumerate(json.load(sys.stdin)["PacketFilter"]):
+    print(i, r.get("Srcs"), sorted({(d["Ports"]["First"],d["Ports"]["Last"]) for d in r.get("Dsts") or []}))'
+```
+
+No `(443, 443)` row means no grant, whatever the console shows. Expect the
+existing rows to be 22/5900/7700-7799 (Macs), 60000-61000 (mosh), 7730 (rb),
+8788 (collie, phone only).
+
 ## Collie — the phone control surface
 
 [Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
@@ -550,12 +785,15 @@ that never ran `collie-setup` has no collie and must not fail the heartbeat.
 ## Dev-host health heartbeat (mini only)
 
 **Two** Uptime Kuma push monitors, one agent. `MacMini Dev Host - Push` (group
-`Local`) is the composite and covers **five** components: tailscaled, sshd,
-herdr, mosh (both the binary and its Application Firewall allowlist membership)
-and the GitHub push credential. `MacMini Collie - Push` is separate — see
-**One scheduler, two monitors** below for why. Both are driven by
-`scripts/devhost-health-check.sh` via the `com.jkrumm.devhost-health`
-LaunchAgent every 5 minutes. Opt-in per machine like `remote-access`:
+`Local`) is the composite and covers **six** components: tailscaled, sshd,
+herdr, mosh (both the binary and its Application Firewall allowlist membership),
+the GitHub push credential, and the clean dev-vhost door (`check_dev_vhosts` —
+the Cloudflare DNS module, wildcard cert lifetime, DNS A-record drift, and
+token/include file permissions; see *Two dev-server doors* above). `MacMini
+Collie - Push` is separate — see **One scheduler, two monitors** below for why.
+Both are driven by `scripts/devhost-health-check.sh` via the
+`com.jkrumm.devhost-health` LaunchAgent every 5 minutes. Opt-in per machine
+like `remote-access`:
 
 | Command | Purpose |
 |-|-|
@@ -572,17 +810,22 @@ pattern as `MacMini Secret Seed - Push` and the Hermes monitors.
 **One monitor, not five.** herdr/sshd/tailscaled/mosh all fail together when the
 mini sleeps or drops off the tailnet; five monitors would be five simultaneous
 pages saying one thing. The failing component is named in the push `msg`, which
-is where the diagnosis belongs. `check_git_push` is the one deliberate exception
-— a token expires while the host is perfectly healthy — folded in anyway because
-a second monitor wasn't worth it for one component.
+is where the diagnosis belongs. `check_git_push` and `check_dev_vhosts` are the
+two deliberate exceptions — a token expires, a DNS module gets reverted by
+`brew upgrade caddy`, a cert nears expiry, or an A record drifts, all while the
+host is otherwise perfectly healthy — folded in anyway because a second monitor
+wasn't worth it for either one. `check_dev_vhosts` additionally SKIPS (not
+fails) on a machine that never seeded `DEV_DOMAIN` — a machine without the clean
+door must not fail this heartbeat over a feature it doesn't use, same as the
+collie push-URL absence below.
 
-**One scheduler, two monitors.** Collie is deliberately *not* a sixth component,
-and the reason is the same rule pointed the other way: it genuinely does **not**
-fail with the other five. It's opt-in per machine and can be absent, down or
-mis-hardened while herdr/sshd/tailscaled/mosh are all fine — so folding it in
-would mark the dev host DOWN and implicate four healthy components. It gets
-`MacMini Collie - Push` instead. What it does *not* get is its own agent: the
-existing LaunchAgent already runs every 300s, so a second one would be pure
+**One scheduler, two monitors.** Collie is deliberately *not* a seventh
+component, and the reason is the same rule pointed the other way: it genuinely
+does **not** fail with the other six. It's opt-in per machine and can be
+absent, down or mis-hardened while herdr/sshd/tailscaled/mosh are all fine — so
+folding it in would mark the dev host DOWN and implicate healthy components. It
+gets `MacMini Collie - Push` instead. What it does *not* get is its own agent:
+the existing LaunchAgent already runs every 300s, so a second one would be pure
 duplication. Only the push target differs, and the URL file's absence is silent
 by design so a machine without collie never fails the script.
 

@@ -8,6 +8,14 @@
 #
 # Reload config: caddy reload   (no sudo needed)
 #
+# THIS FILE IS ALSO THE TAILNET DEV-APP REGISTRY. On the dev host (the mini),
+# scripts/caddy-tailnet.sh parses the `*.test` blocks below via `caddy adapt` and
+# gives every one of them a clean door at https://<name>.$DEV_DOMAIN, plus a
+# listing page at https://apps.$DEV_DOMAIN. So adding a block here is all that is
+# needed — but run `make caddy-tailnet` (not just `caddy reload`) on the mini to
+# regenerate those doors. A plain reload picks up the .test block and leaves the
+# tailnet door missing.
+#
 # Stack:
 #   dnsmasq  — wildcard *.test → 127.0.0.1 (no per-domain DNS config ever)
 #   Caddy    — reverse proxy + HTTPS via local CA (tls internal)
@@ -29,6 +37,16 @@
 			roll_keep_for 720h
 		}
 	}
+
+	# HTTP/3 is unusable over Tailscale: quic-go's 1280-byte initial packet
+	# exceeds the tailnet MTU once headers are added (caddyserver/caddy#7885),
+	# so h3 connections fail outright. The symptom is Chrome-only and
+	# intermittent (Chrome races h3 against h2 and only sometimes falls back
+	# fast enough), which is exactly the shape of bug you don't want to
+	# rediscover by accident — disabled explicitly rather than left to chance.
+	servers {
+		protocols h1 h2
+	}
 }
 
 # Machine-local site blocks — NOT tracked here, and deliberately so.
@@ -42,12 +60,19 @@
 # and docs/remote-dev.md step 4.
 import /opt/homebrew/etc/Caddyfile.d/*.caddy
 
+# bind 127.0.0.1 below: dnsmasq maps *.test to 127.0.0.1, so loopback is the
+# only interface these ever need. Left on the default 0.0.0.0, this Caddy was
+# reachable over the LAN and the tailnet too — and on the mini it collided
+# with the tailnet include's own :443 listener (scripts/caddy-tailnet.sh),
+# since 0.0.0.0:443 and a tailnet-IP-bound :443 both want the same port.
 (local) {
+	bind 127.0.0.1
 	tls internal
 }
 
 # Redirect all HTTP *.test traffic to HTTPS
 http://*.test {
+	bind 127.0.0.1
 	redir https://{host}{uri} 301
 }
 
@@ -205,6 +230,7 @@ linewatch.test {
 # Browser sees Caddy's local-CA cert; Caddy verifies the real upstream cert.
 
 metabase.iu-aws.de {
+	bind 127.0.0.1
 	tls internal
 	reverse_proxy https://127.0.0.1:24443 {
 		header_up Host metabase.iu-aws.de

@@ -13,7 +13,7 @@ another** — most of the confusion in designing this came from collapsing them.
 | Reachability | **Tailscale** | Stable address + NAT traversal, mini reachable from anywhere | Nothing above it |
 | Transport | **mosh** | Your keystrokes survive lid-close, roaming, bad wifi | Multiplexing, port-forwarding, persistence |
 | Persistence + UI | **herdr** | Panes stay alive on the mini; per-pane agent state | Anything about the network |
-| Service exposure | **Caddy** | Dev servers reachable over the tailnet with real HTTPS + working WebSockets | Anything about terminals |
+| Service exposure | **Caddy** | Dev servers reachable over the tailnet with real HTTPS + working WebSockets, via TWO doors — a port-based `.ts.net` fallback (zero dependency) and a clean `.mini.jkrumm.com` door (wildcard cert, opt-in) — see step 4b | Anything about terminals |
 
 Two independent extras that ride on top:
 
@@ -317,42 +317,132 @@ Four decisions worth keeping:
 is one process that both lanes report, and showing it twice reads as two agents
 racing one checkout.
 
-### 4b. Tailnet dev ports — BUILT 2026-07-27
+### 4b. Tailnet dev ports — BUILT 2026-07-27, second door added later
 
-`make caddy-tailnet` on the mini. Reads `~/.config/caddy-tailnet.ports` and
-regenerates `$(brew --prefix)/etc/Caddyfile.d/tailnet.caddy`, which the tracked
+`make caddy-tailnet` on the mini. The **app registry is the tracked
+`config/Caddyfile`** — every `<name>.test { reverse_proxy localhost:PORT }`
+block in it is a dev app and automatically gets a clean door, so adding an app
+is one Caddyfile block and nothing else. `~/.config/caddy-tailnet.ports` is an
+**opt-out + flags** file (`exclude <name>`, `portdoor`, `host=rewrite`), not a
+second list; it used to be the registry, and the two drifted silently (17 apps
+in one, 4 in the other). `~/.config/caddy-tailnet.conf` still carries
+`DEV_DOMAIN` + the Cloudflare token path.
+
+The Caddyfile is parsed with `caddy adapt` and the route JSON is walked
+(`scripts/lib/caddy-registry.py`), never regexed — the live file defeats regex
+via the non-`.test` `metabase.iu-aws.de` block, snippet imports, and
+`fpp.test`'s `header_up Host` variant (which is carried over to the tailnet
+door automatically). The machine-local include is stripped before parsing
+because it holds the Cloudflare token.
+
+Output is `$(brew --prefix)/etc/Caddyfile.d/tailnet.caddy`, which the tracked
 Caddyfile picks up through an `import` glob (valid when it matches nothing, so
-the MacBook is unaffected). Result: a dev server on `127.0.0.1:PORT` on the mini
-is `https://<mini-magicdns>:PORT` from any Mac on the tailnet.
+the MacBook is unaffected). It generates **two doors**, and the second is
+additive — the first is never removed:
 
-Four things that were not obvious, each of which cost a debugging cycle:
+1. **Port-based** (the original mechanism): a dev server on `localhost:PORT`
+   on the mini is `https://<mini-magicdns>:PORT` from any Mac on the tailnet.
+   Cert comes from tailscaled itself — no DNS, no ACME, no Cloudflare. The
+   permanent fallback if door 2 is ever unavailable, but **opt-in per app**
+   via the `portdoor` flag: this door binds the app's own port number on the
+   tailnet interface, so it collides with `tailscale serve` and with any dev
+   server that binds `0.0.0.0`. Auto-generating one per app would squat ports
+   that `docker compose` then fails to bind.
+2. **Clean** (default-on for every app): the same app is *also*
+   `https://<app>.mini.jkrumm.com` — one `*.mini.jkrumm.com { … }` site block
+   on the tailnet IP's `:443`, `host {}` matchers fanning out to
+   `localhost:PORT` per app, one wildcard Let's Encrypt cert via Cloudflare
+   DNS-01. Only generated once `~/.config/caddy-tailnet.conf` sets
+   `DEV_DOMAIN` and a chmod-600 Cloudflare token file exists — an un-seeded
+   machine silently gets door 1 only, which is a valid state, not an error.
+   Needs `make caddy-dns-build` first (see below).
+
+**`https://apps.mini.jkrumm.com` lists every app** with port, both doors and
+live status, and answers on any *unmatched* name too, so a typo shows you what
+exists. Status comes from generated `handle /_up/<name>` routes in the same
+site block — same-origin, so no daemon and no CORS. `502` = dev server not
+running; `403` = running but rejecting the door's Host header (the most common
+failure, and the page names the fix). There is no apex door: a
+`*.mini.jkrumm.com` cert does not cover `mini.jkrumm.com`.
+
+Things that were not obvious, each of which cost a debugging cycle:
 
 - **The generated file is untracked on purpose.** It names the MagicDNS hostname
-  and the Tailscale IP. Regenerate per machine; never copy it between them.
+  and the Tailscale IP (and, once door 2 is enabled, contains the Cloudflare
+  token — chmod 600 for exactly that reason). Regenerate per machine; never
+  copy it between them.
 - **`bind <tailnet-ip>` is load-bearing.** Without it Caddy takes `0.0.0.0:PORT`
   and collides with the dev server already on `127.0.0.1:PORT`. Binding only the
   tailnet IP lets the port number mean the same thing inside and outside.
+- **Dial `localhost:PORT`, never `127.0.0.1:PORT`.** A dev server does not
+  reliably bind the IPv4 loopback: Vite, finding the port held on another
+  address, falls back to binding **`::1` alone** and still prints `ready`. A
+  hardcoded `127.0.0.1` upstream then 502s against an app that is obviously
+  running — seen with basalt-playground on 7710 while a port door held the
+  tailnet IP. `localhost` resolves to both families and the dialer tries each.
 - **The ACL gates it, and failure is silent.** `tag:mac → tag:mac` was
   `tcp:22, tcp:5900, udp:60000-61000`; ports outside that just time out, with
   nothing in any log. Added `tcp:7700-7799` (the dev-server block). This is the
   same lesson rb's dedicated `tcp:7730` grant already encoded — the ACL checks
-  the *listener*, so every new listening port needs a grant.
-- **Certs come from tailscaled, not ACME.** `tls { get_certificate tailscale }`,
-  supported natively in Caddy 2.11. On macOS there is no
+  the *listener*, so every new listening port needs a grant. Door 2 needed the
+  same lesson applied to `:443` — see below.
+- **Certs come from tailscaled, not ACME (door 1 only).** `tls { get_certificate
+  tailscale }`, supported natively in Caddy 2.11. On macOS there is no
   `/var/run/tailscaled.socket` — the app exposes a TCP port via
   `/Library/Tailscale/ipnport` plus a root-readable `sameuserproof-<port>` token.
   Caddy can read it **because it runs as root**; a non-root Caddy silently
   cannot.
+- **`bind 127.0.0.1` on every local `.test` block is what makes door 2 safe.**
+  Before this, the `.test` snippets (see `config/Caddyfile`) took the default
+  `0.0.0.0`, which made this same Caddy reachable over the LAN and the tailnet
+  — and on the mini it collided directly with door 2's own `:443` listener on
+  the tailnet IP. After the change, nothing but the deliberate tailnet-bound
+  site blocks listens on the tailnet interface's `:443` at all.
+- **`servers { protocols h1 h2 }` disables HTTP/3 globally.** quic-go's
+  1280-byte initial packet exceeds the tailnet MTU once headers are added
+  (caddyserver/caddy#7885), so h3 connections over Tailscale fail — Chrome-only,
+  intermittent, and easy to mistake for something else entirely.
+- **Door 2 needs a Caddy binary the stock Homebrew formula doesn't ship.**
+  `caddy list-modules | grep dns.providers` is empty on stock Homebrew Caddy,
+  so DNS-01 has nowhere to run. `make caddy-dns-build` builds Caddy with
+  `github.com/caddy-dns/cloudflare` via `xcaddy` (installed via `go install`,
+  pinned in the Makefile) and installs it over
+  `$(brew --prefix)/opt/caddy/bin/caddy` — the exact path the brew LaunchDaemon
+  plist execs. **A later `brew upgrade caddy` silently reverts this binary**;
+  nothing errors until the wildcard cert fails to renew ~60 days out. Re-run
+  `caddy-dns-build` after any caddy upgrade — `devhost-health-check.sh`'s
+  `check_dev_vhosts` catches the drift on every 5-minute run (module presence,
+  cert days-left, DNS A-record drift, token/include file permissions) so it
+  doesn't sit undetected for two months.
 
 Client-side, each Vite app needs `server.allowedHosts` to accept the MagicDNS
-Host header or it answers 403 (rb already does a `.ts.net` suffix match — copy
-that shape).
+Host header (door 1) or `DEV_DOMAIN` suffix (door 2) or it answers 403 (rb
+already does a `.ts.net` suffix match — copy that shape). Astro is
+`vite.server.allowedHosts`; **Next.js is `allowedDevOrigins` and does not
+understand a leading dot** — it globs whole segments, so use
+`*.mini.jkrumm.com` there, not `.mini.jkrumm.com`. A dev server that validates
+`Host` on dev-only endpoints and can't be allowlisted gets the `host=rewrite`
+flag in `~/.config/caddy-tailnet.ports` instead — same shape as the `fpp.test`
+block in `config/Caddyfile`, which the generator already carries over on its
+own. The landing page reports this state explicitly rather than leaving it
+looking like a proxy fault.
+
+**The ACL grant for door 2 uses an additive tag, same pattern as Funnel and
+Collie.** `tag:devhost → tag:mac/tag:phone/tag:tablet` on `tcp:443` —
+`tag:devhost` rather than `tag:mac` because both Macs run this same Caddy, and
+a `tag:mac → tag:mac` grant on 443 would hand the work MacBook the personal
+Caddy too. `tag:tablet` is additive on the tablet alone, narrower than
+`tag:client` (which also covers the two TVs, which must never reach dev
+servers). Full reasoning: `CLAUDE.md` → *Two dev-server doors*.
 
 **Applying an ACL change now needs both machines.** The repo lives on the mini,
 but `tailscale-acl-push` needs the Tailscale API key, which is `op://Private/*`
 and refused by the mini's cache unconditionally and by design. So the edit
 happens where the repo is and the push happens where the human is. That is a
-real cost of the thin-client split, not an oversight.
+real cost of the thin-client split, not an oversight. **Both re-taggings** (mini
+`+tag:devhost`, tablet `+tag:tablet`) are additionally console-only — no
+`make` target can apply a tag to a physical device — so door 2's grant is
+inert until both are done by hand.
 
 ### 4. Caddy — for *new* dev servers only
 
@@ -446,7 +536,9 @@ must never be granted.
 
 One composite push monitor, `MacMini Dev Host - Push` (group `Local`), covering herdr +
 sshd + tailscaled + mosh (binary and Application Firewall allowlist membership) + the
-GitHub push credential — five components. `scripts/devhost-health-check.sh` via the
+GitHub push credential + the clean dev-vhost door (`check_dev_vhosts` — Cloudflare DNS
+module presence, wildcard cert days-left, DNS A-record drift, token/include file
+permissions; see step 4b) — six components. `scripts/devhost-health-check.sh` via the
 `com.jkrumm.devhost-health` LaunchAgent, every 5 minutes; `make devhost-health-setup`
 installs it and refuses until the push URL exists.
 
@@ -455,10 +547,12 @@ installs it and refuses until the push URL exists.
 inbound grant: new attack surface for a check the mini can just do itself.
 **One monitor, not five** — herdr/sshd/tailscaled/mosh fail together whenever the mini
 sleeps or leaves the tailnet, so splitting them buys simultaneous pages and no extra
-information. The GitHub push credential is the deliberate exception — it does not fail
-with the rest (a token can expire on a perfectly healthy host) — folded in anyway because
-a second Kuma push monitor wasn't worth it for one component. The failing component is
-named in the push `msg`.
+information. The GitHub push credential and the dev-vhost door are the deliberate
+exceptions — neither fails with the rest (a token can expire, a DNS module can get
+reverted by `brew upgrade caddy`, on an otherwise perfectly healthy host) — folded in
+anyway because a second Kuma push monitor wasn't worth it for either. The dev-vhost check
+additionally SKIPS rather than fails on a machine that never set `DEV_DOMAIN`. The failing
+component is named in the push `msg`.
 
 The monitor is live — `MacMini Dev Host - Push` (id 204, group `Local`, interval 600,
 maxretries 0), created declaratively by `make uk-sync` from
@@ -535,10 +629,14 @@ affect MacBook → mini, which is the direction this plan needs.
   live packet filter via `tailscale debug netmap`, IPProto 17.) Both `make mosh-firewall`
   and the `_setup-zshenv` PATH block are prerequisites — either missing reproduces the
   same "hangs after handshake" symptom for a different reason.
-- `make devhost-health-check` on the mini prints **five** green components (herdr, sshd,
-  tailscaled, mosh, GitHub push credential — not four), and the Kuma monitor goes green
-  within one interval.
+- `make devhost-health-check` on the mini prints **six** components green — or, for
+  dev vhosts, `(skipped)` on a machine that never set `DEV_DOMAIN`, which is also a pass
+  (herdr, sshd, tailscaled, mosh, GitHub push credential, dev vhosts) — and the Kuma
+  monitor goes green within one interval.
 - `tailscale serve status` still shows both existing rows (`:7730` tailnet, `:8443` Funnel).
   This plan must not change them.
 - Only if you built step 4: a dev server over Caddy keeps HMR alive past 60s (the #18827
   failure window).
+- Only if you built door 2 (step 4b): `caddy list-modules | grep dns.providers.cloudflare`
+  is non-empty, `https://<app>.mini.jkrumm.com` serves the same app as the `.ts.net` door,
+  and the port-based door still works unchanged.

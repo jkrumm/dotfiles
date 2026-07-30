@@ -24,6 +24,13 @@ set -euo pipefail
 # wasn't worth it for one component. Revisit if it ever pages independently
 # often enough to be noise.
 #
+# `check_dev_vhosts` (the clean https://<app>.$DEV_DOMAIN door — see
+# scripts/caddy-tailnet.sh) is the same exception for the same reason: a
+# reverted DNS module, an aging cert, or a drifted A record can each happen
+# on a perfectly healthy dev host, independently of herdr/sshd/tailscaled/mosh
+# — but it is one component, not another whole monitor. It SKIPS (not fails)
+# on a machine that never set DEV_DOMAIN — see its own comment.
+#
 # `make uk-sync` CAN create push monitors — settled by doing it on 2026-07-28,
 # when it created "MacMini Collie - Push" (id=205) against uptime-kuma:2 with
 # uptime-kuma-api 1.2.1. Worth recording how this went wrong twice, because the
@@ -57,6 +64,17 @@ ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
 COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/com.jkrumm.collie.plist}"
 COLLIE_URL="${COLLIE_URL:-http://127.0.0.1:8787}"
+CADDY_BIN="${CADDY_BIN:-/opt/homebrew/bin/caddy}"
+DIG_BIN="${DIG_BIN:-/usr/bin/dig}"
+OPENSSL_BIN="${OPENSSL_BIN:-/usr/bin/openssl}"
+DATE_BIN="${DATE_BIN:-/bin/date}"
+STAT_BIN="${STAT_BIN:-/usr/bin/stat}"
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
+# Same env var name scripts/caddy-tailnet.sh reads — one machine-local file,
+# one name, so there is exactly one place to look when either disagrees with
+# the other about whether the clean dev-vhost door is configured.
+CADDY_TAILNET_CONF="${CADDY_TAILNET_CONF:-$HOME/.config/caddy-tailnet.conf}"
+CADDY_TAILNET_INCLUDE="${CADDY_TAILNET_INCLUDE:-/opt/homebrew/etc/Caddyfile.d/tailnet.caddy}"
 
 # The push token is low-sensitivity (it can only spoof a heartbeat) but still
 # lives in a chmod-600 file rather than 1Password on purpose: monitoring must not
@@ -200,11 +218,98 @@ check_collie() {
   echo "collie up (rebind guard active)"
 }
 
+check_dev_vhosts() {
+  # The clean dev-vhost door (https://<app>.$DEV_DOMAIN, scripts/caddy-tailnet.sh
+  # + `make caddy-dns-build`). Folded into the COMPOSITE monitor below, not a
+  # dedicated one — same exception check_git_push already is: this does NOT
+  # fail together with tailscaled/sshd/herdr/mosh (a reverted DNS module, a
+  # cert nearing expiry, or a drifted A record can all happen on an otherwise
+  # perfectly healthy dev host), but it is one component, and a second Kuma
+  # push monitor wasn't worth it for this one either. Revisit only if it ever
+  # pages independently often enough to be noise, same as that comment says.
+  #
+  # SKIP silently, exactly like the collie push-URL absence: a machine that
+  # never set DEV_DOMAIN in caddy-tailnet.conf has no clean door and must not
+  # fail this heartbeat over a feature it doesn't use.
+  [[ -f "$CADDY_TAILNET_CONF" ]] || { echo "dev vhosts not configured (skipped)"; return 0; }
+  local DEV_DOMAIN="" CF_TOKEN_FILE=""
+  # shellcheck disable=SC1090,SC1091
+  source "$CADDY_TAILNET_CONF"
+  [[ -n "${DEV_DOMAIN:-}" ]] || { echo "dev vhosts not configured (skipped)"; return 0; }
+
+  # 1. The brew-upgrade trap: `brew upgrade caddy` silently reverts the
+  # binary to the module-less stock build, and nothing errors until the
+  # wildcard cert fails to renew ~60 days out. This is the only thing here
+  # that catches it before then. Capture first, match second — piping
+  # straight into `grep -q` would SIGPIPE the producer and, under
+  # `set -o pipefail`, misreport a healthy module list as a failure.
+  local modules
+  modules=$("$CADDY_BIN" list-modules 2>/dev/null) || true
+  /usr/bin/grep -q 'dns.providers.cloudflare' <<<"$modules" \
+    || { echo "caddy missing dns.providers.cloudflare (brew upgrade reverted it — fix: make caddy-dns-build)"; return 1; }
+
+  # 2. Cert lifetime, probed LOCALLY. Deliberately no outbound call to
+  # Cloudflare or Let's Encrypt — same restraint as check_git_push's comment
+  # above: at a 300s cadence with maxretries 0, a third-party API wobble must
+  # not page "dev host down". `health.$DEV_DOMAIN` need not resolve to
+  # anything real; SNI alone is enough for the wildcard cert to be served.
+  local ip
+  ip=$("$TAILSCALE_BIN" status --json 2>/dev/null \
+    | "$PYTHON_BIN" -c 'import json,sys; print(json.load(sys.stdin)["Self"]["TailscaleIPs"][0])' 2>/dev/null) || true
+  [[ -n "$ip" ]] || { echo "dev vhosts: could not read this machine's tailnet IP"; return 1; }
+
+  local enddate
+  enddate=$(echo | "$OPENSSL_BIN" s_client -connect "$ip:443" -servername "health.$DEV_DOMAIN" 2>/dev/null \
+    | "$OPENSSL_BIN" x509 -noout -enddate 2>/dev/null) || true
+  enddate=${enddate#notAfter=}
+  [[ -n "$enddate" ]] || { echo "dev vhosts: could not read the wildcard cert's expiry (is caddy serving *.${DEV_DOMAIN}?)"; return 1; }
+
+  local end_epoch days_left
+  end_epoch=$("$DATE_BIN" -j -f '%b %d %T %Y %Z' "$enddate" +%s 2>/dev/null) || true
+  [[ -n "$end_epoch" ]] || { echo "dev vhosts: could not parse cert expiry '$enddate'"; return 1; }
+  days_left=$(( (end_epoch - $("$DATE_BIN" +%s)) / 86400 ))
+  (( days_left > 21 )) \
+    || { echo "dev vhosts: wildcard cert has ${days_left}d left (< 21d)"; return 1; }
+
+  # 3. A-record drift: the node's Tailscale IP can change (rename, re-key,
+  # relocation) and nothing else in this stack notices — the clean door just
+  # times out, silently, everywhere, with no error on either end. Same lesson
+  # as the missing-ACL-grant failure mode already documented for the port
+  # doors: the listener/record is the thing that has to be checked, because
+  # nothing upstream of it complains when it goes stale.
+  #
+  # BOTH records are checked, because they are two records. `health.$DEV_DOMAIN`
+  # answers from the wildcard and covers every app door; the bare $DEV_DOMAIN —
+  # the app index — has its own A record, since a wildcard does not answer for
+  # the name it hangs off. Only the apex going stale is the quiet one: every app
+  # keeps working and just the front page dies.
+  local name published
+  for name in "health.$DEV_DOMAIN" "$DEV_DOMAIN"; do
+    published=$("$DIG_BIN" +short "$name" 2>/dev/null | tail -1) || true
+    [[ "$published" == "$ip" ]] \
+      || { echo "dev vhosts: ${name} resolves to ${published:-nothing}, tailnet IP is $ip (DNS record drifted)"; return 1; }
+  done
+
+  # 4. The token and the generated include must both stay 600. Unlike 1-3,
+  # this is a live secret-handling misconfiguration if it ever fails, not a
+  # transient condition — so it is asserted every run, not just at generation
+  # time in caddy-tailnet.sh.
+  local token_perm out_perm
+  token_perm=$("$STAT_BIN" -f '%Lp' "${CF_TOKEN_FILE:-}" 2>/dev/null || echo "")
+  out_perm=$("$STAT_BIN" -f '%Lp' "$CADDY_TAILNET_INCLUDE" 2>/dev/null || echo "")
+  [[ "$token_perm" == "600" ]] \
+    || { echo "dev vhosts: ${CF_TOKEN_FILE:-<unset>} is mode ${token_perm:-missing}, expected 600"; return 1; }
+  [[ "$out_perm" == "600" ]] \
+    || { echo "dev vhosts: $CADDY_TAILNET_INCLUDE is mode ${out_perm:-missing}, expected 600"; return 1; }
+
+  echo "dev vhosts up (cert ${days_left}d left, DNS in sync)"
+}
+
 # --- Run --------------------------------------------------------------------
 
 details=()
 failure=""
-for component in check_tailscale check_sshd check_herdr check_mosh check_git_push; do
+for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_dev_vhosts; do
   if detail=$("$component"); then
     details+=("$detail")
   else

@@ -35,6 +35,16 @@ COLLIE_SOURCE  := AltanS/collie
 COLLIE_REF     := 8c898a013d65fe1c33eb9b947d4d5e3b32eb936f
 COLLIE_VERSION := 0.17.0
 
+# xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
+# DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
+# zero DNS provider modules). Same pinning discipline as HERDR_NOTES_REF /
+# COLLIE_REF: xcaddy fetches and compiles arbitrary Go modules on every
+# invocation, so an upgrade has to be a reviewed diff of these lines, not
+# whatever `@latest` resolves to on the day it happens to run.
+XCADDY_VERSION           ?= v0.4.6
+CADDY_DNS_MODULE         ?= github.com/caddy-dns/cloudflare
+CADDY_DNS_MODULE_VERSION ?= v0.2.4
+
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
 # Existing real files are backed up to <file>.bak before being replaced.
@@ -525,13 +535,121 @@ remote-dev-doctor:
 	@bash $(DOTFILES_DIR)/scripts/remote-dev-doctor.sh
 
 .PHONY: caddy-tailnet
-# Expose dev ports over the tailnet via Caddy. Runs ON the dev host (the mini).
+# Expose dev servers over the tailnet via Caddy. Runs ON the dev host (the mini).
 # Opt-in per machine and NOT in the default `setup` chain — only one machine is
 # the dev host, and the generated include names that machine's MagicDNS name and
 # Tailscale IP, which is why it stays untracked and machine-local.
-# Port list: ~/.config/caddy-tailnet.ports (seeded on first run).
+#
+# The app list is the tracked config/Caddyfile: every `<name>.test` block gets a
+# clean https://<name>.$DEV_DOMAIN door automatically. ~/.config/caddy-tailnet.ports
+# is opt-OUT + flags only (exclude / portdoor / host=rewrite), not a second list.
 caddy-tailnet:
 	@bash $(DOTFILES_DIR)/scripts/caddy-tailnet.sh
+
+.PHONY: caddy-dns-build
+# Build Caddy with the Cloudflare DNS module and install it over Homebrew's
+# binary. Stock Homebrew Caddy ships ZERO DNS provider modules
+# (`caddy list-modules | grep dns.providers` is empty), so DNS-01 — which the
+# clean https://<app>.$DEV_DOMAIN door in scripts/caddy-tailnet.sh needs for
+# its wildcard cert — is impossible with the stock binary. xcaddy is not in
+# Homebrew, so it's installed straight from source via `go install`, pinned
+# above like HERDR_NOTES_REF/COLLIE_REF.
+#
+# Dev-host only, same gate `collie-setup` uses: the mini is the only machine
+# that runs the tailnet Caddyfile include this unlocks.
+#
+# Deliberately targets the SAME Caddy version already installed (read live
+# from `caddy version`) — this is a module addition, not a silent upgrade.
+#
+# THE TRAP, and the whole reason devhost-health-check.sh asserts the module
+# is present on every run: a later `brew upgrade caddy` silently REVERTS this
+# binary back to the stock one. The module just vanishes — nothing errors —
+# until the wildcard cert fails to renew ~60 days out. Re-running this target
+# is the fix after any caddy upgrade.
+#
+# The whole recipe is ONE continued shell line, deliberately. `exit 0` in a
+# make recipe ends only that line's shell — make happily runs the next one — so
+# a dev-host gate written as its own line does not actually gate anything.
+# (collie-setup has that shape and that latent bug; not fixed here, but do not
+# copy it.) Chaining everything after the gate with `; \` is what makes the
+# skip real, which matters more here than for collie: the tail of this target
+# is a Go toolchain install, a multi-minute compile, and three sudo calls.
+#
+# Related, and the reason the restart failure is spelled out inline instead of
+# delegating to _daemon-running-or-fail: make EXECUTES any recipe line
+# containing `$(MAKE)` even under `make -n`. With the whole target on one line,
+# a `make -n caddy-dns-build` "dry run" would compile and sudo-install for
+# real. Keep `$(MAKE)` out of this recipe.
+#
+# Sudo is primed INSIDE the recipe, first thing, and that placement is load-
+# bearing in two ways. Priming it outside — the documented
+# `op read … | ssh mini "sudo -S -v && make …"` shape — does NOT work here:
+# with no TTY, sudo's credential timestamp is scoped to the parent PID, and
+# make's recipe shell is a different process than the shell that ran `sudo -v`.
+# The later `sudo cp` / `sudo install` then find no cached credential, have no
+# TTY to prompt on, and fail — AFTER a four-minute compile has already run.
+# Hence: prime here (all sudo calls in this recipe share one parent shell,
+# because the whole recipe is one line), and prime BEFORE the build so a
+# missing credential costs a second rather than a compile. `[ -t 0 ]` picks
+# between an interactive prompt (`ssh -t`) and reading the password from a
+# pipe, so both invocation styles work.
+caddy-dns-build:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — caddy-dns-build skipped"; \
+		exit 0; \
+	fi; \
+	command -v go >/dev/null 2>&1 || { echo "  ✗ go not installed — run: brew bundle install"; exit 1; }; \
+	command -v caddy >/dev/null 2>&1 || { echo "  ✗ caddy not installed — run: brew bundle install"; exit 1; }; \
+	if [ -t 0 ]; then sudo -v; else sudo -S -v 2>/dev/null; fi \
+		|| { echo "  ✗ sudo required. Either:"; \
+		     echo "      ssh -t mini 'cd ~/SourceRoot/dotfiles && make caddy-dns-build'   # type the password"; \
+		     echo "      op read \"op://Private/mac-mini-server/password\" --account tkrumm | ssh mini 'cd ~/SourceRoot/dotfiles && make caddy-dns-build'"; \
+		     exit 1; }; \
+	CADDY_BIN="$(BREW_PREFIX)/opt/caddy/bin/caddy"; \
+	CADDY_VER=$$(caddy version 2>/dev/null | awk '{print $$1}'); \
+	[ -n "$$CADDY_VER" ] || { echo "  ✗ could not read 'caddy version'"; exit 1; }; \
+	GOBIN_DIR=$$(go env GOPATH)/bin; \
+	XCADDY="$$GOBIN_DIR/xcaddy"; \
+	if [ -x "$$XCADDY" ] && [ "$$("$$XCADDY" version 2>/dev/null | awk '{print $$1}')" = "$(XCADDY_VERSION)" ]; then \
+		echo "    ✓ xcaddy $(XCADDY_VERSION) installed"; \
+	else \
+		echo "    → installing xcaddy $(XCADDY_VERSION) into $$GOBIN_DIR"; \
+		go install github.com/caddyserver/xcaddy/cmd/xcaddy@$(XCADDY_VERSION) \
+			&& echo "    ✓ xcaddy $(XCADDY_VERSION) installed" \
+			|| { echo "  ✗ go install xcaddy failed"; exit 1; }; \
+	fi; \
+	echo "    → building caddy $$CADDY_VER + $(CADDY_DNS_MODULE)@$(CADDY_DNS_MODULE_VERSION) (this takes a minute)"; \
+	TMP_BIN=$$(mktemp -t caddy-xcaddy); \
+	"$$XCADDY" build "$$CADDY_VER" \
+		--with $(CADDY_DNS_MODULE)@$(CADDY_DNS_MODULE_VERSION) \
+		--output "$$TMP_BIN" \
+		|| { echo "  ✗ xcaddy build failed"; rm -f "$$TMP_BIN"; exit 1; }; \
+	"$$TMP_BIN" list-modules 2>/dev/null | grep -q dns.providers.cloudflare \
+		|| { echo "  ✗ built binary is missing dns.providers.cloudflare — refusing to install it"; rm -f "$$TMP_BIN"; exit 1; }; \
+	BUILT_VER=$$("$$TMP_BIN" version 2>/dev/null | awk '{print $$1}'); \
+	[ "$$BUILT_VER" = "$$CADDY_VER" ] \
+		|| { echo "  ✗ built $$BUILT_VER, expected $$CADDY_VER — refusing to install a version mismatch"; rm -f "$$TMP_BIN"; exit 1; }; \
+	BACKUP="$$CADDY_BIN.orig-brew"; \
+	if [ ! -f "$$BACKUP" ]; then \
+		sudo cp -p "$$CADDY_BIN" "$$BACKUP" && echo "    ✓ backed up stock binary → $$BACKUP"; \
+	else \
+		echo "    · stock backup already exists at $$BACKUP"; \
+	fi; \
+	sudo install -m 555 -o root -g admin "$$TMP_BIN" "$$CADDY_BIN" \
+		&& echo "    ✓ installed custom caddy over $$CADDY_BIN" \
+		|| { echo "  ✗ install failed"; rm -f "$$TMP_BIN"; exit 1; }; \
+	rm -f "$$TMP_BIN"; \
+	caddy list-modules 2>/dev/null | grep -q dns.providers.cloudflare \
+		&& echo "    ✓ dns.providers.cloudflare present" \
+		|| { echo "  ✗ live 'caddy' still missing dns.providers.cloudflare after install"; exit 1; }; \
+	LIVE_VER=$$(caddy version 2>/dev/null | awk '{print $$1}'); \
+	[ "$$LIVE_VER" = "$$CADDY_VER" ] \
+		&& echo "    ✓ caddy version unchanged ($$LIVE_VER)" \
+		|| { echo "  ✗ caddy version changed: $$CADDY_VER → $$LIVE_VER"; exit 1; }; \
+	sudo brew services restart caddy >/dev/null 2>&1 \
+		&& echo "    ✓ caddy service restarted with the new binary" \
+		|| { echo "  ✗ caddy service restart failed — the new binary is installed but the running process is still the old one. Fix: sudo brew services restart caddy"; exit 1; }
 
 .PHONY: mosh-firewall
 # Allow mosh-server through the macOS Application Firewall. Opt-in per host and
@@ -2021,6 +2139,8 @@ help:
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
+	@echo ""
+	@echo "  make caddy-dns-build            Dev-host only: build Caddy w/ Cloudflare DNS module (needed for the clean https://<app>.\$$DEV_DOMAIN door; re-run after any brew upgrade of caddy)"
 	@echo ""
 	@echo "  make collie-setup       Dev-host only: install the phone control-surface bridge as a LaunchAgent"
 	@echo "  make collie-status      Show LaunchAgent + bridge + tailscale serve state (read-only)"
