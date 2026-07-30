@@ -58,6 +58,18 @@ case "${1:-}" in
       || die "ACL file not found: $ACL_FILE (bootstrap it first: make tailscale-acl-pull)"
     ;;
 esac
+# This is MacBook-only, and says so rather than suggesting `op signin` — on the
+# mini that advice is actively wrong. The Tailscale API key is op://Private/*,
+# which the headless cache refuses unconditionally by design, so no amount of
+# signing in there helps; `op signin` itself just hangs on a biometric prompt
+# with nobody to answer it. Checked before `op whoami` so the useless generic
+# error can't win the race.
+if [ "$(cat "${SECRETS_BACKEND_FILE:-$HOME/.config/secrets/backend}" 2>/dev/null)" = "cache" ]; then
+  die "this is the headless dev host — run it on the MacBook.
+      The Tailscale API key is op://Private/*, refused by the mini's secrets
+      cache by design, and 'op signin' here would hang on a biometric prompt.
+      Note the ACL cannot tag a device either way: tagging is console-only."
+fi
 op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 \
   || die "1Password not signed in for account '$OP_ACCOUNT' — run 'op signin --account $OP_ACCOUNT'"
 
