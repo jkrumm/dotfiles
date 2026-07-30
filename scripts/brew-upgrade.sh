@@ -52,6 +52,17 @@ set -euo pipefail
 # cooldown argument in dependency-hygiene.md actually applies. Also left to
 # `/upgrade-deps`, never auto-upgraded here.
 #
+# BE HONEST ABOUT WHAT THAT LAST PARAGRAPH BUYS: unlike the caddy/mosh guard,
+# it is NOT enforced. A bare `brew upgrade` upgrades casks too (verified — it
+# even volunteers "Homebrew will now attempt to upgrade casks with
+# `auto_updates true`"), and casks are deliberately NOT pinned here. So the
+# cask cooldown holds only on THIS path, not machine-wide. That asymmetry is a
+# choice, not an oversight: pinning every cask would mean hand-maintaining a
+# list that silently stops receiving security updates, which is a worse trade
+# than a soft preference honoured by the command you normally reach for. The
+# two pinned formulae are pinned because their failure mode is silent config
+# revert, which no amount of care at the keyboard can catch afterward.
+#
 # --pins-only exists for `make setup`/`_setup-packages`: a fresh machine needs
 # caddy/mosh pinned from the very first `brew bundle install` — otherwise the
 # very first bare `brew upgrade` anyone runs reverts the caddy DNS module

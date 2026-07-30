@@ -131,6 +131,15 @@ through `/upgrade-deps`. A held package that is outdated prints its own
 deliberate four-step follow-up (`brew unpin X && brew upgrade X && make <fixup>
 && brew pin X`) rather than being silently dropped.
 
+**That cask exclusion is a preference, not a guarantee — unlike the caddy/mosh
+pins.** A bare `brew upgrade` upgrades casks too (it says so: *"Homebrew will
+now attempt to upgrade casks with `auto_updates true`"*), and casks are
+deliberately left unpinned. Pinning them all would mean hand-maintaining a list
+that silently stops receiving security updates — a worse trade than a soft
+preference honoured by the command you normally reach for. The two formulae are
+pinned because *their* failure mode is silent config revert, which no amount of
+care at the keyboard catches after the fact.
+
 **It asserts rather than assumes the pins protected anything** — a dependency
 upgrade can relink a dependent, so after upgrading it re-checks the caddy module
 and the ALF allowlist directly (dev-host-gated on the `cache` backend marker,
