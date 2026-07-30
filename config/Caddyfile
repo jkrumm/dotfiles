@@ -102,6 +102,18 @@ hyperdx.test {
 	reverse_proxy localhost:7707
 }
 
+# basalt-ui marketing site (apps/marketing, Astro) on :7711. Moved off 7710,
+# which it shared with the playground below — both `dev` scripts hard-coded
+# 7710, so whichever started second killed the first (`npx kill-port 7710`
+# literally does that). 7711 rather than the 7714 freed by dropping the
+# audio-gateway door below: dropping a Caddy block does not release a port, and
+# audio-gateway's own `dev` script still claims 7714. Adjacent to its sibling,
+# so the pair reads as a pair.
+basalt.test {
+	import local
+	reverse_proxy localhost:7711
+}
+
 # basalt-ui — in-monorepo Mantine-pivot playground (apps/playground, @basalt-ui/playground)
 basalt-playground.test {
 	import local
@@ -114,14 +126,11 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
-# audio-gateway — consolidated OpenAI-compatible audio service (STT + expressive
-# Gemini TTS) on :7714. Single source of truth for audio; VPS container reached
-# over the tailnet at audio-gateway.jkrumm.com; local dev on :7714.
-# Point local clients at https://audio-gateway.test/v1.
-audio-gateway.test {
-	import local
-	reverse_proxy localhost:7714
-}
+# audio-gateway.test — DROPPED 2026-07-30. The real gateway is the VPS
+# container reached over the tailnet, so local clients (MacWhisper) point
+# straight at https://audio-gateway.jkrumm.com/v1 and the local door bought
+# nothing. The repo's `dev` script still binds :7714 for actual local work on
+# the gateway — the port is NOT free, it just has no vhost in front of it.
 
 # image-gen — stateless image-generation gateway (Elysia + Bun) on :7716.
 # Local dev for the image-gen monorepo (`bun run dev` at its root also starts the
@@ -204,7 +213,7 @@ linewatch.test {
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
-# https://audio-gateway.test/v1 instead. Kept commented for an easy
+# https://audio-gateway.jkrumm.com/v1 instead. Kept commented for an easy
 # re-add if the local stack ever returns.
 #
 # whisper.test {

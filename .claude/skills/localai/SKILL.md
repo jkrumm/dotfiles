@@ -5,7 +5,7 @@ description: RETIRED — manage the (now decommissioned) per-machine mlx-audio T
 
 # LocalAI Stack Management
 
-> **⚠️ RETIRED 2026-05-25.** This stack is no longer installed or running. TTS/STT moved to the cloud **audio-gateway** (`~/SourceRoot/audio-gateway`, VPS container at `audio-gateway.jkrumm.com`, `https://audio-gateway.test/v1` locally) in front of the IU unified audio endpoint. Files are kept for an easy re-add. Tear down a live install with `make localai-teardown`. The commands below only apply if the stack is reinstated.
+> **⚠️ RETIRED 2026-05-25.** This stack is no longer installed or running. TTS/STT moved to the cloud **audio-gateway** (`~/SourceRoot/audio-gateway`, VPS container at `audio-gateway.jkrumm.com`, `https://audio-gateway.jkrumm.com/v1` over the tailnet) in front of the IU unified audio endpoint. Files are kept for an easy re-add. Tear down a live install with `make localai-teardown`. The commands below only apply if the stack is reinstated.
 
 Per-machine `mlx-audio` (TTS + STT) bound to `127.0.0.1:8000`. Installed automatically by `make setup`. No Tailscale exposure, no Ollama, no LLM — Hermes uses cloud Sonnet 4.6 via the IU unified endpoint.
 
