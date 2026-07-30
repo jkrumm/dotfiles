@@ -165,6 +165,18 @@ rb.test {
 	reverse_proxy localhost:7730
 }
 
+# linewatch — uptime + throughput history for this internet line
+# (~/SourceRoot/linewatch). One container serving both the API and the built
+# dashboard; the ping collector runs natively under launchd beside it, because
+# Colima's NAT fabricates ICMP replies inside a container.
+# Deliberately clean-door only, no `portdoor`: a port door would make Caddy bind
+# 7731 on the tailnet interface, and the container already publishes it on
+# loopback.
+linewatch.test {
+	import local
+	reverse_proxy localhost:7731
+}
+
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
 # https://audio-gateway.test/v1 instead. Kept commented for an easy
