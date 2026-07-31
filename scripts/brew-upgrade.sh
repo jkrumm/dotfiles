@@ -24,6 +24,20 @@ set -euo pipefail
 #   only fails to RENEW roughly 60 days later — by which point the upgrade
 #   that caused it is long forgotten. Fix: `make caddy-dns-build`.
 #
+#   colima — same class, DIFFERENT remedy, and the difference is why it is not
+#   in HELD. `brew upgrade colima` regenerates
+#   ~/Library/LaunchAgents/homebrew.mxcl.colima.plist from the formula's
+#   `service` block, throwing away the supervised boot path
+#   (`make _colima-supervise`: bare `KeepAlive => true` + colima/colima-start.sh
+#   instead of Homebrew's inverted `{ SuccessfulExit => true }`). Nothing errors;
+#   the VM keeps running and only the next FAILED start goes unretried — i.e.
+#   Docker stays down after a power cut on a headless box. A PIN WOULD NOT FIX
+#   THIS: `brew services start|restart colima` regenerates the same plist, and no
+#   pin gates those. The invariant simply cannot be held by pinning, so it is
+#   held by convergence (`_colima-supervise` runs after every colima target and
+#   from `make setup`) plus assertion — here on the upgrade path, and every 300s
+#   in devhost-health-check.sh's probe_colima. Fix: `make _colima-supervise`.
+#
 #   mosh — the macOS Application Firewall stores mosh-server's RESOLVED path
 #   (`readlink -f`), which points into a version-stamped Cellar directory.
 #   `brew upgrade mosh` moves the binary to a new Cellar path, so the ALF
@@ -272,6 +286,29 @@ if [[ "$BACKEND" == "cache" ]]; then
   fi
 else
   echo "  · not the dev host (backend=${BACKEND:-unset}) — skipping caddy/mosh assertions"
+fi
+
+# colima is asserted on BOTH machines, gated on its own plist rather than the
+# backend marker — unlike caddy/mosh there is no dev-host asymmetry here.
+# `_setup-colima` converges the supervised boot path wherever colima is
+# installed, so wherever the plist exists the invariant is supposed to hold. A
+# machine that never registered the brew service simply has nothing to check.
+COLIMA_PLIST="$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist"
+COLIMA_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/colima/colima-start.sh"
+if [[ -f "$COLIMA_PLIST" ]]; then
+  keepalive=$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$COLIMA_PLIST" 2>/dev/null) || keepalive=""
+  program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$COLIMA_PLIST" 2>/dev/null) || program=""
+  # The reverted form prints multi-line as `Dict { SuccessfulExit = true }`;
+  # flatten it so the diagnosis is one readable line. `true` is untouched.
+  keepalive=${keepalive//$'\n'/ }
+  if [[ "$keepalive" == "true" && "$program" == "$COLIMA_WRAPPER" ]]; then
+    echo "  ✓ colima: supervised boot path intact (bare KeepAlive + retry wrapper)"
+  else
+    echo "  ✗ colima: boot path reverted by the upgrade — KeepAlive='${keepalive:-unreadable}', ProgramArguments:0='${program:-unreadable}' (fix: make _colima-supervise)"
+    assertion_failed=1
+  fi
+else
+  echo "  · colima brew service not registered here — skipping boot-path assertion"
 fi
 
 pinned_after=$(brew list --pinned 2>/dev/null) || true
