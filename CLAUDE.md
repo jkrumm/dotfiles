@@ -227,7 +227,7 @@ to touch anything.
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, git, keybindings, opencode, path, remote-dev, secrets, secrets-cache, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, claude-auth, git, keybindings, opencode, path, remote-dev, secrets, secrets-cache, tools |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
 | `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
@@ -561,6 +561,32 @@ is a brew service under launchd inside the user's GUI session, so what it spawns
 inherits keychain access. Verified both directions 2026-07-27. Anything on the
 mini needing the login keychain (LaunchAgent, cron, script-spawned daemon) has
 the same constraint: on the tailnet ≠ in the GUI session.
+
+**`config/zsh/claude-auth.zsh` is the fix, and it is wired but not yet live.** It
+defines a `claude()` zsh function that resolves `op://mini/claude/oauth-token`
+through `secrets-run` and passes it as `CLAUDE_CODE_OAUTH_TOKEN` — the one
+mechanism that needs no keychain. It must be that variable and **never
+`ANTHROPIC_API_KEY`**, which flips billing to API credits, i.e. causes the exact
+failure it is meant to prevent. `_setup-zshenv` sources it from `~/.zshenv` as
+well as conf.d, because `ssh mini 'claude …'` reads only `.zshenv`. Three
+constraints, each the reason for a design choice: it is a **function**, not a
+shim in `~/.local/bin`, because that path is a symlink the Claude Code updater
+rewrites on every version bump; it passes the token by **prefix assignment**, not
+`env VAR=… claude`, because `env` puts the value in argv where `ps auxww` shows
+it; and it **self-gates on the `cache` backend marker**, because on the MacBook
+`secrets-run` passes through to biometric `op` and would prompt on every launch.
+`ca` / `claude_iu` / `claude_bridge` launch through `env`, which resolves the
+binary from PATH and bypasses shell functions — so their off-Max
+`ANTHROPIC_AUTH_TOKEN` flow is unaffected by construction, not by a guard that
+could rot. Until the human mints the token (`claude setup-token`) and the cache
+is reseeded, the read fails and the wrapper falls through to the existing
+keychain login **silently** — it must not break a working machine to announce a
+future step. The reporter for the failure case is `check_claude_auth` in
+`scripts/devhost-health-check.sh`, which fails the 5-minute heartbeat on anything
+that is not a logged-in Max session. Note the token is a **one-year** credential
+with no refresh and no reliable server-side revocation; that heartbeat is the
+only thing that makes the expiry loud. Full reasoning:
+`docs/mini-headless-checklist.md` L3.3 and `dotfiles-private/docs/security-review.md`.
 
 **`scripts/remote-dev.sh` (`rd`) is the layer above the four.** The transport
 layers answer "how do I get a terminal"; `rd` answers "how do I put work on the

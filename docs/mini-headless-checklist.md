@@ -143,9 +143,13 @@ cd ~/SourceRoot/dotfiles && make secrets-seed    # biometric, one pass
 omitted from the seed.
 
 Refs to add before seeding (from the agent reports):
-- `op://mini/claude/oauth-token` — WP4, minted in L3.3. T-classification note required in
-  `headless.refs`, and an entry in `dotfiles-private/docs/security-review.md` as a
-  standing Max credential readable by anything that can call `secrets-run`.
+- `op://mini/claude/oauth-token` — WP4, minted in L3.3. **The ref line and its
+  T-classification note are already written into `dotfiles-private/headless.refs`, and the
+  security-review section into `docs/security-review.md` — both UNCOMMITTED in the working
+  tree on the mini.** Two consequences, and the second is the one that bites: an
+  uncommitted edit is trivially lost by a stray `git checkout`, and an *unpushed* one is
+  silently omitted from a seed run on the MacBook. Commit and push them from the mini in
+  the same sitting as `claude setup-token`, and not before the 1Password item exists.
 - A GitLab PAT, if the 16 IuRoot repos' credential path is being fixed this round.
 
 Already-running processes keep their old env. After the reseed:
@@ -218,18 +222,46 @@ dissolves the `rd bg`-through-a-herdr-pane workaround, makes `ssh mini 'claude -
 correct, unblocks sideclaw-as-daemon, and removes the one thing auto-login demonstrably
 cannot provide.
 
-1. `claude setup-token` from a present-human session on the mini.
-2. **Confirm the env var name against the current CLI before wiring it.** It must be
-   `CLAUDE_CODE_OAUTH_TOKEN`, never `ANTHROPIC_API_KEY` — exporting the latter flips
-   billing to API credits, which is the exact failure this fixes.
-3. Store it as `op://mini/claude/oauth-token`, add it to `dotfiles-private/headless.refs`
-   with a T-classification note, and to `docs/security-review.md`.
-4. Push `dotfiles-private`, then reseed from the MacBook (L2.6).
-5. Export it via `secrets-run` in whatever launches `claude`.
+**The agent half is DONE. Only steps 1, 3-commit and 4 below are left, and all three need
+a human.** Wired and verified 2026-07-31:
 
-The `claude auth status` assertion in `scripts/devhost-health-check.sh` was added in the
-agent run and skips cleanly until this is wired — an expired token otherwise reproduces
-the silent-API-billing failure exactly.
+- `config/zsh/claude-auth.zsh` — a `claude()` zsh function that resolves
+  `op://mini/claude/oauth-token` through `secrets-run` and hands it to the binary as
+  `CLAUDE_CODE_OAUTH_TOKEN`. Self-gates on the `cache` backend so it never fires on the
+  MacBook (where `secrets-run` passes through to biometric `op` and would prompt on every
+  launch). Falls through silently while the ref is absent, so today's keychain login is
+  untouched — verified, `claude auth status` still returns `loggedIn: true` here.
+- `_setup-zshenv` now appends a second guarded block sourcing that file from `~/.zshenv`,
+  which is the **only** startup file `ssh mini 'claude --bg …'` reads. Applied and
+  idempotent-checked; a non-interactive `zsh -c 'whence -w claude'` reports `function`.
+- Proven with a stubbed `secrets-run` + `claude`: the token reaches the child in its
+  environment and **not** in its argv (prefix assignment, not `env VAR=… claude` — `env`
+  puts the value where `ps auxww` shows it).
+- The drafted `headless.refs` entry and `docs/security-review.md` section are written into
+  the `dotfiles-private` **working tree, uncommitted** — see the warning in L2.6.
+
+Remaining, human-only:
+
+1. `claude setup-token` from a present-human session on the mini. Store the value as
+   `op://mini/claude/oauth-token`. **Create the 1Password item before committing the ref** —
+   the seed reads every ref and fails closed, so a listed ref with no item breaks the whole
+   reseed, not just that line.
+2. Commit + push `dotfiles-private` (the two drafted files).
+3. Reseed from the MacBook (L2.6) — `git pull` there first, it is not optional.
+
+Env-var name is already confirmed against the shipped CLI (2.1.220): `CLAUDE_CODE_OAUTH_TOKEN`,
+never `ANTHROPIC_API_KEY`.
+
+Three facts about this token, researched rather than assumed, that the drafts record in full:
+its scope is **`user:inference` alone** — narrower than the `/login` credential in the keychain
+today, so this is a scope *reduction*; it lives **one year with no refresh**; and it has **no
+reliable server-side revocation** (`/logout` and the claude.ai settings page are client-side
+only). The 1-year expiry is safe only because `check_claude_auth` in
+`scripts/devhost-health-check.sh` fails the 5-minute heartbeat the day it lapses. That check is
+**live today**, not skipping.
+
+Do **not** drop the herdr-pane indirection in `remote-dev.sh` `cmd_bg` yet — that change is
+explicitly gated on the acceptance test below passing, and it has not been run.
 
 Acceptance, from the MacBook:
 ```bash

@@ -861,6 +861,26 @@ _setup-zshenv:
 		} >> "$$ZSHENV"; \
 		echo "    ✓ ~/.zshenv PATH block appended"; \
 	fi
+	@ZSHENV="$(HOME)/.zshenv"; \
+	MARKER="# >>> dotfiles: claude max auth >>>"; \
+	if [ -f "$$ZSHENV" ] && grep -qF "$$MARKER" "$$ZSHENV"; then \
+		echo "    · ~/.zshenv claude-auth block (ok)"; \
+	else \
+		{ \
+			echo ""; \
+			echo "$$MARKER"; \
+			echo "# Managed by dotfiles (make setup). MUST come after the PATH block"; \
+			echo "# above — the wrapper calls secrets-run, which lives in ~/.local/bin."; \
+			echo "# ~/.zshrc already sources conf.d for interactive shells; this line is"; \
+			echo "# what carries the wrapper into \`ssh mini 'claude --bg …'\`, which reads"; \
+			echo "# ONLY this file. Sourcing it twice is a no-op (it just defines a"; \
+			echo "# function). Self-gates on the 'cache' secrets backend, so a thin"; \
+			echo "# client picks up nothing."; \
+			echo "[ -r \"\$$HOME/.zsh/conf.d/claude-auth.zsh\" ] && . \"\$$HOME/.zsh/conf.d/claude-auth.zsh\""; \
+			echo "# <<< dotfiles: claude max auth <<<"; \
+		} >> "$$ZSHENV"; \
+		echo "    ✓ ~/.zshenv claude-auth block appended"; \
+	fi
 
 .PHONY: _setup-skills
 _setup-skills:
