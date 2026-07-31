@@ -378,6 +378,16 @@ no grant does not refuse — it times out, with nothing in any log on either end
 That is how the dev-port work went missing for a full debugging cycle; rb's
 dedicated `tcp:7730` grant encodes the same lesson.
 
+**`--accept-routes` is off on the mini** (set 2026-07-31; `tailscale debug prefs`
+→ `RouteAll: false`). No peer advertises a subnet route today, so this changes
+nothing observable — it removes a latent trap. The mini and homelab sit on the
+*same* LAN, so the day homelab advertises `192.168.1.0/24` the mini would start
+routing traffic to its own local subnet out through the tailnet to a machine one
+L2 hop away: slower, and a failure mode that looks like a DNS or Docker problem
+rather than a routing one. This is imperative daemon state with no declared-state
+file behind it — the Tailscale menu bar can flip it back and nothing asserts
+otherwise, so re-check it after any Tailscale reinstall or re-auth.
+
 ## Inbound exposure — `tailscale serve` / Funnel
 
 Serve bindings are imperative daemon state **keyed on the machine's MagicDNS

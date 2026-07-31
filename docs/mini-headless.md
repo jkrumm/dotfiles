@@ -150,9 +150,22 @@ Claude Code command gets no TTY.
 **Where:** MacBook / Tailscale admin console. **Goal:** remove the one failure that
 cannot be recovered without a monitor.
 
-Console → Machines → `mini` → ⋯ → Disable key expiry. Same for the phone
-(`tag:phone`, expires 2026-08-05) if collie access should survive unattended.
-Optionally `apple-tv` (2026-10-09) and `tv` (2026-11-16).
+Console → Machines → ⋯ → Disable key expiry. **Six devices, not two** — the
+original table here listed only the mini and the phone, and understated the
+wall-clock urgency. Re-measured 2026-07-31, still all outstanding:
+
+| Device | Days left | Note |
+|-|-|-|
+| `localhost` (phone) | **5** | collie access dies with it |
+| `IUGMXK9P6DY1XC` | **5** | work machine |
+| `TB330FU` (tablet) | 19 | holds the `tag:tablet` dev-door grant |
+| **`mini`** | **70** | **recovery needs a browser ON the mini — a monitor, physically reattached** |
+| `apple-tv` | 69 | optional |
+| `TV` | 108 | optional |
+
+The mini stays first because it is the only one that cannot be recovered
+remotely, but the two 5-day entries are the ones about to lapse. `homelab`, `vps`
+and every `funnel-ingress-node` already read `never`.
 
 **Acceptance:**
 ```bash
@@ -591,7 +604,7 @@ plainly accidental.
 
 | Item | Change |
 |-|-|
-| GitLab credential | The durable fix for 16 IuRoot repos. Add a GitLab PAT to `headless.refs`; extend `~/.gitconfig-headless` with `[url "https://gitlab.com/"] insteadOf = git@gitlab.com:` plus a `[credential "https://gitlab.com"]` helper pointing at a GitLab twin of `scripts/git-credential-secrets-cache`. **Do not strip `SSH_AUTH_SOCK`** — GitLab SSH was measured working, and the export at `config/zsh/secrets.zsh:10` is deliberately preserved for Screen Sharing sessions (see the comment at :6-9). |
+| GitLab credential | The durable fix for 16 IuRoot repos: extend `~/.gitconfig-headless` with `[url "https://gitlab.com/"] insteadOf = git@gitlab.com:` plus a `[credential "https://gitlab.com"]` helper pointing at a GitLab twin of `scripts/git-credential-secrets-cache`. **The "add a PAT to `headless.refs` and reseed" step this row used to demand is wrong** — measured 2026-07-31: `op://vps/argo/GITLAB_TOKEN` is already in the cache, resolves headlessly, is active until 2027-05-16, and carries `read_user, read_api, read_repository`. A read-only fetch path could be wired today with no seed at all. What is genuinely missing is **`write_repository`** — so the deferral is "mint a write-scoped PAT", a one-line scope decision, not a cache-migration ritual. (`op://Private/feuer/gitlab-token` also resolves, under `OP_ACCOUNT=careerpartner`, but it is Feuer's service identity and is the wrong credential for personal git.) **Do not strip `SSH_AUTH_SOCK`** — GitLab SSH was measured working, and the export at `config/zsh/secrets.zsh:10` is deliberately preserved for Screen Sharing sessions (see the comment at :6-9). |
 | `hooks/machine-role.ts:38-39` | Says "GitHub goes over HTTPS via the `gh` keyring token". Wrong since 2026-07-26 — it is `git-credential-secrets-cache` → `op://mini/github/token`. This string is the first thing every agent reads, and it reproduces the exact misdirection the helper's own comment block says cost a debugging cycle. Fix + `make hooks-test`. |
 | `litellm/bin/start-litellm.sh:19-20`, `brain/brain-backup.sh:37-38` | Both read `security find-generic-password` with `|| echo ""` / `|| true` — an unreachable keychain yields an empty credential and the service starts broken with exit 0. **This becomes live the moment auto-login lands**, since the keychain will be locked. Move to `secrets-run read`, or at minimum drop the swallowing fallback. |
 | `brain/brain-backup.sh` PATH | Missing `$HOME/.local/bin`, where `claude` actually lives — so every nightly run has silently used the literal fallback commit message `chore(brain): nightly vault sync`, never a generated one. One line. |
@@ -655,14 +668,30 @@ tools — but the supply-chain audit trail is out of sync.
 Re-rated down from the initial pass — none of this is currently breaking anything,
 but two items are **not runnable headlessly** and must happen before detach.
 
+**Both headless items are done (2026-07-31).** `RouteAll` is now `false`, verified
+via `tailscale debug prefs`, and the serve conf carries the Lima-mux comment —
+`make tailscale-serve-check` still reports 3 bindings in sync. The `idss-mysql`
+row is **withdrawn**, not deferred: it is one of the four IU work containers the
+owner has ruled untouched, so the accidental control (no `tcp:3306` grant) stands
+as the only control. Everything remaining in this package is Lane 3 (L3.6).
+
 | Item | Action | Headless? |
 |-|-|-|
-| `idss-mysql` binds `0.0.0.0:3306` | Change the compose mapping to `127.0.0.1:3306:3306`, recreate via the repo's Makefile. Every sibling container is already loopback-bound; only the absence of a `tcp:3306` ACL grant keeps the tailnet out, which is an accidental control. | yes |
+| ~~`idss-mysql` binds `0.0.0.0:3306`~~ | **Withdrawn** — IU work container, ruled untouched. Every sibling container is already loopback-bound; only the absence of a `tcp:3306` ACL grant keeps the tailnet out, which is an accidental control rather than a deliberate one. Revisit only if the work-stack boundary moves. | n/a |
 | en0 negotiating `100baseTX` on a 1 Gb/s NIC | Swap the cable. Error counters are clean (0 Ierrs/Oerrs/Coll over 48.2 M packets), so this is a stable negotiation to 100, not a dirty link. Verify `ifconfig en0 \| grep media` → `1000baseT`. | physical |
 | No DHCP reservation | Reserve `5c:e9:1e:ec:5a:6e → 192.168.1.100` on the Fritz!Box. Prefer a reservation over `networksetup -setmanual` — the router stays the authority for gateway/DNS. | router |
 | Wi-Fi Private Address rotating | `0a:31:ca:27:7c:6d` is locally-administered. Turn off Private Wi-Fi Address for this SSID. **No CLI exists** — System Settings → Wi-Fi. Keep Wi-Fi enabled: it is the only failover if the wired path dies, and with the screen gone that would be total loss of access. | **no — pre-detach only** |
-| `RouteAll: true` | `tailscale set --accept-routes=false`. No peer advertises anything today; the latent hazard is homelab advertising `192.168.1.0/24` and the mini routing its own LAN through the tailnet to a machine on the same LAN. | yes |
-| `tailscale-serve.mini.conf` comments | Note that `7730→4050` and `8443→5173` terminate in Colima containers via the Lima SSH mux (PID 1448), so a future 502 hunt does not look for a local dev server that does not exist. Self-healing is intact — colima is a brew service and all nine containers are `restart=unless-stopped`. | yes |
+| ~~`RouteAll: true`~~ | **Done** — `tailscale set --accept-routes=false`, `RouteAll: false` confirmed. No peer advertised anything, so nothing changed observably; the latent hazard removed is homelab advertising `192.168.1.0/24` and the mini routing its own LAN through the tailnet to a machine one L2 hop away. **No declared-state file backs this** — the menu bar can flip it back and nothing asserts otherwise, so re-check after any Tailscale reinstall or re-auth. Recorded in `CLAUDE.md`; a heartbeat assertion was deliberately not added (see below). | yes |
+| ~~`tailscale-serve.mini.conf` comments~~ | **Done** — both rows now name their real terminus. Verified rather than copied from the plan: `lsof` shows `ssh` PID 1448 (the Lima port-forward mux) holding both `127.0.0.1:4050` and `127.0.0.1:5173`, backed by the `rb-api` and `dashboard-ui` containers. | yes |
+
+**Deferred: a `RouteAll` assertion in `devhost-health-check.sh`.** It looks like a
+two-line addition and is not. `_ts_snapshot` emits a fixed three-field line and
+`check_tailscale` reads the expiry with `days=${out##*|}` — the *last* field — so
+a fourth field silently reassigns the expiry check to the new value. That is a
+regression in a monitor validated hours ago, traded for an assertion whose failure
+mode requires a second, deliberate change (a peer starting to advertise a subnet)
+before it costs anything. Take it with the next change that touches the snapshot's
+parsing, not on its own.
 
 ---
 
@@ -807,7 +836,8 @@ credential helper with no biometric dependency. **Backup works.**
 What is broken is cross-device *sync*. Every LiveSync replication trigger is `False`
 (`liveSync`, `syncOnStart`, `syncOnSave`, `syncOnEditorSave`, `syncOnFileOpen`,
 `periodicReplication`, `remoteType=''`), CouchDB on homelab has not been written
-since 2026-07-21, and the vault gained 14 commits in that window.
+since 2026-07-21, and the vault gained 13 commits in that window (the audit said
+14; recounted on execution).
 
 **Recommendation: retire LiveSync** and fix the three docs that claim it
 (`brain/AGENTS.md:17`, `brain/CLAUDE.md:54`, the `brain` row in
