@@ -55,6 +55,20 @@ ssh mini '/Applications/Tailscale.app/Contents/MacOS/Tailscale status --json' | 
   python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["KeyExpiry"])'
 ```
 
+**Do not try to script this with the existing OAuth client — attempted 2026-07-31 and
+it 403s.** The client in `op://Private/Tailscale` can *read* devices but returns
+`calling actor does not have enough permissions` on `POST /device/{id}/key`. Live state
+re-confirmed through it: all six above are `keyExpiryDisabled: false`; `homelab`, `vps`
+and `kobo` are already `true`.
+
+Granting that client `devices:core` **write** scope would make this scriptable, and was
+considered and **not** recommended. Disabling key expiry is permanent-until-changed, so
+this is a one-time action for six devices that recurs only when a new device joins — a
+few times a year. The write scope is not narrowly "disable expiry": it also authorises
+deleting and re-keying devices, permanently, on a credential that would then sit in
+1Password forever. Six clicks in the console costs less than that, and needs no new
+grant. Revisit only if it turns out to recur.
+
 ---
 
 ## Phase A — at the mini, physically (WP4 mint)
@@ -77,17 +91,27 @@ Must happen while a human is at the machine, and **before** Phase B.
 
 ## Phase B — the gate (MacBook)
 
-### B1 — negative control first, and do not skip it
+### B1 — negative control — **DONE 2026-07-31, passed by failing**
 
-Before seeding, run the acceptance test and **expect it to fail**:
-
-```bash
-ssh mini 'claude --bg "echo ok"'      # expect: Not logged in
+```
+ssh mini 'claude --bg "echo ok"'  -> "Not logged in - Please run /login"
+                                     header: "API Usage Billing"
+ssh mini 'claude auth status'     -> {"loggedIn": false, "authMethod": "none"}
 ```
 
-This proves the test discriminates. An ssh session cannot reach the mini's login
-keychain, so a pass here would mean the test is measuring something else — and after
-Phase C there is no second chance to notice.
+**The test discriminates, and the failure it names is real.** The same
+`claude auth status` run from a herdr pane on the mini returns `loggedIn: true,
+subscriptionType: max` — so the split is exactly the diagnosis WP4 was built on: the
+GUI session reaches the login keychain, an ssh session does not. `API Usage Billing`
+in that header is the silent-cost failure, observed rather than predicted.
+
+It also confirms the consumer side is already live and behaving: `claude-auth.zsh` is
+in `~/.zsh/conf.d/` and reached by the non-interactive ssh shell, found no cached ref,
+and fell through silently to the existing auth instead of erroring. That is the
+designed behaviour while the ref is absent.
+
+Do not skip this on a rebuild. After Phase C there is no second chance to notice a
+test that cannot fail.
 
 ### B2 — reseed
 
