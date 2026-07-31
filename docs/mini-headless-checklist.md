@@ -108,7 +108,7 @@ re-register if the mini ever goes headful again.
 Also install the caddy wait-for-address wrapper designed in the agent run — the daemon
 plist lives in `/Library` and cannot be touched from the mini. Exact commands are in the
 agent's report; the defect is that `Caddyfile.d/tailnet.caddy` hardcodes
-`bind 100.87.73.3` while caddy starts pre-login and the tailnet address is created by
+`bind <mini-tailnet-ip>` while caddy starts pre-login and the tailnet address is created by
 the Tailscale GUI app at login. It is a **bounded** outage (launchd retries on a 10 s
 throttle, so caddy self-heals ~10 s after the utun address appears), not a permanent
 one — fix it, but do not treat it as the blocker.
@@ -402,8 +402,8 @@ none of it can be done after the screen comes off.
 | Item | Action |
 |-|-|
 | en0 negotiating `100baseTX` on a 1 Gb/s NIC | Swap the cable. Error counters are clean (0 Ierrs/Oerrs/Coll over 48.2 M packets), so this is a stable negotiation to 100, not a dirty link. Verify `ifconfig en0 \| grep media` → `1000baseT`. |
-| No DHCP reservation | Reserve `5c:e9:1e:ec:5a:6e → 192.168.1.100` on the Fritz!Box. Prefer a reservation over `networksetup -setmanual` — the router stays the authority for gateway/DNS. |
-| Wi-Fi Private Address rotating | `0a:31:ca:27:7c:6d` is locally-administered. Turn off Private Wi-Fi Address for this SSID. **No CLI exists** — System Settings → Wi-Fi. **Keep Wi-Fi enabled:** it is the only failover if the wired path dies, and with the screen gone that would be total loss of access. |
+| No DHCP reservation | Reserve `<mini-en0-mac> → 192.168.1.100` on the Fritz!Box. Prefer a reservation over `networksetup -setmanual` — the router stays the authority for gateway/DNS. |
+| Wi-Fi Private Address rotating | `<mini-wifi-mac>` is locally-administered. Turn off Private Wi-Fi Address for this SSID. **No CLI exists** — System Settings → Wi-Fi. **Keep Wi-Fi enabled:** it is the only failover if the wired path dies, and with the screen gone that would be total loss of access. |
 
 This one is **pre-detach only** — it cannot be done headlessly at all.
 
@@ -516,10 +516,71 @@ curl -sI https://argo.mini.jkrumm.com     # dev door answers
 
 | Question | Recommendation from the plan |
 |-|-|
-| The `:8443` Funnel is public and unauthenticated | **Inspect, then most likely delete.** Only the static frontend is funneled — `dashboard-api` is bound `127.0.0.1:2720` and is in no serve row, so an external browser cannot reach the data layer. What is public is the built JS bundle. Check what it embeds (endpoints, tokens, internal hostnames) before deciding; the hostname is permanently discoverable in Certificate Transparency logs, so obscurity is not a control. |
+| The `:8443` Funnel is public | **INSPECTED 2026-07-31 — this row was wrong, and in the direction that matters.** See below. |
 | GitHub PAT `op://mini/github/token` has no expiry and `Contents: read+write` on **all** repos | **Reduce scope** rather than adding an expiry. An expiry reintroduces exactly the silent-rot failure the cache-backed helper was built to replace; scope reduction has no such failure mode. |
 | Should durable agents auto-restart after a reboot? | **Decide explicitly.** After WP4 a launchd-supervised `claude --bg` no longer needs the GUI session, which makes "yes" cheap. If the answer is "no", nothing to build. |
 | Time Machine — no destination configured at all | **Configure it, after WP10.** Adding a network destination to a machine already writing heavily would add substantial I/O; fix the write pathology first. |
 | Should a Tauri desktop app be built on a permanently headless mini? | Probably not. If only `gateway/` (220 K) belongs here, WP10c stops being a recurring 6.4 GB. |
 | JetBrains pre-2026 state (~12 GB) | Enumerated by the agent run, deleted nothing. Needs your call. |
 | The four IU work containers | Outside the "leave the work stack alone" boundary only if you want it to be. ~1.5 GB, and stopping them takes the Funnel endpoint down. `idss-mysql` may hold un-persisted state. Drive it through the owning repo's Makefile, never raw docker. |
+
+---
+
+## The `:8443` Funnel — inspected 2026-07-31
+
+Fetched from the public URL, so nothing here was newly exposed by looking.
+
+**The claim that "an external browser cannot reach the data layer" is false.**
+`dashboard-api` is not directly published, but the funneled frontend on `:5173` is an
+nginx that **proxies `/api/*` through to it**. Measured from the public internet:
+
+| Path | Result |
+|-|-|
+| `/` | 200, the SPA shell (458 B) |
+| any unknown path (e.g. `/health`) | 200 — SPA fallback, *not* a health endpoint |
+| `/api/health` | **401** `{"detail":"missing or malformed Authorization header"}`, `server: nginx/1.31.3` |
+| `/api` | 301 → `http://<magicdns>:5173/api/` |
+
+A 401 is a **reachable** service refusing a request. Connection-refused would have been
+the shape this row assumed. So the actual exposure is a work dashboard's API on the
+public internet, bearer-gated.
+
+**The good half, and it is the part that decides urgency.** The bundle is clean. 1.34 MB
+of `index-C07K4ypB.js` scanned for credential-shaped strings, long opaque literals, and
+internal hostnames: **nothing**. Only React, Mantine, Redux and react-router. No embedded
+bearer token, no internal URL, no IU identifier. So the 401 is a real gate rather than
+theatre — the token is supplied at runtime, not shipped to every visitor.
+
+**Two smaller findings.** The `/api` 301 reflects the `Host` header and downgrades to
+`http://` on a non-funneled port, which leaks the internal port and is a Host-header
+redirect. And the SPA fallback answering 200 on every path is what made `/health` look
+like an unauthenticated health endpoint in the first pass — worth knowing before anyone
+probes this again and reports it as one.
+
+**Recommendation: drop the Funnel, keep the serve row tailnet-only.** The exposure is a
+work API reachable by anyone on the internet, on a machine about to sit unattended at a
+new location; the compensating control is one bearer check in front of a service nobody
+here has audited. Nothing about the dashboard needs the public internet — every device
+that uses it is on the tailnet. That is a one-line change in
+`dotfiles-private/tailscale-serve.mini.conf` (`yes` → `no`) plus `make tailscale-serve`,
+and it also retires `tag:iu-dashboard-funnel`. **`tailscale serve` needs no sudo**
+(verified), so an agent can apply it once you decide.
+
+## Public-repo hygiene — fixed 2026-07-31
+
+`jkrumm/dotfiles` is a **public** GitHub repo, and the tracked tree carried the tailnet
+MagicDNS name, two `100.x` tailnet IPs, and both of the mini's MAC addresses — against
+this repo's own `rules/security.md`. Redacted to placeholders across `CLAUDE.md` and the
+four `mini-*` docs.
+
+RFC1918 LAN addresses (`192.168.x.x`) were **deliberately left**: they are non-routable,
+and §3b's load-bearing argument is precisely that the mini and homelab sit on different
+`192.168` networks, which placeholders would erase. That is a judgement call, not an
+oversight — revisit it if you disagree.
+
+**This does not un-publish anything.** Git history still contains every value, and the
+tailnet name is in Certificate Transparency logs anyway because of the Funnel above.
+Treat the MagicDNS name as public knowledge; the fix stops the repo being a standing
+directory of the tailnet, it does not make the name secret. It also strengthens the
+Funnel recommendation — a public repo plus a public Funnel meant the exact URL of the
+work dashboard was one `grep` away.

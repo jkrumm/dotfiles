@@ -229,7 +229,7 @@ more as final proof, then re-run Phase E.
 
 ## At the new location
 
-1. **DHCP reservation** for `5c:e9:1e:ec:5a:6e` on the new router.
+1. **DHCP reservation** for `<mini-en0-mac>` on the new router.
 2. `make remote-dev-doctor`
 3. `ssh mini 'cd SourceRoot/dotfiles && make devhost-health-check'`
 4. `ssh mini 'ifconfig en0 | grep media'` — was negotiating `100baseTX` on a 1 Gb/s

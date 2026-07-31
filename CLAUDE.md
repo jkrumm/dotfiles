@@ -786,7 +786,7 @@ layers, and neither expires when you expect:
   flat 1800s SOA for `mini.jkrumm.com` while answering fine for every sibling
   (`argo.jkrumm.com`, `apps.mini.jkrumm.com`). This is *not* DNS rebind
   protection: verified by `dig @192.168.1.1 localtest.me` → `127.0.0.1` and
-  `100-87-73-3.nip.io` → `100.87.73.3`, both unfiltered. It cleared on its own
+  `<mini-tailnet-ip-dashed>.nip.io` → `<mini-tailnet-ip>`, both unfiltered. It cleared on its own
   in ~4 minutes; a mixed-case query (`MiNi.JkRumm.com`) also forces a miss,
   because its cache keys are case-sensitive.
 - **macOS `mDNSResponder`, which is the one that actually bites.** `dig` talks

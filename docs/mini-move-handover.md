@@ -173,7 +173,7 @@ With WP4→WP5→WP6 done, arrival should need no unlock at all: plug in wired
 ethernet and power, press the button, and the machine boots to a live session
 with all 20 services. Then:
 
-1. **Set a DHCP reservation** for `5c:e9:1e:ec:5a:6e` on the new router.
+1. **Set a DHCP reservation** for `<mini-en0-mac>` on the new router.
 2. `make remote-dev-doctor` from the MacBook.
 3. `ssh mini 'make devhost-health-check'`.
 4. `ssh mini 'ifconfig en0 | grep media'` — was negotiating `100baseTX` on a
