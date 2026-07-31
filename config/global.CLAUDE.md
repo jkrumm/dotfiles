@@ -41,7 +41,7 @@ The Mac has two workspace "regions". Skills, hooks, and rules are **global** (`~
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
-| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli`. Git is both durability and review — a nightly LaunchAgent (`com.jkrumm.brain-backup`, 03:30) commits and pushes leftover Obsidian edits, `git diff` is the deliberate gate. **LiveSync/CouchDB is retired** (no remote configured, replication off since 2026-07-21); the vault lives on the mini only and is not cross-device synced. Direct-to-master; validated by `vault-lint`. |
+| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli` — a **client of the running Obsidian app**, so the app must be up (`make obsidian-autostart`); it exits 1 on every subcommand when down. Git is both durability and review — a nightly LaunchAgent (`com.jkrumm.brain-backup`, 03:30) commits and pushes leftover Obsidian edits, `git diff` is the deliberate gate. **LiveSync/CouchDB is retired** and its remnants were cleared 2026-07-31 (4 dead plugins, the plaintext `_device-settings`); 3 plugins remain — dataview, folder-notes, excalidraw. **Access model: the mini is the single writer; every other device reads** — MacBook via a git clone (offline mirror, pull before writing), phone via Hermes/Slack for capture and a planned read-only web door. `docs/brain-access.md`. Direct-to-master; validated by `vault-lint`. |
 | `image-gen` | Personal image-generation studio (gpt-image family) — gateway runs on the mini; its refs are cached in `dotfiles-private/headless.refs`. |
 | `rb` | Personal single-user learning tracker — always-on Docker on the mini, Tailscale-only. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods` | Smaller personal apps / utilities. |
@@ -61,11 +61,19 @@ client window, tmux the fallback. Unlike homelab/vps this is **OpenSSH, not
 Tailscale SSH** (remote dev needs agent forwarding + ControlMaster).
 
 **This MacBook holds no project repos.** As of 2026-07-27 `~/SourceRoot` here is
-`dotfiles`, `dotfiles-private` and `photo-flow` — nothing else. Every other repo
-lives on the mini and is reached there. Don't clone one back to "just look at
-it"; that is how the two trees diverged the first time. What was unique to the
-MacBook is preserved in `~/SourceRoot-archive` (git bundles + un-gitted
-projects, see its README).
+`dotfiles`, `dotfiles-private`, `photo-flow` — and, since 2026-07-31, `brain`.
+Every other repo lives on the mini and is reached there. Don't clone one back to
+"just look at it"; that is how the two trees diverged the first time. What was
+unique to the MacBook is preserved in `~/SourceRoot-archive` (git bundles +
+un-gitted projects, see its README).
+
+**`brain` is a deliberate exception to that rule, not drift — do not "clean it
+up".** It is the vault's only offline copy and its only second copy of any kind
+(the mini is the sole writer and git is the sole durability, see the `brain`
+row above). It is a *read mirror* by discipline, not by permission: `git pull`
+before writing anything there, and expect to rebase against the mini's 03:30
+auto-commit if you don't. The full access model — why not LiveSync/Syncthing,
+what the phone gets, what still has to be built — is `docs/brain-access.md`.
 
 Two separate questions, and collapsing them is the usual confusion:
 
