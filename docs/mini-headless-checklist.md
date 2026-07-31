@@ -321,17 +321,28 @@ The Brewfile is **not** edited — it keeps describing the machine truthfully an
   Expect `osascript … delete login item "Clawbar"` to **fail** with "Can't get login
   item" — a modern app that self-registers at first launch uses SMAppService, which never
   appears in the legacy list. It is a System Settings action, not a CLI one.
-- **Network Extensions:** turn off RadioSilence
-  (`com.radiosilenceapp.client.NetworkExtension`, PID 567, `[activated enabled]`, app
-  already deleted from /Applications). Re-measured 2026-07-31: the LaunchAgent is **not**
-  respawn-looping as this file previously claimed. `launchctl print gui/501/…` reports
-  `runs = 1`, `last exit code = 78: EX_CONFIG`, `state = spawn scheduled` — it failed once
-  at login and launchd has had it throttled ever since. That removes the CPU/noise argument
-  entirely and leaves only the real one, which is enough on its own: an orphaned,
-  unconfigurable content filter is loaded in the network path. `systemextensionsctl gc`
-  needs no `sudo` (confirmed against its own usage output) but it **does** reconfigure that
-  path — run it while physically at the machine, never over the ssh session you would be
-  the one to lose.
+- **Network Extensions: RadioSilence is DONE** (2026-07-31, owner's call to drop it fully).
+  `systemextensionsctl gc` reported `Successfully cleaned up` for
+  `com.radiosilenceapp.client.NetworkExtension`; PID 567 is gone and the extension now
+  reads `[terminated waiting to uninstall on reboot]` — so the pre-move shutdown is what
+  finishes it, which is convenient timing rather than a loose end. No `sudo` was needed
+  (`gc` is not SIP-gated; `systemextensionsctl uninstall` would have been refused).
+  Verified after: Tailscale up, ICMP out, HTTPS to GitHub 200, and all 13 heartbeat
+  components green. There were **no** user-level leftovers under `~/Library`.
+
+  Two notes for the record. The LaunchAgent was **not** respawn-looping as this file
+  claimed — `launchctl print` reported `runs = 1`, `last exit code = 78: EX_CONFIG`,
+  `state = spawn scheduled`, i.e. it failed once at login and launchd had it throttled, and
+  by the time it was booted out the job was already gone from `gui/501`. The CPU/noise
+  argument was never real; the argument that carried was the accurate one — an orphaned,
+  unconfigurable content filter loaded in the network path of a host whose Tailscale,
+  Funnel, dev doors and headless git push all traverse that stack.
+
+  **One sudo remnant, cosmetic:** `/Library/LaunchAgents/com.radiosilenceapp.agent.plist`
+  (root-owned, 498 B) is still on disk, so launchd will load and fail it once per login
+  forever. It points at an app that no longer exists and can do nothing else.
+  `sudo mv /Library/LaunchAgents/com.radiosilenceapp.agent.plist /Library/LaunchAgents/.disabled-20260731/`
+  — fold it into L2.5 rather than making a trip for it.
   Stated accurately: an orphaned, unconfigurable content-filter extension is loaded in
   the network path — not "filtering all traffic" (0.0% CPU, 16 MB, no configuration
   proven). **This is the prime suspect for any future unexplained network failure** on a
