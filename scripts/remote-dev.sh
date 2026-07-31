@@ -43,8 +43,23 @@ host_run() {
   fi
 }
 
+# `herdr status | grep -q` reported a dead server against one that was plainly
+# running. It is a RACE, not a determinism — measured at roughly half of runs on
+# this machine, so it reproduces on demand but not on the first try. Do not
+# conclude the fix is unnecessary because one attempt came back clean.
+# grep -q exits on the first match, herdr takes the SIGPIPE mid-write and returns 101, and
+# `set -o pipefail` hands that up as the pipeline's status. Capture first, match
+# second — the pipe was the bug, not the check. (Same trap the CLAUDE.md
+# heartbeat notes call out; it costs a debugging cycle every time.)
+#
+# Nothing reached vs reached-but-down are separate messages because the fixes
+# are: one is ssh/tailnet, the other is the brew service.
 require_server() {
-  host_run 'herdr status' 2>/dev/null | grep -q 'status: running' \
+  local out
+  out=$(host_run 'herdr status' 2>/dev/null)
+  [[ -n $out ]] \
+    || die "no answer from herdr on $HOST — nothing ran there at all; check the ssh hop with 'make remote-dev-doctor'"
+  grep -q 'status: running' <<<"$out" \
     || die "herdr server is not running on $HOST — 'brew services restart herdr' there, or run 'make remote-dev-doctor'"
 }
 
@@ -68,6 +83,164 @@ agent_name() {
   s=$(printf %s "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')
   s=$(printf %s "$s" | sed 's/^[^a-z]*//')
   printf %s "${s:0:32}"
+}
+
+# --- herdr agent resolution ---------------------------------------------------
+#
+# Three states have to stay distinguishable from the error text alone, because
+# the machine being debugged is the one with no screen attached:
+#
+#   herdr unreachable       → `herdr_agent_list`, which names the server
+#   up, but token unknown   → `die_no_agent`, which prints the roster
+#   token matches several   → `resolve_one_agent`, which lists the candidates
+#
+# `herdr_match` cannot tell the first two apart — both leave it with zero hits —
+# so a dead server used to be reported as "no agent matches '<repo>'" next to an
+# empty list, i.e. "your agent died" when the truth was "herdr died". That is the
+# same misleading-error class this section exists to remove, just pointed the
+# other way. Hence the fetch is validated ONCE, up front, by the function below;
+# by the time anything reaches `herdr_match`, zero hits can only mean zero hits.
+
+# Fetch the roster, or die naming the server rather than the agent.
+#
+# Two things the old `$(host_run 'herdr agent list' 2>/dev/null)` threw away are
+# exactly the two that tell a transport failure from an empty tailnet-side
+# roster: the exit status (lost inside the command substitution) and stderr
+# (redirected to nothing). Both are kept here. A payload that is not
+# `result.agents` counts as a failed fetch even when herdr exits 0 — an error
+# object parses as JSON perfectly well, and is a worse thing to hand the matcher
+# than a crash, because it silently means "no agents".
+#
+# `require_server` first, deliberately: it is the check with the actionable
+# message and it already exists. The validation below is what covers the gap it
+# cannot — an ssh hop that dies between the two calls, a herdr that answers
+# `status` but not the API, a stale socket.
+herdr_agent_list() {
+  require_server
+
+  local json rc errfile err line
+  errfile=$(mktemp "${TMPDIR:-/tmp}/rd-agents.XXXXXX") || die "mktemp failed"
+  json=$(host_run 'herdr agent list' 2>"$errfile"); rc=$?
+  # On a screenless machine herdr's error text IS the diagnosis, so say when it
+  # has been clipped rather than silently dropping the tail.
+  err=$(head -3 "$errfile")
+  if (( $(wc -l <"$errfile") > 3 )); then
+    err+=$'\n'"  … ($(wc -l <"$errfile" | tr -d ' ') lines total, showing first 3)"
+  fi
+  rm -f "$errfile"
+
+  if (( rc != 0 )) || ! printf '%s' "$json" | python3 -c '
+import json, sys
+sys.exit(0 if isinstance(json.load(sys.stdin).get("result", {}).get("agents"), list) else 1)
+' 2>/dev/null; then
+    {
+      printf '\033[31merror:\033[0m could not read the agent roster from %s — the server, not the agent\n' "$HOST"
+      if [[ -n $err ]]; then
+        printf '  herdr said:\n'
+        while IFS= read -r line; do printf '    %s\n' "$line"; done <<<"$err"
+      fi
+      printf "  'herdr agent list' exited %s with no usable roster\n" "$rc"
+      printf "  check it: 'make remote-dev-doctor', or 'herdr status' on %s\n" "$HOST"
+    } >&2
+    exit 1
+  fi
+
+  printf '%s' "$json"
+}
+
+# ONE matcher for every caller, and it returns PANE IDS, not names.
+#
+# `herdr agent list` carries no `name` field at all for a hand-started agent —
+# only `herdr agent start '<name>'` (what `work` does) assigns one. So the
+# obvious `a['name']` was wrong in both directions at once: `agents` printed `?`
+# for every row, and `work <repo>` raised KeyError on the first agent it looked
+# at, found nothing, and stacked a SECOND claude on a checkout that already had
+# one — the precise hazard its own comment says it prevents. Every agent always
+# has a pane id, and the socket API accepts one wherever it accepts a name, so
+# that is what this returns.
+#
+# Matches, in any order: a pane id (wG:p6), an agent name, a repo name (the
+# basename of the agent's cwd), or a full cwd path. Prints one pane id per
+# match, so the caller decides what more-than-one means — for `work` it means
+# "already running, focus it", for `read`/`say` it means "say which one".
+herdr_match() {
+  local token=$1 json=$2
+  TOKEN="$token" python3 -c '
+import json, os, sys
+t = os.environ["TOKEN"]
+try:
+    agents = json.load(sys.stdin)["result"]["agents"]
+except Exception:
+    sys.exit(0)
+for a in agents:
+    cwd = a.get("cwd") or ""
+    if t in (a.get("pane_id"), a.get("name"), cwd) or os.path.basename(cwd) == t:
+        print(a.get("pane_id") or "")
+' <<<"$json" 2>/dev/null | grep -v '^$'
+}
+
+# The roster an error message should print: pane id, repo name, task title —
+# i.e. every string this script will match on. $2 restricts it to a set of pane
+# ids (used when a token was ambiguous rather than unknown).
+herdr_roster() {
+  local json=$1
+  ONLY="${2:-}" python3 -c '
+import json, os, sys
+only = set(os.environ.get("ONLY", "").split())
+try:
+    agents = json.load(sys.stdin)["result"]["agents"]
+except Exception:
+    agents = []
+for a in agents:
+    pane = a.get("pane_id") or "?"
+    if only and pane not in only:
+        continue
+    cwd = a.get("cwd") or ""
+    title = a.get("name") or a.get("terminal_title_stripped") or "?"
+    print("    %-8s %-22s %s" % (pane, os.path.basename(cwd) or "?", title))
+' <<<"$json" 2>/dev/null
+}
+
+# herdr's own `agent_not_found` reads like the agent died. It almost never means
+# that — it means the identifier was wrong, which until now you rediscovered by
+# trial and error because `agents` printed `?` in the column you'd naturally
+# reach for. Name the identifiers that DO work instead.
+#
+# An empty roster gets its own sentence rather than a heading over nothing. The
+# caller has already proved the server is up, so "herdr is running and has no
+# agents" is a fact worth stating — the alternative reads as a truncated list and
+# sends you looking for a display bug.
+die_no_agent() {
+  local token=$1 json=$2 roster
+  roster=$(herdr_roster "$json")
+  {
+    printf '\033[31merror:\033[0m no agent matches '\''%s'\''\n' "$token"
+    if [[ -n $roster ]]; then
+      printf '  address one by pane id or repo name:\n'
+      printf '%s\n' "$roster"
+    else
+      printf "  herdr is running on %s with no agents at all — 'rd work <repo>' starts one\n" "$HOST"
+    fi
+  } >&2
+  exit 1
+}
+
+# Resolve to exactly one pane id or exit. Ambiguity is normal here — two agents
+# in one checkout happens — and steering the wrong one silently is worse than
+# asking which.
+resolve_one_agent() {
+  local token=$1 json=$2 hits n
+  hits=$(herdr_match "$token" "$json")
+  n=$(printf '%s\n' "$hits" | grep -c . || true)
+  (( n == 1 )) && { printf '%s' "$hits"; return 0; }
+  if (( n > 1 )); then
+    {
+      printf '\033[31merror:\033[0m '\''%s'\'' matches %s agents — address one by pane id:\n' "$token" "$n"
+      herdr_roster "$json" "$hits"
+    } >&2
+    exit 1
+  fi
+  die_no_agent "$token" "$json"
 }
 
 # --- subcommands -------------------------------------------------------------
@@ -102,18 +275,11 @@ cmd_work() {
     || die "no git repo named '$name' under ~/SourceRoot or ~/IuRoot on $HOST — try 'repos $name'"
 
   local existing
-  existing=$(host_run 'herdr agent list' | python3 -c "
-import json,sys
-try: agents = json.load(sys.stdin)['result']['agents']
-except Exception: sys.exit(0)
-for a in agents:
-    if a.get('cwd') == '$path':
-        print(a['name']); break
-" 2>/dev/null)
+  existing=$(herdr_match "$path" "$(host_run 'herdr agent list' 2>/dev/null)" | head -1)
 
   if [[ -n $existing ]]; then
     host_run "herdr agent focus '$existing'" >/dev/null 2>&1
-    echo "→ focused existing agent '$existing'  ($path)"
+    echo "→ focused existing agent $existing  ($path)"
     note "   already running; 'rd read $existing' to see it, 'dev' to attach"
     return 0
   fi
@@ -265,9 +431,17 @@ def clip(s, n):
 # checkout, which is a scary thing to see and a wrong thing to believe.
 in_herdr = {a.get("agent_session", {}).get("value") for a in herdr}
 
+# NAME printed `?` for every herdr row until 2026-07-31: the list carries no
+# `name` unless the agent was started BY name (`work` does; a hand-started one
+# never is), and that is most of them. herdr does carry a readable task title,
+# which is more use here than a name would have been — the CWD column already
+# says which repo. Pane id last so the column is never empty.
+def herdr_name(a):
+    return a.get("name") or a.get("terminal_title_stripped") or a.get("pane_id")
+
 rows = []
 for a in herdr:
-    rows.append(("herdr", clip(a.get("name"), 24), a.get("agent_status", "?"),
+    rows.append(("herdr", clip(herdr_name(a), 24), a.get("agent_status", "?"),
                  short(a.get("cwd")), a.get("pane_id", "")))
 
 for a in claude:
@@ -343,7 +517,18 @@ print("\n\n".join(out[-12:]) if out else "  (no assistant output yet)")
     return 0
   fi
 
-  host_run "herdr agent read '$name' --source ${2:-recent}"
+  # Not a bg session, so it is a herdr pane — and a pane is addressable by repo
+  # name here for the same reason `work` is: repo names are what you remember,
+  # pane ids churn every time a workspace is rebuilt.
+  #
+  # The roster is fetched only once the bg lane has come up empty: a `--bg`
+  # daemon is readable with herdr flat on its face (it reparented to PID 1 and
+  # its transcript is a file), so gating the whole subcommand on the server would
+  # break the one lane built to outlive it.
+  local roster pane
+  roster=$(herdr_agent_list) || exit 1
+  pane=$(resolve_one_agent "$name" "$roster") || exit 1
+  host_run "herdr agent read '$pane' --source ${2:-recent}"
 }
 
 # Steer a running agent without attaching.
@@ -351,8 +536,19 @@ cmd_say() {
   local name="${1:-}"; shift || true
   local text="${*:-}"
   [[ -n $name && -n $text ]] || die "usage: say <agent> <text…>"
+
+  local roster pane
+  roster=$(herdr_agent_list) || exit 1
+  pane=$(resolve_one_agent "$name" "$roster") || exit 1
+
+  # Resolution is the whole risk surface here: this types into a live session, so
+  # everything that can be wrong should be wrong BEFORE the send, not after it
+  # landed in someone else's pane. RD_DRY_RUN stops exactly here — it is how the
+  # resolver gets exercised without steering a running agent.
+  [[ -n ${RD_DRY_RUN:-} ]] && { echo "$pane"; return 0; }
+
   local esc=${text//\'/\'\\\'\'}
-  host_run "herdr agent prompt '$name' '$esc'"
+  host_run "herdr agent prompt '$pane' '$esc'"
 }
 
 usage() {
@@ -366,6 +562,9 @@ usage() {
     rd agents              every agent on the host, both lanes
     rd read <agent> [src]  read an agent's output without attaching
     rd say <agent> <text…> send a prompt to a running agent
+
+  <agent> is a repo name, a pane id (wG:p6) or a bg session id prefix —
+  whichever of them 'agents' put in front of you.
 
   Shorthands (bg/read/say stay subcommands — the bare names are a zsh
   builtin, a zsh builtin and /usr/bin/say respectively):

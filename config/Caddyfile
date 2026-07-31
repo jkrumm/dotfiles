@@ -144,6 +144,11 @@ image-gen.test {
 # photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
 # Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
 # Caddy streams SSE (/events/*) fine by default — no special flush config needed.
+#
+# MacBook-only: the repo and its LaunchAgent live there, and nothing on the mini
+# has ever bound 7717. The block stays here because both machines share this
+# file; the mini carries `exclude photoflow` in ~/.config/caddy-tailnet.ports so
+# it gets no tailnet door and stops reporting red for an app it does not run.
 photoflow.test {
 	import local
 	reverse_proxy localhost:7717
@@ -189,14 +194,21 @@ jkrumm.test {
 	reverse_proxy localhost:7728
 }
 
-# rb — personal learning tracker. Always-on Docker stack on the mini: web (Vite)
-# on :7730, api (Elysia) on :4050; both publish to 127.0.0.1 only and Vite proxies
-# /api internally. Primary access is `tailscale serve` on the host (real *.ts.net
-# LE cert, reachable from every device) — rb.test is just the local convenience
-# door and the port reservation.
+# rb — personal learning tracker. Always-on Docker stack on the mini: one
+# container on :4050 (Elysia serving both the API and the built SPA), published
+# to 127.0.0.1 only. Primary access is `tailscale serve` on the host (real
+# *.ts.net LE cert, reachable from every device) and its row points at 4050 —
+# rb.test is just the local convenience door.
+#
+# This block said 7730 until 2026-07-31, which was the port of a separate Vite
+# web container that no longer exists. Nothing has bound 7730 since, so the
+# local door 502'd and the tailnet status column reported rb red permanently
+# while rb was in fact up and serving. 7730 survives as the OUTSIDE port of the
+# serve row (`:7730 → 127.0.0.1:4050`), which is where the number comes from and
+# why the stale value looked plausible.
 rb.test {
 	import local
-	reverse_proxy localhost:7730
+	reverse_proxy localhost:4050
 }
 
 # linewatch — uptime + throughput history for this internet line
