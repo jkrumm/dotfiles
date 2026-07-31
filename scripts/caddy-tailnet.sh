@@ -369,6 +369,71 @@ IP=$(printf '%s' "$ts_json" | python3 -c \
 # diagnosis at the moment it actually matters.
 serve_ports=" $("$TS" serve status 2>/dev/null | grep -oE '\.ts\.net:[0-9]+' | cut -d: -f2 | tr '\n' ' ' || true)"
 
+# --- `tailscale serve` rows, for the landing page ----------------------------
+# The dev doors are only PART of what this machine publishes: `tailscale serve`
+# has its own bindings, and one of them is a Funnel to the PUBLIC INTERNET. A
+# page that lists 18 tailnet-only doors and says nothing about the funneled one
+# is worse than no page — it reads as a complete exposure map while omitting the
+# only row where "who can reach this" has a different answer.
+#
+# Read LIVE from tailscaled rather than from the declared conf, because the
+# question the page answers is what is actually exposed right now, not what was
+# intended. Drift between the two is `make tailscale-serve-check`'s job, and the
+# page says so rather than quietly implying it re-checked.
+#
+# Labels come from an OPTIONAL 4th column of the declared conf in the private
+# repo — tailscale-serve.sh normalises with `$1|$2|$3`, so extra fields are
+# invisible to the applier and cannot cause drift. A missing repo, file or label
+# degrades to showing the proxy target: never to a guessed name, since a wrong
+# label on an exposure map is the one failure that matters here.
+MACHINE=$(printf '%s' "$ts_json" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["Self"]["HostName"])')
+SERVE_CONF="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}/tailscale-serve.$MACHINE.conf"
+
+# The program is read into a variable and passed with `python3 -c`, NOT piped in
+# as `python3 - <<'PY'`: a heredoc IS stdin, so it would take the place of the
+# `tailscale serve status` pipe and python would read an empty document without
+# erroring — the section silently renders as "no bindings" on a machine that has
+# three. That is exactly how this first shipped.
+serve_py=$(cat <<'SERVE_PY'
+import json, os, sys
+
+labels = {}
+conf = sys.argv[1] if len(sys.argv) > 1 else ""
+if conf and os.path.exists(conf):
+    with open(conf) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) >= 4:
+                labels[fields[0]] = " ".join(fields[3:])
+
+raw = sys.stdin.read().strip()
+cfg = json.loads(raw) if raw and raw != "null" else {}
+cfg = cfg or {}
+funnel = cfg.get("AllowFunnel") or {}
+
+rows = []
+for hostport, web in (cfg.get("Web") or {}).items():
+    port = hostport.rsplit(":", 1)[-1]
+    proxy = ((web.get("Handlers") or {}).get("/") or {}).get("Proxy", "")
+    rows.append({
+        "p": port,
+        "t": proxy,
+        "f": bool(funnel.get(hostport)),
+        "l": labels.get(port, ""),
+    })
+rows.sort(key=lambda r: int(r["p"]))
+print(json.dumps(rows, separators=(",", ":")))
+SERVE_PY
+)
+
+serve_json=$( { "$TS" serve status --json 2>/dev/null || echo null; } \
+  | python3 -c "$serve_py" "$SERVE_CONF" ) || serve_json="[]"
+[[ -n "$serve_json" ]] || serve_json="[]"
+
 reload_conflict_report() {
   # Called only after a failed reload. netstat, not lsof: caddy runs as a root
   # LaunchDaemon and is invisible to an unprivileged `lsof -iTCP`, which would
@@ -703,6 +768,11 @@ th {
 }
 td { padding: .5rem .7rem; border-bottom: 1px solid var(--line); vertical-align: baseline; }
 tr:hover td { background: var(--panel); }
+/* The whole row is the primary link — the door cell's <a> is kept only so the
+   URL is visible, copyable and middle-clickable. cursor+focus ring on the row
+   are what make that discoverable; without them it reads as a dead table. */
+tbody tr { cursor: pointer; }
+tbody tr:focus-visible { outline: 2px solid var(--up); outline-offset: -2px; }
 .st { white-space: nowrap; font-size: .78rem; }
 .st::before { content: "\25CF"; margin-right: .45rem; }
 .up { color: var(--up); }
@@ -711,6 +781,19 @@ tr:hover td { background: var(--panel); }
 .unknown, .wait { color: var(--faint); }
 .name { font-weight: 600; }
 .port { color: var(--faint); font-variant-numeric: tabular-nums; }
+h2.sec {
+	font-size: .68rem; letter-spacing: .09em; text-transform: uppercase;
+	color: var(--faint); font-weight: 500; margin: 2.5rem 0 .7rem;
+}
+h2.sec + .sub { margin-bottom: 1rem; }
+/* Funnel is the one row on this page the public internet can reach. It gets the
+   same red the Host-rejection state uses — loud on purpose, and never the same
+   colour as an ordinary tailnet row. */
+.reach { white-space: nowrap; font-size: .78rem; }
+.reach::before { content: "\25CF"; margin-right: .45rem; }
+.tailnet { color: var(--dim); }
+.public { color: var(--bad); font-weight: 600; }
+.target { color: var(--faint); font-size: .78rem; }
 a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
 a:hover { border-bottom-color: currentColor; }
 a.alt { color: var(--faint); font-size: .78rem; }
@@ -741,6 +824,25 @@ code {
 		</thead>
 		<tbody id="rows"></tbody>
 	</table>
+
+	<!-- Hidden until the script finds rows: a machine with no serve bindings
+	     shows nothing here, not an empty table under a heading. -->
+	<section id="serve" hidden>
+		<h2 class="sec">tailscale serve</h2>
+		<p class="sub" id="servesub"></p>
+		<table>
+			<thead>
+				<tr>
+					<th style="width:12rem">reach</th>
+					<th>binding</th>
+					<th style="width:5rem">port</th>
+					<th>door</th>
+				</tr>
+			</thead>
+			<tbody id="serverows"></tbody>
+		</table>
+	</section>
+
 	<footer>
 		<h2>reading the status</h2>
 		<p><span class="st up">up</span> &mdash; the dev server answered.</p>
@@ -774,11 +876,22 @@ code {
 			The <code>.ts.net</code> door is the zero-dependency fallback &mdash; its cert
 			comes from tailscaled itself, no Cloudflare and no ACME &mdash; and is opt-in per
 			app via the <code>portdoor</code> flag.</p>
+		<p>Every row above is <span class="reach tailnet">tailnet only</span>: Caddy binds
+			these to this host's Tailscale IP and nothing else. Clicking a row opens its
+			clean door.</p>
+		<h2>tailscale serve</h2>
+		<p>A separate mechanism, listed because it publishes ports this page would
+			otherwise leave unaccounted for. <span class="reach public">public</span> means
+			Funnel is on for that port &mdash; reachable from the open internet, not just the
+			tailnet. Read live from tailscaled when the doors were last generated; the
+			declared state lives in the private repo and
+			<code>make tailscale-serve-check</code> is what reports drift.</p>
 	</footer>
 </main>
 <script>
 PAGE_HEAD
     printf 'const APPS = [%s];\n' "$apps_json"
+    printf 'const SERVE = %s;\n' "$serve_json"
     printf 'const DOMAIN = "%s";\n' "$DEV_DOMAIN"
     printf 'const TSNET = "%s";\n' "$HOSTN"
     cat <<'PAGE_TAIL'
@@ -805,6 +918,36 @@ function link(href, text, cls) {
 	return a;
 }
 
+function cell(text, cls) {
+	const td = document.createElement("td");
+	if (cls) td.className = cls;
+	td.textContent = text;
+	return td;
+}
+
+// Make the whole row the link. A click that landed on a real <a> is left alone,
+// otherwise the secondary links in the door cell would navigate to the row's
+// primary target instead of their own — the one thing they exist for. Modifier-
+// and middle-clicks open a new tab, so the row behaves like the link it looks
+// like rather than like a table that happens to move.
+function rowLink(tr, href) {
+	tr.tabIndex = 0;
+	tr.addEventListener("click", (ev) => {
+		if (ev.target.closest("a")) return;
+		if (ev.metaKey || ev.ctrlKey || ev.shiftKey) window.open(href, "_blank", "noopener");
+		else window.location.href = href;
+	});
+	tr.addEventListener("auxclick", (ev) => {
+		if (ev.button !== 1 || ev.target.closest("a")) return;
+		ev.preventDefault();
+		window.open(href, "_blank", "noopener");
+	});
+	tr.addEventListener("keydown", (ev) => {
+		if (ev.key !== "Enter" || ev.target !== tr) return;
+		window.location.href = href;
+	});
+}
+
 const tbody = document.getElementById("rows");
 const cells = new Map();
 
@@ -829,14 +972,63 @@ for (const app of APPS) {
 	const doors = document.createElement("td");
 	const wrap = document.createElement("div");
 	wrap.className = "doors";
-	wrap.appendChild(link("https://" + app.n + "." + DOMAIN, app.n + "." + DOMAIN));
+	const primary = "https://" + app.n + "." + DOMAIN;
+	wrap.appendChild(link(primary, app.n + "." + DOMAIN));
 	if (app.d) {
 		wrap.appendChild(link("https://" + TSNET + ":" + app.p, TSNET + ":" + app.p, "alt"));
 	}
 	doors.appendChild(wrap);
 
+	rowLink(tr, primary);
+
 	tr.append(st, name, port, doors);
 	tbody.appendChild(tr);
+}
+
+// tailscale serve — a different mechanism with a different blast radius, so a
+// separate table rather than extra rows above. No probing: these are tailscaled's
+// own bindings, there is no same-origin /_up route for them, and a cross-origin
+// fetch would report failure for every one regardless of health.
+if (SERVE.length) {
+	const sbody = document.getElementById("serverows");
+	const nPublic = SERVE.filter((r) => r.f).length;
+	document.getElementById("servesub").textContent =
+		SERVE.length + " binding" + (SERVE.length === 1 ? "" : "s") + " · " +
+		(nPublic ? nPublic + " reachable from the public internet (Funnel)" : "all tailnet only");
+
+	for (const row of SERVE) {
+		const tr = document.createElement("tr");
+		const door = "https://" + TSNET + ":" + row.p;
+
+		const reach = document.createElement("td");
+		const badge = document.createElement("span");
+		badge.className = "reach " + (row.f ? "public" : "tailnet");
+		badge.textContent = row.f ? "public — Funnel" : "tailnet only";
+		reach.appendChild(badge);
+
+		const what = document.createElement("td");
+		what.className = row.l ? "name" : "target";
+		what.textContent = row.l || row.t;
+
+		const doorCell = document.createElement("td");
+		const wrap = document.createElement("div");
+		wrap.className = "doors";
+		wrap.appendChild(link(door, TSNET + ":" + row.p));
+		// The target is only worth a second line when the label already said what
+		// this is; unlabelled rows show it as the name above instead of twice.
+		if (row.l) {
+			const t = document.createElement("span");
+			t.className = "target";
+			t.textContent = "→ " + row.t;
+			wrap.appendChild(t);
+		}
+		doorCell.appendChild(wrap);
+
+		rowLink(tr, door);
+		tr.append(reach, what, cell(row.p, "port"), doorCell);
+		sbody.appendChild(tr);
+	}
+	document.getElementById("serve").hidden = false;
 }
 
 // Same-origin probes through the generated /_up/<name> routes — no CORS, no
@@ -956,6 +1148,24 @@ if (( wildcard_enabled )); then
   printf '    %-20s    (also served at any unmatched name, with live status)\n' ""
   printf '\n  %d clean doors, %d port doors, %d excluded — registry: %s\n' \
     "$n_clean" "$n_port" "$n_excluded" "$CADDYFILE"
+
+  # Same rows the page shows, for the same reason: this output is the other
+  # place someone asks "what does this machine expose", and a summary that
+  # counts 18 tailnet doors while omitting a live Funnel answers it wrongly.
+  printf '%s' "$serve_json" | python3 -c '
+import json, sys
+rows = json.load(sys.stdin)
+if not rows:
+    sys.exit(0)
+print("\n  tailscale serve — a separate mechanism, listed so this summary is complete\n")
+for r in rows:
+    # Pad BEFORE colouring: the escape sequence has no width on screen but does
+    # in %-16s, so a coloured cell padded by format() comes out short.
+    reach = "%-16s" % ("PUBLIC — Funnel" if r["f"] else "tailnet only")
+    if r["f"]:
+        reach = "\033[31m%s\033[0m" % reach
+    print("    %-20s :%-5s %s %s" % (r["l"] or "", r["p"], reach, r["t"]))
+' || true
 else
   printf '\n  no clean door — set DEV_DOMAIN + a chmod-600 Cloudflare token in %s\n' "$CONF_FILE"
 fi

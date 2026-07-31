@@ -326,7 +326,16 @@ Both current rows are deliberate: `:7730` (rb, tailnet-only) and `:8443`
 (**Funnel — public internet**, the IU dashboard). The Funnel is gated by
 `tag:iu-dashboard-funnel`, an *additive* single-device tag: Funnel is a
 whole-device capability, so granting it to `tag:mac` would expose the work
-MacBook too. Don't "clean up" that row — the tag exists to make it safe.
+MacBook too. Don't "clean up" that row — the tag exists to make it safe. **That
+one port is the machine's entire public surface** — every dev door and both
+other serve rows are tailnet-bound.
+
+Rows take an **optional 4th column, a human label** (`8443 http://localhost:5173
+yes  IU dashboard`). `tailscale-serve.sh` normalises with `$1|$2|$3`, so the
+applier cannot see it and it can never cause drift; it exists so the dev-apps
+landing page can name a binding instead of printing a bare loopback port next to
+the word "public". An unlabelled row degrades to showing its target — never to a
+guessed name, which on an exposure map is the one failure that matters.
 
 ## Remote dev — MacBook → mini
 
@@ -591,7 +600,31 @@ app whose `.test` block doesn't already do it.
 **The landing page at `https://mini.jkrumm.com`** (also `apps.mini.jkrumm.com`)
 lists every app with its port, both doors, and live status — and is served from
 the wildcard block's bare `handle {}` fallback too, so a *typo'd* name shows you
-what exists instead of a bare 404.
+what exists instead of a bare 404. **The whole row is the link**; the anchors in
+the doors cell survive only so a URL stays visible, copyable and
+middle-clickable, and a row click that landed on one is deliberately left alone
+(otherwise a secondary door link would navigate to the primary one).
+
+**It also lists the `tailscale serve` rows, in a second table, with Funnel
+marked `public`.** Those are a different mechanism with a different blast
+radius — but a page that lists 18 tailnet-only doors and stays silent about the
+funneled port reads as a complete exposure map while omitting the only row where
+"who can reach this" has a different answer. Read **live from tailscaled** at
+generation time, not from the declared conf, because the question is what is
+published right now; drift against the declared state stays
+`make tailscale-serve-check`'s job and the page says so rather than implying it
+re-checked. It is a snapshot — changing serve state wants a `make caddy-tailnet`
+after `make tailscale-serve`. Serve rows are never probed: there is no
+same-origin `/_up` route for them, and a cross-origin `fetch` would report every
+one as failed regardless of health.
+
+**No app carries `portdoor` today** (2026-07-31). The four that did — argo,
+basalt-playground, jkrumm, modelpick — were never chosen: they are exactly the
+apps the pre-registry `caddy-tailnet.ports` listed, which the migration
+converted to flags so it wouldn't silently remove a door someone depended on.
+Nothing needed the fallback since, and a second line on four arbitrary rows only
+implied those four were special. The mechanism stays as the documented escape
+hatch — add the flag back and re-run if the Cloudflare/ACME door ever fails.
 
 **The apex is a second subject on the same site block, not a third door** —
 `*.mini.jkrumm.com, mini.jkrumm.com { … }`. A wildcard answers for exactly one
