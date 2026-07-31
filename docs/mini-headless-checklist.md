@@ -516,7 +516,7 @@ curl -sI https://argo.mini.jkrumm.com     # dev door answers
 
 | Question | Recommendation from the plan |
 |-|-|
-| The `:8443` Funnel is public | **INSPECTED 2026-07-31 — this row was wrong, and in the direction that matters.** See below. |
+| ~~The `:8443` Funnel is public~~ | **CLOSED 2026-07-31 — it stays public, owner's call.** The work dashboard is meant to be reachable from the internet; everything else stays tailnet-only. The inspection under it still matters and is not closed by the decision: the API is reachable through the Funnel, not just the static bundle, so the bearer check is the sole control on this machine's only public surface. See the section below. |
 | GitHub PAT `op://mini/github/token` has no expiry and `Contents: read+write` on **all** repos | **Reduce scope** rather than adding an expiry. An expiry reintroduces exactly the silent-rot failure the cache-backed helper was built to replace; scope reduction has no such failure mode. |
 | Should durable agents auto-restart after a reboot? | **Decide explicitly.** After WP4 a launchd-supervised `claude --bg` no longer needs the GUI session, which makes "yes" cheap. If the answer is "no", nothing to build. |
 | Time Machine — no destination configured at all | **Configure it, after WP10.** Adding a network destination to a machine already writing heavily would add substantial I/O; fix the write pathology first. |
@@ -526,45 +526,65 @@ curl -sI https://argo.mini.jkrumm.com     # dev door answers
 
 ---
 
-## The `:8443` Funnel — inspected 2026-07-31
+## The `:8443` Funnel — public by design; inspected 2026-07-31
 
-Fetched from the public URL, so nothing here was newly exposed by looking.
+**Decision, owner, 2026-07-31: the work dashboard stays reachable from the public
+internet. Everything else stays tailnet-only.** An earlier version of this section
+recommended dropping the Funnel; that recommendation was wrong and is recorded rather
+than tidied away, because the *measurement* under it still stands and changes what the
+remaining control has to carry.
 
-**The claim that "an external browser cannot reach the data layer" is false.**
-`dashboard-api` is not directly published, but the funneled frontend on `:5173` is an
-nginx that **proxies `/api/*` through to it**. Measured from the public internet:
+Verified in sync with `tailscale-serve.mini.conf` — one public row, two private:
+
+| Port | Target | Exposure |
+|-|-|-|
+| `8443` | `localhost:5173` (IU dashboard) | **Funnel — public internet.** Deliberate. |
+| `7730` | `127.0.0.1:4050` (rb) | tailnet only |
+| `8788` | `127.0.0.1:8787` (collie) | tailnet only — **must never be funneled**, one bridge call is shell-equivalent |
+
+### What is actually published, measured from outside
+
+This checklist used to say an external browser "cannot reach the data layer" because
+`dashboard-api` is loopback-bound and in no serve row. **That is true of the port and
+false of the path.** The funneled frontend on `:5173` is an nginx that proxies `/api/*`
+straight through:
 
 | Path | Result |
 |-|-|
-| `/` | 200, the SPA shell (458 B) |
+| `/` | 200, SPA shell (458 B) |
 | any unknown path (e.g. `/health`) | 200 — SPA fallback, *not* a health endpoint |
 | `/api/health` | **401** `{"detail":"missing or malformed Authorization header"}`, `server: nginx/1.31.3` |
 | `/api` | 301 → `http://<magicdns>:5173/api/` |
 
-A 401 is a **reachable** service refusing a request. Connection-refused would have been
-the shape this row assumed. So the actual exposure is a work dashboard's API on the
-public internet, bearer-gated.
+A 401 is a reachable service refusing a request; connection-refused is what the old row
+assumed. So the public surface is the dashboard **and its API**, not a static bundle.
 
-**The good half, and it is the part that decides urgency.** The bundle is clean. 1.34 MB
-of `index-C07K4ypB.js` scanned for credential-shaped strings, long opaque literals, and
-internal hostnames: **nothing**. Only React, Mantine, Redux and react-router. No embedded
-bearer token, no internal URL, no IU identifier. So the 401 is a real gate rather than
-theatre — the token is supplied at runtime, not shipped to every visitor.
+### What that means now the Funnel is staying
 
-**Two smaller findings.** The `/api` 301 reflects the `Host` header and downgrades to
-`http://` on a non-funneled port, which leaks the internal port and is a Host-header
-redirect. And the SPA fallback answering 200 on every path is what made `/health` look
-like an unauthenticated health endpoint in the first pass — worth knowing before anyone
-probes this again and reports it as one.
+**The bearer check is the entire access control on this machine's only public surface.**
+Not one of several layers — the only one. Everything else here is gated by the tailnet,
+which does not apply to this port. Worth holding explicitly rather than inheriting.
 
-**Recommendation: drop the Funnel, keep the serve row tailnet-only.** The exposure is a
-work API reachable by anyone on the internet, on a machine about to sit unattended at a
-new location; the compensating control is one bearer check in front of a service nobody
-here has audited. Nothing about the dashboard needs the public internet — every device
-that uses it is on the tailnet. That is a one-line change in
-`dotfiles-private/tailscale-serve.mini.conf` (`yes` → `no`) plus `make tailscale-serve`,
-and it also retires `tag:iu-dashboard-funnel`. **`tailscale serve` needs no sudo**
-(verified), so an agent can apply it once you decide.
+**The bundle is clean, and that is what makes the gate real.** 1.34 MB of
+`index-C07K4ypB.js` scanned for credential-shaped strings, long opaque literals and
+internal hostnames: nothing but React, Mantine, Redux and react-router. No embedded
+bearer token, no internal URL, no IU identifier. The token is supplied at runtime, so the
+401 is a gate rather than theatre. **Re-check this after any frontend build that starts
+baking config in** — an embedded token would silently convert the whole API to
+unauthenticated, with no other symptom.
+
+Two smaller things, neither urgent, both worth not rediscovering:
+
+- **The `/api` 301 reflects the `Host` header** and downgrades to `http://` on a port
+  that is not funneled. It leaks the internal port and is a Host-header redirect. Cheap
+  to fix in nginx (`absolute_redirect off`) if it ever matters.
+- **The SPA fallback answers 200 on every unknown path.** That is what made `/health`
+  look like an unauthenticated health endpoint on the first pass. Anyone probing this
+  again will hit the same illusion.
+
+`tag:iu-dashboard-funnel` stays, and stays *additive on this device alone* — Funnel is a
+whole-device capability, so granting it to `tag:mac` would hand it to the work MacBook
+too. Do not "clean up" that tag.
 
 ## Public-repo hygiene — fixed 2026-07-31
 
