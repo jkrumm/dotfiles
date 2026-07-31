@@ -380,13 +380,21 @@ dedicated `tcp:7730` grant encodes the same lesson.
 
 **`--accept-routes` is off on the mini** (set 2026-07-31; `tailscale debug prefs`
 → `RouteAll: false`). No peer advertises a subnet route today, so this changes
-nothing observable — it removes a latent trap. The mini and homelab sit on the
-*same* LAN, so the day homelab advertises `192.168.1.0/24` the mini would start
-routing traffic to its own local subnet out through the tailnet to a machine one
-L2 hop away: slower, and a failure mode that looks like a DNS or Docker problem
-rather than a routing one. This is imperative daemon state with no declared-state
-file behind it — the Tailscale menu bar can flip it back and nothing asserts
-otherwise, so re-check it after any Tailscale reinstall or re-auth.
+nothing observable — it removes a latent trap: any peer advertising a subnet that
+overlaps the mini's own would silently pull local traffic out through the tailnet,
+a routing fault that presents as a DNS or Docker one. This is imperative daemon
+state with no declared-state file behind it — the Tailscale menu bar can flip it
+back and nothing asserts otherwise, so re-check it after any Tailscale reinstall
+or re-auth.
+
+**The mini and homelab are on different networks** — measured 2026-07-31: mini
+`192.168.1.100` behind gateway `192.168.1.1`, homelab `192.168.178.129`, mutually
+unreachable by LAN address. They meet only over Tailscale (direct IPv6, 7 ms).
+Earlier notes here and in `docs/mini-headless.md` claimed they shared a LAN "one
+L2 hop away"; that was wrong. It matters beyond pedantry: macOS 26's pre-boot SSH
+FileVault unlock is reachable **only over the LAN** (Tailscale does not exist
+before the Data volume mounts), so homelab is *not* a jump host for break-glass
+recovery of the mini as currently wired.
 
 ## Inbound exposure — `tailscale serve` / Funnel
 

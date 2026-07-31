@@ -123,6 +123,91 @@ and it must land **before** WP6.
 
 ---
 
+## 3b. macOS 26 adds remote FileVault unlock over SSH — WP6 is no longer forced
+
+Added 2026-07-31, after §3 was written. **§3's premise — that break-glass with
+FileVault on means a physical monitor — is out of date.** macOS 26 Tahoe added
+pre-boot SSH unlock, and this machine already meets every prerequisite.
+
+Verified against **this machine's own man page**, not a blog post:
+
+```
+$ man 7 apple_ssh_and_filevault
+HISTORY
+     The capability to unlock the data volume over SSH appeared in macOS 26
+     Tahoe.
+```
+
+| Prerequisite | This machine |
+|-|-|
+| Apple Silicon | Mac14,12 (M2 Pro) ✓ |
+| macOS 26+ | 26.5.2 (25F84) ✓ |
+| FileVault enabled | On ✓ |
+| Remote Login enabled | sshd listening v4+v6 ✓ |
+| Wired ethernet | en0, 192.168.1.100 ✓ |
+
+**What it gives you.** After a reboot the machine sits at pre-boot with a
+minimal sshd served from the sealed System volume. You ssh in, it accepts a
+**password** for any FileVault-enabled account, unlocks the Data volume, drops
+the connection, and boot continues. Password only — `authorized_keys` lives on
+the volume that is still encrypted.
+
+**What it does NOT give you, and this is the part every summary omits.** Unlock
+is not login. macOS continues to the **login window**, not to a session. The
+15-of-20 services in `gui/501` — herdr, sideclaw, litellm, the hermes gateway,
+the colima brew service, devhost-health, collie, Obsidian — are still absent.
+Only system-domain daemons come up: sshd, tailscaled, caddy, dnsmasq, the colima
+docker-socket daemon. So this replaces B3, not B6.
+
+**Three constraints measured here, all binding:**
+
+1. **Tailscale does not exist pre-boot.** Its state is on the Data volume, so
+   there is no MagicDNS, no `ssh mini`, no tailnet IP. The unlock must be
+   delivered to the machine's **LAN address**, over the LAN. That is the whole
+   ballgame for a remote recovery story.
+2. **homelab is NOT a jump host into that LAN, contrary to what this document
+   assumed.** Measured: the mini is `192.168.1.100` behind gateway
+   `192.168.1.1`; homelab is `192.168.178.129`. Neither can reach the other's
+   LAN address — they meet only over Tailscale (direct IPv6, 7 ms, so the
+   tailnet path is healthy). **They are on different networks.** The WP13
+   rationale that said "a machine on the same LAN, one L2 hop away" was simply
+   wrong. Today, pre-boot unlock therefore works only from a device physically
+   on the mini's LAN.
+3. **Screen Sharing is probably available at the login window, and the plan says
+   otherwise.** `com.apple.screensharing` is a **system-domain** job whose
+   `state = not running` is socket-activation idle — the same tell as sshd, not
+   an outage. That contradicts §1's "Screen Sharing needs an already-logged-in
+   GUI session". **Unverified**: settling it is exactly what L3.2's logout test
+   is for. If it holds, the full remote path is ssh-unlock → VNC to the login
+   window → log in → all 20 services, with no monitor and no FileVault change.
+
+**`fdesetup authrestart` is the other half, and it is not a substitute.**
+`fdesetup supportsauthrestart` → `true` here, and the local man page documents
+`-delayminutes -1` as "never auto-restart; the auth restart occurs whenever the
+user next restarts" — i.e. arm now, bypass the prompt on the next reboot. It
+covers a **planned** reboot completely and can be scripted (`-inputplist`). It
+does **not** cover this move or a power cut: the extra unlock key is held in
+memory (and on supported systems the SMC), it is single-use on Apple Silicon,
+and a power-off plus transport destroys it.
+
+**Revised decision — WP6 becomes a genuine choice rather than a forced move:**
+
+| | Keep FileVault + SSH unlock | WP6 as planned (FileVault off + auto-login) |
+|-|-|-|
+| After a power cut | Two remote steps: ssh-unlock, then log in | Zero steps — boots to a live session |
+| Reachable from | **Only the mini's own LAN** | Anywhere (Tailscale is up as soon as it boots) |
+| Physical possession | Power button gets an attacker a lock screen | Power button gets an attacker a logged-in desktop, and `~/.config/sops/age/keys.txt` |
+| WP4 (Max auth off keychain) | Still worth doing, no longer a gate | Mandatory before the switch |
+
+Recommendation: **do not disable FileVault yet.** With a UPS converting most
+outages into non-events, the residual case is a rare long outage that needs a
+human on the mini's LAN — which is a much smaller cost than it looked in §3, and
+it is reversible in either direction. Revisit only if L3.2 shows Screen Sharing
+does *not* work at the login window, which would leave the machine unlockable
+but unusable remotely.
+
+---
+
 ## 4. Work packages
 
 **Ordering rule.** WP1 and WP2 come first and nothing else starts until WP2 passes.
@@ -707,7 +792,7 @@ as the only control. Everything remaining in this package is Lane 3 (L3.6).
 | en0 negotiating `100baseTX` on a 1 Gb/s NIC | Swap the cable. Error counters are clean (0 Ierrs/Oerrs/Coll over 48.2 M packets), so this is a stable negotiation to 100, not a dirty link. Verify `ifconfig en0 \| grep media` → `1000baseT`. | physical |
 | No DHCP reservation | Reserve `5c:e9:1e:ec:5a:6e → 192.168.1.100` on the Fritz!Box. Prefer a reservation over `networksetup -setmanual` — the router stays the authority for gateway/DNS. | router |
 | Wi-Fi Private Address rotating | `0a:31:ca:27:7c:6d` is locally-administered. Turn off Private Wi-Fi Address for this SSID. **No CLI exists** — System Settings → Wi-Fi. Keep Wi-Fi enabled: it is the only failover if the wired path dies, and with the screen gone that would be total loss of access. | **no — pre-detach only** |
-| ~~`RouteAll: true`~~ | **Done** — `tailscale set --accept-routes=false`, `RouteAll: false` confirmed. No peer advertised anything, so nothing changed observably; the latent hazard removed is homelab advertising `192.168.1.0/24` and the mini routing its own LAN through the tailnet to a machine one L2 hop away. **No declared-state file backs this** — the menu bar can flip it back and nothing asserts otherwise, so re-check after any Tailscale reinstall or re-auth. Recorded in `CLAUDE.md`; a heartbeat assertion was deliberately not added (see below). | yes |
+| ~~`RouteAll: true`~~ | **Done** — `tailscale set --accept-routes=false`, `RouteAll: false` confirmed. No peer advertised anything, so nothing changed observably; the latent hazard removed is any peer advertising a subnet overlapping the mini's own, silently pulling local traffic out through the tailnet. (The original "homelab, one L2 hop away" framing was **wrong** — measured in §3b, they are on different networks.) **No declared-state file backs this** — the menu bar can flip it back and nothing asserts otherwise, so re-check after any Tailscale reinstall or re-auth. Recorded in `CLAUDE.md`; a heartbeat assertion was deliberately not added (see below). | yes |
 | ~~`tailscale-serve.mini.conf` comments~~ | **Done** — both rows now name their real terminus. Verified rather than copied from the plan: `lsof` shows `ssh` PID 1448 (the Lima port-forward mux) holding both `127.0.0.1:4050` and `127.0.0.1:5173`, backed by the `rb-api` and `dashboard-ui` containers. | yes |
 
 **Deferred: a `RouteAll` assertion in `devhost-health-check.sh`.** It looks like a
