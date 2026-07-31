@@ -41,7 +41,7 @@ The Mac has two workspace "regions". Skills, hooks, and rules are **global** (`~
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
-| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli`. LiveSync is continuous cross-device backup; `git diff` is the deliberate review gate. Direct-to-master; validated by `vault-lint`. |
+| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli`. Git is both durability and review — a nightly LaunchAgent (`com.jkrumm.brain-backup`, 03:30) commits and pushes leftover Obsidian edits, `git diff` is the deliberate gate. **LiveSync/CouchDB is retired** (no remote configured, replication off since 2026-07-21); the vault lives on the mini only and is not cross-device synced. Direct-to-master; validated by `vault-lint`. |
 | `image-gen` | Personal image-generation studio (gpt-image family) — gateway runs on the mini; its refs are cached in `dotfiles-private/headless.refs`. |
 | `rb` | Personal single-user learning tracker — always-on Docker on the mini, Tailscale-only. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods` | Smaller personal apps / utilities. |
@@ -162,7 +162,7 @@ Other IuRoot repos exist but are rarely touched directly (`epos.crm-bridge`, `ep
 
 ### `~/Obsidian/Vault/` — cold backup (not the live vault)
 
-The live vault relocated into `~/SourceRoot/brain` (git-backed, LiveSync-synced, see the `brain` repo-map row and the `/brain` skill). `~/Obsidian/Vault` is retained only as a cold backup — leave it closed, do not read/write it. Tasks managed externally in TickTick.
+The live vault relocated into `~/SourceRoot/brain` (git-backed, on the mini only — see the `brain` repo-map row and the `/brain` skill). `~/Obsidian/Vault` is retained only as a cold backup — leave it closed, do not read/write it. Tasks managed externally in TickTick.
 
 ---
 
