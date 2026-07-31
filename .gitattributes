@@ -1,0 +1,9 @@
+# hooks/docker-makefile.ts carried a raw NUL byte as a token sentinel, which made
+# git classify it as binary — an 8KB change to the command guardrail rendered as
+# "Bin 14353 -> 22776 bytes" and was invisible to `git diff`, to GitHub's PR view,
+# and to any diff-based review. The byte is now written as the `\0` escape, but
+# git compares against the old blob too, so without this the next diff of that
+# file is still binary. Forcing a text diff makes the guardrail reviewable.
+*.ts diff
+*.js diff
+*.json diff
