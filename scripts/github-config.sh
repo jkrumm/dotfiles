@@ -132,11 +132,26 @@ echo ""
 # Resolve shared secrets from 1Password once, up front. The values land in a
 # tempfile cleaned up on exit. Skipping the whole feature is fine — branch
 # protection + merge settings still apply.
+#
+# Reads go through `secrets-run` when it exists (same shim as everywhere else:
+# passthrough to biometric `op` on the MacBook, offline cache on the headless mini,
+# where a bare `op read` would hang on a prompt nobody can answer). `secrets-run`
+# defaults to the tkrumm account, matching the `--account tkrumm` below. A ref that
+# is not in the mini's cache fails closed in ~0s and the loop reports it, which is
+# the wanted headless behaviour — this whole block is optional.
+op_read() {  # $1 = op:// ref
+  if command -v secrets-run >/dev/null 2>&1; then
+    secrets-run read "$1" </dev/null 2>/dev/null
+  else
+    op read "$1" --account tkrumm </dev/null 2>/dev/null
+  fi
+}
+
 SECRETS_TMP=""
 have_secrets=0
 if [ -f "$SECRETS_FILE" ]; then
-  if ! command -v op >/dev/null 2>&1; then
-    echo "  ⚠ op CLI not found — secret sync skipped"
+  if ! command -v secrets-run >/dev/null 2>&1 && ! command -v op >/dev/null 2>&1; then
+    echo "  ⚠ neither secrets-run nor op found — secret sync skipped"
     echo ""
   else
     secret_count=$(jq '.secrets | length' "$SECRETS_FILE")
@@ -147,7 +162,7 @@ if [ -f "$SECRETS_FILE" ]; then
 
       resolve_failed=0
       while IFS=$'\t' read -r name op_ref; do
-        if value=$(op read "$op_ref" --account tkrumm 2>/dev/null) && [ -n "$value" ]; then
+        if value=$(op_read "$op_ref") && [ -n "$value" ]; then
           printf '%s\t%s\n' "$name" "$value" >> "$SECRETS_TMP"
           echo "    ✓ $name ← $op_ref"
         else

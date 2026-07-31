@@ -19,7 +19,8 @@ ulimit -c 0 2>/dev/null || true          # no core dumps (they capture decrypted
 # it can't surface in `ps`/`/proc/<pid>/cmdline`), never a temp file, output
 # suppressed. Only the PUBLIC key (already in .sops.yaml, non-secret) is echoed.
 #
-# Runs on the mini (backend=cache), human present for the biometric `op` writes.
+# Runs on the mini (backend=cache), human present for the biometric `op` writes —
+# the preflight refuses rather than hangs when nobody is (see the op_signed_in guard).
 # See dotfiles-private/docs/runbook.md → "Rotation & recovery".
 
 PRIVATE_REPO="${SECRETS_PRIVATE_REPO:-$HOME/SourceRoot/dotfiles-private}"
@@ -85,8 +86,32 @@ die_post_reseed() {
 [[ -f "$SOPS_YAML" ]] || die "no .sops.yaml at $SOPS_YAML"
 [[ -f "$CACHE_FILE" ]] || die "no cache at $CACHE_FILE — run 'make secrets-seed' first"
 for t in age-keygen sops jq op git; do command -v "$t" >/dev/null 2>&1 || die "$t not installed"; done
-op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$OP_ACCOUNT" >/dev/null \
-  || die "1Password sign-in failed"
+
+# Rotation is biometric END TO END and can only run with a HUMAN AT THIS MACHINE:
+# step 4 writes the new private key to 1Password, and step 5's secrets-seed.sh does
+# its own `op signin` + one `op read` per ref. On a detached mini both hang forever
+# on a prompt nobody can answer — `op signin` is not a fix there, it IS the hang.
+# So probe non-blockingly (stdin closed, bounded when `timeout` exists) and refuse
+# with the right machine named, mirroring scripts/tailscale-acl-sync.sh's guard.
+op_signed_in() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 15 op whoami --account "$OP_ACCOUNT" </dev/null >/dev/null 2>&1
+  else
+    op whoami --account "$OP_ACCOUNT" </dev/null >/dev/null 2>&1
+  fi
+}
+if ! op_signed_in; then
+  die "1Password is not signed in on this host, and rotation cannot proceed without it.
+      Rotation is biometric end to end (the 1P key backup in step 4, then every
+      'op read' inside secrets-seed.sh) — so it needs a HUMAN AT THIS MACHINE.
+      Do NOT 'op signin' from a detached session: with no one to answer the prompt
+      it hangs rather than fails. Get an interactive session on the mini first
+      (Screen Sharing or an attached keyboard), then re-run:
+        make -C $DOTFILES_DIR secrets-rotate
+      There is no MacBook-only path today: the age key and the cache both live on
+      this machine, and only the seed half can be driven remotely.
+      See dotfiles-private/docs/runbook.md → 'Rotation & recovery'."
+fi
 
 old_pub="$(age-keygen -y "$AGE_KEY_FILE")" || die "cannot derive current public key"
 sops_pub="$(grep -Eo 'age1[0-9a-z]+' "$SOPS_YAML" | sort -u)"
@@ -132,7 +157,7 @@ mv "$newkey" "$AGE_KEY_FILE"   # from here on, the NEW key is live → die_post_
 # The key touches only the jq→op pipe; notesPlain carries it for recovery, the public-key
 # field is what the seed's recipient-pinning reads. Brief window with no 1P backup copy —
 # harmless: the key is on disk (new) plus the $stamp backup, so it is never lost.
-op item delete "$ITEM_TITLE" --vault Private --account "$OP_ACCOUNT" >/dev/null 2>&1 || true
+op item delete "$ITEM_TITLE" --vault Private --account "$OP_ACCOUNT" </dev/null >/dev/null 2>&1 || true
 jq -n --rawfile note "$AGE_KEY_FILE" --arg pub "$new_pub" --arg title "$ITEM_TITLE" \
   '{title:$title, category:"SECURE_NOTE", vault:{name:"Private"},
     fields:[{id:"notesPlain",type:"STRING",purpose:"NOTES",label:"notesPlain",value:$note},

@@ -35,9 +35,13 @@ function contextFor(backend: string): string | null {
         "non-interactive tool call; have the user run it with the `!` prefix. Which refs the",
         "mini may hold is `dotfiles-private/headless.refs`. See ~/.claude/CLAUDE.md → \"Headless secrets\".",
         "Outbound access from this machine: `ssh homelab` / `ssh vps` are Tailscale SSH —",
-        "keyless, headless-safe, use them freely; GitHub goes over HTTPS via the `gh` keyring",
-        "token (~/.gitconfig-headless). NEVER rely on the 1Password SSH agent here — it hangs",
-        "like `op` does. Full model: dotfiles-private/docs/access-model.md.",
+        "keyless, headless-safe, use them freely; GitHub goes over HTTPS via",
+        "`~/.gitconfig-headless`, whose credential helper is",
+        "`scripts/git-credential-secrets-cache` resolving `op://mini/github/token` from the",
+        "same cache (NOT the `gh` keyring token — that path was retired 2026-07-26 because",
+        "`gh auth git-credential get` exits 0 with an empty body on expiry). NEVER rely on the",
+        "1Password SSH agent here — it hangs like `op` does. Full model:",
+        "dotfiles-private/docs/access-model.md.",
       ].join(" ");
     case "op":
       return [

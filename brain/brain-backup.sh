@@ -6,13 +6,17 @@
 # dirty, stage everything (git add -A respects .gitignore, so secrets like
 # _device-settings and .obsidian/plugins/*/data.json stay out), ask claude_iu
 # (Haiku, IU per-token — off Max quota) to write a one-line commit message
-# from the diff, commit straight to master, and push. LiveSync/CouchDB already
-# mirrors raw content to homelab in near-real-time; this is what makes GitHub
-# an actually-current offsite copy instead of a stale one.
+# from the diff, commit straight to master, and push. With LiveSync retired
+# (every replication trigger off, CouchDB not written since 2026-07-21, and no
+# second device holding a checkout), nothing else mirrors this vault — the
+# GitHub copy this pushes is the only one there is.
 set -euo pipefail
 
 # launchd hands agents a minimal PATH — make sure git/security resolve either way.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# ~/.local/bin is where `claude` and `secrets-run` live (neither is Homebrew-managed);
+# without it the claude call below silently missed and every run committed the literal
+# fallback message instead of a generated one.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
 VAULT="${BRAIN_VAULT:-$HOME/SourceRoot/brain}"
 cd "$VAULT" 2>/dev/null || { echo "brain-backup: vault not found at $VAULT — skipping"; exit 0; }
@@ -34,8 +38,26 @@ fi
 FALLBACK_MSG="chore(brain): nightly vault sync"
 MSG=""
 
-KEY="$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null || true)"
-BASE="$(security find-generic-password -s claude-sdk-base-url -w 2>/dev/null || true)"
+# The login keychain is unreadable to a launchd job whose GUI session is locked or
+# absent, and `security` then just fails — which used to be swallowed into an empty
+# credential and a silent fallback message. Fall back to `secrets-run read` on the
+# same op:// refs `make setup` cached these entries from (cache backend on the mini:
+# no prompt, no network), and say so on stderr when neither works. Missing credentials
+# stay non-fatal here on purpose: a generated commit message is a nicety, and refusing
+# to back the vault up over it would be the worse failure.
+keychain_or_cache() {
+  local v
+  v=$(security find-generic-password -s "$1" -w 2>/dev/null) && [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  command -v secrets-run >/dev/null 2>&1 || return 0
+  v=$(secrets-run read "$2" 2>/dev/null) && printf '%s' "$v"
+}
+
+KEY="$(keychain_or_cache claude-sdk-api-key op://common/anthropic/API_KEY || true)"
+BASE="$(keychain_or_cache claude-sdk-base-url op://common/anthropic/BASE_URL || true)"
+
+if [ -z "$KEY" ] || [ -z "$BASE" ]; then
+  echo "brain-backup: IU credential unresolvable (Keychain claude-sdk-* and secrets-run both failed) — using the fallback commit message" >&2
+fi
 
 if [ -n "$KEY" ] && [ -n "$BASE" ]; then
   PROMPT="Write ONE git commit message line, conventional-commits format
@@ -54,7 +76,12 @@ $(git diff --cached | head -c 20000)"
     | tail -1 | tr -d '\r' || true)"
 fi
 
-[ -n "$MSG" ] || MSG="$FALLBACK_MSG"
+if [ -z "$MSG" ]; then
+  if [ -n "$KEY" ] && [ -n "$BASE" ]; then
+    echo "brain-backup: claude produced no message (is 'claude' on PATH?) — using the fallback" >&2
+  fi
+  MSG="$FALLBACK_MSG"
+fi
 
 git commit -q -m "$MSG"
 git push -q origin master
