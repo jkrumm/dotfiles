@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.obsidian-autostart</string>
+  <!-- Start Obsidian at login on the dev host. It is a HARD agent dependency,
+       not a convenience app: `/brain` and Hermes's obsidian skill both reach
+       the vault through obsidian-cli (/usr/local/bin/obsidian → the app
+       bundle), and that CLI is a CLIENT of the running app, not a standalone
+       tool — it talks to ~/.obsidian-cli.sock and answers
+       "The CLI is unable to find Obsidian. Please make sure Obsidian is running
+       and try again." (rc=1) when the app is down. Verified 2026-07-31 by
+       running it against an empty HOME: even `obsidian version` fails. So a
+       closed Obsidian is a closed agent door, full stop.
+
+       It was not a login item at all — the running instance had been started by
+       hand on Jul 27, 2.5 days after the previous boot, so the next reboot
+       would have taken the vault door down with nothing reporting it. -->
+
+  <!-- `open -a`, NOT the binary directly, and NO KeepAlive — both deliberate.
+       An agent that execs Obsidian's binary bypasses LaunchServices, and with
+       KeepAlive it respawns the app the instant a human quits it, which makes
+       the machine unusable as a workstation. `open` hands off to
+       LaunchServices and exits immediately, so launchd sees a one-shot job that
+       ran and finished. Idempotent: if Obsidian is already up, `open` just
+       focuses it. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-a</string>
+    <string>Obsidian</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+
+  <!-- ~/Library/Logs, not /tmp — /tmp is world-writable and macOS's periodic
+       cleanup deletes files there untouched for 3+ days. Same rule as every
+       other agent this repo installs. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/obsidian-autostart.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/obsidian-autostart.log</string>
+</dict>
+</plist>

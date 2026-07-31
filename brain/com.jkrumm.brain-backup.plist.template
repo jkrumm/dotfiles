@@ -5,8 +5,9 @@
   <key>Label</key><string>com.jkrumm.brain-backup</string>
   <!-- Nightly auto-commit + push of the brain vault to GitHub. Backstop for
        direct Obsidian edits never committed during a Claude Code session.
-       LiveSync is the continuous cross-device sync; this is what keeps the
-       GitHub copy actually current. -->
+       With LiveSync retired (every replication trigger off, and no second
+       device holding a checkout), this push is not a backstop to a sync
+       layer — it IS the vault's only durability. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/SourceRoot/dotfiles/brain/brain-backup.sh</string>
@@ -18,7 +19,13 @@
   </dict>
   <!-- Don't back up on load/login — only at the scheduled time. -->
   <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>/tmp/brain-backup.log</string>
-  <key>StandardErrorPath</key><string>/tmp/brain-backup.log</string>
+  <!-- ~/Library/Logs, not /tmp: this file is the ONLY record that the nightly
+       backup ran at all, and macOS's periodic cleanup sweeps /tmp files
+       untouched for 3+ days. A calendar-driven agent re-creates its file each
+       spawn so it never writes into an unlinked inode the way the KeepAlive
+       agents do — but the history is deleted out from under it, which for an
+       audit log is the same loss. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/brain-backup.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/brain-backup.log</string>
 </dict>
 </plist>

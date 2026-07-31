@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Homebrew's generated caddy LaunchDaemon, with ONE change: the program is
+	     the wait-for-tailnet wrapper instead of `caddy run` directly.
+
+	     WHY. This is a SYSTEM daemon and starts pre-login. The tailnet address
+	     that Caddyfile.d/tailnet.caddy binds in two site blocks is created on a
+	     utun interface by the Tailscale GUI app, which starts AT login. Binding
+	     an address the kernel does not have yet returns EADDRNOTAVAIL and Caddy
+	     aborts the WHOLE config — every `.test` site and metabase.iu-aws.de go
+	     down with the tailnet blocks. Bounded, not permanent: launchd retries a
+	     KeepAlive job on a 10s throttle, so it self-heals ~10s after the address
+	     appears. The wrapper removes the race rather than the outage.
+
+	     The wrapper is installed root-owned at /usr/local/libexec, NOT run out
+	     of the dotfiles checkout: a root daemon exec'ing a user-writable file is
+	     a privilege-escalation path, and this file already runs as root.
+
+	     BREW REGENERATES THIS PLIST on `brew services restart caddy` and on
+	     every `brew upgrade caddy` — the same trap as the caddy DNS module
+	     (see `make caddy-dns-build`), and it reverts silently. Re-run
+	     `make caddy-boot-order` after either. -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/opt/homebrew/var/lib</string>
+		<key>XDG_DATA_HOME</key>
+		<string>/opt/homebrew/var/lib</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>homebrew.mxcl.caddy</string>
+	<key>LimitLoadToSessionType</key>
+	<array>
+		<string>Aqua</string>
+		<string>Background</string>
+		<string>LoginWindow</string>
+		<string>StandardIO</string>
+		<string>System</string>
+	</array>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__WRAPPER__</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/opt/homebrew/var/log/caddy.log</string>
+	<key>StandardOutPath</key>
+	<string>/opt/homebrew/var/log/caddy.log</string>
+</dict>
+</plist>

@@ -713,7 +713,7 @@ batt-setup:
 	@sleep 1
 	@$(BATT) limit $(LIMIT) >/dev/null 2>&1 \
 		&& echo "    ✓ daemon running, charge limit set to $(LIMIT)%" \
-		|| echo "    ✗ failed to set limit — check the daemon (/tmp/batt.log)"
+		|| echo "    ✗ failed to set limit — check the daemon ($$(brew --prefix)/var/log/batt.log)"
 	@# Daily reset agent: any boost (e.g. 100% via Raycast) expires next morning (09:00 → 80%).
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.batt-reset" PLIST_DIR="$(DOTFILES_DIR)/battery"
@@ -734,16 +734,18 @@ batt-status:
 # ~/SourceRoot/brain nightly auto-commit + push to GitHub (03:30). Backstop for
 # direct Obsidian edits never committed during a Claude Code session — commits
 # any dirty working tree straight to master (claude_iu/Haiku writes the commit
-# message) and pushes. LiveSync stays the continuous cross-device sync; this
-# is what keeps GitHub actually current. Self-guards on a missing vault; the
-# script's `git add -A` respects .gitignore, so secrets stay out.
+# message) and pushes. With LiveSync retired (every replication trigger off, no
+# second device holding a checkout), git IS the vault's only durability — this
+# nightly push is not a backstop to a sync layer, it is the sync layer. Self-
+# guards on a missing vault; the script's `git add -A` respects .gitignore, so
+# secrets stay out.
 .PHONY: brain-backup-setup brain-backup-teardown
 brain-backup-setup:
 	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
 		echo "  brain-backup: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-backup" PLIST_DIR="$(DOTFILES_DIR)/brain"
-	@echo "    ↳ nightly at 03:30 → commit + push to origin/master; log: /tmp/brain-backup.log"
+	@echo "    ↳ nightly at 03:30 → commit + push to origin/master; log: ~/Library/Logs/brain-backup.log"
 brain-backup-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-backup.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -1026,6 +1028,7 @@ _setup-colima:
 			&& echo "    ✓ colima service started (auto-starts at login)" \
 			|| echo "    ✗ colima service failed — run: brew services start colima"; \
 	fi
+	@$(MAKE) --no-print-directory _colima-supervise
 	@# Pin the docker CLI to the colima context (persists across reboots).
 	@tmp=$$(mktemp); jq '.currentContext = "colima"' "$(HOME)/.docker/config.json" > "$$tmp" \
 		&& mv "$$tmp" "$(HOME)/.docker/config.json"
@@ -1360,6 +1363,7 @@ github-config-dry:
 .PHONY: colima-start
 colima-start:
 	@brew services start colima
+	@$(MAKE) --no-print-directory _colima-supervise
 
 .PHONY: colima-stop
 colima-stop:
@@ -1374,11 +1378,77 @@ colima-restart:
 			"$(HOME)/.colima/default/colima.yaml"; \
 	fi
 	@brew services restart colima
+	@$(MAKE) --no-print-directory _colima-supervise
+
+# Converge homebrew.mxcl.colima.plist onto the supervised shape. Called after
+# every brew-services operation above AND from _setup-colima, because BREW
+# REGENERATES THAT PLIST from the formula's `service` block on every
+# start/restart and on every upgrade — a hand-edit alone reverts silently, with
+# nothing in any log.
+#
+# Two changes, both load-bearing:
+#
+#   KeepAlive  { SuccessfulExit => true }  ->  true
+#       Homebrew's version restarts the job only on a ZERO exit. `colima start
+#       -f` runs the VM in the foreground, so exit 0 means "shut down cleanly"
+#       and non-zero means "failed to start" — the condition is inverted
+#       against what you want. A dirty Lima image after an unclean shutdown
+#       therefore leaves Docker down until a human logs in, with nothing
+#       checking `docker info`. `{ Crashed => true }` does NOT fix it: launchd's
+#       Crashed means death by SIGNAL, not a non-zero exit.
+#
+#   ProgramArguments  colima start -f  ->  colima/colima-start.sh
+#       Bare KeepAlive on its own turns a persistently broken image into a full
+#       Lima VM boot attempt every 10s forever. The wrapper bounds that to N
+#       fast attempts then a cool-off, and never latches off permanently.
+#
+# Deliberately does NOT kickstart. Reloading bounces the VM and every container
+# on it, and this target is reached from `make setup` — a setup run that
+# silently takes Docker down for a minute is the surprise makefile-conventions.md
+# exists to prevent. The file is always correct after this; it takes effect at
+# the next start, which for a boot-path fix is exactly when it matters.
+# `make colima-status` reports whether the running job is the supervised one.
+.PHONY: _colima-supervise
+_colima-supervise:
+	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.colima.plist"; \
+	WRAP="$(DOTFILES_DIR)/colima/colima-start.sh"; \
+	if [ ! -f "$$PLIST" ]; then \
+		echo "    · colima plist absent — nothing to supervise"; \
+	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ] \
+	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ]; then \
+		echo "    · colima supervisor (ok)"; \
+	else \
+		chmod +x "$$WRAP"; \
+		/usr/libexec/PlistBuddy -c 'Delete :KeepAlive' "$$PLIST" >/dev/null 2>&1 || true; \
+		/usr/libexec/PlistBuddy -c 'Add :KeepAlive bool true' "$$PLIST" >/dev/null; \
+		/usr/libexec/PlistBuddy -c 'Delete :ProgramArguments' "$$PLIST" >/dev/null 2>&1 || true; \
+		/usr/libexec/PlistBuddy -c 'Add :ProgramArguments array' "$$PLIST" >/dev/null; \
+		/usr/libexec/PlistBuddy -c "Add :ProgramArguments:0 string $$WRAP" "$$PLIST" >/dev/null; \
+		plutil -lint "$$PLIST" >/dev/null || { echo "  ✗ colima plist is malformed after edit"; exit 1; }; \
+		echo "    ✓ colima supervisor pinned (bare KeepAlive + bounded-retry wrapper)"; \
+		echo "      ↳ active at next login/reboot, or now with: brew services restart colima && make _colima-supervise"; \
+	fi
 
 .PHONY: colima-status
 colima-status:
 	@brew services list | grep -E '^colima' || echo "  colima service: not registered"
 	@colima status
+	@# Assert the boot path, not just the running VM. `brew upgrade colima` and
+	@# every `brew services start/restart` rewrite the plist back to Homebrew's
+	@# inverted `KeepAlive { SuccessfulExit = true }`, and NOTHING errors when
+	@# that happens — the VM keeps running fine and only the next failed start
+	@# goes unretried. See _colima-supervise.
+	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.colima.plist"; \
+	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/colima/colima-start.sh" ] \
+	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
+		echo "  ✓ boot path supervised (bare KeepAlive + bounded-retry wrapper)"; \
+	else \
+		echo "  ✗ boot path NOT supervised — brew regenerated the plist; run: make _colima-supervise"; \
+	fi
+	@FAILS="$(HOME)/.local/state/colima-supervisor/consecutive-failures"; \
+	[ -f "$$FAILS" ] && [ "$$(cat "$$FAILS")" != "0" ] \
+		&& echo "  ! $$(cat "$$FAILS") consecutive start failures recorded — see /opt/homebrew/var/log/colima.log" \
+		|| true
 
 # Migrate off OrbStack → Colima. Guarded: refuses unless Colima is already running (so
 # Docker never goes down), and aborts if OrbStack still holds containers (override with
@@ -1711,7 +1781,17 @@ litellm-restart:
 
 .PHONY: litellm-logs
 litellm-logs:
-	@tail -f /tmp/litellm.log
+	@# BOTH streams: the plist splits stdout/stderr and litellm writes most of
+	@# what you want to read to stderr, so tailing only .log shows a near-empty
+	@# file. Missing paths are filtered out first — `tail -f` on a path that does
+	@# not exist is a hard error, which is exactly how this target broke when the
+	@# logs moved out of /tmp into ~/Library/Logs (see scripts/log-rotate.sh).
+	@set -- $$(ls "$(HOME)/Library/Logs/litellm.log" "$(HOME)/Library/Logs/litellm.err" 2>/dev/null); \
+	if [ "$$#" -eq 0 ]; then \
+		echo "  no litellm logs yet at $(HOME)/Library/Logs/litellm.{log,err}"; \
+	else \
+		tail -f "$$@"; \
+	fi
 
 # ============================================================================
 # usage-tracker — local SQLite token/cost telemetry across all AI tools
@@ -1845,6 +1925,114 @@ secrets-freshness-teardown:
 .PHONY: secrets-freshness-check
 secrets-freshness-check:
 	@bash $(DOTFILES_DIR)/scripts/secrets-freshness-check.sh
+
+# Hourly copytruncate rotation for the LaunchAgent logs this repo owns. Needed
+# because moving those logs out of /tmp removed the only thing that had ever
+# bounded them — macOS's periodic cleanup, which DELETES rather than truncates
+# and left every KeepAlive agent writing into an unlinked inode.
+# /tmp/walkingpad.err was 35 MB with nothing rotating it. newsyslog.d is not an
+# option: it needs root, and this machine's root password is deliberately
+# MacBook-only. See scripts/log-rotate.sh for the copytruncate rationale.
+.PHONY: log-rotate-setup log-rotate-teardown log-rotate-check
+log-rotate-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.log-rotate" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ hourly → copytruncate any owned log past 16 MB, keep one .1 generation"
+log-rotate-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.log-rotate.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ log-rotate torn down (unloaded + plist removed)"
+log-rotate-check:
+	@bash $(DOTFILES_DIR)/scripts/log-rotate.sh
+
+# Order caddy's boot behind the tailnet address it binds. NEEDS SUDO — caddy is
+# a SYSTEM LaunchDaemon in /Library, so this cannot run unattended on the mini
+# (the root password is deliberately MacBook-only). Drive it from the MacBook:
+#
+#   ROOT_PW=$$(op read "op://Private/mac-mini-server/password" --account tkrumm) && \
+#     ssh mini "echo '$$ROOT_PW' | sudo -S -v && cd ~/SourceRoot/dotfiles && make caddy-boot-order"
+#
+# The problem it fixes, stated without inflation: caddy starts pre-login, the
+# tailnet utun address is created at login by the Tailscale GUI app, and binding
+# a not-yet-existent address makes Caddy abort the ENTIRE config — `.test` and
+# metabase.iu-aws.de included. launchd's 10s KeepAlive retry means it self-heals
+# ~10s later, so this is a bounded outage on every boot, not a dead machine.
+# See caddy/caddy-wait-for-tailnet.sh.
+#
+# Re-run after any `brew upgrade caddy` or `brew services restart caddy` — brew
+# regenerates the daemon plist and the change reverts SILENTLY, exactly like the
+# Cloudflare DNS module that `make caddy-dns-build` reinstalls.
+.PHONY: caddy-boot-order
+caddy-boot-order:
+	@WRAPPER=/usr/local/libexec/caddy-wait-for-tailnet.sh; \
+	SRC="$(DOTFILES_DIR)/caddy/caddy-wait-for-tailnet.sh"; \
+	DAEMON=/Library/LaunchDaemons/homebrew.mxcl.caddy.plist; \
+	[ -f "$$DAEMON" ] || { echo "  ✗ $$DAEMON not found — is caddy installed as a brew service?"; exit 1; }; \
+	sudo mkdir -p /usr/local/libexec; \
+	sudo install -o root -g wheel -m 0755 "$$SRC" "$$WRAPPER" \
+		|| { echo "  ✗ could not install the wrapper (sudo)"; exit 1; }; \
+	echo "  ✓ wrapper installed root-owned at $$WRAPPER"; \
+	TMP=$$(mktemp); sed "s|__WRAPPER__|$$WRAPPER|g" \
+		"$(DOTFILES_DIR)/caddy/homebrew.mxcl.caddy.plist.template" > "$$TMP"; \
+	plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "  ✗ rendered plist is malformed"; exit 1; }; \
+	if sudo cmp -s "$$TMP" "$$DAEMON" 2>/dev/null; then \
+		rm -f "$$TMP"; echo "  · caddy daemon already ordered behind the tailnet address"; \
+	else \
+		sudo cp "$$TMP" "$$DAEMON" && sudo chown root:wheel "$$DAEMON" && sudo chmod 644 "$$DAEMON"; \
+		rm -f "$$TMP"; \
+		sudo launchctl bootout system "$$DAEMON" 2>/dev/null || true; \
+		sudo launchctl bootstrap system "$$DAEMON" \
+			&& echo "  ✓ caddy daemon re-bootstrapped through the wrapper" \
+			|| $(MAKE) --no-print-directory _daemon-running-or-fail LABEL=homebrew.mxcl.caddy; \
+	fi; \
+	echo "  ↳ verify: sudo launchctl print system/homebrew.mxcl.caddy | grep -E 'state|program'"; \
+	echo "    and after any brew upgrade of caddy, re-run this AND make caddy-dns-build"
+
+# Start Obsidian at login on the dev host. Not a nicety: `/brain` and Hermes's
+# obsidian skill reach the vault through obsidian-cli, and that CLI is a CLIENT
+# of the running app — it talks to ~/.obsidian-cli.sock and exits 1 with "make
+# sure Obsidian is running" when the app is down, `obsidian version` included
+# (verified 2026-07-31). A closed Obsidian is therefore a closed agent door —
+# yet Obsidian was not a login item at all, and the running instance had been
+# started by hand 2.5 days after the last boot.
+# See obsidian/com.jkrumm.obsidian-autostart.plist.template for why `open -a`
+# and no KeepAlive.
+#
+# Dev-host gated on the `cache` backend marker, the same signal collie-setup and
+# caddy-dns-build use — the MacBook opens Obsidian when a human wants it.
+#
+# The WHOLE recipe is one continued shell line, deliberately. `exit 0` in a make
+# recipe ends only that line's shell and make happily runs the next one, so a
+# gate written as its own line does not gate anything (collie-setup has exactly
+# that latent bug — do not copy its shape here).
+.PHONY: obsidian-autostart obsidian-autostart-teardown
+obsidian-autostart:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — obsidian-autostart skipped"; \
+	elif [ ! -d "/Applications/Obsidian.app" ]; then \
+		echo "  ✗ Obsidian not installed at /Applications/Obsidian.app"; exit 1; \
+	else \
+		mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+		$(MAKE) --no-print-directory _render-plists \
+			PLISTS="com.jkrumm.obsidian-autostart" PLIST_DIR="$(DOTFILES_DIR)/obsidian"; \
+		if pgrep -x Obsidian >/dev/null 2>&1; then \
+			echo "    ✓ Obsidian running (pid $$(pgrep -x Obsidian | head -1)) — will also start at next login"; \
+		else \
+			echo "    ! Obsidian not running right now — 'open -a Obsidian' or reboot to verify"; \
+		fi; \
+		if [ -x /usr/local/bin/obsidian ]; then \
+			echo "    · obsidian-cli present (/usr/local/bin/obsidian) — the /brain agent door"; \
+		else \
+			echo "    ! obsidian-cli missing — /brain falls back to filesystem access"; \
+		fi; \
+	fi
+obsidian-autostart-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.obsidian-autostart.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ obsidian-autostart torn down (unloaded + plist removed; the app is left running)"
 
 # herdr wiring. Two halves with different scopes:
 #   - the Claude Code agent-state hook, which makes a pane report real agent
@@ -2153,7 +2341,7 @@ help:
 	@echo ""
 	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
 	@echo "  make litellm-restart  Restart the LiteLLM bridge"
-	@echo "  make litellm-logs     Tail /tmp/litellm.log"
+	@echo "  make litellm-logs     Tail ~/Library/Logs/litellm.{log,err}"
 	@echo ""
 	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (reads dotfiles-private/headless.refs)"
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
@@ -2166,8 +2354,13 @@ help:
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
+	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
+	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
+	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
+	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo ""
 	@echo "  make caddy-dns-build            Dev-host only: build Caddy w/ Cloudflare DNS module (needed for the clean https://<app>.\$$DEV_DOMAIN door; re-run after any brew upgrade of caddy)"
+	@echo "  make caddy-boot-order           NEEDS SUDO: order the caddy daemon behind the tailnet address it binds (re-run after any brew upgrade of caddy)"
 	@echo ""
 	@echo "  make collie-setup       Dev-host only: install the phone control-surface bridge as a LaunchAgent"
 	@echo "  make collie-status      Show LaunchAgent + bridge + tailscale serve state (read-only)"

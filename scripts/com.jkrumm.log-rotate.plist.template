@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.log-rotate</string>
+  <!-- Hourly copytruncate rotation for the LaunchAgent logs this repo owns.
+       The rotation exists because moving those logs out of /tmp (WP9) removed
+       the only thing that had ever bounded them: macOS's periodic cleanup,
+       which does not truncate but DELETES, leaving KeepAlive agents writing
+       into unlinked inodes. /tmp/walkingpad.err was 35 MB with no rotation at
+       all. See scripts/log-rotate.sh for why copytruncate rather than rename,
+       and why not newsyslog (it needs root; this machine's root password is
+       deliberately MacBook-only). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/SourceRoot/dotfiles/scripts/log-rotate.sh</string>
+  </array>
+  <!-- Hourly, not daily. A single `stat` per declared file costs nothing, and
+       the cadence is what bounds a crash-looping agent to one hour's output
+       above the cap instead of a day's. -->
+  <key>StartInterval</key><integer>3600</integer>
+  <!-- Fire on load so a reboot bounds any log that grew while the machine was
+       down or during a long uptime before the agent was installed. -->
+  <key>RunAtLoad</key><true/>
+  <!-- Its own log is deliberately NOT in the rotated set. One summary line per
+       run at ~90 bytes hourly is ~800 KB/year, so it stays two orders of
+       magnitude under the 16 MB cap for the life of the machine — and keeping
+       it out means the script never truncates the file it is writing to. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/log-rotate.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/log-rotate.log</string>
+</dict>
+</plist>
