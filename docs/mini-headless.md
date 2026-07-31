@@ -199,12 +199,41 @@ and a power-off plus transport destroys it.
 | Physical possession | Power button gets an attacker a lock screen | Power button gets an attacker a logged-in desktop, and `~/.config/sops/age/keys.txt` |
 | WP4 (Max auth off keychain) | Still worth doing, no longer a gate | Mandatory before the switch |
 
-Recommendation: **do not disable FileVault yet.** With a UPS converting most
-outages into non-events, the residual case is a rare long outage that needs a
-human on the mini's LAN — which is a much smaller cost than it looked in §3, and
-it is reversible in either direction. Revisit only if L3.2 shows Screen Sharing
-does *not* work at the login window, which would leave the machine unlockable
-but unusable remotely.
+**Decision, taken 2026-07-31 after one reversal: disable FileVault (WP6).** The
+keep-FileVault column was chosen first and then rejected within the hour, once
+the second row of that table was followed through. The new LAN has no homelab
+and no other always-on tailnet node, so "reachable only from the mini's own LAN"
+means *nobody* can reach it while the owner is away.
+
+The deciding argument is that **unlock is not login**, so no amount of remote
+access makes the keep-FileVault path automatic. Even with a jump node on that
+LAN it is two manual steps after every power cut, forever. Only auto-login
+removes the human from the loop, and it happens to delete the need for the jump
+node and the availability case for the UPS at the same time.
+
+Two corrections this reversal forces on the rest of the plan:
+
+- **WP4 goes back to mandatory, and back to being a hard gate before WP6** —
+  §3's original ordering rule, restored. Auto-login does not unlock the login
+  keychain.
+- **`fdesetup authrestart` is not a fallback for any of this.** Single-use on
+  Apple Silicon, and a power-off plus transport destroys the stored key.
+
+What is *not* thrown away: the §3b finding stands on its own merits and the
+`apple_ssh_and_filevault` path remains the fallback if FileVault is ever turned
+back on. L3.2's logout test is still worth doing before the move for exactly
+that reason — it costs minutes and it is the only thing that tells you whether
+Screen Sharing answers at the login window.
+
+**Open question this raised, worth testing before buying a UPS.** `pmset
+autorestart` means "restart after power *failure*"; a UPS-triggered graceful
+shutdown is a deliberate off, and Macs generally stay off when mains returns
+after one. If that holds here, a UPS would convert "long outage → machine
+reboots itself" into "long outage → machine stays off" — making availability
+worse for exactly the case it was bought for, while still earning its keep on
+APFS and Lima-image integrity. **Unverified on this hardware.** Test with
+`pmset -g ps` and a deliberate `shutdown -h` + power-cycle before committing to
+halt thresholds (WP16).
 
 ---
 
