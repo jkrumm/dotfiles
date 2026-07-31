@@ -166,7 +166,10 @@ describe("the management form is classified on the verb, not the object", () => 
 
   test.each([
     "docker image rm alpine",
-    "docker image prune -f",
+    // `docker image prune -f` used to sit here. It moved to the host-daemon
+    // prune carve-out below — reclaiming dangling layers is daemon maintenance
+    // with no project orchestration to bypass. `docker volume prune` and
+    // `docker system prune` stay blocked and are asserted in both places.
     "docker container rm -f web",
     "docker container stop web",
     "docker volume prune",
@@ -207,6 +210,40 @@ describe("docker build --check is a linter, not a build", () => {
 
   test("a build-arg whose value merely contains --check does not open the gate", () => {
     expect(shouldBlock("docker build --build-arg MODE=--check .")).toBe(true);
+  });
+});
+
+describe("host-level prune is daemon maintenance, not project orchestration", () => {
+  test.each([
+    "docker builder prune -f",
+    "docker image prune -a -f",
+    "docker container prune -f",
+    "docker buildx prune -f",
+    "cd ~/SourceRoot/homelab && docker image prune -a -f",
+    // Already allowed as a read-only verb; pinned so the carve-out cannot regress it.
+    "docker system df",
+  ])("allows: %s", (cmd) => {
+    expect(shouldBlock(cmd)).toBe(false);
+  });
+
+  test.each([
+    // The one prune that destroys data: idss-mysql plus 11 active volumes.
+    "docker volume prune",
+    "docker volume prune -f",
+    // A compound that sweeps several objects and grows --volumes — it would
+    // smuggle the volume case back in under a different spelling.
+    "docker system prune",
+    "docker system prune -a --volumes",
+    // prune is only ever a verb; as an object it is not a thing, and as an
+    // image name it must not open the gate.
+    "docker prune",
+    "docker run prune",
+  ])("still blocks: %s", (cmd) => {
+    expect(shouldBlock(cmd)).toBe(true);
+  });
+
+  test("prune must be the verb, not a later argument", () => {
+    expect(shouldBlock("docker image build --tag prune .")).toBe(true);
   });
 });
 

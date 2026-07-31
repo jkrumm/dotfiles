@@ -430,6 +430,35 @@ function isLintOnlyBuild({ subcommand, args }: DockerInvocation): boolean {
 }
 
 /**
+ * Objects whose `prune` reclaims host disk and destroys nothing a project owns.
+ *
+ * `volume` is deliberately absent and must stay absent: eleven volumes are
+ * active on this machine and `idss-mysql` holds real data, so `docker volume
+ * prune` is the one prune that destroys work rather than reclaiming waste.
+ * `system` is absent too — it is a compound that sweeps several objects at once
+ * and grows `--volumes`, so allowing it would smuggle the volume case back in
+ * under a different spelling.
+ */
+const PRUNABLE_OBJECTS = new Set(["image", "container", "builder", "buildx"]);
+
+/**
+ * `docker image|container|builder prune` is host-level daemon maintenance: it
+ * deletes dangling layers and stale build cache belonging to the *daemon*, not
+ * to any project. There is no secret injection, deploy order, or flag set for a
+ * Makefile target to encode, and no repo here ships a target for it — the same
+ * reasoning that already lets `ps`/`logs`/`inspect` through.
+ *
+ * Blocking it cost something real: 84 G of `~/.colima` on a host at 70% disk,
+ * with the only remedy being a hand-run command outside the hook's view. The
+ * carve-out is by *verb after object*, never a blanket `prune`, so
+ * `docker volume prune` stays blocked — see PRUNABLE_OBJECTS.
+ */
+function isHostDaemonPrune({ subcommand, args }: DockerInvocation): boolean {
+  if (subcommand === null || !PRUNABLE_OBJECTS.has(subcommand)) return false;
+  return args[0] === "prune";
+}
+
+/**
  * Docker spells most subcommands two ways: the terse alias (`docker inspect`)
  * and the management form (`docker image inspect`). Matching only the first
  * non-flag token saw the object noun, not the verb, so every management-form
@@ -533,6 +562,7 @@ export function shouldBlock(command: string): boolean {
     if (READ_ONLY.has(invocation.subcommand)) continue;
     if (isReadOnlyManagement(invocation)) continue;
     if (isLintOnlyBuild(invocation)) continue;
+    if (isHostDaemonPrune(invocation)) continue;
     return true;
   }
   return false;
