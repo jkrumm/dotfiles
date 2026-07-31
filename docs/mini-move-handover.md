@@ -4,6 +4,11 @@ Written 2026-07-31. Supersedes the FileVault half of `mini-headless.md` §3.
 Companions: `mini-headless.md` (reasoning; **§3b is new and load-bearing**),
 `mini-headless-checklist.md` (the human lanes).
 
+> **To run it, use `macbook-handover.md`.** This file holds the decision and its
+> reasoning; that one sequences the remaining work into six ordered phases with the
+> WP4 gate in the right place, and is written to be pasted whole as a prompt to a
+> Claude session on the MacBook.
+
 ## The decision, and the reversal behind it
 
 **Disable FileVault, enable auto-login (WP6).** This was decided *against* first
@@ -184,7 +189,7 @@ drop — that is success — then log in over Screen Sharing.
 
 | Question | Status |
 |-|-|
-| Does a UPS make long outages *worse*? `pmset autorestart` means "restart after power **failure**"; a UPS-triggered graceful shutdown is a deliberate off, and Macs generally stay off when mains returns after one. | **Unverified on this hardware.** Test before buying (WP16). If true, the UPS is an integrity purchase, not an availability one. |
+| ~~Does a UPS make long outages *worse*?~~ | **CLOSED 2026-07-31 — not buying one.** Owner's call, so the question is moot rather than answered; nothing was tested on this hardware. Availability is unaffected (WP6 auto-login + WP5 `autorestart 1` is the mechanism, never the UPS). What is given up is integrity on a hard cut, which makes `colima/colima-start.sh`'s bounded-retry wrapper the only guard against a dirty Lima image. If a UPS is ever bought, run that test before setting any halt thresholds. |
 | Should durable agents auto-restart after reboot? | After WP4 a launchd-supervised `claude --bg` no longer needs the GUI session, which makes "yes" cheap. Decide explicitly. |
 | The `:8443` Funnel is public and unauthenticated | Inspect the bundle, then most likely delete. |
 | GitHub PAT has no expiry and `Contents: read+write` on all repos | Reduce scope rather than adding an expiry. |

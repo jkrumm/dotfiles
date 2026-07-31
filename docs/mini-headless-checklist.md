@@ -4,6 +4,11 @@ Companion to `mini-headless.md`, which holds the reasoning. This file holds only
 steps a human must perform, in order, because they need sudo, biometric approval, or a
 GUI dialog. Agent-executable work is not listed here.
 
+> **To actually run the detach, use `macbook-handover.md`.** It sequences what is left
+> into six ordered phases with the WP4 gate in the right place, and is written to be
+> pasted whole as a prompt to a Claude session on the MacBook. This file stays the
+> reference for *why* each step exists and what it touches.
+
 State as of 2026-07-31: WP3 executed (two cores and 9.8 GB of swap reclaimed, 9 orphan
 herdr servers reaped). Lane 1 packages executed by agents — see the git log.
 
@@ -402,42 +407,50 @@ none of it can be done after the screen comes off.
 
 This one is **pre-detach only** — it cannot be done headlessly at all.
 
-### L3.6b — WP10 remainder: two holds needing your call
+### L3.6b — WP10: PASSED (2026-07-31). Remainder is optional.
 
-Disk went 275 Gi → 370 Gi free in the agent run (docker prune + fstrim took
-`~/.colima` 78 G → 29 G; caches, cargo target, stale node_modules, installers and
-wallpaper assets accounted for the rest), then settled at **368 Gi** after the WP12
-brew upgrades (`brew cleanup -s --prune=all` already run). The WP10 acceptance bar
-is 380 Gi, so it is **~12 Gi short**, and both remaining items were deliberately
-left for you:
+**The 380 Gi bar is cleared — 383 Gi free**, measured after the owner uninstalled every
+JetBrains IDE. That reclaimed ~15 Gi of app bundles on its own; neither of the two holds
+below was needed, and neither is a pre-move step any more.
 
-| Hold | Size | Why it stopped |
-|-|-|-|
-| JetBrains pre-2026 state, 34 dirs | 12.04 GiB | Config/caches for versions no longer installed. Enumerated, nothing deleted. **Re-measured 2026-07-31 and both cautions confirmed live** — see below. |
-| Home archive → NAS | 8.6 GiB | `~/Movies` 3.5 G, `~/SY` 2.2 G (confirmed not a git repo), `~/Downloads/mindsera_memos` 1.8 G, `~/transactional-outbox-nestjs` 1.1 G (**is** a git repo, working tree clean), `~/Pictures/ImageGen` 22 M. The NAS mount needs a credential. |
+What the uninstall changed, and it is worth knowing before deciding anything: only
+`JetBrains Toolbox.app` survives, so **all 37 version dirs** under
+`~/Library/Application Support/JetBrains` (19.6 GiB) are now orphaned — not just the 34
+pre-2026 ones this section used to enumerate. Plus 801 MiB of caches and 28 MiB of logs.
 
-Either one alone clears the bar. Two cautions carried forward from the plan and both
-confirmed on the machine: the obvious JetBrains glob `ls -d *20{22,23,24,25}*` **misses**
-`PhpStorm2024.3`, `JetBrainsClient223.8617.44` and the legacy lowercase `Phpstorm/` and
-`Webstorm/`; and WebStorm has **two** current versions (2026.1 and 2026.2), so one dir
-per product does not hold. Both were verified on the machine rather than trusted: the
-36 dirs under `~/Library/Application Support/JetBrains` split 34 pre-2026 / 6 current
-(`WebStorm` genuinely has **two** current dirs, 2026.1 and 2026.2, so a naive one-per-product
-rule deletes a live one), and the pre-2026 set sums to **12333 MiB = 12.04 GiB**, which is
-exactly the figure this table already carried. Every installed IDE — DataGrip, DataSpell,
-PhpStorm, PyCharm, WebStorm, all Toolbox-managed — has a 2026.x dir that survives. The
-matching set is therefore:
+**Recommendation: leave it.** The bar is met, the disk is at 58% used, and this is the one
+irreversible item on the page — those dirs hold per-version settings, plugins, and **Local
+History**, which is unversioned edits with no other copy anywhere. Trading that for 20 GiB
+on a 926 GiB disk, in the days before a move, is a bad trade. If you want it gone anyway, do
+it deliberately and afterwards:
 
 ```bash
 cd ~/Library/Application\ Support/JetBrains
-ls -d *202[2-5]* Phpstorm Webstorm JetBrainsClient*     # REVIEW this list first — 34 dirs
+ls -d *20[0-9][0-9].[0-9]        # REVIEW: 37 dirs, 19.6 GiB
+# keep everything else — Toolbox/ is the live app's own state
 ```
 
-Honest framing on urgency, because the 380 Gi bar reads as a blocker and is not one: the
-disk sits at **368 Gi free (40%)**, and nothing about the move depends on the last 12 Gi.
-Deleting is also the only irreversible item on this page — these dirs hold per-version
-settings, plugins and Local History, the last of which is unversioned edits with no other
-copy. It is a cleanup to do deliberately, not a pre-shutdown step.
+**How the bar was actually cleared, since the history matters more than the number.**
+Disk went 275 Gi → 370 Gi free in the agent run (docker prune + fstrim took `~/.colima`
+78 G → 29 G; caches, cargo target, stale node_modules, installers and wallpaper assets
+accounted for the rest), settled at **368 Gi** after the WP12 brew upgrades
+(`brew cleanup -s --prune=all` already run), and reached **383 Gi** when the owner
+uninstalled the IDEs. So the last 15 Gi came from a decision that was never on this list —
+which is the useful lesson: the two "holds" below were both wrong about where the space
+was.
+
+The other hold, still open and still optional:
+
+| Hold | Size | Status |
+|-|-|-|
+| Home archive → NAS | 8.6 GiB | `~/Movies` 3.5 G, `~/SY` 2.2 G (confirmed not a git repo), `~/Downloads/mindsera_memos` 1.8 G, `~/transactional-outbox-nestjs` 1.1 G (**is** a git repo, working tree clean), `~/Pictures/ImageGen` 22 M. The NAS mount needs a credential. No longer needed for the bar; do it as archiving, if at all. |
+
+Two cautions this section carried are now **obsolete but worth not re-deriving**: the
+year-glob `ls -d *20{22,23,24,25}*` missed `PhpStorm2024.3`, `JetBrainsClient223.8617.44`
+and the legacy lowercase `Phpstorm/` / `Webstorm/`; and WebStorm shipped two concurrent
+current versions (2026.1 and 2026.2), so "one dir per product" was never true. Both mattered
+only while some IDEs were still installed. With all of them gone the safe set is simply
+every `*20NN.N` dir, which is what the command above matches.
 
 For the NAS, do not make it a permanent mount — an SMB mount
 that dies on network loss hangs every process holding a handle on it, on a machine whose
@@ -445,7 +458,26 @@ whole point is surviving network cuts. And verify restic coverage before treatin
 backup: `homelab/restic-excludes.txt` globally excludes `**/node_modules/**`,
 `**/target/**`, `**/dist/**`, `**/build/**`, `**/.cache/**`.
 
-### L3.7 — WP16: UPS
+### L3.7 — WP16: UPS — CLOSED, not buying (2026-07-31)
+
+Owner's call: no UPS this round. The open question this package turned on — whether
+`pmset autorestart` covers a UPS-triggered *graceful* shutdown, which is a deliberate off
+rather than a power failure, and would therefore leave the machine dark exactly when it
+matters — is **moot rather than answered**. Nothing was tested on this hardware and nothing
+needs to be. If a UPS is ever bought, that test comes first, before any halt thresholds.
+
+Note what this does and does not change. It costs nothing on *availability*: WP6's
+auto-login plus WP5's `autorestart 1` is what brings the machine back after mains returns,
+and a UPS was never the mechanism for that. What is given up is **integrity** — a hard power
+cut can leave a dirty APFS state and, more concretely, a dirty Lima image, which is the exact
+failure `colima/colima-start.sh`'s bounded-retry wrapper exists to work around. That wrapper
+is now the only thing standing between a dirty shutdown and a Docker runtime that stays down
+until a human logs in. It is load-bearing; do not let a `brew upgrade colima` silently revert
+the plist it converges (see `CLAUDE.md` → Docker runtime).
+
+The original reference text, kept for the day a UPS is bought:
+
+### L3.7-ref — WP16: UPS (reference only)
 
 Any USB HID Power Device–class UPS (APC Back-UPS, CyberPower, Eaton) — macOS picks it up
 with no driver. **Sequence matters:** attach → confirm it appears in `pmset -g ps` /
