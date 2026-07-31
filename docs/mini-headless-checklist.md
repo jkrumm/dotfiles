@@ -323,7 +323,15 @@ The Brewfile is **not** edited — it keeps describing the machine truthfully an
   appears in the legacy list. It is a System Settings action, not a CLI one.
 - **Network Extensions:** turn off RadioSilence
   (`com.radiosilenceapp.client.NetworkExtension`, PID 567, `[activated enabled]`, app
-  already deleted from /Applications, LaunchAgent respawn-looping on `EX_CONFIG (78)`).
+  already deleted from /Applications). Re-measured 2026-07-31: the LaunchAgent is **not**
+  respawn-looping as this file previously claimed. `launchctl print gui/501/…` reports
+  `runs = 1`, `last exit code = 78: EX_CONFIG`, `state = spawn scheduled` — it failed once
+  at login and launchd has had it throttled ever since. That removes the CPU/noise argument
+  entirely and leaves only the real one, which is enough on its own: an orphaned,
+  unconfigurable content filter is loaded in the network path. `systemextensionsctl gc`
+  needs no `sudo` (confirmed against its own usage output) but it **does** reconfigure that
+  path — run it while physically at the machine, never over the ssh session you would be
+  the one to lose.
   Stated accurately: an orphaned, unconfigurable content-filter extension is loaded in
   the network path — not "filtering all traffic" (0.0% CPU, 16 MB, no configuration
   proven). **This is the prime suspect for any future unexplained network failure** on a
@@ -394,14 +402,33 @@ left for you:
 
 | Hold | Size | Why it stopped |
 |-|-|-|
-| JetBrains pre-2026 state, 34 dirs | 12.04 GiB | Config/caches for versions no longer installed. Enumerated, nothing deleted. |
+| JetBrains pre-2026 state, 34 dirs | 12.04 GiB | Config/caches for versions no longer installed. Enumerated, nothing deleted. **Re-measured 2026-07-31 and both cautions confirmed live** — see below. |
 | Home archive → NAS | 8.6 GiB | `~/Movies` 3.5 G, `~/SY` 2.2 G (confirmed not a git repo), `~/Downloads/mindsera_memos` 1.8 G, `~/transactional-outbox-nestjs` 1.1 G (**is** a git repo, working tree clean), `~/Pictures/ImageGen` 22 M. The NAS mount needs a credential. |
 
 Either one alone clears the bar. Two cautions carried forward from the plan and both
 confirmed on the machine: the obvious JetBrains glob `ls -d *20{22,23,24,25}*` **misses**
 `PhpStorm2024.3`, `JetBrainsClient223.8617.44` and the legacy lowercase `Phpstorm/` and
 `Webstorm/`; and WebStorm has **two** current versions (2026.1 and 2026.2), so one dir
-per product does not hold. For the NAS, do not make it a permanent mount — an SMB mount
+per product does not hold. Both were verified on the machine rather than trusted: the
+36 dirs under `~/Library/Application Support/JetBrains` split 34 pre-2026 / 6 current
+(`WebStorm` genuinely has **two** current dirs, 2026.1 and 2026.2, so a naive one-per-product
+rule deletes a live one), and the pre-2026 set sums to **12333 MiB = 12.04 GiB**, which is
+exactly the figure this table already carried. Every installed IDE — DataGrip, DataSpell,
+PhpStorm, PyCharm, WebStorm, all Toolbox-managed — has a 2026.x dir that survives. The
+matching set is therefore:
+
+```bash
+cd ~/Library/Application\ Support/JetBrains
+ls -d *202[2-5]* Phpstorm Webstorm JetBrainsClient*     # REVIEW this list first — 34 dirs
+```
+
+Honest framing on urgency, because the 380 Gi bar reads as a blocker and is not one: the
+disk sits at **368 Gi free (40%)**, and nothing about the move depends on the last 12 Gi.
+Deleting is also the only irreversible item on this page — these dirs hold per-version
+settings, plugins and Local History, the last of which is unversioned edits with no other
+copy. It is a cleanup to do deliberately, not a pre-shutdown step.
+
+For the NAS, do not make it a permanent mount — an SMB mount
 that dies on network loss hangs every process holding a handle on it, on a machine whose
 whole point is surviving network cuts. And verify restic coverage before treating it as
 backup: `homelab/restic-excludes.txt` globally excludes `**/node_modules/**`,
