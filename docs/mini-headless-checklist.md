@@ -338,6 +338,11 @@ containers) is untouched.
 
 ### L3.6 — WP13: physical network hygiene
 
+WP13's headless half is **done** (2026-07-31): `RouteAll` is now `false` and the
+serve conf names its two container-backed rows. The `idss-mysql` row was withdrawn,
+not deferred — it is an IU work container. Everything below is what is left, and
+none of it can be done after the screen comes off.
+
 | Item | Action |
 |-|-|
 | en0 negotiating `100baseTX` on a 1 Gb/s NIC | Swap the cable. Error counters are clean (0 Ierrs/Oerrs/Coll over 48.2 M packets), so this is a stable negotiation to 100, not a dirty link. Verify `ifconfig en0 \| grep media` → `1000baseT`. |
@@ -350,8 +355,10 @@ This one is **pre-detach only** — it cannot be done headlessly at all.
 
 Disk went 275 Gi → 370 Gi free in the agent run (docker prune + fstrim took
 `~/.colima` 78 G → 29 G; caches, cargo target, stale node_modules, installers and
-wallpaper assets accounted for the rest). The WP10 acceptance bar is 380 Gi, so it is
-**10 Gi short**, and both remaining items were deliberately left for you:
+wallpaper assets accounted for the rest), then settled at **368 Gi** after the WP12
+brew upgrades (`brew cleanup -s --prune=all` already run). The WP10 acceptance bar
+is 380 Gi, so it is **~12 Gi short**, and both remaining items were deliberately
+left for you:
 
 | Hold | Size | Why it stopped |
 |-|-|-|
