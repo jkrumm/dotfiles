@@ -656,10 +656,36 @@ in `make remote-dev-doctor`, and that split has earned itself: on 2026-07-26 the
 credential resolved fine while the deployed helper still pointed at Hermes's
 read-only token, and only the dry-run caught it.
 
-**Also fix the drift `make brew-check` is reporting today:** `obsidian`, `warp`,
-`docker` and `glab` all need install-or-update. The binaries resolve and
-`docker context ls` shows `colima *` pinned, so this is version drift, not missing
-tools — but the supply-chain audit trail is out of sync.
+**Brew drift — done 2026-07-31, and it was five packages, not four.** The plan's
+list omitted `gh`. All of it was version drift, not missing tools. Cleared in two
+passes, deliberately split along the repo's own formula/cask line:
+
+- `make brew-upgrade` took `docker gh glab llhttp simdjson` (all homebrew/core,
+  one point release each). It converged the `caddy`/`mosh` pins first and then
+  re-asserted all three silent-revert invariants afterwards — Cloudflare DNS
+  module present, mosh-server still in the ALF allowlist, colima's supervised
+  boot path intact. All passed.
+- The casks are excluded from that target by design and were upgraded explicitly
+  with the owner's consent: `warp` (one release, nothing running) and **`obsidian`
+  1.1.9 → 1.13.4**. That second one replaces the app bundle `/brain` and Hermes
+  reach the vault through, so it was done as quit → upgrade → relaunch → verify,
+  with the vault git-clean first. Both symlinks (`/usr/local/bin/obsidian` and
+  the cask's own `/opt/homebrew/bin/obsidian`) still resolve, the socket is live,
+  and all four subcommands the brain contract uses (`search`, `backlinks`,
+  `orphans`, `deadends`) work on 1.13.4.
+
+`make brew-check` now passes. Two things surfaced that are worth carrying:
+
+- **obsidian-cli exits 0 on an unknown command and on a missing required
+  argument**, printing the error to stdout. `check_obsidian` is unaffected —
+  `version` is real and still exits 1 when the app is down (re-verified on
+  1.13.4) — but a future extension of that check gated on `$?` would pass
+  forever after an upstream rename. Recorded at the call site.
+- **`brew` reports a `libtiff, webp` circular dependency** on every invocation.
+  Not a failure — `brew-check` passes through it — and its documented fix is
+  `brew uninstall --ignore-dependencies --force libtiff webp && brew install`,
+  which briefly breaks every image-handling formula depending on them. Left
+  alone deliberately; take it during a `/upgrade-deps` pass, not a detach.
 
 ---
 

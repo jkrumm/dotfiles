@@ -773,9 +773,18 @@ check_obsidian() {
   #   2. the app is not RUNNING. obsidian-cli is a client of the live app, not a
   #      standalone tool — it talks to ~/.obsidian-cli.sock, and `version`
   #      itself exits 1 with "make sure Obsidian is running" when the app is
-  #      down (verified 2026-07-31 against an empty HOME). So a quit Obsidian is
-  #      a dead agent door, and this check sees it. `make obsidian-autostart` is
-  #      what keeps the app up across a reboot.
+  #      down (verified 2026-07-31 against an empty HOME, and re-verified the
+  #      same day on 1.13.4 after the 1.1.9 → 1.13.4 cask jump). So a quit
+  #      Obsidian is a dead agent door, and this check sees it.
+  #      `make obsidian-autostart` is what keeps the app up across a reboot.
+  #
+  # Do NOT extend this to a richer subcommand without checking its exit code
+  # first: obsidian-cli exits **0** on an unknown command AND on a missing
+  # required argument, printing the error to stdout (measured on 1.13.4 —
+  # `obsidian definitely-not-a-command` and a bare `obsidian search` both
+  # return 0). A check gated on `$?` would therefore pass forever the moment a
+  # subcommand is renamed upstream. `version` is safe because it is real and
+  # its failure path is the socket, not the argument parser.
   [[ -x "$OBSIDIAN_BIN" ]] || { echo "obsidian cli not installed (skipped)"; return 0; }
   local version
   version=$("$OBSIDIAN_BIN" version 2>/dev/null) || \
