@@ -559,6 +559,65 @@ maxretries 0), created declaratively by `make uk-sync` from
 `homelab/uptime-kuma/monitors.yaml`. `uptime-kuma-api` creates push monitors fine on
 UK 2.x, so there was never a UI-only step. The LaunchAgent's last run exited 0.
 
+#### Transient tolerance — added 2026-08-01 after the first power-cut test
+
+Services do not all come back at boot together, and the gap is much wider than it
+looks. Measured on the real power-cut test:
+
+```
+boot                08:53:20
+caddy               08:53:34   (+14s)
+sideclaw            08:56:08   (+2m48s)
+linewatch-collector 08:56:08   (+2m48s)
+```
+
+The health agent ran at 08:54:24 — inside that gap — and pushed `FAIL: sideclaw not
+answering`. With `maxretries 0` that is a full **DOWN alert on every reboot**,
+clearing itself five minutes later.
+
+**Note what this is not.** A first diagnosis concluded those two agents "never load
+and were only ever alive because hand-bootstrapped", pointing at Background Task
+Management approval. That was wrong — they were merely *late*, both at the identical
+second, which is a deferred launchd bootstrap pass, not a fault. Don't go
+re-engineering two working plists.
+
+Three changes, in `scripts/devhost-health-check.sh`:
+
+| Knob | Default | Effect |
+|-|-|-|
+| `DEVHOST_BOOT_GRACE_SECONDS` | 300 | while uptime is under this, **every** failing component reports `(starting, booted Ns ago)` and the push stays UP |
+| `DEVHOST_TRANSIENT_FAILS` | 3 | outside the grace, a level-triggered check reports `(degraded n/3, may self-heal)` and only FAILs on the 3rd consecutive run |
+| `DEVHOST_REBOOT_NOTE_SECONDS` | 600 | for two intervals after boot the summary carries `host rebooted Ns ago` |
+
+That last one closes a gap worth more than the grace itself: `check_launchd_restarts`
+does delta detection on *agents*, not on the host, so **a 3am power cut that recovers
+perfectly was previously invisible** — no heartbeat said anything had happened.
+
+Two design points that were both got wrong first and are worth not re-deriving:
+
+- **The boot grace applies to every component, not just liveness ones.** Failures
+  cascade at boot — `check_dev_vhosts` needs the tailnet IP, so it fails while
+  tailscaled is merely slow. Restricting the grace to a liveness list still paged on
+  every reboot, through the cascade. Observed directly while testing.
+- **The axis is level-triggered vs edge-triggered, not liveness vs state.** A streak
+  counter only works where the condition stays true while broken. An edge-triggered
+  check fires once and clears, so a threshold does not delay it — it silences it
+  **permanently**. `check_launchd_restarts` is exactly that (a delta against a state
+  file, true for one run per restart) and is the sole member of
+  `IMMEDIATE_COMPONENTS`.
+
+**What this does not relax:** if the host is gone, no push lands at all and Kuma's own
+missed-heartbeat fires on its own schedule. Time-to-DOWN for "the machine died" is
+unchanged — only in-band component failures on a machine that is still talking get
+slack. That is the property `maxretries 0` was chosen to protect, and it is untouched.
+
+One bug caught in testing, recorded because the class recurs: `sysctl -n kern.boottime`
+prints `{ sec = …, usec = … }`, and a leading `.*sec = ` in sed is **greedy** — it
+matches the *second* occurrence and captures `usec`. That yielded an uptime of ~1.78e9
+on a host up twelve minutes, which silently disables every grace window while every
+test still passes. The pattern is anchored at `^{` now, with a plausibility check
+(boot before 2020, or negative uptime → treat as unparseable) as the backstop.
+
 ### 7. The operating contract lives in a skill
 
 `/remote-dev` (global, `dotfiles/skills/remote-dev/`) is the day-to-day surface: the two
@@ -566,11 +625,11 @@ connection forms, herdr's socket API, `claude --bg`, the health check, and a fai
 table. This document is the *design*; the skill is the *usage*. Keep it that way — when
 something here turns into a routine command, it belongs in the skill.
 
-## What actually takes this down
+## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything
 in this design — herdr, Colima, Caddy, every LaunchAgent, every `claude --bg`
-daemon — is user-scoped and starts at login. Verified on the mini 2026-07-26:
+daemon — is user-scoped and starts at login. Measured on the mini 2026-07-26:
 
 ```
 fdesetup status   → FileVault is On
@@ -578,25 +637,125 @@ pmset -g          → autorestart 0
 autoLoginUser     → unset
 ```
 
-So a reboot or a power blip leaves the mini sitting at the **pre-boot FileVault
-unlock screen**: no user session, therefore no agents, no herdr, no Tailscale
-login-item, and nothing in this plan can reach it. The most likely outage on the
-box is the one that is *not* remotely recoverable. That is the real ceiling on
-"always-on", and it is worth knowing before trusting the host with long work.
+A reboot or a power blip therefore left the mini at the **pre-boot FileVault
+unlock screen**: no user session, no agents, no herdr, no Tailscale login-item,
+and nothing in this plan able to reach it. The most likely outage on the box was
+the one that was *not* remotely recoverable — the real ceiling on "always-on".
 
-Options, none free:
+That ceiling is gone. The current posture, verified on a genuine unattended
+reboot 2026-07-31 and a power-cut test 2026-08-01:
 
-- **Planned reboots**: `sudo fdesetup authrestart` unlocks the next boot in
-  advance, so updates and deliberate restarts stay remote. This is the one that
-  costs nothing — use it instead of `sudo reboot`.
-- **Power loss**: `sudo pmset -a autorestart 1` makes the Mac power back on, but
-  it still stops at FileVault. It shortens the outage only if someone unlocks.
-- **Turning FileVault off** would make the host fully remote-recoverable at the
-  cost of at-rest encryption on a machine holding the secrets cache. Not
-  recommended; noted so the trade is explicit rather than accidental.
+```
+fdesetup status   → FileVault is Off
+autoLoginUser     → jkrumm            (/etc/kcpassword written by System Settings)
+pmset -g custom   → autorestart 1     (powers itself on after a power cut)
+```
 
-Accepting the constraint is defensible — the mini is at home and the fix is
-walking to it. Pretending it does not exist is not.
+**`autorestart 1` is not optional and its absence is silent.** FileVault-off plus
+auto-login only solves *"boots into a usable session"*; without `autorestart` the
+machine does not power on at all after a cut, and nothing reports that until the
+one event the whole arrangement exists to survive.
+
+### Why the keychain is the point
+
+Claude Code's Max OAuth credential lives in the **login keychain**, which is
+reachable only from a GUI-session process — this is why `ssh mini 'claude …'`
+comes up `Not logged in` and silently bills API credits while looking healthy.
+Auto-login performs a real password login, so the keychain comes up **unlocked**
+with no human present. Verified directly after an unattended boot:
+
+```
+security show-keychain-info …/login.keychain-db  → no-timeout   (unlocked)
+claude auth status                               → loggedIn: true, max
+```
+
+This settles a question that had been argued from theory in both directions:
+`claude setup-token` is **not** required. `config/zsh/claude-auth.zsh` stays
+wired and dormant as a fallback — it costs nothing there, and a one-year token
+with no refresh and no reliable revocation is not an upgrade over a credential
+that refreshes itself.
+
+### What it costs, stated plainly
+
+| Path | With FileVault off |
+|-|-|
+| Boot the desktop and use it | closed by `lock-at-boot` (below) |
+| Pull the SSD, read it elsewhere | protected — the volume key is fused to the Secure Enclave's hardware UID |
+| Boot from external media | protected — needs a LocalPolicy on the internal SSD |
+| recoveryOS Terminal | Apple documents an admin-password gate |
+| **Mac Sharing Mode (Share Disk, Thunderbolt)** | **open — this is the real hole** |
+
+`/etc/kcpassword` also now holds the login password under a trivially reversible
+XOR. So the claim that used to sit in CLAUDE.md — *"a stolen mini cannot escalate
+to its own root"* — is **false as of this change**, and the justification for
+caching work credentials in `headless.iu.refs` ("encrypted at rest") is weaker
+than it reads: the age key sits on the same disk that now mounts without a
+password. Physical security of the machine is doing real work now, not
+ceremonial work.
+
+Sources disagree on whether reaching Share Disk needs the recoveryOS password
+first — Apple's docs imply yes, Kolide demonstrates the attack assuming no. The
+pessimistic reading is the one to plan against.
+
+### `lock-at-boot` — the mitigation, and its honest scope
+
+`make lock-at-boot-setup` (dev-host only) installs `com.jkrumm.lock-at-boot`, a
+`RunAtLoad` agent that locks the screen immediately after the unattended login.
+**Screen lock does not lock the keychain** — that re-locks on exactly three
+events: the "Lock when sleeping" setting, the "Lock after N minutes" inactivity
+timer, and logout. So the session keeps running in full behind a password
+prompt: herdr, every agent, every LaunchAgent, SSH, Tailscale.
+
+Two halves, and the agent alone does nothing:
+
+| Half | Command | Why |
+|-|-|-|
+| Remove the grace period | `sysadminctl -screenLock immediate -password '<pw>'` | one-time, by hand |
+| Fire the screen-off at login | the LaunchAgent → `pmset displaysleepnow` | no TCC needed |
+
+**`sysadminctl -screenLock` does not prompt.** Unlike `-autologin`, which has an
+explicit interactive form, `-screenLock` requires the password inline and exits
+with `Password is required!` otherwise.
+
+Prefer the GUI — it puts the password on no command line at all: System Settings →
+Lock Screen → require password after screensaver/display off → **Immediately**
+(Systemeinstellungen → Sperrbildschirm → *Sofort*).
+
+If you use the CLI, note that **`histignorespace` is off on this machine**, so the
+usual leading-space trick does *not* keep it out of `~/.zsh_history` — run
+`setopt histignorespace` in that shell first. The argv exposure itself is moot
+here: the same password already sits in `/etc/kcpassword` by design. The shell
+history is the part that actually persists.
+
+`make lock-at-boot-setup` **refuses to install** unless the first half is already
+in place, because a plist that sleeps the display and leaves the machine unlocked
+is worse than no plist — it reads as done.
+
+Two implementation notes that contradict most write-ups online:
+
+- **`CGSession -suspend` does not exist.** The `User.menu` bundle was removed;
+  checked on this disk, not inferred. Every "auto-login but locked" recipe that
+  recommends it is dead on macOS 26.
+- **`osascript` sending ⌃⌘Q is the wrong tool here** — it needs Accessibility
+  (TCC), which cannot be granted to a launchd job on a headless machine because
+  there is nobody to click Allow. `pmset displaysleepnow` needs no TCC.
+
+Resuming a suspended session over Screen Sharing does **not** start a new
+session, so unlocking from the MacBook does not re-fire the agent.
+
+`make lock-at-boot-check` reports FileVault, autologin, autorestart, screenLock,
+agent presence, live lock state, keychain lock state, and the agent's last run.
+
+**What this does not do:** it stops someone walking up and using the desktop. It
+does nothing about Mac Sharing Mode, which is a FileVault question. Do not let it
+stand in for the two things that actually shrink the blast radius — re-deriving
+what `headless.iu.refs` really needs to hold, and having a written theft runbook
+(Tailscale device removal, `op://mini/github/token` revoke, Claude session
+revoke, IU credential rotation, Find My → Erase Mac).
+
+Activation Lock is **Enabled** and Find My is on, which covers the opportunistic
+case well: the machine is unsellable and remotely erasable. It does nothing
+against someone who wants what is on it.
 
 ## Blocking constraint
 

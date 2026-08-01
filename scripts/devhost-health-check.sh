@@ -134,6 +134,74 @@ SECRETS_CACHE_FILE="${SECRETS_CACHE_FILE:-$HOME/SourceRoot/dotfiles-private/cach
 # decides whether a page fires.
 STATE_DIR="${DEVHOST_HEALTH_STATE_DIR:-$HOME/.local/state/devhost-health}"
 
+# --- Transient tolerance -----------------------------------------------------
+# WHY THIS EXISTS. The first real power-cut test (2026-08-01) produced a DOWN
+# page that was pure noise: the host booted at 08:53:20, this agent ran at
+# 08:54:24, and sideclaw + linewatch-collector did not come up until 08:56:08 —
+# ~2m48s after boot, both at the same second, i.e. a deferred launchd bootstrap
+# pass rather than a fault. Everything was healthy by the next run. With
+# `maxretries 0` on the Kuma side (deliberate — it keeps time-to-DOWN at 10min
+# rather than 40), that single failed push is a full DOWN alert on EVERY reboot.
+#
+# A monitor that cries wolf after every power blip does not make you better
+# informed, it trains you to ignore it — and then the one real outage looks like
+# the twelve fake ones. So: report, do not hide.
+#
+# THE DISTINCTION THAT MATTERS is LEVEL-triggered vs EDGE-triggered, not
+# liveness vs state — that was the first cut and it was wrong twice over.
+#
+# A consecutive-failure counter only works for a LEVEL-triggered check, where the
+# condition keeps being true while it is broken. An EDGE-triggered check fires
+# once on a transition and clears itself on the next run, so it can never reach a
+# streak of 3 — a threshold does not delay it, it silences it PERMANENTLY.
+# check_launchd_restarts is exactly that: a delta against a state file, true for
+# one run per restart. It must stay immediate.
+#
+# Everything else is level-triggered and gets the streak, including the state
+# checks. Delaying a cert-expiry or disk-full page by ~15 minutes costs nothing
+# real (a 21-day cert warning does not care), while flap tolerance is worth a
+# lot — a dig that fails once should not page. The first cut kept state checks
+# immediate and still paged on every reboot anyway, via cascade:
+# check_dev_vhosts needs the tailnet IP, so it fails whenever tailscaled is
+# merely slow.
+#
+# WHAT THIS DOES NOT RELAX: if the host is gone, no push lands at all and Kuma's
+# own missed-heartbeat fires on its own schedule, untouched by anything here.
+# Time-to-DOWN for "the machine died" is unchanged; only in-band component
+# failures on a machine that is still talking get slack.
+BOOT_GRACE_SECONDS="${DEVHOST_BOOT_GRACE_SECONDS:-300}"
+TRANSIENT_FAILS_BEFORE_ALERT="${DEVHOST_TRANSIENT_FAILS:-3}"
+IMMEDIATE_COMPONENTS="check_launchd_restarts"
+# Show "host rebooted" for two check intervals, so a reboot is visible in the
+# heartbeat text rather than only as a gap someone has to notice.
+REBOOT_NOTE_SECONDS="${DEVHOST_REBOOT_NOTE_SECONDS:-600}"
+
+# Seconds since boot. Returns a LARGE number when kern.boottime cannot be
+# parsed — failing toward "no grace, alert normally" rather than toward a
+# permanent grace window that would silence this script forever.
+#
+# ANCHOR THE PATTERN. kern.boottime prints
+#     { sec = 1785567200, usec = 570831 } Sat Aug  1 08:53:20 2026
+# and a leading `.*sec = ` is GREEDY, so it matches the SECOND occurrence and
+# captures **usec**. That yielded uptime ≈ 1.78e9 on a host up 12 minutes, which
+# silently disables every grace window below while every test still passes —
+# caught here only because the reboot note failed to appear. Anchor at `^{`.
+#
+# The plausibility check is the backstop for the next variant of that bug: any
+# reading that is negative, or implies a boot before 2020, is treated as a parse
+# failure rather than trusted. A wrong-but-huge number is the dangerous
+# direction, because it looks like a healthy long-running host.
+host_uptime_seconds() {
+  local boot now up
+  boot=$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null | sed -n 's/^{ *sec *= *\([0-9][0-9]*\).*/\1/p')
+  case "${boot:-}" in ''|*[!0-9]*) echo 999999; return 0 ;; esac
+  if (( boot < 1600000000 )); then echo 999999; return 0; fi
+  now=$(date +%s)
+  up=$(( now - boot ))
+  if (( up < 0 )); then echo 999999; return 0; fi
+  echo "$up"
+}
+
 # Same env var name scripts/caddy-tailnet.sh reads — one machine-local file,
 # one name, so there is exactly one place to look when either disagrees with
 # the other about whether the clean dev-vhost door is configured.
@@ -863,17 +931,66 @@ check_runaways() {
 
 details=()
 failure=""
+
+uptime_s=$(host_uptime_seconds)
+# `if`, not `(( … )) && assign`: under `set -e` an arithmetic compound that
+# evaluates false returns 1, and as the last command of an && list that exits
+# the whole script — silently, in the COMMON case (a host that booted long ago).
+in_boot_grace=0
+if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
+# Reboots are otherwise invisible here: check_launchd_restarts does delta
+# detection on AGENTS, not on the host, so a 3am power cut that recovers
+# perfectly leaves no trace in any heartbeat. One line fixes that, and it is
+# arguably worth more than the grace window itself.
+(( uptime_s >= REBOOT_NOTE_SECONDS )) || details+=("host rebooted ${uptime_s}s ago")
+
+/bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
+
 for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_dev_vhosts \
                  check_memory check_launchd_restarts check_services check_claude_auth \
                  check_obsidian check_disk check_runaways; do
+  # Substring match on space-padded strings — bash 3.2 has no associative
+  # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).
+  is_transient=1
+  if [[ " $IMMEDIATE_COMPONENTS " == *" $component "* ]]; then is_transient=0; fi
+  streak_file="$STATE_DIR/fail-$component"
+
   if detail=$("$component"); then
     details+=("$detail")
-  else
-    # First failure wins the alert text; keep checking so the message can still
-    # carry the full picture.
-    [[ -n "$failure" ]] || failure="$detail"
-    details+=("FAIL: $detail")
+    rm -f "$streak_file" 2>/dev/null || true
+    continue
   fi
+
+  # BOOT GRACE APPLIES TO EVERY COMPONENT, not just the transient ones — and
+  # that asymmetry with the streak logic below is deliberate. Failures cascade
+  # at boot: check_dev_vhosts needs the tailnet IP, so while tailscaled is still
+  # coming up it fails too, and it is (correctly) NOT in the transient set
+  # because cert expiry and DNS drift never self-heal. Restricting the grace to
+  # the transient list therefore still pages on every reboot, via the cascade —
+  # observed directly while testing this change. The window is short, bounded,
+  # and anything genuinely broken FAILs on the very next run.
+  if (( in_boot_grace )); then
+    # Not a failure and not silence: the summary says what is still coming up.
+    details+=("$detail (starting, booted ${uptime_s}s ago)")
+    continue
+  fi
+
+  if (( is_transient )); then
+    streak=$(cat "$streak_file" 2>/dev/null || echo 0)
+    case "$streak" in ''|*[!0-9]*) streak=0 ;; esac
+    streak=$(( streak + 1 ))
+    echo "$streak" > "$streak_file" 2>/dev/null || true
+    if (( streak < TRANSIENT_FAILS_BEFORE_ALERT )); then
+      details+=("$detail (degraded ${streak}/${TRANSIENT_FAILS_BEFORE_ALERT}, may self-heal)")
+      continue
+    fi
+    detail="$detail (persisted ${streak} runs)"
+  fi
+
+  # First failure wins the alert text; keep checking so the message can still
+  # carry the full picture.
+  [[ -n "$failure" ]] || failure="$detail"
+  details+=("FAIL: $detail")
 done
 
 # `${arr[*]}` joins on the FIRST character of IFS only, so build the separator

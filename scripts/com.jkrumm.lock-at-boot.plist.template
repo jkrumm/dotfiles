@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.lock-at-boot</string>
+  <!-- Locks the screen immediately after the unattended auto-login.
+       FileVault is OFF and automatic login is ON so the mini reboots itself
+       after a power cut (see docs/remote-dev.md). That is what makes the login
+       keychain reachable — Claude Code's Max OAuth credential lives there and
+       is only readable from a GUI-session process — but it also means a fresh
+       boot lands on an UNLOCKED desktop. This agent closes that window.
+
+       Screen lock does NOT lock the keychain. The login keychain re-locks on
+       exactly three events: the "Lock when sleeping" setting, the "Lock after
+       N minutes" inactivity timer, and logout. Screen lock, screensaver and
+       fast user switching are none of them. So the session keeps running fully
+       — herdr, the agents, every LaunchAgent — behind a password prompt.
+       Verified against security(1) and Apple's keychain docs, 2026-08-01. -->
+
+  <!-- WHY pmset AND NOT osascript. The obvious "lock now" is a synthesized
+       Ctrl-Cmd-Q via System Events, but that needs Accessibility (TCC), which
+       cannot be granted to a launchd job on a headless machine — there is
+       nobody to click Allow. `pmset displaysleepnow` needs no TCC at all.
+       It only locks because `sysadminctl -screenLock immediate` removes the
+       grace period; without that this agent sleeps the display and leaves the
+       session unlocked for the configured delay. make lock-at-boot-setup
+       refuses to install unless that setting is already in place.
+
+       CGSession -suspend is NOT an option: the User.menu bundle it lives in was
+       removed from macOS and is absent on 26.5.2 (checked on this disk, not
+       inferred — most write-ups online still recommend it). -->
+
+  <!-- WHY THE DELAY. RunAtLoad fires as the session is still coming up, and a
+       displaysleepnow issued mid-handoff from loginwindow can no-op silently.
+       Five seconds is negligible next to the screensaver idle timer that backs
+       this up, and a no-op here would be invisible without the assertion below. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>sleep 5; /usr/bin/pmset displaysleepnow; sleep 3; if /usr/sbin/ioreg -n Root -d1 -a | /usr/bin/grep -q CGSSessionScreenIsLocked; then echo "$(date '+%Y-%m-%dT%H:%M:%S') locked"; else echo "$(date '+%Y-%m-%dT%H:%M:%S') NOT LOCKED - check: sysadminctl -screenLock status"; fi</string>
+  </array>
+  <!-- One-shot, so no KeepAlive: this must fire once per session start, not be
+       resurrected. Resuming a suspended session over Screen Sharing does not
+       start a new session, so unlocking from the MacBook does not re-trigger
+       it — you are not locked back out mid-work. -->
+  <key>RunAtLoad</key><true/>
+  <!-- ~/Library/Logs, never /tmp: macOS's periodic cleanup DELETES /tmp files,
+       and launchd opens these paths once at spawn, so a swept log leaves the
+       agent writing into an unlinked inode. Rotated by scripts/log-rotate.sh,
+       which carries this file in its declared list. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/lock-at-boot.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/lock-at-boot.log</string>
+</dict>
+</plist>

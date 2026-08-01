@@ -57,6 +57,7 @@ FILES=(
   secrets-freshness.log
   opbackup.log
   devhost-health.log
+  lock-at-boot.log
   linewatch-collector.log
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )

@@ -562,7 +562,24 @@ inherits keychain access. Verified both directions 2026-07-27. Anything on the
 mini needing the login keychain (LaunchAgent, cron, script-spawned daemon) has
 the same constraint: on the tailnet ≠ in the GUI session.
 
-**`config/zsh/claude-auth.zsh` is the fix, and it is wired but not yet live.** It
+**That constraint binds `ssh mini 'claude …'` only — and the auto-login change
+made it a non-problem in practice.** Since 2026-08-01 the mini boots unattended
+with FileVault off and automatic login on, which performs a *real* password login
+and therefore brings the login keychain up **unlocked** with no human present.
+Measured on a genuine unattended boot: `security show-keychain-info` → `no-timeout`,
+`claude auth status` → `loggedIn: true, max`. Every practical path onto this
+machine — herdr panes, `rd bg`, LaunchAgents — is a GUI-session child and simply
+works. The claim that auto-login would leave the keychain locked, which drove the
+push toward `setup-token`, was **wrong**; it is disproven rather than merely
+doubted. Only a raw `ssh mini 'claude …'` still fails, and `rd bg` exists
+precisely so nothing needs that.
+
+**`config/zsh/claude-auth.zsh` is therefore a dormant fallback, not the fix.**
+Leave it wired and unminted: it costs nothing dormant, and a `setup-token`
+credential is a **one-year token with no refresh and no reliable server-side
+revocation** — a downgrade from a keychain credential that refreshes itself
+(access ~8h, refresh rolling). Mint one only if the keychain path actually breaks.
+It
 defines a `claude()` zsh function that resolves `op://mini/claude/oauth-token`
 through `secrets-run` and passes it as `CLAUDE_CODE_OAUTH_TOKEN` — the one
 mechanism that needs no keychain. It must be that variable and **never
@@ -587,6 +604,39 @@ that is not a logged-in Max session. Note the token is a **one-year** credential
 with no refresh and no reliable server-side revocation; that heartbeat is the
 only thing that makes the expiry loud. Full reasoning:
 `docs/mini-headless-checklist.md` L3.3 and `dotfiles-private/docs/security-review.md`.
+
+### Unattended boot posture (mini only)
+
+Three settings make the mini survive a power cut with no human: FileVault **off**,
+automatic login **on**, `pmset -a autorestart 1`. The third is the one whose
+absence is silent — without it the machine does not power on at all, and nothing
+reports that until the exact event the arrangement exists to survive.
+
+`make lock-at-boot-setup` (dev-host gated) then closes the window that opens:
+`com.jkrumm.lock-at-boot` is a `RunAtLoad` agent that locks the screen right after
+the unattended login. **Screen lock does not lock the keychain** — that re-locks
+only on the "Lock when sleeping" setting, the inactivity timer, or logout — so the
+whole session keeps running behind a password prompt.
+
+Two halves, and the agent alone is inert: `sysadminctl -screenLock immediate`
+removes the grace period, the agent fires `pmset displaysleepnow`. **The setup
+target refuses to install** unless the first half is already applied, because a
+plist that sleeps the display and leaves the machine unlocked reads as done while
+doing nothing. `make lock-at-boot-check` reports all of it plus live lock state.
+
+**`sysadminctl -screenLock` does not prompt** — unlike `-autologin` it has no
+interactive form, and exits `Password is required!` unless the password is inline
+(`-password '<pw>'`). Prefer the GUI (Systemeinstellungen → Sperrbildschirm →
+*Sofort*), which puts it on no command line. If using the CLI, `histignorespace`
+is **off** here so a leading space does not hide it from `~/.zsh_history` — run
+`setopt histignorespace` first. The argv exposure is moot (that password is
+already in `/etc/kcpassword`); the persisted history line is not.
+
+Two things that contradict most write-ups: **`CGSession -suspend` does not exist**
+on macOS 26 (the `User.menu` bundle is gone — checked on disk, not inferred), and
+`osascript` ⌃⌘Q is the wrong tool because Accessibility/TCC cannot be granted to a
+launchd job on a headless machine. Scope, threat model and sources:
+`docs/remote-dev.md` → "What used to take this down".
 
 **`scripts/remote-dev.sh` (`rd`) is the layer above the four.** The transport
 layers answer "how do I get a terminal"; `rd` answers "how do I put work on the
@@ -1071,6 +1121,32 @@ the composite and SKIPs when unconfigured: `check_dev_vhosts` without
 obsidian CLI without their binaries, and the Tailscale key-expiry sub-check once
 WP1 disables expiry entirely (an empty `KeyExpiry` is the correct steady state,
 so it skips silently and permanently rather than nagging).
+
+**Transient tolerance (2026-08-01).** The first real power-cut test produced a
+DOWN page that was pure noise: the host booted 08:53:20, the agent ran 08:54:24,
+and sideclaw + linewatch-collector did not start until 08:56:08 — **+2m48s, both
+at the same second**, a deferred launchd bootstrap pass rather than a fault. With
+`maxretries 0` that is a full DOWN alert on *every* reboot, and a monitor that
+cries wolf after every power blip trains you to ignore it. (An earlier diagnosis
+said those two agents "never load" and blamed Background Task Management — wrong;
+they were only late. Don't re-engineer two working plists.) Three knobs, all
+env-overridable: `DEVHOST_BOOT_GRACE_SECONDS` (300 — every failing component
+reports `starting`, push stays UP), `DEVHOST_TRANSIENT_FAILS` (3 — outside the
+grace a check reports `degraded n/3` and only FAILs on the third consecutive
+run), `DEVHOST_REBOOT_NOTE_SECONDS` (600 — the summary carries `host rebooted Ns
+ago`, closing the gap where a 3am power cut that recovered perfectly left no
+trace anywhere).
+
+Two things that were got wrong first: **the boot grace covers every component,
+not just liveness ones** — failures cascade at boot (`check_dev_vhosts` needs the
+tailnet IP, so it fails while tailscaled is merely slow), so a liveness-only
+grace still paged on every reboot. And **the axis is level- vs edge-triggered,
+not liveness vs state** — a streak counter silences an edge-triggered check
+*permanently* rather than delaying it, which is why `check_launchd_restarts` (a
+delta, true for one run per restart) is the sole `IMMEDIATE_COMPONENTS` member.
+**None of this relaxes "the machine died"** — if the host is gone no push lands
+and Kuma's own missed-heartbeat is untouched, which is the property `maxretries
+0` exists to protect.
 
 **Two of the new checks are worth knowing the shape of, because the obvious
 implementation of each is wrong.** Restart detection is a **delta** against a

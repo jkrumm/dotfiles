@@ -2376,6 +2376,88 @@ devhost-health-teardown:
 devhost-health-check:
 	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
 
+# ----------------------------------------------------------------------------
+# Lock at boot (dev host only)
+#
+# FileVault OFF + automatic login is what lets the mini reboot itself after a
+# power cut with the login keychain unlocked (Claude Code's Max credential lives
+# there and is only reachable from a GUI-session process). The cost is that a
+# fresh boot lands on an unlocked desktop. This agent locks it immediately.
+#
+# Two halves, and the agent alone is useless: `sysadminctl -screenLock immediate`
+# removes the grace period, the agent fires the screen-off. The setup target
+# refuses to install unless the first half is already in place, because a plist
+# that silently sleeps the display and leaves the machine unlocked is worse than
+# no plist — it reads as done.
+#
+# Read the honest scope in docs/remote-dev.md: this stops someone walking up and
+# using the desktop. It does NOT stop Mac Sharing Mode, which is a FileVault
+# question, not a lock-screen one.
+# ----------------------------------------------------------------------------
+.PHONY: lock-at-boot-setup lock-at-boot-teardown lock-at-boot-check
+lock-at-boot-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — lock-at-boot skipped"; \
+	elif ! sysadminctl -autologin status 2>&1 | grep -q 'Automatic login user'; then \
+		echo "    · automatic login is off — nothing to lock at boot, skipped"; \
+	else \
+		LOCK=$$(sysadminctl -screenLock status 2>&1 | sed 's/.*] //'); \
+		case "$$LOCK" in \
+		  *immediate*|*"delay is 0 "*) ;; \
+		  *) echo "  ✗ screen lock is not immediate — refusing to install"; \
+		     echo "      $$LOCK"; \
+		     echo "    The agent only sleeps the display; the lock comes from this"; \
+		     echo "    setting. Without it the machine still boots into an unlocked"; \
+		     echo "    desktop for the configured delay, while looking configured."; \
+		     echo "    Fix it, then re-run this target."; \
+		     echo ""; \
+		     echo "    PREFERRED — no password on any command line:"; \
+		     echo "      System Settings > Lock Screen > require password after"; \
+		     echo "      screensaver/display off -> Immediately"; \
+		     echo "      (Systemeinstellungen > Sperrbildschirm -> 'Sofort')"; \
+		     echo ""; \
+		     echo "    CLI form, if you prefer it. NOTE sysadminctl does NOT prompt —"; \
+		     echo "    unlike -autologin it has no interactive form, so the password"; \
+		     echo "    must be inline. histignorespace is OFF on this machine, so a"; \
+		     echo "    leading space does NOT keep it out of ~/.zsh_history — enable"; \
+		     echo "    it for the current shell first:"; \
+		     echo "      setopt histignorespace"; \
+		     echo "       sysadminctl -screenLock immediate -password 'YOUR-PASSWORD'"; \
+		     echo "    (the argv exposure itself is moot here — that same password"; \
+		     echo "     already sits in /etc/kcpassword by design)"; \
+		     echo ""; \
+		     echo "    Then: make lock-at-boot-setup"; \
+		     exit 1;; \
+		esac; \
+		mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+		$(MAKE) --no-print-directory _render-plists \
+			PLISTS="com.jkrumm.lock-at-boot" PLIST_DIR="$(DOTFILES_DIR)/scripts"; \
+		echo "    ↳ auto-login lands on a lock screen; session + keychain stay up"; \
+	fi
+lock-at-boot-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.lock-at-boot.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ lock-at-boot torn down (screenLock setting left alone — it is not this target's state)"
+lock-at-boot-check:
+	@echo "  filevault  : $$(fdesetup status 2>&1)"
+	@echo "  autologin  : $$(sysadminctl -autologin status 2>&1 | sed 's/.*] //')"
+	@echo "  autorestart: $$(pmset -g custom 2>/dev/null | awk '/^ *autorestart /{print $$2}' | head -1) (1 = powers itself on after a power cut)"
+	@echo "  screenLock : $$(sysadminctl -screenLock status 2>&1 | sed 's/.*] //')"
+	@if [ -f "$(LAUNCHAGENTS)/com.jkrumm.lock-at-boot.plist" ]; then \
+		echo "  agent      : installed"; \
+	else \
+		echo "  agent      : NOT installed"; \
+	fi
+	@if ioreg -n Root -d1 -a 2>/dev/null | grep -q CGSSessionScreenIsLocked; then \
+		echo "  screen     : LOCKED"; \
+	else \
+		echo "  screen     : unlocked"; \
+	fi
+	@echo "  keychain   : $$(security show-keychain-info "$(HOME)/Library/Keychains/login.keychain-db" 2>&1 | sed 's/.*db" //')"
+	@echo "  last run   : $$(tail -1 "$(HOME)/Library/Logs/lock-at-boot.log" 2>/dev/null || echo '(no log yet — has not booted since install)')"
+
 # ============================================================================
 # Help
 # ============================================================================
@@ -2438,6 +2520,9 @@ help:
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
+	@echo "  make lock-at-boot-setup         Dev-host only: lock the screen right after the unattended auto-login"
+	@echo "  make lock-at-boot-check         Show FileVault / autologin / autorestart / screenLock / lock state"
+	@echo "  make lock-at-boot-teardown      Unload + remove the lock-at-boot agent"
 	@echo ""
 	@echo "  make caddy-dns-build            Dev-host only: build Caddy w/ Cloudflare DNS module (needed for the clean https://<app>.\$$DEV_DOMAIN door; re-run after any brew upgrade of caddy)"
 	@echo "  make caddy-boot-order           NEEDS SUDO: order the caddy daemon behind the tailnet address it binds (re-run after any brew upgrade of caddy)"

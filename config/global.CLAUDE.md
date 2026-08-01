@@ -123,9 +123,25 @@ prompt.
 
 **The mini's password is deliberately MacBook-only.** It is an `op://Private/*`
 ref, which `headless.refs` refuses unconditionally for the `tkrumm` account, so
-it never enters the mini's own secrets cache — a stolen mini cannot escalate to
-its own root. Reading it is biometric-gated on a present-human machine, which is
-the whole point. Do not "fix" the seed refusal to make this more convenient.
+it never enters the mini's own secrets cache. Reading it is biometric-gated on a
+present-human machine, which is the whole point. Do not "fix" the seed refusal to
+make this more convenient.
+
+**This used to say "a stolen mini cannot escalate to its own root". That is no
+longer true, as of 2026-08-01.** Making the mini reboot unattended after a power
+cut required FileVault **off** plus automatic login, so `/etc/kcpassword` now
+holds that same password under a trivially reversible XOR, on a volume that
+mounts without a credential. The seed refusal still keeps the password out of the
+*cache*, which is worth keeping — but it no longer keeps it off the machine.
+
+What that changes, concretely: physical possession of the mini yields the login
+password → sudo → the age key → every ref in `headless.refs` (42) **and**
+`headless.iu.refs` (95 work refs — Feuer identity, Artifactory, Jira, read-only
+prod DB). The "encrypted at rest" half of that justification is much weaker than
+it reads, because the key sits on the same unlocked disk. `make lock-at-boot-setup`
+closes the walk-up-and-use-it path; it does nothing about Mac Sharing Mode over
+Thunderbolt, which is a FileVault question. Full trade, sources and mitigations:
+`docs/remote-dev.md` → "What used to take this down".
 
 #### Local dev proxy
 
