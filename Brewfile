@@ -220,13 +220,7 @@ cask "jiggler"
 # Flagged `auto_updates`, so brew will not upgrade it and the pinned-version
 # discipline elsewhere in this file does not apply to it.
 cask "karabiner-elements"
-# Knowledge base that works on top of a local folder of plain text Markdown files
-cask "obsidian"
-# Monitors the computer system and optimises its performance
-cask "sensei"
 # Music streaming service
 cask "spotify"
 # Multimedia player
 cask "vlc"
-# Rust-based terminal
-cask "warp"
