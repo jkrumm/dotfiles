@@ -47,6 +47,18 @@ export GIT_TERMINAL_PROMPT=0
 # passphrase prompt, ConnectTimeout kills the black hole.
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=10}"
 
+# This MacBook has NO key files in ~/.ssh — GitHub auth goes through the
+# 1Password SSH agent. launchd hands agents the *system* ssh-agent socket
+# (/var/run/com.apple.launchd.*/Listeners), which holds none of those keys, so
+# every tick died with "Please make sure you have the correct access rights"
+# until this was added. Point at 1Password's socket when it exists; machines
+# that use an ordinary key (the mini) have no such socket and keep whatever
+# launchd gave them.
+OP_AGENT_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+if [ -S "$OP_AGENT_SOCK" ]; then
+  export SSH_AUTH_SOCK="$OP_AGENT_SOCK"
+fi
+
 # Belt to that braces: bound the network calls themselves. `timeout` is
 # coreutils, not macOS base, so degrade to running them bare when it is absent.
 NET=()
