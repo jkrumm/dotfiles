@@ -198,13 +198,28 @@ cask "jiggler"
 # the best one for Hyper — local Ghostty into a local herdr, no ssh and no mosh
 # in between, so nothing can eat the key encoding.
 #
-# The MacBook sits on the OPPOSITE macOS 26 regression: since 26.4, DriverKit
-# virtual HID cannot see the BUILT-IN keyboard (com.apple.iohid.protectedDevice-
-# Access), which is the one that broke Karabiner for everyone else. The two
-# failures are complementary, so the escape hatch is Karabiner 16.0's
-# "Enable CGEventTap fallback" (Settings → Expert) — CGEventTap still works for
-# built-in keyboards, exactly where IOHIDDeviceOpen now fails. Untested here;
-# the mini needs `effective=false` and has it.
+# The MacBook was expected to sit on the OPPOSITE macOS 26 regression — 26.4+
+# blocking DriverKit from the BUILT-IN keyboard (com.apple.iohid.protectedDevice-
+# Access), the failure that broke Karabiner for everyone else. MEASURED 2026-08-02
+# on macOS 26.6 with Karabiner 16.1.0: it does not happen here. All three
+# keyboards were grabbed at HID level, built-in included, with the fallback OFF:
+#
+#   enable_cgeventtap_fallback unchanged: effective=false
+#   Apple Internal Keyboard / Trackpad  ... hid queue value monitor is started (grabbed).
+#   USB Receiver                        ... (grabbed).
+#   Magic Keyboard von Johannes         ... (grabbed).
+#
+# So BOTH machines run `effective=false`. Karabiner 16.0's "Enable CGEventTap
+# fallback" (Settings → Expert) remains the escape hatch if a future macOS does
+# revoke built-in access — but turn it on only when the log shows no `(grabbed)`
+# line, never prophylactically. It is not free: with it on and the grab already
+# working, the daemon logged `keyboard suppression expired before matching event`
+# twice within the hour, which is a dropped or doubled keystroke.
+#
+# It is also a PER-MACHINE setting and must stay OUT of the tracked config —
+# it is a root-level `global` key, and this file is shared by both Macs.
+# Setting it via the UI writes it to the live karabiner.json and makes
+# `_setup-karabiner` report a diverged file forever.
 #
 # Setup is per-machine and cannot be automated from here — two approvals, both
 # requiring a human at that Mac:
