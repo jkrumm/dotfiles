@@ -72,6 +72,7 @@ FILES=(
   devhost-health.log
   lock-at-boot.log
   linewatch-collector.log
+  batt-reset.log
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
 

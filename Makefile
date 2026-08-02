@@ -700,10 +700,15 @@ mosh-firewall:
 # below on the machine actually having an internal battery. The daemon runs with
 # --always-allow-non-root-access, so `batt limit` needs no sudo after setup.
 # Default cap 80% (long-term battery health); LIMIT=100 lifts it for a full
-# charge (e.g. before travel): `make batt-limit LIMIT=100`.
+# charge (e.g. before travel): `make batt-limit LIMIT=100`. Add DAYS=N to also
+# pause the daily 09:00 reset-to-80% for N days (com.jkrumm.batt-reset checks
+# ~/.config/batt/pause-until via battery/batt-reset.sh); omit DAYS to clear
+# any existing pause, resuming normal daily governance.
 # batt is keg-only (not symlinked into bin), so call it via its opt path.
 LIMIT ?= 80
+DAYS ?=
 BATT := $(BREW_PREFIX)/opt/batt/bin/batt
+BATT_PAUSE_FILE := $(HOME)/.config/batt/pause-until
 batt-setup:
 	@if ! pmset -g batt | grep -q InternalBattery; then \
 		echo "  batt: no internal battery (not a MacBook) — skipping."; exit 0; fi
@@ -728,8 +733,22 @@ batt-limit:
 	@$(BATT) limit $(LIMIT) >/dev/null 2>&1 \
 		&& echo "  ✓ charge limit set to $(LIMIT)%" \
 		|| { echo "  ✗ daemon not running — run 'make batt-setup' first"; exit 1; }
+	@if [ -n "$(DAYS)" ]; then \
+		mkdir -p "$$(dirname "$(BATT_PAUSE_FILE)")"; \
+		UNTIL=$$(date -v+$(DAYS)d +%s); \
+		echo "$$UNTIL" > "$(BATT_PAUSE_FILE)"; \
+		echo "  ✓ daily 09:00 auto-reset paused until $$(date -r $$UNTIL '+%a %b %d')"; \
+	else \
+		rm -f "$(BATT_PAUSE_FILE)"; \
+	fi
 batt-status:
 	@$(BATT) status 2>/dev/null || echo "  batt daemon not running — run 'make batt-setup'"
+	@if [ -f "$(BATT_PAUSE_FILE)" ]; then \
+		UNTIL=$$(cat "$(BATT_PAUSE_FILE)"); \
+		if [ -n "$$UNTIL" ] && [ "$$(date +%s)" -lt "$$UNTIL" ]; then \
+			echo "  ⏸ auto-reset paused until $$(date -r $$UNTIL '+%a %b %d, %H:%M')"; \
+		fi; \
+	fi
 
 # ~/SourceRoot/brain continuous sync through GitHub, every 5 minutes, on BOTH
 # machines. The script picks its role off the secrets-backend marker: `cache`
@@ -2487,6 +2506,7 @@ help:
 	@echo ""
 	@echo "  make batt-setup       MacBook-only: start the charge-limiter daemon + cap at 80% (LIMIT=N)"
 	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
+	@echo "                        Add DAYS=N to also pause the daily 80% auto-reset for N days"
 	@echo "  make batt-status      Show the battery charge-limiter status"
 	@echo ""
 	@echo "  make brain-sync-setup         Load the 5-minute brain vault sync through GitHub (role auto-detected)"

@@ -1328,13 +1328,23 @@ Mac mini.
 daily-reset LaunchAgent, and Raycast control.
 
 - **Daily auto-reset.** `battery/com.jkrumm.batt-reset.plist.template` → a user
-  LaunchAgent that runs `batt limit 80` at **09:00** daily (`RunAtLoad` false, so
-  installing it never clobbers a live boost). This is what makes a 100% boost
-  *temporary* — it expires the next morning. Changing the resting default means
-  editing both this plist's hardcoded `80` and the Makefile `LIMIT ?= 80`.
+  LaunchAgent that runs `battery/batt-reset.sh` at **09:00** daily (`RunAtLoad`
+  false, so installing it never clobbers a live boost). This is what makes a
+  100% boost *temporary* — it expires the next morning. Changing the resting
+  default means editing both the script's hardcoded `80` and the Makefile
+  `LIMIT ?= 80`.
+- **Multi-day pause.** For a boost that should survive more than one morning
+  (e.g. traveling for a week), `batt-reset.sh` checks
+  `~/.config/batt/pause-until` (an epoch timestamp) before resetting — if still
+  in the future it skips the reset and leaves the cap alone; once past, it
+  deletes the file and resumes normal daily resets. Written by either
+  interface: Raycast's "Pause days" field, or `make batt-limit LIMIT=100
+  DAYS=7`. Setting a cap with no pause days always clears the file, so it also
+  doubles as the cancel/resume-early path.
 - **Raycast control.** Self-authored **Script Commands** (no extension/build, no
   deps — `raycast/battery-{limit,status}.sh`) symlinked as `~/.raycast-scripts`.
-  "Battery Limit" offers an 80/90/100 dropdown; "Battery Status" shows state.
+  "Battery Limit" offers an 80/90/100 dropdown plus an optional "Pause days"
+  text field; "Battery Status" shows state and, if paused, the resume date.
   One-time: point Raycast at the dir (Settings → Extensions → Script Commands → Add
   Directories → `~/.raycast-scripts`).
 
@@ -1342,7 +1352,8 @@ daily-reset LaunchAgent, and Raycast control.
 |-|-|
 | `make batt-setup` | One-time per MacBook: daemon + 80% cap + daily-reset agent + Raycast symlink. `LIMIT=N` to set a different initial cap. |
 | `make batt-limit LIMIT=100` | Change the cap now (or just flip it in Raycast). Default `LIMIT=80`. |
-| `make batt-status` | Show charging state + current limits. |
+| `make batt-limit LIMIT=100 DAYS=7` | Same, plus pause the daily 80% reset for 7 days. Omit `DAYS` to clear an existing pause. |
+| `make batt-status` | Show charging state + current limits, and the pause resume date if paused. |
 
 To remove entirely: `sudo brew services stop batt`,
 `launchctl unload ~/Library/LaunchAgents/com.jkrumm.batt-reset.plist`,

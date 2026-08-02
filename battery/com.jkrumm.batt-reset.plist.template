@@ -4,13 +4,15 @@
 <dict>
   <key>Label</key><string>com.jkrumm.batt-reset</string>
   <!-- Daily reset of the battery charge cap to the 80% default. Any temporary
-       boost (e.g. 100% via Raycast) auto-expires the next morning. batt runs
-       with --always-allow-non-root-access, so this user agent needs no root. -->
+       boost (e.g. 100% via Raycast) auto-expires the next morning, UNLESS a
+       pause is in effect (raycast/battery-limit.sh's "Pause days" field, or
+       `make batt-limit DAYS=N`) — batt-reset.sh checks
+       ~/.config/batt/pause-until and skips the reset until it expires. batt
+       runs with --always-allow-non-root-access, so this user agent needs no
+       root. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/opt/batt/bin/batt</string>
-    <string>limit</string>
-    <string>80</string>
+    <string>__HOME__/SourceRoot/dotfiles/battery/batt-reset.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -20,7 +22,7 @@
   <!-- Don't fire on load — only at the scheduled time, so installing/reloading
        the agent never clobbers an intentional boost. -->
   <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>/tmp/batt-reset.log</string>
-  <key>StandardErrorPath</key><string>/tmp/batt-reset.log</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/batt-reset.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/batt-reset.log</string>
 </dict>
 </plist>
