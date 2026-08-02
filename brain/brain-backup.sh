@@ -24,6 +24,37 @@ set -euo pipefail
 # fallback message instead of a generated one.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
+# Resolved before the cd into the vault: $BASH_SOURCE is relative when the script
+# is invoked by a relative path, and dirname would then point at the vault.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Heartbeat, so a sweep that silently stops is visible. It fails independently of
+# brain-sync: the vault can be reconciling perfectly while nothing commits what
+# direct Obsidian edits left behind, and that loss stays invisible until someone
+# reads `git status` days later. A missing URL file is a no-op, not an error —
+# the MacBook runs this script too and deliberately has no monitor.
+# shellcheck source-path=SCRIPTDIR source=../scripts/lib/kuma-push.sh
+source "$SCRIPT_DIR/../scripts/lib/kuma-push.sh"
+
+BACKUP_PUSH_URL_FILE="${BRAIN_BACKUP_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/brain-backup-push-url}"
+backup_push_url=""
+if [ -n "${BRAIN_BACKUP_PUSH_URL:-}" ] || [ -f "$BACKUP_PUSH_URL_FILE" ]; then
+  backup_push_url="$(kuma_resolve_push_url "${BRAIN_BACKUP_PUSH_URL:-}" "$BACKUP_PUSH_URL_FILE")" || backup_push_url=""
+fi
+beat() { [ -n "$backup_push_url" ] && kuma_push "$backup_push_url" "$1" "$2" >/dev/null 2>&1 || true; }
+
+# A sweep that dies under `set -e` — a rejected hook, a full disk, an unreachable
+# origin — would otherwise exit non-zero having said nothing at all, and 25h later
+# the monitor would blame a missed heartbeat rather than name the failure.
+beat_sent=""
+on_exit() {
+  local st=$?
+  if [ "$st" -ne 0 ] && [ -z "$beat_sent" ]; then
+    beat down "nightly sweep failed (exit $st) — see ~/Library/Logs/brain-backup.log"
+  fi
+  rm -rf "$LOCK_DIR"
+}
+
 VAULT="${BRAIN_VAULT:-$HOME/SourceRoot/brain}"
 cd "$VAULT" 2>/dev/null || { echo "brain-backup: vault not found at $VAULT — skipping"; exit 0; }
 
@@ -44,6 +75,7 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   # owned by another user (EPERM) from one that is genuinely gone (ESRCH).
   if [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; then
     echo "brain-backup: brain-sync (pid $holder) holds the vault lock — skipping tonight's sweep"
+    beat up "skipped: brain-sync holds the lock"; beat_sent="yes"
     exit 0
   fi
   lock_born="$(stat -f %m "$LOCK_DIR" 2>/dev/null || true)"
@@ -57,10 +89,11 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   mkdir "$LOCK_DIR" 2>/dev/null || { echo "brain-backup: lost the race for $LOCK_DIR — skipping tonight's sweep"; exit 0; }
 fi
 printf '%s' "$$" >"$LOCK_DIR/pid"
-trap 'rm -rf "$LOCK_DIR"' EXIT
+trap on_exit EXIT
 
 if [ -z "$(git status --porcelain)" ]; then
   echo "brain-backup: working tree clean — nothing to commit"
+  beat up "clean — nothing to commit"; beat_sent="yes"
   exit 0
 fi
 
@@ -68,6 +101,7 @@ git add -A
 
 if git diff --cached --quiet; then
   echo "brain-backup: only ignored/empty changes staged — nothing to commit"
+  beat up "only ignored changes — nothing to commit"; beat_sent="yes"
   exit 0
 fi
 
@@ -122,3 +156,4 @@ fi
 git commit -q -m "$MSG"
 git push -q origin master
 echo "brain-backup: committed + pushed — $MSG"
+beat up "committed + pushed — $MSG"; beat_sent="yes"
