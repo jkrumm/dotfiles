@@ -6,7 +6,11 @@
 1Password full vault backup — age-encrypted JSON to HomeLab.
 
 Run manually: opbackup (alias)
-Frequency: weekly (Uptime Kuma push monitor reminds if overdue at 8 days)
+Automatically:  com.jkrumm.opbackup fires hourly and runs this once the last
+                success is >5 days old, the screen is unlocked and homelab is
+                reachable — see scripts/opbackup-auto.sh. It never removes the
+                Touch ID approval, only the need to remember. `make opbackup-setup`.
+Frequency:      ≤5 days (Uptime Kuma push monitor alerts if overdue at 8 days)
 
 Vaults backed up: every vault `op vault list` returns, minus SKIP_VAULTS (Shared) —
                   a new vault is picked up with no code change
@@ -33,6 +37,15 @@ Security properties (validated 2026-04-02):
     acceptable since it is a low-privilege heartbeat token, not account credentials
   - Item fetch failures propagate immediately and abort the backup (no silent
     partial exports)
+  - No traceback ever reaches stdout/stderr (see main() guard). This matters
+    only now that output lands in a LOG FILE rather than a terminal. The risk
+    was narrower than it first looks — Python does not print locals in a
+    traceback, and neither CalledProcessError.__str__ (argv + exit status) nor
+    JSONDecodeError.__str__ (position only) carries the payload — but a
+    one-line error is strictly better than a stack that quotes source lines,
+    and it costs nothing.
+  - Retention prune deletes by an EXPLICIT list built from a strict filename
+    regex, never a remote glob
 
 Recovery (MUST run locally — age is not installed on homelab):
   # 1. Fetch file from homelab:
@@ -61,12 +74,24 @@ Known duplicates / gotchas:
   - age is not installed on homelab — do not attempt server-side decryption
 """
 
-import json, subprocess, sys, os, tempfile
+import json, subprocess, sys, os, re, tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
 RECIPIENT = "age1eg6cypgrjv48urgvmxe9wua9d8a7x9e6jxt6w2phcfg46gxzpqdq9f3jke"  # public key — not a secret
 OP_ACCOUNT = ["--account", "tkrumm"]
+
+REMOTE_HOST = os.environ.get("OPBACKUP_REMOTE_HOST", "homelab")
+REMOTE_DIR = "~/backups/1password"
+
+# Retention. Every file here is a complete copy of every credential owned, and
+# an old one stays decryptable with the age key even after a password is
+# rotated — so a 2026-04 dump still exposes the password changed in May. That is
+# true regardless of cadence; automating just accretes faster. Keep the newest
+# N, plus the newest of every calendar month before that, so history thins
+# rather than ending at a cliff.
+KEEP_RECENT = int(os.environ.get("OPBACKUP_KEEP_RECENT", "8"))
+BACKUP_RE = re.compile(r"^1password-(\d{4})-(\d{2})-(\d{2})\.json\.age$")
 
 # Archived items are excluded automatically (op item list omits them without --include-archive).
 # To exclude a vault entirely, add its name here.
@@ -80,6 +105,40 @@ def op_json(cmd: list[str]) -> ...:
 
 def fetch_item(item_id: str, vault_id: str) -> dict:
     return op_json(["item", "get", item_id, "--vault", vault_id, "--format", "json"])
+
+def prune_remote() -> None:
+    """Delete superseded backups on the remote: keep the newest KEEP_RECENT,
+    plus the newest of each calendar month.
+
+    Deletion is by explicit filename list — never `rm *.age` or a find. Names
+    are matched against BACKUP_RE first, so nothing outside the exact
+    `1password-YYYY-MM-DD.json.age` shape can be named, and no shell
+    metacharacter can survive into the remote command.
+    """
+    listing = subprocess.check_output(
+        ["ssh", "-o", "BatchMode=yes", REMOTE_HOST, f"ls -1 {REMOTE_DIR}"]
+    ).decode().split()
+
+    names = sorted(n for n in listing if BACKUP_RE.match(n))
+    if len(names) <= KEEP_RECENT:
+        return
+
+    keep = set(names[-KEEP_RECENT:])
+    by_month: dict[str, str] = {}
+    for n in names:                      # ascending, so the last write per key
+        by_month[n[10:17]] = n           # is that month's newest
+    keep |= set(by_month.values())
+
+    doomed = [n for n in names if n not in keep]
+    if not doomed:
+        return
+
+    subprocess.run(
+        ["ssh", "-o", "BatchMode=yes", REMOTE_HOST,
+         f"cd {REMOTE_DIR} && rm -f -- " + " ".join(doomed)],
+        check=True
+    )
+    print(f"  Pruned {len(doomed)}: {', '.join(doomed)}")
 
 def main():
     # Auth check — triggers biometric if 1Password desktop is unlocked
@@ -145,5 +204,19 @@ def main():
     finally:
         os.unlink(tmp_path)
 
+    # After the heartbeat, never before: a prune that ran first could delete the
+    # previous backup on a run whose own upload then failed.
+    prune_remote()
+
 if __name__ == "__main__":
-    main()
+    # One-line errors, never a traceback — this now runs under a LaunchAgent
+    # whose stdout is a file on disk. See "Security properties" above for why
+    # the leak risk is narrow but the guard is still worth having.
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        sys.exit(130)
+    except Exception as exc:
+        print(f"backup failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(1)

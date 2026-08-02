@@ -1166,6 +1166,72 @@ alone and assemble the URL locally); and a
 LaunchAgent has no shell aliases — `tailscale` is an alias to the app bundle and
 must be called by absolute path.
 
+## 1Password vault backup — auto-trigger (MacBook only)
+
+`opbackup` (`scripts/backup-1password.py`) exports every vault, age-encrypts it
+in memory and rsyncs the ciphertext to homelab. It was documented as weekly and
+was not: 12 runs between 2026-04-02 and 2026-08-01, gaps of **6–22 days**, median
+~10. The 8-day Uptime Kuma monitor had therefore spent large stretches red as a
+*nag*, which is how you train yourself to ignore it.
+
+`com.jkrumm.opbackup` (`make opbackup-setup`, opt-in per machine) fixes the
+remembering. It does **not** make the backup unattended, and must never be made
+to: the first `op` call raises a biometric approval, and the only ways around
+that are an `op` service-account token or a long-lived `OP_SESSION_*` — i.e.
+parking a credential that can export every vault you own on a laptop's disk.
+The design goal is a prompt that arrives at a sane moment, not no prompt.
+
+| Command | Does |
+|-|-|
+| `make opbackup-setup` | Seed the stamp from the newest remote backup, install + load the agent |
+| `make opbackup-check` | Run the guard once; prints which precondition stopped it. `FORCE=1` to back up now |
+| `make opbackup-teardown` | Unload + remove the plist (stamps kept) |
+
+**Hourly, not daily, and `RunAtLoad` is the wrong key entirely.** `RunAtLoad`
+fires when the agent is *loaded* — login or reboot — never on wake, and
+launchd.plist(5) says outright to avoid it. The catch-up wanted here is
+`StartCalendarInterval`'s: *"Unlike cron which skips job invocations when the
+computer is asleep, launchd will start the job the next time the computer wakes
+up... coalesced into one event."* `StartInterval` explicitly does **not** do this
+(a fire missed while asleep is lost). A bare `Minute` wildcards every other
+field, so `{Minute: 17}` is every hour — which matters because a single daily
+fire that lands at a locked screen is skipped with the next chance 24h out, so a
+laptop shut at 10:00 drifts red while sitting open all afternoon.
+
+**Every real decision lives in `scripts/opbackup-auto.sh`**, ordered
+cheapest-first, and each one exits **0** — a skipped run is the normal case, not
+a failure launchd should see: backend is `op` (never the mini) → success stamp
+>5d → no attempt within 6h → screen unlocked → 1Password desktop running →
+homelab reachable. 23 of 24 fires cost one `stat`.
+
+**The attempt stamp is the part that makes it liveable.** A real attempt costs a
+Touch ID approval, so declining one must not mean being asked again in 60
+minutes forever — that is precisely the habit (dismissing 1Password dialogs
+reflexively) that would make automating this a net security *loss*. Freshness and
+re-prompting are therefore two separate stamps in
+`~/.local/state/opbackup/`, and `opbackup-setup` backdates the success one to the
+newest backup already on homelab so installing never fires a surprise prompt.
+
+Two probes are worth knowing because the obvious spelling of each is wrong.
+Screen lock is `ioreg -n Root -d1 -k CGSSessionScreenIsLocked` — the key is
+**absent entirely** while unlocked, not `No` — and it is read into a variable
+rather than piped to `grep -q`, because `set -o pipefail` turns that early exit's
+SIGPIPE into a false failure (a trap this repo has already paid for once).
+Reachability is checked **before** the prompt: failing at the rsync leg would
+mean having spent an approval and ~90s of `op` calls for nothing.
+
+**Automation adds no standing access** — no token, no key, no service account;
+the age recipient is a public key and its private half stays in 1Password plus
+paper. What it did add was closed in the same change: output now lands in a log
+file rather than a terminal, so `backup-1password.py` prints one-line errors
+instead of tracebacks (`~/Library/Logs/opbackup.log`, declared in
+`scripts/log-rotate.sh`, never `/tmp`); and the remote had accumulated 12
+never-pruned dumps, each a complete copy of every credential owned and each still
+decryptable with the age key **after** the passwords inside it have been
+rotated — so a April dump exposes the password changed in May. `prune_remote()`
+keeps the newest 8 plus the newest of each calendar month, deleting an
+**explicit** regex-validated filename list, never a remote glob.
+
 ## Battery charge limiter (MacBook only)
 
 The MacBook holds its charge at a cap (default **80%**) to slow Li-ion wear, via

@@ -55,6 +55,7 @@ FILES=(
   brain-backup.log
   brain-sync.log
   secrets-freshness.log
+  opbackup.log
   devhost-health.log
   linewatch-collector.log
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"

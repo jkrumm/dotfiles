@@ -1965,6 +1965,42 @@ secrets-freshness-teardown:
 secrets-freshness-check:
 	@bash $(DOTFILES_DIR)/scripts/secrets-freshness-check.sh
 
+# Guarded auto-trigger for the 1Password vault backup (`opbackup`). Present-human
+# machines only — the backup is biometric end to end and there is deliberately no
+# unattended path, so this removes the REMEMBERING, not the human. Hourly fire,
+# with every real decision in scripts/opbackup-auto.sh. Opt-in per machine like
+# remote-access, not part of the default setup chain.
+.PHONY: opbackup-setup opbackup-teardown opbackup-check
+opbackup-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "op" ]; then \
+		echo "  ✗ secrets backend is '$${BACKEND:-unset}', not 'op' — this is not a present-human machine."; \
+		echo "    The backup needs a biometric approval nobody is there to give. Refusing."; \
+		exit 1; \
+	fi
+	@MISSING=""; \
+	for bin in op age uv rsync; do \
+		command -v $$bin >/dev/null 2>&1 || MISSING="$$MISSING $$bin"; \
+	done; \
+	if [ -n "$$MISSING" ]; then echo "  ✗ missing on PATH:$$MISSING"; exit 1; fi; \
+	echo "  ✓ op, age, uv, rsync present"
+	@chmod +x $(DOTFILES_DIR)/scripts/opbackup-auto.sh
+	@bash $(DOTFILES_DIR)/scripts/opbackup-auto.sh --seed-stamp
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.opbackup" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ hourly at :17 → runs opbackup once >5d stale, screen unlocked, homelab reachable"
+
+opbackup-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.opbackup.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ opbackup auto-trigger torn down (unloaded + plist removed; stamps kept)"
+
+# Run the guard once, printing which precondition it stopped at. Add FORCE=1 to
+# bypass the freshness/backoff/lock checks and actually back up now.
+opbackup-check:
+	@bash $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(if $(FORCE),--force,)
+
 # Hourly copytruncate rotation for the LaunchAgent logs this repo owns. Needed
 # because moving those logs out of /tmp removed the only thing that had ever
 # bounded them — macOS's periodic cleanup, which DELETES rather than truncates
@@ -2388,6 +2424,9 @@ help:
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
+	@echo "  make opbackup-setup             Auto-trigger the 1Password vault backup (MacBook; hourly, guarded)"
+	@echo "  make opbackup-check             Run the guard once — prints which precondition stopped it (FORCE=1 to run)"
+	@echo "  make opbackup-teardown          Remove the auto-trigger (stamps kept)"
 	@echo ""
 	@echo "  Remote dev"
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"

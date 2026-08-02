@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.opbackup</string>
+  <!-- Hourly TRIGGER for the 1Password vault backup. The schedule is dumb on
+       purpose; every decision about whether to actually run lives in
+       opbackup-auto.sh (freshness stamp, attempt backoff, lock screen,
+       1Password running, homelab reachable). 23 of 24 fires cost one stat(2).
+
+       NOT RunAtLoad. That key fires only when the agent is LOADED — login or
+       reboot — never on wake, and launchd.plist(5) explicitly says to avoid it
+       ("speculative job launches have an adverse effect on system-boot and
+       user-login scenarios"). The catch-up semantics wanted here belong to
+       StartCalendarInterval, whose man page is unambiguous: "Unlike cron which
+       skips job invocations when the computer is asleep, launchd will start the
+       job the next time the computer wakes up. If multiple intervals transpire
+       before the computer is woken, those events will be coalesced into one
+       event upon wake from sleep." StartInterval does NOT do this — a fire
+       missed while asleep is simply lost.
+
+       A bare Minute is a wildcard on every other field, so this is every hour
+       at :17 — not daily. A single daily fire that lands at a locked screen is
+       skipped with the next chance 24h out, so a laptop shut at that one clock
+       time drifts red while sitting open all afternoon. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__HOME__/SourceRoot/dotfiles/scripts/opbackup-auto.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Minute</key><integer>17</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <!-- launchd hands an agent /usr/bin:/bin:/usr/sbin:/sbin. `op`, `age`, `uv`
+       (the backup's shebang is `uv run --script`) and `rsync` are all Homebrew,
+       so the PATH has to be pinned here — same failure class as the
+       collie LaunchAgent's missing `bun`. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- ~/Library/Logs, never /tmp: macOS's periodic cleanup DELETES files there
+       untouched for 3+ days and launchd opens this path once at spawn. Declared
+       in scripts/log-rotate.sh. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/opbackup.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/opbackup.log</string>
+</dict>
+</plist>
