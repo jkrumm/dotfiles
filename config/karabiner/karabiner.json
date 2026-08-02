@@ -61,7 +61,7 @@
                                     "key_code": "a",
                                     "modifiers": { "mandatory": ["left_control", "left_option", "left_shift"] }
                                 },
-                                "to": [{ "shell_command": "open https://argo.jkrumm.com" }],
+                                "to": [{ "shell_command": "open -b com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip" }],
                                 "type": "basic"
                             },
                             {
