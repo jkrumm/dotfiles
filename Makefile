@@ -725,8 +725,8 @@ batt-setup:
 	@# Raycast Script Commands: self-authored, no deps. Symlink the dir; Raycast must be pointed at it once.
 	@ln -sfn "$(DOTFILES_DIR)/raycast" "$(HOME)/.raycast-scripts" \
 		&& echo "    ✓ Raycast scripts → ~/.raycast-scripts (Battery Limit / Battery Status)"
-	@echo "    ↳ One-time in Raycast: Settings → Extensions → Script Commands →"
-	@echo "      Add Directories → ~/.raycast-scripts"
+	@echo "    ↳ One-time in Raycast: Settings (⌘,) → Script Commands (own top-level"
+	@echo "      tab, not under Extensions) → Add Script Directory → ~/.raycast-scripts"
 batt-limit:
 	@if ! pmset -g batt | grep -q InternalBattery; then \
 		echo "  batt: no internal battery — nothing to do."; exit 0; fi

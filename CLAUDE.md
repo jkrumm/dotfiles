@@ -1345,8 +1345,11 @@ daily-reset LaunchAgent, and Raycast control.
   deps — `raycast/battery-{limit,status}.sh`) symlinked as `~/.raycast-scripts`.
   "Battery Limit" offers an 80/90/100 dropdown plus an optional "Pause days"
   text field; "Battery Status" shows state and, if paused, the resume date.
-  One-time: point Raycast at the dir (Settings → Extensions → Script Commands → Add
-  Directories → `~/.raycast-scripts`).
+  One-time: point Raycast at the dir — **Settings (⌘,) → Script Commands**, a
+  top-level tab, not nested under Extensions (moved there at some point;
+  `com.raycast.macos.plist` even carries a stale
+  `fallbackSearches_didMigrateScriptCommands` key from the move) → **Add Script
+  Directory** → `~/.raycast-scripts`.
 
 | Command | Purpose |
 |-|-|
