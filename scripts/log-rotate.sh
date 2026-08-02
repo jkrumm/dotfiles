@@ -58,6 +58,11 @@ FILES=(
   hermes-liveness.err
   hermes-backup.log
   hermes-backup.err
+  # Not a LaunchAgent log: hermes-agent/scripts/hermes-ops.sh appends one audit
+  # line per invocation, so it grows with agent activity rather than on a
+  # schedule. It is the only record of what Hermes did unattended, so it is
+  # rotated rather than truncated.
+  hermes-ops.log
   secrets-freshness.log
   opbackup.log
   devhost-health.log
