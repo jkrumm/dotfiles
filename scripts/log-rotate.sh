@@ -54,6 +54,10 @@ FILES=(
   usage-tracker.err
   brain-backup.log
   brain-sync.log
+  hermes-liveness.log
+  hermes-liveness.err
+  hermes-backup.log
+  hermes-backup.err
   secrets-freshness.log
   opbackup.log
   devhost-health.log
