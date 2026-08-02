@@ -61,5 +61,5 @@ Compiled pieces live on the curated surface (an Area/Project folder note, or a h
 ## Safety
 
 - Scope commits to one concern. Review `git diff --stat` before pushing.
-- LiveSync (CouchDB) provides continuous cross-device backup, orthogonal to git; git remains the deliberate review + history gate. Commit deliberately (or via `/commit`) when a write is done, and push.
+- Git is the only durability — LiveSync (CouchDB) is retired and the server decommissioned. Both machines reconcile through GitHub on a 5-minute LaunchAgent, and the mini's lane never auto-commits, so **a write is not durable until it is committed**. `git pull` before writing; commit deliberately (or via `/commit`) when a write is done, and push.
 - Never commit secrets, real hostnames, or real IPs — use placeholders.
