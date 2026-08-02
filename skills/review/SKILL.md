@@ -45,6 +45,33 @@ Present one consolidated verdict — outcome, blocking, improvements, discussion
 testGaps, summary — noting the catching reviewer per finding. Don't echo each
 tool's raw output; synthesize.
 
+## What the gates cannot catch — check these yourself
+
+A green run is not evidence of correctness. A four-round dashboard overhaul
+passed typecheck, lint, the palette guard and 807 tests while drawing unmeasured
+time as clean measured time; only the adversarial pass caught it. Two classes
+recur, and neither is visible to any tool:
+
+- **Comments that assert something false about the code they sit on.** Seen
+  twice in one change: a 12-line block justifying a wrapper by describing
+  behaviour the wrapped component did not have, and a docblock stating the exact
+  opposite of its own function after a dependency upgrade widened an enum. Both
+  would have misled the next reader into deleting a live guard as dead. When a
+  comment makes a load-bearing factual claim — about a library's behaviour, a
+  sibling module, or a threshold — **verify it against source**, not against
+  plausibility.
+- **Half-fixes reported as fixes.** A subagent's report is a claim. Findings that
+  came back "fixed" included dead code no caller wired up, and the one example
+  string the user had named by hand still present. Check the specific site named
+  in the request, not the general area.
+
+**For a subjective ask, demand a measurable acceptance criterion.** "Reduce the
+text bloat" got measurably *worse* across two rounds — every pass added
+explanatory prose while fixing something else — until the criterion became "count
+user-visible words before and after". It then went down 10%. If the request
+cannot be checked by a number or a named site, it will be reported as done
+regardless of what happened.
+
 **Worker caveats when consuming findings:**
 - **Line numbers are unreliable** — the worker often cites lines that don't exist (e.g. L688 in a 600-line file). The *substance* is usually accurate; the location isn't. Before reporting or acting on a finding, **grep for the symbol/code, not the cited line.**
 - **Angle reviewers explore the live tree**, not just the diff (they have Bash/Read/Grep). A finding may reference current code outside the reviewed scope — useful, but verify it's in-scope before treating it as introduced by the change.

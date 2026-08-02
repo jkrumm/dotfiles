@@ -22,6 +22,45 @@ Visx exposes low-level primitives so we can build exactly the chart we want. The
 
 **Exemption:** sparklines (tiny inline charts without legend/tooltip) live under `charts/sparklines/` and don't have to compose `ChartCard`/`ChartLegend`/`ChartTooltip` — but still must use VX tokens and `useVxTheme`.
 
+## Traps no gate catches
+
+Four failures that typecheck, lint, pass the palette guard, and render — each
+found the hard way, none reported by any tool:
+
+- **`ChartTooltip` is a `<div>`. Never render one inside `<svg>`.** React creates
+  the element in the SVG namespace there, so it mounts, accepts its props, throws
+  nothing, and is never painted. One chart shipped **eight authored tooltip rows
+  that no one had ever seen**; the chart was otherwise correct, so nothing looked
+  wrong. The tooltip belongs in the wrapper outside the SVG.
+- **Cross-chart hover syncs on an opaque string key**, so two charts share a
+  cursor only if they emit *identical* key strings. A chart that downsamples its
+  domain to fit a narrow viewport stops owning most of the keys its siblings
+  broadcast — the crosshair then lands on some hovers and not others, with no
+  rule the reader can infer, which is worse than no shared cursor at all. If any
+  chart in a synced group folds, map every unfolded key onto the folded slot that
+  swallowed it rather than matching keys exactly.
+- **`HoverOverlay` binds mouse events, not pointer events**, so every chart under
+  it is inert on touch. Use a pointer-event overlay if the page ships to phones.
+- **A pre-formatted axis label usually doubles as the scale's domain value**
+  (`scalePoint`/`scaleBand` over label strings), so it must be unique per point.
+  Two points sharing a domain value collapse onto one x position and one stops
+  being drawn — a measurement silently dropped, with no gap to show for it. Watch
+  for this when a date formatter truncates: a day-resolution format over a 24 h
+  window makes every label identical.
+
+## "Nothing to draw" is two different states
+
+A chart in a data app has three states, not two: **measured and empty**,
+**measured and absent** (a gap in coverage), and **not asked yet** (query in
+flight). Collapsing the third into either of the others is the most common
+honesty bug in a dashboard — `data ?? []` renders an in-flight query as a fully
+hatched "not measured" window, which is a positive claim that nothing was there.
+Give charts an explicit `isPending` and a placeholder with the same footprint,
+and suppress the legend while pending (a legend naming a "not measured" series
+with nothing to point at is its own small lie). Guard it even where a route
+loader appears to make the state unreachable — that guarantee is route config a
+later edit can silently remove.
+
 ## How to add a new chart
 
 1. **Is it the second instance of an existing pattern?** Extract a kind component into `charts/kinds/` and migrate both call sites. (Rule of Three: don't extract on the first, don't wait past the third.)
