@@ -4,9 +4,9 @@
 # Backstop for direct Obsidian edits that never went through a Claude Code
 # session (and so were never committed/pushed there). If the working tree is
 # dirty, stage everything (git add -A respects .gitignore, so secrets like
-# .obsidian/plugins/*/data.json stay out), ask claude_iu (Haiku, IU per-token —
-# off Max quota) to write a one-line commit message from the diff, commit
-# straight to master, and push.
+# .obsidian/plugins/*/data.json stay out), ask Haiku for a one-line commit
+# message from the diff (`claude -p --model haiku` against the IU endpoint —
+# per-token, off Max quota), commit straight to master, and push.
 #
 # THIS IS NOT THE SYNC LAYER — brain-sync.sh is, running every 5 minutes under
 # launchd on both the mini and the MacBook (LiveSync/CouchDB has been retired
