@@ -10,9 +10,9 @@ Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`
 Two layers, two physical trees:
 
 - **Agentic knowledge — `wiki/`.** A top-level, domain-organized tree (e.g. `wiki/health/peptides/`) of atomic, terse, **English**, cross-linked concept notes agents read and write by traversal. **Strict** discipline: `type` + `description` frontmatter, `[[wikilinks]]` that resolve, a per-level `index.md` MOC.
-- **Curated human surface — `03_Projects`, `04_Areas`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human. There is no PARA `Resources` tier — reference material is a `wiki/` concept note or a page under an Area.
+- **Curated human surface — `Projects`, `Areas`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human. There is no PARA `Resources` tier — reference material is a `wiki/` concept note or a page under an Area.
 
-`00_Inbox`, `01_Journal`, `02_Daily`, `09_Templates` keep a loose capture schema (`title`/`date`/`tags`) and are excluded from lint/MOC checks.
+`Inbox` keeps a loose capture schema (`title`/`date`/`tags`) and is excluded from lint/MOC checks.
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 
 1. Start at `/Users/jkrumm/SourceRoot/brain/index.md` and follow `[[wikilinks]]`.
 2. Route by folder and by `type`/`tags` frontmatter. Each `wiki/` domain level has an `index.md` MOC; each curated Area/Project has a folder note (`{name}.md`) as its local MOC — open the MOC before reading children individually.
-3. **Never** default-traverse `00_Inbox/` — read them only on an explicit ingestion request.
+3. **Never** default-traverse `Inbox/` — read them only on an explicit ingestion request.
 4. For broad search, use `obsidian search` / `obsidian backlinks` (or `obsidian orphans` / `obsidian deadends` for graph health) rather than reading many files inline; delegate wide fan-out reads to the Explore subagent.
 
 ## How to write knowledge (`wiki/`)
@@ -39,11 +39,11 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 - Update the nearest `wiki/` `index.md` MOC. Append a line to root `log.md`.
 - Run `node .scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
-Curating a **human page** (`03_Projects`/`04_Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page. When adding a subfolder that will hold more than one note, create its folder note (`{foldername}.md`) in the same write — see the vault's `AGENTS.md` → Reserved filenames; a pure attachment/spec bucket already covered by the parent's folder note doesn't need one.
+Curating a **human page** (`Projects`/`Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page. When adding a subfolder that will hold more than one note, create its folder note (`{foldername}.md`) in the same write — see the vault's `AGENTS.md` → Reserved filenames; a pure attachment/spec bucket already covered by the parent's folder note doesn't need one.
 
 ## How to capture
 
-For a quick capture (a stray thought, a URL, a one-line reminder), write it to `00_Inbox/` as a dated staging file with the loose capture schema (`title`, `date`, `tags`). Do not distill it inline — captures are promoted deliberately (see Ingestion).
+For a quick capture (a stray thought, a URL, a one-line reminder), write it to `Inbox/` as a dated staging file with the loose capture schema (`title`, `date`, `tags`). Do not distill it inline — captures are promoted deliberately (see Ingestion).
 
 ## How to compile (human-readable output)
 
@@ -54,9 +54,9 @@ Compiled pieces live on the curated surface (an Area/Project folder note, or a h
 **AGENTS.md → Ingestion is canonical** — read it before any migration. The full promotion runbook, the three wikilink cases, provenance/no-re-migration, and "migration preserves, does not recommend" all live there. The non-negotiables:
 
 - **Never an autonomous loop.** v1 was scrapped for exactly that (`.docs/post-mortem-v1.md`). Promote one concept at a time, human-reviewed.
-- Connectors and the vault drop **raw** captures into `00_Inbox/` only — never straight into `wiki/` or an evergreen Area/Project. Log every skip with a reason in `log.md`; no silent drops.
+- Connectors and the vault drop **raw** captures into `Inbox/` only — never straight into `wiki/` or an evergreen Area/Project. Log every skip with a reason in `log.md`; no silent drops.
 - Show the user the `git diff` before it lands. Small batches.
-- Do not touch `00_Inbox/` or run ingestion unless explicitly asked.
+- Do not touch `Inbox/` or run ingestion unless explicitly asked.
 
 ## Safety
 

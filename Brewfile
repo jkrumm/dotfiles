@@ -183,7 +183,7 @@ cask "jiggler"
 # Ghostty/cmux herdr wins and outside them the app launches.
 #
 # The keymap is documented in the brain: "Keyboard — the Hyper layer"
-# (04_Areas/Engineering/keyboard.md); the reasoning is in the wiki note
+# (Areas/Engineering/keyboard.md); the reasoning is in the wiki note
 # "terminal key encoding".
 #
 # NOT Hyperkey, and this is a macOS 26 fact rather than a preference. Hyperkey

@@ -58,7 +58,7 @@ against the mini's 03:30 auto-commit — recoverable, just annoying.
 
 ### iPhone
 
-Capture goes to Hermes over Slack, which writes into `00_Inbox/` on the source
+Capture goes to Hermes over Slack, which writes into `Inbox/` on the source
 of truth. No vault data lives on the phone at all.
 
 Reading is the planned web door below.
@@ -101,7 +101,7 @@ no new exposure.
 Three things to decide when building it:
 
 - **Dataview does not render in a static build**, and 7 notes use it — including
-  `03_Projects/03_Projects.md` and the Areas index pages, i.e. the pages you
+  `Projects/Projects.md` and the Areas index pages, i.e. the pages you
   land on first. They would appear as code blocks. The fix is generating those
   index lists at build time instead of querying them, which has the side benefit
   of making them legible in a plain `git diff`.
