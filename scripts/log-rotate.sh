@@ -53,6 +53,7 @@ FILES=(
   usage-tracker.log
   usage-tracker.err
   brain-backup.log
+  brain-sync.log
   secrets-freshness.log
   devhost-health.log
   linewatch-collector.log

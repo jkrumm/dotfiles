@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.brain-sync</string>
+  <!-- Continuous sync of the brain vault through GitHub. Installed on BOTH
+       machines; the script picks its role off the secrets-backend marker
+       (`cache` = the mini, source, pull+push only; `op` = the MacBook, mirror,
+       pull+commit+push). GitHub is the hub and this agent is the only thing
+       that pushes to it — the obsidian-git plugin is deliberately not
+       installed, because a plugin committing on its own timer next to this one
+       is two committers racing for .git/index.lock.
+       See brain/brain-sync.sh and ~/SourceRoot/brain/docs/brain-access.md. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/SourceRoot/dotfiles/brain/brain-sync.sh</string>
+  </array>
+  <!-- Every 5 minutes: the paired Kuma monitor's interval must be LONGER (600s,
+       same convention as devhost-health) so a single skipped run — a closed
+       lid, a reboot, a slow network — does not page on its own. The script
+       holds its own single-instance lock, so a run that outlives the interval
+       cannot be overlapped by the next one. -->
+  <key>StartInterval</key><integer>300</integer>
+  <!-- Fire on load so a reboot or a `make brain-sync-setup` closes the sync gap
+       immediately instead of leaving up to 5 minutes of divergence. Safe to
+       repeat: every path in the script is idempotent and self-guarding. -->
+  <key>RunAtLoad</key><true/>
+  <!-- ~/Library/Logs, not /tmp: /tmp is world-writable (another local user
+       could pre-create the path as a symlink and have launchd clobber the
+       target every 5 minutes), and macOS's periodic cleanup DELETES /tmp files
+       untouched for 3+ days, which for the only record that the sync ran at all
+       is the same loss as truncation.
+
+       The unlinked-inode caveat on the nightly brain-backup agent does NOT bite
+       here, and for the same reason: launchd opens StandardOutPath once per
+       SPAWN, and an interval agent — RunAtLoad or not — spawns fresh every 300s
+       rather than holding one fd open the way the KeepAlive agents do. A log
+       deleted or renamed out from under this agent costs at most one tick's
+       lines, not every line until the next reboot. (scripts/log-rotate.sh uses
+       copytruncate anyway, which is safe for both shapes.) -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/brain-sync.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/brain-sync.log</string>
+</dict>
+</plist>

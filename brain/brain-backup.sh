@@ -4,12 +4,18 @@
 # Backstop for direct Obsidian edits that never went through a Claude Code
 # session (and so were never committed/pushed there). If the working tree is
 # dirty, stage everything (git add -A respects .gitignore, so secrets like
-# _device-settings and .obsidian/plugins/*/data.json stay out), ask claude_iu
-# (Haiku, IU per-token — off Max quota) to write a one-line commit message
-# from the diff, commit straight to master, and push. With LiveSync retired
-# (every replication trigger off, CouchDB not written since 2026-07-21, and no
-# second device holding a checkout), nothing else mirrors this vault — the
-# GitHub copy this pushes is the only one there is.
+# .obsidian/plugins/*/data.json stay out), ask claude_iu (Haiku, IU per-token —
+# off Max quota) to write a one-line commit message from the diff, commit
+# straight to master, and push.
+#
+# THIS IS NOT THE SYNC LAYER — brain-sync.sh is, running every 5 minutes under
+# launchd on both the mini and the MacBook (LiveSync/CouchDB has been retired
+# since 2026-07-21; git through GitHub is the whole mechanism, and the MacBook
+# holds a writing clone). This job exists for the one thing brain-sync
+# deliberately refuses to do: commit on the mini. There, committing stays a
+# considered act — Claude Code sessions commit their own work under review, and
+# this 03:30 sweep catches whatever they left dirty so GitHub never drifts more
+# than a day stale.
 set -euo pipefail
 
 # launchd hands agents a minimal PATH — make sure git/security resolve either way.
@@ -22,6 +28,36 @@ VAULT="${BRAIN_VAULT:-$HOME/SourceRoot/brain}"
 cd "$VAULT" 2>/dev/null || { echo "brain-backup: vault not found at $VAULT — skipping"; exit 0; }
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "brain-backup: $VAULT is not a git work tree — skipping"; exit 0; }
+
+# Take the SAME lock brain-sync.sh holds. Both agents run on this machine and
+# both touch this repo: at 03:30 a brain-sync tick can autostash the dirty tree
+# a fraction of a second before this script inspects it, whereupon the check
+# below sees a clean tree, reports "nothing to commit" and exits 0 — and the
+# night's uncommitted work sits in a stash that the only committing job on the
+# mini has just declared absent. The other outcome is dying on .git/index.lock
+# mid-`git add -A` with no sweep at all. A one-night skip is the correct
+# response to a live sync; silently losing the sweep is not.
+LOCK_DIR="${BRAIN_SYNC_LOCK_DIR:-$HOME/Library/Caches/brain-sync.lock}"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  holder="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  # `ps` rather than `kill -0`: the latter cannot distinguish a live process
+  # owned by another user (EPERM) from one that is genuinely gone (ESRCH).
+  if [ -n "$holder" ] && ps -p "$holder" >/dev/null 2>&1; then
+    echo "brain-backup: brain-sync (pid $holder) holds the vault lock — skipping tonight's sweep"
+    exit 0
+  fi
+  lock_born="$(stat -f %m "$LOCK_DIR" 2>/dev/null || true)"
+  lock_age=$(( $(date +%s) - ${lock_born:-0} ))
+  if [ -z "$holder" ] && [ "$lock_age" -lt 60 ]; then
+    echo "brain-backup: the vault lock has no pid yet and is only ${lock_age}s old — a sync run is claiming it; skipping tonight's sweep"
+    exit 0
+  fi
+  echo "brain-backup: reclaiming the lock left by pid ${holder:-unknown} (${lock_age}s old) — no such process" >&2
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR" 2>/dev/null || { echo "brain-backup: lost the race for $LOCK_DIR — skipping tonight's sweep"; exit 0; }
+fi
+printf '%s' "$$" >"$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
 
 if [ -z "$(git status --porcelain)" ]; then
   echo "brain-backup: working tree clean — nothing to commit"

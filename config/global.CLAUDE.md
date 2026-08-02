@@ -41,7 +41,7 @@ The Mac has two workspace "regions". Skills, hooks, and rules are **global** (`~
 | `rollhook` | Webhook-triggered zero-downtime rolling deployments for Docker Compose. |
 | `rollhook-action` | GitHub Action wrapping rollhook. |
 | `modelpick` | Decides which models to use for what (LLM/TTS/STT) and keeps it current — ranks IU unified-endpoint models against external leaderboards + live probes, records my committed stack, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`); see its `CLAUDE.md`. TanStack Start + Mantine + Drizzle/Postgres. |
-| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli` — a **client of the running Obsidian app**, so the app must be up (`make obsidian-autostart`); it exits 1 on every subcommand when down. Git is both durability and review — a nightly LaunchAgent (`com.jkrumm.brain-backup`, 03:30) commits and pushes leftover Obsidian edits, `git diff` is the deliberate gate. **LiveSync/CouchDB is retired** and its remnants were cleared 2026-07-31 (4 dead plugins, the plaintext `_device-settings`); 3 plugins remain — dataview, folder-notes, excalidraw. **Access model: the mini is the single writer; every other device reads** — MacBook via a git clone (offline mirror, pull before writing), phone via Hermes/Slack for capture and a planned read-only web door. `docs/brain-access.md`. Direct-to-master; validated by `vault-lint`. |
+| `brain` | Private second brain — a git-backed Obsidian vault at `~/SourceRoot/brain`, shared by Claude Code (`/brain`) and Hermes. Two layers: a top-level `wiki/` tree = agentic knowledge (strict lint); the PARA `03_Projects`/`04_Areas` = curated human surface (light lint) that links down into `wiki/` (no `Resources` tier — reference material is a `wiki/` note or an Area page). Agent door: `obsidian-cli` — a **client of the running Obsidian app**, so the app must be up (`make obsidian-autostart`); it exits 1 on every subcommand when down. Git is both durability and review — `git diff` is the deliberate gate. **LiveSync/CouchDB is retired** and its remnants were cleared 2026-07-31 (4 dead plugins, the plaintext `_device-settings`); 3 plugins remain — dataview, folder-notes, excalidraw. **Access model: GitHub is the hub, both desktops write.** `com.jkrumm.brain-sync` (`dotfiles/brain/brain-sync.sh`) runs every 5 min on both machines — the mini pulls and pushes but never commits, the MacBook pulls, commits and pushes; obsidian-git is deliberately not installed (a second committer racing for `.git/index.lock`). The nightly `com.jkrumm.brain-backup` (03:30) is now only the mini's leftover-dirt sweep. Conflicts are never auto-resolved: the rebase aborts and a human picks the side. Phone is Hermes/Slack capture plus a planned read-only web door. `docs/brain-access.md`. Direct-to-master; validated by `vault-lint`. |
 | `image-gen` | Personal image-generation studio (gpt-image family) — gateway runs on the mini; its refs are cached in `dotfiles-private/headless.refs`. |
 | `rb` | Personal single-user learning tracker — always-on Docker on the mini, Tailscale-only. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods` | Smaller personal apps / utilities. |
@@ -68,12 +68,15 @@ unique to the MacBook is preserved in `~/SourceRoot-archive` (git bundles +
 un-gitted projects, see its README).
 
 **`brain` is a deliberate exception to that rule, not drift — do not "clean it
-up".** It is the vault's only offline copy and its only second copy of any kind
-(the mini is the sole writer and git is the sole durability, see the `brain`
-row above). It is a *read mirror* by discipline, not by permission: `git pull`
-before writing anything there, and expect to rebase against the mini's 03:30
-auto-commit if you don't. The full access model — why not LiveSync/Syncthing,
-what the phone gets, what still has to be built — is `docs/brain-access.md`.
+up".** It is the vault's only offline copy, and it is a *writing* mirror: edit it
+here freely. `com.jkrumm.brain-sync` reconciles both machines through GitHub every
+5 minutes (it commits here, pulls-and-pushes on the mini), so a MacBook edit is on
+the mini within ~10 minutes without anyone doing anything. What it will never do is
+resolve a conflict — edit the same note on both machines inside one interval and
+the rebase aborts, the tree is left untouched, and you pick the side by hand. The
+full access model — why not LiveSync/Syncthing, what the phone gets, obsidisync as
+the designated upgrade path once phone *editing* is wanted — is
+`~/SourceRoot/brain/docs/brain-access.md`.
 
 Two separate questions, and collapsing them is the usual confusion:
 
@@ -170,7 +173,7 @@ Other IuRoot repos exist but are rarely touched directly (`epos.crm-bridge`, `ep
 
 ### `~/Obsidian/Vault/` — cold backup (not the live vault)
 
-The live vault relocated into `~/SourceRoot/brain` (git-backed, on the mini only — see the `brain` repo-map row and the `/brain` skill). `~/Obsidian/Vault` is retained only as a cold backup — leave it closed, do not read/write it. Tasks managed externally in TickTick.
+The live vault relocated into `~/SourceRoot/brain` (git-backed, checked out on both the mini and this MacBook and synced through GitHub — see the `brain` repo-map row and the `/brain` skill). `~/Obsidian/Vault` is retained only as a cold backup — leave it closed, do not read/write it. Tasks managed externally in TickTick.
 
 ---
 

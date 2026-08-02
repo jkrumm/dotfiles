@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.brain-backup</string>
-  <!-- Nightly auto-commit + push of the brain vault to GitHub. Backstop for
-       direct Obsidian edits never committed during a Claude Code session.
-       With LiveSync retired (every replication trigger off, and no second
-       device holding a checkout), this push is not a backstop to a sync
-       layer — it IS the vault's only durability. -->
+  <!-- Nightly leftover-dirt sweep of the brain vault: commits and pushes
+       whatever a Claude Code session left uncommitted. Mini-only in practice.
+       It is NOT the sync layer — com.jkrumm.brain-sync is, every 5 minutes on
+       both machines, and that agent deliberately never commits on the mini so
+       that committing there stays a reviewed act. This job is the backstop for
+       exactly that gap. LiveSync is retired; git through GitHub is both the
+       sync mechanism and the durability. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/SourceRoot/dotfiles/brain/brain-backup.sh</string>

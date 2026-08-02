@@ -731,14 +731,33 @@ batt-limit:
 batt-status:
 	@$(BATT) status 2>/dev/null || echo "  batt daemon not running — run 'make batt-setup'"
 
-# ~/SourceRoot/brain nightly auto-commit + push to GitHub (03:30). Backstop for
-# direct Obsidian edits never committed during a Claude Code session — commits
-# any dirty working tree straight to master (claude_iu/Haiku writes the commit
-# message) and pushes. With LiveSync retired (every replication trigger off, no
-# second device holding a checkout), git IS the vault's only durability — this
-# nightly push is not a backstop to a sync layer, it is the sync layer. Self-
-# guards on a missing vault; the script's `git add -A` respects .gitignore, so
-# secrets stay out.
+# ~/SourceRoot/brain continuous sync through GitHub, every 5 minutes, on BOTH
+# machines. The script picks its role off the secrets-backend marker: `cache`
+# (mini) = source, pull + push only, never commits; `op` (MacBook) = mirror,
+# pull + commit + push. GitHub is the hub and this agent is the only thing that
+# pushes to it — obsidian-git is deliberately not installed, since a plugin
+# committing on its own timer beside this one is two committers racing for
+# .git/index.lock. Self-guards on a missing vault.
+.PHONY: brain-sync-setup brain-sync-teardown
+brain-sync-setup:
+	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
+		echo "  brain-sync: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-sync" PLIST_DIR="$(DOTFILES_DIR)/brain"
+	@echo "    ↳ every 300s → pull --rebase, push (mirror role also commits); log: ~/Library/Logs/brain-sync.log"
+brain-sync-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-sync.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ brain-sync torn down (unloaded + plist removed)"
+
+# The nightly (03:30) leftover-dirt sweep on the mini — commits any working tree
+# the day's Claude Code sessions left dirty (claude_iu/Haiku writes the commit
+# message) and pushes. It is NOT the sync layer: brain-sync above is, on a
+# 5-minute interval on both machines. This is the backstop for the one thing
+# brain-sync deliberately will not do, which is commit on the mini. Self-guards
+# on a missing vault; the script's `git add -A` respects .gitignore, so secrets
+# stay out.
 .PHONY: brain-backup-setup brain-backup-teardown
 brain-backup-setup:
 	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
@@ -2352,7 +2371,9 @@ help:
 	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
 	@echo "  make batt-status      Show the battery charge-limiter status"
 	@echo ""
-	@echo "  make brain-backup-setup       Load the nightly brain vault auto-commit + push to GitHub"
+	@echo "  make brain-sync-setup         Load the 5-minute brain vault sync through GitHub (role auto-detected)"
+	@echo "  make brain-sync-teardown      Unload + remove the brain-sync LaunchAgent"
+	@echo "  make brain-backup-setup       Load the nightly (03:30) brain vault leftover-dirt sweep"
 	@echo "  make brain-backup-teardown    Unload + remove the brain-backup LaunchAgent"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
