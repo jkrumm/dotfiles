@@ -63,6 +63,10 @@ FILES=(
   # schedule. It is the only record of what Hermes did unattended, so it is
   # rotated rather than truncated.
   hermes-ops.log
+  # Same shape, for the other bounded dispatcher: hermes-agent/scripts/hermes-cc.sh
+  # appends one audit line per invocation — including refusals — and is the only
+  # record of which repos Hermes opened a Claude Code episode against.
+  hermes-cc.log
   secrets-freshness.log
   opbackup.log
   devhost-health.log
