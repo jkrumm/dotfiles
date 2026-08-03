@@ -70,6 +70,8 @@ FILES=(
   secrets-freshness.log
   opbackup.log
   devhost-health.log
+  drift-check.log
+  drift-check.err
   lock-at-boot.log
   linewatch-collector.log
   batt-reset.log

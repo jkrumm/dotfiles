@@ -326,4 +326,16 @@ done
 echo ""
 echo "  upgraded ${#upgradable[@]}, skipped: ${#held_outdated[@]} held, ${#third_party_outdated[@]} third-party, ${#outdated_casks[@]} cask(s)"
 
+# Success stamp for scripts/drift-check.sh. It deliberately does NOT alert on
+# "something is outdated" — homebrew/core moves daily, so that is true almost
+# always and a monitor red on it permanently is a nag nobody reads. The
+# alertable fact is that this guarded upgrader has not been RUN, which is a
+# timestamp, not a package list. Written even when the assertions below fail:
+# the upgrade DID happen, and a reverted caddy module is a different alert with
+# a different fix — conflating them would hide the second one behind the first.
+# Not written on --dry-run; that path exits long before here.
+BREW_UPGRADE_STAMP="${BREW_UPGRADE_STAMP:-$HOME/.local/state/brew-upgrade/last-success}"
+mkdir -p "$(dirname "$BREW_UPGRADE_STAMP")" 2>/dev/null || true
+: >"$BREW_UPGRADE_STAMP" 2>/dev/null || true
+
 (( ! assertion_failed )) || exit 1

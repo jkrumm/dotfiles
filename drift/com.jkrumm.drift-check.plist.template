@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.drift-check</string>
+  <!-- Reports what has fallen behind upstream (pinned herdr plugins, the
+       xcaddy/caddy-dns modules, brew-upgrade recency, pending macOS updates)
+       to its own Uptime Kuma push monitor. Reports only — nothing here
+       upgrades anything. Rationale: scripts/drift-check.sh header. -->
+
+  <!-- StartCalendarInterval, NOT StartInterval, and the difference is the whole
+       point on a machine that sleeps. launchd.plist(5): "Unlike cron which skips
+       job invocations when the computer is asleep, launchd will start the job
+       the next time the computer wakes up." StartInterval explicitly does NOT
+       catch up — a fire missed while asleep is simply lost. Same reasoning the
+       opbackup agent records. RunAtLoad is deliberately absent: installing the
+       agent should not fire a network sweep at that exact second. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>9</integer>
+    <key>Minute</key><integer>40</integer>
+  </dict>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__DOTFILES_DIR__/scripts/drift-check.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>__DOTFILES_DIR__</string>
+
+  <!-- Deliberately NOT /tmp: macOS deletes files there after 3 days untouched
+       while launchd holds the fd open from spawn, so a long-lived agent writes
+       into an unlinked inode and the history is gone with nothing reporting it.
+       Rotated hourly by scripts/log-rotate.sh, which is why it must also be
+       DECLARED there — that list is never globbed. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/drift-check.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/drift-check.err</string>
+</dict>
+</plist>

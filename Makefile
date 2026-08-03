@@ -1739,7 +1739,7 @@ _render-plists:
 		SRC="$(PLIST_DIR)/$$label.plist.template"; \
 		DST="$(LAUNCHAGENTS)/$$label.plist"; \
 		TMP="$$(mktemp)"; \
-		sed "s|__HOME__|$(HOME)|g" "$$SRC" > "$$TMP"; \
+		sed -e "s|__HOME__|$(HOME)|g" -e "s|__DOTFILES_DIR__|$(DOTFILES_DIR)|g" "$$SRC" > "$$TMP"; \
 		if [ ! -f "$$DST" ] || ! diff -q "$$TMP" "$$DST" >/dev/null 2>&1; then \
 			mv "$$TMP" "$$DST"; \
 			launchctl unload "$$DST" 2>/dev/null || true; \
@@ -2411,6 +2411,67 @@ devhost-health-teardown:
 	echo "  ✓ devhost-health torn down (unloaded + plist removed)"
 devhost-health-check:
 	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
+
+# ----------------------------------------------------------------------------
+# Drift check (dev host only)
+#
+# Reports what has fallen behind upstream — the commit-pinned herdr plugins, the
+# xcaddy/caddy-dns modules built into caddy, brew-upgrade recency, pending macOS
+# updates. It NEVER upgrades anything; the full argument for that restraint is
+# scripts/drift-check.sh's header, and it is the same one that keeps the runaway
+# reaper report-only.
+#
+# Its OWN scheduler, unlike collie and secrets-freshness which ride the 300s
+# devhost-health agent: every check here is a network call, and that agent runs
+# with maxretries 0 and deliberately refuses to touch GitHub so a provider
+# outage cannot page as "dev host down". Drift moves in days, so: daily.
+# ----------------------------------------------------------------------------
+DRIFT_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/drift-push-url
+.PHONY: drift-check drift-check-setup drift-check-teardown
+drift-check:
+	@bash $(DOTFILES_DIR)/scripts/drift-check.sh
+
+drift-check-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — drift-check-setup skipped"; \
+		exit 0; \
+	fi
+	@# The monitor is OPTIONAL here, unlike devhost-health-setup which refuses
+	@# without one. Drift is a report a human reads; the agent is useful on a
+	@# machine with no Kuma wiring at all, and drift-check.sh skips the push
+	@# silently when the URL file is absent (same contract as collie/secrets).
+	@if [ -f "$(DRIFT_PUSH_URL_FILE)" ]; then \
+		chmod 600 "$(DRIFT_PUSH_URL_FILE)" || { \
+			echo "  ✗ cannot chmod 600 $(DRIFT_PUSH_URL_FILE) — refusing to install a forgeable heartbeat"; exit 1; }; \
+		echo "    ✓ push URL present (monitor: MacMini Drift - Push)"; \
+	else \
+		echo "    · no push URL at $(DRIFT_PUSH_URL_FILE) — installing report-only"; \
+		echo "      to wire the monitor: declare it in homelab/uptime-kuma/monitors.yaml"; \
+		echo "      (group 'Local', interval 172800, maxretries 0 — 2d must exceed the"; \
+		echo "      agent's daily cadence), make uk-sync, then write <base>/api/push/<token>"; \
+		echo "      to that path, chmod 600."; \
+	fi
+	@# Seed the brew-upgrade stamp to NOW rather than leaving it absent. Without
+	@# this, installing the agent immediately starts a 30-day clock from "never
+	@# run" on a machine that has in fact run it — and a monitor whose first act
+	@# is to report a fault it invented is one you learn to disbelieve. Same
+	@# reasoning as opbackup-setup backdating its stamp off the newest remote
+	@# backup. Only ever seeds; an existing stamp is left alone.
+	@STAMP="$(HOME)/.local/state/brew-upgrade/last-success"; \
+	if [ ! -f "$$STAMP" ]; then \
+		mkdir -p "$$(dirname "$$STAMP")" && : > "$$STAMP" \
+			&& echo "    ✓ brew-upgrade stamp seeded (clock starts now, not at 'never')"; \
+	fi
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.drift-check" PLIST_DIR="$(DOTFILES_DIR)/drift"
+	@echo "    ↳ daily 09:40 → report pin/brew/macOS drift (reports only, never upgrades)"
+
+drift-check-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.drift-check.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ drift-check torn down (unloaded + plist removed)"
 
 # ----------------------------------------------------------------------------
 # Lock at boot (dev host only)

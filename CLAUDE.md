@@ -1263,6 +1263,75 @@ alone and assemble the URL locally); and a
 LaunchAgent has no shell aliases — `tailscale` is an alias to the app bundle and
 must be called by absolute path.
 
+## Upstream drift (mini only)
+
+**Two halves of the update story were built and the middle was missing.**
+`make brew-upgrade` is a guarded upgrader that asserts its own invariants;
+the heartbeat above fails loudly on a broken host. Neither ever says *a pin
+has drifted* — so the collie plugin sat **five releases behind** (0.17.0 →
+0.22.0, two of them security fixes on a shell-equivalent surface) and was
+found by hand, months later, by accident. `make drift-check` closes that.
+
+| Command | Does |
+|-|-|
+| `make drift-check` | Run once, print per-component drift. Read-only. |
+| `make drift-check-setup` | Dev-host gated: install `com.jkrumm.drift-check` (daily 09:40) |
+| `make drift-check-teardown` | Unload + remove |
+
+It watches what nothing else does: the commit pins (`COLLIE_REF`,
+`HERDR_NOTES_REF`), the version pins compiled into caddy (`XCADDY_VERSION`,
+`CADDY_DNS_MODULE_VERSION`), brew-upgrade recency, and pending macOS updates.
+Pins are read out of the **Makefile**, never duplicated.
+
+**It reports and never upgrades, deliberately.** The hazard on this machine is
+not a compromised release — `brew-upgrade.sh`'s header settles that — it is
+*silent config revert*: caddy loses its DNS module and nothing fails for ~60
+days; colima's plist reverts and nothing fails until the next power cut. An
+unattended upgrader on the host that runs herdr, colima, sideclaw, Hermes and
+every dev door is a mechanism for introducing exactly that at 3am with nobody
+watching. Same trade as the caddy/mosh pins, and as the runaway reaper's refusal
+to kill.
+
+Four decisions that are not arbitrary:
+
+- **Its own scheduler**, breaking the "one scheduler, N monitors" rule collie
+  and secrets-freshness follow. Every check here is a **network call**, and the
+  300s agent runs `maxretries 0` and deliberately refuses to touch GitHub for
+  exactly that reason — a provider outage would page as "dev host down". Drift
+  moves in days; daily is the right cadence and it needs its own agent to have
+  one.
+- **Age grace, not bare "is it behind".** A drifted pin is named in the msg
+  immediately but only FAILS after `DRIFT_GRACE_DAYS` (14). The 1Password backup
+  monitor already taught this: it "had spent large stretches red as a nag, which
+  is how you train yourself to ignore it". The clock is keyed on the
+  **component, never the version** — keying on the version lets a fast-releasing
+  upstream reset it to zero forever.
+- **brew is a recency stamp, not an outdated count.** homebrew/core moves daily,
+  so "something is outdated" is true almost always and would sit red
+  permanently. The alertable fact is that the *guarded upgrader has not run* —
+  `brew-upgrade.sh` writes `~/.local/state/brew-upgrade/last-success`, and
+  `drift-check-setup` seeds it to *now* rather than leaving it absent, because a
+  monitor whose first act is to report a fault it invented is one you learn to
+  disbelieve.
+- **macOS is read from Apple's own cached scan** (`defaults read
+  /Library/Preferences/com.apple.SoftwareUpdate RecommendedUpdates`), not
+  `softwareupdate -l` — the background scan already ran, so the answer is in a
+  plist and costs nothing instead of tens of seconds and a network round trip.
+
+A network failure degrades to **`skipped`** in the msg and never to DOWN;
+"GitHub was unreachable" and "you are five releases behind" are opposite
+conclusions and only one of them is your problem. Both paths are tested rather
+than asserted — backdate a `first-seen` entry and it goes stale and exits 1;
+point `GIT_BIN` at `/usr/bin/false` and all four pin checks report `skipped`
+with exit 0. The push URL file is optional and its absence silent, same contract
+as the collie and secrets monitors, so the agent is useful on a machine with no
+Kuma wiring at all.
+
+**Bash 3.2**, same constraint and same reason as `devhost-health-check.sh`: the
+plist sets no PATH, launchd hands over `/usr/bin:/bin:/usr/sbin:/sbin`, and
+`/usr/bin/env bash` there is Apple's 3.2. Newline-delimited strings, never
+arrays.
+
 ## 1Password vault backup — auto-trigger (MacBook only)
 
 `opbackup` (`scripts/backup-1password.py`) exports every vault, age-encrypts it
