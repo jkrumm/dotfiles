@@ -32,8 +32,8 @@ HERDR_NOTES_VERSION := 0.1.1
 # every time, so an upgrade has to be a reviewed diff of this pin, not
 # whatever tag happens to move.
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := 78cf013de5a9d0136da51a80b2a70b2431ec9048
-COLLIE_VERSION := 0.22.0
+COLLIE_REF     := a0f880e6d53f5c0c3394e27d09373d1f0a474269
+COLLIE_VERSION := 0.23.0
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
