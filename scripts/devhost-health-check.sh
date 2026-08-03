@@ -83,7 +83,7 @@ TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tails
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
-COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/com.jkrumm.collie.plist}"
+COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/herdr.collie.plist}"
 COLLIE_URL="${COLLIE_URL:-http://127.0.0.1:8787}"
 CADDY_BIN="${CADDY_BIN:-/opt/homebrew/bin/caddy}"
 DIG_BIN="${DIG_BIN:-/usr/bin/dig}"
@@ -435,11 +435,14 @@ check_collie() {
   #
   # Liveness alone is not enough here. The bridge is remote shell access, and
   # its hardening lives entirely in a `.env` that launchd does NOT load on its
-  # own — the bridge reads process.env only, systemd's `EnvironmentFile=` has no
-  # launchd equivalent, and a plist that execs bun directly starts a bridge with
-  # COLLIE_PUBLIC_HOSTS unset. That failure is invisible to every liveness
-  # signal: `launchctl list` reports status 0, the UI works, and the
-  # DNS-rebinding guard is simply gone. So assert the BEHAVIOUR, not the config.
+  # own — the bridge reads process.env only and systemd's `EnvironmentFile=` has
+  # no launchd equivalent, so any start path that reaches `bun` without sourcing
+  # the .env first brings the bridge up with COLLIE_PUBLIC_HOSTS unset. Upstream's
+  # LaunchAgent (0.21.0+) routes through collie-ctl.sh, which does source it — but
+  # that is upstream's invariant to keep, not ours, and it is one refactor away
+  # from silently inverting. The failure is invisible to every liveness signal:
+  # `launchctl list` reports status 0, the UI works, and the DNS-rebinding guard
+  # is simply gone. So assert the BEHAVIOUR, not the config.
   #
   # Both calls are loopback-only. No tailnet hop, no external dependency — a
   # network wobble must not page this monitor (same reasoning as check_git_push
@@ -606,7 +609,7 @@ homebrew.mxcl.colima|$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist
 com.jkrumm.sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw.plist
 com.litellm.proxy|$HOME/Library/LaunchAgents/com.litellm.proxy.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
-com.jkrumm.collie|$HOME/Library/LaunchAgents/com.jkrumm.collie.plist"
+herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
 check_launchd_restarts() {
   # KeepAlive makes a crash-looping service look EXACTLY like a healthy one:

@@ -1013,41 +1013,62 @@ touches it) carries four settings, each closing a specific gap:
 - `COLLIE_HOST=127.0.0.1` — no interface binding beyond loopback; `serve`
   terminates TLS on the tailnet and proxies in.
 
-**The LaunchAgent exists because macOS has no systemd.** `collie-ctl.sh`
-writes a systemd unit on Linux and falls back to a bare `nohup` on macOS,
-which does not survive a reboot — `collie/com.jkrumm.collie.plist.template`
-(rendered by `make collie-setup`, `RunAtLoad` + `KeepAlive`, same always-on
-shape as the herdr brew service) closes that gap. One trap already cost a
-debugging cycle here: invoking the plugin action through herdr
-(`herdr plugin action invoke start --plugin herdr.collie`) fails with
-`error: bun not found`, because a herdr-server-spawned command does not
-inherit Homebrew's PATH — the same class of failure as the
-mosh-server/`~/.zshenv` gap already documented above. The plist pins `PATH`
-explicitly for exactly that reason.
+**Supervision is upstream's as of collie 0.21.0 — this repo used to own it.**
+`collie-ctl.sh start` now writes `~/Library/LaunchAgents/herdr.collie.plist`
+itself (`RunAtLoad` + `KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`),
+closing the gap that `collie/com.jkrumm.collie.plist.template` existed to close:
+before it, macOS got a bare `nohup` that did not survive a reboot. Our template
+is **deleted**, not disabled — two `RunAtLoad` + `KeepAlive` agents on port 8787
+is a fight neither wins cleanly, and upstream's `start` clears only its own
+pidfile tier, so it cannot free the port from a label it has never heard of.
+`make collie-setup` boots the legacy label out and removes the file before
+calling `start`; that migration is idempotent and self-deleting.
 
-**The plist sources the `.env`, and must.** The worse trap sits next to the PATH
-one and is silent where PATH is loud. The bridge reads `process.env` only
+It is a **LaunchAgent, so it starts at login, not at boot** — and a Mac
+administered purely over SSH has no `gui/<uid>` to bootstrap into, so upstream
+degrades to the unsupervised tier with a warning instead of failing. That tier
+passes every liveness probe and dies on the next reboot, which is precisely the
+gap this whole section exists to close, so `collie-setup` asserts the plist
+exists *and* the label is loaded, and fails otherwise. The mini clears this only
+because it auto-logs-in (see *Unattended boot posture*) — that is what makes
+"at login" equivalent to "at boot" here, and it is not true of a Mac without it.
+
+Two upstream fixes made this safe to hand over, and both were the reason the
+local plist existed. PATH: `herdr plugin action invoke start` used to die with
+`error: bun not found` (a herdr-server-spawned command does not inherit
+Homebrew's PATH — same class as the mosh-server/`~/.zshenv` gap above), so our
+plist pinned `PATH`; 0.20.2 made collie-ctl resolve Bun from its install
+locations, not just `PATH`. And the `.env`: upstream's plist execs
+`collie-ctl.sh _exec-bridge` rather than `bun`, and the script sources the
+`.env` at top level (`set -a; . "$CONFIG_DIR/.env"; set +a`, `collie-ctl.sh:42`).
+
+**Whatever starts it must source the `.env`.** This is the invariant, and it
+outlives whoever owns the plist. The bridge reads `process.env` only
 (`bridge/config.ts`) and never parses `.env` itself — on Linux systemd feeds it
-in with `EnvironmentFile=-`, and launchd has no equivalent. A plist that execs
-`bun` directly therefore starts a bridge with `COLLIE_PUBLIC_HOSTS`,
-`COLLIE_MULTI_SESSION` and `COLLIE_SKIP_SERVE` **all unset** — every hardening
-setting above quietly off, DNS-rebinding guard included — while `launchctl list`
-shows status 0 and the UI works perfectly. So `ProgramArguments` runs
-`bash -c 'set -a; . .env; set +a; exec bun …'` instead. It was caught only
-because the acceptance check is behavioural: a spoofed `Host` header must still
+in with `EnvironmentFile=-`, and launchd has no equivalent. Any start path that
+reaches `bun` without sourcing it first brings the bridge up with
+`COLLIE_PUBLIC_HOSTS`, `COLLIE_MULTI_SESSION` and `COLLIE_SKIP_SERVE` **all
+unset** — every hardening setting above quietly off, DNS-rebinding guard
+included — while `launchctl list` shows status 0 and the UI works perfectly.
+Upstream holds that invariant today; it is one refactor away from silently
+inverting, which is why the check below is behavioural and stayed behavioural
+through the handover. The original break was caught only
+because that check is behavioural: a spoofed `Host` header must still
 return 403 **on `/api/snapshot`** after any change to how the bridge is started.
 It had gone back to 200. The path is load-bearing — the guard fires on API routes
 only, and the SPA shell at `/` answers 200 to any Host (it is CSP-locked,
 `default-src 'self'`), so a pathless probe reports the guard broken when it is
 fine. Verified 2026-07-31: `/api/snapshot` loopback 200 / spoofed 403; `/`
-loopback 200 / spoofed 200. Re-run that assertion, not just `launchctl list`,
-whenever this plist or the `.env` moves.
+loopback 200 / spoofed 200. `make collie-setup` now **fails** on anything but
+403, so the handover could not have silently regressed it — re-run that
+assertion, not just `launchctl list`, whenever the start path or the `.env`
+moves.
 
 | Command | Does |
 |-|-|
-| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): install/refresh the pinned plugin, render + load the LaunchAgent |
-| `make collie-status` | Read-only: LaunchAgent state, bridge health, `tailscale serve status` |
-| `make collie-teardown` | Unload the LaunchAgent, uninstall the plugin — leaves `tailscale-serve.mini.conf` untouched (declared state, not this target's to change) |
+| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): install/refresh the pinned plugin, migrate off the legacy agent, `collie-ctl.sh start`, then assert liveness + the rebind guard + that launchd actually supervises it |
+| `make collie-status` | Read-only: LaunchAgent state, bridge health, rebind guard, `tailscale serve status` |
+| `make collie-teardown` | Boot out both labels (current + legacy), uninstall the plugin — deliberately **not** `collie-ctl.sh uninstall`, which attempts a `tailscale serve` teardown even under `COLLIE_SKIP_SERVE=1`; serve is declared state and no upstream script gets to mutate it |
 
 Upgrading is moving `COLLIE_REF` in a reviewed diff — there is no
 `plugin update`.

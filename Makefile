@@ -32,8 +32,8 @@ HERDR_NOTES_VERSION := 0.1.1
 # every time, so an upgrade has to be a reviewed diff of this pin, not
 # whatever tag happens to move.
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := 8c898a013d65fe1c33eb9b947d4d5e3b32eb936f
-COLLIE_VERSION := 0.17.0
+COLLIE_REF     := 78cf013de5a9d0136da51a80b2a70b2431ec9048
+COLLIE_VERSION := 0.22.0
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
@@ -2199,45 +2199,52 @@ collie-setup:
 			&& echo "    ✓ collie $(COLLIE_VERSION) installed" \
 			|| { echo "  ✗ collie plugin install failed"; exit 1; }; \
 	fi
-	@# Renders + loads the LaunchAgent. Two non-obvious steps inside the block
-	@# below, both found by running this for real rather than with `make -n`:
-	@#   1. `collie-ctl.sh stop` first. On macOS collie-ctl has no systemd and
-	@#      falls back to a bare nohup that survives this target and keeps port
-	@#      8787 — the LaunchAgent then crash-loops on EADDRINUSE under KeepAlive.
-	@#   2. A health assert after loading. `launchctl load` exits 0 for a job
-	@#      that immediately dies, so trusting its return code reports a
-	@#      crash-looping bridge as "✓ survives reboot".
+	@# Upstream owns supervision as of collie 0.21.0: `collie-ctl.sh start` writes
+	@# ~/Library/LaunchAgents/herdr.collie.plist itself. This repo carried its own
+	@# com.jkrumm.collie.plist for exactly as long as macOS launchd support was
+	@# missing upstream; keeping both now would mean two RunAtLoad+KeepAlive agents
+	@# racing for port 8787, so the block below boots the old one out FIRST.
+	@# Upstream's `start` clears only the pidfile tier — it has never heard of our
+	@# label and cannot free the port for us.
+	@#
+	@# The one property that made ours worth carrying is preserved upstream: the
+	@# plist execs `collie-ctl.sh _exec-bridge`, and the script sources the .env at
+	@# top level (`set -a; . "$$CONFIG_DIR/.env"; set +a`), so the four hardening
+	@# vars do reach the process. Asserted behaviourally below, never assumed — a
+	@# bridge started without the .env answers 200 exactly the same.
+	@#
 	@# Comments must stay OUT of the block: make joins backslash-continued lines
 	@# before handing them to sh, so a `#` inside would swallow the rest.
 	@PLUGIN_ROOT=$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .plugin_root'); \
 	[ -n "$$PLUGIN_ROOT" ] || { echo "  ✗ could not resolve herdr.collie plugin_root"; exit 1; }; \
-	BUN_BIN=$$(command -v bun); \
 	CONFIG_DIR=$$(herdr plugin config-dir herdr.collie 2>/dev/null); \
 	[ -n "$$CONFIG_DIR" ] || CONFIG_DIR="$(HOME)/.config/herdr/plugins/config/herdr.collie"; \
-	mkdir -p "$$CONFIG_DIR" "$(LAUNCHAGENTS)"; \
-	SOCKET="$(HOME)/.config/herdr/herdr.sock"; \
-	TMP=$$(mktemp); \
-	sed -e "s|__BUN__|$$BUN_BIN|g" \
-		-e "s|__PLUGIN_ROOT__|$$PLUGIN_ROOT|g" \
-		-e "s|__CONFIG_DIR__|$$CONFIG_DIR|g" \
-		-e "s|__SOCKET__|$$SOCKET|g" \
-		"$(DOTFILES_DIR)/collie/com.jkrumm.collie.plist.template" > "$$TMP"; \
-	DST="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
-	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null 2>&1; then \
-		rm "$$TMP"; \
-		echo "    · LaunchAgent up to date"; \
-	else \
-		mv "$$TMP" "$$DST"; \
-		echo "    ✓ LaunchAgent rendered ($$DST)"; \
+	[ -f "$$CONFIG_DIR/.env" ] || { echo "  ✗ no .env at $$CONFIG_DIR — write it by hand first (see CLAUDE.md)"; exit 1; }; \
+	LEGACY="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
+	if [ -f "$$LEGACY" ]; then \
+		launchctl bootout gui/$$(id -u)/com.jkrumm.collie 2>/dev/null \
+			|| launchctl unload "$$LEGACY" 2>/dev/null || true; \
+		rm -f "$$LEGACY"; \
+		echo "    ✓ legacy com.jkrumm.collie booted out + removed (upstream supervises now)"; \
 	fi; \
-	bash "$$PLUGIN_ROOT/scripts/collie-ctl.sh" stop >/dev/null 2>&1 || true; \
-	launchctl unload "$$DST" 2>/dev/null || true; \
-	launchctl load "$$DST" || { echo "  ✗ launchctl load failed"; exit 1; }; \
-	if [ "$$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 1 --retry-connrefused --max-time 20 http://127.0.0.1:8787/ 2>/dev/null)" = "200" ]; then \
-		echo "    ✓ bridge loaded (RunAtLoad + KeepAlive — survives reboot; bare nohup does not)"; \
-	else \
-		echo "  ✗ LaunchAgent loaded but the bridge is not answering on 127.0.0.1:8787"; \
+	bash "$$PLUGIN_ROOT/scripts/collie-ctl.sh" start || { echo "  ✗ collie-ctl.sh start failed"; exit 1; }; \
+	if [ "$$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 1 --retry-connrefused --max-time 20 http://127.0.0.1:8787/ 2>/dev/null)" != "200" ]; then \
+		echo "  ✗ bridge is not answering on 127.0.0.1:8787"; \
 		echo "    check: launchctl list | grep collie   and   $$CONFIG_DIR/collie.log"; \
+		exit 1; \
+	fi; \
+	if [ "$$(curl -s -H 'Host: evil.example.com' -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8787/api/snapshot 2>/dev/null)" != "403" ]; then \
+		echo "  ✗ spoofed Host NOT rejected on /api/snapshot — the .env did not reach the process"; \
+		echo "    every hardening setting is silently off; do not leave the front door published"; \
+		exit 1; \
+	fi; \
+	echo "    ✓ bridge up, DNS-rebinding guard in effect (spoofed Host → 403)"; \
+	if [ -f "$(LAUNCHAGENTS)/herdr.collie.plist" ] \
+		&& launchctl list 2>/dev/null | awk '$$3=="herdr.collie"{f=1} END{exit !f}'; then \
+		echo "    ✓ supervised by launchd (RunAtLoad + KeepAlive — survives reboot)"; \
+	else \
+		echo "  ✗ running UNSUPERVISED (no gui/<uid> to bootstrap into) — dies on reboot"; \
+		echo "    log in at the console once, then re-run: make collie-setup"; \
 		exit 1; \
 	fi
 	@echo "    ↳ Front door is declared state, not this target: the tailnet binding is"
@@ -2251,7 +2258,7 @@ collie-setup:
 # not in make — call it by absolute path (same trap devhost-health-check.sh hit).
 collie-status:
 	@echo "  LaunchAgent:"
-	@ROW=$$(launchctl list 2>/dev/null | awk '$$3=="com.jkrumm.collie" {print $$1" "$$2}'); \
+	@ROW=$$(launchctl list 2>/dev/null | awk '$$3=="herdr.collie" {print $$1" "$$2}'); \
 	if [ -z "$$ROW" ]; then \
 		echo "    ✗ not loaded — run: make collie-setup"; \
 	else \
@@ -2266,8 +2273,10 @@ collie-status:
 	@CODE=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/ 2>/dev/null || echo "000"); \
 	if [ "$$CODE" = "000" ]; then echo "    ✗ unreachable"; else echo "    ✓ HTTP $$CODE"; fi
 	@# Behavioural, not configural: proves COLLIE_PUBLIC_HOSTS actually reached the
-	@# process. A plist that execs bun without sourcing the .env silently drops
-	@# every hardening setting and still answers 200 on the line above.
+	@# process. A bridge started without its .env silently drops every hardening
+	@# setting and still answers 200 on the line above. The path matters as much as
+	@# the header — `/` serves the SPA shell to any Host and always answers 200, so
+	@# probing it reports a perfectly healthy guard as broken.
 	@echo "  DNS-rebinding guard (spoofed Host must be rejected):"
 	@CODE=$$(curl -s -H "Host: evil.example.com" -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/api/snapshot 2>/dev/null || echo "000"); \
 	if [ "$$CODE" = "403" ]; then echo "    ✓ 403 — COLLIE_PUBLIC_HOSTS in effect"; \
@@ -2276,11 +2285,19 @@ collie-status:
 	@/Applications/Tailscale.app/Contents/MacOS/Tailscale serve status 2>/dev/null \
 		| sed 's/^/    /' || echo "    · tailscale not reachable"
 
+	@# Deliberately NOT `collie-ctl.sh uninstall`: that always attempts a tailscale
+	@# serve teardown, even under COLLIE_SKIP_SERVE=1. Serve is declared state in
+	@# this repo (dotfiles-private/tailscale-serve.mini.conf) and no upstream script
+	@# gets to mutate it. Booting the agent out by label does the same job locally.
 collie-teardown:
-	@DST="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
-	launchctl unload "$$DST" 2>/dev/null || true; \
-	rm -f "$$DST"; \
-	echo "  ✓ LaunchAgent unloaded + removed"
+	@for L in herdr.collie com.jkrumm.collie; do \
+		DST="$(LAUNCHAGENTS)/$$L.plist"; \
+		[ -f "$$DST" ] || continue; \
+		launchctl bootout gui/$$(id -u)/$$L 2>/dev/null \
+			|| launchctl unload "$$DST" 2>/dev/null || true; \
+		rm -f "$$DST"; \
+		echo "  ✓ $$L LaunchAgent unloaded + removed"; \
+	done
 	@if command -v herdr >/dev/null 2>&1 && herdr plugin list --json 2>/dev/null | jq -e '.result.plugins[]? | select(.plugin_id=="herdr.collie")' >/dev/null 2>&1; then \
 		herdr plugin uninstall herdr.collie >/dev/null 2>&1 \
 			&& echo "  ✓ herdr.collie plugin uninstalled" \
