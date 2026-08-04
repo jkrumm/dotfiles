@@ -48,6 +48,8 @@ set -euo pipefail
 # instead of arrays throughout.
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# Read by makefile_var() in lib/github-tags.sh, not directly here.
+# shellcheck disable=SC2034
 MAKEFILE="${DRIFT_MAKEFILE:-$DOTFILES_DIR/Makefile}"
 
 # Absolute paths: a LaunchAgent has no shell profile, and `tailscale`-style
@@ -84,59 +86,14 @@ skip_add()  { SKIPPED="${SKIPPED}${1}
 info_add()  { INFO="${INFO}${1}
 "; }
 
-# --- Makefile pin readers ----------------------------------------------------
-# The Makefile is the single source of truth for every pin, so it is parsed
-# rather than duplicated here. `:=` and `?=` both appear in it.
-makefile_var() {
-  /usr/bin/sed -n "s/^${1}[[:space:]]*[:?]*=[[:space:]]*\([^[:space:]#]*\).*/\1/p" "$MAKEFILE" \
-    | /usr/bin/head -1
-}
-
-# --- Remote tag resolution ---------------------------------------------------
-# One ls-remote per repo, cached to a temp file so the tag name and its commit
-# come from ONE view of the remote. `^{}` rows are the dereferenced commit of an
-# annotated tag — the thing `herdr plugin install --ref` actually pins — so they
-# are the rows we want the sha from, while the tag NAME comes from the plain row.
-#
-# A network failure returns 1 and the caller SKIPS. It must never read as drift:
-# "GitHub was unreachable" and "you are five releases behind" are opposite
-# conclusions and only one of them is your problem.
-TMPDIR_DRIFT=$(/usr/bin/mktemp -d)
-trap '/bin/rm -rf "$TMPDIR_DRIFT"' EXIT
-
-remote_tags() {
-  local repo="$1"
-  local cache
-  cache="$TMPDIR_DRIFT/$(echo "$repo" | /usr/bin/tr / _)"
-  if [[ ! -f "$cache" ]]; then
-    "$GIT_BIN" ls-remote --tags "https://github.com/$repo" >"$cache" 2>/dev/null || return 1
-    [[ -s "$cache" ]] || return 1
-  fi
-  /bin/cat "$cache"
-}
-
-# Highest tag by version sort. Filters pre-releases (anything with a `-`), which
-# `sort -V` would otherwise rank above the release it precedes.
-latest_tag() {
-  local repo="$1" out
-  out=$(remote_tags "$repo") || return 1
-  echo "$out" \
-    | /usr/bin/sed -n 's|.*refs/tags/\(v\{0,1\}[0-9][^^]*\)$|\1|p' \
-    | /usr/bin/grep -v -- '-' \
-    | /usr/bin/sort -V \
-    | /usr/bin/tail -1
-}
-
-# Commit a tag resolves to: the `^{}` row if the tag is annotated, else the tag
-# row itself. Getting this backwards silently reports permanent phantom drift.
-tag_commit() {
-  local repo="$1" tag="$2" out sha
-  out=$(remote_tags "$repo") || return 1
-  sha=$(echo "$out" | /usr/bin/awk -v t="refs/tags/$tag^{}" '$2==t {print $1}')
-  [[ -n "$sha" ]] || sha=$(echo "$out" | /usr/bin/awk -v t="refs/tags/$tag" '$2==t {print $1}')
-  [[ -n "$sha" ]] || return 1
-  printf '%s' "$sha"
-}
+# --- Makefile pin readers + remote tag resolution ----------------------------
+# makefile_var / remote_tags / latest_tag / tag_commit live in the shared lib,
+# because scripts/collie-upgrade.sh needs the same annotated-tag peel to APPLY
+# what this file REPORTS — and two implementations of that peel is two chances
+# to get it backwards. See the lib header for why that failure is invisible.
+# shellcheck source=lib/github-tags.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/github-tags.sh"
+trap 'gh_tags_cleanup' EXIT
 
 # --- Checks ------------------------------------------------------------------
 

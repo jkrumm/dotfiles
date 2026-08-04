@@ -1067,11 +1067,29 @@ moves.
 | Command | Does |
 |-|-|
 | `make collie-setup` | Dev-host only (gated on the `cache` backend marker): install/refresh the pinned plugin, migrate off the legacy agent, `collie-ctl.sh start`, then assert liveness + the rebind guard + that launchd actually supervises it |
+| `make collie-upgrade` | Dev-host only: resolve the newest release tag, print its changelog + diffstat + a scope verdict, and on `y` bump the pin, reinstall, assert, commit |
 | `make collie-status` | Read-only: LaunchAgent state, bridge health, rebind guard, `tailscale serve status` |
 | `make collie-teardown` | Boot out both labels (current + legacy), uninstall the plugin — deliberately **not** `collie-ctl.sh uninstall`, which attempts a `tailscale serve` teardown even under `COLLIE_SKIP_SERVE=1`; serve is declared state and no upstream script gets to mutate it |
 
-Upgrading is moving `COLLIE_REF` in a reviewed diff — there is no
-`plugin update`.
+**Upgrading is still a reviewed diff — `make collie-upgrade` just removes the
+eleven mechanical steps around it.** There is no `plugin update` (herdr's docs:
+"reinstall from GitHub to refresh"), and upstream's own `collie-ctl.sh update`
+is deliberately unused here: it pulls **branch head**, which discards the pin and
+can land pre-release commits.
+
+**The scope verdict it prints is decision support, not a safety boundary — do
+not let it grow into an auto-applier.** It answers "did anything outside `web/`
+move?", which catches a *bridge or hardening* change worth reading closely. It
+does not make a UI-only release safe: the PWA **is** the control surface, so
+malicious `web/` code reads the snapshot and sends keys exactly as well as
+malicious `bridge/` code would. `bun.lock` is excluded from the safe set for the
+same reason — a changed lockfile is a changed dependency. What makes a bad
+release survivable is the rollback: `collie-setup`'s spoofed-Host assertion runs
+after the install, and a failure restores the previous pin and reinstalls it.
+
+It refuses to run unattended (no TTY and no `COLLIE_UPGRADE_YES=1` → exit 1) and
+refuses on a dirty `Makefile`, since it commits that file. It commits locally and
+never pushes.
 
 **Monitoring is opt-in, and wiring it is scripted end to end.** Collie reports
 to its own Kuma monitor, `MacMini Collie - Push` (id=205, declared in
@@ -1283,6 +1301,14 @@ It watches what nothing else does: the commit pins (`COLLIE_REF`,
 `CADDY_DNS_MODULE_VERSION`), brew-upgrade recency, and pending macOS updates.
 Pins are read out of the **Makefile**, never duplicated.
 
+Tag resolution is shared with `make collie-upgrade` via
+`scripts/lib/github-tags.sh` rather than copied. The subtle half is
+`tag_commit`'s annotated-tag peel: `herdr plugin install --ref` pins the
+*dereferenced* commit, so reading the tag object's own sha instead reports drift
+that no upgrade can ever clear — and a second copy of that logic is a second
+chance to get it backwards, in the one place where wrong looks exactly like
+right.
+
 **It reports and never upgrades, deliberately.** The hazard on this machine is
 not a compromised release — `brew-upgrade.sh`'s header settles that — it is
 *silent config revert*: caddy loses its DNS module and nothing fails for ~60
@@ -1291,6 +1317,11 @@ unattended upgrader on the host that runs herdr, colima, sideclaw, Hermes and
 every dev door is a mechanism for introducing exactly that at 3am with nobody
 watching. Same trade as the caddy/mosh pins, and as the runaway reaper's refusal
 to kill.
+
+That stays true with `make collie-upgrade` in the tree, and the pair is the whole
+point: **notice unattended, apply attended.** The applier is human-invoked, needs
+a TTY, and refuses to run from automation — it removes the tedium of upgrading,
+never the decision.
 
 Four decisions that are not arbitrary:
 

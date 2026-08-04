@@ -2180,7 +2180,18 @@ herdr-setup:
 # remote-access/devhost-health-setup/batt-setup. Gated on the dev-host marker
 # (same signal herdr-setup and git-headless use) because Collie only makes
 # sense pointed at the mini's herdr server.
-.PHONY: collie-setup collie-status collie-teardown
+.PHONY: collie-setup collie-upgrade collie-status collie-teardown
+# The other half of `make drift-check`. That one NOTICES a drifted pin and
+# deliberately never applies it; this applies one, with the review kept and the
+# mechanical steps gone — resolve the newest tag, show the changelog + diffstat
+# + a scope verdict (did anything outside web/ move?), then on your `y` bump the
+# pin, reinstall, assert, and commit. Rolls the pin back if collie-setup's
+# rebind-guard assertion fails. No `-dry` sibling on purpose: the prompt IS the
+# preview, and a second "same thing but more thorough" target is the choice this
+# repo's makefile-conventions rule exists to avoid.
+collie-upgrade:
+	@bash $(DOTFILES_DIR)/scripts/collie-upgrade.sh
+
 collie-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then \
@@ -2626,6 +2637,7 @@ help:
 	@echo "  make caddy-boot-order           NEEDS SUDO: order the caddy daemon behind the tailnet address it binds (re-run after any brew upgrade of caddy)"
 	@echo ""
 	@echo "  make collie-setup       Dev-host only: install the phone control-surface bridge as a LaunchAgent"
+	@echo "  make collie-upgrade     Dev-host only: show the newest release (changelog, diffstat, scope), apply on y"
 	@echo "  make collie-status      Show LaunchAgent + bridge + tailscale serve state (read-only)"
 	@echo "  make collie-teardown    Unload the LaunchAgent + uninstall the plugin (leaves serve config untouched)"
 	@echo ""
