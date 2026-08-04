@@ -475,15 +475,32 @@ _setup-remote-access:
 	@echo "      port-forward exists for 22/5900."
 
 .PHONY: git-headless _setup-git-headless
-# Headless GitHub pushes for the Mac mini — opt-in, NOT in the default `setup`
-# chain (mirrors remote-access/batt-setup: a deliberate per-host call). The mini
-# can't use the 1Password SSH agent (the biometric prompt hangs with no human),
-# so git talks to GitHub over HTTPS: this writes ~/.gitconfig-headless
-# (machine-local, never symlinked) rewriting git@github.com: remotes to
-# https://github.com/ and pointing the credential helper at the secrets cache.
-# config/gitconfig includes it unconditionally (a no-op wherever the file
+# Headless GitHub *and GitLab* pushes for the Mac mini — opt-in, NOT in the
+# default `setup` chain (mirrors remote-access/batt-setup: a deliberate per-host
+# call). The mini can't use the 1Password SSH agent (the biometric prompt hangs
+# with no human), so git talks to both forges over HTTPS: this writes
+# ~/.gitconfig-headless (machine-local, never symlinked) rewriting git@<forge>:
+# remotes to https://<forge>/ and pointing the credential helper at the secrets
+# cache. config/gitconfig includes it unconditionally (a no-op wherever the file
 # doesn't exist, i.e. every MacBook). homelab/VPS need nothing — Tailscale SSH
 # is keyless and headless-safe already. Self-gates on the cache backend.
+#
+# GitLab was added 2026-08-04. It is the SAME failure as GitHub's, found the same
+# way: every ~/IuRoot repo has a git@gitlab.com: remote, so `git fetch` on the
+# mini died with `sign_and_send_pubkey: signing failed ... Permission denied
+# (publickey)` — an SSH-shaped error whose actual cause is that the 1Password
+# agent cannot serve a headless host. The fallback people reach for first,
+# op://Private/feuer/gitlab-token, is a dead end twice over: it is seeded under
+# the `careerpartner` account (so a bare `secrets-run read` reports "ref not in
+# cache" against `tkrumm` and looks absent rather than misrouted), and the cached
+# copy was expired anyway — `GET /api/v4/user` → 401 invalid_token. Hence a
+# dedicated op://mini/gitlab/TOKEN in the same vault as the GitHub one, on the
+# same rotation path (`make secrets-seed`).
+#
+# GitLab is a WARNING, not a hard failure: a missing GitLab token must not cost
+# the mini its GitHub push path. That is safe to soften precisely because the
+# seed fails closed on an unresolvable ref, so a genuinely missing 1P item breaks
+# `make secrets-seed` loudly long before this probe would have.
 #
 # Credentials come from `secrets-run` (op://mini/github/token, declared in
 # headless.refs), NOT the `gh` keyring. The keyring was the original design and
@@ -502,8 +519,10 @@ _setup-git-headless:
 		echo "  git-headless: backend is not 'cache' (present-human machine) — skipping."; \
 		exit 0; \
 	fi; \
-	echo "  Headless GitHub access (Mac mini only)..."; \
+	echo "  Headless GitHub + GitLab access (Mac mini only)..."; \
 	HELPER="$(HOME)/.local/bin/git-credential-secrets-cache"; \
+	GITLAB_REF="op://mini/gitlab/TOKEN"; \
+	GITLAB_USER="oauth2"; \
 	$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/git-credential-secrets-cache" \
 		DST="$$HELPER"; \
@@ -516,7 +535,19 @@ _setup-git-headless:
 	echo "    ✓ credential helper resolves a GitHub token from the cache"; \
 	GITCFG="$(HOME)/.gitconfig-headless"; \
 	printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n\n[credential "https://github.com"]\n\thelper = \n\thelper = %s\n' "$$HELPER" > "$$GITCFG"; \
-	echo "    ✓ ~/.gitconfig-headless written — GitHub over HTTPS via the secrets cache"
+	if printf 'protocol=https\nhost=gitlab.com\n\n' \
+		| GIT_CREDENTIAL_SECRETS_REF="$$GITLAB_REF" GIT_CREDENTIAL_SECRETS_USER="$$GITLAB_USER" "$$HELPER" get 2>/dev/null \
+		| grep -q '^password=.'; then \
+		printf '\n[url "https://gitlab.com/"]\n\tinsteadOf = git@gitlab.com:\n\n[credential "https://gitlab.com"]\n\thelper = \n\thelper = !GIT_CREDENTIAL_SECRETS_REF=%s GIT_CREDENTIAL_SECRETS_USER=%s %s\n' \
+			"$$GITLAB_REF" "$$GITLAB_USER" "$$HELPER" >> "$$GITCFG"; \
+		echo "    ✓ credential helper resolves a GitLab token from the cache"; \
+	else \
+		echo "    ! helper cannot resolve $$GITLAB_REF — GitLab stanza NOT written."; \
+		echo "      GitHub still works. To fix: ensure the 1P item exists, that"; \
+		echo "      $$GITLAB_REF is listed in dotfiles-private/headless.refs, then"; \
+		echo "      run 'make secrets-seed' from the MacBook (biometric) and retry."; \
+	fi; \
+	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
 .PHONY: remote-dev-doctor
 # Verify the MacBook→mini path FROM the MacBook. Complements — does not
