@@ -177,7 +177,6 @@ check_macos() {
 
 # --- Run ---------------------------------------------------------------------
 check_pinned_commit  collie       AltanS/collie             "$(makefile_var COLLIE_REF)"      "bump COLLIE_REF + COLLIE_VERSION, then make collie-setup"
-check_pinned_commit  herdr-notes  alexarthurs/herdr-notes   "$(makefile_var HERDR_NOTES_REF)" "bump HERDR_NOTES_REF, then make herdr-setup"
 check_pinned_version xcaddy       caddyserver/xcaddy        "$(makefile_var XCADDY_VERSION)"  "bump XCADDY_VERSION, then make caddy-dns-build"
 check_pinned_version caddy-dns    caddy-dns/cloudflare      "$(makefile_var CADDY_DNS_MODULE_VERSION)" "bump CADDY_DNS_MODULE_VERSION, then make caddy-dns-build"
 check_brew

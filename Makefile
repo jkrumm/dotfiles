@@ -15,20 +15,10 @@ COLIMA_CPU    ?= 4
 COLIMA_MEMORY ?= 8
 COLIMA_DISK   ?= 60
 
-# herdr-notes — persistent per-workspace markdown pane, installed by
-# `make herdr-setup` and bound to prefix+e in config/herdr/config.toml.
-# Pinned to a COMMIT rather than a tag: git tags are mutable, the repo is young
-# and third-party (not herdr's author), and `herdr plugin install` executes the
-# repo's own build command — so every upgrade has to be a reviewed diff here,
-# not whatever `v0.1.1` happens to point at today. Bump = read the diff, then
-# move both lines together.
-HERDR_NOTES_SOURCE  := alexarthurs/herdr-notes
-HERDR_NOTES_REF     := d0a8e67f6083ed41dd4fe25e546ed6404767c6be
-HERDR_NOTES_VERSION := 0.1.1
-
 # Collie — phone web-UI control surface for the herd (herdr plugin + Bun
 # bridge), installed by `make collie-setup`. Pinned to a COMMIT for the same
-# reason as herdr-notes: `herdr plugin install` re-clones + rebuilds the repo
+# reason a third-party plugin always is here: `herdr plugin install` re-clones
+# and rebuilds the repo
 # every time, so an upgrade has to be a reviewed diff of this pin, not
 # whatever tag happens to move.
 COLLIE_SOURCE  := AltanS/collie
@@ -37,8 +27,7 @@ COLLIE_VERSION := 0.23.1
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
-# zero DNS provider modules). Same pinning discipline as HERDR_NOTES_REF /
-# COLLIE_REF: xcaddy fetches and compiles arbitrary Go modules on every
+# zero DNS provider modules). Same pinning discipline as COLLIE_REF: xcaddy fetches and compiles arbitrary Go modules on every
 # invocation, so an upgrade has to be a reviewed diff of these lines, not
 # whatever `@latest` resolves to on the day it happens to run.
 XCADDY_VERSION           ?= v0.4.6
@@ -557,7 +546,7 @@ caddy-tailnet:
 # clean https://<app>.$DEV_DOMAIN door in scripts/caddy-tailnet.sh needs for
 # its wildcard cert — is impossible with the stock binary. xcaddy is not in
 # Homebrew, so it's installed straight from source via `go install`, pinned
-# above like HERDR_NOTES_REF/COLLIE_REF.
+# above like COLLIE_REF.
 #
 # Dev-host only, same gate `collie-setup` uses: the mini is the only machine
 # that runs the tailnet Caddyfile include this unlocks.
@@ -2137,9 +2126,11 @@ obsidian-autostart-teardown:
 #     added by `herdr integration install` would be deleted on the next run.
 #   - the herdr *server*, which belongs only on the dev host. Detected the same
 #     way as git-headless: the cache backend marker means this is the mini.
-#   - the herdr-notes plugin, which is installed everywhere for the same reason
-#     as the hook: inert until you press the key, and gating it on the server
-#     would leave the shared keybinding dead on a machine running herdr locally.
+#   - a one-shot migration off the herdr-notes plugin, retired 2026-08-04. Its
+#     prefix+e now runs scripts/brain-note.sh, which opens the pane's repo page
+#     in the brain vault — a store that syncs, backs up and outlives a workspace
+#     id. Nothing to install for that: it is a plain `popup` command, which is
+#     also why the keybinding is no longer machine-dependent.
 .PHONY: herdr-setup
 herdr-setup:
 	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
@@ -2152,19 +2143,26 @@ herdr-setup:
 	else \
 		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
 	fi
-	@# herdr-notes. Reinstalled only when the pin moves: `plugin install` always
-	@# re-clones and re-runs `cargo build --release`, so an unguarded call would
-	@# put a minute of Rust build into every `make herdr-setup`. Compares the
-	@# resolved commit, not the version — a moved tag must still trigger a rebuild.
-	@if ! command -v cargo >/dev/null 2>&1; then \
-		echo "    · cargo missing — herdr-notes skipped (it builds from source)"; \
-	elif [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr-notes") | .source.resolved_commit')" = "$(HERDR_NOTES_REF)" ]; then \
-		echo "    ✓ herdr-notes $(HERDR_NOTES_VERSION) installed (toggle: prefix+e)"; \
+	@# One-shot migration off herdr-notes (retired 2026-08-04). Idempotent and
+	@# self-deleting: once the plugin is gone this is a single `plugin list` that
+	@# prints nothing, exactly like the collie legacy-agent migration above it.
+	@# Its notes are NOT migrated — they were per-workspace scratch in herdr's
+	@# plugin state dir, and anything worth keeping was always meant to go to the
+	@# vault. The state dir is left on disk rather than deleted; reading it back
+	@# is `herdr plugin config-dir`'s sibling path, and destroying data on a
+	@# `make setup` is not this target's call.
+	@if command -v herdr >/dev/null 2>&1 && herdr plugin list --json 2>/dev/null | jq -e '.result.plugins[]? | select(.plugin_id=="herdr-notes")' >/dev/null 2>&1; then \
+		herdr plugin uninstall herdr-notes >/dev/null 2>&1 \
+			&& echo "    ✓ herdr-notes uninstalled (prefix+e now opens the vault project note)" \
+			|| echo "    · herdr-notes uninstall failed — remove it with: herdr plugin uninstall herdr-notes"; \
+	fi
+	@# The replacement is a plain script, so the only thing to verify is that it
+	@# is where the keybinding says it is. A popup that dies with "no such file"
+	@# closes instantly and looks exactly like a dead keybinding.
+	@if [ -x "$(DOTFILES_DIR)/scripts/brain-note.sh" ]; then \
+		echo "    ✓ project note wired (prefix+e → brain vault Projects/<repo>.md)"; \
 	else \
-		echo "    → building herdr-notes $(HERDR_NOTES_VERSION) from source (cargo, ~1 min)"; \
-		herdr plugin install $(HERDR_NOTES_SOURCE) --ref $(HERDR_NOTES_REF) -y >/dev/null \
-			&& echo "    ✓ herdr-notes $(HERDR_NOTES_VERSION) installed (toggle: prefix+e)" \
-			|| { echo "  ✗ herdr-notes install failed"; exit 1; }; \
+		echo "  ✗ scripts/brain-note.sh missing or not executable"; exit 1; \
 	fi
 	@# Pick up config/herdr/config.toml (linked by `make setup`) without dropping
 	@# panes. Silent no-op when no server is running — the MacBook usually has none.
@@ -2201,7 +2199,7 @@ collie-setup:
 	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
 	@command -v bun >/dev/null 2>&1 || { echo "  ✗ bun not installed — run: brew bundle install"; exit 1; }
 	@# Install/refresh only when the pin moved: `plugin install` re-clones and
-	@# rebuilds every time (mirrors the herdr-notes guard, same reason).
+	@# rebuilds every time.
 	@if [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .source.resolved_commit')" = "$(COLLIE_REF)" ]; then \
 		echo "    ✓ collie $(COLLIE_VERSION) plugin installed"; \
 	else \
@@ -2621,7 +2619,7 @@ help:
 	@echo ""
 	@echo "  Remote dev"
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
-	@echo "  make herdr-setup                Claude agent-state hook + herdr-notes plugin (+ server on the dev host)"
+	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"

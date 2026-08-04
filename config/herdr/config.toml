@@ -18,6 +18,14 @@
 #   herdr config check            # unknown keys + TOML errors; NOT bad theme values
 #   herdr server reload-config    # or prefix+shift+R inside herdr
 
+# Written by herdr ITSELF the first time a server runs against this file, which
+# on a symlinked config means it appears here as an uncommitted diff rather than
+# in some machine-local state file. Tracked deliberately: it is the correct
+# value on both machines, and leaving it untracked means it silently reappears
+# as noise in `git status` on every fresh install. Must stay above [theme] —
+# TOML top-level keys cannot follow a table header.
+onboarding = false
+
 [theme]
 # One Dark / One Light for herdr's CHROME. The terminal runs One Zinc
 # (config/ghostty/themes/one-zinc-{dark,light}) — the same Atom One hue family,
@@ -105,9 +113,10 @@ agent_panel_sort = "priority"
 # a second brings the row back, and the keybinding still works when hidden.
 hide_tab_bar_when_single_tab = true
 
-# With claude + notes + a terminal in one workspace, the borders are the only
-# thing distinguishing the panes. Notes names itself (the plugin runs
-# `pane rename`); this is what labels the rest. Manual pane names still win.
+# With claude and a terminal or two in one workspace, the borders are the only
+# thing distinguishing the panes. This is what labels them. Manual pane names
+# still win. (Until 2026-08-04 the herdr-notes pane named itself via
+# `pane rename`; the note is a popup now, so nothing else is self-labelling.)
 show_agent_labels_on_pane_borders = true
 
 [ui.sidebar.spaces]
@@ -238,28 +247,44 @@ new_tab          = ["prefix+c", "ctrl+alt+shift+c"]
 next_tab         = ["prefix+n", "ctrl+alt+shift+n"]
 previous_tab     = ["prefix+p", "ctrl+alt+shift+p"]
 
-# herdr-notes — one persistent markdown note per workspace, docked on the right.
-# Installed and version-pinned by `make herdr-setup`; see CLAUDE.md → "Notes".
+# Project note — opens THIS pane's repo page from the brain vault in $EDITOR.
+# scripts/brain-note.sh resolves the repo via `git rev-parse --show-toplevel`
+# and opens (or creates) `Projects/<repo>.md`. See CLAUDE.md → "Notes".
 #
-# The plugin ships actions, not keys. Without this block it is installed and
-# enabled and still never in front of you — the only way in would be
-# `herdr plugin action invoke herdr-notes.open-notes` from a shell.
+# THIS REPLACED THE herdr-notes PLUGIN, and the reasoning is in the script's
+# header: that plugin's note was untracked, unsynced, unbackuped and keyed to a
+# workspace id, sitting next to a git-backed Obsidian vault on the same disk.
+# The keybinding was the only part worth keeping.
 #
-# `prefix+e` because every obvious mnemonic is already a 0.7.5 default: `n` is
-# next_tab, `shift+n` is new_workspace, `w`/`shift+w` are workspace navigate and
-# rename. `e` is free and matches the plugin's own key for entering edit mode.
+# `prefix+e` is unchanged because every obvious mnemonic is already a 0.7.5
+# default: `n` is next_tab, `shift+n` is new_workspace, `w`/`shift+w` are
+# workspace navigate and rename. `e` is free.
 #
-# Safe in a file symlinked to BOTH machines even though the plugin is only built
-# where a herdr server runs. Verified, not assumed: herdr's keybind parser does
-# not resolve plugin ids at load, so `config check` returns ok for an action id
-# that does not exist and the key is simply inert. And plugin commands are
-# spawned by the SERVER, so on the `desk` path — client on the MacBook, server on
-# the mini — the pane opens on the mini where the note actually lives.
+# `popup` rather than a docked pane — measured from the binary, herdr's
+# CommandKeybindType is exactly {shell, pane, popup, plugin_action}. A popup is
+# session-modal and closes when the command exits, so the note is a thing you
+# open and dismiss rather than a column permanently eating pane width, which is
+# what made the docked plugin pane tiresome. `pane` (temporary zoomed pane) is
+# the other reasonable choice if a popup ever feels too transient.
+#
+# Still safe in a file symlinked to BOTH machines, and now for a simpler reason
+# than before: it is a plain command, so there is no plugin to be missing. The
+# script refuses with a readable message when the pane is not in a repo — and
+# pauses on the way out, because a popup closes the instant the command exits
+# and an unpaused error is a flash of text nobody can read.
+#
+# Custom commands are spawned by the SERVER, so on the `desk` path — client on
+# the MacBook, server on the mini — this edits the mini's vault checkout. Both
+# machines hold one and brain-sync reconciles them through GitHub every 5
+# minutes, so that is the right file either way.
+#
 # The array form works on `keys.command` too, and it is really supported rather
 # than silently dropped — verified by putting a bogus key INSIDE the array and
 # watching the checker reject that element specifically.
 [[keys.command]]
 key = ["prefix+e", "ctrl+alt+shift+e"]
-type = "plugin_action"
-command = "herdr-notes.open-notes"
-description = "toggle notes"
+type = "popup"
+command = "exec bash \"$HOME/SourceRoot/dotfiles/scripts/brain-note.sh\""
+description = "project note"
+width = "80%"
+height = "80%"

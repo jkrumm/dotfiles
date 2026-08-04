@@ -238,7 +238,7 @@ to touch anything.
 | `config/ghostty/config` | `~/.config/ghostty/config` | Shell integration + option key settings. Loaded FIRST, so `config.appsupport` overrides it |
 | `config/ghostty/config.appsupport` | `~/Library/Application Support/com.mitchellh.ghostty/config` | Font, theme, cursor, padding. Ghostty's own macOS config path — read by **both** cmux and bare Ghostty, and it WINS over the file above |
 | `config/ghostty/themes/*` | `~/.config/ghostty/themes/` | `one-zinc-{dark,light}` (active) + `basalt-ui-{dark,light}` (tracked alternative). Copied, not symlinked — cmux symlink bug |
-| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override) + the `prefix+e` notes binding. The **file** only — the same dir holds herdr's sockets and logs |
+| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | herdr theme (near-stock: 1 colour override) + the `prefix+e` project-note binding. The **file** only — the same dir holds herdr's sockets and logs |
 | `config/karabiner/karabiner.json` | `~/.config/karabiner/karabiner.json` | Caps Lock → ctrl+alt+shift, plus the global `Hyper+letter` app launchers. **Copied, never symlinked** — Karabiner rewrites this file on every UI change, and `_setup-karabiner` refuses to overwrite a diverged live copy |
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS reverse proxy — edit here, then `caddy reload` |
@@ -492,43 +492,56 @@ Two non-obvious constraints, both load-bearing:
   script is `managed by herdr` and overwritten on reinstall, so it is
   deliberately not tracked in this repo — only the guarded call to it is.
 
-### Notes — the `herdr-notes` plugin
+### Notes — `prefix+e` opens the repo's page in the brain vault
 
-A persistent markdown note **per workspace**, docked on the right edge, toggled
-with **`prefix+e`**. Third-party (`alexarthurs/herdr-notes`, MIT), installed and
-**commit-pinned** by `make herdr-setup` — `HERDR_NOTES_REF` in the Makefile, not
-a tag, because tags move and `herdr plugin install` runs the repo's own
-`cargo build --release`. Upgrading is a reviewed diff of that pin; there is no
-`plugin update`, only reinstall. The step is guarded on `resolved_commit`, so
-re-running `herdr-setup` doesn't put a Rust build in the path every time.
+**`prefix+e` opens `Projects/<repo>.md` from `~/SourceRoot/brain` in `$EDITOR`,
+in a herdr popup.** `scripts/brain-note.sh` resolves the repo with
+`git rev-parse --show-toplevel` against `HERDR_ACTIVE_PANE_CWD` and creates the
+page (house frontmatter, linked from the Projects folder note) if it does not
+exist yet. No plugin, no pin, nothing to install.
 
-Installed vs *open* are separate, and this is the part that surprises:
+**This replaced the `herdr-notes` plugin on 2026-08-04, and the reason was the
+store, not the UX.** That plugin kept one `<workspace-id>.json` in herdr's
+plugin state dir: untracked, unsynced, unbackuped, keyed to a workspace id that
+a closed workspace orphans — a *third* place notes could live, next to a
+git-backed Obsidian vault on the same disk and TickTick for tasks. This file
+already said as much ("scratch space, not the brain: anything worth keeping goes
+to `/brain`"), which is an argument for not having it. `make herdr-setup` carries
+a one-shot, self-deleting uninstall; the old notes are **not migrated** and the
+state dir is left on disk rather than deleted.
 
-- **Installed + enabled is permanent** — herdr registers plugins per user,
-  globally, surviving server restarts and reboots. Nothing to re-run.
-- **The pane is not.** The plugin ships actions, not keys; without the
-  `[[keys.command]]` block in `config/herdr/config.toml` the only way in is
-  `herdr plugin action invoke herdr-notes.open-notes`. The binding is the whole
-  point of tracking it here.
+Four things worth knowing:
 
-Three facts about where it lives, all verified rather than assumed:
+- **Per repo, not per workspace.** Two workspaces on one checkout were two
+  files under the plugin and are one page now — and a page a human can find
+  without knowing herdr exists.
+- **`Projects/` is deliberate.** PARA `Projects` is the vault's curated human
+  surface (light lint: wikilinks must resolve, no forced schema), and an active
+  repo is an active project. Scratch that turns out to matter gets tidied in
+  place instead of migrated.
+- **New pages must be wikilinked from `Projects/Projects.md`.** `vault-lint`
+  warns `not wikilinked from its folder note` otherwise, and the dashboard's
+  dataview does **not** satisfy it — that query is rendered by Obsidian while the
+  linter reads the file. The script appends the bullet itself; a page that makes
+  the vault warn on creation is how a linter stops being believed.
+- **The popup runs on the server**, so via `desk` (client on the MacBook, server
+  on the mini) it edits the *mini's* checkout. Both machines hold one and
+  brain-sync reconciles through GitHub every 5 minutes, so either is the right
+  file. The mini's lane pulls and pushes but never **commits**, so a note written
+  there lands via the nightly `brain-backup` sweep. The script deliberately does
+  no `git pull` of its own: that is brain-sync's job, and a keystroke should not
+  wait on the network.
 
-- **Plugin commands are spawned by the server**, so the pane and its note are
-  always on the **mini** — the same note whether you came in via `dev` (mosh) or
-  `desk` (client on the MacBook). Keys are handled client-side on the `desk`
-  path, but the action is dispatched over the socket.
-- **The shared config.toml is safe on a machine without the plugin.** herdr's
-  keybind parser does not resolve plugin ids at load — `herdr config check`
-  returns `ok` for an action id that does not exist (probed directly), so the
-  key is inert rather than an error. The install is still unconditional in
-  `herdr-setup`: it's inert until pressed, and gating it on the dev-host marker
-  would leave the binding dead on a machine running herdr locally.
-- **Notes are untracked, unsynced, unbackuped.** One `<workspace-id>.json` per
-  workspace in herdr's `HERDR_PLUGIN_STATE_DIR` (created on first write, so it
-  does not exist until you type something; `herdr plugin config-dir herdr-notes`
-  prints only the config sibling). Keyed to the *stable* workspace id — renames
-  keep the note, closing a workspace orphans the file. Scratch space, not the
-  brain: anything worth keeping goes to `/brain`.
+`popup` rather than a docked pane is measured, not assumed — herdr's
+`CommandKeybindType` is exactly `{shell, pane, popup, plugin_action}` (read out
+of the binary). A popup is session-modal and closes when the command exits, so
+the note stops eating pane width permanently. Custom commands get
+`HERDR_ACTIVE_PANE_CWD`, `HERDR_ACTIVE_WORKSPACE_ID`, `HERDR_ACTIVE_TAB_ID`,
+`HERDR_ACTIVE_PANE_ID` and `HERDR_BIN_PATH` in the environment.
+
+**Every failure path pauses on the way out.** A popup closes the instant its
+command exits, so an unpaused error message is a flash of text nobody can read —
+which makes a broken script indistinguishable from a dead keybinding.
 
 `~/.zshenv` is now managed too (`_setup-zshenv`, idempotent, appends rather than
 symlinks — the vite-plus and cargo installers also append to that file). It is the
@@ -896,7 +909,7 @@ Homebrew Caddy ships zero DNS provider modules
 (`caddy list-modules | grep dns.providers` is empty), so DNS-01 is impossible
 until Caddy is rebuilt with `github.com/caddy-dns/cloudflare` via `xcaddy`
 (installed via `go install`, not Homebrew — pinned in the Makefile like
-`COLLIE_REF`/`HERDR_NOTES_REF`) and installed over
+`COLLIE_REF`) and installed over
 `$(brew --prefix)/opt/caddy/bin/caddy`, the exact path the brew LaunchDaemon
 plist execs. Dev-host only, same gate `collie-setup` uses. **A later
 `brew upgrade caddy` silently reverts this binary and the module vanishes —
@@ -958,11 +971,12 @@ existing rows to be 22/5900/7700-7799 (Macs), 60000-61000 (mosh), 7730 (rb),
 [Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
 that mirrors the herd on a phone: open a URL, see which agent is blocked, type
 a reply. Third-party, installed and **commit-pinned** by `make collie-setup` —
-`COLLIE_REF`/`COLLIE_VERSION` in the Makefile, same discipline as
-`HERDR_NOTES_REF` and for the same reason (`plugin install` re-clones + builds
-every time; upgrading is a reviewed diff of the pin, not `plugin update`,
-which doesn't exist). Chosen over granting the phone raw ssh+mosh: no port-22
-grant, no SSH key on a device that can be lost or stolen.
+`COLLIE_REF`/`COLLIE_VERSION` in the Makefile — a commit, not a tag, because
+tags move and `plugin install` re-clones and rebuilds the repo every time.
+Since herdr-notes was retired it is the **only** pinned plugin left. Upgrading
+is a reviewed diff of that pin, driven by `make collie-upgrade`; there is no
+`plugin update`. Collie was chosen over granting the phone raw ssh+mosh: no
+port-22 grant, no SSH key on a device that can be lost or stolen.
 
 **It is remote shell access by design, not "just a web UI".** One bridge call
 types arbitrary keystrokes into a live pane — Collie's own README says to
@@ -1296,8 +1310,7 @@ found by hand, months later, by accident. `make drift-check` closes that.
 | `make drift-check-setup` | Dev-host gated: install `com.jkrumm.drift-check` (daily 09:40) |
 | `make drift-check-teardown` | Unload + remove |
 
-It watches what nothing else does: the commit pins (`COLLIE_REF`,
-`HERDR_NOTES_REF`), the version pins compiled into caddy (`XCADDY_VERSION`,
+It watches what nothing else does: the commit pin (`COLLIE_REF`), the version pins compiled into caddy (`XCADDY_VERSION`,
 `CADDY_DNS_MODULE_VERSION`), brew-upgrade recency, and pending macOS updates.
 Pins are read out of the **Makefile**, never duplicated.
 
