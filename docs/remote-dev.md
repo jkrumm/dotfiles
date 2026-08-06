@@ -683,8 +683,41 @@ rather than an error**:
 3. **`brew services start` as the user** installs a LaunchAgent, which cannot run
    a root-required service. It must be `sudo brew services start`.
 
-Rollback stays available while the `mini-old` node record exists: `sudo brew
-services stop tailscale`, re-enable the login item, relaunch the app.
+4. **Quitting the macsys app is not enough — it must be removed.** The first
+   version of this migration left the app in place "so rollback stays cheap".
+   The first reboot test destroyed that assumption, which is precisely what the
+   test was for. macOS relaunches the app itself at boot as the container for
+   its still-activated system extension; `TailscaleStartOnLogin = 0` does not
+   stop it, because no login item is involved. Two Tailscale stacks then contest
+   the tunnel.
+
+   The symptom is the nastiest one in this whole document, because **the node
+   looks perfectly healthy**: `BackendState Running`, right IP, all three tags,
+   29 peers, `tailscale ping` answering in 25ms. `tailscale serve` ports keep
+   serving — they terminate *inside* tailscaled. Everything that needs delivery
+   to a host process is silently dropped. Measured 2026-08-06 after reboot #1:
+
+   | Port | Terminates in | Result |
+   |-|-|-|
+   | 7730, 8443 | tailscaled itself | **up** |
+   | 22 (sshd), 443 (caddy), ICMP | the host network stack | **dead** |
+
+   Quitting the app restored all of them instantly. `systemextensionsctl
+   uninstall` cannot remove the extension — SIP blocks it, and disabling SIP to
+   tidy up an extension is not a trade worth making. Removing the container app
+   is the supported route: with no app, macOS has nothing to launch. It is
+   *moved*, not deleted, to `/Users/Shared/tailscale-macsys-rollback`.
+
+Rollback stays available while the `mini-old` node record exists — that record,
+not the app bundle, is the real rollback. Restoring: `sudo brew services stop
+tailscale`, `mv` the app back from `/Users/Shared/tailscale-macsys-rollback`,
+re-enable the login item, relaunch.
+
+**Reboot is a required acceptance test for this host, not an optional one.**
+Every claim in this section about starting before login and surviving unattended
+is a claim about boot, and boot is the one path that cannot be verified any other
+way. The failure above was invisible to every other check — including the
+heartbeat, which would have gone on reporting a healthy tailnet.
 
 What this still does not give you is a genuinely independent path. If tailscaled
 fails to start at all, physical access remains the only recovery — but launchd's

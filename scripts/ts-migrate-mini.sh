@@ -82,10 +82,36 @@ if /usr/bin/pgrep -x Tailscale >/dev/null 2>&1; then
 fi
 log "  macsys app stopped"
 
-# The system extension stays installed but goes dormant once the app that drives
-# it exits — deliberately NOT uninstalled here. `systemextensionsctl uninstall`
-# wants developer mode on current macOS, and leaving the extension in place is
-# what makes rollback cheap: reinstate the login item, relaunch the app.
+MACSYS_ROLLBACK=/Users/Shared/tailscale-macsys-rollback
+if [ -d "$TS_APP" ]; then
+  sudo mkdir -p "$MACSYS_ROLLBACK"
+  sudo mv "$TS_APP" "$MACSYS_ROLLBACK/" || die "could not move $TS_APP aside"
+  log "  macsys app moved to $MACSYS_ROLLBACK (see comment above — quitting is NOT enough)"
+fi
+
+# THE APP MUST BE REMOVED, NOT MERELY QUIT. This was wrong in the first version
+# and the first reboot test caught it, which is the whole reason that test exists.
+#
+# Quitting is enough until the next boot. Then macOS relaunches the app ITSELF as
+# the container for its still-activated system extension — `TailscaleStartOnLogin
+# = 0` does not prevent this, because it is not a login item doing it — and two
+# Tailscale stacks contest the tunnel. The symptom is deeply misleading: the node
+# looks HEALTHY (BackendState Running, correct IP and tags, 29 peers, `tailscale
+# ping` answers in 25ms) and `tailscale serve` ports keep working, because those
+# terminate INSIDE tailscaled. Everything needing delivery to a host process —
+# sshd, caddy, even ICMP — is silently dropped. Measured 2026-08-06: :7730 and
+# :8443 up, :22 and :443 and ping all dead, and quitting the app fixed every one
+# of them instantly.
+#
+# `systemextensionsctl uninstall` cannot do this: SIP blocks it ("cannot be used
+# if System Integrity Protection is enabled"), and disabling SIP to tidy up an
+# extension is not a trade worth making. Removing the container app is the
+# supported route — with no app, macOS has nothing to launch and the extension
+# stays dormant.
+#
+# Moved, not deleted, so rollback survives: reinstating it is a `mv` back plus a
+# relaunch. That is cheaper than it sounds because the OLD NODE RECORD is the
+# real rollback anyway, and it must outlive this step.
 # sudo, NOT bare `brew services start`. As the user it installs a LaunchAgent,
 # and this service is require_root — the agent then dies on every attempt with
 # "tailscaled requires root" while `brew services list` merely says `error`.
@@ -142,6 +168,7 @@ log "Phase B complete. Next: re-declare serve config, then the four fix-ups."
 #
 # ROLLBACK, if Phase B goes wrong:
 #     sudo brew services stop tailscale
+#     sudo mv /Users/Shared/tailscale-macsys-rollback/Tailscale.app /Applications/
 #     defaults write io.tailscale.ipn.macsys TailscaleStartOnLogin -bool true
 #     open -a Tailscale
 #   The macsys node keeps its identity and IP as long as it was not deleted in

@@ -319,6 +319,24 @@ check_tailscale() {
   days=${out##*|}
   [[ "$state" == "Running" ]] || { echo "tailscaled not Running (state=${state:-unreachable})"; return 1; }
 
+  # THE CONTESTED-STACK CHECK. Nothing else here can see this failure, and it is
+  # the worst-shaped one on this host. On 2026-08-06's first post-migration
+  # reboot macOS relaunched the old macsys app as the container for its still
+  # activated system extension, and two Tailscale stacks fought over the tunnel.
+  # Every signal above stayed GREEN — BackendState Running, correct IP and tags,
+  # 29 peers, `tailscale ping` 25ms — while sshd, caddy and even ICMP were
+  # silently dropped. Only `tailscale serve` kept answering, because it
+  # terminates inside tailscaled and never touches the host network stack.
+  #
+  # So this asserts the CAUSE, not the symptom. Probing a host port is the
+  # obvious alternative and is strictly worse: this heartbeat runs ON the mini,
+  # so it reaches every one of those ports over loopback and sees nothing wrong.
+  if [[ "$TAILSCALE_BIN" == "/opt/homebrew/bin/tailscale" ]] \
+     && /usr/bin/pgrep -x Tailscale >/dev/null 2>&1; then
+    echo "the macsys Tailscale app is RUNNING alongside the brew daemon — two stacks contesting the tunnel; sshd/caddy/ICMP over the tailnet are being dropped right now even though everything else looks healthy (fix: quit it, move /Applications/Tailscale.app aside — docs/remote-dev.md §8)"
+    return 1
+  fi
+
   # Node-key expiry, which BackendState cannot see: it flips to a non-Running
   # state only AFTER the key expires, i.e. after the machine has already
   # dropped off the tailnet and taken ssh, mosh, every dev door and this very
