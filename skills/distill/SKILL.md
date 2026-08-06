@@ -1,12 +1,11 @@
 ---
 name: distill
 description: Write, draft, and polish prose through a human-owned 7-step pipeline. Use whenever the user says "distill", "write article", "draft", "summarize into", "create content", "synthesize", or "publish". Also use for any task where the output is a piece of long-form writing — the pipeline keeps prose quality out of coding sessions.
-model: opus
 ---
 
 # Distill — prose writing pipeline
 
-A human-owned 7-step pipeline for producing writing that sounds like the author, not the model. This skill runs on Opus because prose quality demands the best model. It is not a content generator — it is a scaffold that keeps the human in control at every gate.
+A human-owned 7-step pipeline for producing writing that sounds like the author, not the model. It is not a content generator — it is a scaffold that keeps the human in control at every gate. It runs on the session model deliberately: a `model:` override would force a mid-session model switch and invalidate the orchestrator's prompt cache. Want Opus prose from a Sonnet session? Delegate the Draft step to an Opus subagent, which carries its own cache.
 
 Output lands in the brain repo as a curated-surface page under `Projects/` or `Areas/` (per `brain/AGENTS.md`), with `status: draft` and `source` (wikilink into the `wiki/` note(s) it distills) frontmatter. Publishing is always the human's decision.
 

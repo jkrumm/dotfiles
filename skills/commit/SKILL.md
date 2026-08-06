@@ -136,15 +136,14 @@ git push --force-with-lease
 
 **For single commit:**
 1. Show commit message preview
-2. Ask for confirmation or edits
-3. Execute using heredoc:
+2. Execute using heredoc:
    ```bash
    git commit -m "$(cat <<'EOF'
    <message>
    EOF
    )"
    ```
-4. Show `git log -1` result
+3. Show `git log -1` result
 
 **For multiple commits:**
 1. Show commit sequence with file groupings
@@ -153,7 +152,7 @@ git push --force-with-lease
    b. Unstage all: `git reset HEAD`
    c. Stage specific files: `git add <files>`
    d. Show commit message preview
-   e. Execute commit on confirmation
+   e. Execute the commit
    f. Move to next commit
 3. Show final `git log --oneline -n <count>` result
 

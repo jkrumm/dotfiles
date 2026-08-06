@@ -328,15 +328,15 @@ gh api --paginate "repos/$owner/$repo/pulls/$pr_number/reviews" \
 
 **If uncommitted changes exist:**
 ```
-You have uncommitted changes.
-Run `/check` + `/commit` before checking PR status? [y/N]
+Uncommitted changes detected. Running /check + /commit first...
 ```
+Run `/check`, then invoke `/commit`. Wait for completion, then continue to the summary.
 
 **If unpushed commits exist:**
 ```
-You have $unpushed unpushed commit(s).
-Run `/check` and push first? [y/N]
+$unpushed unpushed commit(s) detected. Running /check and pushing...
 ```
+Run `/check`, then `git push`. Continue to the summary once pushed.
 
 ### Present Summary
 
@@ -369,38 +369,36 @@ Run `/check` and push first? [y/N]
 
 ### CodeRabbit Feedback Loop
 
-After presenting the full status, process CodeRabbit feedback interactively:
+After presenting the full status, process CodeRabbit feedback:
 
 **If CHANGES_REQUESTED review state:**
 ```
 ⚠️  CodeRabbit requested changes — address all blocking issues before merging.
 ```
 
-**Blocking items** — ask for each one in sequence:
+**Blocking items** — fix all of them in one pass:
 ```
 CodeRabbit found 2 blocking issues:
 
 1. [Blocking] src/auth/token.ts:42 — Potential null dereference when refreshToken is undefined
 2. [Blocking] src/api/routes.ts:18 — Missing input validation on userId parameter
-
-Implement fix for item 1? [y/N]
 ```
-- User says `y` → implement the fix in the main thread, run `/check`, fold into last commit with `/commit --amend`, then ask for next blocking item
-- User says `N` → skip that item, ask for next
-- After all blocking items addressed: "All blocking issues resolved. Run `/pr merge` once CI passes."
+- Evaluate each finding on its merits — challenge it rather than obeying blindly. Implement fixes for everything that holds up, in the main thread.
+- A finding that doesn't hold up is rejected, not asked about — note the reason.
+- Run `/check` once after all fixes, fold everything into the last commit with `/commit --amend`.
+- Report a summary: what was fixed, what was rejected and why.
+- "All blocking issues resolved. Run `/pr merge` once CI passes."
 
-**Suggestions (non-blocking)** — show as numbered list, ask once:
+**Suggestions (non-blocking)** — apply the worthwhile ones, no ask:
 ```
 CodeRabbit has 3 suggestions (non-blocking):
 
 1. [Suggestion] src/auth/token.ts:55 — Variable name 't' is unclear, prefer 'token'
 2. [Suggestion] src/api/auth.ts:23 — Consider extracting validation to a helper function
 3. [Suggestion] src/api/routes.ts:44 — Add JSDoc comment for this public method
-
-Implement any of these? (enter numbers like "1 3", or "none")
 ```
-- User enters numbers → implement selected suggestions, run `/check`, `/commit --amend`
-- User enters `none` → proceed
+- Apply the ones that genuinely improve the code; run `/check`, fold into the last commit with `/commit --amend`.
+- Report the rest as rejected, with the reason.
 
 ### Auto-update PR Description
 
@@ -412,10 +410,9 @@ gh pr view --json commits,body
 
 If new commits pushed since last description update:
 ```
-New commits detected since PR description was last written.
-Update PR description to reflect current state? [y/N]
+New commits detected since PR description was last written. Updating PR description...
 ```
-- `y` → regenerate description using the improved template (WHY-focused summary, impact bullets), show diff, ask to confirm before applying
+Regenerate description using the improved template (WHY-focused summary, impact bullets) and apply it — show the diff of old vs new in the report.
 
 ---
 
@@ -431,7 +428,7 @@ Skill({ skill: "check" })
 
 If /check fails → abort, show errors. Do not update PR on failing code.
 
-If passes → regenerate PR description using the improved template, show diff of old vs new, ask for confirmation before applying:
+If passes → regenerate PR description using the improved template and apply it, showing the diff of old vs new in the report:
 
 ```bash
 # Update description
@@ -551,10 +548,10 @@ fi
 | Create branch (ticket found) | Auto | |
 | Create branch (no ticket) | | Ask |
 | Create PR | | Preview first |
-| Update PR description (new commits) | | Ask |
+| Update PR description (new commits) | Auto | |
 | Mark PR ready | Auto | |
-| Implement CodeRabbit blocking fix | | Ask per item |
-| Implement CodeRabbit suggestions | | Ask (numbered list) |
+| Implement CodeRabbit blocking fix | Auto (fix all, report) | |
+| Implement CodeRabbit suggestions | Auto (apply worthwhile, report rest) | |
 | Merge PR (checks pass) | Auto (--admin) | |
 | Merge PR (checks fail) | | Report & ask |
 

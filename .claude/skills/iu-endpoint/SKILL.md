@@ -15,9 +15,10 @@ and **are there newer/better models I should switch to** (OpenCode + Hermes).
 - **The model alias is the host selector.** Each id maps to one or more backend
   "sinks" (`owned_by` in the catalog). More backends = more redundant = less
   likely to 429/timeout. The validator prints `backends=N` per model.
-  - Examples: `claude-opus-4-6` (3 backends) is steadier than `claude-opus-4-7`
-    (1). `Kimi-K2.5` (2: Nebius + Azure) is steadier than `Kimi-K2.6` (1: Sweden
-    Central, throttle-prone). `gpt-5` (9) is the most redundant GPT.
+  - Examples: `Kimi-K2.5` (2: Nebius + Azure) is steadier than `Kimi-K2.6`
+    (1: Sweden Central, throttle-prone). `gpt-5` (9) is the most redundant GPT.
+    Don't hardcode a Claude example here — the configured aliases move (the old
+    `claude-opus-4-7` example outlived the model). Read the live counts.
 - **Transports** on the same host: `/anthropic/v1`, `/openai/v1` (rich catalog),
   `/azure/openai/...`, `/gemini/v1beta`, `/replicate/v1`. There is **no**
   `/bedrock` passthrough (404) — Bedrock is only an internal backing.

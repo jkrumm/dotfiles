@@ -100,7 +100,8 @@ forks chrome-devtools. Details live in those skills.
 
 | Work | Route to |
 |-|-|
-| Settled multi-file edit | `@implementer` — or `/implement` when it needs research-gating + validation |
+| Settled multi-file edit **in this repo** | `@implementer` — or `/implement` when it needs research-gating + validation |
+| Bounded episode **in another repo** | `mcp__sideclaw__dispatch` |
 | Search across many files | `Agent` → `Explore` |
 | Any format / lint / tsc / test loop | `mcp__sideclaw__check` — never inline |
 | Code review | `/review` |
@@ -132,13 +133,30 @@ forks chrome-devtools. Details live in those skills.
   the live checkout by default. Don't spawn worktree-isolated agents mid-flow —
   that splits work across trees you then have to reconcile.
 
+### `dispatch` — one episode inside another repo
+
+`mcp__sideclaw__dispatch` hands a single bounded episode to a Claude Code session
+running **inside a named repo**, so that repo's own CLAUDE.md, rules, and skills are
+in its context. This is the lane for "work on repo X while I'm sitting in repo Y" —
+every repo lives on this machine, so it comes up often.
+
+Three tiers: `investigate` (read-only → verdict), `author` (→ verdict + GitHub
+issue), `implement` (write → verdict + branch + **draft** PR). One episode, one
+verdict, **no steering** — mid-run redirection is `rd bg` + `rd say`, not this.
+
+**Every tier runs in its own worktree**, including the read-only ones. That is not
+belt-and-braces: `readOnly: true` disables Edit and Write but **not Bash**, and the
+brief is attacker-influenced (anyone can file an issue on a public repo, and its
+body reaches the episode's context). A read tier in the live checkout was one
+injected `sed -i` away from editing a repo other agents are working in.
+
 ### sideclaw async-job contract
 
-`mcp__sideclaw__{check,review,otel}` return `{ jobId, status }` immediately — **not
-the result**. Submit → note `jobId` → call `job_wait({jobId})` (blocks ~50s with
-heartbeats; loop while `stillRunning: true`) → read `result` on `status: "done"`,
-`error` on failed/interrupted. `job_status` is the non-blocking peek. This is what
-makes 10-min offload safe. **The submit call is not the answer.**
+`mcp__sideclaw__{check,review,dispatch,otel}` return `{ jobId, status }` immediately
+— **not the result**. Submit → note `jobId` → call `job_wait({jobId})` (blocks ~50s
+with heartbeats; loop while `stillRunning: true`) → read `result` on
+`status: "done"`, `error` on failed/interrupted. `job_status` is the non-blocking
+peek. This is what makes 10-min offload safe. **The submit call is not the answer.**
 
 ### Parallelism — cheapest tier first
 
@@ -209,9 +227,12 @@ the free tier.
 | `homelab-private` | **Self-contained.** Never reference its services, hostnames, or details from any other repo, doc, or commit. |
 | `vps` | Production VPS (Cloudflare Tunnel, 3 compose stacks) + image CDN (imgproxy over a private B2 `img/` prefix → `img.jkrumm.com`). |
 | `argo` | Personal API + dashboard, the agent backbone — TickTick, Gmail, calendar (personal + work), Teams, Garmin health, strength training, homelab/VPS state. Elysia/Bun/Postgres/Drizzle; the OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
-| `sideclaw` | Local Claude Code MCP daemon — `check` / `review` / `otel` / excalidraw / read-image. Workers on claude-sonnet-5 + claude-haiku-4-5, currently Max via `SIDECLAW_WORKER_BACKEND=max`. LiteLLM/DeepSeek bridge retained but dormant. |
+| `sideclaw` | Local Claude Code MCP daemon — `check` / `review` / `dispatch` / `otel` / excalidraw / read-image. Workers on claude-sonnet-5 + claude-haiku-4-5, currently Max via `SIDECLAW_WORKER_BACKEND=max`. LiteLLM/DeepSeek bridge retained but dormant. |
 | `research-gateway` | Standalone VPS research service behind `/research` (Elysia + Bun + AI SDK v6) at `research.jkrumm.com`. **Tailnet-only** (grey-cloud DNS, not behind the Tunnel), bearer-auth'd REST + OpenAPI + an MCP facade at `/mcp` with the same submit→poll job trio. IU models, off Max. Mac/tailnet only — cloud routines can't reach it. |
-| `hermes-agent` | Hermes — mini-only personal AI (Slack interface, DeepSeek-V4-Flash brain with `claude-sonnet-4-6-eu` failover, eight skill domains). |
+| `hermes-agent` | Hermes — mini-only personal AI (Slack interface, DeepSeek-V4-Flash brain with `claude-sonnet-4-6-eu` failover). `HERMES_SKILLS` in its Makefile is the source of truth for its skill domains — don't restate the count here, it drifts. |
+| `linewatch` | Home-line / connectivity watcher — bearer-auth'd routes, bucketed metrics, router poller. |
+| `vibe-stack` | The "factory" repo — generates a Cloudflare + Mantine v9 + D1 starter kit plus German-language guided onboarding for non-technical friends. Editing the factory ≠ editing what it produces. |
+| `king-smith-walkingpad-mac` | Go LaunchAgent + Raycast extension driving a WalkingPad P1 over BLE, syncing sessions to Argo. Milestone 0 / POC. |
 | `audio-gateway` | OpenAI-compatible STT + expressive Gemini TTS, VPS container at `audio-gateway.jkrumm.com` over the tailnet. Consumed by Hermes, Argo, local MacWhisper. |
 | `basalt-ui` | Mantine v9 + visx design system (NPM). **No Tailwind** since the 2026-07 zinc redesign. **Always a separate commit** from consumer apps. |
 | `brain` | Git-backed Obsidian vault. Two layers: top-level `wiki/` = agentic knowledge (strict lint), PARA `Projects`/`Areas` = curated human surface (light lint) linking down into `wiki/`. No `Resources` tier. Door is `obsidian-cli`, a **client of the running app** — it exits 1 on every subcommand when Obsidian is down (`make obsidian-autostart` keeps it up). Direct-to-master, validated by `vault-lint`. Use `/brain`. |

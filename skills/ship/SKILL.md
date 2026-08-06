@@ -83,7 +83,6 @@ Based on detected state, pick up from the right step:
 ## Human-in-the-Loop Triggers
 
 Always ask the user when:
-- Uncertain about a CodeRabbit finding (subjective vs real)
 - About to trigger release
 - Force push needed
 - CI failure not clearly related to our changes

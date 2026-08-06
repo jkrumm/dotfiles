@@ -33,8 +33,8 @@ You don't pick the target — the file is universal.
 1. **Assess depth** — Simple/Conceptual or Comprehensive/Technical (see below).
 2. **Research** (if technical) — look up actual specs, event names, formats.
 3. **Design the visual argument** — pattern variety, multi-zoom, evidence.
-4. **Resolve the output path** — ask the user where the file should land, or
-   infer from context (brain vault path, working dir).
+4. **Resolve the output path** — infer from context (brain vault path, working
+   dir) and state the chosen path in the output.
 5. **Call `mcp__sideclaw__excalidraw_diagram`** with the prompt + outputPath.
 6. **Open the result** — read the path back to the user. They open it in their
    editor of choice.
@@ -48,14 +48,16 @@ You don't pick the target — the file is universal.
 
 ## Resolving the output path
 
-Ask the user briefly if it's unclear. Defaults that usually work:
+Infer from context, in this order:
 
 - If cwd is under `~/SourceRoot/brain` (the live vault) → put it in a sensible
   subfolder, co-located with the note it belongs to. Never write to
   `~/Obsidian/Vault` (cold backup, closed).
-- Otherwise → ask. Don't dump diagram files in random project repos.
+- Otherwise → default to the brain vault too, in a sensible subfolder inferred
+  from the diagram's subject. Don't dump diagram files in random project repos.
 
-Always pass an **absolute path** ending in `.excalidraw`.
+Always pass an **absolute path** ending in `.excalidraw`. State the chosen path
+in the output.
 
 ---
 
@@ -239,5 +241,5 @@ If the user wants edits, call again with `mode: "extend"` and the same path.
   (`400×300`, `600×450`, `800×600`, `1200×900`, `1600×1200`).
 - **Skipping the design assessment.** A request like "draw the auth flow" is
   too vague to produce a good diagram — clarify depth and patterns first.
-- **Writing diagram files to arbitrary project repos.** Ask the user where —
-  most diagrams belong in the brain vault.
+- **Writing diagram files to arbitrary project repos.** Default to the brain
+  vault — most diagrams belong there, not in a project repo.

@@ -227,7 +227,7 @@ to touch anything.
 |-|-|-|
 | `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global Claude instructions (single source — no per-workspace layer) |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
-| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, claude-auth, git, keybindings, opencode, path, remote-dev, secrets, secrets-cache, tools |
+| `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | ai, aliases, brew, claude, claude-auth, git, keybindings, opencode, path, prompt, remote-dev, secrets, secrets-cache, tools |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | OpenCode CLI config — IU unified-endpoint providers (no secrets/hostnames; `{env:IU_*}` placeholders) |
 | `config/opencode/AGENTS.md` | `~/.config/opencode/AGENTS.md` | OpenCode global preamble — defers to `~/.claude` config via `instructions` |
 | `config/gitconfig` | `~/.gitconfig` | includeIf per workspace |
@@ -252,7 +252,7 @@ to touch anything.
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte terminal key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run in a **bare** terminal, never inside herdr |
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
-| `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, dockerfile, makefile-conventions, visx-charts) |
+| `rules/` | `~/.claude/rules/` (dir symlink) | All 17 global rules. Always-on: attribution, commit-conventions, dependency-hygiene, formatting, research-first, security, typescript, code-style, docker-makefile. Lazy (`paths:`): dockerfile, makefile-conventions, visx-charts, elysia, react-best-practices, tanstack-query, tanstack-router, tanstack-start. |
 | `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md` — the response-shape + autonomy contract. Activated by `outputStyle` in settings.json. |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
@@ -1632,16 +1632,11 @@ edits inline instead of delegating. The style's standing authorization is the
 counterweight, and it has to be *standing*: re-authorizing per session is exactly
 the tax it exists to remove.
 
-**On length: optimize for density, not line count.** Anthropic's guidance says
-~200 lines ("longer files consume more context and reduce adherence") and `/doctor`
-proposes trims past 25 KB — but that is a symptom rule aimed at the common case of
-CLAUDE.md files padded with directory listings and architecture overviews the model
-can read off the codebase. It is the wrong knife for a file whose lines are accrued
-gotchas. What genuinely costs adherence is *narrative prose*, which also teaches
-the model that hedged essay register is the house voice — the effect this whole
-change exists to undo. So the rule here is per-line, not per-file: a line either
-changes a decision or it goes. Long rationale moves to `docs/` behind a link; a
-non-obvious fact stays regardless of what the total reads.
+The density rule and the global/per-project/rules/output-style layering are stated
+once, in the global file's "Config hierarchy" — not restated here. What is specific
+to *this* file: at 1800+ lines it is the largest in the tree, and the narrative
+sections (remote-dev, collie, devhost-health, homebrew, theme) are the ones to move
+to `docs/` when trimming. The tables and gotchas stay.
 
 **Skills scope:** global skills load everywhere (SourceRoot, IuRoot, anywhere) via `~/.claude/skills/`. Workspace-specific behavior (e.g. SourceRoot vs IuRoot 1Password account) is handled inside the skill via the `op_account_for_cwd` helper or explicit `$PWD` guards.
 
