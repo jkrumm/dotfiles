@@ -816,12 +816,31 @@ and any target that consults it hangs rather than fails. `IdentitiesOnly yes`
 so only this key is ever offered; `ControlMaster` for the same reason as
 `Host mini` — repeated handshakes on an rsync/git loop.
 
-**Prerequisite, still open:** the MacBook's Tailscale device still carries its
-original (pre-rename) name, so `iumac` does not resolve yet.
-`tailscale set --hostname=iumac`, run on the MacBook, is the one remaining
-blocker (`dotfiles-private/docs/macbook-todo.md` item 4.1/new item).
-`make remote-dev-doctor` on the mini reports it as a non-fatal warning with
-the remedy until then.
+**Live since 2026-08-06**, verified from the mini rather than assumed:
+`ssh iumac 'whoami'` → the MacBook account; `rsync -a iumac:SourceRoot/…`
+transferred a real file; `~/.claude/projects` is reachable (89 transcripts,
+42M — the `usage-tracker` source that motivated this). The restrictions were
+verified positively too, not trusted: `ssh -A iumac` leaves `SSH_AUTH_SOCK`
+**unset** on the remote side, and `-R` remote port forwarding is refused.
+Note `-L` is *not* a valid test of `no-port-forwarding` — a local forward needs
+no server-side setup, so it "succeeds" with the restriction fully in force.
+
+Two rollout gotchas, both of which cost a diagnosis round:
+
+- **`tailscale set --hostname` does not move MagicDNS** on an already-registered
+  device. It set `"HostName": "iumac"` while `DNSName` stayed
+  `iu-mac-book.<tailnet>`, so `ssh iumac` failed at *name resolution* while
+  looking like a broken key. MagicDNS follows the control-plane machine name;
+  only the admin console (Machines → device → Edit machine name) rewrites it.
+  Verify `DNSName`, not `HostName`, after any rename.
+- **macOS Remote Login is access-listed, and MDM owns the list.**
+  `com.apple.access_ssh` on the IU MacBook contains `IT-Admin` plus gid 80
+  (`admin`) — the account is admitted only by way of `admin` membership, which
+  is not ours to guarantee. If a policy push drops it, this path breaks as an
+  *accepted* key followed by an immediate post-auth close with **no sshd log
+  line**. `make remote-dev-doctor` now names all three failure modes
+  (unresolvable / key missing / accepted-then-closed) because they are
+  indistinguishable from the mini otherwise.
 
 **The honest cost:** the mini now holds a private key that reaches the
 human's MacBook account. A mini compromise therefore reaches the MacBook's

@@ -177,11 +177,21 @@ if [[ "$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null)" =
     skip "mini->iumac key" "missing at $iumac_key"
   fi
 
+  # The remedy distinguishes the three failure modes seen during rollout,
+  # because they look alike from here and have unrelated fixes: a name that
+  # does not resolve (MagicDNS follows the CONTROL-PLANE machine name, so a
+  # rename needs the admin console — `tailscale set --hostname` alone does not
+  # move it), a missing public key on the MacBook, and an accepted key followed
+  # by an immediate post-auth close (macOS Remote Login is access-listed via
+  # the `com.apple.access_ssh` group, which MDM owns; it logs nothing).
   if ssh -o BatchMode=yes -o ConnectTimeout=5 iumac 'echo ok' >/dev/null 2>&1; then
     ok "ssh iumac (mini -> MacBook)" "reachable"
+  elif ! host iumac >/dev/null 2>&1 && ! dscacheutil -q host -a name iumac 2>/dev/null | grep -q .; then
+    skip "ssh iumac (mini -> MacBook)" \
+      "'iumac' does not resolve — rename the machine in the Tailscale ADMIN CONSOLE (Machines -> device -> Edit machine name); 'tailscale set --hostname' does not move MagicDNS on an already-registered device"
   else
     skip "ssh iumac (mini -> MacBook)" \
-      "unreachable — on the MacBook: 'tailscale set --hostname=iumac', then 'cd ~/SourceRoot/dotfiles && git pull && make authorized-keys'"
+      "resolves but unreachable — on the MacBook: 'cd ~/SourceRoot/dotfiles && git pull && make authorized-keys'. If that is already done and auth is ACCEPTED but the connection then closes, check 'dseditgroup -o read com.apple.access_ssh' (MDM-owned Remote Login access list)"
   fi
 else
   skip "mini->iumac reverse path" "not the mini (cache backend) — nothing to check here"
