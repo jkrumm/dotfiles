@@ -14,9 +14,10 @@ set -uo pipefail
 # the dev host" (the secrets backend marker, same signal `git-headless` and
 # `herdr-setup` key off) so the two machines can share one command surface.
 #
-# The MacBook holds no repos any more. `repos`, `work` and `bg` all resolve
-# paths ON the host, which is why none of them take a path — a MacBook-side
-# path would be meaningless.
+# The MacBook's sanctioned repos are dotfiles/dotfiles-private/photo-flow/brain —
+# no project repos. `repos`, `work` and `bg` all resolve paths ON the host, which
+# is why none of them take a path — a MacBook-side project-repo path would be
+# meaningless.
 
 HOST="${REMOTE_DEV_HOST:-mini}"
 

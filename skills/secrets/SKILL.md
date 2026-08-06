@@ -52,9 +52,13 @@ the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op:/
 + UUID) and T2/prod. To add a consumer: append its tpl's `op://` refs → `make secrets-seed`.
 
 - **`make secrets-seed`** resolves every ref via biometric `op read` (present-human) and seals one
-  age-encrypted cache. **It is interactive** — run it where a human can approve the biometric: on the
-  MacBook, or on the mini via an interactive terminal (in a Claude session, have the user run it with
-  the `!` prefix — it can't be driven from a non-interactive tool call, it will hang).
+  age-encrypted cache. **It is interactive** — it can't be driven from a non-interactive tool call, it
+  will hang. Preferred route from the mini: `ask-human.sh ask "reseal the secrets cache" --cmd 'make
+  secrets-seed' --wait` — async, survives the agent instead of blocking a session on a human appearing.
+  If a human is demonstrably present right now, the `!` prefix (in a Claude session) or running it
+  directly on the MacBook also works. Either way, first verify `dotfiles-private` on the MacBook is
+  current — `ssh iumac 'cd ~/SourceRoot/dotfiles-private && git status'` — since a ref added on the
+  mini and left unpushed is silently omitted from the seed (`docs/mini-headless-checklist.md:143-157`).
 - **`make secrets-test`** (mini-only) / **`make secrets-lint`** (anywhere) validate the shim.
 - **`make secrets-freshness-check`** pushes the Uptime Kuma staleness heartbeat `up` — run after a reseed.
 

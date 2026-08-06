@@ -291,9 +291,11 @@ UDP 60000-61000 for mosh, see Remote dev below — in `homelab-private`) restric
 source to your own Macs, and sshd is key-only. Keep the router free of any WAN
 port-forward for 22/5900 — that would bypass both.
 
-**The mini cannot verify its own inbound SSH.** It holds no private key material at all
-(`~/.ssh/*.pub` is empty) and the 1Password agent can't sign headlessly, so `ssh localhost`
-fails by design — inbound auth is always the *connecting* machine's key. Verify this path
+**The mini cannot verify its own inbound SSH.** It has no key **for itself** — the one
+private key it now holds, `~/.ssh/id_ed25519_iumac`, is an outbound credential for reaching
+iumac and is not in the mini's own `authorized_keys` — and the 1Password agent can't sign
+headlessly, so `ssh localhost` fails by design — inbound auth is always the *connecting*
+machine's key. Verify this path
 from the MacBook, never from the mini. Relatedly: `launchctl print system/com.openssh.sshd`
 reporting `state = not running` is socket-activation idle, not a fault — check
 `netstat -an | grep '\.22 .*LISTEN'` instead.
@@ -314,15 +316,25 @@ secrets below.
 ## Headless outbound access (Mac mini only)
 
 With no human present, anything authenticated by the 1Password SSH agent hangs on
-the biometric prompt — so the mini never uses key auth outbound:
+the biometric prompt — so the mini routes around it instead: keylessly (Tailscale
+SSH), through a dedicated non-1P key (iumac), or via a cache-resolved credential
+(GitHub):
 
 - **homelab + VPS → Tailscale SSH.** tailscaled on the servers authenticates the
   tailnet identity (`tag:mac` ACL); OpenSSH-level auth is `none`. `ssh homelab` /
   `ssh vps` work headless with zero keys, zero agents, zero prompts. No dedicated
   key exists for this path — a stolen mini holds no server credential; revocation
   is removing the device in the Tailscale admin.
+- **mini → iumac (the MacBook) → a dedicated non-1P key.** `ssh iumac` / `rsync …
+  iumac:…` reach the MacBook non-interactively over `~/.ssh/id_ed25519_iumac`
+  (`restrict,pty`, no agent forwarding, never enters 1Password or the secrets
+  cache) — for `usage-tracker`/`brain`/file pulls. `Host iumac` pins
+  `IdentityAgent none` so this leg never touches the 1Password agent and cannot
+  hang on it. `op` still can't resolve `op://Private/*` there — over `ssh iumac`
+  it fails FAST ("account is not signed in", exit 1) rather than hanging, so the
+  biometric gate holds with no hang hazard. Full model: `docs/remote-dev.md` §10.
 - **GitHub → HTTPS + a secrets-cache-backed credential helper.** GitHub is off the
-  tailnet, so this is the one outbound path that needs a headless credential:
+  tailnet, so this is another outbound path that needs a headless credential:
   `make git-headless` (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`,
   rewriting `git@github.com:` remotes to HTTPS and pointing the credential helper at
   `scripts/git-credential-secrets-cache`, which resolves `op://mini/github/token`
@@ -345,10 +357,12 @@ the biometric prompt — so the mini never uses key auth outbound:
   2026-07-26 with a real `git push --dry-run` from the mini; resolvability is not
   the same claim (see the health-check note below).
 
-Inbound is the reverse direction and a different key entirely: the MacBook reaches
-the mini over plain OpenSSH (`make remote-access` above) because remote dev needs
-agent/port forwarding and full-speed transfers that Tailscale SSH doesn't provide.
-The full per-path access model + break-glass runbook lives in
+There are now keys in **both** directions, each its own credential: **inbound** is
+the MacBook reaching the mini over plain OpenSSH (`make remote-access` above),
+needed for remote dev's agent/port forwarding and full-speed transfers that
+Tailscale SSH doesn't provide; **outbound reverse** is the `iumac` bullet above —
+the mini reaching back to the MacBook, restricted and with no agent forwarding. The
+full per-path access model + break-glass runbook lives in
 `dotfiles-private/docs/access-model.md`.
 
 ## Tailnet ACL — as code
@@ -470,8 +484,8 @@ either way. `config/zsh/remote-dev.zsh` gives each a one-command entry point:
 path from the MacBook — reachability, ssh, ControlMaster reuse, agent
 forwarding, mosh, and herdr — read-only, currently 10/10. It complements rather
 than duplicates the mini-side heartbeat below: that one runs *on* the mini and
-structurally cannot see inbound auth or the mosh UDP path, since the mini holds
-no key material and cannot ssh to itself.
+structurally cannot see inbound auth or the mosh UDP path, since the mini has no
+key for itself and cannot ssh to itself.
 
 **`make herdr-setup`** wires the two halves. It installs herdr's first-party
 Claude Code integration (`herdr integration install claude` → a SessionStart

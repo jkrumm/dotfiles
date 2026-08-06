@@ -65,16 +65,23 @@ function contextFor(backend: string): string | null {
         "secrets via the `secrets-run` shim (reads the age-encrypted offline cache):",
         "`secrets-run read op://vault/item/field`, `secrets-run run --env-file=<tpl> -- <cmd>`.",
         "`make secrets-seed` is interactive (biometric) — it can't be driven from a",
-        "non-interactive tool call; have the user run it with the `!` prefix. Which refs the",
+        "non-interactive tool call; have the user run it with the `!` prefix, or when no human is",
+        "in the loop (a `--bg` daemon) enqueue it: `ask-human.sh ask '…' --cmd 'make secrets-seed'`.",
+        "Which refs the",
         "mini may hold is `dotfiles-private/headless.refs`. See ~/.claude/CLAUDE.md → \"Headless secrets\".",
         "Outbound access from this machine: `ssh homelab` / `ssh vps` are Tailscale SSH —",
         "keyless, headless-safe, use them freely; GitHub goes over HTTPS via",
         "`~/.gitconfig-headless`, whose credential helper is",
         "`scripts/git-credential-secrets-cache` resolving `op://mini/github/token` from the",
         "same cache (NOT the `gh` keyring token — that path was retired 2026-07-26 because",
-        "`gh auth git-credential get` exits 0 with an empty body on expiry). NEVER rely on the",
-        "1Password SSH agent here — it hangs like `op` does. Full model:",
-        "dotfiles-private/docs/access-model.md.",
+        "`gh auth git-credential get` exits 0 with an empty body on expiry); and `ssh iumac` /",
+        "`rsync … iumac:…` reach the MacBook non-interactively over a dedicated key",
+        "(`~/.ssh/id_ed25519_iumac`, no agent forwarding) — for file/state pulls (usage-tracker,",
+        "brain, dotfiles). NEVER rely on the 1Password SSH agent for `ssh homelab`/`ssh vps` — it",
+        "hangs like `op` does; `Host iumac` pins `IdentityAgent none` so that leg is unaffected.",
+        "`op` still can't resolve `op://Private/*` even over `ssh iumac` — there it fails FAST",
+        "(\"account is not signed in\", exit 1), not a hang, so the biometric gate holds with no",
+        "hang hazard. Full model: dotfiles-private/docs/access-model.md.",
       ].join(" ");
     case "op": {
       const lines = [
@@ -82,11 +89,13 @@ function contextFor(backend: string): string | null {
         "live biometric `op`; a direct `op --account <acct>` also works (a Touch ID prompt may",
         "appear). See ~/.claude/CLAUDE.md → \"Headless secrets\".",
       ];
-      // Only this backend ever asks — the mini enqueues, this machine is the
-      // one with inbound reach to drain it. A zero count (by far the common
-      // case) says nothing; a nonzero one is the whole reason to interrupt
-      // context with an extra line, so the check only costs a line when it
-      // has something to report.
+      // Only this backend ever asks — the mini enqueues, this machine drains.
+      // That split is a deliberate choice about where the typed-`yes` happens
+      // (human-queue.sh run requires a real TTY and full human privileges),
+      // not a reach constraint: the mini can now ssh back to this machine too.
+      // A zero count (by far the common case) says nothing; a nonzero one is
+      // the whole reason to interrupt context with an extra line, so the
+      // check only costs a line when it has something to report.
       const pending = pendingHumanQueueCount();
       if (pending > 0) {
         lines.push(

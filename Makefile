@@ -563,7 +563,9 @@ _setup-git-headless:
 	chmod +x "$(DOTFILES_DIR)/scripts/git-credential-secrets-cache"; \
 	if ! printf 'protocol=https\nhost=github.com\n\n' | "$$HELPER" get 2>/dev/null | grep -q '^password=.'; then \
 		echo "    ✗ helper cannot resolve op://mini/github/token from the cache."; \
-		echo "      fix: run 'make secrets-seed' from the MacBook (biometric), then retry."; \
+		echo "      fix: ask-human.sh ask 'reseal the secrets cache' --cmd 'make secrets-seed' --wait"; \
+		echo "      (async, survives this session), or run 'make secrets-seed' directly if the"; \
+		echo "      MacBook is at hand right now (biometric). Then retry."; \
 		exit 1; \
 	fi; \
 	echo "    ✓ credential helper resolves a GitHub token from the cache"; \
@@ -579,7 +581,9 @@ _setup-git-headless:
 		echo "    ! helper cannot resolve $$GITLAB_REF — GitLab stanza NOT written."; \
 		echo "      GitHub still works. To fix: ensure the 1P item exists, that"; \
 		echo "      $$GITLAB_REF is listed in dotfiles-private/headless.refs, then"; \
-		echo "      run 'make secrets-seed' from the MacBook (biometric) and retry."; \
+		echo "      ask-human.sh ask 'reseal the secrets cache' --cmd 'make secrets-seed' --wait"; \
+		echo "      (async), or run 'make secrets-seed' from the MacBook directly if present"; \
+		echo "      (biometric), and retry."; \
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
@@ -587,7 +591,7 @@ _setup-git-headless:
 # Verify the MacBook→mini path FROM the MacBook. Complements — does not
 # duplicate — `devhost-health-check`, which runs ON the mini and structurally
 # cannot see inbound auth, ControlMaster reuse, agent forwarding or the mosh
-# UDP path (the mini holds no key material and cannot ssh to itself).
+# UDP path (the mini has no key for itself and cannot ssh to itself).
 # Read-only; safe to run any time.
 remote-dev-doctor:
 	@bash $(DOTFILES_DIR)/scripts/remote-dev-doctor.sh

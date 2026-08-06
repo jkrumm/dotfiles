@@ -33,9 +33,10 @@ Keep these apart — collapsing them is what makes this stack feel complicated:
 | How do I *go look* at the mini? | `dev` / `desk` — the transport layers below |
 | How do I *put work on* the mini and check on it? | `rd` — no terminal needed at all |
 
-Most days are the second one. The MacBook holds no repos any more, so `rd`
-resolves every path on the host; that is why its commands take a repo **name**,
-never a path.
+Most days are the second one. The MacBook's sanctioned repos are `dotfiles`,
+`dotfiles-private`, `photo-flow`, `brain` — everything else lives on the mini, so
+`rd` resolves every project-repo path on the host; that is why its commands take
+a repo **name**, never a path.
 
 ```bash
 repos [filter]         # what's on the dev host, with branch + dirty count
@@ -211,9 +212,42 @@ Three failure modes, all silent:
 | Caddy won't start, or the dev server can't bind its port | The generated block is missing `bind <tailnet-ip>`, so Caddy took `0.0.0.0:PORT` and collided with the dev server on `127.0.0.1:PORT` |
 | **403** from the app itself | Vite 5.4.12+ DNS-rebinding guard. Add the MagicDNS host to `server.allowedHosts` (rb does a `.ts.net` suffix match) |
 
-Changing the ACL needs **both** machines: the repo is on the mini, but
-`tailscale-acl-push` needs the Tailscale API key, which is `op://Private/*` and
-refused by the mini's cache by design. Edit on the mini, push from the MacBook.
+Changing the ACL needs a **present human**, not a second machine: `tailscale-acl-push`
+needs the Tailscale API key, which is `op://Private/*` and refused by the mini's cache
+by design — the blocker is purely biometric. The repo (`dotfiles-private`) lives on
+the MacBook already, so edit and push there; a mini-side edit can be pulled over
+`ssh iumac` first if needed.
+
+## The reverse leg: mini → iumac
+
+Access used to be one-way (MacBook → mini only). Since 2026-08-06 the mini can
+also reach back: `ssh iumac` / `rsync … iumac:…`, over a dedicated
+`~/.ssh/id_ed25519_iumac` key (`restrict,pty`, no agent forwarding, never enters
+1Password or the secrets cache). It is for file/state pulls off the MacBook —
+`usage-tracker` stats, syncing `brain`/`dotfiles` — not for anything needing
+`op://Private/*`: `op` over `ssh iumac` fails **fast** ("account is not signed
+in", exit 1), it does not hang, so the biometric gate holds. `make
+remote-dev-doctor` checks this leg (layer 5, mini-only). Full model:
+`dotfiles/docs/remote-dev.md` §10.
+
+## human-queue — the present-human channel
+
+SSH gave the mini reach into the MacBook; it did not give it a fingerprint. For
+work that genuinely needs a present human — biometric `op` (`make
+secrets-seed`), the Tailscale ACL push, any judgment call — an agent on the mini
+enqueues instead of blocking or editing a handover doc nobody may read for days:
+
+```bash
+ask-human.sh ask "<text>" [--cmd <command>] [--wait [seconds]]   # on the mini
+make human-queue          # list pending requests, on the MacBook
+make human-queue-count    # just the count, on the MacBook
+```
+
+Draining (`human-queue.sh run <id>`) happens only on the MacBook and requires a
+typed `yes` on a real TTY — there is no non-interactive path to it, so a
+compromised or misbehaving mini can only ever put a string in front of a human,
+never execute one. `--wait` polls for the result and exits 0/1/2/3 for
+done/denied/failed/timeout. Full model: `dotfiles/docs/remote-dev.md` §9.
 
 ## Monitoring
 
@@ -232,7 +266,7 @@ reports on itself over the already-granted outbound path.
 
 **`make remote-dev-doctor`** (`scripts/remote-dev-doctor.sh`) is the MacBook-side
 counterpart — it verifies the path FROM the MacBook, which the mini-side
-heartbeat structurally cannot: the mini holds no key material and cannot ssh to
+heartbeat structurally cannot: the mini has no key for itself and cannot ssh to
 itself, so it can't see inbound auth, `ControlMaster` reuse, agent forwarding,
 or the mosh UDP path. Read-only, currently 10/10 passing: tailscale reachability
 (direct vs DERP), ssh, ControlMaster, agent forwarding, mosh installed locally,
@@ -249,7 +283,7 @@ present, and a resolvable GitHub credential.
 | mosh prints `Error: vector` and exits | The client's terminal has no window size (a 0×0 pty). Real terminals are fine; this bites scripted/automated launches — set `TIOCSWINSZ` before exec |
 | Doubled keystrokes over ssh | `TERM=xterm-ghostty` reaching a host without that terminfo (cmux #2969). `ssh_config` pins `SetEnv TERM=xterm-256color` |
 | `launchctl print … sshd` says `state = not running` | socket-activation idle, **not** a fault. Check `netstat -an \| grep '\.22 .*LISTEN'` |
-| `ssh localhost` fails on the mini | By design — the mini holds no private key material. Inbound auth is the *connecting* machine's key, so the mini **cannot test its own inbound ssh**. Verify from the MacBook |
+| `ssh localhost` fails on the mini | By design — the mini has no key for itself (its one private key, `id_ed25519_iumac`, is outbound-only for `iumac`). Inbound auth is the *connecting* machine's key, so the mini **cannot test its own inbound ssh**. Verify from the MacBook |
 | A direct `op read` / `op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run`. `op whoami` fails fast, so preflight guards are safe |
 | `op signin` "worked" but the next command says not signed in | The session lives in the shell that ran it. Chain them: `op signin --account tkrumm && <cmd>` |
 | Agent died when the lid closed | It was `kind: interactive`. Use `rd bg` |

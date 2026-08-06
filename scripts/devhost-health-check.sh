@@ -363,8 +363,8 @@ check_tailscale() {
 }
 
 check_sshd() {
-  # Inbound auth is always the *connecting* machine's key — the mini holds no
-  # key material and cannot ssh to itself — so liveness here is "is something
+  # Inbound auth is always the *connecting* machine's key — the mini has no
+  # key for itself and cannot ssh to itself — so liveness here is "is something
   # listening on 22", not "can I authenticate". Note sshd is socket-activated:
   # `launchctl print` reports "not running" while idle, which is NOT a fault, so
   # the listening socket is the only honest signal.

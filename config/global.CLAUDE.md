@@ -270,11 +270,10 @@ investigations — Jupyter MCP + Python analysis). Rarely touched:
 | HomeLab | `ssh homelab` — Tailscale SSH, keyless | `~/homelab`, `~/homelab-private` | `homelab` + `common` |
 | VPS | `ssh vps` — Tailscale SSH, keyless | `~/vps` | `vps` + `common` |
 | Mac mini | `ssh mini` / `mosh mini` — **OpenSSH + key** (remote dev needs agent forwarding + ControlMaster) | **all** SourceRoot repos | n/a — cache backend |
+| MacBook (`iumac`) | reached FROM the mini: `ssh iumac` / `rsync … iumac:…` — dedicated `~/.ssh/id_ed25519_iumac` key, `restrict,pty`, no agent forwarding | `dotfiles`, `dotfiles-private`, `photo-flow`, `brain` | both accounts — biometric (present-human only) |
 
-The mini can now also reach back: `ssh iumac` / `rsync … iumac:…` — dedicated
-`~/.ssh/id_ed25519_iumac` key, `restrict,pty` (no agent forwarding), for
-`usage-tracker`/`brain`/file pulls off the MacBook. Needs the device renamed
-`iumac` first (`dotfiles-private/docs/macbook-todo.md`). Full model:
+The mini's reach back is live (rename to `iumac` landed 2026-08-06): non-interactive
+file/state pulls (`usage-tracker`/`brain`), no biometric. Full model:
 `dotfiles/docs/remote-dev.md` §10, `dotfiles-private/docs/access-model.md`.
 
 ### The mini is the dev host; the MacBook is the client
@@ -283,10 +282,13 @@ Agents run on the mini and outlive the MacBook. Stack: Tailscale → mosh → **
 (owns the workspace model, runs *on the mini*) → Caddy. `claude --bg` daemons
 survive independently of all of it. cmux is the client window, tmux the fallback.
 
-**The MacBook holds only `dotfiles`, `dotfiles-private`, `photo-flow`, `brain`.**
-Every other repo lives on the mini and is reached there. Don't clone one back "just
-to look" — that is how the two trees diverged. MacBook-unique history is preserved
-in `~/SourceRoot-archive` (git bundles + un-gitted projects).
+**The MacBook's sanctioned set is `dotfiles`, `dotfiles-private`, `photo-flow`,
+`brain`.** Every other repo lives on the mini and is reached there. Don't clone one
+back "just to look" — that is how the two trees diverged. MacBook-unique history is
+preserved in `~/SourceRoot-archive` (git bundles + un-gitted projects). **Known
+drift, unresolved:** the MacBook also carries a `homelab-private` checkout,
+verified from the mini 2026-08-06 — not on the sanctioned list above and not yet
+either deleted or documented as a second exception; pick one.
 
 **`brain` is a deliberate exception, not drift — do not "clean it up".** It is the
 vault's only offline copy and a *writing* mirror: edit it on either machine freely.

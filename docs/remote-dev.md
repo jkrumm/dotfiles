@@ -278,9 +278,9 @@ Session naming, if you want more than the default: `herdr --session <name>`,
 ### 3b. Driving work without a terminal — `rd` — DONE 2026-07-27
 
 Steps 1-3 all answer *how do I get a terminal on the mini*. That turned out to be
-the less common question. The MacBook now holds no project repos at all
-(`~/SourceRoot` = `dotfiles`, `dotfiles-private`, `photo-flow`), so the daily
-motion is "start work over there and check on it", which needs no terminal.
+the less common question. The MacBook's sanctioned repos are `dotfiles`,
+`dotfiles-private`, `photo-flow`, `brain` — no project repos — so the daily motion
+is "start work over there and check on it", which needs no terminal.
 
 `scripts/remote-dev.sh`, exposed as `rd` with `work`/`agents`/`repos` shorthands:
 
@@ -1002,10 +1002,11 @@ reattach. A non-interactive probe cannot stand in for the first: `mosh mini -- t
 fails at `sign_and_send_pubkey … agent refused operation` because the 1Password agent
 will not sign without a human, long before mosh is even reached.
 
-Note the device is still named `iu-mac-book` on the tailnet while `ssh_config` says
-`Host iumac` — the rename is open work (see the MacBook handover doc). `ssh iumac` will
-not resolve until `tailscale set --hostname=iumac` runs on that machine. This does not
-affect MacBook → mini, which is the direction this plan needs.
+Amended 2026-08-06: the rename landed and `ssh iumac` resolves — see §10 for the full
+mini→iumac reach. The dead end this paragraph used to send readers down is documented,
+not repeated here: `tailscale set --hostname` does **not** move MagicDNS on an
+already-registered device (only the admin console does, Machines → device → Edit
+machine name) — see the gotcha at §10 above for the mechanism and how it was diagnosed.
 
 ## Verify at the end
 
