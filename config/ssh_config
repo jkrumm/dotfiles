@@ -41,10 +41,33 @@ Host mini
     ControlPath ~/.ssh/cm/%r@%h:%p
     ControlPersist 10m
 
-# The IU work laptop.
+# The IU work laptop. Reverse of `Host mini`: the mini dials OUT to the
+# MacBook for rsync/scp pulls, usage-tracker stats, brain/dotfiles sync — auth
+# is the dedicated mini->iumac key (config/ssh/authorized_keys), not the 1P
+# agent, because macOS ships no Tailscale SSH server for this leg.
+#
+# IdentityAgent none is NOT optional on the mini: SSH_AUTH_SOCK there still
+# points at the 1Password agent socket, and any target that consults it hangs
+# forever rather than failing (dotfiles-private/docs/access-model.md).
+# Pinning the agent off makes this path headless-safe. IdentitiesOnly yes so
+# only this key is ever offered. This file installs byte-identically on every
+# machine (no rendering), so the block is harmless on the MacBook itself —
+# `ssh iumac` there is a self-loop nobody uses, and IdentityFile simply won't
+# exist. ControlMaster for the same reason as `Host mini`: repeated handshakes
+# on rsync/git loops.
+#
+# Prerequisite: this only resolves once the device is renamed to `iumac`
+# (dotfiles-private/docs/macbook-todo.md item 4.1) — it still carries its
+# original Tailscale device name today.
 Host iumac
     HostName iumac
     User johannes.krumm
+    IdentityFile ~/.ssh/id_ed25519_iumac
+    IdentitiesOnly yes
+    IdentityAgent none
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/%r@%h:%p
+    ControlPersist 10m
 
 # Infrastructure servers (HomeLab + VPS). The Unix user is `jkrumm`; without
 # this, ssh defaults to the local Mac login (johannes.krumm), which doesn't

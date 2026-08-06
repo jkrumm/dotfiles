@@ -271,6 +271,12 @@ investigations — Jupyter MCP + Python analysis). Rarely touched:
 | VPS | `ssh vps` — Tailscale SSH, keyless | `~/vps` | `vps` + `common` |
 | Mac mini | `ssh mini` / `mosh mini` — **OpenSSH + key** (remote dev needs agent forwarding + ControlMaster) | **all** SourceRoot repos | n/a — cache backend |
 
+The mini can now also reach back: `ssh iumac` / `rsync … iumac:…` — dedicated
+`~/.ssh/id_ed25519_iumac` key, `restrict,pty` (no agent forwarding), for
+`usage-tracker`/`brain`/file pulls off the MacBook. Needs the device renamed
+`iumac` first (`dotfiles-private/docs/macbook-todo.md`). Full model:
+`dotfiles/docs/remote-dev.md` §10, `dotfiles-private/docs/access-model.md`.
+
 ### The mini is the dev host; the MacBook is the client
 
 Agents run on the mini and outlive the MacBook. Stack: Tailscale → mosh → **herdr**
@@ -316,6 +322,13 @@ Three facts worth holding without loading the skill:
 
 Use **`/remote-dev`** for anything touching this stack; `make remote-dev-doctor`
 when it's broken. Full model: `dotfiles/docs/remote-dev.md`.
+
+**human-queue** — SSH gives the mini reach, not a fingerprint: for work that
+needs a *present human* (biometric `op`, the Tailscale ACL push, any
+person-only decision), an agent there enqueues with
+`ask-human.sh ask "…" [--cmd …] [--wait]` instead of editing a handover doc;
+the human drains it with `make human-queue` (`human-queue.sh run/deny <id>` —
+never auto-executed, always a typed `yes`).
 
 ### Sudo on a server
 

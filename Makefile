@@ -435,7 +435,46 @@ _setup-karabiner:
 		fi; \
 	fi
 
-.PHONY: remote-access _setup-remote-access
+.PHONY: authorized-keys remote-access _setup-remote-access
+# Installs trusted public keys into ~/.ssh/authorized_keys (append-if-missing;
+# never clobbers or duplicates an existing entry). Deliberately NOT sudo and
+# touches nothing else — no sshd config, no Screen Sharing toggle — so it is
+# safe to run standalone on a machine that only needs a key, where the rest of
+# `remote-access`'s sudo/sharing side effects are unwanted. `remote-access`
+# below calls this instead of duplicating the install logic.
+#
+# TWO FILES, HOST-SCOPED. config/ssh/authorized_keys installs everywhere,
+# always. config/ssh/authorized_keys.iumac — the mini's OUTBOUND key into the
+# MacBook — installs only on a present-human machine (backend marker != cache,
+# the same "am I the mini" discriminator git-headless/opbackup-setup already
+# use). That key must never land in the mini's OWN authorized_keys: the mini
+# holds the matching private key on disk, so installing the public half there
+# too would let it authenticate to itself, turning an outbound-only credential
+# into a standing inbound one on the machine most likely to be compromised
+# first (see config/ssh/authorized_keys.iumac's header and
+# dotfiles-private/docs/access-model.md).
+#
+# The grep matches a bare `ssh-...` line OR an authorized_keys OPTIONS-prefixed
+# line (`restrict,pty ssh-ed25519 ...`, `command=... ssh-ed25519 ...`,
+# `no-agent-forwarding ssh-ed25519 ...`, `from="..." ssh-ed25519 ...`) — a plain
+# `^ssh-` anchor silently dropped any key carrying options, which is exactly the
+# shape the mini->iumac key needs (`restrict,pty`).
+authorized-keys:
+	@mkdir -p "$(HOME)/.ssh"; chmod 700 "$(HOME)/.ssh"
+	@touch "$(HOME)/.ssh/authorized_keys"; chmod 600 "$(HOME)/.ssh/authorized_keys"
+	@grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys" | while IFS= read -r key; do \
+		grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
+	done
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "cache" ]; then \
+		echo "    · authorized_keys.iumac skipped — this is the mini (backend=cache); that key is the mini's own OUTBOUND credential and must never also be an inbound one here"; \
+	else \
+		grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys.iumac" | while IFS= read -r key; do \
+			grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
+		done; \
+	fi
+	@echo "    ✓ authorized_keys ($$(grep -cE '^(ssh-|restrict|command=|no-|from=)' "$(HOME)/.ssh/authorized_keys" 2>/dev/null) trusted key(s))"
+
 # Opt-in per machine — NOT in the default `setup` chain, because enabling an SSH
 # server is a deliberate per-host decision. Run `make remote-access` on a Mac you
 # want to control remotely (over Tailscale): installs trusted keys + key-only
@@ -444,15 +483,9 @@ _setup-karabiner:
 remote-access: _setup-remote-access
 _setup-remote-access:
 	@echo "  Remote access (SSH + Screen Sharing over Tailscale)..."
-	@mkdir -p "$(HOME)/.ssh"; chmod 700 "$(HOME)/.ssh"
-	@touch "$(HOME)/.ssh/authorized_keys"; chmod 600 "$(HOME)/.ssh/authorized_keys"
-	@# Install trusted public keys (append-if-missing; never clobbers existing keys).
-	@grep -E '^ssh-' "$(DOTFILES_DIR)/config/ssh/authorized_keys" | while IFS= read -r key; do \
-		grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
-	done; \
-	echo "    ✓ authorized_keys ($$(grep -cE '^ssh-' "$(HOME)/.ssh/authorized_keys" 2>/dev/null) trusted key(s))"
+	@$(MAKE) --no-print-directory authorized-keys
 	@# Key-only sshd hardening — only with at least one trusted key (avoid lockout).
-	@if ! grep -qE '^ssh-' "$(HOME)/.ssh/authorized_keys" 2>/dev/null; then \
+	@if ! grep -qE '^(ssh-|restrict|command=|no-|from=)' "$(HOME)/.ssh/authorized_keys" 2>/dev/null; then \
 		echo "    ! sshd hardening skipped — no trusted keys (would lock out SSH)"; \
 	else \
 		DROPIN=/etc/ssh/sshd_config.d/200-hardening.conf; \
@@ -2471,6 +2504,18 @@ devhost-health-teardown:
 devhost-health-check:
 	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
 
+# human-queue — the async present-human channel from the mini. An agent there
+# enqueues with `ask-human.sh`; these two targets are the MacBook-side drain,
+# run by a human, never by a poller (see scripts/human-queue.sh's header for
+# why: the ssh hop rides the per-use biometric 1Password SSH agent, and a
+# LaunchAgent draining it would fire Touch ID on its own schedule). No setup/
+# teardown pair here on purpose — there is nothing to install.
+.PHONY: human-queue human-queue-count
+human-queue:
+	@bash $(DOTFILES_DIR)/scripts/human-queue.sh list
+human-queue-count:
+	@bash $(DOTFILES_DIR)/scripts/human-queue.sh count
+
 # ----------------------------------------------------------------------------
 # Drift check (dev host only)
 #
@@ -2668,11 +2713,14 @@ help:
 	@echo "  make opbackup-teardown          Remove the auto-trigger (stamps kept)"
 	@echo ""
 	@echo "  Remote dev"
+	@echo "  make authorized-keys            Install trusted SSH keys only — no sudo, no sshd/sharing changes (safe on the IU MacBook)"
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
+	@echo "  make human-queue                MacBook: list the mini's pending present-human requests"
+	@echo "  make human-queue-count          MacBook: print just the pending count (fast; used by the SessionStart hook)"
 	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"

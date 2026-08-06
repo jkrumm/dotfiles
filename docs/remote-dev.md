@@ -725,6 +725,112 @@ fails to start at all, physical access remains the only recovery — but launchd
 quittable GUI app ever was. A `cloudflared` door behind Cloudflare Access is the
 designated upgrade if that ever proves insufficient.
 
+### 9. human-queue — the async present-human channel from the mini
+
+The mini can now `ssh iumac` (§10, a dedicated restricted key), so a network
+path back to the MacBook exists — but SSH gives it reach, not a fingerprint.
+This queue is for the part reach doesn't buy: work that needs a *present
+human* — biometric `op` (`make secrets-seed`), the Tailscale ACL push, or any
+decision only a person can make. Before this existed, an agent on the mini
+signalled blocked-on-human work by editing prose handover docs, which the
+human might not read for days. human-queue is the async channel instead: an
+agent on the mini enqueues a request; the human on the MacBook lists,
+inspects, and runs or denies it; a result lands back on the mini for a
+waiting agent to pick up.
+
+| Side | Command | Runs on |
+|-|-|-|
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait [seconds]]` | the mini |
+| Inspect (own request) | `ask-human.sh list` / `ask-human.sh status <id>` | the mini |
+| Drain — count | `make human-queue-count` (`human-queue.sh count`) | the MacBook |
+| Drain — list | `make human-queue` (`human-queue.sh list`) | the MacBook |
+| Drain — inspect | `human-queue.sh show <id>` | the MacBook |
+| Drain — act | `human-queue.sh run <id>` / `human-queue.sh deny <id> [reason]` | the MacBook |
+
+Queue state is two small files per request under
+`${XDG_STATE_HOME:-$HOME/.local/state}/human-queue/` on the mini (mode 700
+dir, mode 600 files): `<id>.req` (written by `ask-human.sh`) and `<id>.res`
+(written back by `human-queue.sh`). A request is "pending" for as long as no
+`.res` exists yet. `--wait` polls for the `.res` every 5s and exits
+0/1/2/3 for done/denied/failed/timeout, so a blocked agent can sit on the call
+instead of polling itself.
+
+**The transport is the existing MacBook→mini ssh hop, not a new credential.**
+`human-queue.sh` reuses the same `ssh mini` (`BatchMode=yes`,
+`ConnectTimeout=8`) this whole document is about — no inbound door opens on
+the MacBook, and the mini gains no new way to reach out. It refuses to run at
+all on the cache backend (use `ask-human.sh` there instead), the same
+marker-driven routing `remote-dev.sh` already uses.
+
+**The mini only ever *proposes* a command string — it never executes one.**
+`human-queue.sh run <id>` prints the request (including any `cmd`, verbatim
+and clearly delimited), warns that it was authored by an agent on the mini and
+is about to run on the MacBook with the human's full privileges, and requires
+a typed `yes` on a real TTY — anything else, or no TTY at all, aborts with no
+side effects. There is no non-interactive path to `run`. That is the actual
+security property: a compromised or misbehaving mini can only ever put a
+string in front of a human, never open a shell on its own.
+
+**No LaunchAgent drains this, and that is deliberate.** Every other queue in
+this repo (devhost-health, secrets-freshness) is polled by a plist. This one
+isn't, because the ssh hop it rides sits behind the 1Password SSH agent, which
+is per-use biometric — a poller would mean an unattended Touch ID prompt
+firing on its own schedule, forever, which is not a trade worth making for a
+convenience feature. Draining is something the human does.
+
+`hooks/machine-role.ts` folds a one-line nudge into the SessionStart context
+on the `op` backend only, calling `human-queue.sh count` with a hard 2500ms
+timeout — any failure (unreachable mini, missing script, non-numeric output)
+collapses to silence, never an error, matching that hook's existing contract
+that a secrets/context hint must never block a session.
+
+### 10. mini → iumac — the reverse reach
+
+Access used to be one-way: MacBook → mini (OpenSSH, the human's 1P key), plus
+mini → homelab/vps (Tailscale SSH, keyless). The mini had no path back to the
+MacBook. That blocked concrete jobs with no queue-shaped substitute — pulling
+`usage-tracker` stats off the MacBook, syncing `brain`/`dotfiles`, general
+file transfer — so `ssh iumac` / `rsync … iumac:…` from the mini is now
+allowed, over a dedicated key.
+
+The Tailscale ACL already grants `tag:mac → tag:mac` on `tcp:22`,
+symmetrically — both Macs carry `tag:mac`, so no ACL change was needed. What
+was missing is auth: macOS ships no Tailscale SSH server, and the MacBook's
+sshd offers `publickey` only, so a key is required. `~/.ssh/id_ed25519_iumac`
+on the mini (mode 600, no passphrase, never leaves the mini, never enters
+1Password or the secrets cache) is that key; its public half is installed via
+`config/ssh/authorized_keys.iumac` + `make authorized-keys`, restricted
+(`restrict,pty`) so it carries no port/agent forwarding, no X11, no user-rc.
+That file installs only on a present-human machine (backend marker != cache)
+— `make authorized-keys` skips it on the mini itself, since the mini holding
+both halves of this keypair would turn an outbound-only credential into an
+inbound one on the machine most likely to be compromised first.
+Agent forwarding off is the load-bearing restriction — without it the mini
+could borrow the human's 1Password-held GitHub/commit-signing key on every
+connection. `pty` is re-enabled after `restrict` so interactive shells still
+work; scp/rsync/sftp/git are unaffected by `restrict`.
+
+`Host iumac` in `ssh_config` pins `IdentityAgent none` — not optional on the
+mini, since `SSH_AUTH_SOCK` there still points at the 1Password agent socket
+and any target that consults it hangs rather than fails. `IdentitiesOnly yes`
+so only this key is ever offered; `ControlMaster` for the same reason as
+`Host mini` — repeated handshakes on an rsync/git loop.
+
+**Prerequisite, still open:** the MacBook's Tailscale device still carries its
+original (pre-rename) name, so `iumac` does not resolve yet.
+`tailscale set --hostname=iumac`, run on the MacBook, is the one remaining
+blocker (`dotfiles-private/docs/macbook-todo.md` item 4.1/new item).
+`make remote-dev-doctor` on the mini reports it as a non-fatal warning with
+the remedy until then.
+
+**The honest cost:** the mini now holds a private key that reaches the
+human's MacBook account. A mini compromise therefore reaches the MacBook's
+*files and user session*, not just its own — a real widening of blast radius,
+accepted deliberately for the sync/pull workflows. It does not hand over
+`op://Private/*`: that still needs a biometric `op` prompt on the MacBook
+itself, which a stolen key cannot answer. Full model:
+`dotfiles-private/docs/access-model.md`.
+
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything
@@ -859,10 +965,15 @@ against someone who wants what is on it.
 
 ## Blocking constraint
 
-**The inbound path is not testable from the mini.** The mini holds *no SSH private key
-material at all* — `~/.ssh/*.pub` is empty and the 1Password agent cannot sign headlessly,
-so the mini cannot even SSH to itself. Inbound auth depends entirely on the MacBook's
-1Password agent.
+**The inbound path is not testable from the mini.** Inbound auth depends entirely on the
+MacBook's 1Password agent, which cannot sign headlessly, so the mini cannot SSH to itself
+— it has no copy of the key that admits it.
+
+> Amended 2026-08-06: the mini is no longer key-free. It now holds
+> `~/.ssh/id_ed25519_iumac`, a dedicated *outbound* key for the reverse leg into the
+> MacBook (see the mini → iumac section above). That key is not in the mini's own
+> `authorized_keys`, so the claim above still holds for the **inbound** path — but the
+> older blanket phrasing "no SSH private key material at all" is retired.
 
 Everything that does *not* depend on inbound ssh has now been verified locally: the
 installs, the ssh config, the herdr server and its crash semantics, the ACL grant landing

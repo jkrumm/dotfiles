@@ -5,10 +5,14 @@ set -uo pipefail
 #
 # The existing devhost-health-check.sh runs ON the mini and reports what the
 # mini can see about itself. That is the right shape for a heartbeat, but it
-# structurally cannot check the half that actually breaks: the mini has no
-# private key material and cannot ssh to itself, so inbound auth, ControlMaster
-# reuse, agent forwarding and the mosh UDP path are all invisible from there.
-# This is the other half — the client side, which only this machine can test.
+# structurally cannot check the half that actually breaks: the mini has no key
+# for itself and cannot ssh to itself, so inbound auth, ControlMaster reuse,
+# agent forwarding and the mosh UDP path are all invisible from there. This is
+# the other half — the client side, which only this machine can test.
+#
+# Layer 5 below is the exception: it checks the mini's *own* reverse leg into
+# the MacBook (mini->iumac, a dedicated key, unrelated to the mini's lack of a
+# self-key) and only runs when this script executes ON the mini.
 #
 # Read-only. Nothing here changes state; it is safe to run any time.
 #
@@ -147,6 +151,40 @@ else
       # Don't fail on an unreachable network: that is not a dev-host fault.
       skip "github push rights" "inconclusive — ${probe:-no output from git}" ;;
   esac
+fi
+
+# --- Layer 5: reverse path — mini -> iumac ------------------------------------
+# The other direction: the mini reaching back into the MacBook (rsync/scp file
+# pulls, usage-tracker stats, brain/dotfiles sync) over a dedicated on-disk key,
+# since macOS ships no Tailscale SSH server for this leg. Only meaningful
+# running ON the mini — a MacBook running this doctor has no reverse leg of its
+# own to check. Gated the same way human-queue.sh/remote-dev.sh gate "am I the
+# dev host": the secrets-backend marker.
+#
+# Non-fatal by design (skip, not bad): the MacBook is a laptop, often asleep or
+# off the tailnet, so this must warn rather than fail the doctor or change its
+# exit code.
+if [[ "$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null)" == "cache" ]]; then
+  iumac_key="$HOME/.ssh/id_ed25519_iumac"
+  if [[ -f "$iumac_key" ]]; then
+    iumac_key_mode=$(/usr/bin/stat -f '%Lp' "$iumac_key" 2>/dev/null)
+    if [[ "$iumac_key_mode" == "600" ]]; then
+      ok "mini->iumac key" "$iumac_key (600)"
+    else
+      skip "mini->iumac key" "$iumac_key is mode $iumac_key_mode, expected 600 — chmod 600 it"
+    fi
+  else
+    skip "mini->iumac key" "missing at $iumac_key"
+  fi
+
+  if ssh -o BatchMode=yes -o ConnectTimeout=5 iumac 'echo ok' >/dev/null 2>&1; then
+    ok "ssh iumac (mini -> MacBook)" "reachable"
+  else
+    skip "ssh iumac (mini -> MacBook)" \
+      "unreachable — on the MacBook: 'tailscale set --hostname=iumac', then 'cd ~/SourceRoot/dotfiles && git pull && make authorized-keys'"
+  fi
+else
+  skip "mini->iumac reverse path" "not the mini (cache backend) — nothing to check here"
 fi
 
 echo ""

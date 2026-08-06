@@ -1,0 +1,24 @@
+# mini -> iumac — dedicated key for the mini's reverse reach into the MacBook
+# (rsync/scp pulls, usage-tracker, brain/dotfiles sync). Kept OUT of
+# config/ssh/authorized_keys and in this file instead, because it must be
+# installed on the MacBook (iumac) ONLY, never on the mini itself: the mini
+# holds the matching PRIVATE key on disk (~/.ssh/id_ed25519_iumac), so
+# installing this public half into the mini's own ~/.ssh/authorized_keys too
+# would let that private key authenticate back to the mini — turning an
+# outbound-only credential into a standing inbound one on the machine most
+# likely to be compromised first.
+#
+# `make authorized-keys` enforces the split by checking the present-human
+# backend marker (`${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend`, "cache"
+# = the mini) that scripts/remote-dev.sh and `make git-headless` already use
+# to tell the two machines apart, rather than a second, independent hostname
+# check that could drift from that one.
+#
+# `restrict` turns off port/agent forwarding, X11 and user-rc; agent
+# forwarding off is the load-bearing part — without it the mini could borrow
+# the human's 1Password-held GitHub/commit-signing key on every connection.
+# `pty` is re-enabled after `restrict` so interactive shells still work;
+# scp/rsync/sftp/git are unaffected by `restrict`. No `from=`: source
+# restriction is the tailnet ACL's job (only tag:mac reaches tcp:22), and a
+# Tailscale IP must not enter git.
+restrict,pty ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIABPkPsMROlF6nF0127jSEkNFlJ+Iqtkpy0T3nuMEOoJ mini->iumac
