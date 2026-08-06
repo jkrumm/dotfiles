@@ -175,12 +175,62 @@ check_macos() {
   fi
 }
 
+# The mini's Tailscale is in a blind spot that only became visible on
+# 2026-08-05: it is the STANDALONE (macsys) build, so `brew outdated` never sees
+# it and macOS software update never sees it, while the two Linux servers are
+# apt-managed and surface in their own tooling. Nothing on this machine reported
+# that it sat two minor versions behind through five SSH CVEs.
+#
+# It is not unmanaged — the app self-updates via Sparkle
+# (SUAutomaticallyUpdate = 1). The failure this catches is that self-update
+# STALLING, which is a real state rather than a hypothetical: Sparkle honours a
+# phased-rollout cohort (SUUpdateGroupIdentifier), so a release can be out for
+# days while this host is not yet in the wave. Measured 2026-08-05 — a forced
+# check on 1.98.9 with 1.102.2 released the day before returned nothing.
+#
+# Which is exactly why this REPORTS and never applies. A cohort that has not
+# reached you yet is Tailscale deliberately staging a rollout, and overriding
+# that on the one host whose only remote access path IS Tailscale is a bad
+# trade — the 2026-08-05 attempt to force it cost an outage and changed no
+# version. The 14-day grace draws the line: silent while a rollout is merely in
+# progress, alerting once "not yet in the wave" has become "this is stuck".
+#
+# The MAS build is skipped rather than checked. It updates through the App
+# Store on its own schedule and MacZipsVersion is the wrong channel to compare
+# it against, so a comparison there would report drift that no local action can
+# resolve.
+check_tailscale() {
+  local app="/Applications/Tailscale.app" installed latest
+  [[ -d "$app" ]] || { skip_add "tailscale (not installed)"; return; }
+  if [[ -d "$app/Contents/_MASReceipt" ]]; then
+    skip_add "tailscale (App Store build — updates via the App Store)"
+    return
+  fi
+  installed=$("$DEFAULTS_BIN" read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || installed=""
+  [[ -n "$installed" ]] || { skip_add "tailscale (installed version unreadable)"; return; }
+
+  # MacZipsVersion is the standalone (macsys) channel — NOT `Version`, which is
+  # the cross-platform headline and can lead the Mac build. Comparing against
+  # the wrong key would report drift on a host that is already current for its
+  # own channel.
+  latest=$(/usr/bin/curl -fsS --max-time 8 "https://pkgs.tailscale.com/stable/?mode=json" 2>/dev/null \
+    | "$PYTHON_BIN" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("MacZipsVersion") or d.get("Version") or "")' 2>/dev/null) || latest=""
+  [[ -n "$latest" ]] || { skip_add "tailscale (pkgs.tailscale.com unreachable)"; return; }
+
+  if [[ "$installed" == "$latest" ]]; then
+    info_add "tailscale current ($installed)"
+  else
+    drift_add "tailscale" "tailscale $installed → $latest (Sparkle auto-update has not applied it; if this persists the rollout cohort is stuck — apply via scripts/detached-run.sh, NEVER a bare ssh command)"
+  fi
+}
+
 # --- Run ---------------------------------------------------------------------
 check_pinned_commit  collie       AltanS/collie             "$(makefile_var COLLIE_REF)"      "bump COLLIE_REF + COLLIE_VERSION, then make collie-setup"
 check_pinned_version xcaddy       caddyserver/xcaddy        "$(makefile_var XCADDY_VERSION)"  "bump XCADDY_VERSION, then make caddy-dns-build"
 check_pinned_version caddy-dns    caddy-dns/cloudflare      "$(makefile_var CADDY_DNS_MODULE_VERSION)" "bump CADDY_DNS_MODULE_VERSION, then make caddy-dns-build"
 check_brew
 check_macos
+check_tailscale
 
 # --- Age grace ---------------------------------------------------------------
 # first-seen is rewritten each run: entries for keys that are no longer drifted
