@@ -94,7 +94,13 @@ OUT="${CADDY_TAILNET_OUT:-$BREW_PREFIX/etc/Caddyfile.d/tailnet.caddy}"
 # pick it up. Caddy runs as root and reads it regardless of owner.
 PAGE_DIR="${CADDY_TAILNET_PAGE_DIR:-$BREW_PREFIX/var/caddy-tailnet}"
 REGISTRY_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/caddy-registry.py"
-TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+# Tailscale CLI resolved by lib/tailscale-cli.sh, never hardcoded. On the mini
+# the app-bundle path still exists (dormant macsys extension, kept for rollback)
+# and answers with the PRE-MIGRATION IP — which this generator would then write
+# into every `bind` line and publish as a DNS A record. That is exactly what
+# happened on 2026-08-06; it is a wrong answer, not an error, so nothing failed.
+# shellcheck source=lib/tailscale-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 
 # Stamped into the flags file to mark it as the post-registry format. Migration
 # is gated on its ABSENCE, so it can only ever run once.
@@ -107,7 +113,7 @@ LANDING_NAME="apps"
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 
-[[ -x "$TS" ]] || die "Tailscale.app not found — this is meant to run on the dev host"
+[[ -n "$TAILSCALE_BIN" ]] || die "no Tailscale CLI found — this is meant to run on the dev host"
 [[ -f "$REGISTRY_PY" ]] || die "missing $REGISTRY_PY"
 [[ -f "$CADDYFILE" ]] || die "missing $CADDYFILE"
 
@@ -346,7 +352,7 @@ done < "$FLAGS_FILE"
 # Live values, never hardcoded: a device rename or IP change must not silently
 # leave a stale binding behind (the same failure mode tailscale-serve.sh exists
 # to prevent).
-ts_json=$("$TS" status --json)
+ts_json=$(ts_run status --json)
 HOSTN=$(printf '%s' "$ts_json" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
 IP=$(printf '%s' "$ts_json" | python3 -c \
@@ -367,7 +373,7 @@ IP=$(printf '%s' "$ts_json" | python3 -c \
 # line that would have named a real collision. The real conflict surfaces as a
 # reload failure, and `reload_conflict_report` below turns that into a
 # diagnosis at the moment it actually matters.
-serve_ports=" $("$TS" serve status 2>/dev/null | grep -oE '\.ts\.net:[0-9]+' | cut -d: -f2 | tr '\n' ' ' || true)"
+serve_ports=" $(ts_run serve status 2>/dev/null | grep -oE '\.ts\.net:[0-9]+' | cut -d: -f2 | tr '\n' ' ' || true)"
 
 # --- `tailscale serve` rows, for the landing page ----------------------------
 # The dev doors are only PART of what this machine publishes: `tailscale serve`
@@ -430,7 +436,7 @@ print(json.dumps(rows, separators=(",", ":")))
 SERVE_PY
 )
 
-serve_json=$( { "$TS" serve status --json 2>/dev/null || echo null; } \
+serve_json=$( { ts_run serve status --json 2>/dev/null || echo null; } \
   | python3 -c "$serve_py" "$SERVE_CONF" ) || serve_json="[]"
 [[ -n "$serve_json" ]] || serve_json="[]"
 

@@ -28,12 +28,16 @@ echo "  remote-dev doctor — MacBook → $HOST"
 echo ""
 
 # --- Layer 1: reachability ---------------------------------------------------
-TS_BIN=/Applications/Tailscale.app/Contents/MacOS/Tailscale
-if [[ -x "$TS_BIN" ]]; then
+# Resolved, not hardcoded — this runs on BOTH Macs and they run different
+# variants (MacBook: App Store bundle; mini: brew tailscaled). See
+# lib/tailscale-cli.sh.
+# shellcheck source=lib/tailscale-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
+if [[ -n "$TAILSCALE_BIN" ]]; then
   # `tailscale ping` reports the path, which is the fact worth knowing: a DERP
   # relay still "works" but adds latency that makes an interactive session feel
   # wrong, and it is the thing people misattribute to mosh or herdr.
-  ping_out=$("$TS_BIN" ping --c=1 "$HOST" 2>&1 | head -1)
+  ping_out=$(ts_run ping --c=1 "$HOST" 2>&1 | head -1)
   case "$ping_out" in
     *"via DERP"*) ok "tailscale reachable" "via DERP relay — slower than it should be" ;;
     pong*)        ok "tailscale reachable" "direct" ;;

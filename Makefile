@@ -2339,8 +2339,10 @@ collie-status:
 	if [ "$$CODE" = "403" ]; then echo "    ✓ 403 — COLLIE_PUBLIC_HOSTS in effect"; \
 	else echo "    ✗ got $$CODE, expected 403 — the .env did not reach the process"; fi
 	@echo "  tailscale serve:"
-	@/Applications/Tailscale.app/Contents/MacOS/Tailscale serve status 2>/dev/null \
-		| sed 's/^/    /' || echo "    · tailscale not reachable"
+	@# CLI resolved, not hardcoded: the mini runs the brew daemon since
+	@# 2026-08-06 and the app bundle there answers from a dormant daemon.
+	@TS=$$(bash -c 'source $(DOTFILES_DIR)/scripts/lib/tailscale-cli.sh; echo "$$TAILSCALE_BIN $${TAILSCALE_SOCKET:+--socket=$$TAILSCALE_SOCKET}"'); \
+	$$TS serve status 2>/dev/null | sed 's/^/    /' || echo "    · tailscale not reachable"
 
 	@# Deliberately NOT `collie-ctl.sh uninstall`: that always attempts a tailscale
 	@# serve teardown, even under COLLIE_SKIP_SERVE=1. Serve is declared state in
@@ -2468,42 +2470,6 @@ devhost-health-teardown:
 	echo "  ✓ devhost-health torn down (unloaded + plist removed)"
 devhost-health-check:
 	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
-
-# Tailscale watchdog (dev host only)
-#
-# The RECOVERY half of what devhost-health only reports. The mini's sole remote
-# access path is Tailscale — homelab is on a different LAN and Screen Sharing
-# rides the same tunnel — so a stopped Tailscale app is an absorbing failure
-# that needs a human at the machine. This bounds it at ~2 minutes instead.
-# Full argument in scripts/tailscale-watchdog.sh.
-#
-# Opt-in per machine like devhost-health, and for the same reason: a laptop that
-# is closed half the day does not want its VPN client relaunched on a timer.
-.PHONY: tailscale-watchdog-setup tailscale-watchdog-teardown tailscale-watchdog-check
-tailscale-watchdog-setup:
-	@# Refuse on a machine with no Tailscale app rather than installing an agent
-	@# that can only log an error every 2 minutes.
-	@if [ ! -d /Applications/Tailscale.app ]; then \
-		echo "  ✗ /Applications/Tailscale.app missing — nothing to watch"; exit 1; \
-	fi
-	@# The App Store build is sandboxed and updates itself through the App Store;
-	@# this watchdog is written for the standalone (macsys) build the mini runs.
-	@# Warn rather than refuse — relaunching the MAS app still works.
-	@if [ -d /Applications/Tailscale.app/Contents/_MASReceipt ]; then \
-		echo "  ! App Store build detected — watchdog still works, but this host"; \
-		echo "    is not the standalone build the script was written against."; \
-	fi
-	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.tailscale-watchdog" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ every 2 min → relaunch the Tailscale app if it has stopped"
-	@echo "    ↳ pause with: touch ~/.config/tailscale-watchdog/disabled"
-tailscale-watchdog-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.tailscale-watchdog.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ tailscale-watchdog torn down (unloaded + plist removed)"
-tailscale-watchdog-check:
-	@bash $(DOTFILES_DIR)/scripts/tailscale-watchdog.sh
 
 # ----------------------------------------------------------------------------
 # Drift check (dev host only)

@@ -93,6 +93,8 @@ info_add()  { INFO="${INFO}${1}
 # to get it backwards. See the lib header for why that failure is invisible.
 # shellcheck source=lib/github-tags.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/github-tags.sh"
+# shellcheck source=lib/tailscale-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 trap 'gh_tags_cleanup' EXIT
 
 # --- Checks ------------------------------------------------------------------
@@ -175,50 +177,62 @@ check_macos() {
   fi
 }
 
-# The mini's Tailscale is in a blind spot that only became visible on
-# 2026-08-05: it is the STANDALONE (macsys) build, so `brew outdated` never sees
-# it and macOS software update never sees it, while the two Linux servers are
-# apt-managed and surface in their own tooling. Nothing on this machine reported
-# that it sat two minor versions behind through five SSH CVEs.
+# Tailscale version drift. The mini's client was in a blind spot that only
+# became visible on 2026-08-05: it ran the STANDALONE (macsys) build, which
+# `brew outdated` never saw and macOS software update never saw, while the two
+# apt-managed Linux servers surfaced in their own tooling. Nothing reported that
+# it sat two minor versions behind through five SSH CVEs.
 #
-# It is not unmanaged — the app self-updates via Sparkle
-# (SUAutomaticallyUpdate = 1). The failure this catches is that self-update
-# STALLING, which is a real state rather than a hypothetical: Sparkle honours a
-# phased-rollout cohort (SUUpdateGroupIdentifier), so a release can be out for
-# days while this host is not yet in the wave. Measured 2026-08-05 — a forced
-# check on 1.98.9 with 1.102.2 released the day before returned nothing.
+# On 2026-08-06 that host moved to the brew tailscaled daemon precisely so its
+# updates ride `brew upgrade` like everything else. Both variants are still
+# handled here, because the MacBook remains on the App Store build and a check
+# that only understood one shape would silently skip on the other.
 #
-# Which is exactly why this REPORTS and never applies. A cohort that has not
-# reached you yet is Tailscale deliberately staging a rollout, and overriding
-# that on the one host whose only remote access path IS Tailscale is a bad
-# trade — the 2026-08-05 attempt to force it cost an outage and changed no
-# version. The 14-day grace draws the line: silent while a rollout is merely in
-# progress, alerting once "not yet in the wave" has become "this is stuck".
+# THE INSTALLED VERSION COMES FROM THE RUNNING CLI, never from a bundle plist.
+# Reading Info.plist was correct only while the app WAS the daemon; on the mini
+# that bundle is now dormant-but-present (kept for rollback) and would report
+# 1.98.9 forever on a host actually running 1.102.2. Ask the thing that serves
+# traffic, not the thing that happens to be on disk.
 #
-# The MAS build is skipped rather than checked. It updates through the App
-# Store on its own schedule and MacZipsVersion is the wrong channel to compare
-# it against, so a comparison there would report drift that no local action can
-# resolve.
+# It REPORTS and never applies, and the 14-day grace is what makes that
+# tolerable. For the Sparkle variant a release can legitimately be days out
+# before this host's rollout cohort is reached; forcing past that on the one
+# machine whose only access path IS Tailscale cost an outage and changed no
+# version (2026-08-05). Silent while a rollout is in progress, alerting once it
+# is genuinely stuck.
 check_tailscale() {
-  local app="/Applications/Tailscale.app" installed latest
-  [[ -d "$app" ]] || { skip_add "tailscale (not installed)"; return; }
-  if [[ -d "$app/Contents/_MASReceipt" ]]; then
-    skip_add "tailscale (App Store build — updates via the App Store)"
+  local installed latest key
+  [[ -n "$TAILSCALE_BIN" ]] || { skip_add "tailscale (no CLI found)"; return; }
+
+  installed=$(ts_run version 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d ' ')
+  [[ -n "$installed" ]] || { skip_add "tailscale (running version unreadable)"; return; }
+
+  # The App Store build updates on Apple's schedule and cannot be advanced
+  # locally, so comparing it against any channel here would report drift no
+  # action can resolve. Report the version, do not police it.
+  if [[ -d /Applications/Tailscale.app/Contents/_MASReceipt \
+        && "$TAILSCALE_BIN" != "/opt/homebrew/bin/tailscale" ]]; then
+    info_add "tailscale $installed (App Store build — updates via the App Store)"
     return
   fi
-  installed=$("$DEFAULTS_BIN" read "$app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null) || installed=""
-  [[ -n "$installed" ]] || { skip_add "tailscale (installed version unreadable)"; return; }
 
-  # MacZipsVersion is the standalone (macsys) channel — NOT `Version`, which is
-  # the cross-platform headline and can lead the Mac build. Comparing against
-  # the wrong key would report drift on a host that is already current for its
-  # own channel.
+  # MacZipsVersion is the standalone (macsys) channel; `Version` is the
+  # cross-platform headline that the brew formula tracks. Picking the wrong key
+  # reports drift on a host already current for its own channel.
+  if [[ "$TAILSCALE_BIN" == "/opt/homebrew/bin/tailscale" ]]; then
+    key="Version"
+  else
+    key="MacZipsVersion"
+  fi
+
   latest=$(/usr/bin/curl -fsS --max-time 8 "https://pkgs.tailscale.com/stable/?mode=json" 2>/dev/null \
-    | "$PYTHON_BIN" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("MacZipsVersion") or d.get("Version") or "")' 2>/dev/null) || latest=""
+    | "$PYTHON_BIN" -c "import json,sys; d=json.load(sys.stdin); print(d.get('$key') or d.get('Version') or '')" 2>/dev/null) || latest=""
   [[ -n "$latest" ]] || { skip_add "tailscale (pkgs.tailscale.com unreachable)"; return; }
 
   if [[ "$installed" == "$latest" ]]; then
-    info_add "tailscale current ($installed)"
+    info_add "tailscale current ($installed, $TAILSCALE_VARIANT)"
+  elif [[ "$TAILSCALE_BIN" == "/opt/homebrew/bin/tailscale" ]]; then
+    drift_add "tailscale" "tailscale $installed → $latest (fix: make brew-upgrade)"
   else
     drift_add "tailscale" "tailscale $installed → $latest (Sparkle auto-update has not applied it; if this persists the rollout cohort is stuck — apply via scripts/detached-run.sh, NEVER a bare ssh command)"
   fi

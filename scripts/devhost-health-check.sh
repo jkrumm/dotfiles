@@ -79,7 +79,13 @@ set -euo pipefail
 # here. Resolve every binary by absolute path.
 HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
 MOSH_SERVER_BIN="${MOSH_SERVER_BIN:-/opt/homebrew/bin/mosh-server}"
-TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+# Tailscale CLI: resolved by lib/tailscale-cli.sh, NOT hardcoded. The mini moved
+# to the open-source brew daemon on 2026-08-06 while the app-bundle path stayed
+# on disk (the dormant macsys extension is kept for rollback) — so the old
+# hardcoded path still answers here, from the stopped daemon, and this check
+# would page "tailnet down" on a healthy host. See that lib's header.
+# shellcheck source=lib/tailscale-cli.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
@@ -241,7 +247,7 @@ push() { kuma_push "$push_url" "$1" "$2"; }
 # leaves this machine in — and "?" when it is present but unparseable.
 _ts_snapshot() {
   local json
-  json=$("$TAILSCALE_BIN" status --json 2>/dev/null) || true
+  json=$(ts_run status --json 2>/dev/null) || true
   [[ -n "$json" ]] || return 1
   "$PYTHON_BIN" -c '
 import datetime, json, sys

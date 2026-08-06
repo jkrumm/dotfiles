@@ -625,61 +625,72 @@ connection forms, herdr's socket API, `claude --bg`, the health check, and a fai
 table. This document is the *design*; the skill is the *usage*. Keep it that way — when
 something here turns into a routine command, it belongs in the skill.
 
-### 8. Tailscale is a single point of failure — BOUNDED 2026-08-05
+### 8. Tailscale was a single point of failure — FIXED 2026-08-06 by changing variant
 
-Section 6 monitors the tailnet. It cannot *recover* it, and on this host that gap is
-the whole game: **the mini has exactly one remote access path.** Measured 2026-08-05,
-not assumed:
+Section 6 monitors the tailnet; it cannot recover it. On this host that gap was
+the whole game, because **the mini had exactly one remote access path.** Measured
+2026-08-05, not assumed:
 
 | Candidate second path | Verdict |
 |-|-|
 | homelab as a LAN jump host | **No.** homelab is on `192.168.178.0/24`, the mini on `192.168.1.0/24`. `tcp:22` from homelab to the mini does not connect. |
-| Screen Sharing (`tcp:5900`, granted `tag:mac → tag:mac`) | **No.** Listening, but it rides the same tunnel — it dies *with* ssh, not instead of it. Works over LAN only. |
-| Reboot | Would fix it (auto-login + `TailscaleStartOnLogin = 1`), but triggering one needs the access that is gone. |
+| Screen Sharing (`tcp:5900`) | **No.** Listening, but it rides the same tunnel — it dies *with* ssh, not instead of it. LAN only. |
+| Reboot | Would fix it, but triggering one needs the access that is gone. |
 
-So whatever stops the Tailscale app also removes every means of starting it again.
-The failure is *absorbing*: nothing recovers from it except a human at the machine.
+The proximate cause was the **variant**, not the monitoring. The Standalone
+(macsys) build couples the tunnel to a GUI app: quit the app and the tunnel
+stops. On 2026-08-05 a remote session did exactly that to force a Sparkle update
+check and locked itself out mid-operation, recoverable only because the operator
+happened to be on the same LAN. The same build also updates through a phased
+rollout cohort, which is why the host sat on 1.98.9 with 1.102.2 released and no
+way to pull it forward.
 
-This is not hypothetical. On 2026-08-05 a remote session quit the app to force a
-Sparkle update check and locked itself out mid-operation, recoverable only because
-the operator happened to be on the same LAN that day. The same operation on
-homelab/vps was safe for one reason: it went through `systemd-run`, so the
-tailscaled restart killing the ssh session could not abort it halfway.
+A watchdog was built first, and it worked — 83s unattended recovery, measured.
+It was then **deleted**, because it treated the symptom. Fixing the variant
+removes the failure instead of bounding it.
 
-Two pieces close it, and they are deliberately separate concerns:
+**The mini now runs the open-source `tailscaled` from Homebrew.** Structurally
+this is the same model as systemd on the VPS and homelab:
 
-- **`scripts/tailscale-watchdog.sh`** (`make tailscale-watchdog-setup`) — a
-  LaunchAgent, every 120s: if the Tailscale *app* is not running, relaunch it.
-  Bounds a lockout at ~2 minutes. Measured end-to-end on the mini: detected at
-  t+20s, `RECOVERED after 5s`.
-- **`scripts/detached-run.sh`** — the macOS answer to `systemd-run`. Any command
-  that restarts networking on the mini goes through this, so losing the session
-  cannot leave the machine half-configured.
+| | macsys (before) | brew tailscaled (now) |
+|-|-|-|
+| Runs as | GUI app + system extension | root LaunchDaemon, `keep_alive: always` |
+| Starts | after auto-login | **before login** |
+| Dies when | the app is quit | launchd restarts it |
+| Updates | Sparkle, phased rollout | `brew upgrade`, covered by `make brew-upgrade` + drift-check |
 
-Three design points worth not re-litigating:
+Funnel was the blocking question and was **verified empirically before
+migrating**, because the KB contradicts itself on it: a throwaway node on the
+brew daemon accepted both `serve --bg 8080` and `funnel --bg 8080`. Port-based
+Funnel works; the claim that it needs the App Store or Standalone build is wrong.
 
-1. **LaunchAgent, not LaunchDaemon.** `open -a` needs the user's Aqua session; a
-   root daemon has to go through `launchctl asuser`, which fails with "Could not
-   switch to audit session" and buys nothing. The mini auto-logs-in, so the GUI
-   session is always there.
-2. **It recovers "app not running" and nothing else.** App up but backend
-   `Stopped` is a deliberate toggle; `NeedsLogin` needs a browser *on the mini*
-   and no amount of relaunching produces one. Both are reported, not acted on —
-   the same restraint that keeps `check_runaways` report-only.
-3. **It refuses to mask a crash loop.** Past 4 recoveries in an hour it stops
-   relaunching and lets the tailnet stay down so the heartbeat pages. Blind
-   restarting is precisely what made a crash-looping herdr look healthy
-   (§6, `check_launchd_restarts`).
+**The node identity does not survive the swap.** macsys keeps state inside the
+system extension's sandbox, so this creates a new node with a new tailnet IP
+(`100.87.73.3` → `100.123.249.18`). Four places hardcoded the old one; three are
+regenerated by `make caddy-tailnet`, and argo's `HERMES_BASE_URL` on the VPS is
+the one manual edit.
 
-Pause it with `touch ~/.config/tailscale-watchdog/disabled` when deliberately
-taking Tailscale down. The heartbeat keeps reporting the tailnet as down, so a
-forgotten marker surfaces on its own.
+Three traps found during the migration, all of the same shape — **a wrong answer
+rather than an error**:
 
-What this still does **not** give you is a second path. If tailscaled itself
-fails to come up — as opposed to the app being stopped — the watchdog cannot help,
-and physical access is the only recovery. A `cloudflared` SSH door behind
-Cloudflare Access is the designated upgrade if that ever becomes worth its setup
-and security surface.
+1. **The app-bundle CLI still answers after the migration.** The dormant macsys
+   extension is deliberately left installed so rollback stays cheap, and its CLI
+   reports a stopped tunnel and the pre-migration IP. `caddy-tailnet.sh`
+   regenerated its config with the dead IP that way. Every consumer now goes
+   through `scripts/lib/tailscale-cli.sh`; nothing hardcodes a path.
+2. **The brew CLI auto-detects the macsys socket** when both are present. The
+   socket is always passed explicitly — same wrong daemon, reached another way.
+3. **`brew services start` as the user** installs a LaunchAgent, which cannot run
+   a root-required service. It must be `sudo brew services start`.
+
+Rollback stays available while the `mini-old` node record exists: `sudo brew
+services stop tailscale`, re-enable the login item, relaunch the app.
+
+What this still does not give you is a genuinely independent path. If tailscaled
+fails to start at all, physical access remains the only recovery — but launchd's
+`keep_alive` plus starting before login makes that a much narrower window than a
+quittable GUI app ever was. A `cloudflared` door behind Cloudflare Access is the
+designated upgrade if that ever proves insufficient.
 
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
