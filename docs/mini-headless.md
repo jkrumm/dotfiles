@@ -596,7 +596,7 @@ ls: /tmp/sideclaw.db: No such file or directory
   gone.
 - **sideclaw and litellm have no logs at all.** Post-mortem after a crash is
   impossible.
-- Affected plists: `com.jkrumm.sideclaw`, `com.litellm.proxy`,
+- Affected plists: `com.jkrumm.sideclaw-server`, `com.litellm.proxy`,
   `com.jkrumm.walkingpad`, `com.jkrumm.usage-tracker`, `com.jkrumm.brain-backup`,
   `com.jkrumm.secrets-freshness`, `com.iu.prometheus-*`. The interval-driven ones
   re-create their file each spawn so they survive; the two long-running `KeepAlive`

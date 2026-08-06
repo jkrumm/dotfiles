@@ -41,7 +41,7 @@ a tracked file.
 | Door(s) | Port(s) | Unit | Kind | Note |
 |-|-|-|-|-|
 | `rollhook`, `rollhook-marketing`, `rollhook-dashboard` | 7700–7702 | repo `rollhook` | ephemeral | one `bun run --parallel dev:*` → 3 doors |
-| `sideclaw` | 7705 | repo `sideclaw` | **both** | `make dev` exists, but `com.jkrumm.sideclaw` also runs it always-on — see §7 |
+| `sideclaw` | 7705 | repo `sideclaw` | **both** | `make dev` exists, but `com.jkrumm.sideclaw-server` also runs it always-on — see §7 |
 | `hyperdx` | 7707 | compose | ephemeral | not currently running |
 | `basalt-playground`, `basalt` | 7710, 7711 | repo `basalt-ui` | ephemeral | name mismatch, 2 doors |
 | `argo` | 7715 | repo `argo` | ephemeral | dev script wraps `secrets-run`, two env files |
@@ -198,7 +198,7 @@ can stop them.
 **Phase 3 — merge, maybe.** See §8.
 
 **Resolve before phase 1 code:** `sideclaw` occupies both classes. Door 7705
-points at port 7705 whether that is the always-on `com.jkrumm.sideclaw`
+points at port 7705 whether that is the always-on `com.jkrumm.sideclaw-server`
 LaunchAgent or a `make dev` in the repo, and starting the second while the first
 holds the port fails in a way the UI will render as a mystery. Either the unit
 file declares `sideclaw` always-on and the dev path is out of scope, or the

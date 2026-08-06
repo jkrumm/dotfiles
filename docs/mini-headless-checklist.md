@@ -161,7 +161,7 @@ Already-running processes keep their old env. After the reseed:
 ```bash
 ssh mini 'launchctl kickstart -k gui/501/ai.hermes.gateway'
 ssh mini 'launchctl kickstart -k gui/501/com.litellm.proxy'
-ssh mini 'launchctl kickstart -k gui/501/com.jkrumm.sideclaw'
+ssh mini 'launchctl kickstart -k gui/501/com.jkrumm.sideclaw-server'
 ssh mini 'launchctl kickstart -k gui/501/herdr.collie'
 ```
 

@@ -630,7 +630,7 @@ check_memory() {
 LAUNCHD_KEEPALIVE="\
 homebrew.mxcl.herdr|$HOME/Library/LaunchAgents/homebrew.mxcl.herdr.plist
 homebrew.mxcl.colima|$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist
-com.jkrumm.sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw.plist
+com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
 com.litellm.proxy|$HOME/Library/LaunchAgents/com.litellm.proxy.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
@@ -698,7 +698,7 @@ check_launchd_restarts() {
 
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
-sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw.plist|probe_sideclaw
+sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist|probe_sideclaw
 litellm|$HOME/Library/LaunchAgents/com.litellm.proxy.plist|probe_litellm
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
