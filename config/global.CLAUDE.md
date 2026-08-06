@@ -458,7 +458,8 @@ Per-repo: `dotfiles` → `/iu-endpoint`, `/sync` (MacBook-only), `/localai` (ret
 `hermes-agent` → `/hermes-validate`, `/hermes-update`; `homelab` → `/audit`,
 `/docs`, `/upgrade-stack`; `vps` → `/audit`, `/docs`; `sideclaw` → `/claude-cli`;
 `free-planning-poker` → `/release-fpp`; `homelab-private` → `/prowlarr`;
-`ticktick-raycast` → `/raycast-extension`, `/ticktick-api`.
+`ticktick-raycast` → `/raycast-extension`, `/ticktick-api`;
+`brain` → `/wildrift-refresh`.
 
 ---
 
