@@ -6,8 +6,9 @@ set -euo pipefail
 # session that started it. The macOS answer to `systemd-run --unit=… --collect`.
 #
 # WHY THIS EXISTS. Any change that restarts networking on the mini also kills
-# the ssh session issuing it, and on this host that session is the only way in
-# (see tailscale-watchdog.sh's header for the full argument). Run such a command
+# the ssh session issuing it, and on this host that session is the only way in —
+# homelab is on a different LAN and Screen Sharing rides the same tunnel, so
+# neither survives it (docs/remote-dev.md §8). Run such a command
 # in the foreground of an ssh session and it dies HALFWAY: the network drops,
 # SIGHUP lands, and the machine is left in whatever half-configured state the
 # command reached. That is exactly how the 2026-08-05 Tailscale update attempt
