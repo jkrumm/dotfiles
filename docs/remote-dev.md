@@ -625,6 +625,62 @@ connection forms, herdr's socket API, `claude --bg`, the health check, and a fai
 table. This document is the *design*; the skill is the *usage*. Keep it that way — when
 something here turns into a routine command, it belongs in the skill.
 
+### 8. Tailscale is a single point of failure — BOUNDED 2026-08-05
+
+Section 6 monitors the tailnet. It cannot *recover* it, and on this host that gap is
+the whole game: **the mini has exactly one remote access path.** Measured 2026-08-05,
+not assumed:
+
+| Candidate second path | Verdict |
+|-|-|
+| homelab as a LAN jump host | **No.** homelab is on `192.168.178.0/24`, the mini on `192.168.1.0/24`. `tcp:22` from homelab to the mini does not connect. |
+| Screen Sharing (`tcp:5900`, granted `tag:mac → tag:mac`) | **No.** Listening, but it rides the same tunnel — it dies *with* ssh, not instead of it. Works over LAN only. |
+| Reboot | Would fix it (auto-login + `TailscaleStartOnLogin = 1`), but triggering one needs the access that is gone. |
+
+So whatever stops the Tailscale app also removes every means of starting it again.
+The failure is *absorbing*: nothing recovers from it except a human at the machine.
+
+This is not hypothetical. On 2026-08-05 a remote session quit the app to force a
+Sparkle update check and locked itself out mid-operation, recoverable only because
+the operator happened to be on the same LAN that day. The same operation on
+homelab/vps was safe for one reason: it went through `systemd-run`, so the
+tailscaled restart killing the ssh session could not abort it halfway.
+
+Two pieces close it, and they are deliberately separate concerns:
+
+- **`scripts/tailscale-watchdog.sh`** (`make tailscale-watchdog-setup`) — a
+  LaunchAgent, every 120s: if the Tailscale *app* is not running, relaunch it.
+  Bounds a lockout at ~2 minutes. Measured end-to-end on the mini: detected at
+  t+20s, `RECOVERED after 5s`.
+- **`scripts/detached-run.sh`** — the macOS answer to `systemd-run`. Any command
+  that restarts networking on the mini goes through this, so losing the session
+  cannot leave the machine half-configured.
+
+Three design points worth not re-litigating:
+
+1. **LaunchAgent, not LaunchDaemon.** `open -a` needs the user's Aqua session; a
+   root daemon has to go through `launchctl asuser`, which fails with "Could not
+   switch to audit session" and buys nothing. The mini auto-logs-in, so the GUI
+   session is always there.
+2. **It recovers "app not running" and nothing else.** App up but backend
+   `Stopped` is a deliberate toggle; `NeedsLogin` needs a browser *on the mini*
+   and no amount of relaunching produces one. Both are reported, not acted on —
+   the same restraint that keeps `check_runaways` report-only.
+3. **It refuses to mask a crash loop.** Past 4 recoveries in an hour it stops
+   relaunching and lets the tailnet stay down so the heartbeat pages. Blind
+   restarting is precisely what made a crash-looping herdr look healthy
+   (§6, `check_launchd_restarts`).
+
+Pause it with `touch ~/.config/tailscale-watchdog/disabled` when deliberately
+taking Tailscale down. The heartbeat keeps reporting the tailnet as down, so a
+forgotten marker surfaces on its own.
+
+What this still does **not** give you is a second path. If tailscaled itself
+fails to come up — as opposed to the app being stopped — the watchdog cannot help,
+and physical access is the only recovery. A `cloudflared` SSH door behind
+Cloudflare Access is the designated upgrade if that ever becomes worth its setup
+and security surface.
+
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything

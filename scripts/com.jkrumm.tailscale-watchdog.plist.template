@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.tailscale-watchdog</string>
+  <!-- Relaunches the Tailscale app when it has stopped, restoring the mini's
+       ONLY remote access path. Recovery, not monitoring — devhost-health
+       already reports tailnet liveness to Uptime Kuma. See
+       scripts/tailscale-watchdog.sh for why this is the one failure on this
+       host that nothing else can come back from. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/SourceRoot/dotfiles/scripts/tailscale-watchdog.sh</string>
+  </array>
+  <!-- Every 2 minutes, deliberately TIGHTER than devhost-health's 300s. The
+       two cadences answer different questions: 300s is "how fast should a
+       human hear about it", 120s is "how long is the machine unreachable".
+       Bounding a lockout at ~2min is the entire point, and the check costs one
+       pgrep plus one local status call when healthy. -->
+  <key>StartInterval</key><integer>120</integer>
+  <!-- Fire on load. A reboot is exactly when the app might fail to come up,
+       and the script's own boot grace (180s) keeps this from racing the login
+       item rather than needing the scheduler to delay it. -->
+  <key>RunAtLoad</key><true/>
+  <!-- ~/Library/Logs, not /tmp: /tmp is world-writable, so another local user
+       could pre-create the path as a symlink and have launchd clobber the
+       target. Same reasoning as devhost-health. The log is the record of every
+       recovery, so it is worth keeping readable and un-tamperable. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/tailscale-watchdog.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/tailscale-watchdog.log</string>
+</dict>
+</plist>
