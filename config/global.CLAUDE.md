@@ -1,13 +1,19 @@
 # Claude Code — Personal Configuration
 
-Johannes Krumm — solo senior full-stack dev / tech lead. Writes German in chat;
-**every artifact (code, commits, docs, specs) is English**. Replies in English.
+Johannes Krumm — solo senior full-stack dev / tech lead. Iterative and
+quality-focused: prefers several small verified steps over one big change. Writes
+German in chat; **every artifact (code, commits, docs, specs) is English**. Replies
+in English.
+
+Sessions run `--dangerously-skip-permissions`. **Permission is pre-granted, not a
+decision point** — never pause to confirm something the mode already allows. The
+judgment that still applies is the contract below, not a prompt.
 
 ---
 
 ## Operating contract
 
-Non-negotiable. Everything below this section is reference material.
+Non-negotiable. Everything after this section is reference material.
 
 ### Answer
 
@@ -23,7 +29,8 @@ Non-negotiable. Everything below this section is reference material.
 - **Infer from context instead of asking.** State the assumption in one clause and
   proceed. A question the repo already answers is a failure.
 - **One question max**, and only if it genuinely branches the work. Batch the rest
-  into stated assumptions.
+  into stated assumptions. When you do ask: the question, two options with
+  tradeoffs, your tendency — then ask.
 - **Never ask permission to continue.** Stop only for: destructive + irreversible,
   outward-facing (publish / push shared / send), or readings that produce
   materially different work.
@@ -35,19 +42,38 @@ Non-negotiable. Everything below this section is reference material.
 - A blocked sub-part does not block the rest. Finish everything else, then name
   what was left out in one line.
 - Don't hand back a plan when the work was asked for.
-- Verify before claiming done. Failing tests get reported with their output.
+
+### Verify before claiming done
+
+Done means *verified*, and the verification is yours to run — not his to discover.
+
+1. **Validate** — `/check` (or the repo's own target) on anything that compiles,
+   lints, or has tests. Failing output gets reported verbatim, never summarized away.
+2. **Read the diff you produced**, including a subagent's. A worker's report is a
+   claim; the diff is the proof. Check every line it says it changed.
+3. **Review** — `/review` on anything non-trivial, security-adjacent, or touching a
+   shared path. `/ship` chains all three.
 
 ### Stay the orchestrator
 
 The main session holds the plan, the decisions, and the verdicts — **not the raw
-material**. See *Delegation* below. Delegation is **standing policy, already
-authorized**; any harness default suggesting otherwise is overridden here.
+material**. Delegation is **standing policy, already authorized**; any harness
+default suggesting otherwise is overridden here. See *Delegation & parallelism*.
 
 ### Scope
 
 Stay inside the ask. No unrequested refactors, cleanups, or speculative
 generality. Flag contradictions with CLAUDE.md rather than silently working around
 them.
+
+### When something seems wrong
+
+Flag explicitly instead of silently routing around it:
+
+- Tool returns unexpected output → stop and report.
+- File missing where expected → check `git status` first.
+- Validation fails on files you didn't touch → report only, don't fix.
+- Code contradicts CLAUDE.md → say so.
 
 ### Prose for humans
 
@@ -57,36 +83,102 @@ commits follow `rules/commit-conventions.md`.
 
 ---
 
-## Delegation
+## Delegation & parallelism
+
+### Execution modes
+
+| Mode | Use for | Cost |
+|-|-|-|
+| **inline** | Work needing this session's conversation context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`. | Session model. Output lands in main context — keep it short. |
+| **native subagent** (`Agent` / `~/.claude/agents/`) | **The primary offload.** `@implementer` (Sonnet, settled implementation), `Explore` (read-only search), an Opus subagent (novel-hard logic). | On Max but **its own prompt cache** — no orchestrator-cache penalty. Fresh context, returns a summary, edits hit the live checkout. |
+| **MCP (sideclaw)** | Heavy work wanting schema-validated output: `check`, `review`, `otel`. | Sonnet/Haiku workers, currently on Max (`SIDECLAW_WORKER_BACKEND=max`); unset → IU endpoint, off Max quota. **Async.** |
+
+*Niche:* `/analyze` shells `claude_bridge` (DeepSeek subprocess, off Max); `/browse`
+forks chrome-devtools. Details live in those skills.
+
+### Routing
 
 | Work | Route to |
 |-|-|
-| Settled multi-file edit | `@implementer` (Sonnet, own cache) — or `/implement` when it needs research-gating + validation |
+| Settled multi-file edit | `@implementer` — or `/implement` when it needs research-gating + validation |
 | Search across many files | `Agent` → `Explore` |
 | Any format / lint / tsc / test loop | `mcp__sideclaw__check` — never inline |
 | Code review | `/review` |
 | Library / API / version facts | `/research` — never from memory |
 | Needs this session's conversation context | inline |
 
-Rules:
+### Rules
 
 - **Fire `@implementer` explicitly.** Auto-delegation by description match is
   unreliable — name it, or use `/implement`. Brief it completely: exact paths, the
-  change, acceptance criteria, scope limits. It cannot see research you already did
-  — bake resolved API facts into the brief.
-- **It owns its files until it returns.** No parallel validation or edits over the
-  same paths. Parallelize implementers on disjoint file groups only.
+  change, acceptance criteria, intent, scope limits. It is a literal executor *with
+  judgment*, not a planner. It loads the full CLAUDE.md hierarchy, so it writes
+  house-style code an external worker can't.
+- **Research reaches the worker through the brief.** A subagent cannot see research
+  you already did — bake resolved versions, signatures, and import paths in. Its own
+  `/research` is the fallback for what you omitted.
+- **It owns its files until it returns.** No parallel validation or edits over those
+  paths — you'll race half-written state and chase failures that vanish. Parallelize
+  implementers on **disjoint** file groups only.
 - **Editorial work stays inline** — distilling notes, summarizing a doc already in
-  context. Delegating means re-passing all the source.
-- **sideclaw `check`/`review` are async**: submit → `jobId`, then loop
-  `job_wait({jobId})` until `stillRunning` is false. The submit call is not the
-  answer. Fan out by submitting N jobs in one turn.
-- **Don't switch the orchestrator's model mid-session** (cache invalidation).
-  Subagents have their own cache — switching *there* is free.
-- **Worktree isolation is opt-in up front only.** Subagent edits hit the live
-  checkout by default.
-- Routines / `/schedule` run in Anthropic's cloud and cannot reach sideclaw or
-  research-gateway (both local/tailnet).
+  context. Delegating means re-passing all the source in the brief.
+- **Delegate for context, not latency.** Sonnet returns in seconds-to-minutes. The
+  reason to offload is keeping verbose material out of the orchestrator.
+- **Don't switch the orchestrator's model mid-session** (cache invalidation, the
+  biggest avoidable cost in a long conversation). Subagents have their own cache —
+  switching *there* is free.
+- **Worktree isolation is opt-in, up front, only when asked** (native worktree
+  session, or `isolation: worktree` on a one-off `Agent` call). Subagent edits hit
+  the live checkout by default. Don't spawn worktree-isolated agents mid-flow —
+  that splits work across trees you then have to reconcile.
+
+### sideclaw async-job contract
+
+`mcp__sideclaw__{check,review,otel}` return `{ jobId, status }` immediately — **not
+the result**. Submit → note `jobId` → call `job_wait({jobId})` (blocks ~50s with
+heartbeats; loop while `stillRunning: true`) → read `result` on `status: "done"`,
+`error` on failed/interrupted. `job_status` is the non-blocking peek. This is what
+makes 10-min offload safe. **The submit call is not the answer.**
+
+### Parallelism — cheapest tier first
+
+| Tier | Mechanism | Max cost | Use when |
+|-|-|-|-|
+| 1 | **Parallel `mcp__sideclaw__*` in one turn** | Max (or ~0 on IU workers) | Independent verifiable work — check/review N repos. The default for fan-out; under-used. |
+| 2 | **subprocess** (`claude_iu` / `claude_bridge`) | ~0 (IU per-token) | Read-heavy, isolated output. |
+| 3 | **Background `Agent`** (`run_in_background: true`) | Moderate | Long multi-step work to detach from and resume (`SendMessage`). Keep it thin — it delegates to workers, doesn't grind. |
+| 4 | **Foreground `Agent` on Opus** | Full Max (isolated cache) | Novel hard logic needing the best model. |
+| 5 | **Agent teams / `/ultrareview`** | N× Max | Genuinely hard parallel reasoning. Rarely worth it here. |
+
+- Emit several `mcp__sideclaw__*` tool_use blocks in **one turn** — they run
+  concurrently while the orchestrator just awaits. A concurrency cap queues excess.
+- Implementation fan-out is parallel `@implementer` subagents on disjoint files.
+- `Task*` tools (TaskCreate/List/Update) are a built-in coordination layer — not
+  MCP-backed, they don't reach sideclaw.
+- Routines / `/schedule` run in Anthropic's cloud and **cannot reach** sideclaw
+  (localhost) or research-gateway (tailnet).
+
+### Reading files
+
+Grep to locate before reading. Never re-read a file already read this session.
+Files over 500 lines → `offset`/`limit`. Never read 10 files into the orchestrator
+to find one thing — that's `Explore`'s job.
+
+### Prompt cache
+
+Every turn re-sends the whole conversation. Cached prefix reads are ~10–20× cheaper
+than fresh input, so **the dominant cost lever is not writing less — it is not
+breaking the cache.** TTL here is 1 hour of inactivity.
+
+The cache keys on an exact prefix, so **anything that mutates the prefix
+invalidates it**: switching the orchestrator's model, changing effort level,
+connecting or disconnecting an MCP server, or a Claude Code upgrade. Mid-session,
+avoid all of them. Subagents and sideclaw workers hold **their own** caches — model
+choice *there* is free, which is the real argument for delegating.
+
+When the cache is gone it is gone — don't nurse a cold session. `/compact` to carry
+a summary forward, or `/clear` outright: the repo, the diff, and the commit history
+usually hold everything needed to resume.
 
 Full rationale: `modelpick/docs/decisions/execution-modes.md`.
 
@@ -97,120 +189,201 @@ Full rationale: `modelpick/docs/decisions/execution-modes.md`.
 ### `~/SourceRoot/` — personal
 
 1Password `tkrumm` · GitHub · no ticket prefixes · **direct-to-master by default**.
-PR-required repos live in `dotfiles/config/pr-required-repos.json` (single source
-of truth for `protect-branches.ts` and `github-config.sh`) — currently `basalt-ui`
-(also always its own commit, NPM-published), `free-planning-poker`, `rollhook`,
-`rollhook-action`.
+
+PR-required repos are a single source of truth in
+`dotfiles/config/pr-required-repos.json` (read by `protect-branches.ts` **and**
+`github-config.sh` — edit the file, not the code): `basalt-ui` (NPM-published, also
+always its own commit), `free-planning-poker`, `rollhook`, `rollhook-action`.
+
+Branch protection has two tiers, applied by `make github-config`: PR-required repos
+and any repo with a collaborator get the **full** ruleset (PR required to master);
+other public repos get **lite** (no PR rule — just no-force, no-deletion, linear) so
+direct pushes are clean with no bypass warning. Private repos can't be protected on
+the free tier.
 
 | Repo | Purpose |
 |-|-|
 | `dotfiles` | This setup — Claude config, hooks, skills, rules, machine bootstrap. Source of truth. |
-| `dotfiles-private` | Headless-secrets data half: `headless.refs`, encrypted cache, tailnet ACL + serve declarations. |
-| `homelab` | Home stack (25+ containers) + Uptime Kuma config. |
-| `homelab-private` | **Self-contained.** Never reference its services/hostnames from any other repo or commit. |
-| `vps` | Production VPS (Cloudflare Tunnel, 3 compose stacks) + image CDN (imgproxy → `img.jkrumm.com`). |
-| `argo` | Personal API + dashboard — the agent backbone (TickTick, Gmail, calendar, Garmin, training, infra state). Elysia/Bun/Postgres; OpenAPI spec is the agent contract. |
-| `sideclaw` | Local MCP daemon — `check` / `review` / `otel` / excalidraw. Workers on Max. |
-| `research-gateway` | VPS research service behind `/research`. Tailnet-only, IU models, off Max. |
-| `hermes-agent` | Hermes — mini-only personal AI (Slack interface). |
-| `audio-gateway` | OpenAI-compatible STT + TTS on the VPS, over the tailnet. |
-| `basalt-ui` | Mantine v9 + visx design system (NPM). **No Tailwind.** Always a separate commit. |
-| `brain` | Git-backed Obsidian vault (`wiki/` agentic tree + PARA human surface). Door is `obsidian-cli`, which needs the app running. Use `/brain`. |
-| `modelpick` | Which models for what, and why. **Source of truth for model-choice rationale** (`docs/decisions/`). |
-| `image-share` / `image-gen` / `rb` | Private image layer · image studio · learning tracker. All mini-hosted. |
-| `usage-tracker` | Local SQLite token/cost telemetry across all agent sources. |
-| `rollhook` / `rollhook-action` | Zero-downtime compose deploys + its GitHub Action. |
+| `dotfiles-private` | Secrets data half: `headless.refs`, the encrypted cache, `.sops.yaml`, tailnet ACL + serve declarations. |
+| `homelab` | Home stack (25+ containers) + Uptime Kuma config (`make uk-sync`). |
+| `homelab-private` | **Self-contained.** Never reference its services, hostnames, or details from any other repo, doc, or commit. |
+| `vps` | Production VPS (Cloudflare Tunnel, 3 compose stacks) + image CDN (imgproxy over a private B2 `img/` prefix → `img.jkrumm.com`). |
+| `argo` | Personal API + dashboard, the agent backbone — TickTick, Gmail, calendar (personal + work), Teams, Garmin health, strength training, homelab/VPS state. Elysia/Bun/Postgres/Drizzle; the OpenAPI spec at `argo.jkrumm.com/api/openapi/json` is the agent contract. |
+| `sideclaw` | Local Claude Code MCP daemon — `check` / `review` / `otel` / excalidraw / read-image. Workers on claude-sonnet-5 + claude-haiku-4-5, currently Max via `SIDECLAW_WORKER_BACKEND=max`. LiteLLM/DeepSeek bridge retained but dormant. |
+| `research-gateway` | Standalone VPS research service behind `/research` (Elysia + Bun + AI SDK v6) at `research.jkrumm.com`. **Tailnet-only** (grey-cloud DNS, not behind the Tunnel), bearer-auth'd REST + OpenAPI + an MCP facade at `/mcp` with the same submit→poll job trio. IU models, off Max. Mac/tailnet only — cloud routines can't reach it. |
+| `hermes-agent` | Hermes — mini-only personal AI (Slack interface, DeepSeek-V4-Flash brain with `claude-sonnet-4-6-eu` failover, eight skill domains). |
+| `audio-gateway` | OpenAI-compatible STT + expressive Gemini TTS, VPS container at `audio-gateway.jkrumm.com` over the tailnet. Consumed by Hermes, Argo, local MacWhisper. |
+| `basalt-ui` | Mantine v9 + visx design system (NPM). **No Tailwind** since the 2026-07 zinc redesign. **Always a separate commit** from consumer apps. |
+| `brain` | Git-backed Obsidian vault. Two layers: top-level `wiki/` = agentic knowledge (strict lint), PARA `Projects`/`Areas` = curated human surface (light lint) linking down into `wiki/`. No `Resources` tier. Door is `obsidian-cli`, a **client of the running app** — it exits 1 on every subcommand when Obsidian is down (`make obsidian-autostart` keeps it up). Direct-to-master, validated by `vault-lint`. Use `/brain`. |
+| `modelpick` | Which models for what, and why — ranks IU models against leaderboards + live probes, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`). |
+| `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM, Hermes, Feuer, OpenCode) → one `usage_record` table; LaunchAgent ingests every 15 min. |
+| `image-share` | Private image layer on the HomeLab — filesystem-truth index, token-role public share pages, bearer OpenAPI admin/agent API. Via `/img` (`imgcli share`/`publish`); deploy config lives in `homelab`. |
+| `image-gen` / `rb` | Image-generation studio (gateway on the mini) · single-user learning tracker (mini, Tailscale-only). |
+| `rollhook` / `rollhook-action` | Webhook-triggered zero-downtime compose deploys + its GitHub Action. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods`, `photo-flow` | Smaller apps / utilities. |
 
 ### `~/IuRoot/` — work (IU)
 
 1Password `careerpartner` · GitLab · **`EP-XX` ticket prefixes** on branches and
-commits · **all repos require PRs against `main`** (except `directToMain` entries
-in `pr-required-repos.json`). Stack: DDD, NestJS backends, Vue frontends,
-micro-frontend SPA orchestrator.
+commits · **all repos require PRs against `main`** (detected by path; exceptions are
+`directToMain` in `pr-required-repos.json`, currently `prometheus-feuer-agent`).
+Stack: DDD, NestJS backends, Vue frontends, micro-frontend SPA orchestrator. Some
+repos carry their own CLAUDE.md.
 
-Main: `epos.student-enrolment` (backend, own CLAUDE.md), `epos_fe.academic-profile`,
-`epos_fe.booking`, `epos_fe.spa-orchestrator`, `prometheus-scripts` (investigations,
-Jupyter MCP + Python analysis). Others exist (`epos.crm-bridge`, `epos.dam`,
-`epos.exam`, `epos.finance-bridge`, `epos.iam`, `epos.study-progress`,
-`crm-bridge-retry-tool`, `cfn-kafka`, `terraform-monitoring`) — ask if needed.
+Main: `epos.student-enrolment` (backend for academic-profile + booking, own
+CLAUDE.md), `epos_fe.academic-profile`, `epos_fe.booking`,
+`epos_fe.spa-orchestrator` (micro-frontend host shell), `prometheus-scripts` (work
+investigations — Jupyter MCP + Python analysis). Rarely touched:
+`epos.crm-bridge`, `epos.dam`, `epos.exam`, `epos.finance-bridge`, `epos.iam`,
+`epos.study-progress`, `crm-bridge-retry-tool`, `cfn-kafka`, `terraform-monitoring`.
 
-`~/Obsidian/Vault/` is a **cold backup only** — the live vault is `~/SourceRoot/brain`.
-Leave it closed. Tasks live in TickTick.
+`~/Obsidian/Vault/` is a **cold backup only** — the live vault is
+`~/SourceRoot/brain`. Leave it closed. Tasks live in TickTick.
 
 ---
 
 ## Machines
 
-| Host | Reach | Repos | Secrets |
+| Host | Reach | Repos | 1P vaults |
 |-|-|-|-|
-| HomeLab | `ssh homelab` (Tailscale SSH, keyless) | `homelab`, `homelab-private` | `homelab` + `common` |
-| VPS | `ssh vps` (Tailscale SSH, keyless) | `vps` | `vps` + `common` |
-| Mac mini | `ssh mini` / `mosh mini` (OpenSSH + key) | **all** SourceRoot repos | cache backend |
+| HomeLab | `ssh homelab` — Tailscale SSH, keyless | `~/homelab`, `~/homelab-private` | `homelab` + `common` |
+| VPS | `ssh vps` — Tailscale SSH, keyless | `~/vps` | `vps` + `common` |
+| Mac mini | `ssh mini` / `mosh mini` — **OpenSSH + key** (remote dev needs agent forwarding + ControlMaster) | **all** SourceRoot repos | n/a — cache backend |
 
-**The mini is the always-on dev host; the MacBook holds only `dotfiles`,
-`dotfiles-private`, `photo-flow`, `brain`.** Don't clone a repo back to the MacBook
-"just to look" — that is how the trees diverged. `brain` is a deliberate exception
-(writing mirror, reconciled via GitHub every 5 min).
+### The mini is the dev host; the MacBook is the client
 
-Two different questions:
+Agents run on the mini and outlive the MacBook. Stack: Tailscale → mosh → **herdr**
+(owns the workspace model, runs *on the mini*) → Caddy. `claude --bg` daemons
+survive independently of all of it. cmux is the client window, tmux the fallback.
+
+**The MacBook holds only `dotfiles`, `dotfiles-private`, `photo-flow`, `brain`.**
+Every other repo lives on the mini and is reached there. Don't clone one back "just
+to look" — that is how the two trees diverged. MacBook-unique history is preserved
+in `~/SourceRoot-archive` (git bundles + un-gitted projects).
+
+**`brain` is a deliberate exception, not drift — do not "clean it up".** It is the
+vault's only offline copy and a *writing* mirror: edit it on either machine freely.
+`com.jkrumm.brain-sync` reconciles both through GitHub every 5 min — the MacBook
+pulls, commits, pushes; the mini pulls and pushes but never commits (obsidian-git is
+deliberately not installed — a second committer racing for `.git/index.lock`).
+**Conflicts are never auto-resolved**: the rebase aborts, the tree is untouched, a
+human picks the side. Full model: `brain/docs/brain-access.md`.
+
+Two separate questions — collapsing them is the usual confusion:
 
 | Want | Command |
 |-|-|
-| A terminal on the mini | `dev` (mosh, roams) · `desk` (`herdr --remote`) |
-| Work *placed on* the mini | `rd` — `repos`, `work <repo>`, `rd bg <repo> '<task>'`, `agents`, `rd read/say` |
+| A terminal *on* the mini | `dev` (mosh, roams, survives lid-close) · `desk` (`herdr --remote`, TCP, local keybindings + image paste) |
+| Work *placed on* the mini | `rd` — needs no terminal at all |
 
-`rd` takes repo **names**, never paths. Three facts to hold without loading the
-skill: a herdr crash restores the layout and **loses every process in it** (durable
-work → `claude --bg`); a `kind: interactive` session dies with its connection; and
-**never `ssh mini 'claude --bg …'`** — no login keychain, so it silently falls back
-to API billing while looking healthy.
+`rd` (`dotfiles/scripts/remote-dev.sh`) routes off the secrets-backend marker, so
+the same words work from both machines: `repos [filter]`, `work <repo>` (herdr
+workspace + claude, idempotent), `rd bg <repo> '<task>'` (durable daemon), `agents`
+(both lanes, deduped), `rd read <agent>`, `rd say <agent> '…'`. Shorthands `work` /
+`agents` / `repos`. Commands take a repo **name, never a path** — resolution happens
+on the host.
+
+Three facts worth holding without loading the skill:
+
+- A herdr crash **restores the layout and loses every process in it** → durable work
+  belongs in a `claude --bg` daemon, not a pane.
+- A `kind: interactive` session dies with its connection.
+- **Never `ssh mini 'claude --bg …'`** — an ssh session can't reach the login
+  keychain, so the daemon comes up `Not logged in`, silently falls back to API
+  billing, and still looks healthy in `claude agents`. `rd bg` spawns through a herdr
+  pane precisely to avoid this.
 
 Use **`/remote-dev`** for anything touching this stack; `make remote-dev-doctor`
 when it's broken. Full model: `dotfiles/docs/remote-dev.md`.
 
-Sudo on a server (`sudo -S` from stdin — never `ssh -t`, there is no TTY):
+### Sudo on a server
+
+`sudo -S` reads the password from stdin, so none of these need `ssh -t` — which
+matters, because a `!`-prefixed command in a Claude Code session gets **no TTY** and
+`ssh -t` fails there with "Pseudo-terminal will not be allocated".
 
 ```bash
 ROOT_PW=$(op read "op://Private/homelab-server/password" --account tkrumm) && ssh homelab "echo '$ROOT_PW' | sudo -S <cmd>"
+ROOT_PW=$(op read "op://Private/vps-server/password" --account tkrumm) && ssh vps "echo '$ROOT_PW' | sudo -S <cmd>"   # NOPASSWD sudo
+ROOT_PW=$(op read "op://Private/mac-mini-server/password" --account tkrumm) && ssh mini "echo '$ROOT_PW' | sudo -S <cmd>"
 ```
 
-The mini's password is `op://Private/*` and deliberately **MacBook-only** — the
-seed refuses it unconditionally. Don't "fix" that. Physical possession of the mini
-now does yield root (FileVault off + auto-login, since 2026-08-01); the trade is
-documented in `docs/remote-dev.md` → "What used to take this down".
+`~/.ssh/config` is generated from `config/ssh_config` — all four hosts are MagicDNS
+short names, so it installs identically on a headless machine (no secret, no `op`
+call).
 
-**Local dev proxy:** Caddy + dnsmasq serve `*.test` over HTTPS. Every app gets a
-static port, `npx kill-port PORT && … --strictPort`, and an entry in
-`dotfiles/config/Caddyfile` → `caddy-reload` → commit.
+The mini's password is `op://Private/*` and deliberately **MacBook-only** — the seed
+refuses it unconditionally, so reading it is biometric-gated on a present-human
+machine. **Do not "fix" that refusal to make it more convenient.** Since 2026-08-01
+physical possession of the mini does yield root anyway (FileVault off + auto-login
+for unattended reboot, so `/etc/kcpassword` holds it under a reversible XOR) — which
+reaches every ref in `headless.refs` **and** `headless.iu.refs` (work: Feuer
+identity, Artifactory, Jira, read-only prod DB). `make lock-at-boot-setup` closes the
+walk-up path; Thunderbolt Sharing Mode is a FileVault question and stays open. Full
+trade: `docs/remote-dev.md` → "What used to take this down".
 
-**basalt-ui consumers** adopt Mantine, not Tailwind. Copy the setup from
-`argo/apps/dashboard` (`vite.config.ts` uses `basaltViteConfig`; `main.tsx` imports
-`@mantine/*/styles.layer.css` — the `.layer` variant — before `basalt-ui/styles.css`).
-Color via `--vx-*` tokens, never raw hex. Rebuild basalt-ui before testing consumers.
+### Local dev proxy
+
+Caddy + dnsmasq serve `*.test` over HTTPS; ports assigned in
+`dotfiles/config/Caddyfile`. Every app: static port,
+`npx kill-port PORT && … --strictPort`, an entry in the Caddyfile. Adding one: edit
+Caddyfile → `caddy-reload` → commit in dotfiles. On the mini each `.test` block also
+gets a tailnet door at `https://<name>.mini.jkrumm.com` automatically.
+
+### basalt-ui consumers
+
+Mantine, not Tailwind. Canonical reference: `argo/apps/dashboard`.
+
+```ts
+// vite.config.ts — shipped helper: optimizeDeps.include for @mantine/*,
+// resolve.dedupe, define['process.env.NODE_ENV'] (basalt bans import.meta.env)
+import { basaltViteConfig } from 'basalt-ui/vite'
+```
+```tsx
+// main.tsx — CSS layer order is load-bearing
+import '@mantine/core/styles.layer.css'  // the .layer.css variant, NOT styles.css
+// ...other @mantine/*/styles.layer.css
+import 'basalt-ui/styles.css'            // declares @layer mantine, basalt
+// then: <BasaltProvider theme={createBasaltTheme()} defaultColorScheme="dark">
+```
+
+Primitives (Button, TextInput, Modal, …) come from themed `@mantine/core`; basalt-ui
+adds its own modules (shell, dashboard, charts, data, content, agent-chat, forms,
+notifications). Color via `--vx-*` tokens (`basalt-ui/tokens` → `VX.*` + `alpha()`),
+**never raw hex**. `BasaltProvider` hard-requires `@tanstack/react-query` at build
+time. After editing basalt-ui: `bun run build` before testing consumers.
 
 ---
 
 ## Secrets
 
-`op_account_for_cwd` / `op_run` (in `~/.zsh/conf.d/secrets.zsh`) resolve the right
-account from cwd. Skills touching 1Password call the helper, never a hardcoded
-account.
+`op_account_for_cwd` / `op_run` (in `~/.zsh/conf.d/secrets.zsh`, worktree-safe via
+`git rev-parse --git-common-dir`) resolve the account from cwd. Skills touching
+1Password call the helper; SourceRoot-only infra scripts may hardcode `tkrumm`.
 
-**The mini is headless — a direct `op read`/`op run` there hangs on the biometric
-prompt.** Use the `secrets-run` shim, which mirrors `op`:
+**The mini is headless — a direct `op read` / `op run` there HANGS** on a biometric
+prompt no one can answer. Use the `secrets-run` shim, which mirrors `op` and resolves
+each ref from an age-encrypted, `op://`-keyed offline cache (decrypted in memory, no
+plaintext on disk, no network, fails closed on a missing ref):
 
 ```bash
-secrets-run read op://vault/item/field
-secrets-run run --env-file=<tpl> -- <cmd>
+secrets-run read op://vault/item/field                  # ~ op read
+secrets-run run [--env-file=<tpl>]... -- <cmd>          # ~ op run (repeats; last wins)
 ```
 
-The active backend (`cache` on the mini, `op` on the MacBook) is injected each
-session by the `machine-role.ts` hook — trust it over guessing. What the mini may
-cache is the allowlist `dotfiles-private/headless.refs`; `make secrets-seed`
-reseals it (biometric, present-human). Ops via **`/secrets`**.
+Same app code and same `op://` refs on both machines — only
+`~/.config/secrets/backend` (`cache` on the mini, `op` on the MacBook) differs. The
+active backend is injected each session by the `machine-role.ts` hook; **trust it
+over guessing**.
 
-**Any edit to `secrets-run`** requires the full guardrail: `make secrets-test` +
+What the mini may hold offline is the explicit allowlist
+`dotfiles-private/headless.refs`; `make secrets-seed` reseals the cache (biometric,
+present-human). **Tiering guardrail:** only T0/T1 refs are ever cached —
+`op://Private/*` and T2/prod are refused by the seed (argo's `op://vps/argo/*` is an
+owner-classified exception). Ops via **`/secrets`**; full model in
+`dotfiles-private/{PRD.md,docs/design.md,docs/runbook.md}`.
+
+**Any edit to `secrets-run`** takes the full guardrail: `make secrets-test` +
 `shellcheck` + design.md/security-review.md in the same change + an adversarial
 `/review`. It is the sole secret path on the mini.
 
@@ -218,39 +391,55 @@ reseals it (biometric, present-human). Ops via **`/secrets`**.
 
 ## Skills
 
-Global skills at `~/.claude/skills/` (← `dotfiles/skills/`) load everywhere.
-Per-repo skills in `<repo>/.claude/skills/` load only inside that repo.
+Global skills at `~/.claude/skills/` (← `dotfiles/skills/`) load in every session
+regardless of cwd. Per-repo skills in `<repo>/.claude/skills/` load only inside that
+repo.
 
-| Skill | Notes |
-|-|-|
-| `/commit` | Conventional commits. `--split`, `--amend`. |
-| `/pr` · `/ship` · `/git-cleanup` | PR flow · full check→review→PR→merge→release · squash noisy commits. |
-| `/check` · `/review` | Validation · multi-angle review + CodeRabbit (`--deep` adds native correctness + security). |
-| `/research <query>` | Cited report via research-gateway. Off Max. |
-| `/implement` · `/grill` · `/ralph` | Guided implementation (delegates to `@implementer`) · question-until-clear + PRD · autonomous multi-group loop. |
-| `/browse` · `/analyze` · `/otel` | Chrome DevTools (haiku fork) · static analysis · ClickHouse traces/logs/metrics. |
-| `/secrets` · `/cloudflare` · `/upgrade-deps` | 1Password ops · Cloudflare config · researched dependency upgrades. |
-| `/brain` · `/distill` · `/img` | Vault read/write · 7-step prose pipeline · image CDN + private share layer. |
-| `/dataviz` · `/frontend-design` · `/excalidraw-diagram` · `/read-drawing` | visx+Mantine charts · UI · diagrams · diagram interpretation. |
-| `/remote-dev` | The mini as dev host — herdr, mosh, `--bg` agents, failure modes. |
-| `/skill-creator` · `/update-agent-rules` | Author skills · sync upstream framework rules. |
+| Skill | Mode | Notes |
+|-|-|-|
+| `/commit` | inline | Conventional commits. `--split`, `--amend`. |
+| `/pr [action]` | inline | Create / status / merge. `create` errors on the default branch, proposes a rename, runs `/commit` if dirty, offers `/git-cleanup` at ≥3 commits, `/check` pre-flight. |
+| `/ship` | inline | check → review → commit → PR → CodeRabbit → merge → release. Auto-detects state; direct-to-master vs PR. |
+| `/git-cleanup` | inline | Semantically group + squash noisy branch commits. |
+| `/check` | MCP | Format, lint, typecheck, test. Auto-detects Node/Bun, Python/uv, Makefile, Rust, Go; on non-Node repos pass `commands` (e.g. `['.venv/bin/ruff check', '.venv/bin/pytest -q']`) to skip discovery. |
+| `/review` | MCP | Multi-angle review (dynamic angle router) + CodeRabbit CLI. `--deep` adds native correctness + security. |
+| `/research <query>` | MCP | Agentic Tavily + Context7 + fetch, cross-verified cited report. Off Max. |
+| `/implement` | inline | Guided implementation; orchestrates the `@implementer` Sonnet subagent. |
+| `/grill` | inline | Question until direction is clear, then a PRD. |
+| `/ralph [cmd]` | inline (sonnet) | Autonomous multi-group implementation loop. |
+| `/browse` | fork (haiku) | Chrome DevTools — console, network, DOM, screenshots. |
+| `/analyze` | subprocess | Deep static analysis (fallow + DeepSeek). |
+| `/otel [env] [intent]` | MCP | Traces / logs / metrics in ClickHouse, local + prod. |
+| `/read-drawing` | MCP | Interpret Excalidraw (vision + structural JSON). |
+| `/secrets` · `/cloudflare` | inline | 1Password ops · Cloudflare DNS + tunnel ingress. Both use `op_account_for_cwd`. |
+| `/upgrade-deps` | inline | Researched, one-at-a-time dependency upgrades. |
+| `/brain` | inline | Vault read/write. `obsidian-cli` door with filesystem fallback; contract in the repo's `AGENTS.md`. |
+| `/distill` | inline | Human-owned 7-step prose pipeline (loads `voice.md` at Draft). |
+| `/img` | inline | Public CDN uploads + imgproxy transform URLs, and the private share layer. `--json` on every command. |
+| `/dataviz` · `/frontend-design` · `/excalidraw-diagram` | inline | visx + Mantine charts · production UI · diagrams. |
+| `/remote-dev` | inline | The mini as dev host — herdr, mosh, `--bg` agents, heartbeat, failure modes. |
+| `/skill-creator` · `/update-agent-rules` | inline | Author/test skills · sync upstream framework rules. |
 
-Per-repo: `dotfiles` → `/iu-endpoint`, `/sync`; `hermes-agent` → `/hermes-validate`,
-`/hermes-update`; plus project skills in `homelab`, `vps`, `sideclaw`,
-`free-planning-poker`, `homelab-private`, `ticktick-raycast`.
+Per-repo: `dotfiles` → `/iu-endpoint`, `/sync` (MacBook-only), `/localai` (retired);
+`hermes-agent` → `/hermes-validate`, `/hermes-update`; `homelab` → `/audit`,
+`/docs`, `/upgrade-stack`; `vps` → `/audit`, `/docs`; `sideclaw` → `/claude-cli`;
+`free-planning-poker` → `/release-fpp`; `homelab-private` → `/prowlarr`;
+`ticktick-raycast` → `/raycast-extension`, `/ticktick-api`.
 
 ---
 
 ## Workflow
 
-`/commit` per logical concern → `/git-cleanup` if ≥3 noisy commits → `/ship` for
-the full flow. `/ship` auto-detects state; just run it.
+`/commit` per logical concern → `/git-cleanup` if ≥3 noisy commits → `/ship` for the
+full flow. `/ship` auto-detects state; just run it. `/pr status` warns on
+uncommitted/unpushed work and shows CodeRabbit feedback.
 
-- Validate with `/check`. Fix errors **in changed files only**.
+- Check `package.json` or the repo Makefile for available scripts.
+- Fix errors **in changed files only** — don't refactor untouched code.
 - **Never start dev servers** — he validates running apps manually.
-- Node version manager is **fnm**, not nvm.
+- Node version manager is **fnm**, not nvm. Never suggest nvm paths.
 - `gback` = `git reset --soft HEAD~1`.
-- Worktrees: Claude Code's native feature, requested up front. Not `wtp`.
+- Worktrees: Claude Code's **native** feature, requested up front. Not `wtp`.
 - Docker: Makefile targets only (`rules/docker-makefile.md`).
 
 ---
@@ -258,19 +447,22 @@ the full flow. `/ship` auto-detects state; just run it.
 ## Config hierarchy
 
 - **Global**: `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this file).
-- **Per-project**: `<repo>/CLAUDE.md`.
+- **Per-project**: `<repo>/CLAUDE.md`, plus `<repo>/.claude/rules/` and
+  `<repo>/.claude/skills/`.
 - **Rules**: `~/.claude/rules/` ← `dotfiles/rules/`. No `paths:` frontmatter → always
-  on (attribution, commits, TypeScript, security, code-style, formatting,
+  on (attribution, commit-conventions, typescript, security, code-style, formatting,
   docker-makefile, dependency-hygiene, research-first). With `paths:` → lazy
   (dockerfile, makefile-conventions, visx-charts, elysia, react-best-practices,
-  tanstack-*).
-- **Output style**: `~/.claude/output-styles/Direct.md` ← `dotfiles/config/output-styles/`,
-  activated by `outputStyle` in settings.json. It carries the response-shape and
-  autonomy rules; this file carries the project facts. Styles do **not** reach
-  subagents — a subagent's tone lives in its own `agents/*.md`.
+  tanstack-query/router/start).
+- **Output style**: `~/.claude/output-styles/Direct.md` ←
+  `dotfiles/config/output-styles/`, activated by `outputStyle` in settings.json. It
+  carries the response-shape and autonomy contract; this file carries the facts.
+  Styles are read at session start and do **not** reach subagents — a subagent's tone
+  lives in its own `agents/*.md`.
 
-Keep every file here **under ~200 lines** (Anthropic's own guidance: longer files
-reduce instruction adherence). Push the "why" into `docs/` and link it.
+Optimize these files for **density, not length** — every line either changes a
+decision or gets deleted. Long narrative rationale belongs in `docs/` behind a link;
+facts, gotchas, and non-obvious conventions stay here regardless of line count.
 
-Update CLAUDE.md in the same commit as the code it describes. CLAUDE.md-only
-changes use the `docs:` prefix.
+Update CLAUDE.md in the same commit as the code it describes. CLAUDE.md-only changes
+use the `docs:` prefix.

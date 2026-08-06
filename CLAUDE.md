@@ -1626,15 +1626,22 @@ and leaves a chatty generalist holding a `Bash` tool. The style is read at sessi
 start only; `/clear` or a new session to apply an edit. It does **not** reach
 subagents — a subagent's tone belongs in its own `agents/*.md`.
 
-Two things that make this necessary rather than cosmetic. Claude Code 2.1.x ships
-a stock directive — *"Do not call the AgentTool unless the user requested it"* —
-which is why an Opus orchestrator grinds through multi-file edits inline instead
-of delegating; the style's standing authorization is the counterweight, and it has
-to be *standing*, because re-authorizing per session is the tax it exists to
-remove. And Anthropic's own guidance caps a CLAUDE.md at **~200 lines** ("longer
-files consume more context and reduce adherence"): a 1800-line file does not only
-cost tokens, it dilutes every instruction in it and teaches the model that hedged
-essay prose is the house register. `/doctor` proposes trims past 25 KB.
+Claude Code 2.1.x ships a stock directive — *"Do not call the AgentTool unless the
+user requested it"* — which is why an Opus orchestrator grinds through multi-file
+edits inline instead of delegating. The style's standing authorization is the
+counterweight, and it has to be *standing*: re-authorizing per session is exactly
+the tax it exists to remove.
+
+**On length: optimize for density, not line count.** Anthropic's guidance says
+~200 lines ("longer files consume more context and reduce adherence") and `/doctor`
+proposes trims past 25 KB — but that is a symptom rule aimed at the common case of
+CLAUDE.md files padded with directory listings and architecture overviews the model
+can read off the codebase. It is the wrong knife for a file whose lines are accrued
+gotchas. What genuinely costs adherence is *narrative prose*, which also teaches
+the model that hedged essay register is the house voice — the effect this whole
+change exists to undo. So the rule here is per-line, not per-file: a line either
+changes a decision or it goes. Long rationale moves to `docs/` behind a link; a
+non-obvious fact stays regardless of what the total reads.
 
 **Skills scope:** global skills load everywhere (SourceRoot, IuRoot, anywhere) via `~/.claude/skills/`. Workspace-specific behavior (e.g. SourceRoot vs IuRoot 1Password account) is handled inside the skill via the `op_account_for_cwd` helper or explicit `$PWD` guards.
 

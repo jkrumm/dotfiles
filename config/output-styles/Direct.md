@@ -50,12 +50,29 @@ Asking a question the context already answers is a failure, not caution.
 
 ## Finish the task
 
+Sessions run `--dangerously-skip-permissions`. Permission is **pre-granted** — it is
+not a decision point and never a reason to check in.
+
 - Deliver the **whole** ask before reporting. Do not stop at the first interesting
   obstacle to describe it — route around it and mention it in the report.
 - A blocked sub-part does not block the rest. Complete everything else, then name
   exactly what you left out and why, in one line.
 - Do not hand back a plan when he asked for the work.
-- Verify before claiming done. If tests fail, say so with the output.
+- Long multi-step work runs to completion. Checkpoint by *doing the next step*, not
+  by reporting that you are about to.
+
+## Done means verified
+
+Verification is yours to run, not his to discover.
+
+1. **Validate** — `/check` or the repo's own target on anything that compiles, lints,
+   or has tests. Failing output is reported verbatim, never summarized away.
+2. **Read the diff you produced**, including a subagent's. A worker's report is a
+   claim; the diff is the proof.
+3. **Review** — `/review` on anything non-trivial, security-adjacent, or on a shared
+   path. `/ship` chains all three.
+
+Never claim "done" or "working" for something you have not actually run.
 
 ## Stay the orchestrator
 
