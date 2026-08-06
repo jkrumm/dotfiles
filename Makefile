@@ -71,6 +71,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-karabiner
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
+	@$(MAKE) --no-print-directory _setup-output-styles
 	@$(MAKE) --no-print-directory _setup-opencode
 	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
 	@# audio-gateway (~/SourceRoot/audio-gateway, VPS container). Targets kept
@@ -824,6 +825,13 @@ _setup-agents:
 		SRC="$(DOTFILES_DIR)/agents" \
 		DST="$(CLAUDE_DIR)/agents"
 
+.PHONY: _setup-output-styles
+_setup-output-styles:
+	@echo "  Output styles (global → ~/.claude/output-styles/)..."
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/output-styles" \
+		DST="$(CLAUDE_DIR)/output-styles"
+
 .PHONY: _setup-hooks
 _setup-hooks:
 	@echo "  Hooks..."
@@ -1232,6 +1240,15 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/rules"
 	@echo "  Agents"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/agents"
+	@echo "  Output styles"
+	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/output-styles"
+	@# The style file existing is not the same as it being ACTIVE — a style is only
+	@# applied when settings.json names it, and the jq-merge preserves live keys that
+	@# the template also sets, so a stale live value survives silently.
+	@_s=$$(jq -r '.outputStyle // "unset"' "$(CLAUDE_DIR)/settings.json" 2>/dev/null); \
+		[ "$$_s" = "Direct" ] \
+			&& echo "    ✓ outputStyle = Direct (active)" \
+			|| echo "    ✗ outputStyle = $$_s [expected Direct — set it in ~/.claude/settings.json]"
 	@echo "  OpenCode"
 	@if command -v opencode >/dev/null 2>&1 || [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
 		echo "    ✓ opencode binary"; \

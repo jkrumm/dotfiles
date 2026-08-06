@@ -122,6 +122,7 @@
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
+  "outputStyle": "Direct",
   "autoUpdatesChannel": "latest",
   "skipDangerousModePermissionPrompt": true,
   "disableArtifact": true,

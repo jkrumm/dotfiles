@@ -253,6 +253,8 @@ to touch anything.
 | `scripts/statusline.sh` | `~/.claude/statusline.sh` | 3-line statusline |
 | `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` | Claude.ai usage % fetcher (uv script) |
 | `rules/` | `~/.claude/rules/` (dir symlink) | Global rules (attribution, commit conventions, dependency hygiene, formatting, research-first, security, TypeScript, code style, docker-makefile, dockerfile, makefile-conventions, visx-charts) |
+| `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
+| `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md` — the response-shape + autonomy contract. Activated by `outputStyle` in settings.json. |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every Claude Code session. Each skill is symlinked individually. |
 | `raycast/` | `~/.raycast-scripts` (dir symlink) | Raycast Script Commands (battery limiter). MacBook-only via `make batt-setup`; point Raycast at the dir once. |
 
@@ -1609,6 +1611,30 @@ as the Agent SDK (`op://common/anthropic`).
 **Adding a per-repo (dotfiles-only) skill:** create `.claude/skills/{name}/SKILL.md` here directly (committed, no symlink). Loads only when Claude starts inside this repo. Used for skills that manage this repo's infrastructure (e.g. `iu-endpoint`).
 
 **Adding a global rule:** create `rules/{name}.md` here. The entire `rules/` dir is symlinked to `~/.claude/rules/`. Rules without `paths:` frontmatter load every session. Rules with `paths:` load lazily.
+
+**Changing how Claude *talks*:** that is `config/output-styles/Direct.md`, not
+CLAUDE.md. The split is deliberate and the two are not interchangeable:
+
+| Concern | Lives in | Why |
+|-|-|-|
+| Response shape, autonomy, question budget, delegation posture | `output-styles/Direct.md` | Appended to the end of the system prompt — the last thing read, and it survives a `/clear`. Instructions this behavioural sit poorly among 200 lines of repo facts. |
+| Project/machine facts, routing, conventions | `CLAUDE.md` | Reference material the model looks things up in. |
+
+`keep-coding-instructions: true` is load-bearing — the frontmatter default is
+**false**, which *drops* Claude Code's built-in software-engineering system prompt
+and leaves a chatty generalist holding a `Bash` tool. The style is read at session
+start only; `/clear` or a new session to apply an edit. It does **not** reach
+subagents — a subagent's tone belongs in its own `agents/*.md`.
+
+Two things that make this necessary rather than cosmetic. Claude Code 2.1.x ships
+a stock directive — *"Do not call the AgentTool unless the user requested it"* —
+which is why an Opus orchestrator grinds through multi-file edits inline instead
+of delegating; the style's standing authorization is the counterweight, and it has
+to be *standing*, because re-authorizing per session is the tax it exists to
+remove. And Anthropic's own guidance caps a CLAUDE.md at **~200 lines** ("longer
+files consume more context and reduce adherence"): a 1800-line file does not only
+cost tokens, it dilutes every instruction in it and teaches the model that hedged
+essay prose is the house register. `/doctor` proposes trims past 25 KB.
 
 **Skills scope:** global skills load everywhere (SourceRoot, IuRoot, anywhere) via `~/.claude/skills/`. Workspace-specific behavior (e.g. SourceRoot vs IuRoot 1Password account) is handled inside the skill via the `op_account_for_cwd` helper or explicit `$PWD` guards.
 
