@@ -897,6 +897,18 @@ end to end: shell + pty + scp as `johannes.krumm`, zero SACL involvement, no roo
 The `op`-fails-fast property and the "honest cost" above are unchanged — :2222 is
 still a non-interactive ssh session with no unlocked 1Password.
 
+**TCC boundary — deliberately not solved with Full Disk Access.** The door reads
+non-protected paths freely (home root, `~/SourceRoot`, `~/.claude`, `/tmp` — which
+is why the usage-tracker/brain pulls work), but macOS TCC blocks the sshd-spawned
+process from `~/Downloads`, `~/Desktop`, `~/Documents` and the cloud folders with
+`Operation not permitted`. The fix is to **stage the file out** to a non-protected
+path (`cp ~/Downloads/x ~/xfer/x`, then pull `iumac:xfer/x`), *not* to grant sshd
+Full Disk Access. FDA on `/usr/sbin/sshd` is the most EDR-flagged TCC grant there
+is (remote daemon + read-everything = textbook exfil signature), it can't be
+scoped to this door (same binary as the system sshd, so IT-Admin sessions would
+gain it too), and it undoes the low-profile posture the whole door is built for.
+TCC-limited is a feature. Hit + resolved 2026-08-07 pulling a 48 KB CSV.
+
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything
