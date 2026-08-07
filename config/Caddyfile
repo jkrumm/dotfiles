@@ -135,7 +135,7 @@ argo.test {
 # image-gen — stateless image-generation gateway (Elysia + Bun) on :7716.
 # Local dev for the image-gen monorepo (`bun run dev` at its root also starts the
 # Tauri app; Vite on :1420 is Tauri-internal, not proxied). VPS container reached
-# over the tailnet at image.<domain>.
+# over the tailnet at image-gateway.<domain>.
 image-gen.test {
 	import local
 	reverse_proxy localhost:7716

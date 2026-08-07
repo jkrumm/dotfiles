@@ -239,7 +239,7 @@ the free tier.
 | `modelpick` | Which models for what, and why — ranks IU models against leaderboards + live probes, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`). |
 | `usage-tracker` | Local SQLite token/cost telemetry. Per-source collectors (Claude Code, LiteLLM, Hermes, Feuer, OpenCode) → one `usage_record` table; LaunchAgent ingests every 15 min. |
 | `image-share` | Private image layer on the HomeLab — filesystem-truth index, token-role public share pages, bearer OpenAPI admin/agent API. Via `/img` (`imgcli share`/`publish`); deploy config lives in `homelab`. |
-| `image-gen` / `rb` | Image-generation studio (gateway on the mini) · single-user learning tracker (mini, Tailscale-only). |
+| `image-gen` / `rb` | Image-generation studio. Primary artifact is a Tauri v2 macOS app (`ImageGen.app`, `com.jkrumm.image-gen`) built + installed on the mini (`make app` → `/Applications`, `make up` also deploys + proves both); stores generations on local disk (`~/Pictures/ImageGen/<id>/` + `metadata.json`) and pushes one-way into image-share. Gateway is a separate Docker container on the **VPS** (`:7716`, Traefik, tailnet-only), deployed by RollHook. · `rb` = single-user learning tracker (mini, Tailscale-only). |
 | `rollhook` / `rollhook-action` | Webhook-triggered zero-downtime compose deploys + its GitHub Action. |
 | `bun-email-api`, `free-planning-poker`, `podcast-generator`, `sy-serendipity`, `ticktick-raycast`, `clawbar`, `jkrumm.com`, `kobo-mods`, `photo-flow` | Smaller apps / utilities. |
 

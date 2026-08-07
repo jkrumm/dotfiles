@@ -34,7 +34,7 @@ the MacBook and the headless mini.
 
 | Intent | Command | Lands in |
 |-|-|-|
-| One-off public asset (blog image, OG tag, README) | `imgcli upload` | CDN only |
+| One-off public asset (blog image, OG tag, README) | `imgcli upload` | CDN, but routed through image-share (`load_share_config`) — fails if the homelab is down |
 | Durable private copy, maybe shared via a link later | `imgcli share` | private layer only |
 | Generated/final image headed for a note or article | `imgcli publish` | private layer, then CDN |
 | Already-indexed image headed for the CDN, no local file | `imgcli publish --id` | private layer (already there), then CDN |
@@ -216,10 +216,14 @@ private-layer command uses. Base URL and bearer resolve from
 repo is public).
 
 **Headless mini:** every private-layer command (`share`, `publish`, `library`,
-`link`, `rm`, and now `upload`) needs those two refs cached before they'll work
-there — add them to `dotfiles-private/headless.refs` and run
-`make secrets-seed` (biometric, present-human) first. `sync`, `ls`, `info`,
-`url` are unaffected (they use the separate direct-B2 credential).
+`link`, `rm`, and now `upload`) needs those two refs cached to work there —
+they already are (`dotfiles-private/headless.refs:267-268`), verified live on
+the headless mini. If a read ever fails (rotation, a missing ref), the fix is
+`make secrets-seed` (biometric, present-human) to reseed the cache. `sync`,
+`ls`, `info`, `url` use the separate direct-B2 credential and don't need the
+image-share refs — but `publish` needs **both** sets: it calls `load_config`
+(direct-B2, for `CDN_BASE`) before `load_share_config` (`imgcli:512-513`), so a
+failed `publish` may be either credential set, not only the image-share one.
 
 ## Constraints worth knowing
 
