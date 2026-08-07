@@ -313,7 +313,7 @@ usually 'brain'. Output ONLY the commit message line, nothing else.
 
 $(git diff --cached --stat)
 
-$(git diff --cached | head -c 20000)"
+$(git diff --cached | head -c 20000 || true)"
 
   msg="$(printf '%s' "$prompt" | "${runner[@]}" -u ANTHROPIC_API_KEY \
     ANTHROPIC_AUTH_TOKEN="$key" \
