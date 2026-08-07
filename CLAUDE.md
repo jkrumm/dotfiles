@@ -325,14 +325,24 @@ SSH), through a dedicated non-1P key (iumac), or via a cache-resolved credential
   `ssh vps` work headless with zero keys, zero agents, zero prompts. No dedicated
   key exists for this path — a stolen mini holds no server credential; revocation
   is removing the device in the Tailscale admin.
-- **mini → iumac (the MacBook) → a dedicated non-1P key.** `ssh iumac` / `rsync …
-  iumac:…` reach the MacBook non-interactively over `~/.ssh/id_ed25519_iumac`
-  (`restrict,pty`, no agent forwarding, never enters 1Password or the secrets
-  cache) — for `usage-tracker`/`brain`/file pulls. `Host iumac` pins
-  `IdentityAgent none` so this leg never touches the 1Password agent and cannot
+- **mini → iumac (the MacBook) → a dedicated non-1P key, to a userland sshd on
+  :2222.** `ssh iumac` / `rsync … iumac:…` reach the MacBook non-interactively over
+  `~/.ssh/id_ed25519_iumac` (`restrict,pty`, no agent forwarding, never enters
+  1Password or the secrets cache) — for `usage-tracker`/`brain`/file pulls. **The
+  system sshd on :22 is dead to us**: iumac's MDM pins the Remote Login SACL
+  (`com.apple.access_ssh`) to `IT-Admin` and re-drops `johannes.krumm` on every
+  check-in, so :22 accepts the key then closes the session with no log line. The
+  door is our **own** sshd on **:2222** (`dotfiles/tailnet-sshd/`, `make
+  tailnet-sshd-setup`): Apple's `/usr/sbin/sshd` with `UsePAM no` (the SACL is a
+  PAM module, `pam_sacl.so` — skipping PAM skips the group check), pubkey-only,
+  bound to loopback behind a `tailscale serve --tcp 2222` forwarder (Collie's
+  pattern — self-heals across tailscaled restart + IP change, invisible to the
+  corp LAN). ACL: `tcp:2222` on `tag:mac → tag:mac`. `Host iumac` pins `Port 2222`
+  + `IdentityAgent none` so this leg never touches the 1Password agent and cannot
   hang on it. `op` still can't resolve `op://Private/*` there — over `ssh iumac`
   it fails FAST ("account is not signed in", exit 1) rather than hanging, so the
-  biometric gate holds with no hang hazard. Full model: `docs/remote-dev.md` §10.
+  biometric gate holds with no hang hazard. Full model:
+  `dotfiles-private/docs/access-model.md` (2026-08-07 addendum), `docs/remote-dev.md` §10.
 - **GitHub → HTTPS + a secrets-cache-backed credential helper.** GitHub is off the
   tailnet, so this is another outbound path that needs a headless credential:
   `make git-headless` (opt-in, cache-backend-gated) writes `~/.gitconfig-headless`,

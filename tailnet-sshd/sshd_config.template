@@ -1,0 +1,44 @@
+# Userland sshd — personal SSH door into iumac (the work MacBook) that BYPASSES
+# the MDM-controlled macOS Service ACL on Remote Login.
+#
+# Apple's system sshd (:22) enforces com.apple.access_ssh via `pam_sacl.so`
+# (see /etc/pam.d/sshd) under `UsePAM yes`. IT pins that group to `IT-Admin` and
+# re-drops johannes.krumm on every MDM check-in, so :22 accepts the key then
+# closes the session with no log line. This sshd sets `UsePAM no`, so pam_sacl
+# never runs and the group is never consulted. Pubkey-only, tailnet-bound.
+#
+# Binds LOOPBACK only. The tailnet door is a `tailscale serve --tcp 2222`
+# forwarder (set by tailnet-sshd.sh) — tailscaled owns the tailnet exposure and
+# re-applies it across every daemon restart, so a tailscaled restart / interface
+# flap never invalidates sshd's bound socket (127.0.0.1 never flaps). This is the
+# same loopback-bridge-behind-serve pattern Collie uses on the mini.
+#
+# Rendered from this template by tailnet-sshd.sh at every (re)start — sshd wants
+# absolute paths (no ~ expansion). __HOME__, __USER__ are substituted; do not
+# edit the live copy.
+
+Port 2222
+ListenAddress 127.0.0.1
+
+HostKey __HOME__/.config/tailnet-sshd/ssh_host_ed25519_key
+PidFile __HOME__/.config/tailnet-sshd/sshd.pid
+
+# Pubkey only. No PAM (that is the whole point — pam_sacl lives there), so no
+# password/keyboard-interactive path exists at all.
+UsePAM no
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers __USER__
+
+# Reuse the same trusted keys as the system sshd — the mini's restrict,pty key
+# is already installed there by `make authorized-keys`.
+AuthorizedKeysFile __HOME__/.ssh/authorized_keys
+StrictModes yes
+
+# rsync runs over the exec channel and needs nothing here; scp/sftp need the
+# subsystem, so brain/usage-tracker file pulls work either way.
+Subsystem sftp /usr/libexec/sftp-server
+
+LogLevel VERBOSE

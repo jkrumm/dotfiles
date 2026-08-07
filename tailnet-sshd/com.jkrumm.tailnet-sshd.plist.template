@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.tailnet-sshd</string>
+  <!-- Userland sshd on the tailnet interface (:2222), bypassing the MDM-managed
+       macOS Remote Login SACL that blocks johannes.krumm on the system sshd
+       (:22). See tailnet-sshd/sshd_config.template for the full rationale. This
+       is a GUI-session LaunchAgent (not a root LaunchDaemon) precisely because
+       non-root, same-user, UsePAM-no sshd is what dodges pam_sacl — and it needs
+       no privilege to listen on a high port and log the invoking user in. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/SourceRoot/dotfiles/tailnet-sshd/tailnet-sshd.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <!-- Restart on any non-clean exit. The wrapper exits 1 when tailscaled has no
+       IP yet (login race) or the bind fails; KeepAlive respawns it, and the
+       bounded wait inside means it settles once tailscaled is up. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/tailnet-sshd.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/tailnet-sshd.err</string>
+</dict>
+</plist>

@@ -270,7 +270,7 @@ investigations — Jupyter MCP + Python analysis). Rarely touched:
 | HomeLab | `ssh homelab` — Tailscale SSH, keyless | `~/homelab`, `~/homelab-private` | `homelab` + `common` |
 | VPS | `ssh vps` — Tailscale SSH, keyless | `~/vps` | `vps` + `common` |
 | Mac mini | `ssh mini` / `mosh mini` — **OpenSSH + key** (remote dev needs agent forwarding + ControlMaster) | **all** SourceRoot repos | n/a — cache backend |
-| MacBook (`iumac`) | reached FROM the mini: `ssh iumac` / `rsync … iumac:…` — dedicated `~/.ssh/id_ed25519_iumac` key, `restrict,pty`, no agent forwarding | `dotfiles`, `dotfiles-private`, `photo-flow`, `brain` | both accounts — biometric (present-human only) |
+| MacBook (`iumac`) | reached FROM the mini: `ssh iumac` / `rsync … iumac:…` — dedicated `~/.ssh/id_ed25519_iumac` key, `restrict,pty`, no agent forwarding. Lands on a **userland sshd on :2222** (`dotfiles/tailnet-sshd/`), not the system :22 — MDM dropped us from the Remote Login SACL; the :2222 door runs `UsePAM no` to bypass it | `dotfiles`, `dotfiles-private`, `photo-flow`, `brain` | both accounts — biometric (present-human only) |
 
 The mini's reach back is live (rename to `iumac` landed 2026-08-06): non-interactive
 file/state pulls (`usage-tracker`/`brain`), no biometric. Full model:

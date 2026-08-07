@@ -850,6 +850,53 @@ accepted deliberately for the sync/pull workflows. It does not hand over
 itself, which a stolen key cannot answer. Full model:
 `dotfiles-private/docs/access-model.md`.
 
+### 10b. The SACL dropped us — userland sshd on :2222 (2026-08-07)
+
+The predicted failure landed. `dseditgroup -o checkmember -m johannes.krumm
+com.apple.access_ssh` on iumac reads **NOT a member** — MDM pinned the group to
+`IT-Admin` + a nested MDM group and dropped the `admin` membership that used to
+admit us. So the mini's `ssh iumac` on **:22 authenticates then closes with no
+sshd log line**, exactly the accepted-then-closed mode above.
+
+The fix routes *around* the control rather than fighting it (the `dseditgroup`
+re-add is whack-a-mole — MDM re-drops every check-in — and a more direct override
+of an employer control). We run our **own** userland sshd on **:2222** that never
+consults the group.
+
+**The mechanism — the SACL is a PAM check.** `/etc/pam.d/sshd` enforces it via
+`account required pam_sacl.so sacl_service=ssh`, and PAM runs only under `UsePAM
+yes`. A second `/usr/sbin/sshd` started with `UsePAM no` + pubkey-only never
+invokes PAM → `pam_sacl` never runs → the MDM group is never consulted. Proven
+end to end: shell + pty + scp as `johannes.krumm`, zero SACL involvement, no root
+(same-user login on a port >1024 needs none).
+
+**The door — `dotfiles/tailnet-sshd/`, `make tailnet-sshd-setup` (MacBook-only):**
+
+- Apple's `/usr/sbin/sshd`, `UsePAM no`, pubkey-only, `AllowUsers johannes.krumm`,
+  reusing `~/.ssh/authorized_keys` (the mini's `restrict,pty` key is already there
+  from §10, so this door needs no new credential).
+- Binds **loopback** `127.0.0.1:2222`; the tailnet door is a `tailscale serve
+  --tcp 2222 tcp://127.0.0.1:2222` forwarder. This is Collie's loopback-behind-serve
+  shape and it is what makes the door **self-healing**: tailscaled re-applies serve
+  across every daemon restart, sshd's loopback socket never flaps, and serve
+  forwards by *port* so a node re-auth that changes the tailnet IP doesn't break it.
+  Survives reboot, login, sshd crash (`KeepAlive`), tailscaled restart, IP change.
+- GUI-session LaunchAgent `com.jkrumm.tailnet-sshd` (`RunAtLoad` + `KeepAlive`,
+  logs `~/Library/Logs/tailnet-sshd.{log,err}`). A userland sshd is exactly what
+  dodges `pam_sacl`, so this is deliberately not a root LaunchDaemon.
+- **Invisible to the corp LAN**: only tailscaled listens externally, so an IT
+  portscan of iumac on the LAN finds nothing on 2222 — the door exists only on the
+  tailnet, ACL-gated (`tcp:2222` on `tag:mac → tag:mac`) and key-only. This is a
+  deliberate route-around of an IT-set control on a work machine; the low profile
+  is part of the point.
+- `config/ssh_config` pins `Host iumac → Port 2222`, so bare `ssh iumac` from the
+  mini lands here once the mini regenerates `~/.ssh/config` (`make setup` /
+  `_setup-ssh`). `make tailnet-sshd-status` asserts both halves (loopback listener
+  + serve door). Teardown: `make tailnet-sshd-teardown`.
+
+The `op`-fails-fast property and the "honest cost" above are unchanged — :2222 is
+still a non-interactive ssh session with no unlocked 1Password.
+
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything

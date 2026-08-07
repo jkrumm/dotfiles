@@ -508,6 +508,54 @@ _setup-remote-access:
 	@echo "    ↳ Reachable only via Tailscale (tag:mac ACL). Ensure NO router WAN"
 	@echo "      port-forward exists for 22/5900."
 
+.PHONY: tailnet-sshd-setup tailnet-sshd-status tailnet-sshd-teardown
+# Userland sshd on the tailnet interface (:2222) that BYPASSES the MDM-managed
+# macOS Remote Login SACL. IT pins com.apple.access_ssh to `IT-Admin` and
+# re-drops johannes.krumm on every MDM check-in, so the mini's inbound ssh into
+# iumac (:22) authenticates the key then closes the session with no log line.
+# Apple's sshd enforces the SACL via pam_sacl.so under `UsePAM yes`; this one
+# runs `UsePAM no`, pubkey-only, as the login user in the GUI session, so the
+# group is never consulted (see tailnet-sshd/sshd_config.template).
+#
+# Opt-in per host (like remote-access/git-headless/batt-setup), MacBook-only: on
+# the mini (backend=cache) there is no such MDM and Tailscale SSH already serves
+# inbound. Needs the tcp:2222 grant in dotfiles-private/tailscale-acl.jsonc
+# (tag:mac -> tag:mac) pushed, or the connection times out with nothing logged.
+tailnet-sshd-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "cache" ]; then \
+		echo "  tailnet-sshd: backend is 'cache' (the mini) — not applicable, skipping."; exit 0; fi
+	@echo "  Userland tailnet sshd (:2222, MDM SACL bypass)..."
+	@$(MAKE) --no-print-directory authorized-keys
+	@if ! grep -qE '^(ssh-|restrict|command=|no-|from=)' "$(HOME)/.ssh/authorized_keys" 2>/dev/null; then \
+		echo "    ! aborted — no trusted keys in ~/.ssh/authorized_keys (nothing could connect)"; exit 1; fi
+	@chmod 700 "$(HOME)/.ssh" 2>/dev/null || true
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.tailnet-sshd" PLIST_DIR="$(DOTFILES_DIR)/tailnet-sshd"
+	@sleep 2
+	@$(MAKE) --no-print-directory tailnet-sshd-status
+	@echo "    ↳ ACL: ensure tcp:2222 is in the tag:mac->tag:mac grant"
+	@echo "      (dotfiles-private/tailscale-acl.jsonc → make tailscale-acl-push)"
+	@echo "    ↳ From the mini: ssh -p 2222 iumac (config/ssh_config pins Port 2222)"
+tailnet-sshd-status:
+	@if netstat -an 2>/dev/null | grep -q '127.0.0.1\.2222 .*LISTEN'; then \
+		echo "    ✓ sshd listening on 127.0.0.1:2222 (loopback — invisible to corp LAN)"; \
+	else \
+		echo "    ✗ sshd NOT on 127.0.0.1:2222 — see ~/Library/Logs/tailnet-sshd.err"; \
+	fi
+	@if /Applications/Tailscale.app/Contents/MacOS/Tailscale serve status 2>/dev/null | grep -q '127.0.0.1:2222'; then \
+		echo "    ✓ tailnet door: serve tcp:2222 -> 127.0.0.1:2222 (ACL tag:mac->tag:mac)"; \
+	else \
+		echo "    ✗ tailnet door missing — 'tailscale serve --bg --tcp 2222 tcp://127.0.0.1:2222'"; \
+	fi
+tailnet-sshd-teardown:
+	@DST="$(LAUNCHAGENTS)/com.jkrumm.tailnet-sshd.plist"; \
+	launchctl unload "$$DST" 2>/dev/null || true; \
+	rm -f "$$DST" && echo "  ✓ tailnet-sshd agent unloaded + removed" || true
+	@/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --tcp 2222 off 2>/dev/null \
+		&& echo "  ✓ serve door tcp:2222 removed" || echo "  · no serve door to remove"
+	@echo "  · host key + rendered config kept in ~/.config/tailnet-sshd (rm -rf to purge)"
+
 .PHONY: git-headless _setup-git-headless
 # Headless GitHub *and GitLab* pushes for the Mac mini — opt-in, NOT in the
 # default `setup` chain (mirrors remote-access/batt-setup: a deliberate per-host

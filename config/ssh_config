@@ -61,6 +61,10 @@ Host mini
 # original Tailscale device name today.
 Host iumac
     HostName iumac
+    # :2222 is the userland sshd that bypasses iumac's MDM Remote Login SACL
+    # (com.apple.access_ssh, pinned to IT-Admin). The system sshd on :22 accepts
+    # the key then closes the session. See dotfiles/tailnet-sshd/.
+    Port 2222
     User johannes.krumm
     IdentityFile ~/.ssh/id_ed25519_iumac
     IdentitiesOnly yes
