@@ -1782,7 +1782,7 @@ to neutralise it.
 - Theme files: copied (not symlinked) to `~/.config/ghostty/themes/` — cmux has a bug where it skips symlinked theme files
 - Claude Code: `c()` in `claude.zsh` writes `theme` key to `~/.claude.json` via `jq` on each launch
 
-## The look: One Zinc terminal, One Dark/Tokyo Night Day herdr chrome
+## The look: One Zinc terminal, One Dark/Catppuccin Latte herdr chrome
 
 Three programs paint one screen and none of them can see the other two. herdr
 paints its **chrome** (sidebar, borders, tab row) from its own built-in theme;
@@ -1796,7 +1796,7 @@ Applying only one layer is how they drift apart.
 | Layer | File | Setting |
 |-|-|-|
 | Terminal | `config/ghostty/config.appsupport` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
-| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "tokyo-night-day"` |
+| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
 **One Zinc = Atom One's hues, muted to ~72% saturation, on basalt-ui's zinc
@@ -1815,7 +1815,7 @@ workspaces, one focused, per theme, not assumed:
 |-|-|-|
 | `one-dark` | bg `#282C34`, fg `#ABB2BF`, **bold** | no bg, fg `#969CA8`, regular |
 | `one-light` | bg `#F5F5F6`, fg `#383A42`, **bold** | no bg, fg `#686B77`, regular |
-| `tokyo-night-day` | bg `#D2D3DA`, fg `#3760BF`, **bold** | no bg, fg `#6172B0`, regular |
+| `catppuccin-latte` | bg `#E6E9EF`, fg `#4C4F69`, **bold** | no bg, fg `#6C6F85`, regular |
 
 Six decisions that are not taste:
 
@@ -1826,20 +1826,24 @@ Six decisions that are not taste:
   was the only cue and drove the terminal to `#09090b` to maximise that one
   ratio.** That is where the black-black terminal came from. Verify with a pty
   capture before trading anything else away for it.
-- **Light mode is `tokyo-night-day`, not `one-light`, and that is the whole
-  pairing.** one-light's `surface_dim` is `#F5F5F6`: against the one-zinc-light
-  terminal (`#f2f2f5`) that is **1.03** — the row is painted and invisible, so
-  light mode was running on bold alone. Dark survives the same weakness (1.17)
-  because a dark block on a near-black terminal still reads; a near-white block
-  on a near-white terminal does not. Every light theme herdr ships, focused-row
-  `surface_dim` vs `#f2f2f5`: `kanagawa-lotus` #d5cea3 **1.43**,
-  `tokyo-night-day` #d2d3da **1.34**, `gruvbox-light` #f2e5bc 1.12,
-  `solarized-light` #eee8d5 1.10, `catppuccin-latte` #e6e9ef 1.09,
-  `rose-pine-dawn` #f2e9e1 1.07, `one-light` #f5f5f6 1.03. kanagawa-lotus is the
-  higher number and was **rejected on hue** — warm beige on zinc is a different
-  mistake, not a smaller one. The cost of the switch is that light mode leaves
-  the Atom One family, and the row label drops from 10.41 to 3.92 on its own
-  highlight (still legible; unfocused rows are unchanged at 4.14 vs 4.75).
+- **Light mode is `catppuccin-latte`, and it is a taste call made *against* the
+  numbers** — do not later read it as the measured optimum. one-light's
+  `surface_dim` is `#F5F5F6`: against the one-zinc-light terminal (`#f2f2f5`)
+  that is **1.03**, so the focused row is painted and invisible and light mode
+  runs on bold alone. Dark survives the same weakness (1.17) because a dark
+  block on a near-black terminal still reads; a near-white block on a near-white
+  terminal does not. Every light theme herdr ships, focused row vs `#f2f2f5`
+  (and the row label's contrast on it): `kanagawa-lotus` #d5cea3 **1.43**/4.66,
+  `tokyo-night-day` #d2d3da **1.34**/3.92, `gruvbox-light` #f2e5bc 1.12/9.23,
+  `solarized-light` #eee8d5 1.10/3.64, `catppuccin-latte` #e6e9ef 1.09/6.57,
+  `rose-pine-dawn` #f2e9e1 1.07/7.92, `one-light` #f5f5f6 1.03/10.41. Latte
+  therefore does **not** fix the invisible row — it is one-light's problem in
+  lavender — but it keeps labels near-neutral, where tokyo-night-day's `#3760BF`
+  turns every one blue and contradicts the no-blue-cast premise, and
+  kanagawa-lotus puts warm beige on cool zinc. Only those two actually separate
+  the row, and each costs a hue. **Dark stays `one-dark`**: pairing latte with
+  its own mocha would be a regression, mocha's `#1e1e2e` against the `#1f1f23`
+  terminal being 1.00 — the row vanishing outright rather than being subtle.
 - **`[theme.custom]` cannot fix this per-mode.** herdr does expose the sidebar
   colours (`panel_bg`, `surface0/1`, `surface_dim`, `overlay0/1`, `accent`,
   `text`, `subtext0`, `mauve`, `green`, `yellow`, `red`, `blue`, `teal`, `peach`)
