@@ -228,9 +228,13 @@ linewatch.test {
 # Tailnet-only by design: the vault carries private health data and there is
 # deliberately no auth layer, so the tailnet ACL is the whole perimeter. The
 # mini's automatic `brain.mini.jkrumm.com` door is how the iPhone reaches it.
+# Port 7733, not 7732: 7732 is already claimed by linewatch/web's Vite dev
+# script (`npx kill-port 7732 && vite --port 7732 --strictPort`) — a genuine
+# double-booking caught 2026-08-08. 7733 is free and inside the tailnet ACL's
+# tcp:7700-7799 grant.
 brain.test {
 	import local
-	reverse_proxy localhost:7732
+	reverse_proxy localhost:7733
 }
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/

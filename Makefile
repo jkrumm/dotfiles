@@ -896,6 +896,27 @@ brain-backup-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ brain-backup torn down (unloaded + plist removed)"
 
+# Content-refresh for the brain vault reader (~/SourceRoot/basalt-ui-obsidian,
+# served as the always-on `brain-web` container on the mini). Downstream of
+# brain-sync above: this polls the vault's git HEAD every 5 minutes and only
+# rebuilds the reader's static site (`make refresh`) when it moved — it never
+# touches the container, since nginx bind-mounts dist/ read-only. Self-guards
+# on a missing vault or a missing basalt-ui-obsidian checkout.
+.PHONY: brain-web-refresh-setup brain-web-refresh-teardown
+brain-web-refresh-setup:
+	@if [ ! -d "$(HOME)/SourceRoot/brain/.git" ]; then \
+		echo "  brain-web-refresh: no git vault at ~/SourceRoot/brain — skipping."; exit 0; fi
+	@if [ ! -d "$(HOME)/SourceRoot/basalt-ui-obsidian" ]; then \
+		echo "  brain-web-refresh: no checkout at ~/SourceRoot/basalt-ui-obsidian — skipping."; exit 0; fi
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.brain-web-refresh" PLIST_DIR="$(DOTFILES_DIR)/brain-web"
+	@echo "    ↳ every 300s → rebuild apps/demo/dist when the vault's HEAD moves; log: ~/Library/Logs/brain-web-refresh.log"
+brain-web-refresh-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-web-refresh.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ brain-web-refresh torn down (unloaded + plist removed)"
+
 .PHONY: _setup-rules
 _setup-rules:
 	@echo "  Rules (global → ~/.claude/rules/)..."
@@ -2825,6 +2846,8 @@ help:
 	@echo "  make brain-sync-teardown      Unload + remove the brain-sync LaunchAgent"
 	@echo "  make brain-backup-setup       Load the nightly (03:30) brain vault leftover-dirt sweep"
 	@echo "  make brain-backup-teardown    Unload + remove the brain-backup LaunchAgent"
+	@echo "  make brain-web-refresh-setup      Load the 5-minute brain-web content refresh (rebuilds dist/ when the vault's HEAD moves)"
+	@echo "  make brain-web-refresh-teardown   Unload + remove the brain-web-refresh LaunchAgent"
 	@echo ""
 	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
 	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"

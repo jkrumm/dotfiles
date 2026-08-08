@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.brain-web-refresh</string>
+  <!-- Content refresh for the brain vault reader (basalt-ui-obsidian's
+       `brain-web` container). Polls the vault's git HEAD every 5 minutes and
+       rebuilds the reader's static site (`make refresh`) only when it moved
+       — downstream of brain-sync (com.jkrumm.brain-sync), which is what
+       actually moves that HEAD. Never touches the container: nginx bind-
+       mounts dist/ read-only, so a fresh build is live on its next request
+       with no restart. See brain-web-refresh.sh. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/SourceRoot/dotfiles/brain-web/brain-web-refresh.sh</string>
+  </array>
+  <!-- Every 5 minutes, same cadence as brain-sync — a no-op tick (HEAD
+       unchanged) costs one `git rev-parse` and nothing else. -->
+  <key>StartInterval</key><integer>300</integer>
+  <!-- Fire on load so a reboot or a `make brain-web-refresh-setup` closes any
+       gap immediately instead of leaving up to 5 minutes of stale content.
+       Safe to repeat: every path in the script is idempotent and
+       self-guarding. -->
+  <key>RunAtLoad</key><true/>
+  <!-- launchd hands agents a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
+       `make refresh` shells out to `bun`, which is Homebrew-managed on this
+       machine — pointing ProgramArguments at bun directly instead of this
+       script is exactly the mistake already paid for on the opbackup/collie
+       agents: macOS Background Task Management denies a raw Homebrew binary
+       as the entry point and silently downgrades the agent to
+       `[enabled, disallowed]`, skipping RunAtLoad. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- ~/Library/Logs, never /tmp — same reasoning as brain-sync's plist:
+       /tmp is world-writable and macOS's periodic cleanup deletes files
+       there untouched for 3+ days, and launchd opens this path once at
+       spawn, so a swept file costs at most one tick's lines, not every line
+       until the next reboot (this agent, like brain-sync, spawns fresh every
+       300s rather than holding one fd open). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/brain-web-refresh.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/brain-web-refresh.log</string>
+</dict>
+</plist>
