@@ -223,6 +223,16 @@ linewatch.test {
 	reverse_proxy localhost:7731
 }
 
+# brain — the Obsidian vault reader (basalt-ui-obsidian demo app). Reads
+# ~/SourceRoot/brain at build time and serves it as an offline-first PWA.
+# Tailnet-only by design: the vault carries private health data and there is
+# deliberately no auth layer, so the tailnet ACL is the whole perimeter. The
+# mini's automatic `brain.mini.jkrumm.com` door is how the iPhone reaches it.
+brain.test {
+	import local
+	reverse_proxy localhost:7732
+}
+
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
 # https://audio-gateway.jkrumm.com/v1 instead. Kept commented for an easy
