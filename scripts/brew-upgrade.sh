@@ -311,6 +311,26 @@ else
   echo "  · colima brew service not registered here — skipping boot-path assertion"
 fi
 
+# herdr, same trap in a different plist: `brew upgrade herdr` regenerates
+# homebrew.mxcl.herdr.plist from the formula and strips the session-leader
+# wrapper. Nothing errors — the server comes up fine and only the next `desk`
+# launch starts asking "restart the remote server now? [y/N]" again, which
+# reads as a herdr quirk rather than as a reverted config. Asserted wherever
+# the service is registered, gated on the plist like colima's.
+HERDR_PLIST="$HOME/Library/LaunchAgents/homebrew.mxcl.herdr.plist"
+HERDR_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/herdr/herdr-server-start.py"
+if [[ -f "$HERDR_PLIST" ]]; then
+  program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$HERDR_PLIST" 2>/dev/null) || program=""
+  if [[ "$program" == "$HERDR_WRAPPER" ]]; then
+    echo "  ✓ herdr: session-leader boot path intact"
+  else
+    echo "  ✗ herdr: boot path reverted by the upgrade — ProgramArguments:0='${program:-unreadable}' (fix: make _herdr-supervise, then make herdr-restart YES=1)"
+    assertion_failed=1
+  fi
+else
+  echo "  · herdr brew service not registered here — skipping boot-path assertion"
+fi
+
 pinned_after=$(brew list --pinned 2>/dev/null) || true
 for f in "${HELD[@]}"; do
   brew list --formula --versions "$f" >/dev/null 2>&1 || continue

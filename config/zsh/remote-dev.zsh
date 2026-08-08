@@ -40,11 +40,18 @@ dev() {
 # the mini either way — this is a client-experience choice, not a persistence
 # one.
 #
-# Note it will ask "restart the remote server now? [y/N]", warning the server
-# "may not survive SSH connection loss". Answer N. That is a false positive
-# here: the server is the brew service under launchd (PPID 1), which no ssh
-# disconnect can reach. Answering y restarts it OUTSIDE brew services and kills
-# every process in every pane.
+# It used to ask "restart the remote server now? [y/N]" on EVERY launch, and
+# the only correct answer was N — y restarts the server outside brew services
+# and kills every process in every pane. Root cause, measured rather than
+# guessed: herdr derives `detached_server_daemon` from `getsid(0) == getpid()`,
+# and a launchd job is not a session leader (the mini's server ran pid 671,
+# pgid 671, sid 1). The warning is true as asked and false as meant — launchd
+# owns the job and no ssh disconnect can reach it.
+#
+# Fixed by herdr/herdr-server-start.py, which forks + setsid()s before exec'ing
+# the server; `make _herdr-supervise` pins it into the brew plist and
+# `brew-upgrade.sh` asserts it (brew regenerates that plist silently). If the
+# prompt ever comes back, that assertion is what to run — and still answer N.
 desk() {
   local session="${1:-}"
   local -a args=(--remote mini)

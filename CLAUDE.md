@@ -505,8 +505,29 @@ reason to prefer herdr over tmux. It then starts the **server only on the dev
 host**, detected by the `cache` backend marker, the same signal `git-headless`
 uses; a thin client gets the hook and no server.
 
-Two non-obvious constraints, both load-bearing:
+Three non-obvious constraints, all load-bearing:
 
+- The server must start as a **session leader**, via
+  `herdr/herdr-server-start.py` pinned into the brew plist by
+  `_herdr-supervise`. herdr derives `detached_server_daemon` from
+  `getsid(0) == getpid()`, and a launchd job is not one — measured on the mini:
+  pid 671, pgid 671, **sid 1**. Every `desk` launch therefore asked *"the remote
+  server was started by a herdr build that may not survive SSH connection loss …
+  restart the remote server now? [y/N]"*, where the only correct answer was N
+  forever, because `y` restarts the server outside brew services and destroys
+  every pane. The warning is true as asked and false as meant: launchd owns the
+  job. setsid(2) fails with EPERM for a process-group leader — exactly what
+  launchd hands over — so the wrapper forks and calls it in the child. A/B
+  proven against an isolated server started in the launchd process shape:
+  `detached_server_daemon` false without it, true with it. **`brew upgrade
+  herdr` and every `brew services start/restart` regenerate that plist and strip
+  the wrapper silently** (colima's trap, different file); `brew-upgrade.sh`
+  asserts it, and the prompt coming back is the symptom. Applying it to the
+  *running* server is `make herdr-restart YES=1` — bootout + bootstrap, never
+  `brew services restart` (regenerates the plist on the way up) and never
+  `launchctl kickstart -k` (restarts from the cached job definition). It **kills
+  every pane**, so it is a deliberate, human-timed command, never part of
+  `make setup`.
 - The hook's settings entry lives in **`config/settings.template.json`**, not
   just wherever herdr wrote it. `make setup` merges settings.json with the
   template winning on `hooks`, so an entry added only by `herdr integration
@@ -1761,7 +1782,7 @@ to neutralise it.
 - Theme files: copied (not symlinked) to `~/.config/ghostty/themes/` — cmux has a bug where it skips symlinked theme files
 - Claude Code: `c()` in `claude.zsh` writes `theme` key to `~/.claude.json` via `jq` on each launch
 
-## The look: One Zinc terminal, One Dark/One Light herdr chrome
+## The look: One Zinc terminal, One Dark/Tokyo Night Day herdr chrome
 
 Three programs paint one screen and none of them can see the other two. herdr
 paints its **chrome** (sidebar, borders, tab row) from its own built-in theme;
@@ -1775,7 +1796,7 @@ Applying only one layer is how they drift apart.
 | Layer | File | Setting |
 |-|-|-|
 | Terminal | `config/ghostty/config.appsupport` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
-| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "one-light"` |
+| herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "tokyo-night-day"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
 **One Zinc = Atom One's hues, muted to ~72% saturation, on basalt-ui's zinc
@@ -1794,26 +1815,59 @@ workspaces, one focused, per theme, not assumed:
 |-|-|-|
 | `one-dark` | bg `#282C34`, fg `#ABB2BF`, **bold** | no bg, fg `#969CA8`, regular |
 | `one-light` | bg `#F5F5F6`, fg `#383A42`, **bold** | no bg, fg `#686B77`, regular |
+| `tokyo-night-day` | bg `#D2D3DA`, fg `#3760BF`, **bold** | no bg, fg `#6172B0`, regular |
 
-Five decisions that are not taste:
+Six decisions that are not taste:
 
 - **The focused row has three cues, not one** — background, brighter foreground,
-  and bold. The sidebar is never painted in either theme, so that background
-  lands on the *terminal's* background, but because it is one cue of three it is
-  allowed to be subtle: currently 1.17 dark, 1.03 light. **An earlier revision
-  believed the background was the only cue and drove the terminal to `#09090b` to
-  maximise that one ratio.** That is where the black-black terminal came from.
-  Verify with a pty capture before trading anything else away for it.
+  and bold. The sidebar is never painted in any theme, so that background lands
+  on the *terminal's* background, but because it is one cue of three it is
+  allowed to be subtle: 1.17 dark. **An earlier revision believed the background
+  was the only cue and drove the terminal to `#09090b` to maximise that one
+  ratio.** That is where the black-black terminal came from. Verify with a pty
+  capture before trading anything else away for it.
+- **Light mode is `tokyo-night-day`, not `one-light`, and that is the whole
+  pairing.** one-light's `surface_dim` is `#F5F5F6`: against the one-zinc-light
+  terminal (`#f2f2f5`) that is **1.03** — the row is painted and invisible, so
+  light mode was running on bold alone. Dark survives the same weakness (1.17)
+  because a dark block on a near-black terminal still reads; a near-white block
+  on a near-white terminal does not. Every light theme herdr ships, focused-row
+  `surface_dim` vs `#f2f2f5`: `kanagawa-lotus` #d5cea3 **1.43**,
+  `tokyo-night-day` #d2d3da **1.34**, `gruvbox-light` #f2e5bc 1.12,
+  `solarized-light` #eee8d5 1.10, `catppuccin-latte` #e6e9ef 1.09,
+  `rose-pine-dawn` #f2e9e1 1.07, `one-light` #f5f5f6 1.03. kanagawa-lotus is the
+  higher number and was **rejected on hue** — warm beige on zinc is a different
+  mistake, not a smaller one. The cost of the switch is that light mode leaves
+  the Atom One family, and the row label drops from 10.41 to 3.92 on its own
+  highlight (still legible; unfocused rows are unchanged at 4.14 vs 4.75).
 - **`[theme.custom]` cannot fix this per-mode.** herdr does expose the sidebar
   colours (`panel_bg`, `surface0/1`, `surface_dim`, `overlay0/1`, `accent`,
   `text`, `subtext0`, `mauve`, `green`, `yellow`, `red`, `blue`, `teal`, `peach`)
   — the focused row is `surface_dim` — but it is a **single global block applied
   to whichever theme is active**, so it cannot hold one value for light and
-  another for dark. No single colour is a highlight on both a dark and a light
-  canvas. That is why the *terminal* background, which ghostty does switch per
-  mode, stays the differentiator.
+  another for dark. That "no single colour works on both canvases" is now
+  measured rather than asserted, and it holds for the opposite reason to the one
+  implied: sweeping every grey, the best worst-case is `#707076`, which makes the
+  *row* far more visible than either theme manages (3.34 / 4.40 against 1.17 /
+  1.03) while collapsing the row's own **label** from 6.57 / 10.41 to 2.30 — the
+  focused row becomes the least legible line in the sidebar. Worse trade. So the
+  terminal background, which ghostty switches per mode, stays the differentiator.
 - **`nord`, `dracula` and `vesper` are not options** — herdr ships no light
-  sibling for any of them, so `auto_switch` has nothing to switch to.
+  sibling for any of them, so `auto_switch` has nothing to switch to. The pairs
+  that do exist: one-dark/one-light, tokyo-night/tokyo-night-day,
+  catppuccin/catppuccin-latte, gruvbox/gruvbox-light, solarized/solarized-light,
+  kanagawa/kanagawa-lotus, rose-pine/rose-pine-dawn. `dark_name` and `light_name`
+  need not be siblings — that is what makes the pairing above possible.
+- **`desk` does follow the MacBook's appearance; `dev` cannot.** The switch runs
+  on DEC mode 2031 and the report is read by whichever herdr process talks to a
+  real terminal. On `desk` the client forwards raw stdin bytes
+  (`ClientMessage::Input`) and the *server* parses them — the structured
+  `InputEvents` path, which drops the colour-scheme event, is for Windows clients
+  only — and cmux volunteers the report (it is libghostty, carrying
+  `ghostty_surface_set_color_scheme`). On `dev`, mosh swallows the enable, so the
+  static `name = "one-dark"` fallback is what you get. herdr 0.8.0 additionally
+  forwards live 2031 updates *into panes*, so an agent in a pane follows the Mac
+  too.
 - **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
   which is the obvious-looking choice. It emits only basic ANSI codes there, so
   palette 8 would have to serve as both the row highlight and the comment gray;

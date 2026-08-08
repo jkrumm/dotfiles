@@ -2276,6 +2276,7 @@ herdr-setup:
 	else \
 		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
 	fi
+	@$(MAKE) --no-print-directory _herdr-supervise
 	@# One-shot migration off herdr-notes (retired 2026-08-04). Idempotent and
 	@# self-deleting: once the plugin is gone this is a single `plugin list` that
 	@# prints nothing, exactly like the collie legacy-agent migration above it.
@@ -2303,6 +2304,83 @@ herdr-setup:
 	@herdr server reload-config >/dev/null 2>&1 \
 		&& echo "    ✓ config.toml reloaded into the running server" \
 		|| echo "    · no running server to reload (config applies on next launch)"
+
+# Converge homebrew.mxcl.herdr.plist so the server starts as a SESSION LEADER.
+# Same shape, same trap and same reason as _colima-supervise: BREW REGENERATES
+# THIS PLIST on every `brew services start/restart` and every `brew upgrade
+# herdr`, silently.
+#
+# WHAT IT FIXES. Every `desk` launch asked "restart the remote server now?
+# [y/N]" — and the only correct answer was N, forever, because y restarts the
+# server outside brew services and kills every pane. herdr reports
+# `detached_server_daemon` from `getsid(0) == getpid()`, and a launchd job is
+# not a session leader (measured on the mini: pid 671, pgid 671, **sid 1**), so
+# the remote client refuses to attach quietly. The warning is true as asked and
+# false as meant: launchd owns the job and no ssh disconnect can reach it.
+#
+# The wrapper forks and calls setsid() in the child because setsid(2) fails
+# with EPERM for a process-group leader, which is exactly what launchd hands
+# over — full reasoning in herdr/herdr-server-start.py. Proven by A/B against
+# an isolated server started in the launchd process shape:
+# `detached_server_daemon` false without it, true with it.
+#
+# Deliberately does NOT restart the service, for a harder reason than colima's:
+# restarting herdr does not bounce a VM, it DESTROYS every pane and every agent
+# running in one. A `make setup` may never do that on its own.
+.PHONY: _herdr-supervise
+_herdr-supervise:
+	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
+	WRAP="$(DOTFILES_DIR)/herdr/herdr-server-start.py"; \
+	if [ ! -f "$$PLIST" ]; then \
+		echo "    · herdr brew service not registered here — nothing to supervise"; \
+	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ] \
+	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
+		echo "    · herdr session-leader boot path (ok)"; \
+	else \
+		chmod +x "$$WRAP"; \
+		/usr/libexec/PlistBuddy -c 'Delete :KeepAlive' "$$PLIST" >/dev/null 2>&1 || true; \
+		/usr/libexec/PlistBuddy -c 'Add :KeepAlive bool true' "$$PLIST" >/dev/null; \
+		/usr/libexec/PlistBuddy -c 'Delete :ProgramArguments' "$$PLIST" >/dev/null 2>&1 || true; \
+		/usr/libexec/PlistBuddy -c 'Add :ProgramArguments array' "$$PLIST" >/dev/null; \
+		/usr/libexec/PlistBuddy -c "Add :ProgramArguments:0 string $$WRAP" "$$PLIST" >/dev/null; \
+		plutil -lint "$$PLIST" >/dev/null || { echo "  ✗ herdr plist is malformed after edit"; exit 1; }; \
+		echo "    ✓ herdr session-leader boot path pinned (no more desk [y/N] prompt)"; \
+		echo "      ↳ active at the next boot, or now with: make herdr-restart (KILLS EVERY PANE)"; \
+	fi
+
+# The one command that applies a pinned boot path (or a herdr upgrade) to the
+# RUNNING server. Separate from herdr-setup and loudly named because it is
+# destructive in a way no other brew service here is: a herdr restart loses
+# every process in every pane — see CLAUDE.md "a herdr crash restores the
+# layout and loses every process running in it".
+#
+# NOT `brew services restart`, and not `launchctl kickstart -k`. Both would
+# come back on the OLD job definition: brew REGENERATES the plist as part of
+# restart (so the wrapper is stripped again on the way up), and kickstart
+# restarts from launchd's CACHED definition without re-reading the file at all
+# — the trap this repo already paid for with ai.hermes.gateway. Only
+# bootout + bootstrap reloads the file, and bootstrap fails with `Input/output
+# error` while the old job is still SIGTERMed, hence the wait loop.
+.PHONY: herdr-restart
+herdr-restart:
+	@if [ "$(YES)" != "1" ]; then \
+		echo "  This KILLS every pane and every agent running in one."; \
+		echo "  Check first:  rd agents"; \
+		echo "  Then run:     make herdr-restart YES=1"; \
+		exit 1; \
+	fi
+	@brew services start herdr >/dev/null 2>&1 || true
+	@$(MAKE) --no-print-directory _herdr-supervise
+	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; U=$$(id -u); \
+	launchctl bootout "gui/$$U/homebrew.mxcl.herdr" 2>/dev/null || true; \
+	i=0; while launchctl print "gui/$$U/homebrew.mxcl.herdr" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -gt 30 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
+		sleep 0.5; \
+	done; \
+	launchctl bootstrap "gui/$$U" "$$PLIST" || { echo "  ✗ bootstrap failed"; exit 1; }
+	@sleep 2
+	@herdr status --json 2>/dev/null | jq -r '"  ✓ server v" + .server.version + " · detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring) + " (false still prompts on desk)"' \
+		|| echo "  ! could not read herdr status"
 
 # Collie — phone web-UI control surface for the herd (herdr plugin + Bun
 # bridge). See CLAUDE.md "Collie — the phone control surface" for the full

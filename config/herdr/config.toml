@@ -48,11 +48,21 @@ onboarding = false
 # "black black" terminal came from. Do not reintroduce that trade.
 #
 # Also measured, and the reason there is no per-mode surface override below:
-# [theme.custom] is a SINGLE GLOBAL BLOCK. It applies to whichever theme is
-# active, so it cannot hold one value for light and another for dark. A row
-# highlight that works on both a dark and a light canvas does not exist as one
-# colour — hence the terminal background, which ghostty does switch per mode,
-# stays the differentiator.
+# [theme.custom] is a SINGLE GLOBAL BLOCK (herdr's ThemeConfig is
+# `{name, auto_switch, dark_name, light_name, custom}` — one `custom`, read out
+# of the 0.8.0 binary). It applies to whichever theme is active, so it cannot
+# hold one value for light and another for dark.
+#
+# "A row highlight that works on both canvases does not exist" was asserted
+# here for months. It is now MEASURED, and it holds — but for the opposite
+# reason to the one implied. Sweeping every grey for the best worst-case of
+# {row vs #1f1f23, row vs #f2f2f5, one-dark text on row, one-light text on
+# row}, the optimum is #707076 at 2.30. The row itself becomes far more
+# visible than either theme manages (3.34 / 4.40 against 1.17 / 1.03) — and
+# the row's own LABEL collapses from 6.57 / 10.41 to 2.30, i.e. the focused
+# row turns into the least legible line in the sidebar. That is a worse trade,
+# so the terminal background, which ghostty does switch per mode, stays the
+# differentiator.
 name = "one-dark"
 
 # Follow the host terminal's reported light/dark appearance. THE SIGNAL IS DEC
@@ -73,8 +83,16 @@ name = "one-dark"
 # WHICH MEANS THE ENTRY PATH DECIDES, because the two paths render in different
 # places and only one has a terminal in front of it:
 #
-#   desk (herdr --remote) → client renders ON THE MACBOOK, straight into
-#                           Ghostty. 2031 works; the theme follows the Mac.
+#   desk (herdr --remote) → the client reads the report straight from cmux and
+#                           FORWARDS IT AS RAW BYTES: on unix the client sends
+#                           `ClientMessage::Input { data }` and the SERVER
+#                           parses it (`InputEvents`, the structured path that
+#                           drops HostColorSchemeChanged, is for Windows
+#                           clients only). So the theme follows the Mac even
+#                           though the chrome is rendered on the mini. cmux
+#                           does volunteer the report — it is libghostty, and
+#                           carries ghostty_surface_set_color_scheme plus an
+#                           inline color_scheme_report path.
 #   dev  (mosh)           → client renders ON THE MINI. The enable has to cross
 #                           mosh to Ghostty and the report has to come back, and
 #                           mosh is a state-synchronizing emulator with its own
@@ -94,7 +112,36 @@ name = "one-dark"
 # #F5F5F6 instead of #282C34.
 auto_switch = true
 dark_name = "one-dark"
-light_name = "one-light"
+
+# LIGHT IS NOT one-light, AND THAT IS THE WHOLE POINT OF THIS PAIRING.
+# one-light's surface_dim is #f5f5f6 — against the one-zinc-light terminal
+# (#f2f2f5) that is a contrast of 1.03, i.e. the focused row is painted and
+# invisible, leaving bold + a brighter foreground as the only cues. Dark got
+# away with the same weakness (one-dark #282c34, 1.17) because #282c34 against
+# a near-black terminal still reads as a block; a near-white block on a
+# near-white terminal does not.
+#
+# Every light theme herdr ships, focused-row surface_dim vs #f2f2f5:
+#
+#   kanagawa-lotus    #d5cea3   1.43   warm beige — fights the zinc surfaces
+#   tokyo-night-day   #d2d3da   1.34   cool neutral grey
+#   gruvbox-light     #f2e5bc   1.12
+#   solarized-light   #eee8d5   1.10
+#   catppuccin-latte  #e6e9ef   1.09
+#   rose-pine-dawn    #f2e9e1   1.07
+#   one-light         #f5f5f6   1.03   (was here)
+#
+# tokyo-night-day wins on the only two axes that matter together: it is the
+# best of the cool-neutral options, so it sits on a zinc surface without a
+# colour cast, and it is 1.34 rather than 1.03. kanagawa-lotus is the higher
+# number and was rejected on hue — beige on zinc is a different mistake, not a
+# smaller one. The cost is that light mode no longer shares one-dark's Atom One
+# hues; its row LABEL also drops from 10.41 to 3.92 on the highlight, which is
+# still comfortably legible, and unfocused rows are unchanged (subtext 4.14 vs
+# one-light's 4.75).
+#
+# Revert is this one line. `light_name = "one-light"` restores the matched pair.
+light_name = "tokyo-night-day"
 
 [ui]
 # Tuned for MANY workspaces. Everything here is a departure from a default that
