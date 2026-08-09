@@ -11,13 +11,35 @@
 # skill edits apply without publishing — a no-op in repos without them. Workspace
 # detection lives in skills themselves (e.g. SourceRoot/IuRoot 1Password routing).
 
+# Pin Claude Code's own theme to `auto` — its enum is
+# ["auto","dark","light","light-daltonized","dark-daltonized","light-ansi",
+# "dark-ansi"] and auto is labelled "(match terminal)": it asks the terminal
+# for its colour scheme and re-themes live when that changes.
+#
+# THIS REPLACED A `defaults read -g AppleInterfaceStyle` GUESS, and the guess
+# was reading the wrong machine. An agent runs on the headless mini and is
+# looked at from the MacBook, so the mini's appearance decided how the
+# MacBook's terminal rendered — light-mode MacBook, dark-themed Claude Code,
+# near-white text on a near-white background. The terminal is the only party
+# that knows, and `auto` is the only value that asks it.
+#
+# There is no `auto-ansi`, so this gives up the ANSI-only palette the old
+# `*-ansi` values pinned. Correct polarity beats palette purity: the failure it
+# replaces was unreadable text, not a slightly-off hue.
+#
+# It CONVERGES rather than writes. ~/.claude.json is also written by every
+# running Claude Code session, so the old unconditional rewrite-per-launch
+# could clobber a concurrent update; and the temp file is a sibling, because
+# mv across filesystems is not atomic.
+_claude_theme_auto() {
+  [[ -f ~/.claude.json ]] || return 0
+  [[ "$(jq -r '.theme // ""' ~/.claude.json 2>/dev/null)" == "auto" ]] && return 0
+  jq '.theme = "auto"' ~/.claude.json > ~/.claude.json.tmp \
+    && mv ~/.claude.json.tmp ~/.claude.json
+}
+
 c() {
-  # Auto-sync Claude Code theme with macOS appearance (no "system" theme exists)
-  local appearance claude_theme
-  appearance=$(defaults read -g AppleInterfaceStyle 2>/dev/null)
-  [[ "$appearance" == "Dark" ]] && claude_theme="dark-ansi" || claude_theme="light-ansi"
-  jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
-    && mv /tmp/.claude.json.tmp ~/.claude.json
+  _claude_theme_auto
 
   # Local Claude Code plugin dev: load any plugins this repo ships under
   # plugins/*/.claude-plugin live from disk, so SKILL.md edits apply without
@@ -37,11 +59,7 @@ c() {
 # Same as `c` (Max subscription, same config dir) but starts on Fable instead
 # of whatever /model last left the session on.
 cf() {
-  local appearance claude_theme
-  appearance=$(defaults read -g AppleInterfaceStyle 2>/dev/null)
-  [[ "$appearance" == "Dark" ]] && claude_theme="dark-ansi" || claude_theme="light-ansi"
-  jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
-    && mv /tmp/.claude.json.tmp ~/.claude.json
+  _claude_theme_auto
 
   local -a plugin_args=()
   local git_root pdir
@@ -62,11 +80,7 @@ cf() {
 # of whatever /model last left the session on — for when Opus is the default
 # and this particular chat doesn't need it. `cs --model opus` overrides back.
 cs() {
-  local appearance claude_theme
-  appearance=$(defaults read -g AppleInterfaceStyle 2>/dev/null)
-  [[ "$appearance" == "Dark" ]] && claude_theme="dark-ansi" || claude_theme="light-ansi"
-  jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
-    && mv /tmp/.claude.json.tmp ~/.claude.json
+  _claude_theme_auto
 
   local -a plugin_args=()
   local git_root pdir
@@ -137,11 +151,7 @@ ca() {
     return 1
   fi
 
-  local appearance claude_theme
-  appearance=$(defaults read -g AppleInterfaceStyle 2>/dev/null)
-  [[ "$appearance" == "Dark" ]] && claude_theme="dark-ansi" || claude_theme="light-ansi"
-  jq --arg t "$claude_theme" '.theme = $t' ~/.claude.json > /tmp/.claude.json.tmp \
-    && mv /tmp/.claude.json.tmp ~/.claude.json
+  _claude_theme_auto
 
   local -a plugin_args=()
   local git_root pdir
