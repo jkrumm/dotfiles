@@ -10,7 +10,7 @@ Interact with the private knowledge base at `~/SourceRoot/brain` (`jkrumm/brain`
 Two layers, two physical trees:
 
 - **Agentic knowledge — `wiki/`.** A top-level, domain-organized tree (e.g. `wiki/health/peptides/`) of atomic, terse, **English**, cross-linked concept notes agents read and write by traversal. **Strict** discipline: `type` + `description` frontmatter, `[[wikilinks]]` that resolve, a per-level `index.md` MOC.
-- **Curated human surface — `Projects`, `Areas`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human. There is no PARA `Resources` tier — reference material is a `wiki/` concept note or a page under an Area.
+- **Curated human surface — `Projects`, `Areas`.** The pages the user reads and writes (Area/Project folder notes as overviews, plus human pages), any language, that link *down* into `wiki/` for depth. **Light** discipline: dead links fail and folder notes act as MOCs — no `type`/`description`, and `status` is the user's free field. Light governs schema, not upkeep — a curated page is still rewritten, not accreted (see "Curated pages are rewritten, not appended" below). A page may be distilled from `wiki/` via `/distill`; the voice pass and publish decision are always human. There is no PARA `Resources` tier — reference material is a `wiki/` concept note or a page under an Area.
 
 `Inbox` keeps a loose capture schema (`title`/`date`/`tags`) and is excluded from lint/MOC checks.
 
@@ -40,6 +40,16 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 - Run `node .scripts/vault-lint.mjs` before committing; 0 errors required. Passing is necessary, not sufficient — judgment stays human.
 
 Curating a **human page** (`Projects`/`Areas`) is lighter: no forced schema, link *down* into `wiki/` rather than duplicating detail, keep links resolving, and prefer editing the existing folder note over adding a new page. When adding a subfolder that will hold more than one note, create its folder note (`{foldername}.md`) in the same write — see the vault's `AGENTS.md` → Reserved filenames; a pure attachment/spec bucket already covered by the parent's folder note doesn't need one.
+
+### Curated pages are rewritten, not appended
+
+A curated page (`Areas/`, `Projects/`) is rewritten, never appended. Anything dated — a status line, a `Nachtrag`, a rejected option, a decision log — belongs in `wiki/` or nowhere; adding it to the bottom of a curated page is the tell that it's the wrong layer.
+
+The alternative: write a `wiki/` note that absorbs the detail and history, and link down to it from the curated page.
+
+Why the asymmetry: `wiki/` is atomic and reached by traversal, so detail there costs nothing; a curated page is read top-to-bottom, so every stale line costs the reader.
+
+`node .scripts/vault-lint.mjs --drift` reports the mechanically detectable tells (dated headings, stale status lines, wiki frontmatter in the wrong tree, over-length pages, blocks repeated across files) — necessary, not sufficient; voice, stale framing, and "this restates a wiki note" stay human judgment.
 
 ## How to capture
 
