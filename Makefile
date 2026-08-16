@@ -2146,7 +2146,7 @@ opbackup-setup:
 	done; \
 	if [ -n "$$MISSING" ]; then echo "  ✗ missing on PATH:$$MISSING"; exit 1; fi; \
 	echo "  ✓ op, age, uv, rsync present"
-	@chmod +x $(DOTFILES_DIR)/scripts/opbackup-auto.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(DOTFILES_DIR)/scripts/opbackup-seed-auto.sh
 	@bash $(DOTFILES_DIR)/scripts/opbackup-auto.sh --seed-stamp
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.opbackup" PLIST_DIR="$(DOTFILES_DIR)/scripts"

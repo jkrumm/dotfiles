@@ -26,6 +26,10 @@
 # a nag and you learn to dismiss 1Password dialogs — the exact habit that makes
 # automating this a net security LOSS rather than a gain.
 #
+# The same hourly agent also runs opbackup-seed-auto.sh. That guard checks the
+# remote Mac mini cache independently (default max age 5 days), so a fresh full
+# vault backup cannot suppress a due secrets-cache reseed.
+#
 # Every precondition below is ordered cheapest-first and exits 0, not 1: a
 # skipped run is the normal case, not a failure, and launchd should not see it
 # as one.
@@ -39,7 +43,9 @@ ATTEMPT_STAMP="$STAMP_DIR/last-attempt"
 MAX_AGE_DAYS="${OPBACKUP_MAX_AGE_DAYS:-5}"
 RETRY_HOURS="${OPBACKUP_RETRY_HOURS:-6}"
 BACKUP_SCRIPT="${OPBACKUP_SCRIPT:-$HOME/SourceRoot/dotfiles/scripts/backup-1password.py}"
+SEED_AUTO_SCRIPT="${OPBACKUP_SEED_AUTO_SCRIPT:-$HOME/SourceRoot/dotfiles/scripts/opbackup-seed-auto.sh}"
 REMOTE_HOST="${OPBACKUP_REMOTE_HOST:-homelab}"
+SEED_FAILED=0
 
 FORCE=0
 SEED_ONLY=0
@@ -53,7 +59,13 @@ done
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') opbackup: $*"; }
 
-skip() { log "skip — $*"; exit 0; }
+skip() {
+	log "skip — $*"
+	if [ "$SEED_FAILED" -ne 0 ]; then
+		exit "$SEED_FAILED"
+	fi
+	exit 0
+}
 
 notify() {
 	# Best-effort. A LaunchAgent runs inside the Aqua session, so this reaches
@@ -99,6 +111,20 @@ if [ "$SEED_ONLY" -eq 1 ]; then
 	/usr/bin/touch -t "$(echo "$newest" | tr -d '-')1200" "$SUCCESS_STAMP"
 	log "seed — success stamp backdated to $newest"
 	exit 0
+fi
+
+# --- secrets-cache guard ---------------------------------------------------
+# This is deliberately separate from the full-vault freshness gate above:
+# either job being due is enough to justify one present-human run.
+if [ -x "$SEED_AUTO_SCRIPT" ]; then
+	if "$SEED_AUTO_SCRIPT"; then
+		:
+	else
+		SEED_FAILED=$?
+		log "secrets-cache seed failed (exit $SEED_FAILED); continuing with vault backup"
+	fi
+else
+	log "secrets-cache guard missing: $SEED_AUTO_SCRIPT"
 fi
 
 # --- preconditions ---------------------------------------------------------
@@ -147,6 +173,10 @@ if "$BACKUP_SCRIPT"; then
 	: > "$SUCCESS_STAMP"
 	log "done"
 	notify "1Password backup" "Complete — encrypted copy sent to $REMOTE_HOST."
+	if [ "$SEED_FAILED" -ne 0 ]; then
+		log "vault backup succeeded, but secrets-cache seed failed"
+		exit "$SEED_FAILED"
+	fi
 	exit 0
 fi
 
