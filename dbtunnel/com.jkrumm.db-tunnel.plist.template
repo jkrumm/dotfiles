@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.db-tunnel</string>
+  <!-- Persistent loopback forwards into the mini's dev databases, so any local
+       client (dbOSK, the mysql CLI, a one-off script) has a fixed endpoint that
+       is always there. Declared state lives in dbtunnel/tunnels.conf; that file
+       also carries the argument for why this is a forward rather than
+       `tailscale serve --tcp` or a Caddy route.
+       Installed on BOTH machines from the shared checkout — the script no-ops
+       on the mini, where the databases are already local. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/dbtunnel/db-tunnel.sh</string>
+  </array>
+  <!-- KeepAlive, not StartInterval: this agent supervises a long-lived process
+       rather than firing a periodic job. ssh runs in the foreground (never -f),
+       so the PID launchd watches is the tunnel itself — when the link dies,
+       ServerAliveInterval=15 x CountMax=3 makes ssh exit within ~45s and
+       launchd immediately re-dials. That is the whole reconnect story; no
+       autossh, no wrapper loop. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <!-- The mini being unreachable (asleep, off-network, tailnet down) is a
+       NORMAL state for a laptop, and ssh exits fast when it is. Without a
+       throttle launchd would respawn as fast as ConnectTimeout allows and fill
+       the log with failed dials. 30s is slow enough to stay quiet, fast enough
+       that reopening the lid reconnects before you have switched windows.
+       Note launchd's floor is 10s; this raises it deliberately. -->
+  <key>ThrottleInterval</key><integer>30</integer>
+  <!-- ~/Library/Logs, not /tmp — same reasoning as brain-sync: /tmp is
+       world-writable (symlink pre-creation) and macOS deletes files there after
+       3 idle days. This agent holds ONE fd open for the life of the tunnel, so
+       it does have the unlinked-inode caveat the interval agents avoid: a log
+       rotated out from under it goes to a deleted inode until the next respawn.
+       scripts/log-rotate.sh uses copytruncate, which is safe for exactly this
+       shape — do not switch it to a rename-based rotation. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/db-tunnel.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/db-tunnel.log</string>
+</dict>
+</plist>

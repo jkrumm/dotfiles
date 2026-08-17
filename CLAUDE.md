@@ -730,6 +730,49 @@ herdr layers its own ssh hardening on top for `--remote` only
 per-attach control socket. The repo's `ControlMaster` still earns its place;
 it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
 
+### Database access — MacBook → mini (`make db-tunnel-setup`)
+
+The mini's dev databases bind `127.0.0.1` in their compose files, so a GUI client
+on the MacBook needs a forward. `com.jkrumm.db-tunnel` is a `KeepAlive`
+LaunchAgent holding one long-lived `ssh -N` with every declared `-L`; declared
+state is `dbtunnel/tunnels.conf`, applied by `make db-tunnel-setup`, probed by
+`make db-tunnel-status`. **Local ports are the real port + 30000** (33306, 36379)
+because this machine runs its *own* copy of the same stack — a forward on 3306
+would either fail to bind or silently shadow the local database.
+
+**Not `tailscale serve --tcp`, and the reason is the same one the collie row
+gives**: serve would publish a raw MySQL socket to every tagged device, guarded
+only by a compose-file `root`/`toor`, where a forward keeps the loopback bind
+true and puts an SSH key in front. **Not Caddy either** — MySQL is not HTTP and
+this build ships no layer4 module.
+
+Four things that cost a debugging cycle each, all verified under a throwaway
+launchd job rather than reasoned about:
+
+- **launchd sets `SSH_AUTH_SOCK`, it does not leave it unset** — to Apple's own
+  ssh-agent, a valid socket holding **zero identities**. So `[ -S "$SSH_AUTH_SOCK" ]`
+  passes, ssh gets an agent with no keys, and the tunnel fails `Permission denied
+  (publickey)` while `ssh-add -l` from a terminal looks perfectly healthy. The
+  script prefers 1Password's socket and treats the inherited one as the fallback —
+  deliberately the opposite of the obvious ordering. This machine holds **no
+  private keys on disk** (`ls ~/.ssh/id_*` is empty); every identity is the
+  1Password agent, which *does* sign for a launchd job with no prompt.
+- **`-o IdentityAgent=<path>` needs literal quotes inside the value.** 1Password's
+  socket lives under "Group Containers", ssh splits an `-o` argument on
+  whitespace, and the resulting `keyword identityagent extra arguments at end of
+  line` falls through to `Permission denied (publickey)` — which reads as a key
+  problem and sends you looking in the wrong place entirely.
+- **`ControlMaster=no` + `ControlPath=none` are mandatory.** `ssh_config` sets
+  `ControlMaster auto` for mini; a tunnel riding that shared socket dies when the
+  last interactive session exits and `ControlPersist` expires.
+- **ssh must run in the foreground** (never `-f`). launchd's KeepAlive supervises
+  the process it spawned; a forked-away ssh looks like a clean exit and gets
+  respawned forever. Reconnect is `ServerAliveInterval=15 × CountMax=3` → ssh
+  exits within ~45s → launchd re-dials. No autossh, no wrapper loop.
+
+`ThrottleInterval 30` keeps a closed lid or an off-network mini from filling the
+log — an unreachable mini is a normal laptop state, not a fault.
+
 ### Two dev-server doors: port-based (`.ts.net`) and clean (`.mini.jkrumm.com`)
 
 **`config/Caddyfile` is the single app registry.** Every `<name>.test {

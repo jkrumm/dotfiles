@@ -876,6 +876,33 @@ brain-sync-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ brain-sync torn down (unloaded + plist removed)"
 
+# Persistent loopback forwards into the mini's dev databases, so dbOSK (and the
+# mysql CLI, and any script) has a fixed endpoint that is simply always there.
+# Declared state + the full "why not tailscale serve / not Caddy" argument:
+# dbtunnel/tunnels.conf. MacBook-only in effect — the script no-ops on the mini,
+# where these databases are already on loopback.
+.PHONY: db-tunnel-setup db-tunnel-status db-tunnel-teardown
+db-tunnel-setup:
+	@mkdir -p "$(LAUNCHAGENTS)"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.db-tunnel" PLIST_DIR="$(DOTFILES_DIR)/dbtunnel"
+	@awk 'NF && $$1 !~ /^#/ { printf "    ↳ 127.0.0.1:%s → %s:%s (%s)\n", $$1, $$2, $$4, substr($$0, index($$0,$$5)) }' "$(DOTFILES_DIR)/dbtunnel/tunnels.conf"
+	@echo "    ↳ log: ~/Library/Logs/db-tunnel.log"
+# Read-only, and deliberately probes the LOCAL end rather than asking launchd:
+# `launchctl list` reports the job loaded whether or not the forward came up,
+# which is the exact failure this target exists to catch.
+db-tunnel-status:
+	@launchctl list 2>/dev/null | grep -q com.jkrumm.db-tunnel \
+		&& echo "  agent: loaded" || echo "  agent: NOT loaded — run 'make db-tunnel-setup'"
+	@awk 'NF && $$1 !~ /^#/ { print $$1 }' "$(DOTFILES_DIR)/dbtunnel/tunnels.conf" | while read -r p; do \
+		if nc -z -G 2 127.0.0.1 "$$p" 2>/dev/null; then echo "  ✓ 127.0.0.1:$$p open"; \
+		else echo "  ✗ 127.0.0.1:$$p CLOSED"; fi; \
+	done
+db-tunnel-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.db-tunnel.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	echo "  ✓ db-tunnel torn down (unloaded + plist removed)"
+
 # The nightly (03:30) leftover-dirt sweep on the mini — commits any working tree
 # the day's Claude Code sessions left dirty (claude_iu/Haiku writes the commit
 # message) and pushes. It is NOT the sync layer: brain-sync above is, on a

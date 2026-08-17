@@ -75,6 +75,14 @@ FILES=(
   # every 10 seconds with nothing to stop it.
   tailnet-sshd.log
   tailnet-sshd.err
+  # The MacBook's forwards into the mini's dev databases. The one log here whose
+  # agent holds a SINGLE fd open for the life of the tunnel, so a rename-based
+  # rotation would leave it writing to a deleted inode until the next respawn —
+  # copytruncate, which is what this script does, is safe for exactly this shape.
+  # Its plist says so; this line is what makes that true. An unreachable mini is
+  # a normal laptop state and each retry logs a line, so it grows with lid-closes
+  # rather than on a schedule.
+  db-tunnel.log
   devhost-health.log
   drift-check.log
   drift-check.err
