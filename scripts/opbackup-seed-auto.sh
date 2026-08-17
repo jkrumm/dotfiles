@@ -23,6 +23,7 @@ IOREG_CMD="${OPBACKUP_SEED_IOREG:-/usr/sbin/ioreg}"
 STAT_CMD="${OPBACKUP_SEED_STAT:-/usr/bin/stat}"
 DATE_CMD="${OPBACKUP_SEED_DATE:-/bin/date}"
 OSASCRIPT_CMD="${OPBACKUP_SEED_OSASCRIPT:-/usr/bin/osascript}"
+OP_AGENT_SOCK="${OPBACKUP_SEED_OP_AGENT:-$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock}"
 
 log() { echo "$("$DATE_CMD" '+%Y-%m-%d %H:%M:%S') opbackup-seed: $*"; }
 skip() { log "skip — $*"; exit 0; }
@@ -49,6 +50,29 @@ notify() {
 
 backend=$(tr -d '[:space:]' <"$BACKEND_FILE" 2>/dev/null || echo "")
 [ "$backend" = "op" ] || skip "secrets backend is '${backend:-unset}', not 'op'"
+
+# `ssh mini` is OpenSSH + key, unlike the keyless Tailscale SSH this machine uses
+# for homelab/vps — and this MacBook holds NO private key on disk (`ls ~/.ssh/id_*`
+# is empty). Every identity comes from the 1Password SSH agent, whose socket an
+# interactive shell exports from ~/.zsh/conf.d/secrets.zsh. A LaunchAgent gets no
+# such shell, and launchd does NOT leave SSH_AUTH_SOCK unset — it points it at
+# Apple's own ssh-agent, a perfectly valid socket holding ZERO identities. So the
+# obvious `[ -S "$SSH_AUTH_SOCK" ]` guard passes, ssh finds no key, and this script
+# reports `mini unreachable` and exits 0 — a normal-looking skip, forever, with the
+# reseed never running. Prefer 1Password's socket; treat the inherited one as the
+# fallback, deliberately the opposite of the obvious ordering. (Same trap and same
+# resolution as dbtunnel/db-tunnel.sh.)
+#
+# Exported rather than passed as `-o IdentityAgent=…`: secrets-seed.sh shells out
+# to `ssh mini` itself, so the child needs it too — and the env var sidesteps the
+# quoting hazard in the -o form, whose value contains a space ("Group Containers").
+if [ -S "$OP_AGENT_SOCK" ]; then
+  export SSH_AUTH_SOCK="$OP_AGENT_SOCK"
+elif [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+  log "1Password agent socket absent; falling back to inherited SSH_AUTH_SOCK"
+else
+  skip "no SSH agent socket — is the 1Password desktop app running? ($OP_AGENT_SOCK)"
+fi
 
 remote_mtime=$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE_HOST" \
   "if [ -f '$REMOTE_CACHE_FILE' ]; then stat -f %m '$REMOTE_CACHE_FILE'; else printf 0; fi" \
