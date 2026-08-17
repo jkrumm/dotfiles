@@ -34,6 +34,10 @@ STAT_CMD="${OPBACKUP_SEED_STAT:-/usr/bin/stat}"
 DATE_CMD="${OPBACKUP_SEED_DATE:-/bin/date}"
 OSASCRIPT_CMD="${OPBACKUP_SEED_OSASCRIPT:-/usr/bin/osascript}"
 OP_AGENT_SOCK="${OPBACKUP_SEED_OP_AGENT:-$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock}"
+OP_CMD="${OPBACKUP_SEED_OP:-/opt/homebrew/bin/op}"
+OP_ACCOUNT="${OPBACKUP_SEED_OP_ACCOUNT:-tkrumm}"
+TIMEOUT_CMD="${OPBACKUP_SEED_TIMEOUT:-/opt/homebrew/bin/timeout}"
+UNLOCK_TIMEOUT="${OPBACKUP_SEED_UNLOCK_TIMEOUT:-20}"
 
 log() { echo "$("$DATE_CMD" '+%Y-%m-%d %H:%M:%S') opbackup-seed: $*"; }
 skip() { log "skip — $*"; exit 0; }
@@ -113,6 +117,26 @@ fi
 
 ! screen_locked || skip "screen is locked"
 "$PGREP_CMD" -x "1Password" >/dev/null 2>&1 || skip "1Password desktop is not running"
+
+# RUNNING IS NOT UNLOCKED, and conflating the two is what produces the prompt
+# storm. secrets-seed.sh resolves ~26 refs with one `op read` each; against an
+# unlocked app that is 26 silent calls, but against a LOCKED one every single call
+# raises its own "op möchte auf Daten aus anderen Apps zugreifen" dialog, fails
+# with `error initializing client: You are not currently signed in` when nobody
+# answers it in time, and the loop marches on to the next ref. Observed twice on
+# 2026-08-17: dozens of dialogs, and the seed aborted anyway.
+#
+# `op whoami` is the cheap probe — no secret, one call, instant against an unlocked
+# app. Against a locked one it raises exactly ONE dialog, which is the biometric
+# moment this job is supposed to have. Bounded by `timeout` because an unanswered
+# dialog otherwise hangs the job until launchd's next tick collides with it.
+# Failing here SKIPS at exit 0 rather than starting work that cannot finish: the
+# next hourly tick retries, and the notification says what to do meanwhile.
+if ! "$TIMEOUT_CMD" "$UNLOCK_TIMEOUT" "$OP_CMD" whoami --account "$OP_ACCOUNT" >/dev/null 2>&1; then
+  notify "1Password secrets cache" "Unlock 1Password — the mini's cache reseed is due and will run on the next tick."
+  skip "1Password is running but locked (op whoami failed within ${UNLOCK_TIMEOUT}s) — unlock it; next tick retries"
+fi
+
 [ -x "$SEED_SCRIPT" ] || { log "seed script missing or not executable: $SEED_SCRIPT"; exit 1; }
 
 mkdir -p "$STATE_DIR"

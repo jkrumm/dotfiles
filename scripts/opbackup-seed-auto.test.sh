@@ -50,6 +50,24 @@ chmod +x "$fake_ioreg"
 backend_file="$TMP/backend"
 printf '%s\n' op >"$backend_file"
 
+# `op` MUST be stubbed in every case below. The real one prompts for biometric on
+# the MacBook and hangs outright on the headless mini, so a test that reaches it is
+# a test that wedges CI and raises dialogs at whoever is running it.
+fake_op="$TMP/op"
+cat >"$fake_op" <<'EOF'
+#!/usr/bin/env bash
+exit "${FAKE_OP_EXIT:-0}"
+EOF
+chmod +x "$fake_op"
+
+fake_timeout="$TMP/timeout"
+cat >"$fake_timeout" <<'EOF'
+#!/usr/bin/env bash
+shift          # drop the duration; the stubbed op returns instantly
+exec "$@"
+EOF
+chmod +x "$fake_timeout"
+
 fake_seed="$TMP/seed"
 cat >"$fake_seed" <<'EOF'
 #!/usr/bin/env bash
@@ -76,6 +94,8 @@ run_seed() {
   OPBACKUP_SEED_STATE_DIR="$TMP/state" \
   OPBACKUP_SEED_SCRIPT="$fake_seed" \
   OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+  OPBACKUP_SEED_OP="$fake_op" \
+  OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
   FAKE_SSH_AGENT_LOG="${FAKE_SSH_AGENT_LOG:-}" \
   "$SCRIPT"
 }
@@ -104,6 +124,8 @@ OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
 OPBACKUP_SEED_STATE_DIR="$TMP/state" \
 OPBACKUP_SEED_SCRIPT="$fake_seed" \
 OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+OPBACKUP_SEED_OP="$fake_op" \
+OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
 "$SCRIPT"
 test ! -e "$TMP/unreachable.marker"
 
@@ -132,6 +154,8 @@ out=$(SEED_MARKER="$TMP/noagent.marker" \
   OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
   OPBACKUP_SEED_STATE_DIR="$TMP/state" \
   OPBACKUP_SEED_SCRIPT="$fake_seed" \
+  OPBACKUP_SEED_OP="$fake_op" \
+  OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
   OPBACKUP_SEED_OP_AGENT="$TMP/nonexistent.sock" \
   SSH_AUTH_SOCK="" \
   "$SCRIPT")
@@ -165,6 +189,8 @@ OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
 OPBACKUP_SEED_STATE_DIR="$TMP/state" \
 OPBACKUP_SEED_SCRIPT="$fake_seed" \
 OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+OPBACKUP_SEED_OP="$fake_op" \
+OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
 "$SCRIPT" >/dev/null
 # shellcheck disable=SC2016  # the literal, unexpanded $HOME is the whole point
 grep -q '\$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json' "$TMP/argv.log"
@@ -190,6 +216,8 @@ out=$(SEED_MARKER="$TMP/missing.marker" \
   OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
   OPBACKUP_SEED_STATE_DIR="$TMP/state" \
   OPBACKUP_SEED_SCRIPT="$fake_seed" \
+  OPBACKUP_SEED_OP="$fake_op" \
+  OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
   OPBACKUP_SEED_OP_AGENT="$fake_agent" \
   "$SCRIPT" 2>&1)
 rc=$?
@@ -197,5 +225,39 @@ set -e
 test "$rc" -eq 1
 test ! -e "$TMP/missing.marker"
 case "$out" in *"no cache at"*) ;; *) echo "expected missing-cache failure, got: $out" >&2; exit 1 ;; esac
+
+# 1Password running but LOCKED: skip at exit 0 without starting the seed. This is
+# the storm case — secrets-seed.sh resolves ~26 refs with one `op read` each, and
+# against a locked app every one of them raises its own dialog and then fails.
+# Reproduced twice on 2026-08-17 before this guard existed.
+rm -rf "$TMP/state" "$TMP/locked.marker"
+set +e
+out=$(SEED_MARKER="$TMP/locked.marker" \
+  FAKE_CACHE_MTIME=181000 \
+  FAKE_OP_EXIT=1 \
+  OPBACKUP_SEED_NOW=700000 \
+  OPBACKUP_SEED_MAX_AGE_DAYS=5 \
+  OPBACKUP_SEED_REMOTE_HOST=mini \
+  OPBACKUP_SEED_REMOTE_CACHE_FILE=/remote/cache/secrets.enc.json \
+  OPBACKUP_SEED_SSH="$fake_ssh" \
+  OPBACKUP_SEED_PGREP="$fake_pgrep" \
+  OPBACKUP_SEED_IOREG="$fake_ioreg" \
+  OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
+  OPBACKUP_SEED_STATE_DIR="$TMP/state" \
+  OPBACKUP_SEED_SCRIPT="$fake_seed" \
+  OPBACKUP_SEED_OP="$fake_op" \
+  OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
+  OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+  OPBACKUP_SEED_OSASCRIPT=/usr/bin/true \
+  "$SCRIPT" 2>&1)
+rc=$?
+set -e
+test "$rc" -eq 0
+test ! -e "$TMP/locked.marker"
+case "$out" in *"locked"*) ;; *) echo "expected locked skip, got: $out" >&2; exit 1 ;; esac
+
+# ...and the attempt stamp must NOT be written for a locked skip, or the 6h backoff
+# would punish a state the user fixes in two seconds by unlocking the app.
+test ! -e "$TMP/state/seed-last-attempt"
 
 printf '%s\n' 'opbackup-seed-auto: all tests passed'
