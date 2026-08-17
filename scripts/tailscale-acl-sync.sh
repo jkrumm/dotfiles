@@ -70,8 +70,12 @@ if [ "$(cat "${SECRETS_BACKEND_FILE:-$HOME/.config/secrets/backend}" 2>/dev/null
       cache by design, and 'op signin' here would hang on a biometric prompt.
       Note the ACL cannot tag a device either way: tagging is console-only."
 fi
-op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 \
-  || die "1Password not signed in for account '$OP_ACCOUNT' — run 'op signin --account $OP_ACCOUNT'"
+# The probe is the shared one, and it is NOT `op whoami` — under desktop-app
+# integration whoami reports rc=1 on a perfectly unlocked app, which made this
+# guard refuse every single run on the only machine that can push the ACL. See
+# scripts/lib/op-signed-in.sh for the measurement.
+"$(dirname "${BASH_SOURCE[0]}")/lib/op-signed-in.sh" "$OP_ACCOUNT" \
+  || die "1Password is locked or unavailable for account '$OP_ACCOUNT' — unlock the desktop app and re-run."
 
 urlencode() {
   # POSIX-safe percent-encoding for a single value (used on OAuth creds).

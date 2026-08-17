@@ -93,12 +93,12 @@ for t in age-keygen sops jq op git; do command -v "$t" >/dev/null 2>&1 || die "$
 # on a prompt nobody can answer — `op signin` is not a fix there, it IS the hang.
 # So probe non-blockingly (stdin closed, bounded when `timeout` exists) and refuse
 # with the right machine named, mirroring scripts/tailscale-acl-sync.sh's guard.
+# Deliberately NOT `op whoami`: under desktop-app integration it returns rc=1 on
+# an unlocked app, so this preflight refused on the MacBook too — and then told
+# you to go to the mini, which is the one machine where rotation genuinely cannot
+# run. The shared probe carries the measurement.
 op_signed_in() {
-  if command -v timeout >/dev/null 2>&1; then
-    timeout 15 op whoami --account "$OP_ACCOUNT" </dev/null >/dev/null 2>&1
-  else
-    op whoami --account "$OP_ACCOUNT" </dev/null >/dev/null 2>&1
-  fi
+  "$(dirname "${BASH_SOURCE[0]}")/lib/op-signed-in.sh" "$OP_ACCOUNT"
 }
 if ! op_signed_in; then
   die "1Password is not signed in on this host, and rotation cannot proceed without it.

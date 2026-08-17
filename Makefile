@@ -327,15 +327,15 @@ _setup-op-token-live:
 		exit 1; \
 	fi
 	@echo "    · op-daemon.sock (ok)"
-	@if op whoami --account tkrumm >/dev/null 2>&1; then \
-		echo "    · op session (ok, $$(op whoami --account tkrumm --format=json 2>/dev/null | jq -r '.email // "unknown"'))"; \
+	@if bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh tkrumm; then \
+		echo "    · op session (ok, $$(op account get --account tkrumm --format=json 2>/dev/null | jq -r '.email // .name // "unknown"'))"; \
 	else \
 		echo "    Triggering Touch ID sign-in for tkrumm..."; \
 		op vault list --account tkrumm >/dev/null 2>&1 || true; \
-		if op whoami --account tkrumm >/dev/null 2>&1; then \
+		if bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh tkrumm; then \
 			echo "    ✓ op session established"; \
 		else \
-			echo "    ✗ op sign-in failed — run manually: op vault list --account tkrumm"; \
+			echo "    ✗ op sign-in failed — unlock the 1Password desktop app, then re-run"; \
 		fi; \
 	fi
 	@echo "    · ANTHROPIC_API_KEY not exported (Claude Code uses subscription)"
@@ -1356,10 +1356,10 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/starship.toml"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/herdr/config.toml"
 	@echo "  1Password (personal account)"
-	@if op whoami >/dev/null 2>&1; then \
-		echo "    ✓ op session active ($$(op whoami --format=json 2>/dev/null | jq -r '.email // "unknown"'))"; \
+	@if bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh tkrumm; then \
+		echo "    ✓ op session active ($$(op account get --account tkrumm --format=json 2>/dev/null | jq -r '.email // .name // "unknown"'))"; \
 	else \
-		echo "    ✗ op session [expired — run make setup to re-authenticate]"; \
+		echo "    ✗ 1Password locked or unavailable [unlock the desktop app]"; \
 	fi
 	@echo "    · ANTHROPIC_API_KEY not exported (Claude Code uses subscription)"
 	@echo "  Agent SDK Keys"

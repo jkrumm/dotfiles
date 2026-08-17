@@ -1331,11 +1331,24 @@ potentially coming up credential-less with nothing reporting it. The check now
 runs in the 300s script and pushes `MacMini Secret Seed - Push` (8-day threshold,
 mtime only, never decrypts), on exactly collie's terms: its own monitor because a
 stale cache does not fail with tailscaled/sshd/herdr, and a silent skip when
-`~/.config/secrets/freshness-push-url` is absent. Two follow-ups: the weekly
-LaunchAgent and `scripts/secrets-freshness-check.sh` are now redundant and should
-be removed, and that monitor's `interval: 691200` in
-`homelab/uptime-kuma/monitors.yaml` was sized for a weekly pusher — its
-missed-heartbeat arm is now 8 days too lax.
+`~/.config/secrets/freshness-push-url` is absent. The weekly LaunchAgent was the
+duplicate and is **torn down** on the mini (2026-08-17, `make
+secrets-freshness-teardown`; the target stays for a machine that wants it back).
+
+**`scripts/secrets-freshness-check.sh` is NOT redundant — this file claimed it
+was for weeks, and acting on that would have broken the reseed.** It is what the
+MacBook's auto-reseed calls over ssh (`make secrets-freshness-check`) as its last
+step, to refresh the heartbeat the instant a new cache lands instead of leaving
+the monitor red for up to 5 minutes. `devhost-health-check.sh` has its own
+`secrets_freshness_detail()` and shares only `scripts/lib/kuma-push.sh` with it.
+Two callers, one of them remote — check `grep -rn secrets-freshness-check` before
+believing any claim that something here is dead.
+
+The monitor's `interval: 691200` in `homelab/uptime-kuma/monitors.yaml` was sized
+for the weekly pusher and is left alone deliberately: it is now only the
+missed-heartbeat *backstop*, since the 300s script pushes DOWN explicitly the
+moment the cache crosses 8 days, and a dead agent shows up on `MacMini Dev Host -
+Push` (interval 600) in ten minutes rather than eight days.
 
 **Push monitors are fully declarative — no browser step.** `make uk-sync`
 creates them, proven on 2026-07-28 when it created `MacMini Collie - Push`
@@ -1545,10 +1558,30 @@ not a diagnosis.**
   there is no CLI session token, so `op whoami` returns rc=1 *"account is not
   signed in"* on a fully unlocked app, while `op read` in the same second
   resolves refs perfectly (measured, op 2.38.1). A whoami-gated guard therefore
-  skips on every tick forever. The probe is **`op account get --account <acct>`**:
-  no secret, one call, instant when unlocked, exactly one dialog when locked. It
-  runs for **both** accounts — `headless.iu.refs` is a careerpartner list, so a
-  tkrumm-only check clears and then storms on the IU half.
+  skips on every tick forever. The probe is **`scripts/lib/op-signed-in.sh
+  <acct>`** (`op account get` under the hood): no secret, one call, instant when
+  unlocked, exactly one dialog when locked. It runs for **both** accounts —
+  `headless.iu.refs` is a careerpartner list, so a tkrumm-only check clears and
+  then storms on the IU half.
+
+  **It had spread to five call sites, and four of them were dead without anyone
+  noticing**, because each failed with its own plausible refusal: the reseed
+  skipped hourly for 11 days; `make tailscale-acl-diff` died telling you to run
+  `op signin` — on the *only* machine that can push the tailnet ACL; `make
+  secrets-rotate` refused and pointed you at the mini, the one host where
+  rotation genuinely cannot run; and `make status` reported the session expired,
+  permanently. The source was `rules/makefile-conventions.md`, which printed the
+  whoami snippet as *the* pattern to copy. That rule now points at the shared
+  probe instead — **fixing the call sites without fixing the rule would have
+  regrown them.**
+
+- **1Password authorizes per CALLING BINARY, and the first call from a new
+  parent raises a one-time dialog.** After the fix, `bash lib/op-signed-in.sh
+  tkrumm` passed standalone while `make status` still reported locked seconds
+  later — not a bug, just `make` never having been approved before. Approve once
+  and it sticks. This is also why a LaunchAgent's first `op` call behaves
+  differently from your shell's, and why "it works when I run it by hand" proves
+  less here than it looks like it does.
 - **"mini unreachable" usually means "1Password is locked".** The 1Password SSH
   agent serves that `ssh mini` too, and a locked app fails it as `signing failed
   … communication with agent failed` → `Permission denied (publickey)`. Discard

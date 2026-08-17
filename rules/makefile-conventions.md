@@ -6,12 +6,12 @@ paths: ["Makefile", "**/Makefile"]
 # Makefile Conventions
 
 - **Default target:** set `.DEFAULT_GOAL := help` and make `help` the first target, so a bare `make` prints the target list instead of running the first real target.
-- **1Password in Makefiles:** always pass an explicit `--account <name>` to `op` calls inside a Makefile, and guard with a signin check — the interactive shell's cached 1Password session does not carry into `make`'s subshell:
+- **1Password in Makefiles:** always pass an explicit `--account <name>` to `op` calls inside a Makefile, and guard with a usability check — the interactive shell's cached 1Password session does not carry into `make`'s subshell:
   ```makefile
-  @op whoami --account <name> >/dev/null 2>&1 || op signin --account <name>
+  @bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh <name> || { echo "unlock 1Password"; exit 1; }
   @op run --account <name> --env-file=... -- <cmd>
   ```
-  See `prometheus-scripts/mcp-hub/Makefile` (`hub-up`) for the pattern in practice.
+  **Never guard with `op whoami`.** This rule used to print exactly that, and every script that followed it inherited a guard that fails closed on a perfectly healthy machine: under 1Password's **desktop-app integration** there is no CLI session token, so `op whoami` returns rc=1 *"account is not signed in"* while `op read` resolves refs in the same second (measured, op 2.38.1). Four separate commands were permanently dead this way — an hourly reseed that skipped for 11 days, `make tailscale-acl-diff` on the only host that can push the ACL, `make secrets-rotate`, and `make status` — each with its own plausible-looking refusal. `scripts/lib/op-signed-in.sh` is the single probe; call it rather than pasting a new one, so there is one place to be wrong.
 
 ## Lifecycle targets
 
