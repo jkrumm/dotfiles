@@ -69,6 +69,12 @@ FILES=(
   hermes-cc.log
   secrets-freshness.log
   opbackup.log
+  # The MacBook's userland sshd on :2222 — the only door the mini has back to
+  # this machine. Its plist is KeepAlive-on-failure with a 10s throttle, so a
+  # tailscaled that never hands out an IP turns .err into one respawn message
+  # every 10 seconds with nothing to stop it.
+  tailnet-sshd.log
+  tailnet-sshd.err
   devhost-health.log
   drift-check.log
   drift-check.err
