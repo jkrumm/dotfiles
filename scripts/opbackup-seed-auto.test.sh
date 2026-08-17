@@ -53,9 +53,18 @@ printf '%s\n' op >"$backend_file"
 # `op` MUST be stubbed in every case below. The real one prompts for biometric on
 # the MacBook and hangs outright on the headless mini, so a test that reaches it is
 # a test that wedges CI and raises dialogs at whoever is running it.
+#
+# It also mimics the ONE behaviour of the real `op` that matters here: under
+# desktop-app integration `op whoami` fails with "account is not signed in" even
+# on a fully unlocked app (measured, op 2.38.1), while `op account get` succeeds.
+# That is not colour — it is what makes the "six-day-old cache triggers the seed"
+# case below a regression test: put `whoami` back as the unlock probe and the
+# guard skips forever, the marker is never written, and this suite goes red.
 fake_op="$TMP/op"
 cat >"$fake_op" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n "${FAKE_OP_LOG:-}" ]]; then printf '%s\n' "$*" >>"$FAKE_OP_LOG"; fi
+[[ "${1:-}" == "whoami" ]] && exit 1
 exit "${FAKE_OP_EXIT:-0}"
 EOF
 chmod +x "$fake_op"
@@ -79,6 +88,7 @@ chmod +x "$fake_seed"
 run_seed() {
   local now="$1" mtime="$2" marker="$3"
   rm -f "$marker" "$marker.freshness"
+  if [ -n "${FAKE_OP_LOG:-}" ]; then rm -f "$FAKE_OP_LOG"; fi
   FAKE_CACHE_MTIME="$mtime" \
   FAKE_FRESHNESS_MARKER="$marker.freshness" \
   SEED_MARKER="$marker" \
@@ -97,13 +107,21 @@ run_seed() {
   OPBACKUP_SEED_OP="$fake_op" \
   OPBACKUP_SEED_TIMEOUT="$fake_timeout" \
   FAKE_SSH_AGENT_LOG="${FAKE_SSH_AGENT_LOG:-}" \
+  FAKE_OP_LOG="${FAKE_OP_LOG:-}" \
   "$SCRIPT"
 }
 
 # A six-day-old cache must trigger the seed.
-run_seed 700000 181000 "$TMP/due.marker"
+FAKE_OP_LOG="$TMP/op.calls" run_seed 700000 181000 "$TMP/due.marker"
 test -f "$TMP/due.marker"
 test -f "$TMP/due.marker.freshness"
+
+# ...and the unlock probe must have covered BOTH accounts. secrets-seed.sh reads
+# refs from tkrumm AND careerpartner (headless.iu.refs is a careerpartner list),
+# so a check that clears only tkrumm passes here and then storms on the IU half —
+# the exact prompt storm this guard exists to prevent, just one account later.
+grep -q 'account get --account tkrumm' "$TMP/op.calls"
+grep -q 'account get --account careerpartner' "$TMP/op.calls"
 
 # A two-day-old cache must be a no-op.
 run_seed 700000 527200 "$TMP/fresh.marker"

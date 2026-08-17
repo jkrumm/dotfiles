@@ -36,11 +36,18 @@ OSASCRIPT_CMD="${OPBACKUP_SEED_OSASCRIPT:-/usr/bin/osascript}"
 OP_AGENT_SOCK="${OPBACKUP_SEED_OP_AGENT:-$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock}"
 OP_CMD="${OPBACKUP_SEED_OP:-/opt/homebrew/bin/op}"
 OP_ACCOUNT="${OPBACKUP_SEED_OP_ACCOUNT:-tkrumm}"
+OP_IU_ACCOUNT="${OPBACKUP_SEED_OP_IU_ACCOUNT:-careerpartner}"
 TIMEOUT_CMD="${OPBACKUP_SEED_TIMEOUT:-/opt/homebrew/bin/timeout}"
 UNLOCK_TIMEOUT="${OPBACKUP_SEED_UNLOCK_TIMEOUT:-20}"
 
 log() { echo "$("$DATE_CMD" '+%Y-%m-%d %H:%M:%S') opbackup-seed: $*"; }
 skip() { log "skip — $*"; exit 0; }
+
+# Scratch file for ssh's stderr — see the reachability probe below for why it is
+# classified rather than discarded. The trap is EXIT, so every skip() path cleans
+# up too.
+TMP_SSH_ERR="$(mktemp "${TMPDIR:-/tmp}/opbackup-seed-ssh.XXXXXX")"
+trap 'rm -f "$TMP_SSH_ERR"' EXIT
 
 age_seconds() {
   local mtime now
@@ -88,9 +95,25 @@ else
   skip "no SSH agent socket — is the 1Password desktop app running? ($OP_AGENT_SOCK)"
 fi
 
-remote_mtime=$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE_HOST" \
+# ssh's stderr is KEPT, not discarded, because the two ways this leg fails call
+# for opposite reactions and `2>/dev/null` collapses them into one wrong message.
+# A closed lid or an off-network mini is a normal laptop state; a locked 1Password
+# is a two-second fix — but it fails here first, since the agent serves this ssh
+# too, and it fails as `signing failed … communication with agent failed` →
+# `Permission denied (publickey)`. Reported as "mini unreachable" that sends you
+# to the tailnet, the sshd and the ACL for a problem that is a Touch ID away.
+# Observed 2026-08-17 12:18 while the mini was demonstrably up and `ssh mini`
+# from an interactive shell worked.
+if ! remote_mtime=$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE_HOST" \
   "if [ -f \"$REMOTE_CACHE_FILE\" ]; then stat -f %m \"$REMOTE_CACHE_FILE\"; else printf 0; fi" \
-  2>/dev/null) || skip "$REMOTE_HOST unreachable"
+  2>"$TMP_SSH_ERR"); then
+  case "$(cat "$TMP_SSH_ERR" 2>/dev/null || true)" in
+    *"communication with agent failed"*|*"signing failed"*|*"Permission denied (publickey)"*)
+      notify "1Password secrets cache" "Unlock 1Password — its SSH agent cannot sign for $REMOTE_HOST."
+      skip "1Password SSH agent could not sign for $REMOTE_HOST (app locked?) — unlock it; next tick retries" ;;
+  esac
+  skip "$REMOTE_HOST unreachable"
+fi
 
 case "$remote_mtime" in
   ''|*[!0-9]*) skip "remote cache mtime unavailable" ;;
@@ -126,16 +149,35 @@ fi
 # answers it in time, and the loop marches on to the next ref. Observed twice on
 # 2026-08-17: dozens of dialogs, and the seed aborted anyway.
 #
-# `op whoami` is the cheap probe — no secret, one call, instant against an unlocked
-# app. Against a locked one it raises exactly ONE dialog, which is the biometric
-# moment this job is supposed to have. Bounded by `timeout` because an unanswered
-# dialog otherwise hangs the job until launchd's next tick collides with it.
+# The probe is `op account get`, and it must NOT be `op whoami`. Under 1Password's
+# DESKTOP-APP integration — the only mode this machine uses — there is no CLI
+# session token, and `op whoami` reports that state as an error:
+#   $ op whoami --account tkrumm   → rc=1  "account is not signed in"
+#   $ op account get --account tkrumm → rc=0  (app unlocked)  /  prompts (locked)
+# both measured on 2026-08-17 with op 2.38.1 while `op read` was resolving refs
+# perfectly. A whoami-based guard is therefore not "strict", it is stuck closed:
+# it skips on every tick forever and the reseed never runs again. That is a worse
+# failure than the storm it was added to prevent, because it is silent.
+#
+# `op account get` is the right shape for the same reasons whoami looked right:
+# no secret leaves 1Password, it is one call, it is instant against an unlocked
+# app, and against a locked one it raises exactly ONE dialog — the single
+# biometric moment this job is supposed to have. Bounded by `timeout` because an
+# unanswered dialog otherwise hangs the job into the next launchd tick.
+#
+# BOTH accounts are probed. secrets-seed.sh signs into tkrumm and careerpartner
+# (headless.iu.refs is a careerpartner list) and resolves refs from each, so an
+# unlock check covering only tkrumm passes and then storms on the IU half.
+#
 # Failing here SKIPS at exit 0 rather than starting work that cannot finish: the
 # next hourly tick retries, and the notification says what to do meanwhile.
-if ! "$TIMEOUT_CMD" "$UNLOCK_TIMEOUT" "$OP_CMD" whoami --account "$OP_ACCOUNT" >/dev/null 2>&1; then
-  notify "1Password secrets cache" "Unlock 1Password — the mini's cache reseed is due and will run on the next tick."
-  skip "1Password is running but locked (op whoami failed within ${UNLOCK_TIMEOUT}s) — unlock it; next tick retries"
-fi
+for _acct in "$OP_ACCOUNT" "$OP_IU_ACCOUNT"; do
+  [ -n "$_acct" ] || continue
+  if ! "$TIMEOUT_CMD" "$UNLOCK_TIMEOUT" "$OP_CMD" account get --account "$_acct" >/dev/null 2>&1; then
+    notify "1Password secrets cache" "Unlock 1Password — the mini's cache reseed is due and will run on the next tick."
+    skip "1Password is running but locked for account '$_acct' (op account get failed within ${UNLOCK_TIMEOUT}s) — unlock it; next tick retries"
+  fi
+done
 
 [ -x "$SEED_SCRIPT" ] || { log "seed script missing or not executable: $SEED_SCRIPT"; exit 1; }
 

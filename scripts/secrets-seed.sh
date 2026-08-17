@@ -131,12 +131,22 @@ fi
 [[ ${#refs[@]} -gt 0 ]] || die "headless.refs has no references"
 
 # --- op sign-in guard (rules/makefile-conventions.md pattern) ---------------
-# Each account signs in separately — `op` sessions are per-account.
+# Each account is checked separately — `op` sessions are per-account.
+#
+# The reachability probe is `op account get`, NOT `op whoami`. Under 1Password's
+# desktop-app integration there is no CLI session token, so `op whoami` returns
+# rc=1 "account is not signed in" on a perfectly unlocked app — measured
+# 2026-08-17 with op 2.38.1, while `op read` in this very script was resolving
+# refs fine. With whoami as the test, the `||` fires on EVERY run and this script
+# shells out to `op signin` unconditionally: harmless from a terminal, but from a
+# LaunchAgent it is a non-TTY sign-in that cannot succeed and only adds noise
+# before the real work. Same trap cost us the auto-reseed in
+# opbackup-seed-auto.sh; see the long comment there.
 echo "  1Password sign-in..."
-op whoami --account "$OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$OP_ACCOUNT"
+op account get --account "$OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$OP_ACCOUNT"
 echo "    ✓ $OP_ACCOUNT"
 if ((seed_iu)); then
-  op whoami --account "$IU_OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$IU_OP_ACCOUNT"
+  op account get --account "$IU_OP_ACCOUNT" >/dev/null 2>&1 || op signin --account "$IU_OP_ACCOUNT"
   echo "    ✓ $IU_OP_ACCOUNT"
 fi
 
@@ -210,18 +220,85 @@ fi
 
 # --- resolve every ref (biometric) into an in-memory value array -------------
 # Values live only in the vals[] shell array (process memory, never disk — R1).
-# A single failing op read aborts before any crypto (cache stays untouched).
+# A ref that cannot be resolved even after retries aborts before any crypto, so
+# the cache stays untouched. That invariant is unchanged; what changed is what
+# counts as unresolvable.
+#
+# WHY RETRIES. This loop is one `op read` PROCESS per ref — a few hundred of them
+# back to back, each doing its own handshake with the 1Password desktop app. A
+# small number of those handshakes fail transiently:
+#   error initializing client: response: promptError
+#   error initializing client: You are not currently signed in
+# and the ref is perfectly readable one second later — verified 2026-08-17 by
+# re-reading, by hand, the exact refs two consecutive automated runs died on
+# (op://hermes/slack/app-token at 11:17, op://vps/argo/GITLAB_TOKEN at 12:41):
+# both returned in ~1s, rc=0, no prompt. So the failure is in the app handshake,
+# not the ref, not the vault and not the account.
+#
+# Aborting the whole run on the first of those is what made the reseed feel
+# impossible: it spends the human's Touch ID approval, resolves hundreds of refs,
+# then throws all of it away over one hiccup near the end and arms a 6h backoff.
+# Three attempts with backoff turn that into a hiccup. A ref that is genuinely
+# gone still fails on the first attempt and is NOT retried — a typo'd ref must
+# not cost 30s of pointless waiting, and "item not found" is not a hiccup.
+#
+# WHY EACH READ IS TIME-BOUNDED. A transient handshake failure has a third form:
+# `op read` hangs indefinitely waiting on an authorization dialog that never
+# renders (observed here — 2 minutes, no output, no dialog on screen). From a
+# LaunchAgent that wedges the job until launchd's next tick collides with it.
+# `timeout -k` because op does not reliably die on SIGTERM. Degrades to an
+# unbounded read if coreutils' timeout is absent rather than refusing to run.
+OP_READ_TIMEOUT="${SECRETS_SEED_OP_READ_TIMEOUT:-30}"
+OP_READ_ATTEMPTS="${SECRETS_SEED_OP_READ_ATTEMPTS:-3}"
+TIMEOUT_BIN="${SECRETS_SEED_TIMEOUT:-$(command -v timeout || command -v gtimeout || true)}"
+[[ -n "$TIMEOUT_BIN" ]] || echo "    ! no coreutils 'timeout' found — op reads run unbounded" >&2
+
+op_read_once() {  # $1=account  $2=ref ; value on stdout, diagnostics in $rerr
+  if [[ -n "$TIMEOUT_BIN" ]]; then
+    "$TIMEOUT_BIN" -k 5 "$OP_READ_TIMEOUT" op read --account "$1" "$2" 2>"$rerr"
+  else
+    op read --account "$1" "$2" 2>"$rerr"
+  fi
+}
+
+# Transient == the desktop-app handshake, never the ref. Keep this list tight:
+# retrying a genuine "item not found" only delays an error the human must fix.
+op_read_transient() {  # $1=exit status of op_read_once
+  [[ "$1" == 124 || "$1" == 137 ]] && return 0   # timeout / SIGKILL after -k
+  case "$(cat "$rerr" 2>/dev/null || true)" in
+    *promptError*|*"not currently signed in"*|*"error initializing client"*|\
+    *"could not connect"*|*"connection refused"*|*"deadline exceeded"*) return 0 ;;
+  esac
+  return 1
+}
+
 echo "  Resolving references..."
 vals=()
 rerr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
 for ((i = 0; i < ${#refs[@]}; i++)); do
   ref="${refs[$i]}"
-  if ! v=$(op read --account "${accts[$i]}" "$ref" 2>"$rerr"); then
-    echo "    ✗ op read failed for $ref (account ${accts[$i]}):" >&2
-    indent <"$rerr" >&2
-    rm -f "$rerr"
-    die "aborting — cache untouched"
-  fi
+  attempt=1
+  while :; do
+    # `rc` is captured on the OR side, NOT read from `$?` after an `if`: an `if`
+    # whose condition fails and which has no `else` exits 0, so the obvious
+    # spelling would classify every failure as status 0 and never see a timeout.
+    rc=0
+    v=$(op_read_once "${accts[$i]}" "$ref") || rc=$?
+    if (( rc == 0 )); then
+      break
+    fi
+    if (( attempt >= OP_READ_ATTEMPTS )) || ! op_read_transient "$rc"; then
+      echo "    ✗ op read failed for $ref (account ${accts[$i]}, attempt $attempt/$OP_READ_ATTEMPTS):" >&2
+      indent <"$rerr" >&2
+      rm -f "$rerr"
+      die "aborting — cache untouched"
+    fi
+    # Backoff gives the app time to settle, and — when the cause is a lock — the
+    # human a moment to answer. Never printed as a failure: it is not one yet.
+    echo "    … transient op error on $ref (attempt $attempt/$OP_READ_ATTEMPTS), retrying" >&2
+    sleep $(( attempt * 3 ))
+    attempt=$(( attempt + 1 ))
+  done
   # v1 constraint: single-line values only. A multi-line value would misalign the
   # newline-paired jq fold below and silently corrupt the cache — refuse it.
   case "$v" in

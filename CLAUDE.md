@@ -1532,6 +1532,42 @@ rotated — so a April dump exposes the password changed in May. `prune_remote()
 keeps the newest 8 plus the newest of each calendar month, deleting an
 **explicit** regex-validated filename list, never a remote glob.
 
+### The auto-reseed's three traps (all hit on 2026-08-17)
+
+The same hourly agent reseeds the mini's secrets cache
+(`scripts/opbackup-seed-auto.sh`). It failed on every attempt for eleven days,
+for three unrelated reasons stacked on top of each other — and each one presents
+as a clean, deliberate-looking skip. **A skip line in `opbackup.log` is a claim,
+not a diagnosis.**
+
+- **`op whoami` is not an unlock probe, it is a permanent lock-out.** Under
+  1Password's **desktop-app integration** — the only mode either Mac uses —
+  there is no CLI session token, so `op whoami` returns rc=1 *"account is not
+  signed in"* on a fully unlocked app, while `op read` in the same second
+  resolves refs perfectly (measured, op 2.38.1). A whoami-gated guard therefore
+  skips on every tick forever. The probe is **`op account get --account <acct>`**:
+  no secret, one call, instant when unlocked, exactly one dialog when locked. It
+  runs for **both** accounts — `headless.iu.refs` is a careerpartner list, so a
+  tkrumm-only check clears and then storms on the IU half.
+- **"mini unreachable" usually means "1Password is locked".** The 1Password SSH
+  agent serves that `ssh mini` too, and a locked app fails it as `signing failed
+  … communication with agent failed` → `Permission denied (publickey)`. Discard
+  ssh's stderr and the two collapse into one wrong message that sends you to the
+  tailnet, the sshd and the ACL for a problem that is a Touch ID away. The guard
+  classifies the stderr instead.
+- **One transient `op read` failure must not discard the whole run.** The seed is
+  ~150 refs, one `op read` **process** each, and a few of those handshakes fail
+  transiently (`response: promptError`) or hang on a dialog that never renders.
+  Both refs that killed consecutive runs re-read fine by hand ~1s later, rc=0.
+  Aborting on the first one spends the human's approval, resolves everything,
+  throws it away and arms a 6h backoff. Reads are now `timeout -k`-bounded and
+  retried 3× with backoff — but **only on transient errors**: a genuinely missing
+  ref still fails on attempt 1, because retrying it just delays an error a human
+  has to fix. Regression tests: `scripts/secrets-seed-retry.test.sh` (MacBook —
+  `secrets-seed.test.sh` is mini-gated), which extracts the loop from the real
+  script rather than copying it, and stubs `op` on **PATH** rather than as a
+  shell function, since `timeout` execs past a function and hits the real binary.
+
 ## Battery charge limiter (MacBook only)
 
 The MacBook holds its charge at a cap (default **80%**) to slow Li-ion wear, via
