@@ -634,11 +634,37 @@ push toward `setup-token`, was **wrong**; it is disproven rather than merely
 doubted. Only a raw `ssh mini 'claude …'` still fails, and `rd bg` exists
 precisely so nothing needs that.
 
-**`config/zsh/claude-auth.zsh` is therefore a dormant fallback, not the fix.**
-Leave it wired and unminted: it costs nothing dormant, and a `setup-token`
+**`config/zsh/claude-auth.zsh` is an ARMED fallback, and as of 2026-08-17 it is
+what is actually holding the mini up.** This file said "dormant, leave it
+unminted" for months; the token has in fact been minted and cached, the mini's
+keychain credential is **gone** (bare binary: `loggedIn: false, authMethod:
+none`), and every herdr pane has been quietly running on the token instead.
+Nothing was broken from the outside, which is exactly why it went unnoticed.
+
+**The fallback is the most likely cause of the failure it covers.** It was
+documented as a fallback and coded as a *preemption*: once the ref existed it
+injected the token on every zsh `claude` launch, so `command claude` never
+touched the keychain. That credential is a short access token plus a **rolling**
+refresh token — it renews itself when the binary uses it, and only then. Never
+exercised, it ages out. Fixed the same day: probe the real credential (~245ms,
+measured), prefer it, fall back only on failure. The **positive** verdict is
+cached an hour in `~/.local/state/claude-auth/keychain-ok`; a **negative** one
+deliberately is not, so a fresh `/login` takes effect on the very next command
+rather than up to an hour later — caching the failure would recreate the masking.
+
+Restoring the good credential is a `/login` in a **herdr pane on the mini**
+(`work <repo>` or a pane, then `/login`, paste the URL back) — a GUI-session
+child, so the keychain is reachable. Prefer that over re-minting: a `setup-token`
 credential is a **one-year token with no refresh and no reliable server-side
-revocation** — a downgrade from a keychain credential that refreshes itself
-(access ~8h, refresh rolling). Mint one only if the keychain path actually breaks.
+revocation**, a downgrade from a keychain credential that refreshes itself
+(access ~8h, refresh rolling). `check_claude_auth` now probes **both** paths and
+grades three states — keychain ok / keychain dead but token working (degraded,
+names the fix) / neither (the real "billing API credits" alert) — because the
+bare-binary-only version reported a perfectly working host as the latter, and a
+component that overstates is one you learn to skim past. There is deliberately
+**no** separate token-expiry monitor: probing the fallback covers the one-year
+cliff by construction.
+
 It
 defines a `claude()` zsh function that resolves `op://mini/claude/oauth-token`
 through `secrets-run` and passes it as `CLAUDE_CODE_OAUTH_TOKEN` — the one
@@ -655,10 +681,10 @@ it; and it **self-gates on the `cache` backend marker**, because on the MacBook
 `ca` / `claude_iu` / `claude_bridge` launch through `env`, which resolves the
 binary from PATH and bypasses shell functions — so their off-Max
 `ANTHROPIC_AUTH_TOKEN` flow is unaffected by construction, not by a guard that
-could rot. Until the human mints the token (`claude setup-token`) and the cache
-is reseeded, the read fails and the wrapper falls through to the existing
-keychain login **silently** — it must not break a working machine to announce a
-future step. The reporter for the failure case is `check_claude_auth` in
+could rot. On a machine where the token was never minted the read simply fails
+and the wrapper falls through **silently** — it must not break a working machine
+to announce a future step. (On the mini it *has* been minted; see above.) The
+reporter for the failure case is `check_claude_auth` in
 `scripts/devhost-health-check.sh`, which fails the 5-minute heartbeat on anything
 that is not a logged-in Max session. Note the token is a **one-year** credential
 with no refresh and no reliable server-side revocation; that heartbeat is the
