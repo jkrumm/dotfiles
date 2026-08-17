@@ -106,6 +106,9 @@ LSOF_BIN="${LSOF_BIN:-/usr/sbin/lsof}"
 SYSCTL_BIN="${SYSCTL_BIN:-/usr/sbin/sysctl}"
 LAUNCHCTL_BIN="${LAUNCHCTL_BIN:-/bin/launchctl}"
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+# The fallback credential path claude-auth.zsh uses. Needed here so the auth
+# check can see which of the two credentials is actually holding the host up.
+SECRETS_RUN_BIN="${SECRETS_RUN_BIN:-$HOME/.local/bin/secrets-run}"
 OBSIDIAN_BIN="${OBSIDIAN_BIN:-/usr/local/bin/obsidian}"
 PLISTBUDDY_BIN="${PLISTBUDDY_BIN:-/usr/libexec/PlistBuddy}"
 DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
@@ -827,6 +830,16 @@ check_services() {
   echo "services up (${up}${skip_note})"
 }
 
+claude_token_works() {
+  local tok tout
+  [[ -x "$SECRETS_RUN_BIN" ]] || return 1
+  tok=$("$SECRETS_RUN_BIN" read op://mini/claude/oauth-token 2>/dev/null) || return 1
+  [[ -n "$tok" ]] || return 1
+  tout=$(CLAUDE_CODE_OAUTH_TOKEN="$tok" USER="${USER:-$(/usr/bin/id -un)}" \
+    "$CLAUDE_BIN" auth status 2>/dev/null) || return 1
+  [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$tout" 2>/dev/null)" == "true" ]]
+}
+
 check_claude_auth() {
   # The silent-API-billing failure, made visible. An expired OAuth token does
   # not stop anything: `claude --bg` daemons keep starting, `claude agents`
@@ -853,8 +866,31 @@ check_claude_auth() {
   [[ -n "$out" ]] || { echo "claude auth status returned nothing — agents may be billing API credits"; return 1; }
   logged=$("$JQ_BIN" -r '.loggedIn // false' <<<"$out" 2>/dev/null) || logged=""
   sub=$("$JQ_BIN" -r '.subscriptionType // "none"' <<<"$out" 2>/dev/null) || sub=""
-  [[ "$logged" == "true" ]] \
-    || { echo "claude NOT logged in — every agent on this host is billing API credits (fix: claude setup-token, needs a human)"; return 1; }
+
+  # TWO CREDENTIALS, TWO PATHS — and the bare binary above can only see one of
+  # them. `config/zsh/claude-auth.zsh` falls back to CLAUDE_CODE_OAUTH_TOKEN from
+  # the secrets cache, so a host with a dead keychain but a live token runs every
+  # herdr pane and `rd bg` daemon perfectly on Max. Reporting that as "every
+  # agent on this host is billing API credits" — as this did — is false, and a
+  # component that overstates is one you learn to skim past.
+  #
+  # So probe the fallback too, and grade the three states differently:
+  #   keychain ok                → ok
+  #   keychain dead, token works → DEGRADED, and say what to do (a `/login` in a
+  #                                herdr pane restores a self-refreshing
+  #                                credential; the token is a 1-year static one
+  #                                with no refresh and no reliable revocation)
+  #   neither                    → the real "billing API credits" alert
+
+  if [[ "$logged" != "true" ]]; then
+    if claude_token_works; then
+      echo "claude keychain login is gone; running on the cached oauth token (works, but static 1y — restore with /login in a herdr pane on this host)"
+      return 1
+    fi
+    echo "claude NOT logged in and the cached oauth token does not work either — every agent on this host is billing API credits (fix: /login in a herdr pane, or claude setup-token; needs a human)"
+    return 1
+  fi
+
   [[ "$sub" == "max" ]] \
     || { echo "claude auth is '${sub:-unknown}', not max — agents are off the subscription"; return 1; }
   echo "claude auth ok (max)"

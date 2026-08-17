@@ -58,10 +58,50 @@
 if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
   && [[ "$(<${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend)" == cache ]]; then
 
+  # KEYCHAIN FIRST, TOKEN ONLY IF IT IS ACTUALLY DEAD. This ordering is the whole
+  # point and it was inverted for months: the original injected the token
+  # unconditionally the moment the ref existed, which is a PREEMPTION, not the
+  # fallback the header above describes.
+  #
+  # That inversion is self-fulfilling. Claude Code's keychain credential is a
+  # short access token plus a ROLLING refresh token — it renews itself when the
+  # binary uses it, and only then. Preempt it on every zsh launch and nothing on
+  # this machine ever exercises it, so it quietly ages out and the "fallback"
+  # becomes the only thing holding the host up. Measured 2026-08-17: the bare
+  # binary reported `loggedIn: false, authMethod: none` while every herdr pane
+  # worked fine on the token. It would also have silently swallowed the next
+  # `/login` — you would restore the keychain and still be running on the token,
+  # with no way to tell.
+  #
+  # So: probe the real credential, prefer it, and fall back only on failure.
+  CLAUDE_AUTH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-auth"
+  CLAUDE_AUTH_PROBE_TTL="${CLAUDE_AUTH_PROBE_TTL:-3600}"
+
   claude() {
     # An explicit token in the environment always wins — never second-guess a
     # caller that already decided.
     if [[ -n $CLAUDE_CODE_OAUTH_TOKEN ]]; then
+      command claude "$@"
+      return
+    fi
+
+    # ~245ms on this machine (measured), so it is cached — but ONLY the positive
+    # verdict. A negative one re-probes every launch, deliberately: that is the
+    # degraded path, and paying 245ms there is what makes a fresh `/login` in a
+    # herdr pane take effect on the very next command instead of up to an hour
+    # later. Caching the failure would recreate the masking this fixes.
+    local stamp="$CLAUDE_AUTH_STATE_DIR/keychain-ok" keychain_ok=0
+    if [[ -f $stamp ]] \
+      && (( $(date +%s) - $(stat -f %m "$stamp" 2>/dev/null || echo 0) < CLAUDE_AUTH_PROBE_TTL )); then
+      keychain_ok=1
+    elif command claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+      mkdir -p "$CLAUDE_AUTH_STATE_DIR" && : >"$stamp"
+      keychain_ok=1
+    else
+      rm -f "$stamp"
+    fi
+
+    if (( keychain_ok )); then
       command claude "$@"
       return
     fi
