@@ -141,4 +141,61 @@ test "$rc" -eq 0
 test ! -e "$TMP/noagent.marker"
 case "$out" in *"no SSH agent socket"*) ;; *) echo "expected agent-socket skip, got: $out" >&2; exit 1 ;; esac
 
+# The remote path must be expanded by the MINI's shell, not this machine's: the
+# two accounts differ, and a locally-expanded path silently probes a directory
+# that does not exist there. Assert the literal `$HOME` survives to ssh's argv.
+rm -rf "$TMP/state"
+argv_ssh="$TMP/ssh-argv"
+cat >"$argv_ssh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_SSH_ARGV_LOG:?}"
+printf '%s\n' "${FAKE_CACHE_MTIME:?}"
+EOF
+chmod +x "$argv_ssh"
+: >"$TMP/argv.log"
+FAKE_SSH_ARGV_LOG="$TMP/argv.log" \
+FAKE_CACHE_MTIME=181000 \
+OPBACKUP_SEED_NOW=700000 \
+OPBACKUP_SEED_MAX_AGE_DAYS=99999 \
+OPBACKUP_SEED_REMOTE_HOST=mini \
+OPBACKUP_SEED_SSH="$argv_ssh" \
+OPBACKUP_SEED_PGREP="$fake_pgrep" \
+OPBACKUP_SEED_IOREG="$fake_ioreg" \
+OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
+OPBACKUP_SEED_STATE_DIR="$TMP/state" \
+OPBACKUP_SEED_SCRIPT="$fake_seed" \
+OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+"$SCRIPT" >/dev/null
+# shellcheck disable=SC2016  # the literal, unexpanded $HOME is the whole point
+grep -q '\$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json' "$TMP/argv.log"
+# The assertion is that NO line carries this machine's home. `grep -qv` would pass
+# on any non-matching line, and a leading `!` skips errexit — so neither asserts.
+if grep -q "$HOME/SourceRoot/dotfiles-private" "$TMP/argv.log"; then
+  echo "remote path was expanded locally: $(cat "$TMP/argv.log")" >&2
+  exit 1
+fi
+
+# A remote cache that isn't there reports 0, which as an age is 20000+ days and
+# would sail through every staleness gate. It must fail loudly, not seed.
+rm -rf "$TMP/state" "$TMP/missing.marker"
+set +e
+out=$(SEED_MARKER="$TMP/missing.marker" \
+  FAKE_CACHE_MTIME=0 \
+  OPBACKUP_SEED_NOW=700000 \
+  OPBACKUP_SEED_MAX_AGE_DAYS=5 \
+  OPBACKUP_SEED_REMOTE_HOST=mini \
+  OPBACKUP_SEED_SSH="$fake_ssh" \
+  OPBACKUP_SEED_PGREP="$fake_pgrep" \
+  OPBACKUP_SEED_IOREG="$fake_ioreg" \
+  OPBACKUP_SEED_BACKEND_FILE="$backend_file" \
+  OPBACKUP_SEED_STATE_DIR="$TMP/state" \
+  OPBACKUP_SEED_SCRIPT="$fake_seed" \
+  OPBACKUP_SEED_OP_AGENT="$fake_agent" \
+  "$SCRIPT" 2>&1)
+rc=$?
+set -e
+test "$rc" -eq 1
+test ! -e "$TMP/missing.marker"
+case "$out" in *"no cache at"*) ;; *) echo "expected missing-cache failure, got: $out" >&2; exit 1 ;; esac
+
 printf '%s\n' 'opbackup-seed-auto: all tests passed'

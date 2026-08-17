@@ -13,9 +13,19 @@ ATTEMPT_STAMP="$STATE_DIR/seed-last-attempt"
 MAX_AGE_DAYS="${OPBACKUP_SEED_MAX_AGE_DAYS:-5}"
 RETRY_HOURS="${OPBACKUP_SEED_RETRY_HOURS:-6}"
 REMOTE_HOST="${OPBACKUP_SEED_REMOTE_HOST:-mini}"
-REMOTE_CACHE_FILE="${OPBACKUP_SEED_REMOTE_CACHE_FILE:-$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json}"
+# The two REMOTE_* defaults carry a LITERAL, unexpanded `$HOME` and are quoted
+# with double quotes in the ssh payloads below, so the MINI's shell expands them.
+# The accounts differ — /Users/johannes.krumm here, /Users/jkrumm there — so a
+# locally-expanded path names a directory that does not exist on the mini. That
+# failure is silent and inverted: the probe's `[ -f ]` is false, `printf 0` makes
+# the cache look like it was last written in 1970, and the >5d gate therefore
+# passes on EVERY hourly tick. What looks like a five-day cadence becomes "seed
+# whenever the 6h backoff expires", and the freshness-heartbeat `cd` at the end
+# fails for the same reason, so the Uptime Kuma monitor stays red after a
+# successful reseed. Keep the `\$HOME`; do not "simplify" it to a real path.
+REMOTE_CACHE_FILE="${OPBACKUP_SEED_REMOTE_CACHE_FILE:-\$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json}"
 SEED_SCRIPT="${OPBACKUP_SEED_SCRIPT:-$HOME/SourceRoot/dotfiles/scripts/secrets-seed.sh}"
-REMOTE_DOTFILES_DIR="${OPBACKUP_SEED_REMOTE_DOTFILES_DIR:-$HOME/SourceRoot/dotfiles}"
+REMOTE_DOTFILES_DIR="${OPBACKUP_SEED_REMOTE_DOTFILES_DIR:-\$HOME/SourceRoot/dotfiles}"
 BACKEND_FILE="${OPBACKUP_SEED_BACKEND_FILE:-$HOME/.config/secrets/backend}"
 SSH_CMD="${OPBACKUP_SEED_SSH:-/usr/bin/ssh}"
 PGREP_CMD="${OPBACKUP_SEED_PGREP:-/usr/bin/pgrep}"
@@ -75,12 +85,21 @@ else
 fi
 
 remote_mtime=$("$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE_HOST" \
-  "if [ -f '$REMOTE_CACHE_FILE' ]; then stat -f %m '$REMOTE_CACHE_FILE'; else printf 0; fi" \
+  "if [ -f \"$REMOTE_CACHE_FILE\" ]; then stat -f %m \"$REMOTE_CACHE_FILE\"; else printf 0; fi" \
   2>/dev/null) || skip "$REMOTE_HOST unreachable"
 
 case "$remote_mtime" in
   ''|*[!0-9]*) skip "remote cache mtime unavailable" ;;
 esac
+
+# A missing cache and an ancient one are different conditions and must not share a
+# code path: `printf 0` above means "no file at that path on $REMOTE_HOST", which
+# is a wiring fault far more often than it is a genuinely unseeded mini, and as an
+# age it reads as 20000+ days and silently passes every staleness gate. Refuse.
+if [ "$remote_mtime" -eq 0 ]; then
+  log "FAILED — no cache at $REMOTE_CACHE_FILE on $REMOTE_HOST (path is expanded by the REMOTE shell; the accounts differ)"
+  exit 1
+fi
 
 cache_age=$(( ${OPBACKUP_SEED_NOW:-$("$DATE_CMD" +%s)} - remote_mtime ))
 if [ "$cache_age" -lt $(( MAX_AGE_DAYS * 86400 )) ]; then
@@ -103,7 +122,7 @@ notify "1Password secrets cache" "Starting — approve the Touch ID prompts."
 
 if "$SEED_SCRIPT"; then
   if "$SSH_CMD" -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE_HOST" \
-    "cd '$REMOTE_DOTFILES_DIR' && make secrets-freshness-check" >/dev/null 2>&1; then
+    "cd \"$REMOTE_DOTFILES_DIR\" && make secrets-freshness-check" >/dev/null 2>&1; then
     log "done — secrets cache reseeded and freshness heartbeat refreshed"
     notify "1Password secrets cache" "Complete — cache reseeded and monitor refreshed on $REMOTE_HOST."
     exit 0
