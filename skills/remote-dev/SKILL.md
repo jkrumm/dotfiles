@@ -244,9 +244,12 @@ a screenshot, an installer. Route everything else the way it already goes:
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent or LaunchAgent reads | onto the **mini** — the mount is client-side and dies with the MacBook |
 
-**No offline copy** — files live only on the mini, so an unreachable mini means
-Finder hangs on a stale mount. If a file needs to survive that, it does not
-belong here.
+**No offline copy** — but the table above is not an uptime argument. Repos need
+history, the vault is edited on both machines, and the mount is client-side; all
+three hold however reliable the mini is (and it is — days-to-weeks of uptime is
+normal). The end that actually goes away is the **MacBook**: corp network,
+travel, a Tailscale hiccup. A stale mount then hangs Finder rather than failing
+cleanly, so a file you need while disconnected does not belong here.
 
 If a mount fails: check `SMB-NT` before suspecting the tailnet. macOS mints no
 NTLM credential for a local account until the user is ticked in System Settings →

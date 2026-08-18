@@ -839,10 +839,19 @@ the same user, so that asymmetry buys nothing except a folder you cannot browse.
 | Vault pages | brain-sync through GitHub — it has an offline copy on both machines and reconciles every 5 min; never route `brain` through the mount |
 | Anything an agent or LaunchAgent on the mini reads | must be **on** the mini — the mount is client-side and dies with the MacBook |
 
-**No offline copy.** Files live only on the mini. Mini down or MacBook off the
-tailnet → Finder hangs on a stale mount. That is the real trade against
-Syncthing, and it is why the routing table above sends anything durable
-somewhere else. Over the tailnet (~7 ms) it is otherwise unremarkable.
+**No offline copy** — but do not over-read that, and note the routing table
+above does **not** rest on it. Repos go through git because they need history and
+the mini is the dev host; the vault goes through brain-sync because it is edited
+on both machines; agent-read files live on the mini because the mount is
+client-side. Every one of those holds at 100% uptime.
+
+**The availability risk is the MacBook's, not the mini's.** The mini is the
+always-on host and behaves like it (11d17h up when this was written; the
+preceding reboots were deliberate). What actually goes away is *this* end — the
+IU corp network, travel, a Tailscale hiccup. And a stale SMB mount does not fail
+cleanly: Finder beachballs and open file handles hang, which is worse than a file
+simply being absent. That is the honest trade against Syncthing. Over the tailnet
+(~7 ms) it is otherwise unremarkable.
 
 **`tcp:445` is granted `tag:mac → tag:mac`** in `dotfiles-private/tailscale-acl.jsonc`.
 Symmetric, because both Macs carry `tag:mac` — the MacBook is reachable on 445
