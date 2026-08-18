@@ -74,8 +74,24 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
   # with no way to tell.
   #
   # So: probe the real credential, prefer it, and fall back only on failure.
-  CLAUDE_AUTH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-auth"
-  CLAUDE_AUTH_PROBE_TTL="${CLAUDE_AUTH_PROBE_TTL:-3600}"
+  #
+  # NO CACHING OF THE VERDICT, and that is a deliberate retreat from a version
+  # that cached the positive one for an hour in ~/.local/state/claude-auth.
+  # Within a day it produced a `keychain-ok` stamp on a host whose bare binary
+  # reported `loggedIn: false` — impossible by the code as written, not
+  # reproducible on demand, and not explained by the obvious hypothesis either
+  # (running the binary WITH the token persists no credential; measured
+  # 2026-08-18, bare reports false before and after).
+  #
+  # An unexplained stamp is not a cosmetic problem here: a wrong positive
+  # suppresses the fallback for a full hour, so `claude` runs with no credential
+  # at all and silently bills API credits — the exact failure this file exists to
+  # prevent, reintroduced by the optimisation guarding it. The saving was 245ms
+  # (measured) per launch, against a Claude Code startup an order of magnitude
+  # larger. Probing every time is simple, always correct, and cheap enough that
+  # the complexity could never have paid for itself. If the probe ever becomes
+  # genuinely expensive, cache it then — with a mechanism whose failure mode is
+  # "probe again", not "run unauthenticated".
 
   claude() {
     # An explicit token in the environment always wins — never second-guess a
@@ -85,23 +101,9 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
       return
     fi
 
-    # ~245ms on this machine (measured), so it is cached — but ONLY the positive
-    # verdict. A negative one re-probes every launch, deliberately: that is the
-    # degraded path, and paying 245ms there is what makes a fresh `/login` in a
-    # herdr pane take effect on the very next command instead of up to an hour
-    # later. Caching the failure would recreate the masking this fixes.
-    local stamp="$CLAUDE_AUTH_STATE_DIR/keychain-ok" keychain_ok=0
-    if [[ -f $stamp ]] \
-      && (( $(date +%s) - $(stat -f %m "$stamp" 2>/dev/null || echo 0) < CLAUDE_AUTH_PROBE_TTL )); then
-      keychain_ok=1
-    elif command claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
-      mkdir -p "$CLAUDE_AUTH_STATE_DIR" && : >"$stamp"
-      keychain_ok=1
-    else
-      rm -f "$stamp"
-    fi
-
-    if (( keychain_ok )); then
+    # The real credential, exercised on every launch — which is also what keeps
+    # its rolling refresh alive, the whole point of preferring it.
+    if command claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
       command claude "$@"
       return
     fi

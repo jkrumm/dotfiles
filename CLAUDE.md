@@ -647,10 +647,20 @@ injected the token on every zsh `claude` launch, so `command claude` never
 touched the keychain. That credential is a short access token plus a **rolling**
 refresh token — it renews itself when the binary uses it, and only then. Never
 exercised, it ages out. Fixed the same day: probe the real credential (~245ms,
-measured), prefer it, fall back only on failure. The **positive** verdict is
-cached an hour in `~/.local/state/claude-auth/keychain-ok`; a **negative** one
-deliberately is not, so a fresh `/login` takes effect on the very next command
-rather than up to an hour later — caching the failure would recreate the masking.
+measured), prefer it, fall back only on failure — **every launch, uncached**,
+which is also what keeps the keychain's rolling refresh alive.
+
+**The one-hour verdict cache that shipped with that fix is gone, and the reason
+is worth keeping.** Within a day it produced a `keychain-ok` stamp on a host
+whose bare binary reported `loggedIn: false` — impossible by the code as
+written, not reproducible on demand, and not explained by the obvious hypothesis
+either (running the binary *with* the token persists no credential; measured
+both ways). A wrong positive there suppresses the fallback for a full hour, so
+`claude` runs with **no credential at all** and silently bills API credits — the
+exact failure the file exists to prevent, reintroduced by the optimisation
+guarding it. It was buying 245 ms against a Claude Code startup an order of
+magnitude larger. Unexplained mechanism + costly silent failure + negligible
+saving = delete it, rather than add a second mechanism to watch the first.
 
 Restoring the good credential is a `/login` in a **herdr pane on the mini**
 (`work <repo>` or a pane, then `/login`, paste the URL back) — a GUI-session
