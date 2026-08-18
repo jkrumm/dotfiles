@@ -876,6 +876,20 @@ brain-sync-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ brain-sync torn down (unloaded + plist removed)"
 
+# Audit THIS machine's own LaunchAgents for the failures that produce no error
+# anyone sees: a program or WorkingDirectory that does not exist (exit 78, the
+# job never starts and retries forever), a KeepAlive job that is down, logs in
+# /tmp (swept after 3 idle days, and launchd never reopens the file), and
+# plaintext credentials in EnvironmentVariables.
+#
+# Found on 2026-08-18 by hand: com.jkrumm.sideclaw had 40,281 failed spawns and
+# com.jkrumm.usage-tracker 449, both pointing at repos that live only on the
+# mini. Nothing anywhere reported it — the dev-host heartbeat is mini-only by
+# design, and this machine had no equivalent. Read-only; exits 1 on findings.
+.PHONY: launchagents-check
+launchagents-check:
+	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh
+
 # Persistent loopback forwards into the mini's dev databases, so dbOSK (and the
 # mysql CLI, and any script) has a fixed endpoint that is simply always there.
 # Declared state + the full "why not tailscale serve / not Caddy" argument:
@@ -1541,6 +1555,12 @@ status:
 	else \
 		echo "    ✗ backend marker [missing — run make setup]"; \
 	fi
+	@echo ""
+	@echo "  LaunchAgents"
+# Non-fatal on purpose: `status` is a report, not a gate, and a findings exit
+# would mask every section after it. Surfaced HERE because a dedicated target
+# nobody knows to run is how two agents accumulated 40,000 failed spawns unseen.
+	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh 2>&1 | sed 's/^/  /' || true
 	@echo ""
 
 .PHONY: _check
@@ -2888,6 +2908,7 @@ help:
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
+	@echo "  make launchagents-check         Audit this machine's LaunchAgents (orphans, /tmp logs, plaintext creds)"
 	@echo "  make opbackup-setup             Auto-trigger the 1Password vault backup (MacBook; hourly, guarded)"
 	@echo "  make opbackup-check             Run the guard once — prints which precondition stopped it (FORCE=1 to run)"
 	@echo "  make opbackup-teardown          Remove the auto-trigger (stamps kept)"

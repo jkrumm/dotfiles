@@ -1706,7 +1706,9 @@ Two 1Password accounts are configured:
 
 **Chrome DevTools MCP** — registered globally with deferred tool loading (~400 tokens overhead). Used exclusively via `/browse` skill (haiku fork) to isolate expensive MCP responses from main context.
 
-**MCP-per-project policy** — keep project MCPs minimal. Global servers are only `sideclaw`, `chrome-devtools`, and `research-gateway` (the remote research MCP), all deferred (names only in context, schemas via ToolSearch). The **only** repo running real project-level MCPs is `prometheus-scripts/jupyter` (db/datadog/marimo, in a git-ignored `.mcp.json`). `epos_fe.spa-orchestrator`'s `.mcp.json` (nitrox + Figma Desktop) is declarative IDE config, not always-on. No other repo has or needs project MCPs — don't add one without a deliberate reason. (Note: jupyter's datadog block hardcodes keys in the git-ignored file; the sibling `db` server uses `op run` — migrate datadog to `op run` when convenient.)
+**MCP-per-project policy** — keep project MCPs minimal. Global servers are `chrome-devtools` and `research-gateway` (the remote research MCP), both deferred (names only in context, schemas via ToolSearch), plus **`sideclaw` on the mini only**.
+
+**`sideclaw` is not available on the MacBook, and its skills therefore are not either** — `/check`, `/review`, `/otel`, `/read-drawing`, `/excalidraw-diagram` and `dispatch` all route through it. Its MCP entry is `type: stdio` running `~/SourceRoot/sideclaw/server/mcp.ts`, and that repo lives only on the mini per the sanctioned-repo split — so the entry failed to spawn on every MacBook session until it was removed on 2026-08-18. There is nothing to point at remotely: sideclaw's MCP is `StdioServerTransport` only, and a real JSON-RPC POST to the mini's `:7705` returns `NOT_FOUND` (the 200 you get from a browser is the SPA catch-all — same trap as collie's `/` vs `/api/snapshot`). Reaching it from here would need a StreamableHTTP transport added in sideclaw, which is a design decision for that repo, not drift to tidy up. Until then: run those skills on the mini (`work <repo>`), don't clone sideclaw here. The **only** repo running real project-level MCPs is `prometheus-scripts/jupyter` (db/datadog/marimo, in a git-ignored `.mcp.json`). `epos_fe.spa-orchestrator`'s `.mcp.json` (nitrox + Figma Desktop) is declarative IDE config, not always-on. No other repo has or needs project MCPs — don't add one without a deliberate reason. (Note: jupyter's datadog block hardcodes keys in the git-ignored file; the sibling `db` server uses `op run` — migrate datadog to `op run` when convenient.)
 
 **CodeRabbit CLI** — requires one-time auth: `coderabbit auth login` (GitHub OAuth). Free tier: 3 reviews/hour. Used by `/review` and `/ship` skills.
 
@@ -1887,6 +1889,35 @@ with a throwaway agent rather than assumed. `newsyslog.d` is not an option: it
 needs root, and this machine's root password is deliberately MacBook-only. The
 file list in `scripts/log-rotate.sh` is **declared, never globbed** —
 `~/Library/Logs` also holds Apple and vendor logs.
+
+## `make launchagents-check` — the MacBook has no heartbeat
+
+The mini has `devhost-health-check.sh` every 300s. **This machine has nothing**,
+and on 2026-08-18 that showed: `com.jkrumm.sideclaw` had **40,281** failed spawns
+and `com.jkrumm.usage-tracker` **449**, both with a `WorkingDirectory` pointing at
+a repo that lives only on the mini. launchd cannot chdir there, so every spawn
+died `78 (EX_CONFIG)` — it never started, and KeepAlive retried forever. Nothing
+reported it: both logged to `/tmp`, swept after 3 idle days, and the exit code
+sits in a `launchctl list` column nobody reads. Both were leftovers from before
+the MacBook/mini split and are now removed, along with the dead sideclaw MCP entry.
+
+`scripts/launchagents-check.sh` (read-only, also folded into `make status` so it
+is seen without knowing to run it) flags four things per `com.jkrumm.*` agent:
+missing program or WorkingDirectory, a down KeepAlive job, logs under `/tmp`, and
+plaintext credentials in `EnvironmentVariables` — `com.jkrumm.usage-tracker`
+carried a bare `ARGO_TOKEN`, which `rules/security.md` forbids and nothing else
+scans for.
+
+**Exit codes are graded, and that is what makes it worth reading.** `78` always
+fails, because the job can never start. Any *other* non-zero exit fails only if
+the plist sets `KeepAlive` and the job is not currently running — `db-tunnel`
+exits `255` every time the lid closes and has 103 such exits behind it while
+being perfectly healthy, and flagging that on every run is precisely the noise
+that trains you to skim past the one line that matters.
+
+**Known outstanding:** `com.jkrumm.photoflow` still logs to `/tmp`. Deliberately
+not fixed here — photo-flow is mid-flight on `feat/control-panel` with 122 dirty
+files, and threading a plist change through that is how you lose someone's work.
 
 ## Debug Logs
 
