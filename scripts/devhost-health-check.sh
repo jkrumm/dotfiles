@@ -884,8 +884,20 @@ check_claude_auth() {
 
   if [[ "$logged" != "true" ]]; then
     if claude_token_works; then
-      echo "claude keychain login is gone; running on the cached oauth token (works, but static 1y — restore with /login in a herdr pane on this host)"
-      return 1
+      # PASSES, deliberately. Max billing is intact, every herdr pane and `rd bg`
+      # daemon works, and the only cost is a worse CREDENTIAL — static 1y, no
+      # refresh, no reliable revocation — not a broken host. Failing here would
+      # put the composite monitor red indefinitely for a state that has been
+      # accepted, and this repo has already learned what that does: the
+      # 1Password backup monitor "had spent large stretches red as a nag, which
+      # is how you train yourself to ignore it".
+      #
+      # The condition is still NAMED in the push msg on every run, so it is
+      # visible without being an alarm, and the real failure is not softened:
+      # when the token stops working the branch below fails loudly. That is also
+      # what covers the one-year cliff — no separate expiry monitor needed.
+      echo "claude on the cached oauth token (Max ok; keychain login gone — restore with /login in a herdr pane, static 1y otherwise)"
+      return 0
     fi
     echo "claude NOT logged in and the cached oauth token does not work either — every agent on this host is billing API credits (fix: /login in a herdr pane, or claude setup-token; needs a human)"
     return 1

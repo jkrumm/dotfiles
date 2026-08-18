@@ -668,10 +668,17 @@ child, so the keychain is reachable. Prefer that over re-minting: a `setup-token
 credential is a **one-year token with no refresh and no reliable server-side
 revocation**, a downgrade from a keychain credential that refreshes itself
 (access ~8h, refresh rolling). `check_claude_auth` now probes **both** paths and
-grades three states — keychain ok / keychain dead but token working (degraded,
-names the fix) / neither (the real "billing API credits" alert) — because the
-bare-binary-only version reported a perfectly working host as the latter, and a
-component that overstates is one you learn to skim past. There is deliberately
+grades three states — keychain ok / keychain dead but token working / neither —
+because the bare-binary-only version reported a perfectly working host as the
+last one, and a component that overstates is one you learn to skim past.
+
+**The middle state PASSES and is merely named in the msg.** Max billing is
+intact, every herdr pane and `rd bg` daemon works, and the cost is a worse
+*credential*, not a broken host — so failing there would sit the composite
+monitor red indefinitely for a state that has been accepted, which is the nag
+the 1Password backup monitor already taught us to avoid. The real failure is not
+softened: when the token stops working the check fails loudly, and that is also
+what covers the one-year cliff. There is deliberately
 **no** separate token-expiry monitor: probing the fallback covers the one-year
 cliff by construction.
 
