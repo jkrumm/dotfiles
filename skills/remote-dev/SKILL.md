@@ -230,6 +230,38 @@ in", exit 1), it does not hang, so the biometric gate holds. `make
 remote-dev-doctor` checks this leg (layer 5, mini-only). Full model:
 `dotfiles/docs/remote-dev.md` §10.
 
+## Moving files between the Macs
+
+`~/Shuttle` on the mini, reached from the MacBook as a mounted SMB share
+(`smb://mini/jkrumm`, `tcp:445` granted `tag:mac → tag:mac`). Recommend it over
+one-off `scp`/`rsync` invocations for **ad-hoc human file movement** — an export,
+a screenshot, an installer. Route everything else the way it already goes:
+
+| Moving | Route |
+|-|-|
+| A one-off file between the Macs | the **Shuttle** mount |
+| Code / a repo | `rd`, or git |
+| Vault pages | brain-sync through GitHub |
+| Anything a mini-side agent or LaunchAgent reads | onto the **mini** — the mount is client-side and dies with the MacBook |
+
+**No offline copy** — files live only on the mini, so an unreachable mini means
+Finder hangs on a stale mount. If a file needs to survive that, it does not
+belong here.
+
+If a mount fails: check `SMB-NT` before suspecting the tailnet. macOS mints no
+NTLM credential for a local account until the user is ticked in System Settings →
+Sharing → File Sharing ⓘ → Options, and without it `smbd` refuses everything
+**including on its own loopback**, so a loopback failure settles it as a server
+problem, not a network one. The deterministic check, run on the server:
+
+```bash
+sudo plutil -extract ShadowHashData.0 raw -o - \
+  /var/db/dslocal/nodes/Default/users/<user>.plist | base64 -D | plutil -p - | grep SMB-NT
+```
+
+No match → the account was never enabled, and no amount of ACL work will fix it.
+Full model: `dotfiles/CLAUDE.md` → *File shuttle*.
+
 ## human-queue — the present-human channel
 
 SSH gave the mini reach into the MacBook; it did not give it a fingerprint. For

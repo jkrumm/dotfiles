@@ -816,6 +816,83 @@ launchd job rather than reasoned about:
 `ThrottleInterval 30` keeps a closed lid or an off-network mini from filling the
 log — an unreachable mini is a normal laptop state, not a fault.
 
+### File shuttle — the mini's home mounted over SMB (`~/Shuttle`)
+
+`smb://mini/jkrumm` mounted from the MacBook, with **`~/Shuttle` on the mini as
+the agreed drop folder** — the door for moving a file between the two Macs
+without thinking about it. Set up 2026-08-18. macOS auto-shares the
+authenticating user's home, so the share is the whole home dir and `Shuttle` is
+just a folder inside it; a share point exposing only `Shuttle` would need `sudo
+sharing -a ~/Shuttle`, which nothing needs yet.
+
+**`~/Public/Drop Box` is the wrong tool and was rejected.** It is a *multi-user*
+permission convention — Public readable by other accounts, Drop Box 733 so
+others can write but not list. Both machines are the same human logging in as
+the same user, so that asymmetry buys nothing except a folder you cannot browse.
+
+**Use it for ad-hoc human file movement, and nothing else:**
+
+| Moving | Route |
+|-|-|
+| A one-off file between the Macs (export, screenshot, PDF, installer) | **this mount** |
+| Code / a repo | `rd`, or git — repos live on the mini, the MacBook is a thin client |
+| Vault pages | brain-sync through GitHub — it has an offline copy on both machines and reconciles every 5 min; never route `brain` through the mount |
+| Anything an agent or LaunchAgent on the mini reads | must be **on** the mini — the mount is client-side and dies with the MacBook |
+
+**No offline copy.** Files live only on the mini. Mini down or MacBook off the
+tailnet → Finder hangs on a stale mount. That is the real trade against
+Syncthing, and it is why the routing table above sends anything durable
+somewhere else. Over the tailnet (~7 ms) it is otherwise unremarkable.
+
+**`tcp:445` is granted `tag:mac → tag:mac`** in `dotfiles-private/tailscale-acl.jsonc`.
+Symmetric, because both Macs carry `tag:mac` — the MacBook is reachable on 445
+too; its File Sharing is off, and turning *that* on is what would expose it, not
+the grant. Without the grant the mount times out with nothing in any log, the
+usual silent ACL failure.
+
+**The gotcha that costs an hour: a listening `:445` and a running `smbd` are not
+a working SMB server.** macOS stores no NTLM credential for a local account by
+default — `ShadowHashData` holds only `SALTED-SHA512-PBKDF2` and
+`SRP-RFC5054-4096-SHA512-PBKDF2` — and `smbd` validates a password against the
+**`SMB-NT`** hash. Missing it, the server refuses *every* principal identically:
+guest, password, and Kerberos, over the tailnet **and on its own loopback**. The
+error is a flat `Authentication error` client-side and
+`gss_accept_sec_context … status: 0xc000006d` (STATUS_LOGON_FAILURE) in the
+server's log, which reads like a network or Kerberos fault and is neither.
+
+Two corollaries worth holding:
+
+- **`smbutil view -g //localhost` failing does NOT mean guest access is off.** In
+  this state everything fails, so that probe cannot distinguish guest from any
+  other principal — it was read as proof of "not actually exposed" and proved
+  nothing. Check the share flags (`sharing -l` → `guest access`), not a probe.
+- **Kerberos is not the escape hatch here.** Every Mac runs an LKDC and Apple
+  clients normally authenticate against it with no NT hash — but `kinit` against
+  the local realm fails `unable to reach any KDC … tried 0 KDCs` from a
+  non-GUI context, and the tailnet ACL grants no port 88 anyway. Over a tailnet,
+  NTLM against a Keychain-stored password is the path that actually works.
+
+Minting the hash is **GUI-only and cannot be scripted**: System Settings →
+General → Sharing → File Sharing ⓘ → Options → tick the user → type the
+password. The prompt is the mechanism, not a formality — the stored login hash
+is non-recoverable, so macOS can only compute `MD4(utf-16le(password))` from
+plaintext you supply. No `pwpolicy`, `dscl`, `sysadminctl` or `sharing` verb
+injects it; `pwpolicy -sethashtypes SMB-NT on` only sets what gets stored *next
+password change*. On the mini that means Screen Sharing (`open vnc://mini`,
+tcp:5900 already granted). Verify with the data, never the setting:
+
+```bash
+ssh mini 'sudo plutil -extract ShadowHashData.0 raw -o - \
+  /var/db/dslocal/nodes/Default/users/jkrumm.plist | base64 -D | plutil -p -' \
+  | grep SMB-NT
+```
+
+**Guest access on a share is a separate switch, and `sharing -g` takes three
+digits, not a boolean** — `afp,ftp,smb` in that order, so `-g 0` prints usage and
+changes nothing while looking like it worked. `sudo sharing -e <name> -g 000`
+disables it, `-g 001` restores SMB guest. The mini's `AppleTV` share carried
+`guest access: 1` with `read-only: 0` and was turned off in the same pass.
+
 ### Two dev-server doors: port-based (`.ts.net`) and clean (`.mini.jkrumm.com`)
 
 **`config/Caddyfile` is the single app registry.** Every `<name>.test {

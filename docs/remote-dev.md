@@ -909,6 +909,25 @@ scoped to this door (same binary as the system sshd, so IT-Admin sessions would
 gain it too), and it undoes the low-profile posture the whole door is built for.
 TCC-limited is a feature. Hit + resolved 2026-08-07 pulling a 48 KB CSV.
 
+### 11. File shuttle — SMB mount of the mini — DONE 2026-08-18
+
+`smb://mini/jkrumm` mounted from the MacBook, `~/Shuttle` on the mini as the drop
+folder, for ad-hoc human file movement between the two Macs. Everything durable
+still routes elsewhere — repos through `rd`/git, the vault through brain-sync,
+anything a mini-side agent reads onto the mini itself — because the mount gives
+**no offline copy**: mini down or MacBook off the tailnet and Finder hangs on a
+stale mount. `tcp:445` on the `tag:mac → tag:mac` grant. Rationale, routing table
+and the full setup: `dotfiles/CLAUDE.md` → *File shuttle*.
+
+Worth restating here because it looks like a transport fault and is not: a
+listening `:445` and a running `smbd` are **not** a working SMB server. macOS
+stores no `SMB-NT` hash for a local account until the user is ticked in File
+Sharing → Options, and without it `smbd` refuses *every* principal — guest,
+password, Kerberos — over the tailnet and on its own loopback. Minting it is
+GUI-only (Screen Sharing, `open vnc://mini`); no `pwpolicy`/`dscl`/`sysadminctl`
+verb can. Diagnosed against loopback, which is what ruled out Tailscale in one
+step — do that first next time.
+
 ## What used to take this down — RESOLVED 2026-08-01, by paying for it
 
 The four layers all assume the mini is *booted into a user session*. Everything
