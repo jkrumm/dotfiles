@@ -95,6 +95,20 @@ else
   skip "no SSH agent socket — is the 1Password desktop app running? ($OP_AGENT_SOCK)"
 fi
 
+# SCREEN LOCK IS CHECKED HERE, BEFORE THE SSH PROBE, AND THAT ORDERING IS THE
+# POINT. This gate used to sit below, after the ssh + freshness + backoff checks,
+# so every hourly tick on a closed laptop still dialled the mini over the
+# 1Password SSH agent — an agent that cannot sign while the app is locked and may
+# queue an approval nobody is there to answer. The overnight log for 2026-08-17
+# is 9 consecutive ticks of exactly that, alternating "mini unreachable" and
+# "agent could not sign", none of which could ever have led to work: a locked
+# screen skips regardless of what the probes find.
+#
+# Moving it up changes no decision — every path it short-circuits ended in a skip
+# anyway — and removes an hourly ssh + agent hit, plus the log noise that made a
+# real failure harder to spot among them.
+! screen_locked || skip "screen is locked"
+
 # ssh's stderr is KEPT, not discarded, because the two ways this leg fails call
 # for opposite reactions and `2>/dev/null` collapses them into one wrong message.
 # A closed lid or an off-network mini is a normal laptop state; a locked 1Password
@@ -138,7 +152,6 @@ if [ "$tried_ago" -lt $(( RETRY_HOURS * 3600 )) ]; then
   skip "seed attempted $(( tried_ago / 60 ))m ago (backoff ${RETRY_HOURS}h)"
 fi
 
-! screen_locked || skip "screen is locked"
 "$PGREP_CMD" -x "1Password" >/dev/null 2>&1 || skip "1Password desktop is not running"
 
 # RUNNING IS NOT UNLOCKED, and conflating the two is what produces the prompt
