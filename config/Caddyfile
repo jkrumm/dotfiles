@@ -237,6 +237,16 @@ brain.test {
 	reverse_proxy localhost:7733
 }
 
+# meteo — self-hosted weather platform on the mini (point/marine API + tile service)
+meteo.test {
+	import local
+	reverse_proxy localhost:8080
+}
+meteo-tiles.test {
+	import local
+	reverse_proxy localhost:8081
+}
+
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
 # https://audio-gateway.jkrumm.com/v1 instead. Kept commented for an easy
