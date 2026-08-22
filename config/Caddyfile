@@ -246,6 +246,13 @@ meteo-tiles.test {
 	import local
 	reverse_proxy localhost:8081
 }
+# The live map. Same origin as the tile service on purpose — /layers, /tiles and
+# /probe are fetched with origin-relative URLs, so there is no CORS surface at all.
+meteo-map.test {
+	import local
+	redir / /map/ 302
+	reverse_proxy localhost:8081
+}
 
 # whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
 # :8002) was replaced by the VPS audio-gateway. Point local clients at
