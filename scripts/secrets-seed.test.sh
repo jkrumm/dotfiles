@@ -384,6 +384,7 @@ assert_eq "10. dedupe: repeated ref appears exactly once in the sealed cache" "1
 # only one would silently pass the moment the other path is taken.
 reads="$(grep -c "^read .*op://test/app/token$" "$TESTREPO/op-calls.log" || true)"
 injected="$(grep -c "^op://test/app/token$" "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+injected="${injected:-0}"
 assert_eq "10. dedupe: repeated ref is resolved exactly ONCE (no second prompt)" "1" "$(( reads + injected ))"
 
 # === 11. A failing `op read` aborts before any crypto, cache untouched (D5.4) ==
@@ -424,6 +425,7 @@ run_seed
 assert_accepted "13. paths: batched resolve seals successfully"
 batched_keys="$(decrypt_cache | jq -S 'del(._seeded_at)')"
 batched_injects="$(grep -c . "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+batched_injects="${batched_injects:-0}"   # grep -c on a missing file prints nothing
 assert_eq "13. paths: batched resolve used op inject, not per-ref reads" "2" "$batched_injects"
 
 reset_case
@@ -432,6 +434,7 @@ SECRETS_SEED_OP_BATCH=0 run_seed
 assert_accepted "13. paths: forced per-ref fallback also seals successfully"
 fallback_keys="$(decrypt_cache | jq -S 'del(._seeded_at)')"
 fallback_injects="$(grep -c . "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+fallback_injects="${fallback_injects:-0}" # the whole point: the file never appears
 assert_eq "13. paths: SECRETS_SEED_OP_BATCH=0 really skips the batch" "0" "$fallback_injects"
 assert_eq "13. paths: both resolve paths seal an identical cache" "$batched_keys" "$fallback_keys"
 
