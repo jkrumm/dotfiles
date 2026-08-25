@@ -105,6 +105,34 @@ case "${1:-}" in
     [[ "${2:-}" == "get" ]] || exit 1
     printf '{"id":"%s"}\n' "$(cat "$HERE/fake-uuid.txt")"
     ;;
+  inject)
+    # The seed's fast path. Without this the stub would exit 1 here, resolve_batch
+    # would fail, and every case below would silently exercise the per-ref FALLBACK
+    # instead of the path that actually runs in production.
+    shift
+    acct=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --account) acct="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    while IFS= read -r line; do
+      case "$line" in
+        '{{ '*' }}')
+          ref="${line#\{\{ }"; ref="${ref% \}\}}"
+          # Batched refs travel on stdin, so argv logging cannot see them. Log each
+          # one separately or case 10 loses the only signal that dedupe works.
+          printf '%s\n' "$ref" >> "$HERE/op-injected.log"
+          if [[ "$ref" == *multiline* ]]; then printf 'line-one\nline-two\n'; continue; fi
+          if [[ "$ref" == *readfail* ]]; then
+            echo "[ERROR] could not read secret: item not found" >&2; exit 1
+          fi
+          stub_value "$acct" "$ref"; printf '\n' ;;
+        *) printf '%s\n' "$line" ;;
+      esac
+    done
+    ;;
   read)
     shift
     acct="" ref=""
@@ -158,7 +186,8 @@ write_refs() {  # $1=headless.refs|headless.iu.refs  $2..=lines (verbatim)
 . "$TESTREPO/stubfmt.sh"
 
 reset_case() {  # clears per-case state; restores the canonical single-recipient .sops.yaml
-  rm -f "$TESTREPO/headless.refs" "$TESTREPO/headless.iu.refs" "$TESTREPO/op-calls.log"
+  rm -f "$TESTREPO/headless.refs" "$TESTREPO/headless.iu.refs" "$TESTREPO/op-calls.log" \
+        "$TESTREPO/op-injected.log"
   rm -rf "$TESTREPO/cache"
   mkdir -p "$TESTREPO/cache"
   write_sops_yaml "$RECIPIENT"
@@ -170,7 +199,11 @@ reset_case() {  # clears per-case state; restores the canonical single-recipient
 run_seed() {
   local errf
   errf="$(mktemp "$TESTREPO/stderr.XXXXXX")"
-  PATH="$TESTREPO/bin:$PATH" SECRETS_PRIVATE_REPO="$TESTREPO" "$SEED" >/dev/null 2>"$errf"
+  # SECRETS_SEED_OP_BATCH is forwarded EXPLICITLY: a `VAR=x run_seed` prefix sets the
+  # variable for the function call but bash does not export it onward to the seed
+  # process, so case 13's fallback run would silently have taken the batch path.
+  PATH="$TESTREPO/bin:$PATH" SECRETS_PRIVATE_REPO="$TESTREPO" \
+    SECRETS_SEED_OP_BATCH="${SECRETS_SEED_OP_BATCH:-1}" "$SEED" >/dev/null 2>"$errf"
   SEED_CODE=$?
   SEED_ERR="$(cat "$errf")"
   rm -f "$errf"
@@ -346,8 +379,12 @@ run_seed
 assert_accepted "10. dedupe: repeated ref within one list still seeds successfully"
 count="$(decrypt_cache | jq -r 'keys[]' | grep -c '^op://test/app/token$')"
 assert_eq "10. dedupe: repeated ref appears exactly once in the sealed cache" "1" "$count"
+# Counted across BOTH resolve paths: a batched ref arrives on `op inject`'s stdin
+# (op-injected.log) and a fallback ref as `op read` argv (op-calls.log). Asserting on
+# only one would silently pass the moment the other path is taken.
 reads="$(grep -c "^read .*op://test/app/token$" "$TESTREPO/op-calls.log" || true)"
-assert_eq "10. dedupe: repeated ref is read from op exactly ONCE (no second prompt)" "1" "$reads"
+injected="$(grep -c "^op://test/app/token$" "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+assert_eq "10. dedupe: repeated ref is resolved exactly ONCE (no second prompt)" "1" "$(( reads + injected ))"
 
 # === 11. A failing `op read` aborts before any crypto, cache untouched (D5.4) ==
 # The seed resolves every ref before it seals anything, so ONE failure must abort with the
@@ -373,6 +410,30 @@ run_seed
 assert_refused "12. empty: comment-only headless.refs refused"
 assert_contains "12. empty: refusal explains no references were found" "no references" "$SEED_ERR"
 assert_cache_absent "12. empty: cache untouched"
+
+# --- case 13: both resolve paths reach the same cache -------------------------
+#
+# Every case above runs the BATCHED path (one `op inject` per account). The per-ref
+# path is not dead code — it is the diagnostic fallback the seed takes whenever a
+# batch fails, and it is what produces "which ref is wrong" for a human. A fallback
+# that is only exercised when something is already going wrong is a fallback nobody
+# has tested, so pin it explicitly and assert the two paths agree byte for byte.
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/other/field"
+run_seed
+assert_accepted "13. paths: batched resolve seals successfully"
+batched_keys="$(decrypt_cache | jq -S 'del(._seeded_at)')"
+batched_injects="$(grep -c . "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+assert_eq "13. paths: batched resolve used op inject, not per-ref reads" "2" "$batched_injects"
+
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/other/field"
+SECRETS_SEED_OP_BATCH=0 run_seed
+assert_accepted "13. paths: forced per-ref fallback also seals successfully"
+fallback_keys="$(decrypt_cache | jq -S 'del(._seeded_at)')"
+fallback_injects="$(grep -c . "$TESTREPO/op-injected.log" 2>/dev/null || true)"
+assert_eq "13. paths: SECRETS_SEED_OP_BATCH=0 really skips the batch" "0" "$fallback_injects"
+assert_eq "13. paths: both resolve paths seal an identical cache" "$batched_keys" "$fallback_keys"
 
 # --- guards deliberately NOT covered here (documented, not silently skipped) --
 # - deliver_remote_cache (ssh mini): needs a live SSH target; local delivery
