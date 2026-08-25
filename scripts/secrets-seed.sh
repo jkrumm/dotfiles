@@ -246,19 +246,115 @@ fi
 # `op read` hangs indefinitely waiting on an authorization dialog that never
 # renders (observed here — 2 minutes, no output, no dialog on screen). From a
 # LaunchAgent that wedges the job until launchd's next tick collides with it.
-# `timeout -k` because op does not reliably die on SIGTERM. Degrades to an
-# unbounded read if coreutils' timeout is absent rather than refusing to run.
+# The deadline is enforced by run_bounded (below), which escalates TERM to KILL
+# because op does not reliably die on SIGTERM.
 OP_READ_TIMEOUT="${SECRETS_SEED_OP_READ_TIMEOUT:-30}"
 OP_READ_ATTEMPTS="${SECRETS_SEED_OP_READ_ATTEMPTS:-3}"
-TIMEOUT_BIN="${SECRETS_SEED_TIMEOUT:-$(command -v timeout || command -v gtimeout || true)}"
-[[ -n "$TIMEOUT_BIN" ]] || echo "    ! no coreutils 'timeout' found — op reads run unbounded" >&2
+# One batch covers hundreds of refs, so it gets a proportionally larger deadline.
+OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-180}"
+# Escape hatch: set to 0 to skip batching entirely and read ref-by-ref.
+OP_BATCH="${SECRETS_SEED_OP_BATCH:-1}"
+
+# WHY NOT coreutils `timeout` ANY MORE. macOS attributes a TCC authorization to the
+# RESPONSIBLE PROCESS — the ancestor that spawned the one asking. Wrapping `op` in
+# Homebrew's `timeout` made that ancestor /opt/homebrew/bin/timeout, so every read
+# raised "gtimeout wants to access data from other apps", and because a Homebrew
+# binary carries an ad-hoc signature that changes on every upgrade, the grant never
+# stuck — it re-prompted forever, once per ref. Observed 2026-08-25: a single run
+# put one dialog on screen per ref (148 of them at the time) and kept going.
+#
+# Running `op` as a direct child of /bin/bash keeps the responsible process
+# Apple-signed and stable, so one approval persists. The deadline the old wrapper
+# provided is still enforced — see run_bounded — because the hang it guarded against
+# (op waiting on a dialog that never renders) is real and unchanged.
+run_bounded() {  # $1=seconds  $2..=command ; stdout passes through untouched
+  local secs="$1"; shift
+  local rc=0 cmd_pid wd_pid
+  # `<&0` is load-bearing. POSIX assigns an ASYNCHRONOUS list's stdin to /dev/null
+  # "before any explicit redirections", so a bare `"$@" &` would hand `op inject` an
+  # empty stdin: it reads no template, emits nothing, and exits 0. That failed safe
+  # (the marker walk rejects the empty output and the per-ref fallback runs) but it
+  # silently disabled batching altogether. The explicit redirection overrides the
+  # default and passes the caller's pipe through.
+  "$@" <&0 &
+  cmd_pid=$!
+  # The watchdog's own stdout goes to /dev/null: it must not hold the command
+  # substitution's pipe open, or the caller would block until the sleep elapsed
+  # even on a fast success.
+  { sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null; sleep 5; kill -KILL "$cmd_pid" 2>/dev/null; } >/dev/null 2>&1 &
+  wd_pid=$!
+  wait "$cmd_pid" || rc=$?
+  kill "$wd_pid" 2>/dev/null || true
+  wait "$wd_pid" 2>/dev/null || true
+  # A watchdog kill surfaces as 143 (TERM). Normalise it to coreutils' 124 so
+  # op_read_transient's existing contract keeps working unchanged.
+  (( rc == 143 )) && rc=124
+  return "$rc"
+}
 
 op_read_once() {  # $1=account  $2=ref ; value on stdout, diagnostics in $rerr
-  if [[ -n "$TIMEOUT_BIN" ]]; then
-    "$TIMEOUT_BIN" -k 5 "$OP_READ_TIMEOUT" op read --account "$1" "$2" 2>"$rerr"
-  else
-    op read --account "$1" "$2" 2>"$rerr"
-  fi
+  run_bounded "$OP_READ_TIMEOUT" op read --account "$1" "$2" 2>"$rerr"
+}
+
+# --- batched resolve ---------------------------------------------------------
+# WHY BATCH. The per-ref loop below is one `op` PROCESS per ref, each doing its own
+# handshake with the desktop app. That is what makes a reseal hundreds of dialogs
+# long, and it is also the direct cause of the transient handshake failures the
+# retry logic exists to absorb — a few hundred handshakes is a few hundred chances
+# to lose one. `op inject` resolves every ref in ONE process, so the whole run costs
+# one handshake per ACCOUNT (two) instead of one per ref (148 at the time of writing).
+#
+# The template carries only REFERENCES, never values, so it is safe on stdin. The
+# resolved output is read straight into the vals[] array — plaintext still never
+# lands as a file and never as argv (R1).
+#
+# Values are framed by a per-run sentinel rather than positionally, so a value that
+# happens to look like a marker cannot shift the mapping. A ref whose value spans
+# more than one line is refused here for exactly the reason the per-ref path refuses
+# it: the pairing would silently misalign and corrupt the cache.
+SEED_MARK="@@secrets-seed-$$-${RANDOM}@@"
+
+resolve_batch() {  # $1=account  $2..=indices into refs[] ; fills vals[] by index
+  local acct="$1"; shift
+  local -a idx=("$@")
+  (( ${#idx[@]} )) || return 0
+
+  local tpl="" i
+  for i in "${idx[@]}"; do
+    tpl+="${SEED_MARK}${i}:"$'\n'"{{ ${refs[$i]} }}"$'\n'
+  done
+  tpl+="${SEED_MARK}END:"$'\n'
+
+  local out rc=0
+  out=$(printf '%s' "$tpl" | run_bounded "$OP_BATCH_TIMEOUT" op inject --account "$acct" 2>"$rerr") || rc=$?
+  (( rc == 0 )) || return "$rc"
+
+  local -a lines=()
+  while IFS= read -r line; do lines+=("$line"); done <<<"$out"
+
+  local n=${#lines[@]} p=0 tag
+  while (( p < n )); do
+    case "${lines[$p]}" in
+      "${SEED_MARK}"*) ;;
+      *) echo "    ! batch output did not line up with its markers" >&2; return 91 ;;
+    esac
+    tag="${lines[$p]#"$SEED_MARK"}"; tag="${tag%:}"
+    [[ "$tag" == "END" ]] && break
+    # The line after a marker is the value; the line after THAT must be the next
+    # marker, or the value spanned multiple lines.
+    case "${lines[$((p + 2))]:-}" in
+      "${SEED_MARK}"*) ;;
+      *) die "value for ${refs[$tag]} is multi-line — unsupported (v1: single-line values only); remove it from headless.refs" ;;
+    esac
+    vals[tag]="${lines[$((p + 1))]:-}"
+    p=$(( p + 2 ))
+  done
+
+  # Every index we asked for must have come back, or the mapping is not trustworthy.
+  for i in "${idx[@]}"; do
+    [[ -n "${vals[$i]+set}" ]] || { echo "    ! batch output was missing ${refs[$i]}" >&2; return 92; }
+  done
+  return 0
 }
 
 # Transient == the desktop-app handshake, never the ref. Keep this list tight:
@@ -275,7 +371,40 @@ op_read_transient() {  # $1=exit status of op_read_once
 echo "  Resolving references..."
 vals=()
 rerr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
-for ((i = 0; i < ${#refs[@]}; i++)); do
+
+# Try one batched call per account first. On ANY failure fall back to the per-ref
+# loop below for that account — `op inject` reports a bad template as one error for
+# the whole batch, and "which ref is wrong" is the single most useful thing this
+# script tells a human. Speed is not worth losing that, so the fallback is not an
+# afterthought: it is the diagnostic path, and the batch is the fast path.
+declare -a _pending_idx=()
+if (( OP_BATCH )); then
+  declare -a _seen_accts=()
+  for ((i = 0; i < ${#refs[@]}; i++)); do
+    _known=0
+    for _a in ${_seen_accts[@]+"${_seen_accts[@]}"}; do
+      [[ "$_a" == "${accts[$i]}" ]] && { _known=1; break; }
+    done
+    (( _known )) || _seen_accts+=("${accts[$i]}")
+  done
+  for _acct in ${_seen_accts[@]+"${_seen_accts[@]}"}; do
+    _idx=()
+    for ((i = 0; i < ${#refs[@]}; i++)); do
+      [[ "${accts[$i]}" == "$_acct" ]] && _idx+=("$i")
+    done
+    if resolve_batch "$_acct" "${_idx[@]}"; then
+      echo "    ✓ $_acct: resolved ${#_idx[@]} reference(s) in one call"
+    else
+      echo "    … $_acct: batch resolve failed — falling back to per-reference reads" >&2
+      indent <"$rerr" >&2
+      _pending_idx+=("${_idx[@]}")
+    fi
+  done
+else
+  for ((i = 0; i < ${#refs[@]}; i++)); do _pending_idx+=("$i"); done
+fi
+
+for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
   ref="${refs[$i]}"
   attempt=1
   while :; do
@@ -304,15 +433,21 @@ for ((i = 0; i < ${#refs[@]}; i++)); do
   case "$v" in
     *$'\n'*) rm -f "$rerr"; die "value for $ref is multi-line — unsupported (v1: single-line values only); remove it from headless.refs" ;;
   esac
-  # Heads-up (not fatal): a value shorter than the runtime redaction floor won't be
-  # masked from a command's output on the mini (secrets-run REDACT_MIN_LEN). Print
-  # only the ref + length, never the value.
-  if [[ ${#v} -lt "${REDACT_MIN_LEN:-5}" ]]; then
-    echo "    ! $ref resolves to a ${#v}-char value — too short to be redacted at runtime (secrets-run won't mask it)" >&2
-  fi
-  vals+=("$v")
+  # By INDEX, not append: the batch path above may already have filled other slots,
+  # and vals[] is paired with refs[] positionally by the jq fold below.
+  vals[i]="$v"
 done
 rm -f "$rerr"
+
+# The short-value heads-up is per-ref in the fallback loop; the batch path skips it,
+# so sweep once here for anything it filled. Prints the ref and the length, never
+# the value.
+for ((i = 0; i < ${#refs[@]}; i++)); do
+  [[ -n "${vals[$i]+set}" ]] || die "internal: no value resolved for ${refs[$i]}"
+  if [[ ${#vals[$i]} -lt "${REDACT_MIN_LEN:-5}" ]]; then
+    echo "    ! ${refs[$i]} resolves to a ${#vals[$i]}-char value — too short to be redacted at runtime (secrets-run won't mask it)" >&2
+  fi
+done
 echo "    ✓ resolved ${#vals[@]} value(s)"
 
 # --- assemble plaintext JSON (in pipes) and encrypt --------------------------

@@ -2124,8 +2124,15 @@ secrets-lint:
 	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle' (it's in the Brewfile)"; exit 1; }
 	@shellcheck $(DOTFILES_DIR)/scripts/secrets-run $(DOTFILES_DIR)/scripts/secrets-run-diagnostics.sh \
 		$(DOTFILES_DIR)/scripts/secrets-run.test.sh \
-		$(DOTFILES_DIR)/scripts/secrets-seed.sh $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
+		$(DOTFILES_DIR)/scripts/secrets-seed.sh $(DOTFILES_DIR)/scripts/secrets-seed.test.sh \
+		$(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
 	@echo "  ✓ shellcheck clean (secrets-run + diagnostics + secrets-seed + harnesses)"
+	@# The batch-resolve harness is hermetic (stubbed op, no account, no age key, no
+	@# cache backend), so unlike secrets-seed.test.sh it can run HERE — on the machine
+	@# where a human actually runs `make secrets-seed`. It guards how many 1Password
+	@# dialogs a reseal costs, which is exactly the thing that regressed.
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
 
 # Functional regression suite for the shim + the seed. MINI-ONLY: both harnesses'
 # preflight requires the `cache` backend (+ secrets-run.test.sh needs an age key).
