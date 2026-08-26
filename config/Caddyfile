@@ -258,6 +258,30 @@ hermes-web.test {
 	reverse_proxy localhost:8789
 }
 
+# hermes-api — `hermes serve` (loopback :9119), the JSON-RPC/WebSocket backend
+# Hermes Desktop connects to. Distinct from hermes-web above: that is a
+# third-party browser UI, this is upstream's own Desktop backend, and upstream
+# expects both it and the Slack gateway to run.
+#
+# The WebSocket at /api/ws is why this door works at all — Caddy's reverse_proxy
+# upgrades natively, so no extra directive is needed. It is also why the :8642
+# OpenAI-compatible API cannot substitute: that server has no /api/ws route.
+#
+# Auth is the backend's, not Caddy's. config.yaml sets dashboard.public_url to
+# this hostname precisely so Hermes engages its own auth gate despite the loopback
+# bind — upstream turns auth on for a non-loopback bind OR an operator-declared
+# external URL, and "reverse proxy in front of loopback" is what that second
+# clause is for. Do not add `import local` style basic_auth here on top; two auth
+# layers would break Desktop's /api/status discovery handshake.
+#
+# No `portdoor`: 9119 stays loopback-only, which is the whole access-control
+# argument — a tailnet bind could only be scoped to tag:mac, i.e. both Macs
+# including the work laptop, while this door is scoped to tag:devhost (the mini).
+hermes-api.test {
+	import local
+	reverse_proxy localhost:9119
+}
+
 # meteo — self-hosted weather platform on the mini (point/marine API + tile service)
 meteo.test {
 	import local
