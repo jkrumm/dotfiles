@@ -237,6 +237,27 @@ brain.test {
 	reverse_proxy localhost:7733
 }
 
+# hermes-web — the Hermes Agent browser UI (~/SourceRoot/hermes-webui, a
+# LaunchAgent on loopback :8789). Deployment lives in hermes-agent; this block
+# only gives it a name.
+#
+# It ALSO has a `tailscale serve` row (:8789, tailnet-only, tag:phone) and both
+# doors stay. The serve row is the zero-dependency one — tailscaled mints its own
+# cert, so it survives a Cloudflare outage, an expired DNS token, or a Caddy that
+# will not start, and that is the door the phone is configured against. This block
+# is what makes the UI reachable from the MacBook: the serve row's ACL grant is
+# `tag:phone → tag:mac` alone, and both Macs are tag:mac, so widening it would have
+# handed the work MacBook a UI that reads every Hermes session and memory. The
+# clean door is already scoped to the additive tag:devhost (the mini alone), which
+# is exactly the distinction that grant could not express.
+#
+# No `portdoor`: a port door would have Caddy bind 8789 on the tailnet interface
+# and collide head-on with the serve row above.
+hermes-web.test {
+	import local
+	reverse_proxy localhost:8789
+}
+
 # meteo — self-hosted weather platform on the mini (point/marine API + tile service)
 meteo.test {
 	import local
