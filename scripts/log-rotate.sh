@@ -58,6 +58,23 @@ FILES=(
   hermes-liveness.err
   hermes-backup.log
   hermes-backup.err
+  hermes-webui.log
+  hermes-webui.err
+  hermes-webui-liveness.log
+  hermes-webui-liveness.err
+  # The Hermes gateway's OWN launchd streams. Absolute because `hermes gateway
+  # install` generates that plist and points it at ~/.hermes/logs, not
+  # ~/Library/Logs, and the plist is upstream's to write — this list bends to it
+  # rather than the other way round.
+  #
+  # Hermes rotates agent.log and errors.log itself (agent.log.1/.2/.3), but NOT
+  # these two, and nothing else did either. Found at 115 MB on 2026-08-25: a
+  # slack_bolt reconnect task whose aiohttp session had been closed retried every
+  # 10s for 48 hours — ~17,300 identical lines — and the file simply grew. The
+  # size was the only durable evidence that anything was wrong, which is the
+  # argument for capping it, not for leaving it as an accidental flight recorder.
+  "$HOME/.hermes/logs/gateway.error.log"
+  "$HOME/.hermes/logs/gateway.log"
   # Not a LaunchAgent log: hermes-agent/scripts/hermes-ops.sh appends one audit
   # line per invocation, so it grows with agent activity rather than on a
   # schedule. It is the only record of what Hermes did unattended, so it is
