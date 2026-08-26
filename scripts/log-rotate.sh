@@ -62,6 +62,10 @@ FILES=(
   hermes-webui.err
   hermes-webui-liveness.log
   hermes-webui-liveness.err
+  hermes-serve.log
+  hermes-serve.err
+  hermes-serve-liveness.log
+  hermes-serve-liveness.err
   # The Hermes gateway's OWN launchd streams. Absolute because `hermes gateway
   # install` generates that plist and points it at ~/.hermes/logs, not
   # ~/Library/Logs, and the plist is upstream's to write — this list bends to it
