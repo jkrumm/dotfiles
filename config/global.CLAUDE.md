@@ -233,7 +233,7 @@ the free tier.
 | `linewatch` | Home-line / connectivity watcher — bearer-auth'd routes, bucketed metrics, router poller. |
 | `vibe-stack` | The "factory" repo — generates a Cloudflare + Mantine v9 + D1 starter kit plus German-language guided onboarding for non-technical friends. Editing the factory ≠ editing what it produces. |
 | `king-smith-walkingpad-mac` | Go LaunchAgent + Raycast extension driving a WalkingPad P1 over BLE, syncing sessions to Argo. Milestone 0 / POC. |
-| `audio-gateway` | OpenAI-compatible STT + expressive Gemini TTS, VPS container at `audio-gateway.jkrumm.com` over the tailnet. Consumed by Hermes, Argo, local MacWhisper. |
+| `audio-gateway` | OpenAI-compatible STT + TTS (ElevenLabs via the IU Replicate route, Gemini lane kept), VPS container at `audio-gateway.jkrumm.com` over the tailnet. Consumed by Hermes, Argo, local MacWhisper. |
 | `basalt-ui` | Mantine v9 + visx design system (NPM). **No Tailwind** since the 2026-07 zinc redesign. **Always a separate commit** from consumer apps. |
 | `brain` | Git-backed Obsidian vault. Two layers: top-level `wiki/` = agentic knowledge (strict lint), PARA `Projects`/`Areas` = curated human surface (light lint) linking down into `wiki/`. No `Resources` tier. Door is `obsidian-cli`, a **client of the running app** — it exits 1 on every subcommand when Obsidian is down (`make obsidian-autostart` keeps it up). Direct-to-master, validated by `vault-lint`. Use `/brain`. |
 | `modelpick` | Which models for what, and why — ranks IU models against leaderboards + live probes, flags drift. **Source of truth for model-choice rationale** (`docs/decisions/`). |
