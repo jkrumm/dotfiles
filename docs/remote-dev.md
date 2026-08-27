@@ -1108,3 +1108,779 @@ machine name) — see the gotcha at §10 above for the mechanism and how it was 
 - Only if you built door 2 (step 4b): `caddy list-modules | grep dns.providers.cloudflare`
   is non-empty, `https://<app>.mini.jkrumm.com` serves the same app as the `.ts.net` door,
   and the port-based door still works unchanged.
+
+---
+
+## CLAUDE.md reference snapshot (moved here 2026-08-27 for length)
+
+Everything below was condensed out of the root `CLAUDE.md` "Remote dev" section
+when that file exceeded the 150k-char agent context limit. It documents the
+**current, settled state** (not the plan above, which is largely DONE anyway) —
+treat it as the fuller version of what CLAUDE.md now states tersely.
+
+## Remote dev — MacBook → mini
+
+The mini is the dev host; the MacBook is a thin client. Full plan and the
+end-to-end mental model: **`docs/remote-dev.md`**. Four layers, none of which
+substitutes for another — most design confusion here comes from collapsing them:
+
+| Layer | Tool | Solves |
+|-|-|-|
+| Reachability | Tailscale | stable address, NAT traversal |
+| Transport | **mosh** | keystrokes survive lid-close + roaming |
+| Persistence + UI | **herdr** (on the mini) | panes stay alive, per-pane agent state |
+| Service exposure | Caddy | dev servers over the tailnet with working WebSockets |
+
+`herdr` owns the workspace model because it runs on the *mini* and survives
+lid-close; **cmux is demoted to the window herdr renders in**, and tmux is the
+fallback if herdr (pre-1.0) breaks. On the mini it runs as a **brew service**
+(`RunAtLoad` + `KeepAlive`, same mechanism as colima) — manage it with
+`brew services`, not `herdr server stop`, which KeepAlive would just undo.
+
+There are **two mutually exclusive ways in**, and they trade different things —
+persistence is not one of them, since the server and its panes live on the mini
+either way. `config/zsh/remote-dev.zsh` gives each a one-command entry point:
+
+- `dev [session]` → `mosh mini`, then `herdr` there — UDP, roams, survives
+  lid-close *without reattaching*. mosh cannot multiplex, so it is always *one*
+  connection into herdr, never N. Needs the ACL's `udp:60000-61000` grant or it
+  hangs after a successful ssh handshake. Pins
+  `--experimental-remote-ip=remote` so mosh reuses `ssh_config`'s
+  `ControlMaster` instead of popping its own 1Password approval per launch
+  (mosh's default proxy mode passes `-S none`, disabling multiplexing).
+- `desk [session]` → `herdr --remote mini` — herdr's native attach over
+  **ssh**, client-side on the MacBook (local keybindings, local image paste).
+  TCP, so a roam or lid-close ends the connection and you re-run it.
+
+`herdr attach` is not a command; sessions are `herdr --session <name>` /
+`herdr session list|attach|stop`.
+
+**`make remote-dev-doctor`** (`scripts/remote-dev-doctor.sh`) verifies this whole
+path from the MacBook — reachability, ssh, ControlMaster reuse, agent
+forwarding, mosh, and herdr — read-only, currently 10/10. It complements rather
+than duplicates the mini-side heartbeat below: that one runs *on* the mini and
+structurally cannot see inbound auth or the mosh UDP path, since the mini has no
+key for itself and cannot ssh to itself.
+
+**`make herdr-setup`** wires three things, and the first two are easy to
+confuse because both are "the Claude Code integration". `herdr integration
+install claude` writes a SessionStart **hook** (`~/.claude/hooks/herdr-agent-state.sh`)
+which is what makes a pane report real agent status instead of
+`agent_status: "unknown"` — the entire reason to prefer herdr over tmux. That
+tells herdr about the agent. **`scripts/herdr-skill-sync.sh` is the other
+direction**: it regenerates `skills/herdr/SKILL.md` from `herdr --skill`, which
+is what tells the *agent* about herdr — how to drive panes, tabs, workspaces and
+sibling agents over the CLI. It then starts the **server only on the dev host**,
+detected by the `cache` backend marker, the same signal `git-headless` uses; a
+thin client gets the hook and the skill but no server.
+
+**That skill is GENERATED, never hand-written, and the binary is the
+authority.** herdr 0.8.2 (#2847) bundles it and keeps it matched to that
+release's CLI and lifecycle behaviour, so a hand-maintained copy is a second
+source of truth that goes stale silently on every `brew upgrade herdr` — and
+stale CLI syntax is worse than none, because an agent follows it confidently.
+It is **tracked anyway** rather than generated straight into `~/.claude`,
+because the git diff is the review: an upgrade that changes what agents are told
+to do on this machine should arrive as a reviewable diff, the same argument that
+makes the Brewfile a supply-chain audit trail. The sync refuses to write a
+short or frontmatter-less file and keeps the tracked one instead — a degraded
+SKILL.md does not error at load time, it just quietly stops triggering.
+
+Two things follow from herdr's own `--help`, which carries an "Are you an AI?"
+block: it points control questions at `herdr --skill` and says to **skip it if a
+herdr skill is already in context** — so installing ours is what makes that
+block a no-op. The other two URLs there are task-scoped and deliberately *not*
+in the skill: `herdr.dev/agent-guide.md` (help a human set herdr up) and
+`herdr.dev/llms.txt` (debug herdr itself). Reach for those only for those jobs.
+
+**How an agent knows it is inside herdr: `HERDR_ENV=1`.** herdr injects
+`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID`,
+`HERDR_SOCKET_PATH` and `HERDR_BIN_PATH` into every managed pane, and the skill's
+first instruction is to test that variable and stop if it is unset. So the same
+skill is inert on the MacBook (no server, no vars) and live on the mini with no
+per-machine branching. **The vars are inherited at spawn, not tracked** — a
+process that outlives its pane keeps whatever `HERDR_PANE_ID` it was born with,
+so a `claude --bg` daemon can carry a stale pane ID. Resolve the caller with
+`herdr pane current --current` rather than trusting an inherited ID in anything
+durable.
+
+Three non-obvious constraints, all load-bearing:
+
+- The server must start as a **session leader**, via
+  `herdr/herdr-server-start.py` pinned into the brew plist by
+  `_herdr-supervise`. herdr derives `detached_server_daemon` from
+  `getsid(0) == getpid()`, and a launchd job is not one — measured on the mini:
+  pid 671, pgid 671, **sid 1**. Every `desk` launch therefore asked *"the remote
+  server was started by a herdr build that may not survive SSH connection loss …
+  restart the remote server now? [y/N]"*, where the only correct answer was N
+  forever, because `y` restarts the server outside brew services and destroys
+  every pane. The warning is true as asked and false as meant: launchd owns the
+  job. setsid(2) fails with EPERM for a process-group leader — exactly what
+  launchd hands over — so the wrapper forks and calls it in the child. A/B
+  proven against an isolated server started in the launchd process shape:
+  `detached_server_daemon` false without it, true with it. **`brew upgrade
+  herdr` and every `brew services start/restart` regenerate that plist and strip
+  the wrapper silently** (colima's trap, different file); `brew-upgrade.sh`
+  asserts it, and the prompt coming back is the symptom. Applying it to the
+  *running* server is `make herdr-restart YES=1` — bootout + bootstrap, never
+  `brew services restart` (regenerates the plist on the way up) and never
+  `launchctl kickstart -k` (restarts from the cached job definition). It **kills
+  every pane**, so it is a deliberate, human-timed command, never part of
+  `make setup`.
+- The hook's settings entry lives in **`config/settings.template.json`**, not
+  just wherever herdr wrote it. `make setup` merges settings.json with the
+  template winning on `hooks`, so an entry added only by `herdr integration
+  install` is deleted on the next `make setup`. The target re-runs the merge
+  afterwards so the template's version is the one that survives.
+- The tracked command is **guarded** (`test -f … && bash … || true`). herdr's
+  own version calls the script unconditionally, which fails 127 on every
+  session start on a machine where the integration was never installed. The
+  script is `managed by herdr` and overwritten on reinstall, so it is
+  deliberately not tracked in this repo — only the guarded call to it is.
+
+### Notes — `prefix+e` opens the repo's page in the brain vault
+
+**`prefix+e` opens `Projects/<repo>.md` from `~/SourceRoot/brain` in `$EDITOR`,
+in a herdr popup.** `scripts/brain-note.sh` resolves the repo with
+`git rev-parse --show-toplevel` against `HERDR_ACTIVE_PANE_CWD` and creates the
+page (house frontmatter, linked from the Projects folder note) if it does not
+exist yet. No plugin, no pin, nothing to install.
+
+**This replaced the `herdr-notes` plugin on 2026-08-04, and the reason was the
+store, not the UX.** That plugin kept one `<workspace-id>.json` in herdr's
+plugin state dir: untracked, unsynced, unbackuped, keyed to a workspace id that
+a closed workspace orphans — a *third* place notes could live, next to a
+git-backed Obsidian vault on the same disk and TickTick for tasks. This file
+already said as much ("scratch space, not the brain: anything worth keeping goes
+to `/brain`"), which is an argument for not having it. `make herdr-setup` carries
+a one-shot, self-deleting uninstall; the old notes are **not migrated** and the
+state dir is left on disk rather than deleted.
+
+Four things worth knowing:
+
+- **Per repo, not per workspace.** Two workspaces on one checkout were two
+  files under the plugin and are one page now — and a page a human can find
+  without knowing herdr exists.
+- **`Projects/` is deliberate.** PARA `Projects` is the vault's curated human
+  surface (light lint: wikilinks must resolve, no forced schema), and an active
+  repo is an active project. Scratch that turns out to matter gets tidied in
+  place instead of migrated.
+- **New pages must be wikilinked from `Projects/Projects.md`.** `vault-lint`
+  warns `not wikilinked from its folder note` otherwise, and the dashboard's
+  dataview does **not** satisfy it — that query is rendered by Obsidian while the
+  linter reads the file. The script appends the bullet itself; a page that makes
+  the vault warn on creation is how a linter stops being believed.
+- **The popup runs on the server**, so via `desk` (client on the MacBook, server
+  on the mini) it edits the *mini's* checkout. Both machines hold one and
+  brain-sync reconciles through GitHub every 5 minutes, so either is the right
+  file. The mini's lane pulls and pushes but never **commits**, so a note written
+  there lands via the nightly `brain-backup` sweep. The script deliberately does
+  no `git pull` of its own: that is brain-sync's job, and a keystroke should not
+  wait on the network.
+
+`popup` rather than a docked pane is measured, not assumed — herdr's
+`CommandKeybindType` is exactly `{shell, pane, popup, plugin_action}` (read out
+of the binary). A popup is session-modal and closes when the command exits, so
+the note stops eating pane width permanently. Custom commands get
+`HERDR_ACTIVE_PANE_CWD`, `HERDR_ACTIVE_WORKSPACE_ID`, `HERDR_ACTIVE_TAB_ID`,
+`HERDR_ACTIVE_PANE_ID` and `HERDR_BIN_PATH` in the environment.
+
+**Every failure path pauses on the way out.** A popup closes the instant its
+command exits, so an unpaused error message is a flash of text nobody can read —
+which makes a broken script indistinguishable from a dead keybinding.
+
+`~/.zshenv` is now managed too (`_setup-zshenv`, idempotent, appends rather than
+symlinks — the vite-plus and cargo installers also append to that file). It is the
+only file a non-interactive `ssh host -- cmd` sources (zsh's non-interactive
+non-login path skips `/etc/zprofile`'s `path_helper`), and mosh depends on it to find
+`mosh-server` when it launches over ssh before handing off to UDP.
+
+`_setup-zshenv` now puts **`~/.local/bin`** on that non-interactive PATH too,
+not just Homebrew — `claude`, `secrets-run`, and `imgcli` all live there and
+none of them are Homebrew-managed, so remote automation no longer needs to
+hand-prefix PATH to reach them. The target also strips the superseded
+Homebrew-only block from machines that ran the earlier version, so re-running
+`make setup` converges rather than duplicating.
+
+Independent of all four layers: **`claude --bg` reparents to PID 1** as
+`claude daemon run` and survives ssh/herdr/lid-close on its own (`claude agents`,
+`claude attach|logs|stop <id>`). Use it for anything that must not die — it is
+what bounds the risk of herdr being new. That risk is measured, not assumed:
+`kill -9` on the herdr server brings the workspace back by name but with a new
+`terminal_id`, so **a herdr crash restores the layout and loses every process
+running in it**. Note `--bg` takes the positional prompt;
+it conflicts with `-p`. Phone access is Claude Remote Control (official, no relay).
+
+**Surviving independently is not the same as launching independently, and the
+difference is silent.** Claude Code's Max credentials live in the **login
+keychain**, which an ssh session cannot reach — so `ssh mini 'claude --bg …'`
+starts a daemon that prints `Not logged in · Please run /login`, falls back to
+*API Usage Billing*, and still lists healthy in `claude agents`. The herdr server
+is a brew service under launchd inside the user's GUI session, so what it spawns
+inherits keychain access. Verified both directions 2026-07-27. Anything on the
+mini needing the login keychain (LaunchAgent, cron, script-spawned daemon) has
+the same constraint: on the tailnet ≠ in the GUI session.
+
+**That constraint binds `ssh mini 'claude …'` only — and the auto-login change
+made it a non-problem in practice.** Since 2026-08-01 the mini boots unattended
+with FileVault off and automatic login on, which performs a *real* password login
+and therefore brings the login keychain up **unlocked** with no human present.
+Measured on a genuine unattended boot: `security show-keychain-info` → `no-timeout`,
+`claude auth status` → `loggedIn: true, max`. Every practical path onto this
+machine — herdr panes, `rd bg`, LaunchAgents — is a GUI-session child and simply
+works. The claim that auto-login would leave the keychain locked, which drove the
+push toward `setup-token`, was **wrong**; it is disproven rather than merely
+doubted. Only a raw `ssh mini 'claude …'` still fails, and `rd bg` exists
+precisely so nothing needs that.
+
+**`config/zsh/claude-auth.zsh` is an ARMED fallback, and as of 2026-08-17 it is
+what is actually holding the mini up.** This file said "dormant, leave it
+unminted" for months; the token has in fact been minted and cached, the mini's
+keychain credential is **gone** (bare binary: `loggedIn: false, authMethod:
+none`), and every herdr pane has been quietly running on the token instead.
+Nothing was broken from the outside, which is exactly why it went unnoticed.
+
+**The fallback is the most likely cause of the failure it covers.** It was
+documented as a fallback and coded as a *preemption*: once the ref existed it
+injected the token on every zsh `claude` launch, so `command claude` never
+touched the keychain. That credential is a short access token plus a **rolling**
+refresh token — it renews itself when the binary uses it, and only then. Never
+exercised, it ages out. Fixed the same day: probe the real credential (~245ms,
+measured), prefer it, fall back only on failure — **every launch, uncached**,
+which is also what keeps the keychain's rolling refresh alive.
+
+**The one-hour verdict cache that shipped with that fix is gone, and the reason
+is worth keeping.** Within a day it produced a `keychain-ok` stamp on a host
+whose bare binary reported `loggedIn: false` — impossible by the code as
+written, not reproducible on demand, and not explained by the obvious hypothesis
+either (running the binary *with* the token persists no credential; measured
+both ways). A wrong positive there suppresses the fallback for a full hour, so
+`claude` runs with **no credential at all** and silently bills API credits — the
+exact failure the file exists to prevent, reintroduced by the optimisation
+guarding it. It was buying 245 ms against a Claude Code startup an order of
+magnitude larger. Unexplained mechanism + costly silent failure + negligible
+saving = delete it, rather than add a second mechanism to watch the first.
+
+Restoring the good credential is a `/login` in a **herdr pane on the mini**
+(`work <repo>` or a pane, then `/login`, paste the URL back) — a GUI-session
+child, so the keychain is reachable. Prefer that over re-minting: a `setup-token`
+credential is a **one-year token with no refresh and no reliable server-side
+revocation**, a downgrade from a keychain credential that refreshes itself
+(access ~8h, refresh rolling). `check_claude_auth` now probes **both** paths and
+grades three states — keychain ok / keychain dead but token working / neither —
+because the bare-binary-only version reported a perfectly working host as the
+last one, and a component that overstates is one you learn to skim past.
+
+**The middle state PASSES and is merely named in the msg.** Max billing is
+intact, every herdr pane and `rd bg` daemon works, and the cost is a worse
+*credential*, not a broken host — so failing there would sit the composite
+monitor red indefinitely for a state that has been accepted, which is the nag
+the 1Password backup monitor already taught us to avoid. The real failure is not
+softened: when the token stops working the check fails loudly, and that is also
+what covers the one-year cliff. There is deliberately
+**no** separate token-expiry monitor: probing the fallback covers the one-year
+cliff by construction.
+
+It
+defines a `claude()` zsh function that resolves `op://mini/claude/oauth-token`
+through `secrets-run` and passes it as `CLAUDE_CODE_OAUTH_TOKEN` — the one
+mechanism that needs no keychain. It must be that variable and **never
+`ANTHROPIC_API_KEY`**, which flips billing to API credits, i.e. causes the exact
+failure it is meant to prevent. `_setup-zshenv` sources it from `~/.zshenv` as
+well as conf.d, because `ssh mini 'claude …'` reads only `.zshenv`. Three
+constraints, each the reason for a design choice: it is a **function**, not a
+shim in `~/.local/bin`, because that path is a symlink the Claude Code updater
+rewrites on every version bump; it passes the token by **prefix assignment**, not
+`env VAR=… claude`, because `env` puts the value in argv where `ps auxww` shows
+it; and it **self-gates on the `cache` backend marker**, because on the MacBook
+`secrets-run` passes through to biometric `op` and would prompt on every launch.
+`ca` / `claude_iu` / `claude_bridge` launch through `env`, which resolves the
+binary from PATH and bypasses shell functions — so their off-Max
+`ANTHROPIC_AUTH_TOKEN` flow is unaffected by construction, not by a guard that
+could rot. On a machine where the token was never minted the read simply fails
+and the wrapper falls through **silently** — it must not break a working machine
+to announce a future step. (On the mini it *has* been minted; see above.) The
+reporter for the failure case is `check_claude_auth` in
+`scripts/devhost-health-check.sh`, which fails the 5-minute heartbeat on anything
+that is not a logged-in Max session. Note the token is a **one-year** credential
+with no refresh and no reliable server-side revocation; that heartbeat is the
+only thing that makes the expiry loud. Full reasoning:
+`docs/mini-headless-checklist.md` L3.3 and `dotfiles-private/docs/security-review.md`.
+
+### Unattended boot posture (mini only)
+
+Three settings make the mini survive a power cut with no human: FileVault **off**,
+automatic login **on**, `pmset -a autorestart 1`. The third is the one whose
+absence is silent — without it the machine does not power on at all, and nothing
+reports that until the exact event the arrangement exists to survive.
+
+`make lock-at-boot-setup` (dev-host gated) then closes the window that opens:
+`com.jkrumm.lock-at-boot` is a `RunAtLoad` agent that locks the screen right after
+the unattended login. **Screen lock does not lock the keychain** — that re-locks
+only on the "Lock when sleeping" setting, the inactivity timer, or logout — so the
+whole session keeps running behind a password prompt.
+
+Two halves, and the agent alone is inert: `sysadminctl -screenLock immediate`
+removes the grace period, the agent fires `pmset displaysleepnow`. **The setup
+target refuses to install** unless the first half is already applied, because a
+plist that sleeps the display and leaves the machine unlocked reads as done while
+doing nothing. `make lock-at-boot-check` reports all of it plus live lock state.
+
+**`sysadminctl -screenLock` does not prompt** — unlike `-autologin` it has no
+interactive form, and exits `Password is required!` unless the password is inline
+(`-password '<pw>'`). Prefer the GUI (Systemeinstellungen → Sperrbildschirm →
+*Sofort*), which puts it on no command line. If using the CLI, `histignorespace`
+is **off** here so a leading space does not hide it from `~/.zsh_history` — run
+`setopt histignorespace` first. The argv exposure is moot (that password is
+already in `/etc/kcpassword`); the persisted history line is not.
+
+Two things that contradict most write-ups: **`CGSession -suspend` does not exist**
+on macOS 26 (the `User.menu` bundle is gone — checked on disk, not inferred), and
+`osascript` ⌃⌘Q is the wrong tool because Accessibility/TCC cannot be granted to a
+launchd job on a headless machine. Scope, threat model and sources:
+`docs/remote-dev.md` → "What used to take this down".
+
+**`scripts/remote-dev.sh` (`rd`) is the layer above the four.** The transport
+layers answer "how do I get a terminal"; `rd` answers "how do I put work on the
+mini and check on it", which needs no terminal. It routes off the
+`~/.config/secrets/backend` marker — local exec on the mini, one ssh hop from the
+MacBook — so one command surface serves both machines:
+
+| Command | Does |
+|-|-|
+| `repos [filter]` | repos on the host, branch + dirty count |
+| `work <repo>` | herdr workspace + claude, **idempotent** (refocuses rather than stacking two agents on one checkout) |
+| `rd bg <repo> '<task>'` | durable daemon, spawned *through* a herdr pane for the keychain reason above |
+| `agents` | both lanes, deduped on session id |
+| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching |
+
+`work`, `agents` and `repos` get bare shorthands; `bg`, `read` and `say` stay
+behind `rd` because those names are a zsh builtin, a zsh builtin and
+`/usr/bin/say`. Commands take a repo **name**, never a path — the MacBook has no
+project repos to point at, and `$HOME` differs between the machines, so
+resolution happens on the host.
+
+`config/ssh_config` carries the desk path: a `Host *` keepalive block, real
+`ControlMaster` on `Host mini` (multiplexes herdr/cmux's several connections into
+one handshake and one biometric approval), and `SetEnv TERM=xterm-256color` —
+which fixes cmux #2969, doubled keystrokes when `TERM=xterm-ghostty` reaches a
+host with no such terminfo. `_setup-ssh` creates `~/.ssh/cm`; ssh won't.
+
+herdr layers its own ssh hardening on top for `--remote` only
+(`[remote] manage_ssh_config = true`): a generated config that **includes
+`~/.ssh/config` first** — so the values above still win — plus its own
+per-attach control socket. The repo's `ControlMaster` still earns its place;
+it covers plain `ssh`, `scp` and git-over-ssh, which herdr never touches.
+
+### Database access — MacBook → mini (`make db-tunnel-setup`)
+
+The mini's dev databases bind `127.0.0.1` in their compose files, so a GUI client
+on the MacBook needs a forward. `com.jkrumm.db-tunnel` is a `KeepAlive`
+LaunchAgent holding one long-lived `ssh -N` with every declared `-L`; declared
+state is `dbtunnel/tunnels.conf`, applied by `make db-tunnel-setup`, probed by
+`make db-tunnel-status`. **Local ports are the real port + 30000** (33306, 36379)
+because this machine runs its *own* copy of the same stack — a forward on 3306
+would either fail to bind or silently shadow the local database.
+
+**Not `tailscale serve --tcp`, and the reason is the same one the collie row
+gives**: serve would publish a raw MySQL socket to every tagged device, guarded
+only by a compose-file `root`/`toor`, where a forward keeps the loopback bind
+true and puts an SSH key in front. **Not Caddy either** — MySQL is not HTTP and
+this build ships no layer4 module.
+
+Four things that cost a debugging cycle each, all verified under a throwaway
+launchd job rather than reasoned about:
+
+- **launchd sets `SSH_AUTH_SOCK`, it does not leave it unset** — to Apple's own
+  ssh-agent, a valid socket holding **zero identities**. So `[ -S "$SSH_AUTH_SOCK" ]`
+  passes, ssh gets an agent with no keys, and the tunnel fails `Permission denied
+  (publickey)` while `ssh-add -l` from a terminal looks perfectly healthy. The
+  script prefers 1Password's socket and treats the inherited one as the fallback —
+  deliberately the opposite of the obvious ordering. This machine holds **no
+  private keys on disk** (`ls ~/.ssh/id_*` is empty); every identity is the
+  1Password agent, which *does* sign for a launchd job with no prompt.
+- **`-o IdentityAgent=<path>` needs literal quotes inside the value.** 1Password's
+  socket lives under "Group Containers", ssh splits an `-o` argument on
+  whitespace, and the resulting `keyword identityagent extra arguments at end of
+  line` falls through to `Permission denied (publickey)` — which reads as a key
+  problem and sends you looking in the wrong place entirely.
+- **`ControlMaster=no` + `ControlPath=none` are mandatory.** `ssh_config` sets
+  `ControlMaster auto` for mini; a tunnel riding that shared socket dies when the
+  last interactive session exits and `ControlPersist` expires.
+- **ssh must run in the foreground** (never `-f`). launchd's KeepAlive supervises
+  the process it spawned; a forked-away ssh looks like a clean exit and gets
+  respawned forever. Reconnect is `ServerAliveInterval=15 × CountMax=3` → ssh
+  exits within ~45s → launchd re-dials. No autossh, no wrapper loop.
+
+`ThrottleInterval 30` keeps a closed lid or an off-network mini from filling the
+log — an unreachable mini is a normal laptop state, not a fault.
+
+### File shuttle — the mini's home mounted over SMB (`~/Shuttle`)
+
+`smb://mini/jkrumm` mounted from the MacBook, with **`~/Shuttle` on the mini as
+the agreed drop folder** — the door for moving a file between the two Macs
+without thinking about it. Set up 2026-08-18. macOS auto-shares the
+authenticating user's home, so the share is the whole home dir and `Shuttle` is
+just a folder inside it; a share point exposing only `Shuttle` would need `sudo
+sharing -a ~/Shuttle`, which nothing needs yet.
+
+**`~/Public/Drop Box` is the wrong tool and was rejected.** It is a *multi-user*
+permission convention — Public readable by other accounts, Drop Box 733 so
+others can write but not list. Both machines are the same human logging in as
+the same user, so that asymmetry buys nothing except a folder you cannot browse.
+
+**Use it for ad-hoc human file movement, and nothing else:**
+
+| Moving | Route |
+|-|-|
+| A one-off file between the Macs (export, screenshot, PDF, installer) | **this mount** |
+| Code / a repo | `rd`, or git — repos live on the mini, the MacBook is a thin client |
+| Vault pages | brain-sync through GitHub — it has an offline copy on both machines and reconciles every 5 min; never route `brain` through the mount |
+| Anything an agent or LaunchAgent on the mini reads | must be **on** the mini — the mount is client-side and dies with the MacBook |
+
+**No offline copy** — but do not over-read that, and note the routing table
+above does **not** rest on it. Repos go through git because they need history and
+the mini is the dev host; the vault goes through brain-sync because it is edited
+on both machines; agent-read files live on the mini because the mount is
+client-side. Every one of those holds at 100% uptime.
+
+**The availability risk is the MacBook's, not the mini's.** The mini is the
+always-on host and behaves like it (11d17h up when this was written; the
+preceding reboots were deliberate). What actually goes away is *this* end — the
+IU corp network, travel, a Tailscale hiccup. And a stale SMB mount does not fail
+cleanly: Finder beachballs and open file handles hang, which is worse than a file
+simply being absent. That is the honest trade against Syncthing. Over the tailnet
+(~7 ms) it is otherwise unremarkable.
+
+**`tcp:445` is granted `tag:mac → tag:mac`** in `dotfiles-private/tailscale-acl.jsonc`.
+Symmetric, because both Macs carry `tag:mac` — the MacBook is reachable on 445
+too; its File Sharing is off, and turning *that* on is what would expose it, not
+the grant. Without the grant the mount times out with nothing in any log, the
+usual silent ACL failure.
+
+**The gotcha that costs an hour: a listening `:445` and a running `smbd` are not
+a working SMB server.** macOS stores no NTLM credential for a local account by
+default — `ShadowHashData` holds only `SALTED-SHA512-PBKDF2` and
+`SRP-RFC5054-4096-SHA512-PBKDF2` — and `smbd` validates a password against the
+**`SMB-NT`** hash. Missing it, the server refuses *every* principal identically:
+guest, password, and Kerberos, over the tailnet **and on its own loopback**. The
+error is a flat `Authentication error` client-side and
+`gss_accept_sec_context … status: 0xc000006d` (STATUS_LOGON_FAILURE) in the
+server's log, which reads like a network or Kerberos fault and is neither.
+
+Two corollaries worth holding:
+
+- **`smbutil view -g //localhost` failing does NOT mean guest access is off.** In
+  this state everything fails, so that probe cannot distinguish guest from any
+  other principal — it was read as proof of "not actually exposed" and proved
+  nothing. Check the share flags (`sharing -l` → `guest access`), not a probe.
+- **Kerberos is not the escape hatch here.** Every Mac runs an LKDC and Apple
+  clients normally authenticate against it with no NT hash — but `kinit` against
+  the local realm fails `unable to reach any KDC … tried 0 KDCs` from a
+  non-GUI context, and the tailnet ACL grants no port 88 anyway. Over a tailnet,
+  NTLM against a Keychain-stored password is the path that actually works.
+
+Minting the hash is **GUI-only and cannot be scripted**: System Settings →
+General → Sharing → File Sharing ⓘ → Options → tick the user → type the
+password. The prompt is the mechanism, not a formality — the stored login hash
+is non-recoverable, so macOS can only compute `MD4(utf-16le(password))` from
+plaintext you supply. No `pwpolicy`, `dscl`, `sysadminctl` or `sharing` verb
+injects it; `pwpolicy -sethashtypes SMB-NT on` only sets what gets stored *next
+password change*. On the mini that means Screen Sharing (`open vnc://mini`,
+tcp:5900 already granted). Verify with the data, never the setting:
+
+```bash
+ssh mini 'sudo plutil -extract ShadowHashData.0 raw -o - \
+  /var/db/dslocal/nodes/Default/users/jkrumm.plist | base64 -D | plutil -p -' \
+  | grep SMB-NT
+```
+
+**Guest access on a share is a separate switch, and `sharing -g` takes three
+digits, not a boolean** — `afp,ftp,smb` in that order, so `-g 0` prints usage and
+changes nothing while looking like it worked. `sudo sharing -e <name> -g 000`
+disables it, `-g 001` restores SMB guest. The mini's `AppleTV` share carried
+`guest access: 1` with `read-only: 0` and was turned off in the same pass.
+
+### Two dev-server doors: port-based (`.ts.net`) and clean (`.mini.jkrumm.com`)
+
+**`config/Caddyfile` is the single app registry.** Every `<name>.test {
+reverse_proxy localhost:PORT }` block in the tracked Caddyfile automatically
+gets a clean door at `https://<name>.$DEV_DOMAIN` — a new app needs **zero**
+work beyond the `.test` block it already needs. `~/.config/caddy-tailnet.ports`
+survives as an **opt-out + flags** file (`exclude <name>`, and the `portdoor` /
+`host=rewrite` flags), not a second list. Before this it *was* a second list,
+and the two drifted silently: 17 apps in one, 4 in the other, and an app
+reached the tailnet only if you remembered to edit both.
+
+The Caddyfile is read by handing it to **`caddy adapt` and walking the route
+JSON** (`scripts/lib/caddy-registry.py`) — never by regexing it, which the live
+file defeats three separate ways: the non-`.test` `metabase.iu-aws.de` block,
+snippet imports, and `fpp.test`'s `header_up Host` variant. That last one is
+carried over automatically, so an app whose `.test` block rewrites Host gets the
+same treatment on the tailnet door without a flag. Two guards run before the
+parse and both are fatal: the machine-local include is stripped (it holds the
+Cloudflare token and must never enter the parse path), and any *other* file
+import aborts — adapting happens from stdin, so a surviving relative import
+would resolve against the wrong directory and silently return a short app list
+rather than an error. The extractor also refuses to emit an empty registry,
+because a future Caddyfile restructure that broke the walker would otherwise
+tear down every dev door quietly instead of failing.
+
+**An app that exists in the registry but not on this machine gets `exclude
+<name>` in the machine-local ports file, not a deletion from the tracked
+Caddyfile.** `photoflow` (7717) is the case: photo-flow and its LaunchAgent live
+on the MacBook, which shares this Caddyfile and genuinely needs
+`photoflow.test`, while nothing on the mini has ever bound 7717. Left in, its
+probe reports red forever for something that is not broken — which is how you
+train yourself to ignore the status column. Excluded, it gets no probe route at
+all and the landing page omits it.
+
+**A `.test` block the extractor can't reduce to one name and one port is
+SKIPPED, and the summary says so.** A block with two `reverse_proxy` handlers
+(the retired `whisper.test` split `/v1/audio/transcriptions*` from `/v1/*` — so
+this is a real pattern, not a hypothetical), a multi-host match, or a
+non-loopback upstream cannot be routed by name, so it gets no tailnet door. It
+is never guessed at; a wrong upstream in a generated proxy is worse than a
+missing door. Split such an app into one block per port to give it doors.
+
+The generator's every input *and* output is overridable
+(`CADDY_TAILNET_{CADDYFILE,PORTS,CONF,OUT,PAGE_DIR,NO_RELOAD}`) so it can be
+exercised against scratch files. That is a safety property, not a convenience:
+when only the inputs were overridable, the obvious way to test a change —
+scratch PORTS/CONF — still rewrote the **real** include and reloaded Caddy from
+it, which with an empty scratch `DEV_DOMAIN` deletes the clean door for every
+app at once. An `OUT` outside `Caddyfile.d` now implies `NO_RELOAD`.
+
+`make caddy-tailnet` (`scripts/caddy-tailnet.sh`) generates **two** doors onto
+the same dev servers, not one, and the second is additive — the first stays,
+permanently, as the zero-dependency fallback:
+
+1. **Port-based**: `https://<mini-magicdns>:<port>` — the original mechanism.
+   Cert comes straight from tailscaled (`tls { get_certificate tailscale }`),
+   so it has no DNS provider, no Cloudflare, and no ACME in its path. This is
+   the fallback that must survive door 2 breaking, but it is **opt-in per app**
+   (`portdoor`), and that asymmetry is deliberate — see below.
+2. **Clean**: `https://<app>.mini.jkrumm.com` — one wildcard Caddy site block
+   (`*.mini.jkrumm.com { … }`) on `:443` of the tailnet IP, `host` matchers
+   fanning out to `localhost:<port>` per app, secured by a single wildcard
+   Let's Encrypt cert via Cloudflare DNS-01. **Default-on for every app.**
+   Opt-in per *machine*: only generated once `~/.config/caddy-tailnet.conf`
+   sets `DEV_DOMAIN` and a chmod-600 Cloudflare token file exists — an
+   un-seeded machine silently gets door 1 only, which is a valid state, not
+   an error.
+
+| Command | Purpose |
+|-|-|
+| `make caddy-tailnet` | Dev-host only: regenerate both doors from `config/Caddyfile` + `~/.config/caddy-tailnet.{ports,conf}`, validate, reload. |
+| `make caddy-dns-build` | Dev-host only, one-time (or after any `brew upgrade caddy`): build + install Caddy with the Cloudflare DNS module — prerequisite for door 2. |
+
+**Only the clean door defaults on, and the reason is port squatting.** A port
+door makes Caddy bind the app's *own port number* on the tailnet interface, so
+it collides with anything else holding that address: `tailscale serve` (rb's
+`:7730` row) and any dev server that binds `0.0.0.0` rather than loopback
+(sideclaw does; Docker published ports do by default). Auto-generating 17 of
+them would have Caddy squat ports that `docker compose` then fails to bind
+days later, with a confusing error — so the port door stays a per-app opt-in.
+The clean door has no such failure mode: every app shares one `:443` listener,
+which is exactly why it is the one that scales to "every app, no work".
+
+**Upstreams dial `localhost:<port>`, never `127.0.0.1:<port>`.** A dev server
+does not reliably bind the IPv4 loopback. Vite, finding its port already held
+on some other address, silently falls back to binding **`::1` alone** and still
+prints a cheerful `ready` line — after which a hardcoded `127.0.0.1` upstream
+502s against an app that is plainly running. Observed with basalt-playground on
+7710 while a port door held the tailnet IP. `localhost` resolves to both
+families and Go's dialer tries each, so it covers the app whichever way it
+binds; it is also what the tracked `.test` blocks already use.
+
+**One site block for every app, never one per app.** Caddy 2.10+ issues a
+single wildcard cert that covers every `host {}` matcher inside one site
+block; N site blocks would each provision their own cert and race Let's
+Encrypt's ~50-certs-per-registered-domain-per-week limit for zero benefit.
+The `host=rewrite` flag is the escape hatch for a dev server that validates
+the `Host` header on dev-only endpoints and can't be allowlisted — same shape
+as the `fpp.test` block in `config/Caddyfile`, and **carried over from that
+block automatically**, so it needs setting by hand only to force it on for an
+app whose `.test` block doesn't already do it.
+
+**The landing page at `https://mini.jkrumm.com`** (also `apps.mini.jkrumm.com`)
+lists every app with its port, both doors, and live status — and is served from
+the wildcard block's bare `handle {}` fallback too, so a *typo'd* name shows you
+what exists instead of a bare 404. **The whole row is the link**; the anchors in
+the doors cell survive only so a URL stays visible, copyable and
+middle-clickable, and a row click that landed on one is deliberately left alone
+(otherwise a secondary door link would navigate to the primary one).
+
+**It also lists the `tailscale serve` rows, in a second table, with Funnel
+marked `public`.** Those are a different mechanism with a different blast
+radius — but a page that lists 18 tailnet-only doors and stays silent about the
+funneled port reads as a complete exposure map while omitting the only row where
+"who can reach this" has a different answer. Read **live from tailscaled** at
+generation time, not from the declared conf, because the question is what is
+published right now; drift against the declared state stays
+`make tailscale-serve-check`'s job and the page says so rather than implying it
+re-checked. It is a snapshot — changing serve state wants a `make caddy-tailnet`
+after `make tailscale-serve`. Serve rows are never probed: there is no
+same-origin `/_up` route for them, and a cross-origin `fetch` would report every
+one as failed regardless of health.
+
+**Three apps carry `portdoor` on the mini** (2026-07-31): argo 7715, modelpick
+7727, jkrumm 7728. For a while none did, and that was the wrong end state — a
+fallback documented as permanent but deployed for zero apps means every door on
+the machine hangs off one Cloudflare token, one DNS module and one wildcard cert
+with nothing behind it. Three is the compromise: enough that the fallback is
+exercised and known-good, few enough that Caddy squats almost no ports.
+
+The port must be free on the tailnet interface **and** inside the ACL's
+`tcp:7700-7799` grant, or the door times out with nothing in any log. All three
+run loopback-only dev servers. **basalt-playground (7710) is deliberately
+excluded** despite being on the pre-registry list: 7710 is the exact port where a
+port door once pushed Vite into its `::1`-only fallback, the incident
+`caddy-tailnet.sh` cites in its own upstream comment.
+
+**They carry `host=rewrite`, and that is what makes the fallback real.** A port
+door's Host is the MagicDNS name — the *machine*, not the app — and no app
+allowlists it (all three list `.mini.jkrumm.com`, which does not cover
+`*.ts.net`), so a bare `portdoor` answers 403 on the day door 2 fails.
+Allowlisting a machine name in three app repos would also re-break on the next
+device rename. Rewriting to `localhost:PORT` needs nothing from the app and is
+accepted unconditionally by Vite and Astro. It applies to the clean door too —
+harmless, since `localhost` is allowlisted there as well.
+
+**The apex is a second subject on the same site block, not a third door** —
+`*.mini.jkrumm.com, mini.jkrumm.com { … }`. A wildcard answers for exactly one
+label below the name, in DNS *and* in the cert, so the apex needs its own A
+record (`mini.jkrumm.com → <tailnet-ip>`, grey-cloud) and Caddy provisions a
+separate `CN=mini.jkrumm.com` cert for it. Sharing the block is what makes it
+free otherwise: the apex matches no `host` matcher, falls through to the
+landing-page fallback, and inherits the `/_up/*` probes. `check_dev_vhosts`
+asserts **both** A records against the live tailnet IP, because they drift
+independently — and apex drift is the quiet one, where every app door keeps
+working and only the front page dies.
+
+**Adding the apex record is not the same as being able to resolve it.** Any
+lookup made *before* the record existed is negatively cached, at two independent
+layers, and neither expires when you expect:
+
+- **The LAN router.** MagicDNS declares no resolvers of its own here, so it
+  forwards to the system default — the Fritz!Box — which served NODATA with a
+  flat 1800s SOA for `mini.jkrumm.com` while answering fine for every sibling
+  (`argo.jkrumm.com`, `apps.mini.jkrumm.com`). This is *not* DNS rebind
+  protection: verified by `dig @192.168.1.1 localtest.me` → `127.0.0.1` and
+  `<mini-tailnet-ip-dashed>.nip.io` → `<mini-tailnet-ip>`, both unfiltered. It cleared on its own
+  in ~4 minutes; a mixed-case query (`MiNi.JkRumm.com`) also forces a miss,
+  because its cache keys are case-sensitive.
+- **macOS `mDNSResponder`, which is the one that actually bites.** `dig` talks
+  to `100.100.100.100` directly and reported the record as soon as the router
+  did — while `curl` and every browser on the same machine still failed with
+  "could not resolve host" for far longer. **`dscacheutil -flushcache` does not
+  clear it**; only `sudo killall -HUP mDNSResponder` does, which on the mini
+  means the MacBook-only root password (see Secrets). Chrome caches on top of
+  that again — `chrome://net-internals/#dns`.
+
+So `check_dev_vhosts` can honestly report `DNS in sync` while the browser in
+front of you still says ERR_NAME_NOT_RESOLVED: it uses `dig`, deliberately, to
+assert what is *published* rather than what one client has cached. Verify the
+door itself out-of-band and it separates cleanly —
+`curl --resolve mini.jkrumm.com:443:<tailnet-ip> https://mini.jkrumm.com/`
+returned 200 with `CN=mini.jkrumm.com` before any cache had caught up.
+
+Status is same-origin by construction — no daemon, no CORS. The generator emits
+a `handle /_up/<name>` probe route per app in the *same* site block, so the
+page just fetches `/_up/<name>` and reads the code. Three details are
+load-bearing:
+
+- **`rewrite * /` inside each probe.** Without it the upstream receives
+  `/_up/<name>` and a perfectly healthy dev server answers 404 — indistinguishable
+  from a real failure. With it, a live app returns its real status.
+- **The probes nest inside the fallback `handle {}`**, not at the top of the
+  block. At the top they would shadow `/_up/*` on every real app's own
+  subdomain. Relatedly, the bare `handle {}` must be written **last**: handles
+  in one group are mutually exclusive and first-match, so a bare one written
+  earlier swallows every named host above it.
+- **502 vs 403 is the whole point.** `502` means Caddy could not dial the port
+  (dev server not running); `403` means it is running and rejecting the door's
+  Host header. That second state is the most common failure here and it looks
+  exactly like a proxy fault, so the page names the fix outright: add
+  `.mini.jkrumm.com` to Vite/Astro `server.allowedHosts`, or `*.mini.jkrumm.com`
+  to Next's `allowedDevOrigins` — **Next does not understand a leading dot**, it
+  globs whole segments.
+
+**`servers { protocols h1 h2 }` in the global options block is load-bearing,
+not incidental.** HTTP/3 is unusable over Tailscale: quic-go's 1280-byte
+initial packet exceeds the tailnet MTU once headers are added
+(caddyserver/caddy#7885), so h3 connections fail — Chrome-only, intermittent,
+exactly the kind of bug you don't want to rediscover by accident. Disabled
+explicitly for every site block Caddy serves, not just the tailnet ones.
+
+**`bind 127.0.0.1` on every `.test` block is what makes the clean door safe to
+grant broadly on `:443`.** Before this change, the local dev proxy's `(local)`
+snippet (and the `http://*.test` redirect, and `metabase.iu-aws.de`) took the
+default `0.0.0.0`, which made this Caddy reachable over the LAN *and* the
+tailnet — and on the mini it collided with the tailnet wildcard block's own
+`:443` listener. After the change, nothing but the deliberate tailnet-bound
+site blocks listens on the tailnet interface's `:443` at all, which is the
+premise the ACL grant below relies on.
+
+**`make caddy-dns-build` is the prerequisite, and it has a sharp trap.** Stock
+Homebrew Caddy ships zero DNS provider modules
+(`caddy list-modules | grep dns.providers` is empty), so DNS-01 is impossible
+until Caddy is rebuilt with `github.com/caddy-dns/cloudflare` via `xcaddy`
+(installed via `go install`, not Homebrew — pinned in the Makefile like
+`COLLIE_REF`) and installed over
+`$(brew --prefix)/opt/caddy/bin/caddy`, the exact path the brew LaunchDaemon
+plist execs. Dev-host only, same gate `collie-setup` uses. **A later
+`brew upgrade caddy` silently reverts this binary and the module vanishes —
+nothing errors until the wildcard cert fails to renew ~60 days later.** That
+is why `devhost-health-check.sh`'s `check_dev_vhosts` asserts the module is
+present on every 5-minute run (folded into the composite push monitor, not a
+new one — same `check_git_push` exception: it doesn't fail *with*
+herdr/sshd/tailscaled/mosh, but didn't warrant a monitor of its own), and why
+re-running `caddy-dns-build` is the fix after any caddy upgrade. It also
+checks the wildcard cert has >21 days left (probed locally via `openssl
+s_client` against the tailnet IP — never an outbound call to Cloudflare or
+Let's Encrypt, same restraint as `check_git_push`'s comment) and that the
+published `health.$DEV_DOMAIN` A record still matches the live tailnet IP,
+catching the silent-drift failure mode where a device rename or re-key leaves
+every clean URL dead with nothing in any log.
+
+**The ACL grant needs an additive tag, same pattern as Funnel and Collie.**
+`tag:devhost → tag:mac/tag:phone/tag:tablet` on `tcp:443` in
+`dotfiles-private/tailscale-acl.jsonc` — `dst` is the additive `tag:devhost`,
+not `tag:mac`, because both Macs run this same Caddy config and a
+`tag:mac → tag:mac` grant on 443 would hand the work MacBook the personal
+Caddy too (which also fronts `metabase.iu-aws.de`). `tag:tablet` is new for
+the same reason as the Collie grant's `tag:phone` scoping: `tag:client`
+buckets the two TVs *and* the tablet as one group, and only the tablet should
+reach dev servers — additive on the tablet alone so it keeps its existing
+`tag:client` grants, and the TVs must never gain this. Port 443 rather than a
+dedicated port (Collie's `tcp:8788` pattern) because the entire point of this
+door is a portless URL — the dedicated-port trick that scopes every other
+grant here is simply unavailable. **Both re-taggings (mini `+tag:devhost`,
+tablet `+tag:tablet`) are console-only actions** — `make tailscale-acl-push`
+can declare the grant, but cannot tag a physical device, so the grant is
+inert until both are applied by hand in the admin console.
+
+**Two halves, and each is silently useless without the other**: the tag is
+applied in the console, the grant is applied by `make tailscale-acl-push` from
+the MacBook. Tagging the mini while the grant sits unpushed in
+`dotfiles-private` looks exactly like tagging having no effect — the tag is
+right there in the machine list, and every device still times out.
+
+**Verify the live filter from the mini itself, with no API key.**
+`tailscale debug netmap` carries this node's effective *inbound* rules, so it
+settles "is the grant actually pushed?" on the machine that cannot run
+`tailscale-acl-diff` (`op://Private/*`, refused by the cache — the target now
+says so instead of suggesting `op signin`, which would hang there):
+
+```bash
+/Applications/Tailscale.app/Contents/MacOS/Tailscale debug netmap \
+  | python3 -c 'import json,sys
+for i,r in enumerate(json.load(sys.stdin)["PacketFilter"]):
+    print(i, r.get("Srcs"), sorted({(d["Ports"]["First"],d["Ports"]["Last"]) for d in r.get("Dsts") or []}))'
+```
+
+No `(443, 443)` row means no grant, whatever the console shows. Expect the
+existing rows to be 22/5900/7700-7799 (Macs), 60000-61000 (mosh), 7730 (rb),
+8788 (collie, phone only).
+
