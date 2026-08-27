@@ -155,6 +155,9 @@ alert name or description, and link to how to silence it (delete/disable via
   titles that use it.
 - `bar`/`pie` builder tiles take exactly one select (one series); use a table
   or a `clickstack_sql` tile for p50+p95 side by side.
+- Kiosk links carry a fixed `to=`; Live mode does not advance it, so a link
+  minted before new spans landed shows them as missing. Regenerate the link
+  (`hdx.py <env> link …`) right before every screenshot.
 - **Search tiles are Lucene in the UI** regardless of `whereLanguage` — an SQL
   `where` validates and `query_tiles` returns rows, but the rendered tile says
   "No results found". Write `ServiceName:"x" AND SpanKind:Server`, and keep the
