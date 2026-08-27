@@ -123,3 +123,15 @@ alert name or description, and link to how to silence it (delete/disable via
 - `clickstack_patch_dashboard` shape: `{dashboardId, tileId, tile:{name, config}}`.
   Rate tiles are counts per bucket (no window-normalised req/s in the builder).
   HyperDX opens dashboards at 15 min — hand out `hdx.py <env> link <id> --last 24h`.
+- argo-api (new semconv): Postgres client spans are `db.system='postgresql'` +
+  SpanName `drizzle.*`; HTTP clients carry `server.address`. Elysia's internal
+  `Request`/`Transform`/`Handle` spans are 1:1 with requests — never count them.
+- Browser SDKs (old semconv): `http.status_code='0'` = aborted fetch (noise).
+  `unhandledrejection`/`TypeError`/`eventListener.error` are `StatusCode='Error'`,
+  `console.error` is `Unset`. Page loads: `documentLoad` spans + `location.href`.
+- fpp-server: the `Root` server span is an unrouted 404 (scanners); real work is
+  `GET /ws` + Internal `ws.*` spans (`room.id`, `user.id`, `action.type`). Its
+  logs have an **empty Body** — everything lives in `LogAttributes['event.name']`.
+- `seriesLimit` on line/stacked_bar ranks by the plotted value, not by volume —
+  "p95 of the 8 busiest routes" needs a `clickstack_sql` tile.
+- `hdx.py` key fetch over ssh eats stdin inside shell loops — add `</dev/null`.
