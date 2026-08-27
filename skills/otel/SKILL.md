@@ -16,8 +16,8 @@ Four ways in, cheapest-appropriate first.
 | Need | Route |
 |-|-|
 | Quick triage, off-thread verdict | `mcp__sideclaw__otel` — read-only Sonnet worker, returns `{status, environment, timeRange, findings, recommendations}` only |
-| Interactive investigation, dashboards, alerts | `mcp__hyperdx-local__clickstack_*` / `mcp__hyperdx-prod__clickstack_*` — the builder tools, discovery flow below |
-| Scripted, no MCP client (cron, subagent) | `scripts/hdx.py <env> {tools,schema,instructions,call,prompt,rest,link}` — a full substitute for (b), not just a fallback |
+| Interactive investigation, dashboards, alerts | `scripts/hdx.py <env> …` — the ClickStack builder tools over HTTP, discovery flow below |
+| Same tools as registered MCP (opt-in) | `mcp__hyperdx-{prod,local}__clickstack_*` — only after `make hyperdx-mcp-register`; costs ~2k tokens/turn, never required |
 | Raw SQL fallback, or HyperDX API down | `scripts/query.py --env <env> --preset ...` |
 
 **(a) `mcp__sideclaw__otel`** — call with `investigation` (error/service/trace
@@ -28,8 +28,8 @@ the structured result crosses back — raw output stays in the worker. Query can
 take 1–6 min under load; the tool's 8-min timeout absorbs most of it, retry on a
 hard timeout.
 
-**(b) `mcp__hyperdx-{local,prod}__clickstack_*`** — the built-in ClickStack MCP
-(28 tools local / 30 prod, prefixed `clickstack_`). Server-side tool-selection
+**(b) the ClickStack MCP tool set** (30 tools, prefixed `clickstack_`), reached
+through `hdx.py` (default) or the opt-in registration. Server-side tool-selection
 policy, mirrored here: prefer the **builder tools** (`table`, `timeseries`,
 `search`, `event_patterns`, `event_deltas`, `emerging_signals`,
 `trace_waterfall`, `trace_top_time_consuming_operations`) — `clickstack_sql` is
@@ -43,11 +43,10 @@ callers without an MCP client. `hdx.py <env> tools`, `schema [tool]` (full
 `inputSchema` + description, or the tool list), `instructions` (the server's own
 tool-selection policy, same text as (b)), `call <tool> '<json>'`, `prompt <name>`,
 `rest <METHOD> <path> ['<json>']`, `link <dashboard-id> [--last 24h|7d]`. `<env>`
-is `local` or `prod`. Registering the `mcp__hyperdx-*` MCP is optional, not
-required — `hdx.py` exposes the identical tool set (`tools` → `schema <tool>` →
-`call`), so a session without those MCP tools loses nothing but call ergonomics.
-Registering it costs ~500-800 tokens/turn (~60 deferred tool names, schemas
-loaded only on use) whether or not it's ever called that turn.
+is `local` or `prod`. This is the primary door: `hdx.py` speaks the same MCP endpoint over HTTP, so
+nothing needs to be registered. A registration (`make hyperdx-mcp-register`)
+only adds call ergonomics and costs every turn ~60 deferred tool names plus the
+server's instructions block (~2k tokens) — `make setup` removes it again.
 
 **(d) `scripts/query.py`** — direct ClickHouse SQL (HTTP or docker exec/ssh),
 unchanged. Use when the HyperDX API itself is down, or for ad-hoc SQL the
