@@ -149,6 +149,11 @@ alert name or description, and link to how to silence it (delete/disable via
   titles that use it.
 - `bar`/`pie` builder tiles take exactly one select (one series); use a table
   or a `clickstack_sql` tile for p50+p95 side by side.
+- **Search tiles are Lucene in the UI** regardless of `whereLanguage` — an SQL
+  `where` validates and `query_tiles` returns rows, but the rendered tile says
+  "No results found". Write `ServiceName:"x" AND SpanKind:Server`, and keep the
+  `select` to plain columns (a `SpanAttributes['k']` column empties the tile).
+  Only a screenshot catches this class of bug.
 - `clickstack_query_tile(s)` take top-level `startTime`/`endTime` (ISO); a
   `timeRange` object is silently ignored and you get the 15-minute default.
 - `hyperdx-sync.sh` needs `HYPERDX_PROD_BASE_URL` on the mini until
