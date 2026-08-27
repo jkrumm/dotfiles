@@ -70,9 +70,10 @@ investigation ships a dev stack there; go straight to prod otherwise, and say so
    rules baked in: `secrets-run read op://…/AGENT_EMAIL|AGENT_PASSWORD` into
    shell vars only, never a file, never printed; `take_snapshot` to find the
    login fields; `resize_page` 1440×1800 and verify via `evaluate_script`;
-   `take_screenshot` with `fullPage: true` and an **absolute** `filePath` under
-   `/tmp/hdx/` — never inside a repo (`git add -A` sweeps it up); if the result
-   is ≤ 1000 px tall, scroll by 800 and shoot again. Time range via the kiosk
+   `take_screenshot` with `fullPage: true`. chrome-devtools rejects absolute
+   paths outside its workspace root (the session cwd), so pass a relative
+   `filePath` and `mv` it to `/tmp/hdx/` in the same step — a screenshot left in
+   a repo gets swept up by the next `git add -A` (happened once). Time range via the kiosk
    deep link from `hdx.py <env> link <id> --last 24h`.
 5. Critique the screenshot + tile list against `reference/dashboard-review.md`.
 6. `patch_dashboard` for anything that failed the checklist, repeat 3–5 until it
