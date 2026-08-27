@@ -17,7 +17,7 @@ Four ways in, cheapest-appropriate first.
 |-|-|
 | Quick triage, off-thread verdict | `mcp__sideclaw__otel` — read-only Sonnet worker, returns `{status, environment, timeRange, findings, recommendations}` only |
 | Interactive investigation, dashboards, alerts | `mcp__hyperdx-local__clickstack_*` / `mcp__hyperdx-prod__clickstack_*` — the builder tools, discovery flow below |
-| Scripted, no MCP client (cron, subagent) | `scripts/hdx.py <env> {tools,call,prompt,rest,link}` |
+| Scripted, no MCP client (cron, subagent) | `scripts/hdx.py <env> {tools,schema,instructions,call,prompt,rest,link}` — a full substitute for (b), not just a fallback |
 | Raw SQL fallback, or HyperDX API down | `scripts/query.py --env <env> --preset ...` |
 
 **(a) `mcp__sideclaw__otel`** — call with `investigation` (error/service/trace
@@ -39,9 +39,15 @@ prompts at authoring time instead of restating them here: `create_dashboard`,
 `dashboard_examples`, `query_guide`.
 
 **(c) `scripts/hdx.py`** — stdlib Python, same MCP + REST v2 surface, for
-callers without an MCP client. `hdx.py <env> tools`, `call <tool> '<json>'`,
-`prompt <name>`, `rest <METHOD> <path> ['<json>']`, `link <dashboard-id> [--last
-24h|7d]`. `<env>` is `local` or `prod`.
+callers without an MCP client. `hdx.py <env> tools`, `schema [tool]` (full
+`inputSchema` + description, or the tool list), `instructions` (the server's own
+tool-selection policy, same text as (b)), `call <tool> '<json>'`, `prompt <name>`,
+`rest <METHOD> <path> ['<json>']`, `link <dashboard-id> [--last 24h|7d]`. `<env>`
+is `local` or `prod`. Registering the `mcp__hyperdx-*` MCP is optional, not
+required — `hdx.py` exposes the identical tool set (`tools` → `schema <tool>` →
+`call`), so a session without those MCP tools loses nothing but call ergonomics.
+Registering it costs ~500-800 tokens/turn (~60 deferred tool names, schemas
+loaded only on use) whether or not it's ever called that turn.
 
 **(d) `scripts/query.py`** — direct ClickHouse SQL (HTTP or docker exec/ssh),
 unchanged. Use when the HyperDX API itself is down, or for ad-hoc SQL the

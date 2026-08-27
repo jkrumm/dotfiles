@@ -11,6 +11,8 @@ a subagent, a cron job) or when a deterministic, scriptable call is easier.
 
 Usage:
   python3 hdx.py local tools
+  python3 hdx.py local schema clickstack_timeseries
+  python3 hdx.py local instructions
   python3 hdx.py local call clickstack_list_sources '{}'
   python3 hdx.py local call clickstack_describe_source '{"sourceId": "..."}' --raw
   python3 hdx.py local prompt query_guide
@@ -178,11 +180,42 @@ def rpc_call(base: str, key: str, method: str, params: dict) -> dict:
     return msg.get("result", {})
 
 
-def cmd_tools(base: str, key: str, _args) -> None:
-    result = rpc_call(base, key, "tools/list", {})
-    for tool in result.get("tools", []):
+def _print_tool_list(tools: list) -> None:
+    for tool in tools:
         desc = (tool.get("description") or "").split(".")[0].strip()
         print(f"{tool['name']:<40} {desc}")
+
+
+def cmd_tools(base: str, key: str, args) -> None:
+    result = rpc_call(base, key, "tools/list", {})
+    _print_tool_list(result.get("tools", []))
+    print(f"\n(schema: hdx.py {args.env} schema <name>)")
+
+
+def cmd_schema(base: str, key: str, args) -> None:
+    result = rpc_call(base, key, "tools/list", {})
+    tools = result.get("tools", [])
+    if not args.tool:
+        _print_tool_list(tools)
+        return
+    for tool in tools:
+        if tool["name"] == args.tool:
+            print(json.dumps(tool.get("inputSchema", {}), indent=2))
+            desc = (tool.get("description") or "").strip()
+            if desc:
+                print()
+                print(desc)
+            return
+    sys.exit(f"ERROR: no tool named '{args.tool}'")
+
+
+def cmd_instructions(base: str, key: str, _args) -> None:
+    result = rpc_call(base, key, "initialize", {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "hdx.py", "version": "1.0"},
+    })
+    print(result.get("instructions", ""))
 
 
 def cmd_call(base: str, key: str, args) -> None:
@@ -258,6 +291,11 @@ def main() -> None:
 
     sub.add_parser("tools", help="List MCP tool names + first sentence of description")
 
+    schema_p = sub.add_parser("schema", help="Print a tool's inputSchema + full description (omit tool to list all)")
+    schema_p.add_argument("tool", nargs="?", default=None, help="Tool name, e.g. clickstack_timeseries")
+
+    sub.add_parser("instructions", help="Print the server's tool-selection instructions (from initialize)")
+
     call_p = sub.add_parser("call", help="Call an MCP tool (tools/call)")
     call_p.add_argument("tool", help="Tool name, e.g. clickstack_list_sources")
     call_p.add_argument("json_args", nargs="?", default="{}", help="JSON arguments object")
@@ -280,6 +318,8 @@ def main() -> None:
 
     handlers = {
         "tools": cmd_tools,
+        "schema": cmd_schema,
+        "instructions": cmd_instructions,
         "call": cmd_call,
         "prompt": cmd_prompt,
         "rest": cmd_rest,
