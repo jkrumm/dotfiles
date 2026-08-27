@@ -497,13 +497,47 @@ than duplicates the mini-side heartbeat below: that one runs *on* the mini and
 structurally cannot see inbound auth or the mosh UDP path, since the mini has no
 key for itself and cannot ssh to itself.
 
-**`make herdr-setup`** wires the two halves. It installs herdr's first-party
-Claude Code integration (`herdr integration install claude` → a SessionStart
-hook at `~/.claude/hooks/herdr-agent-state.sh`), which is what makes a pane
-report real agent status instead of `agent_status: "unknown"` — the entire
-reason to prefer herdr over tmux. It then starts the **server only on the dev
-host**, detected by the `cache` backend marker, the same signal `git-headless`
-uses; a thin client gets the hook and no server.
+**`make herdr-setup`** wires three things, and the first two are easy to
+confuse because both are "the Claude Code integration". `herdr integration
+install claude` writes a SessionStart **hook** (`~/.claude/hooks/herdr-agent-state.sh`)
+which is what makes a pane report real agent status instead of
+`agent_status: "unknown"` — the entire reason to prefer herdr over tmux. That
+tells herdr about the agent. **`scripts/herdr-skill-sync.sh` is the other
+direction**: it regenerates `skills/herdr/SKILL.md` from `herdr --skill`, which
+is what tells the *agent* about herdr — how to drive panes, tabs, workspaces and
+sibling agents over the CLI. It then starts the **server only on the dev host**,
+detected by the `cache` backend marker, the same signal `git-headless` uses; a
+thin client gets the hook and the skill but no server.
+
+**That skill is GENERATED, never hand-written, and the binary is the
+authority.** herdr 0.8.2 (#2847) bundles it and keeps it matched to that
+release's CLI and lifecycle behaviour, so a hand-maintained copy is a second
+source of truth that goes stale silently on every `brew upgrade herdr` — and
+stale CLI syntax is worse than none, because an agent follows it confidently.
+It is **tracked anyway** rather than generated straight into `~/.claude`,
+because the git diff is the review: an upgrade that changes what agents are told
+to do on this machine should arrive as a reviewable diff, the same argument that
+makes the Brewfile a supply-chain audit trail. The sync refuses to write a
+short or frontmatter-less file and keeps the tracked one instead — a degraded
+SKILL.md does not error at load time, it just quietly stops triggering.
+
+Two things follow from herdr's own `--help`, which carries an "Are you an AI?"
+block: it points control questions at `herdr --skill` and says to **skip it if a
+herdr skill is already in context** — so installing ours is what makes that
+block a no-op. The other two URLs there are task-scoped and deliberately *not*
+in the skill: `herdr.dev/agent-guide.md` (help a human set herdr up) and
+`herdr.dev/llms.txt` (debug herdr itself). Reach for those only for those jobs.
+
+**How an agent knows it is inside herdr: `HERDR_ENV=1`.** herdr injects
+`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID`,
+`HERDR_SOCKET_PATH` and `HERDR_BIN_PATH` into every managed pane, and the skill's
+first instruction is to test that variable and stop if it is unset. So the same
+skill is inert on the MacBook (no server, no vars) and live on the mini with no
+per-machine branching. **The vars are inherited at spawn, not tracked** — a
+process that outlives its pane keeps whatever `HERDR_PANE_ID` it was born with,
+so a `claude --bg` daemon can carry a stale pane ID. Resolve the caller with
+`herdr pane current --current` rather than trusting an inherited ID in anything
+durable.
 
 Three non-obvious constraints, all load-bearing:
 
@@ -2180,9 +2214,17 @@ and are non-empty.
 
 Applying a herdr config change to a live server without dropping panes:
 `herdr server reload-config` (or `prefix+shift+R` inside herdr). `make
-herdr-setup` does it for you. Validate first with `herdr config check` — it
-catches unknown keys and TOML errors, but **not** bad theme *values*, which
-fall back to defaults silently.
+herdr-setup` does it for you. Validate first with `herdr config check` — but
+know exactly what it does and does not catch, measured on 0.8.2:
+
+- Unknown keys and TOML errors: caught (always were).
+- An unknown **built-in theme name**: caught since 0.8.2 (#2452), and it names
+  the valid set. This file previously said it was not — that was true on 0.7.5.
+- A bad **hex in `[theme.custom]`**: still silently accepted, still falls back
+  to a default. `mauve = "notahexcolor"` returns `config: ok`.
+- **It exits 0 even on `config: issues found`.** Do not gate a script on its
+  return code — read the output. That is why `make theme` asserts the theme
+  files exist and are non-empty rather than trusting this command.
 
 ## Key Technical Facts
 
