@@ -98,3 +98,28 @@ alert name or description, and link to how to silence it (delete/disable via
   assume parity — `hdx.py <env> tools` to check before scripting against one.
 - The MCP is **stateless** — no session, no `initialize` handshake required
   before `tools/list` or `tools/call`. Every POST is independent.
+
+## Schema facts (prod, verified 2026-08-27)
+
+- Error predicate on request spans: `SpanKind='Server' AND StatusCode='Error'`
+  — every service marks 5xx as Error and leaves 4xx `Unset`. Traefik **Client**
+  spans mark 404/401 as Error and include socket-proxy `GET /_ping` — never use
+  them for error rate.
+- Edge view = Traefik Server spans. Host is `SpanAttributes['server.address']`
+  (`http.request.header.host` is empty); `url.scheme` is `https`/`wss` — exclude
+  `wss` from latency (long-lived upgrades) and `server.address='otel.<domain>'`
+  (browser-SDK ingest, ~60 % of edge volume).
+- Status-code attribute per service: argo-api, fpp-server, traefik →
+  `http.response.status_code` (+ `http.route`, `http.request.method`); imgproxy,
+  fpp-analytics, audio-gateway → legacy `http.status_code` (+ `http.method`).
+- Browser SDKs (`free-planning-poker`, `argo-dashboard`) have no Server spans;
+  `otelcol*` ships metrics only — `SpanKind='Server' AND ServiceName!='traefik'`
+  is the clean app-service set.
+- `SeverityNumber`: info 9, warn 13, error 17, fatal 21. `clickstack_search`
+  ignores a custom `select`. Never alias a column `all` (`ORDER BY ALL` clash).
+- Builder group-by on a Map key renders the header as `arrayElement(...)` with no
+  alias — a table meant for row-click drilldown on a Map attribute is the one
+  legitimate `clickstack_sql` tile.
+- `clickstack_patch_dashboard` shape: `{dashboardId, tileId, tile:{name, config}}`.
+  Rate tiles are counts per bucket (no window-normalised req/s in the builder).
+  HyperDX opens dashboards at 15 min — hand out `hdx.py <env> link <id> --last 24h`.
