@@ -67,7 +67,8 @@ investigation ships a dev stack there; go straight to prod otherwise, and say so
 4. Screenshot via `/browse`: log in at `<base>/login` with the env's
    email/password (`take_snapshot` to find the form fields — never paste the
    password into chat), navigate to the kiosk link from `hdx.py <env> link
-   <id>`, `take_screenshot` at 1440×900.
+   <id>`, `take_screenshot` with `fullPage: true` at 1440 px width, saved under
+   `/tmp/hdx/<slug>.png` — never inside a repo (a `git add -A` sweeps it up).
 5. Critique the screenshot + tile list against `reference/dashboard-review.md`.
 6. `patch_dashboard` for anything that failed the checklist, repeat 3–5 until it
    passes.
@@ -135,3 +136,15 @@ alert name or description, and link to how to silence it (delete/disable via
 - `seriesLimit` on line/stacked_bar ranks by the plotted value, not by volume —
   "p95 of the 8 busiest routes" needs a `clickstack_sql` tile.
 - `hdx.py` key fetch over ssh eats stdin inside shell loops — add `</dev/null`.
+- **Durations**: `numberFormat: {output: "duration", factor: 0.000000001}` on
+  every `Duration` select (auto "341ms" / "5.7s"). `output: "number"` with a
+  1e-6 factor is NOT scaled by the UI — tiles render raw nanoseconds while
+  `query_tile` looks fine, so only a screenshot catches it. Drop "(ms)" from
+  titles that use it.
+- `bar`/`pie` builder tiles take exactly one select (one series); use a table
+  or a `clickstack_sql` tile for p50+p95 side by side.
+- `clickstack_query_tile(s)` take top-level `startTime`/`endTime` (ISO); a
+  `timeRange` object is silently ignored and you get the 15-minute default.
+- `hyperdx-sync.sh` needs `HYPERDX_PROD_BASE_URL` on the mini until
+  `op://vps/config/DOMAIN` is seeded; `make hyperdx-export ENV=prod` fails
+  otherwise — and `… | tail` hides that exit code, so don't chain a commit on it.
