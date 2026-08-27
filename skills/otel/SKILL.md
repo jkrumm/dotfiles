@@ -64,11 +64,16 @@ investigation ships a dev stack there; go straight to prod otherwise, and say so
 2. `save_dashboard` — dev first when the service has a local stack, else prod.
 3. `query_tiles` (or `query_tile` per tile) — every tile must return data or be
    justified (e.g. a rare-event counter that's legitimately zero right now).
-4. Screenshot via `/browse`: log in at `<base>/login` with the env's
-   email/password (`take_snapshot` to find the form fields — never paste the
-   password into chat), navigate to the kiosk link from `hdx.py <env> link
-   <id>`, `take_screenshot` with `fullPage: true` at 1440 px width, saved under
-   `/tmp/hdx/<slug>.png` — never inside a repo (a `git add -A` sweeps it up).
+4. Screenshot with the chrome-devtools MCP — **not** the `/browse` haiku fork,
+   which (observed 3×) ignores the save path, drops credentials into files and
+   returns 900 px captures. Spawn a Sonnet `general-purpose` agent with these
+   rules baked in: `secrets-run read op://…/AGENT_EMAIL|AGENT_PASSWORD` into
+   shell vars only, never a file, never printed; `take_snapshot` to find the
+   login fields; `resize_page` 1440×1800 and verify via `evaluate_script`;
+   `take_screenshot` with `fullPage: true` and an **absolute** `filePath` under
+   `/tmp/hdx/` — never inside a repo (`git add -A` sweeps it up); if the result
+   is ≤ 1000 px tall, scroll by 800 and shoot again. Time range via the kiosk
+   deep link from `hdx.py <env> link <id> --last 24h`.
 5. Critique the screenshot + tile list against `reference/dashboard-review.md`.
 6. `patch_dashboard` for anything that failed the checklist, repeat 3–5 until it
    passes.
