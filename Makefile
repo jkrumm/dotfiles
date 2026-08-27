@@ -67,6 +67,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-secrets
 	@$(MAKE) --no-print-directory _setup-sdk-keys
 	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
+	@$(MAKE) --no-print-directory _setup-hyperdx-mcp
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-karabiner
 	@$(MAKE) --no-print-directory _setup-rules
@@ -1219,6 +1220,43 @@ _setup-research-gateway-mcp:
 		echo "    ✓ research-gateway MCP registered (research tool)"; \
 	else \
 		echo "    · could not read op://vps/research-gateway/API_SECRET — skipping (op not authed?)"; \
+	fi
+
+# hyperdx-{prod,local} are the ClickStack/HyperDX MCP server built into the
+# all-in-one image (POST /api/mcp, stateless Streamable HTTP) — dashboard,
+# alert, and query tools for OTel data alongside scripts/hdx.py and query.py
+# (skills/otel/). Two registrations because prod and local dev are separate
+# HyperDX instances with separate bearer keys:
+#   - hyperdx-prod  → op://vps/clickstack/AGENT_ACCESS_KEY, a dedicated
+#     hyperdx-agent user provisioned by `make hyperdx-agent-setup` in vps.
+#     Resolved the same way as research-gateway's token above, so it shares
+#     the same op-auth precondition. The ref may not exist yet — skip soft.
+#   - hyperdx-local → HYPERDX_LOCAL_ACCESS_KEY in ~/.config/hyperdx/local.env,
+#     written by `make hyperdx-dev-bootstrap` in vps. No 1Password involved —
+#     it's a throwaway credential scoped to a local-only container.
+.PHONY: _setup-hyperdx-mcp
+_setup-hyperdx-mcp:
+	@echo "  hyperdx-prod MCP (remote HTTP — bearer via 1Password)..."
+	@TOKEN="$$(OP_ACCOUNT=tkrumm $(DOTFILES_DIR)/scripts/secrets-run read op://vps/clickstack/AGENT_ACCESS_KEY 2>/dev/null)"; \
+	if [ -n "$$TOKEN" ]; then \
+		claude mcp remove hyperdx-prod --scope user 2>/dev/null || true; \
+		claude mcp add hyperdx-prod --scope user --transport http https://hyperdx.jkrumm.com/api/mcp --header "Authorization: Bearer $$TOKEN"; \
+		echo "    ✓ hyperdx-prod MCP registered (clickstack_* tools)"; \
+	else \
+		echo "    · could not read op://vps/clickstack/AGENT_ACCESS_KEY — skipping (run make hyperdx-agent-setup in vps, then add the ref to headless.refs)"; \
+	fi
+	@echo "  hyperdx-local MCP (local HTTP — bearer via ~/.config/hyperdx/local.env)..."
+	@if [ -f "$(HOME)/.config/hyperdx/local.env" ]; then \
+		KEY="$$(grep '^HYPERDX_LOCAL_ACCESS_KEY=' $(HOME)/.config/hyperdx/local.env | cut -d= -f2-)"; \
+		if [ -n "$$KEY" ]; then \
+			claude mcp remove hyperdx-local --scope user 2>/dev/null || true; \
+			claude mcp add hyperdx-local --scope user --transport http http://localhost:7707/api/mcp --header "Authorization: Bearer $$KEY"; \
+			echo "    ✓ hyperdx-local MCP registered (clickstack_* tools)"; \
+		else \
+			echo "    · HYPERDX_LOCAL_ACCESS_KEY not set in local.env — skipping"; \
+		fi; \
+	else \
+		echo "    · ~/.config/hyperdx/local.env not found — skipping (run make hyperdx-dev-bootstrap in vps)"; \
 	fi
 
 .PHONY: _setup-colima

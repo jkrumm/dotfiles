@@ -1,31 +1,100 @@
 ---
 name: otel
 description: >
-  Query and debug OpenTelemetry data (traces, logs, metrics) in ClickHouse (HyperDX/ClickStack) via the
-  sideclaw MCP `otel` tool. Use when investigating application errors, slow or missing traces, log anomalies,
-  service health, or any observability question in local dev or VPS production (local + prod both supported).
+  Query and debug observability data — traces, logs, metrics, dashboards, alerts —
+  in ClickStack/HyperDX (local dev + VPS prod). Use for OpenTelemetry questions,
+  "why is X slow/failing/erroring in prod", service health checks, dashboard or
+  alert authoring, or any ClickHouse query against OTel data.
 ---
 
-# OTEL Debug — via sideclaw MCP
+# OTEL / ClickStack / HyperDX
 
-Call `mcp__sideclaw__otel` with:
-- `investigation` — what to look into (error message, service, trace id, anomaly, time range).
-- `environment` — `local` or `prod`.
-- `cwd` (optional) — defaults to $HOME. OTEL access is host-level, so this rarely matters.
+Four ways in, cheapest-appropriate first.
 
-The worker runs **read-only** on claude-sonnet-5[1m], currently on Max per
-`SIDECLAW_WORKER_BACKEND=max` (IU unified endpoint fallback when unset — non-EU
-routing, so treat prod log content accordingly), and queries ClickHouse through
-`~/.claude/skills/otel/scripts/query.py`. Only the structured result (`status`,
-`environment`, `timeRange`, `findings`, `recommendations`) returns to the caller —
-the raw query output stays in the worker.
+## Routes
 
-Inspect `status` first: `errors` = active error spans/logs, `degraded` = elevated
-latency or warnings, `healthy` = data flowing normally.
+| Need | Route |
+|-|-|
+| Quick triage, off-thread verdict | `mcp__sideclaw__otel` — read-only Sonnet worker, returns `{status, environment, timeRange, findings, recommendations}` only |
+| Interactive investigation, dashboards, alerts | `mcp__hyperdx-local__clickstack_*` / `mcp__hyperdx-prod__clickstack_*` — the builder tools, discovery flow below |
+| Scripted, no MCP client (cron, subagent) | `scripts/hdx.py <env> {tools,call,prompt,rest,link}` |
+| Raw SQL fallback, or HyperDX API down | `scripts/query.py --env <env> --preset ...` |
 
-**Reliability:** a query can take 1–6 min under load. The tool's 8-min timeout
-absorbs most of it; on a hard timeout, retry.
+**(a) `mcp__sideclaw__otel`** — call with `investigation` (error/service/trace
+id/anomaly/time range) and `environment` (`local`/`prod`). Runs read-only on
+claude-sonnet-5[1m] (Max, `SIDECLAW_WORKER_BACKEND=max`; IU fallback otherwise —
+non-EU routing, treat prod log content accordingly) via `scripts/query.py`. Only
+the structured result crosses back — raw output stays in the worker. Query can
+take 1–6 min under load; the tool's 8-min timeout absorbs most of it, retry on a
+hard timeout.
 
-**Maintenance:** the ClickHouse query script (`scripts/query.py`) is the canonical
-access path and lives here in dotfiles, not in sideclaw — add presets / schema
-changes there. The sideclaw worker invokes it by absolute `$HOME` path.
+**(b) `mcp__hyperdx-{local,prod}__clickstack_*`** — the built-in ClickStack MCP
+(28 tools local / 30 prod, prefixed `clickstack_`). Server-side tool-selection
+policy, mirrored here: prefer the **builder tools** (`table`, `timeseries`,
+`search`, `event_patterns`, `event_deltas`, `emerging_signals`,
+`trace_waterfall`, `trace_top_time_consuming_operations`) — `clickstack_sql` is
+last resort (JOINs, CTEs, window functions, unregistered tables). Discovery flow
+before any query: `list_sources` → `describe_source` → build the query. Fetch
+prompts at authoring time instead of restating them here: `create_dashboard`,
+`dashboard_examples`, `query_guide`.
+
+**(c) `scripts/hdx.py`** — stdlib Python, same MCP + REST v2 surface, for
+callers without an MCP client. `hdx.py <env> tools`, `call <tool> '<json>'`,
+`prompt <name>`, `rest <METHOD> <path> ['<json>']`, `link <dashboard-id> [--last
+24h|7d]`. `<env>` is `local` or `prod`.
+
+**(d) `scripts/query.py`** — direct ClickHouse SQL (HTTP or docker exec/ssh),
+unchanged. Use when the HyperDX API itself is down, or for ad-hoc SQL the
+builder tools can't express. Canonical access path for the sideclaw `otel`
+worker too — add presets/schema changes here, not in sideclaw.
+
+## Environment selection
+
+`local` = the dev ClickStack container (`http://localhost:7707`, credentials in
+`~/.config/hyperdx/local.env`, written by `make hyperdx-dev-bootstrap` in vps).
+`prod` = `https://hyperdx.jkrumm.com` (credentials via `op://vps/clickstack/*`,
+`make hyperdx-agent-setup` in vps) — **tailnet-only**, reachable from both Macs,
+**not from cloud routines**. Author against local first when the service under
+investigation ships a dev stack there; go straight to prod otherwise, and say so.
+
+## Dashboard authoring loop
+
+1. Fetch the `create_dashboard` and `dashboard_examples` prompts, and
+   `describe_source` for every source the dashboard touches.
+2. `save_dashboard` — dev first when the service has a local stack, else prod.
+3. `query_tiles` (or `query_tile` per tile) — every tile must return data or be
+   justified (e.g. a rare-event counter that's legitimately zero right now).
+4. Screenshot via `/browse`: log in at `<base>/login` with the env's
+   email/password (`take_snapshot` to find the form fields — never paste the
+   password into chat), navigate to the kiosk link from `hdx.py <env> link
+   <id>`, `take_screenshot` at 1440×900.
+5. Critique the screenshot + tile list against `reference/dashboard-review.md`.
+6. `patch_dashboard` for anything that failed the checklist, repeat 3–5 until it
+   passes.
+7. `make -C ~/SourceRoot/vps hyperdx-export ENV=<env>` and commit the JSON under
+   `vps/observability/dashboards/` — dashboards live in Mongo, which is not
+   backed up; the repo is the backup.
+
+## Alerts
+
+`get_webhook` (check for an existing Slack destination) → `save_webhook` if
+missing (`op://common/slack/WEBHOOK_ALERTS`, never print the URL) →
+`save_alert` targeting a tile or a saved search. State the threshold in the
+alert name or description, and link to how to silence it (delete/disable via
+`save_alert` with the same id, or `clickstack_get_alert` to find it first).
+
+## Gotchas
+
+- `clickstack_sql` is last resort — the builder tools cover almost everything
+  and don't require knowing the schema.
+- Logs partition on `TimestampTime`, not `Timestamp` — filter on it for
+  partition pruning (see `query.py` presets for the pattern).
+- Trace `Duration` is nanoseconds — divide by `1e6` for ms.
+- Map-typed attributes (`SpanAttributes`, `LogAttributes`) need
+  `mapValue['key']` / `ILIKE` syntax, not dot access — `query_guide` has the
+  full reference.
+- Tool list differs by version: local runs 2.33.0-beta (28 tools, no
+  `query_tiles`/`emerging_signals`), prod runs 2.36.0-beta (30 tools). Don't
+  assume parity — `hdx.py <env> tools` to check before scripting against one.
+- The MCP is **stateless** — no session, no `initialize` handshake required
+  before `tools/list` or `tools/call`. Every POST is independent.
