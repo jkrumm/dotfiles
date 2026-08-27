@@ -13,7 +13,7 @@ description: Multi-angle code review via sideclaw MCP tool (claude-sonnet-5, cur
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
 plus a triage router that adds content-driven angles — security, performance,
-concurrency, data-migration, api-contract — when the diff warrants them. All on
+concurrency, data-migration, api-contract, resilience — when the diff warrants them. All on
 claude-sonnet-5, **currently on Max** per `SIDECLAW_WORKER_BACKEND=max` (IU
 unified endpoint fallback when unset). Use this by default.
 
