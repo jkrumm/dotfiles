@@ -1126,23 +1126,44 @@ Three ways to start an agentic coding session — `c`/`ca` defined in
 | Command | Backend | Model | Setup |
 |-|-|-|-|
 | `c` | Claude Max subscription | Opus/Sonnet/Haiku via `/model` | Native — full skills/hooks/subagents/CLAUDE.md |
-| `ca` | Local LiteLLM bridge (`:4000`) | DeepSeek-V4-Pro (hardcoded default) | Identical to `c` — same `~/.claude` config dir, only auth + model change |
+| `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg | Identical to `c` — same `~/.claude` config dir, only auth + model change |
 | `oc` (`opencode`) | IU unified endpoint | whatever `opencode.json` configures | Separate harness — own plugin/hook/agent system, see below |
 
 `ca` exists so the exact same Claude Code setup (skills, hooks, native subagents
-like `@implementer`) runs off Max — at work, or to spare quota — billed as cheap
-IU/DeepSeek tokens instead. It's deliberately inflexible: no WebSearch/WebFetch
-(the bridge can't serve those Anthropic-only tool calls), and no built-in model
-switching — change the `--model DeepSeek-V4-Pro` default in the file by hand if
-needed. Rationale: `modelpick/docs/decisions/ca-launcher.md`.
+like `@implementer`) runs off Max — at work, or to spare quota — billed as IU
+tokens instead. **It does not go through the LiteLLM bridge**: it talks to the IU
+unified endpoint's `/anthropic` route directly, so WebSearch/WebFetch and prompt
+caching both work (the bridge serves neither).
+
+An optional first argument picks the model, and the two tiers behave differently
+on purpose:
+
+- **`claude-*`** → `[1m]` is appended to the id and to every `ANTHROPIC_DEFAULT_*`
+  tier. All Claude models on this route land on AWS Bedrock `eu-west-1`; the
+  `-eu` aliases add nothing and break `count_tokens`, so don't use them.
+- **anything else** (`DeepSeek-V4-Flash`, `glm-5.3-flash`, `kimi-k2.7-code`, …) →
+  every `ANTHROPIC_DEFAULT_*` tier is pinned to that same id, and the window comes
+  from `_CA_CTX` in `claude.zsh` rather than `[1m]`. Both details are load-bearing:
+  leave one tier on a `claude-*` default and subagents 400 against a model the
+  gateway doesn't serve, and `[1m]` on a gateway id would force a `claude-*` name
+  that usage-tracker then misbills as Max quota.
+
+`_CA_CTX` is a conservative table — 200k for anything whose real window hasn't
+been measured, because the variable is a client-side budget: set it above the
+true window and a clean auto-compact becomes a hard mid-session API rejection.
+1M is **not** safe for every model (`kimi-k2.7-code` hard-caps at 262144).
+
+A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
+telemetry, not an error. Rationale: `modelpick/docs/decisions/ca-launcher.md`.
 
 An already-open shell keeps whatever `c`/`ca` definition it loaded at startup —
 `source ~/.zshrc` (or open a new terminal) after editing `claude.zsh`.
 
-`usage-tracker` (`~/SourceRoot/usage-tracker`) ingests all three automatically —
-`ca`'s billing classification, pricing, and dedup against the bridge's own
-request log all fall out of its existing `claude-code`/`litellm` collector
-split, no extra wiring needed.
+`usage-tracker` (`~/SourceRoot/usage-tracker`) ingests all three automatically:
+the `SessionStart` hook logs each session's `ANTHROPIC_BASE_URL`, which is what
+`classifyBilling` keys on to bill `ca` as `iu` rather than sunk Max quota. Rates
+for every gateway model are measured from the endpoint's own reported cost — see
+`usage-tracker/src/pricing.ts`.
 
 ## OpenCode (Claude Code fallback)
 

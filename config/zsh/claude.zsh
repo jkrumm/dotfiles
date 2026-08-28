@@ -3,7 +3,12 @@
 # Usage: c  [claude-args...]   — Max subscription (default)
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
 #        cf [claude-args...]   — Max subscription, defaults to Fable model
-#        ca [claude-args...]   — LiteLLM bridge (DeepSeek-V4-Pro etc.), same setup
+#        ca [model] [claude-args...]
+#                              — IU unified endpoint (NOT the LiteLLM bridge).
+#                                No model  → claude-sonnet-5[1m], as before.
+#                                claude-*  → that Claude model, [1m] auto-appended.
+#                                anything else → treated as a gateway model id
+#                                (DeepSeek-V4-Flash, glm-5.3-flash, …); see _ca_ctx.
 #
 # Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
 # automatically. Additionally, if the current git repo ships local plugins under
@@ -142,6 +147,37 @@ cs() {
 #
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
+# Real context window per gateway model id, for CLAUDE_CODE_MAX_CONTEXT_TOKENS.
+#
+# Claude Code only trusts api.anthropic.com to self-report a window
+# (isFirstPartyAnthropicBaseUrl, claude-code#46416), so over any custom base URL
+# it assumes 200k and auto-compacts there — throttling a model that accepts far
+# more. CLAUDE_CODE_MAX_CONTEXT_TOKENS is the fix for *gateway* ids; the `[1m]`
+# name-trick is NOT, because it forces a claude-* id, which usage-tracker then
+# classifies as Max quota → double-count + misbill. `[1m]` stays correct for the
+# real Claude models, which is why the two branches of `ca` differ.
+#
+# This is a client-side budget, not a server limit: set it HIGHER than the real
+# window and you trade a clean auto-compact for a hard API rejection mid-session.
+# So 1M is not a safe blanket default — kimi-k2.7-code hard-caps at 262144.
+#
+# Anything absent falls back to 200k — NOT measured, deliberately conservative.
+# `modelpick`'s `bun run pick` is what measures these; re-run it when adding a row.
+#   glm-5.3-flash     1000000  measured — still accepted at a 1.1M probe ceiling
+#   DeepSeek-V4-Flash 1000000  measured — still accepted at a 1.1M probe ceiling
+#   DeepSeek-V4-Pro   1000000  documented (IU portal catalog), not yet probed
+#   kimi-k2.7-code     262144  measured — the gateway names the number in its 400
+#
+# Keys are quoted and the notes live up here: an unquoted `[foo-bar]` inside
+# `=( … )` is a glob pattern to zsh and fails to match at source time.
+typeset -gA _CA_CTX=(
+  'glm-5.3-flash'     1000000
+  'DeepSeek-V4-Pro'   1000000
+  'DeepSeek-V4-Flash' 1000000
+  'kimi-k2.7-code'     262144
+)
+_ca_ctx() { print -r -- "${_CA_CTX[$1]:-200000}" }
+
 ca() {
   local key base
   key=$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null)
@@ -162,17 +198,55 @@ ca() {
     done
   fi
 
+  # Optional leading model id: `ca DeepSeek-V4-Flash -p "…"`. Only consumed when
+  # it doesn't look like a flag, so every existing `ca --resume`-style call is
+  # untouched.
+  local model=""
+  if [[ -n "$1" && "$1" != -* ]]; then
+    model="$1"; shift
+  fi
+
   local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model "claude-sonnet-5[1m]" "${args[@]}")
   [[ " $* " == *" --effort "* ]] || args=(--effort high "${args[@]}")
+
+  if [[ -z "$model" || "$model" == claude-* ]]; then
+    # Claude tier: `[1m]` is the documented window fix, stripped before the id
+    # reaches the provider, and applied to every ANTHROPIC_DEFAULT_* tier too or
+    # a subagent silently drops back to a 200k budget. Not for Haiku 4.5 though —
+    # that really is a 200k model, and budgeting it at 1M trades a clean
+    # auto-compact for a hard API rejection.
+    local m="${model:-claude-sonnet-5}"
+    if [[ "$m" != *"[1m]" && "$m" != *haiku* ]]; then
+      m="${m}[1m]"
+    fi
+    [[ " $* " == *" --model "* ]] || args=(--model "$m" "${args[@]}")
+
+    env -u ANTHROPIC_API_KEY \
+      ANTHROPIC_AUTH_TOKEN="$key" \
+      ANTHROPIC_BASE_URL="$base" \
+      ANTHROPIC_DEFAULT_OPUS_MODEL="$m" \
+      ANTHROPIC_DEFAULT_SONNET_MODEL="$m" \
+      ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5 \
+      ANTHROPIC_DEFAULT_FABLE_MODEL="$m" \
+      ENABLE_TOOL_SEARCH=true \
+      claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
+    return
+  fi
+
+  # Gateway tier (DeepSeek / GLM / Kimi / MiniMax / …). Every ANTHROPIC_DEFAULT_*
+  # tier is pinned to the SAME id on purpose: leave one on a claude-* default and
+  # a spawned subagent asks the gateway for a model it doesn't serve — that is
+  # the classic "main session works, subagents 400" failure (claude-code#5680).
+  [[ " $* " == *" --model "* ]] || args=(--model "$model" "${args[@]}")
 
   env -u ANTHROPIC_API_KEY \
     ANTHROPIC_AUTH_TOKEN="$key" \
     ANTHROPIC_BASE_URL="$base" \
-    ANTHROPIC_DEFAULT_OPUS_MODEL="claude-sonnet-5[1m]" \
-    ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-5[1m]" \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5 \
-    ANTHROPIC_DEFAULT_FABLE_MODEL="claude-sonnet-5[1m]" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="$model" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="$model" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="$model" \
+    ANTHROPIC_DEFAULT_FABLE_MODEL="$model" \
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS="$(_ca_ctx "$model")" \
     ENABLE_TOOL_SEARCH=true \
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
