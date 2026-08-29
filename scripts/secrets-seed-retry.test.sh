@@ -48,6 +48,7 @@ case "$ref" in
   op://hang/a/b)    sleep 60; echo "never" ;;
   # A genuinely absent ref. Not a hiccup: must fail on the FIRST attempt.
   op://missing/a/b) echo '[ERROR] "a" isn'"'"'t an item in the "missing" vault' >&2; exit 1 ;;
+  op://missing2/a/b) echo '[ERROR] "a" isn'"'"'t an item in the "missing2" vault' >&2; exit 1 ;;
   *) echo "ok-value" ;;
 esac
 EOF
@@ -120,5 +121,18 @@ test "$(calls_for op://hang/a/b)" -eq 3 \
 # it terminated at all rather than sitting on the stub's 60s sleep.
 test "$elapsed" -lt 45 \
   || { echo "hanging ref was not time-bounded: ${elapsed}s" >&2; exit 1; }
+
+# --- every dead ref is reported, not just the first ---------------------------
+# A deleted 1Password item blocks EVERY reseal (fail-closed), and reporting one
+# ref per biometric pass turns a five-ref outage into five passes — which is
+# exactly what happened on 2026-08-29 with careerpartner's deleted `care-stage`.
+set +e
+OUT=$(bash "$DRIVER" op://missing/a/b op://missing2/a/b op://ok/a/b 2>&1)
+RC=$?
+set -e
+test "$RC" -ne 0 || { echo "dead refs should still abort: $OUT" >&2; exit 1; }
+case "$OUT" in *"op://missing/a/b"*) ;; *) echo "first dead ref missing from the report: $OUT" >&2; exit 1 ;; esac
+case "$OUT" in *"op://missing2/a/b"*) ;; *) echo "second dead ref missing from the report: $OUT" >&2; exit 1 ;; esac
+case "$OUT" in *"cache untouched"*) ;; *) echo "expected the untouched-cache abort: $OUT" >&2; exit 1 ;; esac
 
 printf '%s\n' 'secrets-seed-retry: all tests passed'

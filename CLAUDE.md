@@ -876,6 +876,20 @@ health-check script above.
 
 Full rationale: `docs/devhost-health.md`.
 
+**`make mini-macos-update` is the paired applier** — MacBook-only, needs a TTY or
+`YES=1`, same *notice unattended, apply attended* split as `collie-upgrade`. It
+exists because the obvious spelling is wrong: `softwareupdate -i -a -R --user
+jkrumm --stdinpass` returns in **seconds** printing `Restarting...` and does not
+restart. That is a request, not an event — `UpdateBrainService` +
+`SoftwareUpdateLauncher` then prepare for minutes and reboot the machine
+themselves. Forcing `shutdown -r now` there **aborts the prepare and boots the old
+OS**, with `Update.plist`, `nvram` and `RecommendedUpdates` all still looking
+armed (cost: two spurious reboots, 2026-08-29). `sw_vers -productVersion` is the
+only honest check, which is what the target asserts; if the prepare never starts,
+the restart was swallowed by a stale GUI session (a modal vetoes it) — reboot
+plainly, then re-run. Full write-up: `docs/remote-dev.md` → *Applying a macOS
+update*.
+
 ## 1Password vault backup — auto-trigger (MacBook only)
 
 `opbackup` (`scripts/backup-1password.py`) exports every vault, age-encrypts it
@@ -1094,6 +1108,17 @@ ref through 1Password (biometric, one pass), and reseals the cache — run from 
 mini (present-human) or the MacBook whenever secrets rotate or the cache goes
 stale (`secrets-run` warns after 14 days). varlock is retained only as the
 `dotfiles-private` pre-commit leak scanner, not in the seed/runtime path.
+
+**A ref whose 1Password item was deleted upstream blocks EVERY reseal, silently.**
+The seed fails closed by design, so one dead ref means no cache update at all —
+found 2026-08-29 when careerpartner's `care-stage` item had been deleted and five
+refs in `headless.iu.refs` had been quietly failing every run since. The abort is
+correct; aborting on the *first* one was not, because it spent a Touch ID pass to
+report exactly one dead ref and the next run then died on the second. The loop now
+collects them and prints the **complete** list before aborting (proven with two
+bogus refs; cache untouched). If it fires: fix or comment out the ref — a dead ref
+is a refs-file edit, never a `secrets-run` problem, and no monitor will tell you
+which it is (`MacMini Secret Seed - Push` only knows the cache's age).
 
 **The login Keychain is not a headless credential store, and it fails quietly.**
 `security find-generic-password` returns non-zero when the login keychain is

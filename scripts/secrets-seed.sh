@@ -276,12 +276,26 @@ run_bounded() {  # $1=seconds  $2..=command ; stdout passes through untouched
   # (the marker walk rejects the empty output and the per-ref fallback runs) but it
   # silently disabled batching altogether. The explicit redirection overrides the
   # default and passes the caller's pipe through.
+  # Job control gives the child its own PROCESS GROUP, so the watchdog can kill
+  # the whole tree with `kill -- -$pid`. Killing only the direct child is not
+  # enough and fails in a way that looks like the bound working: the caller reads
+  # the child's stdout through a command substitution, and any surviving
+  # grandchild still holds that pipe open, so `$( )` blocks until IT exits.
+  # Measured 2026-08-29 with a shell-script stub that sleeps 60: rc came back as
+  # 124 (so the watchdog HAD fired) after the full 60s. Real `op` forks nothing,
+  # which is why production never showed it and the regression test — wired into
+  # no make target at the time — was the only thing that ever saw it.
+  # `set -m` is restored to whatever it was: this is a library function.
+  local was_monitor=0
+  case "$-" in *m*) was_monitor=1 ;; esac
+  set -m
   "$@" <&0 &
   cmd_pid=$!
+  (( was_monitor )) || set +m
   # The watchdog's own stdout goes to /dev/null: it must not hold the command
   # substitution's pipe open, or the caller would block until the sleep elapsed
   # even on a fast success.
-  { sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null; sleep 5; kill -KILL "$cmd_pid" 2>/dev/null; } >/dev/null 2>&1 &
+  { sleep "$secs"; kill -TERM -"$cmd_pid" 2>/dev/null; sleep 5; kill -KILL -"$cmd_pid" 2>/dev/null; } >/dev/null 2>&1 &
   wd_pid=$!
   wait "$cmd_pid" || rc=$?
   kill "$wd_pid" 2>/dev/null || true
@@ -404,9 +418,18 @@ else
   for ((i = 0; i < ${#refs[@]}; i++)); do _pending_idx+=("$i"); done
 fi
 
+# Permanently-unresolvable refs are COLLECTED, not fatal on sight: aborting on the
+# first one spends the human's Touch ID pass to learn about exactly one dead ref,
+# and the next run then dies on the second. Verified 2026-08-29, when the deleted
+# careerpartner item `care-stage` had been silently blocking every reseal — five
+# refs, which without this would have been five biometric passes. The run still
+# FAILS CLOSED (nothing is sealed or delivered); it just reports the whole list.
+dead_refs=""
+
 for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
   ref="${refs[$i]}"
   attempt=1
+  _dead=0
   while :; do
     # `rc` is captured on the OR side, NOT read from `$?` after an `if`: an `if`
     # whose condition fails and which has no `else` exits 0, so the obvious
@@ -419,8 +442,10 @@ for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
     if (( attempt >= OP_READ_ATTEMPTS )) || ! op_read_transient "$rc"; then
       echo "    ✗ op read failed for $ref (account ${accts[$i]}, attempt $attempt/$OP_READ_ATTEMPTS):" >&2
       indent <"$rerr" >&2
-      rm -f "$rerr"
-      die "aborting — cache untouched"
+      dead_refs="${dead_refs}${ref}  (account ${accts[$i]})
+"
+      _dead=1
+      break
     fi
     # Backoff gives the app time to settle, and — when the cause is a lock — the
     # human a moment to answer. Never printed as a failure: it is not one yet.
@@ -428,6 +453,9 @@ for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
     sleep $(( attempt * 3 ))
     attempt=$(( attempt + 1 ))
   done
+  # Keep going: the point is to end with the COMPLETE list of dead refs, not the
+  # first one. vals[i] stays unset — the abort below fires before the jq fold.
+  if (( _dead )); then continue; fi
   # v1 constraint: single-line values only. A multi-line value would misalign the
   # newline-paired jq fold below and silently corrupt the cache — refuse it.
   case "$v" in
@@ -438,6 +466,16 @@ for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
   vals[i]="$v"
 done
 rm -f "$rerr"
+
+if [[ -n "$dead_refs" ]]; then
+  echo "" >&2
+  echo "  ✗ unresolvable reference(s) — every one, so one pass tells you the whole list:" >&2
+  printf '%s' "$dead_refs" | sed 's/^/      /' >&2
+  echo "    Each is a ref in headless.refs / headless.iu.refs whose item or field no" >&2
+  echo "    longer exists (renamed, deleted or archived). Fix or comment it out, then" >&2
+  echo "    re-run — the cache is untouched until every ref resolves." >&2
+  die "aborting — cache untouched"
+fi
 
 # The short-value heads-up is per-ref in the fallback loop; the batch path skips it,
 # so sweep once here for anything it filled. Prints the ref and the length, never

@@ -2172,6 +2172,12 @@ secrets-lint:
 secrets-test: secrets-lint
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-run.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-run.test.sh
+	@# Runs BEFORE the mini-gated suite because it is the one that can run here:
+	@# it stubs op on PATH and guards the read loop (retries, the time bound, and
+	@# the dead-ref collector). It was written as a regression test and then wired
+	@# into no target at all — an unrun test is a comment.
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 
@@ -2776,6 +2782,18 @@ DRIFT_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/drift-push-url
 drift-check:
 	@bash $(DOTFILES_DIR)/scripts/drift-check.sh
 
+# ----------------------------------------------------------------------------
+# The applier for the one drift item drift-check cannot clear on its own. Paired
+# with it exactly like collie-upgrade: notice unattended, apply attended — this
+# needs a TTY (or YES=1), reboots the dev host, and asserts the version actually
+# moved. The procedure is not obvious: `softwareupdate -R` prints "Restarting..."
+# and returns without restarting, and forcing a reboot there boots the OLD OS
+# with every artifact still looking armed. See the script header.
+# ----------------------------------------------------------------------------
+.PHONY: mini-macos-update
+mini-macos-update:
+	@bash $(DOTFILES_DIR)/scripts/mini-macos-update.sh
+
 drift-check-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then \
@@ -2987,6 +3005,9 @@ help:
 	@echo "  make tailscale-acl-diff     Diff live tailnet ACL vs dotfiles-private (ALWAYS run first)"
 	@echo "  make tailscale-acl-pull     Fetch live ACL into dotfiles-private (normalises formatting)"
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
+	@echo ""
+	@echo "  make drift-check            Dev host: report pin/brew/macOS drift (read-only, never upgrades)"
+	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
 	@echo "  Manage it in ~/SourceRoot/usage-tracker — make stats / sources / logs."
