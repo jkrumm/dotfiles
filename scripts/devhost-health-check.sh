@@ -731,7 +731,25 @@ probe_hermes() {
   ip=$(tailnet_ip) || ip=""
   [[ -n "$ip" ]] || { echo "hermes: no tailnet IP to probe (tailscaled down?)"; return 1; }
   code=$(http_code "http://${ip}:${HERMES_PORT}/health")
-  [[ "$code" == "200" ]] || { echo "hermes gateway not answering on :${HERMES_PORT} (got ${code:-000})"; return 1; }
+  [[ "$code" == "200" ]] && return 0
+  # NAME THE FIREWALL CASE, because its symptom lies. An Application Firewall
+  # block does not refuse the connection: the kernel completes the handshake and
+  # the app never sees it, so curl reports "Connected" and then times out on
+  # EVERY path — which reads as a hung or broken service and sends you into the
+  # app's own logs, where the API server has cheerfully logged "listening on …".
+  # ALF keys on the BINARY, so replacing it drops the grant, and a running
+  # process keeps its old one until it restarts: that is why this can break at a
+  # reboot days after the actual change. Diagnosed 2026-08-29 by serving
+  # http.server off the same address with an allow-listed python (200 in 24ms)
+  # and hermes's own (hung) — 5 hours after the reboot that surfaced it.
+  local hint="" hermes_bin
+  hermes_bin="$HOME/.hermes/hermes-agent/venv/bin/python"
+  if [[ -x "$hermes_bin" ]] && [[ "$("$ALF_BIN" --getglobalstate 2>/dev/null)" == *"State = 1"* ]]; then
+    "$ALF_BIN" --listapps 2>/dev/null | grep -qF "$hermes_bin" \
+      || hint=" — its binary is NOT in the Application Firewall allow list (fix: sudo $ALF_BIN --add $hermes_bin && sudo $ALF_BIN --unblockapp $hermes_bin)"
+  fi
+  echo "hermes gateway not answering on :${HERMES_PORT} (got ${code:-000})${hint}"
+  return 1
 }
 
 probe_colima() {

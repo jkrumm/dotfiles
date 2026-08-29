@@ -1120,6 +1120,51 @@ same command against a freshly booted session worked first try. So the order
 that works is: plain reboot if the session is old, *then* the installer, then
 leave it alone.
 
+## The Application Firewall lies about which failure it is — 2026-08-29
+
+`mosh-server` has its own row in this repo already: `brew upgrade mosh` replaces
+the binary, ALF stores the *resolved Cellar path*, and the upgrade silently
+un-allows it. That is not a mosh quirk. **ALF keys on the binary, every time**,
+and the general case is worse than the mosh one because of how it fails.
+
+A blocked inbound connection is **not refused**. The kernel completes the TCP
+handshake and simply never hands the socket to the app, so the client prints
+`Connected to <host> port <n>` and then times out — on `/health`, on `/`, on a
+path that does not exist. Every diagnosis that symptom suggests is wrong: it
+reads as a hung event loop or a broken route, and the app's own log meanwhile
+says `API server listening on http://…`, because from inside the process
+everything *is* fine.
+
+Hermes hit exactly this. Its `venv/bin/python` — a real 17 MB binary, not a
+symlink — was replaced on 2026-08-28 by a venv rebuild, which dropped its ALF
+grant. Nothing broke that day: the already-running process keeps the grant it
+was given. The next reboot started a new process under the new binary, and the
+`MacMini Dev Host - Push` monitor went red with `hermes gateway not answering on
+:8642 (got 000)` while Hermes went on answering Slack perfectly. **A replaced
+binary is a time bomb whose fuse is the next restart.**
+
+The two-line experiment that settles it in seconds — same host, same address,
+same `http.server`, different binary:
+
+```bash
+ip=$(tailscale ip -4)
+/usr/bin/python3 -m http.server 8798 --bind "$ip" &            # ALF-allowed → 200 in 24ms
+~/.hermes/hermes-agent/venv/bin/python -m http.server 8799 --bind "$ip" &   # not allowed → hangs
+```
+
+Fix, and it needs sudo:
+
+```bash
+FW=/usr/libexec/ApplicationFirewall/socketfilterfw
+sudo "$FW" --add "$BIN" && sudo "$FW" --unblockapp "$BIN"
+"$FW" --listapps | grep -F "$BIN"      # no sudo needed to READ the list
+```
+
+`devhost-health-check` now appends that hint to the Hermes failure itself, so
+the next occurrence names its own cause instead of costing an afternoon. The
+general lesson stays wider than one check: **after replacing any binary that
+accepts inbound connections on this host, re-check the ALF list.**
+
 ## Blocking constraint
 
 **The inbound path is not testable from the mini.** Inbound auth depends entirely on the
