@@ -22,8 +22,8 @@ COLIMA_DISK   ?= 60
 # every time, so an upgrade has to be a reviewed diff of this pin, not
 # whatever tag happens to move.
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := 10ad046633bce25d95333f058139c31dbb232b2d
-COLLIE_VERSION := 0.35.0
+COLLIE_REF     := 313ed5dc5bd5c55a466bd108f9ac0deee9ab4807
+COLLIE_VERSION := 0.36.0
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
