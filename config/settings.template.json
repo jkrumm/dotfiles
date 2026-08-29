@@ -128,6 +128,7 @@
   "disableArtifact": true,
   "disableClaudeAiConnectors": true,
   "includeCoAuthoredBy": false,
+  "awaySummaryEnabled": false,
   "agentPushNotifEnabled": true,
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true
