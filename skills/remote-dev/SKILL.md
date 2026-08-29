@@ -309,6 +309,39 @@ or the mosh UDP path. Read-only, currently 10/10 passing: tailscale reachability
 Application Firewall allowlist, herdr server running, the agent-state hook
 present, and a resolvable GitHub credential.
 
+### The maintenance round
+
+`make mini-sweep` (MacBook, read-only) is the whole picture in one command:
+the four Kuma rows, macOS version + uptime, outdated count, the composite
+health check and drift. **The Kuma section comes first because it is read from
+homelab over keyless Tailscale SSH** — it is the only view that survives the
+mini being down *or* 1Password being locked.
+
+Order, when something is red:
+
+1. **Unlock 1Password first.** Its agent signs `ssh mini`, so a lock takes the
+   entire host away and presents as `signing failed … agent refused operation`
+   → `Permission denied (publickey)`. That reads like a transport fault and is
+   not one. A short auto-lock makes every mini action need a touch.
+2. `make mini-sweep` — read it before changing anything.
+3. On the mini, **detached**: `make brew-upgrade`. It asserts its four
+   invariants (caddy's DNS module, mosh in the ALF, colima's repaired KeepAlive,
+   herdr's session-leader boot path). Detached because upgrading the `tailscale`
+   formula restarts tailscaled — the transport the ssh session is riding.
+4. `make mini-macos-update` from the MacBook, if one is pending. `Restarting...`
+   is a *request*, not an event: the prepare runs for minutes afterwards and the
+   machine reboots itself. **Never force a reboot there** — it aborts the prepare
+   and boots the old OS with every artifact still looking armed.
+5. One attended applier per remaining drift row — `make collie-upgrade` (needs a
+   TTY; without one it prints changelog + diffstat + scope verdict and refuses,
+   which is the review), a reviewed `XCADDY_VERSION` bump + `make
+   caddy-dns-build`, `make secrets-seed` from the MacBook.
+6. `make mini-sweep` again, then `make remote-dev-doctor`.
+
+A reseal aborts on any ref whose 1Password item was deleted — it now names
+**every** dead ref in one pass, so fix or comment them out and re-run rather
+than paying a Touch ID per ref.
+
 ## Failure modes specific to this host
 
 | Symptom | Cause |
@@ -327,6 +360,8 @@ present, and a resolvable GitHub credential.
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes do not |
 | `claude: command not found` over non-interactive ssh to the mini | **Fixed** — `make setup`'s `_setup-zshenv` block now puts both Homebrew and `~/.local/bin` on the non-interactive PATH. If it recurs, that block is missing: re-run `make setup` on the mini |
 | mosh connects over ssh then hangs / "did not make a successful connection to \<ip\>:\<port\>" | `mosh-server` missing from the mini's Application Firewall allowlist. Fix: `make mosh-firewall`. Re-run after `brew upgrade mosh` |
+| `ssh mini` fails `signing failed … agent refused operation` → `Permission denied (publickey)` | **1Password is locked**, not a transport fault — its agent holds the key. Unlock it. `make mini-sweep` still reports the host's health from Kuma while it is locked |
+| Hermes gateway health fails while Hermes plainly works in Slack | The heartbeat probes `http://<tailnet-ip>:8642/health`. The socket can be `LISTEN` and accepting while nothing ever answers — connect succeeds, every path times out. That is a hermes-agent defect, not a dev-host one; the composite monitor is correctly red |
 | `git push` on the mini fails with `could not read Username for 'https://github.com'` | The credential helper returned nothing. Fix: `make git-headless`, and reseed with `make secrets-seed` if the cache is stale. The helper exits 0 with an empty body when the token is unresolvable, which is why the failure looks like a transport fault |
 | Any remote-dev symptom you can't immediately place | Run `make remote-dev-doctor` first — it names the failing layer instead of guessing |
 

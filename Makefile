@@ -30,7 +30,7 @@ COLLIE_VERSION := 0.36.0
 # zero DNS provider modules). Same pinning discipline as COLLIE_REF: xcaddy fetches and compiles arbitrary Go modules on every
 # invocation, so an upgrade has to be a reviewed diff of these lines, not
 # whatever `@latest` resolves to on the day it happens to run.
-XCADDY_VERSION           ?= v0.4.6
+XCADDY_VERSION           ?= v0.4.7
 CADDY_DNS_MODULE         ?= github.com/caddy-dns/cloudflare
 CADDY_DNS_MODULE_VERSION ?= v0.2.4
 
@@ -2794,6 +2794,15 @@ drift-check:
 mini-macos-update:
 	@bash $(DOTFILES_DIR)/scripts/mini-macos-update.sh
 
+# ----------------------------------------------------------------------------
+# One read-only picture of the dev host, from here. Kuma first, because that
+# section is read from homelab over keyless Tailscale SSH and therefore survives
+# both a dead mini and a locked 1Password — which is exactly when you want it.
+# ----------------------------------------------------------------------------
+.PHONY: mini-sweep
+mini-sweep:
+	@bash $(DOTFILES_DIR)/scripts/mini-sweep.sh
+
 drift-check-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then \
@@ -3007,6 +3016,7 @@ help:
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
 	@echo "  make drift-check            Dev host: report pin/brew/macOS drift (read-only, never upgrades)"
+	@echo "  make mini-sweep             MacBook-only: one read-only picture of the dev host (Kuma + health + drift); works with the mini down"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."
