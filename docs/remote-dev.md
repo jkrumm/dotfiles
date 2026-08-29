@@ -1060,6 +1060,66 @@ Activation Lock is **Enabled** and Find My is on, which covers the opportunistic
 case well: the machine is unsellable and remotely erasable. It does nothing
 against someone who wants what is on it.
 
+## Applying a macOS update to the mini — learned 2026-08-29
+
+The drift monitor names a pending macOS update; *applying* it headlessly has one
+non-obvious failure mode that cost two spurious reboots and ~25 minutes. All of
+it is encoded in **`make mini-macos-update`** (MacBook-only, TTY or `YES=1`);
+what follows is what that target does and why, for when it has to be done by
+hand.
+
+```bash
+# from the MacBook — password twice on one stdin, never in argv
+PW=$(op read "op://Private/mac-mini-server/password" --account tkrumm)
+printf '%s\n' "$PW" | ssh mini 'read -r pw
+  { printf "%s\n" "$pw"; printf "%s\n" "$pw"; } |
+    nohup sudo -S softwareupdate -i -a -R --user jkrumm --stdinpass \
+      > ~/Library/Logs/macos-update.log 2>&1 &'
+```
+
+Three things that shape are answering:
+
+- **Apple Silicon needs volume-owner auth**, hence `--user … --stdinpass`. `sudo -S`
+  reads one line from stdin and `--stdinpass` reads the next, so feeding the same
+  password twice satisfies both and keeps it out of `ps auxww` — the one thing a
+  `sudo … --stdinpass "$PW"` spelling would get wrong. (If sudo's timestamp is
+  already warm it consumes nothing and softwareupdate takes line 1; both work.)
+- **Detached, logging to `~/Library/Logs`.** The run outlives the ssh connection
+  on purpose: a `brew upgrade` of the `tailscale` formula in the same maintenance
+  window restarts `tailscaled` — the transport this very session is riding — and
+  a foreground installer dies with it.
+- Never `/tmp` for the log (see the agent-logs section).
+
+**The trap: the CLI returns in seconds, prints `Restarting...`, and does not
+restart.** That line is a *request*, not an event. The real work starts
+afterwards and runs for several minutes:
+
+```
+pgrep -fl UpdateBrainService      # com.apple.MobileSoftwareUpdate…UpdateBrainService, 70-100% CPU
+pgrep -fl SoftwareUpdateLauncher  # …-RootInstallMode YES -SkipConfirm YES
+```
+
+Those two processes prepare the update and then restart the machine *themselves*.
+
+**Do not `shutdown -r now` to hurry it along.** Done twice here, and both times
+the mini booted straight back into the *old* version: a forced reboot aborts the
+prepare, and a staged asset alone does not apply at boot. Nothing errors and
+every artifact still looks armed — `/System/Volumes/Update/Update.plist` shows
+`personalized-on-preboot` and `do-postupgrade-boot`, `nvram -p` shows
+`ota-updateType incremental`, `RecommendedUpdates` still lists the update — so
+the only honest check is `sw_vers -productVersion`, never an exit code and never
+a plist. Wait for the mini to drop off the tailnet on its own.
+
+**When the request really is swallowed**, neither process is there a minute
+after `Restarting...`. The OS can route the restart to a *notification* instead
+of performing it — `usernoted` was seen registering the `RESTART_NOW` /
+`RESTART_LATER` categories — and a stale GUI session is what makes that happen:
+after 22 days of uptime this one had an `EscrowSecurityAlert` modal up and a
+Chrome left over from a `/browse` session pinning two cores. Re-running the
+same command against a freshly booted session worked first try. So the order
+that works is: plain reboot if the session is old, *then* the installer, then
+leave it alone.
+
 ## Blocking constraint
 
 **The inbound path is not testable from the mini.** Inbound auth depends entirely on the
