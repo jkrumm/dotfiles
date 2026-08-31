@@ -272,6 +272,17 @@ ca() {
   # tier is pinned to the SAME id on purpose: leave one on a claude-* default and
   # a spawned subagent asks the gateway for a model it doesn't serve — that is
   # the classic "main session works, subagents 400" failure (claude-code#5680).
+  #
+  # Three settings this tier needs and the Claude tier does not:
+  #  - AUTO_COMPACT_WINDOW matched to the model's real window. Compacting early
+  #    rewrites history, which busts the prefix cache and re-pays full fresh-input
+  #    price — the dominant cost term in an agent loop, not a nicety.
+  #  - API_TIMEOUT_MS raised: these models legitimately take minutes per turn
+  #    (glm-5.3-flash was measured at 280–737s on one benchmark task), and the
+  #    default timeout turns slow-but-correct into a spurious failure.
+  #  - ENABLE_TOOL_SEARCH deliberately NOT set. Claude Code disables deferred tool
+  #    search on a non-first-party base URL anyway, and forcing it on only works
+  #    if the proxy serves `tool_reference` blocks — this gateway does not.
   [[ " $* " == *" --model "* ]] || args=(--model "$model" "${args[@]}")
 
   env -u ANTHROPIC_API_KEY \
@@ -282,7 +293,8 @@ ca() {
     ANTHROPIC_DEFAULT_HAIKU_MODEL="$model" \
     ANTHROPIC_DEFAULT_FABLE_MODEL="$model" \
     CLAUDE_CODE_MAX_CONTEXT_TOKENS="$(_ca_ctx "$model")" \
-    ENABLE_TOOL_SEARCH=true \
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW="$(_ca_ctx "$model")" \
+    API_TIMEOUT_MS=3000000 \
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
 
