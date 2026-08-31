@@ -423,6 +423,57 @@ check_mosh() {
   echo "mosh ready"
 }
 
+check_boot_path() {
+  # The colima/herdr plist gap, made impossible to repeat. On 2026-08-29 both
+  # plists were observed missing from disk while launchd kept running the jobs
+  # from its cached definition — every liveness probe stayed green, and the
+  # next power cut would have brought the VM and every herdr pane up dead, with
+  # nothing paging. `launchctl print` does NOT re-read the file, so a loaded
+  # job with no plist behind it is indistinguishable from a healthy one until
+  # the machine reboots.
+  #
+  # The assertable fact, per KeepAlive job in LAUNCHD_KEEPALIVE: the plist file
+  # EXISTS, and launchd's own `path =` line points at THAT file — not at a
+  # stale/duplicate location. This catches three distinct failures:
+  #   1. plist deleted (the observed gap; launchd keeps the cached job)
+  #   2. plist deleted AND job unloaded (nothing restarts it at boot)
+  #   3. launchd running the job from a different path than the file this repo
+  #      converges — e.g. a regenerated copy, so edits to ours do nothing
+  #      until the next boot (the kickstart-vs-bootout trap, as a path).
+  #
+  # A job that is neither loaded nor on disk means the feature was never
+  # installed here — but every label in LAUNCHD_KEEPALIVE is one THIS script's
+  # other components already depend on (herdr/colima/sideclaw/hermes/collie are
+  # probed for liveness elsewhere), so absent here is a genuine failure, not a
+  # skip. litellm stays in the list until phase 1b of the subtraction pass
+  # deletes it (dotfiles PRD.md); deleting the label together with the plist.
+  local uid label plist missing="" mismatched="" path
+  uid=$(/usr/bin/id -u)
+  while IFS='|' read -r label plist; do
+    [[ -n "$label" ]] || continue
+    if [[ ! -f "$plist" ]]; then
+      missing="${missing:+$missing, }${label##*.}"
+      # A label that is not even loaded alongside its missing file is the
+      # quieter failure — say so, so the fix differs by state.
+      "$LAUNCHCTL_BIN" print "gui/$uid/$label" >/dev/null 2>&1 \
+        || missing="${missing}(not loaded)"
+      continue
+    fi
+    # shellcheck disable=SC2016  # $2 is an awk field, not a shell expansion
+    path=$("$LAUNCHCTL_BIN" print "gui/$uid/$label" 2>/dev/null \
+      | "$AWK_BIN" -F' = ' '/^[[:space:]]*path = /{ print $2; exit }') || path=""
+    if [[ -z "$path" ]]; then
+      missing="${missing:+$missing, }${label##*.}(not loaded)"
+    elif [[ "$path" != "$plist" ]]; then
+      mismatched="${mismatched:+$mismatched, }${label##*.} runs from $path"
+    fi
+  done <<<"$LAUNCHD_KEEPALIVE"
+
+  [[ -z "$missing" ]] || { echo "boot path BROKEN — plist missing/unloaded: $missing (re-run the owning make target)"; return 1; }
+  [[ -z "$mismatched" ]] || { echo "boot path DRIFTED — launchd runs a different file than on disk: $mismatched (bootout+bootstrap to reload, never kickstart -k)"; return 1; }
+  echo "boot path ok ($(printf '%s\n' "$LAUNCHD_KEEPALIVE" | grep -c .) jobs)"
+}
+
 check_git_push() {
   # A dev host that cannot push is not a working dev host, and this is the one
   # component here that fails SILENTLY and INDEPENDENTLY of the other four.
@@ -1040,7 +1091,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_dev_vhosts \
-                 check_memory check_launchd_restarts check_services check_claude_auth \
+                 check_memory check_launchd_restarts check_boot_path check_services check_claude_auth \
                  check_obsidian check_disk check_runaways; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).

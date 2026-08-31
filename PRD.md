@@ -2,6 +2,28 @@
 
 Status: draft, 2026-08-30. Delete this file when the last phase lands.
 
+**Phase 0 status (2026-08-31, mini session):**
+
+- 0.1 — DONE, with a finding: the colima/herdr plist gap was already closed by
+  the 2026-08-29/31 work (both plists on disk, converged, `launchctl print`
+  paths match; `_colima-supervise`/`_herdr-supervise` re-run idempotently ok).
+  The premise was stale; the assertion (0.3) is what keeps it closed.
+- 0.2 — DONE, verdict: no patch needed. Local measurement: `brew services
+  list` DOES enumerate colima/herdr on 6.0.20 (research found no 6.0 change to
+  `list`; the known omission class requires a formula failing the `service?`
+  filter, which colima/herdr don't). The PRD's inventory claim was a misread —
+  the documented `caddy none`/`dnsmasq none` root-daemon rows are a reporting
+  artifact, not this. Nothing parses `brew services list` in a way that broke.
+- 0.3 — DONE: `check_boot_path` in `devhost-health-check.sh` (plist on disk +
+  launchd path match for every KeepAlive job in `LAUNCHD_KEEPALIVE`), plus a
+  new read-only `make herdr-status` sibling to `colima-status`. Negative-tested
+  (missing plist, wrong path) and run green on the mini.
+- 0.4 — DONE: `docs/architecture.md` (from a fresh live inventory — the PRD
+  appendix was stale in places: meteo's 8 agents all have on-disk plists now,
+  and `brain-web` runs from `com.jkrumm.brain-web-refresh`) +
+  `scripts/architecture-check.sh` (`make architecture-check`, folded into
+  `make status`). Passes on the mini.
+
 ## Problem
 
 The setup has grown by accretion. Every incident became a make target, a

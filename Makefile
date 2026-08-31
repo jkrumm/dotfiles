@@ -891,6 +891,13 @@ brain-sync-teardown:
 launchagents-check:
 	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh
 
+# The subtraction pass's enforcement half (docs/PRD.md phase 0.4): every launchd
+# label loaded on this machine must appear in docs/architecture.md. Read-only,
+# exits 1 on findings — a legit new agent gets a map row in the same change.
+.PHONY: architecture-check
+architecture-check:
+	@bash $(DOTFILES_DIR)/scripts/architecture-check.sh
+
 # Persistent loopback forwards into the mini's dev databases, so dbOSK (and the
 # mysql CLI, and any script) has a fixed endpoint that is simply always there.
 # Declared state + the full "why not tailscale serve / not Caddy" argument:
@@ -1592,6 +1599,8 @@ status:
 # would mask every section after it. Surfaced HERE because a dedicated target
 # nobody knows to run is how two agents accumulated 40,000 failed spawns unseen.
 	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh 2>&1 | sed 's/^/  /' || true
+	@echo "  Architecture map"
+	@bash $(DOTFILES_DIR)/scripts/architecture-check.sh 2>&1 | sed 's/^/  /' || true
 	@echo ""
 
 .PHONY: _check
@@ -2478,6 +2487,23 @@ _herdr-supervise:
 # — the trap this repo already paid for with ai.hermes.gateway. Only
 # bootout + bootstrap reloads the file, and bootstrap fails with `Input/output
 # error` while the old job is still SIGTERMed, hence the wait loop.
+.PHONY: herdr-status
+herdr-status:
+	@# Read-only sibling of colima-status: the server, the brew registration and
+	@# the SUPERVISED boot path, which liveness alone cannot see (brew regenerates
+	@# this plist on every upgrade/start/restart and nothing errors when it does —
+	@# same silent-config-revert class as colima's).
+	@herdr status --json 2>/dev/null | jq -r '"  server: v" + .server.version + " running=" + (.server.running|tostring) + " detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring)' \
+		|| echo "  ✗ herdr server not answering"
+	@brew services list | grep -E '^herdr' || echo "  herdr service: not registered"
+	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
+	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/herdr/herdr-server-start.py" ] \
+	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
+		echo "  ✓ boot path supervised (bare KeepAlive + setsid wrapper)"; \
+	else \
+		echo "  ✗ boot path NOT supervised — brew regenerated the plist; run: make _herdr-supervise"; \
+	fi
+
 .PHONY: herdr-restart
 herdr-restart:
 	@if [ "$(YES)" != "1" ]; then \
@@ -2987,6 +3013,7 @@ help:
 	@echo "  make authorized-keys            Install trusted SSH keys only — no sudo, no sshd/sharing changes (safe on the IU MacBook)"
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
+	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
