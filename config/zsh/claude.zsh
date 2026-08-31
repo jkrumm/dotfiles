@@ -178,6 +178,41 @@ typeset -gA _CA_CTX=(
 )
 _ca_ctx() { print -r -- "${_CA_CTX[$1]:-200000}" }
 
+# `cap` — pick a model, then launch `ca` against it.
+#
+# The comparison and the picklist live in modelpick (`bun run cap`), which reads
+# only its local SQLite file: measured ccbench results, the ArtificialAnalysis
+# intelligence index, solved per-token rates and the route residency survey. No
+# API calls, no secrets, no network — so this is safe to run anywhere.
+#
+# The contract that makes this a one-liner: modelpick's picker writes the table
+# and the prompt to stderr and the chosen model id, alone, to stdout. Anything
+# that breaks that split breaks this function.
+#
+#   cap                 pick interactively, then exec `ca <model>`
+#   cap --list          print the comparison and stop
+#   cap -- <ca args>    pick, then pass the rest through to `ca`
+cap() {
+  local mp="$HOME/SourceRoot/modelpick"
+  [[ -d "$mp" ]] || { print -ru2 "cap: modelpick not found at $mp"; return 1 }
+
+  if [[ "$1" == "--list" || "$1" == "-l" ]]; then
+    (cd "$mp" && bun run scripts/cap.ts "${@:2}" >/dev/null)
+    return
+  fi
+
+  # Passthrough args for `ca` come after a bare `--`.
+  local -a rest=()
+  if [[ "$1" == "--" ]]; then rest=("${@:2}"); else rest=("$@"); fi
+
+  local model
+  model=$(cd "$mp" && bun run scripts/cap.ts) || return
+  [[ -n "$model" ]] || { print -ru2 "cap: no model chosen"; return 1 }
+
+  print -ru2 "cap: launching ca $model"
+  ca "$model" "${rest[@]}"
+}
+
 ca() {
   local key base
   key=$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null)
