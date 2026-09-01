@@ -452,6 +452,7 @@ repo.
 | `/brain` | inline | Vault read/write. `obsidian-cli` door with filesystem fallback; contract in the repo's `AGENTS.md`. |
 | `/distill` | inline | Human-owned 7-step prose pipeline (loads `voice.md` at Draft). |
 | `/img` | inline | Public CDN uploads + imgproxy transform URLs, and the private share layer. `--json` on every command. |
+| `/podcast` | inline | Notes → two-host German podcast episode (ElevenLabs v3, chapters, cover) → Audiobookshelf, via audio-gateway's `bun run podcast` CLI / `/v1/podcasts` job API. |
 | `/dataviz` · `/frontend-design` · `/excalidraw-diagram` | inline | visx + Mantine charts · production UI · diagrams. |
 | `/remote-dev` | inline | The mini as dev host — herdr, mosh, `--bg` agents, heartbeat, failure modes. |
 | `/skill-creator` · `/update-agent-rules` | inline | Author/test skills · sync upstream framework rules. |
