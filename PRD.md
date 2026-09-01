@@ -86,9 +86,9 @@ is coherence through *deletion* — which is this PRD.
 |-|-|
 | Way in | keep `desk` (`herdr --remote`); **drop `dev` and mosh entirely** — zsh function, brew pin, ALF-allowlist target, `udp:60000-61000` ACL grant, heartbeat component, `brew-upgrade` invariant, `remote-dev-doctor` step, docs. `desk` cannot ride mosh (herdr speaks its own protocol over ssh; mosh is a terminal, not a tunnel), so roaming is the accepted loss: on a network change, re-run `desk`; panes live on the mini either way. |
 | Terminal | drop cmux (cask, `TERM` workaround, second Ghostty config file). Plain Ghostty, one config file, themes still copied. |
-| Launchers | `c` + `ca`. Drop OpenCode (`oc`, `opencode.json`, `AGENTS.md`, `opencode.zsh`, docs section). |
+| Launchers | `c` + `ca`. Drop OpenCode (`oc`, `opencode.json`, `AGENTS.md`, `opencode.zsh`, docs section) — as launcher it is redundant with `ca`, and as a dispatch worker it is dominated by `claude -p` on the IU key (same IU billing, full CLAUDE.md/rules/hooks inheritance; OpenCode carries none of those). |
 | Retired stacks | delete `localai/` + `/localai` skill; **stop + delete litellm** (`com.litellm.proxy`, `litellm/`, `docs/deepseek-litellm-bridge.md`) and remove sideclaw's dormant bridge path (usage-tracker's `litellm` collector stays for historical rows); remove `localai-helper` from hermes-agent. |
-| Skills | drop `/sync` (pre-split world). Re-evaluate `/analyze` (its DeepSeek subprocess path dies with the bridge): keep only if it works without it. |
+| Skills | drop `/sync` (pre-split world). `/analyze` stays: re-point its `claude_bridge` subprocess at `claude -p` on the existing `CLAUDE_SDK_API_KEY`/`CLAUDE_SDK_BASE_URL` Keychain entries (IU-billed) — the litellm deletion in 1b proceeds regardless. |
 | Dev doors | drop `portdoor` (the 3 opt-in port doors, `host=rewrite`, the `.ports` flags, docs). |
 | Diagnostics | one `make doctor` (read-only, self-routes on the backend marker) absorbing `remote-dev-doctor`, `mini-sweep`, `launchagents-check`, and drift-check's on-demand run. The daily drift agent and the 5-min heartbeat stay (notice unattended). |
 | Pins | pin `caddy` only. Record on the map: a pin needs its deps pinned too, or it rots. |
@@ -131,6 +131,7 @@ verified and committed before the next. "Runs on" says where the change must be
 | 2c portdoor | `scripts/caddy-tailnet.sh` + `caddy-registry.py` (`portdoor`/`host=rewrite` flags), `~/.config/caddy-tailnet.ports` on the mini, `check_dev_vhosts`, docs. Keep the `exclude` flag. | edits MacBook; `make caddy-tailnet` on mini |
 | 2d `make doctor` | new `scripts/doctor.sh` composing the surviving checks from `remote-dev-doctor.sh`, `mini-sweep`, `launchagents-check.sh`, `drift-check.sh --once`, `architecture-check.sh`; self-routes on the backend marker; delete the four standalone targets, keep the drift LaunchAgent pointing at the same script. `make status` calls it. | MacBook, run on both |
 | 2e pins | `_setup-packages` pin list → `caddy` only; `brew-upgrade.sh` invariants reduced accordingly | MacBook |
+| 2f dispatch rail (new — supersedes this section's 1b/sideclaw "dormant bridge" framing) | Add `scripts/agent-dispatch.sh` (devhost-gated, backend-marker self-routing, both machines): `agent-dispatch bg <repo> '<task>'` → on the mini `rd bg` (herdr-pane spawn, keychain-safe), on the MacBook `claude -p` with `CLAUDE_SDK_API_KEY`/`CLAUDE_SDK_BASE_URL` Keychain creds on the same IU endpoint; `agent-dispatch work <repo>` → `rd work` / `desk`. Contract mirrors `mcp__sideclaw__dispatch`: `cwd`, `brief` (data, never instructions), returns session id. Inheriting Claude Code sessions must NOT self-route into a nested session — print the brief and exit 1 instead. Smoke test: dispatch a trivial read-only task at `dispatch-scratch`, assert output + exit. Model: `ANTHROPIC_MODEL` defaults per backend (Mini: `claude-sonnet-5[1m]` via keychain auth; MacBook: `claude-sonnet-5` via SDK creds). | MacBook, run on both |
 
 ### Phase 3 — docs rewrite
 
@@ -141,7 +142,10 @@ verified and committed before the next. "Runs on" says where the change must be
 - `config/global.CLAUDE.md`: repo table gains `meteo`, `hermes-webui`,
   `basalt-ui-obsidian`, `shutterflow`, `dispatch-scratch`; sanctioned set
   updated; every mosh/cmux/OpenCode/`dev`/`/sync` mention removed; Machines
-  section points at `docs/architecture.md`.
+  section points at `docs/architecture.md`; **Delegation & parallelism**
+  re-tabled so the dispatch lane is `agent-dispatch` (tier-2 subprocess, one
+  row) with `rd` demoted to its mini-internal implementation detail —
+  `execution-modes.md` updated in the same change.
 - `docs/remote-dev.md`: mosh, `dev`, portdoor sections removed; herdr/`desk`
   kept.
 - Memory files under `~/.claude/projects/…/memory/` that mention `/sync` or
@@ -157,6 +161,7 @@ verified and committed before the next. "Runs on" says where the change must be
 | `make hooks-test`, `make brew-check` (both machines), `shellcheck` on touched scripts | green |
 | `desk` from the MacBook | attaches; `dev` is not a command |
 | `make doctor` on both machines | exit 0; every loaded `com.jkrumm.*` / `homebrew.mxcl.*` label appears in `docs/architecture.md` |
+| `agent-dispatch` smoke test | `agent-dispatch bg dispatch-scratch '<read-only task>'` returns output + exit 0 on both machines; a dispatch issued from inside an interactive CC session exits 1 with the brief printed, never nests |
 | Colima + herdr | plist on disk on the mini, `launchctl print` path matches, heartbeat asserts it; a **deliberate, scheduled** `sudo shutdown -r now` on the mini brings colima, herdr, every listed agent and the heartbeat back UP within `DEVHOST_BOOT_GRACE_SECONDS` |
 | `com.litellm.proxy` | not loaded, no plist, no `litellm` process |
 | Tailnet ACL | no `udp:60000-61000` grant; `make tailscale-acl-diff` clean after push |
@@ -171,7 +176,7 @@ verified and committed before the next. "Runs on" says where the change must be
 | `meteo` | daily commits, 8 LaunchAgents (`backfill`, `blendfield`, `fcstlog`, `obs`, `serve`, `sync`, `tileserver`, `watchdog`), 3 processes; 6 agents have no plist in-repo; README empty, purpose in PRD.md | keep, map, flag plist gap |
 | `hermes-webui` | unmodified upstream fork, `WorkingDirectory` of `com.jkrumm.hermes-webui` | keep, map as dependency checkout |
 | `basalt-ui-obsidian` | v0 unreleased, active | keep, map |
-| `dispatch-scratch` | disposable dispatch test target by design | keep, map |
+| `dispatch-scratch` | disposable dispatch test target by design | keep, map — also the first target for the phase-2f dispatch-rail smoke test |
 | `brain-sources` | not git; epub + folder | move out |
 | `linewatch-router-spike` | not git; RE spike, `FINDINGS.md` | fold + delete |
 | `sy-serendipity` | 2026-05-04 | archive + delete |
