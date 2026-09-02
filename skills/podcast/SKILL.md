@@ -62,7 +62,7 @@ Audiobookshelf link when published.
 
 | Var | Default | Meaning |
 |-|-|-|
-| `PODCAST_SCRIPT_MODEL` | `claude-sonnet-5` | outline + dialogue writer |
+| `PODCAST_SCRIPT_MODEL` / `PODCAST_REVIEW_MODEL` | `claude-opus-5` / `claude-fable-5-1` | writer (story, segments, revisions) / the three reviewers |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
 | `PODCAST_VOICES` / `PODCAST_HOST_NAMES` | `Mark,Sarah` / `Jonas,Lena` | host A, host B |
 | `PODCAST_STABILITY` | `0.45` | v3 stability; lower = more tag-responsive |
