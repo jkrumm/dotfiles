@@ -53,7 +53,7 @@ Audiobookshelf link when published.
    secrets are in the local env.
 4. **Run it.** Report the job id immediately if the user is waiting on chat;
    the CLI blocks until done. Then hand over: title, duration, chapter list,
-   the Audiobookshelf link (playable in Plappa/Prologue), cost, and the local
+   the Audiobookshelf link (playable in Plappa), cost, and the local
    `episode.mp3` path.
 5. **Iterate on the script, not the audio.** If the user wants a different
    angle, change `--brief`/`--title`/`--minutes` and re-run — with the strong
