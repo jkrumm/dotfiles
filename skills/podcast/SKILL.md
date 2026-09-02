@@ -7,14 +7,14 @@ description: Turn notes (a brain note, a file, pasted text) into a long-form two
 
 audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline: a
 "writers' room" (story pass with dramaturgy → parallel segment writers → three
-reviewers → per-segment revision, Opus 5 writing, Fable 5.1 reviewing) produces
+reviewers → per-segment revision, all on Claude Opus 4.6) produces
 a two-host conversation script, every turn is synthesized on ElevenLabs v3 with
 its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
 −16 LUFS, ID3 tags, chapter markers, embedded cover), the
 image-gen gateway paints the cover, and Audiobookshelf's upload + scan API files
 it as an episode of a podcast (show) in the `Podcasts` library. It is an
 **async job**: submit → poll → fetch. Budget 15–25 min of wall-clock for a
-20-minute episode and roughly 7–9 USD (≈2 USD ElevenLabs, the rest writer and
+20-minute episode and roughly 5–6 USD (≈2 USD ElevenLabs, the rest writer and
 reviewer tokens).
 
 The CLI wraps the HTTP API and is the door from Claude Code:
@@ -65,7 +65,7 @@ Audiobookshelf link when published.
 
 | Var | Default | Meaning |
 |-|-|-|
-| `PODCAST_SCRIPT_MODEL` / `PODCAST_REVIEW_MODEL` | `claude-opus-5` / `claude-fable-5-1` | writer (story, segments, revisions) / the three reviewers |
+| `PODCAST_SCRIPT_MODEL` / `PODCAST_REVIEW_MODEL` | `claude-opus-4-6` (both) | writer (story, segments, revisions) / the three reviewers |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
 | `PODCAST_VOICES` / `PODCAST_HOST_NAMES` | `Mark,Sarah` / `Jonas,Lena` | host A, host B |
 | `PODCAST_STABILITY` / `PODCAST_SPEEDS` | `0.5` / `0.94,1` | v3 stability preset (0 / 0.5 / 1) · per-host speed |
