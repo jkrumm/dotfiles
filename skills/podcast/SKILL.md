@@ -7,7 +7,7 @@ description: Turn notes (a brain note, a file, pasted text) into a long-form two
 
 audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline: a
 "writers' room" (story pass with dramaturgy → parallel segment writers → three
-reviewers → per-segment revision, all on Claude Opus 4.6) produces
+reviewers → per-segment revision → metadata; Opus 5 plans, Opus 4.6 owns the voice, Gemini 3.1 Pro + GPT-5.6 Luna review, Luna writes the metadata) produces
 a two-host conversation script, every turn is synthesized on ElevenLabs v3 with
 its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
 −16 LUFS, ID3 tags, chapter markers, embedded cover), the
@@ -65,7 +65,9 @@ Audiobookshelf link when published.
 
 | Var | Default | Meaning |
 |-|-|-|
-| `PODCAST_SCRIPT_MODEL` / `PODCAST_REVIEW_MODEL` | `claude-opus-4-6` (both) | writer (story, segments, revisions) / the three reviewers |
+| `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | `claude-opus-5` / `claude-opus-4-6` | story pass / the voice owner (segments + every revision) |
+| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.1-pro-preview,gpt-5.6-luna` / `gpt-5.6-luna` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles |
+| `PODCAST_SHOW_BIBLE` | `./docs/show-bible.md` | binding house style injected into every writer and reviewer prompt |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
 | `PODCAST_VOICES` / `PODCAST_HOST_NAMES` | `Mark,Sarah` / `Jonas,Lena` | host A, host B |
 | `PODCAST_STABILITY` / `PODCAST_SPEEDS` | `0.5` / `0.94,1` | v3 stability preset (0 / 0.5 / 1) · per-host speed |
