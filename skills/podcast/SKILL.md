@@ -5,21 +5,24 @@ description: Turn notes (a brain note, a file, pasted text) into a long-form two
 
 # Podcast — via audio-gateway's podcast pipeline
 
-audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline: a two-pass
-LLM writer (outline → per-segment dialogue) produces a two-host conversation
-script, every turn is synthesized on ElevenLabs v3 with its host's voice, ffmpeg
-masters it (loudnorm −16 LUFS, ID3 tags, chapter markers, embedded cover), the
+audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline: a
+"writers' room" (story pass with dramaturgy → parallel segment writers → three
+reviewers → per-segment revision, Opus 5 writing, Fable 5.1 reviewing) produces
+a two-host conversation script, every turn is synthesized on ElevenLabs v3 with
+its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
+−16 LUFS, ID3 tags, chapter markers, embedded cover), the
 image-gen gateway paints the cover, and Audiobookshelf's upload + scan API files
 it as an episode of a podcast (show) in the `Podcasts` library. It is an
-**async job**: submit → poll → fetch. Budget ~1 min of wall-clock per 3 min of
-audio; a 20-minute episode costs roughly 2–4 USD (ElevenLabs chars dominate).
+**async job**: submit → poll → fetch. Budget 15–25 min of wall-clock for a
+20-minute episode and roughly 7–9 USD (≈2 USD ElevenLabs, the rest writer and
+reviewer tokens).
 
 The CLI wraps the HTTP API and is the door from Claude Code:
 
 ```bash
 cd ~/SourceRoot/audio-gateway
 bun run podcast -- --source <file.md> [--brief "…"] [--title "…"] [--minutes 20] \
-  [--series "Hermes Briefings"] [--language de] [--publish] [--no-cover] \
+  [--series "Brain Sonderausgabe"] [--language de] [--publish] [--no-cover] \
   [--base-url https://audio-gateway.jkrumm.com] [--out ./out] [--json]
 bun run podcast -- status <id>          # one-shot job state
 bun run podcast -- list                 # latest jobs
@@ -53,9 +56,9 @@ Audiobookshelf link when published.
    the Audiobookshelf link (playable in Plappa/Prologue), cost, and the local
    `episode.mp3` path.
 5. **Iterate on the script, not the audio.** If the user wants a different
-   angle, change `--brief`/`--title`/`--minutes` and re-run — the script is the
-   cheap part (one LLM outline + N segment calls); synthesis is the expensive
-   part. `GET /v1/podcasts/<id>/script?format=md` (or `script.json` in `--out`)
+   angle, change `--brief`/`--title`/`--minutes` and re-run — with the strong
+   writer models the script is now the larger share of the cost, so review the
+   transcript before re-running. `GET /v1/podcasts/<id>/script?format=md` (or `script.json` in `--out`)
    is the transcript to review.
 
 ## Knobs (gateway env, see audio-gateway `config.ts`)
@@ -65,8 +68,8 @@ Audiobookshelf link when published.
 | `PODCAST_SCRIPT_MODEL` / `PODCAST_REVIEW_MODEL` | `claude-opus-5` / `claude-fable-5-1` | writer (story, segments, revisions) / the three reviewers |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
 | `PODCAST_VOICES` / `PODCAST_HOST_NAMES` | `Mark,Sarah` / `Jonas,Lena` | host A, host B |
-| `PODCAST_STABILITY` | `0.45` | v3 stability; lower = more tag-responsive |
-| `PODCAST_SERIES` | `Hermes Briefings` | default show name in Audiobookshelf |
+| `PODCAST_STABILITY` / `PODCAST_SPEEDS` | `0.5` / `0.94,1` | v3 stability preset (0 / 0.5 / 1) · per-host speed |
+| `PODCAST_SERIES` | `Brain Sonderausgabe` | default show name in Audiobookshelf |
 | `ABS_URL` / `ABS_API_KEY` / `ABS_LIBRARY` | — / — / `Podcasts` | publishing target; unset = publish disabled |
 | `IMAGE_GEN_URL` / `IMAGE_GEN_API_KEY` | — | cover generation; unset = no cover |
 
