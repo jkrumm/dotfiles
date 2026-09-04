@@ -1,5 +1,10 @@
 ---
 type: Reference
+title: Architecture — the whole environment on one page
+tags:
+  - engineering
+  - infrastructure
+timestamp: 2026-09-04
 description: The whole personal environment on one page — machines, repos, launchd jobs and their owner repos, inbound doors, secrets flow, monitoring. Lives in dotfiles/docs and is symlinked into the brain vault.
 ---
 

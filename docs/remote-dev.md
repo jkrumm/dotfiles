@@ -222,8 +222,10 @@ answering at any *unmatched* name too, so a typo shows what exists. Status comes
 from generated `handle /_up/<name>` routes nested inside the wildcard fallback
 (each with `rewrite * /`, or a healthy app 404s on its own probe path) —
 same-origin, no daemon, no CORS. It also lists live `tailscale serve`/Funnel rows
-from tailscaled: a snapshot, not a drift check. There is **no apex door** — a
-`*.mini.jkrumm.com` cert does not cover `mini.jkrumm.com`.
+from tailscaled: a snapshot, not a drift check. The apex `https://mini.jkrumm.com`
+is a second subject on the same site block — a wildcard cert covers one label only,
+so the apex gets its own cert and needs its own A record — and falls through the
+host matchers to the same landing page.
 
 ## Phone
 
