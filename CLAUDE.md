@@ -105,7 +105,7 @@ skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:
 | Project/machine facts, routing, conventions | `CLAUDE.md` | Reference material to look things up in |
 
 `keep-coding-instructions: true` is load-bearing — `false` drops Claude Code's
-built-in engineering prompt. Read at session start only (`/clear` to apply), never
+built-in coding prompt. Read at session start (`/clear` to apply), never
 reaches subagents (tone lives in `agents/*.md`), and carries the standing
 delegation authorization that overrides the stock "don't call AgentTool" line.
 
