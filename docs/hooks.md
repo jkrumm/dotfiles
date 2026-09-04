@@ -17,37 +17,42 @@ sound, and session timing.
 
 ## Registration
 
-In `~/.claude/settings.json`:
+Hooks are registered in `config/settings.template.json`, which `make setup`
+merges into the live `~/.claude/settings.json` — never edit the live file for a
+persistent change. `notify.ts` is wired to four events:
 
 ```json
-"hooks": {
-  "SessionStart": [{ "matcher": "startup|resume|clear|compact", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }],
-  "Notification":  [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }],
-  "Stop":          [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }],
-  "SessionEnd":    [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }]
-}
+"SessionStart": [{ "matcher": "startup|resume|clear|compact", "hooks": [
+  { "type": "command", "command": "~/.claude/hooks/notify.ts" },
+  { "type": "command", "command": "~/.claude/hooks/machine-role.ts" } ] }],
+"Notification": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }],
+"Stop":         [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }],
+"SessionEnd":   [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/notify.ts" }] }]
 ```
 
-The hook receives a JSON payload on stdin describing the event type and context.
+The hook receives a JSON payload on stdin describing the event and its context.
+
+The template registers three more of this repo's hooks alongside it — symlinked
+live from `dotfiles/hooks/`, so an edit takes effect on the next tool call — plus
+herdr's own state reporter:
+
+| Hook | Event | Does |
+|-|-|-|
+| `protect-branches.ts` | PreToolUse (Bash) | blocks pushes to protected branches (`config/pr-required-repos.json`) |
+| `docker-makefile.ts` | PreToolUse (Bash) | blocks raw `docker` where a Makefile exists; tokenizes the command so a *mention* is not an invocation |
+| `machine-role.ts` | SessionStart | injects this machine's secrets backend + outbound-access routing |
+| `herdr-agent-state.sh` | SessionStart (`*`) | reports agent state to herdr; guarded, so it no-ops where herdr's integration was never installed |
+
+Run `make hooks-test` (`bun test hooks/`) after any hook edit.
 
 ## Notification Routing
 
-Notifications prefer **cmux** when running inside a cmux session, fall back to **osascript**:
+Native macOS notification via `osascript`. `terminal-notifier` is deliberately
+**not** used — it hangs in multiplexer environments.
 
 ```typescript
-// 1. Prefer cmux notify (when CMUX_SOCKET_PATH env var is set by cmux)
-if (process.env.CMUX_SOCKET_PATH) {
-  await $`cmux notify --title ${title} --body ${body} --tab ${CMUX_TAB_ID}`.quiet();
-  return;
-}
-
-// 2. Fallback: native macOS notification via osascript
-// (terminal-notifier is NOT used — it hangs in multiplexer environments)
 await $`osascript -e 'display notification ...'`.quiet();
 ```
-
-`CMUX_SOCKET_PATH` and `CMUX_TAB_ID` are set automatically by cmux for all
-child processes. No manual configuration needed.
 
 ## Workspace Sound Identification
 
@@ -81,6 +86,13 @@ interface NotificationState {
   workspace?:        "SourceRoot" | "IuRoot" | "Other";
 }
 ```
+
+## Debug Logs
+
+`notify.ts` writes structured JSONL to `~/.claude/logs/YYYY-MM-DD.jsonl`
+(`fetch_usage.py` writes there too), with a 3-day cleanup on every invocation.
+`jq 'select(.event == "stop_decision")'` for hook decisions,
+`jq 'select(.src == "fetch_usage")'` for statusline fetch errors.
 
 ## Exit Codes
 

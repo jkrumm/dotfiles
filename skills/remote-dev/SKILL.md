@@ -1,6 +1,6 @@
 ---
 name: remote-dev
-description: Operate the Mac mini remote dev host — connecting from the MacBook over mosh or herdr --remote, running and reattaching many Claude Code agents, herdr workspaces/panes and its socket API, claude --bg durable daemons, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr, mosh, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
+description: Operate the Mac mini remote dev host — connecting from the MacBook over herdr --remote, running and reattaching many Claude Code agents, herdr workspaces/panes and its socket API, claude --bg durable daemons, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
 ---
 
 # Remote dev — the mini as dev host
@@ -12,16 +12,15 @@ on the mini and outlive the MacBook.
 machine you are on. The SessionStart hook says: `Backend: cache` = the mini,
 `Backend: op` = the MacBook.
 
-## Four layers — never collapse them
+## Three layers — never collapse them
 
 | Layer | Tool | Solves | Cannot solve |
 |-|-|-|-|
-| Reachability | Tailscale | stable address, NAT traversal | anything above it |
-| Transport | mosh | keystrokes survive lid-close + roaming | multiplexing, port-forwarding, persistence |
+| Reachability + transport | Tailscale + ssh | stable address, NAT traversal, encrypted transport | persistence |
 | Persistence + UI | herdr (on the mini) | panes stay alive, per-pane agent state | anything about the network |
 | Service exposure | Caddy | dev servers with real HTTPS + working WebSockets | anything about terminals |
 
-Plus one thing that rides on top of all four and depends on none of them:
+Plus one thing that rides on top of all three and depends on none of them:
 `claude --bg`.
 
 ## Two different questions
@@ -30,8 +29,8 @@ Keep these apart — collapsing them is what makes this stack feel complicated:
 
 | Question | Answer |
 |-|-|
-| How do I *go look* at the mini? | `dev` / `desk` — the transport layers below |
-| How do I *put work on* the mini and check on it? | `rd` — no terminal needed at all |
+| How do I *go look* at the mini? | `desk` — herdr's remote attach |
+| How do I *put work on* the mini and check on it? | `rd` / `agent-dispatch` — no terminal needed at all |
 
 Most days are the second one. The MacBook's sanctioned repos are `dotfiles`,
 `dotfiles-private`, `photo-flow`, `brain` — everything else lives on the mini, so
@@ -53,47 +52,29 @@ because the bare names are a zsh builtin, a zsh builtin and `/usr/bin/say`.
 `rd` routes itself off the secrets-backend marker — local exec on the mini, one
 ssh hop from the MacBook — so the same words work on both machines.
 
+`agent-dispatch bg <repo> '<task>'` / `agent-dispatch work <repo>` is the
+one-command router on top of `rd`: for a mini-resident repo it *is* `rd bg` /
+`rd work`; for a MacBook-resident repo (`dotfiles`, `dotfiles-private`, `brain`,
+`photo-flow`, `shutterflow`) it runs a local `claude -p` against the IU Keychain
+creds instead, since that repo has no counterpart on the mini. It refuses to
+nest inside an interactive Claude Code session — use `rd`/`work` directly there.
+Reach for `agent-dispatch` when you don't already know which machine a repo
+lives on; reach for `rd` directly once you do.
+
 ## Connecting from the MacBook
 
-The normal way in is two shell functions (`config/zsh/remote-dev.zsh`):
+The way in is one shell function (`config/zsh/remote-dev.zsh`):
 
 ```bash
-dev [session]   # moshes into the mini, lands in herdr there
-desk [session]  # herdr --remote mini — client stays on the MacBook
+desk [session]  # herdr --remote mini — client stays on the MacBook, over ssh
 ```
 
-Two mutually exclusive shapes. **Persistence is identical either way** — the
-herdr server and its panes live on the mini regardless. This is purely a
-client-experience choice.
-
-```bash
-mosh mini            # then run `herdr` there. Client runs ON THE MINI. `dev` expands to this.
-herdr --remote mini  # herdr's native attach over ssh. Client runs LOCALLY. `desk` expands to this.
-```
-
-| | transport | client on | roaming |
-|-|-|-|-|
-| `dev` (`mosh mini` → `herdr`) | mosh/UDP | mini | survives lid-close with **no reattach** |
-| `desk` (`herdr --remote mini`) | ssh/TCP | MacBook | connection ends; re-run to reattach |
-
-`dev` pins `--experimental-remote-ip=remote` — load-bearing, not cosmetic. mosh's
-default proxy mode passes `-S none` to ssh (disabling multiplexing), so every
-launch opened a fresh connection and popped its own 1Password biometric
-approval — exactly the friction the `ControlMaster` block in `ssh_config`
-exists to remove. `remote` mode reuses the master.
-
-**`--remote` at the desk, mosh on the road.** mosh does not forward the SSH
-agent (upstream refuses it), nor port forwarding, OSC 52 clipboard, or
-sixel/kitty graphics — and its predictive echo only engages on a laggy link, so
-over a LAN-latency tailnet hop it buys nothing ssh wasn't already doing. Its
-value is specific and real: a bad link, and roaming without reattaching.
+Persistence lives entirely on the mini — the herdr server and its panes survive
+regardless of the client. A roam or lid-close ends the ssh/TCP attach; re-run
+`desk` to reattach, nothing is lost.
 
 `herdr attach` is **not a command** — the real forms are `herdr session attach <name>`
 and `herdr agent attach <target>`.
-
-mosh needs the ACL's `udp:60000-61000` grant. Without it the ssh handshake
-succeeds and the session then hangs forever — it reads as a broken mosh, not a
-blocked port.
 
 ## herdr day to day
 
@@ -208,7 +189,7 @@ Three failure modes, all silent:
 
 | Symptom | Cause |
 |-|-|
-| Connection **times out**, nothing in any log | The Tailscale ACL has no grant for that port. `tag:mac → tag:mac` covers `tcp:22`, `tcp:5900`, `tcp:7700-7799`, `udp:60000-61000` — anything else needs adding, exactly as rb's `:7730` did |
+| Connection **times out**, nothing in any log | The Tailscale ACL has no grant for that port. `tag:mac → tag:mac` covers `tcp:22`, `tcp:5900`, `tcp:7700-7799` — anything else needs adding, exactly as rb's `:7730` did |
 | Caddy won't start, or the dev server can't bind its port | The generated block is missing `bind <tailnet-ip>`, so Caddy took `0.0.0.0:PORT` and collided with the dev server on `127.0.0.1:PORT` |
 | **403** from the app itself | Vite 5.4.12+ DNS-rebinding guard. Add the MagicDNS host to `server.allowedHosts` (rb does a `.ts.net` suffix match) |
 
@@ -226,9 +207,8 @@ also reach back: `ssh iumac` / `rsync … iumac:…`, over a dedicated
 1Password or the secrets cache). It is for file/state pulls off the MacBook —
 `usage-tracker` stats, syncing `brain`/`dotfiles` — not for anything needing
 `op://Private/*`: `op` over `ssh iumac` fails **fast** ("account is not signed
-in", exit 1), it does not hang, so the biometric gate holds. `make
-remote-dev-doctor` checks this leg (layer 5, mini-only). Full model:
-`dotfiles/docs/remote-dev.md` §10.
+in", exit 1), it does not hang, so the biometric gate holds. `make doctor`
+checks this leg from the MacBook. Full model: `dotfiles/docs/remote-dev.md` §10.
 
 ## Moving files between the Macs
 
@@ -286,7 +266,7 @@ done/denied/failed/timeout. Full model: `dotfiles/docs/remote-dev.md` §9.
 
 ## Monitoring
 
-One composite heartbeat (herdr + sshd + tailscaled + mosh) pushes to the
+One composite heartbeat (herdr + sshd + tailscaled) pushes to the
 `MacMini Dev Host - Push` Uptime Kuma monitor every 5 minutes.
 
 ```bash
@@ -299,23 +279,18 @@ Push, not probe: the ACL grants `tag:homelab → tag:vps` but **not**
 `tag:homelab → tag:mac`, so Uptime Kuma cannot reach the mini at all. The mini
 reports on itself over the already-granted outbound path.
 
-**`make remote-dev-doctor`** (`scripts/remote-dev-doctor.sh`) is the MacBook-side
-counterpart — it verifies the path FROM the MacBook, which the mini-side
-heartbeat structurally cannot: the mini has no key for itself and cannot ssh to
-itself, so it can't see inbound auth, `ControlMaster` reuse, agent forwarding,
-or the mosh UDP path. Read-only, currently 10/10 passing: tailscale reachability
-(direct vs DERP), ssh, ControlMaster, agent forwarding, mosh installed locally,
-`mosh-server` on the mini's non-interactive PATH, `mosh-server` in the mini's
-Application Firewall allowlist, herdr server running, the agent-state hook
-present, and a resolvable GitHub credential.
+**`make doctor`** is the read-only counterpart, and it self-routes: run on the
+mini it reports the local half; run on the MacBook it verifies the path FROM
+the MacBook first (the mini-side heartbeat structurally cannot — the mini has
+no key for itself and cannot ssh to itself, so it can't see inbound auth,
+`ControlMaster` reuse, agent forwarding, or the herdr `--remote` path), then
+ssh's into the mini and runs the mini's own doctor there — one composite report
+covering both machines with a single command.
 
 ### The maintenance round
 
-`make mini-sweep` (MacBook, read-only) is the whole picture in one command:
-the four Kuma rows, macOS version + uptime, outdated count, the composite
-health check and drift. **The Kuma section comes first because it is read from
-homelab over keyless Tailscale SSH** — it is the only view that survives the
-mini being down *or* 1Password being locked.
+`make doctor` is the whole picture in one read-only command — reachability,
+herdr, sshd, and (from the MacBook) the mini's own health in one report.
 
 Order, when something is red:
 
@@ -323,11 +298,12 @@ Order, when something is red:
    entire host away and presents as `signing failed … agent refused operation`
    → `Permission denied (publickey)`. That reads like a transport fault and is
    not one. A short auto-lock makes every mini action need a touch.
-2. `make mini-sweep` — read it before changing anything.
+2. `make doctor` — read it before changing anything.
 3. On the mini, **detached**: `make brew-upgrade`. It asserts its four
-   invariants (caddy's DNS module, mosh in the ALF, colima's repaired KeepAlive,
-   herdr's session-leader boot path). Detached because upgrading the `tailscale`
-   formula restarts tailscaled — the transport the ssh session is riding.
+   invariants (caddy's DNS module, colima's repaired KeepAlive, herdr's
+   session-leader boot path, and its other pinned invariants). Detached because
+   upgrading the `tailscale` formula restarts tailscaled — the transport the ssh
+   session is riding.
 4. `make mini-macos-update` from the MacBook, if one is pending. `Restarting...`
    is a *request*, not an event: the prepare runs for minutes afterwards and the
    machine reboots itself. **Never force a reboot there** — it aborts the prepare
@@ -336,7 +312,7 @@ Order, when something is red:
    TTY; without one it prints changelog + diffstat + scope verdict and refuses,
    which is the review), a reviewed `XCADDY_VERSION` bump + `make
    caddy-dns-build`, `make secrets-seed` from the MacBook.
-6. `make mini-sweep` again, then `make remote-dev-doctor`.
+6. `make doctor` again.
 
 A reseal aborts on any ref whose 1Password item was deleted — it now names
 **every** dead ref in one pass, so fix or comment them out and re-run rather
@@ -346,24 +322,20 @@ than paying a Touch ID per ref.
 
 | Symptom | Cause |
 |-|-|
-| `mosh mini` hangs after a clean ssh handshake | ACL missing `udp:60000-61000`. Verified present 2026-07-26 — check the Application Firewall row below first, it presents identically |
 | `herdr --remote mini` asks "restart the remote server now? [y/N]", warning it "may not survive SSH connection loss" | **Answer `N`.** False positive for this host: the server is the brew service, PID owned by launchd (PPID 1), so no ssh disconnect can reach it — verified continuously up across a whole session of opening and closing connections. Answering `y` restarts it outside `brew services` supervision *and* kills every process in every pane |
-| mosh prints `Error: vector` and exits | The client's terminal has no window size (a 0×0 pty). Real terminals are fine; this bites scripted/automated launches — set `TIOCSWINSZ` before exec |
-| Doubled keystrokes over ssh | `TERM=xterm-ghostty` reaching a host without that terminfo (cmux #2969). `ssh_config` pins `SetEnv TERM=xterm-256color` |
 | `launchctl print … sshd` says `state = not running` | socket-activation idle, **not** a fault. Check `netstat -an \| grep '\.22 .*LISTEN'` |
 | `ssh localhost` fails on the mini | By design — the mini has no key for itself (its one private key, `id_ed25519_iumac`, is outbound-only for `iumac`). Inbound auth is the *connecting* machine's key, so the mini **cannot test its own inbound ssh**. Verify from the MacBook |
 | A direct `op read` / `op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run`. `op whoami` fails fast, so preflight guards are safe |
 | `op signin` "worked" but the next command says not signed in | The session lives in the shell that ran it. Chain them: `op signin --account tkrumm && <cmd>` |
 | Agent died when the lid closed | It was `kind: interactive`. Use `rd bg` |
 | A `--bg` agent runs but does nothing; `claude logs` shows `Not logged in · Please run /login` and the banner says *API Usage Billing* instead of *Claude Max* | It was spawned over ssh, which cannot reach the login keychain. Spawn through a herdr pane — that is exactly what `rd bg` does. Never `ssh mini 'claude --bg …'` |
-| `rd` says "herdr server is not running" | `brew services restart herdr` on the mini; `make remote-dev-doctor` to confirm the rest of the path |
+| `rd` says "herdr server is not running" | `brew services restart herdr` on the mini; `make doctor` to confirm the rest of the path |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes do not |
 | `claude: command not found` over non-interactive ssh to the mini | **Fixed** — `make setup`'s `_setup-zshenv` block now puts both Homebrew and `~/.local/bin` on the non-interactive PATH. If it recurs, that block is missing: re-run `make setup` on the mini |
-| mosh connects over ssh then hangs / "did not make a successful connection to \<ip\>:\<port\>" | `mosh-server` missing from the mini's Application Firewall allowlist. Fix: `make mosh-firewall`. Re-run after `brew upgrade mosh` |
-| `ssh mini` fails `signing failed … agent refused operation` → `Permission denied (publickey)` | **1Password is locked**, not a transport fault — its agent holds the key. Unlock it. `make mini-sweep` still reports the host's health from Kuma while it is locked |
-| A service on the mini **accepts the connection and then never answers** — curl prints `Connected` and times out on *every* path, while the app's own log says it is listening | **Application Firewall**, not the app. ALF completes the handshake in the kernel and never hands the socket to a non-allowed binary, so it does not look like a refusal. It keys on the BINARY: replacing it drops the grant, and a running process keeps its old one until it restarts — which is why this can surface at a reboot days later. Diagnosed by serving `http.server` off the same address with an allow-listed python (200 in 24 ms) and the app's own (hung). Fix: `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add <binary> && … --unblockapp <binary>`. Same class as the `mosh-server` row above; `devhost-health-check` now names it for the Hermes binary |
+| `ssh mini` fails `signing failed … agent refused operation` → `Permission denied (publickey)` | **1Password is locked**, not a transport fault — its agent holds the key. Unlock it |
+| A service on the mini **accepts the connection and then never answers** — curl prints `Connected` and times out on *every* path, while the app's own log says it is listening | **Application Firewall**, not the app. ALF completes the handshake in the kernel and never hands the socket to a non-allowed binary, so it does not look like a refusal. It keys on the BINARY: replacing it drops the grant, and a running process keeps its old one until it restarts — which is why this can surface at a reboot days later. Diagnosed by serving `http.server` off the same address with an allow-listed python (200 in 24 ms) and the app's own (hung). Fix: `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add <binary> && … --unblockapp <binary>` |
 | `git push` on the mini fails with `could not read Username for 'https://github.com'` | The credential helper returned nothing. Fix: `make git-headless`, and reseed with `make secrets-seed` if the cache is stale. The helper exits 0 with an empty body when the token is unresolvable, which is why the failure looks like a transport fault |
-| Any remote-dev symptom you can't immediately place | Run `make remote-dev-doctor` first — it names the failing layer instead of guessing |
+| Any remote-dev symptom you can't immediately place | Run `make doctor` first — it names the failing layer instead of guessing |
 
 ## Rules
 

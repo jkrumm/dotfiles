@@ -1,3 +1,6 @@
+# Ghostty terminal config — read from ~/.config/ghostty/config, Ghostty's own
+# config path. Reload: restart the app (or Ghostty's reload-config keybind).
+
 # Shell integration — enables semantic zones (command blocks) in Ghostty
 shell-integration = zsh
 shell-integration-features = cursor,sudo,title
@@ -6,9 +9,52 @@ shell-integration-features = cursor,sudo,title
 # "left" means only the left Option key acts as Alt; right Option still types special chars
 macos-option-as-alt = left
 
-# Auto-switch the One Zinc pair with macOS appearance.
-# Kept in sync with config.appsupport, which is loaded AFTER this file by both
-# cmux and bare Ghostty and therefore wins on any key set in both (measured, see
-# that file's header). herdr runs its built-in one-dark/one-light for its own
-# chrome — see config/herdr/config.toml.
-theme = light:one-zinc-light,dark:one-zinc-dark
+# ── Themes (One Zinc Dark / One Zinc Light) ──────────────────────────────────
+# Muted Atom One hues on basalt-ui zinc surfaces, for PANE CONTENT. herdr paints
+# its own chrome from its built-in one-dark/one-light — same hue family, so the
+# two agree without having to be the same file.
+#
+# The backgrounds are middle-ground on purpose: #1f1f23 dark (between basalt's
+# zinc-900 and zinc-800), #f2f2f5 light (basalt's own --vx-surface-bg). Never
+# black, never white. herdr's focused sidebar row lands on these at 1.17 / 1.03
+# separation, which is subtle by design — it also renders that row bold and in a
+# brighter fg, so the background is not the only cue. Full reasoning and the pty
+# measurements behind it are in each theme file's header.
+#
+# Ghostty theme names are EXACT FILENAMES. These resolve because the files are
+# literally named one-zinc-dark / one-zinc-light; bundled themes with spaces and
+# capitals must be written that way ("Catppuccin Mocha", not catppuccin-mocha).
+#
+# The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want it
+# back.
+theme = dark:one-zinc-dark,light:one-zinc-light
+
+# ── Font ─────────────────────────────────────────────────────────────────────
+# Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs
+# are Nerd Font codepoints and render as tofu without it. "Mono" (not "Propo")
+# is deliberate — it forces single-width glyphs, so icons can't push herdr's
+# column-aligned sidebar rows out of alignment.
+font-family = JetBrainsMono Nerd Font Mono
+font-size = 16
+
+# ── Cursor — Warp default is solid block, no blink ───────────────────────────
+cursor-style = block
+cursor-style-blink = false
+
+# ── Padding — Warp has subtle inset ──────────────────────────────────────────
+window-padding-x = 10
+window-padding-y = 6
+
+# ── Scrollback — Warp is effectively unlimited ───────────────────────────────
+scrollback-limit = 100000
+
+# ── Window chrome ─────────────────────────────────────────────────────────────
+window-decoration = auto
+background-opacity = 1.0
+
+# ── Behaviour ─────────────────────────────────────────────────────────────────
+mouse-hide-while-typing = true
+copy-on-select = false
+
+# ── Splits (unfocused slightly dimmed, like Warp) ────────────────────────────
+unfocused-split-opacity = 0.92

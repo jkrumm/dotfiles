@@ -26,9 +26,8 @@
 # rotation that cannot be installed headlessly is not a rotation.
 #
 # The file list is DECLARED, never globbed. ~/Library/Logs also holds Apple and
-# vendor logs (cmux-update.log, PhotosSearch.aapbz, Homebrew/, DiagnosticReports/)
-# and truncating someone else's log because it matched *.log is a bug waiting for
-# a bad week.
+# vendor logs (PhotosSearch.aapbz, Homebrew/, DiagnosticReports/) and truncating
+# someone else's log because it matched *.log is a bug waiting for a bad week.
 
 set -euo pipefail
 
@@ -46,8 +45,6 @@ MAX_BYTES="${LOG_ROTATE_MAX_BYTES:-16777216}"
 FILES=(
   sideclaw.log
   sideclaw.err
-  litellm.log
-  litellm.err
   walkingpad.log
   walkingpad.err
   usage-tracker.log

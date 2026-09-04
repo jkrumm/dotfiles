@@ -9,8 +9,8 @@ a reply. Third-party, installed and **commit-pinned** by `make collie-setup` —
 tags move and `plugin install` re-clones and rebuilds the repo every time.
 Since herdr-notes was retired it is the **only** pinned plugin left. Upgrading
 is a reviewed diff of that pin, driven by `make collie-upgrade`; there is no
-`plugin update`. Collie was chosen over granting the phone raw ssh+mosh: no
-port-22 grant, no SSH key on a device that can be lost or stolen.
+`plugin update`. Collie was chosen over granting the phone raw ssh: no port-22
+grant, no SSH key on a device that can be lost or stolen.
 
 **It is remote shell access by design, not "just a web UI".** One bridge call
 types arbitrary keystrokes into a live pane — Collie's own README says to
@@ -39,7 +39,8 @@ touches it) carries four settings, each closing a specific gap:
   `evil.example.com` → 403, `<name>:9999` → 403.
 - `COLLIE_SKIP_SERVE=1` — **mandatory**, not a preference. `collie-ctl.sh`
   publishes itself imperatively (`tailscale serve --bg 8787`), but this repo
-  owns serve as *declared* state (`## Inbound exposure` above) and
+  owns serve as *declared* state (`docs/remote-dev.md` → *Tailnet ACL and serve*)
+  and
   `make tailscale-serve` runs `tailscale serve reset` first — an imperative
   binding is silently wiped on the next convergence. Collie stays
   loopback-only; the front door is the row in
@@ -61,16 +62,14 @@ touches it) carries four settings, each closing a specific gap:
 - `COLLIE_HOST=127.0.0.1` — no interface binding beyond loopback; `serve`
   terminates TLS on the tailnet and proxies in.
 
-**Supervision is upstream's as of collie 0.21.0 — this repo used to own it.**
-`collie-ctl.sh start` now writes `~/Library/LaunchAgents/herdr.collie.plist`
-itself (`RunAtLoad` + `KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`),
-closing the gap that `collie/com.jkrumm.collie.plist.template` existed to close:
-before it, macOS got a bare `nohup` that did not survive a reboot. Our template
-is **deleted**, not disabled — two `RunAtLoad` + `KeepAlive` agents on port 8787
-is a fight neither wins cleanly, and upstream's `start` clears only its own
-pidfile tier, so it cannot free the port from a label it has never heard of.
-`make collie-setup` boots the legacy label out and removes the file before
-calling `start`; that migration is idempotent and self-deleting.
+**Supervision is upstream's**: `collie-ctl.sh start` writes
+`~/Library/LaunchAgents/herdr.collie.plist` itself (`RunAtLoad` +
+`KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`), so this repo ships no
+plist template of its own — two `RunAtLoad` + `KeepAlive` agents on port 8787 is
+a fight neither wins cleanly, and upstream's `start` clears only its own pidfile
+tier, so it cannot free the port from a label it has never heard of.
+`make collie-setup` boots any legacy label out before calling `start`; that
+migration is idempotent and self-deleting.
 
 It is a **LaunchAgent, so it starts at login, not at boot** — and a Mac
 administered purely over SSH has no `gui/<uid>` to bootstrap into, so upstream
@@ -78,17 +77,14 @@ degrades to the unsupervised tier with a warning instead of failing. That tier
 passes every liveness probe and dies on the next reboot, which is precisely the
 gap this whole section exists to close, so `collie-setup` asserts the plist
 exists *and* the label is loaded, and fails otherwise. The mini clears this only
-because it auto-logs-in (see *Unattended boot posture*) — that is what makes
+because it auto-logs-in (`docs/remote-dev.md` → *Unattended boot posture*) — that is what makes
 "at login" equivalent to "at boot" here, and it is not true of a Mac without it.
 
-Two upstream fixes made this safe to hand over, and both were the reason the
-local plist existed. PATH: `herdr plugin action invoke start` used to die with
-`error: bun not found` (a herdr-server-spawned command does not inherit
-Homebrew's PATH — same class as the mosh-server/`~/.zshenv` gap above), so our
-plist pinned `PATH`; 0.20.2 made collie-ctl resolve Bun from its install
-locations, not just `PATH`. And the `.env`: upstream's plist execs
-`collie-ctl.sh _exec-bridge` rather than `bun`, and the script sources the
-`.env` at top level (`set -a; . "$CONFIG_DIR/.env"; set +a`, `collie-ctl.sh:42`).
+Two upstream properties make that safe. PATH: `collie-ctl` resolves Bun from its
+install locations rather than `PATH` alone, which matters because a
+herdr-server-spawned command does not inherit Homebrew's PATH. And the `.env`:
+upstream's plist execs `collie-ctl.sh _exec-bridge` rather than `bun`, and the
+script sources the `.env` at top level (`set -a; . "$CONFIG_DIR/.env"; set +a`).
 
 **Whatever starts it must source the `.env`.** This is the invariant, and it
 outlives whoever owns the plist. The bridge reads `process.env` only
@@ -98,19 +94,14 @@ reaches `bun` without sourcing it first brings the bridge up with
 `COLLIE_PUBLIC_HOSTS`, `COLLIE_MULTI_SESSION` and `COLLIE_SKIP_SERVE` **all
 unset** — every hardening setting above quietly off, DNS-rebinding guard
 included — while `launchctl list` shows status 0 and the UI works perfectly.
-Upstream holds that invariant today; it is one refactor away from silently
-inverting, which is why the check below is behavioural and stayed behavioural
-through the handover. The original break was caught only
-because that check is behavioural: a spoofed `Host` header must still
-return 403 **on `/api/snapshot`** after any change to how the bridge is started.
-It had gone back to 200. The path is load-bearing — the guard fires on API routes
-only, and the SPA shell at `/` answers 200 to any Host (it is CSP-locked,
-`default-src 'self'`), so a pathless probe reports the guard broken when it is
-fine. Verified 2026-07-31: `/api/snapshot` loopback 200 / spoofed 403; `/`
-loopback 200 / spoofed 200. `make collie-setup` now **fails** on anything but
-403, so the handover could not have silently regressed it — re-run that
-assertion, not just `launchctl list`, whenever the start path or the `.env`
-moves.
+Upstream holds that invariant today and is one refactor away from silently
+inverting it, which is why the check is **behavioural**: after any change to how
+the bridge is started or to the `.env`, a spoofed `Host` header must still return
+403 **on `/api/snapshot`**. The path is load-bearing — the guard fires on API
+routes only, and the CSP-locked SPA shell at `/` answers 200 to any Host, so a
+pathless probe reports the guard broken when it is fine. `make collie-setup`
+**fails** on anything but 403, so re-run that assertion, not just
+`launchctl list`.
 
 | Command | Does |
 |-|-|
@@ -142,12 +133,13 @@ never pushes.
 **Monitoring is opt-in, and wiring it is scripted end to end.** Collie reports
 to its own Kuma monitor, `MacMini Collie - Push` (id=205, declared in
 `homelab/uptime-kuma/monitors.yaml`), pushed by the existing
-`com.jkrumm.devhost-health` LaunchAgent — see the heartbeat section below for
-why it is a separate monitor rather than a sixth component. On a fresh machine:
+`com.jkrumm.devhost-health` LaunchAgent — see `docs/devhost-health.md`
+for why it is a separate monitor rather than a composite component. On a fresh machine:
 
 1. `make uk-sync` from `homelab` — creates the monitor if absent, no browser.
 2. Fetch its `pushToken` and write `https://uptime.jkrumm.com/api/push/<token>`
-   into `~/.config/uptime-kuma/collie-push-url`, `chmod 600` (snippet below).
+   into `~/.config/uptime-kuma/collie-push-url`, `chmod 600` (the
+   `uptime-kuma-api` snippet is in `docs/devhost-health.md`).
 
 Until step 2 the collie push is skipped silently, which is deliberate: a machine
 that never ran `collie-setup` has no collie and must not fail the heartbeat.

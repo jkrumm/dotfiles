@@ -1,36 +1,9 @@
 # Remote dev — one command to land in a persistent session on the Mac mini.
 #
-# The four-layer model (Tailscale / mosh / herdr / Caddy) is in
+# The three-layer model (Tailscale / herdr / Caddy) is in
 # dotfiles/docs/remote-dev.md; this file is only the front door. The design goal
 # is that reaching the dev host costs one word, and that the word picks the
 # right transport instead of making you remember which one you wanted.
-
-# `dev` — mosh in, herdr there. The durable path.
-#
-# Why mosh is the default rather than `herdr --remote`: mosh moves the session
-# to UDP, so a lid-close or a network change does not end it and there is
-# nothing to reattach — you reopen the laptop and the session is simply still
-# there. `herdr --remote` is TCP and dies on a roam, which is a worse default
-# even though it feels nicer at the desk. Use `desk` for that.
-#
-# --experimental-remote-ip=remote is load-bearing, not a curiosity. mosh's
-# DEFAULT (`proxy`) passes `-S none` to ssh (see /opt/homebrew/bin/mosh:407),
-# which disables multiplexing — so every single `mosh mini` opens a fresh
-# connection and pops its own 1Password biometric approval, exactly the friction
-# ssh_config's ControlMaster block exists to remove. `remote` mode skips the
-# ProxyCommand and reuses the master socket. Verified 2026-07-26.
-dev() {
-  local session="${1:-}"
-  local -a herdr_cmd=(herdr)
-  [[ -n "$session" ]] && herdr_cmd+=(--session "$session")
-
-  command -v mosh >/dev/null 2>&1 || {
-    print -u2 "dev: mosh not installed — run 'make setup' (Brewfile), or use 'desk' for the ssh path"
-    return 127
-  }
-
-  mosh --experimental-remote-ip=remote mini -- "${herdr_cmd[@]}"
-}
 
 # `desk` — herdr's native attach over ssh. The client runs HERE.
 #
@@ -62,7 +35,7 @@ desk() {
 # `rd` — the layer above the transport: prepare and steer work on the mini
 # WITHOUT a terminal into it.
 #
-# `dev`/`desk` answer "how do I go look at the mini". `rd` answers "how do I put
+# `desk` answers "how do I go look at the mini". `rd` answers "how do I put
 # work on the mini and check on it", which is the thing you actually do most and
 # the thing that used to require attaching first. It routes itself: on the mini
 # it runs locally, from the MacBook it is one ssh hop, so the same words work on

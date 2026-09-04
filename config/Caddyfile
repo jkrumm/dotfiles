@@ -215,9 +215,8 @@ rb.test {
 # (~/SourceRoot/linewatch). One container serving both the API and the built
 # dashboard; the ping collector runs natively under launchd beside it, because
 # Colima's NAT fabricates ICMP replies inside a container.
-# Deliberately clean-door only, no `portdoor`: a port door would make Caddy bind
-# 7731 on the tailnet interface, and the container already publishes it on
-# loopback.
+# Deliberately clean-door only — a port door would make Caddy bind 7731 on
+# the tailnet interface, and the container already publishes it on loopback.
 linewatch.test {
 	import local
 	reverse_proxy localhost:7731
@@ -251,8 +250,8 @@ brain.test {
 # clean door is already scoped to the additive tag:devhost (the mini alone), which
 # is exactly the distinction that grant could not express.
 #
-# No `portdoor`: a port door would have Caddy bind 8789 on the tailnet interface
-# and collide head-on with the serve row above.
+# No port door: binding 8789 on the tailnet interface would collide head-on
+# with the serve row above.
 hermes-web.test {
 	import local
 	reverse_proxy localhost:8789
@@ -274,9 +273,9 @@ hermes-web.test {
 # clause is for. Do not add `import local` style basic_auth here on top; two auth
 # layers would break Desktop's /api/status discovery handshake.
 #
-# No `portdoor`: 9119 stays loopback-only, which is the whole access-control
-# argument — a tailnet bind could only be scoped to tag:mac, i.e. both Macs
-# including the work laptop, while this door is scoped to tag:devhost (the mini).
+# 9119 stays loopback-only, which is the whole access-control argument — a
+# tailnet bind could only be scoped to tag:mac, i.e. both Macs including the
+# work laptop, while this door is scoped to tag:devhost (the mini).
 hermes-api.test {
 	import local
 	reverse_proxy localhost:9119
@@ -298,26 +297,6 @@ meteo-map.test {
 	redir / /map/ 302
 	reverse_proxy localhost:8081
 }
-
-# whisper.test — RETIRED 2026-05-25. The local mlx-audio/Fish stack (:8000/:8001/
-# :8002) was replaced by the VPS audio-gateway. Point local clients at
-# https://audio-gateway.jkrumm.com/v1 instead. Kept commented for an easy
-# re-add if the local stack ever returns.
-#
-# whisper.test {
-# 	import local
-# 	handle /v1/audio/transcriptions* {
-# 		reverse_proxy localhost:8001 {
-# 			transport http {
-# 				versions 1.1
-# 			}
-# 			flush_interval -1
-# 		}
-# 	}
-# 	handle /v1/* {
-# 		reverse_proxy localhost:8000
-# 	}
-# }
 
 # ─── VPN-only AWS web UIs (via prometheus-scripts/vpn sidecar) ───────────────
 # Caddy fronts the public hostname on 127.0.0.1:443; the sidecar binds a

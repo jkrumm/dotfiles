@@ -13,21 +13,21 @@ set -euo pipefail
 # the mini pushes outbound over the already-granted `tag:mac → tag:homelab`
 # tcp:443. Same pattern as MacMini Secret Seed - Push and the Hermes monitors.
 #
-# ONE composite monitor, not five: herdr/sshd/tailscaled/mosh all fail together
+# ONE composite monitor, not four: herdr/sshd/tailscaled all fail together
 # when the mini sleeps or drops off the tailnet, so separate monitors would just
 # be simultaneous pages saying the same thing. The failing component is named in
 # the push `msg`, which is where the diagnosis belongs.
 #
 # `check_git_push` is the deliberate exception to that reasoning: it fails on
 # its own schedule (a token expires while the host is perfectly healthy) rather
-# than with the other four. It is folded in anyway because a second monitor
+# than with the other three. It is folded in anyway because a second monitor
 # wasn't worth it for one component. Revisit if it ever pages independently
 # often enough to be noise.
 #
 # `check_dev_vhosts` (the clean https://<app>.$DEV_DOMAIN door — see
 # scripts/caddy-tailnet.sh) is the same exception for the same reason: a
 # reverted DNS module, an aging cert, or a drifted A record can each happen
-# on a perfectly healthy dev host, independently of herdr/sshd/tailscaled/mosh
+# on a perfectly healthy dev host, independently of herdr/sshd/tailscaled
 # — but it is one component, not another whole monitor. It SKIPS (not fails)
 # on a machine that never set DEV_DOMAIN — see its own comment.
 #
@@ -78,7 +78,6 @@ set -euo pipefail
 # alias to the app bundle in the interactive shell and would simply not exist
 # here. Resolve every binary by absolute path.
 HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
-MOSH_SERVER_BIN="${MOSH_SERVER_BIN:-/opt/homebrew/bin/mosh-server}"
 # Tailscale CLI: resolved by lib/tailscale-cli.sh, NOT hardcoded. The mini moved
 # to the open-source brew daemon on 2026-08-06 while the app-bundle path stayed
 # on disk (the dormant macsys extension is kept for rollback) — so the old
@@ -120,7 +119,6 @@ COLIMA_PLIST="${COLIMA_PLIST:-$HOME/Library/LaunchAgents/homebrew.mxcl.colima.pl
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 SIDECLAW_URL="${SIDECLAW_URL:-http://127.0.0.1:7705}"
-LITELLM_URL="${LITELLM_URL:-http://127.0.0.1:4000}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
@@ -342,7 +340,7 @@ check_tailscale() {
 
   # Node-key expiry, which BackendState cannot see: it flips to a non-Running
   # state only AFTER the key expires, i.e. after the machine has already
-  # dropped off the tailnet and taken ssh, mosh, every dev door and this very
+  # dropped off the tailnet and taken ssh, every dev door and this very
   # push with it. There is no remote fix at that point — reauth is a browser on
   # the machine. So the useful assertion is days of lead time, not liveness.
   #
@@ -396,33 +394,6 @@ check_herdr() {
   echo "herdr up"
 }
 
-check_mosh() {
-  # mosh-server is spawned per-connection, so presence of the binary is the
-  # only thing worth asserting about the process itself; a missing one means the
-  # Brewfile drifted.
-  [[ -x "$MOSH_SERVER_BIN" ]] || { echo "mosh-server missing"; return 1; }
-
-  # The Application Firewall is per-process and does NOT auto-allow Homebrew
-  # binaries (no Developer ID signature), so mosh-server must be in its
-  # allowlist or every datagram is dropped AFTER a successful ssh handshake —
-  # the client blames a firewalled UDP port, which reads like a missing
-  # Tailscale ACL grant and sent one diagnosis entirely the wrong way.
-  #
-  # This is asserted on every run rather than trusted from `make mosh-firewall`
-  # because socketfilterfw stores the RESOLVED path and the brew symlink points
-  # into a version-stamped Cellar dir: `brew upgrade mosh` silently un-allows
-  # it. The upgrade is the regression this is here to catch.
-  local real
-  real=$(/usr/bin/readlink -f "$MOSH_SERVER_BIN" 2>/dev/null || echo "$MOSH_SERVER_BIN")
-  if [[ -x "$ALF_BIN" ]]; then
-    local apps
-    apps=$("$ALF_BIN" --listapps 2>/dev/null) || true
-    /usr/bin/grep -qF "$real" <<<"$apps" \
-      || { echo "mosh-server not in the Application Firewall allowlist — UDP will be dropped (fix: make mosh-firewall)"; return 1; }
-  fi
-  echo "mosh ready"
-}
-
 check_boot_path() {
   # The colima/herdr plist gap, made impossible to repeat. On 2026-08-29 both
   # plists were observed missing from disk while launchd kept running the jobs
@@ -445,8 +416,7 @@ check_boot_path() {
   # installed here — but every label in LAUNCHD_KEEPALIVE is one THIS script's
   # other components already depend on (herdr/colima/sideclaw/hermes/collie are
   # probed for liveness elsewhere), so absent here is a genuine failure, not a
-  # skip. litellm stays in the list until phase 1b of the subtraction pass
-  # deletes it (dotfiles PRD.md); deleting the label together with the plist.
+  # skip.
   local uid label plist missing="" mismatched="" path
   uid=$(/usr/bin/id -u)
   while IFS='|' read -r label plist; do
@@ -542,7 +512,7 @@ check_dev_vhosts() {
   # The clean dev-vhost door (https://<app>.$DEV_DOMAIN, scripts/caddy-tailnet.sh
   # + `make caddy-dns-build`). Folded into the COMPOSITE monitor below, not a
   # dedicated one — same exception check_git_push already is: this does NOT
-  # fail together with tailscaled/sshd/herdr/mosh (a reverted DNS module, a
+  # fail together with tailscaled/sshd/herdr (a reverted DNS module, a
   # cert nearing expiry, or a drifted A record can all happen on an otherwise
   # perfectly healthy dev host), but it is one component, and a second Kuma
   # push monitor wasn't worth it for this one either. Revisit only if it ever
@@ -593,9 +563,9 @@ check_dev_vhosts() {
   # 3. A-record drift: the node's Tailscale IP can change (rename, re-key,
   # relocation) and nothing else in this stack notices — the clean door just
   # times out, silently, everywhere, with no error on either end. Same lesson
-  # as the missing-ACL-grant failure mode already documented for the port
-  # doors: the listener/record is the thing that has to be checked, because
-  # nothing upstream of it complains when it goes stale.
+  # as any missing-ACL-grant failure mode: the listener/record is the thing
+  # that has to be checked, because nothing upstream of it complains when it
+  # goes stale.
   #
   # BOTH records are checked, because they are two records. `health.$DEV_DOMAIN`
   # answers from the wildcard and covers every app door; the bare $DEV_DOMAIN —
@@ -685,7 +655,6 @@ LAUNCHD_KEEPALIVE="\
 homebrew.mxcl.herdr|$HOME/Library/LaunchAgents/homebrew.mxcl.herdr.plist
 homebrew.mxcl.colima|$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist
 com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
-com.litellm.proxy|$HOME/Library/LaunchAgents/com.litellm.proxy.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
@@ -753,7 +722,6 @@ check_launchd_restarts() {
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
 sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist|probe_sideclaw
-litellm|$HOME/Library/LaunchAgents/com.litellm.proxy.plist|probe_litellm
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|/Library/LaunchDaemons/homebrew.mxcl.caddy.plist|probe_caddy
@@ -763,15 +731,6 @@ probe_sideclaw() {
   local code
   code=$(http_code "$SIDECLAW_URL/health")
   [[ "$code" == "200" ]] || { echo "sideclaw not answering on $SIDECLAW_URL (got ${code:-000})"; return 1; }
-}
-
-probe_litellm() {
-  # /health/liveliness, NOT /health. The latter dials every configured model
-  # upstream, which would turn a provider wobble into a "dev host down" page
-  # and break the no-outbound-calls rule check_git_push exists to keep.
-  local code
-  code=$(http_code "$LITELLM_URL/health/liveliness")
-  [[ "$code" == "200" ]] || { echo "litellm bridge not answering on $LITELLM_URL (got ${code:-000})"; return 1; }
 }
 
 probe_hermes() {
@@ -1090,7 +1049,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
-for component in check_tailscale check_sshd check_herdr check_mosh check_git_push check_dev_vhosts \
+for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
                  check_memory check_launchd_restarts check_boot_path check_services check_claude_auth \
                  check_obsidian check_disk check_runaways; do
   # Substring match on space-padded strings — bash 3.2 has no associative
@@ -1197,8 +1156,8 @@ fi
 # already made and accepted for collie.
 #
 # It keeps its OWN monitor for the same reason collie does, not as an
-# afterthought: a stale cache does not fail with tailscaled/sshd/herdr/mosh, so
-# folding it into the composite would mark the dev host DOWN and implicate four
+# afterthought: a stale cache does not fail with tailscaled/sshd/herdr, so
+# folding it into the composite would mark the dev host DOWN and implicate
 # healthy components for a reseed reminder.
 #
 # Threshold unchanged at 8 days — one day of slack past a weekly ritual.

@@ -28,14 +28,14 @@
 # lifecycle: it is defined from tracked config on every shell.
 #
 # WHERE IT APPLIES. `~/.zshrc` sources this via conf.d for interactive shells
-# (herdr panes, mosh, `desk`), and `~/.zshenv` sources it directly for
+# (herdr panes, `desk`), and `~/.zshenv` sources it directly for
 # NON-interactive ones — `ssh mini 'claude …'` reads only `.zshenv`, and that is
 # precisely the path whose acceptance test this whole package is gated on. The
 # limit, stated plainly: it does not reach a bash script or a LaunchAgent that
 # execs the binary directly. Those must export the variable themselves.
 #
-# WHAT IT DELIBERATELY DOES NOT TOUCH. `ca`, `claude_iu` and `claude_bridge`
-# (claude.zsh) launch through `env`, which resolves the binary from PATH and
+# WHAT IT DELIBERATELY DOES NOT TOUCH. `ca` and `claude_iu` (claude.zsh) launch
+# through `env`, which resolves the binary from PATH and
 # bypasses shell functions entirely. Their off-Max `ANTHROPIC_AUTH_TOKEN` flow
 # is therefore untouched by this file — by construction, not by a guard that
 # could rot. `c` / `cs` / `cf` use a prefix assignment, which in zsh *does*

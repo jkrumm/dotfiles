@@ -17,16 +17,12 @@ dist/
 .DS_Store
 
 # Runtime state — these files live in repos, not here
-cqueue.md
 cnotes.md
 queue.md
 
 # RALPH loop state & logs
 .ralph-tasks.json
 .ralph-logs/
-
-# LocalAI runtime data
-localai/monitor.db
 
 # Claude Code runtime state (but keep committed skills + rules)
 .claude/*

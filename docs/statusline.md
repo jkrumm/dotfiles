@@ -43,22 +43,24 @@ Claude Sonnet 4.6 | 86k/170k 51% | +660 -52 | 308k | 23min
 
 ## Usage Stats Implementation
 
-Data source: `https://claude.ai/api/organizations/{org_id}/usage` — the same endpoint the
-Claude.ai web UI uses. Returns real plan utilization percentages, not computed token counts.
+Data source: `https://api.anthropic.com/api/oauth/usage` — Anthropic's official
+OAuth usage endpoint, called with the Claude Code OAuth access token read from
+the macOS Keychain (`Claude Code-credentials`) plus the
+`anthropic-beta: oauth-2025-04-20` header. It returns real plan utilization
+percentages, not computed token counts. (It replaced a Chrome-cookie scrape of
+the claude.ai web API.)
 
-Auth: Chrome cookies (`sessionKey` + `cf_clearance`) extracted from macOS via:
-1. AES-128 key derived from `Chrome Safe Storage` Keychain entry (PBKDF2-SHA1, `saltysalt`, 1003 iters)
-2. Chrome SQLite cookie DB decrypted (v10 format: strip 3-byte prefix + 32-byte salt block)
+Script: `~/.claude/fetch_usage.py` (symlinked from `scripts/fetch_usage.py`), run
+via `uv run`. Cache: `/tmp/claude_sl/usage_api.json`, 5-min TTL, background
+refresh via `disown`; `sideclaw`'s `quota.ts` consumes the same file.
 
-Script: `~/.claude/fetch_usage.py` (symlinked from `scripts/fetch_usage.py`), run via `uv run`.
-Cache: `/tmp/claude_sl/usage_api.json`, 5-min TTL, background refresh via `disown`.
-
-API response fields used:
-- `five_hour.utilization` — 5h rolling window % (color-coded green/yellow/red)
-- `five_hour.resets_at` — reset timestamp → converted to "↺Nm" countdown
-- `seven_day.utilization` — weekly plan % (all models)
-
-Org UUID read from `~/.claude/.claude.json` → `.oauthAccount.organizationUuid`.
+- The endpoint is **rate-limited** (per-token 429s within a few requests/min) —
+  on 429 the existing cache is kept rather than blanked.
+- Fields used: `five_hour.utilization` (5h window %, color-coded),
+  `five_hour.resets_at` → the "↺Nm" countdown, `seven_day.utilization` (weekly).
+  `seven_day_sonnet` is also captured.
+- Errors are written into the cache file as `{"error": …}` and logged to
+  `~/.claude/logs/YYYY-MM-DD.jsonl` (`src: fetch_usage`), 3-day cleanup.
 
 ## Known Gotchas
 

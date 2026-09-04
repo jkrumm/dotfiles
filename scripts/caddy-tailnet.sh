@@ -16,38 +16,25 @@ set -euo pipefail
 # ONE REGISTRY: config/Caddyfile. Every `<name>.test { reverse_proxy
 # localhost:PORT }` block in the tracked Caddyfile is a dev app, and every dev
 # app automatically gets a clean tailnet door. A new app needs ZERO work here —
-# that is the whole point. Before this, the Caddyfile's 17 apps and
-# ~/.config/caddy-tailnet.ports' 4 were two hand-maintained lists that drifted
+# that is the whole point. Before this, the Caddyfile's apps and
+# ~/.config/caddy-tailnet.ports were two hand-maintained lists that drifted
 # silently, and an app only reached the tailnet if you remembered the second
-# one. That file is now an opt-OUT + flags file (see the header it seeds).
+# one. That file is now an opt-out file (see the header it seeds).
 #
 # The Caddyfile is read via `caddy adapt` and the route JSON is walked — never
 # regexed. See scripts/lib/caddy-registry.py for why the body defeats regex.
 #
-# TWO doors, and neither is optional-away from the other:
+# ONE door: a clean wildcard door (https://<app>.$DEV_DOMAIN) — ONE Caddy site
+# block on :443 of the tailnet IP, secured by a single wildcard Let's Encrypt
+# cert via Cloudflare DNS-01. Opt-in per MACHINE: only emitted once
+# ~/.config/caddy-tailnet.conf sets DEV_DOMAIN AND a chmod-600 Cloudflare
+# token file exists. Needs `make caddy-dns-build` first — stock Homebrew Caddy
+# ships zero DNS provider modules, so the ACME challenge has nowhere to run
+# without it. See that target's comment for the brew-upgrade trap it exists to
+# catch. (A per-app port-based `.ts.net` fallback door used to exist here too;
+# retired — every app now gets only the clean door.)
 #
-#   1. Port-based .ts.net doors (https://<magicdns>:<port>). Cert comes from
-#      tailscaled itself — no DNS provider, no Cloudflare, no ACME — so this is
-#      the zero-dependency fallback that must keep working when door 2 can't.
-#      OPT-IN per app (`portdoor` flag), and that is a deliberate asymmetry
-#      from door 2, not an oversight: this door makes Caddy bind the app's own
-#      port number on the tailnet interface, so it collides with any dev server
-#      that binds 0.0.0.0 (sideclaw does today) and with `tailscale serve`
-#      (rb's :7730 row). Auto-generating 17 of them would have Caddy squat
-#      ports that dev servers and `docker compose` then fail to bind, days
-#      later, with a confusing error. Door 2 has no such problem — every app
-#      shares one :443 listener — which is why it is the one that defaults on.
-#
-#   2. A clean wildcard door (https://<app>.$DEV_DOMAIN) — ONE Caddy site
-#      block on :443 of the tailnet IP, secured by a single wildcard Let's
-#      Encrypt cert via Cloudflare DNS-01. Opt-in per MACHINE: only emitted
-#      once ~/.config/caddy-tailnet.conf sets DEV_DOMAIN AND a chmod-600
-#      Cloudflare token file exists. Needs `make caddy-dns-build` first — stock
-#      Homebrew Caddy ships zero DNS provider modules, so the ACME challenge
-#      has nowhere to run without it. See that target's comment for the
-#      brew-upgrade trap it exists to catch.
-#
-# Door 2 also serves a LANDING PAGE at https://$DEV_DOMAIN and at
+# It also serves a LANDING PAGE at https://$DEV_DOMAIN and at
 # https://apps.$DEV_DOMAIN — and at any unmatched name, so a typo shows you what
 # exists instead of a bare 404. It probes each app same-origin through generated
 # `/_up/<name>` routes, so there is no new daemon and no CORS.
@@ -64,9 +51,8 @@ set -euo pipefail
 # declared in dotfiles-private/tailscale-serve.<machine>.conf and are not this
 # script's business.
 #
-# Certs for door 1 come from tailscaled itself — real Let's Encrypt,
-# auto-renewed, no local CA for the client to trust. Caddy runs as root, which
-# is what lets it read /Library/Tailscale/sameuserproof-*.
+# Certs come from a single wildcard Let's Encrypt cert via Cloudflare DNS-01 —
+# real Let's Encrypt, auto-renewed, no local CA for the client to trust.
 
 FLAGS_FILE="${CADDY_TAILNET_PORTS:-$HOME/.config/caddy-tailnet.ports}"
 CONF_FILE="${CADDY_TAILNET_CONF:-$HOME/.config/caddy-tailnet.conf}"
@@ -76,7 +62,7 @@ CADDYFILE="${CADDY_TAILNET_CADDYFILE:-$BREW_PREFIX/etc/Caddyfile}"
 # against scratch files without touching the live config:
 #
 #   CADDY_TAILNET_CADDYFILE  the registry to parse
-#   CADDY_TAILNET_PORTS      the opt-out + flags file
+#   CADDY_TAILNET_PORTS      the opt-out file
 #   CADDY_TAILNET_CONF       DEV_DOMAIN + the token path
 #   CADDY_TAILNET_OUT        the generated include
 #   CADDY_TAILNET_PAGE_DIR   the landing page directory
@@ -120,13 +106,13 @@ warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
 # --- machine-local config ----------------------------------------------------
 # Base domain + Cloudflare token path for the clean wildcard door. Shell-sourced
 # rather than parsed — two variables, nothing to get wrong. Seeded with an empty
-# DEV_DOMAIN so an un-seeded machine is a valid, silent state (door 1 only),
-# not an error.
+# DEV_DOMAIN so an un-seeded machine is a valid, silent state (no doors at
+# all), not an error.
 if [[ ! -f "$CONF_FILE" ]]; then
   mkdir -p "$(dirname "$CONF_FILE")"
   cat > "$CONF_FILE" <<'SEED'
 # Base domain for clean dev vhosts, e.g. mini.jkrumm.com — leave empty to
-# generate only the port-based .ts.net doors.
+# generate no doors at all yet.
 #
 # SET THIS LAST. It is the feature's on-switch for the heartbeat too:
 # devhost-health-check.sh treats a non-empty DEV_DOMAIN as "the clean door is
@@ -151,9 +137,8 @@ source "$CONF_FILE"
 # is no bash 4 in the Brewfile, so `declare -A` is simply unavailable here.
 APP_NAME=()
 APP_PORT=()
-APP_REWRITE=()   # 1 = rewrite upstream Host to localhost:PORT
-APP_PORTDOOR=()  # 1 = also publish the port-based .ts.net door
-APP_EXCLUDED=()  # 1 = no doors at all
+APP_REWRITE=()   # 1 = rewrite upstream Host to localhost:PORT (derived from the registry)
+APP_EXCLUDED=()  # 1 = no door at all
 
 # Capture the extractor's stderr rather than letting it stream past. It reports
 # `.test` blocks it refused to guess about (a block with two reverse_proxy
@@ -177,7 +162,6 @@ while IFS=$'\t' read -r name port rewrite; do
   APP_NAME+=("$name")
   APP_PORT+=("$port")
   APP_REWRITE+=("$rewrite")
-  APP_PORTDOOR+=(0)
   APP_EXCLUDED+=(0)
 done <<< "$registry"
 
@@ -193,29 +177,20 @@ app_index() {
   return 1
 }
 
-# Index of the app owning a port, or empty. Used only by the legacy migration.
-app_index_by_port() {
-  local want="$1" i
-  for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
-    if [[ "${APP_PORT[$i]}" == "$want" ]]; then printf '%s' "$i"; return 0; fi
-  done
-  return 1
-}
-
 if idx=$(app_index "$LANDING_NAME"); then
   die "an app is named '$LANDING_NAME' (port ${APP_PORT[$idx]}) — that name is reserved for the landing page at $LANDING_NAME.\$DEV_DOMAIN. Rename the .test block in $CADDYFILE."
 fi
 
-# --- flags file: seed, or migrate the pre-registry format --------------------
-# The old format was `PORT [name] [flags]` and WAS the registry. The new one is
-# opt-out + flags, keyed by the .test label. Migrating rather than erroring
-# keeps `make caddy-tailnet` working on the machine that has the old file, and
-# the mapping is exact: every legacy port belongs to a registry app.
+# --- flags file: seed only ----------------------------------------------------
+# Opt-out, keyed by the .test label. `exclude <name>` is the only directive —
+# the port-based fallback door and the manual `host=rewrite` flag are both
+# retired (every app now gets exactly one door, and Host-rewrite is derived
+# automatically from the registry — see caddy-registry.py).
 flags_header() {
   # Quoted heredoc: every $ and backtick below is literal documentation text.
   printf '%s\n' "$FLAGS_SENTINEL"
   cat <<'HEADER'
-# Opt-OUT and flags for the tailnet dev doors. This is NOT the app registry.
+# Opt-out for the tailnet dev doors. This is NOT the app registry.
 #
 # The registry is the tracked config/Caddyfile: every `<name>.test {
 # reverse_proxy localhost:PORT }` block there automatically gets a clean door at
@@ -224,26 +199,13 @@ flags_header() {
 #
 # Re-run `make caddy-tailnet` after editing. Blank lines and # comments ignored.
 #
-#   exclude <name>       no doors at all for <name>
-#   <name> <flags...>    flags for <name>
+#   exclude <name>       no door at all for <name>
 #
-# Flags:
-#
-#   portdoor       ALSO publish the port-based fallback door
-#                  https://<magicdns>:<PORT>, whose cert comes from tailscaled
-#                  itself (no Cloudflare, no ACME). Opt-in, deliberately: this
-#                  door makes Caddy bind the app's own port number on the
-#                  tailnet interface, so it collides with any dev server that
-#                  binds 0.0.0.0 (sideclaw does) and with `tailscale serve`
-#                  (rb's :7730 row). The clean door has no such problem —
-#                  every app shares one :443 listener — so it is the default.
-#
-#   host=rewrite   rewrite the upstream Host header to localhost:PORT. The
-#                  escape hatch for a dev server that validates Host on
-#                  dev-only endpoints and cannot be allowlisted. Carried over
-#                  AUTOMATICALLY from a `header_up Host localhost:PORT` in the
-#                  app's own .test block (fpp.test has one), so this is only
-#                  needed to force it on for an app whose block does not.
+# A dev server that validates Host on dev-only endpoints and cannot be
+# allowlisted has its upstream Host header rewritten to localhost:PORT
+# automatically — carried over from a `header_up Host localhost:PORT` in the
+# app's own .test block (fpp.test has one). There is no flag for this; it is
+# derived from the registry, not declared here.
 #
 # Every app served this way needs its dev server to accept the door's Host
 # header — Vite/Astro `server.allowedHosts`, Next `allowedDevOrigins` — or it
@@ -257,53 +219,12 @@ if [[ ! -f "$FLAGS_FILE" ]]; then
   flags_header > "$FLAGS_FILE"
   printf 'seeded %s\n' "$FLAGS_FILE"
 elif ! grep -q "^$FLAGS_SENTINEL\$" "$FLAGS_FILE"; then
-  # No sentinel => this file predates the registry change and its directives are
-  # in the old `PORT [name] [flags]` shape. Migrate ONCE, then stamp it.
-  #
-  # Gating on the sentinel rather than on "does any line start with digits" is
-  # deliberate. The registry's own LABEL regex permits an all-numeric app name,
-  # so a perfectly valid new-style line like `7700 portdoor` would re-trip a
-  # shape sniffer and rewrite the file on every run — silently discarding real
-  # directives. A one-way stamp cannot be re-triggered by content.
-  backup="$FLAGS_FILE.pre-registry"
-  [[ -e "$backup" ]] || cp "$FLAGS_FILE" "$backup"
-
-  migrated=""
-  renames=""
-  kept=""
-  while read -r f1 f2 _rest || [[ -n ${f1:-} ]]; do
-    [[ -z ${f1:-} || $f1 == \#* ]] && continue
-    if [[ $f1 =~ ^[0-9]+$ ]]; then
-      # Legacy: PORT [name] [flags]
-      if lidx=$(app_index_by_port "$f1"); then
-        migrated+="${APP_NAME[$lidx]} portdoor"$'\n'
-        if [[ -n ${f2:-} && "$f2" != "${APP_NAME[$lidx]}" ]]; then
-          renames+="    ${f2}.\$DEV_DOMAIN → ${APP_NAME[$lidx]}.\$DEV_DOMAIN"$'\n'
-        fi
-      else
-        warn "legacy entry '$f1 ${f2:-}' has no .test block in $CADDYFILE — dropped"
-      fi
-    else
-      # Already new-style (a hand-added `exclude x` or `x portdoor`). Carry it
-      # through verbatim — rewriting the file from the legacy lines alone would
-      # silently delete these, and an `exclude` lost that way re-EXPOSES an app
-      # on the very run that reports a tidy successful migration.
-      kept+="$f1${f2:+ $f2}${_rest:+ $_rest}"$'\n'
-    fi
-  done < "$FLAGS_FILE"
-
-  { flags_header; printf '\n%s%s' "$kept" "$migrated"; } > "$FLAGS_FILE"
-
-  if [[ -n "$migrated$kept" ]]; then
-    n_migrated=$(printf '%s' "$migrated" | grep -c . || true)
-    printf '\n  migrated %s to the new opt-out format (old file kept at %s)\n' \
-      "$FLAGS_FILE" "$backup"
-    printf '  the %d previously-declared ports keep their port doors; every app in\n' "$n_migrated"
-    printf '  %s now gets a clean door automatically.\n' "$CADDYFILE"
-    if [[ -n "$renames" ]]; then
-      printf '\n  clean-door RENAMES (the subdomain is now the .test label):\n%s' "$renames"
-    fi
-  fi
+  # No sentinel => this file predates the registry format entirely (the old
+  # `PORT [name] [flags]` shape). That format, and the one-time migration off
+  # it, are both retired along with the port-based door they existed to carry
+  # forward — fix by hand rather than auto-migrating a directive set that no
+  # longer has an equivalent.
+  die "$FLAGS_FILE predates the registry format (missing '$FLAGS_SENTINEL') — delete it and re-run to reseed, keeping only any 'exclude <name>' lines you still need"
 fi
 
 # Read flags. An unknown name is a WARNING, not fatal: this file outlives the
@@ -340,8 +261,8 @@ while read -r first second rest || [[ -n ${first:-} ]]; do
   # shellcheck disable=SC2086
   for flag in ${second:-} ${rest:-}; do
     case "$flag" in
-      portdoor)    APP_PORTDOOR[idx]=1 ;;
-      host=rewrite) APP_REWRITE[idx]=1 ;;
+      portdoor|host=rewrite)
+        die "'$flag' for '$first' in $FLAGS_FILE is a retired flag — the port-based fallback door is gone (every app now gets only the clean https://<app>.\$DEV_DOMAIN door) and Host-rewrite is derived automatically from the registry. Remove '$flag' from $FLAGS_FILE." ;;
       *) warn "unknown flag '$flag' for '$first' in $FLAGS_FILE — ignored" ;;
     esac
   done
@@ -358,22 +279,6 @@ HOSTN=$(printf '%s' "$ts_json" | python3 -c \
 IP=$(printf '%s' "$ts_json" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["Self"]["TailscaleIPs"][0])')
 [[ -n $HOSTN && -n $IP ]] || die "could not read this machine's tailnet identity"
-
-# A port door binds $IP:PORT, so anything else already holding that address
-# makes `caddy reload` fail outright — taking the WHOLE include down, working
-# doors included.
-#
-# Only `tailscale serve` is checked up front, because it is the one case that
-# can be identified with NO false positives: tailscaled owns those ports and
-# caddy never does. The general "is something on this port" check is
-# deliberately NOT done here — our own caddy is still holding every port it
-# published last run, and netstat cannot say whose socket it is, so the check
-# fired on all four healthy doors on the first run. A warning that cries wolf
-# on the happy path is worse than none: it trains you to skim past the one
-# line that would have named a real collision. The real conflict surfaces as a
-# reload failure, and `reload_conflict_report` below turns that into a
-# diagnosis at the moment it actually matters.
-serve_ports=" $(ts_run serve status 2>/dev/null | grep -oE '\.ts\.net:[0-9]+' | cut -d: -f2 | tr '\n' ' ' || true)"
 
 # --- `tailscale serve` rows, for the landing page ----------------------------
 # The dev doors are only PART of what this machine publishes: `tailscale serve`
@@ -444,24 +349,22 @@ reload_conflict_report() {
   # Called only after a failed reload. netstat, not lsof: caddy runs as a root
   # LaunchDaemon and is invisible to an unprivileged `lsof -iTCP`, which would
   # report a serene all-clear and send the diagnosis the wrong way entirely.
-  local listeners i port
+  #
+  # With the port-based fallback door retired there is only one thing this
+  # include can bind — the wildcard block's own $IP:443 — so there is only one
+  # suspect to name, not one per app.
+  (( wildcard_enabled )) || return 0
+  local listeners
   listeners=$(/usr/sbin/netstat -an -p tcp 2>/dev/null | grep LISTEN || true)
-  for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
-    (( APP_EXCLUDED[i] )) && continue
-    (( APP_PORTDOOR[i] )) || continue
-    port="${APP_PORT[$i]}"
-    if grep -qE "(\*|${IP//./\\.})\.${port}[[:space:]]" <<<"$listeners"; then
-      printf '  port door %s:%s — something holds that port on a non-loopback address.\n' \
-        "${APP_NAME[$i]}" "$port" >&2
-      printf "    If it is a dev server bound to 0.0.0.0, or a 'tailscale serve' row,\n" >&2
-      printf "    drop the 'portdoor' flag for %s in %s.\n" "${APP_NAME[$i]}" "$FLAGS_FILE" >&2
-    fi
-  done
+  if grep -qE "(\*|${IP//./\\.})\.443[[:space:]]" <<<"$listeners"; then
+    printf '  %s:443 — something else already holds that address.\n' "$IP" >&2
+    printf "    Check for a stray 'tailscale serve' row or another Caddy instance.\n" >&2
+  fi
 }
 
-# --- door 2 buildable? -------------------------------------------------------
+# --- door buildable? ---------------------------------------------------------
 # Missing DEV_DOMAIN or an unreadable token file is a valid, silent "not seeded
-# yet" state — door 1 still gets generated. A token file that EXISTS but is more
+# yet" state — nothing gets generated. A token file that EXISTS but is more
 # permissive than 600 is a different thing (a live misconfiguration of a real
 # secret) and is refused loudly rather than silently skipped.
 wildcard_enabled=0
@@ -538,7 +441,7 @@ fi
   echo "#"
   echo "# The app list comes from the .test blocks in:"
   echo "#   $CADDYFILE"
-  echo "# Opt-outs and per-app flags:"
+  echo "# Opt-outs:"
   echo "#   $FLAGS_FILE"
   echo "# DEV_DOMAIN / the Cloudflare token path:"
   echo "#   $CONF_FILE"
@@ -557,37 +460,11 @@ fi
   echo "# IPv4 loopback: Vite, on finding the port already held on another address,"
   echo "# falls back to binding ::1 ALONE and still prints a cheerful 'ready' line."
   echo "# A hardcoded 127.0.0.1 upstream then 502s against an app that is plainly"
-  echo "# running — observed here with basalt-playground on 7710 while a port door"
-  echo "# held the tailnet IP. 'localhost' resolves to both families and Go's"
-  echo "# dialer tries each, so it covers the app whichever way it binds."
-  echo ""
-  echo "(tailnet) {"
-  echo "	bind $IP"
-  echo "	tls {"
-  echo "		get_certificate tailscale"
-  echo "	}"
-  echo "}"
+  echo "# running. 'localhost' resolves to both families and Go's dialer tries"
+  echo "# each, so it covers the app whichever way it binds."
   echo ""
 
-  # Door 1 — opt-in port doors.
-  for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
-    (( APP_EXCLUDED[i] )) && continue
-    (( APP_PORTDOOR[i] )) || continue
-    echo "# ${APP_NAME[$i]}"
-    echo "$HOSTN:${APP_PORT[$i]} {"
-    echo "	import tailnet"
-    if (( APP_REWRITE[i] )); then
-      echo "	reverse_proxy localhost:${APP_PORT[$i]} {"
-      echo "		header_up Host localhost:${APP_PORT[$i]}"
-      echo "	}"
-    else
-      echo "	reverse_proxy localhost:${APP_PORT[$i]}"
-    fi
-    echo "}"
-    echo ""
-  done
-
-  # Door 2 — one wildcard block for every app.
+  # One wildcard block for every app.
   if (( wildcard_enabled )); then
     echo "# --- clean dev door: https://<app>.$DEV_DOMAIN --------------------------"
     echo "#"
@@ -726,8 +603,8 @@ if (( wildcard_enabled )); then
   for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
     (( APP_EXCLUDED[i] )) && continue
     [[ -n "$apps_json" ]] && apps_json+=","
-    apps_json+=$(printf '{"n":"%s","p":%s,"d":%s}' \
-      "${APP_NAME[$i]}" "${APP_PORT[$i]}" "${APP_PORTDOOR[$i]}")
+    apps_json+=$(printf '{"n":"%s","p":%s}' \
+      "${APP_NAME[$i]}" "${APP_PORT[$i]}")
   done
 
   {
@@ -869,7 +746,8 @@ code {
 			one entry covers every door. Next.js does not understand a leading dot &mdash; it
 			globs whole segments, so use <code class="star"></code> instead. A server that
 			validates <code>Host</code> on dev-only endpoints and cannot be allowlisted gets
-			the <code>host=rewrite</code> flag instead.</p>
+			its upstream Host header rewritten to <code>localhost:PORT</code> automatically
+			instead.</p>
 		<p><span class="st wait">no response</span> &mdash; the port accepted the connection
 			but sent nothing back in 8s. Usually a cold start (a first Vite dependency
 			optimise), not a fault &mdash; reload in a moment. <span class="st unknown">unreachable</span>
@@ -877,14 +755,13 @@ code {
 			that this page predates a regeneration that removed the app, and
 			<span class="st unknown">unknown</span> a status outside the cases above (a 5xx
 			other than 502).</p>
-		<h2>the two doors</h2>
-		<p>The clean door is one wildcard site block on this host's tailnet <code>:443</code>.
-			The <code>.ts.net</code> door is the zero-dependency fallback &mdash; its cert
-			comes from tailscaled itself, no Cloudflare and no ACME &mdash; and is opt-in per
-			app via the <code>portdoor</code> flag.</p>
+		<h2>the door</h2>
+		<p>Every app gets one door: a wildcard site block on this host's tailnet
+			<code>:443</code>, secured by a single Let's Encrypt cert via Cloudflare
+			DNS-01.</p>
 		<p>Every row above is <span class="reach tailnet">tailnet only</span>: Caddy binds
-			these to this host's Tailscale IP and nothing else. Clicking a row opens its
-			clean door.</p>
+			it to this host's Tailscale IP and nothing else. Clicking a row opens its
+			door.</p>
 		<h2>tailscale serve</h2>
 		<p>A separate mechanism, listed because it publishes ports this page would
 			otherwise leave unaccounted for. <span class="reach public">public</span> means
@@ -980,9 +857,6 @@ for (const app of APPS) {
 	wrap.className = "doors";
 	const primary = "https://" + app.n + "." + DOMAIN;
 	wrap.appendChild(link(primary, app.n + "." + DOMAIN));
-	if (app.d) {
-		wrap.appendChild(link("https://" + TSNET + ":" + app.p, TSNET + ":" + app.p, "alt"));
-	}
 	doors.appendChild(wrap);
 
 	rowLink(tr, primary);
@@ -1099,7 +973,14 @@ fi
 # Both failure paths roll the include back. Leaving a rejected include on disk
 # is the worst outcome available here: nothing breaks now (the running server
 # keeps its old config), so the failure is invisible until the next restart.
-if (( ! SKIP_RELOAD )) && ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+# Validate the INCLUDE on its own, not the whole Caddyfile: `caddy validate`
+# provisions every module, including the global access-log writer, and that
+# file is root-owned (Caddy runs as a root daemon) — so a full-file validate
+# fails with "permission denied" for the user running this script no matter
+# how good the config is. The include carries everything this script wrote
+# (site block, tls/dns module, every handler); the running daemon's own reload
+# below is what proves the composed file, and it rolls back on failure.
+if (( ! SKIP_RELOAD )) && ! caddy validate --config "$OUT" --adapter caddyfile >/dev/null 2>&1; then
   restore_rollback
   die "generated config is invalid — inspect $OUT (it holds the Cloudflare token; redact before sharing)"
 fi
@@ -1118,7 +999,6 @@ rm -f "$ROLLBACK"
 printf '\n  dev doors on %s\n\n' "$HOSTN"
 
 n_clean=0
-n_port=0
 n_excluded=0
 for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
   if (( APP_EXCLUDED[i] )); then
@@ -1127,24 +1007,12 @@ for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
     continue
   fi
 
-  flags=""
-  (( APP_REWRITE[i] )) && flags=" host=rewrite"
-
   if (( wildcard_enabled )); then
-    printf '    %-20s %s  https://%s.%s%s\n' \
-      "${APP_NAME[$i]}" "${APP_PORT[$i]}" "${APP_NAME[$i]}" "$DEV_DOMAIN" "$flags"
+    printf '    %-20s %s  https://%s.%s\n' \
+      "${APP_NAME[$i]}" "${APP_PORT[$i]}" "${APP_NAME[$i]}" "$DEV_DOMAIN"
     n_clean=$(( n_clean + 1 ))
   else
-    printf '    %-20s %s%s\n' "${APP_NAME[$i]}" "${APP_PORT[$i]}" "$flags"
-  fi
-
-  if (( APP_PORTDOOR[i] )); then
-    printf '    %-20s    https://%s:%s\n' "" "$HOSTN" "${APP_PORT[$i]}"
-    n_port=$(( n_port + 1 ))
-    case "$serve_ports" in
-      *" ${APP_PORT[$i]} "*)
-        warn "port door ${APP_NAME[$i]}:${APP_PORT[$i]} collides with a 'tailscale serve' row — drop the portdoor flag, or the serve row" ;;
-    esac
+    printf '    %-20s %s\n' "${APP_NAME[$i]}" "${APP_PORT[$i]}"
   fi
 done
 
@@ -1152,8 +1020,8 @@ if (( wildcard_enabled )); then
   printf '\n    %-20s    https://%s\n' "index" "$DEV_DOMAIN"
   printf '    %-20s    https://%s.%s\n' "" "$LANDING_NAME" "$DEV_DOMAIN"
   printf '    %-20s    (also served at any unmatched name, with live status)\n' ""
-  printf '\n  %d clean doors, %d port doors, %d excluded — registry: %s\n' \
-    "$n_clean" "$n_port" "$n_excluded" "$CADDYFILE"
+  printf '\n  %d clean doors, %d excluded — registry: %s\n' \
+    "$n_clean" "$n_excluded" "$CADDYFILE"
 
   # Same rows the page shows, for the same reason: this output is the other
   # place someone asks "what does this machine expose", and a summary that

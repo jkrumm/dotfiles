@@ -73,11 +73,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
-	@$(MAKE) --no-print-directory _setup-opencode
-	@# _setup-localai RETIRED 2026-05-25 — local TTS/STT replaced by the cloud
-	@# audio-gateway (~/SourceRoot/audio-gateway, VPS container). Targets kept
-	@# below for an easy re-add; tear down a live install with `make localai-teardown`.
-	@$(MAKE) --no-print-directory _setup-litellm
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
@@ -137,7 +132,7 @@ _setup-packages:
 	@brew bundle install --file=$(DOTFILES_DIR)/Brewfile --no-upgrade \
 		&& echo "    ✓ Brewfile satisfied" \
 		|| echo "    ✗ brew bundle failed — run: make brew-check"
-	@# A fresh machine needs caddy/mosh pinned from the first bundle install —
+	@# A fresh machine needs caddy pinned from the first bundle install —
 	@# otherwise the first bare `brew upgrade` anyone runs reverts the caddy DNS
 	@# module before `make caddy-dns-build` has ever run once. See brew-upgrade.sh.
 	@bash $(DOTFILES_DIR)/scripts/brew-upgrade.sh --pins-only
@@ -230,11 +225,6 @@ _setup-caddy:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/Caddyfile" \
 		DST="$(BREW_PREFIX)/etc/Caddyfile"
-	@# Clean up legacy Caddyfile.localai.conf from older Tailscale-fronted setup
-	@LEGACY="$(BREW_PREFIX)/etc/Caddyfile.localai.conf"; \
-	if [ -f "$$LEGACY" ]; then \
-		rm "$$LEGACY" && echo "    ✓ removed legacy Caddyfile.localai.conf"; \
-	fi
 	@# Clean up any root-owned Caddy data left in user Library from earlier failed runs
 	@CADDY_LIB="$(HOME)/Library/Application Support/Caddy"; \
 	if [ -d "$$CADDY_LIB" ] && [ "$$(stat -f %Su "$$CADDY_LIB" 2>/dev/null)" = "root" ]; then \
@@ -636,14 +626,13 @@ _setup-git-headless:
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
-.PHONY: remote-dev-doctor
-# Verify the MacBook→mini path FROM the MacBook. Complements — does not
-# duplicate — `devhost-health-check`, which runs ON the mini and structurally
-# cannot see inbound auth, ControlMaster reuse, agent forwarding or the mosh
-# UDP path (the mini has no key for itself and cannot ssh to itself).
-# Read-only; safe to run any time.
-remote-dev-doctor:
-	@bash $(DOTFILES_DIR)/scripts/remote-dev-doctor.sh
+.PHONY: doctor
+doctor: ## Read-only health of this machine (+ the mini when run from the MacBook)
+	@bash $(DOTFILES_DIR)/scripts/doctor.sh
+
+.PHONY: agent-dispatch-smoke
+agent-dispatch-smoke: ## Dispatch a trivial read-only task at dispatch-scratch and assert it returns
+	@bash $(DOTFILES_DIR)/scripts/agent-dispatch.sh bg dispatch-scratch 'List the files in this directory and stop. Read-only; do not edit anything.'
 
 .PHONY: caddy-tailnet
 # Expose dev servers over the tailnet via Caddy. Runs ON the dev host (the mini).
@@ -653,7 +642,7 @@ remote-dev-doctor:
 #
 # The app list is the tracked config/Caddyfile: every `<name>.test` block gets a
 # clean https://<name>.$DEV_DOMAIN door automatically. ~/.config/caddy-tailnet.ports
-# is opt-OUT + flags only (exclude / portdoor / host=rewrite), not a second list.
+# is opt-OUT only (exclude), not a second list.
 caddy-tailnet:
 	@bash $(DOTFILES_DIR)/scripts/caddy-tailnet.sh
 
@@ -762,44 +751,6 @@ caddy-dns-build:
 		&& echo "    ✓ caddy service restarted with the new binary" \
 		|| { echo "  ✗ caddy service restart failed — the new binary is installed but the running process is still the old one. Fix: sudo brew services restart caddy"; exit 1; }
 
-.PHONY: mosh-firewall
-# Allow mosh-server through the macOS Application Firewall. Opt-in per host and
-# NOT in the default `setup` chain — it needs sudo and only matters on a machine
-# people mosh INTO (the mini).
-#
-# Why this is needed at all, and why it is so hard to diagnose without it: the
-# ALF is per-process, and "Automatically allow downloaded signed software" does
-# NOT cover Homebrew binaries (no Developer ID signature). With mosh-server
-# missing from the allowlist, the ssh handshake SUCCEEDS, mosh-server starts,
-# binds its UDP port and prints MOSH CONNECT — and then every datagram is
-# dropped. The client just says "did not make a successful connection to
-# <ip>:<port>. Please verify that UDP port ... is not firewalled", which reads
-# exactly like a missing Tailscale ACL grant. Measured on the mini 2026-07-26:
-# /usr/bin/nc (Apple-signed) got UDP through on both the LAN and the tailnet
-# path while mosh-server got nothing, which is what isolates it to the ALF
-# rather than the network.
-#
-# socketfilterfw stores the RESOLVED path, and /opt/homebrew/bin/mosh-server is
-# a symlink into a version-stamped Cellar dir — so a `brew upgrade mosh` moves
-# the binary and silently un-allows it. That is why devhost-health-check.sh
-# asserts allowlist membership: the upgrade is the likely regression, and it is
-# otherwise invisible until the next time you try to mosh in.
-mosh-firewall:
-	@SFW=/usr/libexec/ApplicationFirewall/socketfilterfw; \
-	BIN=$$(readlink -f "$$(brew --prefix)/bin/mosh-server" 2>/dev/null || echo ""); \
-	if [ -z "$$BIN" ] || [ ! -x "$$BIN" ]; then \
-		echo "  ✗ mosh-server not found — is mosh installed? (brew bundle install)"; exit 1; \
-	fi; \
-	echo "  Application Firewall → allow mosh-server..."; \
-	echo "    path: $$BIN"; \
-	sudo "$$SFW" --add "$$BIN" >/dev/null; \
-	sudo "$$SFW" --unblock "$$BIN" >/dev/null; \
-	if "$$SFW" --listapps 2>/dev/null | grep -qF "$$BIN"; then \
-		echo "    ✓ mosh-server allowed to receive incoming connections"; \
-	else \
-		echo "    ✗ still not in the allowlist — check: $$SFW --listapps"; exit 1; \
-	fi
-
 .PHONY: batt-setup batt-limit batt-status
 # MacBook-only battery charge limiter (https://github.com/charlie0129/batt).
 # The binary ships via the Brewfile (harmless on a battery-less Mac like the
@@ -876,20 +827,6 @@ brain-sync-teardown:
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
 	rm -f "$$PLIST"; \
 	echo "  ✓ brain-sync torn down (unloaded + plist removed)"
-
-# Audit THIS machine's own LaunchAgents for the failures that produce no error
-# anyone sees: a program or WorkingDirectory that does not exist (exit 78, the
-# job never starts and retries forever), a KeepAlive job that is down, logs in
-# /tmp (swept after 3 idle days, and launchd never reopens the file), and
-# plaintext credentials in EnvironmentVariables.
-#
-# Found on 2026-08-18 by hand: com.jkrumm.sideclaw had 40,281 failed spawns and
-# com.jkrumm.usage-tracker 449, both pointing at repos that live only on the
-# mini. Nothing anywhere reported it — the dev-host heartbeat is mini-only by
-# design, and this machine had no equivalent. Read-only; exits 1 on findings.
-.PHONY: launchagents-check
-launchagents-check:
-	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh
 
 # The subtraction pass's enforcement half (docs/PRD.md phase 0.4): every launchd
 # label loaded on this machine must appear in docs/architecture.md. Read-only,
@@ -1031,18 +968,18 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/keyprobe.py" \
 		DST="$(HOME)/.local/bin/keyprobe"
+	@chmod +x $(DOTFILES_DIR)/scripts/agent-dispatch.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/agent-dispatch.sh" \
+		DST="$(HOME)/.local/bin/agent-dispatch"
 
 .PHONY: _setup-zshenv
 # ~/.zshenv is the ONLY startup file zsh reads for a non-interactive,
-# non-login shell — which is exactly what `ssh host -- <cmd>` gets, and what
-# mosh uses to launch `mosh-server` on the remote end. macOS runs path_helper
-# from /etc/zprofile, but that is a LOGIN file, so a bare `ssh mini 'herdr …'`
-# lands with PATH=/usr/bin:/bin:/usr/sbin:/sbin and no Homebrew at all.
-#
-# That broke mosh outright on the mini (2026-07-26): `mosh mini` reported
-# "Did not find mosh server startup message. (Have you installed mosh on your
-# server?)" while /opt/homebrew/bin/mosh-server was installed and fine. It also
-# silently forces every remote automation to hand-prefix the PATH.
+# non-login shell — which is exactly what `ssh host -- <cmd>` gets. macOS runs
+# path_helper from /etc/zprofile, but that is a LOGIN file, so a bare
+# `ssh mini 'herdr …'` lands with PATH=/usr/bin:/bin:/usr/sbin:/sbin and no
+# Homebrew at all — silently forcing every remote automation to hand-prefix
+# the PATH.
 #
 # The file is NOT symlinked: third-party installers (vite-plus, cargo) append
 # to it and would clobber a symlink into the repo. Append an idempotent guarded
@@ -1050,7 +987,7 @@ _setup-scripts:
 # system binary of the same name — matching what config/zsh/path.zsh already
 # does for interactive shells.
 _setup-zshenv:
-	@echo "  zshenv (non-interactive PATH — ssh/mosh remote commands)..."
+	@echo "  zshenv (non-interactive PATH — ssh remote commands)..."
 	@ZSHENV="$(HOME)/.zshenv"; \
 	MARKER="# >>> dotfiles: non-interactive PATH >>>"; \
 	LEGACY="# >>> dotfiles: homebrew PATH >>>"; \
@@ -1066,8 +1003,8 @@ _setup-zshenv:
 			echo ""; \
 			echo "$$MARKER"; \
 			echo "# Managed by dotfiles (make setup). zsh reads ONLY this file for"; \
-			echo "# non-interactive non-login shells — \`ssh host -- cmd\` and mosh's"; \
-			echo "# mosh-server launch. Without it neither can see Homebrew."; \
+			echo "# non-interactive non-login shells — \`ssh host -- cmd\`. Without it"; \
+			echo "# that path can't see Homebrew."; \
 			echo "case \":\$$PATH:\" in"; \
 			echo "  *\":$$BREW_PREFIX/bin:\"*) ;;"; \
 			echo "  *) export PATH=\"$$BREW_PREFIX/bin:$$BREW_PREFIX/sbin:\$$PATH\" ;;"; \
@@ -1150,24 +1087,17 @@ _setup-gitignore:
 _setup-ghostty:
 	@echo "  Ghostty (One Zinc Dark / One Zinc Light themes)..."
 	@mkdir -p $(HOME)/.config/ghostty/themes
+	@# Ghostty reads ~/.config/ghostty/config — its own config path, not the
+	@# macOS Application Support one an earlier setup used to win precedence
+	@# with. If a symlink still points from there into this repo, remove it.
+	@_stale="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config"; \
+	if [ -L "$$_stale" ] && [ "$$(readlink "$$_stale")" = "$(DOTFILES_DIR)/config/ghostty/config.appsupport" ]; then \
+		rm "$$_stale" && echo "    ✓ removed stale config.appsupport symlink"; \
+	fi
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/ghostty/config" \
 		DST="$(HOME)/.config/ghostty/config"
-	@# cmux primary config (path has spaces — inline instead of _link)
-	@_src="$(DOTFILES_DIR)/config/ghostty/config.appsupport"; \
-	_dst="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config"; \
-	if [ -L "$$_dst" ] && [ "$$(readlink "$$_dst")" = "$$_src" ]; then \
-		echo "    · config.appsupport (ok)"; \
-	else \
-		if [ -e "$$_dst" ] && [ ! -L "$$_dst" ]; then \
-			mv "$$_dst" "$$_dst.bak"; \
-			echo "    Backing up $$_dst"; \
-		fi; \
-		mkdir -p "$$(dirname "$$_dst")"; \
-		ln -sfn "$$_src" "$$_dst"; \
-		echo "    ✓ config.appsupport"; \
-	fi
-	@# Themes are COPIED, not symlinked — cmux skips symlinked theme files.
+	@# Themes are COPIED, not symlinked — see the _copy helper's own comment.
 	@# one-zinc-{dark,light} are the active pair; basalt-ui-{dark,light} stay
 	@# installed as the tracked alternative.
 	@$(MAKE) --no-print-directory _copy \
@@ -1359,7 +1289,7 @@ _socket-daemon-healthy-or-fail:
 		echo "    ✗ docker-socket LaunchDaemon failed — check: sudo launchctl print system/com.colima.docker-socket"; \
 	fi
 
-# Copy (not symlink) — for apps like cmux that don't follow symlinks for theme files
+# Copy (not symlink) — Ghostty ignores symlinked theme files
 .PHONY: _copy
 _copy:
 	@if [ -f "$(DST)" ] && cmp -s "$(SRC)" "$(DST)"; then \
@@ -1434,14 +1364,6 @@ status:
 		[ "$$_s" = "Direct" ] \
 			&& echo "    ✓ outputStyle = Direct (active)" \
 			|| echo "    ✗ outputStyle = $$_s [expected Direct — set it in ~/.claude/settings.json]"
-	@echo "  OpenCode"
-	@if command -v opencode >/dev/null 2>&1 || [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
-		echo "    ✓ opencode binary"; \
-	else \
-		echo "    ✗ opencode [not installed — run make setup]"; \
-	fi
-	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/opencode.json"
-	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/AGENTS.md"
 	@echo "  Settings"
 	@if [ -f "$(CLAUDE_DIR)/settings.json" ]; then \
 		echo "    ✓ settings.json (hooks + statusline wired)"; \
@@ -1460,11 +1382,6 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitignore_global"
 	@echo "  Ghostty"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/ghostty/config"
-	@if [ -L "$(HOME)/Library/Application Support/com.mitchellh.ghostty/config" ]; then \
-		echo "    ✓ config.appsupport"; \
-	else \
-		echo "    ✗ config.appsupport [not symlinked — run make setup]"; \
-	fi
 	@# The ACTIVE pair first — status previously verified only the tracked
 	@# alternative, so a missing one-zinc theme (the thing both terminals
 	@# actually render) would have reported clean.
@@ -1480,12 +1397,9 @@ status:
 	@$(MAKE) --no-print-directory _check-copy \
 		SRC="$(DOTFILES_DIR)/config/ghostty/themes/basalt-ui-dark" \
 		DST="$(HOME)/.config/ghostty/themes/basalt-ui-dark"
-	@# Both terminals read the same config; report which of them exist here.
-	@for app in cmux Ghostty; do \
-		[ -d "/Applications/$$app.app" ] \
-			&& echo "    ✓ $$app.app" \
-			|| echo "    · $$app.app [not installed — brew bundle install]"; \
-	done
+	@[ -d "/Applications/Ghostty.app" ] \
+		&& echo "    ✓ Ghostty.app" \
+		|| echo "    · Ghostty.app [not installed — brew bundle install]"
 	@echo "  Skills ($(shell ls $(DOTFILES_DIR)/skills/ | wc -l | xargs) — global)"
 	@for skill in $(DOTFILES_DIR)/skills/*/; do \
 		name=$$(basename "$$skill"); \
@@ -1594,13 +1508,12 @@ status:
 		echo "    ✗ backend marker [missing — run make setup]"; \
 	fi
 	@echo ""
-	@echo "  LaunchAgents"
+	@echo "  Doctor"
 # Non-fatal on purpose: `status` is a report, not a gate, and a findings exit
 # would mask every section after it. Surfaced HERE because a dedicated target
-# nobody knows to run is how two agents accumulated 40,000 failed spawns unseen.
-	@bash $(DOTFILES_DIR)/scripts/launchagents-check.sh 2>&1 | sed 's/^/  /' || true
-	@echo "  Architecture map"
-	@bash $(DOTFILES_DIR)/scripts/architecture-check.sh 2>&1 | sed 's/^/  /' || true
+# nobody knows to run is how two agents once accumulated 40,000 failed spawns
+# unseen.
+	@bash $(DOTFILES_DIR)/scripts/doctor.sh --local 2>&1 | sed 's/^/  /' || true
 	@echo ""
 
 .PHONY: _check
@@ -1615,7 +1528,7 @@ _check:
 		echo "    ✗ $(notdir $(DST)) [missing — run make setup]"; \
 	fi
 
-# Check for copied (not symlinked) files — used for cmux theme files
+# Check for copied (not symlinked) files — used for Ghostty theme files
 .PHONY: _check-copy
 _check-copy:
 	@if [ -f "$(DST)" ] && ! [ -L "$(DST)" ] && cmp -s "$(SRC)" "$(DST)"; then \
@@ -1795,15 +1708,12 @@ brew-dump:
 # Guarded `brew upgrade` — see scripts/brew-upgrade.sh for the full rationale.
 # Blanket-upgrading homebrew/core formulae is NOT the npm-style supply-chain
 # risk (reviewed PRs, Homebrew-CI-built bottles) — the real hazard here is
-# SILENT CONFIG REVERT on exactly two packages: `brew upgrade caddy` drops the
-# xcaddy-built dns.providers.cloudflare module (wildcard cert renewal fails
-# ~60 days later, fix: make caddy-dns-build), and `brew upgrade mosh` moves the
-# binary to a new Cellar path, silently dropping it from the Application
-# Firewall allowlist (fix: make mosh-firewall). `brew pin` is the actual
-# enforcement — it makes a bare, hand-typed `brew upgrade` skip both too, not
-# just this target — this script converges the pins and asserts both
-# invariants afterward. Third-party taps and casks are reported, never
-# auto-upgraded — that's /upgrade-deps' job.
+# SILENT CONFIG REVERT on `caddy`: `brew upgrade caddy` drops the xcaddy-built
+# dns.providers.cloudflare module (wildcard cert renewal fails ~60 days later,
+# fix: make caddy-dns-build). `brew pin` is the actual enforcement — it makes
+# a bare, hand-typed `brew upgrade` skip it too, not just this target — this
+# script converges the pin and asserts the invariant afterward. Third-party
+# taps and casks are reported, never auto-upgraded — that's /upgrade-deps' job.
 brew-upgrade:
 	@bash $(DOTFILES_DIR)/scripts/brew-upgrade.sh
 brew-upgrade-dry:
@@ -1823,146 +1733,11 @@ clean:
 	@bun pm cache rm 2>/dev/null && echo "    ✓ bun cache"
 	@echo ""
 
-# ============================================================================
-# LocalAI — mlx-audio (TTS + STT) on every Mac, bound to 127.0.0.1:8000
-# ----------------------------------------------------------------------------
-# RETIRED 2026-05-25 — superseded by the VPS audio-gateway (~/SourceRoot/
-# audio-gateway, Docker container). No longer run by `make setup`.
-# Targets below are kept intact so the stack can be re-added later by
-# re-listing `_setup-localai` in the setup chain. To tear down a machine that
-# still has it installed, run `make localai-teardown`.
-# ============================================================================
-
 LAUNCHAGENTS  := $(HOME)/Library/LaunchAgents
-LOCALAI_DIR   := $(DOTFILES_DIR)/localai
-MLX_AUDIO_BIN := $(HOME)/.local/bin/mlx_audio.server
-MLX_AUDIO_PY  := $(HOME)/.local/share/uv/tools/mlx-audio/bin/python3
-MLX_SPEECH_BIN := $(HOME)/.local/bin/mlx-speech
-LITELLM_DIR   := $(DOTFILES_DIR)/litellm
-LITELLM_BIN   := $(HOME)/.local/share/uv/tools/litellm/bin/litellm
-# Source dir for _render-plists; overridden per-call for non-localai services.
-PLIST_DIR     ?= $(LOCALAI_DIR)
+# Source dir for _render-plists; every surviving caller overrides this.
+PLIST_DIR     ?= $(DOTFILES_DIR)/scripts
 
-# Install mlx-audio + Python deps + ffmpeg + apply m4a STT patch.
-# Idempotent — skips work that's already done.
-.PHONY: _setup-opencode
-_setup-opencode:
-	@echo "  OpenCode (IU unified-endpoint fallback)..."
-	@if [ -x "$(HOME)/.opencode/bin/opencode" ]; then \
-		echo "    · opencode $$($(HOME)/.opencode/bin/opencode --version 2>/dev/null || echo ok) (ok)"; \
-	else \
-		echo "    Installing OpenCode..."; \
-		curl -fsSL https://opencode.ai/install | bash >/dev/null 2>&1 \
-			&& echo "    ✓ OpenCode installed" \
-			|| echo "    ✗ OpenCode install failed — install manually: https://opencode.ai/docs"; \
-	fi
-	@mkdir -p $(HOME)/.config/opencode
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/opencode/opencode.json" \
-		DST="$(HOME)/.config/opencode/opencode.json"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/opencode/AGENTS.md" \
-		DST="$(HOME)/.config/opencode/AGENTS.md"
-	@# Reuses claude-sdk-* Keychain entries (same op://common/anthropic credential).
-	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
-		echo "    · IU credential (Keychain, shared with Agent SDK) ok"; \
-	else \
-		echo "    ✗ claude-sdk-api-key not in Keychain — run make setup (_setup-sdk-keys)"; \
-	fi
-
-.PHONY: _setup-localai
-_setup-localai:
-	@echo "  LocalAI (mlx-audio TTS + STT on 127.0.0.1:8000)..."
-	@if ! command -v uv >/dev/null 2>&1; then \
-		echo "    ✗ uv not installed — run _setup-tools first"; exit 1; \
-	fi
-	@if [ -x "$(MLX_AUDIO_BIN)" ]; then \
-		echo "    · mlx-audio installed (ok)"; \
-	else \
-		echo "    Installing mlx-audio[all] via uv (~2-5 min)..."; \
-		uv tool install "mlx-audio[all]" >/dev/null 2>&1 || { echo "    ✗ uv tool install failed"; exit 1; }; \
-		echo "    ✓ mlx-audio installed"; \
-	fi
-	@# Pinned dep workarounds — mlx-audio's transitive deps need these specific versions
-	@if "$(MLX_AUDIO_PY)" -c "import setuptools, sys; sys.exit(0 if setuptools.__version__ < '81' else 1)" 2>/dev/null; then \
-		echo "    · setuptools<81 (ok)"; \
-	else \
-		uv pip install --quiet --python "$(MLX_AUDIO_PY)" "setuptools<81" \
-			&& echo "    ✓ setuptools<81 pinned"; \
-	fi
-	@if "$(MLX_AUDIO_PY)" -c "import multipart" 2>/dev/null; then \
-		echo "    · python-multipart (ok)"; \
-	else \
-		uv pip install --quiet --python "$(MLX_AUDIO_PY)" python-multipart \
-			&& echo "    ✓ python-multipart installed"; \
-	fi
-	@if "$(MLX_AUDIO_PY)" -c "import misaki, num2words, phonemizer, en_core_web_sm" 2>/dev/null; then \
-		echo "    · Kokoro deps (ok)"; \
-	else \
-		echo "    Installing Kokoro TTS deps..."; \
-		uv pip install --quiet --python "$(MLX_AUDIO_PY)" "misaki[en]<0.9" num2words phonemizer espeakng_loader spacy \
-			&& uv pip install --quiet --python "$(MLX_AUDIO_PY)" "en-core-web-sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" \
-			&& echo "    ✓ Kokoro deps installed"; \
-	fi
-	@# pysbd — German-aware sentence splitter for the TTS chunker.
-	@# Native regex falls over on "29. April", "9.30 Uhr", "z.B.", "Dr.", "bzw."
-	@if "$(MLX_AUDIO_PY)" -c "import pysbd" 2>/dev/null; then \
-		echo "    · pysbd (ok)"; \
-	else \
-		uv pip install --quiet --python "$(MLX_AUDIO_PY)" pysbd \
-			&& echo "    ✓ pysbd installed"; \
-	fi
-	@# supertonic — ONNX/CPU fallback TTS (~99M, ~900 MB RSS).
-	@# Used by helper /v1/tts/synthesize/fast and as automatic fallback
-	@# when the Fish-S2-Pro primary path times out or errors.
-	@if "$(MLX_AUDIO_PY)" -c "import supertonic" 2>/dev/null; then \
-		echo "    · supertonic (ok)"; \
-	else \
-		uv pip install --quiet --python "$(MLX_AUDIO_PY)" supertonic \
-			&& echo "    ✓ supertonic installed"; \
-	fi
-	@command -v ffmpeg >/dev/null 2>&1 && echo "    · ffmpeg (ok)" || echo "    ✗ ffmpeg [from Brewfile — run: make brew-check]"
-	@# m4a STT patch — required for MacWhisper / Slack voice memos.
-	@# Detect by grepping for a unique post-patch marker (reverse dry-run was unreliable).
-	@PATCH="$(LOCALAI_DIR)/patches/mlx-audio-m4a-stt.patch"; \
-	PATCH_DIR="$(HOME)/.local/share/uv/tools/mlx-audio/lib/python3.12/site-packages"; \
-	SERVER_PY="$$PATCH_DIR/mlx_audio/server.py"; \
-	if [ -f "$$SERVER_PY" ] && grep -q "ffmpeg.*src_path" "$$SERVER_PY" 2>/dev/null; then \
-		echo "    · m4a STT patch (already applied)"; \
-	elif [ -d "$$PATCH_DIR" ] && [ -f "$$PATCH" ]; then \
-		if patch -p1 -d "$$PATCH_DIR" < "$$PATCH" >/dev/null 2>&1; then \
-			echo "    ✓ m4a STT patch applied"; \
-		else \
-			echo "    ✗ m4a STT patch failed — re-apply manually after upgrade"; \
-		fi; \
-	fi
-	@# Fish S2 Pro TTS — separate uv tool venv (mlx-speech needs Python 3.13+)
-	@if [ -x "$(MLX_SPEECH_BIN)" ]; then \
-		echo "    · mlx-speech installed (ok)"; \
-	else \
-		echo "    Installing mlx-speech via uv (~30s, plus 6.7 GB model on first synthesis)..."; \
-		uv tool install mlx-speech --python 3.13 >/dev/null 2>&1 || { echo "    ✗ uv tool install mlx-speech failed"; exit 1; }; \
-		echo "    ✓ mlx-speech installed"; \
-	fi
-	@$(MAKE) --no-print-directory localai-setup
-
-# Universal services (every Mac):
-#   com.localai.audio — mlx-audio :8000 (STT only, Parakeet)
-#   com.localai.fish  — Fish S2 Pro :8002 (TTS, both DE and EN)
-#
-# The Hermes-only `com.localai.helper` plist (FastAPI orchestration on :8001)
-# is rendered by hermes-agent's `make setup` — its template still lives here
-# under `localai/com.localai.helper.plist.template` for colocation with the
-# other localai plists.
-LOCALAI_AUDIO_PLISTS  := com.localai.audio com.localai.fish
-
-# Render universal plists (audio only) and reload changed ones.
-.PHONY: localai-setup
-localai-setup:
-	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="$(LOCALAI_AUDIO_PLISTS)"
-
-# Internal: render any plist list from $(PLIST_DIR) templates (default localai).
+# Internal: render any plist list from $(PLIST_DIR) templates.
 .PHONY: _render-plists
 _render-plists:
 	@for label in $(PLISTS); do \
@@ -1980,106 +1755,6 @@ _render-plists:
 			echo "    · $$label (up to date)"; \
 		fi; \
 	done
-
-# `start`/`stop` cover the Hermes helper too if it's been installed by
-# hermes-agent — that's why we glob the LaunchAgents directory rather than just
-# iterating LOCALAI_AUDIO_PLISTS.
-LOCALAI_ALL_PLISTS := com.localai.audio com.localai.fish com.localai.helper
-
-.PHONY: start
-start:
-	@for label in $(LOCALAI_ALL_PLISTS); do \
-		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
-		[ -f "$$PLIST" ] || continue; \
-		launchctl load "$$PLIST" 2>/dev/null \
-			&& echo "  · $$label started" \
-			|| echo "  · $$label already running"; \
-	done
-
-.PHONY: stop
-stop:
-	@for label in $(LOCALAI_ALL_PLISTS); do \
-		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
-		[ -f "$$PLIST" ] || continue; \
-		launchctl unload "$$PLIST" 2>/dev/null \
-			&& echo "  · $$label stopped" \
-			|| true; \
-	done
-
-# Retire a live install: unload (RunAtLoad+KeepAlive means we must also delete
-# the installed plists or launchd relaunches at next login) and remove the
-# rendered LaunchAgents. Leaves the templates, venvs, models, and uv tools
-# untouched so the stack can be re-added later. Does not uninstall mlx-audio /
-# mlx-speech (cheap to keep; `uv tool uninstall mlx-audio mlx-speech` to reclaim).
-.PHONY: localai-teardown
-localai-teardown:
-	@for label in $(LOCALAI_ALL_PLISTS); do \
-		PLIST="$(LAUNCHAGENTS)/$$label.plist"; \
-		[ -f "$$PLIST" ] || { echo "  · $$label (not installed)"; continue; }; \
-		launchctl unload "$$PLIST" 2>/dev/null || true; \
-		rm -f "$$PLIST"; \
-		echo "  ✓ $$label torn down (unloaded + plist removed)"; \
-	done
-	@echo "  Templates + venvs/models kept. VPS audio-gateway is the replacement."
-
-# ============================================================================
-# LiteLLM — Anthropic↔OpenAI bridge for IU (DeepSeek-V4-Pro etc.), bound to 127.0.0.1:4000
-# ============================================================================
-# Translates `claude -p` Anthropic Messages calls into OpenAI chat/completions
-# against the IU unified endpoint, so worker sessions can run on DeepSeek-V4-Pro
-# with claude-sonnet-4-6-eu failover. Consumed by sideclaw. See
-# docs/deepseek-litellm-bridge.md.
-
-.PHONY: _setup-litellm
-_setup-litellm:
-	@echo "  LiteLLM (Anthropic↔OpenAI bridge on 127.0.0.1:4000)..."
-	@if ! command -v uv >/dev/null 2>&1; then \
-		echo "    ✗ uv not installed — run _setup-tools first"; exit 1; \
-	fi
-	@if [ -x "$(LITELLM_BIN)" ]; then \
-		echo "    · litellm installed (ok)"; \
-	else \
-		echo "    Installing litellm[proxy] via uv (~1-2 min)..."; \
-		uv tool install "litellm[proxy]" >/dev/null 2>&1 || { echo "    ✗ uv tool install failed"; exit 1; }; \
-		echo "    ✓ litellm installed"; \
-	fi
-	@mkdir -p "$(HOME)/.config/litellm"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/litellm/config.yaml" \
-		DST="$(HOME)/.config/litellm/config.yaml"
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/litellm/usage_logger.py" \
-		DST="$(HOME)/.config/litellm/usage_logger.py"
-	@if security find-generic-password -s claude-sdk-api-key -w >/dev/null 2>&1; then \
-		echo "    · IU credential (Keychain, shared with Agent SDK) ok"; \
-	else \
-		echo "    ✗ claude-sdk-api-key not in Keychain — run make setup (_setup-sdk-keys)"; \
-	fi
-	@$(MAKE) --no-print-directory litellm-setup
-
-# Render the litellm plist from its template + reload if changed.
-.PHONY: litellm-setup
-litellm-setup:
-	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="com.litellm.proxy" PLIST_DIR="$(LITELLM_DIR)"
-
-.PHONY: litellm-restart
-litellm-restart:
-	@launchctl kickstart -k gui/$$(id -u)/com.litellm.proxy && echo "  · litellm restarted"
-
-.PHONY: litellm-logs
-litellm-logs:
-	@# BOTH streams: the plist splits stdout/stderr and litellm writes most of
-	@# what you want to read to stderr, so tailing only .log shows a near-empty
-	@# file. Missing paths are filtered out first — `tail -f` on a path that does
-	@# not exist is a hard error, which is exactly how this target broke when the
-	@# logs moved out of /tmp into ~/Library/Logs (see scripts/log-rotate.sh).
-	@set -- $$(ls "$(HOME)/Library/Logs/litellm.log" "$(HOME)/Library/Logs/litellm.err" 2>/dev/null); \
-	if [ "$$#" -eq 0 ]; then \
-		echo "  no litellm logs yet at $(HOME)/Library/Logs/litellm.{log,err}"; \
-	else \
-		tail -f "$$@"; \
-	fi
 
 # ============================================================================
 # usage-tracker — local SQLite token/cost telemetry across all AI tools
@@ -2138,7 +1813,7 @@ tailscale-serve-check:
 
 # Tailnet-wide ACL as code — declared in dotfiles-private/tailscale-acl.jsonc,
 # applied here. Moved out of homelab-private 2026-07-27: the ACL governs Mac↔Mac
-# ssh/mosh/dev-ports, rb, phone and e-reader, none of which is homelab's, and
+# ssh/dev-ports, rb, phone and e-reader, none of which is homelab's, and
 # living there put it on the one machine that CANNOT apply it (the API key is
 # op://Private, refused by the mini's cache by design).
 #
@@ -2715,22 +2390,21 @@ theme:
 	done
 	@# Resolve a ghostty binary rather than trusting PATH. The ghostty CASK ships
 	@# no binary (app bundle + manpages + completions only), so `which ghostty`
-	@# returns cmux's BUNDLED copy — validation would silently stop happening the
-	@# day cmux is uninstalled. Prefer the standalone app, fall back to PATH.
+	@# resolves nothing on a fresh machine. Prefer the standalone app, fall back
+	@# to PATH (e.g. a Homebrew formula install of ghostty).
 	@GB="/Applications/Ghostty.app/Contents/MacOS/ghostty"; \
 	[ -x "$$GB" ] || GB="$$(command -v ghostty 2>/dev/null)"; \
 	if [ -n "$$GB" ] && [ -x "$$GB" ]; then \
 		"$$GB" +validate-config --config-file="$(HOME)/.config/ghostty/config" >/dev/null || exit 1; \
-		"$$GB" +validate-config --config-file="$(HOME)/Library/Application Support/com.mitchellh.ghostty/config" >/dev/null || exit 1; \
 		echo "    ✓ ghostty config valid ($$GB)"; \
 	else \
 		echo "    · no ghostty binary found — config not validated"; \
 	fi
 	@echo ""
-	@echo "  Done. cmux picks up the terminal palette on reload (Cmd+Shift+,)."
+	@echo "  Done. Reload Ghostty to pick up the terminal palette."
 	@echo ""
 
-# Remote-dev readiness heartbeat (herdr + sshd + tailscaled + mosh) pushed to
+# Remote-dev readiness heartbeat (herdr + sshd + tailscaled) pushed to
 # Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this
 # belongs on the dev host (the mini), not on a laptop that is meant to be
 # closed half the day and would just page about itself.
@@ -2768,7 +2442,7 @@ devhost-health-setup:
 	fi
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.devhost-health" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ every 5 min → push herdr/sshd/tailscale/mosh readiness to Uptime Kuma"
+	@echo "    ↳ every 5 min → push herdr/sshd/tailscale readiness to Uptime Kuma"
 devhost-health-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.devhost-health.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -2804,9 +2478,7 @@ human-queue-count:
 # outage cannot page as "dev host down". Drift moves in days, so: daily.
 # ----------------------------------------------------------------------------
 DRIFT_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/drift-push-url
-.PHONY: drift-check drift-check-setup drift-check-teardown
-drift-check:
-	@bash $(DOTFILES_DIR)/scripts/drift-check.sh
+.PHONY: drift-check-setup drift-check-teardown
 
 # ----------------------------------------------------------------------------
 # The applier for the one drift item drift-check cannot clear on its own. Paired
@@ -2819,15 +2491,6 @@ drift-check:
 .PHONY: mini-macos-update
 mini-macos-update:
 	@bash $(DOTFILES_DIR)/scripts/mini-macos-update.sh
-
-# ----------------------------------------------------------------------------
-# One read-only picture of the dev host, from here. Kuma first, because that
-# section is read from homelab over keyless Tailscale SSH and therefore survives
-# both a dead mini and a locked 1Password — which is exactly when you want it.
-# ----------------------------------------------------------------------------
-.PHONY: mini-sweep
-mini-sweep:
-	@bash $(DOTFILES_DIR)/scripts/mini-sweep.sh
 
 drift-check-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
@@ -2971,7 +2634,7 @@ help:
 	@echo "  make brew-check         Verify the machine matches the Brewfile (read-only)"
 	@echo "  make brew-diff          List installed packages not declared in the Brewfile (dry-run)"
 	@echo "  make brew-dump          Regenerate the Brewfile from the machine — then review the git diff"
-	@echo "  make brew-upgrade       Upgrade outdated homebrew/core formulae (skips pinned caddy/mosh + casks + third-party taps, then asserts the invariants)"
+	@echo "  make brew-upgrade       Upgrade outdated homebrew/core formulae (skips pinned caddy + casks + third-party taps, then asserts the invariants)"
 	@echo "  make brew-upgrade-dry   Preview without upgrading"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
@@ -2992,19 +2655,10 @@ help:
 	@echo "  make brain-web-refresh-setup      Load the 5-minute brain-web content refresh (rebuilds dist/ when the vault's HEAD moves)"
 	@echo "  make brain-web-refresh-teardown   Unload + remove the brain-web-refresh LaunchAgent"
 	@echo ""
-	@echo "  LocalAI (mlx-audio/Fish TTS+STT) is RETIRED — replaced by the VPS"
-	@echo "  audio-gateway. make setup no longer installs it; make localai-teardown"
-	@echo "  removes a live localai install."
-	@echo ""
-	@echo "  make litellm-setup    Install + load the LiteLLM bridge LaunchAgent (:4000)"
-	@echo "  make litellm-restart  Restart the LiteLLM bridge"
-	@echo "  make litellm-logs     Tail ~/Library/Logs/litellm.{log,err}"
-	@echo ""
 	@echo "  make secrets-seed           Seed the SOPS+age cache from 1Password (reads dotfiles-private/headless.refs)"
 	@echo "  make secrets-backend-cache  One-time: mark this machine as the headless cache backend (mini only)"
 	@echo "  make secrets-freshness-setup    Load the weekly secrets-cache staleness heartbeat (Mon 09:15)"
 	@echo "  make secrets-freshness-check    Run the staleness check once on demand (for testing)"
-	@echo "  make launchagents-check         Audit this machine's LaunchAgents (orphans, /tmp logs, plaintext creds)"
 	@echo "  make opbackup-setup             Auto-trigger the 1Password vault backup (MacBook; hourly, guarded)"
 	@echo "  make opbackup-check             Run the guard once — prints which precondition stopped it (FORCE=1 to run)"
 	@echo "  make opbackup-teardown          Remove the auto-trigger (stamps kept)"
@@ -3014,7 +2668,7 @@ help:
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
-	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale/mosh heartbeat → Uptime Kuma"
+	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
 	@echo "  make human-queue                MacBook: list the mini's pending present-human requests"
@@ -3042,8 +2696,8 @@ help:
 	@echo "  make tailscale-acl-pull     Fetch live ACL into dotfiles-private (normalises formatting)"
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
-	@echo "  make drift-check            Dev host: report pin/brew/macOS drift (read-only, never upgrades)"
-	@echo "  make mini-sweep             MacBook-only: one read-only picture of the dev host (Kuma + health + drift); works with the mini down"
+	@echo "  make doctor                 Read-only health of this machine (+ the mini when run from the MacBook)"
+	@echo "  make agent-dispatch-smoke   Dispatch a trivial read-only task at dispatch-scratch and assert it returns"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."

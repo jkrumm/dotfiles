@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # IU unified-endpoint validator.
 #
-# Probes every transport, health-checks the models configured in opencode.json,
+# Probes every transport, health-checks the models listed in models.txt,
 # and diffs the live catalog to surface notable models not yet configured.
 # The API key is read from Keychain and never printed.
 #
@@ -20,11 +20,10 @@ HOST="${BASE%/anthropic}"                       # https://<iu-unified-endpoint>
 OPENAI="$HOST/openai/v1"
 ANTHRO="$HOST/anthropic/v1"
 
-# Locate opencode.json
-CFG=""
-for c in "config/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"; do
-  [[ -f "$c" ]] && { CFG="$c"; break; }
-done
+# Locate the tracked model roster (provider/model per line, # comments allowed)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CFG="$SCRIPT_DIR/models.txt"
+[[ -f "$CFG" ]] || CFG=""
 
 CATALOG=$(mktemp)
 curl -sS --max-time 30 "$OPENAI/models" -H "Authorization: Bearer $KEY" -o "$CATALOG" 2>/dev/null
@@ -79,10 +78,11 @@ echo ""
 echo "## CONFIGURED MODELS  (status · residency · latency · backends)"
 echo "   residency: EU = EU region/GDPR gateway · US = US region · ? = backend region not exposed (e.g. Nebius)"
 if [[ -z "$CFG" ]]; then
-  echo "  (opencode.json not found — skipping)"
+  echo "  (models.txt not found — skipping)"
 else
-  # emit "provider<TAB>modelid" per configured model
-  jq -r '.provider | to_entries[] | .key as $p | .value.models | keys[] | "\($p)\t\(.)"' "$CFG" 2>/dev/null |
+  # emit "provider<TAB>modelid" per configured model, split on the FIRST slash
+  # (the model id itself may contain further slashes, e.g. a Qwen HF-style path)
+  grep -vE '^\s*(#|$)' "$CFG" | sed -E 's#^([^/]+)/(.+)$#\1\t\2#' |
   while IFS=$'\t' read -r prov model; do
     if [[ "$prov" == *anthropic* ]]; then
       url="$ANTHRO/messages"; auth=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01")
@@ -114,7 +114,7 @@ fi
 echo ""
 echo "## NOTABLE CHAT MODELS IN CATALOG  ([cfg]=configured, [NEW]=available, not configured)"
 if [[ $catalog_ok -eq 1 ]]; then
-  configured=$(jq -r '.provider[].models | keys[]' "$CFG" 2>/dev/null | sort -u)
+  configured=$(grep -vE '^\s*(#|$)' "$CFG" 2>/dev/null | sed -E 's#^[^/]+/##' | sort -u)
   NOTABLE='claude-(opus|sonnet|haiku)-4|^gpt-5|gemini-3|gemini-2\.5-pro|Kimi|^GLM-[0-9]|MiniMax-M|Qwen3.*(Coder|397B|235B|Thinking)|DeepSeek-V|mistral-large|codestral|devstral|magistral|Hermes-[0-9]|^sonar'
   EXCLUDE='embed|tts|image|audio|realtime|transcribe|moderation|search-preview|dall-e|whisper|ocr|voxtral|robotics|computer-use|-live|native-audio|customtools'
   jq -r '.data[] | "\(.id)\t\(.owned_by // "")"' "$CATALOG" 2>/dev/null |

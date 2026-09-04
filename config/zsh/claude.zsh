@@ -4,7 +4,7 @@
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
 #        cf [claude-args...]   — Max subscription, defaults to Fable model
 #        ca [model] [claude-args...]
-#                              — IU unified endpoint (NOT the LiteLLM bridge).
+#                              — IU unified endpoint, native Anthropic transport.
 #                                No model  → claude-sonnet-5[1m], as before.
 #                                claude-*  → that Claude model, [1m] auto-appended.
 #                                anything else → treated as a gateway model id
@@ -110,9 +110,9 @@ cs() {
 # `ca --model claude-opus-4-8` also works for any model the IU Anthropic endpoint
 # serves (run /iu-endpoint for the live catalog).
 #
-# Full Anthropic protocol fidelity — no LiteLLM translation tax. Prompt caching
-# works (first turn builds the cache, subsequent turns read at ~10% cost), tool
-# use is native, WebSearch/WebFetch work, and tier differentiation is real.
+# Full Anthropic protocol fidelity. Prompt caching works (first turn builds
+# the cache, subsequent turns read at ~10% cost), tool use is native,
+# WebSearch/WebFetch work, and tier differentiation is real.
 #
 # Default effort: high (matches --model, overridable with `ca --effort xhigh`).
 # Effort is a plain request parameter (`claude --help` lists --effort), not
@@ -139,11 +139,9 @@ cs() {
 # be ANTHROPIC_AUTH_TOKEN. Env auth takes precedence over the cached claude.ai
 # OAuth login for this process only — `c` and `ca` don't fight each other.
 #
-# IU creds are read from the macOS Keychain (same as claude_iu / opencode).
-# The LiteLLM bridge is NOT used here — it's only for sideclaw workers
-# (claude_bridge / mcp__sideclaw__*). ToolSearch stays on (ENABLE_TOOL_SEARCH)
-# because the IU endpoint isn't api.anthropic.com and ToolSearch is off by
-# default on non-first-party hosts.
+# IU creds are read from the macOS Keychain (same entries `claude_iu` uses).
+# ToolSearch stays on (ENABLE_TOOL_SEARCH) because the IU endpoint isn't
+# api.anthropic.com and ToolSearch is off by default on non-first-party hosts.
 #
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
@@ -298,22 +296,21 @@ ca() {
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
 
-# ── Off-Max `claude -p` transports ────────────────────────────────────────────
+# ── Off-Max `claude -p` transport ─────────────────────────────────────────────
 #
-# Two helpers so subprocess skills (otel, analyze, read-drawing, ralph cleanup)
-# don't copy-paste the IU credential plumbing. Both run `claude -p` off the Max
+# So subprocess skills (otel, analyze, read-drawing, ralph cleanup) don't
+# copy-paste the IU credential plumbing. Runs `claude -p` off the Max
 # subscription — billing is IU per-token, not Max quota. Pass any `claude -p`
 # flags + a prompt (positional or via stdin), e.g.
 #
-#   claude_iu     --model haiku --dangerously-skip-permissions < prompt.txt
-#   claude_bridge --model DeepSeek-V4-Pro --dangerously-skip-permissions < prompt.txt
+#   claude_iu --model haiku --dangerously-skip-permissions < prompt.txt
 #
 # ANTHROPIC_API_KEY is stripped: claude v2.x rejects it ("Not logged in") and it
 # would shadow ANTHROPIC_AUTH_TOKEN.
 
 # IU unified endpoint, native Anthropic transport. Best Claude fidelity; NOT
-# EU-residency-guaranteed (native routing can land in the US — use claude_bridge
-# for GDPR-bound data). Creds from the same Keychain entries `make setup` caches.
+# EU-residency-guaranteed (native routing can land in the US). Creds from the
+# same Keychain entries `make setup` caches.
 claude_iu() {
   local key base
   key=$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null)
@@ -326,32 +323,4 @@ claude_iu() {
     ANTHROPIC_AUTH_TOKEN="$key" \
     ANTHROPIC_BASE_URL="$base" \
     claude -p "$@"
-}
-
-# Local LiteLLM bridge (LaunchAgent on :4000) → DeepSeek-V4-Pro (EU/GDPR, Azure Spain),
-# with native failover to claude-sonnet-4-6-eu. Defaults --model to DeepSeek-V4-Pro if
-# the caller omits it (the bridge 404s on an unmapped model name). Pass
-# --model DeepSeek-V4-Flash for the fast/cheap tier. The bridge derives its own IU
-# creds; the token here is a dummy claude v2.x requires. Constraint: no
-# WebSearch/WebFetch (they make internal Anthropic calls the bridge can't serve).
-# See dotfiles/docs/deepseek-litellm-bridge.md.
-claude_bridge() {
-  local url="${LITELLM_BRIDGE_URL:-http://127.0.0.1:4000}"
-  if ! curl -fsS -m 3 "${url}/health/liveliness" >/dev/null 2>&1; then
-    print -ru2 "claude_bridge: LiteLLM bridge unreachable at ${url} — run 'make litellm-restart' in dotfiles"
-    return 1
-  fi
-  local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model DeepSeek-V4-Pro "${args[@]}")
-  # Pin subagent/background tiers to bridge-known names (see `ca` above) so any
-  # -p flow that spawns a subagent can't fall back to an unmapped claude-* default.
-  env -u ANTHROPIC_API_KEY \
-    ANTHROPIC_AUTH_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}" \
-    ANTHROPIC_BASE_URL="$url" \
-    ANTHROPIC_DEFAULT_OPUS_MODEL=DeepSeek-V4-Pro \
-    ANTHROPIC_DEFAULT_SONNET_MODEL=DeepSeek-V4-Pro \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL=DeepSeek-V4-Flash \
-    ANTHROPIC_DEFAULT_FABLE_MODEL=DeepSeek-V4-Pro \
-    CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1 \
-    claude -p "${args[@]}"
 }

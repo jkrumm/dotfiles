@@ -112,7 +112,7 @@ exec ssh -N -T \
 #   *something else* on that port. Fail, let launchd retry, surface it in the log.
 #
 #   ControlMaster=no + ControlPath=none — ~/.ssh/config sets `ControlMaster auto`
-#   for mini so herdr/cmux share one connection. A long-lived tunnel must NOT
+#   for mini so herdr's several connections share one handshake. A long-lived tunnel must NOT
 #   ride that shared socket: when the last interactive session exits and
 #   ControlPersist expires, the master tears down and takes every forward with
 #   it. This agent owns its own connection.

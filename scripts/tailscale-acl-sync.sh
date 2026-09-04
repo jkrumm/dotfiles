@@ -2,7 +2,7 @@
 # Tailscale ACL sync — manages the tailnet-wide ACL as code.
 #
 # Moved here from homelab-private 2026-07-27. The ACL is tailnet-wide, not
-# homelab's: it governs Mac↔Mac ssh/screen-sharing, mosh, the dev-port block,
+# homelab's: it governs Mac↔Mac ssh/screen-sharing, the dev-port block,
 # rb, the phone and the e-reader. Living in homelab-private made it invisible
 # from the machine that can actually apply it — the API key is
 # `op://Private/Tailscale`, which the mini's cache refuses by design, so an

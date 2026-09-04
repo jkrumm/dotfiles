@@ -38,15 +38,6 @@ set -euo pipefail
 #   from `make setup`) plus assertion — here on the upgrade path, and every 300s
 #   in devhost-health-check.sh's probe_colima. Fix: `make _colima-supervise`.
 #
-#   mosh — the macOS Application Firewall stores mosh-server's RESOLVED path
-#   (`readlink -f`), which points into a version-stamped Cellar directory.
-#   `brew upgrade mosh` moves the binary to a new Cellar path, so the ALF
-#   entry silently stops matching. ssh still handshakes fine (that path is
-#   unaffected), so mosh LOOKS like it connected — the client just times out
-#   waiting for the first UDP datagram, which reads exactly like a missing
-#   Tailscale ACL grant and sends the diagnosis the wrong way entirely. Fix:
-#   `make mosh-firewall`.
-#
 # `brew pin` IS THE ENFORCEMENT — this script's own HELD list is a convenience
 # for reporting, not the actual guard. `brew upgrade` (with no arguments,
 # typed by hand, on a machine six months from now) skips every pinned formula
@@ -66,21 +57,21 @@ set -euo pipefail
 # cooldown argument in dependency-hygiene.md actually applies. Also left to
 # `/upgrade-deps`, never auto-upgraded here.
 #
-# BE HONEST ABOUT WHAT THAT LAST PARAGRAPH BUYS: unlike the caddy/mosh guard,
-# it is NOT enforced. A bare `brew upgrade` upgrades casks too (verified — it
-# even volunteers "Homebrew will now attempt to upgrade casks with
+# BE HONEST ABOUT WHAT THAT LAST PARAGRAPH BUYS: unlike the caddy guard, it is
+# NOT enforced. A bare `brew upgrade` upgrades casks too (verified — it even
+# volunteers "Homebrew will now attempt to upgrade casks with
 # `auto_updates true`"), and casks are deliberately NOT pinned here. So the
 # cask cooldown holds only on THIS path, not machine-wide. That asymmetry is a
 # choice, not an oversight: pinning every cask would mean hand-maintaining a
 # list that silently stops receiving security updates, which is a worse trade
 # than a soft preference honoured by the command you normally reach for. The
-# two pinned formulae are pinned because their failure mode is silent config
-# revert, which no amount of care at the keyboard can catch afterward.
+# pinned formula is pinned because its failure mode is silent config revert,
+# which no amount of care at the keyboard can catch afterward.
 #
 # --pins-only exists for `make setup`/`_setup-packages`: a fresh machine needs
-# caddy/mosh pinned from the very first `brew bundle install` — otherwise the
-# very first bare `brew upgrade` anyone runs reverts the caddy DNS module
-# before `make caddy-dns-build` has ever been run once.
+# caddy pinned from the very first `brew bundle install` — otherwise the very
+# first bare `brew upgrade` anyone runs reverts the caddy DNS module before
+# `make caddy-dns-build` has ever been run once.
 #
 # Idioms carried over from scripts/devhost-health-check.sh and
 # scripts/caddy-tailnet.sh, both learned the hard way there:
@@ -95,14 +86,13 @@ set -euo pipefail
 
 # The declared hold list. `brew pin` is what actually protects these (see
 # above) — this array only drives what this script reports and asserts.
-HELD=(caddy mosh)
+HELD=(caddy)
 
 # Which `make` target repairs a held package after a deliberate manual
 # upgrade (`brew unpin X && brew upgrade X && make <this> && brew pin X`).
 fixup_for() {
   case "$1" in
     caddy) printf '%s' "caddy-dns-build" ;;
-    mosh) printf '%s' "mosh-firewall" ;;
     *) printf '%s' "" ;;
   esac
 }
@@ -140,7 +130,7 @@ if (( ! PINS_ONLY )); then
 fi
 
 # --- converge pins (idempotent) ----------------------------------------------
-echo "  Pins (caddy/mosh — silent-config-revert guards, see header)..."
+echo "  Pins (caddy — silent-config-revert guard, see header)..."
 pinned_raw=$(brew list --pinned 2>/dev/null) || true
 
 for f in "${HELD[@]}"; do
@@ -259,11 +249,11 @@ else
 fi
 
 # --- post-assertions — assert, don't assume the hold list protected anything -
-# A dependency upgrade can relink a dependent, so verify the two fragile
-# invariants directly rather than trusting that caddy/mosh were merely
-# skipped. Both are dev-host-only concerns (the mini is the only machine
-# running the tailnet Caddyfile include and the only one moshed INTO), gated
-# the same way `caddy-dns-build` gates itself: on the secrets backend marker.
+# A dependency upgrade can relink a dependent, so verify the fragile
+# invariant directly rather than trusting that caddy was merely skipped. This
+# is a dev-host-only concern (the mini is the only machine running the
+# tailnet Caddyfile include), gated the same way `caddy-dns-build` gates
+# itself: on the secrets backend marker.
 assertion_failed=0
 BACKEND=$(tr -d '[:space:]' < "$HOME/.config/secrets/backend" 2>/dev/null || echo "")
 if [[ "$BACKEND" == "cache" ]]; then
@@ -274,22 +264,12 @@ if [[ "$BACKEND" == "cache" ]]; then
     echo "  ✗ caddy: dns.providers.cloudflare missing (fix: make caddy-dns-build)"
     assertion_failed=1
   fi
-
-  mosh_bin="$(brew --prefix)/bin/mosh-server"
-  real=$(readlink -f "$mosh_bin" 2>/dev/null || echo "$mosh_bin")
-  apps=$(/usr/libexec/ApplicationFirewall/socketfilterfw --listapps 2>/dev/null) || true
-  if grep -qF "$real" <<<"$apps"; then
-    echo "  ✓ mosh-server still allowed through the Application Firewall"
-  else
-    echo "  ✗ mosh-server not in the Application Firewall allowlist (fix: make mosh-firewall)"
-    assertion_failed=1
-  fi
 else
-  echo "  · not the dev host (backend=${BACKEND:-unset}) — skipping caddy/mosh assertions"
+  echo "  · not the dev host (backend=${BACKEND:-unset}) — skipping caddy assertion"
 fi
 
 # colima is asserted on BOTH machines, gated on its own plist rather than the
-# backend marker — unlike caddy/mosh there is no dev-host asymmetry here.
+# backend marker — unlike caddy there is no dev-host asymmetry here.
 # `_setup-colima` converges the supervised boot path wherever colima is
 # installed, so wherever the plist exists the invariant is supposed to hold. A
 # machine that never registered the brew service simply has nothing to check.

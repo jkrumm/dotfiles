@@ -60,15 +60,9 @@ fi
 #
 # ── Misc ─────────────────────────────────────────────────────────────────────
 # sz                 reload ~/.zshrc
-#
-# ── Modules (config/zsh/*.zsh → ~/.zsh/conf.d/) ──────────────────────────────
-# path.zsh · secrets.zsh · tools.zsh · keybindings.zsh
-# aliases.zsh · claude.zsh · opencode.zsh · git.zsh · ai.zsh
 
 for f in ~/.zsh/conf.d/*.zsh(N); do source "$f"; done
 
 
 # bun completions
-[ -s "/Users/jkrumm/.bun/_bun" ] && source "/Users/jkrumm/.bun/_bun"
-
-# opencode PATH + IU env injection lives in conf.d/opencode.zsh
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"

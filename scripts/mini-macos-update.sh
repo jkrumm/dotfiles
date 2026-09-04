@@ -163,4 +163,4 @@ fi
 
 echo ""
 echo "  ✓ $HOST: macOS $before → $after"
-echo "    next: make devhost-health-check && make drift-check   (on $HOST)"
+echo "    next: make doctor   (on $HOST)"

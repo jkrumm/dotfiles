@@ -58,7 +58,8 @@ the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op:/
   If a human is demonstrably present right now, the `!` prefix (in a Claude session) or running it
   directly on the MacBook also works. Either way, first verify `dotfiles-private` on the MacBook is
   current — `ssh iumac 'cd ~/SourceRoot/dotfiles-private && git status'` — since a ref added on the
-  mini and left unpushed is silently omitted from the seed (`docs/mini-headless-checklist.md:143-157`).
+  mini and left unpushed is silently omitted from the seed. Full model: the "Headless secrets" section
+  of `dotfiles/config/global.CLAUDE.md` and `dotfiles-private/docs/runbook.md`.
 - **`make secrets-test`** (mini-only) / **`make secrets-lint`** (anywhere) validate the shim.
 - **`make secrets-freshness-check`** pushes the Uptime Kuma staleness heartbeat `up` — run after a reseed.
 

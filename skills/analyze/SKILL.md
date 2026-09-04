@@ -124,12 +124,13 @@ Prioritize actionable findings. Skip sections with zero issues. If all clean, sa
 
 SCOPE: [SCOPE]
 PROMPT_END
-claude_bridge --model DeepSeek-V4-Flash --dangerously-skip-permissions < "$TMPFILE"
+zsh -ic 'claude_iu --model claude-haiku-4-5 --dangerously-skip-permissions' < "$TMPFILE"
 rm -f "$TMPFILE"
 ```
 
-`claude_bridge` (from `~/.zsh/conf.d/claude.zsh`) runs `claude -p` through the local
-LiteLLM bridge to DeepSeek-V4-Flash (the fast tier, EU/GDPR on Azure Spain) off Max
-quota (IU per-token). The bridge needs no web access — analysis is pure `npx fallow`
-+ Bash — so the no-WebSearch/WebFetch constraint doesn't bite. If the bridge is down
-it errors with a `make litellm-restart` hint; do not fall back to inline execution.
+`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) is a zsh function, not a binary on
+PATH — invoke it via `zsh -ic '…'` so it loads from an interactive shell. It runs
+`claude -p` against the IU unified endpoint's native Anthropic transport (Keychain
+creds, off Max quota, billed IU per-token). Analysis is pure `npx fallow` + Bash,
+so the no-WebSearch/WebFetch constraint doesn't bite. If the Keychain lookup fails
+it errors with a `make setup` hint; do not fall back to inline execution.

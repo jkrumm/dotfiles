@@ -1,137 +1,59 @@
 # dotfiles
 
-Version-controlled source of truth for Johannes's local Claude Code setup.
-Config files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
-`~/.claude/` hooks/scripts/skills/rules all point into this repo.
+Source of truth for Johannes's Claude Code setup and machine bootstrap. Config
+files live here and are symlinked outward — `~/.zshrc`, `~/.gitconfig`,
+`~/.claude/` hooks/scripts/skills/rules all point into this repo. Edit at
+either end; git always sees the change here.
 
-## Strategy
+## Two machines
 
-**Token-efficient, model-routed Claude Code setup** optimized for a solo senior developer hitting daily 5h subscription windows.
-
-### Architecture Principles
-
-| Principle | Implementation |
-|-|-|
-| Lean context | CLAUDE.md files <150 lines each, conventions in `.claude/rules/` |
-| Model routing | Opus for strategy, Sonnet for implementation, Haiku for all delegation |
-| Fresh over fork | Haiku subagents with fresh context, not conversation forks |
-| Deferred MCPs only | Chrome DevTools, sideclaw, and research-gateway MCPs registered but deferred — names only, schemas on demand |
-| API offloading | `claude -p` with Keychain-cached API key for expensive repetitive tasks |
-| Rules > CLAUDE.md | Focused `.claude/rules/*.md` files (96% adherence vs 92% for monolithic CLAUDE.md) |
-
-### Token Budget per Session
-
-| Layer | Tokens | Content |
-|-|-|-|
-| Global CLAUDE.md | ~2,000 | Personal context, workspaces (SourceRoot + IuRoot + Obsidian), 1P routing, skills, workflow |
-| Global rules (8 files) | ~1,400 | Attribution, commits, TS, code style, security, formatting, research, docker-makefile |
-| Chrome DevTools (deferred) | ~400 | Tool names only — schemas loaded on demand |
-| **Total baseline** | **~3,800** | Single CLAUDE.md (no workspace-level intermediate layer) |
-
-### Model Routing
-
-| Model | Use | Skills |
-|-|-|-|
-| Opus | Strategy, planning, PRD, architecture | `/grill`, main conversation |
-| Sonnet | Implementation, complex code changes | `/ralph`, `/implement` |
-| Sonnet | Reasoning-heavy subprocesses | `/review` |
-| IU (off Max) | Agentic research | `/research` → research-gateway MCP (hosted on the VPS) |
-| Haiku | Mechanical subprocesses + orchestration | `/check`, `/analyze`, `/otel`, `/read-drawing` (subprocess, API) + `/browse` (fork) + `/commit`, `/pr`, `/ship`, `/secrets`, `/git-cleanup` (main) |
-
-### Workflow
-
-```text
-Idea → /grill → PRD → /ralph or /implement → /ship
-                                                ↓
-                                 check → review → commit → PR
-                                 → CodeRabbit iteration → merge → release
-```
-
-Small tasks (infra, config): implement → `/ship` (auto-detects direct-to-master).
-
-## Structure
-
-```text
-dotfiles/
-├── config/          global.CLAUDE.md, zshrc, zsh modules, gitconfig, ghostty,
-│                    Caddyfile, settings.template.json
-├── rules/           8 global rules (→ ~/.claude/rules/)
-├── hooks/           notify.ts (all 4 events), protect-branches.ts, docker-makefile.ts
-├── scripts/         statusline.sh, fetch_usage.py, github-config.sh, wakeup.sh
-├── skills/          21 global Claude Code skills (→ ~/.claude/skills/)
-├── .claude/skills/  Per-repo skills (e.g. /iu-endpoint)
-├── localai/         RETIRED mlx-audio + Fish-S2-Pro TTS/STT stack (→ VPS audio-gateway)
-└── Makefile         Bootstrap + idempotent setup
-```
+The Mac mini is the always-on dev host — agents run there and outlive any
+client. The MacBook is a thin client: `desk` attaches to the mini's herdr
+session over ssh, `rd`/`agent-dispatch` put work on the mini with no terminal
+needed at all. Full model, including the reverse `mini → iumac` leg and the
+secrets/access split between the two: `docs/architecture.md`.
 
 ## Bootstrap
 
 ```bash
 git clone git@github.com:jkrumm/dotfiles.git ~/SourceRoot/dotfiles
 cd ~/SourceRoot/dotfiles
-make setup        # idempotent — safe to re-run after any change
+make setup              # idempotent — safe to re-run after any change
 coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 ```
 
-`make setup` handles: symlinks, Homebrew tools, 1Password auth, API key caching (Anthropic SDK → Keychain), Chrome DevTools + research-gateway MCP registration, settings.json merge.
+`make setup` handles: symlinks, Homebrew tools (from `Brewfile`), 1Password
+auth, Keychain API-key caching, MCP registration, `settings.json` merge.
 
-## Symlink Map
+## Everyday commands
 
-| dotfiles | Live path |
+| Command | Does |
 |-|-|
-| `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| `rules/` | `~/.claude/rules/` |
-| `skills/{name}/` | `~/.claude/skills/{name}/` |
-| `config/zshrc` | `~/.zshrc` |
-| `config/zsh/` | `~/.zsh/conf.d/` |
-| `config/gitconfig*` | `~/.gitconfig*` |
-| `config/gitignore_global` | `~/.gitignore_global` |
-| `config/ghostty/` | `~/.config/ghostty/` |
-| `hooks/notify.ts` | `~/.claude/hooks/notify.ts` |
-| `hooks/protect-branches.ts` | `~/.claude/hooks/protect-branches.ts` |
-| `hooks/docker-makefile.ts` | `~/.claude/hooks/docker-makefile.ts` |
-| `scripts/statusline.sh` | `~/.claude/statusline.sh` |
-| `scripts/fetch_usage.py` | `~/.claude/fetch_usage.py` |
+| `make setup` | Converge this machine onto the tracked config. Idempotent. |
+| `make status` | Read-only snapshot of this machine's state. |
+| `make doctor` | Read-only health check — self-routes: on the MacBook it also runs the mini's doctor over ssh. |
+| `make theme` | Apply the terminal/herdr/prompt theme and reload live. |
 
-**Not symlinked:** `~/.claude/settings.json` (machine-specific permissions — jq-merged from template).
+Machine-specific setup (remote access, battery limiter, backups, etc.) is
+opt-in per target — see `CLAUDE.md` for the full list.
 
-## Skills
+## Layout
 
-**21 global skills** at `~/.claude/skills/` — load everywhere (SourceRoot, IuRoot, anywhere). Source of truth: `skills/{name}/SKILL.md` in this repo.
+```text
+dotfiles/
+├── config/          global.CLAUDE.md, zshrc, zsh modules, gitconfig, ghostty, Caddyfile
+├── scripts/         setup/health/maintenance scripts invoked by Makefile targets
+├── skills/          Global Claude Code skills (→ ~/.claude/skills/)
+├── .claude/skills/  Per-repo skills, committed here (e.g. iu-endpoint)
+├── rules/           Global rules (→ ~/.claude/rules/)
+├── agents/          Global subagents (→ ~/.claude/agents/), e.g. @implementer
+├── hooks/           SessionStart/PreToolUse hooks (→ ~/.claude/hooks/)
+├── docs/            Architecture, remote-dev, homebrew, theme, devhost-health
+└── Makefile         Bootstrap + every idempotent setup/maintenance target
+```
 
-Execution modes (full table with mode + worker model in `config/global.CLAUDE.md`):
+## Full reference
 
-| Mode | Examples | Cost profile |
-|-|-|-|
-| **inline** | `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `grill`, `implement`, `frontend-design`, `skill-creator`, `upgrade-deps`, `excalidraw-diagram`, `cloudflare`, `ralph` (sonnet) | Runs on session model — no model switch, no fork |
-| **subprocess** (`claude -p`) | `analyze`, `otel`, `read-drawing` | API credits via Keychain, output isolated |
-| **MCP (sideclaw)** | `check`, `review` | Schema-validated JSON, off Max (DeepSeek) |
-| **MCP (research-gateway)** | `research` | Hosted VPS service (blocking call), IU models off Max |
-| **fork** (`context: fork`) | `browse` | Wraps the chrome-devtools MCP — Max quota |
-
-**Per-repo skills** (committed in their repo's `.claude/skills/`, auto-load when Claude starts inside):
-- `dotfiles/.claude/skills/localai/` — **retired** (mlx-audio + Fish-S2-Pro stack, replaced by the VPS audio-gateway); `dotfiles/.claude/skills/iu-endpoint/` — validate the IU endpoint + discover models
-- `hermes-agent/.claude/skills/{hermes-update,hermes-validate}/` — manage Hermes
-- Project-committed skills in other SourceRoot repos (release-fpp, audit, docs, prowlarr, raycast-extension, etc.)
-
-## API Keys (Keychain-cached)
-
-| Key | Source | Purpose |
-|-|-|-|
-| `claude-sdk-api-key` | `op://common/anthropic/API_KEY` | API offloading via `claude -p` |
-| `claude-sdk-base-url` | `op://common/anthropic/BASE_URL` | Custom API endpoint |
-
-## Key Tooling
-
-| Tool | Purpose |
-|-|-|
-| **notify.ts** | All 4 Claude Code events: timing, notifications, session end |
-| **statusline.sh** | Model/context/tokens/duration, cwd/branch |
-| **coderabbit** | Local code review CLI (free: 3 reviews/hr) |
-| **wtp** | Git worktree management with post-create hooks |
-
-## Per-Repo AI Files (globally gitignored)
-
-| File | Purpose |
-|-|-|
-| `sc-note.md` | Session notes — surfaced by the sideclaw dashboard |
+`CLAUDE.md` is the source of truth for everything else: workspaces, machine
+reach, secrets strategy, and skill routing. Loaded automatically in every
+Claude Code session; read it directly for anything this file doesn't cover.

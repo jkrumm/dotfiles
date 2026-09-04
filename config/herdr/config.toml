@@ -6,10 +6,9 @@
 # runtime state and must not be tracked.
 #
 # It has to be identical on both because the config is read wherever the herdr
-# process that renders is running, and that differs per entry path:
-#   dev  (mosh)           → herdr runs ON THE MINI, renders there, streams over UDP
-#   desk (herdr --remote) → the client runs on the MacBook and handles keys
-#                           locally (--remote-keybindings defaults to `local`)
+# process that renders is running: with `desk` (herdr --remote) that's the
+# client on the MacBook, which handles keys locally (--remote-keybindings
+# defaults to `local`); worked at directly, it's a local session on the mini.
 #
 # Deliberately near-stock: a [theme] block and one colour override. Everything
 # herdr already defaults to is left out rather than restated.
@@ -80,31 +79,20 @@ name = "one-dark"
 # volunteer `CSI ?997;1n` (dark) / `;2n` (light). Debugging this means asking
 # whether that report arrives, not what the background colour is.
 #
-# WHICH MEANS THE ENTRY PATH DECIDES, because the two paths render in different
-# places and only one has a terminal in front of it:
+# WHICH MEANS THE ENTRY PATH DECIDES, because the chrome renders on the mini
+# and only `desk` has a real terminal in front of it: the client reads the
+# report straight from Ghostty and FORWARDS IT AS RAW BYTES — on unix the
+# client sends `ClientMessage::Input { data }` and the SERVER parses it
+# (`InputEvents`, the structured path that drops HostColorSchemeChanged, is
+# for Windows clients only). So the theme follows the Mac even though the
+# chrome is rendered on the mini. Ghostty does volunteer the report — it is
+# libghostty, and carries ghostty_surface_set_color_scheme plus an inline
+# color_scheme_report path.
 #
-#   desk (herdr --remote) → the client reads the report straight from cmux and
-#                           FORWARDS IT AS RAW BYTES: on unix the client sends
-#                           `ClientMessage::Input { data }` and the SERVER
-#                           parses it (`InputEvents`, the structured path that
-#                           drops HostColorSchemeChanged, is for Windows
-#                           clients only). So the theme follows the Mac even
-#                           though the chrome is rendered on the mini. cmux
-#                           does volunteer the report — it is libghostty, and
-#                           carries ghostty_surface_set_color_scheme plus an
-#                           inline color_scheme_report path.
-#   dev  (mosh)           → client renders ON THE MINI. The enable has to cross
-#                           mosh to Ghostty and the report has to come back, and
-#                           mosh is a state-synchronizing emulator with its own
-#                           terminal model rather than a byte tunnel. Presumed
-#                           swallowed — not measured, since it cannot be
-#                           reproduced from the mini alone.
-#
-# So `name` below is the no-report fallback, and there is no value that is right:
-# the MacBook auto-switches with the time of day, and the mini is headless (every
-# mosh session originates from the MacBook anyway, so its own appearance never
-# matters). Dark is kept as the coin-flip. The actual fix for a light-mode
-# MacBook is to come in via `desk`, where the probe is not proxied at all.
+# So `name` below is the no-report fallback for a local session directly at
+# the headless mini, where its own appearance never matters. Dark is kept as
+# the coin-flip. A light-mode MacBook always gets the right theme via `desk`,
+# where the probe is not proxied at all.
 #
 # Both themes behave the same way (see the table above) — an earlier note here
 # claimed one-light painted its own sidebar and so needed no care. It does not;
@@ -255,8 +243,7 @@ rows = [["state_icon", "workspace", "tab"]]
 # remapper emits real flags, Karabiner included. So `hyper+X` passes
 # `config check` and never fires.
 #
-# WHY THIS IS THE `desk` PATH ONLY, and why the prefix stays. Measured in a pty,
-# not assumed:
+# WHY BOTH FORMS ARE BOUND. Measured in a pty, not assumed:
 #
 #   herdr pushes `CSI > 7 u` on startup — the Kitty keyboard protocol, flags
 #   1+2+4 (disambiguate escape codes, report event types, report alternate
@@ -264,23 +251,16 @@ rows = [["state_icon", "workspace", "tab"]]
 #   herdr's own docs claim it does not implement the protocol. The capture says
 #   otherwise; believe the capture.
 #
-#   mosh SWALLOWS that push (captured client-side with a passing visible-text
-#   control, so the zero is real and not a broken harness). Same mechanism, and
-#   now the same measurement, as the DEC 2031 theme probe in the [theme] block
-#   above — mosh is a state-synchronising emulator, not a byte tunnel, so any
-#   capability negotiated by escape sequence never reaches Ghostty.
-#
-# So the rule is NOT "desk only" — it is "anything except mosh". Hyper works
-# wherever the keys are handled by a client talking straight to Ghostty:
-# `desk` (herdr --remote, client on the MacBook), and equally sitting at the
-# mini headful, which is actually the cleanest case of all since there is no
-# transport in the path at all. Only `dev` (mosh) falls back to the prefix,
-# which is fine — mosh is the travel path.
+# Hyper works wherever the keys are handled by a client talking straight to
+# Ghostty: `desk` (herdr --remote, client on the MacBook), and equally sitting
+# at the mini headful, which is actually the cleanest case of all since there
+# is no transport in the path at all — both remaining entry paths carry the
+# Kitty protocol push through untouched. The prefix binding stays anyway as
+# muscle memory and a fallback for any future entry path that doesn't.
 #
 # `ctrl+alt+X` (no shift) was the other candidate and is deliberately NOT bound
-# as a third alias. It is genuinely free and it does survive mosh — but the
-# prefix already covers the mosh path, so it would add a third way to do
-# everything and buy nothing.
+# as a third alias — it would just add a third way to do everything and buy
+# nothing over the prefix.
 
 # Panes — the biggest daily win: no prefix dance to move between claude, notes
 # and a terminal in the same workspace.

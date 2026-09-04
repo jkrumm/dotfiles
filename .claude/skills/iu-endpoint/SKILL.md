@@ -1,6 +1,6 @@
 ---
 name: iu-endpoint
-description: Validate the IU unified endpoint and discover better models. Probes every transport, health-checks the models configured in OpenCode (opencode.json), reports per-model backend redundancy + live latency, and diffs the live catalog to surface newer/hotter models worth adopting — for OpenCode and for the Hermes Agent (especially Kimi). Use when checking endpoint health, picking a reliable model/host, or deciding whether to upgrade configured models.
+description: Validate the IU unified endpoint and discover better models. Probes every transport, health-checks the models listed in models.txt, reports per-model backend redundancy + live latency, and diffs the live catalog to surface newer/hotter models worth adopting — for the tracked roster and for the Hermes Agent (especially Kimi). Use when checking endpoint health, picking a reliable model/host, or deciding whether to upgrade configured models.
 ---
 
 # IU Unified Endpoint — validate & discover
@@ -8,7 +8,8 @@ description: Validate the IU unified endpoint and discover better models. Probes
 The IU unified endpoint (`op://common/anthropic`, host derived from `BASE_URL`)
 fronts many model backends through several transports. This skill answers three
 questions: **what's up right now**, **which alias gives the most reliable host**,
-and **are there newer/better models I should switch to** (OpenCode + Hermes).
+and **are there newer/better models I should switch to** (this skill's tracked
+roster + Hermes).
 
 ## Key facts (the mental model)
 
@@ -22,11 +23,12 @@ and **are there newer/better models I should switch to** (OpenCode + Hermes).
 - **Transports** on the same host: `/anthropic/v1`, `/openai/v1` (rich catalog),
   `/azure/openai/...`, `/gemini/v1beta`, `/replicate/v1`. There is **no**
   `/bedrock` passthrough (404) — Bedrock is only an internal backing.
-- **Resilience in OpenCode**: the AI SDK auto-retries `429`s with backoff. For
-  hard failover across models, switch alias (or, in Hermes, code a primary→fallback).
+- **Resilience**: AI-SDK-based consumers (e.g. Hermes) auto-retry `429`s with
+  backoff. For hard failover across models, switch alias (or, in Hermes, code a
+  primary→fallback).
 - **Probe quirks**: `gpt-5*` reasoning models need `max_completion_tokens` (not
   `max_tokens`); `*-codex` models return empty over chat-completions (responses
-  API only) — don't configure them for OpenCode. The validator handles the first.
+  API only) — don't add them to `models.txt`. The validator handles the first.
 - Auth: `/openai` + `/replicate` use `Authorization: Bearer`; `/anthropic` uses
   `x-api-key` + `anthropic-version`; `/azure` uses `api-key`; `/gemini` uses
   `x-goog-api-key`. Same single key for all. **Never print the key.**
@@ -52,10 +54,10 @@ Full run takes ~30–60s (it sends a tiny completion per configured model).
 3. **Discover upgrades.** In the `NOTABLE` list, find `[NEW]` ids that are a newer
    version or stronger sibling of a configured `[cfg]` model (e.g. a newer Gemini
    preview, a higher GPT-5.x, a newer Kimi). For each genuinely better one,
-   propose the exact `opencode.json` edit (under provider `iu` or `iu-anthropic`),
-   with `tool_call`/`reasoning`/`attachment`/`limit`. Verify it actually completes
-   first with a one-shot curl (use `max_completion_tokens` for `gpt-5*`). Only
-   recommend models that return real text.
+   propose the exact `models.txt` edit (`iu/<model>` or `iu-anthropic/<model>`).
+   Verify it actually completes first with a one-shot curl (use
+   `max_completion_tokens` for `gpt-5*`). Only recommend models that return
+   real text.
 4. **Hermes advice.** Compare the models grepped from `~/SourceRoot/hermes-agent`
    against the best available. Be specific about Kimi (the user runs Kimi in
    Hermes): K2.6 is single-backend/throttle-prone, K2.5 is dual-backend/steadier
@@ -65,9 +67,10 @@ Full run takes ~30–60s (it sends a tiny completion per configured model).
 5. **Report concisely.** A short health summary, a ranked "consider adopting"
    list with backend counts, and any concrete config edits. No key, no raw catalog dump.
 
-## Updating OpenCode config
+## Updating the model list
 
-`config/opencode/opencode.json` (symlinked to `~/.config/opencode/opencode.json`)
-holds the curated model set. Editing it needs no `make setup` (it's a symlink).
-Keep the set lean and current; this skill is the mechanism for keeping it so.
-After any edit here, commit in dotfiles.
+`.claude/skills/iu-endpoint/models.txt` (this skill, committed — no symlink, no
+`make setup` needed) holds the curated model roster `validate.sh` health-checks.
+Keep it lean and current; this skill is the mechanism for keeping it so. Hermes's
+own model config lives in `~/SourceRoot/hermes-agent`, not here. After any edit,
+commit in dotfiles.

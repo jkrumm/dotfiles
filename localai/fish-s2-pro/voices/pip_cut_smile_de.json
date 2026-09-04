@@ -1,6 +1,0 @@
-{
-  "label": "Pip cut — smile EQ",
-  "lang": "de",
-  "source": "Audacity-cut + ffmpeg smile EQ + loudnorm -18 LUFS",
-  "description": "Aggressive: highpass 70 Hz, wide -3 dB scoop centered at 600 Hz (Q=2.5), wide +3 dB plateau at 5.5 kHz, +1.5 dB at 12 kHz. Approximates the Audacity curve you drew. Maximum 'dumpf' removal — risk of telephone-y sound."
-}

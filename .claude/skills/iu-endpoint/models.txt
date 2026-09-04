@@ -1,0 +1,34 @@
+# IU unified-endpoint model roster — one id per line, `<provider>/<model>`.
+#
+# provider is "iu-anthropic" (native Anthropic transport, best Claude fidelity,
+# NOT EU-residency-guaranteed) or "iu" (OpenAI-compatible transport, `/openai/v1`).
+# The model id itself may contain further slashes (e.g. a Qwen HF-style path) —
+# only the FIRST slash is the provider separator; validate.sh splits on it.
+#
+# Comments and blank lines are ignored. Edit this file directly to add/drop a
+# model from the health-check set — there is no opencode.json to keep in sync
+# with anymore (OpenCode was retired). Hermes's own model config lives in
+# ~/SourceRoot/hermes-agent, not here.
+
+iu-anthropic/claude-opus-4-8
+iu-anthropic/claude-opus-4-6
+iu-anthropic/claude-sonnet-4-6
+iu-anthropic/claude-haiku-4-5
+
+iu/DeepSeek-V4-Pro
+iu/DeepSeek-V4-Flash
+iu/Kimi-K2.6
+iu/Kimi-K2.5
+iu/kimi-k2.7-code
+iu/gpt-5.5
+iu/gpt-5-mini
+iu/gemini-3.1-pro-preview
+iu/gemini-3.5-flash
+iu/gemini-2.5-pro
+iu/glm-5.2
+iu/minimax-m3
+iu/Qwen/Qwen3-Coder-480B-A35B-Instruct
+iu/qwen3.7-max
+iu/MiMo-V2.5-Pro
+iu/nemotron-3-ultra
+iu/mistral-medium-latest

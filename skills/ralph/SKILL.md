@@ -314,32 +314,11 @@ REPORT_FILE="$DOCS_DIR/RALPH_REPORT.md"
 MAX_RETRIES=3
 CLAUDE_TIMEOUT=2700  # 45 minutes per group
 
-# Model + transport (override via env at launch, e.g. RALPH_TRANSPORT=bridge ./scripts/ralph.sh run).
-#   max    → sonnet on the Max subscription. Best quality/ceiling for autonomous
-#            multi-hour groups; burns Max quota heavily.
-#   bridge → every group routed through the local LiteLLM bridge to DeepSeek-V4-Pro
-#            (EU/GDPR), IU per-token billing, ZERO Max quota — the same lane the
-#            `ca` launcher (config/zsh/claude.zsh, dotfiles) uses interactively.
-#            Caveats: no WebSearch/WebFetch (research-phase groups lose web), the
-#            worker model can throttle under load across a long loop (leans on
-#            retries), and a lower implementation ceiling than sonnet. Use for
-#            cost-sensitive or EU-bound loops; keep `max` for quality-critical
-#            migrations.
+# Model + effort (override via env at launch, e.g. RALPH_MODEL=opus ./scripts/ralph.sh run).
+# Runs on the Max subscription — best quality/ceiling for autonomous multi-hour
+# groups. A bare tier alias like "sonnet" resolves against api.anthropic.com.
 RALPH_EFFORT="${RALPH_EFFORT:-high}"
-RALPH_TRANSPORT="${RALPH_TRANSPORT:-max}"            # max | bridge
-LITELLM_BRIDGE_URL="${LITELLM_BRIDGE_URL:-http://127.0.0.1:4000}"
-LITELLM_BRIDGE_TOKEN="${LITELLM_BRIDGE_TOKEN:-sk-litellm-master-key}"
-# RALPH_MODEL defaults per transport: a bare tier alias like "sonnet" is only
-# guaranteed to resolve against api.anthropic.com. Against the bridge, pass the
-# literal LiteLLM model id (config/litellm/config.yaml, dotfiles) the same way
-# `ca`/`claude_bridge` default their --model — an unmapped name 404s.
-if [[ -z "${RALPH_MODEL:-}" ]]; then
-  if [[ "$RALPH_TRANSPORT" == "bridge" ]]; then
-    RALPH_MODEL="DeepSeek-V4-Pro"
-  else
-    RALPH_MODEL="sonnet"
-  fi
-fi
+RALPH_MODEL="${RALPH_MODEL:-sonnet}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
@@ -518,51 +497,19 @@ run_group() {
   local full_prompt
   full_prompt="$(cat "$context_file")"$'\n\n---\n\n'"$(cat "$prompt_file")"
 
-  log_info "Claude running (model: $RALPH_MODEL, transport: $RALPH_TRANSPORT, timeout: ${CLAUDE_TIMEOUT}s) → log: .ralph-logs/group-$group_id.log"
+  log_info "Claude running (model: $RALPH_MODEL, timeout: ${CLAUDE_TIMEOUT}s) → log: .ralph-logs/group-$group_id.log"
   log_info "Watch live: tail -f .ralph-logs/group-$group_id.log"
   echo ""
 
-  # Env prefix for the spawn. Always at least the two interactive-noise suppressors,
-  # so the array is never empty (avoids the bash "unbound variable" trap under set -u).
-  # bridge mode appends the LiteLLM routing vars; ANTHROPIC_API_KEY is stripped in
-  # both modes (max uses the OAuth login; the key would shadow the bridge token).
+  # Env prefix for the spawn — the two interactive-noise suppressors.
+  # ANTHROPIC_API_KEY is stripped: the Max OAuth login would otherwise be shadowed.
   local -a group_env=(CLAUDE_CODE_ENABLE_TASKS=true CLAUDECODE=)
-  local -a claude_flags=()
-  if [[ "$RALPH_TRANSPORT" == "bridge" ]]; then
-    if ! curl -fsS -m 3 "${LITELLM_BRIDGE_URL}/health/liveliness" >/dev/null 2>&1; then
-      log_error "RALPH_TRANSPORT=bridge but LiteLLM bridge unreachable at $LITELLM_BRIDGE_URL — run 'make litellm-restart' in dotfiles."
-      return 1
-    fi
-    group_env+=(
-      ANTHROPIC_BASE_URL="$LITELLM_BRIDGE_URL"
-      ANTHROPIC_AUTH_TOKEN="$LITELLM_BRIDGE_TOKEN"
-      # Subagents/background tasks (Explore, @implementer — CLAUDE_CODE_ENABLE_TASKS=true
-      # above means groups CAN spawn them) resolve by TIER, not by the top-level --model.
-      # Without these pins each tier falls back to its hardcoded claude-* default, which
-      # the bridge doesn't map → "400 Invalid model name" the instant a subagent spawns
-      # mid-group. Mirrors `ca`/`claude_bridge` in config/zsh/claude.zsh (dotfiles).
-      ANTHROPIC_DEFAULT_OPUS_MODEL=DeepSeek-V4-Pro
-      ANTHROPIC_DEFAULT_SONNET_MODEL=DeepSeek-V4-Pro
-      ANTHROPIC_DEFAULT_HAIKU_MODEL=DeepSeek-V4-Flash
-      ANTHROPIC_DEFAULT_FABLE_MODEL=DeepSeek-V4-Pro
-      # Claude Code hardcodes a 200k context window for any model over a custom
-      # ANTHROPIC_BASE_URL. This restores DeepSeek's real 1M so long research- and
-      # edit-heavy groups don't auto-compact early (same fix as `ca`).
-      CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
-      CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
-    )
-    # DeepSeek over the bridge tends to self-invoke EnterPlanMode. In headless -p
-    # mode there is no user to exit plan mode, so the group would present a plan
-    # and never implement it — silently burning a retry with no completion signal.
-    claude_flags+=(--disallowedTools EnterPlanMode)
-  fi
 
   local exit_code=0
   if env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
     -p "$full_prompt" \
     --model "$RALPH_MODEL" \
     --effort "$RALPH_EFFORT" \
-    "${claude_flags[@]}" \
     --dangerously-skip-permissions \
     --output-format stream-json \
     --verbose \
@@ -1100,7 +1047,6 @@ env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
   -p "$full_prompt" \
   --model "$RALPH_MODEL" \          # explicit — don't inherit interactive session model
   --effort "$RALPH_EFFORT" \        # explicit — don't inherit interactive session effort
-  "${claude_flags[@]}" \            # bridge mode adds --disallowedTools EnterPlanMode
   --dangerously-skip-permissions \  # lets Claude run tools without prompting
   --output-format stream-json \     # writes to log file in real-time (text format buffers)
   --verbose \                       # includes tool use in log output
@@ -1108,18 +1054,9 @@ env -u ANTHROPIC_API_KEY "${group_env[@]}" gtimeout "$CLAUDE_TIMEOUT" claude \
   < /dev/null                       # prevents interactive prompts from blocking
 ```
 
-`group_env` always carries `CLAUDE_CODE_ENABLE_TASKS=true` + `CLAUDECODE=` (suppress interactive UI noise) and, in bridge mode, the LiteLLM routing vars.
+`group_env` always carries `CLAUDE_CODE_ENABLE_TASKS=true` + `CLAUDECODE=` (suppress interactive UI noise).
 
-**Model choice:** `--model` and `--effort` must be set explicitly. The `/model` and `/effort` commands in an interactive Claude Code session are session-level only — they are **not** inherited by spawned `claude -p` subprocesses. Without explicit flags, each group silently uses whatever the global default is. Sonnet + high effort is the right default for RALPH on `max`; DeepSeek-V4-Pro is the right default on `bridge` (see below). Override per-group if needed (e.g. bump to `opus` for a particularly complex migration group).
-
-**Transport choice (`RALPH_TRANSPORT`):** the default `max` runs `$RALPH_MODEL` (default `sonnet`) on the Max subscription — best quality, but a full autonomous loop (45 min × N groups) is the single heaviest Max-quota consumer in this setup. Set `RALPH_TRANSPORT=bridge` to route every group through the local LiteLLM bridge to **DeepSeek-V4-Pro (EU/GDPR, Azure Spain)** at IU per-token billing — **zero Max quota** — the same lane the `ca` launcher (`config/zsh/claude.zsh`, dotfiles) uses interactively. `RALPH_MODEL` then defaults to the literal bridge model id `DeepSeek-V4-Pro` instead of the tier alias `sonnet` (an unmapped name 404s against the bridge — see `config/litellm/config.yaml`).
-
-Three fixes make bridge mode safe for RALPH's fully-autonomous, subagent-capable groups — all mirrored from `ca`/`claude_bridge` (dotfiles `config/zsh/claude.zsh`), which hit and fixed the same issues for interactive/one-shot bridge use:
-- **Tier pins** (`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL`): groups run with `CLAUDE_CODE_ENABLE_TASKS=true`, so they can spawn Explore/`@implementer` subagents. Subagents resolve by tier, not by the top-level `--model` — without these pins, the first subagent spawn 400s on an unmapped `claude-*` default the instant it fires, mid-group.
-- **1M context window** (`CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000`): Claude Code hardcodes 200k for any model behind a custom `ANTHROPIC_BASE_URL`. Without this, long research/edit-heavy groups hit DeepSeek's *true* 1M ceiling far too early and auto-compact mid-group.
-- **`--disallowedTools EnterPlanMode`**: DeepSeek over the bridge tends to self-invoke plan mode. In headless `-p` mode there's no user to call `ExitPlanMode`, so the group would present a plan and never implement it — a silent retry burn with no completion signal, same failure shape as the interactive-skill anti-pattern above.
-
-The bridge's remaining trade-offs are real and not fixed by the above: no `WebSearch`/`WebFetch` (research-phase groups that lean on web must be restructured to use Bash + `curl`/Context7), the worker model can still throttle under load so a long loop leans hard on the runner's retry logic, and its implementation ceiling is below sonnet. The runner health-checks the bridge before each group and aborts with a `make litellm-restart` hint if it's down. Rule of thumb: `max` for quality-critical or web-heavy migrations; `bridge` for cost-sensitive, EU-bound, or overnight loops where retries absorb the throttling.
+**Model choice:** `--model` and `--effort` must be set explicitly. The `/model` and `/effort` commands in an interactive Claude Code session are session-level only — they are **not** inherited by spawned `claude -p` subprocesses. Without explicit flags, each group silently uses whatever the global default is. Sonnet + high effort is the right default for RALPH — runs on the Max subscription, best quality/ceiling for autonomous multi-hour groups. Override per-group if needed (e.g. bump to `opus` for a particularly complex migration group).
 
 ### Completion signal detection
 
@@ -1436,7 +1373,7 @@ claude_iu --model haiku "$prompt_with_inputs_inlined" > docs/migrations/<slug>.m
 `claude_iu` (from `~/.zsh/conf.d/claude.zsh`) runs the distill off Max quota on
 the IU endpoint. This one-shot summary runs in the orchestrator's zsh context, so
 the helper is available; the autonomous group runner above is a standalone bash
-script and instead inlines the routing vars via `RALPH_TRANSPORT`.
+script and always runs on Max via `RALPH_MODEL`/`RALPH_EFFORT` instead.
 
 Show the user the generated file and ask them to confirm before proceeding to deletion. This is the only point where they can still bail.
 

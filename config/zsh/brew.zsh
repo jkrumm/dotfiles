@@ -16,5 +16,5 @@ export HOMEBREW_NO_ANALYTICS=1
 # Note: auto-*update* (refreshing formula definitions before a command) is left ON —
 # it surfaces security fixes. Auto-*upgrade* (unattended `brew upgrade`) stays OFF —
 # not for npm-style supply-chain reasons (homebrew/core is reviewed PRs + CI-built
-# bottles), but because caddy/mosh silently revert local config on upgrade and casks
+# bottles), but because caddy silently reverts local config on upgrade and casks
 # are vendor binaries where the release-age cooldown applies. Use `make brew-upgrade`.

@@ -501,22 +501,7 @@ function handleSessionEndEvent(
 async function sendNotification(config: NotificationConfig): Promise<void> {
   const { title, subtitle, body, sound } = config;
 
-  // Prefer cmux notify when running inside cmux (env var is set by cmux for all child processes)
-  const cmuxSocket = process.env.CMUX_SOCKET_PATH;
-  const cmuxTab = process.env.CMUX_TAB_ID;
-  if (cmuxSocket) {
-    try {
-      const args = ["notify", "--title", title, "--body", body];
-      if (subtitle) args.push("--subtitle", subtitle);
-      if (cmuxTab) args.push("--tab", cmuxTab);
-      await $`cmux ${args}`.quiet();
-      return;
-    } catch {
-      // Fall through to osascript
-    }
-  }
-
-  // Fallback: native osascript (terminal-notifier hangs in multiplexer environments)
+  // Native osascript (terminal-notifier hangs in multiplexer environments)
   const subtitleLine = subtitle ? `subtitle "${escapeAppleScript(subtitle)}"` : "";
   const script = `
     display notification "${escapeAppleScript(body)}" with title "${escapeAppleScript(title)}" ${subtitleLine} sound name "${sound}"

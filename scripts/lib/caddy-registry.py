@@ -9,7 +9,7 @@ This exists so that `config/Caddyfile` is the SINGLE registry of dev apps.
 Before it there were two lists — the Caddyfile's `*.test` blocks and
 `~/.config/caddy-tailnet.ports` — and they drifted silently: a new app got a
 local `.test` door immediately and a tailnet door only if you remembered the
-second file. Now the second file records exceptions only (see the flags-file
+second file. Now the second file records exceptions only (see the opt-out file
 header written by scripts/caddy-tailnet.sh).
 
 The Caddyfile is parsed by handing it to `caddy adapt --adapter caddyfile` and

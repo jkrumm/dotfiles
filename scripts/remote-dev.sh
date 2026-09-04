@@ -3,10 +3,10 @@ set -uo pipefail
 
 # remote-dev — drive the mini's herdr workspaces and Claude agents.
 #
-# The four-layer model (Tailscale / mosh / herdr / Caddy) is about *getting a
+# The three-layer model (Tailscale / herdr / Caddy) is about *getting a
 # terminal*. This script is the layer above it: preparing and steering the work
 # itself, without needing a terminal at all. That distinction is the whole point
-# — `dev` and `desk` are how you go and look; everything here you can do from
+# — `desk` is how you go and look; everything here you can do from
 # the MacBook while attached to nothing.
 #
 # Routing is deliberate and invisible: every subcommand runs on the dev host,
@@ -59,9 +59,9 @@ require_server() {
   local out
   out=$(host_run 'herdr status' 2>/dev/null)
   [[ -n $out ]] \
-    || die "no answer from herdr on $HOST — nothing ran there at all; check the ssh hop with 'make remote-dev-doctor'"
+    || die "no answer from herdr on $HOST — nothing ran there at all; check the ssh hop with 'make doctor'"
   grep -q 'status: running' <<<"$out" \
-    || die "herdr server is not running on $HOST — 'brew services restart herdr' there, or run 'make remote-dev-doctor'"
+    || die "herdr server is not running on $HOST — 'brew services restart herdr' there, or run 'make doctor'"
 }
 
 # Repo names, not paths: the two roots live under a different $HOME on the mini
@@ -141,7 +141,7 @@ sys.exit(0 if isinstance(json.load(sys.stdin).get("result", {}).get("agents"), l
         while IFS= read -r line; do printf '    %s\n' "$line"; done <<<"$err"
       fi
       printf "  'herdr agent list' exited %s with no usable roster\n" "$rc"
-      printf "  check it: 'make remote-dev-doctor', or 'herdr status' on %s\n" "$HOST"
+      printf "  check it: 'make doctor', or 'herdr status' on %s\n" "$HOST"
     } >&2
     exit 1
   fi
@@ -281,7 +281,7 @@ cmd_work() {
   if [[ -n $existing ]]; then
     host_run "herdr agent focus '$existing'" >/dev/null 2>&1
     echo "→ focused existing agent $existing  ($path)"
-    note "   already running; 'rd read $existing' to see it, 'dev' to attach"
+    note "   already running; 'rd read $existing' to see it, 'desk' to attach"
     return 0
   fi
 
@@ -309,7 +309,7 @@ cmd_work() {
 
   if echo "$out" | grep -q '"type":"agent_started"'; then
     echo "→ started claude '$agent' in pane $pane  ($path)"
-    note "   'dev' to attach · 'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
+    note "   'desk' to attach · 'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
   else
     # Roll the workspace back. Leaving it costs a stale entry in every later
     # `herdr workspace list` and, worse, makes the next `work` look like it
@@ -573,10 +573,9 @@ usage() {
     repos · work · agents
 
   Getting a terminal is a different layer:
-    dev    mosh in, land in herdr — roams, survives lid-close, no reattach
     desk   herdr --remote — local keybindings, dies on roam
 
-  Both lanes persist on the mini. You only need a terminal to watch.
+  It persists on the mini regardless. You only need a terminal to watch.
 
 EOF
 }

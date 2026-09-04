@@ -20,8 +20,8 @@ set -euo pipefail
 # until the next power cut. An unattended upgrader on the host that runs herdr,
 # colima, sideclaw, Hermes and every dev door is a mechanism for introducing
 # exactly that class of fault at 3am with nobody watching. So this reports and a
-# human applies — the same trade the caddy/mosh pins already make, and the same
-# one the runaway reaper in devhost-health-check.sh makes when it refuses to kill.
+# human applies — the same trade the caddy pin already makes, and the same one
+# the runaway reaper in devhost-health-check.sh makes when it refuses to kill.
 #
 # WHY ITS OWN SCHEDULER, when "one scheduler, N monitors" is the house rule that
 # gave collie and secrets-freshness their monitors without a second LaunchAgent:
@@ -46,6 +46,17 @@ set -euo pipefail
 # `/usr/bin/env bash` there is Apple's 3.2. No mapfile, no ${var,,}, no
 # "${arr[@]}" on a possibly-empty array under `set -u`. Newline-delimited strings
 # instead of arrays throughout.
+
+# --no-push: for an on-demand caller (scripts/doctor.sh) that wants the same
+# report without touching Kuma — the daily agent is still the only thing that
+# pushes on a schedule. No other flags exist; anything else is a usage error.
+NO_PUSH=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-push) NO_PUSH=1 ;;
+    *) echo "usage: $(basename "$0") [--no-push]" >&2; exit 1 ;;
+  esac
+done
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # Read by makefile_var() in lib/github-tags.sh, not directly here.
@@ -309,7 +320,9 @@ if (( skip_n > 0 )); then printf '%s' "$SKIPPED" | /usr/bin/grep -v '^$' | /usr/
 # The push URL file is optional and its absence is silent — same contract as the
 # collie and secrets monitors. A machine that never wired this must not fail.
 push_rc=0
-if [[ -f "$PUSH_URL_FILE" ]]; then
+if (( NO_PUSH )); then
+  : # --no-push: report only, requested by an on-demand caller
+elif [[ -f "$PUSH_URL_FILE" ]]; then
   url=$(kuma_resolve_push_url "${DRIFT_PUSH_URL:-}" "$PUSH_URL_FILE") || url=""
   if [[ -n "$url" ]]; then
     if (( stale_n > 0 )); then

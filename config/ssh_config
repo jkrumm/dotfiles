@@ -11,13 +11,10 @@
 # Applies to every host below.
 #
 # ServerAlive*: without these a session on a flaky link hangs forever instead of
-# failing fast — 15s probes, dead after 3 misses (~45s). Note this only helps the
-# ssh path; mosh has its own UDP heartbeat and ignores all of it.
+# failing fast — 15s probes, dead after 3 misses (~45s).
 #
-# SetEnv TERM: cmux runs on libghostty and exports TERM=xterm-ghostty. Sent to a
-# host without that terminfo entry it produces doubled keystrokes
-# (manaflow-ai/cmux#2969). Pin a universally-present value rather than install
-# ghostty terminfo on every box.
+# SetEnv TERM: pinned so a client terminal whose TERM the mini lacks terminfo
+# for doesn't double keystrokes.
 Host *
     ServerAliveInterval 15
     ServerAliveCountMax 3
@@ -33,7 +30,7 @@ Host mini
     User jkrumm
     ForwardAgent yes
     # ControlMaster — this comment claimed it for a long time without it being
-    # set. It matters now: herdr/cmux open several connections, and without
+    # set. It matters now: herdr opens several connections, and without
     # multiplexing each one repeats a full handshake *and* a separate 1Password
     # biometric approval. One shared connection, held 10m after the last exit.
     # Socket dir is created by `make setup` (_setup-ssh).

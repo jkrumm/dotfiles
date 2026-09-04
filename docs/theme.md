@@ -14,7 +14,7 @@ Applying only one layer is how they drift apart.
 
 | Layer | File | Setting |
 |-|-|-|
-| Terminal | `config/ghostty/config.appsupport` (+ `config`) | `theme = dark:one-zinc-dark,light:one-zinc-light` |
+| Terminal | `config/ghostty/config` → `~/.config/ghostty/config` | `theme = dark:one-zinc-dark,light:one-zinc-light` |
 | herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
 
@@ -81,22 +81,16 @@ Six decisions that are not taste:
   catppuccin/catppuccin-latte, gruvbox/gruvbox-light, solarized/solarized-light,
   kanagawa/kanagawa-lotus, rose-pine/rose-pine-dawn. `dark_name` and `light_name`
   need not be siblings — that is what makes the pairing above possible.
-- **`desk` does follow the MacBook's appearance; `dev` cannot.** The switch runs
-  on DEC mode 2031 and the report is read by whichever herdr process talks to a
-  real terminal. On `desk` the client forwards raw stdin bytes
-  (`ClientMessage::Input`) and the *server* parses them — the structured
-  `InputEvents` path, which drops the colour-scheme event, is for Windows clients
-  only — and cmux volunteers the report (it is libghostty, carrying
-  `ghostty_surface_set_color_scheme`). On `dev`, mosh swallows the enable, so the
-  static `name = "one-dark"` fallback is what you get. herdr 0.8.0 additionally
-  forwards live 2031 updates *into panes*, so an agent in a pane follows the Mac
-  too.
+- **Appearance follows the MacBook's live switch on `desk`.** The herdr client
+  runs locally inside Ghostty, which reports the colour scheme over DEC mode
+  2031; the client forwards raw stdin bytes (`ClientMessage::Input`) and the
+  server parses them, so `auto_switch` sees the report. herdr 0.8.0 forwards live
+  2031 updates *into panes*, so an agent in a pane follows the Mac too. `name` is
+  the static fallback for a terminal that never sends the report.
 - **herdr does not use its `terminal` theme** (inherit the host ANSI palette),
-  which is the obvious-looking choice. It emits only basic ANSI codes there, so
-  palette 8 would have to serve as both the row highlight and the comment gray;
-  and on the `dev` path herdr renders *on the mini* and would have to negotiate
-  the palette through mosh's UDP proxy. A named theme needs no negotiation and
-  looks identical over both transports.
+  the obvious-looking choice: it emits only basic ANSI codes there, so palette 8
+  would have to serve as both the row highlight and the comment gray. A named
+  theme needs no negotiation and renders identically over any transport.
 - **starship uses ANSI names, herdr's one override uses hex — asymmetric on
   purpose.** starship's names resolve through the active palette, so they follow
   the switch for free. herdr's inline sidebar token styles accept strict hex
@@ -110,6 +104,7 @@ Six decisions that are not taste:
   unoverridden — this is the only place it showed up, and a targeted override
   beats a global one whose other uses are unknown.
 
+Theme files are **copied** into `~/.config/ghostty/themes/`, not symlinked.
 Ghostty theme names are **exact filenames**. `one-zinc-dark` resolves because the
 file is named that; bundled themes with spaces and capitals must be written in
 full (`Catppuccin Mocha`, never `catppuccin-mocha`, which errors and falls back

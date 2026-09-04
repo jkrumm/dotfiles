@@ -1,13 +1,20 @@
+---
+type: Reference
+description: The whole personal environment on one page — machines, repos, launchd jobs and their owner repos, inbound doors, secrets flow, monitoring. Lives in dotfiles/docs and is symlinked into the brain vault.
+---
+
 # Architecture — the whole environment on one page
 
-> Generated 2026-08-31 for the subtraction pass (dotfiles `PRD.md`). The rule this
-> page enforces: **anything running on a machine appears here or gets deleted** —
-> never left implicit. `scripts/architecture-check.sh` asserts the mini half.
+> The map: every machine, every repo on it, every launchd job and its owner repo,
+> every inbound door, the secrets flow, and what monitors what. The rule it
+> enforces — **anything running on a machine appears here or gets deleted** — is
+> asserted by `scripts/architecture-check.sh` (run by `make doctor`): a launchd
+> label loaded or on disk with no row here exits 1.
 >
-> Machine roles: the **MacBook** (`iumac`) is the thin client — editing, `desk`,
-> biometric 1Password. The **Mac mini** is the always-on dev host — agents,
-> LaunchAgents, Docker, dev servers. homelab and VPS are separate stacks with
-> their own repos and are referenced, not restated.
+> The **MacBook** (`iumac`) is the thin client — editing, `desk`, biometric
+> 1Password. The **Mac mini** is the always-on dev host — agents, LaunchAgents,
+> Docker, dev servers. homelab and VPS are separate stacks with their own repos,
+> referenced rather than restated.
 
 ## Repos
 
@@ -16,44 +23,34 @@
 | Repo | Purpose |
 |-|-|
 | `dotfiles` | Claude config, hooks, skills, machine bootstrap. Source of truth. |
-| `dotfiles-private` | Secrets data half: refs lists, tailscale ACL + serve declarations, docs. |
+| `dotfiles-private` | Secrets data half: refs lists, tailscale ACL + serve declarations. |
 | `brain` | Obsidian vault — the deliberate second checkout, reconciled by brain-sync. |
 
 ### Mini-only (`~/SourceRoot`)
 
 | Repo | Purpose | Notes |
 |-|-|-|
-| `argo` | Personal API + dashboard, the agent backbone | dev door `argo` + `portdoor` 7715 |
-| `audio-gateway` | STT/TTS VPS container; repo lives here for edits | deployed on VPS |
+| `argo` | Personal API + dashboard, the agent backbone | dev door `argo` |
+| `audio-gateway` | STT/TTS service; repo here, container on the VPS | |
 | `basalt-ui` | Mantine design system (NPM) | always its own commit |
-| `basalt-ui-obsidian` | Obsidian plugin, v0 unreleased | active |
+| `basalt-ui-obsidian` | Obsidian plugin, v0 unreleased | |
 | `bun-email-api`, `clawbar`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `ticktick-raycast`, `rollhook`, `rollhook-action`, `image-gen`, `image-share`, `modelpick`, `rb`, `research-gateway`, `sideclaw`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `hermes-agent`, `meteo`, `hermes-webui`, `dispatch-scratch` | see global CLAUDE.md repo table | |
 | `hermes-webui` | upstream fork, live `WorkingDirectory` of `com.jkrumm.hermes-webui` | dependency checkout |
-| `meteo` | weather/wave service, 8 LaunchAgents | 6 of 8 agents installed by hand, no plist template in-repo — meteo's own pass, listed as a known gap |
+| `meteo` | weather/wave service, 8 LaunchAgents | 6 of 8 installed by hand, no plist template in-repo — known gap, meteo's own pass |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
-
-### Pending deletion (subtraction pass, phase 1e)
-
-| Dir | Disposition |
-|-|-|
-| `sy-serendipity` | git-bundle → `~/SourceRoot-archive`, then delete |
-| `vibe-stack` | git-bundle → `~/SourceRoot-archive`, then delete |
-| `linewatch-router-spike` | fold `FINDINGS.md` into `linewatch/docs/`, then delete (not git) |
-| `brain-sources` | move to `~/Documents` (not git) |
 
 ### MacBook-only
 
 | Repo | Purpose |
 |-|-|
 | `photo-flow` | sanctioned exception |
-| `shutterflow` | sanctioned exception (added 2026-08-30) |
+| `shutterflow` | sanctioned exception |
 
 ## LaunchAgents — mini (gui/501 unless noted)
 
-Owner repo in brackets. Every label here is asserted by
-`scripts/architecture-check.sh` and (the KeepAlive subset) by the devhost
-heartbeat's `check_boot_path`.
+Every label here is asserted by `scripts/architecture-check.sh`, and the
+KeepAlive subset also by the heartbeat's `check_boot_path`.
 
 ### dotfiles
 
@@ -76,7 +73,6 @@ heartbeat's `check_boot_path`.
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
 | `com.jkrumm.sideclaw-server` | KeepAlive | sideclaw MCP daemon |
-| `com.litellm.proxy` | KeepAlive | **retired** — phase 1b deletes it |
 | `herdr.collie` | KeepAlive | collie bridge (upstream plist) |
 
 ### hermes-agent
@@ -90,7 +86,7 @@ heartbeat's `check_boot_path`.
 | `com.jkrumm.hermes-liveness` | 300s | Kuma push monitor |
 | `com.jkrumm.hermes-serve-liveness` | 300s | Kuma push monitor |
 | `com.jkrumm.hermes-webui-liveness` | 300s | Kuma push monitor |
-| `com.radiosilenceapp.agent` | — | dead stub, scheduled for removal (macbook-handover WP8 remnant) |
+| `com.radiosilenceapp.agent` | — | dead vendor stub, safe to remove |
 | `com.1password.1password-launcher` | — | 1Password app launcher (vendor) |
 
 ### meteo
@@ -125,8 +121,8 @@ heartbeat's `check_boot_path`.
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
-(KeepAlive, :2222 door) · `homebrew.mxcl.colima`. *(Inventoried 2026-08-30 from
-the MacBook; the mini cannot list that machine's agents remotely.)*
+(KeepAlive, :2222 door) · `homebrew.mxcl.colima`. *(Inventoried from the
+MacBook — the mini cannot list that machine's agents remotely.)*
 
 ## Doors (inbound)
 
@@ -135,14 +131,12 @@ the MacBook; the mini cannot list that machine's agents remotely.)*
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |
 | `https://<app>.mini.jkrumm.com` | mini Caddy wildcard block | tailnet, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on 443 |
 | `:7730` (`rb`) | `tailscale serve` → 127.0.0.1:4050 | tailnet only |
+| `:8788` (Collie) | `tailscale serve` → 127.0.0.1:8787 | tailnet, ACL `tag:phone → tag:mac` |
+| `tcp:22` → mini | OpenSSH, key-only | tailnet `tag:mac → tag:mac` |
 | `:8443` (IU dashboard) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
 | `tcp:2222` → iumac | userland sshd behind `tailscale serve --tcp` | tailnet `tag:mac → tag:mac` |
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |
 | `tcp:445` (SMB `~/Shuttle`) | macOS smbd | tailnet `tag:mac → tag:mac` |
-| `dev` mosh UDP 60000–61000 | mosh-server | tailnet `tag:mac → tag:mac` — **removed in phase 2a** |
-
-Port-based dev doors (`portdoor`: argo 7715, modelpick 7727, jkrumm 7728) are
-**removed in phase 2c**; the clean `.mini.jkrumm.com` doors stay.
 
 ## Secrets flow
 
@@ -175,7 +169,12 @@ Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
 
 ## Pinning policy
 
-`caddy` is pinned (its upgrade silently reverts the xcaddy-built Cloudflare DNS
-module). A pin must pin its dependencies too — mosh stayed at 1.4.0_40 while
-`protobuf` upgraded underneath it and the dylib link broke. mosh is deleted in
-phase 2a rather than re-pinned.
+`caddy` is pinned — its upgrade silently replaces the xcaddy-built binary and the
+Cloudflare DNS module vanishes, invisible until the wildcard cert fails to renew
+~60 days later. **A pin must pin its dependencies too, or it rots** (a pinned
+binary still breaks when a dylib it links is upgraded underneath it). `colima` is
+deliberately unpinned — it is the Docker runtime, so pinning means sitting on an
+unpatched hypervisor — and is instead asserted after every upgrade and checked by
+the 5-minute heartbeat. Full rationale: `docs/homebrew.md`.
+
+Related: [[remote-dev-stack]] · [[mac-host-monitoring]]

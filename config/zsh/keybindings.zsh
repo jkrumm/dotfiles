@@ -1,4 +1,4 @@
-# Warp-like text input for Ghostty / CMUX
+# Warp-like text input for Ghostty
 # Ghostty config: ~/.config/ghostty/config sets macos-option-as-alt = left
 #
 # Active bindings:
