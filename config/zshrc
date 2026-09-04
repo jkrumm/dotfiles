@@ -66,3 +66,7 @@ for f in ~/.zsh/conf.d/*.zsh(N); do source "$f"; done
 
 # bun completions
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# Vite+ bin (https://viteplus.dev) — the installer writes ~/.config/vite-plus/env
+# and greps this file for the path, so the line stays even where it is absent.
+[ -f "$HOME/.config/vite-plus/env" ] && . "$HOME/.config/vite-plus/env"

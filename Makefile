@@ -289,7 +289,7 @@ _setup-pnpm:
 .PHONY: _setup-viteplus
 _setup-viteplus:
 	@echo "  Vite+..."
-	@if [ -f "$$HOME/.vite-plus/env" ]; then \
+	@if [ -f "$$HOME/.vite-plus/env" ] || [ -f "$$HOME/.config/vite-plus/env" ]; then \
 		echo "    · Vite+ (ok)"; \
 	else \
 		echo "    Installing Vite+..."; \
