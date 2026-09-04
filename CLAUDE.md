@@ -89,11 +89,9 @@ plugins, env) and on `permissions.deny`; `permissions.allow` and
 
 **Hooks:** symlinked live, so a change applies on the *next tool call* — no
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
-`docker-makefile.ts` tokenizes with quote/escape state and only inspects tokens in
-**command position** — a *mention* is not an invocation, and a false block trains
-you to distrust the hook. Host-level prune verbs (`docker
-{builder,image,container} prune`) are allowlisted (no Makefile target covers the
-daemon); `docker volume prune` stays blocked. Full map: `docs/hooks.md`.
+`docker-makefile.ts` tokenizes and inspects only **command position** — a mention
+is not an invocation. `docker {builder,image,container} prune` is allowlisted
+(daemon-level, no Makefile target); `docker volume prune` stays blocked. Full map: `docs/hooks.md`.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**
@@ -106,12 +104,10 @@ skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:
 | Response shape, autonomy, question budget, delegation posture | `output-styles/Direct.md` | Appended at the *end* of the system prompt and survives `/clear` |
 | Project/machine facts, routing, conventions | `CLAUDE.md` | Reference material to look things up in |
 
-`keep-coding-instructions: true` is load-bearing — the default `false` drops
-Claude Code's built-in software-engineering prompt and leaves a chatty generalist
-holding a `Bash` tool. Read at session start only (`/clear` to apply an edit) and
-does **not** reach subagents (their tone lives in `agents/*.md`). It also carries
-the standing delegation authorization that counterweights Claude Code's stock "do
-not call AgentTool unless the user requested it".
+`keep-coding-instructions: true` is load-bearing — `false` drops Claude Code's
+built-in engineering prompt. Read at session start only (`/clear` to apply), never
+reaches subagents (tone lives in `agents/*.md`), and carries the standing
+delegation authorization that overrides the stock "don't call AgentTool" line.
 
 Keep this file **under 40k chars** (`wc -c CLAUDE.md`; the agent context limit is
 150k). When a section grows, move its narrative verbatim into the matching
