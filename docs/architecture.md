@@ -126,8 +126,11 @@ KeepAlive subset also by the heartbeat's `check_boot_path`.
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
-(KeepAlive, :2222 door) · `homebrew.mxcl.colima`. *(Inventoried from the
-MacBook — the mini cannot list that machine's agents remotely.)*
+(KeepAlive, :2222 door) · `homebrew.mxcl.colima` · `homebrew.mxcl.sleepwatcher` ·
+`homebrew.mxcl.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the
+charge limiter). The machine is MDM-managed — Jamf, Okta, Adobe and the cancom
+hardening daemons are corporate, not mapped; `architecture-check.sh` asserts only
+the `com.jkrumm.` / `homebrew.mxcl.` / `cc.chlc.` prefixes there.
 
 ## Doors (inbound)
 

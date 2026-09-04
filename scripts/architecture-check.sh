@@ -3,8 +3,7 @@
 # in docs/architecture.md, or this exits 1. The subtraction pass's enforcement
 # half: the map says what runs, this proves nothing runs un-mapped.
 #
-# Read-only. Runs on both machines (the map covers both, with the MacBook's
-# agent list inventoried 2026-08-30). Folded into `make doctor` in phase 2d.
+# Read-only. Runs on both machines via `make doctor`; the map covers both.
 #
 # What it checks:
 #   1. Every label in `launchctl list` (this user's gui domain) that is NOT an
@@ -31,12 +30,23 @@ LAUNCHCTL=/bin/launchctl
 # ship their own plists and are not managed by any repo here.
 allowlist_regex='^(com\.apple\.|application\.|com\.google\.GoogleUpdater|com\.jetbrains\.toolbox|com\.riot\.riotclient|com\.microsoft\.|org\.pqrs\.|com\.amazonaws\.|com\.logi\.|com\.macromates\.|us\.zoom\.|2BUA8C4S2C\.|com\.openssh\.ssh-agent)'
 
+# The MacBook is MDM-managed: Jamf, Okta, Adobe and the cancom hardening daemons
+# ship dozens of plists nobody here owns, so on the `op` backend only the prefixes
+# this repo manages are asserted. The mini is entirely ours — full scan there.
+BACKEND=$(tr -d '[:space:]' < "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null || echo "")
+if [[ "$BACKEND" == "op" ]]; then
+  owned_regex='^(com\.jkrumm\.|homebrew\.mxcl\.|cc\.chlc\.)'
+else
+  owned_regex='.'
+fi
+
 unmapped=""
 
 # 1. loaded labels (gui domain)
 while IFS= read -r label; do
   [[ -n "$label" && "$label" != "Label" ]] || continue
   [[ "$label" =~ $allowlist_regex ]] && continue
+  [[ "$label" =~ $owned_regex ]] || continue
   if ! grep -q "$label" "$MAP"; then
     unmapped="${unmapped}  loaded-but-unmapped: $label
 "
@@ -51,6 +61,7 @@ for dir in "$HOME/Library/LaunchAgents" "/Library/LaunchDaemons"; do
     label=$(/usr/libexec/PlistBuddy -c 'Print :Label' "$plist" 2>/dev/null) || label=""
     [[ -n "$label" ]] || label=$(basename "$plist" .plist)
     [[ "$label" =~ $allowlist_regex ]] && continue
+    [[ "$label" =~ $owned_regex ]] || continue
     if ! grep -q "$label" "$MAP"; then
       unmapped="${unmapped}  on-disk-but-unmapped: $label ($plist)
 "
