@@ -211,9 +211,9 @@ bootout + bootstrap (the only reload that re-reads the file).
   fix (death by *signal*). `_setup-colima` converges onto bare `KeepAlive => true`
   plus `colima/colima-start.sh`, a bounded-retry wrapper (5 attempts, 600 s
   cool-off, never latching off).
-- **Brew regenerates that plist on every `brew services start/restart` and every
-  `brew upgrade colima`, silently** — same trap as herdr's setsid wrapper and
-  Caddy's DNS module. `colima-status` / `herdr-status`, `brew-upgrade` and the
+- **Brew regenerates that plist on every `brew services start/restart` and
+  `brew upgrade colima`, silently** (same trap as herdr's wrapper and Caddy's
+  DNS module). `colima-status` / `herdr-status`, `brew-upgrade` and the
   heartbeat's `check_boot_path` assert the file **and** that the loaded job's
   `program` is the wrapper — a converged file behind a stale job is a ✗.
 - The wrapper **adopts** a detached VM (stop, restart in the foreground, once)
@@ -624,8 +624,6 @@ it). `obsidian` (`/opt/homebrew/bin/obsidian` → the app bundle) is a **client 
 the running app** and exits 1 on every subcommand when it is down, so a closed
 Obsidian is a closed agent door for `/brain` and Hermes. `docs/brain-access.md`.
 
-**Debug logs** — structured JSONL at `~/.claude/logs/YYYY-MM-DD.jsonl`, written by
-`hooks/notify.ts` and `scripts/fetch_usage.py`, 3-day auto-cleanup on every
-invocation. `jq 'select(.event == "stop_decision")'` for hook decisions;
-`jq 'select(.src == "fetch_usage")'` for statusline errors (`type` names the
-exception class).
+**Debug logs** — structured JSONL at `~/.claude/logs/YYYY-MM-DD.jsonl` from
+`hooks/notify.ts` and `scripts/fetch_usage.py`, 3-day auto-cleanup; filter with
+`jq 'select(.event == "stop_decision")'` or `select(.src == "fetch_usage")`.
