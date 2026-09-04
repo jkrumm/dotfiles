@@ -74,13 +74,11 @@ rather than running it (it always pushes). **MacBook** adds the remote path
 credential + `git push --dry-run`), Kuma monitor states, then recurses into the
 mini's doctor over ssh — `--local` skips that. Read-only by construction.
 
-**Exit codes are graded, and that is what makes the LaunchAgent section worth
-reading.** `78` (EX_CONFIG) always fails — the job can never start, so KeepAlive
-retries forever with nothing reporting it. Any other non-zero exit fails only if
-the plist sets `KeepAlive` **and** the job is not currently running: `db-tunnel`
-exits `255` on every lid-close while perfectly healthy, and flagging that trains
-you to skim past the line that matters. It also flags a missing
-program/WorkingDirectory, `/tmp` logs, and plaintext credentials in
+**Exit codes are graded.** `78` (EX_CONFIG) always fails — the job can never
+start, so KeepAlive retries forever with nothing reporting it. Any other non-zero
+exit fails only if the plist sets `KeepAlive` **and** the job is not running
+(`db-tunnel` exits `255` on every lid-close while healthy). It also flags a
+missing program/WorkingDirectory, `/tmp` logs, and plaintext credentials in
 `EnvironmentVariables`.
 
 **settings.json merge:** the template wins on structural keys (hooks, statusLine,
