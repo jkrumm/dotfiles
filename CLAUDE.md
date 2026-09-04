@@ -202,8 +202,8 @@ Full walkthrough: `docs/remote-dev.md` → *Dev-server doors*.
 
 `make colima-{start,stop,restart,status}` wrap **`brew services`**, never bare
 `colima stop` (KeepAlive undoes it). `colima-restart` also applies the current
-`COLIMA_CPU`/`COLIMA_MEMORY` (defaults **2/4/60**, ceilings not reservations;
-disk only grows via recreate).
+`COLIMA_CPU`/`COLIMA_MEMORY` (per machine: mini **4/8/60**, MacBook **2/4/30**;
+ceilings, not reservations; disk only grows via recreate).
 
 - **The plist's `KeepAlive` is repaired and the repair is load-bearing.** Brew
   generates `{ SuccessfulExit => true }` (restart only on a *zero* exit) while

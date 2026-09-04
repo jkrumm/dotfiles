@@ -498,8 +498,14 @@ bare `colima stop` (KeepAlive undoes it).
   single resolver every caller goes through; nothing hardcodes a label. The old
   hardcoded path turned the converge step into `plist absent — nothing to
   supervise`, exit 0, over the stock plist it exists to repair.
-- `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` default to **2 / 4 / 60** and are
-  **ceilings, not reservations**; disk only grows via recreate.
+- `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` default per machine off the
+  backend marker — mini **4 / 8 / 60**, MacBook **2 / 4 / 30** — because
+  `colima-restart` writes cpu/memory back into `~/.colima/default/colima.yaml`
+  on every run. Ceilings, not reservations; disk only grows via recreate.
+- **`colima delete` orphans the data disk.** It leaves
+  `~/.colima/_lima/_disks/colima/datadisk` (sparse, tens of GB) behind, unlisted
+  by `limactl disk list` and `colima list`, and a fresh `colima start` silently
+  reuses it — defeating a `--disk` resize. Remove it explicitly before recreating.
 - `com.colima.docker-socket` maintains `/var/run/docker.sock` at boot — the only
   path the Raycast Docker extension can use, since it sanitizes
   `DOCKER_HOST`/context out of its env.
