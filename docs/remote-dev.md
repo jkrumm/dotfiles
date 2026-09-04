@@ -478,8 +478,16 @@ by looking fine.
 `_setup-colima` brews the docker toolchain, creates the VM (`vz` + Rosetta amd64
 + virtiofs), pins the `colima` docker context, registers the brew service and
 installs the `com.colima.docker-socket` LaunchDaemon. Manage with
-`make colima-{start,stop,restart,status}` — they wrap **`brew services`**, never
-bare `colima stop` (KeepAlive undoes it).
+`make colima-{start,stop,restart,status}`, never bare `colima stop` (KeepAlive
+undoes it) and never `brew services restart colima`: brew regenerates the stock
+plist and bootstraps that, so the repaired file never reaches launchd — the VM
+keeps running under the inverted KeepAlive while `ls` shows a converged file.
+`colima-restart` converges, then bootout + bootstrap (the only reload that
+re-reads a plist; `kickstart -k` does not). `colima-start` re-arms only if
+launchd's loaded `program` is not the wrapper, so it never bounces a healthy VM.
+The wrapper adopts a VM that was started detached (stops it, restarts it in the
+foreground, one hop) instead of hot-looping on `colima start -f`'s instant
+"already running" rc=0 under bare KeepAlive.
 
 - **The plist's `KeepAlive` is repaired, and the repair is load-bearing.**
   Homebrew generates `KeepAlive { SuccessfulExit => true }` (restart only on a
@@ -490,7 +498,8 @@ bare `colima stop` (KeepAlive undoes it).
   `colima/colima-start.sh`, a bounded-retry wrapper (5 fast attempts, then a
   600 s cool-off, never latching off). **Brew regenerates the plist on every
   `brew services start/restart` and every `brew upgrade colima`, silently** — so
-  every `colima-*` target re-converges and `colima-status` asserts the boot path.
+  every `colima-*` target re-converges and `colima-status` asserts the file AND
+  the loaded job's `program`.
 - **And since Homebrew 6, it regenerates it under a different NAME** —
   `homebrew.mxcl.<name>` → `sh.brew.<name>`, written on the next `brew services
   start|restart` (the old file is deleted then, not at upgrade time), so both

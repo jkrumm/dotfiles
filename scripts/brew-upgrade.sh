@@ -289,7 +289,7 @@ if [[ -z "$COLIMA_PLIST" ]] && brew services info colima --json 2>/dev/null | gr
   # Loaded with no file under either name is not "not installed here" — it is
   # the DISARMED state: nothing can converge the boot path and launchd is
   # running from a cached definition that dies at the next reboot. Fail.
-  echo "  ✗ colima: brew service is loaded but has NO plist under either name (sh.brew.colima / homebrew.mxcl.colima) — boot path unassertable (fix: brew services restart colima && make _colima-supervise)"
+  echo "  ✗ colima: brew service is loaded but has NO plist under either name (sh.brew.colima / homebrew.mxcl.colima) — boot path unassertable (fix: make colima-restart)"
   assertion_failed=1
 elif [[ -n "$COLIMA_PLIST" ]]; then
   keepalive=$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$COLIMA_PLIST" 2>/dev/null) || keepalive=""
@@ -297,8 +297,13 @@ elif [[ -n "$COLIMA_PLIST" ]]; then
   # The reverted form prints multi-line as `Dict { SuccessfulExit = true }`;
   # flatten it so the diagnosis is one readable line. `true` is untouched.
   keepalive=${keepalive//$'\n'/ }
-  if [[ "$keepalive" == "true" && "$program" == "$COLIMA_WRAPPER" ]]; then
+  loaded=$(launchctl print "$(brew_service_launchctl_target colima 2>/dev/null)" 2>/dev/null \
+    | awk -F' = ' '/^[[:space:]]*program = /{ print $2; exit }') || loaded=""
+  if [[ "$keepalive" == "true" && "$program" == "$COLIMA_WRAPPER" && ( -z "$loaded" || "$loaded" == "$COLIMA_WRAPPER" ) ]]; then
     echo "  ✓ colima: supervised boot path intact (bare KeepAlive + retry wrapper)"
+  elif [[ "$keepalive" == "true" && "$program" == "$COLIMA_WRAPPER" ]]; then
+    echo "  ✗ colima: file converged but launchd still runs '$loaded' — bootout+bootstrap needed (fix: make colima-restart)"
+    assertion_failed=1
   else
     echo "  ✗ colima: boot path reverted by the upgrade — KeepAlive='${keepalive:-unreadable}', ProgramArguments:0='${program:-unreadable}' (fix: make _colima-supervise)"
     assertion_failed=1
@@ -320,8 +325,13 @@ if [[ -z "$HERDR_PLIST" ]] && brew services info herdr --json 2>/dev/null | grep
   assertion_failed=1
 elif [[ -n "$HERDR_PLIST" ]]; then
   program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$HERDR_PLIST" 2>/dev/null) || program=""
-  if [[ "$program" == "$HERDR_WRAPPER" ]]; then
+  loaded=$(launchctl print "$(brew_service_launchctl_target herdr 2>/dev/null)" 2>/dev/null \
+    | awk -F' = ' '/^[[:space:]]*program = /{ print $2; exit }') || loaded=""
+  if [[ "$program" == "$HERDR_WRAPPER" && ( -z "$loaded" || "$loaded" == "$HERDR_WRAPPER" ) ]]; then
     echo "  ✓ herdr: session-leader boot path intact"
+  elif [[ "$program" == "$HERDR_WRAPPER" ]]; then
+    echo "  ✗ herdr: file converged but launchd still runs '$loaded' (fix: make herdr-restart YES=1)"
+    assertion_failed=1
   else
     echo "  ✗ herdr: boot path reverted by the upgrade — ProgramArguments:0='${program:-unreadable}' (fix: make _herdr-supervise, then make herdr-restart YES=1)"
     assertion_failed=1

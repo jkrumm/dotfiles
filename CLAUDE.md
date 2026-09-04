@@ -77,9 +77,8 @@ mini's doctor over ssh — `--local` skips that. Read-only by construction.
 **Exit codes are graded.** `78` (EX_CONFIG) always fails — the job can never
 start, so KeepAlive retries forever with nothing reporting it. Any other non-zero
 exit fails only if the plist sets `KeepAlive` **and** the job is not running
-(`db-tunnel` exits `255` on every lid-close while healthy). It also flags a
-missing program/WorkingDirectory, `/tmp` logs, and plaintext credentials in
-`EnvironmentVariables`.
+(`db-tunnel` exits `255` on every lid-close while healthy). Also flags `/tmp`
+logs, missing programs and plaintext credentials.
 
 **settings.json merge:** the template wins on structural keys (hooks, statusLine,
 plugins, env) and on `permissions.deny`; `permissions.allow` and
@@ -102,10 +101,10 @@ skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:
 | Response shape, autonomy, question budget, delegation posture | `output-styles/Direct.md` | Appended at the *end* of the system prompt and survives `/clear` |
 | Project/machine facts, routing, conventions | `CLAUDE.md` | Reference material to look things up in |
 
-`keep-coding-instructions: true` is load-bearing — `false` drops Claude Code's
-built-in coding prompt. Read at session start (`/clear` to apply), never
-reaches subagents (tone lives in `agents/*.md`), and carries the standing
-delegation authorization that overrides the stock "don't call AgentTool" line.
+`keep-coding-instructions: true` is load-bearing (`false` drops the built-in
+coding prompt). Read at session start (`/clear` to apply), never reaches
+subagents (tone lives in `agents/*.md`), and carries the standing delegation
+authorization.
 
 Keep this file **under 40k chars** (`wc -c CLAUDE.md`; the agent context limit is
 150k). When a section grows, move its narrative verbatim into the matching
@@ -198,12 +197,14 @@ Full walkthrough: `docs/remote-dev.md` → *Dev-server doors*.
 
 ## Colima and the boot path
 
-`make colima-{start,stop,restart,status}` wrap **`brew services`**, never bare
-`colima stop` (KeepAlive undoes it). `colima-restart` also applies the current
-`COLIMA_CPU`/`COLIMA_MEMORY` (per machine: mini **4/8/60**, MacBook **2/4/30**;
-ceilings, not reservations; disk only grows via recreate).
+`make colima-{start,stop,restart,status}` — never bare `colima stop` (KeepAlive
+undoes it) and **never `brew services restart colima`**: it regenerates the stock
+plist and bootstraps *that*, so a repaired file never reaches launchd.
+`colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/8/60**, MacBook
+**2/4/30**; ceilings; disk grows only via recreate), converges the plist, then
+bootout + bootstrap (the only reload that re-reads the file).
 
-- **The plist's `KeepAlive` is repaired and the repair is load-bearing.** Brew
+- **The plist's `KeepAlive` repair is load-bearing.** Brew
   generates `{ SuccessfulExit => true }` (restart only on a *zero* exit) while
   `colima start -f` runs the VM in the foreground — inverted, so a dirty Lima
   image leaves Docker down until a human logs in. `{ Crashed => true }` is not the
@@ -212,9 +213,11 @@ ceilings, not reservations; disk only grows via recreate).
   then a 600 s cool-off, never latching off).
 - **Brew regenerates that plist on every `brew services start/restart` and every
   `brew upgrade colima`, silently** — same trap as herdr's setsid wrapper and
-  Caddy's DNS module. Every `colima-*` target re-converges; `colima-status` /
-  `herdr-status` assert the boot path (plist on disk + `launchctl print` path
-  match), and so does the heartbeat's `check_boot_path`.
+  Caddy's DNS module. `colima-status` / `herdr-status`, `brew-upgrade` and the
+  heartbeat's `check_boot_path` assert the file **and** that the loaded job's
+  `program` is the wrapper — a converged file behind a stale job is a ✗.
+- The wrapper **adopts** a detached VM (stop, restart in the foreground, once)
+  instead of hot-looping on `already running` rc=0.
 - **Homebrew 6 renames the plist** to `sh.brew.<name>` on the next
   `brew services start|restart`. Never spell a label: **`scripts/lib/brew-service.sh`**
   resolves plist/label/target by service name (`make brew-service-test`); a

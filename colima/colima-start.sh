@@ -67,6 +67,25 @@ started=$(date +%s)
 rc=$?
 elapsed=$(( $(date +%s) - started ))
 
+# ADOPTION. If the VM is already up but not owned by this process — a
+# `brew services restart` started it detached, or a human ran `colima start` —
+# `colima start -f` returns 0 within a second with "already running, ignoring".
+# Counting that as a healthy run makes bare KeepAlive respawn this wrapper
+# every ~10s forever, with the failure counter never engaging because rc=0
+# reads as success. Stop the detached VM and start it again in the foreground
+# so launchd owns it. One hop only: if it happens twice in a row something else
+# is holding the VM, and that is a failure, not a loop.
+if [ "$rc" -eq 0 ] && [ "$elapsed" -lt "$UP_SECONDS" ] && "$COLIMA" status >/dev/null 2>&1; then
+  if [ -z "${COLIMA_SUPERVISOR_ADOPTED:-}" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') colima-start: VM already running outside this supervisor — stopping it so launchd owns it"
+    "$COLIMA" stop
+    COLIMA_SUPERVISOR_ADOPTED=1 exec "$0" "$@"
+  fi
+  echo $((fails + 1)) > "$FAIL_FILE"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') colima-start: VM still owned elsewhere after one adoption attempt (failure $((fails + 1))/$MAX_FAILS)" >&2
+  exit 1
+fi
+
 if [ "$rc" -eq 0 ] || [ "$elapsed" -ge "$UP_SECONDS" ]; then
   echo 0 > "$FAIL_FILE"
   echo "$(date '+%Y-%m-%d %H:%M:%S') colima-start: exited rc=$rc after ${elapsed}s (counted as a healthy run)"

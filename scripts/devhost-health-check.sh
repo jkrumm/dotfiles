@@ -424,9 +424,9 @@ check_boot_path() {
   # other components already depend on (herdr/colima/sideclaw/hermes/collie are
   # probed for liveness elsewhere), so absent here is a genuine failure, not a
   # skip.
-  local uid label plist missing="" mismatched="" path
+  local uid label plist want missing="" mismatched="" stale="" path program
   uid=$(/usr/bin/id -u)
-  while IFS='|' read -r label plist; do
+  while IFS='|' read -r label plist want; do
     [[ -n "$label" ]] || continue
     if [[ ! -f "$plist" ]]; then
       missing="${missing:+$missing, }${label##*.}"
@@ -443,11 +443,18 @@ check_boot_path() {
       missing="${missing:+$missing, }${label##*.}(not loaded)"
     elif [[ "$path" != "$plist" ]]; then
       mismatched="${mismatched:+$mismatched, }${label##*.} runs from $path"
+    elif [[ -n "$want" ]]; then
+      # shellcheck disable=SC2016
+      program=$("$LAUNCHCTL_BIN" print "gui/$uid/$label" 2>/dev/null \
+        | "$AWK_BIN" -F' = ' '/^[[:space:]]*program = /{ print $2; exit }') || program=""
+      [[ "$program" == "$want" ]] \
+        || stale="${stale:+$stale, }${label##*.} loaded as ${program:-?}"
     fi
   done <<<"$LAUNCHD_KEEPALIVE"
 
   [[ -z "$missing" ]] || { echo "boot path BROKEN — plist missing/unloaded: $missing (re-run the owning make target)"; return 1; }
   [[ -z "$mismatched" ]] || { echo "boot path DRIFTED — launchd runs a different file than on disk: $mismatched (bootout+bootstrap to reload, never kickstart -k)"; return 1; }
+  [[ -z "$stale" ]] || { echo "boot path STALE — file converged but launchd still runs the stock command: $stale (make colima-restart / herdr-restart YES=1, never brew services restart)"; return 1; }
   echo "boot path ok ($(printf '%s\n' "$LAUNCHD_KEEPALIVE" | grep -c .) jobs)"
 }
 
@@ -666,7 +673,7 @@ check_memory() {
 #            actually has loaded (that is the cached job that dies at reboot),
 #            else the new-form name so the row still asserts.
 brew_row() {
-  local name="$1" uid label plist candidate
+  local name="$1" want="${2:-}" uid label plist candidate
   uid=$(/usr/bin/id -u)
   plist=$(brew_service_plist "$name" 2>/dev/null) || plist=""
   label=$(brew_service_label "$name" 2>/dev/null) || label=""
@@ -679,13 +686,16 @@ brew_row() {
   fi
   [[ -n "$label" ]] || label="sh.brew.$name"
   [[ -n "$plist" ]] || plist=$(brew_service_expected_plist "$name")
-  printf '%s|%s\n' "$label" "$plist"
+  printf '%s|%s|%s\n' "$label" "$plist" "$want"
 }
 
-# label|plist whose absence means "not wired on this machine"
+# label|plist|program — program is the ProgramArguments:0 launchd must be
+# RUNNING (empty = not asserted). A converged file behind a stale loaded job
+# is the `brew services restart` trap: the file looks right, launchd still runs
+# the stock command until bootout + bootstrap.
 LAUNCHD_KEEPALIVE="\
-$(brew_row herdr)
-$(brew_row colima)
+$(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
+$(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
@@ -712,7 +722,7 @@ check_launchd_restarts() {
   state_file="$STATE_DIR/launchd-runs"
   /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
-  while IFS='|' read -r label plist; do
+  while IFS='|' read -r label plist _; do
     [[ -n "$label" ]] || continue
     [[ -f "$plist" ]] || continue
     out=$("$LAUNCHCTL_BIN" print "gui/$uid/$label" 2>/dev/null) || continue

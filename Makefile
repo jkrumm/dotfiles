@@ -1568,29 +1568,72 @@ github-config-dry:
 # Colima — Docker runtime VM management (replaces OrbStack/Docker Desktop)
 # ============================================================================
 # Resources via COLIMA_CPU / COLIMA_MEMORY / COLIMA_DISK (see top of file).
-# Always-on via brew service (RunAtLoad + KeepAlive) — manage with these targets,
-# not bare `colima stop` (KeepAlive would relaunch it).
+# Always-on via brew service (RunAtLoad + KeepAlive) — manage with these targets.
+# Never bare `colima stop` (KeepAlive relaunches it) and never
+# `brew services restart colima`: brew REGENERATES the stock plist and
+# bootstraps THAT, so a repaired file never reaches launchd — launchctl keeps
+# running `colima start -f` with the inverted KeepAlive while the file on disk
+# looks converged. The only reload that re-reads the file is bootout +
+# bootstrap (kickstart -k does not), which is what _colima-rearm does.
 # GUI: Raycast "Manage Docker" extension + `lazydocker` TUI.
 
 .PHONY: colima-start
 colima-start:
-	@brew services start colima
+	@if [ -z "$$($(BREW_SERVICE) plist colima 2>/dev/null)" ]; then \
+		brew services start colima >/dev/null 2>&1 || true; \
+	fi
 	@$(MAKE) --no-print-directory _colima-supervise
+	@$(MAKE) --no-print-directory _colima-rearm
 
 .PHONY: colima-stop
 colima-stop:
 	@brew services stop colima
 
-# Apply current COLIMA_CPU/MEMORY to the persisted config + restart the service.
-# (Disk can only grow via recreate — not handled here.)
+# Apply current COLIMA_CPU/MEMORY to the persisted config, converge the plist,
+# then bootout + bootstrap so launchd runs the converged definition. Restarts
+# the VM and every container on it, by design. (Disk only grows via recreate.)
 .PHONY: colima-restart
 colima-restart:
 	@if [ -f "$(HOME)/.colima/default/colima.yaml" ]; then \
 		sed -i '' 's/^cpu: .*/cpu: $(COLIMA_CPU)/; s/^memory: .*/memory: $(COLIMA_MEMORY)/' \
 			"$(HOME)/.colima/default/colima.yaml"; \
 	fi
-	@brew services restart colima
+	@if [ -z "$$($(BREW_SERVICE) plist colima 2>/dev/null)" ]; then \
+		brew services start colima >/dev/null 2>&1 || true; \
+	fi
 	@$(MAKE) --no-print-directory _colima-supervise
+	@$(MAKE) --no-print-directory _colima-rearm FORCE=1
+
+# Make launchd run the converged plist: bootout the loaded job, wait for the
+# label to disappear, bootstrap the file. Idempotent unless FORCE=1 — if launchd
+# already holds the wrapper as its program there is nothing to re-arm and the
+# VM is left alone. Bouncing means a Docker outage of ~30s, so this is reached
+# only from colima-start / colima-restart, never from `make setup`.
+.PHONY: _colima-rearm
+_colima-rearm:
+	@PLIST=$$($(BREW_SERVICE) plist colima 2>/dev/null); \
+	TARGET=$$($(BREW_SERVICE) target colima 2>/dev/null); \
+	WRAP="$(DOTFILES_DIR)/colima/colima-start.sh"; \
+	if [ -z "$$PLIST" ] || [ -z "$$TARGET" ]; then \
+		echo "  ✗ no colima plist under either name (sh.brew.colima / homebrew.mxcl.colima) — nothing to bootstrap"; exit 1; \
+	fi; \
+	LOADED=$$(launchctl print "$$TARGET" 2>/dev/null | awk -F' = ' '/^[[:space:]]*program = /{ print $$2; exit }'); \
+	if [ "$(FORCE)" != "1" ] && [ "$$LOADED" = "$$WRAP" ]; then \
+		echo "    · launchd already runs the supervised job — not bouncing the VM"; exit 0; \
+	fi; \
+	echo "    Re-arming launchd (bootout + bootstrap — the VM and every container restart)..."; \
+	launchctl bootout "$$TARGET" 2>/dev/null || true; \
+	i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -gt 60 ] && { echo "  ✗ old colima job never went away"; exit 1; }; \
+		sleep 0.5; \
+	done; \
+	launchctl bootstrap "gui/$$(id -u)" "$$PLIST" || { echo "  ✗ bootstrap failed"; exit 1; }; \
+	LOADED=$$(launchctl print "$$TARGET" 2>/dev/null | awk -F' = ' '/^[[:space:]]*program = /{ print $$2; exit }'); \
+	if [ "$$LOADED" = "$$WRAP" ]; then \
+		echo "    ✓ launchd runs $${WRAP##*/} from $${PLIST##*/}"; \
+	else \
+		echo "  ✗ launchd loaded '$${LOADED:-nothing}' instead of the wrapper"; exit 1; \
+	fi
 
 # Converge colima's brew-service plist onto the supervised shape. Called after
 # every brew-services operation above AND from _setup-colima, because BREW
@@ -1652,7 +1695,14 @@ _colima-supervise:
 		/usr/libexec/PlistBuddy -c "Add :ProgramArguments:0 string $$WRAP" "$$PLIST" >/dev/null; \
 		plutil -lint "$$PLIST" >/dev/null || { echo "  ✗ colima plist is malformed after edit"; exit 1; }; \
 		echo "    ✓ colima supervisor pinned (bare KeepAlive + bounded-retry wrapper)"; \
-		echo "      ↳ active at next login/reboot, or now with: brew services restart colima && make _colima-supervise"; \
+		TARGET=$$($(BREW_SERVICE) target colima 2>/dev/null); \
+		LOADED=$$(launchctl print "$$TARGET" 2>/dev/null | awk -F' = ' '/^[[:space:]]*program = /{ print $$2; exit }'); \
+		if [ -n "$$LOADED" ] && [ "$$LOADED" != "$$WRAP" ]; then \
+			echo "      ! launchd still runs the STOCK definition ($$LOADED) — the file is fixed, the loaded job is not"; \
+			echo "      ↳ make colima-restart   (bootout + bootstrap; restarts the VM — never 'brew services restart', it regenerates the stock plist)"; \
+		else \
+			echo "      ↳ active at next boot; 'make colima-restart' re-arms it now (restarts the VM)"; \
+		fi; \
 	fi
 
 .PHONY: colima-status
@@ -1669,9 +1719,18 @@ colima-status:
 		echo "  ✗ boot path UNRESOLVABLE — no sh.brew.colima/homebrew.mxcl.colima plist on disk"; \
 	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/colima/colima-start.sh" ] \
 	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
-		echo "  ✓ boot path supervised (bare KeepAlive + bounded-retry wrapper) — $${PLIST##*/}"; \
+		echo "  ✓ boot path supervised on disk (bare KeepAlive + bounded-retry wrapper) — $${PLIST##*/}"; \
 	else \
-		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _colima-supervise"; \
+		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make colima-restart"; \
+	fi; \
+	TARGET=$$($(BREW_SERVICE) target colima 2>/dev/null); \
+	LOADED=$$(launchctl print "$$TARGET" 2>/dev/null | awk -F' = ' '/^[[:space:]]*program = /{ print $$2; exit }'); \
+	if [ -z "$$LOADED" ]; then \
+		echo "  ✗ launchd has no colima job loaded ($$TARGET)"; \
+	elif [ "$$LOADED" = "$(DOTFILES_DIR)/colima/colima-start.sh" ]; then \
+		echo "  ✓ launchd runs the wrapper (loaded job matches the file)"; \
+	else \
+		echo "  ✗ launchd runs the STOCK definition ($$LOADED) — file repaired, job stale; run: make colima-restart"; \
 	fi
 	@FAILS="$(HOME)/.local/state/colima-supervisor/consecutive-failures"; \
 	[ -f "$$FAILS" ] && [ "$$(cat "$$FAILS")" != "0" ] \
@@ -2702,7 +2761,7 @@ help:
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
-	@echo "  make colima-restart  Restart + apply current COLIMA_CPU/MEMORY ceilings"
+	@echo "  make colima-restart  Apply COLIMA_CPU/MEMORY, converge the plist, bootout+bootstrap (restarts the VM)"
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
 	@echo ""
