@@ -2,12 +2,10 @@
 set -u -o pipefail   # NOT -e: one section failing must not abort the rest
 
 # doctor — read-only health of this machine, and (from the MacBook) the mini
-# too. Collapses four standalone diagnostics that used to answer overlapping
-# questions with overlapping output: scripts/remote-dev-doctor.sh (MacBook →
-# mini path), scripts/mini-sweep.sh (Kuma + a remote devhost/drift roundup),
-# scripts/launchagents-check.sh (this machine's own LaunchAgents), and the
-# on-demand half of scripts/drift-check.sh (its daily-push half stays a
-# separate LaunchAgent — see below). One command, one place to look.
+# too. One command, one place to look: this machine's LaunchAgents, the
+# architecture map, brew, the on-demand half of scripts/drift-check.sh (its
+# daily-push half stays a separate LaunchAgent — see below), and from the
+# MacBook the whole remote path plus the Kuma view of the mini.
 #
 # Nothing here writes, restarts, or pushes to Uptime Kuma. The daily drift
 # push, the 300s devhost heartbeat, and every applier (brew-upgrade,
@@ -56,12 +54,10 @@ echo ""
 echo "  doctor — $(hostname -s 2>/dev/null || echo "this machine") (backend=${BACKEND:-unset})"
 
 # --- LaunchAgents (both machines) --------------------------------------------
-# Harvested from scripts/launchagents-check.sh — same detection logic,
-# unchanged: a missing program/WorkingDirectory, a down KeepAlive job, /tmp
-# logs, and a plaintext credential in EnvironmentVariables. See that history
-# in dotfiles CLAUDE.md ("The MacBook has no heartbeat") for why each check
-# exists — two agents once accumulated 40,000+ failed spawns with nothing
-# reporting it.
+# A missing program/WorkingDirectory, a down KeepAlive job, /tmp logs, and a
+# plaintext credential in EnvironmentVariables. Each check exists because it
+# once went unreported — two agents accumulated 40,000+ failed spawns with
+# nothing saying so (docs/devhost-health.md).
 section_launchagents() {
   hdr "LaunchAgents"
   local agent_dir="${LAUNCHAGENTS_DIR:-$HOME/Library/LaunchAgents}"
@@ -195,11 +191,10 @@ section_devhost_heartbeat() {
 }
 
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
-# Harvested from scripts/remote-dev-doctor.sh, layers 1/2/4 plus the GitHub
-# credential + push-rights checks. Layer 3 (the mosh path) is dropped — mosh
-# is retired. The reverse mini->iumac leg is dropped too: it is only
-# meaningful running ON the mini (gated on backend=cache there), which this
-# section by definition is not.
+# Tailscale, ssh, ControlMaster, agent forwarding, herdr, then the GitHub
+# credential + push rights. The reverse mini->iumac leg is not probed here: it
+# is only meaningful running ON the mini, which this section by definition is
+# not.
 section_remote_path() {
   hdr "Remote path — MacBook → $HOST"
 
@@ -275,7 +270,7 @@ section_remote_path() {
 # --- Kuma monitor states (MacBook only) ---------------------------------------
 # Read straight from Uptime Kuma's SQLite on homelab, over keyless Tailscale
 # SSH — the one view of the dev host that survives the dev host being down or
-# 1Password being locked. Harvested from scripts/mini-sweep.sh.
+# 1Password being locked.
 section_kuma() {
   hdr "Uptime Kuma — MacMini monitors (via $KUMA_HOST, keyless)"
   local kuma_sql kuma_out

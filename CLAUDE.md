@@ -197,8 +197,8 @@ and **after any `brew upgrade caddy`**, which silently reverts it.
   `sudo killall -HUP mDNSResponder`.
 - **`https://apps.mini.jkrumm.com` lists every app** with port and live status,
   and answers at any *unmatched* `*.mini.jkrumm.com` name, so a typo shows what
-  exists. The apex `https://mini.jkrumm.com` is a second subject on the same
-  block (own cert, own A record) and falls through to the same page.
+  exists. The apex `https://mini.jkrumm.com` (own cert + A record) lands on the
+  same page.
 
 Full walkthrough: `docs/remote-dev.md` → *Dev-server doors*.
 
