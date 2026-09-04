@@ -208,9 +208,9 @@ bootout + bootstrap (the only reload that re-reads the file).
   generates `{ SuccessfulExit => true }` (restart only on a *zero* exit) while
   `colima start -f` runs the VM in the foreground — inverted, so a dirty Lima
   image leaves Docker down until a human logs in. `{ Crashed => true }` is not the
-  fix (that is death by *signal*). `_setup-colima` converges onto bare `KeepAlive
-  => true` plus `colima/colima-start.sh`, a bounded-retry wrapper (5 attempts,
-  then a 600 s cool-off, never latching off).
+  fix (death by *signal*). `_setup-colima` converges onto bare `KeepAlive => true`
+  plus `colima/colima-start.sh`, a bounded-retry wrapper (5 attempts, 600 s
+  cool-off, never latching off).
 - **Brew regenerates that plist on every `brew services start/restart` and every
   `brew upgrade colima`, silently** — same trap as herdr's setsid wrapper and
   Caddy's DNS module. `colima-status` / `herdr-status`, `brew-upgrade` and the
