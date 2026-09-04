@@ -76,6 +76,16 @@ elapsed=$(( $(date +%s) - started ))
 # so launchd owns it. One hop only: if it happens twice in a row something else
 # is holding the VM, and that is a failure, not a loop.
 if [ "$rc" -eq 0 ] && [ "$elapsed" -lt "$UP_SECONDS" ] && "$COLIMA" status >/dev/null 2>&1; then
+  # Only a CLEAN history earns an adoption. When the previous attempt already
+  # failed (a VM that booted but whose docker never came up leaves the VM
+  # running, so the next `start -f` also says "already running"), stopping and
+  # restarting it every cycle just makes each failed attempt 90s instead of
+  # 10s. Count it and let the bounded-retry policy reach its cool-off.
+  if [ "$fails" -gt 0 ]; then
+    echo $((fails + 1)) > "$FAIL_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') colima-start: VM up but the previous start failed — not adopting, counting (failure $((fails + 1))/$MAX_FAILS)" >&2
+    exit 1
+  fi
   if [ -z "${COLIMA_SUPERVISOR_ADOPTED:-}" ]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') colima-start: VM already running outside this supervisor — stopping it so launchd owns it"
     "$COLIMA" stop
