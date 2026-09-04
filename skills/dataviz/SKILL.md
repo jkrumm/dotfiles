@@ -13,9 +13,11 @@ Before applying any of the generic guidance below, look for a **`DESIGN.md` at t
 (the emerging Google-spec convention: YAML token front matter + Markdown prose; sibling to
 `AGENTS.md`/`CLAUDE.md`). If it exists, **it is the law** — this skill is only the _method_. Load
 it, obey its palette/token/restraint rules and its earned-color policy verbatim, and never
-introduce a color, scale, or pattern it forbids. This skill's defaults (Blueprint v6, single hue
-per metric, neutral structure) are what a _good_ DESIGN.md encodes — but the project file wins on
-every conflict. The reference instantiation is `~/SourceRoot/argo/DESIGN.md`.
+introduce a color, scale, or pattern it forbids. This skill's defaults (single hue per metric,
+neutral structure) are what a _good_ DESIGN.md encodes — but the project file wins on every
+conflict. **In a basalt-ui consumer** the precedence is `consumer DESIGN.md > the shipped
+basalt-* rules > this skill` — `basalt-charts.md`/`basalt-tokens.md` are law there, not this file.
+The reference instantiation is `~/SourceRoot/argo/DESIGN.md`.
 
 ## Aesthetic direction (decide first)
 
@@ -31,12 +33,25 @@ Professional dataviz is **restraint**, not decoration. Commit to these before to
 
 Aesthetics only survive if they're impossible to bypass. The architecture:
 
-1. **One palette data file** (`palette.ts`): the hex palette (`BP`) + every series/status/semantic/neutral entry as a per-theme `{ light, dark }` **pair**. Pure data — no React, no UI-lib import. Series colors are NOT theme-agnostic: a hue keeps identity but shifts shade (lighter on dark to avoid glow, deeper on light). This file also feeds the **Mantine theme** (reskin every accent from the same `BP`), so chrome and charts share one identity with zero call-site edits.
-2. **CSS custom properties** (`theme-vars.ts`): emit the pairs as `--vx-*` vars under the light/dark selector the UI lib toggles (`[data-mantine-color-scheme]`). Theme resolution becomes pure CSS — no JS branching, works in non-component files too.
-3. **Thin tokens** (`tokens.ts`): `VX.*` are just `var(--vx-*)` strings + non-color sizing. Opacity via `alpha(token, a)` = `color-mix(in srgb, token a%, transparent)`, never `rgba()`.
-4. **Enforcement guard**: a tiny script scanning chart + app source for raw hex / `rgb()` / `hsl()` (allow a `theme-allow` escape comment, exempt the palette/token files), wired into `lint`. A markdown rule drifts; a failing build doesn't. oxlint has no `no-restricted-syntax`, so this guard is how you get teeth.
+1. **One palette data file**: every series/status/semantic/neutral entry as a per-theme
+   `{ light, dark }` **pair**. Pure data — no React, no UI-lib import. **The palette is DERIVED,
+   not hand-authored** where the project has a derive engine (basalt-ui: `tokens/derive.ts` from
+   one accent seed + bounded knobs) — never hand-edit a hex in that file to "fix" a drift; retune
+   the derive config instead (`createBasaltTheme(overrides?, { derive })`). Where no derive engine
+   exists, the pair is still hand-authored data, just not a hex edited to chase a one-off look.
+   This file also feeds the **Mantine theme**, so chrome and charts share one identity.
+2. **CSS custom properties**: emit the pairs as `--vx-*` vars under the light/dark selector the UI
+   lib toggles. Theme resolution becomes pure CSS — no JS branching, works in non-component files.
+3. **Thin tokens**: `VX.*` are just `var(--vx-*)` strings + non-color sizing. Opacity via
+   `alpha(token, a)` = `color-mix(in srgb, token a%, transparent)`, never `rgba()`.
+4. **Enforcement guard**: a script scanning chart + app source for raw hex/`rgb()`/`hsl()` (allow
+   a documented escape comment, exempt the palette/token files), wired into lint. A markdown rule
+   drifts; a failing build doesn't.
 
-Full conventions (primitives contract, kinds vs bespoke, the Rule of Three, gradient defaults) live in the global rule `~/.claude/rules/visx-charts.md` — read it before adding a chart. The realized reference implementation is `~/SourceRoot/argo/packages/charts`.
+**In a basalt-ui consumer**, this pattern already ships — `basalt-ui/tokens` + `basalt check-theme`
++ `agent/rules/basalt-charts.md`/`basalt-tokens.md`. Don't re-roll it; read those before adding a
+chart. Elsewhere, the global rule `~/.claude/rules/visx-charts.md` covers the primitives contract,
+kinds vs bespoke, and the Rule of Three.
 
 ## Dark vs light tuning
 
@@ -51,6 +66,6 @@ Static HTML POCs don't translate 1:1 to visx/Mantine. Instead ship a **DEV-only 
 - Every color comes from a token (`VX.*` / palette) — guard is green, zero raw hex.
 - One hue per metric; categorical multi-color only where justified.
 - Neutral line/axis/grid; soft gradient area on plain metric lines.
-- Tooltip = `ChartCard`/`ChartTooltip` primitives, not hand-rolled markup; one swatch per row.
+- Tooltip = the shared card/legend/tooltip primitives, not hand-rolled markup; one swatch per row.
 - Looks right in BOTH themes (toggle and check glow on dark, contrast on light).
-- New colors went into `palette.ts` as `{light,dark}` pairs, not inline.
+- New colors went into the palette data as `{light,dark}` pairs, not inline — and not a hand-edited hex where a derive engine owns the palette.

@@ -1,117 +1,52 @@
 ---
-description: visx charting conventions — ChartCard/ChartLegend/ChartTooltip primitives, kind-registry, centralized CSS-variable palette + tokens, theme reactivity
+description: visx charting conventions for a non-basalt-ui repo — primitives, kind-registry, centralized CSS-variable palette, theme reactivity. In a basalt-ui consumer, `basalt-charts.md` (shipped by the package) supersedes this file entirely.
 paths: ["**/charts/**", "**/*chart*.tsx", "**/*chart*.ts", "**/*Chart*.tsx", "**/*Chart*.ts"]
 ---
 
-# Visx Charts — Library Conventions
+# Visx Charts — Library Conventions (non-basalt-ui repos)
 
-Applies to any project using [visx](https://airbnb.io/visx) for charting. Keeps charts visually consistent and makes AI contributions predictable. Project-specific primitives/tokens live alongside the project — this file captures the discipline.
+**If this repo installs `basalt-ui`, stop here** — `agent/rules/basalt-charts.md` (shipped by the
+package via `basalt-ui init`/`sync`) is the doctrine for that repo; it names `CartesianChart` as
+the one mandatory assembly primitive and this file's older `ChartHoverSync`/`useChartTooltip`
+shapes do not apply there.
 
-## Why visx (and not Recharts)
-
-Visx exposes low-level primitives so we can build exactly the chart we want. The trade-off is that each chart duplicates structure unless we enforce shared building blocks. **Primitives + a small kind-registry is the contract, not optional polish.**
+For any other project using [visx](https://airbnb.io/visx): low-level primitives mean each chart
+duplicates structure unless shared building blocks are enforced. **Primitives + a small
+kind-registry is the contract, not optional polish.**
 
 ## Every chart has
 
-1. **ChartCard** wrapper — never a raw AntD `<Card>`. Gives title + info-tooltip + extra slot, consistent margin.
-2. **ChartLegend** — never hand-rolled legend markup. Supports `line | bar | split | splitLine` shapes and optional highlight state.
-3. **ChartTooltip** + `TooltipHeader` + `TooltipRow` + `TooltipBody` — never import `@visx/tooltip` directly.
-4. **AxisLeftNumeric** + **AxisBottomDate** — never raw `<AxisLeft>`/`<AxisBottom>` (they miss theme tokens + smart ticks).
-5. **HoverOverlay** for mouse capture, **HoverContext** for cross-chart crosshair sync, **useChartTooltip** for tip state. Wrap a group of date-aligned charts in a sync provider (basalt-ui: `<ChartHoverSync>`) to cast a ghost crosshair across all siblings on hover; without it the cursor stays per-chart.
-6. **Theme-aware colors** via `useVxTheme()` (re-renders on toggle) + `VX` tokens. **Never** raw hex literals in chart files. **Never** `localStorage.getItem('theme')`.
+1. A **card wrapper** — never a raw library `<Card>`. Title + info-tooltip + extra slot.
+2. A **legend component** — never hand-rolled legend markup.
+3. A **tooltip component** that portals outside the SVG — never render a `<div>`-based tooltip
+   inside `<svg>` (it mounts in the SVG namespace, throws nothing, and never paints).
+4. **Tokenized axis primitives** — never raw `<AxisLeft>`/`<AxisBottom>` (they miss theme tokens
+   and smart ticks).
+5. **Theme-aware colors** via CSS custom properties (`--vx-*` or your own prefix), resolved in pure
+   CSS under the light/dark selector — never a React re-render on scheme toggle, never
+   `localStorage.getItem('theme')`, never a raw hex literal in a chart file.
 
-**Exemption:** sparklines (tiny inline charts without legend/tooltip) live under `charts/sparklines/` and don't have to compose `ChartCard`/`ChartLegend`/`ChartTooltip` — but still must use VX tokens and `useVxTheme`.
+**Exemption:** sparklines (tiny inline charts without legend/tooltip) don't have to compose the
+card/legend/tooltip contract — but still use the token system.
 
-## Traps no gate catches
+## Palette architecture (three layers)
 
-Four failures that typecheck, lint, pass the palette guard, and render — each
-found the hard way, none reported by any tool:
-
-- **`ChartTooltip` is a `<div>`. Never render one inside `<svg>`.** React creates
-  the element in the SVG namespace there, so it mounts, accepts its props, throws
-  nothing, and is never painted. One chart shipped **eight authored tooltip rows
-  that no one had ever seen**; the chart was otherwise correct, so nothing looked
-  wrong. The tooltip belongs in the wrapper outside the SVG.
-- **Cross-chart hover syncs on an opaque string key**, so two charts share a
-  cursor only if they emit *identical* key strings. A chart that downsamples its
-  domain to fit a narrow viewport stops owning most of the keys its siblings
-  broadcast — the crosshair then lands on some hovers and not others, with no
-  rule the reader can infer, which is worse than no shared cursor at all. If any
-  chart in a synced group folds, map every unfolded key onto the folded slot that
-  swallowed it rather than matching keys exactly.
-- **`HoverOverlay` binds mouse events, not pointer events**, so every chart under
-  it is inert on touch. Use a pointer-event overlay if the page ships to phones.
-- **A pre-formatted axis label usually doubles as the scale's domain value**
-  (`scalePoint`/`scaleBand` over label strings), so it must be unique per point.
-  Two points sharing a domain value collapse onto one x position and one stops
-  being drawn — a measurement silently dropped, with no gap to show for it. Watch
-  for this when a date formatter truncates: a day-resolution format over a 24 h
-  window makes every label identical.
-
-## "Nothing to draw" is two different states
-
-A chart in a data app has three states, not two: **measured and empty**,
-**measured and absent** (a gap in coverage), and **not asked yet** (query in
-flight). Collapsing the third into either of the others is the most common
-honesty bug in a dashboard — `data ?? []` renders an in-flight query as a fully
-hatched "not measured" window, which is a positive claim that nothing was there.
-Give charts an explicit `isPending` and a placeholder with the same footprint,
-and suppress the legend while pending (a legend naming a "not measured" series
-with nothing to point at is its own small lie). Guard it even where a route
-loader appears to make the state unreachable — that guarantee is route config a
-later edit can silently remove.
+Palette data (pure `{light,dark}` pairs, no React/UI-lib/browser API) → CSS variables (emitted
+under the light/dark selector) → thin token refs (`var(--x-*)` strings, usable in components AND
+non-component files). One source of truth; the app's UI-chrome theme is reskinned from the same
+file so charts and chrome share one identity. Opacity via `color-mix(in srgb, token a%,
+transparent)`, never `rgba()`.
 
 ## How to add a new chart
 
-1. **Is it the second instance of an existing pattern?** Extract a kind component into `charts/kinds/` and migrate both call sites. (Rule of Three: don't extract on the first, don't wait past the third.)
-2. **Is it genuinely unique (like a dual-panel MACD)?** Stay bespoke — compose the primitives directly. Keep it in the page's chart file, not in `charts/kinds/`.
-3. **Does it add a new color?** Add a `{light,dark}` pair to `palette.ts`, wire the var in `theme-vars.ts`, expose the `VX.*` ref in `tokens.ts` — never inline a hex. New non-color sizing goes straight in `tokens.ts`.
-
-## Tokens & palette (CSS-variable architecture)
-
-The mature pattern is **one palette data file → CSS custom properties → thin token refs**. Three layers, separated:
-
-1. **Palette data** (`palette.ts`): a designed hue set (e.g. Blueprint v6 — muted, UI-tuned, never raw Material/AntD/Tailwind defaults) plus every semantic/series/status entry as a per-theme `{ light, dark }` **pair**. Pure data: no React, no UI-lib import, no browser API. This is the single source of truth — the app's UI-chrome theme (Mantine/etc.) is reskinned from the *same* file so charts and chrome share one identity.
-2. **CSS variables** (`theme-vars.ts`): emits the pairs as `--vx-*` custom properties under the light/dark selectors the UI lib already toggles (e.g. `[data-mantine-color-scheme]`). Resolution is then pure CSS.
-3. **Tokens** (`tokens.ts`): `VX.*` are just `var(--vx-*)` strings (colors) plus non-color sizing constants.
-
-Consequences worth internalizing:
-
-- Series colors are **not** theme-agnostic — a hue keeps its identity but shifts shade across themes (lighter on dark to avoid glow/bleed, deeper on light). The pair lives in `palette.ts`, not in two `fooDark`/`fooLight` keys on `VX`.
-- Because tokens are CSS vars, `VX.*` works identically in components **and** non-component files (`constants.ts`, `formulas.ts`) — no hook required. `useVxTheme()` is kept only as a back-compat convenience returning the same var refs.
-- Apply opacity with an `alpha(token, a)` helper (`color-mix(in srgb, token a%, transparent)`), never `rgba()` — the hue must keep resolving per scheme.
-- A **single palette source** makes a DEV-only theme lab trivial: override `--vx-*` on the root element to retune the whole app live, persist to localStorage, export values to bake back in.
-
-## Kind components
-
-A "kind" is a recurring chart shape reusable across datasets. Props are declarative; bespoke escape hatches (`renderExtraTooltipRows`, etc.) are fine but shouldn't grow into god-object configs.
-
-**Characteristic props of a good kind:**
-- `data`, `width`, `height`, `chartId`
-- `getX`, `getY` accessors (generic over point type)
-- Zones / thresholds / refLines as plain arrays
-- `seriesLabel`, `formatValue`, `tooltipLabel?`
-- No `children` render-prop unless you genuinely need it — config-first.
-
-**Anti-pattern:** a single `<Chart type="..." config={...} />` component that switches by kind. That's the Recharts trap. Prefer N small kinds.
-
-**Shipped kinds (basalt-ui):** beyond the line/bar/area/donut basics, basalt-ui ships `MultiLine` (N series on a shared y-axis — legend-hover dimming, dashed MA companions, per-point markers, zones/refLines, fixed or auto domain; also z-score/σ via a symmetric domain + zero refLine), `DualPanel` (line pane + signed-histogram pane on one x-scale and cursor, optional fill-between), and `Heatmap` (category×category intensity grid with per-cell tooltip + optional gradient legend strip).
-
-## Dark/light mode
-
-Theme reactivity is **pure CSS**: the `--vx-*` variables are redeclared under the light/dark selector, so toggling the UI lib's color scheme restyles every chart with no React re-render. Charts read `VX.*` (var refs) directly; `useVxTheme()` returns the same refs for back-compat. Don't branch on color scheme in JS, and never read `localStorage.getItem('theme')`.
-
-## Area gradients
-
-Soft single-hue fills under a line read as "modern" and are cheap to centralize: one `AreaGradient` primitive emitting a vertical `<linearGradient>` whose stops are `color-mix` of a CSS-var color, with global strength knobs (`--vx-area-top` / `--vx-area-bottom`). Default the fill **on** for plain metric lines and **off** when the chart already carries zone/threshold fills (avoid double-fill clutter). Keep stacked-area bands opaque — fading them to transparent leaks lower bands and hurts readability.
+1. Second instance of an existing pattern? Extract a kind, migrate both call sites (Rule of Three).
+2. Genuinely unique? Stay bespoke, composing the primitives directly.
+3. Adds a new color? A `{light,dark}` pair in the palette data, wired through — never inline a hex.
 
 ## Guardrails
 
-- `no-restricted-imports` bans `@visx/tooltip` in chart files (enforce in lint config).
-- **Enforce the palette mechanically.** oxlint has no `no-restricted-syntax`, so add a tiny guard script (scan chart + app source for raw hex / `rgb()` / `hsl()`, allow a `theme-allow` escape comment) and wire it into `lint`. A markdown rule alone drifts — a failing build doesn't. Exempt the palette/token files themselves.
-- **Enforce "no raw axes" mechanically too.** Raw `<AxisLeft>`/`<AxisBottom>`/`<AxisRight>` in a `/charts/` file is now a build failure (basalt-ui: the `basalt check-theme` `raw-visx-axis` guard; escape via `theme-allow`) — use the tokenized axis primitives. Previously markdown-only.
-- `ChartCard`/`ChartLegend`/`ChartTooltip` contract is social/markdown-enforced. It's easier to compose them than work around them.
-
-## Rule of thumb
+Enforce the palette and the "no raw axes" rule mechanically (a lint rule or a small guard script
+scanning for raw hex/`rgb()`/`hsl()` and raw axis primitives, with a documented escape comment) —
+a markdown rule alone drifts, a failing build doesn't.
 
 > If the new chart doesn't fit the primitives, add a kind — don't loosen the primitives.
