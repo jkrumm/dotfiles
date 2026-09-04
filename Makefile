@@ -62,7 +62,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-browser
 	@$(MAKE) --no-print-directory _setup-sideclaw-mcp
 	@$(MAKE) --no-print-directory _setup-pnpm
-	@$(MAKE) --no-print-directory _setup-viteplus
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-secrets
 	@$(MAKE) --no-print-directory _setup-sdk-keys
@@ -284,17 +283,6 @@ _setup-pnpm:
 		echo "    Installing pnpm..."; \
 		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 		echo "    ✓ pnpm installed"; \
-	fi
-
-.PHONY: _setup-viteplus
-_setup-viteplus:
-	@echo "  Vite+..."
-	@if [ -f "$$HOME/.vite-plus/env" ] || [ -f "$$HOME/.config/vite-plus/env" ]; then \
-		echo "    · Vite+ (ok)"; \
-	else \
-		echo "    Installing Vite+..."; \
-		curl -fsSL https://vite.plus | bash; \
-		echo "    ✓ Vite+ installed (node version managed via fnm)"; \
 	fi
 
 .PHONY: _setup-op-token
@@ -981,7 +969,7 @@ _setup-scripts:
 # Homebrew at all — silently forcing every remote automation to hand-prefix
 # the PATH.
 #
-# The file is NOT symlinked: third-party installers (vite-plus, cargo) append
+# The file is NOT symlinked: third-party installers (cargo, …) append
 # to it and would clobber a symlink into the repo. Append an idempotent guarded
 # block instead, and prepend rather than append to PATH so brew wins over any
 # system binary of the same name — matching what config/zsh/path.zsh already
@@ -1429,12 +1417,6 @@ status:
 		echo "    ✓ pnpm $$(pnpm --version)"; \
 	else \
 		echo "    ✗ pnpm [not installed — run make setup]"; \
-	fi
-	@echo "  Vite+"
-	@if [ -f "$$HOME/.vite-plus/env" ]; then \
-		echo "    ✓ Vite+ installed"; \
-	else \
-		echo "    ✗ Vite+ [not installed — run make setup]"; \
 	fi
 	@echo "  Browser debugging"
 	@if claude mcp list 2>/dev/null | grep -q "chrome-devtools"; then \
