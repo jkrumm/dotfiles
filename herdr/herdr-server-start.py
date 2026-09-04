@@ -31,10 +31,13 @@ It waits, forwards SIGTERM/SIGINT/SIGHUP to the child so `brew services stop`
 still stops the server, and exits with the child's status so KeepAlive restarts
 a server that genuinely died.
 
-Installed into homebrew.mxcl.herdr.plist by `make herdr-setup` (_herdr-supervise).
-BREW REGENERATES THAT PLIST on every `brew services start/restart` and every
-`brew upgrade herdr`, silently — same trap as colima's inverted KeepAlive and
-caddy's DNS module. `make _herdr-supervise` re-converges it and
+Installed into herdr's brew-service plist by `make herdr-setup`
+(_herdr-supervise) — `sh.brew.herdr.plist` since Homebrew 6, renamed from
+`homebrew.mxcl.herdr.plist` on the next start/restart rather than at upgrade
+time, so every caller resolves it via scripts/lib/brew-service.sh instead of
+spelling a label. BREW REGENERATES THAT PLIST on every `brew services
+start/restart` and every `brew upgrade herdr`, silently — same trap as colima's
+inverted KeepAlive and caddy's DNS module. `make _herdr-supervise` re-converges it and
 `scripts/brew-upgrade.sh` asserts it after every upgrade.
 """
 

@@ -55,20 +55,23 @@ description: The whole personal environment on one page — machines, repos, lau
 ## LaunchAgents — mini (gui/501 unless noted)
 
 Every label here is asserted by `scripts/architecture-check.sh`, and the
-KeepAlive subset also by the heartbeat's `check_boot_path`.
+KeepAlive subset also by the heartbeat's `check_boot_path`. Homebrew 6 writes
+`sh.brew.<name>` on the next start/restart and deletes `homebrew.mxcl.<name>`;
+both names map to the same row; `scripts/lib/brew-service.sh` resolves whichever
+exists.
 
 ### dotfiles
 
 | Label | Schedule | What |
 |-|-|-|
-| `homebrew.mxcl.herdr` | KeepAlive | herdr server, setsid wrapper — **supervised boot path** |
-| `homebrew.mxcl.colima` | KeepAlive | Docker VM, bounded-retry wrapper — **supervised boot path** |
+| `sh.brew.herdr` | KeepAlive | herdr server, setsid wrapper — **supervised boot path** |
+| `sh.brew.colima` | KeepAlive | Docker VM, bounded-retry wrapper — **supervised boot path** |
 | `com.colima.docker-socket` | daemon (root) | `/var/run/docker.sock` symlink at boot |
-| `homebrew.mxcl.caddy` | daemon (root) | local HTTPS + tailnet doors |
-| `homebrew.mxcl.dnsmasq` | daemon (root) | `*.test` DNS |
-| `homebrew.mxcl.tailscale` | daemon (root) | tailnet |
-| `homebrew.mxcl.postgresql@18` | KeepAlive | local Postgres |
-| `homebrew.mxcl.sleepwatcher` | KeepAlive | runs `~/.wakeup` |
+| `sh.brew.caddy` | daemon (root) | local HTTPS + tailnet doors |
+| `sh.brew.dnsmasq` | daemon (root) | `*.test` DNS |
+| `sh.brew.tailscale` | daemon (root) | tailnet |
+| `sh.brew.postgresql@18` | KeepAlive | local Postgres |
+| `sh.brew.sleepwatcher` | KeepAlive | runs `~/.wakeup` |
 | `com.jkrumm.brain-sync` | 300s | vault reconcile via GitHub |
 | `com.jkrumm.brain-backup` | 03:30 daily | vault backup |
 | `com.jkrumm.brain-web-refresh` | 300s | brain-web rebuild |
@@ -126,11 +129,11 @@ KeepAlive subset also by the heartbeat's `check_boot_path`.
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
-(KeepAlive, :2222 door) · `homebrew.mxcl.colima` · `homebrew.mxcl.sleepwatcher` ·
-`homebrew.mxcl.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the
+(KeepAlive, :2222 door) · `sh.brew.colima` · `sh.brew.sleepwatcher` ·
+`sh.brew.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the
 charge limiter). The machine is MDM-managed — Jamf, Okta, Adobe and the cancom
 hardening daemons are corporate, not mapped; `architecture-check.sh` asserts only
-the `com.jkrumm.` / `homebrew.mxcl.` / `cc.chlc.` prefixes there.
+the `com.jkrumm.` / `sh.brew.` / `homebrew.mxcl.` / `cc.chlc.` prefixes there.
 
 ## Doors (inbound)
 

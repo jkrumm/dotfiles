@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Supervised entry point for the colima brew service. Installed into
-# homebrew.mxcl.colima.plist by `make setup` (_setup-colima) — see there for why
-# the plist is rewritten rather than trusted as brew ships it.
+# Supervised entry point for the colima brew service. Installed into colima's
+# brew-service plist by `make setup` (_setup-colima) — see there for why the
+# plist is rewritten rather than trusted as brew ships it. That file is
+# `sh.brew.colima.plist` since Homebrew 6 (renamed from
+# `homebrew.mxcl.colima.plist` on the next start/restart, not at upgrade time),
+# so it is RESOLVED by scripts/lib/brew-service.sh, never spelled.
 #
 # THE BUG THIS EXISTS FOR. Homebrew generates that plist with
 #

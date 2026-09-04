@@ -85,6 +85,13 @@ HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
 # would page "tailnet down" on a healthy host. See that lib's header.
 # shellcheck source=lib/tailscale-cli.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
+# Homebrew service plists: resolved by lib/brew-service.sh, NOT hardcoded.
+# Homebrew 6 renamed homebrew.mxcl.<name> to sh.brew.<name>, and writes the new
+# file (deleting the old) on the next `brew services start|restart` — so the two
+# names coexist across these machines and a hardcoded path silently degrades
+# check_boot_path from "the boot path is intact" to "there is no file, skip".
+# shellcheck source=lib/brew-service.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
@@ -115,7 +122,7 @@ DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
 # the DEVHOST_SERVICES gate below cannot drift apart. The wrapper path is the
 # checkout path on purpose — it is what `make _colima-supervise` writes into the
 # plist, so anything else in there means brew regenerated it.
-COLIMA_PLIST="${COLIMA_PLIST:-$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist}"
+COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_service_expected_plist colima)}"
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 SIDECLAW_URL="${SIDECLAW_URL:-http://127.0.0.1:7705}"
@@ -650,10 +657,35 @@ check_memory() {
   echo "memory ok (pressure ${level_name}, swap ${used_mb}M = ${pct}% of ${phys_gb}G)"
 }
 
+# One `label|plist` row for a Homebrew service, under whichever of the two
+# names it currently carries. Both halves have to survive the file being GONE,
+# because that is the state check_boot_path exists to catch:
+#   plist  — the resolved file, else the name brew would write next, so the
+#            "missing" branch has something concrete to name.
+#   label  — the file's own Label; with no file, whichever label launchd
+#            actually has loaded (that is the cached job that dies at reboot),
+#            else the new-form name so the row still asserts.
+brew_row() {
+  local name="$1" uid label plist candidate
+  uid=$(/usr/bin/id -u)
+  plist=$(brew_service_plist "$name" 2>/dev/null) || plist=""
+  label=$(brew_service_label "$name" 2>/dev/null) || label=""
+  if [[ -z "$label" ]]; then
+    for candidate in "sh.brew.$name" "homebrew.mxcl.$name"; do
+      if "$LAUNCHCTL_BIN" print "gui/$uid/$candidate" >/dev/null 2>&1; then
+        label="$candidate"; break
+      fi
+    done
+  fi
+  [[ -n "$label" ]] || label="sh.brew.$name"
+  [[ -n "$plist" ]] || plist=$(brew_service_expected_plist "$name")
+  printf '%s|%s\n' "$label" "$plist"
+}
+
 # label|plist whose absence means "not wired on this machine"
 LAUNCHD_KEEPALIVE="\
-homebrew.mxcl.herdr|$HOME/Library/LaunchAgents/homebrew.mxcl.herdr.plist
-homebrew.mxcl.colima|$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist
+$(brew_row herdr)
+$(brew_row colima)
 com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
@@ -724,8 +756,8 @@ DEVHOST_SERVICES="\
 sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist|probe_sideclaw
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
-caddy|/Library/LaunchDaemons/homebrew.mxcl.caddy.plist|probe_caddy
-dnsmasq|/Library/LaunchDaemons/homebrew.mxcl.dnsmasq.plist|probe_dnsmasq"
+caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
+dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected_plist dnsmasq system)|probe_dnsmasq"
 
 probe_sideclaw() {
   local code

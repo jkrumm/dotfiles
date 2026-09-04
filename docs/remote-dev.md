@@ -491,6 +491,13 @@ bare `colima stop` (KeepAlive undoes it).
   600 s cool-off, never latching off). **Brew regenerates the plist on every
   `brew services start/restart` and every `brew upgrade colima`, silently** — so
   every `colima-*` target re-converges and `colima-status` asserts the boot path.
+- **And since Homebrew 6, it regenerates it under a different NAME** —
+  `homebrew.mxcl.<name>` → `sh.brew.<name>`, written on the next `brew services
+  start|restart` (the old file is deleted then, not at upgrade time), so both
+  names are live across these two machines. `scripts/lib/brew-service.sh` is the
+  single resolver every caller goes through; nothing hardcodes a label. The old
+  hardcoded path turned the converge step into `plist absent — nothing to
+  supervise`, exit 0, over the stock plist it exists to repair.
 - `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` default to **2 / 4 / 60** and are
   **ceilings, not reservations**; disk only grows via recreate.
 - `com.colima.docker-socket` maintains `/var/run/docker.sock` at boot — the only

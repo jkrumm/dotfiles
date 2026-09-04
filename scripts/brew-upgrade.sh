@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Both boot-path invariants below live in a Homebrew-generated plist, and
+# Homebrew 6 renamed those from homebrew.mxcl.<name> to sh.brew.<name> — on the
+# next start/restart, not at upgrade time, so both names are live across these
+# machines. Resolve by service name; a hardcoded path would print "not
+# registered here — skipping" over a service that IS registered and HAS just
+# been reverted, which is the one thing this script exists to catch.
+# shellcheck source=lib/brew-service.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
+
 # brew-upgrade — guarded `brew upgrade`, safe to run unattended or by hand.
 #
 # Usage: brew-upgrade.sh [--dry-run] [--pins-only]
@@ -26,7 +35,8 @@ set -euo pipefail
 #
 #   colima — same class, DIFFERENT remedy, and the difference is why it is not
 #   in HELD. `brew upgrade colima` regenerates
-#   ~/Library/LaunchAgents/homebrew.mxcl.colima.plist from the formula's
+#   colima's brew-service plist (sh.brew.colima.plist, or the pre-Homebrew-6
+#   homebrew.mxcl.colima.plist) from the formula's
 #   `service` block, throwing away the supervised boot path
 #   (`make _colima-supervise`: bare `KeepAlive => true` + colima/colima-start.sh
 #   instead of Homebrew's inverted `{ SuccessfulExit => true }`). Nothing errors;
@@ -273,9 +283,15 @@ fi
 # `_setup-colima` converges the supervised boot path wherever colima is
 # installed, so wherever the plist exists the invariant is supposed to hold. A
 # machine that never registered the brew service simply has nothing to check.
-COLIMA_PLIST="$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist"
+COLIMA_PLIST=$(brew_service_plist colima) || COLIMA_PLIST=""
 COLIMA_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/colima/colima-start.sh"
-if [[ -f "$COLIMA_PLIST" ]]; then
+if [[ -z "$COLIMA_PLIST" ]] && brew services info colima --json 2>/dev/null | grep -q '"loaded": *true'; then
+  # Loaded with no file under either name is not "not installed here" — it is
+  # the DISARMED state: nothing can converge the boot path and launchd is
+  # running from a cached definition that dies at the next reboot. Fail.
+  echo "  ✗ colima: brew service is loaded but has NO plist under either name (sh.brew.colima / homebrew.mxcl.colima) — boot path unassertable (fix: brew services restart colima && make _colima-supervise)"
+  assertion_failed=1
+elif [[ -n "$COLIMA_PLIST" ]]; then
   keepalive=$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$COLIMA_PLIST" 2>/dev/null) || keepalive=""
   program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$COLIMA_PLIST" 2>/dev/null) || program=""
   # The reverted form prints multi-line as `Dict { SuccessfulExit = true }`;
@@ -292,14 +308,17 @@ else
 fi
 
 # herdr, same trap in a different plist: `brew upgrade herdr` regenerates
-# homebrew.mxcl.herdr.plist from the formula and strips the session-leader
+# herdr's brew-service plist from the formula and strips the session-leader
 # wrapper. Nothing errors — the server comes up fine and only the next `desk`
 # launch starts asking "restart the remote server now? [y/N]" again, which
 # reads as a herdr quirk rather than as a reverted config. Asserted wherever
 # the service is registered, gated on the plist like colima's.
-HERDR_PLIST="$HOME/Library/LaunchAgents/homebrew.mxcl.herdr.plist"
+HERDR_PLIST=$(brew_service_plist herdr) || HERDR_PLIST=""
 HERDR_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/herdr/herdr-server-start.py"
-if [[ -f "$HERDR_PLIST" ]]; then
+if [[ -z "$HERDR_PLIST" ]] && brew services info herdr --json 2>/dev/null | grep -q '"loaded": *true'; then
+  echo "  ✗ herdr: brew service is loaded but has NO plist under either name (sh.brew.herdr / homebrew.mxcl.herdr) — boot path unassertable (fix: brew services start herdr && make _herdr-supervise)"
+  assertion_failed=1
+elif [[ -n "$HERDR_PLIST" ]]; then
   program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$HERDR_PLIST" 2>/dev/null) || program=""
   if [[ "$program" == "$HERDR_WRAPPER" ]]; then
     echo "  ✓ herdr: session-leader boot path intact"

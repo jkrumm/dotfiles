@@ -21,7 +21,13 @@
 	     BREW REGENERATES THIS PLIST on `brew services restart caddy` and on
 	     every `brew upgrade caddy` — the same trap as the caddy DNS module
 	     (see `make caddy-dns-build`), and it reverts silently. Re-run
-	     `make caddy-boot-order` after either. -->
+	     `make caddy-boot-order` after either.
+
+	     __LABEL__ and the installed FILENAME are both decided at install time by
+	     scripts/lib/brew-service.sh, and must agree: Homebrew 6 renamed this
+	     daemon from homebrew.mxcl.caddy to sh.brew.caddy, and the rename lands on
+	     the next `sudo brew services restart caddy` rather than at upgrade time.
+	     That is also why this file is no longer NAMED for either label. -->
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>HOME</key>
@@ -32,7 +38,7 @@
 	<key>KeepAlive</key>
 	<true/>
 	<key>Label</key>
-	<string>homebrew.mxcl.caddy</string>
+	<string>__LABEL__</string>
 	<key>LimitLoadToSessionType</key>
 	<array>
 		<string>Aqua</string>

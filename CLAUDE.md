@@ -221,6 +221,10 @@ disk only grows via recreate).
   Caddy's DNS module. Every `colima-*` target re-converges; `colima-status` /
   `herdr-status` assert the boot path (plist on disk + `launchctl print` path
   match), and so does the heartbeat's `check_boot_path`.
+- **Homebrew 6 renames the plist** to `sh.brew.<name>` on the next
+  `brew services start|restart`. Never spell a label: **`scripts/lib/brew-service.sh`**
+  resolves plist/label/target by service name (`make brew-service-test`); a
+  hardcoded path once made converge exit 0 over the stock plist it repairs.
 - **`launchctl kickstart -k` does not re-read the plist** — only `bootout` +
   `bootstrap` does. Expect `Bootstrap failed: 5` until the label disappears.
 - **`brew services list` showing `caddy none` / `dnsmasq none` is a reporting

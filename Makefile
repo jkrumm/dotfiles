@@ -3,6 +3,15 @@ CLAUDE_DIR   := $(HOME)/.claude
 SOURCEROOT   := $(HOME)/SourceRoot
 BREW_PREFIX  := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 
+# Resolve a Homebrew service's plist/label under EITHER name it may carry.
+# Homebrew 6 renamed `homebrew.mxcl.<name>` to `sh.brew.<name>`, and the rename
+# lands on the next `brew services start|restart`, not at upgrade time — so both
+# names are live across these two machines. Recipes run under /bin/sh, hence the
+# CLI form rather than sourcing; resolved AT RECIPE TIME rather than via
+# $(shell ...) because `make setup` itself restarts services and thereby renames
+# their plists mid-run. See scripts/lib/brew-service.sh.
+BREW_SERVICE := bash $(DOTFILES_DIR)/scripts/lib/brew-service.sh
+
 # Data half of the headless secrets system (schemas + encrypted cache) —
 # see ~/SourceRoot/dotfiles-private, override for testing/alternate checkouts.
 SECRETS_PRIVATE_REPO ?= $(HOME)/SourceRoot/dotfiles-private
@@ -234,7 +243,7 @@ _setup-caddy:
 	@sudo brew services restart caddy >/dev/null 2>&1 \
 		&& echo "    ✓ caddy service" \
 		|| $(MAKE) --no-print-directory _daemon-running-or-fail \
-			LABEL=homebrew.mxcl.caddy NAME="caddy service" \
+			SERVICE=caddy NAME="caddy service" \
 			HINT="sudo brew services restart caddy"
 	@# Trust Caddy local CA — caddy trust handles keychain install + NSS
 	@if security dump-trust-settings -d 2>/dev/null | grep -q "Caddy"; then \
@@ -264,7 +273,7 @@ _setup-caddy:
 	@sudo brew services restart dnsmasq >/dev/null 2>&1 \
 		&& echo "    ✓ dnsmasq service" \
 		|| $(MAKE) --no-print-directory _daemon-running-or-fail \
-			LABEL=homebrew.mxcl.dnsmasq NAME="dnsmasq service" \
+			SERVICE=dnsmasq NAME="dnsmasq service" \
 			HINT="sudo brew services restart dnsmasq"
 	@# sleepwatcher (from Brewfile) fires wakeup.sh on sleep wake → caddy reload
 	@brew services start sleepwatcher >/dev/null 2>&1 || brew services restart sleepwatcher >/dev/null 2>&1 || true
@@ -1257,9 +1266,17 @@ _setup-colima:
 # ✗ for the benign case trains you to ignore ✗. `launchctl print` needs no sudo.
 
 # Long-running daemons (caddy, dnsmasq): the product is the process itself.
+# Takes SERVICE (the brew service NAME), not a label — the label differs by
+# Homebrew generation (homebrew.mxcl.<name> vs sh.brew.<name>) and this is the
+# one place that has to know. An unresolvable plist is reported as its own
+# state: on a system daemon that means brew never registered it here, which is
+# a different fix from "registered but not running".
 .PHONY: _daemon-running-or-fail
 _daemon-running-or-fail:
-	@if launchctl print system/$(LABEL) 2>/dev/null | grep -qE '^[[:space:]]*state = running'; then \
+	@LABEL=$$($(BREW_SERVICE) label $(SERVICE) system 2>/dev/null); \
+	if [ -z "$$LABEL" ]; then \
+		echo "    ✗ $(NAME) failed — no $(SERVICE) plist in /Library/LaunchDaemons under either name; check: $(HINT)"; \
+	elif launchctl print "system/$$LABEL" 2>/dev/null | grep -qE '^[[:space:]]*state = running'; then \
 		echo "    · $(NAME) (already running — re-registration skipped)"; \
 	else \
 		echo "    ✗ $(NAME) failed — check: $(HINT)"; \
@@ -1563,11 +1580,17 @@ colima-restart:
 	@brew services restart colima
 	@$(MAKE) --no-print-directory _colima-supervise
 
-# Converge homebrew.mxcl.colima.plist onto the supervised shape. Called after
+# Converge colima's brew-service plist onto the supervised shape. Called after
 # every brew-services operation above AND from _setup-colima, because BREW
 # REGENERATES THAT PLIST from the formula's `service` block on every
 # start/restart and on every upgrade — a hand-edit alone reverts silently, with
 # nothing in any log.
+#
+# The plist is RESOLVED, never spelled: Homebrew 6 writes `sh.brew.colima.plist`
+# and deletes `homebrew.mxcl.colima.plist` on the next start/restart. Hardcoding
+# the old name made this step print "absent — nothing to supervise" and exit 0
+# over a freshly written STOCK plist — the exact inverted KeepAlive this target
+# exists to repair, reported green. See scripts/lib/brew-service.sh.
 #
 # Two changes, both load-bearing:
 #
@@ -1593,10 +1616,18 @@ colima-restart:
 # `make colima-status` reports whether the running job is the supervised one.
 .PHONY: _colima-supervise
 _colima-supervise:
-	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.colima.plist"; \
+	@PLIST=$$($(BREW_SERVICE) plist colima 2>/dev/null); \
 	WRAP="$(DOTFILES_DIR)/colima/colima-start.sh"; \
-	if [ ! -f "$$PLIST" ]; then \
-		echo "    · colima plist absent — nothing to supervise"; \
+	if [ -z "$$PLIST" ]; then \
+		if brew services info colima --json 2>/dev/null | grep -q '"loaded": *true'; then \
+			echo "  ✗ colima is a LOADED brew service with NO plist under either name"; \
+			echo "    looked for: $(LAUNCHAGENTS)/sh.brew.colima.plist"; \
+			echo "                $(LAUNCHAGENTS)/homebrew.mxcl.colima.plist"; \
+			echo "    The boot path cannot be converged, so it is DISARMED — never report this green."; \
+			echo "    ↳ brew services info colima --json"; \
+			exit 1; \
+		fi; \
+		echo "    · colima brew service not registered here — nothing to supervise"; \
 	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ] \
 	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ]; then \
 		echo "    · colima supervisor (ok)"; \
@@ -1621,12 +1652,14 @@ colima-status:
 	@# inverted `KeepAlive { SuccessfulExit = true }`, and NOTHING errors when
 	@# that happens — the VM keeps running fine and only the next failed start
 	@# goes unretried. See _colima-supervise.
-	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.colima.plist"; \
-	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/colima/colima-start.sh" ] \
+	@PLIST=$$($(BREW_SERVICE) plist colima 2>/dev/null); \
+	if [ -z "$$PLIST" ]; then \
+		echo "  ✗ boot path UNRESOLVABLE — no sh.brew.colima/homebrew.mxcl.colima plist on disk"; \
+	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/colima/colima-start.sh" ] \
 	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
-		echo "  ✓ boot path supervised (bare KeepAlive + bounded-retry wrapper)"; \
+		echo "  ✓ boot path supervised (bare KeepAlive + bounded-retry wrapper) — $${PLIST##*/}"; \
 	else \
-		echo "  ✗ boot path NOT supervised — brew regenerated the plist; run: make _colima-supervise"; \
+		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _colima-supervise"; \
 	fi
 	@FAILS="$(HOME)/.local/state/colima-supervisor/consecutive-failures"; \
 	[ -f "$$FAILS" ] && [ "$$(cat "$$FAILS")" != "0" ] \
@@ -1847,6 +1880,16 @@ secrets-test: secrets-lint
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 
+# Resolver regression suite. scripts/lib/brew-service.sh decides WHICH plist the
+# supervise/status/restart targets read and rewrite, so a bug here disarms a boot
+# path silently — the exact failure the resolver exists to end. Hermetic: it
+# drives the lib over a scratch dir and never touches a live LaunchAgent.
+.PHONY: brew-service-test
+brew-service-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/brew-service.sh $(DOTFILES_DIR)/scripts/brew-service.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/brew-service.test.sh
+	@$(DOTFILES_DIR)/scripts/brew-service.test.sh
+
 # Hook regression suite. Hooks are symlinked live into ~/.claude/hooks, so a bug
 # here gates real tool calls immediately — run after any hook edit.
 .PHONY: hooks-test
@@ -1961,14 +2004,22 @@ log-rotate-check:
 caddy-boot-order:
 	@WRAPPER=/usr/local/libexec/caddy-wait-for-tailnet.sh; \
 	SRC="$(DOTFILES_DIR)/caddy/caddy-wait-for-tailnet.sh"; \
-	DAEMON=/Library/LaunchDaemons/homebrew.mxcl.caddy.plist; \
-	[ -f "$$DAEMON" ] || { echo "  ✗ $$DAEMON not found — is caddy installed as a brew service?"; exit 1; }; \
+	DAEMON=$$($(BREW_SERVICE) plist caddy system 2>/dev/null); \
+	if [ -z "$$DAEMON" ]; then \
+		if brew services info caddy --json 2>/dev/null | grep -q '"loaded": *true'; then \
+			DAEMON=$$($(BREW_SERVICE) expected caddy system); \
+			echo "  ! caddy is loaded with no plist under either name — installing $${DAEMON##*/}"; \
+		else \
+			echo "  ✗ no caddy plist in /Library/LaunchDaemons under either name — is caddy installed as a brew service?"; exit 1; \
+		fi; \
+	fi; \
+	LABEL=$${DAEMON##*/}; LABEL=$${LABEL%.plist}; \
 	sudo mkdir -p /usr/local/libexec; \
 	sudo install -o root -g wheel -m 0755 "$$SRC" "$$WRAPPER" \
 		|| { echo "  ✗ could not install the wrapper (sudo)"; exit 1; }; \
 	echo "  ✓ wrapper installed root-owned at $$WRAPPER"; \
-	TMP=$$(mktemp); sed "s|__WRAPPER__|$$WRAPPER|g" \
-		"$(DOTFILES_DIR)/caddy/homebrew.mxcl.caddy.plist.template" > "$$TMP"; \
+	TMP=$$(mktemp); sed -e "s|__WRAPPER__|$$WRAPPER|g" -e "s|__LABEL__|$$LABEL|g" \
+		"$(DOTFILES_DIR)/caddy/caddy.plist.template" > "$$TMP"; \
 	plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "  ✗ rendered plist is malformed"; exit 1; }; \
 	if sudo cmp -s "$$TMP" "$$DAEMON" 2>/dev/null; then \
 		rm -f "$$TMP"; echo "  · caddy daemon already ordered behind the tailnet address"; \
@@ -1978,9 +2029,9 @@ caddy-boot-order:
 		sudo launchctl bootout system "$$DAEMON" 2>/dev/null || true; \
 		sudo launchctl bootstrap system "$$DAEMON" \
 			&& echo "  ✓ caddy daemon re-bootstrapped through the wrapper" \
-			|| $(MAKE) --no-print-directory _daemon-running-or-fail LABEL=homebrew.mxcl.caddy; \
+			|| $(MAKE) --no-print-directory _daemon-running-or-fail SERVICE=caddy; \
 	fi; \
-	echo "  ↳ verify: sudo launchctl print system/homebrew.mxcl.caddy | grep -E 'state|program'"; \
+	echo "  ↳ verify: sudo launchctl print system/$$LABEL | grep -E 'state|program'"; \
 	echo "    and after any brew upgrade of caddy, re-run this AND make caddy-dns-build"
 
 # Start Obsidian at login on the dev host. Not a nicety: `/brain` and Hermes's
@@ -2088,10 +2139,12 @@ herdr-setup:
 		&& echo "    ✓ config.toml reloaded into the running server" \
 		|| echo "    · no running server to reload (config applies on next launch)"
 
-# Converge homebrew.mxcl.herdr.plist so the server starts as a SESSION LEADER.
+# Converge herdr's brew-service plist so the server starts as a SESSION LEADER.
 # Same shape, same trap and same reason as _colima-supervise: BREW REGENERATES
 # THIS PLIST on every `brew services start/restart` and every `brew upgrade
-# herdr`, silently.
+# herdr`, silently — and it now regenerates it under a DIFFERENT NAME
+# (`sh.brew.herdr.plist`, Homebrew 6), so the file is resolved by service name
+# through scripts/lib/brew-service.sh rather than spelled.
 #
 # WHAT IT FIXES. Every `desk` launch asked "restart the remote server now?
 # [y/N]" — and the only correct answer was N, forever, because y restarts the
@@ -2112,9 +2165,17 @@ herdr-setup:
 # running in one. A `make setup` may never do that on its own.
 .PHONY: _herdr-supervise
 _herdr-supervise:
-	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
+	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
 	WRAP="$(DOTFILES_DIR)/herdr/herdr-server-start.py"; \
-	if [ ! -f "$$PLIST" ]; then \
+	if [ -z "$$PLIST" ]; then \
+		if brew services info herdr --json 2>/dev/null | grep -q '"loaded": *true'; then \
+			echo "  ✗ herdr is a LOADED brew service with NO plist under either name"; \
+			echo "    looked for: $(LAUNCHAGENTS)/sh.brew.herdr.plist"; \
+			echo "                $(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
+			echo "    The boot path cannot be converged, so it is DISARMED — never report this green."; \
+			echo "    ↳ brew services info herdr --json"; \
+			exit 1; \
+		fi; \
 		echo "    · herdr brew service not registered here — nothing to supervise"; \
 	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ] \
 	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
@@ -2153,12 +2214,14 @@ herdr-status:
 	@herdr status --json 2>/dev/null | jq -r '"  server: v" + .server.version + " running=" + (.server.running|tostring) + " detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring)' \
 		|| echo "  ✗ herdr server not answering"
 	@brew services list | grep -E '^herdr' || echo "  herdr service: not registered"
-	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
-	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/herdr/herdr-server-start.py" ] \
+	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
+	if [ -z "$$PLIST" ]; then \
+		echo "  ✗ boot path UNRESOLVABLE — no sh.brew.herdr/homebrew.mxcl.herdr plist on disk"; \
+	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/herdr/herdr-server-start.py" ] \
 	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
-		echo "  ✓ boot path supervised (bare KeepAlive + setsid wrapper)"; \
+		echo "  ✓ boot path supervised (bare KeepAlive + setsid wrapper) — $${PLIST##*/}"; \
 	else \
-		echo "  ✗ boot path NOT supervised — brew regenerated the plist; run: make _herdr-supervise"; \
+		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _herdr-supervise"; \
 	fi
 
 .PHONY: herdr-restart
@@ -2171,9 +2234,15 @@ herdr-restart:
 	fi
 	@brew services start herdr >/dev/null 2>&1 || true
 	@$(MAKE) --no-print-directory _herdr-supervise
-	@PLIST="$(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; U=$$(id -u); \
-	launchctl bootout "gui/$$U/homebrew.mxcl.herdr" 2>/dev/null || true; \
-	i=0; while launchctl print "gui/$$U/homebrew.mxcl.herdr" >/dev/null 2>&1; do \
+	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
+	TARGET=$$($(BREW_SERVICE) target herdr 2>/dev/null); \
+	if [ -z "$$PLIST" ] || [ -z "$$TARGET" ]; then \
+		echo "  ✗ no herdr plist under either name (sh.brew.herdr / homebrew.mxcl.herdr) — nothing to bootstrap"; \
+		echo "    ↳ brew services info herdr --json"; exit 1; \
+	fi; \
+	U=$$(id -u); \
+	launchctl bootout "$$TARGET" 2>/dev/null || true; \
+	i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
 		i=$$((i+1)); [ $$i -gt 30 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
 		sleep 0.5; \
 	done; \

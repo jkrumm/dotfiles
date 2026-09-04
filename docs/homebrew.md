@@ -53,6 +53,14 @@ Each has local machinery bolted on top that an upgrade destroys with no error:
 | `caddy` | replaces the xcaddy-built binary; `dns.providers.cloudflare` vanishes | ~60 days, when the wildcard cert fails to *renew* |
 | `colima` | regenerates the plist, restoring the inverted `KeepAlive {SuccessfulExit=true}` and the direct `colima start -f` | only after a *dirty* shutdown, when the failed start is never retried — i.e. the power cut this setup exists to survive |
 
+Homebrew 6 also **renames** what it regenerates — `homebrew.mxcl.<name>` →
+`sh.brew.<name>`, written on the next `brew services start|restart` (the old file
+is deleted then, not at upgrade time). Both names are therefore live across the
+two Macs, so nothing here hardcodes one: `scripts/lib/brew-service.sh` resolves
+plist/label/launchctl-target by service name and `brew-upgrade.sh`'s colima and
+herdr assertions go through it. A hardcoded old path does not error — it reports
+"not registered here — skipping", which is the invariant silently unasserted.
+
 **A pin needs its dependencies pinned too, or it rots**: `mosh` sat pinned at a
 working version while `protobuf` upgraded underneath it and the dylib link broke,
 which is why it was deleted rather than re-pinned. `caddy` is the only pin.

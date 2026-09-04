@@ -19,7 +19,7 @@ components:
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |
 | launchd restarts | delta on `runs` for every KeepAlive job |
-| boot path | plist on disk + `launchctl print` path match for every KeepAlive job |
+| boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
 | services | sideclaw, hermes gateway, colima, caddy, dnsmasq |
 | claude auth | keychain credential, then the token fallback |
 | obsidian | CLI answers (i.e. the app is running) |
