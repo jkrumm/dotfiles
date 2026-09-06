@@ -131,6 +131,16 @@ argo.test {
 # straight at https://audio-gateway.jkrumm.com/v1 and the local door bought
 # nothing. The repo's `dev` script still binds :7714 for actual local work on
 # the gateway — the port is NOT free, it just has no vhost in front of it.
+# The podcast pipeline moved to a SECOND instance of the same service on this
+# machine (:7719, com.jkrumm.audio-gateway LaunchAgent) — see podcasts.test
+# below — because the brain vault is a git checkout only here.
+
+# podcast pipeline — audio-gateway's second instance (repo `audio-gateway`,
+# scripts/launch.sh, port 7719). STT/TTS stays on the VPS container above.
+podcasts.test {
+	import local
+	reverse_proxy localhost:7719
+}
 
 # image-gen — stateless image-generation gateway (Elysia + Bun) on :7716.
 # Local dev for the image-gen monorepo (`bun run dev` at its root also starts the

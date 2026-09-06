@@ -36,7 +36,7 @@ description: The whole personal environment on one page — machines, repos, lau
 | Repo | Purpose | Notes |
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | dev door `argo` |
-| `audio-gateway` | STT/TTS service; repo here, container on the VPS | |
+| `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `basalt-ui` | Mantine design system (NPM) | always its own commit |
 | `basalt-ui-obsidian` | Obsidian plugin, v0 unreleased | |
 | `bun-email-api`, `clawbar`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `ticktick-raycast`, `rollhook`, `rollhook-action`, `image-gen`, `image-share`, `modelpick`, `rb`, `research-gateway`, `sideclaw`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `hermes-agent`, `meteo`, `hermes-webui`, `dispatch-scratch` | see global CLAUDE.md repo table | |
@@ -119,6 +119,7 @@ exists.
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
+| `com.jkrumm.audio-gateway` | audio-gateway | KeepAlive |
 | `com.iu.prometheus-epos-token` | IuRoot (prometheus-scripts) | 300s |
 | `com.iu.prometheus-state-backup` | IuRoot | 3600s |
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |

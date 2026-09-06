@@ -5,35 +5,48 @@ description: Turn notes (a brain note, a file, pasted text) into a long-form two
 
 # Podcast — via audio-gateway's podcast pipeline
 
-audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline: a
-"writers' room" (story pass with dramaturgy → parallel segment writers → three
-reviewers → per-segment revision → metadata; Opus 5 plans, Opus 4.6 owns the voice, Gemini 3.1 Pro + GPT-5.6 Luna review, Luna writes the metadata) produces
-a two-host conversation script, every turn is synthesized on ElevenLabs v3 with
+audio-gateway (`~/SourceRoot/audio-gateway`) owns the whole pipeline, running as
+a **second instance on the mini** (`:7719`, `com.jkrumm.audio-gateway`) because
+the pipeline now researches the brain (a git checkout that only exists here)
+before writing — the VPS container keeps STT/TTS only. Research (brain search +
+past episodes + the research gateway, tool-calling) feeds an editorial pass that
+decides format, roles, tone, humor and length for *this* episode — there is no
+fixed formula. The writers' room (story pass → parallel segment writers → three
+reviewers → per-segment revision → metadata; Opus 5 plans, Opus 4.6 owns the
+voice, Gemini 3.8 Flash + GPT-5.6 Luna review, Luna writes the metadata)
+produces the two-host script, every turn is synthesized on ElevenLabs v3 with
 its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
-−16 LUFS, ID3 tags, chapter markers, embedded cover), the
-image-gen gateway paints the cover, and Audiobookshelf's upload + scan API files
-it as an episode of a podcast (show) in the `Podcasts` library. It is an
-**async job**: submit → poll → fetch. Budget 15–25 min of wall-clock for a
-20-minute episode and roughly 5–6 USD (≈2 USD ElevenLabs, the rest writer and
-reviewer tokens).
+−16 LUFS, ID3 tags, chapter markers, embedded cover), the image-gen gateway
+paints the cover, and Audiobookshelf's upload + scan API files it as an episode
+of a podcast (show) in the `Podcasts` library. The finished transcript is also
+written back into the brain under `Areas/Podcasts/`. It is an **async job**:
+submit → poll → fetch. Budget 15–25 min of wall-clock for a 20-minute episode
+and roughly 5–6 USD (≈2 USD ElevenLabs, the rest writer/reviewer/research
+tokens).
 
 The CLI wraps the HTTP API and is the door from Claude Code:
 
 ```bash
 cd ~/SourceRoot/audio-gateway
-bun run podcast -- --source <file.md> [--brief "…"] [--title "…"] [--minutes 20] \
-  [--series "Brain Sonderausgabe"] [--language de] [--publish] [--no-cover] \
-  [--base-url https://audio-gateway.jkrumm.com] [--out ./out] [--json]
+bun run podcast -- --source <file.md> [--path <brain-relative note path>]... \
+  [--brief "…"] [--title "…"] [--minutes 20] [--series "Brain Sonderausgabe"] \
+  [--language de] [--publish] [--no-cover] [--no-research] [--pin-minutes] \
+  [--no-brain-note] [--base-url http://localhost:7719] [--out ./out] [--json]
 bun run podcast -- status <id>          # one-shot job state
 bun run podcast -- list                 # latest jobs
 bun run podcast -- publish <id>         # (re-)publish a finished job to Audiobookshelf
 ```
 
-`--source -` reads stdin. `--base-url` defaults to `$PODCAST_BASE_URL`, else
-`http://localhost:7714` (a local `bun run dev` gateway). The CLI polls until
-`done`/`failed`, prints stage progress, downloads `episode.mp3`, `cover.png` and
-`script.json` into `--out` (default `./out/podcasts/<id>/`), and prints the
-Audiobookshelf link when published.
+`--source -` reads stdin; `--path` (repeatable) has the gateway read a
+brain-relative note itself, making `--source` optional. `--no-research` skips
+the research stage, `--pin-minutes` stops the editor deviating from
+`--minutes`, `--no-brain-note` skips the transcript note. `--base-url` defaults
+to `$PODCAST_BASE_URL`, else `http://localhost:7719` — the mini instance; from
+the MacBook use `https://podcasts.mini.jkrumm.com`. The CLI polls until
+`done`/`failed`, prints stage progress (and the episode's `profile` — format,
+lead, humor, minutes — once the editorial pass has run), downloads
+`episode.mp3`, `cover.png` and `script.json` into `--out` (default
+`./out/podcasts/<id>/`), and prints the Audiobookshelf link when published.
 
 ## Flow
 
@@ -46,11 +59,11 @@ Audiobookshelf link when published.
    so say so: `--brief "Johannes plant genau diese Reise mit dem Camper; sprich
    ihn direkt an und gib konkrete Ratschläge."` The hosts then talk *to* him
    about *his* plan instead of narrating a travelogue.
-3. **Pick length + target.** `--minutes` 15–25 for a drive briefing, 8–10 for
-   a quick summary. `--publish` unless the user only wants the file. Prod
-   gateway (`--base-url https://audio-gateway.jkrumm.com`) is the default choice
-   once it has `ABS_*` configured; a local `bun run dev` gateway works when the
-   secrets are in the local env.
+3. **Pick length + target.** `--minutes` is a hint the editor may deviate from
+   (pass `--pin-minutes` to force it) — 15–25 for a drive briefing, 8–10 for a
+   quick summary. `--publish` unless the user only wants the file. The mini
+   instance (`http://localhost:7719`, the CLI's default) is the one with brain
+   access and `ABS_*` configured — always use it for real episodes.
 4. **Run it.** Report the job id immediately if the user is waiting on chat;
    the CLI blocks until done. Then hand over: title, duration, chapter list,
    the Audiobookshelf link (playable in Plappa), cost, and the local
@@ -65,9 +78,11 @@ Audiobookshelf link when published.
 
 | Var | Default | Meaning |
 |-|-|-|
+| `PODCAST_RESEARCH_MODEL` / `PODCAST_EDITORIAL_MODEL` | `gpt-5.6-luna` / `claude-opus-5` | tool-calling researcher (brain, past episodes, research gateway) / decides format, roles, tone, humor, length per episode |
 | `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | `claude-opus-5` / `claude-opus-4-6` | story pass / the voice owner (segments + every revision) |
-| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.1-pro-preview,gpt-5.6-luna` / `gpt-5.6-luna` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles |
+| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.8-flash,gpt-5.6-luna` / `gpt-5.6-luna` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles, topics |
 | `PODCAST_SHOW_BIBLE` | `./docs/show-bible.md` | binding house style injected into every writer and reviewer prompt |
+| `BRAIN_DIR` / `RESEARCH_API_KEY` | `/Users/jkrumm/SourceRoot/brain` / — | unset either and research + the brain note are skipped |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
 | `PODCAST_VOICES` / `PODCAST_HOST_NAMES` | `Mark,Sarah` / `Jonas,Lena` | host A, host B |
 | `PODCAST_STABILITY` / `PODCAST_SPEEDS` | `0.5` / `0.94,1` | v3 stability preset (0 / 0.5 / 1) · per-host speed |
