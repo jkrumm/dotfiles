@@ -88,7 +88,7 @@ plugins, env) and on `permissions.deny`; `permissions.allow` and
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
 `docker-makefile.ts` tokenizes and inspects only **command position** — a mention
 is not an invocation. `docker {builder,image,container} prune` is allowlisted
-(daemon-level, no Makefile target); `docker volume prune` stays blocked. Full map: `docs/hooks.md`.
+(daemon-level, no Makefile target); `docker volume prune` stays blocked. Map: `docs/hooks.md`.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**
@@ -122,6 +122,7 @@ substitutes for another.** `claude --bg` rides on top of all three.
 | Work *placed on* the mini, no terminal | `rd repos\|work\|bg\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | One bounded episode, either machine | `agent-dispatch bg <repo> '<task>'` · `agent-dispatch work <repo>` |
 | Work that must not die | `claude --bg '<prompt>'` — reparents to PID 1, survives ssh, herdr and lid-close. Conflicts with `-p`. |
+| What every agent is doing | `make agent-overview` — herdr workspace `overview` watching sideclaw `GET /api/agents.txt`; the JSON twin `/api/agents` is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 `agent-dispatch` routes on the backend marker crossed with whether the repo exists
@@ -131,7 +132,7 @@ repo → local `claude -p` on the IU Keychain creds (`claude-sonnet-5[1m]`).
 `dispatch-scratch`. It **refuses to nest inside an interactive Claude Code
 session** (`CLAUDECODE` set → prints the brief, exit 1) — use a subagent instead.
 
-Three facts worth holding without loading the skill:
+Three facts to hold:
 
 - **A herdr crash restores the layout and loses every process in it** (new
   `terminal_id`) → durable work belongs in a `claude --bg` daemon, not a pane.
@@ -152,8 +153,7 @@ mini only ever *proposes* a command string; `run` needs a typed `yes` on a real
 TTY. Nothing drains it automatically — a poller would mean an unattended Touch ID
 prompt on a schedule forever.
 
-Use **`/remote-dev`** for anything touching this stack. Full model:
-`docs/remote-dev.md`.
+**`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
 ## Dev-server doors
 
@@ -193,8 +193,6 @@ and **after any `brew upgrade caddy`**, which silently reverts it.
   exists. The apex `https://mini.jkrumm.com` (own cert + A record) lands on the
   same page.
 
-Full walkthrough: `docs/remote-dev.md` → *Dev-server doors*.
-
 ## Colima and the boot path
 
 `make colima-{start,stop,restart,status}` — never bare `colima stop` (KeepAlive
@@ -233,7 +231,7 @@ bootout + bootstrap (the only reload that re-reads the file).
   use, since it sanitizes `DOCKER_HOST`/context out of its env. Colima ships no
   GUI: that extension plus `lazydocker`. Drive containers via Makefile targets.
 
-Full rationale: `docs/remote-dev.md` → *launchd on the dev host*.
+Rationale: `docs/remote-dev.md` → *launchd on the dev host*.
 
 ## Homebrew
 
@@ -313,7 +311,7 @@ services, claude auth, obsidian, disk, runaways.
   `shutdown -r now` aborts the prepare and boots the old OS with everything still
   looking armed. `sw_vers -productVersion` is the only honest check.
 
-Full rationale: `docs/devhost-health.md`.
+Rationale: `docs/devhost-health.md`.
 
 ## Collie — the phone control surface
 
@@ -339,7 +337,7 @@ Full rationale: `docs/devhost-health.md`.
   a tag, since `plugin install` re-clones). Monitoring is opt-in on its own Kuma
   monitor: a machine without collie must not fail the heartbeat.
 
-Full rationale: `docs/collie.md`.
+Rationale: `docs/collie.md`.
 
 ## Secrets
 
@@ -516,7 +514,7 @@ second without the first**; `make lock-at-boot-check` reports both plus live sta
 
 Physical possession still yields root (`/etc/kcpassword`, reversible XOR), reaching
 every cached ref; Thunderbolt Sharing Mode is a FileVault question and stays open.
-Full trade: `docs/remote-dev.md`.
+Trade: `docs/remote-dev.md`.
 
 ## opbackup + secrets auto-reseed (MacBook only)
 
@@ -583,8 +581,7 @@ nothing reports it. `make log-rotate-setup` bounds them: hourly, **copytruncate*
 (a rename follows the inode, exactly like the sweep), 16 MB cap, one `.1`
 generation, safe because launchd's fds are `O_APPEND`. The list in
 `scripts/log-rotate.sh` is **declared, never globbed** (`~/Library/Logs` also
-holds Apple and vendor logs). `com.jkrumm.photoflow` still logs to `/tmp` — known,
-deliberately not fixed from here.
+holds Apple and vendor logs). `com.jkrumm.photoflow` still logs to `/tmp` — known.
 
 **Database access** (`make db-tunnel-setup`, MacBook): a `KeepAlive` agent holding
 one `ssh -N` with every `-L` in `dbtunnel/tunnels.conf`; **local ports are the real

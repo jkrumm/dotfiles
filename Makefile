@@ -2295,6 +2295,26 @@ herdr-status:
 		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _herdr-supervise"; \
 	fi
 
+.PHONY: agent-overview
+agent-overview:
+	@# Dev host only: the agent overview pane — a herdr workspace labelled
+	@# `overview` running `watch` over sideclaw's GET /api/agents.txt, so herdr
+	@# and Collie show every Claude pane's state without a second data source.
+	@# Idempotent: reuses the workspace if it exists, (re)starts the loop in its
+	@# first pane. Re-run after a herdr restart (panes survive, processes don't).
+	@command -v herdr >/dev/null || { echo "  ✗ herdr not installed"; exit 1; }
+	@curl -sf localhost:7705/api/agents.txt >/dev/null || { echo "  ✗ sideclaw not answering on :7705 — is com.jkrumm.sideclaw-server loaded?"; exit 1; }
+	@WS=$$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[] | select(.label=="overview") | .workspace_id' | head -1); \
+	if [ -z "$$WS" ]; then \
+		WS=$$(herdr workspace create --cwd "$$HOME" --label overview --no-focus | jq -r '.result.workspace.workspace_id'); \
+		echo "  created herdr workspace overview ($$WS)"; \
+	fi; \
+	PANE=$$(herdr pane list 2>/dev/null | jq -r --arg ws "$$WS" '.result.panes[] | select(.workspace_id==$$ws) | .pane_id' | head -1); \
+	[ -n "$$PANE" ] || { echo "  ✗ no pane in workspace $$WS"; exit 1; }; \
+	herdr pane send-keys "$$PANE" C-c >/dev/null 2>&1 || true; \
+	herdr pane run "$$PANE" watch -t -n 30 'curl -sf localhost:7705/api/agents.txt || echo "sideclaw unreachable"' >/dev/null; \
+	echo "  ✓ overview loop running in $$PANE (workspace $$WS)"
+
 .PHONY: herdr-restart
 herdr-restart:
 	@if [ "$(YES)" != "1" ]; then \
@@ -2790,6 +2810,7 @@ help:
 	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
+	@echo "  make agent-overview             Dev host: herdr workspace overview watching sideclaw /api/agents.txt (idempotent)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
