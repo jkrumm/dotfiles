@@ -100,10 +100,13 @@ FILES=(
   # schedule. It is the only record of what Hermes did unattended, so it is
   # rotated rather than truncated.
   hermes-ops.log
-  # Same shape, for the other bounded dispatcher: warden/scripts/hermes-cc.sh
-  # (hermes-agent/scripts/hermes-cc.sh is now an exec shim into it, 2026-09-10)
-  # appends one audit line per invocation — including refusals — and is the only
-  # record of which repos Hermes opened a Claude Code episode against.
+  # Same shape, for the other bounded dispatcher: warden/scripts/warden (the
+  # Python CLI that replaced hermes-cc.sh on 2026-09-10; hermes-agent's
+  # scripts/hermes-cc.sh is an exec shim into it) appends one audit line per
+  # invocation — including refusals — and is the only record of which repos
+  # Hermes opened a Claude Code episode against. hermes-cc.log is the retired
+  # file's name, kept until it has rotated out.
+  warden-cli.log
   hermes-cc.log
   opbackup.log
   # The MacBook's userland sshd on :2222 — the only door the mini has back to
