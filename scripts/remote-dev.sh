@@ -346,6 +346,26 @@ cmd_wave() {
   local path
   path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
 
+  # The green gate, mechanical half (scripts/wave-gate.py owns the rest of the
+  # rationale). A cross-repo chain's prompt names its shared plan by absolute
+  # path (the estate-review chain's own convention) — pull that out of the
+  # prompt if present, otherwise the plan lives at the default in-repo
+  # location the skill documents. Expansion of `~` and relative-to-$path both
+  # happen ON THE HOST inside wave-gate.py, since $HOME differs there.
+  local plan_ref
+  plan_ref=$(grep -oE '[~/][^[:space:]]*docs/waves/PLAN\.md' <<<"$prompt" | head -1)
+  [[ -n $plan_ref ]] || plan_ref="docs/waves/PLAN.md"
+  # plan_ref comes out of free-text prompt content, not a resolved path — unlike
+  # $path (a directory resolve_repo already proved exists), it is not safe to
+  # trust into a quoted string that host_run hands to a shell. Restricting it to
+  # a safe character set before it ever reaches host_run closes that off, rather
+  # than relying on the single-quoting alone.
+  [[ $plan_ref =~ ^[A-Za-z0-9~/_.-]+$ ]] \
+    || die "plan reference extracted from the wave prompt has unsafe characters: $plan_ref"
+  local gate_out
+  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" '$path' '$plan_ref'" 2>&1) \
+    || die "green gate failed for $path:"$'\n'"$gate_out"
+
   # The repo's space is the one labelled with its bare name — the convention
   # `work` establishes and `herdr-groups.py` groups by. Waves live inside it as
   # tabs labelled `wave <n>`, so the number comes from that tab list rather than

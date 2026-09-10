@@ -69,15 +69,17 @@ greps them.
 
 **A wave spawns its successor only if its own close-out was green.**
 
-| Condition | Action |
-|-|-|
-| `/check` passed, review findings resolved, plan committed, a next wave exists | Spawn it |
-| `/check` failed, or a review finding is unresolved | **Stop.** Write the failure into the active wave's **Left behind**, commit, and leave the pane open. Do not spawn. |
-| No `pending` wave remains | Stop. Say the chain is complete. Do not spawn. |
-| The next step is outward-facing — merge, publish, release, deploy | Stop and hand back to the human. `/ship` is a human's call, not a wave's. |
+| Condition | Action | Enforced by |
+|-|-|-|
+| `/check` passed, review findings resolved | Prerequisite for the rest | The finishing wave's own judgment — not re-provable from the plan file, so `rd wave` trusts it |
+| Plan committed, an `active` wave with a done, fully-ticked predecessor exists | Spawn it | `rd wave` → `scripts/wave-gate.py`, mechanical |
+| No `active` wave, or the predecessor isn't `done`/fully ticked | **Stop.** Write the failure into the active wave's **Left behind**, commit, and leave the pane open. Do not spawn. | `wave-gate.py` refuses before touching herdr |
+| The next step is outward-facing — merge, publish, release, deploy, ship | Stop and hand back to the human. `/ship` is a human's call, not a wave's. | `wave-gate.py`'s keyword heuristic on the active wave's next unchecked step — a subtler outward-facing reason still needs the wave to notice it itself |
 
 A red wave that chains anyway poisons every wave after it with a broken base. The
-gate is the whole reason this is safe to leave unattended.
+mechanical half of the gate is the reason a broken close-out fails loud instead
+of silently spawning into it; the judgment half (did check/review actually pass)
+is still the finishing wave's to get right.
 
 ## Spawning the next wave
 
