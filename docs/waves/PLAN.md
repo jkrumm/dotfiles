@@ -198,12 +198,11 @@ own project set, which this wave has no way to register warden into without
 touching that repo; either the generator discovers it automatically or that's
 a `hermes-agent`-scoped follow-up.
 
-## Wave 4 — ground truth, the cheap lane, the wholesale move (repos: `warden`, `sideclaw`, `hermes-agent`, `dotfiles`)   <!-- status: active -->
-Read first: the shape note (above), `warden/STATE.md` §§46–51, `warden/CLAUDE.md`,
-findings 1, 3, 4, 6, 22. The Warden Wave 3 session (`wave3` pane in this space,
-idle) finished items 0, 1a, 1b; items 2 and 3 are Wave 5 here. Warden's tree is
-clean at `d3f5f2b`.
-- [ ] 4.1 Reconnaissance against the running system, no edits: `make status`,
+## Wave 4 — ground truth, the cheap lane, the wholesale move (repos: `warden`, `sideclaw`, `hermes-agent`, `dotfiles`)   <!-- status: done -->
+Read first: the shape note (above), `warden/STATE.md` §§46–53, `warden/CLAUDE.md`,
+findings 1, 3, 4, 6, 22. The Warden Wave 3 session finished items 0, 1a, 1b;
+items 2 and 3 are Wave 5 here. Started from `d3f5f2b`.
+- [x] 4.1 Reconnaissance against the running system, no edits: `make status`,
       `make test`, `make check-policy` in warden; `/health` + `/metrics` on
       `127.0.0.1:7734`; sideclaw `GET /api/routing`, `/api/jobs/health`,
       `/api/jobs?limit=30` (as of 2026-09-10 14:23 `overview` still exits with
@@ -211,7 +210,15 @@ clean at `d3f5f2b`.
       connectors are disabled" — two distinct shapes); the Hermes gateway log;
       Argo's agents page. Append a dated section to `warden/STATE.md` (its
       convention) — findings only, and anything the shape note got wrong.
-- [ ] 4.2 The cheap lane lives again (findings 1, 22; the former Wave 1). Root-cause
+      `warden/STATE.md` §52. Warden green (148/148, five agents, policy agrees);
+      IU key answering 200; the two stderr lines are warnings printed on every
+      successful IU run, one shape not two — what failed was a 403 refusal in
+      the result envelope (never classified) and a 120 s `overview` cap neither
+      lane meets. Gateway: Socket Mode client reconnect-looping every 10 s all
+      day while a second client still answers. Argo `/agents` 200, API 401 —
+      Wave 7's. Stale counts fixed on the way: `test_triage` gate 148/148 in
+      `CLAUDE.md`/`docs/triage.md`, five LaunchAgents in README/DESIGN/STATE.
+- [x] 4.2 The cheap lane lives again (findings 1, 22; the former Wave 1). Root-cause
       the `unrecognized_model` exit on Claude Code 2.1.266+ — a version fact,
       so `/research` it, never from memory — and either fix the pin in
       `session-runner.ts` or re-route `check`/`overview`/`review_router` to the
@@ -223,7 +230,18 @@ clean at `d3f5f2b`.
       it and on `backendFallbacks.count > 0`. Acceptance: one `check` and one
       `overview` job `done` on the cheap route; a forced route failure produces a
       fallback and a WARN, not silence.
-- [ ] 4.3 `hermes-cc.sh` moves wholesale into `warden/scripts/` (shape note step
+      sideclaw `df89ac5`, dotfiles `3bf4b30`. Not the pin: `api_error_status`
+      off the result envelope, `{400,401,403,404}` or `access_denied|cost-
+      service-denial|403` on a zero-output exit → Max fallback at attempt 1;
+      429/5xx keep the same-backend retry. Bounded per-route streaks +
+      `warnings[]` on `/api/jobs/health`, `ok` untouched; devhost WARNs on it.
+      `overview` cap 2 → 3 min (measured: glm 139 s, haiku hit 120 s once).
+      Review caught the banner lines in the classifier — removed, pinned by a
+      test. Live: `check` 64 s and `overview` 166 s `done` on glm/iu; forced bad
+      model → fallback in 1.2 s, health `warnings` set, devhost rc=2. Route stays
+      glm-5.3-flash (`cap` still picks it). Research-gateway returned zero
+      citations on the 2.1.266 catalog question — its own defect.
+- [x] 4.3 `hermes-cc.sh` moves wholesale into `warden/scripts/` (shape note step
       4.0): `triage.py`'s `HERMES_CC_BIN` default, the plugin's
       `_DEFAULT_CC_SCRIPT`, `skills/claude-dispatch`, the hermes Makefile and
       tests repointed; `~/.hermes/scripts/hermes-cc.sh` becomes a two-line exec
@@ -234,18 +252,69 @@ clean at `d3f5f2b`.
       165-case and 148-case suites green from the new location; one live
       `investigate` opened from Slack through Hermes and one from the loop, both
       folded onto their cards.
-- [ ] 4.4 Verdict delivery off the gateway binary (finding 3): `dispatch-sweep.py`
+      warden `e29434a`, hermes-agent `3ecbdef`, dotfiles `dd306eb`. Byte-identical
+      apart from comments and one default; five-line exec shim stays because the
+      Hermes guards allow that literal path (the skill keeps calling it; loop and
+      plugin call warden directly). `dispatch-repos.json` moved, not deleted —
+      it is what `make check-policy` compares against sideclaw. Both suites moved:
+      165 + 85 green under `make test`; schema pin asserted by a ledger test.
+      Live: loop ticked on the moved script; one `investigate` opened through the
+      shim (`c7737ef5`, 25 s) — the recursion guard refused inside this Claude
+      session, re-run with `CLAUDECODE` unset as a human would. **From Slack
+      through Hermes: not done unattended** — needs a human typing.
+- [x] 4.4 Verdict delivery off the gateway binary (finding 3): `dispatch-sweep.py`
       `send_message()` and the plugin's `_send_to_origin` use the plain
       `chat.postMessage` client `triage.py` already has; `reported_at` gets a
       sibling `delivery_status` instead of a string in a timestamp column.
-- [ ] 4.5 The notifier reads the ledger (STATE §49, finding 6): the reminder path
+      warden `c1ebe58`, hermes-agent `0429201`. `scripts/slack_client.py`, stdlib,
+      never raises; sweep and plugin post through it; schema 6 with a backfill
+      (25 delivered, 2 undeliverable, zero strings left in `reported_at`);
+      every `reported_at` write point writes both, `--wait` and abandon included.
+      The live ledger migrated at the loop's next tick from the working tree,
+      the sweep refused once and resumed, the API needed a kickstart. Live: the
+      probe's verdict posted to the card channel over HTTP at 18:34Z,
+      `delivery_status = delivered`, gateway still reconnect-looping.
+- [x] 4.5 The notifier reads the ledger (STATE §49, finding 6): the reminder path
       skips events whose item is `ignored`/`note`/terminal, `needs_human` gets
       its own cadence, and the three UptimeKuma group monitors (`uk:95`, `uk:179`,
       `uk:186`) are disposed of the way DESIGN § Open questions already names.
-**Left behind:**
+      warden `968f4ac`. Terminal-state items skipped without touching the
+      anchor; `needs_human` on its own 24 h cadence with the verdict folded in;
+      group monitors dropped in `poll_uk` (children alert on their own; a parent
+      is never escalatable). Proven on a `.backup` copy, then live: the poller's
+      first run resolved all three at 18:14Z.
+**Left behind:** Everything green and live; nothing pushed (the chain runs in
+this checkout — push when the owner next looks). `warden/STATE.md` §§52–53 are
+the record. Open, by owner: (1) 4.3's "one live `investigate` from Slack through
+Hermes" needs a human typing in Slack — the shim path is what answers, the
+plugin's HTTP delivery is what replies; do it once. (2) `hermes_log` events ride
+`upsert_grouped()`, not the reminder branch, so ev261 is not on the 24 h cadence
+(worker finding, STATE §53). (3) `hermes-cc.sh` still runs on bare `python3`
+(Homebrew 3.14) and its `APPROVAL_PY` is the gateway venv — zero-change kept
+them; Wave 5 deletes the file. (4) The gateway's dead Socket Mode client has
+logged `Session is closed` every 10 s since 09-07 while a live one answers —
+Hermes's own bug, now irrelevant to delivery, still worth a restart from the
+owner. (5) Declined review items, recorded with reasons in STATE §53:
+`session-health.ts` extraction, streak-limit env override, `runSessionAttempt`
+refactor, `triage.py` importing state names from `ledger.py` (a module reorder,
+not an alias), `sensitive ⊆ deny` in the moved validator, the `cmd_merge`
+`--confirm` argument (pre-existing contract, Wave 5.2's port). (6) The
+`modelPicker`/`behavesAs` catalog mapping that would silence the
+`unrecognized_model` banner is cosmetic and undocumented; research-gateway
+returned a report with zero citations on it — a research-gateway defect to look
+at. Wave 8.2's "five LaunchAgents" line is already done (this wave's recon
+commit). (7) `scripts/wave-gate.py` scanned every unchecked step for an
+outward verb and reported the hit as "the next step" — it refused Wave 5's
+spawn on 5.4 (`Deploy`), three steps away. Fixed to its documented contract
+(next step only) with a test; 5.4 stays the Wave 5 agent's own stop-and-judge
+moment under the header's owner authorization.
 
-## Wave 5 — the actuator in Python, and the chain proven end to end (repos: `warden`, `hermes-agent`, `sideclaw`, `argo`)   <!-- status: pending -->
-Shape note §§ 3–4 are the design; STATE §12 has `hermes-cc.sh`'s line ranges.
+## Wave 5 — the actuator in Python, and the chain proven end to end (repos: `warden`, `hermes-agent`, `sideclaw`, `argo`)   <!-- status: active -->
+Shape note §§ 3–4 are the design; STATE §12 has `hermes-cc.sh`'s line ranges —
+the file is `warden/scripts/hermes-cc.sh` now (Wave 4.3), its suites are
+`warden/tests/test_hermes_cc.py` (165) and `test_dispatch_approval.py` (85), the
+ledger is schema 6 with `dispatches.delivery_status`, and `scripts/slack_client.py`
+already is the slack client 5.1 names. Read `STATE.md` §53 first.
 - [ ] 5.1 `warden/scripts/clients/`: sideclaw (submit, get, wait, cancel), github
       (read PR, ready-for-review, the landing call, branch delete, check-runs,
       Actions run), slack (HTTP), signer (verify against the published pubkey),
