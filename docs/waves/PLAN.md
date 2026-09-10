@@ -182,12 +182,36 @@ own project set, which this wave has no way to register warden into without
 touching that repo; either the generator discovers it automatically or that's
 a `hermes-agent`-scoped follow-up.
 
-## Wave 4 — Warden's actuator (repos: `warden`, `hermes-agent`)   <!-- status: blocked -->
-Findings 2-6 and 16: dispatch/implement/merge/approvals still run through
+## Wave 4 — Warden's actuator (repos: `warden`, `hermes-agent`, `sideclaw`, `brain`)   <!-- status: blocked -->
+Findings 3-6, 15, 16, 18: dispatch/implement/merge/approvals still run through
 `hermes-agent/scripts/hermes-cc.sh`; verdict delivery depends on the Hermes
 gateway binary; "merge is deploy" has no code path, so `verified_unattended_fixes`
 is structurally 0; Hermes's persona line 41 still claims it triages.
 
-**Blocked on the IU key** and on the owner — this is the largest change in the
-estate and its design is not settled. Do not start it in this chain. Report it as
-the next decision needed.
+**The shape is decided in `~/SourceRoot/brain/Inbox/Warden Wave 4 — Shape.md`
+(2026-09-10) — read it first; it is the authority on the split.** One line:
+Warden owns every unattended lifecycle regardless of origin and no actuator;
+Hermes is a door; sideclaw `dispatch` and `rd bg` stay as the two primitives.
+The IU key is resolved and no longer blocks. Steps, each its own wave:
+- [ ] 4.0 Wholesale move of `hermes-cc.sh` into `warden/scripts/`, callers
+      repointed, `~/.hermes/scripts/hermes-cc.sh` an exec shim, the hermes copy
+      of the repo policy deleted, schema pin intra-repo. Zero behaviour change.
+- [ ] 4.1 `clients/` in Python (sideclaw, github, slack, signer, deploy); the
+      loop calls functions; deploy becomes its own operation; verdict delivery
+      off `hermes send` (finding 3).
+- [ ] 4.2 `lifecycle/` gates in Python; `warden` CLI over them; bash deleted;
+      approval canonical-string spec versioned on both sides; the 165-case
+      black-box suite ported as the gate.
+- [ ] 4.3 Every origin opens an item: `warden run`, the `warden:go` label,
+      Hermes's `claude-dispatch` skill calls the CLI.
+- [ ] 4.4 sideclaw: `review` on a branch/PR ref, `check` inside the implement
+      handler, `POST /api/jobs/:id/cancel`; Warden's validation step reads
+      `review.outcome`.
+- [ ] 4.5 Docs: `agent-dispatch-paths.md` rewritten (lanes = executor /
+      lifecycle / colleague), `warden-control-plane.md` to §§46-50, `SOUL.md:41`
+      (finding 15), four→five LaunchAgents in the three warden files,
+      `WARDEN_LEDGER_SCHEMA_VERSION` + sideclaw schema asserted (finding 18).
+**Blocked on** two things, both named in the shape note: the owner's greenlight
+on its five decisions, and Wave 3's stop-condition run recording one real
+`fixed` transition on argo — the chain this wave moves has never executed in
+production. Do not start it in this chain until both are true.
