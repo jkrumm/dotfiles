@@ -246,6 +246,13 @@ brain.test {
 	reverse_proxy localhost:7733
 }
 
+# sy-serendipity — Astro static site; `bun run dev` / `bun run preview` both
+# bind 7734 (--strictPort), inside the tailnet ACL's tcp:7700-7799 grant.
+sy-serendipity.test {
+	import local
+	reverse_proxy localhost:7734
+}
+
 # meteo — self-hosted weather platform on the mini (point/marine API + tile service)
 meteo.test {
 	import local
