@@ -94,11 +94,14 @@ The expensive model is here to hold the plan. It is not here to run inside a
 subagent, where it buys judgment on work whose plan is already settled.
 
 - **`CLAUDE_CODE_SUBAGENT_MODEL` pins every subagent to Sonnet.** Frontmatter
-  `model:` overrides it, an explicit `model` param overrides both.
+  `model:` overrides it, an explicit `model` param overrides both — and a
+  `PreToolUse` hook (`model-discipline.ts`) denies a `model: fable` worker
+  outright, since there is no legitimate use of Fable as a worker.
 - **Never `subagent_type: "fork"` from Fable or Opus.** A fork always inherits the
   parent's model — that is architectural, no setting overrides it. A fork on Fable
-  is the most expensive call available. Spawn a named agent instead. A *skill's*
-  `context: fork` is a different mechanism and is fine — it honours the skill's own
-  `model:` (that is how `/browse` stays on Haiku).
+  is the most expensive call available. Spawn a named agent instead — the same
+  hook denies a `fork` call whenever the caller is Fable/Opus, so this is enforced,
+  not just stated. A *skill's* `context: fork` is a different mechanism and is fine
+  — it honours the skill's own `model:` (that is how `/browse` stays on Haiku).
 - **Raise a worker above Sonnet only for novel hard logic**, and say in one clause
   why the settled-work default did not fit.

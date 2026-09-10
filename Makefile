@@ -1045,6 +1045,9 @@ _setup-hooks:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/machine-role.ts" \
 		DST="$(CLAUDE_DIR)/hooks/machine-role.ts"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/hooks/model-discipline.ts" \
+		DST="$(CLAUDE_DIR)/hooks/model-discipline.ts"
 	@# Shared PR-required denylist — read by protect-branches.ts, also drives github-config.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/pr-required-repos.json" \
@@ -1509,6 +1512,7 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/protect-branches.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/docker-makefile.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/machine-role.ts"
+	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/model-discipline.ts"
 	@echo "  Scripts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/statusline.sh"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/fetch_usage.py"
