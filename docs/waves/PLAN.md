@@ -112,17 +112,75 @@ run was explicit: do not touch other repos' checkouts. Wave 3's `active`
 flip below is the close-out convention; actually starting it is a separate,
 outward-facing call for the human to make.
 
-## Wave 3 — docs describe the estate that exists (repos: `dotfiles`, `brain`)   <!-- status: active -->
-- [ ] Findings 23 and 24: `global.CLAUDE.md`, the brain wiki (zero hits for
+## Wave 3 — docs describe the estate that exists (repos: `dotfiles`, `brain`)   <!-- status: done -->
+- [x] Findings 23 and 24: `global.CLAUDE.md`, the brain wiki (zero hits for
       `warden`) and both archify diagrams do not know Warden exists.
-- [ ] Finding 8: `warden/DESIGN.md` says four LaunchAgents; there are five.
-- [ ] Finding 9: a 41.9k `CLAUDE.md` (over the 40k rule), a 286 KB `STATE.md`,
+      `global.CLAUDE.md` and `dotfiles/CLAUDE.md`'s architecture map both get a
+      warden row/section. Brain: new `wiki/engineering/warden-control-plane.md`
+      is the current source of truth, linked from `index.md`; the three
+      Hermes pages that used to own this mechanism
+      (`hermes-as-control-surface.md`, `incident-triage-loop.md`,
+      `agent-dispatch-paths.md`) each get a "superseded 2026-09-09" banner —
+      design narrative stays, mechanism description points at the new page.
+      `agent-dispatch-paths.md`'s stale "Approve button is a dead end" claim
+      corrected in the body, not just banner-noted. `dispatch-path.html`
+      (sequence diagram) regenerated via archify with a `warden` participant
+      and the `--auto-from-item` unattended trigger path alongside the
+      existing human-initiated one — validated, delivered, visual-checked.
+      `estate.architecture.json` (source) got a `warden` component and the
+      dispatch edge rerouted off `hermes -> sideclaw`; `estate.html` itself
+      is **not** regenerated — `deliver` correctly refused on a pre-existing,
+      unrelated desktop-readability failure (confirmed present before this
+      change, on unrelated sublabel text). The source change is committed so
+      whoever fixes that debt doesn't have to redo the Warden addition too.
+- [x] Finding 8: `warden/DESIGN.md` says four LaunchAgents; there are five.
+      Fixed the dotfiles-side half: `architecture.md` now has a `### warden`
+      heading with all five (`warden-api` was missing entirely, filed
+      nowhere) and links to `warden/docs/api.md`, `FLOWS.md`, `docs/triage.md`.
+      Also fixed a self-contradiction one paragraph away: the gateway's own
+      "6 live jobs" cron count still listed watchdog/dispatch-sweep as
+      gateway cron directly next to the warden row saying those two were
+      promoted OUT on 2026-09-09 — corrected to 4. **`warden/DESIGN.md`
+      itself is not touched** — that's the warden repo, outside this wave's
+      declared scope (`dotfiles`, `brain`); still says four.
+- [x] Finding 9: a 41.9k `CLAUDE.md` (over the 40k rule), a 286 KB `STATE.md`,
       secrets prose duplicated across 19 files.
-- [ ] The model exists nowhere as one piece. Write the single page a new agent
+      The 41.9k figure is `free-planning-poker`'s CLAUDE.md, not a dotfiles
+      one (dotfiles' is 38.5k, under the limit) — out of this wave's repo
+      scope regardless. Of the three dotfiles sections the audit named as
+      duplicating `docs/*.md`: Colima genuinely was (docs/remote-dev.md
+      already carried the full narrative) — trimmed to command + pointer.
+      "Unattended boot posture" and "MacBook-only subsystems" turned out to
+      already be pointer-only on inspection, nothing to trim. Evaluated and
+      declined the `brain-access.md` "symlink" fix: the two files are
+      genuinely different, valuable content (dotfiles-side machinery vs.
+      brain's sync-contract authority), already explicitly cross-reference
+      each other — not accidental duplication, and symlinking would destroy
+      real information. `STATE.md` (286 KB) and the 19-file secrets-prose
+      duplication are in `warden` and mostly repos outside `dotfiles`/`brain`
+      — out of scope here.
+- [x] The model exists nowhere as one piece. Write the single page a new agent
       reads to get the shape — machine, orchestrator, delegation roster, model
       discipline, `/wave`, Warden's loop, sideclaw's tiers. One home, everything
       else links to it.
-**Left behind:**
+      New `wiki/engineering/agent-estate-model.md`, linked first in
+      `index.md`'s "Agents and gateways" section. One pass per topic, links
+      out to every deeper note rather than restating it. vault-lint: 0
+      errors, 0 warnings after every wiki edit this wave.
+**Left behind:** `warden/DESIGN.md`/`README.md`/`STATE.md` still say "four
+LaunchAgents" — the actual repo-side fix is one-line-times-three but out of
+this wave's declared scope; worth folding into Wave 4 (already touches
+`warden`) or a quick standalone pass. `estate.html` needs its pre-existing
+desktop-readability failure fixed before the Warden addition already sitting
+in `estate.architecture.json` can actually be delivered. The narrower
+Finding-17-shaped issue (Hermes's own docs — README, scheduled-jobs.md,
+CLAUDE.md, and `agent-overview-loop.md` in brain — asserting stale cron-job
+counts and the `#agents` digest pause) lives in `hermes-agent`, out of scope,
+not investigated. `wiki/engineering/projects/warden.md` was not hand-authored
+— it's a `project-narratives` cron artifact generated from `hermes-agent`'s
+own project set, which this wave has no way to register warden into without
+touching that repo; either the generator discovers it automatically or that's
+a `hermes-agent`-scoped follow-up.
 
 ## Wave 4 — Warden's actuator (repos: `warden`, `hermes-agent`)   <!-- status: blocked -->
 Findings 2-6 and 16: dispatch/implement/merge/approvals still run through
