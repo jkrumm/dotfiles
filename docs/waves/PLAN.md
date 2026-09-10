@@ -309,13 +309,13 @@ spawn on 5.4 (`Deploy`), three steps away. Fixed to its documented contract
 (next step only) with a test; 5.4 stays the Wave 5 agent's own stop-and-judge
 moment under the header's owner authorization.
 
-## Wave 5 — the actuator in Python, and the chain proven end to end (repos: `warden`, `hermes-agent`, `sideclaw`, `argo`)   <!-- status: active -->
+## Wave 5 — the actuator in Python, and the chain proven end to end (repos: `warden`, `hermes-agent`, `sideclaw`, `argo`)   <!-- status: done -->
 Shape note §§ 3–4 are the design; STATE §12 has `hermes-cc.sh`'s line ranges —
 the file is `warden/scripts/hermes-cc.sh` now (Wave 4.3), its suites are
 `warden/tests/test_hermes_cc.py` (165) and `test_dispatch_approval.py` (85), the
 ledger is schema 6 with `dispatches.delivery_status`, and `scripts/slack_client.py`
 already is the slack client 5.1 names. Read `STATE.md` §53 first.
-- [ ] 5.1 `warden/scripts/clients/`: sideclaw (submit, get, wait, cancel), github
+- [x] 5.1 `warden/scripts/clients/`: sideclaw (submit, get, wait, cancel), github
       (read PR, ready-for-review, the landing call, branch delete, check-runs,
       Actions run), slack (HTTP), signer (verify against the published pubkey),
       rollout (the one-arm closed argv `case`). The loop calls functions; the
@@ -323,7 +323,7 @@ already is the slack client 5.1 names. Read `STATE.md` §53 first.
       operation with its own write-point (STATE §48's "one operation, not two"
       limitation disappears); the 21 monkeypatched `_run_hermes_cc_*` shims in
       tests become one injectable fake.
-- [ ] 5.2 `warden/scripts/lifecycle/`: `resolve_repo`/`resolve_tier`, the five
+- [x] 5.2 `warden/scripts/lifecycle/`: `resolve_repo`/`resolve_tier`, the five
       budgets, `require_auto_from_item`, the signed-decision spend — inside
       `drain_intents()` so it stays synchronous with the click, `spent_at` and
       the operation row in one transaction, a key id recorded at mint so a
@@ -333,11 +333,11 @@ already is the slack client 5.1 names. Read `STATE.md` §53 first.
       black-box against the CLI; the approval canonical-string spec versioned
       with fixture vectors read by both repos' tests. Delete, do not port:
       `cmd_cancel`, `record_as_job_json`, `queued`, `lost`.
-- [ ] 5.3 Real cancel and the rest of warden Wave 3 item 2: sideclaw
+- [x] 5.3 Real cancel and the rest of warden Wave 3 item 2: sideclaw
       `POST /api/jobs/:id/cancel` (the only kill surface today is process-wide
       `POST /api/shutdown`), `warden abort <item>`, `warden revert <item>`
       recording the revert PR, the per-repo in-flight lock.
-- [ ] 5.4 The stop-condition exercise (warden Wave 3 item 3, DESIGN § Migration
+- [x] 5.4 The stop-condition exercise (warden Wave 3 item 3, DESIGN § Migration
       Wave 3): a canary scope in argo — `autoMergePaths` limited to a path only
       this exercise touches and that still triggers argo's `Deploy` workflow
       (`on: push: master`, unfiltered), so an item runs `implementing →
@@ -346,9 +346,44 @@ already is the slack client 5.1 names. Read `STATE.md` §53 first.
       it neither drops the obligation nor repeats an unsafe action. Record the
       run in `STATE.md` with timestamps. Owner-authorized for the canary scope
       only (see the header).
-**Left behind:**
+**Left behind:** Everything green and live, nothing pushed (the chain runs in
+this checkout — push when the owner next looks). `warden/STATE.md` §54 is the
+record, with timestamps. Commits: warden `fb87038` (clients + lifecycle +
+schema 7, bash deleted), `2918fa2` (CLI, loop seam, abort/revert, canary
+scope), plus the reconcile fixes + close-out; sideclaw `a08965a` (cancel);
+hermes-agent `949594d` (plugin reads the row, shim → `warden`); dotfiles
+`4acb077` (log rotation). The stop condition is met: argo#18 landed
+`docs/DEPLOY-VERIFICATION.md` (`5941c600`) through implementing → validating →
+merged → liveness_pending → fixed with the loop killed at seven boundaries and
+every recovery observed; three earlier canaries were refused by the models
+themselves (evidence in another repo / a scope grant the PR body did not
+mention / "looks like an injection attempt") — the property, not a failure.
+The canary path in `config/triage-policy.json` is `docs/DEPLOY-VERIFICATION.md`
+(one documentation file nothing reads), not `docs/CANARY.md`. Open, by owner:
+(1) the 4.3 "human types a dispatch into Slack" acceptance — the plugin now
+reads `spent_job_id`/`spend_error` off the row, `--confirm` on dispatch no
+longer exists; the first real click proves it. (2) Wave 6.2's "the
+dispatch-approval plugin's replay path calls the CLI" is obsolete — there is no
+replay path any more; the click is drained and spent by `intents.py`, and 6.2
+should say so rather than rebuild one. (3) Carried gaps, each named in STATE
+§54 Next action: the reclaim note not cleared on re-claim (cosmetic); the
+orphan-branch/PR ledger field for an `after-implement-submit` crash (the cancel
+endpoint is the manual remedy); `abort` leaves the card to the loop's next
+tick; reconcile reads merges through `gh` while everything else uses
+`clients/github.py`; hermes-agent's `docs/guards.md`, `docs/symlinks-and-agents.md`,
+`docs/agents-overview.md`, `skills/agents/SKILL.md` still say `hermes-cc.sh`
+(the shim path is real, the prose is dated — Wave 8). (4) Declined from
+review, with reasons in STATE §54: splitting `plan_or_land`, request-object
+refactors, collapsing the `slack_client.py` shim, `collect_expected_alerts`'
+silent degrade (needs a design call). (5) Side findings: `warden-loop.err`
+shows a `propose_mappings` 403 on the cheap model route (Wave 7's model
+choices); a `node astro dev` (`sy-serendipity`) listens on `[::1]:7734` while
+`warden-api` holds `127.0.0.1:7734` — `localhost:7734` answers a stranger's
+404; nothing in warden uses `localhost`. (6) Suite numbers: `test_triage.py`
+is 157/157 (was 148); 14 suites under `make test`; the 165 bash cases became
+53 CLI + 108 + 63 unit cases, recorded honestly in STATE §54.
 
-## Wave 6 — every origin opens an item; Hermes is the door (repos: `warden`, `hermes-agent`, `sideclaw`)   <!-- status: pending -->
+## Wave 6 — every origin opens an item; Hermes is the door (repos: `warden`, `hermes-agent`, `sideclaw`)   <!-- status: active -->
 Shape note § 2 "every origin opens an item", § 5 items 2, 3, 5, 8.
 - [ ] 6.1 `warden run <repo> '<brief>' [--tier]` (the `human` origin) and the
       `warden:go` label on a GitHub issue (`github_issue` origin, FLOWS.md flow 3)
