@@ -295,17 +295,14 @@ negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors.
 
 ## Colima and the boot path
 
-`make colima-{start,stop,restart,status}` — never bare `colima stop` (KeepAlive
-undoes it) and **never `brew services restart colima`**: it regenerates the stock
-plist and bootstraps *that*, so a repaired file never reaches launchd.
+`make colima-{start,stop,restart,status}` — never bare `colima stop` or `brew
+services restart colima`, both fight the supervised boot path.
 `colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/8/60**, MacBook
-**2/4/30**; ceilings; disk grows only via recreate), converges the plist, then
-bootout + bootstrap (the only reload that re-reads the file).
-
-Gotchas (the inverted `KeepAlive` repair, brew silently regenerating the plist on
-every `brew services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
+**2/4/30**; ceilings; disk grows only via recreate). Full model — the inverted
+`KeepAlive` repair, brew silently regenerating the plist on every `brew
+services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,
 `kickstart -k` not re-reading the plist, `com.colima.docker-socket` for the
-Raycast Docker extension): `docs/remote-dev.md` → *launchd on the dev host*.
+Raycast Docker extension: `docs/remote-dev.md` → *launchd on the dev host*.
 
 ## Homebrew
 

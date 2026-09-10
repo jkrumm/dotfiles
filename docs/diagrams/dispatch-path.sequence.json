@@ -6,7 +6,7 @@
     "subtitle": "The dispatch bridge end to end, including the two ways it stops",
     "viewBox": [
       1080,
-      1520
+      1950
     ],
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -25,6 +25,12 @@
       "type": "backend",
       "label": "Hermes",
       "sublabel": "answers"
+    },
+    {
+      "id": "warden",
+      "type": "backend",
+      "label": "Warden",
+      "sublabel": "decides"
     },
     {
       "id": "bridge",
@@ -71,6 +77,11 @@
       "label": "Answer",
       "from": 1020,
       "to": 1420
+    },
+    {
+      "label": "Auto-trigger — Warden decides on its own",
+      "from": 1440,
+      "to": 1900
     }
   ],
   "messages": [
@@ -161,6 +172,48 @@
       "label": "the verdict, into the original thread",
       "variant": "return",
       "note": "Three misses and it is marked lost, not retried forever."
+    },
+    {
+      "from": "warden",
+      "to": "bridge",
+      "y": 1470,
+      "label": "decides: --auto-from-item, no human gate",
+      "variant": "emphasis",
+      "note": "The triage loop dispatches on its own; the Ask and Gate segments above never run for this path."
+    },
+    {
+      "from": "bridge",
+      "to": "queue",
+      "y": 1550,
+      "label": "submit the job, same policy and budget checks"
+    },
+    {
+      "from": "queue",
+      "to": "worker",
+      "y": 1620,
+      "label": "same worktree and routing-table path",
+      "variant": "emphasis"
+    },
+    {
+      "from": "worker",
+      "to": "queue",
+      "y": 1700,
+      "label": "one verdict",
+      "variant": "return"
+    },
+    {
+      "from": "queue",
+      "to": "sweeper",
+      "y": 1780,
+      "label": "no live turn is waiting",
+      "variant": "dashed"
+    },
+    {
+      "from": "sweeper",
+      "to": "human",
+      "y": 1860,
+      "label": "the verdict, posted to the digest",
+      "variant": "return"
     }
   ]
 }

@@ -103,13 +103,27 @@
       "id": "hermes",
       "type": "backend",
       "label": "Hermes gateway",
-      "sublabel": "answers, dispatches, 7 cron jobs",
+      "sublabel": "answers, narrates, 7 cron jobs",
       "pos": [
         1020,
         180
       ],
       "size": [
         190,
+        64
+      ]
+    },
+    {
+      "id": "warden",
+      "type": "backend",
+      "label": "Warden",
+      "sublabel": "decides, dispatches, owns the ledger",
+      "pos": [
+        1100,
+        50
+      ],
+      "size": [
+        200,
         64
       ]
     },
@@ -322,6 +336,7 @@
       "label": "Mac mini — the always-on dev host, where agents run",
       "wraps": [
         "hermes",
+        "warden",
         "herdr",
         "sideclaw",
         "vault",
@@ -400,7 +415,7 @@
       "variant": "emphasis"
     },
     {
-      "from": "hermes",
+      "from": "warden",
       "to": "sideclaw",
       "label": "dispatch: budgeted and signed",
       "variant": "emphasis"

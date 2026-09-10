@@ -209,6 +209,7 @@ in* a repo, not *what it is*, earn a line:
 | `sideclaw` | Local Claude Code MCP daemon behind check/review/dispatch/otel. **Mini only.** |
 | `research-gateway` | Behind `/research`, **tailnet-only**. Cloud routines can't reach it. One `job_wait` covers a whole job. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for its skill domains. |
+| `warden` | **The control plane** — decides, dispatches, owns the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09; Hermes narrates and answers, it does not dispatch. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. |
 | `basalt-ui` | Mantine v9 + visx design system (NPM). No Tailwind. **Always its own commit.** |
 | `brain` | `wiki/` = agentic knowledge (strict lint), PARA `Projects`/`Areas` = curated human surface linking into it, no `Resources` tier; use `/brain`. |
 | `modelpick` | **Source of truth for model-choice rationale**, backs `cap`. |
