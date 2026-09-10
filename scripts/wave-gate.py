@@ -78,6 +78,21 @@ def check_clean(repo: str) -> None:
         )
 
 
+def outward_next_step(unchecked: list[str]) -> str | None:
+    """The NEXT unchecked step's text if it names an outward-facing verb, else
+    None. Only the next step — that is the contract the skill and the module
+    docstring state ("the next step being outward-facing"), and it is what
+    makes a wave like the estate chain's Wave 5 spawnable at all: its first
+    steps are pure code, its last is an owner-authorized canary landing that
+    the wave agent itself must stop and judge when it gets there. Scanning the
+    whole wave (what this did until 2026-09-10) refused the spawn on a step
+    three steps away and reported it as "the next step".
+    """
+    if not unchecked:
+        return None
+    return unchecked[0] if OUTWARD_RE.search(unchecked[0]) else None
+
+
 def parse_steps(body: str) -> list[tuple[str, str]]:
     """A step is its bullet line plus every indented continuation line that
     follows, joined into one string — the plan's own bullets wrap (see any
@@ -180,7 +195,7 @@ def main() -> None:
         if not prev["left_behind"]:
             fail(f"{prev['name']} has no Left behind — a finished wave must say what the next one inherits")
 
-    hit = next((s for s in active_wave["unchecked"] if OUTWARD_RE.search(s)), None)
+    hit = outward_next_step(active_wave["unchecked"])
     if hit:
         fail(
             f"{active_wave['name']}'s next step looks outward-facing, stop and hand back "

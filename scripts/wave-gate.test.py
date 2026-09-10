@@ -86,6 +86,16 @@ class ParseWaves(unittest.TestCase):
             ["a step that wraps onto a continuation line naming the word merge only on the second line"],
         )
 
+    def test_outward_scan_looks_only_at_the_next_unchecked_step(self):
+        # A later step naming deploy/merge is the wave agent's own call when it
+        # reaches it (the skill's judgment half); the gate must not refuse the
+        # spawn for it. The next step, if outward-facing, still refuses.
+        self.assertIsNone(wave_gate.outward_next_step(["write the clients", "deploy the canary"]))
+        self.assertEqual(wave_gate.outward_next_step(["deploy the canary", "write docs"]), "deploy the canary")
+        self.assertIsNone(wave_gate.outward_next_step([]))
+        # merge_gate_check is not the verb merge — word boundary holds.
+        self.assertIsNone(wave_gate.outward_next_step(["port merge_gate_check to python"]))
+
     def test_unchecked_captures_only_unticked_step_text(self):
         wave2 = next(w for w in self.waves if w["name"] == "Wave 2")
         self.assertEqual(wave2["unchecked"], ["do the next thing"])
