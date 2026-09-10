@@ -980,7 +980,7 @@ check_services() {
 # page on every machine the moment this check shipped ahead of it.
 check_sideclaw_jobs() {
   [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist" ]] || { echo "sideclaw jobs n/a"; return 0; }
-  local out code body ok detail
+  local out code body ok warnings
   out=$("$CURL_BIN" -s --max-time 4 -w '\n%{http_code}' "$SIDECLAW_URL/api/jobs/health" 2>/dev/null) || out=$'\n000'
   code=${out##*$'\n'}; body=${out%$'\n'*}
   case "$code" in
@@ -989,9 +989,17 @@ check_sideclaw_jobs() {
     *)   echo "sideclaw jobs endpoint not answering on $SIDECLAW_URL (got ${code:-000})"; return 1 ;;
   esac
   ok=$("$JQ_BIN" -r '.ok // false' <<<"$body" 2>/dev/null) || ok=""
-  detail=$("$JQ_BIN" -r '.error // .detail // .summary // empty' <<<"$body" 2>/dev/null) || detail=""
-  [[ "$ok" == "true" ]] || { echo "sideclaw jobs unhealthy${detail:+: $detail}"; return 1; }
-  echo "sideclaw jobs ok${detail:+ ($detail)}"
+  # `.error`/`.detail`/`.summary` were never emitted by this endpoint — the real
+  # per-route/fallback detail lives in `.warnings` (added alongside `routeStreaks`/
+  # `degradedRoutes`; a degraded route or a backend fallback is a WARN, never a FAIL,
+  # so it must not flip `ok` on its own).
+  warnings=$("$JQ_BIN" -r '.warnings | join("; ") // empty' <<<"$body" 2>/dev/null) || warnings=""
+  [[ "$ok" == "true" ]] || { echo "sideclaw jobs unhealthy${warnings:+: $warnings}"; return 1; }
+  if [[ -n "$warnings" ]]; then
+    echo "sideclaw jobs WARN: $warnings"
+    return 2
+  fi
+  echo "sideclaw jobs ok"
 }
 
 # The `make agent-overview` pane — a `watch` loop over sideclaw's overview.txt
