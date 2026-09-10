@@ -29,22 +29,90 @@ Everything in Waves 2 and 3 is local and needs no IU key.
       timeout-shaped fires no fallback and alerts nobody. Make a dead route loud.
 **Left behind:**
 
-## Wave 2 — enforcement, not prose (repo: `dotfiles`)   <!-- status: active -->
-- [ ] Findings 11 and 14: orchestration and model discipline exist only as prose.
+## Wave 2 — enforcement, not prose (repo: `dotfiles`)   <!-- status: done -->
+- [x] Findings 11 and 14: orchestration and model discipline exist only as prose.
       Two Bash-only hooks are the whole enforcement layer. Add a `SubagentStart`
       hook that rejects a worker on Opus/Fable unless explicitly justified —
       **verify the blocking semantics first, they are undocumented.**
-- [ ] Finding 4's real content: the "cannot spawn Fable" claim was false. Either
+      Verified empirically (`claude -p --settings <probe>`) that `SubagentStart`
+      is observational only — no `permissionDecision`/exit-code combination
+      blocks it. Built `hooks/model-discipline.ts` as a `PreToolUse` hook on
+      `matcher: "Agent"` instead (same mechanism `protect-branches.ts` uses):
+      denies a `model: fable` worker outright, and denies `subagent_type: "fork"`
+      whenever the caller's own model (read from its transcript — `PreToolUse`
+      carries no field for it) is Fable/Opus. `model: opus` stays open — the
+      audit's own "already right" list calls existing Opus worker sites
+      deliberate, and hard-blocking would break them. Verified live (four
+      scenarios: fable-worker denied, fork-from-fable denied, plain-sonnet
+      allowed, explicit-opus allowed) plus 10 unit tests.
+- [x] Finding 4's real content: the "cannot spawn Fable" claim was false. Either
       make it true or correct the wording in `output-styles/Direct.md`. Do not
       leave a rule that probes disprove.
-- [ ] Finding 13's tail: `/wave`'s green gate is prose. Decide what can be
+      No literal claim existed to correct — made it true instead, via the hook
+      above. Updated `Direct.md` and `global.CLAUDE.md` to say enforcement is a
+      hook now, not just prose; added the one-clause-justification note to
+      `implement/SKILL.md:63` for the sanctioned Opus escalation path.
+- [x] Finding 13's tail: `/wave`'s green gate is prose. Decide what can be
       mechanical (a `--gate` check before spawning) and what must stay judgment.
-- [ ] `@verifier` is invoked by nothing. Wire it into `/implement` and `/ship`.
-- [ ] Finding 9: `global.CLAUDE.md`'s "50 s regardless" sideclaw wait contract is
+      "/check passed" and "review resolved" stay the finishing wave's own
+      judgment (not re-provable from the plan file). Made mechanical: plan
+      committed (git status clean), an `active` wave whose immediate
+      predecessor is `done` with every step ticked and a non-empty Left behind,
+      and a keyword heuristic on the skill's own outward-facing verb list
+      (merge/publish/release/deploy/ship). New `scripts/wave-gate.py`, wired
+      into `cmd_wave` in `remote-dev.sh` before it touches herdr. 11 unit tests
+      plus 5 live end-to-end cases (pass, dirty tree, outward step, undone
+      predecessor, no active wave) against a scratch git repo.
+- [x] `@verifier` is invoked by nothing. Wire it into `/implement` and `/ship`.
+      `/implement`'s Heavy-tier runtime validation now delegates to `@verifier`
+      instead of calling `/browse`/`/otel` inline (Quick/Standard keep the
+      direct routing — proportionate at that volume). `/ship` gained a
+      verifier step before commit in both the direct-to-master and PR flows,
+      gated the same way `/review` already is ("non-trivial", skip
+      docs/config-only).
+- [x] Finding 9: `global.CLAUDE.md`'s "50 s regardless" sideclaw wait contract is
       stale; `otel` bypassing the job queue on Max is stale.
-**Left behind:**
+      Rewrote the wait-contract paragraph: `job_wait` accepts `maxWaitMs` up to
+      29 min, pass it up rather than looping on the ~50s default. Pulled `otel`
+      out of the async-job-tool list and documented its exemption (runs inline
+      on Max, no `jobId`, no `job_wait`) — it was listed alongside check/
+      review/dispatch as if it followed the same contract, and it doesn't.
+**Left behind:** A `/review --deep` pass (sideclaw multi-angle + native
+correctness) caught a real command-injection bug I introduced: `plan_ref`
+(extracted from free-text wave-prompt content) was interpolated unsanitized
+into a `host_run` shell string. Fixed with a strict charset validator before
+it ever reaches the shell; verified with a constructed injection payload that
+now gets rejected instead of composed. Also applied the review's minor
+findings (fail-open JSON.parse in `model-discipline.ts`, a runtime type guard,
+an unclosed file handle in `wave-gate.py`, a `wave-gate.test.py` fixture for
+the plan parser). A follow-up native `/code-review high` pass found three more
+real bugs specific to `wave-gate.py`, all fixed: the git-dirty check ran
+against the wave's *target* repo, not the repo that actually owns the plan
+file — wrong for exactly the cross-repo case this chain itself uses (dotfiles
+plan, `brain` target) — now checks both; the step-text capture had no
+continuation-line handling, so an outward-facing keyword landing on a wrapped
+bullet's second line was invisible to the gate — now joins wrapped bullets
+before scanning; and a `done` wave with zero checklist items passed the
+completeness check vacuously — demonstrated live against this very file's own
+Wave 4 — now a zero-step `done` wave fails the gate instead of passing it.
+12 unit tests cover all three; a live cross-repo probe (two scratch git repos)
+confirmed the dirty-check fix. Declined as scope creep for this wave: two
+pre-existing `cmd_wave` bugs the same pass found (herdr workspace/tab lookups
+swallow transient errors, indistinguishable from "doesn't exist yet") — real,
+but in code I didn't touch, so reported and left for whoever next edits that
+lookup; deduping the `block()` helper across `docker-makefile.ts`/
+`model-discipline.ts`/`protect-branches.ts` (touches two files outside this
+wave's diff); restructuring `callerModel` for its complexity score
+(well-tested, small, not worth the churn here). The sideclaw adversary review
+angle failed with the known IU 403 cost-limit — not investigated per this
+chain's own instruction; re-run that angle once the key is fixed. Wave 3 was
+**not**
+spawned — it spans `dotfiles` **and** `brain`, and the instruction for this
+run was explicit: do not touch other repos' checkouts. Wave 3's `active`
+flip below is the close-out convention; actually starting it is a separate,
+outward-facing call for the human to make.
 
-## Wave 3 — docs describe the estate that exists (repos: `dotfiles`, `brain`)   <!-- status: pending -->
+## Wave 3 — docs describe the estate that exists (repos: `dotfiles`, `brain`)   <!-- status: active -->
 - [ ] Findings 23 and 24: `global.CLAUDE.md`, the brain wiki (zero hits for
       `warden`) and both archify diagrams do not know Warden exists.
 - [ ] Finding 8: `warden/DESIGN.md` says four LaunchAgents; there are five.
