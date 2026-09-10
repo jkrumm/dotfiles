@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration, while keeping the main agent's context window lean.
 
-> **sideclaw tools are async.** `mcp__sideclaw__{check,review}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (loop while `stillRunning`) yields the structured output. (`/research` is the separate **research-gateway** MCP: submit returns `{ jobId }`, then a single `mcp__research-gateway__job_wait({ jobId })` normally covers the whole job — it blocks rather than returning every 50 s.) **Implementation runs on the native `@implementer` Sonnet subagent** (synchronous, on Max, its own prompt cache — no orchestrator-cache penalty), not on sideclaw. See the async-job contract in global CLAUDE.md.
+> **sideclaw tools are async.** `mcp__sideclaw__{check,review}` return `{ jobId }`, not the result — then `mcp__sideclaw__job_wait({ jobId })` (pass `maxWaitMs` up to 29 min rather than looping on the ~50s default) yields the structured output. (`/research` is the separate **research-gateway** MCP: submit returns `{ jobId }`, then a single `mcp__research-gateway__job_wait({ jobId })` normally covers the whole job — it blocks rather than returning every 50 s.) **Implementation runs on the native `@implementer` Sonnet subagent** (synchronous, on Max, its own prompt cache — no orchestrator-cache penalty), not on sideclaw. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 
@@ -55,12 +55,12 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`.
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
 | Implement | Inline | Inline or `@implementer` (Sonnet) subagent | `@implementer` (Sonnet) subagent, one call per independent file group in parallel; `Agent` with `subagent_type: general-purpose, model: opus` for novel-hard logic — see below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
-| Validate (runtime) | Only if obvious | Assess need | Always assess |
+| Validate (runtime) | Only if obvious | Assess need | Always assess — via `@verifier` |
 
 **Heavy implementer choice (delegate to protect orchestrator CONTEXT — implementation now runs on Max/Sonnet):**
 - **Settled multi-file work**: delegate to **`@implementer`** (native `sonnet` alias, effort high). Pass a complete brief — exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). It loads the CLAUDE.md rules automatically (house-style fidelity a foreign worker can't match) and returns a diff summary. It has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, to save orchestrator context. Review the actual diff before committing.
 - **Independent file groups**: fire **multiple `@implementer` calls in one turn** (one per group). Parallelize **only on disjoint file sets** — never two implementers on the same file. Remember parallel = N× Sonnet-on-Max (detachment, not free).
-- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Opus — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`. The worker is a literal executor, not a planner.
+- **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Opus — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`. The worker is a literal executor, not a planner. State the one-clause reason Sonnet doesn't fit in the call's `description` — Opus is not hook-blocked, but it is not free either, and an unjustified reach for it is a decision worth being able to grep for later.
 - **Mass mechanical migration (codemod across many files)**: parallel `@implementer` subagents on disjoint groups, or the `for f in ...; claude -p ... --allowedTools` fan-out (optionally pointed at the IU endpoint to keep it off Max). The retired sideclaw implement worker is **not** an option.
 - **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast.
 - **Need branch isolation?** Decide it **up front, at the orchestrator level** — not mid-flow. A subagent inherits the orchestrator's `cwd`, and **by default its `Edit`/`Write` land in your LIVE checkout** — so create the worktree with Claude Code's native worktree feature and run the whole `/implement` flow there (or set `isolation: worktree` on a one-off `Agent` call for a single risky run). Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
@@ -135,6 +135,10 @@ Mark the Implement task complete.
 **Static** — always run `/check` as a subprocess. Never skip. Fix errors in YOUR changed files only. Report but don't fix issues in untouched files.
 
 **Runtime** — assess whether the change needs runtime verification:
+
+**Heavy tier: delegate to `@verifier`** (`Agent` with `subagent_type: verifier`) rather than calling `/browse`/`/otel` inline — it already wraps both instruments and a `curl`/`/check` fallback, and its whole point is keeping screenshots and trace dumps out of the orchestrator's context. Give it the concrete claims to check (routes, expected states, endpoints) — it returns a `PASS`/`FAIL`/`INCONCLUSIVE` verdict with evidence, not the raw dump. Same server-not-running handling applies: it will not start one, and reports that as a finding.
+
+**Quick/Standard: the direct routing below** — proportionate at that volume, and screenshotting one component doesn't need a subagent hop.
 
 | Scenario | Tool | Notes |
 |-|-|-|

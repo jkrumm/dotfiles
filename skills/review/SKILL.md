@@ -9,7 +9,7 @@ description: Multi-angle code review via sideclaw MCP tool (backend/model per si
 
 `mcp__sideclaw__review` is **asynchronous** (a background job; backend and model per tool come from sideclaw `GET /api/routing`, and the result's `backend` field says which one ran it):
 1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
-2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes (loop while `stillRunning: true`); read `result` on `status: "done"`. The submit call does **not** return the findings.
+2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default; read `result` on `status: "done"`. The submit call does **not** return the findings.
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
 plus a triage router that adds content-driven angles — security, performance,

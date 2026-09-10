@@ -90,8 +90,8 @@ commits follow `rules/commit-conventions.md`.
 | Lane | Use for |
 |-|-|
 | **inline** — session model | Work needing this conversation's context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `implement`. Keep short. |
-| **native subagent** (`Agent`, `~/.claude/agents/`) — `@implementer` (settled work), `@verifier` (evidence), `Explore` (search). All pinned to Sonnet by `CLAUDE_CODE_SUBAGENT_MODEL`; raise one only for novel-hard logic, and **never `fork`** from Fable/Opus. **Its own cache** | **The primary offload.** Fresh context, returns a summary, edits hit the live tree. |
-| **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **Async** — job contract below. |
+| **native subagent** (`Agent`, `~/.claude/agents/`) — `@implementer` (settled work), `@verifier` (evidence), `Explore` (search). All pinned to Sonnet by `CLAUDE_CODE_SUBAGENT_MODEL`; raise one only for novel-hard logic. A `PreToolUse` hook (`hooks/model-discipline.ts`) enforces the rest: a worker on Fable is denied outright, and **`fork`** is denied whenever the caller itself is Fable/Opus. **Its own cache** | **The primary offload.** Fresh context, returns a summary, edits hit the live tree. |
+| **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **Async** — job contract below (`otel` is the one exception, see there). |
 | **subprocess — `agent-dispatch`**, IU per-token (Max on the mini lane) | One durable bounded episode against a named repo, output kept out of here. |
 | **`/research`** — research-gateway MCP, tailnet-only, off Max | Any library / API / version fact, never from memory. |
 
@@ -125,17 +125,19 @@ disables Edit and Write but **not Bash**, and the brief is attacker-influenced.
 
 ### Async-job contract — both MCPs
 
-`mcp__sideclaw__{check,review,dispatch,otel}` and
-`mcp__research-gateway__research` return `{ jobId, … }` immediately — **not the
-result**. Submit → note `jobId` → `job_wait({jobId})` → read `result` on
-`status: "done"`, `error` on failed. `job_status` is the non-blocking peek.
-**The submit call is not the answer.**
+`mcp__sideclaw__{check,review,dispatch}` and `mcp__research-gateway__research`
+return `{ jobId, … }` immediately — **not the result**. Submit → note `jobId` →
+`job_wait({jobId})` → read `result` on `status: "done"`, `error` on failed.
+`job_status` is the non-blocking peek. **The submit call is not the answer.**
+`otel` is the one sideclaw tool exempt from this contract — it still runs
+inline, synchronously, on Max (`runSession` called directly, not through the job
+queue), so it returns its result immediately with no `jobId` and no `job_wait`.
 
-The wait differs **per door**: sideclaw's returns after ~50 s regardless, so
-**loop while `stillRunning: true`**; research-gateway's *MCP* wait blocks for the
-whole job over a kept-alive stream, so **one call is normally the whole wait** —
-call again only if it still comes back `stillRunning`. Its REST door (Hermes's
-lane) still polls.
+The wait differs **per door**: sideclaw's `job_wait` accepts `maxWaitMs` (up to
+29 min) — pass it up to that ceiling rather than looping on the ~50 s default;
+research-gateway's *MCP* wait blocks for the whole job over a kept-alive stream,
+so **one call is normally the whole wait** — call again only if it still comes
+back `stillRunning`. Its REST door (Hermes's lane) still polls.
 
 ### Rules
 
@@ -307,7 +309,7 @@ a call costs. **Everything routed through sideclaw exists only on the mini.**
 
 | Mode | Skills |
 |-|-|
-| **MCP (sideclaw, async)** | `/check` (format·lint·tsc·test·fallow; pass `commands` on non-Node repos) · `/review` (multi-angle + CodeRabbit; `--deep` adds correctness + security) · `/otel` · `/excalidraw-diagram` (drawings are read with sideclaw `read_image` directly) |
+| **MCP (sideclaw, async — `/otel` is the sync exception, see the async-job contract)** | `/check` (format·lint·tsc·test·fallow; pass `commands` on non-Node repos) · `/review` (multi-angle + CodeRabbit; `--deep` adds correctness + security) · `/otel` · `/excalidraw-diagram` (drawings are read with sideclaw `read_image` directly) |
 | **MCP · fork · subprocess** | `/research` (research-gateway, off Max) · `/browse` (chrome-devtools, haiku) · `/analyze` (fallow + `claude_iu`) |
 | **inline — git** | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | **inline — build** | `/wave` (long work as a self-continuing chain of panes; drives `rd wave`) · `/implement` (drives `@implementer`) · `/upgrade-deps` (charts and UI: the basalt-ui per-repo skills + `rules/visx-charts.md`) · `/archify` (standalone HTML diagrams — vendored, not npx) |

@@ -32,9 +32,10 @@ gh pr view --json state,statusCheckRollup,reviews,url 2>/dev/null
 Every SourceRoot repo ships direct-to-master **unless** it's on the PR-required list. That list is a single source of truth in `config/pr-required-repos.json` (symlinked to `~/.claude/pr-required-repos.json`), shared by `hooks/protect-branches.ts` and `scripts/github-config.sh`. If unsure whether a repo is PR-required, read that file rather than trusting the snapshot below.
 
 1. Run `/check` (skip for `homelab`, `homelab-private`, `vps`, `dotfiles` — config/infra repos with no lint/typecheck)
-2. Run `/commit` (if uncommitted changes)
-3. `git push`
-4. Done
+2. If the change is runtime-observable (touches UI, an API, or a running service) and non-trivial: `Agent` with `subagent_type: verifier` to prove it actually works before it ships — a `PASS`/`FAIL`/`INCONCLUSIVE` verdict with evidence, not a claim. Skip for docs/config-only changes.
+3. Run `/commit` (if uncommitted changes)
+4. `git push`
+5. Done
 
 ### PR Flow (the exception list)
 
@@ -47,6 +48,7 @@ Based on detected state, pick up from the right step:
 **Step 1 — Uncommitted changes exist:**
 - Run `/check`
 - If check fails → fix errors, re-run
+- If runtime-observable and non-trivial: `Agent` with `subagent_type: verifier` to confirm it works before committing
 - Run `/commit`
 
 **Step 2 — Committed but no PR:**
