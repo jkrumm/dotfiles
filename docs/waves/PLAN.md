@@ -13,21 +13,37 @@ context does what*. Its finding 27 carries the ranked fix order.
 this plan by absolute path (`~/SourceRoot/dotfiles/docs/waves/PLAN.md`) and each
 wave runs in its own repo's herdr space via `rd wave <repo> '<prompt>'`.
 
-## External blocker — read before starting
+## The IU key is back — and the chain's second half is one tab
 
-The shared IU API key answers `403 rolling-30-day-cost-service-denial-limit`.
-That is **upstream and being fixed by IU** — do not investigate it, do not work
-around it, do not rewrite routing because of it. Probe with a single cheap call
-before any wave that needs it; if still 403, skip that wave and move on.
+The `403 rolling-30-day-cost-service-denial-limit` was the provider's own
+usage-tracking fault, resolved externally 2026-09-10 and confirmed by the owner.
+Nothing below is blocked on it. The former Wave 1 (the dead cheap lane) was never
+run and is now step 4.2 of Wave 4 — the failure is still live and is still ours.
 
-Everything in Waves 2 and 3 is local and needs no IU key.
+**Waves 4–8 are the wrap-up the owner asked for on 2026-09-10**: one Fable tab
+in `warden`'s herdr space, orchestrating subagents, that keeps chaining until the
+estate is end to end — a human in herdr, a human in Hermes, proof and insight in
+Argo, the model and cost choices reconciled — and ends by writing the handover
+the owner runs after days in the field (Wave 9). The design authority for the
+split is `~/SourceRoot/brain/Inbox/Warden Wave 4 — Shape.md`; the ground truth
+for where Warden is remains `warden/STATE.md` (§§46–51 are Wave 3). This is not
+a re-derivation: the decisions are made and documented, the job is to finish and
+align. Every wave runs in `warden`'s space via
+`RD_WAVE_MODEL=fable rd wave warden '…'`; a wave that touches `hermes-agent`,
+`sideclaw`, `argo` or `brain` says so in its steps and commits in each repo it
+touched. Workers stay on Sonnet (the hook enforces it); raise one to Opus only
+for novel-hard logic, in one clause.
 
-## Wave 1 — the dead cheap lane (repo: `sideclaw`)   <!-- status: pending, needs IU key -->
-- [ ] Finding 1: every `check`/`overview` job has failed since 2026-09-09 12:09Z with
-      `[claude-code:unrecognized_model] glm-5.3-flash`. This is **ours**, not the 403.
-- [ ] Finding 22 and finding 1's tail: a route failure that is neither quota- nor
-      timeout-shaped fires no fallback and alerts nobody. Make a dead route loud.
-**Left behind:**
+**Owner authorization, recorded once so the gate's outward-verb heuristic is not
+the human's call by proxy:** landing pull requests the chain itself opened in
+argo's *canary scope* (Wave 5) is inside this chain. Widening `autoMergePaths`
+past the canary, any change to a production repo outside a chain-opened PR, and
+any Tailscale ACL push remain the owner's call — stop and hand back.
+
+**Method rule, from three waves of evidence in `STATE.md`:** every wave has had
+defects invisible to reading and caught only by mutation or by executing the
+path. Acceptance for moved or ported code is *executing* it, never diffing it.
+A worker's report is a claim; read its diff; run the thing.
 
 ## Wave 2 — enforcement, not prose (repo: `dotfiles`)   <!-- status: done -->
 - [x] Findings 11 and 14: orchestration and model discipline exist only as prose.
@@ -182,36 +198,169 @@ own project set, which this wave has no way to register warden into without
 touching that repo; either the generator discovers it automatically or that's
 a `hermes-agent`-scoped follow-up.
 
-## Wave 4 — Warden's actuator (repos: `warden`, `hermes-agent`, `sideclaw`, `brain`)   <!-- status: blocked -->
-Findings 3-6, 15, 16, 18: dispatch/implement/merge/approvals still run through
-`hermes-agent/scripts/hermes-cc.sh`; verdict delivery depends on the Hermes
-gateway binary; "merge is deploy" has no code path, so `verified_unattended_fixes`
-is structurally 0; Hermes's persona line 41 still claims it triages.
+## Wave 4 — ground truth, the cheap lane, the wholesale move (repos: `warden`, `sideclaw`, `hermes-agent`, `dotfiles`)   <!-- status: active -->
+Read first: the shape note (above), `warden/STATE.md` §§46–51, `warden/CLAUDE.md`,
+findings 1, 3, 4, 6, 22. The Warden Wave 3 session (`wave3` pane in this space,
+idle) finished items 0, 1a, 1b; items 2 and 3 are Wave 5 here. Warden's tree is
+clean at `d3f5f2b`.
+- [ ] 4.1 Reconnaissance against the running system, no edits: `make status`,
+      `make test`, `make check-policy` in warden; `/health` + `/metrics` on
+      `127.0.0.1:7734`; sideclaw `GET /api/routing`, `/api/jobs/health`,
+      `/api/jobs?limit=30` (as of 2026-09-10 14:23 `overview` still exits with
+      `unrecognized_model glm-5.3-flash`, and a `check` exited with "claude.ai
+      connectors are disabled" — two distinct shapes); the Hermes gateway log;
+      Argo's agents page. Append a dated section to `warden/STATE.md` (its
+      convention) — findings only, and anything the shape note got wrong.
+- [ ] 4.2 The cheap lane lives again (findings 1, 22; the former Wave 1). Root-cause
+      the `unrecognized_model` exit on Claude Code 2.1.266+ — a version fact,
+      so `/research` it, never from memory — and either fix the pin in
+      `session-runner.ts` or re-route `check`/`overview`/`review_router` to the
+      cheapest IU model `modelpick` currently passes (`cap --list`). Classify
+      `unrecognized_model`, `connectors are disabled` and
+      `access_denied|cost-service-denial` as "IU never answered" in
+      `planNextAttempt` so the Max fallback fires. `GET /api/jobs/health`
+      flags N consecutive failures per route; `devhost-health-check.sh` WARNs on
+      it and on `backendFallbacks.count > 0`. Acceptance: one `check` and one
+      `overview` job `done` on the cheap route; a forced route failure produces a
+      fallback and a WARN, not silence.
+- [ ] 4.3 `hermes-cc.sh` moves wholesale into `warden/scripts/` (shape note step
+      4.0): `triage.py`'s `HERMES_CC_BIN` default, the plugin's
+      `_DEFAULT_CC_SCRIPT`, `skills/claude-dispatch`, the hermes Makefile and
+      tests repointed; `~/.hermes/scripts/hermes-cc.sh` becomes a two-line exec
+      shim; `hermes-agent/config/dispatch-repos.json` deleted (sideclaw is the
+      boundary, warden's copy is defence in depth, `make check-policy` proves
+      they agree); the schema pin intra-repo; `hermes-cc.log` registered in
+      `dotfiles/scripts/log-rotate.sh`. Zero behaviour change. Acceptance: the
+      165-case and 148-case suites green from the new location; one live
+      `investigate` opened from Slack through Hermes and one from the loop, both
+      folded onto their cards.
+- [ ] 4.4 Verdict delivery off the gateway binary (finding 3): `dispatch-sweep.py`
+      `send_message()` and the plugin's `_send_to_origin` use the plain
+      `chat.postMessage` client `triage.py` already has; `reported_at` gets a
+      sibling `delivery_status` instead of a string in a timestamp column.
+- [ ] 4.5 The notifier reads the ledger (STATE §49, finding 6): the reminder path
+      skips events whose item is `ignored`/`note`/terminal, `needs_human` gets
+      its own cadence, and the three UptimeKuma group monitors (`uk:95`, `uk:179`,
+      `uk:186`) are disposed of the way DESIGN § Open questions already names.
+**Left behind:**
 
-**The shape is decided in `~/SourceRoot/brain/Inbox/Warden Wave 4 — Shape.md`
-(2026-09-10) — read it first; it is the authority on the split.** One line:
-Warden owns every unattended lifecycle regardless of origin and no actuator;
-Hermes is a door; sideclaw `dispatch` and `rd bg` stay as the two primitives.
-The IU key is resolved and no longer blocks. Steps, each its own wave:
-- [ ] 4.0 Wholesale move of `hermes-cc.sh` into `warden/scripts/`, callers
-      repointed, `~/.hermes/scripts/hermes-cc.sh` an exec shim, the hermes copy
-      of the repo policy deleted, schema pin intra-repo. Zero behaviour change.
-- [ ] 4.1 `clients/` in Python (sideclaw, github, slack, signer, deploy); the
-      loop calls functions; deploy becomes its own operation; verdict delivery
-      off `hermes send` (finding 3).
-- [ ] 4.2 `lifecycle/` gates in Python; `warden` CLI over them; bash deleted;
-      approval canonical-string spec versioned on both sides; the 165-case
-      black-box suite ported as the gate.
-- [ ] 4.3 Every origin opens an item: `warden run`, the `warden:go` label,
-      Hermes's `claude-dispatch` skill calls the CLI.
-- [ ] 4.4 sideclaw: `review` on a branch/PR ref, `check` inside the implement
-      handler, `POST /api/jobs/:id/cancel`; Warden's validation step reads
-      `review.outcome`.
-- [ ] 4.5 Docs: `agent-dispatch-paths.md` rewritten (lanes = executor /
-      lifecycle / colleague), `warden-control-plane.md` to §§46-50, `SOUL.md:41`
-      (finding 15), four→five LaunchAgents in the three warden files,
-      `WARDEN_LEDGER_SCHEMA_VERSION` + sideclaw schema asserted (finding 18).
-**Blocked on** two things, both named in the shape note: the owner's greenlight
-on its five decisions, and Wave 3's stop-condition run recording one real
-`fixed` transition on argo — the chain this wave moves has never executed in
-production. Do not start it in this chain until both are true.
+## Wave 5 — the actuator in Python, and the chain proven end to end (repos: `warden`, `hermes-agent`, `sideclaw`, `argo`)   <!-- status: pending -->
+Shape note §§ 3–4 are the design; STATE §12 has `hermes-cc.sh`'s line ranges.
+- [ ] 5.1 `warden/scripts/clients/`: sideclaw (submit, get, wait, cancel), github
+      (read PR, ready-for-review, the landing call, branch delete, check-runs,
+      Actions run), slack (HTTP), signer (verify against the published pubkey),
+      rollout (the one-arm closed argv `case`). The loop calls functions; the
+      exit taxonomy becomes exceptions; the Actions-run step is its own
+      operation with its own write-point (STATE §48's "one operation, not two"
+      limitation disappears); the 21 monkeypatched `_run_hermes_cc_*` shims in
+      tests become one injectable fake.
+- [ ] 5.2 `warden/scripts/lifecycle/`: `resolve_repo`/`resolve_tier`, the five
+      budgets, `require_auto_from_item`, the signed-decision spend — inside
+      `drain_intents()` so it stays synchronous with the click, `spent_at` and
+      the operation row in one transaction, a key id recorded at mint so a
+      rotated key reads `superseded` — and `merge_gate_check`. The `warden` CLI
+      (closed verbs, no path or URL argument, brief on stdin, recursion guard,
+      audit line) over them; the bash file deleted; `test_hermes_cc.py` ported
+      black-box against the CLI; the approval canonical-string spec versioned
+      with fixture vectors read by both repos' tests. Delete, do not port:
+      `cmd_cancel`, `record_as_job_json`, `queued`, `lost`.
+- [ ] 5.3 Real cancel and the rest of warden Wave 3 item 2: sideclaw
+      `POST /api/jobs/:id/cancel` (the only kill surface today is process-wide
+      `POST /api/shutdown`), `warden abort <item>`, `warden revert <item>`
+      recording the revert PR, the per-repo in-flight lock.
+- [ ] 5.4 The stop-condition exercise (warden Wave 3 item 3, DESIGN § Migration
+      Wave 3): a canary scope in argo — `autoMergePaths` limited to a path only
+      this exercise touches and that still triggers argo's `Deploy` workflow
+      (`on: push: master`, unfiltered), so an item runs `implementing →
+      validating → merged → liveness_pending → fixed` with zero blast radius
+      and the `GIT_SHA` probe as proof. Kill the loop at every boundary and show
+      it neither drops the obligation nor repeats an unsafe action. Record the
+      run in `STATE.md` with timestamps. Owner-authorized for the canary scope
+      only (see the header).
+**Left behind:**
+
+## Wave 6 — every origin opens an item; Hermes is the door (repos: `warden`, `hermes-agent`, `sideclaw`)   <!-- status: pending -->
+Shape note § 2 "every origin opens an item", § 5 items 2, 3, 5, 8.
+- [ ] 6.1 `warden run <repo> '<brief>' [--tier]` (the `human` origin) and the
+      `warden:go` label on a GitHub issue (`github_issue` origin, FLOWS.md flow 3)
+      create items that ride the same lifecycle as an alert. Third-party issues
+      stay `investigate`-only.
+- [ ] 6.2 Hermes's `claude-dispatch` skill calls the warden CLI (`--wait` keeps
+      the in-turn `investigate` answer); the dispatch-approval plugin's replay
+      path calls the CLI; `SOUL.md:41` says Hermes narrates and answers while
+      Warden triages, decides and dispatches (finding 15); `hermes-agent/CLAUDE.md`
+      names Warden in its opening section.
+- [ ] 6.3 Hermes reads Warden (finding 16): a read-only `warden` skill in
+      `HERMES_SKILLS` on `/health`, `/metrics`, `/board`, `/items/:id` (add the
+      two projections to `warden-api` if missing); the morning briefing reads the
+      ledger instead of a second `gh search`; `warden` joins the
+      `project-narratives` project set.
+- [ ] 6.4 One quality vocabulary for humans and machines: sideclaw `review`
+      accepts a branch or PR ref, and Warden's step-7 validation reads its typed
+      `outcome` (`clean` → confirmed, `blocking` → blocked, `needs-human` →
+      `needs_human`) instead of marker-matching an `investigate` verdict; the
+      implement handler runs sideclaw `check` in the worktree before push, and a
+      red check is `nextAction: human`, never a PR.
+**Left behind:**
+
+## Wave 7 — the surfaces: Argo, herdr, Slack, and the model choices (repos: `argo`, `warden`, `sideclaw`, `hermes-agent`, `dotfiles`, `brain`)   <!-- status: pending -->
+How the owner proves, sees and steers it: in herdr on his own, in Hermes, in Argo.
+- [ ] 7.1 Argo — a Warden board: items by state, one timeline per item (brief,
+      verdict, PR, validation outcome, operation receipts, probe result), the six
+      funnel numbers, budget deferrals as a first-class state, intents recorded
+      and visibly *not* approving. Fed by push from the mini the way the agents
+      overview already reaches `GET /agents/overview` — Argo on the VPS cannot
+      probe the mini. Screenshots by `@verifier`, not inline.
+- [ ] 7.2 herdr — the overview pane (`make agent-overview`, sideclaw's
+      `overview.txt`/JSON) shows Warden's open items and in-flight operations
+      beside the agent roster; `rd`/`agent-dispatch` help text names the three
+      lanes — executor (sideclaw), lifecycle (`warden run`), colleague (`rd bg`).
+- [ ] 7.3 Slack — the `#agents` digest pause (`72aa2fb36307`, paused since
+      2026-09-08, `paused_reason: null`) decided: resume or retire, a
+      `(paused, reason)` marker in the registry and a `make status` assertion
+      (finding 17); the five docs asserting it live corrected.
+- [ ] 7.4 Model choices and cost, reconciled once: sideclaw's routing table against
+      `modelpick`'s current picks (CLASSIFY on the cheapest passing IU model,
+      JUDGE on Max, adversary out-of-family), Warden's `VALIDATION_MODEL`,
+      `rd wave`/`claude --bg`'s default model versus `c` pinned to Fable
+      (findings 12, 13), `otel` registered as a job tool or its exemption
+      documented (finding 19), usage-tracker attributing every lane. The
+      rationale written once in `brain/wiki/engineering/model-routing.md`;
+      every other mention becomes a link.
+**Left behind:**
+
+## Wave 8 — docs describe the estate that exists, and the field-review handover (repos: `brain`, `warden`, `hermes-agent`, `sideclaw`, `dotfiles`)   <!-- status: pending -->
+- [ ] 8.1 brain: `agent-dispatch-paths.md` rewritten around the three lanes,
+      `warden-control-plane.md` and `agent-estate-model.md` brought to the state
+      Waves 4–7 left, `dispatch-path.html` and `estate.html` regenerated (fix the
+      pre-existing desktop-readability failure that blocks `estate.html`
+      delivery), vault-lint 0/0.
+- [ ] 8.2 Repo docs: five LaunchAgents in `warden/{DESIGN,README,STATE}.md`;
+      `warden/docs/watchdog.md` and the "Hermes cron" docstrings retired
+      (finding 10); `WARDEN_LEDGER_SCHEMA_VERSION` renamed and sideclaw's
+      `DISPATCH_SCHEMA_VERSION` asserted by the client (finding 18);
+      `warden/STATE.md` split into a two-page state plus
+      `docs/history/state-log.md` (finding 25 — history preserved verbatim, never
+      rewritten); `global.CLAUDE.md` and `dotfiles/CLAUDE.md` routing tables
+      updated so `warden run` is the unattended lane; `make doctor`'s
+      architecture assertion green.
+- [ ] 8.3 The field-review handover: `warden/docs/handover-field-review.md`, the
+      prompt the owner runs after days in the field — what to measure (the six
+      metrics, `needs_human` queue age, reverts and reopen-after-`fixed`, false
+      `fixed`, budget deferrals, cost per item), what to read (`STATE.md` tail,
+      ledger queries, `#agents` cards, Argo board), where the friction was in
+      herdr / Hermes / Argo, where it was too fast, and the decisions it must
+      surface (widen `autoMergePaths`? promote or demote a tier? retire a
+      surface?). Wave 9 below is its checklist. Also a one-page "how to use it"
+      in `warden/README.md`: the three lanes, the four verbs a human needs, and
+      where to look when something is stuck.
+**Left behind:**
+
+## Wave 9 — field review (repos: `warden`, `brain`)   <!-- status: pending -->
+Started by the owner, by hand, after the chain has run unattended for days.
+- [ ] 9.1 Run `warden/docs/handover-field-review.md` against the live ledger and
+      the owner's own notes from the field; write the findings as a dated
+      section in `warden/STATE.md` and a brain Inbox note.
+- [ ] 9.2 Surface the decisions the review demands, with the evidence for each;
+      propose the next chain as a new `PLAN.md`. Do not implement in this wave.
+**Left behind:**
