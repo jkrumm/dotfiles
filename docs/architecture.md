@@ -187,7 +187,7 @@ plane cannot depend on the process it supervises being up. Registry:
 
 Five LaunchAgents, not four — `warden-api` is easy to miss counting because it
 has no fixed interval (`KeepAlive`, not a timer), but `GET /health` and
-`/metrics` on `127.0.0.1:7734` are the ledger's only HTTP surface, read by
+`/metrics` on `127.0.0.1:7735` are the ledger's only HTTP surface, read by
 `make status` here and by Hermes nowhere yet ([[hermes-as-control-surface]]
 finding: no read path). The other four were extracted from `hermes-agent`
 2026-09-09 — a control plane cannot live inside the thing it supervises — and
@@ -197,7 +197,7 @@ plain HTTP client, not the gateway's live connection.
 
 | Label | Schedule | What |
 |-|-|-|
-| `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics` on `127.0.0.1:7734` |
+| `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics` on `127.0.0.1:7735` |
 | `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into one card per problem in `#agents` and a sideclaw `investigate` episode in the owning repo. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
 | `com.jkrumm.warden-poll` | 1800s | Ingest. Was gateway cron job `4b1faabda97d`; promoted for the same reason — ingest running inside the process it supervises is how the loop kept ticking against a ledger that had stopped receiving signals. Posts its own digest and pings the `watchdog` UptimeKuma push URL on a clean poll. |
 | `com.jkrumm.warden-sweep` | 300s | Folds a terminal sideclaw verdict onto the card the loop already wrote. Was gateway cron job `4dd759917dd1`. |

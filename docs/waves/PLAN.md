@@ -204,7 +204,7 @@ findings 1, 3, 4, 6, 22. The Warden Wave 3 session finished items 0, 1a, 1b;
 items 2 and 3 are Wave 5 here. Started from `d3f5f2b`.
 - [x] 4.1 Reconnaissance against the running system, no edits: `make status`,
       `make test`, `make check-policy` in warden; `/health` + `/metrics` on
-      `127.0.0.1:7734`; sideclaw `GET /api/routing`, `/api/jobs/health`,
+      `127.0.0.1:7735`; sideclaw `GET /api/routing`, `/api/jobs/health`,
       `/api/jobs?limit=30` (as of 2026-09-10 14:23 `overview` still exits with
       `unrecognized_model glm-5.3-flash`, and a `check` exited with "claude.ai
       connectors are disabled" — two distinct shapes); the Hermes gateway log;
@@ -378,8 +378,9 @@ refactors, collapsing the `slack_client.py` shim, `collect_expected_alerts`'
 silent degrade (needs a design call). (5) Side findings: `warden-loop.err`
 shows a `propose_mappings` 403 on the cheap model route (Wave 7's model
 choices); a `node astro dev` (`sy-serendipity`) listens on `[::1]:7734` while
-`warden-api` holds `127.0.0.1:7734` — `localhost:7734` answers a stranger's
-404; nothing in warden uses `localhost`. (6) Suite numbers: `test_triage.py`
+`warden-api` held `127.0.0.1:7734` — `localhost:7734` answered a stranger's
+404; nothing in warden uses `localhost`. Resolved 2026-09-11: warden-api
+moved to 7735, reserved in the Caddyfile. (6) Suite numbers: `test_triage.py`
 is 157/157 (was 148); 14 suites under `make test`; the 165 bash cases became
 53 CLI + 108 + 63 unit cases, recorded honestly in STATE §54.
 
