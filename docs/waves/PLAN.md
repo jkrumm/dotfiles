@@ -497,13 +497,13 @@ give `sideclaw:dispatch`/`sideclaw:review`) — Wave 9 will want it. Owner:
 merge argo PR #19; the PAT Issues permission and the 4.3 Slack acceptance
 from Wave 6 are still open.
 
-## Wave 8 — docs describe the estate that exists, and the field-review handover (repos: `brain`, `warden`, `hermes-agent`, `sideclaw`, `dotfiles`)   <!-- status: active -->
-- [ ] 8.1 brain: `agent-dispatch-paths.md` rewritten around the three lanes,
+## Wave 8 — docs describe the estate that exists, and the field-review handover (repos: `brain`, `warden`, `hermes-agent`, `sideclaw`, `dotfiles`)   <!-- status: done -->
+- [x] 8.1 brain: `agent-dispatch-paths.md` rewritten around the three lanes,
       `warden-control-plane.md` and `agent-estate-model.md` brought to the state
       Waves 4–7 left, `dispatch-path.html` and `estate.html` regenerated (fix the
       pre-existing desktop-readability failure that blocks `estate.html`
       delivery), vault-lint 0/0.
-- [ ] 8.2 Repo docs: five LaunchAgents in `warden/{DESIGN,README,STATE}.md`;
+- [x] 8.2 Repo docs: five LaunchAgents in `warden/{DESIGN,README,STATE}.md`;
       `warden/docs/watchdog.md` and the "Hermes cron" docstrings retired
       (finding 10); `WARDEN_LEDGER_SCHEMA_VERSION` renamed and sideclaw's
       `DISPATCH_SCHEMA_VERSION` asserted by the client (finding 18);
@@ -512,7 +512,7 @@ from Wave 6 are still open.
       rewritten); `global.CLAUDE.md` and `dotfiles/CLAUDE.md` routing tables
       updated so `warden run` is the unattended lane; `make doctor`'s
       architecture assertion green.
-- [ ] 8.3 The field-review handover: `warden/docs/handover-field-review.md`, the
+- [x] 8.3 The field-review handover: `warden/docs/handover-field-review.md`, the
       prompt the owner runs after days in the field — what to measure (the six
       metrics, `needs_human` queue age, reverts and reopen-after-`fixed`, false
       `fixed`, budget deferrals, cost per item), what to read (`STATE.md` tail,
@@ -522,9 +522,32 @@ from Wave 6 are still open.
       surface?). Wave 9 below is its checklist. Also a one-page "how to use it"
       in `warden/README.md`: the three lanes, the four verbs a human needs, and
       where to look when something is stuck.
-**Left behind:**
-
-## Wave 9 — field review (repos: `warden`, `brain`)   <!-- status: pending -->
+**Left behind:** Five repos committed, nothing pushed: warden `e144466`
+(§57 is the record), brain `fe3f631`, dotfiles `f16181d`, hermes-agent
+`fb7a753`; sideclaw untouched. `warden/STATE.md` is two pages; §§1–56 are
+verbatim in `warden/docs/history/state-log.md`, which is append-only from
+here (every `STATE.md §NN` citation in warden repointed). Gates: `make test`
+all suites, `test_triage.py` 211/211; vault-lint 0/0; `make doctor` clean
+with the architecture map green; dispatch-path `deliver` 9/9. sideclaw review
+on warden: one finding (a doc named `merge` as reporting `budget`; it does
+not), fixed. Caught before commit: the new STATE.md's origin list was the
+brief's, not the column's (`alert | github_issue | human`); a `warden
+budget` verb that does not exist; the dispatch-path door labelled `warden
+dispatch` when `warden run` is what opens an item. **Not fully closed:**
+`estate.html`'s desktop-readability refusal is gone (viewBox 3000 → 930,
+five vertical bands) but `deliver` now refuses on one `proper-crossing`
+(`devhost → kuma` vs `argoapi → otel`, ~20 corridor attempts); it ships as
+a `render` with the crossing recorded in `architecture.md`. Finding 25's
+other items (free-planning-poker and dotfiles CLAUDE.md length, PRD.md
+files, the basalt-ui plan) were never in this wave's scope and stay open.
+Carried: sideclaw `fallow` debt (decided: not a gate for this chain); cost
+per item is still a join nobody built — the handover doc names both sides.
+Owner: argo PR #19, the PAT Issues permission, the 4.3 Slack acceptance;
+hermes-agent's `cron/usage_audit.jsonl` has an uncommitted append from
+running its tests. **Wave 9 is the owner's to start, by hand, after days
+unattended** — `warden/docs/handover-field-review.md` is the prompt; this
+wave does not spawn it.
+## Wave 9 — field review (repos: `warden`, `brain`)   <!-- status: active -->
 Started by the owner, by hand, after the chain has run unattended for days.
 - [ ] 9.1 Run `warden/docs/handover-field-review.md` against the live ledger and
       the owner's own notes from the field; write the findings as a dated
