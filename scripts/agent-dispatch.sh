@@ -70,6 +70,13 @@ usage: agent-dispatch [--dry-run] bg <repo> '<task>'
   bg <repo> '<task>'   durable background episode against <repo>
   work <repo>          herdr workspace + interactive claude on the dev host
 
+Three lanes for putting work on the mini:
+  executor    sideclaw `dispatch` (MCP) — one bare episode, a typed verdict, no item
+  lifecycle   `warden run <repo> '<brief>'` — opens an ITEM that rides the ledger:
+              investigate → verdict → implement → review → merge, gated by policy
+  colleague   this script's `bg` — a durable claude you can steer with `rd say`
+              (`work` above is a terminal, not this lane)
+
 <repo> is a NAME, never a path.
 
   --dry-run   print the resolved route + command, run nothing, exit 0

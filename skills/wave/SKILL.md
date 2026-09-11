@@ -95,6 +95,8 @@ keep the prompt to the two sentences above.
 
 `RD_WAVE_MAX` (default 10) bounds the chain. `RD_DRY_RUN=1` resolves and prints
 without spawning. `rd agents` shows every wave; `rd read <agent>` watches one.
+Waves run on Sonnet unless `RD_WAVE_MODEL` says otherwise; a chain that needs
+Fable sets it per spawn (rationale: `brain/wiki/engineering/model-routing.md`).
 
 **Never `rd wave` a repo whose live agent is still `working`** — the command
 refuses, and the reason is that two Claudes in one checkout silently race each

@@ -469,6 +469,7 @@ function handleSessionStartEvent(
   logEvent("hook", "session_env", "info", {
     session: input.session_id,
     base_url: process.env.ANTHROPIC_BASE_URL || null,
+    lane: process.env.USAGE_LANE || null,
   });
 
   // No notification for session start (silent tracking)

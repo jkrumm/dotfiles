@@ -95,6 +95,8 @@ commits follow `rules/commit-conventions.md`.
 | **subprocess — `agent-dispatch`**, IU per-token (Max on the mini lane) | One durable bounded episode against a named repo, output kept out of here. |
 | **`/research`** — research-gateway MCP, tailnet-only, off Max | Any library / API / version fact, never from memory. |
 
+Model-choice rationale for every lane above: `brain/wiki/engineering/model-routing.md`.
+
 | Work | Route to |
 |-|-|
 | Settled multi-file edit **in this repo** | `@implementer`, or `/implement` when it needs research-gating + validation |
@@ -138,6 +140,8 @@ The wait differs **per door**: sideclaw's `job_wait` accepts `maxWaitMs` (up to
 research-gateway's *MCP* wait blocks for the whole job over a kept-alive stream,
 so **one call is normally the whole wait** — call again only if it still comes
 back `stillRunning`. Its REST door (Hermes's lane) still polls.
+
+Why `otel` alone is exempt: `brain/wiki/engineering/model-routing.md`.
 
 ### Rules
 
@@ -341,7 +345,8 @@ the full flow; `/pr status` warns on uncommitted or unpushed work.
 the same `~/.claude` config over the IU endpoint's native Anthropic route (off
 Max; `claude-sonnet-5[1m]` default) · `cap` = pick a model from measured data,
 then launch `ca` · `claude_iu` = the headless `claude -p` helper. `[1m]` and
-`_CA_CTX` rules: `dotfiles/CLAUDE.md`.
+`_CA_CTX` rules: `dotfiles/CLAUDE.md`. Launcher rationale:
+`brain/wiki/engineering/model-routing.md`.
 
 **The non-Anthropic lane** — Claude Code is 99% of the work; this is the rare
 second opinion. `cx` (gpt-5.6-sol) · `cxa` (gpt-6-astra, several times the price)

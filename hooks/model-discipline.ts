@@ -21,12 +21,12 @@
  *      model; the estate has zero documented legitimate use of it as a worker.
  *
  * `model: "opus"` is deliberately NOT blocked here. It is the sanctioned escape
- * valve for novel-hard logic (`implement/SKILL.md`'s Heavy tier,
- * `triage.py`'s `VALIDATION_MODEL`) and the audit itself calls existing Opus
- * worker sites "deliberate second opinion, fine" — hard-blocking it here would
- * break real, already-endorsed workflows. The justification for THAT path stays
- * a one-clause note at the call site (documentation), not a machine-checkable
- * field on the Agent tool.
+ * valve for novel-hard logic (`implement/SKILL.md`'s Heavy tier — a worker may
+ * run on Opus with a one-clause justification at the call site) and the audit
+ * itself calls existing Opus worker sites "deliberate second opinion, fine" —
+ * hard-blocking it here would break real, already-endorsed workflows. The
+ * justification for THAT path stays a one-clause note at the call site
+ * (documentation), not a machine-checkable field on the Agent tool.
  *
  * ── Determining the caller's own model ────────────────────────────────────
  *

@@ -459,6 +459,9 @@ startup — `source ~/.zshrc` after editing.
 | `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg |
 | `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
+| `rd wave` / `rd bg` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL`/`RD_BG_MODEL` override; a chain that needs Fable sets it per spawn) |
+
+Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
 All share `~/.claude`, so skills, hooks, subagents and CLAUDE.md are identical;
 only auth and model change. `ca` talks to the endpoint's `/anthropic` route

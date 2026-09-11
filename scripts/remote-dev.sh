@@ -478,8 +478,16 @@ for a in agents:
 
   # Same `agent_pane_busy` race `work` retries around — the pane exists before
   # its shell does.
-  local start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions"
-  [[ -n ${RD_WAVE_MODEL:-} ]] && start_cmd+=" --model '$RD_WAVE_MODEL'"
+  # Unattended work defaults to Sonnet: the settings.json model is whatever
+  # `/model` last left the interactive session on (Fable today), and that is the
+  # wrong default exactly where no one is watching. A chain that wants Fable
+  # says so per chain (`RD_WAVE_MODEL=fable`). `USAGE_LANE` is exported into the
+  # pane's shell first — `herdr agent start` types the claude command into that
+  # same shell, so the agent inherits it and usage-tracker books the session
+  # under the `wave` lane.
+  local model="${RD_WAVE_MODEL:-sonnet}"
+  host_run "herdr pane run '$pane' export USAGE_LANE=wave" >/dev/null 2>&1
+  local start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
 
   local out="" i=0
   while (( i < 10 )); do
@@ -568,7 +576,10 @@ cmd_bg() {
   # single-quoted argv element are what keep the pane-side expansion one word.
   local b64
   b64=$(printf %s "$task" | base64 | tr -d '\n')
-  host_run "herdr pane run '$pane' claude --bg '\"\$(echo $b64 | base64 -d)\"'" >/dev/null 2>&1
+  # Same default as `wave`: Sonnet unless the caller says otherwise
+  # (`RD_BG_MODEL`), and the `bg` lane for usage-tracker.
+  local model="${RD_BG_MODEL:-sonnet}"
+  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --model '$model' '\"\$(echo $b64 | base64 -d)\"'" >/dev/null 2>&1
 
   local id="" i=0
   while (( i < 24 )); do
@@ -772,6 +783,12 @@ usage() {
   builtin, a zsh builtin and /usr/bin/say respectively):
 
     repos · work · agents
+
+  Three lanes for putting work on the mini:
+    executor    sideclaw `dispatch` (MCP) — one bare episode, a typed verdict, no item
+    lifecycle   `warden run <repo> '<brief>'` — opens an ITEM that rides the ledger:
+                investigate → verdict → implement → review → merge, gated by policy
+    colleague   `rd bg <repo> '<task>'` — a durable claude you can steer with `rd say`
 
   Getting a terminal is a different layer:
     desk   herdr --remote — local keybindings, dies on roam
