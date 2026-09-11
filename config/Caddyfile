@@ -252,6 +252,16 @@ sy-serendipity.test {
 	import local
 	reverse_proxy localhost:7734
 }
+# Redesign comparison worktrees (2026-09-11): the same repo on PORT=7735 / 7736 so
+# three variants can be compared side by side. Drop these once a redesign is merged.
+sy-serendipity-fable.test {
+	import local
+	reverse_proxy localhost:7735
+}
+sy-serendipity-codex.test {
+	import local
+	reverse_proxy localhost:7736
+}
 
 # meteo — self-hosted weather platform on the mini (point/marine API + tile service)
 meteo.test {
