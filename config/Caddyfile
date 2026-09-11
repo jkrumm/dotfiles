@@ -252,6 +252,11 @@ sy-serendipity.test {
 	import local
 	reverse_proxy localhost:7734
 }
+# 7735 — warden-api (~/SourceRoot/warden, scripts/api.py), 127.0.0.1 only, no
+# .test host and no proxy: reserved here so nothing else claims it. It sat on
+# 7734 until 2026-09-11, where sy-serendipity's `kill-port 7734` would have
+# killed it on every `bun run dev`.
+
 # Redesign worktree (2026-09-11): the same repo on PORT=7736, the v2 in progress.
 # Drop this once redesign/codex is merged into master.
 sy-serendipity-codex.test {
