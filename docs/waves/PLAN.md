@@ -435,23 +435,23 @@ CLAUDE_SESSION_ID -u CLAUDE_ENTRYPOINT` or the recursion guard refuses every
 dispatch; `sideclaw`'s MCP `review` tool only sees `pr`/`branch` after
 `RESTART_MCP=1 make reload` or a fresh session (HTTP callers see them now).
 
-## Wave 7 — the surfaces: Argo, herdr, Slack, and the model choices (repos: `argo`, `warden`, `sideclaw`, `hermes-agent`, `dotfiles`, `brain`)   <!-- status: active -->
+## Wave 7 — the surfaces: Argo, herdr, Slack, and the model choices (repos: `argo`, `warden`, `sideclaw`, `hermes-agent`, `dotfiles`, `brain`)   <!-- status: done -->
 How the owner proves, sees and steers it: in herdr on his own, in Hermes, in Argo.
-- [ ] 7.1 Argo — a Warden board: items by state, one timeline per item (brief,
+- [x] 7.1 Argo — a Warden board: items by state, one timeline per item (brief,
       verdict, PR, validation outcome, operation receipts, probe result), the six
       funnel numbers, budget deferrals as a first-class state, intents recorded
       and visibly *not* approving. Fed by push from the mini the way the agents
       overview already reaches `GET /agents/overview` — Argo on the VPS cannot
       probe the mini. Screenshots by `@verifier`, not inline.
-- [ ] 7.2 herdr — the overview pane (`make agent-overview`, sideclaw's
+- [x] 7.2 herdr — the overview pane (`make agent-overview`, sideclaw's
       `overview.txt`/JSON) shows Warden's open items and in-flight operations
       beside the agent roster; `rd`/`agent-dispatch` help text names the three
       lanes — executor (sideclaw), lifecycle (`warden run`), colleague (`rd bg`).
-- [ ] 7.3 Slack — the `#agents` digest pause (`72aa2fb36307`, paused since
+- [x] 7.3 Slack — the `#agents` digest pause (`72aa2fb36307`, paused since
       2026-09-08, `paused_reason: null`) decided: resume or retire, a
       `(paused, reason)` marker in the registry and a `make status` assertion
       (finding 17); the five docs asserting it live corrected.
-- [ ] 7.4 Model choices and cost, reconciled once: sideclaw's routing table against
+- [x] 7.4 Model choices and cost, reconciled once: sideclaw's routing table against
       `modelpick`'s current picks (CLASSIFY on the cheapest passing IU model,
       JUDGE on Max, adversary out-of-family), Warden's `VALIDATION_MODEL`,
       `rd wave`/`claude --bg`'s default model versus `c` pinned to Fable
@@ -459,9 +459,45 @@ How the owner proves, sees and steers it: in herdr on his own, in Hermes, in Arg
       documented (finding 19), usage-tracker attributing every lane. The
       rationale written once in `brain/wiki/engineering/model-routing.md`;
       every other mention becomes a link.
-**Left behind:**
+**Left behind:** Everything green and live on the mini; `warden/STATE.md` §56
+is the record with timestamps. Commits: warden `547f47e`, sideclaw `49a065e`,
+hermes-agent `5f5c7c6`, dotfiles `6dfba3e`, usage-tracker `ae805b3`, brain
+`a180ec6`, modelpick `baf441c`; **argo is PR #19** (`warden-board`, draft) —
+argo master deploys, so landing it is the owner's; until then every loop tick
+logs `argo push — http-error:404` by design. Proven by execution: the loop's
+push (73 KB, 12 items) against the not-yet-deployed endpoint; sideclaw's
+`overview.txt` rendering the warden block live in the herdr pane (a clipped
+`merge_blocked` column was found only there); the pane-shell `USAGE_LANE`
+export surviving into child processes; `propose_mappings` root-caused by
+calling the endpoint (`max_tokens` and `temperature: 0` both 503 on the
+reasoning model — the loop's one LLM call had never succeeded); `hermes cron
+remove` leaving four jobs and `make status` asserting `4 live, 0 paused, 1
+retired`. Reviews caught before commit: Argo's board dropped items with an
+unknown state and rewrote the pushed `generatedAt`; sideclaw's block ignored
+warden's own `truncated`, had the wrong cache TTL and rendered
+attacker-influenced titles unstripped; warden's intent entries were unbounded
+and a rejected intent's error line leaks the submitted signature; the
+registry's recreate command used the wrong CLI syntax. **Found only by
+executing, after every unit test was green:** the real 73 KB snapshot was
+rejected by Argo's ingest with 422 — the sixth metric is a composite of two
+leaves and the schema demanded a top-level `value`; the verifier ran a local
+Argo on the branch, POSTed the real file, and got the honest empty state
+(six `n/a` tiles, no bare 0). Fixed on the branch, the real snapshot is now
+a test fixture; the second pass rendered it (201, round-trip verbatim, six
+honest tiles, `needs_human` 8) and found three display defects — fixed at
+`1f245b1`. Decisions: digest
+**retired**; otel **stays inline on Max** (interactive, quota not money);
+`rd wave`/`rd bg` default **sonnet**, this chain passes `RD_WAVE_MODEL=fable`
+per spawn. Carried to Wave 8: sideclaw `fallow` fails at HEAD before and
+after this wave (unused MCP tool files, never-imported `agents.ts` exports,
+CRITICAL functions) — pre-existing debt, decide whether it is a gate; the
+`hermes-cc.sh` mentions in hermes-agent docs listed under Wave 6 are still
+8.2's; cost per Warden item needs a join on ledger job ids (usage lanes now
+give `sideclaw:dispatch`/`sideclaw:review`) — Wave 9 will want it. Owner:
+merge argo PR #19; the PAT Issues permission and the 4.3 Slack acceptance
+from Wave 6 are still open.
 
-## Wave 8 — docs describe the estate that exists, and the field-review handover (repos: `brain`, `warden`, `hermes-agent`, `sideclaw`, `dotfiles`)   <!-- status: pending -->
+## Wave 8 — docs describe the estate that exists, and the field-review handover (repos: `brain`, `warden`, `hermes-agent`, `sideclaw`, `dotfiles`)   <!-- status: active -->
 - [ ] 8.1 brain: `agent-dispatch-paths.md` rewritten around the three lanes,
       `warden-control-plane.md` and `agent-estate-model.md` brought to the state
       Waves 4–7 left, `dispatch-path.html` and `estate.html` regenerated (fix the
