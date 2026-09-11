@@ -93,6 +93,7 @@ commits follow `rules/commit-conventions.md`.
 | **native subagent** (`Agent`, `~/.claude/agents/`) — `@implementer` (settled work), `@verifier` (evidence), `Explore` (search). All pinned to Sonnet by `CLAUDE_CODE_SUBAGENT_MODEL`; raise one only for novel-hard logic. A `PreToolUse` hook (`hooks/model-discipline.ts`) enforces the rest: a worker on Fable is denied outright, and **`fork`** is denied whenever the caller itself is Fable/Opus. **Its own cache** | **The primary offload.** Fresh context, returns a summary, edits hit the live tree. |
 | **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **Async** — job contract below (`otel` is the one exception, see there). |
 | **subprocess — `agent-dispatch`**, IU per-token (Max on the mini lane) | One durable bounded episode against a named repo, output kept out of here. |
+| **lifecycle — `warden run <repo> '<brief>'`** | Unattended work tracked to an outcome on warden's ledger — investigate → verdict → implement → review → merge, gated by policy. |
 | **`/research`** — research-gateway MCP, tailnet-only, off Max | Any library / API / version fact, never from memory. |
 
 Model-choice rationale for every lane above: `brain/wiki/engineering/model-routing.md`.
@@ -100,14 +101,21 @@ Model-choice rationale for every lane above: `brain/wiki/engineering/model-routi
 | Work | Route to |
 |-|-|
 | Settled multi-file edit **in this repo** | `@implementer`, or `/implement` when it needs research-gating + validation |
-| One bounded episode **in another repo** | `agent-dispatch bg <repo> '<task>'`, or `mcp__sideclaw__dispatch` |
+| One bounded episode **in another repo** | `warden run <repo> '<brief>'` for anything unattended tracked to an outcome; `mcp__sideclaw__dispatch` for a bounded question with a typed verdict; `agent-dispatch bg <repo> '<task>'` for a colleague you will steer |
 | Search across many files | `Agent` → `Explore` |
 | Any format / lint / tsc / test loop | `mcp__sideclaw__check` — never inline |
 | Prove a change actually works (UI, traces, endpoints) | `@verifier` — screenshots and trace dumps never land inline |
 | Work too large for one context | `/wave` — a green-gated chain of fresh panes |
 | Code review · library facts | `/review` · `/research` |
 
-### The two dispatch lanes
+### The three lanes
+
+`warden run <repo> '<brief>'` opens an item in `~/.warden/warden.db`
+(`origin="human"` per `scripts/warden.py`), and the loop drives it through
+investigate → verdict → (policy gate) → implement → review → merge. Visible in
+`#agents`, Argo `/warden` and `warden list`; steps in only at
+`needs_human`/`merge_blocked`. The only lane that may run unattended for days —
+the only one with budgets, deadlines and a ledger.
 
 `agent-dispatch bg <repo> '<task>'` · `agent-dispatch work <repo>` — `<repo>` is a
 **name, never a path**. Routes on the secrets backend crossed with whether the repo
@@ -116,14 +124,15 @@ herdr pane so the Max keychain credential is reachable; MacBook + a
 MacBook-resident repo → a local `claude -p` on the IU Keychain creds. **It refuses
 to nest inside an interactive Claude Code session** (`CLAUDECODE` set → prints the
 brief, exit 1). `rd` is its mini-side detail — use it directly only for `repos`,
-`agents`, `read`, `say`.
+`agents`, `read`, `say`. This is the colleague lane — durable, steerable, no ledger.
 
-`mcp__sideclaw__dispatch` (mini only) instead runs the episode **inside** the named
-repo, so that repo's CLAUDE.md, rules and skills are in context. Tiers:
-`investigate` (read-only → verdict), `author` (+ issue), `implement` (write +
-branch + **draft** PR). One verdict, **no steering** (that is `rd bg` + `rd say`).
-**Every tier gets its own worktree, read-only ones included** — `readOnly: true`
-disables Edit and Write but **not Bash**, and the brief is attacker-influenced.
+`mcp__sideclaw__dispatch` (mini only) instead runs a single bounded episode
+**inside** the named repo, so that repo's CLAUDE.md, rules and skills are in
+context. Tiers: `investigate` (read-only → verdict), `author` (+ issue),
+`implement` (write + branch + **draft** PR). One verdict, **no steering** (that is
+`rd bg` + `rd say`) and no item on any ledger. **Every tier gets its own
+worktree, read-only ones included** — `readOnly: true` disables Edit and Write
+but **not Bash**, and the brief is attacker-influenced.
 
 ### Async-job contract — both MCPs
 

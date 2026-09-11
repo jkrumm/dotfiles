@@ -2,11 +2,11 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "How a Slack message becomes committed work",
-    "subtitle": "The dispatch bridge end to end, including the two ways it stops",
+    "title": "How a Slack message becomes committed, deployed work",
+    "subtitle": "The lifecycle path end to end, including the two ways it stops",
     "viewBox": [
       1080,
-      1950
+      1700
     ],
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -18,28 +18,22 @@
       "id": "human",
       "type": "external",
       "label": "Him, in Slack",
-      "sublabel": "asks, approves"
+      "sublabel": "reports, approves"
     },
     {
       "id": "hermes",
       "type": "backend",
       "label": "Hermes",
-      "sublabel": "answers"
+      "sublabel": "answers, narrates"
     },
     {
       "id": "warden",
       "type": "backend",
       "label": "Warden",
-      "sublabel": "decides"
+      "sublabel": "the ledger, the loop"
     },
     {
-      "id": "bridge",
-      "type": "backend",
-      "label": "the bridge",
-      "sublabel": "policy, budget"
-    },
-    {
-      "id": "queue",
+      "id": "sideclaw",
       "type": "messagebus",
       "label": "sideclaw",
       "sublabel": "job queue"
@@ -49,170 +43,160 @@
       "type": "backend",
       "label": "the worker",
       "sublabel": "in a worktree"
-    },
-    {
-      "id": "sweeper",
-      "type": "backend",
-      "label": "the sweeper",
-      "sublabel": "every 5 min"
     }
   ],
   "segments": [
     {
-      "label": "Ask",
-      "from": 170,
-      "to": 330
+      "label": "Report",
+      "from": 160,
+      "to": 300
     },
     {
-      "label": "Gate — implement only",
-      "from": 340,
-      "to": 560
+      "label": "Investigate — or defer on budget",
+      "from": 320,
+      "to": 620
     },
     {
-      "label": "Run",
-      "from": 570,
-      "to": 1010
+      "label": "Gate — case 1/2/4 only",
+      "from": 640,
+      "to": 900
     },
     {
-      "label": "Answer",
-      "from": 1020,
-      "to": 1420
+      "label": "Implement, then review",
+      "from": 920,
+      "to": 1380
     },
     {
-      "label": "Auto-trigger — Warden decides on its own",
-      "from": 1440,
-      "to": 1900
+      "label": "Merge, deploy, verify",
+      "from": 1400,
+      "to": 1620
     }
   ],
   "messages": [
     {
       "from": "human",
       "to": "hermes",
-      "y": 200,
-      "label": "do this in repo X",
+      "y": 190,
+      "label": "reports a problem, or an alert fires",
       "variant": "emphasis"
     },
     {
       "from": "hermes",
-      "to": "bridge",
-      "y": 260,
-      "label": "the brief on stdin, never as an argument",
-      "note": "A brief is data. It never becomes an argv element, so nothing in it can be read as a flag."
-    },
-    {
-      "from": "bridge",
-      "to": "human",
-      "y": 390,
-      "label": "Approve / Deny, and stop here",
-      "variant": "security",
-      "note": "Only the implement tier is gated. Investigate and author run straight through. No recursion, repo resolves, not denied, budget left."
-    },
-    {
-      "from": "human",
-      "to": "bridge",
-      "y": 450,
-      "label": "Approve",
-      "variant": "emphasis",
-      "note": "The signature covers the brief and the context bytes. Swap either after signing and the replay is refused."
-    },
-    {
-      "from": "bridge",
-      "to": "queue",
-      "y": 610,
-      "label": "submit the job, and record the Slack thread it came from",
-      "note": "Verify the signature, then spend it once."
-    },
-    {
-      "from": "queue",
-      "to": "worker",
-      "y": 680,
-      "label": "cut a worktree: read-only, or writable for implement",
-      "variant": "emphasis"
-    },
-    {
-      "from": "queue",
-      "to": "worker",
-      "y": 745,
-      "label": "pick the model and the credential from the routing table",
-      "note": "Cheap mechanical work runs on a gateway model. Judgment runs on Claude, and falls back to the metered key when the subscription quota is high."
-    },
-    {
-      "from": "worker",
-      "to": "queue",
-      "y": 875,
-      "label": "one verdict, or a timeout that is also a verdict",
-      "variant": "return",
-      "note": "Read, reason, and for implement, write."
-    },
-    {
-      "from": "queue",
-      "to": "bridge",
-      "y": 1070,
-      "label": "done, inside three minutes",
-      "variant": "return"
-    },
-    {
-      "from": "bridge",
-      "to": "human",
-      "y": 1130,
-      "label": "the verdict, in the same reply",
-      "variant": "emphasis"
-    },
-    {
-      "from": "queue",
-      "to": "sweeper",
-      "y": 1210,
-      "label": "or it took longer than the turn could wait",
-      "variant": "dashed"
-    },
-    {
-      "from": "sweeper",
-      "to": "human",
-      "y": 1270,
-      "label": "the verdict, into the original thread",
-      "variant": "return",
-      "note": "Three misses and it is marked lost, not retried forever."
+      "to": "warden",
+      "y": 250,
+      "label": "warden run — the brief on stdin",
+      "note": "hermes-cc.sh is retired. A six-line shim in hermes-agent execs straight into this repo's `scripts/warden` — there is no bridge process left to be the thing that is down when Hermes is down."
     },
     {
       "from": "warden",
-      "to": "bridge",
-      "y": 1470,
-      "label": "decides: --auto-from-item, no human gate",
+      "to": "sideclaw",
+      "y": 360,
+      "label": "opens the item, dispatches investigate",
       "variant": "emphasis",
-      "note": "The triage loop dispatches on its own; the Ask and Gate segments above never run for this path."
+      "note": "The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits — overflow is never dropped, only deferred."
     },
     {
-      "from": "bridge",
-      "to": "queue",
-      "y": 1550,
-      "label": "submit the job, same policy and budget checks"
-    },
-    {
-      "from": "queue",
+      "from": "sideclaw",
       "to": "worker",
-      "y": 1620,
-      "label": "same worktree and routing-table path",
-      "variant": "emphasis"
+      "y": 430,
+      "label": "cuts a read-only worktree"
     },
     {
       "from": "worker",
-      "to": "queue",
-      "y": 1700,
-      "label": "one verdict",
+      "to": "sideclaw",
+      "y": 520,
+      "label": "verdict: nextAction=implement",
       "variant": "return"
     },
     {
-      "from": "queue",
-      "to": "sweeper",
-      "y": 1780,
-      "label": "no live turn is waiting",
-      "variant": "dashed"
+      "from": "sideclaw",
+      "to": "warden",
+      "y": 590,
+      "label": "verdict, confidence=high",
+      "variant": "return"
     },
     {
-      "from": "sweeper",
+      "from": "warden",
       "to": "human",
-      "y": 1860,
-      "label": "the verdict, posted to the digest",
+      "y": 700,
+      "label": "approve the diff?",
+      "variant": "security",
+      "note": "Only the four human-essential cases gate (DESIGN.md): monitoring config, a first deploy target, a third-party issue, reviving a wedged gateway. Everything else in a tier-3 repo runs straight through to implement with no approval at all."
+    },
+    {
+      "from": "human",
+      "to": "warden",
+      "y": 780,
+      "label": "Approve",
+      "variant": "dashed",
+      "note": "A denial, a timeout, or no case firing at all: the item parks at `needs_human` and waits on the board — the other way this stops. Nothing merges until a human clears it."
+    },
+    {
+      "from": "warden",
+      "to": "sideclaw",
+      "y": 870,
+      "label": "dispatches implement",
+      "variant": "emphasis"
+    },
+    {
+      "from": "sideclaw",
+      "to": "worker",
+      "y": 950,
+      "label": "writable worktree, opens draft PR"
+    },
+    {
+      "from": "worker",
+      "to": "sideclaw",
+      "y": 1040,
+      "label": "PR opened",
+      "variant": "return"
+    },
+    {
+      "from": "sideclaw",
+      "to": "warden",
+      "y": 1100,
+      "label": "PR ready",
+      "variant": "return"
+    },
+    {
+      "from": "warden",
+      "to": "sideclaw",
+      "y": 1170,
+      "label": "dispatches review — a second session"
+    },
+    {
+      "from": "sideclaw",
+      "to": "worker",
+      "y": 1250,
+      "label": "reads the diff, no write access"
+    },
+    {
+      "from": "worker",
+      "to": "sideclaw",
+      "y": 1320,
+      "label": "review verdict: pass",
+      "variant": "return"
+    },
+    {
+      "from": "sideclaw",
+      "to": "warden",
+      "y": 1360,
+      "label": "review verdict",
+      "variant": "return"
+    },
+    {
+      "from": "warden",
+      "to": "hermes",
+      "y": 1480,
+      "label": "merge, deploy, verify",
+      "variant": "emphasis",
+      "note": "Merge only if every changed path is inside the repo's approved scope. Deploy runs the repo's own make target. Verify re-reads the live system so `fixed` means observed, not just merged."
+    },
+    {
+      "from": "hermes",
+      "to": "human",
+      "y": 1560,
+      "label": "fixed — card updated in place",
       "variant": "return"
     }
   ]

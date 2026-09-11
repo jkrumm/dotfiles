@@ -7,8 +7,8 @@
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
     "viewBox": [
-      3000,
-      1820
+      930,
+      1800
     ],
     "legend": {
       "mode": "auto"
@@ -20,351 +20,199 @@
       "type": "frontend",
       "label": "MacBook",
       "sublabel": "desk into the mini, biometric 1Password",
-      "pos": [
-        200,
-        460
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [480, 120],
+      "size": [180, 64]
     },
     {
       "id": "iphone",
       "type": "frontend",
       "label": "iPhone",
       "sublabel": "the surface he carries",
-      "pos": [
-        200,
-        1020
-      ],
-      "size": [
-        190,
-        64
-      ]
-    },
-    {
-      "id": "slack",
-      "type": "external",
-      "label": "Slack",
-      "sublabel": "ask, approve, get told",
-      "pos": [
-        610,
-        180
-      ],
-      "size": [
-        190,
-        64
-      ]
-    },
-    {
-      "id": "collie",
-      "type": "frontend",
-      "label": "Collie",
-      "sublabel": "every pane on the phone",
-      "pos": [
-        610,
-        460
-      ],
-      "size": [
-        190,
-        64
-      ]
-    },
-    {
-      "id": "argoui",
-      "type": "frontend",
-      "label": "Argo dashboard",
-      "sublabel": "rendered by argo-api on the VPS",
-      "pos": [
-        610,
-        740
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [260, 120],
+      "size": [180, 64]
     },
     {
       "id": "brainweb",
       "type": "frontend",
       "label": "brain reader",
       "sublabel": "the vault as a PWA",
-      "pos": [
-        610,
-        1020
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [40, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "slack",
+      "type": "external",
+      "label": "Slack",
+      "sublabel": "ask, approve, get told",
+      "pos": [260, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "collie",
+      "type": "frontend",
+      "label": "Collie",
+      "sublabel": "every pane on the phone",
+      "pos": [480, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "argoui",
+      "type": "frontend",
+      "label": "Argo dashboard",
+      "sublabel": "rendered by argo-api on the VPS",
+      "pos": [700, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "warden",
+      "type": "backend",
+      "label": "Warden",
+      "sublabel": "control plane · lifecycle lane",
+      "pos": [370, 688],
+      "size": [180, 64]
     },
     {
       "id": "hermes",
       "type": "backend",
       "label": "Hermes gateway",
       "sublabel": "answers, narrates, 7 cron jobs",
-      "pos": [
-        1020,
-        180
-      ],
-      "size": [
-        190,
-        64
-      ]
-    },
-    {
-      "id": "warden",
-      "type": "backend",
-      "label": "Warden",
-      "sublabel": "decides, dispatches, owns the ledger",
-      "pos": [
-        1100,
-        50
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [150, 858],
+      "size": [180, 64]
     },
     {
       "id": "sideclaw",
       "type": "backend",
       "label": "sideclaw",
       "sublabel": "the job queue",
-      "pos": [
-        1430,
-        180
-      ],
-      "size": [
-        190,
-        64
-      ]
-    },
-    {
-      "id": "workers",
-      "type": "backend",
-      "label": "Claude Code workers",
-      "sublabel": "one worktree, one verdict",
-      "pos": [
-        1840,
-        180
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [370, 858],
+      "size": [180, 64]
     },
     {
       "id": "herdr",
       "type": "backend",
       "label": "herdr",
       "sublabel": "pane multiplexer",
-      "pos": [
-        1020,
-        460
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [590, 858],
+      "size": [180, 64]
     },
     {
       "id": "vault",
       "type": "database",
       "label": "brain vault",
       "sublabel": "Obsidian + git, 5 min sync",
-      "pos": [
-        1430,
-        740
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [150, 1028],
+      "size": [180, 64]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Claude Code workers",
+      "sublabel": "one worktree, one verdict",
+      "pos": [370, 1028],
+      "size": [180, 64]
     },
     {
       "id": "devhost",
       "type": "security",
       "label": "devhost heartbeat",
       "sublabel": "16 components + drift",
-      "pos": [
-        1840,
-        460
-      ],
-      "size": [
-        200,
-        64
-      ]
-    },
-    {
-      "id": "argoapi",
-      "type": "backend",
-      "label": "argo-api",
-      "sublabel": "the estate's own API",
-      "pos": [
-        2260,
-        180
-      ],
-      "size": [
-        200,
-        64
-      ]
-    },
-    {
-      "id": "otel",
-      "type": "cloud",
-      "label": "HyperDX",
-      "sublabel": "traces, logs, alerts",
-      "pos": [
-        2260,
-        460
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [590, 1028],
+      "size": [180, 64]
     },
     {
       "id": "research",
       "type": "cloud",
       "label": "research-gateway",
       "sublabel": "search, read, cross-verify",
-      "pos": [
-        2260,
-        740
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [150, 1312],
+      "size": [180, 64]
+    },
+    {
+      "id": "otel",
+      "type": "cloud",
+      "label": "HyperDX",
+      "sublabel": "traces, logs, alerts",
+      "pos": [370, 1312],
+      "size": [180, 64]
+    },
+    {
+      "id": "argoapi",
+      "type": "backend",
+      "label": "argo-api",
+      "sublabel": "the estate's own API",
+      "pos": [590, 1312],
+      "size": [180, 64]
     },
     {
       "id": "audio",
       "type": "cloud",
       "label": "audio-gateway",
       "sublabel": "speech in, speech out",
-      "pos": [
-        2260,
-        1020
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [260, 1482],
+      "size": [180, 64]
     },
     {
       "id": "imggw",
       "type": "cloud",
       "label": "image gateway + CDN",
       "sublabel": "generate, then serve",
-      "pos": [
-        2260,
-        1300
-      ],
-      "size": [
-        200,
-        64
-      ]
+      "pos": [480, 1482],
+      "size": [180, 64]
     },
     {
       "id": "abs",
       "type": "database",
       "label": "Audiobookshelf",
       "sublabel": "where an episode lands",
-      "pos": [
-        2680,
-        1020
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [150, 1596],
+      "size": [180, 64]
     },
     {
       "id": "imgshare",
       "type": "database",
       "label": "image-share",
       "sublabel": "private shares, B2 mirror",
-      "pos": [
-        2680,
-        1300
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [370, 1596],
+      "size": [180, 64]
     },
     {
       "id": "kuma",
       "type": "security",
       "label": "Uptime Kuma",
       "sublabel": "31 push monitors",
-      "pos": [
-        2680,
-        1580
-      ],
-      "size": [
-        190,
-        64
-      ]
+      "pos": [590, 1596],
+      "size": [180, 64]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
       "label": "MacBook and iPhone — the UI layer he builds from",
-      "wraps": [
-        "macbook",
-        "iphone"
-      ],
+      "wraps": ["macbook", "iphone"],
       "pad": 30
     },
     {
       "kind": "region",
       "label": "Where he sees what happened, and answers",
-      "wraps": [
-        "slack",
-        "collie",
-        "argoui",
-        "brainweb"
-      ],
+      "wraps": ["slack", "collie", "argoui", "brainweb"],
       "pad": 30
     },
     {
       "kind": "region",
       "label": "Mac mini — the always-on dev host, where agents run",
-      "wraps": [
-        "hermes",
-        "warden",
-        "herdr",
-        "sideclaw",
-        "vault",
-        "devhost",
-        "workers"
-      ],
+      "wraps": ["hermes", "warden", "herdr", "sideclaw", "vault", "devhost", "workers"],
       "pad": 34
     },
     {
       "kind": "region",
       "label": "VPS — the mature stack, and the gateways that take work off the mini",
-      "wraps": [
-        "argoapi",
-        "research",
-        "audio",
-        "imggw",
-        "otel"
-      ],
+      "wraps": ["argoapi", "research", "audio", "imggw", "otel"],
       "pad": 30
     },
     {
       "kind": "region",
       "label": "HomeLab — his own container world",
-      "wraps": [
-        "abs",
-        "imgshare",
-        "kuma"
-      ],
+      "wraps": ["abs", "imgshare", "kuma"],
       "pad": 30
     }
   ],
@@ -374,144 +222,103 @@
       "to": "slack",
       "label": "ask, approve",
       "variant": "emphasis",
-      "fromSide": "left",
-      "toSide": "left",
-      "via": [
-        [
-          150,
-          1052
-        ],
-        [
-          150,
-          212
-        ]
-      ]
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30
     },
     {
       "from": "macbook",
       "to": "herdr",
       "label": "a terminal on the mini",
-      "fromSide": "top",
-      "toSide": "left",
-      "via": [
-        [
-          295,
-          330
-        ],
-        [
-          830,
-          330
-        ],
-        [
-          830,
-          492
-        ]
-      ]
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [[570, 300], [895, 300], [895, 890]]
     },
     {
       "from": "slack",
       "to": "hermes",
       "label": "socket mode",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[350, 520], [240, 520]]
     },
     {
       "from": "warden",
       "to": "sideclaw",
       "label": "dispatch: budgeted and signed",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30
     },
     {
       "from": "sideclaw",
       "to": "workers",
       "label": "a worktree per tier",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -70,
+      "labelDy": 45
     },
     {
       "from": "workers",
       "to": "sideclaw",
       "label": "one verdict",
       "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "bottom"
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 70,
+      "labelDy": -75
     },
     {
       "from": "herdr",
       "to": "sideclaw",
       "label": "pane and agent state",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "via": [
-        [
-          1115,
-          540
-        ],
-        [
-          580,
-          540
-        ],
-        [
-          580,
-          1100
-        ],
-        [
-          1650,
-          1100
-        ],
-        [
-          1650,
-          90
-        ],
-        [
-          1525,
-          90
-        ]
-      ],
-      "labelAt": [
-        1650,
-        450
-      ]
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": 60
     },
     {
       "from": "sideclaw",
       "to": "hermes",
       "label": "overview, human queue",
       "variant": "dashed",
-      "fromSide": "bottom",
-      "toSide": "bottom"
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": -30
     },
     {
       "from": "hermes",
       "to": "slack",
       "label": "digest, briefing, triage",
       "variant": "emphasis",
-      "fromSide": "bottom",
-      "toSide": "bottom"
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [[240, 560], [350, 560]],
+      "labelDx": 70
     },
     {
       "from": "herdr",
       "to": "collie",
-      "label": "the same panes"
+      "label": "the same panes",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [[680, 580], [570, 580]]
     },
     {
       "from": "sideclaw",
       "to": "argoapi",
       "label": "overview push",
-      "fromSide": "top",
+      "fromSide": "bottom",
       "toSide": "right",
       "via": [
-        [
-          1525,
-          50
-        ],
-        [
-          2500,
-          50
-        ],
-        [
-          2500,
-          212
-        ]
-      ]
+        [460, 975],
+        [905, 975],
+        [905, 1344]
+      ],
+      "labelDx": 60
     },
     {
       "from": "hermes",
@@ -519,89 +326,61 @@
       "label": "narratives",
       "fromSide": "bottom",
       "toSide": "top",
-      "via": [
-        [
-          1115,
-          400
-        ],
-        [
-          1525,
-          400
-        ]
-      ],
-      "labelAt": [
-        1320,
-        382
-      ]
+      "labelDx": -40,
+      "labelDy": 30
     },
     {
       "from": "vault",
       "to": "brainweb",
       "label": "rebuilt on commit",
       "fromSide": "left",
-      "toSide": "right",
+      "toSide": "bottom",
       "via": [
-        [
-          900,
-          772
-        ],
-        [
-          900,
-          1052
-        ]
+        [28, 1060],
+        [28, 490],
+        [130, 490]
       ],
-      "labelAt": [
-        1000,
-        754
-      ]
+      "labelDx": 60
     },
     {
       "from": "workers",
       "to": "research",
       "label": "research",
-      "fromSide": "right",
-      "toSide": "left",
-      "via": [
-        [
-          2150,
-          212
-        ],
-        [
-          2150,
-          772
-        ]
-      ]
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[460, 1180], [240, 1180]]
     },
     {
       "from": "workers",
       "to": "imggw",
       "label": "generate",
-      "fromSide": "top",
-      "toSide": "left",
+      "fromSide": "bottom",
+      "toSide": "top",
       "via": [
-        [
-          1940,
-          150
-        ],
-        [
-          2190,
-          150
-        ],
-        [
-          2190,
-          1332
-        ]
+        [460, 1220],
+        [570, 1220],
+        [570, 1290],
+        [340, 1290],
+        [340, 1390],
+        [570, 1390],
+        [570, 1482]
       ]
     },
     {
       "from": "imggw",
       "to": "imgshare",
-      "label": "private by default"
+      "label": "private by default",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[570, 1565], [460, 1565]]
     },
     {
       "from": "audio",
       "to": "abs",
-      "label": "episode and chapters"
+      "label": "episode and chapters",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[350, 1580], [240, 1580]]
     },
     {
       "from": "devhost",
@@ -609,16 +388,12 @@
       "label": "push, never probed",
       "variant": "security",
       "fromSide": "bottom",
-      "toSide": "bottom",
+      "toSide": "top",
       "via": [
-        [
-          1940,
-          1720
-        ],
-        [
-          2775,
-          1720
-        ]
+        [680, 1300],
+        [580, 1300],
+        [580, 1390],
+        [680, 1390]
       ]
     },
     {
@@ -626,35 +401,22 @@
       "to": "slack",
       "label": "down and up",
       "variant": "security",
-      "fromSide": "right",
-      "toSide": "left",
+      "fromSide": "bottom",
+      "toSide": "top",
       "via": [
-        [
-          2900,
-          1612
-        ],
-        [
-          2900,
-          10
-        ],
-        [
-          450,
-          10
-        ],
-        [
-          450,
-          212
-        ]
+        [680, 1750],
+        [5, 1750],
+        [5, 250],
+        [350, 250]
       ]
     },
     {
       "from": "argoapi",
       "to": "otel",
       "label": "traces",
-      "labelAt": [
-        2360,
-        258
-      ]
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [460, 1420]
     }
   ]
 }

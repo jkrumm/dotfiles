@@ -88,15 +88,17 @@ Both are compiled from the `.json` beside them with the vendored `archify`
 skill, which validates geometry and composition before it will deliver: an
 arrow through a box or a label over a node fails the build. Regenerate with
 `node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html>
---quality showcase`. Both specs carry `quality_profile: showcase` and both
-route every relationship — including the two feedback arrows, `sideclaw →
-hermes` and `kuma → slack` — through their own corridor with zero unrelated
-crossings. The estate diagram's one open item is
-`composition/desktop-readability`: twenty nodes across five bands need more
-canvas width (viewBox 3000) than the checker's 1440px-desktop legibility
-budget allows for the longest sublabel, so `deliver` still declines and
-`estate.html` is regenerated with `render` instead — same validated geometry,
-without that one text-scale guarantee.
+--quality showcase`. Both specs carry `quality_profile: showcase`.
+`dispatch-path.html` delivers clean. The estate diagram's readability failure
+was fixed by narrowing `viewBox` from 3000 to 930 (the desktop-reader legibility
+budget caps out at 930px of usable width, and anything under it scores full
+marks regardless of sublabel length) and reflowing the five regions into
+vertical bands instead of one wide row. One open item remains:
+`composition/proper-crossing` between `devhost → kuma` and `argoapi → otel` —
+both must route through the same 40px gap between adjacent VPS nodes, and no
+corridor assignment found so far clears one without re-crossing the other, so
+`deliver` still declines and `estate.html` is regenerated with `render`
+instead — same validated geometry, without that one crossing guarantee.
 
 ## Repos
 
@@ -114,7 +116,7 @@ without that one text-scale guarantee.
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
 | `hermes-agent` | Hermes gateway — Slack-facing control surface, dispatch bridge, 5-job cron layer | see [[hermes-as-control-surface]] |
-| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/docs/api.md`, `warden/FLOWS.md`, `warden/docs/triage.md` |
+| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/docs/api.md`, `warden/FLOWS.md`, `warden/docs/triage.md`. `warden run <repo> '<brief>'` is the unattended lane; `sideclaw dispatch` and `rd bg` are a session's and a human's |
 | `sideclaw` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |

@@ -5005,7 +5005,7 @@
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 3000 1820" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="signal-flow" data-quality-profile="showcase">
+      <svg viewBox="0 0 930 1800" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="signal-flow" data-quality-profile="standard">
         <title id="archify-diagram-title">The personal agent estate</title>
         <desc id="archify-diagram-description">Where agents run, where he watches them, and what the work is handed to</desc>
         <!-- Definitions -->
@@ -5031,414 +5031,425 @@
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="MacBook and iPhone — the UI layer he builds from" x="7.290308180645127" y="425" width="575.4193836387097" height="679" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="MacBook and iPhone — the UI layer he builds from" x="230" y="90" width="460" height="114" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Where he sees what happened, and answers" x="463.74192348387095" y="145" width="482.5161530322581" height="959" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Where he sees what happened, and answers" x="10" y="374" width="900" height="114" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="2" data-composition-frame-label="Mac mini — the always-on dev host, where agents run" x="986" y="145" width="1088" height="679" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="2" data-composition-frame-label="Mac mini — the always-on dev host, where agents run" x="116" y="654" width="688" height="458" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="3" data-composition-frame-label="VPS — the mature stack, and the gateways that take work off the mini" x="1956.1612699225807" y="145" width="807.6774601548387" height="1239" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="3" data-composition-frame-label="VPS — the mature stack, and the gateways that take work off the mini" x="120" y="1282" width="680" height="284" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="4" data-composition-frame-label="HomeLab — his own container world" x="2574.3870868741933" y="985" width="401.22582625161294" height="679" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="4" data-composition-frame-label="HomeLab — his own container world" x="120" y="1566" width="680" height="114" rx="12" class="c-region" stroke-width="1"/>
 
         <!-- Connection paths (before components for correct z-order) -->
-        <path data-edge-from="iphone" data-edge-to="slack" data-edge-label="ask, approve" data-edge-key="0" data-composition-points="200,1052;150,1052;150,212;610,212" d="M 200 1052 L 158 1052 Q 150 1052 150 1044 L 150 220 Q 150 212 158 212 L 610 212" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="macbook" data-edge-to="herdr" data-edge-label="a terminal on the mini" data-edge-key="1" data-composition-points="295,460;295,330;830,330;830,492;1020,492" d="M 295 460 L 295 338 Q 295 330 303 330 L 822 330 Q 830 330 830 338 L 830 484 Q 830 492 838 492 L 1020 492" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="slack" data-edge-to="hermes" data-edge-label="socket mode" data-edge-key="2" data-composition-points="800,212;1020,212" d="M 800 212 L 1020 212" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="hermes" data-edge-to="sideclaw" data-edge-label="dispatch: budgeted and signed" data-edge-key="3" data-composition-points="1210,212;1430,212" d="M 1210 212 L 1430 212" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="sideclaw" data-edge-to="workers" data-edge-label="a worktree per tier" data-edge-key="4" data-composition-points="1620,212;1840,212" d="M 1620 212 L 1840 212" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="workers" data-edge-to="sideclaw" data-edge-label="one verdict" data-edge-key="5" data-composition-points="1940,244;1940,268;1532,268;1532,244" d="M 1940 244 L 1940 260 Q 1940 268 1932 268 L 1540 268 Q 1532 268 1532 260 L 1532 244" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="herdr" data-edge-to="sideclaw" data-edge-label="pane and agent state" data-edge-key="6" data-composition-points="1115,524;1115,540;580,540;580,1100;1650,1100;1650,90;1525,90;1525,180" d="M 1115 524 L 1115 532 Q 1115 540 1107 540 L 588 540 Q 580 540 580 548 L 580 1092 Q 580 1100 588 1100 L 1642 1100 Q 1650 1100 1650 1092 L 1650 98 Q 1650 90 1642 90 L 1533 90 Q 1525 90 1525 98 L 1525 180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sideclaw" data-edge-to="hermes" data-edge-label="overview, human queue" data-edge-key="7" data-composition-points="1518,244;1518,268;1122,268;1122,244" d="M 1518 244 L 1518 260 Q 1518 268 1510 268 L 1130 268 Q 1122 268 1122 260 L 1122 244" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="hermes" data-edge-to="slack" data-edge-label="digest, briefing, triage" data-edge-key="8" data-composition-points="1108,244;1108,268;705,268;705,244" d="M 1108 244 L 1108 260 Q 1108 268 1100 268 L 713 268 Q 705 268 705 260 L 705 244" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="herdr" data-edge-to="collie" data-edge-label="the same panes" data-edge-key="9" data-composition-points="1020,492;800,492" d="M 1020 492 L 800 492" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sideclaw" data-edge-to="argoapi" data-edge-label="overview push" data-edge-key="10" data-composition-points="1525,180;1525,50;2500,50;2500,212;2460,212" d="M 1525 180 L 1525 58 Q 1525 50 1533 50 L 2492 50 Q 2500 50 2500 58 L 2500 204 Q 2500 212 2492 212 L 2460 212" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="hermes" data-edge-to="vault" data-edge-label="narratives" data-edge-key="11" data-composition-points="1115,244;1115,400;1525,400;1525,740" d="M 1115 244 L 1115 392 Q 1115 400 1123 400 L 1517 400 Q 1525 400 1525 408 L 1525 740" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="vault" data-edge-to="brainweb" data-edge-label="rebuilt on commit" data-edge-key="12" data-composition-points="1430,772;900,772;900,1052;800,1052" d="M 1430 772 L 908 772 Q 900 772 900 780 L 900 1044 Q 900 1052 892 1052 L 800 1052" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="workers" data-edge-to="research" data-edge-label="research" data-edge-key="13" data-composition-points="2040,212;2150,212;2150,772;2260,772" d="M 2040 212 L 2142 212 Q 2150 212 2150 220 L 2150 764 Q 2150 772 2158 772 L 2260 772" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="workers" data-edge-to="imggw" data-edge-label="generate" data-edge-key="14" data-composition-points="1940,180;1940,150;2190,150;2190,1332;2260,1332" d="M 1940 180 L 1940 158 Q 1940 150 1948 150 L 2182 150 Q 2190 150 2190 158 L 2190 1324 Q 2190 1332 2198 1332 L 2260 1332" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="imggw" data-edge-to="imgshare" data-edge-label="private by default" data-edge-key="15" data-composition-points="2460,1332;2680,1332" d="M 2460 1332 L 2680 1332" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="audio" data-edge-to="abs" data-edge-label="episode and chapters" data-edge-key="16" data-composition-points="2460,1052;2680,1052" d="M 2460 1052 L 2680 1052" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="devhost" data-edge-to="kuma" data-edge-label="push, never probed" data-edge-key="17" data-composition-points="1940,524;1940,1720;2775,1720;2775,1644" d="M 1940 524 L 1940 1712 Q 1940 1720 1948 1720 L 2767 1720 Q 2775 1720 2775 1712 L 2775 1644" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="kuma" data-edge-to="slack" data-edge-label="down and up" data-edge-key="18" data-composition-points="2870,1612;2900,1612;2900,10;450,10;450,212;610,212" d="M 2870 1612 L 2892 1612 Q 2900 1612 2900 1604 L 2900 18 Q 2900 10 2892 10 L 458 10 Q 450 10 450 18 L 450 204 Q 450 212 458 212 L 610 212" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="argoapi" data-edge-to="otel" data-edge-label="traces" data-edge-key="19" data-composition-points="2360,244;2360,460" d="M 2360 244 L 2360 460" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="iphone" data-edge-to="slack" data-edge-label="ask, approve" data-edge-key="0" data-composition-points="350,184;350,404" d="M 350 184 L 350 404" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="macbook" data-edge-to="herdr" data-edge-label="a terminal on the mini" data-edge-key="1" data-composition-points="570,184;570,300;895,300;895,890;770,890" d="M 570 184 L 570 292 Q 570 300 578 300 L 887 300 Q 895 300 895 308 L 895 882 Q 895 890 887 890 L 770 890" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="slack" data-edge-to="hermes" data-edge-label="socket mode" data-edge-key="2" data-composition-points="350,468;350,520;240,520;240,858" d="M 350 468 L 350 512 Q 350 520 342 520 L 248 520 Q 240 520 240 528 L 240 858" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="warden" data-edge-to="sideclaw" data-edge-label="dispatch: budgeted and signed" data-edge-key="3" data-composition-points="460,752;460,858" d="M 460 752 L 460 858" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="sideclaw" data-edge-to="workers" data-edge-label="a worktree per tier" data-edge-key="4" data-composition-points="453,922;453,1028" d="M 453 922 L 453 1028" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="workers" data-edge-to="sideclaw" data-edge-label="one verdict" data-edge-key="5" data-composition-points="467,1028;467,922" d="M 467 1028 L 467 922" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="herdr" data-edge-to="sideclaw" data-edge-label="pane and agent state" data-edge-key="6" data-composition-points="590,890;550,890" d="M 590 890 L 550 890" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sideclaw" data-edge-to="hermes" data-edge-label="overview, human queue" data-edge-key="7" data-composition-points="370,890;330,890" d="M 370 890 L 330 890" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="hermes" data-edge-to="slack" data-edge-label="digest, briefing, triage" data-edge-key="8" data-composition-points="240,858;240,560;350,560;350,468" d="M 240 858 L 240 568 Q 240 560 248 560 L 342 560 Q 350 560 350 552 L 350 468" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="herdr" data-edge-to="collie" data-edge-label="the same panes" data-edge-key="9" data-composition-points="680,858;680,580;570,580;570,468" d="M 680 858 L 680 588 Q 680 580 672 580 L 578 580 Q 570 580 570 572 L 570 468" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sideclaw" data-edge-to="argoapi" data-edge-label="overview push" data-edge-key="10" data-composition-points="460,922;460,975;905,975;905,1344;770,1344" d="M 460 922 L 460 967 Q 460 975 468 975 L 897 975 Q 905 975 905 983 L 905 1336 Q 905 1344 897 1344 L 770 1344" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="hermes" data-edge-to="vault" data-edge-label="narratives" data-edge-key="11" data-composition-points="240,922;240,1028" d="M 240 922 L 240 1028" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="vault" data-edge-to="brainweb" data-edge-label="rebuilt on commit" data-edge-key="12" data-composition-points="150,1060;28,1060;28,490;130,490;130,468" d="M 150 1060 L 36 1060 Q 28 1060 28 1052 L 28 498 Q 28 490 36 490 L 122 490 Q 130 490 130 482 L 130 468" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="workers" data-edge-to="research" data-edge-label="research" data-edge-key="13" data-composition-points="460,1092;460,1180;240,1180;240,1312" d="M 460 1092 L 460 1172 Q 460 1180 452 1180 L 248 1180 Q 240 1180 240 1188 L 240 1312" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="workers" data-edge-to="imggw" data-edge-label="generate" data-edge-key="14" data-composition-points="460,1092;460,1220;570,1220;570,1290;340,1290;340,1390;570,1390;570,1482;570,1482" d="M 460 1092 L 460 1212 Q 460 1220 468 1220 L 562 1220 Q 570 1220 570 1228 L 570 1282 Q 570 1290 562 1290 L 348 1290 Q 340 1290 340 1298 L 340 1382 Q 340 1390 348 1390 L 562 1390 Q 570 1390 570 1398 L 570 1482 L 570 1482" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="imggw" data-edge-to="imgshare" data-edge-label="private by default" data-edge-key="15" data-composition-points="570,1546;570,1565;460,1565;460,1596" d="M 570 1546 L 570 1557 Q 570 1565 562 1565 L 468 1565 Q 460 1565 460 1573 L 460 1596" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="audio" data-edge-to="abs" data-edge-label="episode and chapters" data-edge-key="16" data-composition-points="350,1546;350,1580;240,1580;240,1596" d="M 350 1546 L 350 1572 Q 350 1580 342 1580 L 248 1580 Q 240 1580 240 1588 L 240 1596" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="devhost" data-edge-to="kuma" data-edge-label="push, never probed" data-edge-key="17" data-composition-points="680,1092;680,1300;580,1300;580,1390;680,1390;680,1596" d="M 680 1092 L 680 1292 Q 680 1300 672 1300 L 588 1300 Q 580 1300 580 1308 L 580 1382 Q 580 1390 588 1390 L 672 1390 Q 680 1390 680 1398 L 680 1596" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="kuma" data-edge-to="slack" data-edge-label="down and up" data-edge-key="18" data-composition-points="680,1660;680,1750;5,1750;5,250;350,250;350,404" d="M 680 1660 L 680 1742 Q 680 1750 672 1750 L 13 1750 Q 5 1750 5 1742 L 5 258 Q 5 250 13 250 L 342 250 Q 350 250 350 258 L 350 404" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="argoapi" data-edge-to="otel" data-edge-label="traces" data-edge-key="19" data-composition-points="590,1344;550,1344" d="M 590 1344 L 550 1344" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
         <!-- Components -->
         <g id="node-macbook" data-node-id="macbook" data-node-label="MacBook" tabindex="0" role="button" aria-label="Focus MacBook, desk into the mini, biometric 1Password, MacBook and iPhone — the UI layer he builds from" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="desk into the mini, biometric 1Password" data-node-context="MacBook and iPhone — the UI layer he builds from">
           <title>MacBook · desk into the mini, biometric 1Password · MacBook and iPhone — the UI layer he builds from</title>
-          <rect x="200" y="460" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="200" y="460" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(206 466) scale(0.6875)">
+          <rect x="480" y="120" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="480" y="120" width="180" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(486 126) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="295" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MacBook</text>
-        <text data-detail="context" x="295" y="506" class="t-muted" font-size="7.7" text-anchor="middle">desk into the mini, biometric 1Password</text>
+          <text data-node-label="" data-detail-anchor="" x="570" y="150" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MacBook</text>
+        <text data-detail="context" x="570" y="166" class="t-muted" font-size="7.3" text-anchor="middle">desk into the mini, biometric 1Password</text>
         </g>
 
         <g id="node-iphone" data-node-id="iphone" data-node-label="iPhone" tabindex="0" role="button" aria-label="Focus iPhone, the surface he carries, MacBook and iPhone — the UI layer he builds from" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="the surface he carries" data-node-context="MacBook and iPhone — the UI layer he builds from">
           <title>iPhone · the surface he carries · MacBook and iPhone — the UI layer he builds from</title>
-          <rect x="200" y="1020" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="200" y="1020" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(206 1026) scale(0.6875)">
+          <rect x="260" y="120" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="260" y="120" width="180" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(266 126) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="295" y="1050" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">iPhone</text>
-        <text data-detail="context" x="295" y="1066" class="t-muted" font-size="9" text-anchor="middle">the surface he carries</text>
-        </g>
-
-        <g id="node-slack" data-node-id="slack" data-node-label="Slack" tabindex="0" role="button" aria-label="Focus Slack, ask, approve, get told, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="external" data-node-sublabel="ask, approve, get told" data-node-context="Where he sees what happened, and answers">
-          <title>Slack · ask, approve, get told · Where he sees what happened, and answers</title>
-          <rect x="610" y="180" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="610" y="180" width="190" height="64" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(616 186) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="705" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Slack</text>
-        <text data-detail="context" x="705" y="226" class="t-muted" font-size="9" text-anchor="middle">ask, approve, get told</text>
-        </g>
-
-        <g id="node-collie" data-node-id="collie" data-node-label="Collie" tabindex="0" role="button" aria-label="Focus Collie, every pane on the phone, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="every pane on the phone" data-node-context="Where he sees what happened, and answers">
-          <title>Collie · every pane on the phone · Where he sees what happened, and answers</title>
-          <rect x="610" y="460" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="610" y="460" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(616 466) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="705" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Collie</text>
-        <text data-detail="context" x="705" y="506" class="t-muted" font-size="9" text-anchor="middle">every pane on the phone</text>
-        </g>
-
-        <g id="node-argoui" data-node-id="argoui" data-node-label="Argo dashboard" tabindex="0" role="button" aria-label="Focus Argo dashboard, rendered by argo-api on the VPS, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="rendered by argo-api on the VPS" data-node-context="Where he sees what happened, and answers">
-          <title>Argo dashboard · rendered by argo-api on the VPS · Where he sees what happened, and answers</title>
-          <rect x="610" y="740" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="610" y="740" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(616 746) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="705" y="770" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo dashboard</text>
-        <text data-detail="context" x="705" y="786" class="t-muted" font-size="9" text-anchor="middle">rendered by argo-api on the VPS</text>
+          <text data-node-label="" data-detail-anchor="" x="350" y="150" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">iPhone</text>
+        <text data-detail="context" x="350" y="166" class="t-muted" font-size="9" text-anchor="middle">the surface he carries</text>
         </g>
 
         <g id="node-brainweb" data-node-id="brainweb" data-node-label="brain reader" tabindex="0" role="button" aria-label="Focus brain reader, the vault as a PWA, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="the vault as a PWA" data-node-context="Where he sees what happened, and answers">
           <title>brain reader · the vault as a PWA · Where he sees what happened, and answers</title>
-          <rect x="610" y="1020" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="610" y="1020" width="190" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(616 1026) scale(0.6875)">
+          <rect x="40" y="404" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="40" y="404" width="180" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(46 410) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="705" y="1050" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">brain reader</text>
-        <text data-detail="context" x="705" y="1066" class="t-muted" font-size="9" text-anchor="middle">the vault as a PWA</text>
+          <text data-node-label="" data-detail-anchor="" x="130" y="434" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">brain reader</text>
+        <text data-detail="context" x="130" y="450" class="t-muted" font-size="9" text-anchor="middle">the vault as a PWA</text>
         </g>
 
-        <g id="node-hermes" data-node-id="hermes" data-node-label="Hermes gateway" tabindex="0" role="button" aria-label="Focus Hermes gateway, answers, dispatches, 7 cron jobs, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="answers, dispatches, 7 cron jobs" data-node-context="Mac mini — the always-on dev host, where agents run">
-          <title>Hermes gateway · answers, dispatches, 7 cron jobs · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1020" y="180" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="1020" y="180" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1026 186) scale(0.6875)">
+        <g id="node-slack" data-node-id="slack" data-node-label="Slack" tabindex="0" role="button" aria-label="Focus Slack, ask, approve, get told, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="external" data-node-sublabel="ask, approve, get told" data-node-context="Where he sees what happened, and answers">
+          <title>Slack · ask, approve, get told · Where he sees what happened, and answers</title>
+          <rect x="260" y="404" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="260" y="404" width="180" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(266 410) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="350" y="434" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Slack</text>
+        <text data-detail="context" x="350" y="450" class="t-muted" font-size="9" text-anchor="middle">ask, approve, get told</text>
+        </g>
+
+        <g id="node-collie" data-node-id="collie" data-node-label="Collie" tabindex="0" role="button" aria-label="Focus Collie, every pane on the phone, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="every pane on the phone" data-node-context="Where he sees what happened, and answers">
+          <title>Collie · every pane on the phone · Where he sees what happened, and answers</title>
+          <rect x="480" y="404" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="480" y="404" width="180" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(486 410) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="570" y="434" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Collie</text>
+        <text data-detail="context" x="570" y="450" class="t-muted" font-size="9" text-anchor="middle">every pane on the phone</text>
+        </g>
+
+        <g id="node-argoui" data-node-id="argoui" data-node-label="Argo dashboard" tabindex="0" role="button" aria-label="Focus Argo dashboard, rendered by argo-api on the VPS, Where he sees what happened, and answers" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="rendered by argo-api on the VPS" data-node-context="Where he sees what happened, and answers">
+          <title>Argo dashboard · rendered by argo-api on the VPS · Where he sees what happened, and answers</title>
+          <rect x="700" y="404" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="700" y="404" width="180" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(706 410) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="790" y="434" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo dashboard</text>
+        <text data-detail="context" x="790" y="450" class="t-muted" font-size="9" text-anchor="middle">rendered by argo-api on the VPS</text>
+        </g>
+
+        <g id="node-warden" data-node-id="warden" data-node-label="Warden" tabindex="0" role="button" aria-label="Focus Warden, control plane · lifecycle lane, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="control plane · lifecycle lane" data-node-context="Mac mini — the always-on dev host, where agents run">
+          <title>Warden · control plane · lifecycle lane · Mac mini — the always-on dev host, where agents run</title>
+          <rect x="370" y="688" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="370" y="688" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(376 694) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1115" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hermes gateway</text>
-        <text data-detail="context" x="1115" y="226" class="t-muted" font-size="9" text-anchor="middle">answers, dispatches, 7 cron jobs</text>
+          <text data-node-label="" data-detail-anchor="" x="460" y="718" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Warden</text>
+        <text data-detail="context" x="460" y="734" class="t-muted" font-size="9" text-anchor="middle">control plane · lifecycle lane</text>
+        </g>
+
+        <g id="node-hermes" data-node-id="hermes" data-node-label="Hermes gateway" tabindex="0" role="button" aria-label="Focus Hermes gateway, answers, narrates, 7 cron jobs, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="answers, narrates, 7 cron jobs" data-node-context="Mac mini — the always-on dev host, where agents run">
+          <title>Hermes gateway · answers, narrates, 7 cron jobs · Mac mini — the always-on dev host, where agents run</title>
+          <rect x="150" y="858" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="150" y="858" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(156 864) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="240" y="888" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hermes gateway</text>
+        <text data-detail="context" x="240" y="904" class="t-muted" font-size="9" text-anchor="middle">answers, narrates, 7 cron jobs</text>
         </g>
 
         <g id="node-sideclaw" data-node-id="sideclaw" data-node-label="sideclaw" tabindex="0" role="button" aria-label="Focus sideclaw, the job queue, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the job queue" data-node-context="Mac mini — the always-on dev host, where agents run">
           <title>sideclaw · the job queue · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1430" y="180" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="1430" y="180" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1436 186) scale(0.6875)">
+          <rect x="370" y="858" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="370" y="858" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(376 864) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1525" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">sideclaw</text>
-        <text data-detail="context" x="1525" y="226" class="t-muted" font-size="9" text-anchor="middle">the job queue</text>
-        </g>
-
-        <g id="node-workers" data-node-id="workers" data-node-label="Claude Code workers" tabindex="0" role="button" aria-label="Focus Claude Code workers, one worktree, one verdict, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="one worktree, one verdict" data-node-context="Mac mini — the always-on dev host, where agents run">
-          <title>Claude Code workers · one worktree, one verdict · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1840" y="180" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="1840" y="180" width="200" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1846 186) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="1940" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Claude Code workers</text>
-        <text data-detail="context" x="1940" y="226" class="t-muted" font-size="9" text-anchor="middle">one worktree, one verdict</text>
+          <text data-node-label="" data-detail-anchor="" x="460" y="888" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">sideclaw</text>
+        <text data-detail="context" x="460" y="904" class="t-muted" font-size="9" text-anchor="middle">the job queue</text>
         </g>
 
         <g id="node-herdr" data-node-id="herdr" data-node-label="herdr" tabindex="0" role="button" aria-label="Focus herdr, pane multiplexer, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pane multiplexer" data-node-context="Mac mini — the always-on dev host, where agents run">
           <title>herdr · pane multiplexer · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1020" y="460" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="1020" y="460" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1026 466) scale(0.6875)">
+          <rect x="590" y="858" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="590" y="858" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(596 864) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1115" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">herdr</text>
-        <text data-detail="context" x="1115" y="506" class="t-muted" font-size="9" text-anchor="middle">pane multiplexer</text>
+          <text data-node-label="" data-detail-anchor="" x="680" y="888" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">herdr</text>
+        <text data-detail="context" x="680" y="904" class="t-muted" font-size="9" text-anchor="middle">pane multiplexer</text>
         </g>
 
         <g id="node-vault" data-node-id="vault" data-node-label="brain vault" tabindex="0" role="button" aria-label="Focus brain vault, Obsidian + git, 5 min sync, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="database" data-node-sublabel="Obsidian + git, 5 min sync" data-node-context="Mac mini — the always-on dev host, where agents run">
           <title>brain vault · Obsidian + git, 5 min sync · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1430" y="740" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="1430" y="740" width="190" height="64" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1436 746) scale(0.6875)">
+          <rect x="150" y="1028" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="150" y="1028" width="180" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(156 1034) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1525" y="770" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">brain vault</text>
-        <text data-detail="context" x="1525" y="786" class="t-muted" font-size="9" text-anchor="middle">Obsidian + git, 5 min sync</text>
+          <text data-node-label="" data-detail-anchor="" x="240" y="1058" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">brain vault</text>
+        <text data-detail="context" x="240" y="1074" class="t-muted" font-size="9" text-anchor="middle">Obsidian + git, 5 min sync</text>
+        </g>
+
+        <g id="node-workers" data-node-id="workers" data-node-label="Claude Code workers" tabindex="0" role="button" aria-label="Focus Claude Code workers, one worktree, one verdict, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="backend" data-node-sublabel="one worktree, one verdict" data-node-context="Mac mini — the always-on dev host, where agents run">
+          <title>Claude Code workers · one worktree, one verdict · Mac mini — the always-on dev host, where agents run</title>
+          <rect x="370" y="1028" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="370" y="1028" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(376 1034) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="460" y="1058" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Claude Code workers</text>
+        <text data-detail="context" x="460" y="1074" class="t-muted" font-size="9" text-anchor="middle">one worktree, one verdict</text>
         </g>
 
         <g id="node-devhost" data-node-id="devhost" data-node-label="devhost heartbeat" tabindex="0" role="button" aria-label="Focus devhost heartbeat, 16 components + drift, Mac mini — the always-on dev host, where agents run" aria-pressed="false" data-node-kind="security" data-node-sublabel="16 components + drift" data-node-context="Mac mini — the always-on dev host, where agents run">
           <title>devhost heartbeat · 16 components + drift · Mac mini — the always-on dev host, where agents run</title>
-          <rect x="1840" y="460" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="1840" y="460" width="200" height="64" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1846 466) scale(0.6875)">
+          <rect x="590" y="1028" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="590" y="1028" width="180" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(596 1034) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1940" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">devhost heartbeat</text>
-        <text data-detail="context" x="1940" y="506" class="t-muted" font-size="9" text-anchor="middle">16 components + drift</text>
-        </g>
-
-        <g id="node-argoapi" data-node-id="argoapi" data-node-label="argo-api" tabindex="0" role="button" aria-label="Focus argo-api, the estate&#39;s own API, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the estate&#39;s own API" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
-          <title>argo-api · the estate&#39;s own API · VPS — the mature stack, and the gateways that take work off the mini</title>
-          <rect x="2260" y="180" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="2260" y="180" width="200" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(2266 186) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="2360" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">argo-api</text>
-        <text data-detail="context" x="2360" y="226" class="t-muted" font-size="9" text-anchor="middle">the estate&#39;s own API</text>
-        </g>
-
-        <g id="node-otel" data-node-id="otel" data-node-label="HyperDX" tabindex="0" role="button" aria-label="Focus HyperDX, traces, logs, alerts, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="traces, logs, alerts" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
-          <title>HyperDX · traces, logs, alerts · VPS — the mature stack, and the gateways that take work off the mini</title>
-          <rect x="2260" y="460" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="2260" y="460" width="200" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(2266 466) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="2360" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">HyperDX</text>
-        <text data-detail="context" x="2360" y="506" class="t-muted" font-size="9" text-anchor="middle">traces, logs, alerts</text>
+          <text data-node-label="" data-detail-anchor="" x="680" y="1058" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">devhost heartbeat</text>
+        <text data-detail="context" x="680" y="1074" class="t-muted" font-size="9" text-anchor="middle">16 components + drift</text>
         </g>
 
         <g id="node-research" data-node-id="research" data-node-label="research-gateway" tabindex="0" role="button" aria-label="Focus research-gateway, search, read, cross-verify, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="search, read, cross-verify" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
           <title>research-gateway · search, read, cross-verify · VPS — the mature stack, and the gateways that take work off the mini</title>
-          <rect x="2260" y="740" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="2260" y="740" width="200" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(2266 746) scale(0.6875)">
+          <rect x="150" y="1312" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="150" y="1312" width="180" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(156 1318) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2360" y="770" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">research-gateway</text>
-        <text data-detail="context" x="2360" y="786" class="t-muted" font-size="9" text-anchor="middle">search, read, cross-verify</text>
+          <text data-node-label="" data-detail-anchor="" x="240" y="1342" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">research-gateway</text>
+        <text data-detail="context" x="240" y="1358" class="t-muted" font-size="9" text-anchor="middle">search, read, cross-verify</text>
+        </g>
+
+        <g id="node-otel" data-node-id="otel" data-node-label="HyperDX" tabindex="0" role="button" aria-label="Focus HyperDX, traces, logs, alerts, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="traces, logs, alerts" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
+          <title>HyperDX · traces, logs, alerts · VPS — the mature stack, and the gateways that take work off the mini</title>
+          <rect x="370" y="1312" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="370" y="1312" width="180" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(376 1318) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="460" y="1342" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">HyperDX</text>
+        <text data-detail="context" x="460" y="1358" class="t-muted" font-size="9" text-anchor="middle">traces, logs, alerts</text>
+        </g>
+
+        <g id="node-argoapi" data-node-id="argoapi" data-node-label="argo-api" tabindex="0" role="button" aria-label="Focus argo-api, the estate&#39;s own API, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the estate&#39;s own API" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
+          <title>argo-api · the estate&#39;s own API · VPS — the mature stack, and the gateways that take work off the mini</title>
+          <rect x="590" y="1312" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="590" y="1312" width="180" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(596 1318) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="680" y="1342" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">argo-api</text>
+        <text data-detail="context" x="680" y="1358" class="t-muted" font-size="9" text-anchor="middle">the estate&#39;s own API</text>
         </g>
 
         <g id="node-audio" data-node-id="audio" data-node-label="audio-gateway" tabindex="0" role="button" aria-label="Focus audio-gateway, speech in, speech out, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="speech in, speech out" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
           <title>audio-gateway · speech in, speech out · VPS — the mature stack, and the gateways that take work off the mini</title>
-          <rect x="2260" y="1020" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="2260" y="1020" width="200" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(2266 1026) scale(0.6875)">
+          <rect x="260" y="1482" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="260" y="1482" width="180" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(266 1488) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2360" y="1050" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">audio-gateway</text>
-        <text data-detail="context" x="2360" y="1066" class="t-muted" font-size="9" text-anchor="middle">speech in, speech out</text>
+          <text data-node-label="" data-detail-anchor="" x="350" y="1512" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">audio-gateway</text>
+        <text data-detail="context" x="350" y="1528" class="t-muted" font-size="9" text-anchor="middle">speech in, speech out</text>
         </g>
 
         <g id="node-imggw" data-node-id="imggw" data-node-label="image gateway + CDN" tabindex="0" role="button" aria-label="Focus image gateway + CDN, generate, then serve, VPS — the mature stack, and the gateways that take work off the mini" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="generate, then serve" data-node-context="VPS — the mature stack, and the gateways that take work off the mini">
           <title>image gateway + CDN · generate, then serve · VPS — the mature stack, and the gateways that take work off the mini</title>
-          <rect x="2260" y="1300" width="200" height="64" rx="6" class="c-mask"/>
-          <rect x="2260" y="1300" width="200" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(2266 1306) scale(0.6875)">
+          <rect x="480" y="1482" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="480" y="1482" width="180" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(486 1488) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2360" y="1330" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image gateway + CDN</text>
-        <text data-detail="context" x="2360" y="1346" class="t-muted" font-size="9" text-anchor="middle">generate, then serve</text>
+          <text data-node-label="" data-detail-anchor="" x="570" y="1512" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image gateway + CDN</text>
+        <text data-detail="context" x="570" y="1528" class="t-muted" font-size="9" text-anchor="middle">generate, then serve</text>
         </g>
 
         <g id="node-abs" data-node-id="abs" data-node-label="Audiobookshelf" tabindex="0" role="button" aria-label="Focus Audiobookshelf, where an episode lands, HomeLab — his own container world" aria-pressed="false" data-node-kind="database" data-node-sublabel="where an episode lands" data-node-context="HomeLab — his own container world">
           <title>Audiobookshelf · where an episode lands · HomeLab — his own container world</title>
-          <rect x="2680" y="1020" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="2680" y="1020" width="190" height="64" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(2686 1026) scale(0.6875)">
+          <rect x="150" y="1596" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="150" y="1596" width="180" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(156 1602) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2775" y="1050" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Audiobookshelf</text>
-        <text data-detail="context" x="2775" y="1066" class="t-muted" font-size="9" text-anchor="middle">where an episode lands</text>
+          <text data-node-label="" data-detail-anchor="" x="240" y="1626" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Audiobookshelf</text>
+        <text data-detail="context" x="240" y="1642" class="t-muted" font-size="9" text-anchor="middle">where an episode lands</text>
         </g>
 
         <g id="node-imgshare" data-node-id="imgshare" data-node-label="image-share" tabindex="0" role="button" aria-label="Focus image-share, private shares, B2 mirror, HomeLab — his own container world" aria-pressed="false" data-node-kind="database" data-node-sublabel="private shares, B2 mirror" data-node-context="HomeLab — his own container world">
           <title>image-share · private shares, B2 mirror · HomeLab — his own container world</title>
-          <rect x="2680" y="1300" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="2680" y="1300" width="190" height="64" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(2686 1306) scale(0.6875)">
+          <rect x="370" y="1596" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="370" y="1596" width="180" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(376 1602) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2775" y="1330" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image-share</text>
-        <text data-detail="context" x="2775" y="1346" class="t-muted" font-size="9" text-anchor="middle">private shares, B2 mirror</text>
+          <text data-node-label="" data-detail-anchor="" x="460" y="1626" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">image-share</text>
+        <text data-detail="context" x="460" y="1642" class="t-muted" font-size="9" text-anchor="middle">private shares, B2 mirror</text>
         </g>
 
         <g id="node-kuma" data-node-id="kuma" data-node-label="Uptime Kuma" tabindex="0" role="button" aria-label="Focus Uptime Kuma, 31 push monitors, HomeLab — his own container world" aria-pressed="false" data-node-kind="security" data-node-sublabel="31 push monitors" data-node-context="HomeLab — his own container world">
           <title>Uptime Kuma · 31 push monitors · HomeLab — his own container world</title>
-          <rect x="2680" y="1580" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="2680" y="1580" width="190" height="64" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(2686 1586) scale(0.6875)">
+          <rect x="590" y="1596" width="180" height="64" rx="6" class="c-mask"/>
+          <rect x="590" y="1596" width="180" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(596 1602) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="2775" y="1610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Uptime Kuma</text>
-        <text data-detail="context" x="2775" y="1626" class="t-muted" font-size="9" text-anchor="middle">31 push monitors</text>
+          <text data-node-label="" data-detail-anchor="" x="680" y="1626" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Uptime Kuma</text>
+        <text data-detail="context" x="680" y="1642" class="t-muted" font-size="9" text-anchor="middle">31 push monitors</text>
         </g>
 
         <!-- Connection labels -->
         <g data-detail="context" data-edge-from="iphone" data-edge-to="slack" data-edge-label="ask, approve" data-edge-key="0">
-          <rect x="116.2" y="612" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="150" y="622" class="t-backend" font-size="8" text-anchor="middle">ask, approve</text>
+          <rect x="316.2" y="194" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="350" y="204" class="t-backend" font-size="8" text-anchor="middle">ask, approve</text>
         </g>
         <g data-detail="context" data-edge-from="macbook" data-edge-to="herdr" data-edge-label="a terminal on the mini" data-edge-key="1">
-          <rect x="504.7" y="310" width="115.6" height="14" rx="3" class="c-mask"/>
-          <text x="562.5" y="320" class="t-muted" font-size="8" text-anchor="middle">a terminal on the mini</text>
+          <rect x="674.7" y="280" width="115.6" height="14" rx="3" class="c-mask"/>
+          <text x="732.5" y="290" class="t-muted" font-size="8" text-anchor="middle">a terminal on the mini</text>
         </g>
         <g data-detail="context" data-edge-from="slack" data-edge-to="hermes" data-edge-label="socket mode" data-edge-key="2">
-          <rect x="878.6" y="192" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="910" y="202" class="t-backend" font-size="8" text-anchor="middle">socket mode</text>
+          <rect x="263.6" y="500" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="295" y="510" class="t-backend" font-size="8" text-anchor="middle">socket mode</text>
         </g>
-        <g data-detail="context" data-edge-from="hermes" data-edge-to="sideclaw" data-edge-label="dispatch: budgeted and signed" data-edge-key="3">
-          <rect x="1245.4" y="192" width="149.2" height="14" rx="3" class="c-mask"/>
-          <text x="1320" y="202" class="t-backend" font-size="8" text-anchor="middle">dispatch: budgeted and signed</text>
+        <g data-detail="context" data-edge-from="warden" data-edge-to="sideclaw" data-edge-label="dispatch: budgeted and signed" data-edge-key="3">
+          <rect x="385.4" y="762" width="149.2" height="14" rx="3" class="c-mask"/>
+          <text x="460" y="772" class="t-backend" font-size="8" text-anchor="middle">dispatch: budgeted and signed</text>
         </g>
         <g data-detail="context" data-edge-from="sideclaw" data-edge-to="workers" data-edge-label="a worktree per tier" data-edge-key="4">
-          <rect x="1679.4" y="192" width="101.2" height="14" rx="3" class="c-mask"/>
-          <text x="1730" y="202" class="t-backend" font-size="8" text-anchor="middle">a worktree per tier</text>
+          <rect x="332.4" y="947" width="101.2" height="14" rx="3" class="c-mask"/>
+          <text x="383" y="957" class="t-backend" font-size="8" text-anchor="middle">a worktree per tier</text>
         </g>
         <g data-detail="context" data-edge-from="workers" data-edge-to="sideclaw" data-edge-label="one verdict" data-edge-key="5">
-          <rect x="1704.6" y="248" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="1736" y="258" class="t-messagebus" font-size="8" text-anchor="middle">one verdict</text>
+          <rect x="505.6" y="933" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="537" y="943" class="t-messagebus" font-size="8" text-anchor="middle">one verdict</text>
         </g>
         <g data-detail="context" data-edge-from="herdr" data-edge-to="sideclaw" data-edge-label="pane and agent state" data-edge-key="6">
-          <rect x="1597" y="440" width="106" height="14" rx="3" class="c-mask"/>
-          <text x="1650" y="450" class="t-muted" font-size="8" text-anchor="middle">pane and agent state</text>
+          <rect x="517" y="930" width="106" height="14" rx="3" class="c-mask"/>
+          <text x="570" y="940" class="t-muted" font-size="8" text-anchor="middle">pane and agent state</text>
         </g>
         <g data-detail="context" data-edge-from="sideclaw" data-edge-to="hermes" data-edge-label="overview, human queue" data-edge-key="7">
-          <rect x="1264.6" y="248" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="1320" y="258" class="t-messagebus" font-size="8" text-anchor="middle">overview, human queue</text>
+          <rect x="294.6" y="840" width="110.8" height="14" rx="3" class="c-mask"/>
+          <text x="350" y="850" class="t-messagebus" font-size="8" text-anchor="middle">overview, human queue</text>
         </g>
         <g data-detail="context" data-edge-from="hermes" data-edge-to="slack" data-edge-label="digest, briefing, triage" data-edge-key="8">
-          <rect x="843.9" y="248" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="906.5" y="258" class="t-backend" font-size="8" text-anchor="middle">digest, briefing, triage</text>
+          <rect x="302.4" y="540" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="365" y="550" class="t-backend" font-size="8" text-anchor="middle">digest, briefing, triage</text>
         </g>
         <g data-detail="context" data-edge-from="herdr" data-edge-to="collie" data-edge-label="the same panes" data-edge-key="9">
-          <rect x="871.4" y="472" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="910" y="482" class="t-muted" font-size="8" text-anchor="middle">the same panes</text>
+          <rect x="586.4" y="560" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="625" y="570" class="t-muted" font-size="8" text-anchor="middle">the same panes</text>
         </g>
         <g data-detail="context" data-edge-from="sideclaw" data-edge-to="argoapi" data-edge-label="overview push" data-edge-key="10">
-          <rect x="1976.3" y="30" width="72.4" height="14" rx="3" class="c-mask"/>
-          <text x="2012.5" y="40" class="t-muted" font-size="8" text-anchor="middle">overview push</text>
+          <rect x="706.3" y="955" width="72.4" height="14" rx="3" class="c-mask"/>
+          <text x="742.5" y="965" class="t-muted" font-size="8" text-anchor="middle">overview push</text>
         </g>
         <g data-detail="context" data-edge-from="hermes" data-edge-to="vault" data-edge-label="narratives" data-edge-key="11">
-          <rect x="1291" y="372" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="1320" y="382" class="t-muted" font-size="8" text-anchor="middle">narratives</text>
+          <rect x="171" y="932" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="200" y="942" class="t-muted" font-size="8" text-anchor="middle">narratives</text>
         </g>
         <g data-detail="context" data-edge-from="vault" data-edge-to="brainweb" data-edge-label="rebuilt on commit" data-edge-key="12">
-          <rect x="954.2" y="744" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="1000" y="754" class="t-muted" font-size="8" text-anchor="middle">rebuilt on commit</text>
+          <rect x="42.2" y="755" width="91.6" height="14" rx="3" class="c-mask"/>
+          <text x="88" y="765" class="t-muted" font-size="8" text-anchor="middle">rebuilt on commit</text>
         </g>
         <g data-detail="context" data-edge-from="workers" data-edge-to="research" data-edge-label="research" data-edge-key="13">
-          <rect x="2125.8" y="472" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="2150" y="482" class="t-muted" font-size="8" text-anchor="middle">research</text>
+          <rect x="325.8" y="1160" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="350" y="1170" class="t-muted" font-size="8" text-anchor="middle">research</text>
         </g>
         <g data-detail="context" data-edge-from="workers" data-edge-to="imggw" data-edge-label="generate" data-edge-key="14">
-          <rect x="2040.8" y="130" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="2065" y="140" class="t-muted" font-size="8" text-anchor="middle">generate</text>
+          <rect x="490.8" y="1200" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="515" y="1210" class="t-muted" font-size="8" text-anchor="middle">generate</text>
         </g>
         <g data-detail="context" data-edge-from="imggw" data-edge-to="imgshare" data-edge-label="private by default" data-edge-key="15">
-          <rect x="2521.8" y="1312" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="2570" y="1322" class="t-muted" font-size="8" text-anchor="middle">private by default</text>
+          <rect x="466.8" y="1545" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="515" y="1555" class="t-muted" font-size="8" text-anchor="middle">private by default</text>
         </g>
         <g data-detail="context" data-edge-from="audio" data-edge-to="abs" data-edge-label="episode and chapters" data-edge-key="16">
-          <rect x="2517" y="1032" width="106" height="14" rx="3" class="c-mask"/>
-          <text x="2570" y="1042" class="t-muted" font-size="8" text-anchor="middle">episode and chapters</text>
+          <rect x="242" y="1560" width="106" height="14" rx="3" class="c-mask"/>
+          <text x="295" y="1570" class="t-muted" font-size="8" text-anchor="middle">episode and chapters</text>
         </g>
         <g data-detail="context" data-edge-from="devhost" data-edge-to="kuma" data-edge-label="push, never probed" data-edge-key="17">
-          <rect x="2309.3" y="1700" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="2357.5" y="1710" class="t-security" font-size="8" text-anchor="middle">push, never probed</text>
+          <rect x="581.8" y="1280" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="630" y="1290" class="t-security" font-size="8" text-anchor="middle">push, never probed</text>
         </g>
         <g data-detail="context" data-edge-from="kuma" data-edge-to="slack" data-edge-label="down and up" data-edge-key="18">
-          <rect x="2868.6" y="791" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="2900" y="801" class="t-security" font-size="8" text-anchor="middle">down and up</text>
+          <rect x="311.1" y="1730" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="342.5" y="1740" class="t-security" font-size="8" text-anchor="middle">down and up</text>
         </g>
         <g data-detail="context" data-edge-from="argoapi" data-edge-to="otel" data-edge-label="traces" data-edge-key="19">
-          <rect x="2340.6" y="248" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="2360" y="258" class="t-muted" font-size="8" text-anchor="middle">traces</text>
+          <rect x="440.6" y="1410" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="460" y="1420" class="t-muted" font-size="8" text-anchor="middle">traces</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
         <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="MacBook and iPhone — the UI layer he builds from">
-          <rect data-graph-role="structural-frame-label-mask" x="11.290308180645127" y="429" width="567.4193836387097" height="27" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="15.290308180645127" y="452.35483970967744" class="t-cloud" font-size="19.35483970967742" font-weight="600">MacBook and iPhone — the UI layer he builds from</text>
+          <rect data-graph-role="structural-frame-label-mask" x="234" y="100" width="269.2" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="238" y="113" class="t-cloud" font-size="9" font-weight="600">MacBook and iPhone — the UI layer he builds from</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Where he sees what happened, and answers">
-          <rect data-graph-role="structural-frame-label-mask" x="467.74192348387095" y="149" width="474.5161530322581" height="27" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="471.74192348387095" y="172.35483970967744" class="t-cloud" font-size="19.35483970967742" font-weight="600">Where he sees what happened, and answers</text>
+          <rect data-graph-role="structural-frame-label-mask" x="14" y="384" width="226" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="18" y="397" class="t-cloud" font-size="9" font-weight="600">Where he sees what happened, and answers</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="2" data-composition-frame-kind="region" data-composition-frame-label="Mac mini — the always-on dev host, where agents run">
-          <rect data-graph-role="structural-frame-label-mask" x="990" y="149" width="602.2580951161291" height="27" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="994" y="172.35483970967744" class="t-cloud" font-size="19.35483970967742" font-weight="600">Mac mini — the always-on dev host, where agents run</text>
+          <rect data-graph-role="structural-frame-label-mask" x="120" y="668" width="285.4" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="124" y="681" class="t-cloud" font-size="9" font-weight="600">Mac mini — the always-on dev host, where agents run</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="3" data-composition-frame-kind="region" data-composition-frame-label="VPS — the mature stack, and the gateways that take work off the mini">
-          <rect data-graph-role="structural-frame-label-mask" x="1960.1612699225807" y="149" width="799.6774601548387" height="27" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="1964.1612699225807" y="172.35483970967744" class="t-cloud" font-size="19.35483970967742" font-weight="600">VPS — the mature stack, and the gateways that take work off the mini</text>
+          <rect data-graph-role="structural-frame-label-mask" x="124" y="1292" width="377.2" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="128" y="1305" class="t-cloud" font-size="9" font-weight="600">VPS — the mature stack, and the gateways that take work off the mini</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="4" data-composition-frame-kind="region" data-composition-frame-label="HomeLab — his own container world">
-          <rect data-graph-role="structural-frame-label-mask" x="2578.3870868741933" y="989" width="393.22582625161294" height="27" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="2582.3870868741933" y="1012.3548397096774" class="t-cloud" font-size="19.35483970967742" font-weight="600">HomeLab — his own container world</text>
+          <rect data-graph-role="structural-frame-label-mask" x="124" y="1576" width="188.2" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="128" y="1589" class="t-cloud" font-size="9" font-weight="600">HomeLab — his own container world</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="1784" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="1804" data-legend-width="83">
-            <rect x="40" y="1795" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="1804" class="t-muted" font-size="10" font-weight="500">Frontend</text>
+          <text x="40" y="1764" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="1784" data-legend-width="83">
+            <rect x="40" y="1775" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="1784" class="t-muted" font-size="10" font-weight="500">Frontend</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="145" data-legend-baseline="1804" data-legend-width="78">
-            <rect x="145" y="1795" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="167" y="1804" class="t-muted" font-size="10" font-weight="500">Backend</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="145" data-legend-baseline="1784" data-legend-width="78">
+            <rect x="145" y="1775" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="167" y="1784" class="t-muted" font-size="10" font-weight="500">Backend</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Database" data-legend-x="245" data-legend-baseline="1804" data-legend-width="83">
-            <rect x="245" y="1795" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="267" y="1804" class="t-muted" font-size="10" font-weight="500">Database</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Database" data-legend-x="245" data-legend-baseline="1784" data-legend-width="83">
+            <rect x="245" y="1775" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="267" y="1784" class="t-muted" font-size="10" font-weight="500">Database</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="1804" data-legend-width="68">
-            <rect x="350" y="1795" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="372" y="1804" class="t-muted" font-size="10" font-weight="500">Cloud</text>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="1784" data-legend-width="68">
+            <rect x="350" y="1775" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="372" y="1784" class="t-muted" font-size="10" font-weight="500">Cloud</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Security" data-legend-x="440" data-legend-baseline="1804" data-legend-width="83">
-            <rect x="440" y="1795" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="462" y="1804" class="t-muted" font-size="10" font-weight="500">Security</text>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Security" data-legend-x="440" data-legend-baseline="1784" data-legend-width="83">
+            <rect x="440" y="1775" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+            <text x="462" y="1784" class="t-muted" font-size="10" font-weight="500">Security</text>
           </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="External" data-legend-x="545" data-legend-baseline="1804" data-legend-width="83">
-            <rect x="545" y="1795" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="567" y="1804" class="t-muted" font-size="10" font-weight="500">External</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="External" data-legend-x="545" data-legend-baseline="1784" data-legend-width="83">
+            <rect x="545" y="1775" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="567" y="1784" class="t-muted" font-size="10" font-weight="500">External</text>
           </g>
         </g>
       </svg>

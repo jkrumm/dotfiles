@@ -202,6 +202,7 @@ substitutes for another.** `claude --bg` rides on top of all three.
 | A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|bg\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | One bounded episode, either machine | `agent-dispatch bg <repo> '<task>'` · `agent-dispatch work <repo>` |
+| Unattended work tracked to an outcome | `warden run <repo> '<brief>'` — the lifecycle lane; see warden/README.md |
 | A long job as a self-continuing chain | `rd wave <repo> '<prompt>'` — a fresh solo pane per wave; `/wave` owns the contract and the green gate |
 | Work that must not die | `claude --bg '<prompt>'` — reparents to PID 1, survives ssh, herdr and lid-close. Conflicts with `-p`. |
 | What every agent is doing | `make agent-overview` — herdr workspace `overview` watching sideclaw `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
@@ -213,6 +214,9 @@ repo → local `claude -p` on the IU Keychain creds (`claude-sonnet-5[1m]`).
 `--dry-run` prints the route; `make agent-dispatch-smoke` runs a read-only task at
 `dispatch-scratch`. It **refuses to nest inside an interactive Claude Code
 session** (`CLAUDECODE` set → prints the brief, exit 1) — use a subagent instead.
+Three lanes cover placing work elsewhere: `warden run` for unattended work tracked
+to an outcome, `mcp__sideclaw__dispatch` for one bounded question with a typed
+verdict, `agent-dispatch bg`/`work` for a colleague you steer.
 
 Four facts to hold:
 
