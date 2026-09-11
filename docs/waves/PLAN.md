@@ -383,31 +383,59 @@ choices); a `node astro dev` (`sy-serendipity`) listens on `[::1]:7734` while
 is 157/157 (was 148); 14 suites under `make test`; the 165 bash cases became
 53 CLI + 108 + 63 unit cases, recorded honestly in STATE §54.
 
-## Wave 6 — every origin opens an item; Hermes is the door (repos: `warden`, `hermes-agent`, `sideclaw`)   <!-- status: active -->
+## Wave 6 — every origin opens an item; Hermes is the door (repos: `warden`, `hermes-agent`, `sideclaw`)   <!-- status: done -->
 Shape note § 2 "every origin opens an item", § 5 items 2, 3, 5, 8.
-- [ ] 6.1 `warden run <repo> '<brief>' [--tier]` (the `human` origin) and the
+- [x] 6.1 `warden run <repo> '<brief>' [--tier]` (the `human` origin) and the
       `warden:go` label on a GitHub issue (`github_issue` origin, FLOWS.md flow 3)
       create items that ride the same lifecycle as an alert. Third-party issues
       stay `investigate`-only.
-- [ ] 6.2 Hermes's `claude-dispatch` skill calls the warden CLI (`--wait` keeps
+- [x] 6.2 Hermes's `claude-dispatch` skill calls the warden CLI (`--wait` keeps
       the in-turn `investigate` answer); the dispatch-approval plugin's replay
       path calls the CLI; `SOUL.md:41` says Hermes narrates and answers while
       Warden triages, decides and dispatches (finding 15); `hermes-agent/CLAUDE.md`
       names Warden in its opening section.
-- [ ] 6.3 Hermes reads Warden (finding 16): a read-only `warden` skill in
+- [x] 6.3 Hermes reads Warden (finding 16): a read-only `warden` skill in
       `HERMES_SKILLS` on `/health`, `/metrics`, `/board`, `/items/:id` (add the
       two projections to `warden-api` if missing); the morning briefing reads the
       ledger instead of a second `gh search`; `warden` joins the
       `project-narratives` project set.
-- [ ] 6.4 One quality vocabulary for humans and machines: sideclaw `review`
+- [x] 6.4 One quality vocabulary for humans and machines: sideclaw `review`
       accepts a branch or PR ref, and Warden's step-7 validation reads its typed
       `outcome` (`clean` → confirmed, `blocking` → blocked, `needs-human` →
       `needs_human`) instead of marker-matching an `investigate` verdict; the
       implement handler runs sideclaw `check` in the worktree before push, and a
       red check is `nextAction: human`, never a PR.
-**Left behind:**
+**Left behind:** Everything green and live, nothing pushed. `warden/STATE.md`
+§55 is the record with timestamps. Commits: sideclaw `e9b6584` (review by
+`pr`/`branch`, check before push, dispatch schema 2, review schema 1);
+hermes-agent `11bb095` (SOUL, claude-dispatch v3 with `run`, the read-only
+`warden` skill linked into `~/.hermes/skills`, briefing reads `/board`,
+capture's opt-in label); warden — schema 8, `warden run`, the `warden:go`
+poll, `/board` + `/items/:id`, typed outcomes, review-based validation (`34ac048`). Proven by execution, not diff: `checks_failed` on a
+scratch implement (branch, no PR, `nextAction: human`); review of rollhook#23
+by `pr`; `warden run --wait` answering in 21 s and closing as `answered:`; a
+labelled issue (`dispatch-scratch#9`) becoming an item, a comment-back, an
+auto-implement with the check, PR #10, a `clean` review → `confirmed`, and the
+merge gate refusing on scope. Nine defects found only by executing (STATE
+§55), all fixed. **Owner, before the `github_issue` origin is real under the
+LaunchAgent:** the PAT at `op://mini/github/token` has no Issues permission
+(403 on issues, works on pulls) — grant Issues read & write on github.com;
+until then the search API answers it with 200 and zero hits, so no label is
+picked up and nothing is logged (silently dead). Also owner: the
+4.3 "human types in Slack" acceptance. For Wave 7: the `propose_mappings`
+503/403 on the cheap route recurs every tick (model choices); `/health` reads
+`ok: false` whenever a poller is stale, which is right, but Argo has no board
+yet. Wave 8 docs: hermes-agent's `docs/guards.md`, `docs/symlinks-and-agents.md`,
+`docs/agents-overview.md`, `skills/agents/SKILL.md` still say `hermes-cc.sh`;
+`docs/symlinks-and-agents.md` still claims `config/dispatch-repos.json` lives
+in hermes-agent and an 18-entry skill roster (it is 20). Declined with reasons
+in STATE §55: `lifecycle/origins.py` extraction, `runReview` refactor. Note for
+whoever runs the loop by hand: `env -u CLAUDECODE -u CLAUDE_CODE_SESSION -u
+CLAUDE_SESSION_ID -u CLAUDE_ENTRYPOINT` or the recursion guard refuses every
+dispatch; `sideclaw`'s MCP `review` tool only sees `pr`/`branch` after
+`RESTART_MCP=1 make reload` or a fresh session (HTTP callers see them now).
 
-## Wave 7 — the surfaces: Argo, herdr, Slack, and the model choices (repos: `argo`, `warden`, `sideclaw`, `hermes-agent`, `dotfiles`, `brain`)   <!-- status: pending -->
+## Wave 7 — the surfaces: Argo, herdr, Slack, and the model choices (repos: `argo`, `warden`, `sideclaw`, `hermes-agent`, `dotfiles`, `brain`)   <!-- status: active -->
 How the owner proves, sees and steers it: in herdr on his own, in Hermes, in Argo.
 - [ ] 7.1 Argo — a Warden board: items by state, one timeline per item (brief,
       verdict, PR, validation outcome, operation receipts, probe result), the six
