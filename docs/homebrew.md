@@ -45,13 +45,24 @@ argument, which is the whole defence in npm, buys almost nothing here — while
 sitting on unpatched `libssh2`/`libarchive`/`sqlite` point releases costs
 something real.
 
-**The actual hazard is silent config revert, and it is two packages.**
-Each has local machinery bolted on top that an upgrade destroys with no error:
+**The actual hazard is silent config revert.**
+Each of these has local machinery bolted on top that an upgrade destroys with
+no error:
 
 | Package | What an upgrade breaks | Visible after |
 |-|-|-|
 | `caddy` | replaces the xcaddy-built binary; `dns.providers.cloudflare` vanishes | ~60 days, when the wildcard cert fails to *renew* |
 | `colima` | regenerates the plist, restoring the inverted `KeepAlive {SuccessfulExit=true}` and the direct `colima start -f` | only after a *dirty* shutdown, when the failed start is never retried — i.e. the power cut this setup exists to survive |
+| `herdr` | regenerates the plist and strips the session-leader wrapper | the next `desk`, as a "restart the remote server now?" prompt that reads like a herdr quirk |
+| `1password-cli` | moves op to a new versioned Caskroom path, orphaning the TCC grants keyed on the old one | the next `make secrets-seed`, as a macOS "op möchte auf Daten aus anderen Apps zugreifen" dialog blocking the reseal |
+
+The op row is the only one whose fix is **not** a make target: re-add
+`/opt/homebrew/Caskroom/1password-cli/<ver>/op` to Full Disk Access by hand
+(`open -R` the path, drag it into the pane). FDA supersedes the
+`SystemPolicyAppData` check op's desktop-app handshake trips, so one grant
+covers it — and the assertion reports *unassertable* rather than *missing*
+when it cannot read the TCC databases, which is what happens whenever the
+upgrade is driven from an agent session instead of a terminal.
 
 Homebrew 6 also **renames** what it regenerates — `homebrew.mxcl.<name>` →
 `sh.brew.<name>`, written on the next `brew services start|restart` (the old file
@@ -80,7 +91,7 @@ machine is protected before `caddy-dns-build` has run even once.
 
 | Command | Does |
 |-|-|
-| `make brew-upgrade` | Converge pins, upgrade outdated **homebrew/core formulae**, then assert both invariants |
+| `make brew-upgrade` | Converge pins, upgrade outdated **homebrew/core formulae**, then assert the invariants above |
 | `make brew-upgrade-dry` | True no-op preview — reports what *would* be pinned/upgraded and touches nothing |
 
 Casks and third-party-tap formulae are **reported, never auto-upgraded** —

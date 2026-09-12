@@ -340,6 +340,57 @@ else
   echo "  · herdr brew service not registered here — skipping boot-path assertion"
 fi
 
+# op, the same silent-revert class with no plist in it. macOS records a TCC
+# grant against the BINARY PATH, and 1password-cli is a cask, so that path
+# carries the version (…/Caskroom/1password-cli/<ver>/op). An upgrade moves the
+# binary out from under the grant, nothing announces it, and the next
+# `make secrets-seed` simply puts "op möchte auf Daten aus anderen Apps
+# zugreifen" back on screen — a dialog a present human has to click before the
+# reseal proceeds, on top of the biometric prompt. This script never causes it
+# (op is a cask, reported not upgraded); `/upgrade-deps` does, which is why the
+# check belongs on the path that reports casks. Observed 2026-09-12, macOS
+# 26.6.2 with op 2.38.1.
+#
+# TWO services, and either one covering the CURRENT path is enough:
+# SystemPolicyAllFiles (Full Disk Access) supersedes the SystemPolicyAppData
+# check that op's desktop-app handshake actually trips. They live in different
+# databases — FDA in the system one, AppData in the user's — so both are asked.
+# auth_value: 0 denied, 2 allowed (FDA), 5 allowed (AppData, macOS 26).
+#
+# Reading either db itself needs FDA for THIS process. From a Ghostty shell it
+# holds; from inside a Claude Code chain it does not, because claude's TCC
+# client is its per-version directory (~/.local/share/claude/versions/<ver>)
+# and every auto-update mints a fresh one no grant covers. An unreadable db is
+# therefore reported as unassertable, never as a missing grant — the opposite
+# would fire this alert on every agent-run upgrade.
+tcc_allows() {  # $1=db  $2=service  $3=client path ; rc 0 granted, 1 absent, 2 db unreadable
+  local rows
+  rows=$(sqlite3 "$1" "select auth_value||'|'||client from access where service='$2';" 2>/dev/null) || return 2
+  grep -qxF -e "2|$3" -e "5|$3" <<<"$rows"
+}
+
+if [[ "$BACKEND" != "op" ]]; then
+  echo "  · op: not the present-human machine (backend=${BACKEND:-unset}) — skipping TCC assertion"
+elif ! command -v op >/dev/null 2>&1; then
+  echo "  · op: 1password-cli not installed here — skipping TCC assertion"
+else
+  op_real=$(readlink -f "$(command -v op)")
+  op_tcc=0
+  tcc_allows "/Library/Application Support/com.apple.TCC/TCC.db" \
+    kTCCServiceSystemPolicyAllFiles "$op_real" || op_tcc=$?
+  if (( op_tcc == 1 )); then
+    op_tcc=0
+    tcc_allows "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+      kTCCServiceSystemPolicyAppData "$op_real" || op_tcc=$?
+  fi
+  case "$op_tcc" in
+    0) echo "  ✓ op: TCC grant covers $op_real" ;;
+    2) echo "  · op: TCC db unreadable from here (this process has no Full Disk Access) — re-run from a plain terminal to assert" ;;
+    *) echo "  ✗ op: no TCC grant for $op_real — the next secrets-seed re-prompts for app data (fix: open 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles', then open -R '$op_real' and drag it in)"
+       assertion_failed=1 ;;
+  esac
+fi
+
 pinned_after=$(brew list --pinned 2>/dev/null) || true
 for f in "${HELD[@]}"; do
   brew list --formula --versions "$f" >/dev/null 2>&1 || continue

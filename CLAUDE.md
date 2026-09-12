@@ -337,10 +337,11 @@ the whole install), plus `NO_INSECURE_REDIRECT` / `NO_ANALYTICS`. Auto-*update*
 **Auto-upgrade stays off because of silent config revert, not npm-style supply
 chain** — a homebrew/core formula is a reviewed PR built by Homebrew's CI.
 `make brew-upgrade` asserts rather than assumes: caddy's DNS module, colima's
-plist and herdr's setsid wrapper each silently revert on an unrelated brew
-upgrade, invisible until the failure mode it caused (cert renewal, a dirty
-shutdown, the next `desk`). **`caddy` is the only pin, and a pin needs its
-dependencies pinned too or it rots** (mosh is why that rule is written down —
+plist, herdr's setsid wrapper and op's TCC grant each silently revert on an
+unrelated brew upgrade, invisible until the failure mode it caused (cert
+renewal, a dirty shutdown, the next `desk`, a macOS dialog mid-reseal).
+**`caddy` is the only pin, and a pin needs its dependencies pinned too or it
+rots** (mosh is why that rule is written down —
 deleted, not re-pinned). `colima` is deliberately unpinned (pinning the Docker
 runtime means an unpatched hypervisor) and asserted + health-checked instead.
 Casks and third-party taps are reported, never auto-upgraded — route them
@@ -420,6 +421,16 @@ resolves every ref through 1Password in one biometric pass, and reseals.
 - **1Password authorizes per calling binary** — the first `op` call from a new
   parent (`make`, a LaunchAgent) raises a one-time dialog, so "it works when I run
   it by hand" proves less than it looks like.
+- **The second dialog is macOS, not 1Password** — *"op möchte auf Daten aus
+  anderen Apps zugreifen"* is TCC `SystemPolicyAppData`, raised because op reads
+  the desktop app's group container to handshake. macOS keys that grant on the
+  BINARY PATH, and the cask path carries the version
+  (`…/Caskroom/1password-cli/<ver>/op`), so **every `brew upgrade
+  1password-cli` drops it** and the dialog returns mid-reseal. Held by a Full
+  Disk Access grant on that exact path (FDA supersedes the AppData check),
+  asserted by `make brew-upgrade`. A grant earned through a Claude Code chain
+  never sticks: claude's TCC client is `~/.local/share/claude/versions/<ver>`,
+  a fresh client on every auto-update — run the seed from a plain terminal.
 - **"mini unreachable" usually means "1Password is locked"** — the same agent
   serves `ssh mini`, and a locked app fails it as `Permission denied (publickey)`.
 - **The login Keychain is not a headless credential store and it fails quietly** —
