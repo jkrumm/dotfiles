@@ -372,8 +372,9 @@ Claude Code at an OpenAI model through a gateway. `dotfiles/CLAUDE.md` §Codex.
 - **Global**: `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this file).
 - **Per-project**: `<repo>/CLAUDE.md` + `<repo>/.claude/{rules,skills}/`.
 - **Rules**: `~/.claude/rules/` ← `dotfiles/rules/`. No `paths:` → always on
-  (attribution, code-style, commit-conventions, dependency-hygiene,
-  docker-makefile, formatting, research-first, security, typescript); with
+  (agent-limits, attribution, code-style, commit-conventions,
+  dependency-hygiene, docker-makefile, formatting, research-first, security,
+  typescript); with
   `paths:` → lazy (dockerfile, elysia, makefile-conventions,
   react-best-practices, tanstack-{query,router,start}, visx-charts).
 - **Output style**: `~/.claude/output-styles/Direct.md` (via `outputStyle` in

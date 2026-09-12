@@ -25,8 +25,8 @@ whichever backend/model sideclaw `GET /api/routing` assigns the tool (the result
 `backend` field says which ran; on the IU route that is non-EU — treat prod log
 content accordingly) via `scripts/query.py`. Only
 the structured result crosses back — raw output stays in the worker. Query can
-take 1–6 min under load; the tool's 8-min timeout absorbs most of it, retry on a
-hard timeout.
+take 1–6 min under load; the worker has no fixed timeout any more (idle
+watchdog only), so it waits out the load rather than needing a retry.
 
 **(b) the ClickStack MCP tool set** (30 tools, prefixed `clickstack_`), reached
 through `hdx.py` (default) or the opt-in registration. Server-side tool-selection

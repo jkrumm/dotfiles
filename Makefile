@@ -1280,13 +1280,19 @@ _setup-browser:
 	@claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
+# timeout: 1800000 (30 min) on the mcpServers.sideclaw entry, not the plain
+# `claude mcp add` — that command has no --timeout flag, so this is add-json
+# with the same JSON shape a stdio server would otherwise get. Without it the
+# client falls back to a 60s default per tool call, which hard-aborts any
+# job_wait({maxWaitMs}) above 60000 even though sideclaw's own worker will
+# happily run up to MAX_WAIT_MS (29 min) — see CLAUDE.md's Async-job contract.
 .PHONY: _setup-sideclaw-mcp
 _setup-sideclaw-mcp:
 	@echo "  sideclaw MCP..."
 	@if [ -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
 		claude mcp remove sideclaw --scope user 2>/dev/null || true; \
-		claude mcp add sideclaw --scope user -- bun run $(SOURCEROOT)/sideclaw/server/mcp.ts; \
-		echo "    ✓ sideclaw MCP registered (check, review, ship tools)"; \
+		claude mcp add-json sideclaw --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/sideclaw/server/mcp.ts"],"timeout":1800000}'; \
+		echo "    ✓ sideclaw MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
 	else \
 		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
 	fi

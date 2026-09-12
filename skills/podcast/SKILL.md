@@ -20,7 +20,7 @@ its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
 paints the cover, and Audiobookshelf's upload + scan API files it as an episode
 of a podcast (show) in the `Podcasts` library. The finished transcript is also
 written back into the brain under `Areas/Podcasts/`. It is an **async job**:
-submit → poll → fetch. Budget 15–25 min of wall-clock for a 20-minute episode
+submit → poll → fetch. Expect 15–25 min of wall-clock for a 20-minute episode
 and roughly 5–6 USD (≈2 USD ElevenLabs, the rest writer/reviewer/research
 tokens).
 
