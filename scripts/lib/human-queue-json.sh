@@ -87,3 +87,14 @@ json_field() {
 printable() {
   printf '%s' "$1" | LC_ALL=C tr -d '\000-\010\013\014\016-\037\177'
 }
+
+# A request id is always <date>T<time>-<RANDOM> from ask-human.sh. Shared by
+# both scripts: human-queue.sh validates ids that arrive FROM the mini (the
+# design's stated adversary) before embedding them in a remote command
+# STRING; ask-human.sh validates its own `push <id>` argument before using it
+# to build a local queue path. Extracted here rather than defined twice —
+# same rationale as json_escape/json_field/printable above. Callers must
+# already define `die()`.
+validate_id() {
+  [[ "$1" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] || die "invalid request id: $1"
+}

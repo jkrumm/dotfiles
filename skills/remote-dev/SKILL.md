@@ -115,15 +115,21 @@ If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 ## human-queue — the present-human channel
 
 ```bash
-ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>]   # on the mini
+ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--push]  # on the mini
+ask-human.sh push <id>    # trigger the dialog for an already-enqueued request
 make human-queue          # walk pending requests (run/deny/skip each), on the MacBook
 make human-queue-count    # just the count, on the MacBook
 ```
 
-Draining happens only on the MacBook and needs a typed `yes` on a real TTY —
-there is no non-interactive path. `--wait` polls and exits 0/1/2/3 for
+Two ways a request reaches a human: the MacBook drains on its own schedule
+(`make human-queue`, typed `yes` on a real TTY, no non-interactive path), or
+the mini triggers it right away with `--push` — `ssh iumac` runs
+`human-queue.sh gui-run` there, showing the exact string in a native dialog
+that only executes on a click. Still no path that skips a present human;
+`--push` just moves *when* they see it. `--wait` polls and exits 0/1/2/3 for
 done/denied/failed/timeout; default 0 (return at once, median resolution ~7
-days). Full model: `dotfiles/docs/remote-dev.md` → *human-queue*.
+days) — `--push` takes precedence over `--wait` and resolves synchronously.
+Full model: `dotfiles/docs/remote-dev.md` → *human-queue*.
 
 ## Monitoring and the maintenance round
 

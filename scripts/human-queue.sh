@@ -12,21 +12,29 @@ set -euo pipefail
 # (`ControlMaster`'d `Host mini`); no new credential, no inbound door opened on
 # the MacBook.
 #
-# The important property is in `run`: the mini only ever *proposes* a command
-# string. This script prints it (control bytes stripped for display, see
-# print_req/printable — a raw ESC must never be able to make the terminal show
-# something other than what would run), requires a typed 'yes' on a real TTY,
-# and only then executes the UNMODIFIED string locally with the human's full
-# privileges. A compromised or misbehaving mini therefore gets a string in
-# front of a human, never a shell — there is no non-interactive path to `run`
-# at all.
+# The important property is in `run` (and now `gui-run`, below): the mini only
+# ever *proposes* a command string. This script prints it — or, for `gui-run`,
+# shows it in a native dialog (control bytes stripped for display either way,
+# see print_req/printable — a raw ESC must never be able to make the shown text
+# differ from what would run) — and requires an explicit human act before
+# anything executes: a typed 'yes' on a real TTY for `run`, or a clicked "Run"
+# button in that dialog for `gui-run`. Only then does it execute the UNMODIFIED
+# string locally with the human's full privileges. There is no path that skips
+# the human: a compromised or misbehaving mini can put a string in front of a
+# human, never open a shell on its own. The dialog is a second gate next to the
+# typed-yes TTY gate, not a bypass of it — it exists because the ssh key the
+# mini already holds (`~/.ssh/id_ed25519_iumac`, see docs/remote-dev.md → *mini
+# → iumac*) already lets it run arbitrary commands non-interactively on this
+# machine; `gui-run` is what turns that reach into something a present human
+# still has to approve, one request at a time, by reading the exact string.
 #
 # No LaunchAgent drains this automatically, and that is deliberate, not an
 # oversight: the machine reaching the mini is the human's own MacBook, and the
 # 1Password SSH agent behind that ssh hop is per-use biometric — a poller would
 # mean a Touch ID prompt firing on its own schedule, unattended, forever.
-# Draining is something the human does (`make human-queue`), not something that
-# runs.
+# Draining is something the human does (`make human-queue`) or triggers
+# (`ask-human.sh ask … --push` from the mini, landing as a dialog here), not
+# something that runs unattended.
 
 HOST="${HUMAN_QUEUE_HOST:-mini}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8)
@@ -65,16 +73,14 @@ have_tty() {
   { : </dev/tty; } 2>/dev/null
 }
 
-# A request id is always <date>T<time>-<RANDOM> from ask-human.sh. Every
-# subcommand that embeds $id into a remote command STRING (not piped as data)
-# validates it first — the id otherwise flows unescaped into a string that a
-# remote shell parses, and a request id is attacker-influenced input (it names
-# whatever an agent on the mini chose to enqueue).
-validate_id() {
-  [[ "$1" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] || die "invalid request id: $1"
-}
+# Every subcommand that embeds $id into a remote command STRING (not piped as
+# data) validates it first — the id otherwise flows unescaped into a string
+# that a remote shell parses, and a request id is attacker-influenced input
+# (it names whatever an agent on the mini chose to enqueue). validate_id
+# itself lives in lib/human-queue-json.sh (sourced below), shared with
+# ask-human.sh.
 
-# json_escape, json_field, printable — shared with ask-human.sh. Both scripts
+# json_escape, json_field, printable, validate_id — shared with ask-human.sh. Both scripts
 # hold a full `dotfiles` checkout regardless of which machine they run on, so
 # there is nothing stopping either from sourcing the other's helpers.
 # shellcheck source=lib/human-queue-json.sh
@@ -212,6 +218,23 @@ cmd_show() {
   print_req "$req_json"
 }
 
+# The result payload shape, shared by write_result (ssh'd back to the mini
+# after an interactive `run`) and gui-run's own stdout (read by ask-human.sh's
+# `push`, running ON the mini, which persists it locally with no extra hop).
+# Both callers already validate the id before reaching here.
+build_result_json() {
+  local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5"
+  local exit_json="null"
+  [[ -n "$exit_code" ]] && exit_json="$exit_code"
+  printf '{'
+  printf '"id":%s,' "$(json_escape "$id")"
+  printf '"status":%s,' "$(json_escape "$status")"
+  printf '"exit":%s,' "$exit_json"
+  printf '"ran_at":%s,' "$(json_escape "$ran_at")"
+  printf '"output_tail":%s' "$(json_escape "$output_tail")"
+  printf '}\n'
+}
+
 # Pipes the JSON body to `ssh … 'cat > …'` over stdin — content never touches
 # the remote command STRING, which is the whole point: a request's own
 # output_tail can contain arbitrary bytes from a command an agent proposed, and
@@ -220,18 +243,8 @@ cmd_show() {
 write_result() {
   local id="$1" status="$2" exit_code="$3" ran_at="$4" output_tail="$5"
   validate_id "$id"
-  local exit_json="null"
-  [[ -n "$exit_code" ]] && exit_json="$exit_code"
   local payload
-  payload=$(
-    printf '{'
-    printf '"id":%s,' "$(json_escape "$id")"
-    printf '"status":%s,' "$(json_escape "$status")"
-    printf '"exit":%s,' "$exit_json"
-    printf '"ran_at":%s,' "$(json_escape "$ran_at")"
-    printf '"output_tail":%s' "$(json_escape "$output_tail")"
-    printf '}\n'
-  )
+  payload="$(build_result_json "$id" "$status" "$exit_code" "$ran_at" "$output_tail")"
   local remote_cmd="cat > \"$REMOTE_QUEUE_DIR/$id.res\" && chmod 600 \"$REMOTE_QUEUE_DIR/$id.res\""
   # shellcheck disable=SC2029
   printf '%s' "$payload" | ssh "${SSH_OPTS[@]}" "$HOST" "$remote_cmd" \
@@ -304,6 +317,155 @@ run_one() {
   write_result "$id" "$status" "$exit_code" "$ran_at" "$output_tail"
   echo ""
   echo "  ✓ result written back to $HOST: $status (exit $exit_code)"
+}
+
+# gui-run — the non-interactive trigger for `ask-human.sh … --push`/`push`.
+# Invoked over `ssh iumac … gui-run` FROM the mini with the request's raw JSON
+# on stdin (never as a command-string argument — same reason write_result pipes
+# instead of interpolates). Shows a native dialog with the exact command,
+# requires a click, and stdout carries exactly ONE result JSON line (the
+# build_result_json shape) for the caller on the mini to parse — nothing else
+# may go to stdout in this path. A command's own output goes to a temp file,
+# never here, so a chatty or secret-printing command can't corrupt the one
+# line of protocol the mini is parsing.
+#
+# Deliberately does NOT require have_tty: this is the whole point of the
+# subcommand — the dialog is what stands in for the TTY's typed-yes when
+# nothing is attached to this ssh session, and osascript talks to the Aqua
+# session's WindowServer regardless.
+GUI_RUN_MAX_CMD_CHARS=2500
+
+osascript_bin() { printf '%s' "${HUMAN_QUEUE_OSASCRIPT:-osascript}"; }
+
+# One "Deny"/"Run" or "Not yet"/"Mark done" dialog. Every string reaches
+# AppleScript as argv (`osascript - … <<'OSA'` + `on run argv`), never spliced
+# into the script source — the request text and the proposed command are both
+# written by the mini, the design's stated adversary, and interpolating them
+# into AppleScript source would be exactly the injection print_req's own
+# control-byte stripping exists to close one layer down. Echoes
+# `button returned:<label>, gave up:<true|false>` on success; a non-zero exit
+# means osascript itself failed to show anything (e.g. no GUI session).
+gui_dialog() {
+  local title="$1" msg="$2" btn_no="$3" btn_yes="$4" giveup="$5"
+  "$(osascript_bin)" - "$title" "$msg" "$btn_no" "$btn_yes" "$giveup" <<'OSA'
+on run argv
+  set theTitle to item 1 of argv
+  set theMsg to item 2 of argv
+  set btnNo to item 3 of argv
+  set btnYes to item 4 of argv
+  set giveUp to (item 5 of argv) as integer
+  set theResult to display dialog theMsg with title theTitle buttons {btnNo, btnYes} default button btnNo giving up after giveUp
+  -- A dialog record does not coerce to text (error -1700), so spell the fields out
+  -- in the same "button returned:X, gave up:Y" shape `osascript -e` prints.
+  return "button returned:" & (button returned of theResult) & ", gave up:" & ((gave up of theResult) as text)
+end run
+OSA
+}
+
+gui_run_informational() {
+  local id="$1" text_disp="$2" giveup="$3" ran_at="$4"
+  local msg result rc
+  msg="$text_disp
+
+No command proposed — this is an informational request from an agent on the mini. \"Mark done\" tells the mini you have handled it; \"Not yet\" leaves it pending for make human-queue."
+
+  # set +e around the assignment: under `set -e`, a failing command
+  # substitution used as an assignment's RHS aborts the script immediately,
+  # before `rc=$?` ever runs — osascript exiting non-zero (no GUI session)
+  # must be a handled outcome (unanswered), not a script crash.
+  set +e
+  result="$(gui_dialog "human-queue: informational request from the mini" "$msg" "Not yet" "Mark done" "$giveup")"
+  rc=$?
+  set -e
+  if (( rc != 0 )); then
+    build_result_json "$id" "unanswered" "" "$ran_at" "could not show the dialog (osascript exit $rc)"
+    return
+  fi
+  if [[ "$result" == *"gave up:true"* ]]; then
+    build_result_json "$id" "unanswered" "" "$ran_at" "no response within ${giveup}s"
+  elif [[ "$result" == *"button returned:Mark done"* ]]; then
+    build_result_json "$id" "done" 0 "$ran_at" "marked done via dialog"
+  else
+    build_result_json "$id" "unanswered" "" "$ran_at" "left pending via dialog"
+  fi
+}
+
+gui_run_command() {
+  local id="$1" text_disp="$2" cmd_value="$3" cmd_disp="$4" giveup="$5" ran_at="$6"
+
+  # Never show a truncated command — a dialog that cannot fit the whole string
+  # must not offer to run it sight-unseen. No dialog is shown at all; this is
+  # not a "click through anyway" prompt, it is a hard refusal.
+  if (( ${#cmd_disp} > GUI_RUN_MAX_CMD_CHARS )); then
+    build_result_json "$id" "unanswered" "" "$ran_at" \
+      "too long (${#cmd_disp} chars) — use make human-queue"
+    return
+  fi
+
+  local msg result rc
+  msg="$text_disp
+
+Runs on THIS MacBook with your full privileges, proposed by an agent on the mini:
+
+---- proposed command ----
+$cmd_disp
+---------------------------"
+
+  # See gui_run_informational above for why set -e is suspended here.
+  set +e
+  result="$(gui_dialog "human-queue: request from the mini" "$msg" "Deny" "Run" "$giveup")"
+  rc=$?
+  set -e
+  if (( rc != 0 )); then
+    build_result_json "$id" "unanswered" "" "$ran_at" "could not show the dialog (osascript exit $rc)"
+    return
+  fi
+  if [[ "$result" == *"gave up:true"* ]]; then
+    build_result_json "$id" "unanswered" "" "$ran_at" "no response within ${giveup}s"
+    return
+  fi
+  if [[ "$result" != *"button returned:Run"* ]]; then
+    build_result_json "$id" "denied" "" "$ran_at" "denied via dialog"
+    return
+  fi
+
+  local tmp_out exit_code output_tail
+  tmp_out="$(mktemp)"
+  set +e
+  bash -c "$cmd_value" >"$tmp_out" 2>&1
+  exit_code=$?
+  set -e
+  output_tail="$(tail -c 2000 "$tmp_out")"
+  rm -f "$tmp_out"
+
+  local status
+  [[ $exit_code -eq 0 ]] && status="done" || status="failed"
+  build_result_json "$id" "$status" "$exit_code" "$ran_at" "$output_tail"
+}
+
+cmd_gui_run() {
+  local req_json
+  req_json="$(cat)"
+  [[ -n "$req_json" ]] || die "gui-run requires a request JSON on stdin"
+
+  local id text cmd_value
+  id="$(json_field "$req_json" id)"
+  text="$(json_field "$req_json" text)"
+  cmd_value="$(json_field "$req_json" cmd)"
+  [[ -n "$id" ]] || die "gui-run: request JSON on stdin has no id"
+  validate_id "$id"
+
+  local text_disp cmd_disp giveup ran_at
+  text_disp="$(printable "$text")"
+  cmd_disp="$(printable "$cmd_value")"
+  giveup="${HUMAN_QUEUE_DIALOG_SECONDS:-600}"
+  ran_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  if [[ -z "$cmd_value" ]]; then
+    gui_run_informational "$id" "$text_disp" "$giveup" "$ran_at"
+  else
+    gui_run_command "$id" "$text_disp" "$cmd_value" "$cmd_disp" "$giveup" "$ran_at"
+  fi
 }
 
 # The default `make human-queue` path: list, then walk each pending request in
@@ -430,6 +592,9 @@ Usage:
   human-queue.sh list           List pending requests (table-ish, newest last)
   human-queue.sh show <id>      Print one request in full, including any proposed cmd
   human-queue.sh run <id>       Review + confirm ('yes') + execute a request's cmd
+  human-queue.sh gui-run        Read one request JSON on stdin, show a native dialog,
+                                execute on click. Called remotely by
+                                `ask-human.sh push` over ssh — not for interactive use.
   human-queue.sh resolve <id> [note]  Mark done without running the cmd (already handled)
   human-queue.sh deny <id> [reason]   Deny a request; writes a denied result back
   human-queue.sh help           This message.
@@ -449,6 +614,7 @@ main() {
     list) cmd_list ;;
     show) shift; cmd_show "$@" ;;
     run) shift; cmd_run "$@" ;;
+    gui-run) shift; cmd_gui_run "$@" ;;
     resolve) shift; cmd_resolve "$@" ;;
     deny) shift; cmd_deny "$@" ;;
     help|-h|--help) usage ;;

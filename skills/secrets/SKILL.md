@@ -55,6 +55,8 @@ the tiering boundary: only **T0/T1** refs belong there; the seed **refuses `op:/
   age-encrypted cache. **It is interactive** — it can't be driven from a non-interactive tool call, it
   will hang. Preferred route from the mini: `ask-human.sh ask "reseal the secrets cache" --cmd 'make
   secrets-seed' --wait` — async, survives the agent instead of blocking a session on a human appearing.
+  Add `--push` instead of `--wait` to trigger it right away as a native dialog on the MacBook rather
+  than waiting for a manual `make human-queue` drain there — still needs a human to click Run.
   If a human is demonstrably present right now, the `!` prefix (in a Claude session) or running it
   directly on the MacBook also works. Either way, first verify `dotfiles-private` on the MacBook is
   current — `ssh iumac 'cd ~/SourceRoot/dotfiles-private && git status'` — since a ref added on the

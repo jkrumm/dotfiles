@@ -321,6 +321,11 @@ macOS ships no Tailscale SSH server.
 - **Honest cost:** a mini compromise now reaches the MacBook's files and user
   session, but not `op://Private/*`, which needs a biometric prompt a stolen key
   cannot answer. Full model: `dotfiles-private/docs/access-model.md`.
+- **Also the transport for `ask-human.sh … --push`** (see *human-queue*, below):
+  it runs `human-queue.sh gui-run` over this same key, non-interactively. That
+  is exactly the "arbitrary commands non-interactively" reach this section
+  already describes — `gui-run` doesn't widen it, it puts a human dialog in
+  front of it for this one path.
 
 ### File shuttle — `~/Shuttle` over SMB
 
@@ -422,36 +427,68 @@ credential rotation, Find My → Erase Mac).
 SSH gives the mini reach, not a fingerprint. For work needing a *present human* —
 biometric `op` (`make secrets-seed`), the Tailscale ACL push, any person-only
 decision — an agent on the mini enqueues instead of writing prose nobody reads.
+Two ways the request then gets in front of a human: the MacBook drains on its
+own schedule (`make human-queue`), or the mini **triggers the approval itself**
+(`--push`) as a native dialog there.
 
 | Side | Command | Runs on |
 |-|-|-|
-| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>]` | mini |
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--push]` | mini |
+| Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
 | Inspect own request | `ask-human.sh list` / `status <id>` | mini |
 | Drain | `make human-queue` (walks each pending request) · `-list` · `-count` · `-show/-run/-deny ID=<id>` | MacBook |
+| Dialog trigger target (not for interactive use) | `human-queue.sh gui-run` (request JSON on stdin) | MacBook, invoked over ssh by `push` |
 
 State is `<id>.req` + `<id>.res` under
 `${XDG_STATE_HOME:-$HOME/.local/state}/human-queue/` on the mini (dir 700, files
 600); pending = no `.res`. `--wait <seconds>` polls every 5 s, exiting 0/1/2/3
 for done/denied/failed/timeout; the default is **0** (return at once) because
 the median resolution is about seven days — the queue drains when a MacBook
-session happens to be open — so a polling default only ever timed out.
+session happens to be open — so a polling default only ever timed out. `--push`
+takes precedence over `--wait`: it already resolves synchronously over one ssh
+round trip, so there is nothing left to poll for.
 
-- **The transport is the existing MacBook→mini ssh hop**, not a new credential —
-  no inbound door opens on the MacBook. It refuses to run on the `cache` backend.
-- **The mini only ever *proposes* a command string.** `run <id>` prints it
-  verbatim, names its origin, and requires a typed `yes` on a real TTY — no TTY,
-  no path to `run`. A misbehaving mini can put a string in front of a human,
-  never open a shell.
+- **The transport is the existing MacBook→mini ssh hop** for a manual drain, and
+  the mini's own **`ssh iumac`** reach (see *mini → iumac*, below) for `--push` —
+  neither is a new credential, and no inbound door opens on either machine. Both
+  scripts refuse to run on the `cache` backend (the mini).
+- **There is still no path that skips a present human.** The mini only ever
+  *proposes* a command string. `run <id>` (manual drain) prints it verbatim and
+  requires a typed `yes` on a real TTY; `gui-run` (the `--push` target) shows it
+  in a native macOS dialog (`osascript display dialog`, buttons "Deny"/"Run",
+  default "Deny", a `giving up after ${HUMAN_QUEUE_DIALOG_SECONDS:-600}` seconds
+  timeout) and only executes on a click. Every string reaches AppleScript as
+  **argv**, never spliced into the script source, so a crafted request can't
+  inject AppleScript the way a raw ESC byte could once make a terminal show
+  something other than what would run — `printable()` still strips control
+  bytes from what's *displayed*, same as `run`'s `print_req`. A command longer
+  than ~2500 chars after that stripping never reaches the dialog at all — no
+  "Run" button is offered for a string that can't be shown in full. The dialog
+  is a **second** gate next to the typed-yes TTY gate, not a bypass: it exists
+  because the ssh key behind `--push` already lets the mini run arbitrary
+  commands non-interactively on the MacBook, and turns that reach back into
+  something a human approves per request, by reading the exact string. A
+  misbehaving mini can put a string in front of a human either way, never open a
+  shell on its own.
 - **The default drain walks the queue instead of printing it**, prompting
   `[r]un / [d]eny / [s]kip / [q]uit` per request. That is ergonomics only: it
   reuses the same `run_one` gate, so the TTY requirement, the typed `yes` and the
   control-byte stripping are unchanged, and the ids it walks come *from the mini*
   and are re-validated against the id pattern before reaching any command string.
   Declining one request returns rather than exits, so it no longer ends the walk.
-- **No LaunchAgent drains it, deliberately** — the hop sits behind the per-use
-  biometric 1Password agent, so a poller means an unattended Touch ID prompt on a
-  schedule forever. `hooks/machine-role.ts` folds a count into SessionStart on
-  the `op` backend only, with a 2500 ms timeout collapsing to silence.
+- **`--push`'s outcomes**: `done`/`failed` write the `.res` locally on the mini
+  (no extra ssh hop back — `ask-human.sh` already has the result from the same
+  round trip) and exit with the command's own exit code; `denied` writes `.res`
+  and exits 1; `unanswered` (dialog timed out, or the command was too long to
+  show) leaves the request pending, unchanged, for `make human-queue`, exit 75;
+  an ssh failure or an unparseable response also leaves it pending, exit 69.
+  `push` refuses an id that already has a `.res`.
+- **No LaunchAgent drains it, deliberately** — a manual drain sits behind the
+  per-use biometric 1Password agent, so a poller means an unattended Touch ID
+  prompt on a schedule forever, and `--push` needs an actual click, which is the
+  same objection restated. `hooks/machine-role.ts` folds a count into
+  SessionStart on the `op` backend only, with a 2500 ms timeout collapsing to
+  silence.
 
 ### Human queue notifications
 

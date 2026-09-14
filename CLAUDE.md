@@ -274,7 +274,12 @@ the mini with `ask-human.sh ask "…" [--cmd …]`; `make
 human-queue` **walks** each one (r/already-done/deny/skip; `-run`, `-resolve`,
 `-deny ID=` one-shot; no TTY → a list). `resolve` closes one satisfied out of band. The mini only *proposes* a
 string; `run` needs a typed `yes` on a real TTY, per request. No poller — that
-means unattended Touch ID forever.
+means unattended Touch ID forever. `ask-human.sh ask … --push` (or `push <id>`)
+instead **triggers the approval itself**: it ssh's to `iumac` (the mini's own
+dedicated key — reach the mini already has) and runs `human-queue.sh gui-run`
+there, which shows the exact string in a native macOS dialog and only executes
+on a click. Still no path without a present human — the dialog is a second gate
+next to the typed-yes TTY gate, not a bypass of it.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 

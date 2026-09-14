@@ -2098,6 +2098,18 @@ brew-service-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/brew-service.test.sh
 	@$(DOTFILES_DIR)/scripts/brew-service.test.sh
 
+# human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
+# osascript failure), the AppleScript-injection and control-byte safety
+# properties, the over-long-command refusal, the dev-host guard, and the
+# shared validate_id/push pre-ssh guard clauses. Hermetic — stubs osascript,
+# never opens a real ssh connection or shows a real dialog. Runs on either
+# machine.
+.PHONY: human-queue-test
+human-queue-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/human-queue.sh $(DOTFILES_DIR)/scripts/ask-human.sh $(DOTFILES_DIR)/scripts/lib/human-queue-json.sh $(DOTFILES_DIR)/scripts/human-queue.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/human-queue.test.sh
+	@$(DOTFILES_DIR)/scripts/human-queue.test.sh
+
 # Hook regression suite. Hooks are symlinked live into ~/.claude/hooks, so a bug
 # here gates real tool calls immediately — run after any hook edit.
 .PHONY: hooks-test
@@ -3074,6 +3086,7 @@ help:
 	@echo "  make secrets-test       secrets-run regression suite (+ lint)"
 	@echo "  make opbackup-seed-test Hermetic reseed-guard regression suite"
 	@echo "  make brew-service-test  scripts/lib/brew-service.sh resolver suite"
+	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
@@ -3129,6 +3142,7 @@ help:
 	@echo "  make human-queue-resolve ID=<id> [NOTE=...]  MacBook: mark done without running the cmd"
 	@echo "  make human-queue-deny ID=<id> [REASON=...]  MacBook: deny one request"
 	@echo "  make human-queue-count          MacBook: print just the pending count (fast; used by the SessionStart hook)"
+	@echo "  ask-human.sh ask '…' --push     mini: trigger the approval itself — a native dialog on the MacBook, no make human-queue needed"
 	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
