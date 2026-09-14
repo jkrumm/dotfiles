@@ -18,10 +18,10 @@ SECRETS_PRIVATE_REPO ?= $(HOME)/SourceRoot/dotfiles-private
 
 # Colima (Docker runtime VM — replaces OrbStack/Docker Desktop).
 # These are ceilings (not reservations): idle VM holds ~1.3GB regardless;
-# CPU is time-shared (free when idle). Bump for heavy stacks like clickstack:
+# CPU is time-shared (free when idle). Bump for heavy stacks:
 #   COLIMA_MEMORY=10 make colima-restart
 # Defaults key on the secrets-backend marker, like brew-upgrade.sh: the dev host
-# (cache) runs the real stacks and gets 4/8/60; the MacBook (op) rarely runs
+# (cache) runs the real stacks and gets 4/12/60 (16 held ~16 GB resident under pressure — the VM rarely hands memory back); the MacBook (op) rarely runs
 # Docker and gets 2/4/30. colima-restart writes cpu/memory back into the
 # persisted colima.yaml, so a single machine-agnostic default would silently
 # resize the other machine on its next restart.
@@ -32,7 +32,7 @@ COLIMA_MEMORY ?= 4
 COLIMA_DISK   ?= 30
 else
 COLIMA_CPU    ?= 4
-COLIMA_MEMORY ?= 8
+COLIMA_MEMORY ?= 12
 COLIMA_DISK   ?= 60
 endif
 

@@ -301,7 +301,7 @@ negative-caching at two layers): `docs/remote-dev.md` §Dev-server doors.
 
 `make colima-{start,stop,restart,status}` — never bare `colima stop` or `brew
 services restart colima`, both fight the supervised boot path.
-`colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/8/60**, MacBook
+`colima-restart` applies `COLIMA_CPU`/`COLIMA_MEMORY` (mini **4/12/60**, MacBook
 **2/4/30**; ceilings; disk grows only via recreate). Full model — the inverted
 `KeepAlive` repair, brew silently regenerating the plist on every `brew
 services start/restart`/`brew upgrade colima`, the `sh.brew.*` rename,

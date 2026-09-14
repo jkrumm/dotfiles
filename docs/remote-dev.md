@@ -534,7 +534,7 @@ foreground, one hop) instead of hot-looping on `colima start -f`'s instant
   hardcoded path turned the converge step into `plist absent — nothing to
   supervise`, exit 0, over the stock plist it exists to repair.
 - `COLIMA_CPU` / `COLIMA_MEMORY` / `COLIMA_DISK` default per machine off the
-  backend marker — mini **4 / 8 / 60**, MacBook **2 / 4 / 30** — because
+  backend marker — mini **4 / 12 / 60**, MacBook **2 / 4 / 30** — because
   `colima-restart` writes cpu/memory back into `~/.colima/default/colima.yaml`
   on every run. Ceilings, not reservations; disk only grows via recreate.
 - **`colima delete` orphans the data disk.** It leaves
