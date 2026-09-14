@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.beszel-agent</string>
+  <!-- Push-mode Beszel agent: dials OUT to the homelab hub over WebSocket
+       (https://beszel.jkrumm.com) rather than the hub reaching in, so this
+       needs no inbound port and no tailnet ACL grant — same posture as
+       devhost-health's push to Uptime Kuma. Credentials (HUB_URL/TOKEN/KEY)
+       live in ~/.config/beszel/beszel-agent.env, mode 600, sourced at
+       runtime by the wrapper below — deliberately NOT EnvironmentVariables
+       here, which scripts/doctor.sh flags as a plaintext credential. The
+       binary itself is a pinned GitHub release install (make
+       beszel-agent-setup), not Homebrew: henrygd/beszel/beszel-agent's
+       build.rb hung twice on pthread_once. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__DOTFILES_DIR__/beszel/beszel-agent-wrapper.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>__HOME__/.cache/beszel</string>
+  <!-- KeepAlive: this supervises a long-lived WebSocket client, not a
+       periodic job. RunAtLoad so a reboot reconnects immediately rather than
+       waiting on the first respawn. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <!-- Same reasoning as db-tunnel: the hub being unreachable (homelab down,
+       tailnet blip) is a normal transient state, and without a floor
+       launchd would respawn as fast as the client's own connect timeout
+       allows and fill the log with failed dials. -->
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- ~/Library/Logs, not /tmp — same reasoning as every other agent here:
+       /tmp is world-writable and macOS deletes untouched files there after
+       3 days while launchd holds the fd open from spawn. Rotated hourly by
+       scripts/log-rotate.sh, which is why it must also be DECLARED there. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/beszel-agent.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/beszel-agent.err</string>
+</dict>
+</plist>

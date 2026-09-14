@@ -158,6 +158,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.brain-web-refresh` | 300s | brain-web rebuild |
 | `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma |
 | `com.jkrumm.drift-check` | 09:40 daily | upstream drift notice |
+| `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
@@ -300,6 +301,11 @@ and the reseed trigger: `dotfiles-private/docs/design.md`.
 
 Push, not probe — the ACL grants `tag:homelab → tag:vps` but not `→ tag:mac`.
 Full rationale: [[mac-host-monitoring]].
+
+The mini additionally reports CPU/RAM/disk/network to a **Beszel** hub on
+homelab (`https://beszel.jkrumm.com`) via `com.jkrumm.beszel-agent` — its own
+outbound WebSocket, same push posture as the table below, separate from
+Uptime Kuma.
 
 | Monitor | Pusher | Cadence |
 |-|-|-|

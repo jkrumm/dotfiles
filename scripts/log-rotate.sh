@@ -126,6 +126,9 @@ FILES=(
   devhost-health.log
   drift-check.log
   drift-check.err
+  # Push-mode agent to the homelab Beszel hub — com.jkrumm.beszel-agent.
+  beszel-agent.log
+  beszel-agent.err
   lock-at-boot.log
   linewatch-collector.log
   batt-reset.log
