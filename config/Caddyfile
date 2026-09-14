@@ -264,18 +264,18 @@ sy-serendipity-codex.test {
 	reverse_proxy localhost:7736
 }
 
-# meteo — self-hosted weather platform on the mini (point/marine API + tile service)
-meteo.test {
+# weatherorb — self-hosted weather platform on the mini (point/marine API + tile service)
+weatherorb.test {
 	import local
 	reverse_proxy localhost:8080
 }
-meteo-tiles.test {
+weatherorb-tiles.test {
 	import local
 	reverse_proxy localhost:8081
 }
 # The live map. Same origin as the tile service on purpose — /layers, /tiles and
 # /probe are fetched with origin-relative URLs, so there is no CORS surface at all.
-meteo-map.test {
+weatherorb-map.test {
 	import local
 	redir / /map/ 302
 	reverse_proxy localhost:8081

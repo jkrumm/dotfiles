@@ -41,7 +41,7 @@
  * every push to a protected branch in EVERY other repo, including the ones the
  * denylist deliberately omits. Measured cost — a fleet upgrade run from
  * `basalt-ui` stranded commits in six direct-to-master repos (rb, image-share,
- * image-gen, linewatch, meteo, basalt-ui-obsidian) and burned a session
+ * image-gen, linewatch, weatherorb, basalt-ui-obsidian) and burned a session
  * rediscovering why.
  *
  * `repoDirectories()` now reads the target out of the command. An explicit

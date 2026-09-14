@@ -57,7 +57,7 @@ different question:
   `tag:phone` alone.
 
 **VPS — the mature, always-running stack.** Traefik-fronted production apps
-(argo, rollhook, the research/audio/image gateways' prod side, meteo's edge,
+(argo, rollhook, the research/audio/image gateways' prod side, meteo's edge (WeatherOrb),
 bun-email-api, free-planning-poker, …), backed by ClickStack/HyperDX for OTel,
 alerts-as-code, and its own backup/prune crons. Nothing here depends on the mini
 being up, and it is reached over Tailscale SSH, never through the mini.
@@ -121,7 +121,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `bun-email-api`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `ticktick-raycast`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `research-gateway`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `dispatch-scratch` | see global CLAUDE.md repo table | |
-| `meteo` | weather/wave service, 8 LaunchAgents | all 8 templated in `meteo/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
+| `weatherorb` | weather/wave service, 8 LaunchAgents | all 8 templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
 
@@ -210,18 +210,18 @@ plain HTTP client, not the gateway's live connection.
 |-|-|-|
 | `com.jkrumm.modelpick-refresh` | 06:00 daily | bun run refresh: probe → collect → recommend (make refresh-setup) |
 
-### meteo
+### weatherorb
 
 | Label | Schedule | What |
 |-|-|-|
-| `com.jkrumm.meteo.serve` | KeepAlive | API server (:8080, loopback) |
-| `com.jkrumm.meteo.tileserver` | KeepAlive | map tiles (:8081) |
-| `com.jkrumm.meteo.sync` | KeepAlive | data sync |
-| `com.jkrumm.meteo.obs` | 1200s | observations ingest |
-| `com.jkrumm.meteo.fcstlog` | 900s | forecast logging |
-| `com.jkrumm.meteo.blendfield` | 10800s | blend field |
-| `com.jkrumm.meteo.backfill` | 07:15 daily | backfill |
-| `com.jkrumm.meteo.watchdog` | 900s | Kuma push monitor |
+| `com.jkrumm.weatherorb.serve` | KeepAlive | API server (:8080, loopback) |
+| `com.jkrumm.weatherorb.tileserver` | KeepAlive | map tiles (:8081) |
+| `com.jkrumm.weatherorb.sync` | KeepAlive | data sync |
+| `com.jkrumm.weatherorb.obs` | 1200s | observations ingest |
+| `com.jkrumm.weatherorb.fcstlog` | 900s | forecast logging |
+| `com.jkrumm.weatherorb.blendfield` | 10800s | blend field |
+| `com.jkrumm.weatherorb.backfill` | 07:15 daily | backfill |
+| `com.jkrumm.weatherorb.watchdog` | 900s | Kuma push monitor |
 
 ### others
 
@@ -268,7 +268,7 @@ Rationale for every one of these: `docs/macbook.md`.
 ## Doors (inbound)
 
 Every dev app's own `<name>.test` / `<name>.mini.jkrumm.com` door (25 of them —
-argo, sideclaw, meteo, rollhook, …) is one row in `config/Caddyfile`, the single
+argo, sideclaw, weatherorb, rollhook, …) is one row in `config/Caddyfile`, the single
 registry — not repeated here. This table is everything else: the fixed,
 non-Caddy doors.
 
@@ -277,7 +277,7 @@ non-Caddy doors.
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |
 | `https://<app>.mini.jkrumm.com` | mini Caddy wildcard block | tailnet, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on 443 |
 | `:7730` (`rb`) | `tailscale serve` → 127.0.0.1:4050 | tailnet only |
-| `:8081` (meteo tiles) | `tailscale serve` → 127.0.0.1:8081 | tailnet only |
+| `:8081` (weatherorb tiles) | `tailscale serve` → 127.0.0.1:8081 | tailnet only |
 | `:8788` (Collie) | `tailscale serve` → 127.0.0.1:8787 | tailnet, ACL `tag:phone → tag:mac` |
 | `tcp:22` → mini | OpenSSH, key-only | tailnet `tag:mac → tag:mac` |
 | `tcp:5900` → mini | macOS Screen Sharing (VNC) | tailnet `tag:mac → tag:mac`, MacBook → mini only |
@@ -318,7 +318,7 @@ Uptime Kuma.
 | `Hermes Agent - Push` | hermes-liveness | 6 min |
 | `Hermes Watchdog - Push` | hermes watchdog poll | 35 min |
 | `Hermes Backup - Push` | hermes-backup agent | 25 h |
-| `Meteo Watchdog - Push` | meteo watchdog | 35 min |
+| `Meteo Watchdog - Push` | weatherorb watchdog | 35 min |
 | `Home Line - Push` | linewatch | 4 min |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
 

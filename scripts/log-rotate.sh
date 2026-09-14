@@ -138,24 +138,24 @@ FILES=(
   # modelpick — daily 06:00 refresh (com.jkrumm.modelpick-refresh).
   modelpick-refresh.log
   modelpick-refresh.err
-  # meteo's eight LaunchAgents (com.jkrumm.meteo.<job>), moved off /tmp into
-  # ~/Library/Logs/meteo.<job>.{log,err} by the meteo repo's own pass.
-  meteo.serve.log
-  meteo.serve.err
-  meteo.tileserver.log
-  meteo.tileserver.err
-  meteo.sync.log
-  meteo.sync.err
-  meteo.obs.log
-  meteo.obs.err
-  meteo.fcstlog.log
-  meteo.fcstlog.err
-  meteo.blendfield.log
-  meteo.blendfield.err
-  meteo.backfill.log
-  meteo.backfill.err
-  meteo.watchdog.log
-  meteo.watchdog.err
+  # weatherorb's eight LaunchAgents (com.jkrumm.weatherorb.<job>), moved off /tmp into
+  # ~/Library/Logs/weatherorb.<job>.{log,err} by the weatherorb repo's own pass.
+  weatherorb.serve.log
+  weatherorb.serve.err
+  weatherorb.tileserver.log
+  weatherorb.tileserver.err
+  weatherorb.sync.log
+  weatherorb.sync.err
+  weatherorb.obs.log
+  weatherorb.obs.err
+  weatherorb.fcstlog.log
+  weatherorb.fcstlog.err
+  weatherorb.blendfield.log
+  weatherorb.blendfield.err
+  weatherorb.backfill.log
+  weatherorb.backfill.err
+  weatherorb.watchdog.log
+  weatherorb.watchdog.err
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
 
