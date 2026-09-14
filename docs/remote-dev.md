@@ -307,7 +307,9 @@ macOS ships no Tailscale SSH server.
 - `Host iumac` pins `Port 2222`, `IdentitiesOnly yes`, **`IdentityAgent none`** —
   not optional on the mini, where `SSH_AUTH_SOCK` points at the 1Password agent
   and any target consulting it *hangs* rather than fails. `op` on the far side
-  then fails fast (exit 1), so the biometric gate holds with no hang hazard.
+  raises Touch ID on the MacBook and resolves once approved (verified
+  2026-09-14, `op://Private/*` included); it fails fast (exit 1) only when
+  1Password there is not signed in. Go through `ask-human.sh … --push`, never bare.
 - **TCC: stage files out, do not grant Full Disk Access.** The door reads home
   root, `~/SourceRoot`, `~/.claude`, `/tmp` and is blocked from `~/Downloads`,
   `~/Desktop`, `~/Documents` and cloud folders — `cp ~/Downloads/x ~/xfer/`, then

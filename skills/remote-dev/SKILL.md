@@ -107,7 +107,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | Code / a repo | `rd`, or git |
 | Vault pages | brain-sync through GitHub |
 | Anything a mini-side agent/LaunchAgent reads | put it **on the mini** — the SMB mount is client-side and dies with the MacBook |
-| A file/state pull the other direction | `ssh iumac` / `rsync … iumac:…` from the mini (`usage-tracker` stats, syncing `brain`) — never for `op://Private/*`, which fails fast rather than hanging |
+| A file/state pull the other direction | `ssh iumac` / `rsync … iumac:…` from the mini (`usage-tracker` stats, syncing `brain`) — MacBook-side `op` goes through `ask-human.sh … --push` (dialog, then Touch ID), never a bare `ssh iumac 'op …'` |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
 `dotfiles/CLAUDE.md` → *File shuttle* for the deterministic check.

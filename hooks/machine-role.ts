@@ -81,9 +81,11 @@ function contextFor(backend: string): string | null {
         "(`~/.ssh/id_ed25519_iumac`, no agent forwarding) — for file/state pulls (usage-tracker,",
         "brain, dotfiles). NEVER rely on the 1Password SSH agent for `ssh homelab`/`ssh vps` — it",
         "hangs like `op` does; `Host iumac` pins `IdentityAgent none` so that leg is unaffected.",
-        "`op` still can't resolve `op://Private/*` even over `ssh iumac` — there it fails FAST",
-        "(\"account is not signed in\", exit 1), not a hang, so the biometric gate holds with no",
-        "hang hazard. Full model: dotfiles-private/docs/access-model.md.",
+        "`op` over `ssh iumac` raises Touch ID on the MacBook and resolves even `op://Private/*`",
+        "once approved (verified 2026-09-14; it fails fast, exit 1, when 1Password there is not",
+        "signed in). Never call it bare — route MacBook-side work through",
+        "`ask-human.sh ask '…' --cmd '…' --push`, which shows the human the exact command first.",
+        "Full model: dotfiles-private/docs/access-model.md.",
       ].join(" ");
     case "op": {
       const lines = [
