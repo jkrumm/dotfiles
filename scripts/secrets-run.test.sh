@@ -220,6 +220,110 @@ assert_eq "export: single-quote-safe round-trip" "$QUOTED" "$got"
 run run --env-file="$TESTREPO/app.env.tpl" -- bash -c 'exit 7' >/dev/null 2>&1
 assert_eq "exit: child code preserved through redaction" "7" "$?"
 
+# === 13b. signal forwarding + child lifetime on the redacting path ===========
+# Regression for the 2026-09-14 orphans: launchd stopping a job SIGTERMs its process
+# group; the wrapper bash and the perl filters died at once, the child logged its
+# graceful shutdown into a dead pipe, and a Node server (EPIPE → uncaughtException →
+# console.error → EPIPE …) spun at 100% CPU with PPID 1, swallowing every later
+# SIGTERM. The stand-in child below behaves the same way: it survives SIGPIPE and
+# retries a failed write (bounded to ~5 s so a regression cannot leave a permanent
+# orphan). Fixed contract: the filters outlive the child, the wrapper forwards the
+# signal and exits with the CHILD's code, the shutdown lines are drained, nothing
+# is left in the group.
+cat > "$TESTREPO/graceful.sh" <<'EOF'
+trap '' PIPE
+bye() {
+  sleep 0.3
+  for ((i = 0; i < 250; i++)); do echo "BYE-OUT $TOKEN" 2>/dev/null && break; sleep 0.02; done
+  for ((i = 0; i < 250; i++)); do echo "BYE-ERR $TOKEN" >&2 2>/dev/null && break; sleep 0.02; done
+  exit 0
+}
+trap bye TERM
+echo "UP $TOKEN"
+while :; do sleep 0.1; done
+EOF
+# sig_scenario <label> <kill-target: group|wrapper>
+sig_scenario() {
+  local label="$1" target="$2" wpid pgid rc left o e
+  o="$TESTREPO/sig-$target.out"; e="$TESTREPO/sig-$target.err"
+  # Own process group, like a launchd job; both streams redirected → both redacted.
+  SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+    perl -e 'setpgrp(0, 0); exec @ARGV' -- "$SHIM" run --env-file="$TESTREPO/app.env.tpl" \
+    -- bash "$TESTREPO/graceful.sh" >"$o" 2>"$e" </dev/null &
+  wpid=$!; pgid=$wpid
+  for ((n = 0; n < 100; n++)); do grep -q '^UP' "$o" 2>/dev/null && break; sleep 0.05; done
+  if [[ "$target" == group ]]; then kill -TERM -- "-$pgid"; else kill -TERM "$wpid"; fi
+  wait "$wpid"; rc=$?
+  sleep 1   # anything still alive in the group now is an orphan
+  left="$(ps -axo pgid=,pid=,command= | awk -v g="$pgid" '$1 == g')"
+  kill -KILL -- "-$pgid" 2>/dev/null   # cleanup only if the assertion below fails
+  assert_eq       "signal ($label): wrapper exits with the child's code" "0" "$rc"
+  assert_eq       "signal ($label): no process outlives the wrapper" "" "$left"
+  assert_contains "signal ($label): shutdown stdout line drained" "BYE-OUT <redacted>" "$(cat "$o")"
+  assert_contains "signal ($label): shutdown stderr line drained" "BYE-ERR <redacted>" "$(cat "$e")"
+  assert_not_contains "signal ($label): still redacted" "$LONG" "$(cat "$o" "$e")"
+}
+sig_scenario "SIGTERM to the process group" group
+sig_scenario "SIGTERM to the wrapper only" wrapper
+
+# start_grouped <out> <err> <cmd…>: run the shim in its own process group (like a
+# launchd job), both streams redirected; sets WPID. await_exit <pid> <secs>: bounded
+# wait, so a regression fails the suite instead of hanging it; sets WRC (124 = hung).
+start_grouped() {
+  local o="$1" e="$2"; shift 2
+  SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+    perl -e 'setpgrp(0, 0); exec @ARGV' -- "$SHIM" run --env-file="$TESTREPO/app.env.tpl" \
+    -- "$@" >"$o" 2>"$e" </dev/null &
+  WPID=$!
+}
+await_exit() {
+  local n
+  for ((n = 0; n < $2 * 10; n++)); do
+    kill -0 "$1" 2>/dev/null || { wait "$1" 2>/dev/null; WRC=$?; return 0; }
+    sleep 0.1
+  done
+  WRC=124
+}
+
+# Early stop: SIGTERM to the wrapper at once and at small offsets, so it lands before
+# the traps, between the traps and the fork, and after. None may leave a process behind.
+early_left=""
+for delay in 0 0.05 0.1 0.2 0.3 0.5; do
+  start_grouped "$TESTREPO/early.out" "$TESTREPO/early.err" bash "$TESTREPO/graceful.sh"
+  sleep "$delay"; kill -TERM "$WPID" 2>/dev/null
+  await_exit "$WPID" 10
+  [[ $WRC -eq 124 ]] && early_left+=" [delay $delay: wrapper hung]"
+  sleep 1
+  left="$(ps -axo pgid=,pid=,command= | awk -v g="$WPID" '$1 == g')"
+  [[ -z "$left" ]] || early_left+=" [delay $delay: $left]"
+  kill -KILL -- "-$WPID" 2>/dev/null
+done 2>/dev/null   # silence bash's "Terminated" job notices for the wrapper we stop
+assert_eq "signal (SIGTERM right after start): wrapper exits, no orphan" "" "$early_left"
+
+# Bounded drain: a grandchild inherits stdout and outlives the child. The wrapper must
+# return within the bound with the CHILD's code, warn once, and leave the filter alive
+# so what the grandchild writes later is still masked.
+t0=$SECONDS
+start_grouped "$TESTREPO/drain.out" "$TESTREPO/drain.err" \
+  bash -c '( sleep 9; echo "LATE $TOKEN" ) & echo "EARLY $TOKEN"; exit 3'
+drain_pgid=$WPID
+await_exit "$WPID" 15
+elapsed=$((SECONDS - t0))
+assert_eq "drain: wrapper returns the child's code despite a held pipe" "3" "$WRC"
+if ((elapsed <= 7)); then ok "drain: wrapper returned within the bound (${elapsed}s)"
+else bad "drain: wrapper returned within the bound" "took ${elapsed}s"; fi
+assert_contains "drain: one-line warning names the held output" "still held open" "$(cat "$TESTREPO/drain.err")"
+for ((n = 0; n < 100; n++)); do grep -q '^LATE' "$TESTREPO/drain.out" && break; sleep 0.1; done
+assert_contains "drain: filter kept masking the grandchild's late write" "LATE <redacted>" "$(cat "$TESTREPO/drain.out")"
+assert_not_contains "drain: no secret leaked after the bound" "$LONG" "$(cat "$TESTREPO/drain.out")"
+kill -KILL -- "-$drain_pgid" 2>/dev/null
+
+# A signalled child's code still propagates (128+n), and a missing command is 127.
+run run --env-file="$TESTREPO/app.env.tpl" -- bash -c 'kill -TERM $$' >/dev/null 2>&1
+assert_eq "exit: child killed by SIGTERM reports 143 through redaction" "143" "$?"
+run run --env-file="$TESTREPO/app.env.tpl" -- secrets-run-no-such-cmd >/dev/null 2>&1
+assert_eq "exit: command not found reports 127 through redaction" "127" "$?"
+
 # === 14. no plaintext secret on disk (cache is ciphertext only) =============
 assert_not_contains "disk: no plaintext secret in cache file" "$LONG" "$(cat "$TESTREPO/cache/secrets.enc.json")"
 
