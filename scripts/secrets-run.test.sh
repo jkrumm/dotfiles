@@ -266,6 +266,60 @@ sig_scenario() {
 sig_scenario "SIGTERM to the process group" group
 sig_scenario "SIGTERM to the wrapper only" wrapper
 
+# === 13b2. stdin reaches the child on both backgrounded paths ======================
+# The relay path runs the child with `&`; piped input must still arrive, whether or
+# not anything is redacted.
+out="$(printf 'piped-in' | run run --env-file="$TESTREPO/app.env.tpl" -- cat 2>/dev/null)"
+assert_eq "run: piped stdin reaches child (redacting path)" "piped-in" "$out"
+printf 'LITERAL_ONLY=plain-value\n' > "$TESTREPO/stdin-noredact.env.tpl"
+out="$(printf 'piped-in' | run run --env-file="$TESTREPO/stdin-noredact.env.tpl" -- cat 2>/dev/null)"
+assert_eq "run: piped stdin reaches child (no-redaction path)" "piped-in" "$out"
+
+# === 13c. signal forwarding + grandchild reaping on the NON-redacting (fast) path ====
+# Regression for the 2026-09-12 modelpick-web orphans: `run_with_redaction` had a
+# separate fast path for "nothing to redact" that ran the child in the FOREGROUND with
+# no trap and no relay at all. A parent like `bun run start` commonly forwards a stop to
+# only its one child's pid, never the whole group — that SIGTERM killed this wrapper
+# outright (no trap → default action) before it could reap anything, orphaning the
+# child it had started and, transitively, any grandchild that child had not detached.
+# Deliberately targets the WRAPPER'S PID ONLY (never the process group) — the group
+# already reaches everyone directly and would pass even without a fix; only an explicit
+# relay proves this wrapper is not the last line that fails to pass a stop along.
+GRANDCHILD_SH="$TESTREPO/grandchild.sh"
+cat > "$GRANDCHILD_SH" <<'EOF'
+#!/usr/bin/env bash
+sleep 600
+EOF
+chmod +x "$GRANDCHILD_SH"
+FAKE_CHILD_SH="$TESTREPO/fake-child.sh"
+cat > "$FAKE_CHILD_SH" <<EOF
+#!/usr/bin/env bash
+"$GRANDCHILD_SH" &
+echo READY
+while :; do sleep 0.1; done
+EOF
+chmod +x "$FAKE_CHILD_SH"
+cat > "$TESTREPO/noredact.env.tpl" <<'EOF'
+SHORTV=op://test/app/short
+EOF
+SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+  "$SHIM" run --env-file="$TESTREPO/noredact.env.tpl" -- "$FAKE_CHILD_SH" \
+  >"$TESTREPO/noredact.out" 2>"$TESTREPO/noredact.err" </dev/null &
+noredact_wpid=$!
+for ((n = 0; n < 100; n++)); do
+  pgrep -f "$GRANDCHILD_SH" >/dev/null 2>&1 && break
+  sleep 0.05
+done
+kill -TERM "$noredact_wpid" 2>/dev/null   # the wrapper's pid alone, never the group
+sleep 3
+noredact_left_child="$(pgrep -f "$FAKE_CHILD_SH" 2>/dev/null)"
+noredact_left_grandchild="$(pgrep -f "$GRANDCHILD_SH" 2>/dev/null)"
+assert_eq "fast-path signal: child reaped, no orphan" "" "$noredact_left_child"
+assert_eq "fast-path signal: grandchild reaped, no orphan" "" "$noredact_left_grandchild"
+pkill -KILL -f "$GRANDCHILD_SH" 2>/dev/null   # cleanup only if the assertion above failed
+pkill -KILL -f "$FAKE_CHILD_SH" 2>/dev/null
+wait "$noredact_wpid" 2>/dev/null
+
 # start_grouped <out> <err> <cmd…>: run the shim in its own process group (like a
 # launchd job), both streams redirected; sets WPID. await_exit <pid> <secs>: bounded
 # wait, so a regression fails the suite instead of hanging it; sets WRC (124 = hung).
