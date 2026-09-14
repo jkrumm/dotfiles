@@ -57,6 +57,8 @@ worker too — add presets/schema changes here, not in sideclaw.
 
 `local` = the dev ClickStack container (`http://localhost:7707`, credentials in
 `~/.config/hyperdx/local.env`, written by `make hyperdx-dev-bootstrap` in vps).
+**Local is on demand** — not running by default; `make -C ~/SourceRoot/vps clickstack-up`
+first, `clickstack-down` when done.
 `prod` = `https://hyperdx.jkrumm.com` (credentials via `op://vps/clickstack/*`,
 `make hyperdx-agent-setup` in vps) — **tailnet-only**, reachable from both Macs,
 **not from cloud routines**. Author against local first when the service under
