@@ -134,7 +134,7 @@ placed on whichever machine owns the repo.
 
 | Command | mini / mini-resident repo | MacBook + MacBook-resident repo |
 |-|-|-|
-| `agent-dispatch bg <repo> '<task>'` | `rd bg` — herdr-pane spawn, keychain-safe Max auth | local `claude -p` on the IU Keychain creds, `claude-sonnet-5[1m]` |
+| `agent-dispatch bg <repo> '<task>'` | `rd bg` — herdr-pane spawn, keychain-safe Max auth | local `claude -p` on the IU Keychain creds, default `glm-5.3-flash` (`MAX_THINKING_TOKENS=8192`) |
 | `agent-dispatch work <repo>` | `rd work` | local session |
 
 MacBook-resident repos are the sanctioned set: `dotfiles`, `dotfiles-private`,
@@ -431,11 +431,12 @@ biometric `op` (`make secrets-seed`), the Tailscale ACL push, any person-only
 decision — an agent on the mini enqueues instead of writing prose nobody reads.
 Two ways the request then gets in front of a human: the MacBook drains on its
 own schedule (`make human-queue`), or the mini **triggers the approval itself**
-(`--push`) as a native dialog there.
+as a native dialog there — **the default since 2026-09-15**; the Slack notify
+hook only fires when that push could not resolve the request.
 
 | Side | Command | Runs on |
 |-|-|-|
-| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--push]` | mini |
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--no-push]` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
 | Inspect own request | `ask-human.sh list` / `status <id>` | mini |
 | Drain | `make human-queue` (walks each pending request) · `-list` · `-count` · `-show/-run/-deny ID=<id>` | MacBook |
@@ -446,9 +447,11 @@ State is `<id>.req` + `<id>.res` under
 600); pending = no `.res`. `--wait <seconds>` polls every 5 s, exiting 0/1/2/3
 for done/denied/failed/timeout; the default is **0** (return at once) because
 the median resolution is about seven days — the queue drains when a MacBook
-session happens to be open — so a polling default only ever timed out. `--push`
+session happens to be open — so a polling default only ever timed out. The default push
 takes precedence over `--wait`: it already resolves synchronously over one ssh
-round trip, so there is nothing left to poll for.
+round trip, so there is nothing left to poll for. An unreachable MacBook (69)
+or an unanswered dialog (75) leaves the request pending and fires the notify
+hook; `--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only.
 
 - **The transport is the existing MacBook→mini ssh hop** for a manual drain, and
   the mini's own **`ssh iumac`** reach (see *mini → iumac*, below) for `--push` —

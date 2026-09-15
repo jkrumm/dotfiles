@@ -49,6 +49,8 @@ export XDG_CONFIG_HOME="$CFG"
 STATE="$TMP/state"
 mkdir -p "$STATE"
 export XDG_STATE_HOME="$STATE"
+# ask pushes by default (ssh iumac) — never from a test.
+export HUMAN_QUEUE_PUSH=0
 
 # json_field/validate_id call die() on a malformed value — only used below to
 # build assertion inputs, so a plain stderr message is enough.

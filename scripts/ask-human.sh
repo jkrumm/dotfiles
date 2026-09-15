@@ -13,8 +13,10 @@ set -euo pipefail
 # This is the async channel instead: an agent here writes a small request file,
 # and a human either drains it on their own schedule (`make human-queue` on the
 # MacBook, over the existing MacBook→mini ssh) or this script triggers the
-# approval itself: `ask-human.sh ask … --push` (or `push <id>` for an
-# already-enqueued request) opens `ssh iumac` — the mini's own dedicated,
+# approval itself — the DEFAULT since 2026-09-15 (owner: "I don't ever want to
+# hear again it needs me; execute it yourself, I'm here and can approve"):
+# `ask` pushes right away (or `push <id>` for an already-enqueued request) and
+# opens `ssh iumac` — the mini's own dedicated,
 # restricted key, see docs/remote-dev.md → *mini → iumac* — and runs
 # `human-queue.sh gui-run` there, which shows the exact request in a native
 # macOS dialog on the MacBook and only executes on a click. There is still no
@@ -42,6 +44,9 @@ QUEUE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/human-queue"
 # config/ssh_config (port 2222, IdentityAgent none, no agent forwarding).
 # Overridable for the test harness.
 MAC_HOST="${HUMAN_QUEUE_MAC_HOST:-iumac}"
+# 1 = `ask` pushes the dialog immediately (the default); 0 = enqueue only.
+# Tests set 0 so no ask ever opens a real ssh connection.
+PUSH_DEFAULT="${HUMAN_QUEUE_PUSH:-1}"
 PUSH_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8)
 
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -115,15 +120,17 @@ poll_for_result() {
 # about seven days — the human drains this queue when a MacBook session happens
 # to be open, not on any schedule — so a polling default only ever produced a
 # timeout after a wasted quarter hour. A caller that genuinely wants to block
-# passes an explicit budget: `--wait 600`. --push triggers the approval itself
-# right after enqueueing (see push_request below) instead of waiting for a
-# manual `make human-queue`; combined with --wait it takes precedence and
-# --wait is ignored — push already resolves synchronously over one ssh round
-# trip, so there is nothing left to poll for.
+# passes an explicit budget: `--wait 600`. Pushing is the default: the approval
+# dialog opens on the MacBook right after enqueueing (see push_request below),
+# and --wait is ignored — push resolves synchronously over one ssh round trip.
+# --no-push (or HUMAN_QUEUE_PUSH=0) enqueues only. The notify hook (the Slack
+# "Human needed" post) fires only when the push did not resolve the request —
+# MacBook unreachable, dialog unanswered — or pushing was turned off; a request
+# the owner clicked through never reaches #agents. --push is still accepted.
 cmd_ask() {
-  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--wait <seconds>] [--push]"
+  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--wait <seconds>] [--no-push]"
   local text="$1"; shift
-  local cmd="" wait_seconds=0 push_after=0
+  local cmd="" wait_seconds=0 push_after="$PUSH_DEFAULT"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -145,6 +152,10 @@ cmd_ask() {
         ;;
       --push)
         push_after=1
+        shift
+        ;;
+      --no-push)
+        push_after=0
         shift
         ;;
       *)
@@ -182,14 +193,19 @@ cmd_ask() {
   chmod 600 "$tmp_file"
   mv "$tmp_file" "$req_file"
 
-  fire_notify_hook "$id" "$text"
-
   printf '%s\n' "$id"
 
   if (( push_after )); then
-    push_request "$id"
-    return $?
+    local rc=0
+    push_request "$id" || rc=$?
+    # 75 unanswered / 69 unreachable: still pending, so fall back to the hook.
+    if (( rc == 75 || rc == 69 )); then
+      fire_notify_hook "$id" "$text"
+    fi
+    return "$rc"
   fi
+
+  fire_notify_hook "$id" "$text"
 
   if (( wait_seconds > 0 )); then
     poll_for_result "$id" "$wait_seconds"
@@ -335,7 +351,7 @@ usage() {
 ask-human.sh — enqueue present-human work from the mini (or any machine)
 
 Usage:
-  ask-human.sh ask <text> [--cmd <command>] [--wait <seconds>] [--push]
+  ask-human.sh ask <text> [--cmd <command>] [--wait <seconds>] [--no-push]
                               Enqueue a request. Prints the request id.
                               --cmd proposes a shell command for the human to
                               review and run on the MacBook (never auto-run).
@@ -343,10 +359,12 @@ Usage:
                               0/1/2/3 for done/denied/failed/timeout. Default
                               0 = return at once: the median resolution is
                               ~7 days, so polling by default only timed out.
-                              --push triggers the approval itself right away:
+                              By default the approval is pushed right away:
                               ssh to the MacBook, show a native dialog there,
-                              execute on click. Still needs a present human —
-                              see push below. Takes precedence over --wait.
+                              execute on click (overrides --wait). Only an
+                              unreachable MacBook or an unanswered dialog
+                              falls back to the notify hook and the queue.
+                              --no-push (or HUMAN_QUEUE_PUSH=0) enqueues only.
   ask-human.sh push <id>      Trigger the dialog for an already-enqueued
                               request. Exits with the command's own exit code
                               on done, 1 on denied, 75 on unanswered (dialog
