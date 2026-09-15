@@ -57,7 +57,7 @@ different question:
   `tag:phone` alone.
 
 **VPS — the mature, always-running stack.** Traefik-fronted production apps
-(argo, rollhook, the research/audio/image gateways' prod side, meteo's edge (WeatherOrb),
+(argo, rollhook, the research/audio/image gateways' prod side, weatherorb's edge,
 bun-email-api, free-planning-poker, …), backed by ClickStack/HyperDX for OTel,
 alerts-as-code, and its own backup/prune crons. Nothing here depends on the mini
 being up, and it is reached over Tailscale SSH, never through the mini.
@@ -318,7 +318,7 @@ Uptime Kuma.
 | `Hermes Agent - Push` | hermes-liveness | 6 min |
 | `Hermes Watchdog - Push` | hermes watchdog poll | 35 min |
 | `Hermes Backup - Push` | hermes-backup agent | 25 h |
-| `Meteo Watchdog - Push` | weatherorb watchdog | 35 min |
+| `WeatherOrb Watchdog - Push` | weatherorb watchdog | 35 min |
 | `Home Line - Push` | linewatch | 4 min |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
 
