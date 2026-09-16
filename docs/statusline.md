@@ -15,7 +15,7 @@ The script receives a JSON payload on stdin with session context and prints
 ## Output Format
 
 ```
-Claude Sonnet 4.6 | 86k/170k 51% | +660 -52 | 308k | 23min
+Claude Sonnet 5 | 86k/170k 51% | +660 -52 | 308k | 23min
 ~/SourceRoot/basalt-ui | * feat/add-button
 ```
 

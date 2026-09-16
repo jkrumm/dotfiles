@@ -49,7 +49,7 @@ Full run takes ~30–60s (it sends a tiny completion per configured model).
    - `TIMEOUT`/`ERR(503)` → backend down or saturated; note it, suggest alias.
    - High latency on a 1-backend model → flag as slow-prone.
 2. **Reliability advice.** When two aliases serve the same model tier, recommend
-   the higher-`backends` one as default (e.g. opus-4-6 over opus-4-7 for daily use).
+   the higher-`backends` one as default.
 3. **Discover upgrades.** In the `NOTABLE` list, find `[NEW]` ids that are a newer
    version or stronger sibling of a configured `[cfg]` model (e.g. a newer Gemini
    flash, a higher GPT-5.x, a newer GLM/DeepSeek). For each genuinely better one,

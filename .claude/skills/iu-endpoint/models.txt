@@ -13,12 +13,10 @@
 
 iu-anthropic/claude-sonnet-5
 iu-anthropic/claude-opus-5
-iu-anthropic/claude-opus-4-6
 iu-anthropic/claude-haiku-4-5
 
 iu/glm-5.3-flash
-iu/DeepSeek-V4-Pro
-iu/DeepSeek-V4-Flash
+iu/deepseek-v4.1-flash
 iu/gpt-5.6-luna
 iu/gpt-5.6-sol
 iu/gpt-5.6-terra
@@ -26,4 +24,3 @@ iu/gpt-6-astra
 iu/gemini-3.8-flash
 iu/gemini-3.5-flash
 iu/gemini-3.5-flash-lite
-iu/gemini-2.5-flash
