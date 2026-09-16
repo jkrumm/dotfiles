@@ -340,7 +340,7 @@ keychain_or_cache() {
 # lands on bash 3.2, where "${empty[@]}" trips `set -u`.
 commit_message() {
   local key base prompt msg runner=(env)
-  command -v timeout >/dev/null 2>&1 && runner=(timeout 90 env)
+  command -v timeout >/dev/null 2>&1 && runner=(timeout 1800 env)
 
   key="$(keychain_or_cache claude-sdk-api-key op://common/anthropic/API_KEY || true)"
   base="$(keychain_or_cache claude-sdk-base-url op://common/anthropic/BASE_URL || true)"
