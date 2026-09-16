@@ -210,7 +210,8 @@ substitutes for another.** `claude --bg` rides on top of all three.
 Commands take a repo **name, never a path** — resolution happens on the host.
 `agent-dispatch` routes on the backend marker crossed with whether the repo exists
 here: mini or mini-resident repo → `rd bg`/`rd work`; MacBook + MacBook-resident
-repo → local `claude -p` on the IU Keychain creds (`claude-sonnet-5[1m]`).
+repo → local `claude -p` on the IU Keychain creds, default `glm-5.3-flash`
+(`MAX_THINKING_TOKENS=8192`; `ANTHROPIC_MODEL` overrides).
 `--dry-run` prints the route; `make agent-dispatch-smoke` runs a read-only task at
 `dispatch-scratch`. It **refuses to nest inside an interactive Claude Code
 session** (`CLAUDECODE` set → prints the brief, exit 1) — use a subagent instead.
@@ -484,11 +485,14 @@ differently on purpose:
   `count_tokens`.
 - **anything else** (gateway ids) → every `ANTHROPIC_DEFAULT_*` tier is pinned to
   that same id (leave one on a `claude-*` default and subagents 400 against a model
-  the gateway doesn't serve), and the window comes from `_CA_CTX` +
-  `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, never `[1m]` — a `claude-*` name would make
-  usage-tracker misbill it as Max quota. `_CA_CTX` is deliberately conservative
-  (200k unless measured): it is a *client-side budget*, so setting it above the
-  real window trades a clean auto-compact for a hard mid-session rejection.
+  the gateway doesn't serve), and the window comes from `_ca_ctx` (shared table:
+  `config/zsh/iu-models.sh`) + `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, never `[1m]` — a
+  `claude-*` name would make usage-tracker misbill it as Max quota. `_ca_ctx` is
+  deliberately conservative (200k unless measured): it is a *client-side budget*,
+  so setting it above the real window trades a clean auto-compact for a hard
+  mid-session rejection. The same file's `_ca_thinking` sets `MAX_THINKING_TOKENS`
+  for GLM — the only reasoning-effort control that reaches the gateway's
+  Anthropic leg.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills all three lanes correctly because the SessionStart

@@ -51,12 +51,13 @@ greps them.
 1. **Orient.** Read `docs/waves/PLAN.md`. Your wave is the `active` one. If none
    is active, or the active one is already `[x]` complete, stop and say so — do
    not guess which wave you are.
-2. **Execute the steps.** Delegate as always: `@implementer` for settled edits,
-   `Explore` for search, `/research` for library facts. The wave agent
-   orchestrates; it does not grind.
+2. **Execute the steps.** Delegate as always: `mcp__sideclaw__dispatch` (tier
+   `implement`) for settled edits off Max, `@implementer` for edits needing this
+   pane's live tree, `Explore` for search, `/research` for library facts. The
+   wave agent orchestrates; it does not grind.
 3. **Close out.** In this order, every time:
    - `/check` — the plan's **Gate**. Report failures verbatim.
-   - `/review` on anything non-trivial; fix findings via `@implementer`.
+   - `/review` on anything non-trivial; fix findings via `dispatch` or `@implementer`.
    - `/commit` per logical concern.
    - Update `docs/waves/PLAN.md`: tick the steps, write **Left behind**, flip this
      wave to `done` and the next to `active`.

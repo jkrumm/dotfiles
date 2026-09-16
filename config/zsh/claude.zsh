@@ -8,7 +8,7 @@
 #                                No model  → claude-sonnet-5[1m], as before.
 #                                claude-*  → that Claude model, [1m] auto-appended.
 #                                anything else → treated as a gateway model id
-#                                (DeepSeek-V4-Flash, glm-5.3-flash, …); see _ca_ctx.
+#                                (glm-5.3-flash, …); see config/zsh/iu-models.sh.
 #
 # Skills load from ~/.claude/skills/ (global) and <repo>/.claude/skills/ (per-repo)
 # automatically. Additionally, if the current git repo ships local plugins under
@@ -107,7 +107,7 @@ cs() {
 # Anthropic transport (real Claude models, API-billed per-token) instead of the
 # Max subscription. Default model: claude-sonnet-5 (latest Sonnet tier). To use a
 # different model permanently, change the --model default below; a one-off
-# `ca --model claude-opus-4-8` also works for any model the IU Anthropic endpoint
+# `ca --model claude-opus-5` also works for any model the IU Anthropic endpoint
 # serves (run /iu-endpoint for the live catalog).
 #
 # Full Anthropic protocol fidelity. Prompt caching works (first turn builds
@@ -121,11 +121,12 @@ cs() {
 #
 # Subagents/background tasks resolve by TIER (opus/sonnet/haiku/fable). A custom
 # main-model name can't be classified into a tier, so each tier falls back to its
-# hardcoded Anthropic default (claude-opus-4-8, …) which the IU endpoint may not
-# serve. ANTHROPIC_DEFAULT_*_MODEL below pins every tier to the IU catalog:
-# sonnet-5 for the workhorse tiers, haiku-4-5 for background (title-gen,
-# compaction, fast reads). No opus/fable override — the sonnet fallback is cheap
-# enough and those tiers are rarely invoked.
+# hardcoded Anthropic default, which the IU endpoint may not serve.
+# ANTHROPIC_DEFAULT_*_MODEL below pins every tier to the IU catalog: opus,
+# sonnet and fable all pinned to the same resolved model ($m below) — leaving
+# any one on its hardcoded default is the classic "main session works,
+# subagents 400" failure — and haiku pinned to haiku-4-5 for background
+# (title-gen, compaction, fast reads).
 #
 # Context window: over any non-api.anthropic.com ANTHROPIC_BASE_URL, Claude Code
 # can't verify 1M support and budgets Sonnet 5 at 200k, even though it natively
@@ -134,7 +135,8 @@ cs() {
 # reaches the provider): --model claude-sonnet-5[1m], plus the same suffix on
 # every ANTHROPIC_DEFAULT_*_MODEL tier that resolves to Sonnet 5. The gateway
 # tier below instead sets CLAUDE_CODE_MAX_CONTEXT_TOKENS + AUTO_COMPACT_WINDOW
-# from _CA_CTX — a CLIENT-SIDE budget (when to compact), not a capability claim:
+# from `_ca_ctx` (config/zsh/iu-models.sh) — a CLIENT-SIDE budget (when to
+# compact), not a capability claim:
 # set it above the model's real window and a clean auto-compact becomes a hard
 # mid-session rejection. Never the `[1m]` suffix there — a claude-* name would
 # make usage-tracker misbill a gateway model as Max quota.
@@ -149,36 +151,14 @@ cs() {
 #
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
-# Real context window per gateway model id, for CLAUDE_CODE_MAX_CONTEXT_TOKENS.
-#
-# Claude Code only trusts api.anthropic.com to self-report a window
-# (isFirstPartyAnthropicBaseUrl, claude-code#46416), so over any custom base URL
-# it assumes 200k and auto-compacts there — throttling a model that accepts far
-# more. CLAUDE_CODE_MAX_CONTEXT_TOKENS is the fix for *gateway* ids; the `[1m]`
-# name-trick is NOT, because it forces a claude-* id, which usage-tracker then
-# classifies as Max quota → double-count + misbill. `[1m]` stays correct for the
-# real Claude models, which is why the two branches of `ca` differ.
-#
-# This is a client-side budget, not a server limit: set it HIGHER than the real
-# window and you trade a clean auto-compact for a hard API rejection mid-session.
-# So 1M is not a safe blanket default — kimi-k2.7-code hard-caps at 262144.
-#
-# Anything absent falls back to 200k — NOT measured, deliberately conservative.
-# `modelpick`'s `bun run pick` is what measures these; re-run it when adding a row.
-#   glm-5.3-flash     1000000  measured — still accepted at a 1.1M probe ceiling
-#   DeepSeek-V4-Flash 1000000  measured — still accepted at a 1.1M probe ceiling
-#   DeepSeek-V4-Pro   1000000  documented (IU portal catalog), not yet probed
-#   kimi-k2.7-code     262144  measured — the gateway names the number in its 400
-#
-# Keys are quoted and the notes live up here: an unquoted `[foo-bar]` inside
-# `=( … )` is a glob pattern to zsh and fails to match at source time.
-typeset -gA _CA_CTX=(
-  'glm-5.3-flash'     1000000
-  'DeepSeek-V4-Pro'   1000000
-  'DeepSeek-V4-Flash' 1000000
-  'kimi-k2.7-code'     262144
-)
-_ca_ctx() { print -r -- "${_CA_CTX[$1]:-200000}" }
+# Context window + GLM thinking budget per gateway model id — shared with
+# scripts/agent-dispatch.sh (bash 3.2), since both launch paths need the same
+# CLAUDE_CODE_MAX_CONTEXT_TOKENS / MAX_THINKING_TOKENS values. Case-statement
+# functions live in config/zsh/iu-models.sh (not a zsh assoc array), so the one
+# file parses under both interpreters — see it for the `_ca_ctx`/`_ca_thinking`
+# contracts and the `isFirstPartyAnthropicBaseUrl` / Requesty-hop rationale.
+# Update the table there, not here.
+source "$HOME/.zsh/conf.d/iu-models.sh"
 
 # `cap` — pick a model, then launch `ca` against it.
 #
@@ -235,7 +215,7 @@ ca() {
     done
   fi
 
-  # Optional leading model id: `ca DeepSeek-V4-Flash -p "…"`. Only consumed when
+  # Optional leading model id: `ca glm-5.3-flash -p "…"`. Only consumed when
   # it doesn't look like a flag, so every existing `ca --resume`-style call is
   # untouched.
   local model=""
@@ -244,9 +224,13 @@ ca() {
   fi
 
   local -a args=("$@")
-  [[ " $* " == *" --effort "* ]] || args=(--effort high "${args[@]}")
 
   if [[ -z "$model" || "$model" == claude-* ]]; then
+    # Effort is a native Claude request param, defaulted here — inert over the
+    # gateway's Anthropic leg below, where GLM's real lever is
+    # MAX_THINKING_TOKENS instead.
+    [[ " $* " == *" --effort "* ]] || args=(--effort high "${args[@]}")
+
     # Claude tier: `[1m]` is the documented window fix, stripped before the id
     # reaches the provider, and applied to every ANTHROPIC_DEFAULT_* tier too or
     # a subagent silently drops back to a 200k budget. Not for Haiku 4.5 though —
@@ -275,7 +259,7 @@ ca() {
   # a spawned subagent asks the gateway for a model it doesn't serve — that is
   # the classic "main session works, subagents 400" failure (claude-code#5680).
   #
-  # Three settings this tier needs and the Claude tier does not:
+  # Four settings this tier needs and the Claude tier does not:
   #  - AUTO_COMPACT_WINDOW matched to the model's real window. Compacting early
   #    rewrites history, which busts the prefix cache and re-pays full fresh-input
   #    price — the dominant cost term in an agent loop, not a nicety.
@@ -285,7 +269,15 @@ ca() {
   #  - ENABLE_TOOL_SEARCH deliberately NOT set. Claude Code disables deferred tool
   #    search on a non-first-party base URL anyway, and forcing it on only works
   #    if the proxy serves `tool_reference` blocks — this gateway does not.
+  #  - MAX_THINKING_TOKENS, when `_ca_thinking` returns one (GLM): the only
+  #    reasoning-effort control that reaches this leg — `--effort` above is
+  #    dropped for this branch precisely because it's a no-op here.
   [[ " $* " == *" --model "* ]] || args=(--model "$model" "${args[@]}")
+
+  local thinking
+  thinking=$(_ca_thinking "$model")
+  local -a thinking_env=()
+  [[ -n "$thinking" ]] && thinking_env=(MAX_THINKING_TOKENS="$thinking")
 
   env -u ANTHROPIC_API_KEY \
     ANTHROPIC_AUTH_TOKEN="$key" \
@@ -297,6 +289,7 @@ ca() {
     CLAUDE_CODE_MAX_CONTEXT_TOKENS="$(_ca_ctx "$model")" \
     CLAUDE_CODE_AUTO_COMPACT_WINDOW="$(_ca_ctx "$model")" \
     API_TIMEOUT_MS=3000000 \
+    "${thinking_env[@]}" \
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
 

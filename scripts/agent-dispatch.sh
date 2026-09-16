@@ -142,12 +142,27 @@ nesting_guard() {
   fi
 }
 
+# Context window + GLM thinking budget per gateway model id — the same
+# case-statement functions config/zsh/claude.zsh's `ca()` reads for its own
+# gateway tier, shared (not duplicated) because bash 3.2 has no assoc arrays:
+# see config/zsh/iu-models.sh for `_ca_ctx`/`_ca_thinking` contracts and
+# rationale. Update the table there, not here.
+# shellcheck source=../config/zsh/iu-models.sh
+source "$DOTFILES_DIR/config/zsh/iu-models.sh"
+
 # Local `claude -p` path — backend=op, <repo> is a sanctioned MacBook repo.
 # Mirrors claude_iu()/ca() in config/zsh/claude.zsh: same Keychain entries,
 # same ANTHROPIC_AUTH_TOKEN/BASE_URL shape, ANTHROPIC_API_KEY unset (claude
 # rejects it there). --dangerously-skip-permissions matches every other
 # non-interactive launcher in this repo (ca, claude_iu callers) — a `claude
 # -p` with no TTY to answer a permission prompt would otherwise hang forever.
+#
+# Default model is a cheap IU gateway model, not Sonnet: this path runs
+# UNATTENDED against the IU key, billed per token with nobody watching a
+# meter — the worst combination for a premium model. modelpick's 2026-09-11
+# ccbench run scored glm-5.3-flash 10/10 on the agentic coding suite at
+# $0.048/suite, ahead of claude-sonnet-5 on DeepSWE. `ANTHROPIC_MODEL`
+# still overrides it exactly as before.
 run_local_claude_p() {
   local path="$1"
   nesting_guard "$path"
@@ -159,7 +174,35 @@ run_local_claude_p() {
     die "IU credentials missing in Keychain — run 'make setup' in dotfiles"
   fi
 
-  local model="${ANTHROPIC_MODEL:-claude-sonnet-5[1m]}"
+  local model="${ANTHROPIC_MODEL:-glm-5.3-flash}"
+
+  # Gateway tier (any non-Claude id, the default included) needs the same
+  # extras config/zsh/claude.zsh's `ca()` sets for it: without the context/
+  # timeout pair the CLI budgets a 1M-context model as if it were the 200k
+  # first-party default and times out per request instead of the minutes these
+  # models actually take; without MAX_THINKING_TOKENS, GLM defaults to `max`
+  # thinking, its worst setting. A `claude-*` override skips all of it — that
+  # tier is first-party and already handled by the CLI itself.
+  local haiku_model="$model"
+  local -a gateway_env=()
+  local tool_search="true"
+  if [[ "$model" != claude-* ]]; then
+    local ctx thinking
+    ctx=$(_ca_ctx "$model")
+    thinking=$(_ca_thinking "$model")
+    gateway_env=(CLAUDE_CODE_MAX_CONTEXT_TOKENS="$ctx" CLAUDE_CODE_AUTO_COMPACT_WINDOW="$ctx" API_TIMEOUT_MS=3000000)
+    # MAX_THINKING_TOKENS is the only reasoning-effort control that reaches
+    # this leg (GLM) — --effort/reasoning_effort are no-ops here, so there is
+    # nothing else to set for effort on a gateway id.
+    [ -n "$thinking" ] && gateway_env+=(MAX_THINKING_TOKENS="$thinking")
+    # ENABLE_TOOL_SEARCH stays unset on the gateway tier, matching ca()'s
+    # gateway branch: Claude Code disables deferred tool search on a
+    # non-first-party base URL anyway, and forcing it on only works when the
+    # proxy serves `tool_reference` blocks — this gateway does not.
+    tool_search=""
+  else
+    haiku_model="claude-haiku-4-5"
+  fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "route: local claude -p (backend=op, sanctioned repo)"
@@ -176,9 +219,10 @@ run_local_claude_p() {
     ANTHROPIC_MODEL="$model" \
     ANTHROPIC_DEFAULT_OPUS_MODEL="$model" \
     ANTHROPIC_DEFAULT_SONNET_MODEL="$model" \
-    ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5 \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="$haiku_model" \
     ANTHROPIC_DEFAULT_FABLE_MODEL="$model" \
-    ENABLE_TOOL_SEARCH=true \
+    ${tool_search:+ENABLE_TOOL_SEARCH=true} \
+    ${gateway_env[@]+"${gateway_env[@]}"} \
     claude -p "$task" --output-format json --dangerously-skip-permissions --model "$model")
   rc=$?
 
