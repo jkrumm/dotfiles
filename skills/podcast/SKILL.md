@@ -12,8 +12,9 @@ before writing — the VPS container keeps STT/TTS only. Research (brain search 
 past episodes + the research gateway, tool-calling) feeds an editorial pass that
 decides format, roles, tone, humor and length for *this* episode — there is no
 fixed formula. The writers' room (story pass → parallel segment writers → three
-reviewers → per-segment revision → metadata; Opus 5 plans, Opus 4.6 owns the
-voice, Gemini 3.8 Flash + GPT-5.6 Luna review, Luna writes the metadata)
+reviewers → per-segment revision → metadata; DeepSeek V4.1 Flash plans, Opus 4.6
+owns the voice (deliberate — the only slot that stays Claude), Gemini 3.8 Flash +
+DeepSeek V4.1 Flash review, DeepSeek V4.1 Flash writes the metadata)
 produces the two-host script, every turn is synthesized on ElevenLabs v3 with
 its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
 −16 LUFS, ID3 tags, chapter markers, embedded cover), the image-gen gateway
@@ -81,9 +82,9 @@ lead, humor, minutes — once the editorial pass has run), downloads
 
 | Var | Default | Meaning |
 |-|-|-|
-| `PODCAST_RESEARCH_MODEL` / `PODCAST_EDITORIAL_MODEL` | `gpt-5.6-terra` / `claude-opus-5` | tool-calling researcher (brain, past episodes, research gateway) / decides format, roles, tone, humor, length per episode |
-| `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | `claude-opus-5` / `claude-opus-4-6` | story pass / the voice owner (segments + every revision) |
-| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.8-flash,gpt-5.6-luna` / `gpt-5.6-luna` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles, topics |
+| `PODCAST_RESEARCH_MODEL` / `PODCAST_EDITORIAL_MODEL` | `deepseek-v4.1-flash` / `deepseek-v4.1-flash` | tool-calling researcher (brain, past episodes, research gateway) / decides format, roles, tone, humor, length per episode |
+| `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | `deepseek-v4.1-flash` / `claude-opus-4-6` | story pass / the voice owner (segments + every revision) |
+| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.8-flash,deepseek-v4.1-flash` / `deepseek-v4.1-flash` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles, topics |
 | `PODCAST_SHOW_BIBLE` | `./docs/show-bible.md` | binding house style injected into every writer and reviewer prompt |
 | `BRAIN_DIR` / `RESEARCH_API_KEY` | `../brain` (repo-relative) / — | unset either and research + the brain note are skipped |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |
