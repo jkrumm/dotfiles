@@ -11,3 +11,6 @@ model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 model_reasoning_summary = "auto"
 model_verbosity = "medium"
+
+[projects."/Users/jkrumm/SourceRoot/sy-serendipity"]
+trust_level = "trusted"
