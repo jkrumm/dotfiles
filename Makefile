@@ -2521,7 +2521,17 @@ herdr-restart:
 	@# exits itself, so for a moment the OLD binary still answers. A `sleep 2`
 	@# here is what made the 0.8.2 → 0.9.0 upgrade run agent-overview against a
 	@# protocol-20 server and die with `no pane in workspace `.
+	@#
+	@# AND WAIT FOR THE VERSION, not just for "a server". Without --version the
+	@# gate passes on running+compatible alone, and across a PATCH bump both
+	@# binaries speak the same protocol — so the old daemon, still shutting down,
+	@# satisfies it. Measured on 0.9.0 → 0.9.1 (2026-09-20): the gate printed
+	@# `✓ herdr server 0.9.0 ready (protocol 22)` and agent-overview then failed
+	@# with `workspace create failed: server is shutting down`. The version comes
+	@# from the CLI because brew has already relinked it — client and server are
+	@# the same bottle, so the client IS the expected server version.
 	@bash $(DOTFILES_DIR)/scripts/lib/herdr-ready.sh --timeout 60 \
+		--version "$$(herdr --version | awk '{print $$2}')" \
 		|| { echo "    ↳ brew services info herdr --json"; exit 1; }
 	@herdr status --json 2>/dev/null | jq -r '"    · detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring) + " (false still prompts on desk)"' \
 		|| echo "  ! could not read herdr status"
