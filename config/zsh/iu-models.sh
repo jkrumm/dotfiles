@@ -19,10 +19,11 @@
 # modelpick's `bun run pick` is what measures these; re-run it before adding a
 # row.
 #   glm-5.3-flash  1000000  measured — still accepted at a 1.1M probe ceiling
+_CA_CTX_FALLBACK=200000
 _ca_ctx() {
   case "$1" in
     glm-5.3-flash) echo 1000000 ;;
-    *) echo 200000 ;;
+    *) echo "$_CA_CTX_FALLBACK" ;;
   esac
 }
 

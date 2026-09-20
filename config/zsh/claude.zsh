@@ -274,6 +274,14 @@ ca() {
   #    dropped for this branch precisely because it's a no-op here.
   [[ " $* " == *" --model "* ]] || args=(--model "$model" "${args[@]}")
 
+  # An unmeasured model runs on the fallback budget and auto-compacts at 200k
+  # whatever its real window — silent, that reads as a broken model
+  # (deepseek-v4-pro, 2026-09). Say so before the session starts.
+  local ctx
+  ctx=$(_ca_ctx "$model")
+  [[ "$ctx" == "$_CA_CTX_FALLBACK" ]] && print -u2 \
+    "ca: no measured context window for $model — budgeting ${ctx}, expect early auto-compaction (add a row to config/zsh/iu-models.sh)"
+
   local thinking
   thinking=$(_ca_thinking "$model")
   local -a thinking_env=()
@@ -286,8 +294,8 @@ ca() {
     ANTHROPIC_DEFAULT_SONNET_MODEL="$model" \
     ANTHROPIC_DEFAULT_HAIKU_MODEL="$model" \
     ANTHROPIC_DEFAULT_FABLE_MODEL="$model" \
-    CLAUDE_CODE_MAX_CONTEXT_TOKENS="$(_ca_ctx "$model")" \
-    CLAUDE_CODE_AUTO_COMPACT_WINDOW="$(_ca_ctx "$model")" \
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS="$ctx" \
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW="$ctx" \
     API_TIMEOUT_MS=3000000 \
     "${thinking_env[@]}" \
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
