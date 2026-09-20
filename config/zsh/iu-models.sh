@@ -19,10 +19,15 @@
 # modelpick's `bun run pick` is what measures these; re-run it before adding a
 # row.
 #   glm-5.3-flash  1000000  measured — still accepted at a 1.1M probe ceiling
+#   DeepSeek-V4-Flash / DeepSeek-V4-Pro / minimax-m3  1000000  measured
+#                  2026-09-20 — each accepted at the 1.1M probe ceiling
+#   kimi-k2.7-code  262144  measured 2026-09-20 — exact, named by the gateway
+# Gateway ids are case-sensitive; these are the catalog's spellings.
 _CA_CTX_FALLBACK=200000
 _ca_ctx() {
   case "$1" in
-    glm-5.3-flash) echo 1000000 ;;
+    glm-5.3-flash|DeepSeek-V4-Flash|DeepSeek-V4-Pro|minimax-m3) echo 1000000 ;;
+    kimi-k2.7-code) echo 262144 ;;
     *) echo "$_CA_CTX_FALLBACK" ;;
   esac
 }
@@ -34,9 +39,11 @@ _ca_ctx() {
 # agentic/implementation-lane value (modelpick docs/decisions/model-configs.md)
 # — classify-type lanes (sideclaw check/overview/review_router) use 2048, but
 # those don't run through a Claude Code launcher, so that value isn't here.
+# The other rows carry 8192 because that is the budget their 2026-09-20 ccbench
+# rows were measured under — the reproduced config, not a tuned one.
 _ca_thinking() {
   case "$1" in
-    glm-5.3-flash) echo 8192 ;;
+    glm-5.3-flash|DeepSeek-V4-Flash|DeepSeek-V4-Pro|minimax-m3|kimi-k2.7-code) echo 8192 ;;
     *) echo "" ;;
   esac
 }
