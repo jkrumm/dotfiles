@@ -143,13 +143,35 @@ check_pinned_version() {
 # always and would sit red permanently, which is the nag failure this file's
 # header rejects. The alertable fact is that the guarded upgrader has not been
 # RUN. Counts still ride along in the msg as context.
+#
+# PINNED-BUT-OUTDATED GETS ITS OWN ROW. `brew upgrade` skips pinned formulae by
+# design, so "fix: make brew-upgrade" is a line no command can satisfy for one —
+# the upgrader runs green and the pin never moves. The pin is a deliberate human
+# decision (docs/homebrew.md), so the row names the decision to make, never
+# applies it. tailscale is excluded from the generic loop because
+# check_tailscale owns its row and knows the channel version too.
 check_brew() {
-  local outdated casks_n core_n age mtime
+  local outdated casks_n core_n age mtime pinned_outdated
   if [[ ! -x "$BREW_BIN" ]]; then skip_add "brew (not installed)"; return; fi
   outdated=$("$BREW_BIN" outdated --quiet 2>/dev/null) || { skip_add "brew (outdated query failed)"; return; }
   core_n=$(echo "$outdated" | /usr/bin/grep -c . || true)
   casks_n=$("$BREW_BIN" outdated --cask --quiet 2>/dev/null | /usr/bin/grep -c . || true)
   info_add "brew: ${core_n} outdated (${casks_n} cask)"
+
+  # outdated entries are bare names for core formulae but FULL names for tap
+  # formulae (`oven-sh/bun/bun`); the pinned list is bare names — basename both
+  # sides before intersecting.
+  pinned_outdated=$(/usr/bin/comm -12 \
+    <("$BREW_BIN" list --pinned 2>/dev/null | /usr/bin/sort) \
+    <(echo "$outdated" | /usr/bin/sed 's|^[^ ]*/||' | /usr/bin/sort)) || pinned_outdated=""
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    # tailscale owns its row below (it knows the channel version too); caddy is
+    # a HELD pin whose deliberate four-step path brew-upgrade.sh prints — the
+    # generic row's short unpin would omit `make caddy-dns-build`.
+    [[ "$f" == "tailscale" || "$f" == "caddy" ]] && continue
+    drift_add "brew-pin-$f" "$f outdated but pinned — brew upgrade skips it (decide: brew unpin $f && brew upgrade $f, or keep the pin)"
+  done <<<"$pinned_outdated"
 
   if [[ -f "$BREW_UPGRADE_STAMP" ]]; then
     mtime=$(/usr/bin/stat -f %m "$BREW_UPGRADE_STAMP" 2>/dev/null) || mtime=0
@@ -226,7 +248,17 @@ check_tailscale() {
   if [[ "$installed" == "$latest" ]]; then
     info_add "tailscale current ($installed, $TAILSCALE_VARIANT)"
   else
-    drift_add "tailscale" "tailscale $installed → $latest (fix: make brew-upgrade)"
+    # The brew CLI is pinned iff tailscale appears in `brew list --pinned`.
+    # A pinned formula is skipped by `brew upgrade` — a fresh brew-upgrade
+    # stamp and a drifted version can both be true, so this row's fix is the
+    # unpin decision, never "make brew-upgrade". Captured into a variable
+    # before matching (the pipefail/SIGPIPE note at the top of the file).
+    pinned_list=$("$BREW_BIN" list --pinned 2>/dev/null) || pinned_list=""
+    if /usr/bin/grep -qFx "tailscale" <<<"$pinned_list"; then
+      drift_add "tailscale" "tailscale $installed → $latest (pinned — brew upgrade skips it; decide: brew unpin tailscale && brew upgrade tailscale, or keep the pin)"
+    else
+      drift_add "tailscale" "tailscale $installed → $latest (fix: make brew-upgrade)"
+    fi
   fi
 }
 

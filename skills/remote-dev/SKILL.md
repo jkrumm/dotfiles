@@ -145,10 +145,12 @@ When something is red, in order:
 1. **Unlock 1Password first** — its agent signs `ssh mini`; a lock reads as a
    transport fault (`Permission denied (publickey)`) and isn't one.
 2. `make doctor` — read it before changing anything.
-3. On the mini, detached: `make brew-upgrade` (detached because it restarts
+3. `make mini-macos-update` from the MacBook, if one is pending — never force a
+   reboot mid-prepare. Before any mass brew upgrade: an OS/CLT update changes
+   the toolchain out from under bottles, and the restart window should absorb
+   that before `brew upgrade` starts building anything from source.
+4. On the mini, detached: `make brew-upgrade` (detached because it restarts
    tailscaled, the transport the ssh session rides on).
-4. `make mini-macos-update` from the MacBook, if one is pending — never force a
-   reboot mid-prepare.
 5. One attended applier per remaining drift row: `make collie-upgrade` (needs a
    TTY), a reviewed `XCADDY_VERSION` bump + `make caddy-dns-build`,
    `make secrets-seed` from the MacBook.

@@ -2556,13 +2556,21 @@ collie-setup:
 		exit 0; \
 	fi
 	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
-	@command -v bun >/dev/null 2>&1 || { echo "  ✗ bun not installed — run: brew bundle install"; exit 1; }
+	@BUN_BIN_DIR=$$(bash $(DOTFILES_DIR)/scripts/lib/bun-bin.sh) || { echo "  ✗ bun not found on PATH, ~/.bun/bin or the Homebrew prefixes — run: brew bundle install"; exit 1; }; \
+	if [ ! -x "$$BUN_BIN_DIR/bunx" ]; then \
+		echo "  ✗ bunx shim missing next to bun ($$BUN_BIN_DIR/bunx) — reinstall bun (the plugin rebuild needs it)"; exit 1; \
+	fi; \
+	echo "    · bun from $$BUN_BIN_DIR (bunx present)"
 	@# Install/refresh only when the pin moved: `plugin install` re-clones and
-	@# rebuilds every time.
+	@# rebuilds every time. The rebuild runs `bun`/`bunx` from the plugin's own
+	@# scripts and inherits THIS shell's PATH, so the resolved dir is prepended
+	@# here rather than trusted to be there already — a non-login make
+	@# (launchd, agent dispatch) has neither a login shell's PATH nor ~/.bun/bin.
 	@if [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .source.resolved_commit')" = "$(COLLIE_REF)" ]; then \
 		echo "    ✓ collie $(COLLIE_VERSION) plugin installed"; \
 	else \
 		echo "    → installing collie $(COLLIE_VERSION) ($(COLLIE_REF))"; \
+		export PATH="$$(bash $(DOTFILES_DIR)/scripts/lib/bun-bin.sh):$$PATH"; \
 		herdr plugin install $(COLLIE_SOURCE) --ref $(COLLIE_REF) -y >/dev/null \
 			&& echo "    ✓ collie $(COLLIE_VERSION) installed" \
 			|| { echo "  ✗ collie plugin install failed"; exit 1; }; \

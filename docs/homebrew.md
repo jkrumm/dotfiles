@@ -65,6 +65,15 @@ herdr assertions go through it. A hardcoded old path does not error — it repor
 working version while `protobuf` upgraded underneath it and the dylib link broke,
 which is why it was deleted rather than re-pinned. `caddy` is the only pin.
 
+**A pin outside HELD is owned by whoever made it, and the tooling says so.**
+A foreign pin (tailscale was the case) is deliberately left alone by `make
+brew-upgrade` — one `! pinned but not in HELD` line, nothing else. Because
+`brew upgrade` skips pinned formulae by design, drift-check.sh reports a
+pinned-but-outdated formula as its own row whose fix is the unpin *decision*
+(`brew unpin X && brew upgrade X …`), never "make brew-upgrade" — a command
+that runs green and cannot move the pin. Re-pin after such an upgrade if the
+revert hazard still applies, as with caddy.
+
 **`colima` is asserted but deliberately not pinned.** Pinning caddy costs
 nothing — it is stable and its local machinery is rebuilt by a named target.
 colima is the Docker runtime and holds the VM; pinning it means sitting on an

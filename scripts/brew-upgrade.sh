@@ -134,6 +134,22 @@ done
 command -v brew >/dev/null 2>&1 \
   || { echo "✗ brew not found — this script requires Homebrew" >&2; exit 1; }
 
+# --- single-run guard --------------------------------------------------------
+# Two unattended triggers can overlap (a hand-run `make brew-upgrade` colliding
+# with a maintenance round, or two panes at once); interleaved brew update /
+# upgrade output and double-run assertions are the failure this prevents.
+# macOS ships no /usr/bin/flock, and a stale mkdir-style lock would need its
+# own reaper — shlock ties the lock to a live pid, so a crashed run releases it
+# with no cleanup path (a recycled pid can false-hold it; accepted at this
+# scale). BREW_UPGRADE_LOCK / BREW_UPGRADE_SHLOCK are overridable for tests.
+SHLOCK_BIN="${BREW_UPGRADE_SHLOCK:-/usr/bin/shlock}"
+LOCK_FILE="${BREW_UPGRADE_LOCK:-$HOME/.local/state/brew-upgrade/lock}"
+mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
+if ! "$SHLOCK_BIN" -p "$$" -f "$LOCK_FILE"; then
+  echo "✗ another brew-upgrade appears to be running (pid $(cat "$LOCK_FILE" 2>/dev/null || echo '?')) — refusing to run concurrently" >&2
+  exit 1
+fi
+
 if (( ! PINS_ONLY )); then
   echo "  brew update..."
   brew update --quiet
@@ -198,10 +214,10 @@ done <<<"$outdated_casks_raw"
 # A non-core tap reports its full name as `owner/tap/formula`
 # (`oven-sh/bun/bun`) where a homebrew/core formula reports bare (`jq`) — the
 # presence of a `/` IS the signal, not a maintained allowlist of taps.
-third_party_basenames=()
+third_party_full_names=()
 while IFS= read -r fn; do
   if [[ -n "$fn" && "$fn" == */* ]]; then
-    third_party_basenames+=("${fn##*/}")
+    third_party_full_names+=("$fn")
   fi
 done <<<"$full_names_raw"
 
@@ -211,7 +227,7 @@ upgradable=()
 for pkg in ${outdated_formulae[@]+"${outdated_formulae[@]}"}; do
   if in_array "$pkg" "${HELD[@]}"; then
     held_outdated+=("$pkg")
-  elif in_array "$pkg" ${third_party_basenames[@]+"${third_party_basenames[@]}"}; then
+  elif in_array "$pkg" ${third_party_full_names[@]+"${third_party_full_names[@]}"}; then
     third_party_outdated+=("$pkg")
   else
     upgradable+=("$pkg")
@@ -363,6 +379,10 @@ echo "  upgraded ${#upgradable[@]}, skipped: ${#held_outdated[@]} held, ${#third
 # the upgrade DID happen, and a reverted caddy module is a different alert with
 # a different fix — conflating them would hide the second one behind the first.
 # Not written on --dry-run; that path exits long before here.
+# A foreign pin (e.g. tailscale) is likewise a separate fact, not a failed run:
+# `brew upgrade` skips it silently, so "stamp is fresh" and "pinned package is
+# outdated" can both be true. drift-check.sh reports that as its own row with
+# its own fix, so this run is still a success.
 BREW_UPGRADE_STAMP="${BREW_UPGRADE_STAMP:-$HOME/.local/state/brew-upgrade/last-success}"
 mkdir -p "$(dirname "$BREW_UPGRADE_STAMP")" 2>/dev/null || true
 : >"$BREW_UPGRADE_STAMP" 2>/dev/null || true
