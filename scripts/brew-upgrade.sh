@@ -96,13 +96,36 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
 
 # The declared hold list. `brew pin` is what actually protects these (see
 # above) — this array only drives what this script reports and asserts.
-HELD=(caddy)
+#
+# tailscale is held for a DIFFERENT reason than caddy, and it is not silent
+# config revert. On the dev host Tailscale is not one network path among
+# several, it is the ONLY one: `ssh mini` resolves to the tailnet address and
+# the LAN address does not answer — measured 2026-09-20, ARP for the mini's
+# 192.168.1.x never completes from the MacBook, the two Macs are not on the
+# same L2 despite both showing a 192.168.1.0/24 address. So the formula whose
+# daemon carries every inbound connection must not ride an unattended batch
+# that nobody is watching: 2026-08-05 already cost an outage by forcing a
+# Tailscale update on this host (drift-check.sh's check_tailscale header says
+# so, and then told you to fix the drift with `make brew-upgrade` — which, up
+# to here, would have done exactly the forcing that incident warned about).
+#
+# Upgrading the FORMULA is in fact harmless on its own: the running daemon
+# keeps its old inode until something restarts it, so the door stays open. It
+# is the restart that is the risk, and the restart is what the repair command
+# below makes explicit and human-timed. The post-assertion further down
+# reports the in-between state (new binary on disk, old daemon serving) rather
+# than letting it pass for "upgraded".
+HELD=(caddy tailscale)
 
-# Which `make` target repairs a held package after a deliberate manual
-# upgrade (`brew unpin X && brew upgrade X && make <this> && brew pin X`).
+# The command that repairs a held package after a deliberate manual upgrade:
+#   brew unpin X && brew upgrade X && <this> && brew pin X
+# It is a COMMAND, not a make target — `make caddy-dns-build` is a target and
+# tailscale's repair is a launchctl call, and printing a half-line the reader
+# has to assemble is how a follow-up gets skipped.
 fixup_for() {
   case "$1" in
-    caddy) printf '%s' "caddy-dns-build" ;;
+    caddy) printf '%s' "make caddy-dns-build" ;;
+    tailscale) printf '%s' "sudo launchctl kickstart -k system/homebrew.mxcl.tailscale" ;;
     *) printf '%s' "" ;;
   esac
 }
@@ -140,7 +163,7 @@ if (( ! PINS_ONLY )); then
 fi
 
 # --- converge pins (idempotent) ----------------------------------------------
-echo "  Pins (caddy — silent-config-revert guard, see header)..."
+echo "  Pins (${HELD[*]} — see the HELD comment for why each one is held)..."
 pinned_raw=$(brew list --pinned 2>/dev/null) || true
 
 for f in "${HELD[@]}"; do
@@ -198,10 +221,23 @@ done <<<"$outdated_casks_raw"
 # A non-core tap reports its full name as `owner/tap/formula`
 # (`oven-sh/bun/bun`) where a homebrew/core formula reports bare (`jq`) — the
 # presence of a `/` IS the signal, not a maintained allowlist of taps.
-third_party_basenames=()
+#
+# COMPARE FULL NAME TO FULL NAME. This used to collect BASENAMES here
+# (`bun`) and match them against what `brew outdated --quiet` prints, which is
+# the FULL name (`oven-sh/bun/bun`) — so the comparison could never be true and
+# the third-party bucket was always empty. The stated policy ("tap maintainers
+# publish directly, no Homebrew-CI review gate — report, never auto-upgrade")
+# silently did not hold: measured 2026-09-20, a run that reported
+# `skipped: 0 third-party` had just upgraded `oven-sh/bun/bun` inside the
+# automatic set on both machines. A guard that reports zero is indistinguishable
+# from a guard that has nothing to guard, which is why this went unnoticed.
+#
+# HELD IS STILL MATCHED BARE, deliberately: every held formula is a
+# homebrew/core one, and `brew pin`/`brew unpin` take the bare name.
+third_party_fullnames=()
 while IFS= read -r fn; do
   if [[ -n "$fn" && "$fn" == */* ]]; then
-    third_party_basenames+=("${fn##*/}")
+    third_party_fullnames+=("$fn")
   fi
 done <<<"$full_names_raw"
 
@@ -211,7 +247,7 @@ upgradable=()
 for pkg in ${outdated_formulae[@]+"${outdated_formulae[@]}"}; do
   if in_array "$pkg" "${HELD[@]}"; then
     held_outdated+=("$pkg")
-  elif in_array "$pkg" ${third_party_basenames[@]+"${third_party_basenames[@]}"}; then
+  elif in_array "$pkg" ${third_party_fullnames[@]+"${third_party_fullnames[@]}"}; then
     third_party_outdated+=("$pkg")
   else
     upgradable+=("$pkg")
@@ -225,7 +261,7 @@ if (( ${#held_outdated[@]} > 0 )); then
   echo "  ! held & outdated — deliberate follow-up, not run automatically:"
   for pkg in "${held_outdated[@]}"; do
     fixup=$(fixup_for "$pkg")
-    echo "      brew unpin $pkg && brew upgrade $pkg && make $fixup && brew pin $pkg"
+    echo "      brew unpin $pkg && brew upgrade $pkg && $fixup && brew pin $pkg"
   done
 fi
 
@@ -276,6 +312,47 @@ if [[ "$BACKEND" == "cache" ]]; then
   fi
 else
   echo "  · not the dev host (backend=${BACKEND:-unset}) — skipping caddy assertion"
+fi
+
+# tailscale: ASK THE DAEMON, NEVER THE CLI. `brew upgrade tailscale` replaces
+# the binary behind /opt/homebrew/opt/tailscale; the running tailscaled keeps
+# its old inode until something restarts it, so right after an upgrade the
+# machine is serving traffic from a version that is no longer installed. Plain
+# `tailscale version` reports the CLI's own version and so goes green at that
+# exact moment — a confident wrong answer of the same shape lib/tailscale-cli.sh
+# exists to prevent (there: the dormant macsys daemon answering for the live
+# one). `version --daemon` prints both; the `Daemon:` line is the only one that
+# says what is actually carrying the tunnel.
+#
+# This is a REPORT, not a repair. The restart is `sudo launchctl kickstart -k`,
+# it needs root the unattended path does not have, and on the dev host it
+# briefly drops the only door in (see the HELD comment). The daemon plist is
+# KeepAlive=true + RunAtLoad=true, so the gap self-heals — but it is still a
+# gap, and choosing when to open it is the human's call. Left outdated it is
+# the 2026-08-05 blind spot again, which is why silence is not an option either.
+if [[ -x /opt/homebrew/bin/tailscale && -S /var/run/tailscaled.socket ]]; then
+  # THE OPT SYMLINK, not `brew list --versions`. Homebrew keeps old kegs around
+  # (the mini had `tailscale 1.102.3 1.102.2` listed side by side), so picking a
+  # field out of that line compares the daemon against whichever keg happens to
+  # sort there. `/opt/homebrew/opt/tailscale` is the LINKED one, and it is also
+  # the exact path the LaunchDaemon's ProgramArguments resolves through — so it
+  # is what the next restart will actually start.
+  ts_installed=$(basename "$(readlink /opt/homebrew/opt/tailscale 2>/dev/null)" 2>/dev/null)
+  # `Daemon: 1.102.3-t53a0d659a` → 1.102.3. The -t<commit> suffix is build
+  # metadata the formula version never carries, so it is stripped, not matched.
+  ts_daemon=$(/opt/homebrew/bin/tailscale --socket=/var/run/tailscaled.socket \
+    version --daemon 2>/dev/null | awk -F': ' '/^Daemon:/{print $2}' | cut -d- -f1)
+  if [[ -z "$ts_installed" || -z "$ts_daemon" ]]; then
+    echo "  · tailscale: version unreadable (installed='${ts_installed:-?}' daemon='${ts_daemon:-?}') — skipping assertion"
+  elif [[ "$ts_installed" == "$ts_daemon" ]]; then
+    echo "  ✓ tailscale: daemon $ts_daemon matches the installed keg"
+  else
+    echo "  ✗ tailscale: daemon still runs $ts_daemon, $ts_installed is installed — the tunnel is on a version no longer on disk"
+    echo "      fix (drops the tailnet for a moment; launchd brings it back): sudo launchctl kickstart -k system/homebrew.mxcl.tailscale"
+    assertion_failed=1
+  fi
+else
+  echo "  · tailscale: no brew tailscaled here — skipping assertion"
 fi
 
 # colima is asserted on BOTH machines, gated on its own plist rather than the

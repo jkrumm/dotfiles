@@ -206,11 +206,27 @@ check_macos() {
 # It REPORTS and never applies, and the 14-day grace is what makes that
 # tolerable: forcing an update on the one machine whose only access path IS
 # Tailscale cost an outage and changed no version (2026-08-05).
+#
+# `version --daemon`, NOT `version`. Bare `tailscale version` prints the CLI
+# binary's own version, and `brew upgrade tailscale` advances that binary while
+# the running tailscaled keeps serving from its old inode until something
+# restarts it. Measured against the CLI, this check therefore turned green the
+# moment the bottle was poured and stayed green through every CVE the stale
+# daemon was still exposed to — the exact blind spot the header above says this
+# function exists to close, reopened one command lower down. `--daemon` prints
+# `Client:` and `Daemon:`; only the second one is carrying traffic.
 check_tailscale() {
   local installed latest
   [[ -n "$TAILSCALE_BIN" ]] || { skip_add "tailscale (no CLI found)"; return; }
 
-  installed=$(ts_run version 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d ' ')
+  # The `-t<commit>` suffix (`1.102.3-t53a0d659a`) is build metadata the release
+  # feed never carries, so it is stripped rather than matched. The app-bundle
+  # variant answers `--daemon` too; the fallback to line 1 is for a CLI old
+  # enough not to know the flag, where the CLI version is all there is.
+  installed=$(ts_run version --daemon 2>/dev/null \
+    | /usr/bin/awk -F': ' '/^Daemon:/{print $2}' | /usr/bin/cut -d- -f1)
+  [[ -n "$installed" ]] \
+    || installed=$(ts_run version 2>/dev/null | /usr/bin/head -1 | /usr/bin/tr -d ' ')
   [[ -n "$installed" ]] || { skip_add "tailscale (running version unreadable)"; return; }
 
   if [[ "$TAILSCALE_BIN" != "/opt/homebrew/bin/tailscale" ]]; then
@@ -224,9 +240,12 @@ check_tailscale() {
   [[ -n "$latest" ]] || { skip_add "tailscale (pkgs.tailscale.com unreachable)"; return; }
 
   if [[ "$installed" == "$latest" ]]; then
-    info_add "tailscale current ($installed, $TAILSCALE_VARIANT)"
+    info_add "tailscale current (daemon $installed, $TAILSCALE_VARIANT)"
   else
-    drift_add "tailscale" "tailscale $installed → $latest (fix: make brew-upgrade)"
+    # tailscale is HELD in brew-upgrade.sh (it is the dev host's only door —
+    # see that script's HELD comment), so `make brew-upgrade` deliberately
+    # skips it. Naming it here would be a fix that does nothing.
+    drift_add "tailscale" "tailscale daemon $installed → $latest (fix: brew unpin tailscale && brew upgrade tailscale && sudo launchctl kickstart -k system/homebrew.mxcl.tailscale && brew pin tailscale)"
   fi
 }
 
