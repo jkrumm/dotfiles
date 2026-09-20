@@ -1,11 +1,19 @@
 # Homebrew — supply-chain hardening + privacy
 # See dependency-hygiene rule: minimal surface, deliberate upgrades, no blind auto-upgrade.
 
-# Refuse formulae/casks/commands from untrusted third-party taps. Trusted taps are
-# allow-listed via `brew trust --formula <tap>/<formula>` (oven-sh/bun, satococoa/tap).
-# Both machines are on Homebrew 6.x already (6.0.0 shipped 11 June 2026, where this
-# became the default) — the export is now belt-and-braces, not an early adoption.
-export HOMEBREW_REQUIRE_TAP_TRUST=1
+# Tap trust — formulae/casks/commands from untrusted third-party taps are ignored.
+# Trusted taps are allow-listed via `brew trust [--formula|--cask] <tap>/<name>`
+# (oven-sh/bun, satococoa/tap; `make setup` trusts exactly what the Brewfile declares).
+#
+# NO EXPORT ANY MORE. `HOMEBREW_REQUIRE_TAP_TRUST=1` was belt-and-braces over the
+# Homebrew 6 default; Homebrew 7 (both machines run 7.0.4) turned it into a
+# deprecation that prints
+#   Warning: Calling HOMEBREW_REQUIRE_TAP_TRUST is deprecated! Use the default
+#   behaviour instead.
+# on EVERY brew invocation. A permanent warning on a command that is scripted and
+# parsed all over this repo is worse than no belt at all — it trains the eye to skip
+# brew's warnings, which is where the real ones appear. The behaviour it asked for is
+# the default and stays on without it; `brew trust --json v1` shows the live store.
 
 # Refuse downloads that redirect from HTTPS down to insecure HTTP.
 export HOMEBREW_NO_INSECURE_REDIRECT=1
