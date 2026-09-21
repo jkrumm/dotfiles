@@ -91,7 +91,7 @@ commits follow `rules/commit-conventions.md`.
 |-|-|
 | **inline** — session model | Work needing this conversation's context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `implement`. Keep short. |
 | **native subagent** (`Agent`, `~/.claude/agents/`) — `@implementer` (edits needing THIS session's live uncommitted tree or tight iteration — a native subagent can't reach the IU endpoint, so it's stuck on Sonnet/Max), `@verifier` (evidence), `Explore` (search). All pinned to Sonnet by `CLAUDE_CODE_SUBAGENT_MODEL`; raise one only for novel-hard logic. A `PreToolUse` hook (`hooks/model-discipline.ts`) enforces the rest: a worker on Fable is denied outright, and **`fork`** is denied whenever the caller itself is Fable/Opus. **Its own cache** | Fresh context, returns a summary, edits hit the live tree. |
-| **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **The primary offload for settled implementation**: `dispatch` tier `implement` runs `glm-5.3-flash` off Max in its own worktree → branch → draft PR; tier `investigate` is read-only. **Async** — job contract below (`otel` is the one exception, see there). |
+| **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **The primary offload for settled implementation**: `dispatch` tier `implement` runs `DeepSeek-V4-Flash` off Max in its own worktree → branch → draft PR; tier `investigate` is read-only. **Async** — job contract below (`otel` is the one exception, see there). |
 | **subprocess — `agent-dispatch`**, IU per-token (Max on the mini lane) | One durable bounded episode against a named repo, output kept out of here. |
 | **lifecycle — `warden run <repo> '<brief>'`** | Unattended work tracked to an outcome on warden's ledger — investigate → verdict → implement → review → merge, gated by policy. |
 | **`/research`** — research-gateway MCP, tailnet-only, off Max | Any library / API / version fact, never from memory. |
@@ -100,7 +100,7 @@ Model-choice rationale for every lane above: `brain/wiki/engineering/model-routi
 
 | Work | Route to |
 |-|-|
-| Settled multi-file edit **in this repo** | `mcp__sideclaw__dispatch` (tier `implement`, `glm-5.3-flash`, off Max) by default; `@implementer` only when it must land in this session's live uncommitted tree or needs tight iteration; `/implement` when it needs research-gating + validation |
+| Settled multi-file edit **in this repo** | `mcp__sideclaw__dispatch` (tier `implement`, `DeepSeek-V4-Flash`, off Max) by default; `@implementer` only when it must land in this session's live uncommitted tree or needs tight iteration; `/implement` when it needs research-gating + validation |
 | One bounded episode **in another repo** | `warden run <repo> '<brief>'` for anything unattended tracked to an outcome; `mcp__sideclaw__dispatch` for a bounded question with a typed verdict; `agent-dispatch bg <repo> '<task>'` for a colleague you will steer |
 | Search across many files | `Agent` → `Explore` |
 | Any format / lint / tsc / test loop | `mcp__sideclaw__check` — never inline |
