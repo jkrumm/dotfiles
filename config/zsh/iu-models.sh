@@ -22,11 +22,16 @@
 #   DeepSeek-V4-Flash / DeepSeek-V4-Pro / minimax-m3  1000000  measured
 #                  2026-09-20 — each accepted at the 1.1M probe ceiling
 #   kimi-k2.7-code  262144  measured 2026-09-20 — exact, named by the gateway
-# Gateway ids are case-sensitive; these are the catalog's spellings.
 _CA_CTX_FALLBACK=200000
+# Matched case-insensitively: the gateway accepts `deepseek-v4-pro` as readily
+# as `DeepSeek-V4-Pro`, and a lookup that only knew the catalog spelling sent the
+# lowercase form to the 200k fallback — five compactions in one hour, 2026-09-17.
+# `tr`, not ${1:l} / ${1,,}: this file parses under zsh and bash 3.2 alike.
+_ca_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 _ca_ctx() {
-  case "$1" in
-    glm-5.3-flash|DeepSeek-V4-Flash|DeepSeek-V4-Pro|minimax-m3) echo 1000000 ;;
+  case "$(_ca_lower "$1")" in
+    glm-5.3-flash|deepseek-v4-flash|deepseek-v4-pro|minimax-m3) echo 1000000 ;;
     kimi-k2.7-code) echo 262144 ;;
     *) echo "$_CA_CTX_FALLBACK" ;;
   esac
@@ -42,8 +47,8 @@ _ca_ctx() {
 # The other rows carry 8192 because that is the budget their 2026-09-20 ccbench
 # rows were measured under — the reproduced config, not a tuned one.
 _ca_thinking() {
-  case "$1" in
-    glm-5.3-flash|DeepSeek-V4-Flash|DeepSeek-V4-Pro|minimax-m3|kimi-k2.7-code) echo 8192 ;;
+  case "$(_ca_lower "$1")" in
+    glm-5.3-flash|deepseek-v4-flash|deepseek-v4-pro|minimax-m3|kimi-k2.7-code) echo 8192 ;;
     *) echo "" ;;
   esac
 }
