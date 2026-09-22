@@ -29,6 +29,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/codex/astra.config.toml` | `~/.codex/astra.config.toml` | The `cxa` profile. `config/codex/config.toml.tpl` is **rendered**, not linked (below) |
 | `config/codex/AGENTS.md` | `~/.codex/AGENTS.md` | Codex's global brief — environment facts only, deliberately **not** the Claude method |
+| `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | The **file** only — the dir holds opencode's plugin `node_modules`. Rules via `instructions`, IU provider via `{env:IU_*}` |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | The **file** only — the same dir holds herdr's sockets and logs |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
@@ -190,6 +191,19 @@ worth building.
   `~/.codex/sessions/**/rollout-*.jsonl` and pushes to Argo like every other
   lane. Local only — codex runs on the MacBook are invisible until that
   collector gains an iumac mirror.
+
+## OpenCode — the third lane
+
+`oc` = OpenCode on the IU endpoint's Anthropic route, re-added 2026-09-23 after
+the 2026-09-04 subtraction because AGENTS.md made it a zero-maintenance reader
+of the same instructions. It loads `<repo>/AGENTS.md` (nested lazily),
+`~/.claude/CLAUDE.md` and every skill natively; the always-on rules come from
+`instructions` in `config/opencode/opencode.json` — list only global rules
+without `paths:`; the per-repo `.claude/rules/*.md` glob is a known tradeoff
+(OpenCode ignores `paths:`, so a repo's lazy rules load on every turn there).
+Adding an always-on global rule means adding it to that list too. `@imports`
+do **not** resolve there.
+Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
 
 ## Machines & remote dev
 
@@ -481,6 +495,7 @@ startup — `source ~/.zshrc` after editing.
 | `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg |
 | `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
+| `oc` | OpenCode on the IU endpoint's Anthropic route | `claude-opus-5-5` default; see *OpenCode* |
 | `rd wave` / `rd bg` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL`/`RD_BG_MODEL` override; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.

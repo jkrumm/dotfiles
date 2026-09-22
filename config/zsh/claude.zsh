@@ -338,3 +338,24 @@ claude_iu() {
     ANTHROPIC_BASE_URL="$base" \
     claude -p "$@"
 }
+
+# `oc` — OpenCode on the IU endpoint's native Anthropic route. The third lane
+# next to `ca` and `cx`: it reads the same AGENTS.md, ~/.claude/CLAUDE.md and
+# ~/.claude/skills, and gets the always-on rules through `instructions` in
+# config/opencode/opencode.json (→ ~/.config/opencode/opencode.json), which
+# holds only {env:IU_*} placeholders — no key, no host. Pattern and measured
+# load matrix: docs/agents-md.md.
+#
+# Creds resolve per call like `cx`: Keychain first, the time-boxed secrets shim
+# second (`_codex_secret`, codex.zsh), passed by prefix assignment — never
+# exported, never `env VAR=…`, so they stay out of `ps auxww`.
+oc() {
+  local key base
+  key=$(_codex_secret claude-sdk-api-key op://common/anthropic/API_KEY)
+  base=$(_codex_secret claude-sdk-base-url op://common/anthropic/BASE_URL)
+  if [[ -z "$key" || -z "$base" ]]; then
+    print -ru2 "oc: IU credentials unresolvable — run 'make setup' in dotfiles"
+    return 1
+  fi
+  IU_KEY="$key" IU_ANTHROPIC_BASE="${base%/}" command opencode "$@"
+}

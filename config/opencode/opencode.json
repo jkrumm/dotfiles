@@ -1,0 +1,26 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-opus-5-5",
+  "autoupdate": false,
+  "instructions": [
+    ".claude/rules/*.md",
+    "~/.claude/rules/agent-limits.md",
+    "~/.claude/rules/attribution.md",
+    "~/.claude/rules/code-style.md",
+    "~/.claude/rules/commit-conventions.md",
+    "~/.claude/rules/dependency-hygiene.md",
+    "~/.claude/rules/docker-makefile.md",
+    "~/.claude/rules/formatting.md",
+    "~/.claude/rules/research-first.md",
+    "~/.claude/rules/security.md",
+    "~/.claude/rules/typescript.md"
+  ],
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "{env:IU_ANTHROPIC_BASE}/v1",
+        "apiKey": "{env:IU_KEY}"
+      }
+    }
+  }
+}

@@ -95,6 +95,9 @@ brew "logdy"
 brew "micro"
 # Libraries for security-enabled client and server applications
 brew "nss"
+# OpenCode — third agent lane on the IU endpoint's Anthropic route
+# (config/opencode/, launched with `oc`). Reads AGENTS.md and ~/.claude skills.
+brew "opencode"
 # Package compiler and linker metadata toolkit
 brew "pkgconf"
 # Fast, disk space efficient package manager
