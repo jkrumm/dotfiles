@@ -147,6 +147,15 @@ TS_KEY_EXPIRY_DAYS_MIN="${DEVHOST_TS_KEY_EXPIRY_DAYS_MIN:-30}"
 RUNAWAY_CPU_MINUTES="${DEVHOST_RUNAWAY_CPU_MINUTES:-600}"
 RUNAWAY_CPU_PCT_MIN="${DEVHOST_RUNAWAY_CPU_PCT_MIN:-50}"
 SECRETS_FRESHNESS_MAX_AGE_DAYS="${SECRETS_FRESHNESS_MAX_AGE_DAYS:-8}"
+# A panic report is written once and stays on disk forever, so the alertable
+# fact is an AGE, not its existence — see check_kernel_panics. Three days is
+# long enough to survive a weekend, short enough that the msg still names the
+# event when someone reads the log.
+PANIC_MAX_AGE_DAYS="${DEVHOST_PANIC_MAX_AGE_DAYS:-3}"
+# Overridable so the check can be driven to its failing side on a healthy
+# machine (point it at a fixture dir), the same reason every threshold above is
+# overridable — the only other way to test the alarm is to panic the host.
+DIAGNOSTIC_REPORTS_DIR="${DEVHOST_DIAGNOSTIC_REPORTS_DIR:-/Library/Logs/DiagnosticReports}"
 # usage-tracker runs every 900s; twice that plus slack before "it stopped".
 USAGE_TRACKER_MAX_AGE_MIN="${DEVHOST_USAGE_TRACKER_MAX_AGE_MIN:-30}"
 # Max quota is reported, never graded — except a WARN (never FAIL) when the
@@ -678,6 +687,75 @@ check_memory() {
   (( pct <= MEM_SWAP_PCT_MAX )) \
     || { echo "swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM (max ${MEM_SWAP_PCT_MAX}%) — something is leaking"; return 1; }
   echo "memory ok (pressure ${level_name}, swap ${used_mb}M = ${pct}% of ${phys_gb}G)"
+}
+
+check_kernel_panics() {
+  # A kernel panic was the one host-level fault with no trace anywhere. The
+  # machine reboots (pmset autorestart), every service comes back, and the only
+  # record is a `.panic` file in /Library/Logs/DiagnosticReports that nothing
+  # read. The `host rebooted Ns ago` note above says a reboot happened for ten
+  # minutes and never says WHY, and check_launchd_restarts deltas AGENTS rather
+  # than the host — so a 3am panic that recovered perfectly left the same
+  # footprint as a power blip.
+  #
+  # WARN, never FAIL, and the file's own doctrine decides it. A panic is
+  # EDGE-triggered and already recovered: autorestart brought the host back and
+  # every other component is healthy, so grading it FAIL would mark the dev host
+  # DOWN and implicate fifteen healthy components in an event that is over. That
+  # is the collie/secrets-freshness argument one step further out — the same
+  # asymmetry check_memory already leans on in the other direction, where the
+  # signal PRECEDES the damage and therefore does page.
+  #
+  # An AGE WINDOW, not a state-file delta, even though check_launchd_restarts is
+  # the precedent for edges. A delta reports once, in a single heartbeat, while
+  # the human who needs it is asleep; the window keeps naming the panic for
+  # PANIC_MAX_AGE_DAYS so it is still in the log when someone reads it. WARN
+  # ignores the streak machinery entirely, so a sustained WARN costs nothing.
+  #
+  # Globbed by explicit name and never `*.ips` — that directory also holds
+  # `tailscaled-*.ips` and dozens of `*_mini.diag` resource scans, and a broad
+  # glob would WARN on a perfectly healthy host. JetsamEvent-*.ips is
+  # deliberately NOT matched: check_memory FAILs at pressure level 2, the signal
+  # that PRECEDES a jetsam kill, and check_launchd_restarts surfaces `Killed: 9`
+  # for every KeepAlive job — so both jetsam cases this host actually hits are
+  # already covered, and re-raising one days later under a component named for
+  # panics would read as an event that just happened.
+  local dir="$DIAGNOSTIC_REPORTS_DIR" newest="" newest_mtime=0 f mtime
+  [[ -d "$dir" ]] || { echo "kernel panics n/a (no $dir)"; return 0; }
+  # A pattern that matches nothing expands to itself, which `-f` rejects — so no
+  # nullglob (bash 3.2 has it off and this script must not need it).
+  for f in "$dir"/panic-full-*.panic "$dir"/Kernel-*.panic; do
+    [[ -f "$f" ]] || continue
+    mtime=$("$STAT_BIN" -f %m "$f" 2>/dev/null) || continue
+    [[ -n "$mtime" ]] || continue
+    if (( mtime > newest_mtime )); then newest_mtime=$mtime; newest="$f"; fi
+  done
+  [[ -n "$newest" ]] || { echo "no kernel panic on record"; return 0; }
+
+  local age_days
+  age_days=$(( ( $("$DATE_BIN" -u +%s) - newest_mtime ) / 86400 ))
+  (( age_days <= PANIC_MAX_AGE_DAYS )) \
+    || { echo "no kernel panic in ${PANIC_MAX_AGE_DAYS}d (last ${age_days}d ago)"; return 0; }
+
+  # The panic's own one-line signature, taken from `panicString` — the file's
+  # first line is a small JSON object and the report itself the next, so jq is
+  # fed the stream and picks the value that has one. `panic(cpu N caller 0x…)`
+  # is 40 characters of identifier noise, so strip that prefix and keep the
+  # quoted message that follows; if the shape is not what is expected, fall back
+  # to the raw string rather than reporting nothing.
+  #
+  # Flattened first, because panicString is a multi-line block and this value
+  # becomes one msg in the heartbeat: a newline would split the summary into two
+  # lines in the Kuma UI and in every downstream Slack notification. The lib
+  # comment about hand-rolled URLs records the same class of bug, caught there.
+  local raw sig
+  raw=$("$JQ_BIN" -r '[select(.panicString) | .panicString] | first // ""' "$newest" 2>/dev/null) || raw=""
+  raw=${raw//$'\n'/ }
+  sig=$("$SED_BIN" -e 's/^[[:space:]]*//' -e 's/^panic([^)]*):[[:space:]]*"//' -e 's/".*$//' <<<"$raw")
+  [[ -n "$sig" ]] || sig="$raw"
+  [[ -n "$sig" ]] || sig="signature unreadable"
+  echo "kernel panic ${age_days}d ago (${sig:0:80}) — autorestart recovered, report ${newest##*/}"
+  return 2
 }
 
 # One `label|plist` row for a Homebrew service, under whichever of the two
@@ -1228,7 +1306,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
-                 check_memory check_launchd_restarts check_boot_path check_services check_claude_auth \
+                 check_memory check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth \
                  check_obsidian check_disk check_runaways check_sideclaw_jobs check_overview_pane \
                  check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
