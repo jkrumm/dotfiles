@@ -589,7 +589,11 @@ cmd_bg() {
   # Same default as `wave`: Sonnet unless the caller says otherwise
   # (`RD_BG_MODEL`), and the `bg` lane for usage-tracker.
   local model="${RD_BG_MODEL:-sonnet}"
-  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --model '$model' '\"\$(cat $brief_file)\"'" >/dev/null 2>&1
+  # `--dangerously-skip-permissions`, as `work` already passes: a daemon has no
+  # one to answer a permission prompt, so without it the first Bash call stalls
+  # the whole episode in `waiting` (2026-09-22, the usage-tracker daemon sat on
+  # its opening `gh pr view` for an hour).
+  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --dangerously-skip-permissions --model '$model' '\"\$(cat $brief_file)\"'" >/dev/null 2>&1
 
   local id="" i=0
   while (( i < 24 )); do
