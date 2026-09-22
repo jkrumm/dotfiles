@@ -572,14 +572,24 @@ cmd_bg() {
   #
   # base64 removes the problem rather than escaping around it — the alphabet has
   # no shell metacharacters, so the payload survives both parses byte-identical
-  # no matter what the task contains. The literal double quotes inside the
-  # single-quoted argv element are what keep the pane-side expansion one word.
-  local b64
+  # no matter what the task contains.
+  #
+  # But the payload must NOT ride the pane's command line: `herdr pane run`
+  # types the line into a tty, and macOS canonical input stops at 1024 bytes
+  # (MAX_INPUT) — a brief longer than ~700 bytes arrived truncated, the shell
+  # never saw the closing quote, and the daemon never started (2026-09-22,
+  # eight of eight multi-paragraph briefs). So the brief is decoded into a
+  # file on the host over `host_run` (ssh argv has no such limit) and the pane
+  # line only reads it. The literal double quotes inside the single-quoted argv
+  # element are what keep the pane-side expansion one word.
+  local b64 brief_file
   b64=$(printf %s "$task" | base64 | tr -d '\n')
+  brief_file=$(host_run "umask 077; f=\$(mktemp -t rd-bg-brief); printf %s '$b64' | base64 -d > \"\$f\" && echo \"\$f\"")
+  [[ -n $brief_file ]] || die "could not stage the brief on $HOST"
   # Same default as `wave`: Sonnet unless the caller says otherwise
   # (`RD_BG_MODEL`), and the `bg` lane for usage-tracker.
   local model="${RD_BG_MODEL:-sonnet}"
-  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --model '$model' '\"\$(echo $b64 | base64 -d)\"'" >/dev/null 2>&1
+  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --model '$model' '\"\$(cat $brief_file)\"'" >/dev/null 2>&1
 
   local id="" i=0
   while (( i < 24 )); do
