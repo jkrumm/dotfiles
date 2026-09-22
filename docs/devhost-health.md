@@ -1,7 +1,7 @@
 # Dev-host health heartbeat and upstream drift (mini only)
 
 The full rationale behind the two monitoring surfaces on the mini. Commands and
-one-line gotchas live in `CLAUDE.md`.
+one-line gotchas live in `AGENTS.md`.
 
 ## The heartbeat
 

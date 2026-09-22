@@ -35,7 +35,7 @@ auth, Keychain API-key caching, MCP registration, `settings.json` merge.
 | `make theme` | Apply the terminal/herdr/prompt theme and reload live. |
 
 Machine-specific setup (remote access, battery limiter, backups, etc.) is
-opt-in per target — see `CLAUDE.md` for the full list.
+opt-in per target — see `AGENTS.md` for the full list.
 
 ## Layout
 
@@ -54,6 +54,6 @@ dotfiles/
 
 ## Full reference
 
-`CLAUDE.md` is the source of truth for everything else: workspaces, machine
+`AGENTS.md` is the source of truth for everything else: workspaces, machine
 reach, secrets strategy, and skill routing. Loaded automatically in every
 Claude Code session; read it directly for anything this file doesn't cover.

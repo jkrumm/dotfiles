@@ -84,7 +84,7 @@ age_seconds() {
 screen_locked() {
 	# No pipe on purpose: `set -o pipefail` plus a `grep -q` that exits early
 	# turns the producer's SIGPIPE into a false failure (a trap this repo has
-	# already paid for once, see CLAUDE.md). The key is absent entirely while
+	# already paid for once, see AGENTS.md). The key is absent entirely while
 	# unlocked, and reads `= Yes` while locked.
 	local out
 	out=$(/usr/sbin/ioreg -n Root -d1 -k CGSSessionScreenIsLocked 2>/dev/null || true)

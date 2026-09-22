@@ -50,7 +50,7 @@ host_run() {
 # conclude the fix is unnecessary because one attempt came back clean.
 # grep -q exits on the first match, herdr takes the SIGPIPE mid-write and returns 101, and
 # `set -o pipefail` hands that up as the pipeline's status. Capture first, match
-# second — the pipe was the bug, not the check. (Same trap the CLAUDE.md
+# second — the pipe was the bug, not the check. (Same trap the AGENTS.md
 # heartbeat notes call out; it costs a debugging cycle every time.)
 #
 # Nothing reached vs reached-but-down are separate messages because the fixes

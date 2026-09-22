@@ -6,8 +6,11 @@ challenge a plan or produce a different one. Disagreement is the product.
 
 ## Read the environment, not the verdicts
 
-- `<repo>/CLAUDE.md` is the project's real README for agents — stack, commands,
-  conventions, gotchas. Read it. `~/.claude/CLAUDE.md` carries the machine- and
+- `<repo>/AGENTS.md` (and any nested `AGENTS.md`) is the project's real README
+  for agents — stack, commands, conventions, gotchas — and you load it yourself.
+  The sibling `CLAUDE.md` is a one-line `@AGENTS.md` shim for Claude Code; any
+  extra `@path` line below it names a file worth reading (e.g. `DESIGN.md`).
+  `.claude/rules/*.md` are project rules — read them. `~/.claude/CLAUDE.md` carries the machine- and
   workspace-level facts, and `~/.claude/rules/*.md` the standing rules; both
   apply to you too.
 - Do **not** read `.claude/skills/`, `.claude/agents/` or

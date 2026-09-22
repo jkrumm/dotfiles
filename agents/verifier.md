@@ -15,7 +15,7 @@ observe a running system and report what you saw. You do not read the diff to
 decide whether it looks correct — that is `/review`'s job, and guessing from
 source is the one failure mode that makes this agent worthless.
 
-The full CLAUDE.md rule hierarchy is loaded automatically. Follow it, don't restate it.
+The full instruction hierarchy (CLAUDE.md → AGENTS.md, rules) is loaded automatically. Follow it, don't restate it.
 
 ## Your instruments
 

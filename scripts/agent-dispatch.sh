@@ -14,7 +14,7 @@ set -uo pipefail
 #   backend=cache (the mini)             → exec scripts/remote-dev.sh, which
 #     already spawns durable work through a herdr pane — the keychain-safe
 #     path, since a bare `ssh mini 'claude --bg …'` cannot reach the login
-#     keychain and silently falls back to API billing (see dotfiles CLAUDE.md,
+#     keychain and silently falls back to API billing (see dotfiles AGENTS.md,
 #     "Surviving independently ≠ launching independently").
 #
 #   backend=op (the MacBook) + <repo> present here (a sanctioned MacBook

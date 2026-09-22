@@ -169,7 +169,7 @@ Ask the user to confirm the outcome looks correct before considering the task do
 ### 6. Document Learnings (if non-obvious)
 
 If you discovered a gotcha, a constraint, or a reusable pattern:
-- Add to project CLAUDE.md if it'll help future sessions
+- Add to project AGENTS.md if it'll help future sessions
 - Mention to the user if one-time
 
 ---
@@ -187,5 +187,5 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 - Always ask for human sign-off at the end
 - **Action bias is the default**: small decisions are the agent's to make. Only escalate major uncertainty or user-owned decisions (see Default Stance section)
 - Implementation subagent must receive all context upfront (it has no prior conversation)
-- Settled multi-file work defaults to `mcp__sideclaw__dispatch` (tier `implement`, off Max); `@implementer` runs Sonnet at high effort on Max for live-tree/tight-iteration work. Both load CLAUDE.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
+- Settled multi-file work defaults to `mcp__sideclaw__dispatch` (tier `implement`, off Max); `@implementer` runs Sonnet at high effort on Max for live-tree/tight-iteration work. Both load CLAUDE.md → AGENTS.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
 - **A subjective goal needs a measurable acceptance criterion, or it comes back "done" unchanged.** "Make it less verbose", "tidy this up", "improve the naming" are unfalsifiable as written: the worker fixes something adjacent and reports success. Convert to a number the worker must measure and report (word count before/after, file count, the specific line that must be gone), or to the exact named sites that must change. A goal stated only in adjectives regressed twice in one project before the brief demanded a count

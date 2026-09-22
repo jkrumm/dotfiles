@@ -2437,7 +2437,7 @@ _herdr-supervise:
 # The one command that applies a pinned boot path (or a herdr upgrade) to the
 # RUNNING server. Separate from herdr-setup and loudly named because it is
 # destructive in a way no other brew service here is: a herdr restart loses
-# every process in every pane — see CLAUDE.md "a herdr crash restores the
+# every process in every pane — see AGENTS.md "a herdr crash restores the
 # layout and loses every process running in it".
 #
 # NOT `brew services restart`, and not `launchctl kickstart -k`. Both would
@@ -2541,7 +2541,7 @@ herdr-restart:
 	@$(MAKE) --no-print-directory agent-overview || echo "  ! agent-overview not restarted — run: make agent-overview"
 
 # Collie — phone web-UI control surface for the herd (herdr plugin + Bun
-# bridge). See CLAUDE.md "Collie — the phone control surface" for the full
+# bridge). See AGENTS.md "Collie — the phone control surface" for the full
 # model: what it is, the ACL gate, why COLLIE_SKIP_SERVE=1 is mandatory here.
 # Opt-in per machine, NOT in the default `setup` chain — same policy as
 # remote-access/devhost-health-setup/batt-setup. Gated on the dev-host marker
@@ -2605,7 +2605,7 @@ collie-setup:
 	[ -n "$$PLUGIN_ROOT" ] || { echo "  ✗ could not resolve herdr.collie plugin_root"; exit 1; }; \
 	CONFIG_DIR=$$(herdr plugin config-dir herdr.collie 2>/dev/null); \
 	[ -n "$$CONFIG_DIR" ] || CONFIG_DIR="$(HOME)/.config/herdr/plugins/config/herdr.collie"; \
-	[ -f "$$CONFIG_DIR/.env" ] || { echo "  ✗ no .env at $$CONFIG_DIR — write it by hand first (see CLAUDE.md)"; exit 1; }; \
+	[ -f "$$CONFIG_DIR/.env" ] || { echo "  ✗ no .env at $$CONFIG_DIR — write it by hand first (see AGENTS.md)"; exit 1; }; \
 	LEGACY="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
 	if [ -f "$$LEGACY" ]; then \
 		launchctl bootout gui/$$(id -u)/com.jkrumm.collie 2>/dev/null \

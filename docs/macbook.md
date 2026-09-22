@@ -13,7 +13,7 @@ description: The four subsystems that exist only on the MacBook — opbackup + s
 These four run only on the MacBook (`iumac`), never on the mini — `make
 setup`'s per-target guards no-op on the wrong machine. They matter little to an
 agent working on the mini, which is why they live here rather than in
-`CLAUDE.md`.
+`AGENTS.md`.
 
 ## opbackup + secrets auto-reseed
 
@@ -42,7 +42,7 @@ every vault. The goal is a prompt at a sane moment.
 - **Hourly via `StartCalendarInterval`**, never `RunAtLoad`/`StartInterval` — only
   those coalesce a sleep-missed fire into one wake-up run.
 - **A skip line in `~/Library/Logs/opbackup.log` is a claim, not a diagnosis** —
-  every guard exits **0**; three Secrets gotchas (see `dotfiles/CLAUDE.md`
+  every guard exits **0**; three Secrets gotchas (see `dotfiles/AGENTS.md`
   §Secrets) each present as one.
 
 Full rationale: `docs/opbackup.md`.

@@ -9,7 +9,7 @@ description: Operate the Mac mini remote dev host — connecting from the MacBoo
 `Backend: cache` = the mini, `Backend: op` = the MacBook. The model behind every
 command below (why three layers, why herdr crashes are survivable, why ssh
 can't reach the keychain) lives in `dotfiles/docs/remote-dev.md` and
-`dotfiles/CLAUDE.md` §Machines & remote dev — this file is the command
+`dotfiles/AGENTS.md` §Machines & remote dev — this file is the command
 reference and the troubleshooting table, not the rationale.
 
 ## Put work on the mini (no terminal)
@@ -110,7 +110,7 @@ Never `tailscale serve` for a dev server (issue #18827 drops WebSockets every
 | A file/state pull the other direction | `ssh iumac` / `rsync … iumac:…` from the mini (`usage-tracker` stats, syncing `brain`) — MacBook-side `op` goes through `ask-human.sh … --push` (dialog, then Touch ID), never a bare `ssh iumac 'op …'` |
 
 If the SMB mount fails, check `SMB-NT` before suspecting the tailnet — see
-`dotfiles/CLAUDE.md` → *File shuttle* for the deterministic check.
+`dotfiles/AGENTS.md` → *File shuttle* for the deterministic check.
 
 ## human-queue — the present-human channel
 

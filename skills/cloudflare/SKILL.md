@@ -158,7 +158,7 @@ No tunnel ingress change required — the wildcard already routes any subdomain 
 
 1. Add an A record with `proxied:false` (grey cloud) → Tailscale IP or VPS public IP
 2. No tunnel ingress change — traffic doesn't flow through Cloudflare at all
-3. For raw TCP exposure (e.g. MariaDB), open the host port at the firewall level and rely on app-level TLS + auth — see `vps/CLAUDE.md` Security Invariants for the documented exception pattern.
+3. For raw TCP exposure (e.g. MariaDB), open the host port at the firewall level and rely on app-level TLS + auth — see `vps/AGENTS.md` Security Invariants for the documented exception pattern.
 
 ---
 

@@ -1,6 +1,6 @@
 # Homebrew — Brewfile as supply-chain audit trail, and why auto-upgrade stays off
 
-Condensed reference lives in `CLAUDE.md` → "Homebrew". This is the full rationale.
+Condensed reference lives in `AGENTS.md` → "Homebrew". This is the full rationale.
 
 ## Brewfile is the source of truth, not the machine
 

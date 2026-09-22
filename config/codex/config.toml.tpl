@@ -23,7 +23,7 @@ model_reasoning_summary = "auto"
 model_verbosity = "medium"
 
 # Parity with how Claude Code runs here. Why not `workspace-write`, and the
-# per-run escape hatch: dotfiles/CLAUDE.md §Codex.
+# per-run escape hatch: dotfiles/AGENTS.md §Codex.
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 

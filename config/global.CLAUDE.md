@@ -63,7 +63,7 @@ default suggesting otherwise is overridden here. See *Delegation & parallelism*.
 ### Scope
 
 Stay inside the ask. No unrequested refactors, cleanups, or speculative
-generality. Flag contradictions with CLAUDE.md rather than silently working around
+generality. Flag contradictions with AGENTS.md/CLAUDE.md rather than silently working around
 them.
 
 ### When something seems wrong
@@ -73,7 +73,7 @@ Flag explicitly instead of silently routing around it:
 - Tool returns unexpected output → stop and report.
 - File missing where expected → check `git status` first.
 - Validation fails on files you didn't touch → report only, don't fix.
-- Code contradicts CLAUDE.md → say so.
+- Code contradicts AGENTS.md/CLAUDE.md → say so.
 
 ### Prose for humans
 
@@ -127,7 +127,7 @@ brief, exit 1). `rd` is its mini-side detail — use it directly only for `repos
 `agents`, `read`, `say`. This is the colleague lane — durable, steerable, no ledger.
 
 `mcp__sideclaw__dispatch` (mini only) instead runs a single bounded episode
-**inside** the named repo, so that repo's CLAUDE.md, rules and skills are in
+**inside** the named repo, so that repo's AGENTS.md, rules and skills are in
 context. Tiers: `investigate` (read-only → verdict), `author` (+ issue),
 `implement` (write + branch + **draft** PR). One verdict, **no steering** (that is
 `rd bg` + `rd say`) and no item on any ledger. **Every tier gets its own
@@ -160,7 +160,7 @@ Why `otel` alone is exempt: `brain/wiki/engineering/model-routing.md`.
   edits — auto-delegation by description match is unreliable either way. Brief
   either completely: exact paths, the change, acceptance criteria, intent, scope
   limits. Both are literal executors *with judgment*, not planners, and both load
-  the full CLAUDE.md hierarchy, so both write house-style code an external worker
+  the full CLAUDE.md → AGENTS.md hierarchy, so both write house-style code an external worker
   can't.
 - **Research reaches the worker through the brief** — bake in resolved versions,
   signatures and import paths; it cannot see research you did.
@@ -251,7 +251,7 @@ study-progress}`, `crm-bridge-retry-tool`, `cfn-kafka`, `terraform-monitoring`.
 
 **The mini is the dev host; the MacBook and iPhone are the client** — agents run
 on the mini and outlive the MacBook. **`dotfiles/docs/architecture.md` is the
-map and the mental model** (what each machine and surface is FOR); **`dotfiles/CLAUDE.md`
+map and the mental model** (what each machine and surface is FOR); **`dotfiles/AGENTS.md`
 §Machines & remote dev** carries the reach table, the herdr-crash and
 never-`ssh mini 'claude …'` traps, and human-queue. Read them, don't restate them
 here — this file only routes:
@@ -312,7 +312,7 @@ in `~/IuRoot/`. Skills call the helper, never bare `op`. **Never `op read`/`op
 run` on the mini** — it hangs on a biometric prompt no one can answer; use
 `secrets-run` instead (mirrors `op`, resolves from the offline cache). Full
 model, the cache/backend split, and the tiering guardrail:
-`dotfiles/CLAUDE.md` §Secrets, `dotfiles-private/docs/design.md`. Ops via
+`dotfiles/AGENTS.md` §Secrets, `dotfiles-private/docs/design.md`. Ops via
 **`/secrets`**.
 
 ---
@@ -358,7 +358,7 @@ the same `~/.claude` config over the IU endpoint's native Anthropic route (off
 Max; `claude-sonnet-5[1m]` default) · `cdf`/`cdp` = `ca` on
 DeepSeek-V4-Flash (fast, easy work) / DeepSeek-V4-Pro (the hard kind) · `cap` = pick a model from measured data,
 then launch `ca` · `claude_iu` = the headless `claude -p` helper. `[1m]` and
-`_ca_ctx` rules: `dotfiles/CLAUDE.md`. Launcher rationale:
+`_ca_ctx` rules: `dotfiles/AGENTS.md`. Launcher rationale:
 `brain/wiki/engineering/model-routing.md`.
 
 **The non-Anthropic lane** — Claude Code is 99% of the work; this is the rare
@@ -367,14 +367,17 @@ second opinion. `cx` (gpt-5.6-sol) · `cxa` (gpt-6-astra, several times the pric
 the strongest single shot available and something no coding harness can send.
 Codex is the harness because its wire protocol is **Responses**-only, the only
 way OpenAI reasoning models keep reasoning items across tool calls — never route
-Claude Code at an OpenAI model through a gateway. `dotfiles/CLAUDE.md` §Codex.
+Claude Code at an OpenAI model through a gateway. `dotfiles/AGENTS.md` §Codex.
 
 ---
 
 ## Config hierarchy
 
 - **Global**: `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this file).
-- **Per-project**: `<repo>/CLAUDE.md` + `<repo>/.claude/{rules,skills}/`.
+- **Per-project**: `<repo>/AGENTS.md` (all content, tool-neutral, no `@imports`)
+  + `<repo>/CLAUDE.md` = `@AGENTS.md` shim (+ Claude-only `@path` lines) +
+  `<repo>/.claude/{rules,skills}/`. Nested dirs get the same pair. Claude Code,
+  OpenCode and Codex all read it — contract: `dotfiles/docs/agents-md.md`.
 - **Rules**: `~/.claude/rules/` ← `dotfiles/rules/`. No `paths:` → always on
   (agent-limits, attribution, code-style, commit-conventions,
   dependency-hygiene, docker-makefile, formatting, research-first, security,
@@ -388,5 +391,5 @@ Claude Code at an OpenAI model through a gateway. `dotfiles/CLAUDE.md` §Codex.
 
 Optimize these files for **density, not length** — every line either changes a
 decision or gets deleted; long narrative belongs in `docs/` behind a link. Update
-CLAUDE.md in the same commit as the code it describes; CLAUDE.md-only changes use
+AGENTS.md in the same commit as the code it describes; AGENTS.md-only changes use
 the `docs:` prefix.

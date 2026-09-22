@@ -22,7 +22,7 @@
 # works against a process you cannot signal.
 #
 # WHY newsyslog IS NOT USED. /etc/newsyslog.d needs root, and this machine's root
-# password is deliberately MacBook-only (see dotfiles CLAUDE.md, Secrets). A
+# password is deliberately MacBook-only (see dotfiles AGENTS.md, Secrets). A
 # rotation that cannot be installed headlessly is not a rotation.
 #
 # The file list is DECLARED, never globbed. ~/Library/Logs also holds Apple and

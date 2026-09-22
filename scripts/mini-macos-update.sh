@@ -101,7 +101,7 @@ fi
 # Detached on purpose: a brew upgrade of the tailscale formula in the same
 # maintenance window restarts tailscaled — the transport this ssh rides — and a
 # foreground installer dies with it. Log lands in ~/Library/Logs, never /tmp
-# (launchd-style unlinked-inode class; see the agent-logs section in CLAUDE.md).
+# (launchd-style unlinked-inode class; see the agent-logs section in AGENTS.md).
 PW="$(op read "$PW_REF" --account "$ACCOUNT")" || die "could not read $PW_REF"
 log="\$HOME/Library/Logs/macos-update-$stamp.log"
 # shellcheck disable=SC2029  # $REMOTE_USER/$log are meant to expand here; $pw is read remotely

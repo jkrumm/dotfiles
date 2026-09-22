@@ -1,6 +1,6 @@
 # The look — One Zinc terminal, One Dark/Catppuccin Latte herdr chrome
 
-Condensed reference lives in `CLAUDE.md` → "The look". This is the full rationale
+Condensed reference lives in `AGENTS.md` → "The look". This is the full rationale
 and measurement data behind it.
 
 Three programs paint one screen and none of them can see the other two. herdr

@@ -1,6 +1,6 @@
 # Collie — the phone control surface
 
-Condensed reference lives in `CLAUDE.md` → "Collie". This is the full rationale.
+Condensed reference lives in `AGENTS.md` → "Collie". This is the full rationale.
 
 [Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
 that mirrors the herd on a phone: open a URL, see which agent is blocked, type
