@@ -673,8 +673,19 @@ check_memory() {
     *) level_name="level=$level" ;;
   esac
 
-  (( level < 2 )) \
-    || { echo "memory pressure ${level_name} — the kernel is about to start jetsam-killing (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"; return 1; }
+  # Level 2 (WARN) is non-paging and routine here — weatherorb's blendfield job
+  # trips it regularly with no jetsam kill following. Only level 4 (CRITICAL)
+  # is the signal that actually precedes one, so only it pages; level 2 still
+  # gets reported (a WARN, never silent) in case a run of them turns out to
+  # predict something after all.
+  if (( level >= 4 )); then
+    echo "memory pressure ${level_name} — the kernel is about to start jetsam-killing (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
+    return 1
+  fi
+  if (( level >= 2 )); then
+    echo "memory pressure ${level_name} — non-paging (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
+    return 2
+  fi
   (( pct <= MEM_SWAP_PCT_MAX )) \
     || { echo "swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM (max ${MEM_SWAP_PCT_MAX}%) — something is leaking"; return 1; }
   echo "memory ok (pressure ${level_name}, swap ${used_mb}M = ${pct}% of ${phys_gb}G)"
