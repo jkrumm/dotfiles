@@ -301,6 +301,15 @@ ca() {
     claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
 }
 
+# The two DeepSeek tiers, named (owner's split, 2026-09-22): `cdf` for fast and
+# easy work, `cdp` for the hard kind. Same `ca` underneath — measured context
+# window, thinking budget, gateway timeout — so the only thing the letter
+# chooses is the model. Pro reuses this gateway's prompt cache poorly (measured
+# 9–26% against Flash's 94%), so its turns re-process the whole prefix: pick it
+# for the task, not by default.
+cdf() { ca DeepSeek-V4-Flash "$@" }
+cdp() { ca DeepSeek-V4-Pro "$@" }
+
 # ── Off-Max `claude -p` transport ─────────────────────────────────────────────
 #
 # So subprocess skills (analyze; otel and read-drawing moved to sideclaw) don't

@@ -355,7 +355,8 @@ the full flow; `/pr status` warns on uncommitted or unpushed work.
 
 **Launchers:** `c` = Max · `cs`/`cf` = Max pinned to Sonnet/Fable · `ca [model]` =
 the same `~/.claude` config over the IU endpoint's native Anthropic route (off
-Max; `claude-sonnet-5[1m]` default) · `cap` = pick a model from measured data,
+Max; `claude-sonnet-5[1m]` default) · `cdf`/`cdp` = `ca` on
+DeepSeek-V4-Flash (fast, easy work) / DeepSeek-V4-Pro (the hard kind) · `cap` = pick a model from measured data,
 then launch `ca` · `claude_iu` = the headless `claude -p` helper. `[1m]` and
 `_ca_ctx` rules: `dotfiles/CLAUDE.md`. Launcher rationale:
 `brain/wiki/engineering/model-routing.md`.
