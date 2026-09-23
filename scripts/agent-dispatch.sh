@@ -159,10 +159,13 @@ source "$DOTFILES_DIR/config/zsh/iu-models.sh"
 #
 # Default model is a cheap IU gateway model, not Sonnet: this path runs
 # UNATTENDED against the IU key, billed per token with nobody watching a
-# meter — the worst combination for a premium model. modelpick's 2026-09-11
-# ccbench run scored glm-5.3-flash 10/10 on the agentic coding suite at
-# $0.048/suite, ahead of claude-sonnet-5 on DeepSWE. `ANTHROPIC_MODEL`
-# still overrides it exactly as before.
+# meter — the worst combination for a premium model. modelpick's 2026-09-20
+# ccbench run moved this fleet off glm: DeepSeek-V4-Flash posts a 1.00
+# composite at ~190 effective in-loop tok/s, 6m20s wall, $0.09, 4%
+# tool-error and zero compactions, against glm-5.3-flash's 0.81, 38m24s,
+# 13.3 tok/s and $0.035 — a little cost and index-capability traded for
+# ~14x in-loop speed, which is what an unattended lane actually needs.
+# `ANTHROPIC_MODEL` still overrides it exactly as before.
 run_local_claude_p() {
   local path="$1"
   nesting_guard "$path"
@@ -174,7 +177,7 @@ run_local_claude_p() {
     die "IU credentials missing in Keychain — run 'make setup' in dotfiles"
   fi
 
-  local model="${ANTHROPIC_MODEL:-glm-5.3-flash}"
+  local model="${ANTHROPIC_MODEL:-DeepSeek-V4-Flash}"
 
   # Gateway tier (any non-Claude id, the default included) needs the same
   # extras config/zsh/claude.zsh's `ca()` sets for it: without the context/

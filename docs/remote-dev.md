@@ -134,7 +134,7 @@ placed on whichever machine owns the repo.
 
 | Command | mini / mini-resident repo | MacBook + MacBook-resident repo |
 |-|-|-|
-| `agent-dispatch bg <repo> '<task>'` | `rd bg` — herdr-pane spawn, keychain-safe Max auth | local `claude -p` on the IU Keychain creds, default `glm-5.3-flash` (`MAX_THINKING_TOKENS=8192`) |
+| `agent-dispatch bg <repo> '<task>'` | `rd bg` — herdr-pane spawn, keychain-safe Max auth | local `claude -p` on the IU Keychain creds, default `DeepSeek-V4-Flash` (`MAX_THINKING_TOKENS=8192`) |
 | `agent-dispatch work <repo>` | `rd work` | local session |
 
 MacBook-resident repos are the sanctioned set: `dotfiles`, `dotfiles-private`,
