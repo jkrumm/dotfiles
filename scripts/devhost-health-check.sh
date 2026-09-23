@@ -712,19 +712,31 @@ check_kernel_panics() {
   # PANIC_MAX_AGE_DAYS so it is still in the log when someone reads it. WARN
   # ignores the streak machinery entirely, so a sustained WARN costs nothing.
   #
-  # Globbed by explicit name and never `*.ips` — that directory also holds
-  # `tailscaled-*.ips` and dozens of `*_mini.diag` resource scans, and a broad
-  # glob would WARN on a perfectly healthy host. JetsamEvent-*.ips is
+  # Globbed by explicit name and never a bare `*.ips` — that directory also
+  # holds `tailscaled-*.ips` and dozens of `*_mini.diag` resource scans, and a
+  # broad glob would WARN on a perfectly healthy host. JetsamEvent-*.ips is
   # deliberately NOT matched: check_memory FAILs at pressure level 2, the signal
   # that PRECEDES a jetsam kill, and check_launchd_restarts surfaces `Killed: 9`
   # for every KeepAlive job — so both jetsam cases this host actually hits are
   # already covered, and re-raising one days later under a component named for
   # panics would read as an event that just happened.
+  #
+  # EVERY spelling macOS has used for a panic report, because this check must
+  # not depend on the OS version's naming. `panic-full-*` is the modern name and
+  # is what this host wrote for the 2026-09-21 panic (macOS 26, `.panic`
+  # extension over a unified-IPS body); `.ips` is the same report's name where
+  # the OS emits it as a plain unified file; and the pre-Big-Sur form is
+  # `Kernel_*` with an UNDERSCORE, which `Kernel-*.panic` alone never matched.
+  # Matching one spelling only fails SILENTLY in the one direction that matters:
+  # zero matches falls through to "no kernel panic on record" and pushes the
+  # composite UP. A pattern that matches nothing expands to itself and is
+  # dropped by the `-f` test below, so carrying all four costs nothing.
   local dir="$DIAGNOSTIC_REPORTS_DIR" newest="" newest_mtime=0 f mtime
   [[ -d "$dir" ]] || { echo "kernel panics n/a (no $dir)"; return 0; }
   # A pattern that matches nothing expands to itself, which `-f` rejects — so no
   # nullglob (bash 3.2 has it off and this script must not need it).
-  for f in "$dir"/panic-full-*.panic "$dir"/Kernel-*.panic; do
+  for f in "$dir"/panic-full-*.panic "$dir"/panic-full-*.ips \
+           "$dir"/Kernel-*.panic "$dir"/Kernel_*.panic; do
     [[ -f "$f" ]] || continue
     mtime=$("$STAT_BIN" -f %m "$f" 2>/dev/null) || continue
     [[ -n "$mtime" ]] || continue
