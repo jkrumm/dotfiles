@@ -7,7 +7,7 @@ one-line gotchas live in `AGENTS.md`.
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent and pushes **three** Uptime Kuma
-monitors. `MacMini Dev Host - Push` is the composite, covering **sixteen**
+monitors. `MacMini Dev Host - Push` is the composite, covering **seventeen**
 components:
 
 | Component | Checks |
@@ -18,6 +18,7 @@ components:
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |
+| kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding `Terminated: 15`** (a deliberate restart) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
 | services | sideclaw, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
