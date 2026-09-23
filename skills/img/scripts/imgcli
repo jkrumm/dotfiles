@@ -200,7 +200,8 @@ sys.exit(1)
 }
 
 # --- generation (image-gen gateway) -----------------------------------------
-# Stateless bearer-auth'd gateway on the VPS wrapping gpt-image-2. `gen` is
+# Stateless bearer-auth'd gateway on the VPS wrapping gpt-image-2.5 (flare /
+# sunburst). No model is sent: the gateway auto-routes by quality/endpoint. `gen` is
 # the agent lane into it: generate (or edit / plan-then-generate), write the
 # PNGs under ~/Pictures/imgcli/, then hand each one to `share` (default) or
 # `publish` (--public) so the result is a URL, not a local file.
@@ -261,7 +262,7 @@ cmd_gen() {
       *) if [ -z "$prompt" ]; then prompt="$1"; else die "unexpected argument: $1"; fi; shift ;;
     esac
   done
-  [ -n "$prompt" ] || die "usage: imgcli gen \"<prompt>\" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|auto] [--edit <file>] [--enhance] [--public] [--prefix fuji|blog|gen|misc] [--dir <d>] [--copy] [--open] [--json]"
+  [ -n "$prompt" ] || die "usage: imgcli gen \"<prompt>\" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto] [--edit <file>] [--enhance] [--public] [--prefix fuji|blog|gen|misc] [--dir <d>] [--copy] [--open] [--json]"
   [ -z "$edit" ] || [ -f "$edit" ] || die "no such file: $edit"
   local mime=""
   if [ -n "$edit" ]; then
@@ -284,8 +285,8 @@ cmd_gen() {
     *) die "--n must be 1-10: $n" ;;
   esac
   case "$quality" in
-    ''|low|medium|high|auto) : ;;
-    *) die "unknown quality: $quality (must be one of: low, medium, high, auto)" ;;
+    ''|low|medium|high|xhigh|max|auto) : ;;
+    *) die "unknown quality: $quality (must be one of: low, medium, high, xhigh, max, auto)" ;;
   esac
   prefix="${prefix%/}"
   is_valid_publish_prefix "$prefix" \
@@ -1008,7 +1009,7 @@ imgcli — image CDN upload and addressing, the private image-share layer, and g
   imgcli library [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--page n] [--limit n] [--recursive] [--json]
   imgcli link    <imageId> [<imageId>...] [--role view|download|full] [--label <text>] [--expires <ISO date>] [--json]
 
-  imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|auto]
+  imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
                  [--edit <file>] [--enhance] [--public] [--prefix gen/] [--dir <d>] [--copy] [--open] [--json]
 
 PREFIXES (upload, sync, publish)
@@ -1038,13 +1039,13 @@ PRIVATE LAYER
   `make secrets-seed`).
 
 GENERATION
-  gen      generates on the image-gen gateway (VPS, gpt-image-2), writes the
+  gen      generates on the image-gen gateway (VPS, gpt-image-2.5), writes the
            PNGs to ~/Pictures/imgcli/, then shares each one privately — or
            publishes it to the CDN with --public. --edit <file> sends the
            prompt as an edit of that reference image; --enhance runs the brief
            through the gateway's Plan step first (playbook prompt + derived
            size/quality/n, explicit flags win). Quality is the cost lever:
-           low ~$0.006, high ~$0.21 per 1024x1024 image.
+           low ~$0.006, high ~$0.053, xhigh ~$0.094, max ~$0.21 per 1024x1024 image.
            Needs op://vps/image-gen-gateway/{BASE_URL,API_SECRET} as well.
 EOF
 }
