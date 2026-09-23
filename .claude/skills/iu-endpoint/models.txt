@@ -18,7 +18,7 @@ iu-anthropic/DeepSeek-V4-Flash
 
 iu/glm-5.3-flash
 iu/deepseek-v4.1-flash
-iu/gpt-5.6-luna
+iu/gpt-6-luna
 iu/gpt-5.6-sol
 iu/gpt-5.6-terra
 iu/gpt-6-astra
