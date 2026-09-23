@@ -752,17 +752,20 @@ check_launchd_restarts() {
   # 2026-06-14 and 2026-09-07 were somebody running `make hermes-restart` or
   # `make sideclaw-restart`, or `launchctl bootout`+`bootstrap` after an edit.
   # SIGTERM is launchd asking politely, which only ever happens because a human
-  # or a Makefile target asked it to. The events this check exists to catch look
-  # different and all still page: `Killed: 9` (jetsam/OOM — the herdr case it was
-  # written for), `Abort trap: 6`, `Segmentation fault: 11`, `Bus error: 10`, and
-  # a crash-loop that exits non-zero with NO signal at all (empty `sig`).
+  # or a Makefile target asked it to. A clean self-exit — `last exit code = 0`
+  # with no terminating signal — is the same shape: deploy churn like
+  # `make research-gateway-restart`, not a fault. The events this check exists to
+  # catch look different and all still page: `Killed: 9` (jetsam/OOM — the herdr
+  # case it was written for), `Abort trap: 6`, `Segmentation fault: 11`,
+  # `Bus error: 10`, and a crash-loop that exits non-zero with NO signal at all
+  # (empty `sig`, non-zero `exit_code`).
   #
   # A deliberate restart is still REPORTED — named in this component's own text
   # and, since a restarted job has runs != 1, again in the `history:` tail. The
   # fact that hermes bounced is worth seeing in the heartbeat; it just is not
   # worth marking the machine DOWN and pinging a channel over.
   local uid state_file seen="" restarted="" deliberate="" history=""
-  local entry label plist out runs sig prev
+  local entry label plist out runs sig exit_code cause prev
   uid=$(/usr/bin/id -u)
   state_file="$STATE_DIR/launchd-runs"
   /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
@@ -776,13 +779,22 @@ check_launchd_restarts() {
     [[ -n "$runs" ]] || continue
     # shellcheck disable=SC2016
     sig=$("$AWK_BIN" -F' = ' '/^[[:space:]]*last terminating signal = /{ print $2; exit }' <<<"$out")
+    # shellcheck disable=SC2016
+    exit_code=$("$AWK_BIN" -F' = ' '/^[[:space:]]*last exit code = /{ print $2; exit }' <<<"$out")
+    # Why the last exit happened, for the diagnosis: the signal if there was one,
+    # else the exit code (so a clean self-exit reads "exit 0" and a crash loop
+    # that exits non-zero with no signal is still distinguishable).
+    cause="$sig"
+    if [[ -z "$sig" && -n "$exit_code" ]]; then
+      cause="exit ${exit_code}"
+    fi
     seen="${seen}${label} ${runs}
 "
     # Surface a non-clean history even when nothing changed this cycle: a `-9`
     # in the record is the difference between "restarted on purpose" and "was
     # killed", and it belongs in the msg where the diagnosis happens.
     if [[ "$runs" != "1" ]]; then
-      history="${history:+$history }${label##*.}=${runs}${sig:+(${sig})}"
+      history="${history:+$history }${label##*.}=${runs}${cause:+(${cause})}"
     fi
     # shellcheck disable=SC2016
     prev=$("$AWK_BIN" -v l="$label" '$1 == l { print $2; exit }' "$state_file" 2>/dev/null) || prev=""
@@ -793,8 +805,10 @@ check_launchd_restarts() {
     if (( runs > prev )); then
       if [[ "$sig" == "Terminated: 15" ]]; then
         deliberate="${deliberate:+$deliberate, }${label} restarted (${prev}→${runs}, SIGTERM — deliberate)"
+      elif [[ -z "$sig" && "$exit_code" == "0" ]]; then
+        deliberate="${deliberate:+$deliberate, }${label} restarted (${prev}→${runs}, exit 0 — deliberate)"
       else
-        restarted="${restarted:+$restarted, }${label} restarted (${prev}→${runs}${sig:+, ${sig}})"
+        restarted="${restarted:+$restarted, }${label} restarted (${prev}→${runs}${cause:+, ${cause}})"
       fi
     fi
   done <<<"$LAUNCHD_KEEPALIVE"
