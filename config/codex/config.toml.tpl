@@ -45,7 +45,7 @@ wire_api = "responses"
 # `tool_timeout_sec` is the load-bearing line: one `job_wait` blocks for a whole
 # research job, which runs minutes, and the default would abort it mid-flight.
 [mcp_servers.research-gateway]
-url = "https://research.jkrumm.com/mcp"
+url = "https://research.mini.jkrumm.com/mcp"
 bearer_token_env_var = "RESEARCH_GATEWAY_TOKEN"
 startup_timeout_sec = 30
 tool_timeout_sec = 7200

@@ -1303,7 +1303,7 @@ _setup-sideclaw-mcp:
 		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
 	fi
 
-# research-gateway is a REMOTE HTTP MCP (research.jkrumm.com/mcp) — unlike the
+# research-gateway is a REMOTE HTTP MCP (research.mini.jkrumm.com/mcp, the mini's native instance) — unlike the
 # stdio servers above, it needs a bearer token. The token is NOT written into the
 # config: `--header` would resolve it into ~/.claude.json, a file every agent
 # reads routinely, and rotating it would mean re-running setup on both machines.
@@ -1327,7 +1327,7 @@ _setup-research-gateway-mcp:
 		fi; \
 	fi
 	@claude mcp remove research-gateway --scope user >/dev/null 2>&1 || true
-	@claude mcp add-json research-gateway --scope user '{"type":"http","url":"https://research.jkrumm.com/mcp","headersHelper":"$(DOTFILES_DIR)/scripts/mcp-research-headers.sh","timeout":7200000}' >/dev/null
+	@claude mcp add-json research-gateway --scope user '{"type":"http","url":"https://research.mini.jkrumm.com/mcp","headersHelper":"$(DOTFILES_DIR)/scripts/mcp-research-headers.sh","timeout":7200000}' >/dev/null
 	@echo "    ✓ research-gateway MCP registered (no token in ~/.claude.json)"
 
 .PHONY: _setup-colima

@@ -135,6 +135,12 @@ FILES=(
   # audio-gateway — KeepAlive LaunchAgent (com.jkrumm.audio-gateway).
   audio-gateway.log
   audio-gateway.err
+  # research-gateway — gateway + lightpanda sidecar KeepAlive LaunchAgents, deploy poller.
+  research-gateway.log
+  research-gateway.err
+  research-gateway-lightpanda.log
+  research-gateway-lightpanda.err
+  research-gateway-deploy.log
   # modelpick — daily 06:00 refresh (com.jkrumm.modelpick-refresh).
   modelpick-refresh.log
   modelpick-refresh.err

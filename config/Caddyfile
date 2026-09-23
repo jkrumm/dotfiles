@@ -142,6 +142,17 @@ podcasts.test {
 	reverse_proxy localhost:7719
 }
 
+# research-gateway — the research MCP/HTTP service, native LaunchAgent on the mini
+# (com.jkrumm.research-gateway, :7780, bound to 127.0.0.1; lightpanda sidecar on
+# :7781, loopback, no door). `research.mini.jkrumm.com` is how every consumer
+# reaches it. MCP `job_wait` holds one SSE response open for a whole job (tens of
+# minutes, 15s keep-alive frames) — reverse_proxy has no read timeout by default,
+# so nothing here may add one.
+research.test {
+	import local
+	reverse_proxy localhost:7780
+}
+
 # image-gen — stateless image-generation gateway (Elysia + Bun) on :7716.
 # Local dev for the image-gen monorepo (`bun run dev` at its root also starts the
 # Tauri app; Vite on :1420 is Tauri-internal, not proxied). VPS container reached

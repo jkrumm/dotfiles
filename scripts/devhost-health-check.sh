@@ -128,6 +128,7 @@ CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 SIDECLAW_URL="${SIDECLAW_URL:-http://127.0.0.1:7705}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 AUDIO_GATEWAY_URL="${AUDIO_GATEWAY_URL:-http://127.0.0.1:7719}"
+RESEARCH_GATEWAY_URL="${RESEARCH_GATEWAY_URL:-http://127.0.0.1:7780}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
 USAGE_TRACKER_LOG="${USAGE_TRACKER_LOG:-$HOME/Library/Logs/usage-tracker.log}"
@@ -724,6 +725,8 @@ LAUNCHD_KEEPALIVE="\
 $(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
+com.jkrumm.research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist
+com.jkrumm.research-gateway-lightpanda|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway-lightpanda.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
@@ -815,6 +818,7 @@ colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
 dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected_plist dnsmasq system)|probe_dnsmasq
 audio-gateway|$HOME/Library/LaunchAgents/com.jkrumm.audio-gateway.plist|probe_audio_gateway
+research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist|probe_research_gateway
 brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
 usage-tracker|$HOME/Library/LaunchAgents/com.jkrumm.usage-tracker.plist|probe_usage_tracker
 walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad"
@@ -930,6 +934,16 @@ probe_audio_gateway() {
   local code
   code=$(http_code "$AUDIO_GATEWAY_URL/health")
   [[ "$code" == "200" ]] || { echo "audio-gateway not answering on $AUDIO_GATEWAY_URL (got ${code:-000})"; return 1; }
+}
+
+probe_research_gateway() {
+  # /health alone stays green with the renderer sidecar dead — the chain is built to
+  # run without it — so the sidecar is probed through the gateway's own /health/render.
+  local code render
+  code=$(http_code "$RESEARCH_GATEWAY_URL/health")
+  [[ "$code" == "200" ]] || { echo "research-gateway not answering on $RESEARCH_GATEWAY_URL (got ${code:-000})"; return 1; }
+  render=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/render" 2>/dev/null || true)
+  [[ "$render" == *'"renderer":"ok"'* ]] || { echo "research-gateway renderer sidecar not ok (${render:-no answer})"; return 1; }
 }
 
 probe_brain_web() {
