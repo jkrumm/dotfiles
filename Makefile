@@ -59,7 +59,13 @@ CADDY_DNS_MODULE_VERSION ?= v0.2.4
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
-FALLOW_VERSION := 3.23.0
+FALLOW_VERSION := 3.27.0
+
+# ocr — alibaba/open-code-review, one input to sideclaw's review pipeline. A
+# GitHub-release Go binary (the npm package only wraps it behind a postinstall
+# download), checksum-verified against the release's sha256sum.txt; pinned for
+# the same reason as fallow.
+OCR_VERSION := 1.12.8
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
@@ -255,6 +261,19 @@ _setup-tools:
 	@FALLOW_BIN="$$(npm prefix -g 2>/dev/null)/bin/fallow"; \
 	if [ -x "$$FALLOW_BIN" ]; then \
 		$(MAKE) --no-print-directory _link SRC="$$FALLOW_BIN" DST="$(HOME)/.local/bin/fallow"; \
+	fi
+	@if [ "$$(ocr version 2>/dev/null | head -1 | awk '{print $$2}')" = "v$(OCR_VERSION)" ]; then \
+		echo "    · ocr $(OCR_VERSION) (ok)"; \
+	else \
+		arch=$$(uname -m | sed 's/x86_64/amd64/'); os=$$(uname -s | tr A-Z a-z); \
+		asset="opencodereview-$$os-$$arch"; tmp=$$(mktemp -d); \
+		if gh release download "v$(OCR_VERSION)" -R alibaba/open-code-review -D "$$tmp" -p "$$asset" -p sha256sum.txt >/dev/null 2>&1 \
+			&& (cd "$$tmp" && grep " $$asset$$" sha256sum.txt | shasum -a 256 -c - >/dev/null 2>&1); then \
+			install -m 0755 "$$tmp/$$asset" "$(HOME)/.local/bin/ocr" && echo "    ✓ ocr $(OCR_VERSION) installed"; \
+		else \
+			echo "    ✗ ocr install failed (download or checksum) — v$(OCR_VERSION) $$asset"; \
+		fi; \
+		rm -rf "$$tmp"; \
 	fi
 
 .PHONY: _setup-caddy
