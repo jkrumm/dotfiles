@@ -357,5 +357,7 @@ oc() {
     print -ru2 "oc: IU credentials unresolvable — run 'make setup' in dotfiles"
     return 1
   fi
-  IU_KEY="$key" IU_ANTHROPIC_BASE="${base%/}" command opencode "$@"
+  base=${base%/}
+  IU_KEY="$key" IU_ANTHROPIC_BASE="$base" IU_OPENAI_BASE="${base%/anthropic}/openai/v1" \
+    command opencode "$@"
 }

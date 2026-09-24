@@ -194,7 +194,7 @@ worth building.
 
 ## OpenCode — the third lane
 
-`oc` = OpenCode on the IU endpoint's Anthropic route, re-added 2026-09-23 after
+`oc` = OpenCode on the IU endpoint, re-added 2026-09-23 after
 the 2026-09-04 subtraction because AGENTS.md made it a zero-maintenance reader
 of the same instructions. It loads `<repo>/AGENTS.md` (nested lazily),
 `~/.claude/CLAUDE.md` and every skill natively; the always-on rules come from
@@ -204,6 +204,18 @@ without `paths:`; the per-repo `.claude/rules/*.md` glob is a known tradeoff
 Adding an always-on global rule means adding it to that list too. `@imports`
 do **not** resolve there.
 Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
+
+Two providers (2026-09-24): `iu` = `@ai-sdk/openai-compatible` on `{env:IU_OPENAI_BASE}`
+(`oc` derives it from the Keychain base, `/anthropic` → `/openai/v1`) serving
+`deepseek-v4.1-flash` — the default, since that id is **not** served on the Anthropic
+route; `anthropic` = the Anthropic route for Claude ids. On `iu`, `reasoningEffort`
+reaches the model (`--variant max|none`, default `high`) and prompt caching works
+(95–98% hits in real episodes). Headless `opencode run` auto-**rejects** any `ask`
+permission and that ends the session — workers must set every prompting permission
+to `allow`/`deny` (`deny` returns an error and the run continues). `--pure` hangs;
+don't use it. Concurrent starts can hit `database is locked` on the shared
+`opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
+config, not this file).
 
 ## Machines & remote dev
 
@@ -495,7 +507,7 @@ startup — `source ~/.zshrc` after editing.
 | `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg |
 | `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
-| `oc` | OpenCode on the IU endpoint's Anthropic route | `claude-opus-5-5` default; see *OpenCode* |
+| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | `iu/deepseek-v4.1-flash` default (`--variant max` / `none`); `-m anthropic/claude-opus-5-5`; see *OpenCode* |
 | `rd wave` / `rd bg` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL`/`RD_BG_MODEL` override; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.

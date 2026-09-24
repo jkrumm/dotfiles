@@ -74,10 +74,11 @@ every turn.
 }
 ```
 
-Provider wiring for the IU endpoint's Anthropic route (verified, serves
-`claude-opus-5-5`): `"provider": {"anthropic": {"options": {"baseURL":
-"{env:IU_ANTHROPIC_BASE}/v1", "apiKey": "{env:IU_KEY}"}}}` — env substitution
-keeps the host out of git.
+Provider wiring (verified 2026-09-24): `anthropic` → `{env:IU_ANTHROPIC_BASE}/v1`
+for Claude ids, and `iu` (`"npm": "@ai-sdk/openai-compatible"`) →
+`{env:IU_OPENAI_BASE}` for `deepseek-v4.1-flash` (the default; per-model
+`options.reasoningEffort` + `variants`). Both keys are `{env:IU_KEY}` — env
+substitution keeps the host out of git. Full block: `config/opencode/opencode.json`.
 
 ## Migration rules per repo
 
