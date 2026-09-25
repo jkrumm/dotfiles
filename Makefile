@@ -43,8 +43,8 @@ endif
 # every time, so an upgrade has to be a reviewed diff of this pin, not
 # whatever tag happens to move.
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := e48468805baac677a18ea37ec09912e033ae6eae
-COLLIE_VERSION := 1.11.0
+COLLIE_REF     := 9e9d021ff2d8ca2c3653e00bb8dadb2a1cb7f705
+COLLIE_VERSION := 1.13.1
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
