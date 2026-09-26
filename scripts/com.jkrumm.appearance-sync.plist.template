@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.appearance-sync</string>
+  <!-- Push the macOS light/dark appearance into apps without their own switch
+       (Herdr GPUI). cfprefsd writes AppleInterfaceStyle to the global plist
+       on every appearance change, so watching that file IS the change event;
+       it also fires on unrelated preference writes, which the script ignores. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/scripts/appearance-sync.sh</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>__HOME__/Library/Preferences/.GlobalPreferences.plist</string>
+  </array>
+  <!-- Catch up with any flip that happened while the agent was not loaded. -->
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/appearance-sync.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/appearance-sync.log</string>
+</dict>
+</plist>

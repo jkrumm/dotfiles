@@ -69,6 +69,23 @@ file, so that doubles as cancel. Changing the resting default means editing both
 **Battery Limit** / **Battery Status** custom commands, which run `launcher/*.sh`
 and are declared in `config/tinycast/defaults.json` (applied by `make setup`).
 
+## Herdr GPUI light/dark — `com.jkrumm.appearance-sync`
+
+Herdr GPUI (the herdr desktop client, attached to the mini through the saved
+`herdr machine` profile) takes one `theme` name and has no system-appearance
+support. `scripts/appearance-sync.sh` rewrites the `theme` line of
+`~/.config/herdr/config-gpui.local.toml` to `basalt-ui-light`/`-dark`; the app
+reloads it on save. The agent `WatchPaths` the global preferences plist, so it
+also fires on unrelated preference writes (no-ops) and lags a flip by ~7–10 s
+(cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the
+mini.
+
+**It does not reach the panes.** The herdr protocol has a client→server
+appearance update (`ClientHostThemeUpdate::Appearance`), but Herdr GPUI never
+sends it, so apps inside panes — Claude Code on `theme: auto` — keep the
+appearance they last got from a `desk` (Ghostty) client. No herdr CLI/API
+command sets it either; the fix is upstream.
+
 ## Database access — `make db-tunnel-setup`
 
 A `KeepAlive` LaunchAgent holding one `ssh -N` with every `-L` in

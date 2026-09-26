@@ -103,6 +103,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-karabiner
 	@$(MAKE) --no-print-directory _setup-tinycast
+	@$(MAKE) --no-print-directory _setup-appearance-sync
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
@@ -563,6 +564,19 @@ tinycast-apply:
 	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" apply
 tinycast-check:
 	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" check
+
+.PHONY: _setup-appearance-sync
+# com.jkrumm.appearance-sync: flips Herdr GPUI's single `theme` between the
+# basalt-ui light/dark pair on every macOS appearance change (the app has no
+# system-appearance support). Client-side only — skipped on the mini.
+_setup-appearance-sync:
+	@echo "  Appearance sync (Herdr GPUI light/dark)..."
+	@if [ "$(SECRETS_BACKEND)" = "cache" ]; then \
+		echo "    - dev host (cache backend), skipping"; \
+	else \
+		mkdir -p "$(LAUNCHAGENTS)"; \
+		$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.appearance-sync" PLIST_DIR="$(DOTFILES_DIR)/scripts"; \
+	fi
 
 .PHONY: authorized-keys remote-access _setup-remote-access
 # Installs trusted public keys into ~/.ssh/authorized_keys (append-if-missing;

@@ -14,6 +14,7 @@
 tap "oven-sh/bun"
 tap "satococoa/tap"
 tap "abue-ammar/tinycast"
+tap "penso/tap"
 # Simple, modern, secure file encryption
 brew "age"
 # Editor of encrypted files (paired with age for the headless secrets cache)
@@ -235,5 +236,11 @@ cask "spotify"
 # config/tinycast/defaults.json (`make tinycast-check`). Its own Hyper key stays
 # OFF: it rides a CGEventTap (see Karabiner above), Karabiner owns Hyper.
 cask "abue-ammar/tinycast/tinycast"
+# Herdr GPUI — native desktop client for herdr (unaffiliated, third-party tap),
+# attached to the mini through the saved `herdr machine` profile. Its config is
+# ~/.config/herdr/config-gpui.local.toml (machine-local, untracked — the app
+# and com.jkrumm.appearance-sync both rewrite it); the light/dark theme flip is
+# scripts/appearance-sync.sh, since the app has no system-appearance support.
+cask "penso/tap/herdr-gpui"
 # Multimedia player
 cask "vlc"

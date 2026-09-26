@@ -262,6 +262,7 @@ such stray fails the assertion instead of hiding from it.
 
 ## LaunchAgents — MacBook
 
+`com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`

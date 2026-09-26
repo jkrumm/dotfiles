@@ -132,6 +132,7 @@ FILES=(
   lock-at-boot.log
   linewatch-collector.log
   batt-reset.log
+  appearance-sync.log
   # audio-gateway — KeepAlive LaunchAgent (com.jkrumm.audio-gateway).
   audio-gateway.log
   audio-gateway.err
