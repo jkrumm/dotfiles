@@ -21,7 +21,7 @@ Shared values live in **`common`** (used by both servers). Per-server bits live 
 
 | Env var | 1Password ref | Notes |
 |-|-|-|
-| `CLOUDFLARE_MANAGE_TOKEN` | `op://common/cloudflare/MANAGE_API_TOKEN` | Dashboard name **cf-manage**. Zone.DNS + Account.Cloudflare Tunnel + Zone.Cache Rules:Edit, all zones. **Every snippet in this skill uses it.** |
+| `CLOUDFLARE_MANAGE_TOKEN` | `op://common/cloudflare/MANAGE_API_TOKEN` | Dashboard name **cf-manage**. All zones: DNS:Edit, Cache Rules:Edit · all accounts: Cloudflare Tunnel:Edit, Account Rulesets:Edit, Account Filter Lists:Edit (the last two are required by the Cache Rules API). **Every snippet in this skill uses it.** Permission edits take a few minutes to propagate — a `10000 Authentication error` right after an edit is usually just that. |
 | `CLOUDFLARE_API_TOKEN` | `op://common/cloudflare/DNS_API_TOKEN` | Dashboard name **dns-acme**. Zone.DNS only — Traefik (as `CF_DNS_API_TOKEN`) / Caddy ACME DNS-01. Not for this skill: it cannot read tunnels or rulesets. |
 | — | `op://common/cloudflare/CACHE_PURGE_TOKEN` | Dashboard name **CACHE_PURGE_TOKEN**. Zone.Zone:Read + Zone.Cache Purge, all zones. CI only — GitHub secret `CLOUDFLARE_PURGE_TOKEN`. |
 | `CLOUDFLARE_ACCOUNT_ID` | `op://common/cloudflare/ACCOUNT_ID` | Account ID — same across all zones/tunnels. |
@@ -215,7 +215,7 @@ curl -s -X PUT "$E" -H "Authorization: Bearer ${CLOUDFLARE_MANAGE_TOKEN}" -H "Co
 '"'"''
 ```
 
-A 404 on the GET just means the zone has no cache rules yet — the PUT creates the entrypoint. Free plan: 10 Cache Rules per zone.
+The upsert keeps every other rule (e.g. `photos.jkrumm.com`) but re-creates them without their old ids — harmless. A 404 on the GET just means the zone has no cache rules yet — the PUT creates the entrypoint. Free plan: 10 Cache Rules per zone.
 
 ### Manual purge of one hostname (CI normally does this)
 
