@@ -148,6 +148,17 @@ herdr config check || die "config.toml is not valid for herdr $LATEST — fix it
 # the last run lands under OTHER until this re-asserts the declared order.
 make -C "$DOTFILES_DIR" --no-print-directory herdr-groups
 
+# Full Disk Access is granted to the resolved Cellar path, so a new version is a
+# new, ungranted binary. Without it the first agent that touches ~/Documents,
+# ~/Desktop, ~/Downloads or iCloud Drive raises a TCC consent dialog on the
+# headless screen, and the open() behind it blocks until someone clicks —
+# freezing that whole Claude process, subagents included. Nothing from a shell
+# can grant it or even read the grant, so this is a checklist line, not a gate.
+HERDR_BIN=$(realpath "$(command -v herdr)")
+echo "  ! re-grant Full Disk Access to $HERDR_BIN"
+echo "    (screen-share → System Settings → Privacy & Security → Full Disk Access)"
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" 2>/dev/null || true
+
 echo "  ✓ herdr $LATEST running, boot path converged, groups re-applied"
 echo "    restore checklist: $INVENTORY"
 echo "    reattach with: desk"

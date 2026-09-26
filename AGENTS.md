@@ -245,7 +245,7 @@ Three lanes cover placing work elsewhere: `warden run` for unattended work track
 to an outcome, `mcp__sideclaw__dispatch` for one bounded question with a typed
 verdict, `agent-dispatch bg`/`work` for a colleague you steer.
 
-Four facts to hold:
+Five facts to hold:
 
 - **A herdr restart restores the layout and loses the processes in it** (new
   `terminal_id`) — but **not the Claude panes**: herdr's native agent session
@@ -280,6 +280,16 @@ Four facts to hold:
   `scripts/lib/herdr-ready.sh` (running + protocol-compatible + expected
   version) rather than sleeping. A `sleep 2` there is what made the 0.8.2 →
   0.9.0 run talk to a protocol-20 server and fail a green upgrade.
+- **herdr needs Full Disk Access, and loses it on every version bump.** A pane
+  process's TCC requests are attributed to herdr, and the grant is keyed to the
+  resolved `/opt/homebrew/Cellar/herdr/<version>/bin/herdr`. Ungranted, the first
+  agent that opens `~/Documents`, `~/Desktop`, `~/Downloads` or iCloud Drive
+  raises a consent dialog on the headless screen and the `openat()` blocks until
+  someone clicks — the whole Claude process freezes, subagents included, at 0%
+  CPU with no error. Diagnose with `sample <pid>` (main thread in `openat`) and
+  `/usr/bin/log show --predicate 'process == "tccd"'`; answering the dialog over
+  screen share unfreezes it in place. `make herdr-upgrade` prints the path to
+  re-grant.
 
 **Sidebar groups** — herdr has no folder and no separator primitive, so
 `config/herdr/groups.json` declares the taxonomy and `make herdr-groups` makes
