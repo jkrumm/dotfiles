@@ -205,7 +205,7 @@
     },
     {
       "kind": "region",
-      "label": "VPS — the mature stack, and the gateways that take work off the mini",
+      "label": "VPS — the mature stack (research-gateway is mini-only now)",
       "wraps": ["argoapi", "research", "audio", "imggw", "otel"],
       "pad": 30
     },

@@ -57,7 +57,7 @@ different question:
   `tag:phone` alone.
 
 **VPS — the mature, always-running stack.** Traefik-fronted production apps
-(argo, rollhook, the audio/image gateways' prod side, research-gateway's fallback container, weatherorb's edge,
+(argo, rollhook, the audio/image gateways' prod side, weatherorb's edge,
 bun-email-api, free-planning-poker, …), backed by ClickStack/HyperDX for OTel,
 alerts-as-code, and its own backup/prune crons. Nothing here depends on the mini
 being up, and it is reached over Tailscale SSH, never through the mini.
@@ -72,7 +72,8 @@ Tavily+Context7 research), audio-gateway (STT/TTS, the podcast pipeline) and the
 image-gen gateway (generate/edit/enhance) each expose one kind of work as a
 submit-then-poll HTTP service — an agent calls out and polls rather than doing
 research, STT, TTS or image generation itself. research-gateway runs natively
-on the mini since 2026-09-23 (next to its consumers, `research.mini.jkrumm.com`);
+on the mini since 2026-09-23 (next to its consumers, `research.mini.jkrumm.com`)
+and is the only instance — its VPS fallback container was retired 2026-09-26;
 the other two stay on the VPS.
 
 ## Diagrams
@@ -121,7 +122,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/docs/api.md`, `warden/FLOWS.md`, `warden/docs/triage.md`. `warden run <repo> '<brief>'` is the unattended lane; `sideclaw dispatch` and `rd bg` are a session's and a human's |
 | `sideclaw` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
-| `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the VPS container is the fallback until retired |
+| `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `bun-email-api`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `ticktick-raycast`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `dispatch-scratch` | see global CLAUDE.md repo table | |
 | `weatherorb` | weather/wave service, 8 LaunchAgents | all 8 templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
