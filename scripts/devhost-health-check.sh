@@ -939,11 +939,18 @@ probe_audio_gateway() {
 probe_research_gateway() {
   # /health alone stays green with the renderer sidecar dead — the chain is built to
   # run without it — so the sidecar is probed through the gateway's own /health/render.
-  local code render
+  local code render tavily
   code=$(http_code "$RESEARCH_GATEWAY_URL/health")
   [[ "$code" == "200" ]] || { echo "research-gateway not answering on $RESEARCH_GATEWAY_URL (got ${code:-000})"; return 1; }
   render=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/render" 2>/dev/null || true)
   [[ "$render" == *'"renderer":"ok"'* ]] || { echo "research-gateway renderer sidecar not ok (${render:-no answer})"; return 1; }
+  # The VPS instance's retirement (2026-09-26) took its Uptime Kuma Tavily-plan
+  # monitor with it — the mini's own /health/tavily is the only thing left that
+  # can catch the account crossing from its Researcher plan into pay-as-you-go
+  # (health.ts: `overPlan` is deliberately not `?? false`, so a renamed/missing
+  # field reads as unhealthy rather than silently "fine").
+  tavily=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/tavily" 2>/dev/null || true)
+  [[ "$tavily" == *'"overPlan":false'* ]] || { echo "research-gateway Tavily plan over quota or unreadable (${tavily:-no answer})"; return 1; }
 }
 
 probe_brain_web() {
