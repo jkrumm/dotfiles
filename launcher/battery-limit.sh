@@ -1,26 +1,19 @@
 #!/bin/bash
 # Set the MacBook battery charge cap via batt, optionally pausing the daily
 # 09:00 auto-reset to 80% for N days (e.g. before a multi-day trip).
-#
-# Required parameters:
-# @raycast.schemaVersion 1
-# @raycast.title Battery Limit
-# @raycast.mode compact
-# @raycast.argument1 { "type": "dropdown", "placeholder": "Cap", "data": [{ "title": "80% (default)", "value": "80" }, { "title": "90%", "value": "90" }, { "title": "100% (full charge)", "value": "100" }] }
-# @raycast.argument2 { "type": "text", "placeholder": "Pause days (blank = auto-reset tonight)", "optional": true }
-#
-# Optional parameters:
-# @raycast.packageName Battery
-# @raycast.icon 🔋
-#
-# Documentation:
-# @raycast.description Set the MacBook battery charge cap (batt). Auto-resets to 80% at 09:00 daily, unless paused for N days.
-# @raycast.author Johannes Krumm
+# Tinycast custom command "Battery Limit" (config/tinycast/defaults.json):
+#   $1 = cap in percent (required), $2 = pause days (optional).
 
 set -euo pipefail
 BATT="$(brew --prefix)/opt/batt/bin/batt"
 PAUSE_FILE="$HOME/.config/batt/pause-until"
 [ -x "$BATT" ] || { echo "batt not installed — run: make batt-setup"; exit 1; }
+# The launcher field is free text, so validate before batt turns a typo into a
+# misleading "daemon not running".
+if ! [[ "${1:-}" =~ ^[0-9]+$ ]] || [ "$1" -lt 10 ] || [ "$1" -gt 100 ]; then
+  echo "Cap must be a whole number from 10 to 100 (80 = default, 100 = full charge)"
+  exit 1
+fi
 if ! "$BATT" limit "$1" >/dev/null 2>&1; then
   echo "batt daemon not running — run: make batt-setup"
   exit 1

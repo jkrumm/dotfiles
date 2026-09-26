@@ -56,18 +56,18 @@ mini).
 
 | Command | Purpose |
 |-|-|
-| `make batt-setup` | One-time: daemon + cap + daily-reset agent + Raycast symlink (`LIMIT=N`) |
+| `make batt-setup` | One-time: daemon + cap + daily-reset agent (`LIMIT=N`) |
 | `make batt-limit LIMIT=100` | Change the cap now |
 | `make batt-limit LIMIT=100 DAYS=7` | Same, plus pause the daily 80% reset for 7 days |
 | `make batt-status` | Charging state + limits, and the resume date if paused |
 
 A 09:00 LaunchAgent resets the cap daily — that is what makes a 100% boost
-*temporary*; `~/.config/batt/pause-until` (epoch stamp, from Raycast's "Pause days"
+*temporary*; `~/.config/batt/pause-until` (epoch stamp, from Tinycast's "Pause days"
 field or `DAYS=N`) suspends it for travel, and a cap set with no `DAYS` clears the
 file, so that doubles as cancel. Changing the resting default means editing both
-`battery/batt-reset.sh` and `LIMIT ?= 80`. Raycast control is self-authored Script
-Commands in `raycast/` — point Raycast at `~/.raycast-scripts` once, under
-**Settings → Script Commands** (a top-level tab, not under Extensions).
+`battery/batt-reset.sh` and `LIMIT ?= 80`. Launcher control is Tinycast's
+**Battery Limit** / **Battery Status** custom commands, which run `launcher/*.sh`
+and are declared in `config/tinycast/defaults.json` (applied by `make setup`).
 
 ## Database access — `make db-tunnel-setup`
 

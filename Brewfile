@@ -13,6 +13,7 @@
 
 tap "oven-sh/bun"
 tap "satococoa/tap"
+tap "abue-ammar/tinycast"
 # Simple, modern, secure file encryption
 brew "age"
 # Editor of encrypted files (paired with age for the headless secrets cache)
@@ -228,5 +229,11 @@ cask "jiggler"
 cask "karabiner-elements"
 # Music streaming service
 cask "spotify"
+# The launcher (Raycast's replacement since 2026-09-26): native SwiftUI, runs
+# Raycast extensions in JavaScriptCore, AGPL-3.0, single maintainer, third-party
+# tap (trusted by `_setup-packages` like the others). Settings are tracked in
+# config/tinycast/defaults.json (`make tinycast-check`). Its own Hyper key stays
+# OFF: it rides a CGEventTap (see Karabiner above), Karabiner owns Hyper.
+cask "abue-ammar/tinycast/tinycast"
 # Multimedia player
 cask "vlc"

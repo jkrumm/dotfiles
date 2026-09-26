@@ -47,7 +47,6 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload` on wake |
-| `raycast/` | `~/.raycast-scripts` (dir symlink) | Raycast Script Commands (battery limiter), MacBook-only via `make batt-setup` |
 
 **Not symlinked:** `~/.codex/config.toml` (rendered by `_setup-codex` from
 `config/codex/config.toml.tpl` — it needs the IU endpoint host, which never
@@ -56,6 +55,8 @@ appends its own `Include`; all four hosts are MagicDNS short names, so it instal
 identically on a headless machine, no secret and no `op` call) ·
 `config/karabiner/karabiner.json` (copied; Karabiner rewrites the live file on
 every UI change and `_setup-karabiner` refuses to overwrite a diverged copy) ·
+`config/tinycast/defaults.json` (applied to Tinycast's defaults domain by
+`scripts/tinycast-config.py`, never on the mini; live wins, `make tinycast-check`) ·
 `~/.claude/settings.json` (merged, below) · `~/.gitconfig-headless` (written only
 by `make git-headless` on the mini) · `scripts/doctor.sh` (invoked by `make
 doctor`).

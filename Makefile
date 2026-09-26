@@ -102,6 +102,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-codex
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-karabiner
+	@$(MAKE) --no-print-directory _setup-tinycast
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
@@ -542,6 +543,27 @@ _setup-karabiner:
 		fi; \
 	fi
 
+.PHONY: _setup-tinycast tinycast-export tinycast-apply tinycast-check
+# Tinycast (the launcher) keeps its settings in the com.tinycast.app defaults
+# domain; config/tinycast/defaults.json tracks it as readable JSON (hotkeys and
+# custom commands are JSON-in-plist, decoded by the script). Like karabiner.json
+# the live domain wins on divergence: setup applies only on a fresh install.
+_setup-tinycast:
+	@echo "  Tinycast (launcher settings)..."
+	@# The mini gets the cask from the shared Brewfile but has no one at the
+	@# keyboard — never launch a clipboard-history daemon there.
+	@if [ "$(SECRETS_BACKEND)" = "cache" ]; then \
+		echo "    - dev host (cache backend), skipping"; \
+	else \
+		python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" setup; \
+	fi
+tinycast-export:
+	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" export
+tinycast-apply:
+	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" apply
+tinycast-check:
+	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" check
+
 .PHONY: authorized-keys remote-access _setup-remote-access
 # Installs trusted public keys into ~/.ssh/authorized_keys (append-if-missing;
 # never clobbers or duplicates an existing entry). Deliberately NOT sudo and
@@ -893,14 +915,12 @@ batt-setup:
 	@$(BATT) limit $(LIMIT) >/dev/null 2>&1 \
 		&& echo "    ✓ daemon running, charge limit set to $(LIMIT)%" \
 		|| echo "    ✗ failed to set limit — check the daemon ($$(brew --prefix)/var/log/batt.log)"
-	@# Daily reset agent: any boost (e.g. 100% via Raycast) expires next morning (09:00 → 80%).
+	@# Daily reset agent: any boost (e.g. 100% via Tinycast) expires next morning (09:00 → 80%).
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.batt-reset" PLIST_DIR="$(DOTFILES_DIR)/battery"
-	@# Raycast Script Commands: self-authored, no deps. Symlink the dir; Raycast must be pointed at it once.
-	@ln -sfn "$(DOTFILES_DIR)/raycast" "$(HOME)/.raycast-scripts" \
-		&& echo "    ✓ Raycast scripts → ~/.raycast-scripts (Battery Limit / Battery Status)"
-	@echo "    ↳ One-time in Raycast: Settings (⌘,) → Script Commands (own top-level"
-	@echo "      tab, not under Extensions) → Add Script Directory → ~/.raycast-scripts"
+	@# Launcher control: launcher/*.sh, wired as Tinycast custom commands by
+	@# config/tinycast/defaults.json (applied by `make setup`). Nothing to link.
+	@echo "    ✓ Tinycast: Battery Limit / Battery Status (config/tinycast/defaults.json)"
 batt-limit:
 	@if ! pmset -g batt | grep -q InternalBattery; then \
 		echo "  batt: no internal battery — nothing to do."; exit 0; fi
@@ -3138,6 +3158,7 @@ help:
 	@echo "  make colima-status   Show service + VM status"
 	@echo "  make orbstack-remove Uninstall OrbStack after migrating to Colima (guarded; FORCE=1 to override)"
 	@echo ""
+	@echo "  make tinycast-check   Diff Tinycast's live settings against config/tinycast/ (-export adopts live, -apply adopts repo)"
 	@echo "  make batt-setup       MacBook-only: start the charge-limiter daemon + cap at 80% (LIMIT=N)"
 	@echo "  make batt-limit       Change the cap, e.g. make batt-limit LIMIT=100 (full charge before travel)"
 	@echo "                        Add DAYS=N to also pause the daily 80% auto-reset for N days"

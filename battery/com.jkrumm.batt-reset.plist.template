@@ -4,8 +4,8 @@
 <dict>
   <key>Label</key><string>com.jkrumm.batt-reset</string>
   <!-- Daily reset of the battery charge cap to the 80% default. Any temporary
-       boost (e.g. 100% via Raycast) auto-expires the next morning, UNLESS a
-       pause is in effect (raycast/battery-limit.sh's "Pause days" field, or
+       boost (e.g. 100% via Tinycast) auto-expires the next morning, UNLESS a
+       pause is in effect (launcher/battery-limit.sh's "Pause days" field, or
        `make batt-limit DAYS=N`) — batt-reset.sh checks
        ~/.config/batt/pause-until and skips the reset until it expires. batt
        runs with --always-allow-non-root-access, so this user agent needs no

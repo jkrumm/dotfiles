@@ -1,7 +1,7 @@
 #!/bin/bash
 # Daily 09:00 reset of the batt charge cap to 80%, run by
 # com.jkrumm.batt-reset. Skips the reset while a pause is in effect (see
-# raycast/battery-limit.sh's "Pause days" field / `make batt-limit DAYS=N`),
+# launcher/battery-limit.sh's "Pause days" field / `make batt-limit DAYS=N`),
 # so a temporary 100% boost before a trip survives every morning until it
 # expires on its own.
 
