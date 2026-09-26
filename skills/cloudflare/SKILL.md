@@ -184,7 +184,7 @@ No tunnel ingress change for a `*.jkrumm.com` subdomain. An **apex** (`jkrumm.co
 
 ## Edge cache for static sites (Cache Rule + purge on deploy)
 
-Full pattern and rationale: `vps/docs/edge-cache.md`. Origin nginx sets the headers (HTML: `Cache-Control: public, max-age=0, must-revalidate` + `Cloudflare-CDN-Cache-Control: max-age=31536000`; hashed assets `immutable`); Cloudflare only needs **one Cache Rule per hostname** making it eligible and deferring to origin. Purge happens in CI via `jkrumm/rollhook-action@v1` (`cloudflare_purge_hosts` + `cloudflare_api_token`) — never here, never `purge_everything` (the jkrumm.com zone also fronts the image CDN).
+Full pattern and rationale: `vps/docs/edge-cache.md`. Origin nginx sets the headers (HTML: `Cache-Control: public, max-age=0, must-revalidate` + `Cloudflare-CDN-Cache-Control: max-age=31536000`; hashed assets `immutable`); Cloudflare only needs **one Cache Rule per hostname** making it eligible and deferring to origin. Purge happens in CI via `jkrumm/rollhook-action@v1` (≥ v1.10: `cloudflare_purge_hosts` — newline/comma list, validated before the build — + `cloudflare_api_token`; per-host result table in the job summary) — never here, never `purge_everything` (the jkrumm.com zone also fronts the image CDN).
 
 **Token split:** rules are set with `CLOUDFLARE_MANAGE_TOKEN` (1Password + servers only); the purge runs in CI with `CACHE_PURGE_TOKEN`, which sits in public repos' GitHub secrets and so stays Zone:Read + Cache Purge only. Seed it without printing it — the VPS service account reads `common/`:
 
@@ -192,30 +192,17 @@ Full pattern and rationale: `vps/docs/edge-cache.md`. Origin nginx sets the head
 ssh vps "op read 'op://common/cloudflare/CACHE_PURGE_TOKEN'" | gh secret set CLOUDFLARE_PURGE_TOKEN --repo jkrumm/<repo>
 ```
 
-### Add/replace the Cache Rule for a hostname
+### Provision / verify a site — use the vps make targets, not snippets
 
-Cache Rules live in the zone's `http_request_cache_settings` entrypoint ruleset. `PUT …/entrypoint` **replaces every rule** — GET first, keep the others, then PUT. Set `ZONE` (look it up by name) and `HOST`:
+Run on the VPS (`ssh vps 'cd ~/vps && make … ENV=prod'`). `scripts/edge-cache.py`, stdlib Python, idempotent:
 
 ```bash
-ssh vps 'op run --env-file=$HOME/vps/.env.tpl -- bash -c '"'"'
-ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=jkrumm.com" -H "Authorization: Bearer ${CLOUDFLARE_MANAGE_TOKEN}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"result\"][0][\"id\"])")
-HOST=jkrumm.com
-E="https://api.cloudflare.com/client/v4/zones/$ZONE/rulesets/phases/http_request_cache_settings/entrypoint"
-EXISTING=$(curl -s "$E" -H "Authorization: Bearer ${CLOUDFLARE_MANAGE_TOKEN}")
-BODY=$(HOST=$HOST python3 -c "
-import json,os,sys
-r=json.loads(sys.argv[1]); host=os.environ[\"HOST\"]
-rules=[x for x in ((r.get(\"result\") or {}).get(\"rules\") or []) if x.get(\"description\")!=f\"edge-cache {host}\"]
-rules=[{k:v for k,v in x.items() if k in (\"expression\",\"action\",\"action_parameters\",\"description\",\"enabled\")} for x in rules]
-rules.append({\"description\":f\"edge-cache {host}\",\"expression\":f\"(http.host eq \\\"{host}\\\")\",\"action\":\"set_cache_settings\",\"enabled\":True,
-  \"action_parameters\":{\"cache\":True,\"edge_ttl\":{\"mode\":\"respect_origin\"},\"browser_ttl\":{\"mode\":\"respect_origin\"}}})
-print(json.dumps({\"rules\":rules}))" "$EXISTING")
-curl -s -X PUT "$E" -H "Authorization: Bearer ${CLOUDFLARE_MANAGE_TOKEN}" -H "Content-Type: application/json" --data "$BODY" \
-  | python3 -c "import json,sys; r=json.load(sys.stdin); print([x[\"description\"] for x in r[\"result\"][\"rules\"]]) if r[\"success\"] else print(\"ERR:\",r[\"errors\"])"
-'"'"''
+make edge-cache-apply  HOST=example.com DRY_RUN=1   # preview
+make edge-cache-apply  HOST=example.com             # proxied CNAMEs (apex + www) → VPS tunnel, ingress entries, Cache Rule upsert; then status
+make edge-cache-status HOST=example.com             # ✓/✗ checklist with fix hints + live MISS→HIT probe; exit 1 on any ✗
 ```
 
-The upsert keeps every other rule (e.g. `photos.jkrumm.com`) but re-creates them without their old ids — harmless. A 404 on the GET just means the zone has no cache rules yet — the PUT creates the entrypoint. Free plan: 10 Cache Rules per zone.
+`apply` never overwrites a DNS record pointing elsewhere, preserves every other ingress entry / Cache Rule, and round-trips the whole tunnel config. Order for a new site: deploy the new nginx headers **first**, then `apply` — a Cache Rule over an origin without `Cache-Control` falls back to Cloudflare's default TTL and caches unpurged HTML.
 
 ### Manual purge of one hostname (CI normally does this)
 
@@ -227,7 +214,7 @@ ssh vps 'op run --env-file=$HOME/vps/.env.tpl -- bash -c '"'"'curl -s -X POST "h
 
 ### Verify
 
-`curl -sI https://HOST/ | grep -i cf-cache-status` twice → `MISS` then `HIT`; after a deploy → `MISS` again.
+`make edge-cache-status HOST=…` (above). By hand: `curl -sI https://HOST/ | grep -i cf-cache-status` twice → `MISS` then `HIT`; after a deploy → `MISS` again.
 
 ---
 
