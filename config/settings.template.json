@@ -88,6 +88,11 @@
             "type": "command",
             "command": "test -f ~/.claude/hooks/herdr-agent-state.sh && bash ~/.claude/hooks/herdr-agent-state.sh session || true",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "test -x ~/SourceRoot/dotfiles/scripts/claude-appearance.sh && ~/SourceRoot/dotfiles/scripts/claude-appearance.sh session || true",
+            "timeout": 5
           }
         ]
       }
