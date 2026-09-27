@@ -124,7 +124,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
-| `bun-email-api`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `ticktick-raycast`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `dispatch-scratch` | see global CLAUDE.md repo table | |
+| `bun-email-api`, `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch`, `dispatch-scratch` | see global CLAUDE.md repo table | |
 | `weatherorb` | weather/wave service, 8 LaunchAgents | all 8 templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
@@ -136,7 +136,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `photo-flow` · `shutterflow` | the two photography apps |
 | `image-gen` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
 | `basalt-ui` | followed image-gen: it is consumed as a `file:` dependency, so the studio's machine needs the build |
-| `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here; supersedes the mini's `ticktick-raycast` |
+| `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
 
 ## LaunchAgents — mini (gui/501 unless noted)
 

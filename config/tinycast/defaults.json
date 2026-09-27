@@ -49,6 +49,16 @@
   },
   "customCommandsEnabled": true,
   "customCommandsShowInLauncher": true,
+  "extensionsEnabled": true,
+  "favoriteApps": [
+    "extension:jkrumm/hub",
+    "extension:jkrumm/my-tasks",
+    "extension:jkrumm/quick-add",
+    "extension:jkrumm/claude-usage",
+    "extension:jkrumm/netgear",
+    "extension:jkrumm/speed-test",
+    "extension:jkrumm/battery"
+  ],
   "hotkey.togglePalette": {
     "$jsonString": {
       "combo": {
@@ -58,6 +68,16 @@
         }
       }
     }
+  },
+  "interfaceSize": "larger",
+  "launcherAliases": {
+    "extension:jkrumm/hub": "db",
+    "extension:jkrumm/my-tasks": "tt",
+    "extension:jkrumm/quick-add": "ta",
+    "extension:jkrumm/claude-usage": "cu",
+    "extension:jkrumm/netgear": "ng",
+    "extension:jkrumm/speed-test": "st",
+    "extension:jkrumm/battery": "bt"
   },
   "showInMenuBar": true
 }
