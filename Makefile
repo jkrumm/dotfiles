@@ -545,7 +545,7 @@ _setup-karabiner:
 	fi
 
 .PHONY: _setup-tinycast tinycast-export tinycast-apply tinycast-check
-# Tinycast (the launcher) keeps its settings in the com.tinycast.app defaults
+# Tinycast (the launcher) keeps its settings in the com.tinycast.app.beta defaults
 # domain; config/tinycast/defaults.json tracks it as readable JSON (hotkeys and
 # custom commands are JSON-in-plist, decoded by the script). Like karabiner.json
 # the live domain wins on divergence: setup applies only on a fresh install.

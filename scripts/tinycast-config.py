@@ -32,8 +32,12 @@ import sys
 import time
 from pathlib import Path
 
-DOMAIN = "com.tinycast.app"
-APP = Path("/Applications/Tinycast.app")
+# The beta channel (cask tinycast@beta) since 2026-09-27: it draws extension
+# menu-bar commands and lays extension views out far better in the same fixed
+# window. A separate app with its own domain — stable and beta never share.
+DOMAIN = "com.tinycast.app.beta"
+APP = Path("/Applications/Tinycast Beta.app")
+PROCESS = "Tinycast Beta"
 TRACKED = Path(__file__).resolve().parent.parent / "config/tinycast/defaults.json"
 
 # Window geometry, status-item slots and AppKit/Sparkle bookkeeping: rewritten
@@ -100,7 +104,7 @@ def diverged_keys(tracked: dict, live: dict) -> list[str]:
 
 
 def running() -> bool:
-    return subprocess.run(["pgrep", "-x", "Tinycast"], capture_output=True).returncode == 0
+    return subprocess.run(["pgrep", "-x", PROCESS], capture_output=True).returncode == 0
 
 
 def quit_app() -> None:

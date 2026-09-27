@@ -235,7 +235,10 @@ cask "spotify"
 # tap (trusted by `_setup-packages` like the others). Settings are tracked in
 # config/tinycast/defaults.json (`make tinycast-check`). Its own Hyper key stays
 # OFF: it rides a CGEventTap (see Karabiner above), Karabiner owns Hyper.
-cask "abue-ammar/tinycast/tinycast"
+# The beta channel on purpose: it draws extension menu-bar commands and gives
+# extension views more room (stable 0.11.3 does neither) — separate app, own
+# com.tinycast.app.beta domain, self-updates within the beta channel.
+cask "abue-ammar/tinycast/tinycast@beta"
 # Herdr GPUI — native desktop client for herdr (unaffiliated, third-party tap),
 # attached to the mini through the saved `herdr machine` profile. Its config is
 # ~/.config/herdr/config-gpui.local.toml (machine-local, untracked — the app

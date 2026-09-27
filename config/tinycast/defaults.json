@@ -9,6 +9,7 @@
   "boundQuickActionIDs": [],
   "boundQuicklinkIDs": [],
   "boundWindowLayoutIDs": [],
+  "boundWindowRoomIDs": [],
   "calendarMenuBarDisplay": 0,
   "customCommands": {
     "$json": [
@@ -69,15 +70,15 @@
       }
     }
   },
-  "interfaceSize": "larger",
+  "interfaceSize": "standard",
   "launcherAliases": {
+    "extension:jkrumm/battery": "bt",
+    "extension:jkrumm/claude-usage": "cu",
     "extension:jkrumm/hub": "db",
     "extension:jkrumm/my-tasks": "tt",
-    "extension:jkrumm/quick-add": "ta",
-    "extension:jkrumm/claude-usage": "cu",
     "extension:jkrumm/netgear": "ng",
-    "extension:jkrumm/speed-test": "st",
-    "extension:jkrumm/battery": "bt"
+    "extension:jkrumm/quick-add": "ta",
+    "extension:jkrumm/speed-test": "st"
   },
   "showInMenuBar": true
 }
