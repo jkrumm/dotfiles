@@ -80,11 +80,16 @@ also fires on unrelated preference writes (no-ops) and lags a flip by ~7–10 s
 (cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the
 mini.
 
-**It does not reach the panes.** The herdr protocol has a client→server
-appearance update (`ClientHostThemeUpdate::Appearance`), but Herdr GPUI never
-sends it, so apps inside panes — Claude Code on `theme: auto` — keep the
-appearance they last got from a `desk` (Ghostty) client. No herdr CLI/API
-command sets it either; the fix is upstream.
+**Claude panes on the mini follow too.** Claude Code on `theme: auto` flips on
+a DEC 2031 report plus the OSC 11 background answer it re-queries — which only
+a Ghostty (`desk`) client supplies; Herdr GPUI never sends either. So on a
+change the agent also runs `ssh mini scripts/claude-appearance.sh light|dark`
+(BatchMode, riding the ControlMaster a connected GUI keeps open; a failed push
+retries on the next preferences write), which sends both halves to every
+`claude` pane and records the mode in `~/.local/state/claude-appearance`. A
+SessionStart hook replays that mode into each new session ~3 s after start.
+Measured: live flip, no redraw, nothing typed into the prompt. Either half
+alone, or editing `~/.claude.json`, does nothing to a running session.
 
 ## Database access — `make db-tunnel-setup`
 
