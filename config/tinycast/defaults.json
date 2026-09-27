@@ -12,41 +12,7 @@
   "boundWindowRoomIDs": [],
   "calendarMenuBarDisplay": 0,
   "customCommands": {
-    "$json": [
-      {
-        "id": "5C1E7B0A-3D2F-4B8E-9A61-7F0C2D4E8B11",
-        "name": "Battery Limit",
-        "command": "\"$HOME/SourceRoot/dotfiles/launcher/battery-limit.sh\" \"$1\" \"$2\"",
-        "isEnabled": true,
-        "loadsShellEnvironment": false,
-        "requiresConfirmation": false,
-        "showsConfirmation": false,
-        "arguments": [
-          {
-            "name": "Cap %",
-            "isOptional": false
-          },
-          {
-            "name": "Pause days",
-            "isOptional": true
-          }
-        ],
-        "showsOutput": true,
-        "iconSymbol": "battery.75percent"
-      },
-      {
-        "id": "8A4F2C6D-1B9E-4E3A-B7D2-0C5F9A1E6D22",
-        "name": "Battery Status",
-        "command": "\"$HOME/SourceRoot/dotfiles/launcher/battery-status.sh\"",
-        "isEnabled": true,
-        "loadsShellEnvironment": false,
-        "requiresConfirmation": false,
-        "showsConfirmation": false,
-        "arguments": [],
-        "showsOutput": true,
-        "iconSymbol": "battery.100percent"
-      }
-    ]
+    "$json": []
   },
   "customCommandsEnabled": true,
   "customCommandsShowInLauncher": true,

@@ -65,9 +65,9 @@ A 09:00 LaunchAgent resets the cap daily — that is what makes a 100% boost
 *temporary*; `~/.config/batt/pause-until` (epoch stamp, from Tinycast's "Pause days"
 field or `DAYS=N`) suspends it for travel, and a cap set with no `DAYS` clears the
 file, so that doubles as cancel. Changing the resting default means editing both
-`battery/batt-reset.sh` and `LIMIT ?= 80`. Launcher control is Tinycast's
-**Battery Limit** / **Battery Status** custom commands, which run `launcher/*.sh`
-and are declared in `config/tinycast/defaults.json` (applied by `make setup`).
+`battery/batt-reset.sh` and `LIMIT ?= 80`. Launcher control is the **Battery**
+command of the `tinycast-extensions` repo (status via `batt status --json`, limit
+changes via `launcher/battery-limit.sh`, so the pause logic lives in one place).
 
 ## Herdr GPUI light/dark — `com.jkrumm.appearance-sync`
 

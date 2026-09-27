@@ -932,9 +932,8 @@ batt-setup:
 	@# Daily reset agent: any boost (e.g. 100% via Tinycast) expires next morning (09:00 → 80%).
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.batt-reset" PLIST_DIR="$(DOTFILES_DIR)/battery"
-	@# Launcher control: launcher/*.sh, wired as Tinycast custom commands by
-	@# config/tinycast/defaults.json (applied by `make setup`). Nothing to link.
-	@echo "    ✓ Tinycast: Battery Limit / Battery Status (config/tinycast/defaults.json)"
+	@# Launcher control: the Battery command of the tinycast-extensions repo,
+	@# which runs launcher/battery-limit.sh. Nothing to link.
 batt-limit:
 	@if ! pmset -g batt | grep -q InternalBattery; then \
 		echo "  batt: no internal battery — nothing to do."; exit 0; fi

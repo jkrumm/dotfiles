@@ -1,7 +1,7 @@
 #!/bin/bash
 # Set the MacBook battery charge cap via batt, optionally pausing the daily
 # 09:00 auto-reset to 80% for N days (e.g. before a multi-day trip).
-# Tinycast custom command "Battery Limit" (config/tinycast/defaults.json):
+# Called by the Battery command of the tinycast-extensions repo:
 #   $1 = cap in percent (required), $2 = pause days (optional).
 
 set -euo pipefail
