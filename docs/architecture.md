@@ -136,6 +136,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `photo-flow` · `shutterflow` | the two photography apps |
 | `image-gen` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
 | `basalt-ui` | followed image-gen: it is consumed as a `file:` dependency, so the studio's machine needs the build |
+| `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here; supersedes the mini's `ticktick-raycast` |
 
 ## LaunchAgents — mini (gui/501 unless noted)
 

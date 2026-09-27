@@ -337,8 +337,8 @@ a call costs. **Everything routed through sideclaw exists only on the mini.**
 Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
 `/hermes-update`; `homelab` → `/audit`, `/docs`, `/upgrade-stack`; `vps` →
 `/audit`, `/docs`; `sideclaw` → `/claude-cli`; `free-planning-poker` →
-`/release-fpp`; `homelab-private` → `/prowlarr`; `ticktick-raycast` →
-`/raycast-extension`, `/ticktick-api`; `brain` → `/wildrift-refresh`.
+`/release-fpp`; `homelab-private` → `/prowlarr`; `tinycast-extensions` →
+`/tinycast`, `/raycast-extension`, `/ticktick-api`; `brain` → `/wildrift-refresh`.
 
 ---
 
