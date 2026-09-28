@@ -7,7 +7,7 @@ one-line gotchas live in `AGENTS.md`.
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent and pushes **three** Uptime Kuma
-monitors. `MacMini Dev Host - Push` is the composite, covering **seventeen**
+monitors. `MacMini Dev Host - Push` is the composite, covering **eighteen**
 components:
 
 | Component | Checks |
@@ -18,6 +18,7 @@ components:
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |
+| swapouts | cumulative `vm.compressor.swapper.swapouts_total` → MiB/300s delta — **FAIL** past `DEVHOST_SWAPOUT_MB_PER_300S_MAX` (2 GiB) |
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
@@ -95,7 +96,7 @@ Two things that were got wrong first:
 and Kuma's own missed-heartbeat is untouched, which is the property
 `maxretries 0` exists to protect.
 
-### Two checks whose obvious implementation is wrong
+### Checks whose obvious implementation is wrong
 
 - **Restart detection is a delta** against
   `~/.local/state/devhost-health/launchd-runs`, never a threshold on `runs`:
@@ -124,6 +125,19 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   `bootout`+`bootstrap` needs none (a fresh load restarts at `runs = 1`).
   Contract and logic: `scripts/lib/launchd-restarts.sh`; proof:
   `make launchd-restarts-test`.
+- **Memory storm detection is the swapout RATE, not the pressure level or the
+  swap share.** On 2026-09-27 an eight-hour Claude-pane storm swapped 19-107 GiB
+  every 300 s while `kern.memorystatus_vm_pressure_level` sat at 2 — which
+  `1c33c67` grades WARN (rc=2, never pages) — so the pressure branch
+  short-circuited the swap-percent gate and nothing paged; that gate then fired
+  only on the settled level-1 reading, i.e. as a false positive on a recovering
+  host. The rate is agnostic to the cause, so it also subsumes the leaked-child
+  case `check_runaways` cannot see (it needs PPID 1 / high accumulated CPU /
+  a SourceRoot cwd). `check_swapouts` deltas the cumulative
+  `vm.compressor.swapper.swapouts_total` (pages × `hw.pagesize`) against a state
+  file, re-seeds instead of paging when the counter falls across a reboot, and
+  FAILs past 2 GiB/300s on the normal 3-streak path. Proof:
+  `make swapout-rate-test`; logic: `scripts/lib/swapout-rate.sh`.
 - **The runaway reaper gates on accumulated CPU time crossed with lifetime
   average CPU**, never instantaneous `%CPU` (a compile pegs a core) and never
   accumulated time alone (a healthy long-lived service crosses any fixed

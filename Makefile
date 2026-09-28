@@ -2167,6 +2167,16 @@ launchd-restarts-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
 
+# check_swapouts regression suite: the swapout-rate delta that pages on a memory
+# storm, and the reset/seed guard that must NOT page across a reboot. Hermetic —
+# a stubbed sysctl and a scratch state dir, never the real heartbeat state. Runs
+# on either machine.
+.PHONY: swapout-rate-test
+swapout-rate-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/swapout-rate.sh $(DOTFILES_DIR)/scripts/swapout-rate.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/swapout-rate.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/swapout-rate.test.sh
+
 # human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
 # osascript failure), the AppleScript-injection and control-byte safety
 # properties, the over-long-command refusal, the dev-host guard, and the
@@ -3175,6 +3185,7 @@ help:
 	@echo "  make brew-service-test  scripts/lib/brew-service.sh resolver suite"
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
+	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
