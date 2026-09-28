@@ -394,8 +394,8 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is the composite over **17 components**: tailscale,
-sshd, herdr, git push credential, dev vhosts, memory, kernel panics (WARN), launchd restarts, boot path,
+`MacMini Dev Host - Push` is the composite over **18 components**: tailscale,
+sshd, herdr, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
 services (9), claude auth, obsidian, disk, runaways, sideclaw jobs, overview
 pane, quota (in every msg; WARN never pages). Push, not probe (no ACL grant runs
 `tag:homelab → tag:mac`) — full rationale, transient-tolerance knobs, and the
