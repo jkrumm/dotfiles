@@ -77,6 +77,7 @@ case_ "two deploys in one cycle (+2, 2 marks)" 5 7 ""             0 "240 60" 0 "
 case_ "non-zero exit, unmarked"              5 6 ""               78 ""      1 "exit 78"
 case_ "Terminated: 15, unmarked (unchanged)" 5 6 "Terminated: 15" "" ""     0 "SIGTERM — deliberate"
 case_ "Terminated: 15, marked"               5 6 "Terminated: 15" "" "60"   0 "marked deliberate"
+case_ "exit 1 despite a marker (crashing new build)" 5 6 "" 1 "60" 1 "exit 1, marker ignored"
 case_ "Killed: 9 despite a marker"           5 6 "Killed: 9"      "" "60"   1 "Killed: 9, marker ignored"
 case_ "no bump, history shown"               6 6 ""               0 ""       0 "history: svc=6(exit 0)"
 
@@ -110,6 +111,32 @@ chmod 755 "$STATE_DIR"
 [ "$rc" = 0 ] && [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] \
   && ok "state write failed → marker kept for the re-seen bump" \
   || bad "state write failed → rc=$rc, marker $( [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] && echo kept || echo CONSUMED)"
+
+echo "malformed markers never excuse (a crash loop must still page)"
+# raw_case NAME PREV RUNS MARKER_CONTENT_CMD — exit-0 bump, marker file written by the cmd.
+raw_case() {
+  local name=$1 prev=$2 runs=$3 out rc
+  rm -rf "$STATE_DIR" "$DEVHOST_DELIBERATE_RESTART_DIR"; mkdir -p "$STATE_DIR" "$DEVHOST_DELIBERATE_RESTART_DIR"
+  printf '%s %s\n' "$LABEL" "$prev" > "$STATE_DIR/launchd-runs"
+  eval "$4"
+  fake_print "$runs" "" 0
+  rc=0; out=$(check_launchd_restarts) || rc=$?
+  chmod -R u+rwx "$DEVHOST_DELIBERATE_RESTART_DIR" 2>/dev/null
+  [ "$rc" = 1 ] && ok "$name → pages ($out)" || bad "$name → rc=$rc out='$out', want a page"
+}
+M='"$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL"'
+raw_case "millisecond timestamp"        5 6 "echo \$((\$(date +%s) * 1000)) > $M"
+raw_case "empty marker file"            5 6 ": > $M"
+raw_case "partial/garbage line"         5 6 "printf '17905' > $M; echo abc >> $M"
+raw_case "ISO date instead of epoch"    5 6 "date -u +%Y-%m-%dT%H:%M:%SZ > $M"
+raw_case "marker 1h in the future (clock stepped back)" 5 6 "echo \$((\$(date +%s) + 3600)) > $M"
+raw_case "marker dir missing"           5 6 "rm -rf \"\$DEVHOST_DELIBERATE_RESTART_DIR\""
+raw_case "marker file unreadable"       5 6 "date +%s > $M; chmod 000 $M"
+raw_case "marker for another label"     5 6 "date +%s > \"\$DEVHOST_DELIBERATE_RESTART_DIR/com.example.else\""
+
+# bootout + bootstrap: runs falls back to 1 — no bump, no page, and a marker
+# is not spent on it (it cannot excuse more than its one later bump anyway).
+case_ "bootout+bootstrap resets runs (5 → 1)" 5 1 "" 0 "" 0 "no crash restarts"
 
 echo "per-label isolation"
 # Two services, only one marked, both bumped: the marker belongs to its label.
