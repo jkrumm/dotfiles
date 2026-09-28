@@ -730,85 +730,11 @@ com.jkrumm.research-gateway-lightpanda|$HOME/Library/LaunchAgents/com.jkrumm.res
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
-check_launchd_restarts() {
-  # KeepAlive makes a crash-looping service look EXACTLY like a healthy one:
-  # launchd restarts it, the port comes back, every liveness check goes green.
-  # The evidence is already sitting in `launchctl print` and nothing read it —
-  # herdr is at `runs = 2` with `last terminating signal = Killed: 9`, the OOM
-  # kill that silently emptied its panes.
-  #
-  # This is a DELTA, not a threshold on `runs`. `runs` is cumulative since load,
-  # so failing on runs > 1 would page forever over an event from weeks ago; the
-  # alertable fact is "a service restarted since the last 5-minute check", which
-  # for herdr means every pane's processes are gone RIGHT NOW. It pages for one
-  # cycle and clears, which is the correct shape for an edge.
-  #
-  # StartInterval agents (this one included, at runs = 1333) are deliberately
-  # absent from the list — `runs` counts scheduled invocations there and would
-  # increment every single cycle.
-  #
-  # A `Terminated: 15` RESTART IS NOT A FAULT, and treating it as one was this
-  # check's dominant false positive: 40 of the 67 dev-host DOWN alerts between
-  # 2026-06-14 and 2026-09-07 were somebody running `make hermes-restart` or
-  # `make sideclaw-restart`, or `launchctl bootout`+`bootstrap` after an edit.
-  # SIGTERM is launchd asking politely, which only ever happens because a human
-  # or a Makefile target asked it to. The events this check exists to catch look
-  # different and all still page: `Killed: 9` (jetsam/OOM — the herdr case it was
-  # written for), `Abort trap: 6`, `Segmentation fault: 11`, `Bus error: 10`, and
-  # a crash-loop that exits non-zero with NO signal at all (empty `sig`).
-  #
-  # A deliberate restart is still REPORTED — named in this component's own text
-  # and, since a restarted job has runs != 1, again in the `history:` tail. The
-  # fact that hermes bounced is worth seeing in the heartbeat; it just is not
-  # worth marking the machine DOWN and pinging a channel over.
-  local uid state_file seen="" restarted="" deliberate="" history=""
-  local entry label plist out runs sig prev
-  uid=$(/usr/bin/id -u)
-  state_file="$STATE_DIR/launchd-runs"
-  /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
-
-  while IFS='|' read -r label plist _; do
-    [[ -n "$label" ]] || continue
-    [[ -f "$plist" ]] || continue
-    out=$("$LAUNCHCTL_BIN" print "gui/$uid/$label" 2>/dev/null) || continue
-    # shellcheck disable=SC2016  # $2 is an awk field, not a shell expansion
-    runs=$("$AWK_BIN" -F' = ' '/^[[:space:]]*runs = /{ print $2; exit }' <<<"$out")
-    [[ -n "$runs" ]] || continue
-    # shellcheck disable=SC2016
-    sig=$("$AWK_BIN" -F' = ' '/^[[:space:]]*last terminating signal = /{ print $2; exit }' <<<"$out")
-    seen="${seen}${label} ${runs}
-"
-    # Surface a non-clean history even when nothing changed this cycle: a `-9`
-    # in the record is the difference between "restarted on purpose" and "was
-    # killed", and it belongs in the msg where the diagnosis happens.
-    if [[ "$runs" != "1" ]]; then
-      history="${history:+$history }${label##*.}=${runs}${sig:+(${sig})}"
-    fi
-    # shellcheck disable=SC2016
-    prev=$("$AWK_BIN" -v l="$label" '$1 == l { print $2; exit }' "$state_file" 2>/dev/null) || prev=""
-    # No previous reading (first run, or a newly wired service) — seed and move
-    # on. Inventing a comparison against zero would page once for every service
-    # on the first run after install.
-    [[ -n "$prev" ]] || continue
-    if (( runs > prev )); then
-      if [[ "$sig" == "Terminated: 15" ]]; then
-        deliberate="${deliberate:+$deliberate, }${label} restarted (${prev}→${runs}, SIGTERM — deliberate)"
-      else
-        restarted="${restarted:+$restarted, }${label} restarted (${prev}→${runs}${sig:+, ${sig}})"
-      fi
-    fi
-  done <<<"$LAUNCHD_KEEPALIVE"
-
-  # temp + mv: a torn state file would either re-seed (missing an edge) or
-  # compare against garbage (a phantom page).
-  if [[ -n "$seen" ]]; then
-    printf '%s' "$seen" > "$state_file.tmp" 2>/dev/null \
-      && /bin/mv -f "$state_file.tmp" "$state_file" 2>/dev/null || true
-  fi
-
-  [[ -z "$restarted" ]] || { echo "${restarted}${deliberate:+; also ${deliberate}}"; return 1; }
-  echo "no crash restarts${deliberate:+ (${deliberate})}${history:+ (history: $history)}"
-}
+# check_launchd_restarts lives in its own lib so the classification can be
+# driven hermetically (scripts/launchd-restarts.test.sh) — it reads
+# LAUNCHD_KEEPALIVE, STATE_DIR and the *_BIN overrides above.
+# shellcheck source=lib/launchd-restarts.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/launchd-restarts.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
