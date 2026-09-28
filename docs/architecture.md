@@ -286,7 +286,7 @@ Uptime Kuma.
 
 | Monitor | Pusher | Cadence |
 |-|-|-|
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (17 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (18 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min |
 | `MacMini Collie - Push` | collie behavioural check | 10 min |
 | `MacMini Secret Seed - Push` | cache-freshness check | 8 days |
 | `MacMini Drift - Push` | drift-check agent | 2 days |
