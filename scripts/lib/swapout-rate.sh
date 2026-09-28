@@ -25,6 +25,19 @@
 # the alertable fact is its DELTA — exactly like check_launchd_restarts' `runs`.
 # It counts PAGES, so multiply by hw.pagesize for bytes. A reboot (or any counter
 # reset) makes it fall; that is a re-seed, never a page.
+#
+# EVERY state write is asserted, never swallowed with `|| true`. That swallow is
+# the other door into the blindness the unreadable-counter guard above closes: an
+# unwritable STATE_DIR means no state file is ever written, so every later run
+# takes the seed branch and returns 0 — "seeded" for ever, and a storm that can
+# never page again. The same failure on the delta path is the mirror image (a
+# stale reading grows the delta until it pages a healthy host). Neither is worth
+# reporting as healthy, so both FAIL.
+swapouts_persist() {
+  printf '%s\n' "$2" > "$1.tmp" 2>/dev/null \
+    && /bin/mv -f "$1.tmp" "$1" 2>/dev/null
+}
+
 check_swapouts() {
   local pagesize now_pages prev state_file delta_mb
   pagesize=$("$SYSCTL_BIN" -n hw.pagesize 2>/dev/null) || pagesize=""
@@ -46,8 +59,8 @@ check_swapouts() {
   # ran BACKWARDS across a reboot. Seed and move on: inventing a comparison
   # against zero would page once for every boot.
   if [[ -z "$prev" ]] || (( now_pages < prev )); then
-    printf '%s\n' "$now_pages" > "$state_file.tmp" 2>/dev/null \
-      && /bin/mv -f "$state_file.tmp" "$state_file" 2>/dev/null || true
+    swapouts_persist "$state_file" "$now_pages" \
+      || { echo "swapouts: cannot write $state_file — state is blind, a storm can never page"; return 1; }
     echo "swapouts seeded (${now_pages} pages)"
     return 0
   fi
@@ -62,8 +75,11 @@ check_swapouts() {
 
   # Persist the new reading BEFORE deciding: an unreadable state dir must not
   # leave the same delta to be compared — and paged — again on the next run.
-  printf '%s\n' "$now_pages" > "$state_file.tmp" 2>/dev/null \
-    && /bin/mv -f "$state_file.tmp" "$state_file" 2>/dev/null || true
+  # Asserted for the same reason as the seed above: a run whose state did not
+  # land cannot say anything about the next one, and only "I cannot tell" is
+  # honest here.
+  swapouts_persist "$state_file" "$now_pages" \
+    || { echo "swapouts: cannot write $state_file — state is blind, a storm can never page"; return 1; }
 
   (( delta_mb <= SWAPOUT_MB_PER_300S_MAX )) \
     || { echo "swapouts ${delta_mb}M/300s (max ${SWAPOUT_MB_PER_300S_MAX}M) — something is thrashing the swap file"; return 1; }
