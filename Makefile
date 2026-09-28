@@ -2157,6 +2157,16 @@ brew-service-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/brew-service.test.sh
 	@$(DOTFILES_DIR)/scripts/brew-service.test.sh
 
+# check_launchd_restarts regression suite: which launchd restarts page and which
+# are report-only (deliberate-restart markers, SIGTERM, kills, exit codes) and
+# the marker lifecycle. Hermetic — a stubbed launchctl over a scratch state dir,
+# never a live job or the real heartbeat state. Runs on either machine.
+.PHONY: launchd-restarts-test
+launchd-restarts-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
+
 # human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
 # osascript failure), the AppleScript-injection and control-byte safety
 # properties, the over-long-command refusal, the dev-host guard, and the
@@ -3164,6 +3174,7 @@ help:
 	@echo "  make opbackup-seed-test Hermetic reseed-guard regression suite"
 	@echo "  make brew-service-test  scripts/lib/brew-service.sh resolver suite"
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
+	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"

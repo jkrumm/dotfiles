@@ -18,7 +18,7 @@ components:
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |
-| launchd restarts | delta on `runs` for every KeepAlive job, **excluding `Terminated: 15`** (a deliberate restart) |
+| launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
 | services | sideclaw, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
@@ -110,6 +110,19 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   `Abort trap: 6`, `Segmentation fault: 11`, `Bus error: 10` and a signal-less
   crash-loop all still page; a deliberate restart is reported in the component's
   own text and in the `history:` tail instead.
+- **A clean exit 0 is not evidence of intent — a marker is.** research-gateway
+  and sideclaw drain and exit 0 on their own, so their deploys carried no signal
+  and paged every time (87 messages in 14 days to 2026-09-27, a third of
+  #alerts). "No signal + exit 0 = deliberate" was rejected: a KeepAlive daemon
+  that bails cleanly on missing config crash-loops with exactly that shape. So
+  every restart path that leaves the job loaded (`kickstart -k`, self-exit +
+  KeepAlive) appends an epoch to
+  `~/.local/state/devhost/deliberate-restart/<label>` first; one line excuses
+  one bump within 10 min and is consumed by it. Writers: research-gateway
+  `mini-deploy.sh` + `make launchd-restart`, sideclaw `make reload`.
+  `bootout`+`bootstrap` needs none (a fresh load restarts at `runs = 1`).
+  Contract and logic: `scripts/lib/launchd-restarts.sh`; proof:
+  `make launchd-restarts-test`.
 - **The runaway reaper gates on accumulated CPU time crossed with lifetime
   average CPU**, never instantaneous `%CPU` (a compile pegs a core) and never
   accumulated time alone (a healthy long-lived service crosses any fixed
