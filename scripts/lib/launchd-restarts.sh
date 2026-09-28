@@ -31,7 +31,8 @@
 # lines (oldest first) are consumed by the check that evaluates the bump. So a
 # service that crash-loops after a deploy still pages: the loop's extra bumps
 # outnumber the marker lines, and the next cycle finds none left. A marker
-# never excuses a kill or a crash signal — only a clean exit or SIGTERM. A marker is the only thing a crash
+# never excuses a kill, a crash signal or a non-zero exit — only exit 0 or
+# SIGTERM. A deploy that restarts into a crashing build therefore pages too. A marker is the only thing a crash
 # loop cannot leave behind — which is why this replaced "exit 0 means
 # deliberate": a KeepAlive daemon that bails cleanly on missing config also
 # exits 0, forever.
@@ -86,8 +87,9 @@ check_launchd_restarts() {
   #
   # TWO THINGS MAKE A RESTART DELIBERATE, and both are report-only:
   #
-  #   1. A marker (header contract) covering the whole bump, on a clean exit or
-  #      SIGTERM — a marker never launders `Killed: 9` or a crash signal. research-gateway
+  #   1. A marker (header contract) covering the whole bump, on exit 0 or
+  #      SIGTERM — a marker never launders `Killed: 9`, a crash signal or a
+  #      non-zero exit. research-gateway
   #      and sideclaw drain and exit 0 on their own, so their restarts carry no
   #      signal at all — 87 dev-host messages in the 14 days to 2026-09-27, a
   #      third of #alerts, were every research-gateway deploy paging this.
@@ -104,7 +106,7 @@ check_launchd_restarts() {
   # A deliberate restart is still REPORTED — named in this component's own text
   # and, since a restarted job has runs != 1, again in the `history:` tail.
   local uid state_file now seen="" restarted="" deliberate="" history="" consume=""
-  local label plist out runs sig exit_code cause prev marks note n
+  local label plist out runs sig exit_code cause prev marks note n clean
   uid=$(/usr/bin/id -u)
   now=$("$DATE_BIN" +%s)
   state_file="$STATE_DIR/launchd-runs"
@@ -141,13 +143,15 @@ check_launchd_restarts() {
     # on. Inventing a comparison against zero would page once for every service
     # on the first run after install.
     if [[ -n "$prev" ]] && (( runs > prev )); then
-      if (( marks >= runs - prev )) && [[ -z "$sig" || "$sig" == "Terminated: 15" ]]; then
+      clean=0
+      [[ "$sig" == "Terminated: 15" || ( -z "$sig" && "$exit_code" == "0" ) ]] && clean=1
+      if (( marks >= runs - prev && clean )); then
         deliberate="${deliberate:+$deliberate, }${label} restarted (${prev}→${runs}${cause:+, ${cause}} — marked deliberate)"
       elif [[ "$sig" == "Terminated: 15" ]]; then
         deliberate="${deliberate:+$deliberate, }${label} restarted (${prev}→${runs}, SIGTERM — deliberate)"
       else
         note=""
-        if (( marks > 0 )) && [[ -n "$sig" && "$sig" != "Terminated: 15" ]]; then
+        if (( marks > 0 && ! clean )); then
           note=", marker ignored — not a clean exit"
         elif (( marks > 0 )); then
           note=", only ${marks} marked"
