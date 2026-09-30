@@ -138,6 +138,12 @@ PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 # side on a healthy machine — otherwise the only way to test the alarm is to
 # break the host.
 MEM_SWAP_PCT_MAX="${DEVHOST_MEM_SWAP_PCT_MAX:-25}"
+# Swapout RATE that pages: cumulative swapout pages -> MiB in the ~300 s window.
+# 2 GiB, because the 2026-09-27 storm ran 19-107 GiB per window against 0-0.9
+# GiB idle — an order of magnitude of daylight on either side. The caller for
+# the delta logic and why it is a rate is scripts/lib/swapout-rate.sh.
+# shellcheck disable=SC2034  # read by check_swapouts() in lib/swapout-rate.sh
+SWAPOUT_MB_PER_300S_MAX="${DEVHOST_SWAPOUT_MB_PER_300S_MAX:-2048}"
 DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-90}"
 DISK_FREE_GB_MIN="${DEVHOST_DISK_FREE_GB_MIN:-20}"
 # 30d, not the cert check's 21d, and the asymmetry is the point: an expired
@@ -683,17 +689,19 @@ check_memory() {
     *) level_name="level=$level" ;;
   esac
 
-  # Level 2 (WARN) is non-paging and routine here — weatherorb's blendfield job
-  # trips it regularly with no jetsam kill following. Only level 4 (CRITICAL)
-  # is the signal that actually precedes one, so only it pages; level 2 still
-  # gets reported (a WARN, never silent) in case a run of them turns out to
-  # predict something after all.
+  # Level 2 (WARN) is routine here — weatherorb's blendfield job trips it
+  # regularly with no jetsam kill following. Only level 4 (CRITICAL) is the
+  # signal that actually precedes one, so only it pages; level 2 still gets
+  # reported (a WARN, never silent). It is NOT evidence that nothing is paging,
+  # though: the 2026-09-27 storm sat at level 2 for eight hours while swapping
+  # 19-107 GiB per 300 s, so the WARN text must not claim otherwise and the
+  # actual thrashing signal is check_swapouts' rate.
   if (( level >= 4 )); then
     echo "memory pressure ${level_name} — the kernel is about to start jetsam-killing (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
     return 1
   fi
   if (( level >= 2 )); then
-    echo "memory pressure ${level_name} — non-paging (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
+    echo "memory pressure ${level_name} (swap ${used_mb}M = ${pct}% of ${phys_gb}G RAM)"
     return 2
   fi
   (( pct <= MEM_SWAP_PCT_MAX )) \
@@ -727,7 +735,7 @@ check_kernel_panics() {
   # Globbed by explicit name and never a bare `*.ips` — that directory also
   # holds `tailscaled-*.ips` and dozens of `*_mini.diag` resource scans, and a
   # broad glob would WARN on a perfectly healthy host. JetsamEvent-*.ips is
-  # deliberately NOT matched: check_memory FAILs at pressure level 2, the signal
+  # deliberately NOT matched: check_memory FAILs at pressure level 4, the signal
   # that PRECEDES a jetsam kill, and check_launchd_restarts surfaces `Killed: 9`
   # for every KeepAlive job — so both jetsam cases this host actually hits are
   # already covered, and re-raising one days later under a component named for
@@ -832,6 +840,12 @@ herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 # LAUNCHD_KEEPALIVE, STATE_DIR and the *_BIN overrides above.
 # shellcheck source=lib/launchd-restarts.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/launchd-restarts.sh"
+
+# check_swapouts lives in its own lib for the same reason: the cumulative
+# counter's delta/reset logic can be driven hermetically
+# (scripts/swapout-rate.test.sh) over STATE_DIR and a stubbed SYSCTL_BIN.
+# shellcheck source=lib/swapout-rate.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
@@ -1283,7 +1297,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
-                 check_memory check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth \
+                 check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth \
                  check_obsidian check_disk check_runaways check_sideclaw_jobs check_overview_pane \
                  check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
