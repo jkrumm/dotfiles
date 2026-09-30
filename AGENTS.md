@@ -209,16 +209,31 @@ do **not** resolve there.
 Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
 
 Two providers (2026-09-24): `iu` = `@ai-sdk/openai-compatible` on `{env:IU_OPENAI_BASE}`
-(`oc` derives it from the Keychain base, `/anthropic` → `/openai/v1`) serving
-`deepseek-v4.1-flash` — the default, since that id is **not** served on the Anthropic
-route; `anthropic` = the Anthropic route for Claude ids. On `iu`, `reasoningEffort`
-reaches the model (`--variant max|none`, default `high`) and prompt caching works
-(95–98% hits in real episodes). Headless `opencode run` auto-**rejects** any `ask`
-permission and that ends the session — workers must set every prompting permission
-to `allow`/`deny` (`deny` returns an error and the run continues). `--pure` hangs;
-don't use it. Concurrent starts can hit `database is locked` on the shared
-`opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
+(`oc` derives it from the Keychain base, `/anthropic` → `/openai/v1`) and
+`anthropic` = the Anthropic route for Claude ids. `iu` declares the whole IU roster,
+not just the default: `deepseek-v4.1-flash` stays the default (that id is **not**
+served on the Anthropic route), with `DeepSeek-V4-Pro`, `glm-5.3-flash`, the
+`gpt-5.6/6` line (`gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-6-luna`, `gpt-6-astra`), `gemini-3.{5,8}-flash`, `kimi-k2.7-code` and
+`minimax-m3` alongside it — context windows, prices and `reasoningEffort` variants
+come from **modelpick** (`bun run scripts/cap.ts --json --all` on the mini;
+`metric_snapshot` for the frontier ids), so re-check there before editing a row.
+`small_model` is `gpt-6-luna` (cheap) for title/summary generation. On `iu`,
+`reasoningEffort` reaches the model (`--variant max|none`, default `high`) and prompt
+caching works (95–98% hits in real episodes). Headless `opencode run` auto-**rejects**
+any `ask` permission and that ends the session — workers must set every prompting
+permission to `allow`/`deny` (`deny` returns an error and the run continues).
+`--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
+shared `opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
 config, not this file).
+
+**sideclaw is wired in, mini-only.** `config/opencode/mini.json` declares the
+`sideclaw` MCP (`bun run …/sideclaw/server/mcp.ts`, `timeout` 30 min so a `job_wait`
+is not cut off at the default 5 s). It is deliberately *not* in the shared
+`opencode.json`: `oc` layers it in with `OPENCODE_CONFIG` (merged over the global
+config) only where the repo exists, so the MacBook stays sideclaw-free. External
+skills load natively from `~/.claude/skills`, so `/check`, `/review` and friends
+resolve to real tools on the mini.
 
 **Yolo is the default here, deliberately** — `permission: "allow"`, so `oc`
 never stops to ask. It is also what makes the lane usable headlessly: `run`
@@ -243,6 +258,15 @@ that pick, so it **overrides** `tui.json` on later launches. Panels invert
 (lighter than the dark bg, darker than the light one): on a near-white surface a
 lifted panel is invisible and a white one glares — why this repo never uses
 `#ffffff`.
+
+**It follows the system appearance — via the same push Claude Code uses.** The
+dual mode only selects when opencode hears the terminal's mode; herdr answers
+neither DEC mode 2031 nor OSC 11 for a pane, so on the mini it sat dark forever.
+`scripts/claude-appearance.sh` now pushes the `CSI ?997;Nn` report (plus the
+OSC 11 answer) to every `claude` **and** `opencode` pane, and `oc` re-themes its
+own pane on launch — so a new pane starts in the MacBook's current mode. A
+`/theme` Dark/Light/Auto pick still persists into `theme_mode_lock` and wins, so
+leave it on **Auto** to follow the host.
 
 **A missing `opencode.json` is a silent failure, not an error** — 2026-09-30: the
 symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
@@ -665,7 +689,8 @@ like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
 herdr live; run it on both machines, since applying one layer is how they drift.
 opencode is the fourth layer and is **file-based, not a make target** — it
 carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy
-and `/theme` flips it live.
+and `/theme` flips it live. It follows the appearance through the Claude Code
+push rather than a config file, so leave its `/theme` pick on **Auto** (above).
 
 | Layer | File | Setting |
 |-|-|-|

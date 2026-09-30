@@ -1,16 +1,19 @@
 #!/bin/bash
-# Make Claude Code in herdr panes follow the MacBook's light/dark appearance
-# when no Ghostty client is there to report it (Herdr GPUI sends nothing).
+# Make Claude Code (and OpenCode) in herdr panes follow the MacBook's light/dark
+# appearance when no Ghostty client is there to report it (Herdr GPUI sends
+# nothing).
 #
-#   claude-appearance.sh light|dark   record the mode, re-theme every Claude pane
-#   claude-appearance.sh session      SessionStart hook: re-theme THIS pane
+#   claude-appearance.sh light|dark   record the mode, re-theme every claude/opencode pane
+#   claude-appearance.sh session      SessionStart hook / `oc` wrapper: re-theme THIS pane
 #
 # Claude Code on `theme: auto` enables DEC mode 2031 and, on a `CSI ?997;Nn`
-# report, re-queries the background with OSC 11. herdr answers neither for
-# panes, so this sends the report AND the OSC 11 answer, as a terminal would.
-# Measured 2026-09-27: a running Claude flips live, no redraw, nothing lands in
-# the prompt. Neither half works alone, and editing ~/.claude.json does nothing
-# to a running session.
+# report, re-queries the background with OSC 11. OpenCode's opentui renderer
+# reads the same `CSI ?997;Nn` report (packages/tui/src/context/theme.tsx) and
+# flips its mode from it. herdr answers neither for panes, so this sends the
+# report AND the OSC 11 answer, as a terminal would. Measured 2026-09-27: a
+# running Claude flips live, no redraw, nothing lands in the prompt. Neither
+# half works alone, and editing ~/.claude.json does nothing to a running
+# session.
 #
 # Pushed from the MacBook by scripts/appearance-sync.sh over `ssh mini`.
 
@@ -33,9 +36,11 @@ case "${1:-}" in
   light|dark)
     mkdir -p "$(dirname "$STATE")"
     echo "$1" > "$STATE"
-    # Only Claude panes: a shell would take the bytes as typed input.
+    # Only agent panes: a plain shell would take the bytes as typed input.
+    # opencode self-reports through herdr's opencode integration, so both
+    # renderers are targetable by agent id.
     herdr agent list 2>/dev/null \
-      | jq -r '.result.agents[] | select(.agent == "claude") | .pane_id' \
+      | jq -r '.result.agents[] | select(.agent == "claude" or .agent == "opencode") | .pane_id' \
       | while read -r pane; do
           herdr pane send-text "$pane" "$(report "$1")" >/dev/null 2>&1 || true
         done

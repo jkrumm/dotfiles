@@ -17,6 +17,17 @@ Applying only one layer is how they drift apart.
 | Terminal | `config/ghostty/config` → `~/.config/ghostty/config` | `theme = dark:one-zinc-dark,light:one-zinc-light` |
 | herdr | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
+| opencode | `config/opencode/tui.json` → `config/opencode/themes/one-zinc.json` | `theme = "one-zinc"`; one file, `{dark, light}` per token |
+
+opencode is the one layer with no terminal-independent switch of its own: its
+`one-zinc` theme picks dark/light from the mode the **terminal** reports (DEC mode
+2031), and herdr answers neither 2031 nor OSC 11 for a pane, so on the mini it sat
+dark forever. `scripts/claude-appearance.sh` therefore pushes the `CSI ?997;Nn`
+report to every `claude` **and** `opencode` pane when the Mac's appearance changes,
+and the `oc` wrapper re-themes its own pane on launch — the same bytes Claude Code
+already consumes. A `/theme` pick still persists into `theme_mode_lock` and wins
+over the push, so leave opencode's theme on **Auto**. `make theme` still does not
+touch it (nothing to copy).
 
 **One Zinc = Atom One's hues, muted to ~72% saturation, on basalt-ui's zinc
 surfaces.** Two design systems used for what each is good at: basalt-ui's zinc

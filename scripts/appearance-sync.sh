@@ -6,9 +6,10 @@
 # 1. Herdr GPUI takes a single `theme` name and has no system-appearance
 #    handling (checked against its source, 2026-09-26). It reloads
 #    config-gpui.local.toml on save, so rewriting the one line is enough.
-# 2. Claude Code in herdr panes on the mini only follows the Mac when a Ghostty
-#    client reports the appearance; Herdr GPUI never does. So push the mode to
-#    the mini, where scripts/claude-appearance.sh re-themes every Claude pane.
+# 2. Claude Code and OpenCode in herdr panes on the mini only follow the Mac
+#    when a Ghostty client reports the appearance; Herdr GPUI never does. So push
+#    the mode to the mini, where scripts/claude-appearance.sh re-themes every
+#    Claude and OpenCode pane.
 
 set -euo pipefail
 
