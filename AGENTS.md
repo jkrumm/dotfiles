@@ -29,7 +29,9 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/starship.toml` | `~/.config/starship.toml` | Prompt. ANSI color names, never hex, so it follows the light/dark switch |
 | `config/codex/astra.config.toml` | `~/.codex/astra.config.toml` | The `cxa` profile. `config/codex/config.toml.tpl` is **rendered**, not linked (below) |
 | `config/codex/AGENTS.md` | `~/.codex/AGENTS.md` | Codex's global brief — environment facts only, deliberately **not** the Claude method |
-| `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | The **file** only — the dir holds opencode's plugin `node_modules`. Rules via `instructions`, IU provider via `{env:IU_*}` |
+| `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | The **file** only — the dir holds opencode's plugin `node_modules`. Rules via `instructions`, IU provider via `{env:IU_*}`, yolo via `permission` |
+| `config/opencode/tui.json` | `~/.config/opencode/tui.json` | TUI-only keys. `theme` lives **here**, not in `opencode.json` |
+| `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + herdr |
 | `config/herdr/config.toml` | `~/.config/herdr/config.toml` | The **file** only — the same dir holds herdr's sockets and logs |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
@@ -217,6 +219,35 @@ to `allow`/`deny` (`deny` returns an error and the run continues). `--pure` hang
 don't use it. Concurrent starts can hit `database is locked` on the shared
 `opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
 config, not this file).
+
+**Yolo is the default here, deliberately** — `permission: "allow"`, so `oc`
+never stops to ask. It is also what makes the lane usable headlessly: `run`
+**ends the session** on an `ask` rather than prompting, so a worker with a
+leftover `ask` rule is not slow, it is broken. This is the one config file
+sideclaw does *not* share — its dispatch ships its own per-run permissions, so
+widening this one cannot loosen a dispatch worker.
+
+**Config is two files, and the split is enforced.** `opencode.json` is
+`additionalProperties: false`, so `theme` there is a `ConfigInvalidError` — and
+`tui-migrate.ts` silently *moves* a `theme`/`keybinds`/`tui` key into a sibling
+`tui.json` instead, which is how a hand-written `theme` vanishes rather than
+fails. TUI keys go in `tui.json`; themes are `themes/*.json`, globbed with
+`symlink: true` (hence the dir symlink) and parsed with strict `JSON.parse` —
+**no comments in a theme file**, unlike every other config here.
+
+**One theme, both modes.** `one-zinc.json` holds the Ghostty palette as `defs`
+(`d*`/`l*` = dark/light, ANSI-indexed so it stays auditable against
+`config/ghostty/themes/one-zinc-*`), each token a `{dark, light}` pair — so
+`/theme`'s Dark/Light/Auto toggle switches the whole UI, and opencode persists
+that pick, so it **overrides** `tui.json` on later launches. Panels invert
+(lighter than the dark bg, darker than the light one): on a near-white surface a
+lifted panel is invisible and a white one glares — why this repo never uses
+`#ffffff`.
+
+**A missing `opencode.json` is a silent failure, not an error** — 2026-09-30: the
+symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
+happily with no model, no provider, no rules. `make status` lists all three
+opencode links for exactly this; run it when `oc` looks unconfigured.
 
 ## Machines & remote dev
 
@@ -630,14 +661,18 @@ plus a running `smbd` is not a working SMB server** — macOS stores no NTLM
 (`SMB-NT`) hash by default and `smbd` then refuses every principal with what reads
 like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
 
-**The look** — `make theme` applies all three layers and reloads herdr live; run
-it on both machines, since applying one layer is how they drift.
+**The look** — `make theme` applies the terminal + herdr layers and reloads
+herdr live; run it on both machines, since applying one layer is how they drift.
+opencode is the fourth layer and is **file-based, not a make target** — it
+carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy
+and `/theme` flips it live.
 
 | Layer | File | Setting |
 |-|-|-|
 | Terminal | `config/ghostty/config` | `theme = dark:one-zinc-dark,light:one-zinc-light` |
 | herdr chrome | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
 | Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
+| opencode | `config/opencode/tui.json` → `config/opencode/themes/one-zinc.json` | `theme = "one-zinc"`; one file, `{dark, light}` per token |
 
 **Never black, never white** — middle-ground zinc (`#1f1f23` / `#f2f2f5`);
 `#09090b` was tried and lasted one commit. `catppuccin-latte` for light is a taste

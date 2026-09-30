@@ -220,12 +220,21 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/herdr/config.toml" \
 		DST="$(HOME)/.config/herdr/config.toml"
-	@# opencode: link the FILE, never the directory — opencode installs its
-	@# plugin node_modules/package.json next to it, machine-local state.
+	@# opencode: link the FILES, never the config directory itself — opencode
+	@# installs its plugin node_modules/package.json next to them there,
+	@# machine-local state. The themes/ SUBDIRECTORY is linked as a dir
+	@# (its own scan target, globbed with symlink:true) so adding a theme is
+	@# a file in the repo and nothing else.
 	@mkdir -p $(HOME)/.config/opencode
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/opencode/opencode.json" \
 		DST="$(HOME)/.config/opencode/opencode.json"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/opencode/tui.json" \
+		DST="$(HOME)/.config/opencode/tui.json"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/config/opencode/themes" \
+		DST="$(HOME)/.config/opencode/themes"
 
 .PHONY: _setup-tools
 _setup-tools:
@@ -1539,6 +1548,8 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/starship.toml"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/herdr/config.toml"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/opencode.json"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/tui.json"
+	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/themes"
 	@echo "  1Password (personal account)"
 	@if bash $(DOTFILES_DIR)/scripts/lib/op-signed-in.sh tkrumm; then \
 		echo "    ✓ op session active ($$(op account get --account tkrumm --format=json 2>/dev/null | jq -r '.email // .name // "unknown"'))"; \

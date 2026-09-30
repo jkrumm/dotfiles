@@ -339,12 +339,11 @@ claude_iu() {
     claude -p "$@"
 }
 
-# `oc` — OpenCode on the IU endpoint's native Anthropic route. The third lane
-# next to `ca` and `cx`: it reads the same AGENTS.md, ~/.claude/CLAUDE.md and
-# ~/.claude/skills, and gets the always-on rules through `instructions` in
-# config/opencode/opencode.json (→ ~/.config/opencode/opencode.json), which
-# holds only {env:IU_*} placeholders — no key, no host. Pattern and measured
-# load matrix: docs/agents-md.md.
+# `oc` — OpenCode on the IU endpoint, both routes. The third lane next to `ca`
+# and `cx`: it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,
+# and gets the always-on rules through `instructions` in config/opencode/opencode.json
+# (→ ~/.config/opencode/opencode.json), which holds only {env:IU_*} placeholders —
+# no key, no host. Pattern and measured load matrix: docs/agents-md.md.
 #
 # Creds resolve per call like `cx`: Keychain first, the time-boxed secrets shim
 # second (`_codex_secret`, codex.zsh), passed by prefix assignment — never
