@@ -69,6 +69,19 @@ client attached (`herdr workspace create …` succeeds with zero clients).
   before exec, `_herdr-supervise` pins it into the brew plist, and
   `brew-upgrade.sh` asserts it — **`brew upgrade herdr` and any `brew services
   start|restart` regenerate that plist and strip the wrapper, silently.**
+- **The wrapper exists to stop the respawn loop, not only the prompt.** `herdr
+  server` runs in the foreground, so the wrapper *is* the process launchd tracks:
+  it stays alive while any server answers the socket and exits only when none
+  does, so the plist's unconditional `KeepAlive` never hot-loops. If its own
+  child loses the `AddrInUse` race it adopts the running server instead of dying
+  with it — that race is also what makes a speculative fork safe, since the child
+  cannot take a held socket. An unreadable `herdr status` is UNKNOWN: never an
+  exit for a respawn, and never a second server on a held socket. At startup
+  UNKNOWN therefore still forks — waiting forever for a server nobody had started
+  was the old bug — and a momentarily non-executable binary (a `brew upgrade` in
+  flight) is the same UNKNOWN rather than an `exit 127` respawn loop for the
+  length of the upgrade. A server it adopted is left running on stop.
+  `make herdr-server-start-test` covers the contract.
 - **Apply a fix to the running server with `make herdr-restart YES=1`** (bootout
   + bootstrap; never `brew services restart`, never `launchctl kickstart -k`). It
   **kills every pane**, so it is human-timed and not in `make setup`.
