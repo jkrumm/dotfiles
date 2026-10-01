@@ -75,6 +75,24 @@ if [ -z "$pending" ]; then
 fi
 echo "  pending: $(echo "$pending" | tr '\n' ',' | sed 's/,$//')"
 
+# --- pick ONE label, same major only ------------------------------------------
+# `softwareupdate -i -a` installs every RECOMMENDED update, and Apple marks the
+# next major (macOS 27 while this host is on 26) as recommended too — so -a is a
+# remote major upgrade waiting to happen. A major resets TCC grants (herdr and op
+# FDA) and can break brew/colima/caddy; it is done in person, never from here.
+# So the install is pinned to the newest macOS label on the CURRENT major;
+# MACOS_LABEL overrides with an exact label from `softwareupdate -l`.
+major="${before%%.*}"
+label="${MACOS_LABEL:-$(ssh "${SSH_OPTS[@]}" "$HOST" 'softwareupdate -l 2>/dev/null' \
+  | sed -n 's/^\* Label: \(macOS .*\)$/\1/p' \
+  | awk -v m="$major" '{ v=$NF; sub(/-.*/, "", v); split(v, p, "."); if (p[1]==m) print }' \
+  | sort -V | tail -1)}"
+if [ -z "$label" ]; then
+  echo "  ✓ no macOS $major.x update pending — a new major is never applied remotely"
+  exit 0
+fi
+echo "  installing: $label"
+
 # --- confirm -----------------------------------------------------------------
 # Reboots the host every agent runs on: herdr restores the layout by name but
 # every process inside it dies. Policy override, not a doubt override.
@@ -107,7 +125,7 @@ log="\$HOME/Library/Logs/macos-update-$stamp.log"
 # shellcheck disable=SC2029  # $REMOTE_USER/$log are meant to expand here; $pw is read remotely
 printf '%s\n' "$PW" | ssh "${SSH_OPTS[@]}" "$HOST" "read -r pw
   { printf '%s\n' \"\$pw\"; printf '%s\n' \"\$pw\"; } |
-    nohup sudo -S softwareupdate -i -a -R --user $REMOTE_USER --stdinpass \
+    nohup sudo -S softwareupdate -i $(printf '%q' "$label") -R --user $REMOTE_USER --stdinpass \
       > $log 2>&1 &
   echo ok" >/dev/null || die "could not launch the installer on $HOST"
 unset PW
