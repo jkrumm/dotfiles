@@ -138,7 +138,7 @@ PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 # side on a healthy machine — otherwise the only way to test the alarm is to
 # break the host.
 MEM_SWAP_PCT_MAX="${DEVHOST_MEM_SWAP_PCT_MAX:-25}"
-DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-90}"
+DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-93}"
 DISK_FREE_GB_MIN="${DEVHOST_DISK_FREE_GB_MIN:-20}"
 # 30d, not the cert check's 21d, and the asymmetry is the point: an expired
 # wildcard cert is fixable over the tailnet, an expired NODE KEY takes the
@@ -1201,9 +1201,14 @@ check_disk() {
   # deciding to grow them, and a full data volume takes down every service on
   # this host at once with errors that name anything but the disk.
   #
-  # Both a percentage and an absolute floor, because neither alone is right on
-  # a 926G volume: 90% still leaves 92G (plenty of warning), while a small
-  # volume at 85% can have less headroom than a day of snapshots.
+  # Both a percentage and an absolute floor, because the same number is not
+  # right on every volume: the percentage is the working gate on the 926G data
+  # volume (93% still leaves ~65G, plenty of warning), while the floor
+  # backstops a small volume where a low percentage can still be a day of
+  # snapshots. 93, not 90: healthy operation here was measured at 86-91% used,
+  # so the old default FAILed on normal load rather than a real leak. The two
+  # constants are independent guards — raising the ceiling does not move the
+  # floor.
   local line parsed pct free_gb
   line=$("$DF_BIN" -kP "$HOME" 2>/dev/null | tail -1) || true
   [[ -n "$line" ]] || { echo "disk: could not read df for $HOME"; return 1; }
