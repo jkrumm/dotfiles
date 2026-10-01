@@ -2482,6 +2482,14 @@ herdr-groups-check:
 # an isolated server started in the launchd process shape:
 # `detached_server_daemon` false without it, true with it.
 #
+# AND IT IS ALSO WHY THE BARE KeepAlive DOES NOT HOT-LOOP. `herdr server` exits
+# non-zero when another server already holds the socket, so a wrapper that
+# forwarded its child's status turned every launch into a ~10s respawn loop.
+# This one stays alive as long as any server answers the socket, adopts a server
+# its own child lost the AddrInUse race to, and treats an unreadable `herdr
+# status` as "assume up" rather than "start another" — long form in the file's
+# docstring.
+#
 # Deliberately does NOT restart the service, for a harder reason than colima's:
 # restarting herdr does not bounce a VM, it DESTROYS every pane and every agent
 # running in one. A `make setup` may never do that on its own.
