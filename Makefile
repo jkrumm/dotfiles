@@ -2482,6 +2482,14 @@ herdr-groups-check:
 # an isolated server started in the launchd process shape:
 # `detached_server_daemon` false without it, true with it.
 #
+# AND IT IS ALSO WHY THE BARE KeepAlive DOES NOT HOT-LOOP. `herdr server` exits
+# non-zero when another server already holds the socket, so a wrapper that
+# forwarded its child's status turned every launch into a ~10s respawn loop.
+# This one stays alive as long as any server answers the socket, adopts a server
+# its own child lost the AddrInUse race to, and treats an unreadable `herdr
+# status` as "assume up" rather than "start another" — long form in the file's
+# docstring.
+#
 # Deliberately does NOT restart the service, for a harder reason than colima's:
 # restarting herdr does not bounce a VM, it DESTROYS every pane and every agent
 # running in one. A `make setup` may never do that on its own.
@@ -2583,6 +2591,14 @@ herdr-restart:
 	fi
 	@brew services start herdr >/dev/null 2>&1 || true
 	@$(MAKE) --no-print-directory _herdr-supervise
+	@# 60s of slack, not 15s. bootout SIGTERMs the wrapper, whose own shutdown can
+	@# block in a `herdr status --json` probe (STATUS_TIMEOUT_SECONDS, 15s) and
+	@# then in the stop grace for a child that ignores the relay
+	@# (STOP_GRACE_SECONDS, 10s) — up to ~25s when a stop lands mid-probe, which
+	@# is exactly the wedged-herdr case this target exists for. A 15s wait
+	@# spuriously declared the job stuck and exited 1 before `launchctl
+	@# bootstrap`, leaving the old job mid-deregistration and the new plist never
+	@# bootstrapped. 120×0.5s covers that worst case with margin.
 	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
 	TARGET=$$($(BREW_SERVICE) target herdr 2>/dev/null); \
 	if [ -z "$$PLIST" ] || [ -z "$$TARGET" ]; then \
@@ -2592,7 +2608,7 @@ herdr-restart:
 	U=$$(id -u); \
 	launchctl bootout "$$TARGET" 2>/dev/null || true; \
 	i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
-		i=$$((i+1)); [ $$i -gt 30 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
+		i=$$((i+1)); [ $$i -gt 120 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
 		sleep 0.5; \
 	done; \
 	launchctl bootstrap "gui/$$U" "$$PLIST" || { echo "  ✗ bootstrap failed"; exit 1; }
