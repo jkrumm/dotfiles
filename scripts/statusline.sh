@@ -2,7 +2,7 @@
 
 # Claude Code Statusline — 2 line layout
 #
-# Line 1: Auth (MAX/IU) · Model · Context (usable) · Session tokens · Duration · Usage (5h/wk/mo)
+# Line 1: Auth (MAX/IU) · Model · Effort | Context (usable) | Session tokens | Cache hit | Duration | Usage (5h/wk)
 # Line 2: CWD · Git branch & dirty flag
 
 input=$(cat)
@@ -16,15 +16,40 @@ else
   auth_mode="MAX"
 fi
 
+# ── One jq pass over stdin ─────────────────────────────────────────────────────
+# Unit separator, not tab: tab is IFS whitespace, so `read` would collapse an
+# empty field and shift every later one.
+IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
+  session_id transcript_path duration_ms \
+  rl_5h rl_5h_reset rl_wk cache_requests cache_hit cache_warm < <(
+  echo "$input" | jq -r '[
+    .model.display_name // "Unknown",
+    .effort.level // "auto",
+    (.thinking.enabled | tostring),
+    .workspace.current_dir // "~",
+    .context_window.context_window_size // 200000,
+    (.context_window.used_percentage // 0 | floor),
+    .session_id // "",
+    .transcript_path // "",
+    (.cost.total_duration_ms // 0 | floor),
+    (.rate_limits.five_hour.used_percentage // "" | if . == "" then . else round end),
+    .rate_limits.five_hour.resets_at // "",
+    (.rate_limits.seven_day.used_percentage // "" | if . == "" then . else round end),
+    .prompt_cache.requests // 0,
+    .prompt_cache.hit_ratio // "",
+    (.prompt_cache.warm | tostring)
+  ] | map(tostring) | join("\u001f")'
+)
+
 # ── Model ──────────────────────────────────────────────────────────────────────
-model=$(echo "$input" | jq -r '.model.display_name // "Unknown"')
-effort=$(jq -r '.effortLevel // "auto"' "$HOME/.claude/settings.json" 2>/dev/null || echo "auto")
+# Effort comes from stdin: it is per-model since 2.1.251, so settings.json's
+# effortLevel is not what the session runs at.
+[ "$thinking" = "false" ] && effort="${effort} ·no-think"
 
 # ── Working directory ──────────────────────────────────────────────────────────
 # Show just the project name (last path segment). For worktrees, the last segment
 # is the project (wtp's layout: <repo>.worktrees/<branch>/<repo>), so basename
 # collapses both regular repos and worktree checkouts to the same display.
-cwd=$(echo "$input" | jq -r '.workspace.current_dir // "~"')
 if [ "$cwd" = "$HOME" ]; then
   cwd_display="~"
 else
@@ -32,9 +57,6 @@ else
 fi
 
 # ── Context window ─────────────────────────────────────────────────────────────
-context_size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
-used_percentage=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
-
 # Subtract ~30k autocompact buffer to show usable space
 autocompact_buffer=30000
 usable_size=$((context_size - autocompact_buffer))
@@ -68,8 +90,6 @@ pct_colored=$(printf "${color}%d%%${reset}" "$usable_pct")
 # transcript counts the same tokens again and again — it also doesn't count
 # toward Anthropic's rate/quota limits for most models. Only input_tokens +
 # output_tokens + cache_creation_input_tokens are genuinely new per turn.
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
 tokens_fmt=""
 if [ -n "$session_id" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
   subagents_dir="$(dirname "$transcript_path")/${session_id}/subagents"
@@ -113,7 +133,6 @@ if [ -n "$session_id" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" 
 fi
 
 # ── Duration ───────────────────────────────────────────────────────────────────
-duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
 duration_s=$((duration_ms / 1000))
 hours=$((duration_s / 3600))
 minutes=$(((duration_s % 3600) / 60))
@@ -123,57 +142,88 @@ else
   duration="${minutes}min"
 fi
 
-# ── Subscription usage (Claude.ai API, non-blocking cached) ────────────────────
-# fetch_usage.py reads the Claude Code OAuth token from the Keychain and calls
-# api.anthropic.com/api/oauth/usage (no browser cookies involved).
-# Cache TTL: 5 min. Background refresh on miss; stale value shown immediately.
+# ── Subscription usage ─────────────────────────────────────────────────────────
+# Primary: stdin `rate_limits` (Max only, present from the first API response on).
+# Fallback until then: fetch_usage.py (Keychain OAuth → api.anthropic.com/api/oauth/
+# usage), cached 5 min, refreshed in the background — so it only ever spawns at
+# session start, and never on the IU lane, which has no subscription windows.
 _USAGE_CACHE="/tmp/claude_sl/usage_api.json"
 _FETCH_SCRIPT="$HOME/.claude/fetch_usage.py"
 _now_s=$(date +%s)
 
-# Trigger background refresh when cache is stale or missing
-if [ -f "$_USAGE_CACHE" ]; then
-  _fetched_at=$(jq -r '.fetched_at // 0' "$_USAGE_CACHE" 2>/dev/null)
-else
-  _fetched_at=0
-fi
-if [ $(( _now_s - ${_fetched_at:-0} )) -gt 300 ]; then
-  ( /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" >/dev/null 2>&1 ) &
-  disown 2>/dev/null
-fi
-
+_5h_pct="$rl_5h"
+_5h_reset="$rl_5h_reset"
+_wk_pct="$rl_wk"
 usage_parts=""
-if [ -f "$_USAGE_CACHE" ] && jq -e '.error != null' "$_USAGE_CACHE" >/dev/null 2>&1; then
-  usage_parts="\033[33m⚠ claude.ai login${reset}"
-elif [ -f "$_USAGE_CACHE" ] && jq -e '.five_hour.utilization != null' "$_USAGE_CACHE" >/dev/null 2>&1; then
-  _5h_util=$(jq -r '.five_hour.utilization' "$_USAGE_CACHE")
-  _5h_reset=$(jq -r '.five_hour.resets_at_epoch // 0' "$_USAGE_CACHE")
-  _wk_util=$(jq -r '.seven_day.utilization // empty' "$_USAGE_CACHE")
 
-  _5h_pct=$(jq -rn "$_5h_util | round")
+if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
+  _fetched_at=0
+  [ -f "$_USAGE_CACHE" ] && _fetched_at=$(jq -r '.fetched_at // 0' "$_USAGE_CACHE" 2>/dev/null)
+  if [ $(( _now_s - ${_fetched_at:-0} )) -gt 300 ]; then
+    ( /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" >/dev/null 2>&1 ) &
+    disown 2>/dev/null
+  fi
+  if [ -f "$_USAGE_CACHE" ] && jq -e '.error != null' "$_USAGE_CACHE" >/dev/null 2>&1; then
+    usage_parts="\033[33m⚠ claude.ai login${reset}"
+  elif [ -f "$_USAGE_CACHE" ]; then
+    IFS=$'\x1f' read -r _5h_pct _5h_reset _wk_pct < <(jq -r '[
+      (.five_hour.utilization // "" | if . == "" then . else round end),
+      .five_hour.resets_at_epoch // "",
+      (.seven_day.utilization // "" | if . == "" then . else round end)
+    ] | map(tostring) | join("\u001f")' "$_USAGE_CACHE" 2>/dev/null)
+  fi
+fi
 
-  # Color-code the 5h percentage
-  if [ "${_5h_pct:-0}" -lt 50 ]; then
+# Stdin figures also feed sideclaw's quota view (POST /api/usage, the same body
+# fetch_usage.py sends) — throttled to once a minute, fire-and-forget.
+if [ -n "$rl_5h" ]; then
+  _push_stamp="/tmp/claude_sl/usage_push.stamp"
+  _pushed_at=$(cat "$_push_stamp" 2>/dev/null)
+  if [ $(( _now_s - ${_pushed_at:-0} )) -gt 60 ]; then
+    mkdir -p /tmp/claude_sl && echo "$_now_s" > "$_push_stamp"
+    _mins=null
+    [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _mins=$(( (rl_5h_reset - _now_s) / 60 ))
+    ( curl -s -m 1 -X POST -H 'Content-Type: application/json' \
+        -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}}" \
+        http://localhost:7705/api/usage >/dev/null 2>&1 ) &
+    disown 2>/dev/null
+  fi
+fi
+
+if [ -n "$_5h_pct" ]; then
+  if [ "$_5h_pct" -lt 50 ]; then
     _uc="\033[32m"
-  elif [ "${_5h_pct:-0}" -lt 75 ]; then
+  elif [ "$_5h_pct" -lt 75 ]; then
     _uc="\033[33m"
   else
     _uc="\033[31m"
   fi
 
-  # Minutes until 5h window resets
+  # Minutes until the 5h window resets (epoch seconds; anything else is skipped)
   _mins_left=""
-  if [ "${_5h_reset:-0}" -gt "$_now_s" ]; then
-    _mins=$(( (_5h_reset - _now_s) / 60 ))
-    _mins_left=" ↺${_mins}m"
+  if [[ "$_5h_reset" =~ ^[0-9]+$ ]] && [ "$_5h_reset" -gt "$_now_s" ]; then
+    _mins_left=" ↺$(( (_5h_reset - _now_s) / 60 ))m"
   fi
 
   usage_parts="${_uc}${_5h_pct}%${reset}/5h${_mins_left}"
+  [ -n "$_wk_pct" ] && usage_parts="${usage_parts} · ${_wk_pct}%/wk"
+fi
 
-  if [ -n "$_wk_util" ]; then
-    _wk_pct=$(jq -rn "$_wk_util | round")
-    usage_parts="${usage_parts} · ${_wk_pct}%/wk"
+# ── Prompt cache ───────────────────────────────────────────────────────────────
+# Hit ratio of this session's main loop; `cold` once the TTL has lapsed, i.e. the
+# next turn re-writes the whole prefix. Shown only after the first request.
+cache_part=""
+if [ "${cache_requests:-0}" -gt 0 ] && [ -n "$cache_hit" ]; then
+  _hit=$(LC_NUMERIC=C awk -v r="$cache_hit" 'BEGIN { if (r <= 1) r *= 100; printf "%d", r + 0.5 }')
+  if [ "$_hit" -ge 80 ]; then
+    _cc="\033[32m"
+  elif [ "$_hit" -ge 50 ]; then
+    _cc="\033[33m"
+  else
+    _cc="\033[31m"
   fi
+  cache_part="⚡${_cc}${_hit}%${reset}"
+  [ "$cache_warm" = "false" ] && cache_part="${cache_part} \033[36mcold${reset}"
 fi
 
 # ── Git ────────────────────────────────────────────────────────────────────────
@@ -200,6 +250,7 @@ fi
 # ── Output ─────────────────────────────────────────────────────────────────────
 line1="${auth_mode} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
 [ -n "$tokens_fmt" ] && line1="${line1} | Σ${tokens_fmt}"
+[ -n "$cache_part" ] && line1="${line1} | ${cache_part}"
 line1="${line1} | ${duration}"
 [ -n "$usage_parts" ] && line1="${line1} | ${usage_parts}"
 echo -e "$line1"

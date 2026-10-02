@@ -6,7 +6,7 @@
 Reads the OAuth access token from macOS Keychain (entry "Claude Code-credentials"),
 calls Anthropic's usage endpoint, writes /tmp/claude_sl/usage_api.json for
 statusline.sh. Same output shape as the legacy Chrome-cookie scraper —
-statusline.sh and sideclaw quota.ts both consume this file unchanged.
+statusline.sh consumes this file as its pre-first-response fallback (docs/statusline.md).
 
 The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
 we keep the existing cache rather than blanking it.

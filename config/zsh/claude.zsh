@@ -242,7 +242,11 @@ ca() {
     fi
     [[ " $* " == *" --model "* ]] || args=(--model "$m" "${args[@]}")
 
+    # An API-key session defaults to a 5-minute cache TTL, which a single long
+    # MCP `job_wait` outlives; 1h on the main loop only (subagents stay at 5m).
+    # Claude tier only — the gateway models' cache semantics are their own.
     env -u ANTHROPIC_API_KEY \
+      CLAUDE_CODE_PROMPT_CACHE_TTL=1h \
       ANTHROPIC_AUTH_TOKEN="$key" \
       ANTHROPIC_BASE_URL="$base" \
       ANTHROPIC_DEFAULT_OPUS_MODEL="$m" \
