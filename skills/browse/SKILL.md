@@ -2,6 +2,7 @@
 name: browse
 description: Chrome DevTools debugging via haiku subagent — console, network, DOM, screenshots. Isolates expensive MCP responses from main context.
 context: fork
+background: false
 model: haiku
 ---
 
