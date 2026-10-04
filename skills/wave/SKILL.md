@@ -34,7 +34,8 @@ at its committed close-out and spawns nothing. No such sentence → chain.
 
 The orchestrator holds no plan state of its own; PLAN.md is the state.
 
-1. Spawn: `rd wave <repo> [--kind opencode] 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'`
+1. Spawn: `RD_ORCHESTRATED=1 rd wave <repo> [--kind opencode] 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'`
+   `RD_ORCHESTRATED=1` skips the gate's outward-facing keyword stop — the orchestrator, not a keyword, decides when a merge or deploy happens; every other gate check still runs.
    Its own tab being `working` does not block the spawn — `rd wave` excludes the caller's pane and tab. Any *other* working agent in the checkout still does.
 2. Block on it, one call each: `herdr agent wait <repo>-w<n> --until working --timeout 60000`, then `herdr agent wait <repo>-w<n> --until idle --until done --until blocked`. All three settled states — `done` alone never fires while the tab is being watched (it reports `idle`). `blocked` → `rd read` it before answering.
 3. Review the close-out: read PLAN.md (the wave's **Left behind**, status flips), `git log` and the diff it produced. A wave's report is a claim, the diff is the proof. Re-run `/check` if the wave's own gate result is not in its Left behind.

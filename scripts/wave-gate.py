@@ -149,9 +149,15 @@ def parse_waves(text: str) -> list[dict]:
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        fail(f"usage: {sys.argv[0]} <repo-path> <plan-path-or-relative-plan-ref>")
-    repo_path, plan_ref = sys.argv[1], sys.argv[2]
+    args = sys.argv[1:]
+    # Orchestrated mode: a visible orchestrator tab spawns each wave on purpose and
+    # owns merges/deploys itself, so the outward-facing keyword stop (a chain-mode
+    # guard against a wave continuing into a deploy unattended) does not apply.
+    orchestrated = "--orchestrated" in args
+    args = [a for a in args if a != "--orchestrated"]
+    if len(args) != 2:
+        fail(f"usage: {sys.argv[0]} [--orchestrated] <repo-path> <plan-path-or-relative-plan-ref>")
+    repo_path, plan_ref = args
 
     if not os.path.isdir(repo_path):
         fail(f"repo path does not exist: {repo_path}")
@@ -195,7 +201,7 @@ def main() -> None:
         if not prev["left_behind"]:
             fail(f"{prev['name']} has no Left behind — a finished wave must say what the next one inherits")
 
-    hit = outward_next_step(active_wave["unchecked"])
+    hit = None if orchestrated else outward_next_step(active_wave["unchecked"])
     if hit:
         fail(
             f"{active_wave['name']}'s next step looks outward-facing, stop and hand back "

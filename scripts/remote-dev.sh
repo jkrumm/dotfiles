@@ -400,7 +400,7 @@ cmd_wave() {
   [[ $plan_ref =~ ^[A-Za-z0-9~/_.-]+$ ]] \
     || die "plan reference extracted from the wave prompt has unsafe characters: $plan_ref"
   local gate_out
-  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" '$path' '$plan_ref'" 2>&1) \
+  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" ${RD_ORCHESTRATED:+--orchestrated} '$path' '$plan_ref'" 2>&1) \
     || die "green gate failed for $path:"$'\n'"$gate_out"
 
   # The repo's space is the one labelled with its bare name — the convention
