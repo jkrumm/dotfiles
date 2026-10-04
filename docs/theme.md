@@ -144,3 +144,23 @@ know exactly what it does and does not catch, measured on 0.8.2:
 - **It exits 0 even on `config: issues found`.** Do not gate a script on its
   return code — read the output. That is why `make theme` asserts the theme
   files exist and are non-empty rather than trusting this command.
+
+## Operating notes (moved from AGENTS.md)
+
+**The look** — `make theme` applies the terminal + herdr layers and reloads
+herdr live; run it on both machines, since applying one layer is how they drift.
+opencode is the fourth layer and is **file-based, not a make target** — it
+carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy
+and `/theme` flips it live. It follows the appearance through the Claude Code
+push rather than a config file, so leave its `/theme` pick on **Auto** (see `docs/opencode.md`).
+
+Layer table: above.
+
+**Never black, never white** — middle-ground zinc (`#1f1f23` / `#f2f2f5`);
+`#09090b` was tried and lasted one commit. `catppuccin-latte` for light is a taste
+call **against** the measured contrast numbers; `nord`/`dracula`/`vesper` aren't
+options (no light sibling for `auto_switch`). Font must be
+**`JetBrainsMono Nerd Font Mono`** — the Mono variant forces single-width glyphs
+so herdr's icons can't break sidebar alignment. `herdr config check` catches
+unknown keys and theme names but **silently accepts a bad hex and exits 0 even on
+`issues found`**, so `make theme` asserts the theme files instead. Measurements: above.

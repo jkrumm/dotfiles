@@ -67,7 +67,7 @@ every turn.
     ".claude/rules/*.md",
     "~/.claude/rules/agent-limits.md", "~/.claude/rules/attribution.md",
     "~/.claude/rules/code-style.md", "~/.claude/rules/commit-conventions.md",
-    "~/.claude/rules/dependency-hygiene.md", "~/.claude/rules/docker-makefile.md",
+    "~/.claude/rules/dependency-hygiene.md",
     "~/.claude/rules/formatting.md", "~/.claude/rules/research-first.md",
     "~/.claude/rules/security.md", "~/.claude/rules/typescript.md"
   ]
@@ -79,6 +79,35 @@ for Claude ids, and `iu` (`"npm": "@ai-sdk/openai-compatible"`) →
 `{env:IU_OPENAI_BASE}` for `deepseek-v4.1-flash` (the default; per-model
 `options.reasoningEffort` + `variants`). Both keys are `{env:IU_KEY}` — env
 substitution keeps the host out of git. Full block: `config/opencode/opencode.json`.
+
+## Repo contract — how agents learn a repo
+
+**This section is the authority** (rationale: `docs/agent-platform.md`). Every
+repo with a runtime ships four Make targets and four AGENTS.md sections, so no
+central component (warden, sideclaw, Hermes) holds per-repo knowledge.
+
+| Make target | Contract |
+|-|-|
+| `make check` | all local validation; non-zero on failure; no side effects |
+| `make deploy` | ships the merged default branch; CI-deployed repos print `deployed by CI on push` and exit 0; self-hosting repos (warden, sideclaw, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make verify` | probes production; exit 0 = live and healthy |
+| `make logs` | bounded tail of production logs, then exits |
+
+Aliases and thin wrappers around existing scripts are fine; the names are the
+interface. AGENTS.md carries exactly these sections, in this order, among its own:
+
+| Section | Holds |
+|-|-|
+| `## Validate` | what `make check` runs, and anything it does not cover |
+| `## Deploy` | how the default branch ships (CI, RollHook, `make deploy`) and the rollback story |
+| `## Verify & Monitor` | the **full** health URL, the Kuma monitor name, the OTel `service.name` |
+| `## Gotchas` | the traps that cost someone an hour |
+
+Repos without a runtime (`brain`, `kobo-mods`, `dotfiles-private`) need `check`
+only, and only if trivial. A signal is routed to a repo by its own label (Kuma
+tag, OTel `service.name`, GitHub repo); the fallback is triage reading candidate
+repos' `## Verify & Monitor`. Never put hostnames or secrets in these sections
+for repos that are public (`rules/security.md`).
 
 ## Migration rules per repo
 

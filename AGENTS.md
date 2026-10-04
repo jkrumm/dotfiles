@@ -8,8 +8,7 @@ here. **After any edit: commit here.**
 
 **MacBook (`iumac`) = thin client** (editing, `desk`, biometric 1Password, a few
 Mac-only apps and repos). **Mac mini = always-on dev host** (agents, LaunchAgents,
-Docker, dev servers), reached with `desk`/`rd`/`agent-dispatch`. homelab and VPS
-are separate stacks with their own repos.
+Docker, dev servers), reached with `desk`/`rd`.
 
 **`docs/architecture.md` is the map** — every machine, every repo on it, every
 launchd job and its owner repo, every inbound door, the secrets flow, what
@@ -37,15 +36,17 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |
 | `rules/` | `~/.claude/rules/` (dir symlink) | All global rules. No `paths:` frontmatter → always on; with `paths:` → lazy. Roster in the global file's *Config hierarchy*. |
-| `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
+| `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md`, activated by `outputStyle` in settings.json |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
 | `hooks/{notify,protect-branches,docker-makefile,machine-role,model-discipline}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · Claude.ai usage-% fetcher (uv script) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
-| `scripts/agent-dispatch.sh` | `~/.local/bin/agent-dispatch` | One bounded episode on whichever machine owns the repo |
-| `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — see *Codex* |
+| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|agents\|read\|say` (see Machines) |
+| `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
+| `~/SourceRoot/warden/scripts/warden` | `~/.local/bin/warden` | Linked from the warden repo, not from here — `warden run <repo> '<brief>'` |
+| `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload` on wake |
@@ -75,6 +76,10 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
+| `make check` | All local validation: architecture-check + secrets-lint + hooks-test. No side effects. |
+| `make verify` | `make doctor`, under the repo-contract name. |
+| `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
+| `make deploy` | `make setup` under the repo-contract name; prints what it does. |
 | `make worktree-audit` / `worktree-prune` | List / reclaim clean, fully-merged git worktrees across `~/SourceRoot` + `~/IuRoot` — they pile up in four different parent dirs (repo-local, `.claude/worktrees/`, `~/IuRoot/worktrees/`, `~/IuRoot/.wt/`), so it asks git rather than assuming a location. |
 
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map
@@ -120,186 +125,55 @@ Keep this file **under 40k chars** (`wc -c AGENTS.md`; the agent context limit i
 150k). When a section grows, move its narrative verbatim into the matching
 `docs/*.md` and leave commands, tables and one-line gotchas with a pointer.
 
-## Codex — the non-Anthropic lane
+## Validate
 
-Claude Code stays the driver; this is the rare second opinion, and the whole
-reason it is Codex and not a proxy is the **wire protocol**. OpenAI's reasoning
-models only carry reasoning items across tool calls over the **Responses** API,
-and Codex is the one harness whose `wire_api` is Responses-only. Chat-completions
-drops them silently — the model re-derives its plan every tool round trip.
-Routing Claude Code at an OpenAI model through a gateway is strictly worse
-(double translation, thinking dropped, `reasoning_effort` ignored) and is not
-worth building.
+`make check` (architecture-check + secrets-lint + hooks-test). Any edit to
+`hooks/` → `make hooks-test`; any edit to `scripts/secrets-run` → the full
+guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 
-| Command | Model | Effort |
-|-|-|-|
-| `cx` | `gpt-5.6-sol` | `high` |
-| `cxa` | `gpt-6-astra` — several times the price, opt-in on purpose | `xhigh` |
-| `astra '<question>'` | `gpt-6-astra`, **no agent loop, no tools** | `xhigh` + `mode="pro"` |
+## Deploy
 
-- **`reasoning.mode = "pro"` is why `astra` exists.** The endpoint accepts it;
-  codex has no config key for it (only `model_reasoning_effort`), so the
-  strongest single shot the estate can fire is a bare Responses call. Take its
-  plan, execute it in Claude Code.
-- **`astra` has a ceiling, and it is the endpoint's front door, not `curl -m`.**
-  `pro` + `xhigh` + a ~400-line `-f` attachment came back as an HTML `500 - The
-  request timed out` after ~5 min; the same question at `-e high` returned a full
-  answer in ~4 min. There is no knob for it — drop to `-e high`, drop `-m pro`, or
-  send less. The script names this case explicitly now rather than printing markup.
-- **Effort on this endpoint is `low|medium|high|xhigh|max`.** `none` and
-  `minimal` are rejected for these models, and codex's own catalog lists
-  `ultra`, which the endpoint rejects — don't set it.
-- **`--profile NAME` loads `$CODEX_HOME/NAME.config.toml`**, not the legacy
-  `[profiles.NAME]` table, which still parses and does nothing.
-- **No prompts, no sandbox** — `approval_policy = "never"` +
-  `sandbox_mode = "danger-full-access"`, parity with how `claude` runs here.
-  `workspace-write` is not a middle ground: it keeps `.git` read-only and its
-  network is off, so commits refuse and `bun outdated` dies on DNS. Per-run
-  guardrails: `cx -s workspace-write -a on-request`.
-- **The TUI probes the terminal background once, at startup**, and picks its
-  colours from that (`terminal_bg` → a syntect theme, set through a `OnceLock`).
-  It does not re-probe, and there is no documented `[tui]` theme key — so after
-  `make theme` or an automatic light/dark flip, restart codex. herdr and Claude
-  Code both switch live; this one doesn't.
-- **`~/.codex/AGENTS.md` loads on every run** (verified: a marker planted in a
-  scratch `CODEX_HOME` came back without any file read). It points codex at
-  `AGENTS.md` and `rules/` for environment facts and explicitly tells it *not*
-  to read `skills/`, `agents/` or the output style — importing the framing is
-  how a second opinion turns into an echo.
-- **That combination is its own trust boundary**, not an inherited one: an
-  unsandboxed agent with no human in the loop, holding a tool that fetches
-  arbitrary web pages. Text in a fetched page is reachable input to a shell it
-  can run unrestricted. The same shape as Claude Code + WebFetch here, but a
-  second instance of it — treat an unfamiliar repo or a research-heavy run as
-  the case for `cx -s workspace-write -a on-request`.
-- **research-gateway is wired into codex too** (`[mcp_servers]`, bearer via
-  `RESEARCH_GATEWAY_TOKEN`, `tool_timeout_sec = 7200` because one `job_wait`
-  blocks for the whole job). `cx mcp list` reports it. **An empty
-  `bearer_token_env_var` is fatal to codex's MCP startup** — it refuses to
-  start the client rather than taking a 401 — so `cx` disables the server for
-  that launch when the bearer won't resolve. In practice that means a shell
-  that hasn't `sz`'d since this landed. The bearer is resolved
-  once per launch into an env var, where Claude Code's headers helper re-reads
-  it on every reconnect — so a mid-session rotation needs a codex restart.
-- **`codex exec` blocks on stdin** when it isn't a TTY and no prompt is piped —
-  redirect `</dev/null` in scripts or it hangs with no output at all.
-- **`codex --strict-config` is the validator**: it names the exact unknown key
-  and line. Run it after any edit to `config/codex/`.
-- The key never enters the config file — `cx`/`cxa` resolve it per call
-  (Keychain, then the mini's cache) into `IU_API_KEY` by prefix assignment, so
-  it stays out of `ps auxww`.
-- Casks are never auto-upgraded: `make brew-upgrade` reports codex, `/upgrade-deps`
-  applies it.
-- **Spend is tracked**: usage-tracker's `codex` collector reads
-  `~/.codex/sessions/**/rollout-*.jsonl` and pushes to Argo like every other
-  lane. Local only — codex runs on the MacBook are invisible until that
-  collector gains an iumac mirror.
+`make deploy` = `make setup` (idempotent; run on **both** machines). No CI, no
+release: a merged commit is live once symlinked. Commit here after every edit.
 
-## OpenCode — the third lane
+## Verify & Monitor
 
-`oc` = OpenCode on the IU endpoint, re-added 2026-09-23 after
-the 2026-09-04 subtraction because AGENTS.md made it a zero-maintenance reader
-of the same instructions. It loads `<repo>/AGENTS.md` (nested lazily),
-`~/.claude/CLAUDE.md` and every skill natively; the always-on rules come from
-`instructions` in `config/opencode/opencode.json` — list only global rules
-without `paths:`; the per-repo `.claude/rules/*.md` glob is a known tradeoff
-(OpenCode ignores `paths:`, so a repo's lazy rules load on every turn there).
-Adding an always-on global rule means adding it to that list too. `@imports`
-do **not** resolve there.
-Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
+`make verify` (= `make doctor`); `make logs` for the bounded log tail. No HTTP
+health URL and no OTel `service.name` — this repo runs no service. Kuma:
+`MacMini Dev Host - Push` (composite over the heartbeat components, mini only),
+`MacMini Secret Seed - Push` (8-day mtime). Detail: `docs/devhost-health.md`.
 
-Two providers (2026-09-24): `iu` = `@ai-sdk/openai-compatible` on `{env:IU_OPENAI_BASE}`
-(`oc` derives it from the Keychain base, `/anthropic` → `/openai/v1`) and
-`anthropic` = the Anthropic route for Claude ids. `iu` declares the whole IU roster,
-not just the default: `deepseek-v4.1-flash` stays the default (that id is **not**
-served on the Anthropic route), with `DeepSeek-V4-Pro`, `glm-5.3-flash`, the
-`gpt-5.6/6` line (`gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`,
-`gpt-6-luna`, `gpt-6-astra`), `gemini-3.{5,8}-flash`, `kimi-k2.7-code` and
-`minimax-m3` alongside it — context windows, prices and `reasoningEffort` variants
-come from **modelpick** (`bun run scripts/cap.ts --json --all` on the mini;
-`metric_snapshot` for the frontier ids), so re-check there before editing a row.
-`small_model` is `gpt-6-luna` (cheap) for title/summary generation. On `iu`,
-`reasoningEffort` reaches the model (`--variant max|none`, default `high`) and prompt
-caching works (95–98% hits in real episodes). Headless `opencode run` auto-**rejects**
-any `ask` permission and that ends the session — workers must set every prompting
-permission to `allow`/`deny` (`deny` returns an error and the run continues).
-`--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
-shared `opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
-config, not this file).
+## Gotchas
 
-**sideclaw is wired in, mini-only.** `config/opencode/mini.json` declares the
-`sideclaw` MCP (`bun run …/sideclaw/server/mcp.ts`, `timeout` 30 min so a `job_wait`
-is not cut off at the default 5 s). It is deliberately *not* in the shared
-`opencode.json`: `oc` layers it in with `OPENCODE_CONFIG` (merged over the global
-config) only where the repo exists, so the MacBook stays sideclaw-free. External
-skills load natively from `~/.claude/skills`, so `/check`, `/review` and friends
-resolve to real tools on the mini.
-
-**Yolo is the default here, deliberately** — `permission: "allow"`, so `oc`
-never stops to ask. It is also what makes the lane usable headlessly: `run`
-**ends the session** on an `ask` rather than prompting, so a worker with a
-leftover `ask` rule is not slow, it is broken. This is the one config file
-sideclaw does *not* share — its dispatch ships its own per-run permissions, so
-widening this one cannot loosen a dispatch worker.
-
-**Config is two files, and the split is enforced.** `opencode.json` is
-`additionalProperties: false`, so `theme` there is a `ConfigInvalidError` — and
-`tui-migrate.ts` silently *moves* a `theme`/`keybinds`/`tui` key into a sibling
-`tui.json` instead, which is how a hand-written `theme` vanishes rather than
-fails. TUI keys go in `tui.json`; themes are `themes/*.json`, globbed with
-`symlink: true` (hence the dir symlink) and parsed with strict `JSON.parse` —
-**no comments in a theme file**, unlike every other config here.
-
-**One theme, both modes.** `one-zinc.json` holds the Ghostty palette as `defs`
-(`d*`/`l*` = dark/light, ANSI-indexed so it stays auditable against
-`config/ghostty/themes/one-zinc-*`), each token a `{dark, light}` pair — so
-`/theme`'s Dark/Light/Auto toggle switches the whole UI, and opencode persists
-that pick, so it **overrides** `tui.json` on later launches. Panels invert
-(lighter than the dark bg, darker than the light one): on a near-white surface a
-lifted panel is invisible and a white one glares — why this repo never uses
-`#ffffff`.
-
-**It follows the system appearance — via the same push Claude Code uses.** The
-dual mode only selects when opencode hears the terminal's mode; herdr answers
-neither DEC mode 2031 nor OSC 11 for a pane, so on the mini it sat dark forever.
-`scripts/claude-appearance.sh` now pushes the `CSI ?997;Nn` report (plus the
-OSC 11 answer) to every `claude` **and** `opencode` pane, and `oc` re-themes its
-own pane on launch — so a new pane starts in the MacBook's current mode. A
-`/theme` Dark/Light/Auto pick still persists into `theme_mode_lock` and wins, so
-leave it on **Auto** to follow the host.
-
-**A missing `opencode.json` is a silent failure, not an error** — 2026-09-30: the
-symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
-happily with no model, no provider, no rules. `make status` lists all three
-opencode links for exactly this; run it when `oc` looks unconfigured.
+- Symlinks: edit at either end, but **never the live `~/.claude/settings.json`** (merged).
+- Every always-on rule also needs adding to `config/opencode/opencode.json` `instructions`.
+- herdr restart/upgrade, TCC grants, `ssh mini 'claude …'`, `ssh iumac` identity → *Machines & remote dev*.
+- `op read`/`op run` on the mini hangs; use `secrets-run` → *Secrets*.
+- Logs live in `~/Library/Logs`, never `/tmp` → *Odds and ends*.
+- `docs/architecture.md` must list everything that runs, or `make doctor` exits 1.
 
 ## Machines & remote dev
 
 Agents run on the mini and outlive the MacBook. Stack: Tailscale (reachability) →
 herdr on the mini (persistence + UI) → Caddy (service exposure). **No layer
-substitutes for another.** `claude --bg` rides on top of all three.
+substitutes for another.**
+
+**Four lanes start agent work** (spec: `docs/agent-platform.md` §Four lanes):
+
+| Lane | Use for |
+|-|-|
+| `@implementer` | the edit must land in this session's live tree |
+| `sideclaw dispatch` | settled, bounded work → branch/PR or a verdict |
+| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude, bounded by `RD_WAVE_MAX`; `/wave` owns the contract and the green gate |
+| `warden run <repo> '<brief>'` | unattended, tracked to an outcome on warden's ledger |
 
 | Want | Command |
 |-|-|
 | A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
-| Work *placed on* the mini, no terminal | `rd repos\|work\|bg\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| One bounded episode, either machine | `agent-dispatch bg <repo> '<task>'` · `agent-dispatch work <repo>` |
-| Unattended work tracked to an outcome | `warden run <repo> '<brief>'` — the lifecycle lane; see warden/README.md |
-| A long job as a self-continuing chain | `rd wave <repo> '<prompt>'` — a fresh solo pane per wave; `/wave` owns the contract and the green gate |
-| Work that must not die | `claude --bg '<prompt>'` — reparents to PID 1, survives ssh, herdr and lid-close. Conflicts with `-p`. |
+| Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | What every agent is doing | `make agent-overview` — herdr workspace `overview` watching sideclaw `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
-`agent-dispatch` routes on the backend marker crossed with whether the repo exists
-here: mini or mini-resident repo → `rd bg`/`rd work`; MacBook + MacBook-resident
-repo → local `claude -p` on the IU Keychain creds, default `glm-5.3-flash`
-(`MAX_THINKING_TOKENS=8192`; `ANTHROPIC_MODEL` overrides).
-`--dry-run` prints the route; `make agent-dispatch-smoke` runs a read-only task at
-`dispatch-scratch`. It **refuses to nest inside an interactive Claude Code
-session** (`CLAUDECODE` set → prints the brief, exit 1) — use a subagent instead.
-Three lanes cover placing work elsewhere: `warden run` for unattended work tracked
-to an outcome, `mcp__sideclaw__dispatch` for one bounded question with a typed
-verdict, `agent-dispatch bg`/`work` for a colleague you steer.
 
 Five facts to hold:
 
@@ -309,8 +183,7 @@ Five facts to hold:
   integration version 6+ (this machine reports 8) and
   `[session].resume_agents_on_restore`, true by default. Shells, dev servers and
   `bun` loops still die, and a resumed agent still lost whatever turn was in
-  flight, so work that must not be *interrupted* still belongs in a `claude --bg`
-  daemon rather than a pane.
+  flight, so work that must not be *interrupted* belongs in `warden run`.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied
@@ -320,7 +193,7 @@ Five facts to hold:
   exists on the mini, where exporting it hangs.
 - **Never `ssh mini 'claude …'`.** The Max credential lives in the login keychain,
   unreachable from an ssh session: the daemon comes up `Not logged in`, silently
-  falls back to API billing, and still looks healthy in `claude agents`. `rd bg`
+  falls back to API billing, and still looks healthy in `claude agents`. `rd wave`
   spawns *through* a herdr pane (a GUI-session child) precisely to avoid this.
 - **`herdr attach` is not a command** — `herdr --session <name>`,
   `herdr session list|attach|stop`. Apply a fix to the live server with
@@ -347,32 +220,25 @@ Five facts to hold:
   screen share unfreezes it in place. `make herdr-upgrade` prints the path to
   re-grant.
 
-**Sidebar groups** — herdr has no folder and no separator primitive, so
-`config/herdr/groups.json` declares the taxonomy and `make herdr-groups` makes
-each header a **workspace** whose label is the rule (`── TOOLING ─────`),
-ordered above its members via the socket API's `workspace.move_block`. A
-metadata token in its own sidebar row was tried first and lost: herdr indents
-rows 2+ of an entry, so any two-row entry pushes its own name out of line —
-`scripts/herdr-groups.py` carries the full comparison. Nothing re-applies this
-and nothing has to; both halves are workspace state, which `session.json`
-persists. A separator costs an idle shell and a slot in the workspace picker,
-and stays invisible to sideclaw's overview (agent-driven; `workspace list` is
-only an id→label map there). `make herdr-groups-check` prints the plan,
-`herdr-groups.py clear` is the undo. Adding a repo is one line in the JSON; an
-unopened space is skipped, so listing one early costs nothing.
+**Sidebar groups** — `config/herdr/groups.json` declares the taxonomy; `make
+herdr-groups` applies it (headers are separator workspaces), `make
+herdr-groups-check` prints the plan, `herdr-groups.py clear` is the undo. Adding
+a repo is one line in the JSON. Rationale: `docs/herdr.md`.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
-the mini with `ask-human.sh ask "…" [--cmd …]`; `make
+the mini with `ask-human ask "…" [--cmd …]`; `make
 human-queue` **walks** each one (r/already-done/deny/skip; `-run`, `-resolve`,
 `-deny ID=` one-shot; no TTY → a list). `resolve` closes one satisfied out of band. The mini only *proposes* a
 string; `run` needs a typed `yes` on a real TTY, per request. No poller — that
-means unattended Touch ID forever. `ask-human.sh ask … --push` (or `push <id>`)
-instead **triggers the approval itself**: it ssh's to `iumac` (the mini's own
-dedicated key — reach the mini already has) and runs `human-queue.sh gui-run`
-there, which shows the exact string in a native macOS dialog and only executes
-on a click. Still no path without a present human — the dialog is a second gate
-next to the typed-yes TTY gate, not a bypass of it.
+means unattended Touch ID forever. **`ask-human ask …` pushes by default**
+(`--no-push` or `HUMAN_QUEUE_PUSH=0` enqueues only; `push <id>` pushes an
+existing request): it ssh's to `iumac` (the mini's own dedicated key — reach the
+mini already has) and runs `human-queue.sh gui-run` there, which shows the exact
+string in a native macOS dialog and only executes on a click. Only an
+unreachable MacBook or an unanswered dialog leaves the request queued (and fires
+the Slack notify). Still no path without a present human — the dialog is a second
+gate next to the typed-yes TTY gate, not a bypass of it.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
@@ -541,7 +407,7 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 
 **Keychain-cached by `make setup`:** `CLAUDE_SDK_API_KEY` + `CLAUDE_SDK_BASE_URL`
 (from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `ca`,
-`cap`, `claude_iu` and `agent-dispatch`. `ANTHROPIC_API_KEY` is intentionally
+`cap` and `claude_iu`. `ANTHROPIC_API_KEY` is intentionally
 **never exported**: Claude Code falls back to the Max subscription when the key is
 absent, and exporting it bills API credits instead.
 
@@ -573,8 +439,9 @@ startup — `source ~/.zshrc` after editing.
 | `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg |
 | `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
-| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | `iu/deepseek-v4.1-flash` default (`--variant max` / `none`); `-m anthropic/claude-opus-5-5`; see *OpenCode* |
-| `rd wave` / `rd bg` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL`/`RD_BG_MODEL` override; a chain that needs Fable sets it per spawn) |
+| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | `iu/deepseek-v4.1-flash` default (`--variant max` / `none`); `-m anthropic/claude-opus-5-5`; `docs/opencode.md` |
+| `cx` / `cxa` | Codex on the IU endpoint (Responses API) | `gpt-5.6-sol` / `gpt-6-astra`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
+| `rd wave` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
@@ -599,7 +466,7 @@ differently on purpose:
   Anthropic leg.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
-telemetry. `usage-tracker` bills all three lanes correctly because the SessionStart
+telemetry. `usage-tracker` bills every launcher correctly because the SessionStart
 hook logs `ANTHROPIC_BASE_URL`.
 
 **`config/zsh/claude-auth.zsh` is an ARMED fallback** (mini only, self-gated on
@@ -613,42 +480,23 @@ heartbeat. **Restore the keychain credential with `/login` in a herdr pane on th
 mini** rather than minting a token — that token is a one-year credential with no
 refresh and no reliable revocation.
 
-## Tailnet ACL and serve — as code
+## Codex, OpenCode, tailnet
 
-Both are **declared state in `dotfiles-private`** (an ACL is a security boundary,
-a serve file an exposure map) with the tooling here, and both apply **from the
-MacBook**: the API key is `op://Private/Tailscale`, which the mini's cache refuses
-by design.
-
-| Command | Does |
-|-|-|
-| `make tailscale-acl-diff` | **Always first** — a push overwrites the whole tailnet ACL |
-| `make tailscale-acl-pull` | Fetch live **into** the file, staged through a temp file |
-| `make tailscale-acl-push` | Validate + apply (prompts; `ACL_PUSH_YES=1` bypasses) |
-| `make tailscale-serve` / `-check` | Converge / report drift against `tailscale-serve.<machine>.conf` |
-
-- **Every listening port needs a grant and the failure is silent** — no refusal,
-  no log line on either end, just a timeout. The clean door rides `tcp:443`;
-  `tcp:7700-7799` covers dev servers that bind `0.0.0.0`.
-- **Applying serve does `tailscale serve reset` first** — a device rename leaves
-  bindings under the old name that no per-port `off` can address. Row column 4 is
-  an optional human label the applier normalises away, so it cannot cause drift.
-- Rows: `:7730` (rb) and `:8788` (Collie), tailnet-only; **`:8443` — Funnel,
-  public internet**, the IU dashboard, gated by `tag:iu-dashboard-funnel`, an
-  *additive single-device* tag because Funnel is a whole-device capability and
-  `tag:mac` would expose the work MacBook. **That one port is the machine's entire
-  public surface** — don't "clean up" the tag.
-- **Tagging a device is console-only** and independent of pushing a grant — both
-  are silently inert without the other. Verify the live filter with no API key
-  from the mini: `tailscale debug netmap`, parsing `PacketFilter`.
-- **`--accept-routes` is off on the mini** — imperative daemon state with nothing
-  declaring it; re-check after any Tailscale reinstall or re-auth.
-- **The mini and homelab are on different networks** and meet only over Tailscale
-  — homelab is *not* a LAN jump host for the mini.
-- The mini runs the **open-source `tailscaled` from Homebrew** (root LaunchDaemon,
-  starts before login), never the macsys app; consumers resolve the CLI through
-  `scripts/lib/tailscale-cli.sh` — a leftover app-bundle CLI answers with a stopped
-  tunnel and a stale IP, a wrong answer rather than an error.
+- **Codex** (`cx`/`cxa`/`astra`) is the rare second opinion; Responses-only wire
+  protocol is why it is Codex and not a proxy. `codex --strict-config` validates
+  any edit to `config/codex/`; `codex exec` needs `</dev/null` in scripts.
+  Everything else: `docs/codex.md`.
+- **OpenCode** (`oc`) reads this file, `~/.claude/CLAUDE.md` and every skill
+  natively; always-on global rules come from `instructions` in
+  `config/opencode/opencode.json` (a new always-on rule must be added there too).
+  Headless `run` ends on any `ask` permission; `theme` lives in `tui.json`; a
+  missing `opencode.json` is a silent failure — `make status` lists the links.
+  Everything else: `docs/opencode.md`.
+- **Tailnet ACL and serve** are declared in `dotfiles-private` and apply **from
+  the MacBook**: `make tailscale-acl-diff` (always first) · `-acl-pull` ·
+  `-acl-push` · `make tailscale-serve` / `-check`. Every listening port needs a
+  grant and the failure is silent; `:8443` is the machine's entire public surface
+  (Funnel). Everything else: `docs/tailnet.md`.
 
 ## Unattended boot posture (mini only)
 
@@ -685,29 +533,12 @@ plus a running `smbd` is not a working SMB server** — macOS stores no NTLM
 (`SMB-NT`) hash by default and `smbd` then refuses every principal with what reads
 like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
 
-**The look** — `make theme` applies the terminal + herdr layers and reloads
-herdr live; run it on both machines, since applying one layer is how they drift.
-opencode is the fourth layer and is **file-based, not a make target** — it
-carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy
-and `/theme` flips it live. It follows the appearance through the Claude Code
-push rather than a config file, so leave its `/theme` pick on **Auto** (above).
-
-| Layer | File | Setting |
-|-|-|-|
-| Terminal | `config/ghostty/config` | `theme = dark:one-zinc-dark,light:one-zinc-light` |
-| herdr chrome | `config/herdr/config.toml` | `name = "one-dark"`, `auto_switch = true`, `light_name = "catppuccin-latte"` |
-| Prompt | `config/starship.toml` | ANSI color *names* — resolve through whichever is active |
-| opencode | `config/opencode/tui.json` → `config/opencode/themes/one-zinc.json` | `theme = "one-zinc"`; one file, `{dark, light}` per token |
-
-**Never black, never white** — middle-ground zinc (`#1f1f23` / `#f2f2f5`);
-`#09090b` was tried and lasted one commit. `catppuccin-latte` for light is a taste
-call **against** the measured contrast numbers; `nord`/`dracula`/`vesper` aren't
-options (no light sibling for `auto_switch`). Font must be
-**`JetBrainsMono Nerd Font Mono`** — the Mono variant forces single-width glyphs
-so herdr's icons can't break sidebar alignment. `herdr config check` catches
-unknown keys and theme names but **silently accepts a bad hex and exits 0 even on
-`issues found`**, so `make theme` asserts the theme files instead. Measurements:
-`docs/theme.md`.
+**The look** — `make theme` applies the terminal + herdr layers (run it on both
+machines); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
+on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
+middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
+`herdr config check` exits 0 even on `issues found`, so `make theme` asserts the
+theme files instead.
 
 **Obsidian must keep running on the mini** (`make obsidian-autostart` — `open -a
 Obsidian`, deliberately no `KeepAlive`, or it respawns the instant a human quits
