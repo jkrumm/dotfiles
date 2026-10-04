@@ -15,7 +15,7 @@ set -uo pipefail
 # `herdr-setup` key off) so the two machines can share one command surface.
 #
 # The MacBook's sanctioned repos are dotfiles/dotfiles-private/photo-flow/brain —
-# no project repos. `repos`, `work` and `bg` all resolve paths ON the host, which
+# no project repos. `repos` and `work` resolve paths ON the host, which
 # is why none of them take a path — a MacBook-side project-repo path would be
 # meaningless.
 
@@ -527,100 +527,6 @@ for a in agents:
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
 }
 
-# The durable lane. A herdr crash restores the layout and loses every process in
-# it, so anything that must survive goes here instead of into a pane.
-#
-# It is spawned THROUGH a throwaway herdr pane rather than directly over ssh, and
-# that indirection is the whole reason this function exists. Claude Code's Max
-# credentials live in the login keychain, which an ssh session cannot reach: a
-# bare `ssh mini "claude --bg …"` starts, reports `Not logged in · Please run
-# /login`, silently falls back to *API Usage Billing*, and still shows up in
-# `claude agents` looking healthy. The herdr server is a brew service under
-# launchd inside the user's GUI session, so anything it spawns inherits keychain
-# access. Verified both ways on 2026-07-27.
-#
-# The pane is closed once the daemon exists — `--bg` reparents to PID 1, so it
-# no longer needs the thing that launched it.
-cmd_bg() {
-  local name="${1:-}"; shift || true
-  local task="${*:-}"
-  [[ -n $name && -n $task ]] || die "usage: bg <repo> <task…>"
-  require_server
-
-  local path
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
-
-  local before
-  before=$(host_run 'claude agents --json' | python3 -c \
-    "import json,sys; print(' '.join(a['sessionId'] for a in json.load(sys.stdin)))" 2>/dev/null)
-
-  local ws pane
-  ws=$(host_run "herdr workspace create --cwd '$path' --label 'bg:$name' --no-focus")
-  pane=$(echo "$ws" | python3 -c \
-    "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
-  [[ -n $pane ]] || die "could not create a launcher pane for $path"
-  local wsid=${pane%%:*}
-
-  # --bg takes the positional prompt and conflicts with -p.
-  #
-  # There are TWO shells between here and Claude, and the obvious quoting loses
-  # to the second one silently. `herdr pane run` accepts argv but joins it back
-  # into a line for the pane's shell to parse, so a prompt quoted for the ssh
-  # hop arrives at the pane unquoted and word-splits: 'read the repo and
-  # summarize…' reached Claude as the one-word prompt `read`. The daemon then
-  # started, reported healthy in `agents`, and sat there asking what to read.
-  #
-  # base64 removes the problem rather than escaping around it — the alphabet has
-  # no shell metacharacters, so the payload survives both parses byte-identical
-  # no matter what the task contains.
-  #
-  # But the payload must NOT ride the pane's command line: `herdr pane run`
-  # types the line into a tty, and macOS canonical input stops at 1024 bytes
-  # (MAX_INPUT) — a brief longer than ~700 bytes arrived truncated, the shell
-  # never saw the closing quote, and the daemon never started (2026-09-22,
-  # eight of eight multi-paragraph briefs). So the brief is decoded into a
-  # file on the host over `host_run` (ssh argv has no such limit) and the pane
-  # line only reads it. The literal double quotes inside the single-quoted argv
-  # element are what keep the pane-side expansion one word.
-  local b64 brief_file
-  b64=$(printf %s "$task" | base64 | tr -d '\n')
-  brief_file=$(host_run "umask 077; f=\$(mktemp -t rd-bg-brief); printf %s '$b64' | base64 -d > \"\$f\" && echo \"\$f\"")
-  [[ -n $brief_file ]] || die "could not stage the brief on $HOST"
-  # Same default as `wave`: Sonnet unless the caller says otherwise
-  # (`RD_BG_MODEL`), and the `bg` lane for usage-tracker.
-  local model="${RD_BG_MODEL:-sonnet}"
-  # `--dangerously-skip-permissions`, as `work` already passes: a daemon has no
-  # one to answer a permission prompt, so without it the first Bash call stalls
-  # the whole episode in `waiting` (2026-09-22, the usage-tracker daemon sat on
-  # its opening `gh pr view` for an hour).
-  host_run "herdr pane run '$pane' env USAGE_LANE=bg claude --bg --dangerously-skip-permissions --model '$model' '\"\$(cat $brief_file)\"'" >/dev/null 2>&1
-
-  local id="" i=0
-  while (( i < 24 )); do
-    sleep 1; i=$((i+1))
-    id=$(BEFORE="$before" host_run 'claude agents --json' | BEFORE="$before" python3 -c "
-import json,os,sys
-before = set(os.environ.get('BEFORE','').split())
-try: agents = json.load(sys.stdin)
-except Exception: sys.exit(0)
-for a in agents:
-    if a['sessionId'] not in before and a.get('cwd') == '$path' and a.get('kind') == 'background':
-        print(a['sessionId']); break
-" 2>/dev/null)
-    [[ -n $id ]] && break
-  done
-
-  if [[ -z $id ]]; then
-    note "   launcher pane $pane left open for inspection ('rd read' won't see it — use herdr)"
-    die "no background agent appeared for $path after ${i}s"
-  fi
-
-  host_run "herdr workspace close '$wsid'" >/dev/null 2>&1
-  echo "→ backgrounded ${id:0:8}  ($path)"
-  note "   survives ssh, herdr and lid-close · 'agents' to track"
-  note "   on the host: claude logs ${id:0:8} · claude attach ${id:0:8} · claude stop ${id:0:8}"
-}
-
 # One view over both lanes, because "is my work still running" should not depend
 # on remembering which lane you started it in.
 cmd_agents() {
@@ -691,7 +597,7 @@ else:
     if any(r[0] == "interactive" for r in rows):
         print()
         print("  \033[33mnote:\033[0m 'interactive' agents die with their connection.")
-        print("        Durable work belongs in 'bg' (claude --bg).")
+        print("        Unattended work belongs in 'warden run'.")
 PY
 }
 
@@ -702,7 +608,7 @@ cmd_read() {
   [[ -n $name ]] || die "usage: read <agent>   (see 'agents')"
 
   # The two lanes need completely different read paths, and getting this wrong
-  # was actively misleading: `rd bg` hands you a session id, but that id is not
+  # was actively misleading: a `claude --bg` daemon hands you a session id, but that id is not
   # a herdr agent — the launcher pane is closed the moment the daemon exists —
   # so the socket API answered `agent_not_found` for an agent that was running
   # perfectly well.
@@ -785,7 +691,6 @@ usage() {
     rd repos [filter]         repos on the dev host, with branch + dirty count
     rd work <repo>            herdr workspace + claude for that repo (idempotent)
     rd wave <repo> <prompt…>  fresh pane + solo claude + prompt — the wave chain
-    rd bg <repo> <task…>      durable claude --bg daemon — survives everything
     rd agents                 every agent on the host, both lanes
     rd read <agent> [src]     read an agent's output without attaching
     rd say <agent> <text…>    send a prompt to a running agent
@@ -793,16 +698,16 @@ usage() {
   <agent> is a repo name, a pane id (wG:p6) or a bg session id prefix —
   whichever of them 'agents' put in front of you.
 
-  Shorthands (bg/read/say stay subcommands — the bare names are a zsh
+  Shorthands (read/say stay subcommands — the bare names are a zsh
   builtin, a zsh builtin and /usr/bin/say respectively):
 
     repos · work · agents
 
-  Three lanes for putting work on the mini:
-    executor    sideclaw `dispatch` (MCP) — one bare episode, a typed verdict, no item
-    lifecycle   `warden run <repo> '<brief>'` — opens an ITEM that rides the ledger:
-                investigate → verdict → implement → review → merge, gated by policy
-    colleague   `rd bg <repo> '<task>'` — a durable claude you can steer with `rd say`
+  Four lanes for starting agent work (docs/agent-platform.md):
+    @implementer  native subagent — the edit must land in this session's live tree
+    dispatch      sideclaw `dispatch` (MCP/CLI) — settled bounded work → branch/PR or verdict
+    wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
+    warden        `warden run <repo> '<brief>'` — unattended, tracked to an outcome
 
   Getting a terminal is a different layer:
     desk   herdr --remote — local keybindings, dies on roam
@@ -816,7 +721,6 @@ case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
   work)   shift; cmd_work "$@" ;;
   wave)   shift; cmd_wave "$@" ;;
-  bg)     shift; cmd_bg "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   read)   shift; cmd_read "$@" ;;
   say)    shift; cmd_say "$@" ;;

@@ -9,7 +9,7 @@ either end; git always sees the change here.
 
 The Mac mini is the always-on dev host — agents run there and outlive any
 client. The MacBook is a thin client: `desk` attaches to the mini's herdr
-session over ssh, `rd`/`agent-dispatch` put work on the mini with no terminal
+session over ssh, `rd`/`warden` put work on the mini with no terminal
 needed at all. Full model, including the reverse `mini → iumac` leg and the
 secrets/access split between the two: `docs/architecture.md`.
 

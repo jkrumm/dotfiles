@@ -152,7 +152,7 @@ cs() {
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
 # Context window + GLM thinking budget per gateway model id — shared with
-# scripts/agent-dispatch.sh (bash 3.2), since both launch paths need the same
+# bash 3.2 callers, which need the same
 # CLAUDE_CODE_MAX_CONTEXT_TOKENS / MAX_THINKING_TOKENS values. Case-statement
 # functions live in config/zsh/iu-models.sh (not a zsh assoc array), so the one
 # file parses under both interpreters — see it for the `_ca_ctx`/`_ca_thinking`

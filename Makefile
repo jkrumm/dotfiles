@@ -787,13 +787,25 @@ _setup-git-headless:
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
+.PHONY: check verify logs deploy
+
+# The repo contract (docs/agents-md.md): check = all local validation, no side
+# effects; verify = probe the live system; logs = bounded tail; deploy = converge.
+check: architecture-check secrets-lint hooks-test ## All local validation (architecture map, secrets lint, hook tests)
+
+verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
+
+logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
+	@for f in $(HOME)/Library/Logs/devhost-health.log $(HOME)/Library/Logs/devhost-health.err; do \
+		[ -f "$$f" ] && { echo "== $$f"; tail -n 40 "$$f"; } || true; \
+	done
+
+deploy: ## Converge this machine onto the tracked config (wraps setup; nothing to ship)
+	@$(MAKE) --no-print-directory setup
+
 .PHONY: doctor
 doctor: ## Read-only health of this machine (+ the mini when run from the MacBook)
 	@bash $(DOTFILES_DIR)/scripts/doctor.sh
-
-.PHONY: agent-dispatch-smoke
-agent-dispatch-smoke: ## Dispatch a trivial read-only task at dispatch-scratch and assert it returns
-	@bash $(DOTFILES_DIR)/scripts/agent-dispatch.sh bg dispatch-scratch 'List the files in this directory and stop. Read-only; do not edit anything.'
 
 .PHONY: caddy-tailnet
 # Expose dev servers over the tailnet via Caddy. Runs ON the dev host (the mini).
@@ -1139,10 +1151,27 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/keyprobe.py" \
 		DST="$(HOME)/.local/bin/keyprobe"
-	@chmod +x $(DOTFILES_DIR)/scripts/agent-dispatch.sh
+	@# rd, ask-human, warden: agent-control commands as real executables on PATH
+	@# (not only zsh functions), so ssh remote commands, OpenCode, Codex and
+	@# sideclaw workers resolve them. warden's script lives in its own repo and is
+	@# linked only where that repo exists (the mini).
+	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/scripts/agent-dispatch.sh" \
-		DST="$(HOME)/.local/bin/agent-dispatch"
+		SRC="$(DOTFILES_DIR)/scripts/remote-dev.sh" \
+		DST="$(HOME)/.local/bin/rd"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/ask-human.sh" \
+		DST="$(HOME)/.local/bin/ask-human"
+	@# warden resolves its venv relative to $$0, so a symlink would break it — an
+	@# exec wrapper is the install shape.
+	@if [ -x "$(HOME)/SourceRoot/warden/scripts/warden" ]; then \
+		rm -f "$(HOME)/.local/bin/warden"; \
+		printf '#!/bin/sh\nexec "%s/SourceRoot/warden/scripts/warden" "$$@"\n' "$(HOME)" > "$(HOME)/.local/bin/warden"; \
+		chmod +x "$(HOME)/.local/bin/warden"; \
+		echo "    ✓ warden"; \
+	else \
+		echo "    · warden (repo not on this machine — skipped)"; \
+	fi
 	@# astra — the one-shot Responses call at reasoning.mode="pro", the one
 	@# setting no coding harness can send. Complements `cxa`, see config/codex/.
 	@chmod +x $(DOTFILES_DIR)/scripts/astra.sh
@@ -3168,6 +3197,10 @@ help:
 	@echo "  make setup              Idempotent full setup — symlinks, secrets, settings, browser"
 	@echo "  make clean              Purge brew/npm/pnpm/bun caches"
 	@echo "  make status             Verify symlink health + Keychain secrets"
+	@echo "  make check              All local validation (architecture map, secrets lint, hook tests)"
+	@echo "  make deploy             Converge this machine (wraps setup)"
+	@echo "  make verify             Probe the live system (= doctor)"
+	@echo "  make logs               Bounded tail of the dotfiles-owned agent logs"
 	@echo "  make github-config      Apply branch protection + merge settings + shared secrets to all repos"
 	@echo "  make github-config-dry  Preview without applying"
 	@echo ""
@@ -3274,7 +3307,6 @@ help:
 	@echo "  make tailscale-acl-push     Validate + apply the ACL to the whole tailnet"
 	@echo ""
 	@echo "  make doctor                 Read-only health of this machine (+ the mini when run from the MacBook)"
-	@echo "  make agent-dispatch-smoke   Dispatch a trivial read-only task at dispatch-scratch and assert it returns"
 	@echo "  make mini-macos-update      MacBook-only: apply the mini's pending macOS update, then assert the version moved (YES=1 skips the prompt)"
 	@echo ""
 	@echo "  usage-tracker (token/cost telemetry) is installed by make setup."

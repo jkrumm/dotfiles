@@ -56,7 +56,7 @@ note() { printf '\033[2m%s\033[0m\n' "$*" >&2; }
 # displays these same fields on the MacBook right before a typed-'yes'
 # execution prompt.
 # shellcheck source=lib/human-queue-json.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/human-queue-json.sh"
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/human-queue-json.sh"
 
 ensure_queue_dir() {
   mkdir -p "$QUEUE_DIR"

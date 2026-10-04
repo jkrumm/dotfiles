@@ -6,7 +6,7 @@
 # from inside a herdr pane and it kills the shell running it — mid-sequence,
 # between `brew upgrade` and the plist convergence, which is the one window
 # where stopping leaves the boot path reverted. This refuses to start there
-# (the same `CLAUDECODE`-style guard agent-dispatch uses) rather than trusting
+# (a `CLAUDECODE`-style guard) rather than trusting
 # you to remember which kind of shell you are in.
 #
 # THE SECOND IS THE PLIST. `brew upgrade herdr` regenerates herdr's brew-service

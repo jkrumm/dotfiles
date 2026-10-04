@@ -120,7 +120,6 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 |-|-|
 | `repos [filter]` | repos on the host, branch + dirty count |
 | `work <repo>` | herdr workspace + claude, **idempotent** (refocuses, never stacks) |
-| `rd bg <repo> '<task>'` | durable `claude --bg` daemon, spawned *through* a herdr pane |
 | `agents` | both lanes, deduped on Claude session id |
 | `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching |
 
@@ -129,24 +128,15 @@ hazard, except across panes where you cannot see it happen. `agents` dedupes on
 the Claude session id (herdr exposes `agent_session.value`, the daemon
 `sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
 
-`agent-dispatch` is the machine-agnostic layer above `rd`: one bounded episode,
-placed on whichever machine owns the repo.
-
-| Command | mini / mini-resident repo | MacBook + MacBook-resident repo |
-|-|-|-|
-| `agent-dispatch bg <repo> '<task>'` | `rd bg` — herdr-pane spawn, keychain-safe Max auth | local `claude -p` on the IU Keychain creds, default `DeepSeek-V4-Flash` (`MAX_THINKING_TOKENS=8192`) |
-| `agent-dispatch work <repo>` | `rd work` | local session |
-
-MacBook-resident repos are the sanctioned set: `dotfiles`, `dotfiles-private`,
-`brain`, `photo-flow`, `shutterflow`, `image-gen`, `basalt-ui`. It **refuses to nest inside an interactive
-Claude Code session** (`CLAUDECODE` set → prints the brief, exit 1).
-`make agent-dispatch-smoke` runs a read-only task at `dispatch-scratch`.
+Four lanes start agent work (`docs/agent-platform.md`): `@implementer`,
+`sideclaw dispatch`, an `rd wave` tab, `warden run`. `agent-dispatch` and
+`rd bg` were removed 2026-10-04 — work that must outlive a pane is `warden run`.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
 **login keychain**, unreachable from an ssh session, so that spelling comes up
 `Not logged in`, silently falls back to API billing, and still looks healthy in
 `claude agents`. The herdr server is a brew service inside the GUI session, so
-anything it spawns (panes, `rd bg`) inherits keychain access, and the mini's
+anything it spawns (panes, `rd wave`/`rd work`) inherits keychain access, and the mini's
 auto-login brings the keychain up unlocked at boot. `claude --bg` takes the
 positional prompt and conflicts with `-p`.
 

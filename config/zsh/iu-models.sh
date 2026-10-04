@@ -1,6 +1,6 @@
 # IU gateway model metadata, shared between config/zsh/claude.zsh's `ca()`
-# (zsh) and scripts/agent-dispatch.sh's `run_local_claude_p()` (bash 3.2) — the
-# one place both launchers get a gateway model's real context window and GLM
+# (zsh) and any bash 3.2 caller — the
+# one place launchers get a gateway model's real context window and GLM
 # thinking budget from. Case-statement functions, not an associative array:
 # bash 3.2 has no assoc arrays, so this is the shape that parses under both
 # interpreters. Update here only; the callers just source this file.

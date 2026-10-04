@@ -1131,7 +1131,7 @@ check_claude_auth() {
   # TWO CREDENTIALS, TWO PATHS — and the bare binary above can only see one of
   # them. `config/zsh/claude-auth.zsh` falls back to CLAUDE_CODE_OAUTH_TOKEN from
   # the secrets cache, so a host with a dead keychain but a live token runs every
-  # herdr pane and `rd bg` daemon perfectly on Max. Reporting that as "every
+  # herdr pane and `claude --bg` daemon perfectly on Max. Reporting that as "every
   # agent on this host is billing API credits" — as this did — is false, and a
   # component that overstates is one you learn to skim past.
   #
@@ -1145,7 +1145,7 @@ check_claude_auth() {
 
   if [[ "$logged" != "true" ]]; then
     if claude_token_works; then
-      # PASSES, deliberately. Max billing is intact, every herdr pane and `rd bg`
+      # PASSES, deliberately. Max billing is intact, every herdr pane and `claude --bg`
       # daemon works, and the only cost is a worse CREDENTIAL — static 1y, no
       # refresh, no reliable revocation — not a broken host. Failing here would
       # put the composite monitor red indefinitely for a state that has been

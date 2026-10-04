@@ -20,18 +20,14 @@ a path:
 ```bash
 repos [filter]         # what's on the dev host, with branch + dirty count
 work <repo>            # herdr workspace + claude for that repo (idempotent)
-rd bg <repo> <task…>   # durable claude --bg daemon, survives everything
 agents                 # every agent on the host, both lanes, deduped
 rd read <agent>        # read its output without attaching
 rd say <agent> "…"     # send it a prompt
 ```
 
-`agent-dispatch bg <repo> '<task>'` / `agent-dispatch work <repo>` is the
-one-command router on top of `rd` — use it when you don't already know which
-machine the repo lives on (it resolves mini-resident vs MacBook-resident and
-picks `rd bg`/`rd work` or a local `claude -p`). It refuses to nest inside an
-interactive Claude Code session (`CLAUDECODE` set) — use `rd`/`work` directly
-there instead.
+Four lanes start agent work: `@implementer`, `sideclaw dispatch`, `rd wave`
+(a tab you watch), `warden run` (unattended, tracked). `agent-dispatch` and
+`rd bg` no longer exist.
 
 ## Go look at the mini (a terminal)
 
@@ -67,19 +63,14 @@ If every pane reports `agent_status: "unknown"`, run `make herdr-setup`
 (installs herdr's Claude Code integration hook; opt-in, not part of `make
 setup`, needs running on each client machine separately).
 
-## Durable agents — `claude --bg`
+## Durable work
 
-```bash
-rd bg <repo> '<task>'        # the supported way to launch one
-claude agents --json         # list; check `kind`: interactive vs background
-claude attach|logs|stop <id>
-```
-
-**Never `ssh mini 'claude --bg …'` directly** — spawn through `rd bg` (which
-goes via a herdr pane) instead, or the daemon comes up logged out of Max and
-silently bills API credits while still looking healthy. Anything that must
-survive a herdr crash (which restores the layout but kills every process in it)
-belongs in `claude --bg`, never a bare pane.
+Anything that must survive a herdr crash (layout restores, processes don't) is
+`warden run <repo> '<brief>'`, not a bare pane. **Never `ssh mini 'claude …'`**
+(`--bg` included): the daemon comes up logged out of Max and silently bills API
+credits while still looking healthy — a pane spawned by herdr (`rd wave`/`rd work`)
+inherits the keychain. `claude agents --json` lists what is running (`kind`:
+interactive vs background); `claude attach|logs|stop <id>` for existing daemons.
 
 ## Reaching a dev server on the mini
 
@@ -163,8 +154,8 @@ When something is red, in order:
 | `ssh localhost` fails on the mini | By design — the mini has no key for itself. Verify inbound auth from the MacBook |
 | A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run` |
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
-| Agent died when the lid closed | It was `kind: interactive`. Use `rd bg` |
-| `--bg` agent runs but does nothing, `claude logs` shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through a herdr pane (`rd bg`) — never `ssh mini 'claude --bg …'` |
+| Agent died when the lid closed | It was `kind: interactive`. Hand the work to `warden run` |
+| `--bg` agent runs but does nothing, `claude logs` shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through a herdr pane (`rd wave`/`rd work`) — never `ssh mini 'claude --bg …'` |
 | `rd` says "herdr server is not running" | `brew services restart herdr` on the mini |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes don't |
 | `claude: command not found` over non-interactive ssh | `make setup`'s `_setup-zshenv` puts Homebrew + `~/.local/bin` on the non-interactive PATH — re-run `make setup` if missing |
