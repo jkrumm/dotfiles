@@ -29,8 +29,9 @@ any older doc that contradicts it; rollout is tracked in each repo's
 | sideclaw: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (sideclaw W1–W3); review angles off Max still pending (W4) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 | warden: gates cut, nine states, one queue | **landed** (W1–W2) |
-| warden: intake fingerprint + triage dedup | **rolling out** (W3, in progress) |
-| warden: merge train, deploy + verify, automatic revert | **rolling out** (W4, not started) — the sections below describe the target |
+| warden: intake fingerprint + triage dedup, revisions as attempts | **landed** (W3) |
+| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs a sideclaw PR delta scope) |
+| warden: docs, loop split into modules, own `check`/`deploy`/`verify`/`logs` | **landed** (W5) |
 
 ## Why this rewrite
 
