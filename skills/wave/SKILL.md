@@ -1,6 +1,6 @@
 ---
 name: wave
-description: Run a long implementation as a self-continuing chain of fresh agent contexts on the mini. Use when work is too large for one context and would otherwise end with a hand-written handover prompt the human copy-pastes into a new herdr pane — multi-wave/multi-round/multi-phase implementations, staged migrations, anything whose plan says "then in the next session". Also use when asked to author a wave plan, to close out a wave, or to continue/resume a wave chain.
+description: Run a long implementation as a chain of fresh agent contexts on the mini — self-continuing (chain mode) or spawned wave by wave from a visible orchestrator tab (orchestrated mode). Use when work is too large for one context and would otherwise end with a hand-written handover prompt the human copy-pastes into a new herdr pane — multi-wave/multi-round/multi-phase implementations, staged migrations, anything whose plan says "then in the next session". Also use when asked to author a wave plan, to close out a wave, or to continue/resume a wave chain.
 ---
 
 # Wave — a chain of fresh contexts that continues itself
@@ -18,6 +18,30 @@ someone has to copy.
 
 A plan that says round, phase, stage, milestone or iteration is renamed at
 authoring time. Nothing downstream searches for synonyms.
+
+## Two modes
+
+| Mode | Who spawns the next wave | Use when |
+|-|-|-|
+| **chain** | the finishing wave, from its own session (`rd wave`, below) | the plan is settled and nobody needs to look between waves |
+| **orchestrated** | the orchestrator tab — an interactive session the owner can see | the owner wants a review point between waves, or a wave may need a different model/kind next |
+
+The brief a wave starts from says which one applies. **"Do NOT spawn the next
+wave"** (or any mention of an orchestrator) means orchestrated: a wave then ends
+at its committed close-out and spawns nothing. No such sentence → chain.
+
+### Orchestrated mode — the orchestrator's loop
+
+The orchestrator holds no plan state of its own; PLAN.md is the state.
+
+1. Spawn: `rd wave <repo> [--kind opencode] 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'`
+   Its own tab being `working` does not block the spawn — `rd wave` excludes the caller's pane and tab. Any *other* working agent in the checkout still does.
+2. Block on it, one call each: `herdr agent wait <repo>-w<n> --until working --timeout 60000`, then `herdr agent wait <repo>-w<n> --until idle --until done --until blocked`. All three settled states — `done` alone never fires while the tab is being watched (it reports `idle`). `blocked` → `rd read` it before answering.
+3. Review the close-out: read PLAN.md (the wave's **Left behind**, status flips), `git log` and the diff it produced. A wave's report is a claim, the diff is the proof. Re-run `/check` if the wave's own gate result is not in its Left behind.
+4. Decide: red or incomplete → fix inline or `rd say` the wave; green → `rd close <repo>-w<n>` (refuses unless the tab is a `wave <n>` tab, the agent is not working, the checkout is clean and everything is pushed), then spawn the next. A next step that is outward-facing (merge, publish, release, deploy) stops at the owner.
+5. One active wave per repo; parallel waves only across repos.
+
+Chain mode leaves its tabs open — a wave cannot close the tab it is running in.
 
 ## The plan is the handover
 
@@ -63,8 +87,9 @@ greps them.
      wave to `done` and the next to `active`.
    - Prune what this wave made stale — dead docs, obsolete TODOs, closed issues.
      A wave that leaves stale docs behind has not closed out.
-   - Commit the plan update.
-4. **Gate, then chain.** Below.
+   - Commit the plan update, then push (PR-required repo: the branch). An unpushed
+     wave cannot be closed by `rd close`, and the next wave starts from the remote.
+4. **Gate, then chain** (chain mode) — or stop at the committed close-out (orchestrated). Below.
 
 ## The green gate
 
@@ -82,16 +107,18 @@ mechanical half of the gate is the reason a broken close-out fails loud instead
 of silently spawning into it; the judgment half (did check/review actually pass)
 is still the finishing wave's to get right.
 
-## Spawning the next wave
+## Spawning the next wave (chain mode)
 
-One command, from the finishing wave's own session:
+Orchestrated mode: skip this section — the orchestrator spawns. Chain mode: one
+command, from the finishing wave's own session:
 
 ```bash
 rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n+1>). Follow the /wave skill.'
 ```
 
-That creates a fresh herdr workspace, starts Claude in solo mode, and submits the
-prompt. The handover content lives in the committed plan, not in this string —
+That adds a `wave <n>` tab to the repo's workspace, starts the agent in solo mode
+(Claude Code by default, `--kind opencode` for OpenCode on the IU endpoint), and
+submits the prompt. The handover content lives in the committed plan, not in this string —
 keep the prompt to the two sentences above.
 
 `RD_WAVE_MAX` (default 10) bounds the chain. `RD_DRY_RUN=1` resolves and prints

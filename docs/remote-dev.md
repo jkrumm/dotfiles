@@ -18,10 +18,10 @@ another.**
 | Persistence + UI | **herdr** (on the mini) | Panes stay alive; per-pane agent state | Anything about the network |
 | Service exposure | **Caddy** | Dev servers over the tailnet, real HTTPS, working WebSockets | Anything about terminals |
 
-Riding on top, independent of all three: **`claude --bg`** (reparents to PID 1 as
-`claude daemon run`; survives ssh death, herdr death and lid-close — the safety
-net that bounds herdr being pre-1.0) and **Claude Remote Control** (first-party,
-one session at a time; the whole-herd view is Collie).
+Riding on top, independent of all three: **`warden run`** (unattended work,
+tracked to an outcome — what survives a herdr crash) and **Claude Remote Control**
+(first-party, one session at a time; the whole-herd view is Collie). Raw
+`claude --bg` is no longer a lane (`docs/agent-platform.md`).
 
 **`mini` resolves two ways and the resolver picks silently.** The bare name is
 LAN-first and `ssh_config` pins neither, so at home the tailnet is not in the
@@ -81,8 +81,9 @@ client attached (`herdr workspace create …` succeeds with zero clients).
   what survives `make setup`) and its command is guarded.
 
 **A herdr crash restores the layout and loses every process in it** — the
-workspace comes back by name with a new `terminal_id`. That is the concrete
-reason `claude --bg` is not optional for work that matters.
+workspace comes back by name with a new `terminal_id`; Claude panes are resumed
+(`claude --resume`) but shells, servers and the in-flight turn are lost. That is
+the concrete reason work that must not be interrupted goes through `warden run`.
 
 **Config is tracked**: `config/herdr/config.toml` → `~/.config/herdr/config.toml`
 on both machines, linking the **file** and never the directory (the same dir
@@ -94,7 +95,7 @@ it silently misses.
 **`HERDR_ENV=1` is how an agent knows it is inside herdr** (plus `HERDR_PANE_ID`
 / `_TAB_ID` / `_WORKSPACE_ID` / `_SOCKET_PATH` / `_BIN_PATH`), which makes the
 skill inert on the MacBook with no branching. **Vars are inherited at spawn, not
-tracked** — a `claude --bg` daemon that outlives its pane keeps a stale
+tracked** — a process that outlives its pane keeps a stale
 `HERDR_PANE_ID`; resolve the live one with `herdr pane current --current`.
 
 **`prefix+e` opens `Projects/<repo>.md`** from `~/SourceRoot/brain` in `$EDITOR`,
@@ -137,8 +138,7 @@ Four lanes start agent work (`docs/agent-platform.md`): `@implementer`,
 `Not logged in`, silently falls back to API billing, and still looks healthy in
 `claude agents`. The herdr server is a brew service inside the GUI session, so
 anything it spawns (panes, `rd wave`/`rd work`) inherits keychain access, and the mini's
-auto-login brings the keychain up unlocked at boot. `claude --bg` takes the
-positional prompt and conflicts with `-p`.
+auto-login brings the keychain up unlocked at boot.
 
 **`config/zsh/claude-auth.zsh` is an armed fallback**: a `claude()` zsh function
 resolving `op://mini/claude/oauth-token` via `secrets-run` into
@@ -688,8 +688,8 @@ printf '%s\n' "$PW" | ssh mini 'read -r pw
 | `bash scripts/architecture-check.sh` | Every loaded/on-disk launchd label appears in `docs/architecture.md` |
 
 By hand after a change to this stack: start agents in herdr, close the lid,
-re-run `desk` — all still there; `claude --bg` a long task, stop herdr entirely,
-confirm the daemon still runs.
+re-run `desk` — all still there; `warden run` a long task, stop herdr entirely,
+confirm the item is still driven.
 
 **The heartbeat asserts the GitHub credential resolves, not that a push
 succeeds** — the real `git push --dry-run` lives in `make doctor`, because at a

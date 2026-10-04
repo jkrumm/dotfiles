@@ -174,7 +174,9 @@ caller.
 
 The orchestrator is always a visible tab. `/wave` has two modes: **chain**
 (each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab,
-`herdr agent wait --until done`, reads `PLAN.md`, decides the next). One active
+blocks on `herdr agent wait` for the settled states idle/done/blocked — `done` alone
+never fires on a watched tab — reads `PLAN.md`, decides the next, closes the finished
+tab with `rd close`). One active
 wave per repo; parallel waves only in different repos. A pane-less supervisor
 (`claude --bg` mother) is not a pattern.
 
