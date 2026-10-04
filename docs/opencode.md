@@ -11,17 +11,25 @@ Adding an always-on global rule means adding it to that list too. `@imports`
 do **not** resolve there.
 Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
 
-Two providers (2026-09-24): `iu` = `@ai-sdk/openai-compatible` on `{env:IU_OPENAI_BASE}`
-(`oc` derives it from the Keychain base, `/anthropic` → `/openai/v1`) and
-`anthropic` = the Anthropic route for Claude ids. `iu` declares the whole IU roster,
-not just the default: `deepseek-v4.1-flash` stays the default (that id is **not**
-served on the Anthropic route), with `DeepSeek-V4-Pro`, `glm-5.3-flash`, the
-`gpt-5.6/6` line (`gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`,
-`gpt-6-luna`, `gpt-6-astra`), `gemini-3.{5,8}-flash`, `kimi-k2.7-code` and
-`minimax-m3` alongside it — context windows, prices and `reasoningEffort` variants
+Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
+`{env:IU_OPENAI_BASE}` (`oc` derives it from the Keychain base, `/anthropic` →
+`/openai/v1`); `iu-responses` = `@ai-sdk/openai` (the **Responses** wire) on the
+same base, carrying every GPT id — they are Responses-only for agent loops
+(reasoning items must survive tool calls), so `-m iu-responses/gpt-6-sol`, not
+`iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
+wire split mirror sideclaw's registry (`server/lib/models.ts`, `wire`), which
+generates the same blocks for its workers. **This file's rows are hand-written
+and can drift from the registry** — sideclaw owns ids, limits and verification
+(`GET /api/routing`); re-check there before editing a row, and an id the
+registry marks unverified is not a recommendation. `iu` declares the rest of the
+roster: `deepseek-v4.1-flash` stays the default (that id is **not** served on
+the Anthropic route), with `DeepSeek-V4-Pro`, `glm-5.3-flash`,
+`gemini-3.{5,8}-flash`, `kimi-k2.7-code` and `minimax-m3` alongside it;
+`iu-responses` holds `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-6-luna`, `gpt-6-astra` — context windows, prices and `reasoningEffort` variants
 come from **modelpick** (`bun run scripts/cap.ts --json --all` on the mini;
 `metric_snapshot` for the frontier ids), so re-check there before editing a row.
-`small_model` is `gpt-6-luna` (cheap) for title/summary generation. On `iu`,
+`small_model` is `iu-responses/gpt-6-luna` (cheap) for title/summary generation. On `iu`,
 `reasoningEffort` reaches the model (`--variant max|none`, default `high`) and prompt
 caching works (95–98% hits in real episodes). Headless `opencode run` auto-**rejects**
 any `ask` permission and that ends the session — workers must set every prompting
@@ -29,6 +37,24 @@ permission to `allow`/`deny` (`deny` returns an error and the run continues).
 `--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
 shared `opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
 config, not this file).
+
+**Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
+`research-gateway` (remote MCP; `oc` exports `RESEARCH_GATEWAY_AUTH` from the same
+helper Claude Code's `headersHelper` runs — Keychain first, `secrets-run` second —
+so no token sits in the config) and `chrome-devtools` (local, `--isolated
+--headless`; reach for it only for browser work) in `opencode.json`'s `mcp`;
+`plugins/protect-branches.js` throws on whatever `hooks/protect-branches.ts` denies;
+`agent/{implementer,verifier}.md` are rendered from `agents/` (frontmatter differs,
+body is verbatim). Instructions stay the always-on rules plus the four small
+stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
+`tanstack-*`, `visx-charts`, `makefile-conventions`, ~40k chars) are **not** listed
+because OpenCode ignores `paths:` and would load them on every turn of every repo;
+a repo that wants one ships it in its own `.claude/rules/`.
+
+**Waves on OpenCode:** `rd wave|work <repo> --kind opencode` starts it in a herdr
+tab; the pane evals `_oc_env` (claude.zsh) first so `IU_*` and the gateway bearer
+are in its shell without touching argv. Default model `iu/deepseek-v4.1-flash`,
+`RD_WAVE_MODEL` overrides (`provider/id`).
 
 **sideclaw is wired in, mini-only.** `config/opencode/mini.json` declares the
 `sideclaw` MCP (`bun run …/sideclaw/server/mcp.ts`, `timeout` 30 min so a `job_wait`
