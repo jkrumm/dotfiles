@@ -61,7 +61,7 @@ require_server() {
   [[ -n $out ]] \
     || die "no answer from herdr on $HOST — nothing ran there at all; check the ssh hop with 'make doctor'"
   grep -q 'status: running' <<<"$out" \
-    || die "herdr server is not running on $HOST — 'brew services restart herdr' there, or run 'make doctor'"
+    || die "herdr server is not running on $HOST — 'make herdr-restart YES=1' there, or run 'make doctor'"
 }
 
 # Repo names, not paths: the two roots live under a different $HOME on the mini
@@ -262,13 +262,48 @@ cmd_repos() {
     done' | if [[ -n $filter ]]; then grep -i -- "$filter"; else cat; fi
 }
 
+# `--kind claude|opencode` for `work` and `wave`: sets AGENT_KIND and leaves the
+# remaining words in REST — the flag may sit anywhere before the prompt text.
+AGENT_KIND=claude
+REST=()
+parse_kind() {
+  REST=()
+  while (( $# )); do
+    case $1 in
+      --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude|opencode)"; AGENT_KIND=$2; shift 2 ;;
+      --kind=*) AGENT_KIND=${1#--kind=}; shift ;;
+      *)        REST+=("$1"); shift ;;
+    esac
+  done
+  case $AGENT_KIND in
+    claude|opencode) ;;
+    *) die "unknown --kind '$AGENT_KIND' — claude or opencode" ;;
+  esac
+}
+
+# Pane-side setup for a kind. `herdr agent start`
+# types the agent's own binary into the pane shell, so anything the binary needs
+# must already be in that shell: claude takes the lane tag; opencode takes the IU
+# credentials (`_oc_env` in config/zsh/claude.zsh — the same resolution `oc` does,
+# evaluated INSIDE the pane so the key never rides argv or ssh).
+# $1 kind  $2 pane
+agent_pane_setup() {
+  local kind=$1 pane=$2
+  if [[ $kind == opencode ]]; then
+    host_run "herdr pane run '$pane' 'eval \"\$(_oc_env)\"'" >/dev/null 2>&1
+  else
+    host_run "herdr pane run '$pane' export USAGE_LANE=wave" >/dev/null 2>&1
+  fi
+}
+
 # `work` is idempotent on purpose. Two Claude agents in one checkout race each
 # other's edits — the same hazard the CLAUDE.md file-ownership rule describes,
 # except across panes where you cannot see it happening. So a second `work argo`
 # focuses the first rather than stacking a workspace on the same tree.
 cmd_work() {
-  local name="${1:-}"
-  [[ -n $name ]] || die "usage: work <repo>   (see 'repos')"
+  parse_kind "$@"
+  local name="${REST[0]:-}"
+  [[ -n $name ]] || die "usage: work <repo> [--kind claude|opencode]   (see 'repos')"
   require_server
 
   local path
@@ -303,12 +338,13 @@ cmd_work() {
   local out="" i=0
   while (( i < 10 )); do
     sleep 1; i=$((i+1))
-    out=$(host_run "herdr agent start '$agent' --kind claude --pane '$pane'")
+    (( i == 1 )) && [[ $AGENT_KIND == opencode ]] && agent_pane_setup opencode "$pane"
+    out=$(host_run "herdr agent start '$agent' --kind $AGENT_KIND --pane '$pane'")
     echo "$out" | grep -q 'agent_pane_busy' || break
   done
 
   if echo "$out" | grep -q '"type":"agent_started"'; then
-    echo "→ started claude '$agent' in pane $pane  ($path)"
+    echo "→ started $AGENT_KIND '$agent' in pane $pane  ($path)"
     note "   'desk' to attach · 'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
   else
     # Roll the workspace back. Leaving it costs a stale entry in every later
@@ -338,9 +374,10 @@ cmd_work() {
 #   4. It is bounded. See RD_WAVE_MAX below — a wave that can spawn its own
 #      successor is exactly the shape of a chain with no natural end.
 cmd_wave() {
-  local name="${1:-}"; shift || true
-  local prompt="${*:-}"
-  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> <prompt…>"
+  parse_kind "$@"
+  local name="${REST[0]:-}"
+  local prompt="${REST[*]:1}"
+  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude|opencode] <prompt…>"
   require_server
 
   local path
@@ -405,13 +442,14 @@ print((max(nums) + 1) if nums else 1)
   (( n <= wave_max )) \
     || die "wave $n would exceed RD_WAVE_MAX=$wave_max — refusing to keep an unbounded self-spawning chain going"
 
-  # Same hazard `work`'s comment describes: two Claude agents editing one
-  # checkout race each other. But the CALLER is normally the finishing wave
-  # handing over, and herdr still reports it `working` because it is mid-turn —
-  # so an unqualified check refuses the command's primary use case. Excluding
-  # our own pane is exact: any OTHER live agent in that checkout is still a hard
-  # stop. An idle or done predecessor is what a finished wave looks like, so
-  # those were never the concern.
+  # Same hazard `work`'s comment describes: two agents editing one checkout race
+  # each other. But the CALLER is the orchestrator (or a finishing wave handing
+  # over) and herdr still reports it `working` because it is mid-turn — so an
+  # unqualified check refuses the command's primary use case. The caller is
+  # excluded by pane AND by tab: a Bash tool or subagent running inside the
+  # orchestrator's tab is the same operator, not a second editor. Any OTHER live
+  # agent in that checkout is still a hard stop; an idle or done predecessor is
+  # what a finished wave looks like, so those were never the concern.
   local roster busy
   roster=$(herdr_agent_list) || exit 1
   busy=$(CWD="$path" SELF="${HERDR_PANE_ID:-}" python3 -c '
@@ -421,8 +459,11 @@ try:
     agents = json.load(sys.stdin)["result"]["agents"]
 except Exception:
     agents = []
+self_tab = next((a.get("tab_id") for a in agents if self_pane and a.get("pane_id") == self_pane), None)
 for a in agents:
     if a.get("cwd") != cwd or a.get("pane_id") == self_pane:
+        continue
+    if self_tab and a.get("tab_id") == self_tab:
         continue
     if a.get("agent_status") in ("working", "blocked"):
         print("%s %s" % (a.get("pane_id") or "?", a.get("agent_status")))
@@ -478,16 +519,23 @@ for a in agents:
 
   # Same `agent_pane_busy` race `work` retries around — the pane exists before
   # its shell does.
-  # Unattended work defaults to Sonnet: the settings.json model is whatever
-  # `/model` last left the interactive session on (Fable today), and that is the
-  # wrong default exactly where no one is watching. A chain that wants Fable
-  # says so per chain (`RD_WAVE_MODEL=fable`). `USAGE_LANE` is exported into the
-  # pane's shell first — `herdr agent start` types the claude command into that
-  # same shell, so the agent inherits it and usage-tracker books the session
-  # under the `wave` lane.
-  local model="${RD_WAVE_MODEL:-sonnet}"
-  host_run "herdr pane run '$pane' export USAGE_LANE=wave" >/dev/null 2>&1
-  local start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
+  # Unattended work defaults to Sonnet (claude) or the `oc` default (opencode):
+  # the settings.json model is whatever `/model` last left the interactive
+  # session on (Fable today), and that is the wrong default exactly where no one
+  # is watching. A chain that wants another model says so per chain
+  # (`RD_WAVE_MODEL`). The pane setup (lane tag / IU credentials) runs in the
+  # pane's shell first — `herdr agent start` types the agent command into that
+  # same shell, so the agent inherits it. opencode needs no permission flag:
+  # `permission: "allow"` is the global default (docs/opencode.md).
+  local model start_cmd
+  if [[ $AGENT_KIND == opencode ]]; then
+    model="${RD_WAVE_MODEL:-iu/deepseek-v4.1-flash}"
+    start_cmd="herdr agent start '$agent' --kind opencode --pane '$pane' -- -m '$model'"
+  else
+    model="${RD_WAVE_MODEL:-sonnet}"
+    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
+  fi
+  agent_pane_setup "$AGENT_KIND" "$pane"
 
   local out="" i=0
   while (( i < 10 )); do
@@ -523,8 +571,51 @@ for a in agents:
     die "wave $n started but the prompt was rejected: $sent"
   fi
 
-  echo "→ wave $n started: claude '$agent' in ${ws:+space $ws, }pane $pane  ($path)"
+  echo "→ wave $n started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
+}
+
+# Close a finished wave's tab — the orchestrator's last step after reading the
+# wave's close-out. Refuses unless it is provably finished: a `wave <n>` tab,
+# agent not working/blocked, checkout clean, and nothing unpushed (a branch with
+# no upstream counts as unpushed — the wave's commits would exist only in that
+# checkout). The tab, never the workspace: the repo's other panes live there.
+cmd_close() {
+  local name="${1:-}"
+  [[ -n $name ]] || die "usage: close <agent>   (a finished wave's tab)"
+
+  local roster pane
+  roster=$(herdr_agent_list) || exit 1
+  pane=$(resolve_one_agent "$name" "$roster") || exit 1
+
+  local info tab status cwd label
+  info=$(PANE="$pane" python3 -c '
+import json, os, sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a.get("pane_id") == os.environ["PANE"]:
+        print(a.get("tab_id") or "", a.get("agent_status") or "", a.get("cwd") or "", sep="\t"); break
+' <<<"$roster" 2>/dev/null)
+  IFS=$'\t' read -r tab status cwd <<<"$info"
+  [[ -n $tab ]] || die "could not resolve the tab of $pane"
+
+  label=$(host_run "herdr tab get '$tab'" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print((json.load(sys.stdin)["result"]["tab"].get("label") or "").strip())
+except Exception:
+    pass
+' 2>/dev/null)
+  [[ $label =~ ^wave\ [0-9]+$ ]] || die "tab $tab is '${label:-unlabelled}', not a 'wave <n>' tab — refusing to close it"
+  [[ $status == working || $status == blocked ]] && die "agent $pane is $status — not finished"
+
+  local dirty unpushed
+  dirty=$(host_run "git -C '$cwd' status --porcelain" | wc -l | tr -d ' ')
+  (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the wave's work is not committed"
+  unpushed=$(host_run "git -C '$cwd' rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
+  [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing the wave tab"
+
+  host_run "herdr tab close '$tab'" >/dev/null
+  echo "→ closed $label ($tab)"
 }
 
 # One view over both lanes, because "is my work still running" should not depend
@@ -689,8 +780,10 @@ usage() {
   rd — drive the mini's workspaces and agents from anywhere
 
     rd repos [filter]         repos on the dev host, with branch + dirty count
-    rd work <repo>            herdr workspace + claude for that repo (idempotent)
-    rd wave <repo> <prompt…>  fresh pane + solo claude + prompt — the wave chain
+    rd work <repo> [--kind K]   herdr workspace + claude (or opencode) for that repo (idempotent)
+    rd wave <repo> [--kind K] <prompt…>
+                              fresh tab + solo agent + prompt — claude (default) or opencode
+    rd close <agent>          close a finished wave's tab (clean + pushed only)
     rd agents                 every agent on the host, both lanes
     rd read <agent> [src]     read an agent's output without attaching
     rd say <agent> <text…>    send a prompt to a running agent
@@ -721,6 +814,7 @@ case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
   work)   shift; cmd_work "$@" ;;
   wave)   shift; cmd_wave "$@" ;;
+  close)  shift; cmd_close "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   read)   shift; cmd_read "$@" ;;
   say)    shift; cmd_say "$@" ;;

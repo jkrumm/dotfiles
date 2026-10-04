@@ -247,7 +247,7 @@ section_remote_path() {
   if [ "$running" = "True" ]; then
     ok "herdr server" "running on $HOST"
   else
-    bad "herdr server" "down — 'brew services restart herdr' on $HOST"
+    bad "herdr server" "down — 'make herdr-restart YES=1' on $HOST"
   fi
 
   if ssh "$HOST" 'test -f "$HOME/.claude/hooks/herdr-agent-state.sh"' 2>/dev/null; then

@@ -350,13 +350,16 @@ claude_iu() {
 # no key, no host. Pattern and measured load matrix: docs/agents-md.md.
 #
 # Creds resolve per call like `cx`: Keychain first, the time-boxed secrets shim
-# second (`_codex_secret`, codex.zsh), passed by prefix assignment — never
-# exported, never `env VAR=…`, so they stay out of `ps auxww`.
+# second (`_codex_secret`, codex.zsh), exported only inside `oc`'s subshell (or
+# a wave pane's own shell) — never `env VAR=…`, so they stay out of `ps auxww`.
 #
 # The two machine-dependent bits are gated at launch, not committed into the
 # shared config: the light/dark re-theme (herdr panes only) and the mini-only
 # sideclaw MCP (config/opencode/mini.json via OPENCODE_CONFIG).
-oc() {
+# The IU env opencode's `{env:…}` placeholders resolve against, as `export`
+# lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
+# so the key never rides argv or an ssh hop.
+_oc_env() {
   local key base
   key=$(_codex_secret claude-sdk-api-key op://common/anthropic/API_KEY)
   base=$(_codex_secret claude-sdk-base-url op://common/anthropic/BASE_URL)
@@ -365,19 +368,28 @@ oc() {
     return 1
   fi
   base=${base%/}
-  # Re-theme this pane to the appearance the MacBook last pushed. herdr panes
-  # only — a Ghostty client answers OpenCode's own terminal query. Mirrors
-  # Claude's SessionStart hook; sends after the TUI is up.
-  "$HOME/SourceRoot/dotfiles/scripts/claude-appearance.sh" session >/dev/null 2>&1 || true
+  local openai="${base%/anthropic}/openai/v1"
+  print -r -- "export IU_KEY=${(q)key} IU_ANTHROPIC_BASE=${(q)base} IU_OPENAI_BASE=${(q)openai}"
+  # research-gateway's bearer, as the full header value `opencode.json` reads via
+  # {env:RESEARCH_GATEWAY_AUTH} — the same helper Claude Code's headersHelper runs
+  # (Keychain first, secrets-run second); `{}` when unresolvable → gateway 401s.
+  local auth
+  auth=$("$HOME/SourceRoot/dotfiles/scripts/mcp-research-headers.sh" 2>/dev/null | sed -n 's/.*"Authorization":"\([^"]*\)".*/\1/p')
+  [[ -n $auth ]] && print -r -- "export RESEARCH_GATEWAY_AUTH=${(q)auth}"
   # sideclaw's MCP is stdio-only against a repo that lives on the mini, so layer
   # it in with OPENCODE_CONFIG (merged over the global config) only where it
   # exists — the MacBook stays sideclaw-free.
   if [[ -f "$HOME/SourceRoot/sideclaw/server/mcp.ts" ]]; then
-    OPENCODE_CONFIG="$HOME/SourceRoot/dotfiles/config/opencode/mini.json" \
-      IU_KEY="$key" IU_ANTHROPIC_BASE="$base" IU_OPENAI_BASE="${base%/anthropic}/openai/v1" \
-      command opencode "$@"
-  else
-    IU_KEY="$key" IU_ANTHROPIC_BASE="$base" IU_OPENAI_BASE="${base%/anthropic}/openai/v1" \
-      command opencode "$@"
+    print -r -- "export OPENCODE_CONFIG=${(q)HOME}/SourceRoot/dotfiles/config/opencode/mini.json"
   fi
+}
+
+oc() {
+  local envs
+  envs=$(_oc_env) || return 1
+  # Re-theme this pane to the appearance the MacBook last pushed. herdr panes
+  # only — a Ghostty client answers OpenCode's own terminal query. Mirrors
+  # Claude's SessionStart hook; sends after the TUI is up.
+  "$HOME/SourceRoot/dotfiles/scripts/claude-appearance.sh" session >/dev/null 2>&1 || true
+  (eval "$envs"; command opencode "$@")
 }
