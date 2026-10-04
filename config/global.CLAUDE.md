@@ -1,397 +1,145 @@
 # Claude Code — Personal Configuration
 
 Johannes Krumm — solo senior full-stack dev / tech lead. Iterative and
-quality-focused: prefers several small verified steps over one big change. Writes
-German in chat; **every artifact (code, commits, docs, specs) is English**. Replies
-in English.
+quality-focused: several small verified steps over one big change. Writes German
+in chat; **every artifact (code, commits, docs, specs) is English**. Replies in
+English. Prose for humans (articles, docs, README, vault pages, copy) → load
+`~/SourceRoot/brain/voice.md` first; chat and code comments are exempt.
 
-Sessions run `--dangerously-skip-permissions`. **Permission is pre-granted, not a
-decision point** — never pause to confirm something the mode already allows. The
-judgment that still applies is the contract below, not a prompt.
-
----
+Sessions run `--dangerously-skip-permissions`: **permission is pre-granted, not a
+decision point.** The judgment that still applies is the contract below.
 
 ## Operating contract
 
-Non-negotiable. Everything after this section is reference material.
-
-### Answer
-
-- **Verdict first**, then only what changes his next move. Default under 8 lines.
-- Table / diff / command / code block over prose describing one.
-- Own the opinion. One clause of uncertainty, then a tendency anyway.
-- Critique over validation — challenge a premise, an over-engineered design, or a
-  wrong framing before answering it.
-- No preamble, no recap of what the diff already shows, no "let me know if".
+Non-negotiable. Tone lives in `output-styles/Direct.md`; this is the behaviour.
 
 ### Decide
 
 - **Infer from context instead of asking.** State the assumption in one clause and
   proceed. A question the repo already answers is a failure.
-- **One question max**, and only if it genuinely branches the work. Batch the rest
-  into stated assumptions. When you do ask: the question, two options with
-  tradeoffs, your tendency — then ask.
+- **One question max**, only if it genuinely branches the work: the question, two
+  options with tradeoffs, your tendency.
 - **Never ask permission to continue.** Stop only for: destructive + irreversible,
   outward-facing (publish / push shared / send), or readings that produce
   materially different work.
+- Critique over validation — challenge a wrong premise or over-engineered design
+  before answering it.
 
 ### Finish
 
-- Deliver the **whole** ask before reporting. Route around obstacles, mention them
-  in the report — do not stop at the first one to describe it.
-- A blocked sub-part does not block the rest. Finish everything else, then name
-  what was left out in one line.
-- Don't hand back a plan when the work was asked for.
+- Deliver the **whole** ask before reporting. Route around obstacles and mention
+  them; a blocked sub-part does not block the rest — name what was left out in
+  one line. Don't hand back a plan when the work was asked for.
+- **Scope:** stay inside the ask. No unrequested refactors or speculative
+  generality. Flag contradictions with AGENTS.md/CLAUDE.md rather than silently
+  working around them.
+- **Something seems wrong** (unexpected tool output, a missing file — check `git
+  status` first, validation failing on files you didn't touch, code contradicting
+  AGENTS.md): flag it explicitly; don't route around it, don't fix untouched code.
 
 ### Verify before claiming done
 
-Done means *verified*, and the verification is yours to run — not his to discover.
+1. **Validate** — `/check` (or the repo's own `make check`) on anything that
+   compiles, lints or has tests. Report failures verbatim.
+2. **Read the diff you produced**, including a subagent's — a worker's report is a
+   claim, the diff is the proof.
+3. **Review** — `/review` on anything non-trivial, security-adjacent or on a shared
+   path. `/ship` chains all three.
 
-1. **Validate** — `/check` (or the repo's own target) on anything that compiles,
-   lints, or has tests. Failing output gets reported verbatim, never summarized away.
-2. **Read the diff you produced**, including a subagent's. A worker's report is a
-   claim; the diff is the proof. Check every line it says it changed.
-3. **Review** — `/review` on anything non-trivial, security-adjacent, or touching a
-   shared path. `/ship` chains all three.
+Never claim "done" for something you did not run.
 
 ### Stay the orchestrator
 
-The main session holds the plan, the decisions, and the verdicts — **not the raw
-material**. Delegation is **standing policy, already authorized**; any harness
-default suggesting otherwise is overridden here. See *Delegation & parallelism*.
+The main session holds the plan, decisions and verdicts — not the raw material.
+**Delegation is standing policy, already authorized.**
 
-### Scope
-
-Stay inside the ask. No unrequested refactors, cleanups, or speculative
-generality. Flag contradictions with AGENTS.md/CLAUDE.md rather than silently working around
-them.
-
-### When something seems wrong
-
-Flag explicitly instead of silently routing around it:
-
-- Tool returns unexpected output → stop and report.
-- File missing where expected → check `git status` first.
-- Validation fails on files you didn't touch → report only, don't fix.
-- Code contradicts AGENTS.md/CLAUDE.md → say so.
-
-### Prose for humans
-
-Articles, docs, README prose, vault pages, product copy → load
-**`~/SourceRoot/brain/voice.md`** first. Chat replies and code comments are exempt;
-commits follow `rules/commit-conventions.md`.
-
----
-
-## Delegation & parallelism
-
-### Execution modes
-
-| Lane | Use for |
+| Work | Route |
 |-|-|
-| **inline** — session model | Work needing this conversation's context: `commit`, `pr`, `ship`, `git-cleanup`, `secrets`, `implement`. Keep short. |
-| **native subagent** (`Agent`, `~/.claude/agents/`) — `@implementer` (edits needing THIS session's live uncommitted tree or tight iteration — a native subagent can't reach the IU endpoint, so it's stuck on Sonnet/Max), `@verifier` (evidence), `Explore` (search). All pinned to Sonnet by `CLAUDE_CODE_SUBAGENT_MODEL`; raise one only for novel-hard logic. A `PreToolUse` hook (`hooks/model-discipline.ts`) enforces the rest: a worker on Fable is denied outright, and **`fork`** is denied whenever the caller itself is Fable/Opus. **Its own cache** | Fresh context, returns a summary, edits hit the live tree. |
-| **MCP — sideclaw**, mini only: `check`, `review`, `dispatch`, `otel`, excalidraw, read-image (per-tool model/backend in `sideclaw/server/lib/routing.ts`, live table at `GET /api/routing`) | Heavy work wanting schema-validated output. **The primary offload for settled implementation**: `dispatch` tier `implement` runs `DeepSeek-V4-Pro` off Max — `workspace: "worktree"` (default) gives worktree → branch → draft PR, `"in-place"` edits the live checkout and commits nothing; tier `investigate` is read-only on `DeepSeek-V4-Flash`. No GLM anywhere since 2026-09-23. **Async** — job contract below (`otel` is the one exception, see there). |
-| **CLI — `sideclaw`** (`sideclaw/bin/sideclaw.ts`, `make install-cli`), mini only | The same jobs **without an MCP client** — OpenCode, Codex, a shell, a Makefile, cron: `sideclaw dispatch --repo R --tier implement [--workspace in-place] '<brief>'`, `check`, `review`, `jobs/status/wait/cancel`, `routing`, `policy`, `health`. `--json` = machine output on stdout, `--no-wait` = jobId only. Exit 0 done · 1 failed · 2 usage/refused · 3 unreachable. |
-| **subprocess — `agent-dispatch`**, IU per-token (Max on the mini lane) | One durable bounded episode against a named repo, output kept out of here. |
-| **lifecycle — `warden run <repo> '<brief>'`** | Unattended work tracked to an outcome on warden's ledger — investigate → verdict → implement → review → merge, gated by policy. |
-| **`/research`** — research-gateway MCP, tailnet-only, off Max | Any library / API / version fact, never from memory. |
-
-Model-choice rationale for every lane above: `brain/wiki/engineering/model-routing.md`.
-
-| Work | Route to |
-|-|-|
-| Settled multi-file edit **in this repo** | `mcp__sideclaw__dispatch` (tier `implement`, `DeepSeek-V4-Flash`, off Max) by default; `@implementer` only when it must land in this session's live uncommitted tree or needs tight iteration; `/implement` when it needs research-gating + validation |
-| One bounded episode **in another repo** | `warden run <repo> '<brief>'` for anything unattended tracked to an outcome; `mcp__sideclaw__dispatch` for a bounded question with a typed verdict; `agent-dispatch bg <repo> '<task>'` for a colleague you will steer |
+| Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
+| Settled, bounded work in a repo; result is a branch/PR or a verdict | `sideclaw dispatch` (`implement` / `investigate`) — default for settled multi-file edits |
+| Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
+| Unattended work tracked to an outcome | `warden run <repo> '<brief>'` or a GitHub issue |
 | Search across many files | `Agent` → `Explore` |
-| Any format / lint / tsc / test loop | `mcp__sideclaw__check` — never inline |
-| Prove a change actually works (UI, traces, endpoints) | `@verifier` — screenshots and trace dumps never land inline |
-| Work too large for one context | `/wave` — a green-gated chain of fresh panes |
-| Code review · library facts | `/review` · `/research` |
+| format / lint / tsc / test loops | `/check` — never inline |
+| Prove a change works (UI, traces, endpoints) | `@verifier` |
+| Library / API / version facts | `/research` — never from memory |
+| Code review | `/review` |
 
-### The three lanes
+Those four lanes — `@implementer`, `sideclaw dispatch`, `rd wave`, `warden run` —
+are the only ways to start agent work (`docs/agent-platform.md`). Brief a worker
+completely: exact paths, the change, acceptance criteria, scope limits, and any
+research baked in (it can't see yours). A worker owns its files until it returns;
+parallelize only on disjoint file groups. Delegate for context, not latency;
+editorial work stays inline.
 
-`warden run <repo> '<brief>'` opens an item in `~/.warden/warden.db`
-(`origin="human"` per `scripts/warden.py`), and the loop drives it through
-investigate → verdict → (policy gate) → implement → review → merge. Visible in
-`#agents`, Argo `/warden` and `warden list`; steps in only at
-`needs_human`/`merge_blocked`. The only lane that may run unattended for days —
-the only one with budgets, deadlines and a ledger.
+- **Model ids live only in `sideclaw routing`** (`GET /api/routing`; rationale
+  `brain/wiki/engineering/model-routing.md`). Never write one in prose.
+- **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
+  `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
+  Raise a worker only for novel hard logic, and say why.
+- Don't switch the orchestrator's model mid-session (cache invalidation).
+  Worktree isolation only when asked, up front.
+- Grep before reading; never re-read a file; never read 10 files to find one thing
+  (`Explore`'s job).
 
-`agent-dispatch bg <repo> '<task>'` · `agent-dispatch work <repo>` — `<repo>` is a
-**name, never a path**. Routes on the secrets backend crossed with whether the repo
-is here: the mini (or a mini-resident repo) → `rd bg`/`rd work`, spawned through a
-herdr pane so the Max keychain credential is reachable; MacBook + a
-MacBook-resident repo → a local `claude -p` on the IU Keychain creds. **It refuses
-to nest inside an interactive Claude Code session** (`CLAUDECODE` set → prints the
-brief, exit 1). `rd` is its mini-side detail — use it directly only for `repos`,
-`agents`, `read`, `say`. This is the colleague lane — durable, steerable, no ledger.
-
-`mcp__sideclaw__dispatch` (mini only) instead runs a single bounded episode
-**inside** the named repo, so that repo's AGENTS.md, rules and skills are in
-context. Tiers: `investigate` (read-only → verdict), `author` (+ issue),
-`implement` (write + branch + **draft** PR). One verdict, **no steering** (that is
-`rd bg` + `rd say`) and no item on any ledger. **Every tier gets its own
-worktree, read-only ones included** — `readOnly: true` disables Edit and Write
-but **not Bash**, and the brief is attacker-influenced.
-
-### Async-job contract — both MCPs
+### Async jobs
 
 `mcp__sideclaw__{check,review,dispatch}` and `mcp__research-gateway__research`
-return `{ jobId, … }` immediately — **not the result**. Submit → note `jobId` →
-`job_wait({jobId})` → read `result` on `status: "done"`, `error` on failed.
-`job_status` is the non-blocking peek. **The submit call is not the answer.**
-`otel` is the one sideclaw tool exempt from this contract — it still runs
-inline, synchronously, on Max (`runSession` called directly, not through the job
-queue), so it returns its result immediately with no `jobId` and no `job_wait`.
-
-The wait differs **per door**: sideclaw's `job_wait` accepts `maxWaitMs` (up to
-29 min) — pass it up to that ceiling rather than looping on the ~50 s default;
-research-gateway's *MCP* wait blocks for the whole job over a kept-alive stream,
-so **one call is normally the whole wait** — call again only if it still comes
-back `stillRunning`. Its REST door (Hermes's lane) still polls.
-
-Why `otel` alone is exempt: `brain/wiki/engineering/model-routing.md`.
-
-### Rules
-
-- **Settled implementation defaults to `mcp__sideclaw__dispatch`** (tier
-  `implement`, off Max) — worktree, branch, draft PR; review the diff before
-  merge. **Fire `@implementer` explicitly** instead for live-tree/tight-iteration
-  edits — auto-delegation by description match is unreliable either way. Brief
-  either completely: exact paths, the change, acceptance criteria, intent, scope
-  limits. Both are literal executors *with judgment*, not planners, and both load
-  the full CLAUDE.md → AGENTS.md hierarchy, so both write house-style code an external worker
-  can't.
-- **Research reaches the worker through the brief** — bake in resolved versions,
-  signatures and import paths; it cannot see research you did.
-- **It owns its files until it returns.** Parallelize on **disjoint** file groups.
-- **Delegate for context, not latency** — the point is keeping verbose material
-  out of the orchestrator. Editorial work therefore stays inline: delegating it
-  means re-passing the source.
-- **Don't switch the orchestrator's model mid-session** (cache invalidation);
-  subagent caches are their own. **Worktree isolation is opt-in, up front, only
-  when asked** — spawning one mid-flow splits work across trees.
-
-### Parallelism — cheapest tier first
-
-| Tier | Mechanism | Use when |
-|-|-|-|
-| 1 | Parallel `mcp__sideclaw__*` in **one turn** | Independent verifiable work — the default for fan-out; under-used. |
-| 2 | subprocess (`agent-dispatch`, `claude_iu`), ~0 Max cost | Read-heavy, isolated output. |
-| 3 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`). Keep it thin. |
-| 4–5 | Foreground `Agent` on Opus (own cache) · agent teams (N× Max) | Novel hard logic · genuinely hard parallel reasoning. Rarely worth it. |
-
-`Task*` tools are a built-in coordination layer, not MCP-backed. Routines /
-`/schedule` run in Anthropic's cloud and **cannot reach** sideclaw (localhost) or
-research-gateway (tailnet).
-
-### Reading files, and the prompt cache
-
-Grep to locate before reading; never re-read a file already read this session;
-files over 500 lines → `offset`/`limit`. Never read 10 files into the orchestrator
-to find one thing — `Explore`'s job.
-
-Cached prefix reads are ~10–20× cheaper than fresh input, so **the dominant cost
-lever is not writing less, it is not breaking the cache** (TTL 1 h idle). It keys
-on an exact prefix: switching the orchestrator's model or effort level,
-connecting/disconnecting an MCP server, or a Claude Code upgrade all invalidate
-it. Subagents and sideclaw workers hold **their own** caches — the real argument
-for delegating. When it's gone it's gone: `/compact` or `/clear` rather than nurse
-a cold session.
-
----
+return `{ jobId }`, not the result: submit → `job_wait({jobId})` → read `result` /
+`error`. The submit call is not the answer. Door-specific waits, `otel`'s
+exemption: `docs/global-reference.md`.
 
 ## Workspaces
 
-### `~/SourceRoot/` — personal
-
-1Password `tkrumm` · GitHub · no ticket prefixes · **direct-to-master by default**.
-
-PR-required repos are a single source of truth in
-`dotfiles/config/pr-required-repos.json` (read by `protect-branches.ts` **and**
-`github-config.sh` — edit the file, not the code): `basalt-ui` (NPM-published,
-also always its own commit), `free-planning-poker`, `rollhook`, `rollhook-action`.
-`make github-config` applies two tiers: those repos and any with a collaborator
-get the **full** ruleset; other public repos get **lite** (no PR rule — just
-no-force, no-deletion, linear). Private repos can't be protected for free.
-
-**Every repo, what it's for and where it lives is `dotfiles/docs/architecture.md`
-§Repos — look it up there, not here.** Only the facts that change *how you work
-in* a repo, not *what it is*, earn a line:
-
-| Repo | Workflow fact |
-|-|-|
-| `homelab-private` | **Self-contained.** Never reference its services, hostnames or details from any other repo, doc or commit. |
-| `sideclaw` | Local Claude Code MCP daemon behind check/review/dispatch/otel. **Mini only.** |
-| `research-gateway` | Behind `/research`, **tailnet-only**. Cloud routines can't reach it. One `job_wait` covers a whole job. |
-| `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for its skill domains. |
-| `warden` | **The control plane** — decides, dispatches, owns the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09; Hermes narrates and answers, it does not dispatch. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. |
-| `basalt-ui` | Mantine v9 + visx design system (NPM). No Tailwind. **Always its own commit.** |
-| `brain` | `wiki/` = agentic knowledge (strict lint), PARA `Projects`/`Areas` = curated human surface linking into it, no `Resources` tier; use `/brain`. |
-| `modelpick` | **Source of truth for model-choice rationale**, backs `cap`. |
-
-### `~/IuRoot/` — work (IU)
-
-1Password `careerpartner` · GitLab · **`EP-XX` ticket prefixes** on branches and
-commits · **all repos require PRs against `main`** (detected by path; exceptions
-are `directToMain` in `pr-required-repos.json`, currently
-`prometheus-feuer-agent`). Stack: DDD, NestJS backends, Vue frontends, a
-micro-frontend SPA orchestrator; some carry their own CLAUDE.md.
-
-Main: `epos.student-enrolment` (own CLAUDE.md), `epos_fe.{academic-profile,
-booking,spa-orchestrator}`, `prometheus-scripts` (Jupyter MCP + Python
-investigations). Rarely touched: `epos.{crm-bridge,dam,exam,finance-bridge,iam,
-study-progress}`, `crm-bridge-retry-tool`, `cfn-kafka`, `terraform-monitoring`.
-`~/Obsidian/Vault/` is a **cold backup only** — the live vault is
-`~/SourceRoot/brain`; leave it closed. Tasks live in TickTick.
-
----
+- **`~/SourceRoot/`** — 1Password `tkrumm`, GitHub, no ticket prefixes,
+  direct-to-master by default. PR-required repos: `config/pr-required-repos.json`
+  (the single source). **`basalt-ui` is always its own commit.**
+  **`homelab-private` is self-contained** — never reference its services or hosts
+  elsewhere.
+- **`~/IuRoot/`** — 1Password `careerpartner`, GitLab, `EP-XX` ticket prefixes on
+  branches and commits, every repo PRs against `main`.
+- Every repo, what it is and where it lives: `docs/architecture.md` §Repos.
+  Per-repo detail, the IuRoot repo list, dev proxy, sudo-on-a-server, basalt-ui
+  consumers: `docs/global-reference.md`.
 
 ## Machines
 
-**The mini is the dev host; the MacBook and iPhone are the client** — agents run
-on the mini and outlive the MacBook. **`dotfiles/docs/architecture.md` is the
-map and the mental model** (what each machine and surface is FOR); **`dotfiles/AGENTS.md`
-§Machines & remote dev** carries the reach table, the herdr-crash and
-never-`ssh mini 'claude …'` traps, and human-queue. Read them, don't restate them
-here — this file only routes:
-
-`desk [session]` puts a **terminal on** the mini; `rd`/`agent-dispatch` put
-**work on** it with no terminal (two separate questions, see the map). **`/remote-dev`**
-for this stack, **`make doctor`** when it's broken.
-
-### Sudo on a server
-
-`sudo -S` reads the password from stdin, so none of these need `ssh -t` (a
-`!`-prefixed command in a Claude Code session gets **no TTY**).
-
-```bash
-# HOST = homelab | vps (NOPASSWD) | mini; REF = homelab-server | vps-server | mac-mini-server
-ROOT_PW=$(op read "op://Private/<REF>/password" --account tkrumm) && ssh <HOST> "echo '$ROOT_PW' | sudo -S <cmd>"
-```
-
-The mini's password is `op://Private/*` and deliberately **MacBook-only**: the
-seed refuses it unconditionally. **Do not "fix" that refusal.**
-
-### Local dev proxy
-
-Caddy + dnsmasq serve `*.test` over HTTPS; `dotfiles/config/Caddyfile` is both the
-port assignment and the app registry. Every app: static port, `npx kill-port PORT
-&& … --strictPort`, one Caddyfile entry, `caddy-reload`, commit. On the mini each
-`.test` block also gets a tailnet door at `https://<name>.mini.jkrumm.com`, all
-listed at `https://apps.mini.jkrumm.com`.
-
-### basalt-ui consumers
-
-Mantine, not Tailwind; canonical reference `argo/apps/dashboard`. Primitives come
-from themed `@mantine/core`, basalt-ui adds its own modules (shell, dashboard,
-charts, data, content, agent-chat, forms, notifications). Color via `--vx-*`
-tokens (`basalt-ui/tokens` → `VX.*` + `alpha()`), **never raw hex**.
-`BasaltProvider` hard-requires `@tanstack/react-query` at build time. After
-editing basalt-ui: `bun run build` before testing consumers.
-
-```ts
-// vite.config.ts — shipped helper: optimizeDeps.include for @mantine/*,
-// resolve.dedupe, define['process.env.NODE_ENV'] (basalt bans import.meta.env)
-import { basaltViteConfig } from 'basalt-ui/vite'
-
-// main.tsx — CSS layer order is load-bearing
-import '@mantine/core/styles.layer.css'  // the .layer.css variant, NOT styles.css
-// ...other @mantine/*/styles.layer.css
-import 'basalt-ui/styles.css'            // declares @layer mantine, basalt
-// then: <BasaltProvider theme={createBasaltTheme()} defaultColorScheme="dark">
-```
-
----
+The mini is the dev host; the MacBook and iPhone are clients — agents run on the
+mini and outlive the MacBook. Map: `docs/architecture.md`; reach table, traps
+(herdr crash, never `ssh mini 'claude …'`), human-queue: `AGENTS.md` §Machines &
+remote dev. `desk [session]` puts a terminal on the mini; `rd` puts work on it.
+`/remote-dev` for this stack, `make doctor` when it's broken.
 
 ## Secrets
 
-`op_account_for_cwd` / `op_run` (`~/.zsh/conf.d/secrets.zsh`, worktree-safe)
-resolve the account from cwd: **`tkrumm`** in `~/SourceRoot/`, **`careerpartner`**
-in `~/IuRoot/`. Skills call the helper, never bare `op`. **Never `op read`/`op
-run` on the mini** — it hangs on a biometric prompt no one can answer; use
-`secrets-run` instead (mirrors `op`, resolves from the offline cache). Full
-model, the cache/backend split, and the tiering guardrail:
-`dotfiles/AGENTS.md` §Secrets, `dotfiles-private/docs/design.md`. Ops via
-**`/secrets`**.
-
----
-
-## Skills
-
-Global skills at `~/.claude/skills/` (← `dotfiles/skills/`) load everywhere;
-per-repo skills in `<repo>/.claude/skills/` load only inside that repo. Each
-carries its own description — this table is only the **mode**, which decides what
-a call costs. **Everything routed through sideclaw exists only on the mini.**
-
-| Mode | Skills |
-|-|-|
-| **MCP (sideclaw, async — `/otel` is the sync exception, see the async-job contract)** | `/check` (format·lint·tsc·test·fallow; pass `commands` on non-Node repos) · `/review` (multi-angle + CodeRabbit; `--deep` adds correctness + security) · `/otel` · `/excalidraw-diagram` (drawings are read with sideclaw `read_image` directly) |
-| **MCP · fork · subprocess** | `/research` (research-gateway, off Max) · `/browse` (chrome-devtools, haiku) · `/analyze` (fallow + `claude_iu`) |
-| **inline — git** | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
-| **inline — build** | `/wave` (long work as a self-continuing chain of panes; drives `rd wave`) · `/implement` (drives `mcp__sideclaw__dispatch`, falling back to `@implementer` for live-tree work) · `/upgrade-deps` (charts and UI: the basalt-ui per-repo skills + `rules/visx-charts.md`) · `/archify` (standalone HTML diagrams — vendored, not npx) |
-| **inline — ops** | `/secrets` · `/cloudflare` (via `op_account_for_cwd`) · `/remote-dev` · `/herdr` (inert unless `HERDR_ENV=1`) · `/img` (`--json`) |
-| **inline — writing** | `/brain` (via `obsidian-cli`) · `/distill` · `/podcast` |
-
-Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
-`/hermes-update`; `homelab` → `/audit`, `/docs`, `/upgrade-stack`; `vps` →
-`/audit`, `/docs`; `sideclaw` → `/claude-cli`; `free-planning-poker` →
-`/release-fpp`; `homelab-private` → `/prowlarr`; `tinycast-extensions` →
-`/tinycast`, `/raycast-extension`, `/ticktick-api`; `brain` → `/wildrift-refresh`.
-
----
+`op_account_for_cwd` / `op_run` resolve the account from cwd (`tkrumm` in
+`~/SourceRoot/`, `careerpartner` in `~/IuRoot/`); skills call the helper, never
+bare `op`. **Never `op read`/`op run` on the mini** — it hangs on a biometric
+prompt; use `secrets-run`. Model and guardrails: `AGENTS.md` §Secrets; ops via
+`/secrets`.
 
 ## Workflow
 
-`/commit` per logical concern → `/git-cleanup` if ≥3 noisy commits → `/ship` for
-the full flow; `/pr status` warns on uncommitted or unpushed work.
+`/commit` per logical concern → `/git-cleanup` if ≥3 noisy commits → `/ship`.
+Commit format and the amend rule: `rules/commit-conventions.md`.
 
-- Check `package.json` or the repo Makefile for available scripts.
-- Fix errors **in changed files only** — don't refactor untouched code.
-- **Never start dev servers** — he validates running apps manually.
-- Node version manager is **fnm**, not nvm. `gback` = `git reset --soft HEAD~1`.
-  Worktrees are Claude Code's **native** feature, requested up front, not `wtp`;
-  Docker via Makefile targets only.
-
-**Launchers:** `c` = Max · `cs`/`cf` = Max pinned to Sonnet/Fable · `ca [model]` =
-the same `~/.claude` config over the IU endpoint's native Anthropic route (off
-Max; `claude-sonnet-5[1m]` default) · `cdf`/`cdp` = `ca` on
-DeepSeek-V4-Flash (fast, easy work) / DeepSeek-V4-Pro (the hard kind) · `cap` = pick a model from measured data,
-then launch `ca` · `claude_iu` = the headless `claude -p` helper · `oc` = OpenCode on
-the same IU route, reading the same AGENTS.md and skills. `[1m]` and
-`_ca_ctx` rules: `dotfiles/AGENTS.md`. Launcher rationale:
-`brain/wiki/engineering/model-routing.md`.
-
-**The non-Anthropic lane** — Claude Code is 99% of the work; this is the rare
-second opinion. `cx` (gpt-5.6-sol) · `cxa` (gpt-6-astra, several times the price)
-· `astra '<q>'` = one Responses call at `reasoning.mode="pro"`, no agent loop,
-the strongest single shot available and something no coding harness can send.
-Codex is the harness because its wire protocol is **Responses**-only, the only
-way OpenAI reasoning models keep reasoning items across tool calls — never route
-Claude Code at an OpenAI model through a gateway. `dotfiles/AGENTS.md` §Codex.
-
----
+- Check `package.json` or the Makefile (`make check`, `make verify`) first.
+- Fix errors in changed files only.
+- **Never start dev servers** — Johannes validates running apps manually.
+- Node manager is **fnm**. `gback` = `git reset --soft HEAD~1`. Worktrees are
+  Claude Code's native feature. Docker via Makefile targets only (a hook enforces it).
+- Launchers (`c`, `cs`/`cf`, `ca`, `cdf`/`cdp`, `cap`, `claude_iu`, `oc`, and the
+  Codex lane `cx`/`cxa`/`astra`): `AGENTS.md` §Claude Code launchers.
 
 ## Config hierarchy
 
-- **Global**: `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this file).
-- **Per-project**: `<repo>/AGENTS.md` (all content, tool-neutral, no `@imports`)
-  + `<repo>/CLAUDE.md` = `@AGENTS.md` shim (+ Claude-only `@path` lines) +
-  `<repo>/.claude/{rules,skills}/`. Nested dirs get the same pair. Claude Code,
-  OpenCode and Codex all read it — contract: `dotfiles/docs/agents-md.md`.
-- **Rules**: `~/.claude/rules/` ← `dotfiles/rules/`. No `paths:` → always on
-  (agent-limits, attribution, code-style, commit-conventions,
-  dependency-hygiene, docker-makefile, formatting, research-first, security,
-  typescript); with
-  `paths:` → lazy (dockerfile, elysia, makefile-conventions,
-  react-best-practices, tanstack-{query,router,start}, visx-charts).
-- **Output style**: `~/.claude/output-styles/Direct.md` (via `outputStyle` in
-  settings.json) carries the response-shape and autonomy contract, this file the
-  facts. Read at session start; does **not** reach subagents (their tone lives in
-  `agents/*.md`).
-
-Optimize these files for **density, not length** — every line either changes a
-decision or gets deleted; long narrative belongs in `docs/` behind a link. Update
-AGENTS.md in the same commit as the code it describes; AGENTS.md-only changes use
-the `docs:` prefix.
+- **Global:** `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this
+  file). Optimize for **density, not length** — every line changes a decision or
+  gets deleted; narrative goes to `docs/` behind a link.
+- **Per repo:** `AGENTS.md` (all content, tool-neutral, no `@imports`) + `CLAUDE.md`
+  = `@AGENTS.md` shim + `.claude/{rules,skills}/`. Contract:
+  `docs/agents-md.md`. Update AGENTS.md in the same commit as the code it
+  describes; AGENTS.md-only changes use `docs:`.
+- **Rules:** `~/.claude/rules/` ← `dotfiles/rules/`. Always on: attribution,
+  code-style, formatting, research-first, security. Lazy (`paths:`): the rest.
+- **Output style:** `output-styles/Direct.md` — tone only; does not reach subagents.

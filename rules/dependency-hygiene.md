@@ -1,3 +1,8 @@
+---
+description: Supply-chain hygiene for adding, pinning and updating dependencies
+paths: ["**/package.json", "**/bun.lock", "**/bunfig.toml", "**/pnpm-lock.yaml", "**/package-lock.json"]
+---
+
 # Dependency Hygiene
 
 npm/pnpm/bun packages are compromised regularly via supply-chain attacks

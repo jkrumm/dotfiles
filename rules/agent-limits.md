@@ -1,3 +1,8 @@
+---
+description: Agent workers get no turn limit or wall-clock ceiling — only an idle watchdog
+paths: ["**/*.ts", "**/*.py", "**/*.sh", "**/Makefile"]
+---
+
 # Agent Limits: None
 
 Agent workers — anything that spawns `claude -p`, `claude_iu`, a sideclaw

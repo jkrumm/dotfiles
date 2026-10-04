@@ -1,5 +1,6 @@
 ---
 description: TypeScript coding standards and error handling
+paths: ["**/*.ts", "**/*.tsx"]
 ---
 
 # TypeScript Standards

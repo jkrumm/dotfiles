@@ -1,5 +1,6 @@
 ---
-description: Conventional commits format and amend rules
+description: Conventional commits format and amend rules — loaded by /commit and when a commit message is open
+paths: ["**/COMMIT_EDITMSG"]
 ---
 
 # Commit Conventions

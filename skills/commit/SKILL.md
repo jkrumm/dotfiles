@@ -9,6 +9,8 @@ Generate conventional commit messages with intelligent analysis of changes, Open
 
 **Platform:** GitHub (SourceRoot projects)
 
+Read `~/.claude/rules/commit-conventions.md` first (format, amend rule) — it is path-scoped, so it is not in context until a commit is open.
+
 ## Arguments
 
 - `--amend` - Amend last commit + force push (for follow-up fixes)
