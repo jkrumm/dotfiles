@@ -126,7 +126,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
-| `weatherorb` | weather/wave service, 8 LaunchAgents | all 8 templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
+| `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
 
@@ -215,6 +215,7 @@ plain HTTP client, not the gateway's live connection.
 | Label | Schedule | What |
 |-|-|-|
 | `com.jkrumm.modelpick-refresh` | 06:00 daily | bun run refresh: probe → collect → recommend (make refresh-setup) |
+| `com.jkrumm.modelpick-web` | KeepAlive | always-on dashboard on :7727 behind the Caddy `modelpick.test` entry; a LaunchAgent, not a container, because its SQLite file is shared with host-side writers (`make web-setup`) |
 
 ### weatherorb
 
@@ -228,6 +229,14 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.blendfield` | 10800s | blend field |
 | `com.jkrumm.weatherorb.backfill` | 07:15 daily | backfill |
 | `com.jkrumm.weatherorb.watchdog` | 900s | Kuma push monitor |
+| `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |
+| `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
+| `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
+| `com.jkrumm.weatherorb-mother-wake` | daily 08:15 | resumes a parked or dead weatherorb build-mother session; script `~/.local/bin/weatherorb-mother-wake` |
+| `com.jkrumm.weatherorb-mother-watch` | WatchPaths (mother mailbox), throttle 60s | same script, `WAKE_REASON=watch` |
+
+The last two are not templated in `weatherorb/ops` — installed by hand, owned by
+the weatherorb session workflow.
 
 ### others
 
@@ -247,8 +256,9 @@ plain HTTP client, not the gateway's live connection.
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
+| `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 
-Four of the five IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
+Four of the six IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
 `artefact-daily`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
 not fixed here because IuRoot repos are out of this map's write scope, and one
 that bites on a schedule: macOS sweeps `/tmp` files untouched for three days,

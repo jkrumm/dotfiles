@@ -40,7 +40,7 @@ LAUNCHCTL=/bin/launchctl
 # Labels that are not ours to map. application.* are GUI apps launched by
 # LaunchServices (1Password, Obsidian…); the rest are vendor updaters that
 # ship their own plists and are not managed by any repo here.
-allowlist_regex='^(com\.apple\.|application\.|com\.google\.GoogleUpdater|com\.jetbrains\.toolbox|com\.riot\.riotclient|com\.microsoft\.|org\.pqrs\.|com\.amazonaws\.|com\.logi\.|com\.macromates\.|us\.zoom\.|2BUA8C4S2C\.|com\.openssh\.ssh-agent)'
+allowlist_regex='^(com\.apple\.|application\.|com\.google\.GoogleUpdater|com\.jetbrains\.toolbox|com\.riot\.riotclient|com\.microsoft\.|org\.pqrs\.|com\.amazonaws\.|com\.logi\.|com\.macromates\.|us\.zoom\.|2BUA8C4S2C\.|com\.openssh\.ssh-agent|com\.google\.keystone|net\.imput\.helium-sparkle)'
 
 # The MacBook is MDM-managed: Jamf, Okta, Adobe and the cancom hardening daemons
 # ship dozens of plists nobody here owns, so on the `op` backend only the prefixes
