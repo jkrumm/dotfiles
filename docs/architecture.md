@@ -18,63 +18,19 @@ description: The whole personal environment on one page — the owner's mental m
 
 ## The mental model
 
-Six boxes, each with one job. Full rationale for any of these lives in the
-docs/wiki pages linked at the end of each reference table below — this section
-is only the *why this box exists*.
+Six boxes, each with one job; the *why* only — depth lives behind the links.
 
-**Mac mini — the always-on dev host.** Where agents actually run: Claude Code
-sessions (`c`/`ca`/`cap`), Hermes's gateway, sideclaw's workers, every LaunchAgent
-below. It never sleeps and holds no human-facing UI of its own; everything on it
-is reached, never sat in front of.
+- **Mac mini — the always-on dev host.** Every agent and LaunchAgent runs here. It never sleeps and has no UI of its own.
+- **MacBook and iPhone — the UI layer.** No durable state. The MacBook is `desk` (a herdr client) plus biometric 1Password; the iPhone is Collie in a browser tab. Closing the lid ends a *connection*, never the work.
+- **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` and `/warden` (the durable record and the one queue), the brain reader, Collie (the only one that can *act*).
+- **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
+- **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
+- **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26), audio-gateway, image-gen, email-gateway, image-share. Detail: brain `gateways`.
 
-**MacBook and iPhone — the UI layer he builds from.** Neither holds durable
-state. The MacBook is `desk` (a herdr client) plus editing and biometric
-1Password; closing the lid ends a *connection*, never the work. The iPhone is
-Collie in a browser tab — the phone-side control surface, nothing installed.
-
-**herdr, Slack, Argo, the brain reader, Collie — where he sees what happens and
-interacts.** Five different windows onto the same mini, each answering a
-different question:
-
-- **herdr** — the terminal-level view: `make agent-overview` opens a pane
-  watching every agent's live status text, and any other pane is a session he
-  can attach to directly.
-- **Slack** — Hermes's channel: `#agents` is the **work board** — one
-  deduplicated card per problem from the triage loop, updated in place, plus the
-  06:30 project-narrative line. The 30-min agent-status digest that used to run
-  here was paused 2026-09-08 (it reposted the same blocked pane ~35 times in two
-  days). `#briefings`/`#watchdog` get the cron
-  digests, and dispatch approvals land as buttons in the origin thread.
-- **Argo dashboard** (`/agents`) — the durable, queryable record: the mini
-  pushes every completed sideclaw overview snapshot there (plus one push every
-  10 min regardless), so a browser tab shows 24 h history after herdr and
-  Slack have scrolled past it.
-- **brain reader** (`brain.mini.jkrumm.com`) — read-only render of the vault,
-  rebuilt every 5 min; how the model in his second brain gets checked from a
-  phone or a browser with nothing installed.
-- **Collie** — the one surface here that can *act*, not just observe: it types
-  into a live herdr pane from the phone. Gated by the tailnet ACL, scoped to
-  `tag:phone` alone.
-
-**VPS — the mature, always-running stack.** Traefik-fronted production apps
-(argo, rollhook, the audio/image gateways' prod side, weatherorb's edge,
-email-gateway, free-planning-poker, …), backed by ClickStack/HyperDX for OTel,
-alerts-as-code, and its own backup/prune crons. Nothing here depends on the mini
-being up, and it is reached over Tailscale SSH, never through the mini.
-
-**HomeLab — his own container world.** A ~36-service personal stack (Immich,
-the ebook/reading pipeline, Garmin/KoInsight, media, the VPN watchdog) plus the
-single Uptime Kuma instance every push monitor in this doc reports to — the
-mini's heartbeat destination, not a peer of the mini.
-
-**The gateways — outsourcing work and workflows.** research-gateway (agentic
-Tavily+Context7 research), audio-gateway (STT/TTS, the podcast pipeline) and the
-image-gen gateway (generate/edit/enhance) each expose one kind of work as a
-submit-then-poll HTTP service — an agent calls out and polls rather than doing
-research, STT, TTS or image generation itself. research-gateway runs natively
-on the mini since 2026-09-23 (next to its consumers, `research.mini.jkrumm.com`)
-and is the only instance — its VPS fallback container was retired 2026-09-26;
-the other two stay on the VPS.
+**The agent platform** — one engine (sideclaw), one autonomous loop (warden),
+one front door (Hermes), one cockpit (herdr), four lanes, one repo contract —
+is specified in [`agent-platform.md`](agent-platform.md), which wins over any
+older doc on that topic. This map only places its parts on machines.
 
 ## Diagrams
 
@@ -85,6 +41,7 @@ own image export, so a screenshot is never the way to share one.
 | File | The question it answers |
 |-|-|
 | `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
+| `agent-platform.html` | How the agent platform fits together: sources, front doors, warden's loop, sideclaw, the four lanes, the repo contract. Spec: `agent-platform.md`. |
 | `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
 Both are compiled from the `.json` beside them with the vendored `archify`

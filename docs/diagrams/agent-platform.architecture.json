@@ -1,0 +1,567 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The agent platform",
+    "quality_profile": "showcase",
+    "viewBox": [
+      930,
+      1400
+    ],
+    "legend": {
+      "mode": "auto"
+    }
+  },
+  "components": [
+    {
+      "id": "hermes",
+      "type": "frontend",
+      "label": "Hermes",
+      "sublabel": "Slack/Argo chat · files work, narrates",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "herdr",
+      "type": "frontend",
+      "label": "herdr",
+      "sublabel": "orchestrator tab → wave tabs",
+      "pos": [
+        700,
+        100
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "github",
+      "type": "external",
+      "label": "GitHub issues",
+      "sublabel": "owner and agents",
+      "pos": [
+        40,
+        290
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "kuma",
+      "type": "security",
+      "label": "Uptime Kuma",
+      "sublabel": "alerts",
+      "pos": [
+        260,
+        290
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "otel",
+      "type": "cloud",
+      "label": "HyperDX / OTel",
+      "sublabel": "alerts",
+      "pos": [
+        480,
+        290
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "wardenrun",
+      "type": "backend",
+      "label": "warden run",
+      "sublabel": "the unattended lane",
+      "pos": [
+        700,
+        290
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "intake",
+      "type": "backend",
+      "label": "Warden intake",
+      "sublabel": "every source writes an event, deduplicated by fingerprint",
+      "pos": [
+        40,
+        480
+      ],
+      "size": [
+        840,
+        64
+      ]
+    },
+    {
+      "id": "triage",
+      "type": "backend",
+      "label": "triage",
+      "sublabel": "single-shot",
+      "pos": [
+        40,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "investigate",
+      "type": "backend",
+      "label": "investigate",
+      "sublabel": "root cause",
+      "pos": [
+        184,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "implement",
+      "type": "backend",
+      "label": "implement",
+      "sublabel": "one item",
+      "pos": [
+        328,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "merge",
+      "type": "backend",
+      "label": "merge train",
+      "sublabel": "rolling out",
+      "pos": [
+        472,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "deploy",
+      "type": "backend",
+      "label": "deploy",
+      "sublabel": "make deploy",
+      "pos": [
+        616,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "verify",
+      "type": "backend",
+      "label": "verify",
+      "sublabel": "revert: rolling out",
+      "pos": [
+        760,
+        600
+      ],
+      "size": [
+        120,
+        64
+      ]
+    },
+    {
+      "id": "sideclaw",
+      "type": "backend",
+      "label": "Sideclaw",
+      "sublabel": "the one worker engine · triage, dispatch, review, check · models from its registry",
+      "pos": [
+        40,
+        800
+      ],
+      "size": [
+        680,
+        64
+      ]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Claude Code · OpenCode · every worker",
+      "sublabel": "all read the same core identically",
+      "pos": [
+        40,
+        990
+      ],
+      "size": [
+        560,
+        64
+      ]
+    },
+    {
+      "id": "argo",
+      "type": "frontend",
+      "label": "Argo /warden",
+      "sublabel": "the single queue and status",
+      "pos": [
+        700,
+        990
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "claude",
+      "type": "database",
+      "label": "~/.claude",
+      "sublabel": "global CLAUDE.md, skills, agents",
+      "pos": [
+        40,
+        1180
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "agents",
+      "type": "database",
+      "label": "AGENTS.md",
+      "sublabel": "per-repo brief",
+      "pos": [
+        260,
+        1180
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "makefile",
+      "type": "database",
+      "label": "Makefile",
+      "sublabel": "check · deploy · verify · logs",
+      "pos": [
+        480,
+        1180
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "slack",
+      "type": "external",
+      "label": "Slack",
+      "sublabel": "done / needs decision",
+      "pos": [
+        720,
+        1180
+      ],
+      "size": [
+        140,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Front doors",
+      "wraps": [
+        "hermes",
+        "herdr"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Trusted sources",
+      "wraps": [
+        "github",
+        "kuma",
+        "otel",
+        "wardenrun"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Warden — the autonomous loop",
+      "wraps": [
+        "intake",
+        "triage",
+        "investigate",
+        "implement",
+        "merge",
+        "deploy",
+        "verify"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Worker engine",
+      "wraps": [
+        "sideclaw"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Readers",
+      "wraps": [
+        "workers"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Status surface",
+      "wraps": [
+        "argo"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Core — the repo contract",
+      "wraps": [
+        "claude",
+        "agents",
+        "makefile"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "region",
+      "label": "Notify",
+      "wraps": [
+        "slack"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "from": "hermes",
+      "to": "herdr",
+      "label": "opens a tab on request",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "hermes",
+      "to": "github",
+      "label": "files an issue",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24,
+      "labelDx": -50
+    },
+    {
+      "from": "hermes",
+      "to": "wardenrun",
+      "label": "files work",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "github",
+      "to": "intake",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "kuma",
+      "to": "intake",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "otel",
+      "to": "intake",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "wardenrun",
+      "to": "intake",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "intake",
+      "to": "triage",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "triage",
+      "to": "investigate",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "investigate",
+      "to": "implement",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "implement",
+      "to": "merge",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "merge",
+      "to": "deploy",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "deploy",
+      "to": "verify",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "triage",
+      "to": "sideclaw",
+      "label": "single-shot",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "from": "investigate",
+      "to": "sideclaw",
+      "label": "dispatch",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "implement",
+      "to": "sideclaw",
+      "label": "dispatch",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 56
+    },
+    {
+      "from": "merge",
+      "to": "sideclaw",
+      "label": "review",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "sideclaw",
+      "to": "workers",
+      "label": "spawns",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "workers",
+      "to": "claude",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "workers",
+      "to": "agents",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "workers",
+      "to": "makefile",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "verify",
+      "to": "argo",
+      "label": "queue, status",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "argo",
+      "to": "slack",
+      "label": "one line",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "@implementer",
+      "items": [
+        "The edit must land in this session's live tree"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "sideclaw dispatch",
+      "items": [
+        "Settled, bounded work",
+        "Result is a branch, PR or verdict"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "rd wave",
+      "items": [
+        "Long work the owner watches or steers"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "warden run",
+      "items": [
+        "Unattended, tracked to fixed"
+      ]
+    }
+  ]
+}

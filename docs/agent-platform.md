@@ -1,3 +1,14 @@
+---
+type: Concept
+title: The agent platform
+description: One worker engine (sideclaw), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the target design, its rollout status, and the loop's nine states. The page a new agent reads first.
+tags:
+  - engineering
+  - agents
+  - moc
+timestamp: 2026-10-04
+---
+
 # Agent platform — target design
 
 **Verdict:** one worker engine (sideclaw), one autonomous loop (warden), one
@@ -7,8 +18,19 @@ sections, so no central component holds per-repo knowledge. Trust comes from
 the infrastructure (Tailscale, the owner's GitHub account); the only gates left
 are quality gates.
 
-STATUS: target, adopted 2026-10-02. Rollout tracked in `docs/waves/PLAN.md`
-of each repo; this page wins over any older doc that contradicts it.
+STATUS: adopted 2026-10-02, rolling out (as of 2026-10-04). This page wins over
+any older doc that contradicts it; rollout is tracked in each repo's
+`docs/waves/PLAN.md`.
+
+| Part | State |
+|-|-|
+| Four lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
+| sideclaw: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (sideclaw W1–W3); review angles off Max still pending (W4) |
+| Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
+| warden: gates cut, nine states, one queue | **landed** (W1–W2) |
+| warden: intake fingerprint + triage dedup | **rolling out** (W3, in progress) |
+| warden: merge train, deploy + verify, automatic revert | **rolling out** (W4, not started) — the sections below describe the target |
 
 ## Why this rewrite
 
@@ -24,6 +46,8 @@ Measured 2026-09-08 → 10-01 on the live ledger and logs:
 | Model ids hard-coded in docs | 6+ files, 3 different answers | no single source |
 
 ## The picture
+
+Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](diagrams/agent-platform.html).
 
 ```
  trusted sources                       front doors
