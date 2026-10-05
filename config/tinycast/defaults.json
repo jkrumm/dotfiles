@@ -24,7 +24,8 @@
     "extension:jkrumm/claude-usage",
     "extension:jkrumm/netgear",
     "extension:jkrumm/speed-test",
-    "extension:jkrumm/battery"
+    "extension:jkrumm/battery",
+    "extension:jkrumm/van-power"
   ],
   "hotkey.togglePalette": {
     "$jsonString": {
@@ -44,7 +45,8 @@
     "extension:jkrumm/my-tasks": "tt",
     "extension:jkrumm/netgear": "ng",
     "extension:jkrumm/quick-add": "ta",
-    "extension:jkrumm/speed-test": "st"
+    "extension:jkrumm/speed-test": "st",
+    "extension:jkrumm/van-power": "vp"
   },
   "showInMenuBar": true
 }
