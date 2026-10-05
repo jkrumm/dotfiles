@@ -272,7 +272,7 @@ ca() {
   #  - ENABLE_TOOL_SEARCH deliberately NOT set. Claude Code disables deferred tool
   #    search on a non-first-party base URL anyway, and forcing it on only works
   #    if the proxy serves `tool_reference` blocks — this gateway does not.
-  #  - MAX_THINKING_TOKENS, when `_ca_thinking` returns one (GLM): the only
+  #  - MAX_THINKING_TOKENS, when `_ca_thinking` returns one (non-Claude gateway ids): the only
   #    reasoning-effort control that reaches this leg — `--effort` above is
   #    dropped for this branch precisely because it's a no-op here.
   [[ " $* " == *" --model "* ]] || args=(--model "$model" "${args[@]}")
