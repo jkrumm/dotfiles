@@ -428,11 +428,12 @@ fi
 # check belongs on the path that reports casks. Observed 2026-09-12, macOS
 # 26.6.2 with op 2.38.1.
 #
-# TWO services, and either one covering the CURRENT path is enough:
-# SystemPolicyAllFiles (Full Disk Access) supersedes the SystemPolicyAppData
-# check that op's desktop-app handshake actually trips. They live in different
-# databases — FDA in the system one, AppData in the user's — so both are asked.
-# auth_value: 0 denied, 2 allowed (FDA), 5 allowed (AppData, macOS 26).
+# ONLY Full Disk Access counts. SystemPolicyAllFiles (system db) supersedes the
+# SystemPolicyAppData check op's desktop-app handshake trips. Clicking "Allow" on
+# the AppData dialog writes a user-db row (auth_value 5) with NO csreq for op's
+# path, and tccd does not honour it — it re-prompts on every op process (~6 per
+# seed) and rewrites the row. Observed 2026-10-05 with op 2.39.0: an AppData row
+# present, this check green, the dialog back on every run. auth_value 2 = allowed.
 #
 # Reading either db itself needs FDA for THIS process. From a Ghostty shell it
 # holds; from inside a Claude Code chain it does not, because claude's TCC
@@ -443,7 +444,7 @@ fi
 tcc_allows() {  # $1=db  $2=service  $3=client path ; rc 0 granted, 1 absent, 2 db unreadable
   local rows
   rows=$(sqlite3 "$1" "select auth_value||'|'||client from access where service='$2';" 2>/dev/null) || return 2
-  grep -qxF -e "2|$3" -e "5|$3" <<<"$rows"
+  grep -qxF "2|$3" <<<"$rows"
 }
 
 if [[ "$BACKEND" != "op" ]]; then
@@ -455,15 +456,10 @@ else
   op_tcc=0
   tcc_allows "/Library/Application Support/com.apple.TCC/TCC.db" \
     kTCCServiceSystemPolicyAllFiles "$op_real" || op_tcc=$?
-  if (( op_tcc == 1 )); then
-    op_tcc=0
-    tcc_allows "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
-      kTCCServiceSystemPolicyAppData "$op_real" || op_tcc=$?
-  fi
   case "$op_tcc" in
-    0) echo "  ✓ op: TCC grant covers $op_real" ;;
+    0) echo "  ✓ op: Full Disk Access covers $op_real" ;;
     2) echo "  · op: TCC db unreadable from here (this process has no Full Disk Access) — re-run from a plain terminal to assert" ;;
-    *) echo "  ✗ op: no TCC grant for $op_real — the next secrets-seed re-prompts for app data (fix: open 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles', then open -R '$op_real' and drag it in)"
+    *) echo "  ✗ op: no Full Disk Access for $op_real — every secrets-seed re-prompts for app data (fix: open 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles', then open -R '$op_real' and drag it in)"
        assertion_failed=1 ;;
   esac
 fi

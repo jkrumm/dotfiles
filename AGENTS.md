@@ -387,7 +387,7 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   BINARY PATH, and the cask path carries the version
   (`…/Caskroom/1password-cli/<ver>/op`), so **every `brew upgrade
   1password-cli` drops it** and the dialog returns mid-reseal. Held by a Full
-  Disk Access grant on that exact path (FDA supersedes the AppData check),
+  Disk Access grant on that exact path (FDA supersedes the AppData check; clicking "Allow" on the dialog does **not** stick — it re-prompts per `op` process),
   asserted by `make brew-upgrade`. A grant earned through a Claude Code chain
   never sticks: claude's TCC client is `~/.local/share/claude/versions/<ver>`,
   a fresh client on every auto-update — run the seed from a plain terminal.
