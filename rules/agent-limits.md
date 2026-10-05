@@ -13,7 +13,7 @@ SDK `query()` — run **as long as the work takes**.
   `max_steps` / `maxIterations` budget to a session, tier, tool or loop.
 - **No wall-clock ceiling.** No `timeoutMs`, `AbortSignal.timeout`,
   `subprocess.run(timeout=…)`, `setTimeout(kill)` or `deadline` around an
-  agent run. A slow episode is not a stuck one — glm-class models spend
+  agent run. A slow episode is not a stuck one — slow models spend
   minutes per turn on hard work by design.
 - **The one liveness rule is an idle watchdog:** no output for N minutes
   (sideclaw: 5 min of no stdout) means wedged, and only then is the worker

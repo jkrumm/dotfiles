@@ -47,7 +47,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|close\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
-| `~/SourceRoot/warden/scripts/warden` | `~/.local/bin/warden` | Linked from the warden repo, not from here — `warden run <repo> '<brief>'` |
+| `~/SourceRoot/warden/scripts/warden` | `~/.local/bin/warden` | Linked from the warden repo, not from here — `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>` |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
@@ -167,7 +167,7 @@ substitutes for another.**
 | `@implementer` | the edit must land in this session's live tree |
 | `sideclaw dispatch` | settled, bounded work → branch/PR or a verdict |
 | `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (`--kind opencode` for OpenCode), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
-| `warden run <repo> '<brief>'` | unattended, tracked to an outcome on warden's ledger |
+| `warden run <repo> <<'BRIEF'` / `--brief-file <path>` | unattended, tracked to an outcome on warden's ledger |
 
 | Want | Command |
 |-|-|
@@ -464,8 +464,8 @@ differently on purpose:
   deliberately conservative (200k unless measured): it is a *client-side budget*,
   so setting it above the real window trades a clean auto-compact for a hard
   mid-session rejection. The same file's `_ca_thinking` sets `MAX_THINKING_TOKENS`
-  for GLM — the only reasoning-effort control that reaches the gateway's
-  Anthropic leg.
+  for non-Claude gateway ids (DeepSeek, kimi, minimax) — the only reasoning-effort
+  control that reaches the gateway's Anthropic leg.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart

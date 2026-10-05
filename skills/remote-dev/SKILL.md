@@ -79,7 +79,7 @@ lost. `herdr attach` is **not** a command.
 
 ## Durable work
 
-Anything that must survive a herdr restart is `warden run <repo> '<brief>'`, not
+Anything that must survive a herdr restart is `warden run <repo> <<'BRIEF'` (brief on stdin; or `--brief-file <path>`), not
 a bare pane: a restart restores the layout and resumes Claude panes
 (`claude --resume`), but shells, dev servers and loops die and a resumed agent
 lost its in-flight turn. **Never `ssh mini 'claude …'`**: the session comes up

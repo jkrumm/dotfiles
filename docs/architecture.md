@@ -75,15 +75,15 @@ instead — same validated geometry, without that one crossing guarantee.
 | Repo | Purpose | Notes |
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
-| `hermes-agent` | Hermes gateway — Slack-facing control surface, dispatch bridge, 5-job cron layer | see [[hermes-as-control-surface]] |
-| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/docs/api.md`, `warden/FLOWS.md`, `warden/docs/triage.md`. `warden run <repo> '<brief>'` is the unattended lane; `sideclaw dispatch` is a session's bounded episode, `rd wave` a human's long one |
+| `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work via `warden run` or an issue, 5-job cron layer | see [[hermes-as-control-surface]] |
+| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `sideclaw dispatch` is a session's bounded episode, `rd wave` a human's long one |
 | `sideclaw` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
-| `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
+| `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents (legacy pattern, retired at weatherorb's next wave boundary (`agent-platform.md` §herdr)) | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
 
@@ -152,8 +152,8 @@ plane cannot depend on the process it supervises being up. Registry:
 Five LaunchAgents, not four — `warden-api` is easy to miss counting because it
 has no fixed interval (`KeepAlive`, not a timer), but `GET /health` and
 `/metrics` on `127.0.0.1:7735` are the ledger's only HTTP surface, read by
-`make status` here and by Hermes nowhere yet ([[hermes-as-control-surface]]
-finding: no read path). The other four were extracted from `hermes-agent`
+`make status` here and by Hermes through its `warden` skill (HTTP API, never the
+database). The other four were extracted from `hermes-agent`
 2026-09-09 — a control plane cannot live inside the thing it supervises — and
 are LaunchAgents rather than gateway cron on purpose: the loop that notices
 Hermes is broken cannot depend on Hermes being up, and its Slack delivery is a
@@ -162,9 +162,9 @@ plain HTTP client, not the gateway's live connection.
 | Label | Schedule | What |
 |-|-|-|
 | `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics` on `127.0.0.1:7735` |
-| `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into one card per problem in `#agents` and a sideclaw `investigate` episode in the owning repo. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
+| `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into items and sideclaw `investigate` episodes in the owning repo; Slack gets one line on `fixed` / `needs_decision`, Argo `/warden` is the queue. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
 | `com.jkrumm.warden-poll` | 1800s | Ingest. Was gateway cron job `4b1faabda97d`; promoted for the same reason — ingest running inside the process it supervises is how the loop kept ticking against a ledger that had stopped receiving signals. Posts its own digest and pings the `watchdog` UptimeKuma push URL on a clean poll. |
-| `com.jkrumm.warden-sweep` | 300s | Folds a terminal sideclaw verdict onto the card the loop already wrote. Was gateway cron job `4dd759917dd1`. |
+| `com.jkrumm.warden-sweep` | 300s | Folds finished episodes onto their items, then runs the implement chain. Was gateway cron job `4dd759917dd1`. |
 | `com.jkrumm.warden-backup` | daily 03:10 | `VACUUM INTO` snapshot of the ledger, rotated, rsynced to `homelab:/mnt/hdd/backups/warden/` — inside the restic source mount, so it reaches B2 with no homelab-side change. Between `hermes-backup` (03:00) and restic (03:30). |
 
 ### modelpick
@@ -189,8 +189,8 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |
 | `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
 | `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
-| `com.jkrumm.weatherorb-mother-wake` | daily 08:15 | resumes a parked or dead weatherorb build-mother session; script `~/.local/bin/weatherorb-mother-wake` |
-| `com.jkrumm.weatherorb-mother-watch` | WatchPaths (mother mailbox), throttle 60s | same script, `WAKE_REASON=watch` |
+| `com.jkrumm.weatherorb-mother-wake` | daily 08:15 | resumes a parked or dead weatherorb build-mother session (legacy pattern, retired at weatherorb's next wave boundary (`agent-platform.md` §herdr)); script `~/.local/bin/weatherorb-mother-wake` |
+| `com.jkrumm.weatherorb-mother-watch` | WatchPaths (mother mailbox), throttle 60s | same script, `WAKE_REASON=watch` (legacy, as above) |
 
 The last two are not templated in `weatherorb/ops` — installed by hand, owned by
 the weatherorb session workflow.

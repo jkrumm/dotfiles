@@ -58,7 +58,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
 | Settled, bounded work in a repo; result is a branch/PR or a verdict | `sideclaw dispatch` (`implement` / `investigate`) — default for settled multi-file edits |
 | Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
-| Unattended work tracked to an outcome | `warden run <repo> '<brief>'` or a GitHub issue |
+| Unattended work tracked to an outcome | `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>`, or a GitHub issue |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
@@ -73,7 +73,7 @@ parallelize only on disjoint file groups. Delegate for context, not latency;
 editorial work stays inline.
 
 - **Model ids live only in `sideclaw routing`** (`GET /api/routing`; rationale
-  `brain/wiki/engineering/model-routing.md`). Never write one in prose.
+  `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`). Never write one in prose.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.

@@ -126,8 +126,8 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
 1. **Intake.** Every source writes an event. The fingerprint is the title after
    stripping timestamps, hex ids, paths, numbers and the log-file name — the
    same line from two log files is one event.
-2. **Triage — single-shot, no tools** (sideclaw `triage`, deepseek-v4.1-flash,
-   ~1–10 s, cents). Input: the new event, the open items of the candidate
+2. **Triage — single-shot, no tools** (sideclaw `triage`, cheap single-shot model
+   per `GET /api/routing`, ~1–10 s, cents). Input: the new event, the open items of the candidate
    repos, items fixed in the last 14 days with their PR titles. Output:
    `attach(item) | new(repo, title) | fixed_by(item|PR) | ignore(reason)`.
    Debounce stays one knob: alerts need ≥3 occurrences or ≥30 min open;
@@ -166,9 +166,9 @@ merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
 
 | Job | Default | Why |
 |-|-|-|
-| `triage`, review router | single-shot `iu-openai` deepseek-v4.1-flash, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
-| `dispatch` investigate | OpenCode, deepseek-v4.1-flash `high` | measured ~$0.06/episode, 95 % cache hits |
-| `dispatch` implement | OpenCode, deepseek-v4.1-flash `max`; escalation model from the registry | strong enough on settled briefs; escalation for attempt 3+ |
+| `triage`, review router | single-shot `iu-openai` cheap model, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
+| `dispatch` investigate | OpenCode, cheap OpenCode model `high` | measured ~$0.06/episode, 95 % cache hits |
+| `dispatch` implement | OpenCode, cheap OpenCode model `max`; escalation model from the registry | strong enough on settled briefs; escalation for attempt 3+ |
 | `review` angles | OpenCode cheap model after A/B; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
 | `review` synthesis | Sonnet | the judgment that gates every merge |
 | `check` | OpenCode or single-shot | mechanical |
