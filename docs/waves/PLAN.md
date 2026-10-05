@@ -71,15 +71,19 @@ Runs after warden Wave 2 and sideclaw Wave 1 are done, so the docs describe the 
 - **jkrumm.com:** new `agent-infrastructure.mdx` (`status: draft`, order 2), `personal-stack.mdx` untouched. Committed on master, **not pushed, not published** — owner's call. Prose is written to `brain/voice.md` but not human-edited.
 - Not pruned: `docs/diagrams/estate.html` spec still carries its one open crossing; `docs/architecture.md` mental model lost the `#agents` digest/Argo history detail (pointed at by nothing else).
 
-## Wave 5 — review fixes            <!-- status: active -->
+## Wave 5 — review fixes            <!-- status: done -->
 From the `/review` of `25e78f6..HEAD` (2026-10-05). Fix, then `make check`, then `/review` the fix diff.
-- [ ] `config/opencode/plugins/protect-branches.js`: run the policy for every bash call (no `git` substring pre-filter — `g\it push` bypasses it); fail CLOSED when the hook exits non-zero or crashes; only a clean exit with empty stdout means allow.
-- [ ] `scripts/remote-dev.sh` `cmd_close`: fail closed when `git status` cannot be read (ssh failure, empty cwd) — refuse to close; check `herdr tab close`'s response for an `error` field before printing success.
-- [ ] `scripts/remote-dev.sh`: `RD_ORCHESTRATED` triggers only on `=1`; `parse_kind` consumes only leading flags (prompt text containing `--kind` stays intact); surface `_oc_env` failure in `cmd_wave`/`cmd_work` instead of starting an opencode agent with no credentials; parameterize `USAGE_LANE` in `agent_pane_setup`.
-- [ ] `config/zsh/claude.zsh` `_oc_env`: emit the bearer with `${(qq)…}` (single-quoted, literal space) so redactors recognize it — never the backslash-escaped form that leaked once.
-- [ ] `docs/global-reference.md` sudo pattern: pipe the password through stdin (`secrets-run read … | ssh HOST 'sudo -S …'` / `op read … | ssh …`), never inside the remote argv.
-- [ ] `Makefile`: `_setup-scripts` removes the stale `~/.local/bin/agent-dispatch` link; `check` also runs the hermetic either-machine suites (`opbackup-seed-test`, `brew-service-test`, `launchd-restarts-test`, `human-queue-test`) if they are hermetic.
-- [ ] `scripts/opencode-agents.py`: a missing `description` is a clear error, not a KeyError traceback. `config/opencode/opencode.json`: pin `chrome-devtools-mcp` to an exact version.
-- [ ] `config/zsh/iu-models.sh`: header still cites the deleted agent-dispatch as a bash-3.2 consumer — drop the stale justification (keep the shape unless trivially foldable).
+- [x] `config/opencode/plugins/protect-branches.js`: run the policy for every bash call (no `git` substring pre-filter — `g\it push` bypasses it); fail CLOSED when the hook exits non-zero or crashes; only a clean exit with empty stdout means allow.
+- [x] `scripts/remote-dev.sh` `cmd_close`: fail closed when `git status` cannot be read (ssh failure, empty cwd) — refuse to close; check `herdr tab close`'s response for an `error` field before printing success.
+- [x] `scripts/remote-dev.sh`: `RD_ORCHESTRATED` triggers only on `=1`; `parse_kind` consumes only leading flags (prompt text containing `--kind` stays intact); surface `_oc_env` failure in `cmd_wave`/`cmd_work` instead of starting an opencode agent with no credentials; parameterize `USAGE_LANE` in `agent_pane_setup`.
+- [x] `config/zsh/claude.zsh` `_oc_env`: emit the bearer with `${(qq)…}` (single-quoted, literal space) so redactors recognize it — never the backslash-escaped form that leaked once.
+- [x] `docs/global-reference.md` sudo pattern: pipe the password through stdin (`secrets-run read … | ssh HOST 'sudo -S …'` / `op read … | ssh …`), never inside the remote argv.
+- [x] `Makefile`: `_setup-scripts` removes the stale `~/.local/bin/agent-dispatch` link; `check` also runs the hermetic either-machine suites (`opbackup-seed-test`, `brew-service-test`, `launchd-restarts-test`, `human-queue-test`) if they are hermetic.
+- [x] `scripts/opencode-agents.py`: a missing `description` is a clear error, not a KeyError traceback. `config/opencode/opencode.json`: pin `chrome-devtools-mcp` to an exact version.
+- [x] `config/zsh/iu-models.sh`: header still cites the deleted agent-dispatch as a bash-3.2 consumer — drop the stale justification (keep the shape unless trivially foldable).
 - Not a bug: `ask-human.sh` `readlink -f` works on this macOS (26.x supports `-f`).
 **Left behind:**
+- **Gate:** `make check` green (architecture-check, secrets-lint, hooks-test 135, plus the four hermetic suites now in `check`). sideclaw `/review` ran this time (outcome `needs-human`): blocking finding fixed (`require_oc_env` now also requires `RESEARCH_GATEWAY_AUTH` in `_oc_env` output); also fixed: plugin hook timeout (10s, fail-closed) + stderr in the error, `opencode-agents.py` validates all agents before writing anything, stale bash-3.2 comments. The fix diff was not re-reviewed.
+- **Deviations / not done:** `parse_kind` consumes `--kind` before the repo and right after it (the usage lines put the flag there), not strictly leading-only. Declined review suggestions: single-pass `parse_kind` rewrite; `rd work` Claude sessions never get `USAGE_LANE` (pre-existing — claude `cmd_work` never called `agent_pane_setup`); a shared schema between the plugin and `hooks/protect-branches.ts` (the plugin's fail-closed handling assumes the hook emits stdout only to deny — an architecture call).
+- `skills/secrets/SKILL.md` sudo example moved to the stdin pattern too. `rd wave`/`rd work` `--kind opencode` still not run end to end.
+- Still open from Wave 2: consider rotating `op://vps/research-gateway/API_SECRET` (bearer leaked into a transcript once).
