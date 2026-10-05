@@ -78,7 +78,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
-| `make check` | All local validation: architecture-check + secrets-lint + hooks-test. No side effects. |
+| `make check` | All local validation: architecture-check + secrets-lint + hooks-test + the hermetic suites (opbackup-seed, brew-service, launchd-restarts, human-queue). No side effects. |
 | `make verify` | `make doctor`, under the repo-contract name. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. |
@@ -129,7 +129,7 @@ Keep this file **under 40k chars** (`wc -c AGENTS.md`; the agent context limit i
 
 ## Validate
 
-`make check` (architecture-check + secrets-lint + hooks-test). Any edit to
+`make check` (architecture-check + secrets-lint + hooks-test + the four hermetic script suites). Any edit to
 `hooks/` → `make hooks-test`; any edit to `scripts/secrets-run` → the full
 guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 

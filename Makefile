@@ -798,7 +798,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check secrets-lint hooks-test ## All local validation (architecture map, secrets lint, hook tests)
+check: architecture-check secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -1169,6 +1169,12 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/ask-human.sh" \
 		DST="$(HOME)/.local/bin/ask-human"
+	@# agent-dispatch was deleted; its link is left dangling on machines that
+	@# installed it. -L is true for a dangling link too; a real file is never touched.
+	@if [ -L "$(HOME)/.local/bin/agent-dispatch" ]; then \
+		rm -f "$(HOME)/.local/bin/agent-dispatch"; \
+		echo "    ✓ removed stale agent-dispatch link"; \
+	fi
 	@# warden resolves its venv relative to $$0, so a symlink would break it — an
 	@# exec wrapper is the install shape.
 	@if [ -x "$(HOME)/SourceRoot/warden/scripts/warden" ]; then \

@@ -151,13 +151,12 @@ cs() {
 #
 # After editing this file: `source ~/.zshrc` (or open a new terminal). An
 # already-open shell keeps running whatever `ca` it loaded at startup.
-# Context window + GLM thinking budget per gateway model id — shared with
-# bash 3.2 callers, which need the same
-# CLAUDE_CODE_MAX_CONTEXT_TOKENS / MAX_THINKING_TOKENS values. Case-statement
-# functions live in config/zsh/iu-models.sh (not a zsh assoc array), so the one
-# file parses under both interpreters — see it for the `_ca_ctx`/`_ca_thinking`
-# contracts and the `isFirstPartyAnthropicBaseUrl` / Requesty-hop rationale.
-# Update the table there, not here.
+# Context window + GLM thinking budget per gateway model id
+# (CLAUDE_CODE_MAX_CONTEXT_TOKENS / MAX_THINKING_TOKENS). Case-statement
+# functions live in config/zsh/iu-models.sh (plain POSIX-style shell, not a zsh
+# assoc array) — see it for the `_ca_ctx`/`_ca_thinking` contracts and the
+# `isFirstPartyAnthropicBaseUrl` / Requesty-hop rationale. Update the table
+# there, not here.
 source "$HOME/.zsh/conf.d/iu-models.sh"
 
 # `cap` — pick a model, then launch `ca` against it.
@@ -375,7 +374,7 @@ _oc_env() {
   # (Keychain first, secrets-run second); `{}` when unresolvable → gateway 401s.
   local auth
   auth=$("$HOME/SourceRoot/dotfiles/scripts/mcp-research-headers.sh" 2>/dev/null | sed -n 's/.*"Authorization":"\([^"]*\)".*/\1/p')
-  [[ -n $auth ]] && print -r -- "export RESEARCH_GATEWAY_AUTH=${(q)auth}"
+  [[ -n $auth ]] && print -r -- "export RESEARCH_GATEWAY_AUTH=${(qq)auth}"
   # sideclaw's MCP is stdio-only against a repo that lives on the mini, so layer
   # it in with OPENCODE_CONFIG (merged over the global config) only where it
   # exists — the MacBook stays sideclaw-free.

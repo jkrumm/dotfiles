@@ -227,8 +227,8 @@ ssh server "cd ~/repo && make up"
 For sudo operations (homelab requires password):
 ```bash
 # Root passwords are in Private vault (not accessible to server SAs — local only)
-ROOT_PW=$(op read "op://Private/homelab-server/password")
-ssh homelab "echo '$ROOT_PW' | sudo -S <command>"
+# Pipe via stdin — never put the password in the remote argv
+op read "op://Private/homelab-server/password" | ssh homelab 'sudo -S <command>'
 ```
 
 ## Cloudflare Integration

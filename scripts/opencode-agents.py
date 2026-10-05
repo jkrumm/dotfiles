@@ -18,11 +18,14 @@ DST = Path.home() / ".config" / "opencode" / "agent"
 MARK = "<!-- rendered from dotfiles/agents by scripts/opencode-agents.py — edit the source -->"
 
 
-def render(text: str) -> str:
+def render(text: str, name: str) -> str:
+    """Raise ValueError (message prefixed with `name`) on invalid frontmatter."""
     m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.S)
     if not m:
-        raise SystemExit("no frontmatter")
+        raise ValueError(f"{name}: no frontmatter")
     fm = dict(l.split(": ", 1) for l in m.group(1).splitlines() if ": " in l)
+    if "description" not in fm:
+        raise ValueError(f"{name}: frontmatter has no `description` — OpenCode needs one")
     tools = [t.strip().lower() for t in fm.get("tools", "").split(",") if t.strip()]
     out = ["---", f"description: {fm['description']}", "mode: subagent"]
     if tools:
@@ -33,13 +36,26 @@ def render(text: str) -> str:
 
 
 def main() -> int:
-    DST.mkdir(parents=True, exist_ok=True)
+    # Validate every source before touching DST: all errors reported together,
+    # nothing written and no stale cleanup on failure.
+    rendered: dict[Path, str] = {}
+    errors: list[str] = []
     for src in sorted(SRC.glob("*.md")):
+        try:
+            rendered[src] = render(src.read_text(), str(src))
+        except ValueError as e:
+            errors.append(str(e))
+    if errors:
+        print("\n".join(errors), file=sys.stderr)
+        return 1
+
+    DST.mkdir(parents=True, exist_ok=True)
+    for src, text in rendered.items():
         dst = DST / src.name
         if dst.exists() and MARK not in dst.read_text():
             print(f"    · {dst} is hand-written — left alone")
             continue
-        dst.write_text(render(src.read_text()))
+        dst.write_text(text)
         print(f"    ✓ {dst}")
     for stale in DST.glob("*.md"):
         if not (SRC / stale.name).exists() and MARK in stale.read_text():

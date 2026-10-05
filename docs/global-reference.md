@@ -97,11 +97,12 @@ is a cold backup only — the live vault is `~/SourceRoot/brain`. Tasks: TickTic
 ## Sudo on a server
 
 `sudo -S` reads the password from stdin, so no `ssh -t` is needed (a `!`-prefixed
-command gets no TTY).
+command gets no TTY). Pipe the password in on local stdin — never interpolate it
+into the remote command, where it lands in the remote argv and `ps`.
 
 ```bash
 # HOST = homelab | vps (NOPASSWD) | mini; REF = homelab-server | vps-server | mac-mini-server
-ROOT_PW=$(op read "op://Private/<REF>/password" --account tkrumm) && ssh <HOST> "echo '$ROOT_PW' | sudo -S <cmd>"
+op read "op://Private/<REF>/password" --account tkrumm | ssh <HOST> 'sudo -S <cmd>'
 ```
 
 The mini's password is `op://Private/*` and deliberately MacBook-only: the seed

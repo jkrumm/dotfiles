@@ -1,9 +1,8 @@
 # IU gateway model metadata, shared between config/zsh/claude.zsh's `ca()`
-# (zsh) and any bash 3.2 caller — the
-# one place launchers get a gateway model's real context window and GLM
-# thinking budget from. Case-statement functions, not an associative array:
-# bash 3.2 has no assoc arrays, so this is the shape that parses under both
-# interpreters. Update here only; the callers just source this file.
+# (zsh) — the one place launchers get a gateway model's real context window and
+# GLM thinking budget from. Case-statement functions, not an associative array,
+# so the file stays plain POSIX-style shell. Update here only; the callers just
+# source this file.
 #
 # _ca_ctx <model>       real context window, for CLAUDE_CODE_MAX_CONTEXT_TOKENS
 #                       / CLAUDE_CODE_AUTO_COMPACT_WINDOW
@@ -26,7 +25,8 @@ _CA_CTX_FALLBACK=200000
 # Matched case-insensitively: the gateway accepts `deepseek-v4-pro` as readily
 # as `DeepSeek-V4-Pro`, and a lookup that only knew the catalog spelling sent the
 # lowercase form to the 200k fallback — five compactions in one hour, 2026-09-17.
-# `tr`, not ${1:l} / ${1,,}: this file parses under zsh and bash 3.2 alike.
+# `tr`, not ${1:l} / ${1,,}: the file stays plain POSIX-style shell, not tied to
+# zsh's or bash 4's lowercasing syntax.
 _ca_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 _ca_ctx() {

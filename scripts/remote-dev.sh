@@ -263,18 +263,32 @@ cmd_repos() {
 }
 
 # `--kind claude|opencode` for `work` and `wave`: sets AGENT_KIND and leaves the
-# remaining words in REST — the flag may sit anywhere before the prompt text.
+# remaining words in REST. Flags are consumed only in the two slots the usage
+# lines allow — before the repo and right after it. The first word after that
+# starts the prompt, so a prompt that itself contains `--kind` stays intact.
 AGENT_KIND=claude
 REST=()
-parse_kind() {
-  REST=()
+# Consume leading --kind flags from "$@"; sets FLAGS_USED to the words eaten.
+parse_kind_flags() {
+  FLAGS_USED=0
   while (( $# )); do
     case $1 in
-      --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude|opencode)"; AGENT_KIND=$2; shift 2 ;;
-      --kind=*) AGENT_KIND=${1#--kind=}; shift ;;
-      *)        REST+=("$1"); shift ;;
+      --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude|opencode)"; AGENT_KIND=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
+      --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
+      *)        break ;;
     esac
   done
+}
+parse_kind() {
+  REST=()
+  parse_kind_flags "$@"
+  shift "$FLAGS_USED"
+  if (( $# )); then
+    REST+=("$1"); shift
+    parse_kind_flags "$@"
+    shift "$FLAGS_USED"
+    (( $# )) && REST+=("$@")
+  fi
   case $AGENT_KIND in
     claude|opencode) ;;
     *) die "unknown --kind '$AGENT_KIND' — claude or opencode" ;;
@@ -286,14 +300,30 @@ parse_kind() {
 # must already be in that shell: claude takes the lane tag; opencode takes the IU
 # credentials (`_oc_env` in config/zsh/claude.zsh — the same resolution `oc` does,
 # evaluated INSIDE the pane so the key never rides argv or ssh).
-# $1 kind  $2 pane
+# $1 kind  $2 pane  $3 usage lane (claude's USAGE_LANE tag; opencode ignores it)
 agent_pane_setup() {
-  local kind=$1 pane=$2
+  local kind=$1 pane=$2 lane=${3:?agent_pane_setup needs a usage lane}
   if [[ $kind == opencode ]]; then
     host_run "herdr pane run '$pane' 'eval \"\$(_oc_env)\"'" >/dev/null 2>&1
   else
-    host_run "herdr pane run '$pane' export USAGE_LANE=wave" >/dev/null 2>&1
+    host_run "herdr pane run '$pane' export USAGE_LANE='$lane'" >/dev/null 2>&1
   fi
+}
+
+# The pane evals `_oc_env` blind (its output must never ride argv or ssh), so a
+# failed resolution would start an opencode agent with no credentials and no
+# message. Resolve once on the host first — the output is captured THERE and
+# never printed or sent back; only the verdict and the error text survive — and
+# abort before anything is created. `_oc_env` exits 0 yet omits the
+# RESEARCH_GATEWAY_AUTH line when the research-gateway bearer is unresolvable
+# (the gateway would then 401 every call), so a missing line is a failure too.
+require_oc_env() {
+  [[ $AGENT_KIND == opencode ]] || return 0
+  local err rc=0
+  err=$(host_run "zsh -ic 'o=\$(_oc_env) || exit 1; [[ \$o == *RESEARCH_GATEWAY_AUTH=* ]] || exit 3' 2>&1") || rc=$?
+  [[ $rc -eq 0 ]] && return 0
+  [[ $rc -eq 3 ]] && die "opencode needs the research-gateway bearer and _oc_env resolved none on $HOST — run 'make setup' in dotfiles (see scripts/mcp-research-headers.sh)"
+  die "opencode needs the IU credentials and _oc_env failed on $HOST — run 'make setup' in dotfiles:"$'\n'"$err"
 }
 
 # `work` is idempotent on purpose. Two Claude agents in one checkout race each
@@ -323,6 +353,7 @@ cmd_work() {
   local agent
   agent=$(agent_name "$name")
   [[ -n $agent ]] || die "'$name' has no usable herdr agent name — rename the repo or start it by hand"
+  require_oc_env
 
   local pane
   pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus" \
@@ -338,7 +369,7 @@ cmd_work() {
   local out="" i=0
   while (( i < 10 )); do
     sleep 1; i=$((i+1))
-    (( i == 1 )) && [[ $AGENT_KIND == opencode ]] && agent_pane_setup opencode "$pane"
+    (( i == 1 )) && [[ $AGENT_KIND == opencode ]] && agent_pane_setup opencode "$pane" work
     out=$(host_run "herdr agent start '$agent' --kind $AGENT_KIND --pane '$pane'")
     echo "$out" | grep -q 'agent_pane_busy' || break
   done
@@ -399,8 +430,11 @@ cmd_wave() {
   # than relying on the single-quoting alone.
   [[ $plan_ref =~ ^[A-Za-z0-9~/_.-]+$ ]] \
     || die "plan reference extracted from the wave prompt has unsafe characters: $plan_ref"
-  local gate_out
-  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" ${RD_ORCHESTRATED:+--orchestrated} '$path' '$plan_ref'" 2>&1) \
+  # Orchestrated only on exactly `=1` — `RD_ORCHESTRATED=0` or an empty-ish
+  # leftover must not silently drop the gate's outward-facing keyword stop.
+  local gate_out orch_flag=""
+  [[ ${RD_ORCHESTRATED:-} == 1 ]] && orch_flag="--orchestrated"
+  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" $orch_flag '$path' '$plan_ref'" 2>&1) \
     || die "green gate failed for $path:"$'\n'"$gate_out"
 
   # The repo's space is the one labelled with its bare name — the convention
@@ -493,6 +527,8 @@ for a in agents:
     return 0
   fi
 
+  require_oc_env
+
   local created json pane tab
   if [[ -n $ws ]]; then
     created=tab
@@ -535,7 +571,7 @@ for a in agents:
     model="${RD_WAVE_MODEL:-sonnet}"
     start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
   fi
-  agent_pane_setup "$AGENT_KIND" "$pane"
+  agent_pane_setup "$AGENT_KIND" "$pane" wave
 
   local out="" i=0
   while (( i < 10 )); do
@@ -608,13 +644,20 @@ except Exception:
   [[ $label =~ ^wave\ [0-9]+$ ]] || die "tab $tab is '${label:-unlabelled}', not a 'wave <n>' tab — refusing to close it"
   [[ $status == working || $status == blocked ]] && die "agent $pane is $status — not finished"
 
-  local dirty unpushed
-  dirty=$(host_run "git -C '$cwd' status --porcelain" | wc -l | tr -d ' ')
+  # Fail closed: an unreadable checkout (ssh failure, no cwd) is not a clean one.
+  [[ -n $cwd ]] || die "agent $pane reports no cwd — cannot verify the checkout is clean, refusing to close"
+  local dirty unpushed status_out
+  status_out=$(host_run "git -C '$cwd' status --porcelain") \
+    || die "could not read git status of $cwd — refusing to close"
+  dirty=$(printf '%s' "$status_out" | grep -c . || true)
   (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the wave's work is not committed"
   unpushed=$(host_run "git -C '$cwd' rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
   [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing the wave tab"
 
-  host_run "herdr tab close '$tab'" >/dev/null
+  local closed
+  closed=$(host_run "herdr tab close '$tab'" 2>&1) || die "herdr tab close failed: $closed"
+  # herdr reports failure in the body and exits 0 (same trap as `agent prompt`).
+  echo "$closed" | grep -q '"error"' && die "herdr tab close rejected: $closed"
   echo "→ closed $label ($tab)"
 }
 
