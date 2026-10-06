@@ -189,6 +189,7 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |
 | `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
 | `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
+| `com.jkrumm.weatherorb.archive` | hourly at :40 | archive (`run-archive.sh`, Nice 10 / low-priority IO) |
 | `com.jkrumm.weatherorb-mother-wake` | daily 08:15 | resumes a parked or dead weatherorb build-mother session (legacy pattern, retired at weatherorb's next wave boundary (`agent-platform.md` §herdr)); script `~/.local/bin/weatherorb-mother-wake` |
 | `com.jkrumm.weatherorb-mother-watch` | WatchPaths (mother mailbox), throttle 60s | same script, `WAKE_REASON=watch` (legacy, as above) |
 
