@@ -18,6 +18,15 @@
   <!-- Fire on load so a reboot re-establishes the heartbeat immediately rather
        than leaving a 5-minute hole that reads as an outage. -->
   <key>RunAtLoad</key><true/>
+  <!-- The disk ceiling is the one threshold tuned for THIS host: its normal
+       blend/retention oscillation spans 86-91%, so a generic 90 sat inside the
+       working band and paged on a healthy machine. Pinned here so the deployed
+       heartbeat carries the value, matching the script default so an
+       interactive `make devhost-health-check` grades the same. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DEVHOST_DISK_USED_PCT_MAX</key><string>93</string>
+  </dict>
   <!-- ~/Library/Logs, not /tmp: /tmp is world-writable, so another local user
        could pre-create the path as a symlink and have launchd clobber the
        target every 5 minutes. Nothing here is sensitive, but the issue class
