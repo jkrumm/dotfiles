@@ -38,6 +38,14 @@ Host mini
     ControlPath ~/.ssh/cm/%r@%h:%p
     ControlPersist 10m
 
+# A GUI app launched from Dock/Raycast (Herdr.app's saved SSH device) inherits
+# launchd's SSH_AUTH_SOCK: Apple's agent, zero identities — and it runs ssh with
+# BatchMode, so it fails `Permission denied (publickey)` while every terminal
+# works. Pin the 1Password agent for this host, gated on the `op` backend like
+# config/zsh/ssh-agent.zsh: on the mini that socket is the biometric hang.
+Match host mini exec "grep -qx op ~/.config/secrets/backend"
+    IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
 # The IU work laptop. Reverse of `Host mini`: the mini dials OUT to the
 # MacBook for rsync/scp pulls, usage-tracker stats, brain/dotfiles sync — auth
 # is the dedicated mini->iumac key (config/ssh/authorized_keys), not the 1P
