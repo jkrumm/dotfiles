@@ -183,7 +183,7 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.sync` | KeepAlive | data sync |
 | `com.jkrumm.weatherorb.obs` | 1200s | observations ingest |
 | `com.jkrumm.weatherorb.fcstlog` | 900s | forecast logging |
-| `com.jkrumm.weatherorb.blendfield` | 10800s | blend field |
+| `com.jkrumm.weatherorb.archive` | hourly at :40 | archive pass — stage the past track of every committed blend (`ops/run-archive.sh`) |
 | `com.jkrumm.weatherorb.backfill` | 07:15 daily | backfill |
 | `com.jkrumm.weatherorb.watchdog` | 900s | Kuma push monitor |
 | `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |

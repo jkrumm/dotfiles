@@ -31,7 +31,7 @@
 
 set -u
 
-DOTFILES="${DOTFILES_DIR:-$HOME/SourceRoot/dotfiles}"
+DOTFILES="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MAP="$DOTFILES/docs/architecture.md"
 LAUNCHCTL=/bin/launchctl
 
