@@ -24,7 +24,7 @@ components:
 | services | sideclaw, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | obsidian | CLI answers (i.e. the app is running) |
-| disk | free space |
+| disk | two gates: used-% below `DEVHOST_DISK_USED_PCT_MAX` (plist override 93; script default 90) **and** free space at least `DEVHOST_DISK_FREE_GB_MIN` (20) |
 | runaways | report-only CPU-time reaper |
 | sideclaw jobs | sideclaw `GET /api/jobs/health` — `ok:false` FAILs; a 404 (older sideclaw) reports `starting` |
 | overview pane | the `make agent-overview` `watch` loop is alive — **WARN**, never FAIL |

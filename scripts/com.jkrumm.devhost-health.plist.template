@@ -24,5 +24,16 @@
        disappears for free. -->
   <key>StandardOutPath</key><string>__HOME__/Library/Logs/devhost-health.log</string>
   <key>StandardErrorPath</key><string>__HOME__/Library/Logs/devhost-health.log</string>
+  <!-- Host-specific disk policy, set here rather than in the script's generic
+       default. The script's 90% sits inside the 86-91% band weatherorb's blend
+       rounds oscillate through, so check_disk flaps without the 20 GiB
+       free-space floor (DISK_FREE_GB_MIN, left at its default) ever firing.
+       93% still leaves ~65G free on this host's 926G volume, well above the
+       floor. Reversible: edit here and re-run `make devhost-health-setup`. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DEVHOST_DISK_USED_PCT_MAX</key>
+    <string>93</string>
+  </dict>
 </dict>
 </plist>
