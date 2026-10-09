@@ -75,7 +75,7 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 **Left behind:**
 
 ## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: pending -->
-Prerequisite (owner): add **Checks: Read** to the fine-grained PAT `op://mini/github/token` (verified 2026-10-09: check-runs 403 with `x-accepted-github-permissions: checks=read`; repo/pulls/issues/actions read are 200), then `make secrets-seed`; re-login `gh` on the mini (token invalid). Without Checks the merge train stays dead on private repos (weatherorb 0/26 fixed).
+Premise check (Wave 0): fine-grained PATs have **no Checks permission** (GitHub's fine-grained permission table lists no check-run endpoints), so check-runs stay 403. `scripts/clients/github.py:workflow_runs()` already falls back to Actions runs, and the token reads them (weatherorb: 200, 181 runs on 2026-10-09). The STATE.md "lacks Actions: Read" note looks stale. Confirm the train can land a weatherorb PR via that fallback; if it can, there is no credential change and STATE.md §Open gets corrected. Re-login `gh` on the mini (token invalid).
 - [ ] `improve` loop: trigger on outcomes (failed / needs_decision / revision-exhausted items), not hourly; no journal commit for a quiet iteration.
 - [ ] Duplicate detection before dispatch (same repo + overlapping brief/carrier); revision cap 2, then one escalation.
 - [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
@@ -95,7 +95,7 @@ Evidence, three runs: shutterflow fleet on the MacBook (great; `~/SourceRoot/shu
   - opens tabs inside the repo's **existing** workspace (never a new workspace per worktree; the prometheus run left 11 under OTHER)
   - starts Claude and sends its brief, with a start-prompt delivery check (context counter off 0k, else re-send; shutterflow measured ~1/6 dropped)
   - also applies the delivery check to `rd wave`
-- [ ] Merge train helper (`rd merge`): rebase, checks, merge, re-rebase whenever main moves. GitHub path plus a GitLab ff-only path (API rebase, then arm auto-merge, since a push drops approvals). Push with `git -C <worktree>` so `protect-branches` judges the worktree, not the orchestrator's cwd.
+- [ ] Merge train helper (`rd merge`): rebase, checks, merge, re-rebase whenever main moves. GitHub only, **fast-forward/rebase-only** (SourceRoot now; IuRoot work repos move from GitLab to GitHub Enterprise soon, so no GitLab path). Where a push drops approvals: API rebase, then arm auto-merge. Push with `git -C <worktree>` so `protect-branches` judges the worktree, not the orchestrator's cwd.
 - [ ] `scripts/wave-watch.py` (from shutterflow `watch.py`) for fan-out and fleet only: wake on an agent leaving `working`/vanishing, an event line, or a 20-min heartbeat. Gates: cheap per-change check, full `make check` at merge, no `done` with "Review: none" without a recorded reason. Update `skills/remote-dev` + `docs/remote-dev.md`.
 **Left behind:**
 
