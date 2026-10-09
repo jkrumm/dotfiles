@@ -75,10 +75,17 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 **Left behind:**
 
 ## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: pending -->
-Premise check (Wave 0): fine-grained PATs have **no Checks permission** (GitHub's fine-grained permission table lists no check-run endpoints), so check-runs stay 403. `scripts/clients/github.py:workflow_runs()` already falls back to Actions runs, and the token reads them (weatherorb: 200, 181 runs on 2026-10-09). The STATE.md "lacks Actions: Read" note looks stale. Confirm the train can land a weatherorb PR via that fallback; if it can, there is no credential change and STATE.md §Open gets corrected. Re-login `gh` on the mini (token invalid).
+Premise (ledger, checked read-only 2026-10-09): the token is **not** the weatherorb blocker. Fine-grained PATs have no Checks permission, and warden already falls back to Actions runs, which it can read. The real causes:
+  - PRs #21, #33, #44, #47 and #48 **did merge**, but the 1h `merged` deadline closed them as `resolved`, not `fixed`. The "0/26 fixed" figure is a bookkeeping artifact.
+  - The live checkout diverged from origin, so ff-only deploys failed. That happened because Johannes's own wave commits sat unpushed on the live master.
+  - Carriers were superseded while waves reshaped master underneath them (#17, #30).
+  - Step-7 review blocked twice after 3 revisions (#57, #58).
+
+  Correct the stale "lacks Actions: Read" note in STATE.md §Open.
 - [ ] `improve` loop: trigger on outcomes (failed / needs_decision / revision-exhausted items), not hourly; no journal commit for a quiet iteration.
 - [ ] Duplicate detection before dispatch (same repo + overlapping brief/carrier); revision cap 2, then one escalation.
-- [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
+- [ ] Coexistence with live wave work: when a repo has an active herdr/wave agent or a dirty/diverged live checkout, warden parks that repo's implement/merge (one line to Argo, no strikes) instead of racing it. Rebase stale carriers rather than superseding them.
+- [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines` (it recorded real merges as `resolved`), and backfill the five misrecorded weatherorb items as `fixed`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
 - [ ] Repo contract (`check`/`deploy`/`verify`) for basalt-ui (draft PR), free-planning-poker (draft PR), homelab-private; bring basalt-ui and jkrumm.com into triage scope.
 - [ ] Owner gate: herdr under launchd / restart window (decision open since 2026-10-07 in `docs/improve/JOURNAL.md`). Implement whatever he picks.
 **Left behind:**
