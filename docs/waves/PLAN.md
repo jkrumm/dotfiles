@@ -33,16 +33,19 @@ homelab-private. Each repo gets its own commits; PR-required repos
 
 **No owner gates except a herdr restart.** Go was given on 2026-10-09 with Johannes away. Renames on GitHub and on disk, publishing on jkrumm.com, global config edits and Hermes skill changes are all in scope. PR-required repos follow one loop: PR, `/review`, fix and re-review until clean, merge, deploy, verify live, and if broken, the next PR. A table the plan used to hold for the owner (Wave 8 mapping, Wave 9 verdicts) is still written, committed and followed, but not waited on. The only real stop is a herdr restart, which kills every pane including the orchestrator's: record it in Left behind and move on. IuRoot repos are never touched.
 
-## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: active -->
-- [ ] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
-- [ ] Delete UI-only routes and libs: `server/routes/{repos,notes,markdown,events,diagrams,kiosk}.ts`, `server/lib/{repo-scanner,markdown-scanner,notes-bus,diagram-bus,diagram-lock,chrome,workspace}.ts` (~1k LOC), and the dashboard-only env keys `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH`.
-- [ ] **Keep:** `GET/POST /api/usage` (statusline + `fetch_usage.py` post to it), `server/lib/excalidraw*.ts` (the `excalidraw_diagram` tool), Octokit in `dispatch-git.ts` (live PR creation).
-- [ ] Drop the now-unused deps (blueprint, codemirror, `@uiw/*`, `@excalidraw/excalidraw`, mermaid, shiki, react*, remark/rehype, vite, …) — `bun remove`, then confirm nothing imports them.
-- [ ] Delete one-off scripts (`ab-review-angles.ts`, `probe-implement.ts`, `ralph*.sh`) and `docs/ui-and-caching.md`; README stops describing an "offload daemon"/dashboard.
-- [ ] `make reload` (drains), then `/api/jobs/health` green and one `check` + one `dispatch investigate` job round-trip.
-**Left behind:**
+## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: done -->
+- [x] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
+- [x] Delete UI-only routes and libs: `server/routes/{repos,notes,markdown,events,diagrams,kiosk}.ts`, `server/lib/{repo-scanner,markdown-scanner,notes-bus,diagram-bus,diagram-lock,chrome,workspace}.ts` (~1k LOC), and the dashboard-only env keys `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH`.
+- [x] **Keep:** `GET/POST /api/usage` (statusline + `fetch_usage.py` post to it), `server/lib/excalidraw*.ts` (the `excalidraw_diagram` tool), Octokit in `dispatch-git.ts` (live PR creation).
+- [x] Drop the now-unused deps (blueprint, codemirror, `@uiw/*`, `@excalidraw/excalidraw`, mermaid, shiki, react*, remark/rehype, vite, …) — `bun remove`, then confirm nothing imports them.
+- [x] Delete one-off scripts (`ab-review-angles.ts`, `probe-implement.ts`, `ralph*.sh`) and `docs/ui-and-caching.md`; README stops describing an "offload daemon"/dashboard.
+- [x] `make reload` (drains), then `/api/jobs/health` green and one `check` + one `dispatch investigate` job round-trip.
+**Left behind:** sideclaw `63d47aa` on master, pushed, deployed (`make deploy` green), `make check` 1148 tests pass, `/review` findings (6 cleanups) fixed in the same commit. Round-trips: `check` job passed, `dispatch investigate` job returned a verdict, `/api/usage` still answers.
+- Deviations from the plan: `server/lib/workspace.ts` is **kept, slimmed to `WORKSPACE_ROOTS`**, and `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH` are **kept**: they are not dashboard-only, `dispatch-policy.ts` builds its default dispatch roots from them (README row reworded). `server/lib/chrome.ts` is **kept**: `image.ts` (SVG rasterizer) and `excalidraw-hydrate.ts` use it. The hydrator loads `@excalidraw/excalidraw` from esm.sh, so dropping the npm dep is safe.
+- Also removed: `/api/build-id`, the `make build` target (reload/install-agent no longer depend on it), the `react` oxlint plugin, `.ralph*` gitignore entries. `docs/routing-and-quota.md` keeps its A/B evidence prose, now noting the two scripts are deleted (in git history).
+- Wave 2 note: the codemod must also rewrite the `https://sideclaw.local` diagram `source` stamp in `excalidraw-hydrate.ts` and `x-sideclaw-shutdown` (header read by `make reload` and `routes/shutdown.ts`). The first `make reload` attempt this wave refused because another agent's `review` job was running; waiting for idle was enough, no `FORCE`.
 
-## Wave 2 — rename sideclaw → agent-gateway (core + runtime)            <!-- status: pending -->
+## Wave 2 — rename sideclaw → agent-gateway (core + runtime)            <!-- status: active -->
 Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tools `mcp__agent-gateway__*`), env prefix `AGENT_GATEWAY_*`, launchd label `com.jkrumm.agent-gateway`, state `~/.local/{share,state}/agent-gateway`, logs `~/Library/Logs/agent-gateway*`.
 - [ ] Scripted codemod (committed under `scripts/`, re-runnable) over the sideclaw repo: identifiers, env vars, paths, docs. Env reads accept `SIDECLAW_*` as a fallback for one deprecation window, logged once at boot.
 - [ ] Runtime migration: drain (`make reload` semantics), stop the old agent, move `jobs.db`/`sideclaw.db`/salvage to the new paths, load the **new** label (never reuse `com.jkrumm.sideclaw` — BTM-denied), boot, health green.
