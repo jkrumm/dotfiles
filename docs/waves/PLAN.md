@@ -1,9 +1,6 @@
 # Setup round 4 — agent-gateway, a loop that ships, fleet-style waves
 
-**Status: PARKED.** Johannes is mid-build elsewhere. Do not start, spawn or
-flip any wave to `active` until he gives the explicit go. No worktree or
-parallel-branch tricks to "get ahead" — when the go comes, waves run one after
-another on the normal branches.
+**Status: RUNNING** (go given 2026-10-09). Orchestrated from a herdr tab in `~/SourceRoot`, one wave at a time, on the normal branches.
 
 **Goal:** act on the 2026-10-09 holistic review: sideclaw becomes a lean
 `agent-gateway` (CLI `agw`), warden ships on every repo instead of feeding
@@ -24,9 +21,7 @@ jkrumm.com, usage-tracker, modelpick, basalt-ui, free-planning-poker,
 homelab-private. Each repo gets its own commits; PR-required repos
 (`config/pr-required-repos.json`) get a draft PR, never a direct push.
 
-**Owner gates (stop and ask, never decide):** GitHub repo renames (outward),
-the PAT/GitHub App scopes, the herdr restart window, the Wave 7 mapping table,
-the Wave 8 verdict table, publishing on jkrumm.com.
+**No owner gates except a herdr restart.** Go was given on 2026-10-09 with Johannes away. Renames on GitHub and on disk, publishing on jkrumm.com, global config edits and Hermes skill changes are all in scope. PR-required repos follow one loop: PR, `/review`, fix and re-review until clean, merge, deploy, verify live, and if broken, the next PR. A table the plan used to hold for the owner (Wave 8 mapping, Wave 9 verdicts) is still written, committed and followed, but not waited on. The only real stop is a herdr restart, which kills every pane including the orchestrator's: record it in Left behind and move on. IuRoot repos are never touched.
 
 ## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: pending -->
 - [ ] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
@@ -43,7 +38,7 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 - [ ] Runtime migration: drain (`make reload` semantics), stop the old agent, move `jobs.db`/`sideclaw.db`/salvage to the new paths, load the **new** label (never reuse `com.jkrumm.sideclaw` — BTM-denied), boot, health green.
 - [ ] CLI `agw` on PATH via `make setup`; `sideclaw` stays as a thin deprecation shim that execs `agw` and prints one stderr line.
 - [ ] MCP registration in `~/.claude.json` and `config/opencode/opencode.json` → `agent-gateway`. Grep the live `settings.json` and `hooks/` for `mcp__sideclaw` matchers.
-- [ ] Owner gate: GitHub repo rename `jkrumm/sideclaw` → `jkrumm/agent-gateway` (GitHub redirects the old URL), local dir `~/SourceRoot/agent-gateway`.
+- [ ] GitHub repo rename `jkrumm/sideclaw` → `jkrumm/agent-gateway` (`gh repo rename`; GitHub redirects the old URL), update the remote, move the local dir to `~/SourceRoot/agent-gateway` (fix `~/.claude.json` project paths, launchd plist, symlinks).
 **Left behind:**
 
 ## Wave 3 — rename sweep: consumers and docs            <!-- status: pending -->
@@ -87,7 +82,7 @@ Premise (ledger, checked read-only 2026-10-09): the token is **not** the weather
 - [ ] Coexistence with live wave work: when a repo has an active herdr/wave agent or a dirty/diverged live checkout, warden parks that repo's implement/merge (one line to Argo, no strikes) instead of racing it. Rebase stale carriers rather than superseding them.
 - [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines` (it recorded real merges as `resolved`), and backfill the five misrecorded weatherorb items as `fixed`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
 - [ ] Repo contract (`check`/`deploy`/`verify`) for basalt-ui (draft PR), free-planning-poker (draft PR), homelab-private; bring basalt-ui and jkrumm.com into triage scope.
-- [ ] Owner gate: herdr under launchd / restart window (decision open since 2026-10-07 in `docs/improve/JOURNAL.md`). Implement whatever he picks.
+- [ ] herdr under launchd: prepare everything that doesn't need a restart (plist, `make` target, docs). The restart itself is the one deferred step: record it in Left behind.
 **Left behind:**
 
 ## Wave 7 — /wave: one simple skill that picks the right shape            <!-- status: pending -->
@@ -108,7 +103,7 @@ Evidence, three runs: shutterflow fleet on the MacBook (great; `~/SourceRoot/shu
 
 ## Wave 8 — global config: contradictions out, guardrails kept            <!-- status: pending -->
 No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
-- [ ] Build a mapping table (old line → kept / moved to `<file>:<section>` / duplicate of `<file>`) for every proposed change. **Owner gate: Johannes reviews the table before any edit is committed.** Operating contract, secrets/mini warnings, herdr, waves, mini vs MacBook, lanes stay verbatim.
+- [ ] Build a mapping table (old line → kept / moved to `<file>:<section>` / duplicate of `<file>`) for every proposed change. Commit the table first (`docs/waves/round4-claude-md-map.md`), then apply it. Operating contract, secrets/mini warnings, herdr, waves, mini vs MacBook, lanes stay verbatim.
 - [ ] Fix the lanes contradiction (four lanes vs Explore/@verifier/`/check` vs `global-reference.md` §Parallelism vs `skills/implement`) with one consistent sentence.
 - [ ] Narrow the lane table:
   - dispatch = "one bounded change, unattended, in a repo you are not working in"; it is no longer "default for settled multi-file edits", which pushed the prometheus run into dispatch first
@@ -120,14 +115,14 @@ No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
 **Left behind:**
 
 ## Wave 9 — Hermes: audit and improve the wiring (no blind deletion)            <!-- status: pending -->
-- [ ] Verdict table for every live skill in `~/.hermes/skills` (73 + 24 archived): learn-from (pattern worth porting into our skills) / adapt-port / keep in Hermes / retire, with a one-line reason. **Owner gate: Johannes picks before anything is disabled.**
+- [ ] Verdict table for every live skill in `~/.hermes/skills` (73 + 24 archived): learn-from (pattern worth porting into our skills) / adapt-port / keep in Hermes / retire, with a one-line reason. Commit the table, then act on it. Retire only what has no use and nothing to learn from.
 - [ ] Wiring map Hermes ↔ global setup: shared facts duplicated in Hermes skills (`herdr` 279 vs 195 lines, `podcast`, research, homelab/homelab-ops, dispatch/warden) → which become links to one doc, which stay Hermes-specific.
 - [ ] Port the "learn-from" patterns into dotfiles skills as agreed; remove retired terms (`agent-dispatch`, `rd bg`, "colleague", `claude --bg`) from `capture` and `herdr`.
 - [ ] Review the stale/oversized ones (`karakeep`, `reading`, `work` 618 lines); add a check that the live skill set matches the declared `HERMES_SKILLS` list.
 **Left behind:**
 
 ## Wave 10 — docs on every surface            <!-- status: pending -->
-- [ ] jkrumm.com `personal-stack.mdx` (published, stale: CLAUDE.md → AGENTS.md, Grafana/Loki → ClickStack, no agent stack); `agent-infrastructure.mdx` "rolling out" paragraph → current; cross-link the two. **Publishing is the owner's call.**
+- [ ] jkrumm.com `personal-stack.mdx` (published, stale: CLAUDE.md → AGENTS.md, Grafana/Loki → ClickStack, no agent stack); `agent-infrastructure.mdx` "rolling out" paragraph → current; cross-link the two. Publish it (the site is WIP-flagged).
 - [ ] brain: `agent-overview-loop.md` and `agent-harness.md` rewritten or bannered superseded; `Areas/Engineering/Engineering.md` links the agent platform page; rename `agent-estate-model` → `agent-platform` (keep an alias); four superseded pages → one History page.
 - [ ] Narrator prompt stops writing "merge-approval gate" for warden; one human "daily workflow" note in brain Areas/Engineering (lanes, waves with roles, Argo/Hermes queue).
 - [ ] Website diagram generated from or pointing at `dotfiles/docs/diagrams` source.
