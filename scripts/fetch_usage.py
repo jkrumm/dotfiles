@@ -25,6 +25,7 @@ from pathlib import Path
 
 CACHE_DIR = Path("/tmp/claude_sl")
 CACHE_FILE = CACHE_DIR / "usage_api.json"
+RAW_FILE = CACHE_DIR / "usage_raw.json"
 LOG_DIR = Path.home() / ".claude" / "logs"
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -122,10 +123,38 @@ def fetch() -> None:
             "resets_at_epoch": _to_epoch(w.get("resets_at")),
         }
 
+    # The endpoint's generic limit list (session, weekly_all, weekly_scoped
+    # per model — Fable today, whatever later), normalized: consumers show
+    # model limits from here instead of hardcoding a seven_day_<model> key.
+    shares = {
+        share.get("limit_index"): share.get("allowance_percent_of_weekly")
+        for share in data.get("weekly_scoped_shares") or []
+    }
+
+    def limit(index: int, item: dict) -> dict:
+        scope = item.get("scope") or {}
+        model = (scope.get("model") or {}).get("display_name")
+        surface = scope.get("surface")
+        return {
+            "kind": item.get("kind"),
+            "group": item.get("group"),
+            "label": model or (surface if isinstance(surface, str) else None),
+            "percent": item.get("percent"),
+            "resets_at_epoch": _to_epoch(item.get("resets_at")),
+            "severity": item.get("severity"),
+            "is_active": item.get("is_active"),
+            "allowance_percent_of_weekly": shares.get(index),
+        }
+
+    limits = [limit(i, item) for i, item in enumerate(data.get("limits") or [])]
+
     result = {
+        # Legacy top-level keys — statusline.sh and sideclaw read these.
         "five_hour": extract("five_hour"),
         "seven_day": extract("seven_day"),
         "seven_day_sonnet": extract("seven_day_sonnet"),
+        "limits": limits,
+        "extra_usage": data.get("extra_usage"),
         "fetched_at": int(datetime.now(timezone.utc).timestamp()),
     }
 
@@ -141,6 +170,8 @@ def fetch() -> None:
     tmp = CACHE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(result))
     tmp.rename(CACHE_FILE)
+    # Unmodified response, for checking what the endpoint returns today.
+    RAW_FILE.write_text(json.dumps(data, indent=2))
 
     # Push to agent-gateway UI (localhost:7705) — fail silently if not running
     try:

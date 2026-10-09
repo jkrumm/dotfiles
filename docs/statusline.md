@@ -63,7 +63,19 @@ also POSTs to agent-gateway. Never spawned on the IU lane.
   until the first response brings `rate_limits` — which is why the push moved here.
 - The endpoint is **rate-limited** (per-token 429s within a few requests/min) —
   on 429 the existing cache is kept rather than blanked.
-- Errors are logged to `~/.claude/logs/YYYY-MM-DD.jsonl` (`src: fetch_usage`), 3-day cleanup.
+- Fields used: `five_hour.utilization` (5h window %, color-coded),
+  `five_hour.resets_at` → the "↺Nm" countdown, `seven_day.utilization` (weekly).
+  `seven_day_sonnet` is also captured (legacy; `null` on current plans).
+- Additive keys for other consumers (tinycast-extensions' Claude Usage):
+  `limits` — the endpoint's generic limit list, normalized to `{kind, group,
+  label, percent, resets_at_epoch, severity, is_active,
+  allowance_percent_of_weekly}`; `kind` is `session` / `weekly_all` /
+  `weekly_scoped`, and a scoped limit's `label` is the model name (Fable on a
+  Max plan as of 2026-10) — and `extra_usage` (passed through as returned).
+  The unmodified response lands in `/tmp/claude_sl/usage_raw.json` for
+  checking what the endpoint returns today.
+- Errors are written into the cache file as `{"error": …}` and logged to
+  `~/.claude/logs/YYYY-MM-DD.jsonl` (`src: fetch_usage`), 3-day cleanup.
 
 ## Known Gotchas
 
