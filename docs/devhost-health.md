@@ -21,14 +21,14 @@ components:
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | sideclaw, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), research-gateway (`/health`, renderer, Tavily plan, and a deploy marker that lags `origin/master` > 15 min or a poller silent > 15 min), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
+| services | agent-gateway, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), research-gateway (`/health`, renderer, Tavily plan, and a deploy marker that lags `origin/master` > 15 min or a poller silent > 15 min), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | obsidian | CLI answers (i.e. the app is running) |
 | disk | free space |
 | runaways | report-only CPU-time reaper |
-| sideclaw jobs | sideclaw `GET /api/jobs/health` — `ok:false` FAILs; a 404 (older sideclaw) reports `starting` |
+| agent-gateway jobs | agent-gateway `GET /api/jobs/health` — `ok:false` FAILs; a 404 (older agent-gateway) reports `starting` |
 | overview pane | the `make agent-overview` `watch` loop is alive — **WARN**, never FAIL |
-| quota | Max utilisation from sideclaw `GET /api/usage`, appended ungraded (`quota 5h 48% · 7d 21%`); **WARN** at 5 h ≥ 90 % |
+| quota | Max utilisation from agent-gateway `GET /api/usage`, appended ungraded (`quota 5h 48% · 7d 21%`); **WARN** at 5 h ≥ 90 % |
 
 A component exits 0 (healthy), 2 (WARN — named in the msg, no streak, never a
 page) or anything else (FAIL — subject to the boot grace and streak rules below).
@@ -112,7 +112,7 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   crash-loop all still page; a deliberate restart is reported in the component's
   own text and in the `history:` tail instead.
 - **A clean exit 0 is not evidence of intent — a marker is.** research-gateway
-  and sideclaw drain and exit 0 on their own, so their deploys carried no signal
+  and agent-gateway drain and exit 0 on their own, so their deploys carried no signal
   and paged every time (87 messages in 14 days to 2026-09-27, a third of
   #alerts). "No signal + exit 0 = deliberate" was rejected: a KeepAlive daemon
   that bails cleanly on missing config crash-loops with exactly that shape. So
@@ -120,7 +120,7 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   KeepAlive) appends an epoch to
   `~/.local/state/devhost/deliberate-restart/<label>` first; one line excuses
   one bump within 10 min and is consumed by it. Writers: research-gateway
-  `mini-deploy.sh` + `make launchd-restart`, sideclaw `make reload`.
+  `mini-deploy.sh` + `make launchd-restart`, agent-gateway `make reload`.
   `bootout`+`bootstrap` needs none (a fresh load restarts at `runs = 1`).
   Contract and logic: `scripts/lib/launchd-restarts.sh`; proof:
   `make launchd-restarts-test`.
@@ -214,7 +214,7 @@ object's own sha reports drift no upgrade can clear.
 compromised release, it is *silent config revert*: caddy loses its DNS module and
 nothing fails for ~60 days; colima's plist reverts and nothing fails until the
 next power cut. An unattended upgrader on the host running herdr, colima,
-sideclaw, Hermes and every dev door is a mechanism for introducing exactly that
+agent-gateway, Hermes and every dev door is a mechanism for introducing exactly that
 at 3am with nobody watching. `make collie-upgrade` is the paired human-invoked
 applier (needs a TTY, refuses automation): **notice unattended, apply attended.**
 

@@ -841,7 +841,7 @@ usage() {
 
   Four lanes for starting agent work (docs/agent-platform.md):
     @implementer  native subagent — the edit must land in this session's live tree
-    dispatch      sideclaw `dispatch` (MCP/CLI) — settled bounded work → branch/PR or verdict
+    dispatch      agent-gateway `dispatch` (MCP/CLI) — settled bounded work → branch/PR or verdict
     wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
     warden        `warden run <repo> '<brief>'` — unattended, tracked to an outcome
 

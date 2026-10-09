@@ -1,15 +1,15 @@
 ---
 name: review
-description: Multi-angle code review via sideclaw MCP tool (backend/model per sideclaw GET /api/routing; the result's `backend` field says which ran). Add --deep to also run Anthropic's native correctness + security review on the orchestrator's Max model.
+description: Multi-angle code review via agent-gateway MCP tool (backend/model per agent-gateway GET /api/routing; the result's `backend` field says which ran). Add --deep to also run Anthropic's native correctness + security review on the orchestrator's Max model.
 ---
 
 # Review
 
-## Default — sideclaw multi-angle
+## Default — agent-gateway multi-angle
 
-`mcp__sideclaw__review` is **asynchronous** (a background job; backend and model per tool come from sideclaw `GET /api/routing`, and the result's `backend` field says which one ran it):
-1. Call `mcp__sideclaw__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
-2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default; read `result` on `status: "done"`. The submit call does **not** return the findings.
+`mcp__agent-gateway__review` is **asynchronous** (a background job; backend and model per tool come from agent-gateway `GET /api/routing`, and the result's `backend` field says which one ran it):
+1. Call `mcp__agent-gateway__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
+2. Call `mcp__agent-gateway__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default; read `result` on `status: "done"`. The submit call does **not** return the findings.
 
 This runs the deterministic floor (architect, senior-dev, and file-type angles)
 plus a triage router that adds content-driven angles — security, performance,
@@ -20,12 +20,12 @@ where it ran.
 ## `--deep` — add native correctness + security (on the orchestrator's Max model)
 
 When the args contain `--deep`, ALSO run Anthropic's native reviewers and merge
-them with the sideclaw result. These run on the orchestrator's Max model and are
-tuned for real correctness bugs — complementary to sideclaw's architecture /
+them with the agent-gateway result. These run on the orchestrator's Max model and are
+tuned for real correctness bugs — complementary to agent-gateway's architecture /
 framework / style angles. **Reserve `--deep` for pre-ship gates or risky changes**,
 not routine reviews — it spends Max.
 
-1. Run the sideclaw review (as above).
+1. Run the agent-gateway review (as above).
 2. Invoke the native **`code-review`** skill at high effort over the same scope
    (Skill tool, `args: "high"`). It targets correctness bugs the angle reviewers
    may miss.
@@ -33,9 +33,9 @@ not routine reviews — it spends Max.
    touches security-sensitive surface — auth/authz, secrets or credentials,
    crypto, SQL/command/path construction from input, file uploads, shelling out,
    or env-var handling. Skip it otherwise.
-4. Merge all findings into one verdict, deduplicated against the sideclaw
+4. Merge all findings into one verdict, deduplicated against the agent-gateway
    findings. Map native **Important** → blocking, **Nit** → improvements. Keep
-   sideclaw's outcome classification (`clean` / `actionable` / `needs-human`); if
+   agent-gateway's outcome classification (`clean` / `actionable` / `needs-human`); if
    the native pass surfaces a blocking bug, the merged outcome is at least
    `actionable`.
 

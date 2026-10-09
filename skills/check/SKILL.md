@@ -1,14 +1,14 @@
 ---
 name: check
-description: Run validation (format, lint, tsc, test) via sideclaw MCP tool
+description: Run validation (format, lint, tsc, test) via agent-gateway MCP tool
 ---
 
-# Check — via sideclaw MCP
+# Check — via agent-gateway MCP
 
-`mcp__sideclaw__check` is **asynchronous** (a background job; the backend and model per tool come from sideclaw `GET /api/routing`, and every result carries a `backend` field saying which one ran it):
+`mcp__agent-gateway__check` is **asynchronous** (a background job; the backend and model per tool come from agent-gateway `GET /api/routing`, and every result carries a `backend` field saying which one ran it):
 
-1. Call `mcp__sideclaw__check` with `cwd` set to the target repo root → returns `{ jobId }`.
-2. Call `mcp__sideclaw__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default.
+1. Call `mcp__agent-gateway__check` with `cwd` set to the target repo root → returns `{ jobId }`.
+2. Call `mcp__agent-gateway__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default.
 3. On `status: "done"`, read `result`: check `passed` first; if false, inspect `steps[n].errors`.
 
 The submit call does **not** return the pass/fail result — always poll `job_wait`.

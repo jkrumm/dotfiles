@@ -76,7 +76,7 @@ greps them.
 1. **Orient.** Read `docs/waves/PLAN.md`. Your wave is the `active` one. If none
    is active, or the active one is already `[x]` complete, stop and say so — do
    not guess which wave you are.
-2. **Execute the steps.** Delegate as always: `mcp__sideclaw__dispatch` (tier
+2. **Execute the steps.** Delegate as always: `mcp__agent-gateway__dispatch` (tier
    `implement`) for settled edits off Max, `@implementer` for edits needing this
    pane's live tree, `Explore` for search, `/research` for library facts. The
    wave agent orchestrates; it does not grind.

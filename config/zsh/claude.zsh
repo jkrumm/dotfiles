@@ -315,7 +315,7 @@ cdp() { ca DeepSeek-V4-Pro "$@" }
 
 # ── Off-Max `claude -p` transport ─────────────────────────────────────────────
 #
-# So subprocess skills (analyze; otel and read-drawing moved to sideclaw) don't
+# So subprocess skills (analyze; otel and read-drawing moved to agent-gateway) don't
 # copy-paste the IU credential plumbing. Runs `claude -p` off the Max
 # subscription — billing is IU per-token, not Max quota. Pass any `claude -p`
 # flags + a prompt (positional or via stdin), e.g.
@@ -354,7 +354,7 @@ claude_iu() {
 #
 # The two machine-dependent bits are gated at launch, not committed into the
 # shared config: the light/dark re-theme (herdr panes only) and the mini-only
-# sideclaw MCP (config/opencode/mini.json via OPENCODE_CONFIG).
+# agent-gateway MCP (config/opencode/mini.json via OPENCODE_CONFIG).
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
 # so the key never rides argv or an ssh hop.

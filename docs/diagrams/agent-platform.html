@@ -5060,11 +5060,11 @@
         <path data-edge-from="implement" data-edge-to="merge" data-edge-key="10" data-composition-points="448,632;472,632" d="M 448 632 L 472 632" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="merge" data-edge-to="deploy" data-edge-key="11" data-composition-points="592,632;616,632" d="M 592 632 L 616 632" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="deploy" data-edge-to="verify" data-edge-key="12" data-composition-points="736,632;760,632" d="M 736 632 L 760 632" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="triage" data-edge-to="sideclaw" data-edge-label="single-shot" data-edge-key="13" data-composition-points="100,664;100,732;359,732;359,800" d="M 100 664 L 100 724 Q 100 732 108 732 L 351 732 Q 359 732 359 740 L 359 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="investigate" data-edge-to="sideclaw" data-edge-label="dispatch" data-edge-key="14" data-composition-points="244,664;244,732;373,732;373,800" d="M 244 664 L 244 724 Q 244 732 252 732 L 365 732 Q 373 732 373 740 L 373 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="implement" data-edge-to="sideclaw" data-edge-label="dispatch" data-edge-key="15" data-composition-points="387,664;387,800" d="M 387 664 L 387 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="merge" data-edge-to="sideclaw" data-edge-label="review" data-edge-key="16" data-composition-points="532,664;532,732;401,732;401,800" d="M 532 664 L 532 724 Q 532 732 524 732 L 409 732 Q 401 732 401 740 L 401 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="sideclaw" data-edge-to="workers" data-edge-label="spawns" data-edge-key="17" data-composition-points="380,864;380,927;320,927;320,990" d="M 380 864 L 380 919 Q 380 927 372 927 L 328 927 Q 320 927 320 935 L 320 990" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="triage" data-edge-to="agent-gateway" data-edge-label="single-shot" data-edge-key="13" data-composition-points="100,664;100,732;359,732;359,800" d="M 100 664 L 100 724 Q 100 732 108 732 L 351 732 Q 359 732 359 740 L 359 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="investigate" data-edge-to="agent-gateway" data-edge-label="dispatch" data-edge-key="14" data-composition-points="244,664;244,732;373,732;373,800" d="M 244 664 L 244 724 Q 244 732 252 732 L 365 732 Q 373 732 373 740 L 373 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="implement" data-edge-to="agent-gateway" data-edge-label="dispatch" data-edge-key="15" data-composition-points="387,664;387,800" d="M 387 664 L 387 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="merge" data-edge-to="agent-gateway" data-edge-label="review" data-edge-key="16" data-composition-points="532,664;532,732;401,732;401,800" d="M 532 664 L 532 724 Q 532 732 524 732 L 409 732 Q 401 732 401 740 L 401 800" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="agent-gateway" data-edge-to="workers" data-edge-label="spawns" data-edge-key="17" data-composition-points="380,864;380,927;320,927;320,990" d="M 380 864 L 380 919 Q 380 927 372 927 L 328 927 Q 320 927 320 935 L 320 990" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="workers" data-edge-to="claude" data-edge-key="18" data-composition-points="306,1054;306,1117;130,1117;130,1180" d="M 306 1054 L 306 1109 Q 306 1117 298 1117 L 138 1117 Q 130 1117 130 1125 L 130 1180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="workers" data-edge-to="agents" data-edge-key="19" data-composition-points="320,1054;320,1117;350,1117;350,1180" d="M 320 1054 L 320 1109 Q 320 1117 328 1117 L 342 1117 Q 350 1117 350 1125 L 350 1180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="workers" data-edge-to="makefile" data-edge-key="20" data-composition-points="334,1054;334,1117;570,1117;570,1180" d="M 334 1054 L 334 1109 Q 334 1117 342 1117 L 562 1117 Q 570 1117 570 1125 L 570 1180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
@@ -5223,14 +5223,14 @@
         <text data-detail="context" x="820" y="646" class="t-muted" font-size="9" text-anchor="middle">revert: rolling out</text>
         </g>
 
-        <g id="node-sideclaw" data-node-id="sideclaw" data-node-label="Sideclaw" tabindex="0" role="button" aria-label="Focus Sideclaw, the one worker engine · triage, dispatch, review, check · models from its registry, Worker engine" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the one worker engine · triage, dispatch, review, check · models from its registry" data-node-context="Worker engine">
-          <title>Sideclaw · the one worker engine · triage, dispatch, review, check · models from its registry · Worker engine</title>
+        <g id="node-agent-gateway" data-node-id="agent-gateway" data-node-label="Agent-Gateway" tabindex="0" role="button" aria-label="Focus Agent-Gateway, the one worker engine · triage, dispatch, review, check · models from its registry, Worker engine" aria-pressed="false" data-node-kind="backend" data-node-sublabel="the one worker engine · triage, dispatch, review, check · models from its registry" data-node-context="Worker engine">
+          <title>Agent-Gateway · the one worker engine · triage, dispatch, review, check · models from its registry · Worker engine</title>
           <rect x="40" y="800" width="680" height="64" rx="6" class="c-mask"/>
           <rect x="40" y="800" width="680" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(46 806) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="380" y="830" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Sideclaw</text>
+          <text data-node-label="" data-detail-anchor="" x="380" y="830" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Agent-Gateway</text>
         <text data-detail="context" x="380" y="846" class="t-muted" font-size="9" text-anchor="middle">the one worker engine · triage, dispatch, review, check · models from its registry</text>
         </g>
 
@@ -5330,23 +5330,23 @@
 
 
 
-        <g data-detail="context" data-edge-from="triage" data-edge-to="sideclaw" data-edge-label="single-shot" data-edge-key="13">
+        <g data-detail="context" data-edge-from="triage" data-edge-to="agent-gateway" data-edge-label="single-shot" data-edge-key="13">
           <rect x="198.1" y="736" width="62.8" height="14" rx="3" class="c-mask"/>
           <text x="229.5" y="746" class="t-backend" font-size="8" text-anchor="middle">single-shot</text>
         </g>
-        <g data-detail="context" data-edge-from="investigate" data-edge-to="sideclaw" data-edge-label="dispatch" data-edge-key="14">
+        <g data-detail="context" data-edge-from="investigate" data-edge-to="agent-gateway" data-edge-label="dispatch" data-edge-key="14">
           <rect x="284.3" y="712" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="308.5" y="722" class="t-backend" font-size="8" text-anchor="middle">dispatch</text>
         </g>
-        <g data-detail="context" data-edge-from="implement" data-edge-to="sideclaw" data-edge-label="dispatch" data-edge-key="15">
+        <g data-detail="context" data-edge-from="implement" data-edge-to="agent-gateway" data-edge-label="dispatch" data-edge-key="15">
           <rect x="362.8" y="700" width="48.4" height="14" rx="3" class="c-mask"/>
           <text x="387" y="710" class="t-backend" font-size="8" text-anchor="middle">dispatch</text>
         </g>
-        <g data-detail="context" data-edge-from="merge" data-edge-to="sideclaw" data-edge-label="review" data-edge-key="16">
+        <g data-detail="context" data-edge-from="merge" data-edge-to="agent-gateway" data-edge-label="review" data-edge-key="16">
           <rect x="447.1" y="712" width="38.8" height="14" rx="3" class="c-mask"/>
           <text x="466.5" y="722" class="t-backend" font-size="8" text-anchor="middle">review</text>
         </g>
-        <g data-detail="context" data-edge-from="sideclaw" data-edge-to="workers" data-edge-label="spawns" data-edge-key="17">
+        <g data-detail="context" data-edge-from="agent-gateway" data-edge-to="workers" data-edge-label="spawns" data-edge-key="17">
           <rect x="330.6" y="907" width="38.8" height="14" rx="3" class="c-mask"/>
           <text x="350" y="917" class="t-muted" font-size="8" text-anchor="middle">spawns</text>
         </g>
@@ -5630,7 +5630,7 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>sideclaw dispatch</h3>
+          <h3>agw dispatch</h3>
         </div>
         <ul>
           <li>&bull; Settled, bounded work</li>

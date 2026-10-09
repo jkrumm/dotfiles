@@ -165,7 +165,7 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `sideclaw dispatch` | settled, bounded work → branch/PR or a verdict |
+| `agw dispatch` | settled, bounded work → branch/PR or a verdict |
 | `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (`--kind opencode` for OpenCode), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
 | `warden run <repo> <<'BRIEF'` / `--brief-file <path>` | unattended, tracked to an outcome on warden's ledger |
 
@@ -173,7 +173,7 @@ substitutes for another.**
 |-|-|
 | A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|close\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| What every agent is doing | `make agent-overview` — herdr workspace `overview` watching sideclaw `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
+| What every agent is doing | `make agent-overview` — herdr workspace `overview` watching agent-gateway `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 
@@ -319,7 +319,7 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
 `MacMini Dev Host - Push` is the composite over **17 components**: tailscale,
 sshd, herdr, git push credential, dev vhosts, memory, kernel panics (WARN), launchd restarts, boot path,
-services (9), claude auth, obsidian, disk, runaways, sideclaw jobs, overview
+services (9), claude auth, obsidian, disk, runaways, agent-gateway jobs, overview
 pane, quota (in every msg; WARN never pages). Push, not probe (no ACL grant runs
 `tag:homelab → tag:mac`) — full rationale, transient-tolerance knobs, and the
 paired `make mini-macos-update` applier: `docs/devhost-health.md`,
@@ -419,10 +419,10 @@ is **not** in `~/.claude.json` — `headersHelper` runs
 `scripts/mcp-research-headers.sh` per connect, Keychain first, `secrets-run`
 second. Rotating `op://vps/research-gateway/API_SECRET` means
 `security delete-generic-password -s research-gateway-token` then
-`make setup`), and **`sideclaw` on the mini only** — its
-MCP is stdio-only against `~/SourceRoot/sideclaw/server/mcp.ts`, a repo that lives
+`make setup`), and **`agent-gateway` on the mini only** — its
+MCP is stdio-only against `~/SourceRoot/agent-gateway/server/mcp.ts`, a repo that lives
 only there, so `/check`, `/review`, `/otel`, `/excalidraw-diagram` and
-`dispatch` are mini-only skills. Don't clone sideclaw to the MacBook to "fix"
+`dispatch` are mini-only skills. Don't clone agent-gateway to the MacBook to "fix"
 (remote reach = a StreamableHTTP transport).
 HyperDX is deliberately *not*
 registered — `/otel` speaks its endpoint over HTTP rather than costing every

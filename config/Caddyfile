@@ -90,8 +90,8 @@ rollhook-dashboard.test {
 	reverse_proxy localhost:7702
 }
 
-# sideclaw
-sideclaw.test {
+# agent-gateway
+agent-gateway.test {
 	import local
 	reverse_proxy localhost:7705
 }

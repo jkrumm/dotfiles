@@ -5,7 +5,7 @@ description: Deep technical research via the research-gateway MCP — agentic Ta
 
 # Research — via research-gateway MCP
 
-The standalone research-gateway service (Elysia + Bun, native on the Mac mini, Tailscale-only) runs the agentic loop on IU models, off Max. It uses an **async job contract** (mirrors sideclaw's `check`/`review`): submit → wait → read. The submit never blocks; `job_wait` then blocks for the WHOLE job (the server holds the stream open with 15s keep-alives), so one wait call is normally the entire interaction.
+The standalone research-gateway service (Elysia + Bun, native on the Mac mini, Tailscale-only) runs the agentic loop on IU models, off Max. It uses an **async job contract** (mirrors agent-gateway's `check`/`review`): submit → wait → read. The submit never blocks; `job_wait` then blocks for the WHOLE job (the server holds the stream open with 15s keep-alives), so one wait call is normally the entire interaction.
 
 1. **Submit.** Call `mcp__research-gateway__research` with `query` set to the user's question, optionally `depth` (`quick` | `standard` | `deep`, default `standard`). It returns IMMEDIATELY with `{ jobId, status }` — **not** the report. Note the `jobId`; do not treat this response as the answer.
 2. **Wait.** Call `mcp__research-gateway__job_wait({ jobId })` — once. It blocks until the job actually finishes (quick ~40s, standard ~2min, deep up to ~20min) and returns the terminal state. Only if it comes back with `stillRunning: true` — meaning the wait was cut short, not that the job failed — call it again with the same `jobId`. (`job_status({ jobId })` is a non-blocking peek if you want to do other work meanwhile.)

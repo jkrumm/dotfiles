@@ -55,13 +55,13 @@ XCADDY_VERSION           ?= v0.4.7
 CADDY_DNS_MODULE         ?= github.com/caddy-dns/cloudflare
 CADDY_DNS_MODULE_VERSION ?= v0.2.4
 
-# fallow — the static analyzer behind /analyze and sideclaw's check/review
+# fallow — the static analyzer behind /analyze and agent-gateway's check/review
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
 FALLOW_VERSION := 3.27.0
 
-# ocr — alibaba/open-code-review, one input to sideclaw's review pipeline. A
+# ocr — alibaba/open-code-review, one input to agent-gateway's review pipeline. A
 # GitHub-release Go binary (the npm package only wraps it behind a postinstall
 # download), checksum-verified against the release's sha256sum.txt; pinned for
 # the same reason as fallow.
@@ -267,7 +267,7 @@ _setup-tools:
 		|| echo "    ✗ coderabbit [missing — run: make brew-check]"
 	@# fallow — npm global (not brew: needs Node on PATH), pinned to FALLOW_VERSION.
 	@# Linked into ~/.local/bin as well: the fnm-global bin dir is a per-shell
-	@# multishell path that a LaunchAgent (sideclaw's `which fallow`) never sees.
+	@# multishell path that a LaunchAgent (agent-gateway's `which fallow`) never sees.
 	@if [ "$$(fallow --version 2>/dev/null | head -1 | awk '{print $$2}')" = "$(FALLOW_VERSION)" ]; then \
 		echo "    · fallow $(FALLOW_VERSION) (ok)"; \
 	else \
@@ -1160,7 +1160,7 @@ _setup-scripts:
 		DST="$(HOME)/.local/bin/keyprobe"
 	@# rd, ask-human, warden: agent-control commands as real executables on PATH
 	@# (not only zsh functions), so ssh remote commands, OpenCode, Codex and
-	@# sideclaw workers resolve them. warden's script lives in its own repo and is
+	@# agent-gateway workers resolve them. warden's script lives in its own repo and is
 	@# linked only where that repo exists (the mini).
 	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh
 	@$(MAKE) --no-print-directory _link \
@@ -1389,11 +1389,11 @@ _setup-browser:
 	@claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
-# timeout: 1800000 (30 min) on the mcpServers.sideclaw entry, not the plain
+# timeout: 1800000 (30 min) on the mcpServers.agent-gateway entry, not the plain
 # `claude mcp add` — that command has no --timeout flag, so this is add-json
 # with the same JSON shape a stdio server would otherwise get. Without it the
 # client falls back to a 60s default per tool call, which hard-aborts any
-# job_wait({maxWaitMs}) above 60000 even though sideclaw's own worker will
+# job_wait({maxWaitMs}) above 60000 even though agent-gateway's own worker will
 # happily run up to MAX_WAIT_MS (29 min) — see CLAUDE.md's Async-job contract.
 .PHONY: _setup-agent-gateway
 _setup-agent-gateway:
@@ -2595,12 +2595,12 @@ AGENT_OVERVIEW_COLS ?= 80
 .PHONY: agent-overview
 agent-overview:
 	@# Dev host only: the agent overview pane — a herdr workspace labelled
-	@# `overview` running `watch` over sideclaw's GET /api/overview.txt, so herdr
+	@# `overview` running `watch` over agent-gateway's GET /api/overview.txt, so herdr
 	@# and Collie show every Claude pane's state without a second data source.
 	@# Idempotent: reuses the workspace if it exists, (re)starts the loop in its
 	@# first pane. Re-run after a herdr restart (panes survive, processes don't).
 	@command -v herdr >/dev/null || { echo "  ✗ herdr not installed"; exit 1; }
-	@curl -sf localhost:7705/api/overview.txt >/dev/null || { echo "  ✗ sideclaw not answering on :7705 — is com.jkrumm.sideclaw-server loaded?"; exit 1; }
+	@curl -sf localhost:7705/api/overview.txt >/dev/null || { echo "  ✗ agent-gateway not answering on :7705 — is com.jkrumm.agent-gateway loaded?"; exit 1; }
 	@WS=$$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[] | select(.label=="overview") | .workspace_id' | head -1); \
 	if [ -z "$$WS" ]; then \
 		OUT=$$(herdr workspace create --cwd "$$HOME" --label overview --no-focus 2>&1); \
@@ -2615,7 +2615,7 @@ agent-overview:
 	[ -n "$$PANE" ] || { echo "  ✗ no pane in workspace $$WS"; exit 1; }; \
 	pkill -f 'watch --color -t -n 30 curl -sfG localhost:7705/api/overview.txt' 2>/dev/null || true; \
 	herdr pane send-keys "$$PANE" C-c >/dev/null 2>&1 || true; sleep 1; \
-	herdr pane run "$$PANE" watch --color -t -n 30 'curl -sfG localhost:7705/api/overview.txt -d color=1 -d cols=$(AGENT_OVERVIEW_COLS) || echo sideclaw unreachable' >/dev/null; \
+	herdr pane run "$$PANE" watch --color -t -n 30 'curl -sfG localhost:7705/api/overview.txt -d color=1 -d cols=$(AGENT_OVERVIEW_COLS) || echo agent-gateway unreachable' >/dev/null; \
 	echo "  ✓ overview loop running in $$PANE (workspace $$WS)"
 
 .PHONY: herdr-restart
@@ -3279,7 +3279,7 @@ help:
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
-	@echo "  make agent-overview             Dev host: herdr workspace overview watching sideclaw /api/overview.txt (idempotent)"
+	@echo "  make agent-overview             Dev host: herdr workspace overview watching agent-gateway /api/overview.txt (idempotent)"
 	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane), then re-run agent-overview"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"

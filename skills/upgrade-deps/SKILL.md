@@ -16,7 +16,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 | Skill | Use For | Mode |
 |-------|---------|------|
 | **`/research`** | Major version research, breaking changes, migration guides | MCP (research-gateway) |
-| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | MCP (sideclaw) |
+| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | MCP (agent-gateway) |
 
 ### Delegation Rules
 
@@ -34,7 +34,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ### Token Savings
 
-`/research` routes through the **research-gateway** MCP (hosted VPS service on IU models, off Max — async: submit returns `{ jobId }`, then one `job_wait` blocks for the whole job) and `/check` routes through **sideclaw** (async job; backend per `GET /api/routing`). Verbose work stays off the main thread; only the structured result returns.
+`/research` routes through the **research-gateway** MCP (hosted VPS service on IU models, off Max — async: submit returns `{ jobId }`, then one `job_wait` blocks for the whole job) and `/check` routes through **agent-gateway** (async job; backend per `GET /api/routing`). Verbose work stays off the main thread; only the structured result returns.
 
 ---
 

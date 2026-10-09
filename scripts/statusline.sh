@@ -174,7 +174,7 @@ if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
   fi
 fi
 
-# Stdin figures also feed sideclaw's quota view (POST /api/usage, the same body
+# Stdin figures also feed agent-gateway's quota view (POST /api/usage, the same body
 # fetch_usage.py sends) — throttled to once a minute, fire-and-forget.
 if [ -n "$rl_5h" ]; then
   _push_stamp="/tmp/claude_sl/usage_push.stamp"

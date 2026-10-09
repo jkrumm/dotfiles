@@ -15,13 +15,13 @@ Four ways in, cheapest-appropriate first.
 
 | Need | Route |
 |-|-|
-| Quick triage, off-thread verdict | `mcp__sideclaw__otel` — read-only Sonnet worker, returns `{status, environment, timeRange, findings, recommendations}` only |
+| Quick triage, off-thread verdict | `mcp__agent-gateway__otel` — read-only Sonnet worker, returns `{status, environment, timeRange, findings, recommendations}` only |
 | Interactive investigation, dashboards, alerts | `scripts/hdx.py <env> …` — the ClickStack builder tools over HTTP, discovery flow below |
 | Raw SQL fallback, or HyperDX API down | `scripts/query.py --env <env> --preset ...` |
 
-**(a) `mcp__sideclaw__otel`** — call with `investigation` (error/service/trace
+**(a) `mcp__agent-gateway__otel`** — call with `investigation` (error/service/trace
 id/anomaly/time range) and `environment` (`local`/`prod`). Runs read-only on
-whichever backend/model sideclaw `GET /api/routing` assigns the tool (the result's
+whichever backend/model agent-gateway `GET /api/routing` assigns the tool (the result's
 `backend` field says which ran; on the IU route that is non-EU — treat prod log
 content accordingly) via `scripts/query.py`. Only
 the structured result crosses back — raw output stays in the worker. Query can
@@ -50,8 +50,8 @@ instructions block, ~2k tokens); `hdx.py` is the door.
 
 **(d) `scripts/query.py`** — direct ClickHouse SQL (HTTP or docker exec/ssh),
 unchanged. Use when the HyperDX API itself is down, or for ad-hoc SQL the
-builder tools can't express. Canonical access path for the sideclaw `otel`
-worker too — add presets/schema changes here, not in sideclaw.
+builder tools can't express. Canonical access path for the agent-gateway `otel`
+worker too — add presets/schema changes here, not in agent-gateway.
 
 ## Environment selection
 

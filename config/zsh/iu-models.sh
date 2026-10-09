@@ -42,7 +42,7 @@ _ca_ctx() {
 # / `reasoning_effort` / `thinking:{type:disabled}` are all ignored by the
 # Requesty hop; unset lets GLM default to `max`, its worst setting. 8192 is the
 # agentic/implementation-lane value (modelpick docs/decisions/model-configs.md)
-# — classify-type lanes (sideclaw check/overview/review_router) use 2048, but
+# — classify-type lanes (agent-gateway check/overview/review_router) use 2048, but
 # those don't run through a Claude Code launcher, so that value isn't here.
 # The other rows carry 8192 because that is the budget their 2026-09-20 ccbench
 # rows were measured under — the reproduced config, not a tuned one.

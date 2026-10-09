@@ -80,9 +80,9 @@
       "size": [180, 64]
     },
     {
-      "id": "sideclaw",
+      "id": "agent-gateway",
       "type": "backend",
-      "label": "sideclaw",
+      "label": "agent-gateway",
       "sublabel": "the job queue",
       "pos": [370, 858],
       "size": [180, 64]
@@ -200,7 +200,7 @@
     {
       "kind": "region",
       "label": "Mac mini — the always-on dev host, where agents run",
-      "wraps": ["hermes", "warden", "herdr", "sideclaw", "vault", "devhost", "workers"],
+      "wraps": ["hermes", "warden", "herdr", "agent-gateway", "vault", "devhost", "workers"],
       "pad": 34
     },
     {
@@ -245,7 +245,7 @@
     },
     {
       "from": "warden",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "dispatch: budgeted and signed",
       "variant": "emphasis",
       "fromSide": "bottom",
@@ -253,7 +253,7 @@
       "labelDy": 30
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "workers",
       "label": "a worktree per tier",
       "variant": "emphasis",
@@ -264,7 +264,7 @@
     },
     {
       "from": "workers",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "one verdict",
       "variant": "dashed",
       "fromSide": "top",
@@ -274,14 +274,14 @@
     },
     {
       "from": "herdr",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "pane and agent state",
       "fromSide": "left",
       "toSide": "right",
       "labelDy": 60
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "hermes",
       "label": "overview, human queue",
       "variant": "dashed",
@@ -308,7 +308,7 @@
       "via": [[680, 580], [570, 580]]
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "argoapi",
       "label": "overview push",
       "fromSide": "bottom",

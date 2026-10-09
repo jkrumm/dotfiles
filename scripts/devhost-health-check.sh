@@ -125,7 +125,7 @@ DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
 COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_service_expected_plist colima)}"
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
-SIDECLAW_URL="${SIDECLAW_URL:-http://127.0.0.1:7705}"
+AGENT_GATEWAY_URL="${AGENT_GATEWAY_URL:-http://127.0.0.1:7705}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 AUDIO_GATEWAY_URL="${AUDIO_GATEWAY_URL:-http://127.0.0.1:7719}"
 RESEARCH_GATEWAY_URL="${RESEARCH_GATEWAY_URL:-http://127.0.0.1:7780}"
@@ -178,7 +178,7 @@ STATE_DIR="${DEVHOST_HEALTH_STATE_DIR:-$HOME/.local/state/devhost-health}"
 # --- Transient tolerance -----------------------------------------------------
 # WHY THIS EXISTS. The first real power-cut test (2026-08-01) produced a DOWN
 # page that was pure noise: the host booted at 08:53:20, this agent ran at
-# 08:54:24, and sideclaw + linewatch-collector did not come up until 08:56:08 —
+# 08:54:24, and agent-gateway + linewatch-collector did not come up until 08:56:08 —
 # ~2m48s after boot, both at the same second, i.e. a deferred launchd bootstrap
 # pass rather than a fault. Everything was healthy by the next run. With
 # `maxretries 0` on the Kuma side (deliberate — it keeps time-to-DOWN at 10min
@@ -453,7 +453,7 @@ check_boot_path() {
   #
   # A job that is neither loaded nor on disk means the feature was never
   # installed here — but every label in LAUNCHD_KEEPALIVE is one THIS script's
-  # other components already depend on (herdr/colima/sideclaw/hermes/collie are
+  # other components already depend on (herdr/colima/agent-gateway/hermes/collie are
   # probed for liveness elsewhere), so absent here is a genuine failure, not a
   # skip.
   local uid label plist want missing="" mismatched="" stale="" path program
@@ -827,7 +827,7 @@ brew_row() {
 LAUNCHD_KEEPALIVE="\
 $(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
-com.jkrumm.sideclaw-server|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist
+com.jkrumm.agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist
 com.jkrumm.research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist
 com.jkrumm.research-gateway-lightpanda|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway-lightpanda.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
@@ -841,7 +841,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/launchd-restarts.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
-sideclaw|$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist|probe_sideclaw
+agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist|probe_agent_gateway
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
@@ -852,10 +852,10 @@ brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_br
 usage-tracker|$HOME/Library/LaunchAgents/com.jkrumm.usage-tracker.plist|probe_usage_tracker
 walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad"
 
-probe_sideclaw() {
+probe_agent_gateway() {
   local code
-  code=$(http_code "$SIDECLAW_URL/health")
-  [[ "$code" == "200" ]] || { echo "sideclaw not answering on $SIDECLAW_URL (got ${code:-000})"; return 1; }
+  code=$(http_code "$AGENT_GATEWAY_URL/health")
+  [[ "$code" == "200" ]] || { echo "agent-gateway not answering on $AGENT_GATEWAY_URL (got ${code:-000})"; return 1; }
 }
 
 probe_hermes() {
@@ -1071,21 +1071,21 @@ check_services() {
   echo "services up (${up}${skip_note})"
 }
 
-# sideclaw's job runner, as distinct from its HTTP liveness in probe_sideclaw:
+# agent-gateway's job runner, as distinct from its HTTP liveness in probe_agent_gateway:
 # a daemon that answers /health while every check/review job wedges is the
-# failure that hid behind "services up". The endpoint is sideclaw's own verdict
-# (`ok:false` = FAIL); a 404 means a sideclaw that predates it and is reported
+# failure that hid behind "services up". The endpoint is agent-gateway's own verdict
+# (`ok:false` = FAIL); a 404 means a agent-gateway that predates it and is reported
 # as starting, not failed — grading an endpoint that does not exist yet would
 # page on every machine the moment this check shipped ahead of it.
-check_sideclaw_jobs() {
-  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist" ]] || { echo "sideclaw jobs n/a"; return 0; }
+check_agent_gateway_jobs() {
+  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist" ]] || { echo "agent-gateway jobs n/a"; return 0; }
   local out code body ok warnings
-  out=$("$CURL_BIN" -s --max-time 4 -w '\n%{http_code}' "$SIDECLAW_URL/api/jobs/health" 2>/dev/null) || out=$'\n000'
+  out=$("$CURL_BIN" -s --max-time 4 -w '\n%{http_code}' "$AGENT_GATEWAY_URL/api/jobs/health" 2>/dev/null) || out=$'\n000'
   code=${out##*$'\n'}; body=${out%$'\n'*}
   case "$code" in
     200) ;;
-    404) echo "sideclaw jobs: /api/jobs/health not served yet (starting)"; return 0 ;;
-    *)   echo "sideclaw jobs endpoint not answering on $SIDECLAW_URL (got ${code:-000})"; return 1 ;;
+    404) echo "agent-gateway jobs: /api/jobs/health not served yet (starting)"; return 0 ;;
+    *)   echo "agent-gateway jobs endpoint not answering on $AGENT_GATEWAY_URL (got ${code:-000})"; return 1 ;;
   esac
   ok=$("$JQ_BIN" -r '.ok // false' <<<"$body" 2>/dev/null) || ok=""
   # `.error`/`.detail`/`.summary` were never emitted by this endpoint — the real
@@ -1093,21 +1093,21 @@ check_sideclaw_jobs() {
   # `degradedRoutes`; a degraded route or a backend fallback is a WARN, never a FAIL,
   # so it must not flip `ok` on its own).
   warnings=$("$JQ_BIN" -r '.warnings | join("; ") // empty' <<<"$body" 2>/dev/null) || warnings=""
-  [[ "$ok" == "true" ]] || { echo "sideclaw jobs unhealthy${warnings:+: $warnings}"; return 1; }
+  [[ "$ok" == "true" ]] || { echo "agent-gateway jobs unhealthy${warnings:+: $warnings}"; return 1; }
   if [[ -n "$warnings" ]]; then
-    echo "sideclaw jobs WARN: $warnings"
+    echo "agent-gateway jobs WARN: $warnings"
     return 2
   fi
-  echo "sideclaw jobs ok"
+  echo "agent-gateway jobs ok"
 }
 
-# The `make agent-overview` pane — a `watch` loop over sideclaw's overview.txt
+# The `make agent-overview` pane — a `watch` loop over agent-gateway's overview.txt
 # in a herdr workspace. Panes survive a herdr restart, their processes do not,
 # so this is the one thing that silently stops after every `make herdr-restart`.
 # WARN, never FAIL: it is a display, and a missing display must not page "dev
 # host DOWN".
 check_overview_pane() {
-  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.sideclaw-server.plist" ]] || { echo "overview pane n/a"; return 0; }
+  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist" ]] || { echo "overview pane n/a"; return 0; }
   if "$PGREP_BIN" -f 'watch .*overview\.txt' >/dev/null 2>&1; then
     echo "overview pane alive"
     return 0
@@ -1122,7 +1122,7 @@ check_overview_pane() {
 # exception is a WARN at QUOTA_5H_WARN_PCT — still never a FAIL.
 check_quota() {
   local body five seven text
-  body=$("$CURL_BIN" -s --max-time 4 "$SIDECLAW_URL/api/usage" 2>/dev/null) || body=""
+  body=$("$CURL_BIN" -s --max-time 4 "$AGENT_GATEWAY_URL/api/usage" 2>/dev/null) || body=""
   five=$("$JQ_BIN" -r '.data.five_hour_pct // empty' <<<"$body" 2>/dev/null) || five=""
   seven=$("$JQ_BIN" -r '.data.seven_day_pct // empty' <<<"$body" 2>/dev/null) || seven=""
   case "$five" in ''|*[!0-9]*) echo "quota unavailable"; return 0 ;; esac
@@ -1275,7 +1275,7 @@ check_runaways() {
   #
   # Accumulated time alone is not enough either, and the reason is specific to
   # this host: the always-on services here are PPID 1 with a cwd under
-  # ~/SourceRoot too, so given enough uptime a perfectly healthy sideclaw
+  # ~/SourceRoot too, so given enough uptime a perfectly healthy agent-gateway
   # crosses ANY fixed CPU-minute line and then pages forever until someone
   # restarts it. The second gate is therefore the process's LIFETIME AVERAGE
   # (cputime / elapsed) — still computed from accumulated time, not sampled: a
@@ -1328,7 +1328,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
                  check_memory check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth \
-                 check_obsidian check_disk check_runaways check_sideclaw_jobs check_overview_pane \
+                 check_obsidian check_disk check_runaways check_agent_gateway_jobs check_overview_pane \
                  check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).

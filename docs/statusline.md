@@ -47,16 +47,16 @@ dotfiles | * master
 
 **Primary: stdin `.rate_limits`** (`five_hour`/`seven_day` → `used_percentage`,
 `resets_at` epoch seconds). Max sessions only, and only from the first API
-response on. Every render that has them also POSTs them to sideclaw's
+response on. Every render that has them also POSTs them to agent-gateway's
 `/api/usage` (throttled to once a minute via `/tmp/claude_sl/usage_push.stamp`,
-fire-and-forget) — that is what keeps sideclaw's quota view and the devhost
+fire-and-forget) — that is what keeps agent-gateway's quota view and the devhost
 heartbeat's quota component fed.
 
 **Fallback until then: `fetch_usage.py`** — `https://api.anthropic.com/api/oauth/usage`
 with the Claude Code OAuth token from the macOS Keychain (`Claude Code-credentials`)
 plus `anthropic-beta: oauth-2025-04-20`. Run via `uv run`, cache
 `/tmp/claude_sl/usage_api.json`, 5-min TTL, background refresh via `disown`; it
-also POSTs to sideclaw. Never spawned on the IU lane.
+also POSTs to agent-gateway. Never spawned on the IU lane.
 
 - On the headless mini the Keychain read fails (`security` exit 36, locked
   keychain), the cache holds `{"error": …}` and the line shows `⚠ claude.ai login`

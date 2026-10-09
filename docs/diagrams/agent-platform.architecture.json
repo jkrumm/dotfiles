@@ -196,9 +196,9 @@
       ]
     },
     {
-      "id": "sideclaw",
+      "id": "agent-gateway",
       "type": "backend",
-      "label": "Sideclaw",
+      "label": "Agent-Gateway",
       "sublabel": "the one worker engine · triage, dispatch, review, check · models from its registry",
       "pos": [
         40,
@@ -333,7 +333,7 @@
       "kind": "region",
       "label": "Worker engine",
       "wraps": [
-        "sideclaw"
+        "agent-gateway"
       ],
       "pad": 30
     },
@@ -459,7 +459,7 @@
     },
     {
       "from": "triage",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "single-shot",
       "variant": "emphasis",
       "fromSide": "bottom",
@@ -468,7 +468,7 @@
     },
     {
       "from": "investigate",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "dispatch",
       "variant": "emphasis",
       "fromSide": "bottom",
@@ -476,7 +476,7 @@
     },
     {
       "from": "implement",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "dispatch",
       "variant": "emphasis",
       "fromSide": "bottom",
@@ -485,14 +485,14 @@
     },
     {
       "from": "merge",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "label": "review",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "workers",
       "label": "spawns",
       "fromSide": "bottom",
@@ -543,7 +543,7 @@
     },
     {
       "dot": "emerald",
-      "title": "sideclaw dispatch",
+      "title": "agw dispatch",
       "items": [
         "Settled, bounded work",
         "Result is a branch, PR or verdict"

@@ -2,7 +2,7 @@
 sc-note.md
 sc-queue.md
 
-# sideclaw atomic write temp files
+# agent-gateway atomic write temp files
 .sc-note.md.tmp
 
 # macOS

@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (sideclaw), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the target design, its rollout status, and the loop's nine states. The page a new agent reads first.
+description: One worker engine (agent-gateway), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the target design, its rollout status, and the loop's nine states. The page a new agent reads first.
 tags:
   - engineering
   - agents
@@ -11,7 +11,7 @@ timestamp: 2026-10-04
 
 # Agent platform — target design
 
-**Verdict:** one worker engine (sideclaw), one autonomous loop (warden), one
+**Verdict:** one worker engine (agent-gateway), one autonomous loop (warden), one
 conversational front door (Hermes), one human cockpit (herdr). Every repo
 describes itself through the same four Make targets and four AGENTS.md
 sections, so no central component holds per-repo knowledge. Trust comes from
@@ -26,11 +26,11 @@ any older doc that contradicts it; rollout is tracked in each repo's
 |-|-|
 | Four lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
-| sideclaw: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (sideclaw W1–W4); review angles off Max: senior-dev, typescript, qa adopted (frontend stays on Max, measured) |
+| agent-gateway: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa adopted (frontend stays on Max, measured) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 | warden: gates cut, nine states, one queue | **landed** (W1–W2) |
 | warden: intake fingerprint + triage dedup, revisions as attempts | **landed** (W3) |
-| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs a sideclaw PR delta scope) |
+| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs a agent-gateway PR delta scope) |
 | warden: docs, loop split into modules, own `check`/`deploy`/`verify`/`logs` | **landed** (W5) |
 
 ## Why this rewrite
@@ -41,7 +41,7 @@ Measured 2026-09-08 → 10-01 on the live ledger and logs:
 |-|-|-|
 | Warden items merged by its own path | ~10 of 414 dispatches | 23 trust/approval/policy gates nobody asked for |
 | Items that were duplicates or follow-ups | 30–40 % | raw log titles as identity, revisions filed as new items, no issue↔alert link |
-| Failed dispatches from one policy drift | 281 | repo/tier policy defined in warden **and** sideclaw |
+| Failed dispatches from one policy drift | 281 | repo/tier policy defined in warden **and** agent-gateway |
 | Hermes skills | 126 (≈105 self-authored) | upstream skill-review nudge + Hermes replying to every warden card |
 | Ways to start an agent episode | 10+ | lanes added, never removed |
 | Model ids hard-coded in docs | 6+ files, 3 different answers | no single source |
@@ -59,16 +59,16 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
         ▼                                   ▼
  WARDEN  intake → triage → investigate → implement → merge train → deploy → verify
         │            │            │             │            │
-        │            └── single-shot triage     └────────────┴── sideclaw jobs
+        │            └── single-shot triage     └────────────┴── agent-gateway jobs
         ▼
  Argo /warden = the one queue · Slack = one line on "done" / "needs decision"
 
- SIDECLAW  the one worker engine: triage · dispatch(investigate|implement) · review · check
+ AGENT-GATEWAY the one worker engine: triage · dispatch(investigate|implement) · review · check
            OpenCode + cheap models by default, Sonnet only where judgment gates a merge
            model ids live ONLY in `GET /api/routing`
 
  core      ~/.claude (global CLAUDE.md, skills, agents) + per-repo AGENTS.md + Makefile
-           read identically by Claude Code, OpenCode and every sideclaw worker
+           read identically by Claude Code, OpenCode and every agent-gateway worker
 ```
 
 ## Roles — one verb each
@@ -76,7 +76,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | Component | Does | Never does |
 |-|-|-|
 | **warden** | owns the ledger; decides and drives every unattended item to `fixed` | hold per-repo config, ask for approval, edit code itself |
-| **sideclaw** | runs bounded jobs: triage, investigate, implement, review, check | decide what to work on, merge |
+| **agent-gateway** | runs bounded jobs: triage, investigate, implement, review, check | decide what to work on, merge |
 | **Hermes** | answers, narrates in one line per item, files work via `warden run` or an issue, opens herdr tabs when asked | dispatch on its own, land PRs, repeat warden cards, author skills unattended |
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work (that is warden) |
 | **Argo** | the single status + "needs you" surface | hold state of its own |
@@ -86,9 +86,9 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | Lane | When | Engine |
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `sideclaw dispatch` | settled, bounded work; result is a branch/PR or a verdict | OpenCode worker |
+| `agw dispatch` | settled, bounded work; result is a branch/PR or a verdict | OpenCode worker |
 | `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
-| `warden run` / issue | unattended, tracked to `fixed` | warden → sideclaw |
+| `warden run` / issue | unattended, tracked to `fixed` | warden → agent-gateway |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.
@@ -100,7 +100,7 @@ Every repo with a runtime ships:
 | Make target | Contract |
 |-|-|
 | `make check` | all local validation; non-zero on failure; no side effects |
-| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (warden, sideclaw, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (warden, agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
 | `make verify` | probes production; exit 0 = live and healthy |
 | `make logs` | bounded tail of production logs, then exits |
 
@@ -126,7 +126,7 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
 1. **Intake.** Every source writes an event. The fingerprint is the title after
    stripping timestamps, hex ids, paths, numbers and the log-file name — the
    same line from two log files is one event.
-2. **Triage — single-shot, no tools** (sideclaw `triage`, cheap single-shot model
+2. **Triage — single-shot, no tools** (agent-gateway `triage`, cheap single-shot model
    per `GET /api/routing`, ~1–10 s, cents). Input: the new event, the open items of the candidate
    repos, items fixed in the last 14 days with their PR titles. Output:
    `attach(item) | new(repo, title) | fixed_by(item|PR) | ignore(reason)`.
@@ -137,7 +137,7 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
    implement — review is the gate, not the investigator's self-assessment. A
    matching `rootCause` on another open item merges the two.
 4. **Revisions are attempts, not items.** A blocked review re-dispatches on the
-   same item from the prior branch (sideclaw cuts the worktree from it). Up to
+   same item from the prior branch (agent-gateway cuts the worktree from it). Up to
    4 attempts; the third switches to the stronger implement model.
 5. **Merge train, one per repo, single-flight:**
    update the PR onto the latest default branch → `make check` / CI green on that
@@ -162,7 +162,7 @@ permissions, CI, review hiccups and "low confidence" do not.
 Kept gates — quality, not trust: CI/`make check` green, review confirmed on the
 merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
 
-## Sideclaw — the engine
+## Agent-Gateway — the engine
 
 | Job | Default | Why |
 |-|-|-|
@@ -216,7 +216,7 @@ wave per repo; parallel waves only in different repos. A pane-less supervisor
 
 ## Open facts to verify during rollout
 
-- deepseek-v4.1-flash rates conflict (sideclaw 0.15/0.6 vs modelpick 0.50/1.50
+- deepseek-v4.1-flash rates conflict (agent-gateway 0.15/0.6 vs modelpick 0.50/1.50
   per MTok) — re-probe before cost claims.
 - gpt-6.1-sol, DeepSeek-V4-Pro, kimi, minimax on the OpenAI leg are declared but
   never probed — the registry refuses them until verified.

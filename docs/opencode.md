@@ -17,9 +17,9 @@ Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
 same base, carrying every GPT id — they are Responses-only for agent loops
 (reasoning items must survive tool calls), so `-m iu-responses/gpt-6-sol`, not
 `iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
-wire split mirror sideclaw's registry (`server/lib/models.ts`, `wire`), which
+wire split mirror agent-gateway's registry (`server/lib/models.ts`, `wire`), which
 generates the same blocks for its workers. **This file's rows are hand-written
-and can drift from the registry** — sideclaw owns ids, limits and verification
+and can drift from the registry** — agent-gateway owns ids, limits and verification
 (`GET /api/routing`); re-check there before editing a row, and an id the
 registry marks unverified is not a recommendation. `iu` declares the rest of the
 roster: `deepseek-v4.1-flash` stays the default (that id is **not** served on
@@ -35,7 +35,7 @@ caching works (95–98% hits in real episodes). Headless `opencode run` auto-**r
 any `ask` permission and that ends the session — workers must set every prompting
 permission to `allow`/`deny` (`deny` returns an error and the run continues).
 `--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
-shared `opencode.db` — retry. sideclaw's dispatch runs on this lane (its own per-run
+shared `opencode.db` — retry. agent-gateway's dispatch runs on this lane (its own per-run
 config, not this file).
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
@@ -56,11 +56,11 @@ tab; the pane evals `_oc_env` (claude.zsh) first so `IU_*` and the gateway beare
 are in its shell without touching argv. Default model `iu/deepseek-v4.1-flash`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
-**sideclaw is wired in, mini-only.** `config/opencode/mini.json` declares the
-`sideclaw` MCP (`bun run …/sideclaw/server/mcp.ts`, `timeout` 30 min so a `job_wait`
+**agent-gateway is wired in, mini-only.** `config/opencode/mini.json` declares the
+`agent-gateway` MCP (`bun run …/agent-gateway/server/mcp.ts`, `timeout` 30 min so a `job_wait`
 is not cut off at the default 5 s). It is deliberately *not* in the shared
 `opencode.json`: `oc` layers it in with `OPENCODE_CONFIG` (merged over the global
-config) only where the repo exists, so the MacBook stays sideclaw-free. External
+config) only where the repo exists, so the MacBook stays agent-gateway-free. External
 skills load natively from `~/.claude/skills`, so `/check`, `/review` and friends
 resolve to real tools on the mini.
 
@@ -68,7 +68,7 @@ resolve to real tools on the mini.
 never stops to ask. It is also what makes the lane usable headlessly: `run`
 **ends the session** on an `ask` rather than prompting, so a worker with a
 leftover `ask` rule is not slow, it is broken. This is the one config file
-sideclaw does *not* share — its dispatch ships its own per-run permissions, so
+agent-gateway does *not* share — its dispatch ships its own per-run permissions, so
 widening this one cannot loosen a dispatch worker.
 
 **Config is two files, and the split is enforced.** `opencode.json` is

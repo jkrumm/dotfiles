@@ -33,9 +33,9 @@
       "sublabel": "the ledger, the loop"
     },
     {
-      "id": "sideclaw",
+      "id": "agent-gateway",
       "type": "messagebus",
-      "label": "sideclaw",
+      "label": "agent-gateway",
       "sublabel": "job queue"
     },
     {
@@ -89,27 +89,27 @@
     },
     {
       "from": "warden",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 360,
       "label": "opens the item, dispatches investigate",
       "variant": "emphasis",
       "note": "The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits — overflow is never dropped, only deferred."
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "worker",
       "y": 430,
       "label": "cuts a read-only worktree"
     },
     {
       "from": "worker",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 520,
       "label": "verdict: nextAction=implement",
       "variant": "return"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "warden",
       "y": 590,
       "label": "verdict, confidence=high",
@@ -133,26 +133,26 @@
     },
     {
       "from": "warden",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 870,
       "label": "dispatches implement",
       "variant": "emphasis"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "worker",
       "y": 950,
       "label": "writable worktree, opens draft PR"
     },
     {
       "from": "worker",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 1040,
       "label": "PR opened",
       "variant": "return"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "warden",
       "y": 1100,
       "label": "PR ready",
@@ -160,25 +160,25 @@
     },
     {
       "from": "warden",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 1170,
       "label": "dispatches review — a second session"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "worker",
       "y": 1250,
       "label": "reads the diff, no write access"
     },
     {
       "from": "worker",
-      "to": "sideclaw",
+      "to": "agent-gateway",
       "y": 1320,
       "label": "review verdict: pass",
       "variant": "return"
     },
     {
-      "from": "sideclaw",
+      "from": "agent-gateway",
       "to": "warden",
       "y": 1360,
       "label": "review verdict",

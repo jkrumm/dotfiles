@@ -84,12 +84,12 @@ substitution keeps the host out of git. Full block: `config/opencode/opencode.js
 
 **This section is the authority** (rationale: `docs/agent-platform.md`). Every
 repo with a runtime ships four Make targets and four AGENTS.md sections, so no
-central component (warden, sideclaw, Hermes) holds per-repo knowledge.
+central component (warden, agent-gateway, Hermes) holds per-repo knowledge.
 
 | Make target | Contract |
 |-|-|
 | `make check` | all local validation; non-zero on failure; no side effects |
-| `make deploy` | ships the merged default branch; CI-deployed repos print `deployed by CI on push` and exit 0; self-hosting repos (warden, sideclaw, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make deploy` | ships the merged default branch; CI-deployed repos print `deployed by CI on push` and exit 0; self-hosting repos (warden, agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
 | `make verify` | probes production; exit 0 = live and healthy |
 | `make logs` | bounded tail of production logs, then exits |
 

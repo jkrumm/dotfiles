@@ -5069,8 +5069,8 @@
         <text data-detail="fine" x="367.25" y="268" class="t-dim" font-size="7">hermes-cc.sh is retired. A six-line shim in hermes-agent execs straight into this repo&#39;s `scripts/warden` — there is no bridge process left to be the thing that is down when Hermes is down.</text>
         </g>
 
-        <g data-edge-from="warden" data-edge-to="sideclaw" data-edge-label="opens the item, dispatches investigate" data-edge-key="2">
-          <path data-composition-edge-from="warden" data-composition-edge-to="sideclaw" data-composition-points="558,360;746.75,360" d="M 558 360 L 746.75 360" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="warden" data-edge-to="agent-gateway" data-edge-label="opens the item, dispatches investigate" data-edge-key="2">
+          <path data-composition-edge-from="warden" data-composition-edge-to="agent-gateway" data-composition-points="558,360;746.75,360" d="M 558 360 L 746.75 360" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
           <rect x="547.575" y="340" width="209.6" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="350" class="t-backend" font-size="9" text-anchor="middle">opens the item, dispatches investigate</text>
@@ -5078,24 +5078,24 @@
         <text data-detail="fine" x="570" y="378" class="t-dim" font-size="7">The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits — overflow is never dropped, only deferred.</text>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="worker" data-edge-label="cuts a read-only worktree" data-edge-key="3">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="worker" data-composition-points="760.75,430;949.5,430" d="M 760.75 430 L 949.5 430" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="cuts a read-only worktree" data-edge-key="3">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,430;949.5,430" d="M 760.75 430 L 949.5 430" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="784.125" y="410" width="142" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="420" class="t-backend" font-size="9" text-anchor="middle">cuts a read-only worktree</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="sideclaw" data-edge-label="verdict: nextAction=implement" data-edge-key="4">
-          <path data-composition-edge-from="worker" data-composition-edge-to="sideclaw" data-composition-points="949.5,520;760.75,520" d="M 949.5 520 L 760.75 520" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="worker" data-edge-to="agent-gateway" data-edge-label="verdict: nextAction=implement" data-edge-key="4">
+          <path data-composition-edge-from="worker" data-composition-edge-to="agent-gateway" data-composition-points="949.5,520;760.75,520" d="M 949.5 520 L 760.75 520" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="773.725" y="500" width="162.8" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="510" class="t-muted" font-size="9" text-anchor="middle">verdict: nextAction=implement</text>
         </g>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="warden" data-edge-label="verdict, confidence=high" data-edge-key="5">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="warden" data-composition-points="746.75,590;558,590" d="M 746.75 590 L 558 590" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="warden" data-edge-label="verdict, confidence=high" data-edge-key="5">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="warden" data-composition-points="746.75,590;558,590" d="M 746.75 590 L 558 590" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="583.975" y="570" width="136.8" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="580" class="t-muted" font-size="9" text-anchor="middle">verdict, confidence=high</text>
@@ -5120,64 +5120,64 @@
         <text data-detail="fine" x="164.5" y="798" class="t-dim" font-size="7">A denial, a timeout, or no case firing at all: the item parks at `needs_human` and waits on the board — the other way this stops. Nothing merges until a human clears it.</text>
         </g>
 
-        <g data-edge-from="warden" data-edge-to="sideclaw" data-edge-label="dispatches implement" data-edge-key="8">
-          <path data-composition-edge-from="warden" data-composition-edge-to="sideclaw" data-composition-points="558,870;746.75,870" d="M 558 870 L 746.75 870" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <g data-edge-from="warden" data-edge-to="agent-gateway" data-edge-label="dispatches implement" data-edge-key="8">
+          <path data-composition-edge-from="warden" data-composition-edge-to="agent-gateway" data-composition-points="558,870;746.75,870" d="M 558 870 L 746.75 870" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g data-detail="context">
           <rect x="594.375" y="850" width="116" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="860" class="t-backend" font-size="9" text-anchor="middle">dispatches implement</text>
         </g>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="worker" data-edge-label="writable worktree, opens draft PR" data-edge-key="9">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="worker" data-composition-points="760.75,950;949.5,950" d="M 760.75 950 L 949.5 950" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="writable worktree, opens draft PR" data-edge-key="9">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,950;949.5,950" d="M 760.75 950 L 949.5 950" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="763.325" y="930" width="183.6" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="940" class="t-backend" font-size="9" text-anchor="middle">writable worktree, opens draft PR</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="sideclaw" data-edge-label="PR opened" data-edge-key="10">
-          <path data-composition-edge-from="worker" data-composition-edge-to="sideclaw" data-composition-points="949.5,1040;760.75,1040" d="M 949.5 1040 L 760.75 1040" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="worker" data-edge-to="agent-gateway" data-edge-label="PR opened" data-edge-key="10">
+          <path data-composition-edge-from="worker" data-composition-edge-to="agent-gateway" data-composition-points="949.5,1040;760.75,1040" d="M 949.5 1040 L 760.75 1040" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="825.725" y="1020" width="58.800000000000004" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="1030" class="t-muted" font-size="9" text-anchor="middle">PR opened</text>
         </g>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="warden" data-edge-label="PR ready" data-edge-key="11">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="warden" data-composition-points="746.75,1100;558,1100" d="M 746.75 1100 L 558 1100" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="warden" data-edge-label="PR ready" data-edge-key="11">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="warden" data-composition-points="746.75,1100;558,1100" d="M 746.75 1100 L 558 1100" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="625.575" y="1080" width="53.6" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="1090" class="t-muted" font-size="9" text-anchor="middle">PR ready</text>
         </g>
         </g>
 
-        <g data-edge-from="warden" data-edge-to="sideclaw" data-edge-label="dispatches review — a second session" data-edge-key="12">
-          <path data-composition-edge-from="warden" data-composition-edge-to="sideclaw" data-composition-points="558,1170;746.75,1170" d="M 558 1170 L 746.75 1170" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="warden" data-edge-to="agent-gateway" data-edge-label="dispatches review — a second session" data-edge-key="12">
+          <path data-composition-edge-from="warden" data-composition-edge-to="agent-gateway" data-composition-points="558,1170;746.75,1170" d="M 558 1170 L 746.75 1170" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="552.775" y="1150" width="199.20000000000002" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="1160" class="t-backend" font-size="9" text-anchor="middle">dispatches review — a second session</text>
         </g>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="worker" data-edge-label="reads the diff, no write access" data-edge-key="13">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="worker" data-composition-points="760.75,1250;949.5,1250" d="M 760.75 1250 L 949.5 1250" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="reads the diff, no write access" data-edge-key="13">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,1250;949.5,1250" d="M 760.75 1250 L 949.5 1250" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="768.525" y="1230" width="173.20000000000002" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="1240" class="t-backend" font-size="9" text-anchor="middle">reads the diff, no write access</text>
         </g>
         </g>
 
-        <g data-edge-from="worker" data-edge-to="sideclaw" data-edge-label="review verdict: pass" data-edge-key="14">
-          <path data-composition-edge-from="worker" data-composition-edge-to="sideclaw" data-composition-points="949.5,1320;760.75,1320" d="M 949.5 1320 L 760.75 1320" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="worker" data-edge-to="agent-gateway" data-edge-label="review verdict: pass" data-edge-key="14">
+          <path data-composition-edge-from="worker" data-composition-edge-to="agent-gateway" data-composition-points="949.5,1320;760.75,1320" d="M 949.5 1320 L 760.75 1320" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="797.125" y="1300" width="116" height="16" rx="3" class="c-mask"/>
           <text x="855.125" y="1310" class="t-muted" font-size="9" text-anchor="middle">review verdict: pass</text>
         </g>
         </g>
 
-        <g data-edge-from="sideclaw" data-edge-to="warden" data-edge-label="review verdict" data-edge-key="15">
-          <path data-composition-edge-from="sideclaw" data-composition-edge-to="warden" data-composition-points="746.75,1360;558,1360" d="M 746.75 1360 L 558 1360" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
+        <g data-edge-from="agent-gateway" data-edge-to="warden" data-edge-label="review verdict" data-edge-key="15">
+          <path data-composition-edge-from="agent-gateway" data-composition-edge-to="warden" data-composition-points="746.75,1360;558,1360" d="M 746.75 1360 L 558 1360" class="a-default" stroke-width="1.4" stroke-dasharray="3,5" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
           <rect x="609.975" y="1340" width="84.8" height="16" rx="3" class="c-mask"/>
           <text x="652.375" y="1350" class="t-muted" font-size="9" text-anchor="middle">review verdict</text>
@@ -5258,8 +5258,8 @@
           <text data-detail="context" x="551" y="111" class="t-muted" font-size="7" text-anchor="middle">the ledger, the loop</text>
         </g>
 
-        <g id="node-sideclaw" data-node-id="sideclaw" data-node-label="sideclaw" tabindex="0" role="button" aria-label="Focus sideclaw, job queue, Sequence participant" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="job queue" data-node-context="Sequence participant">
-          <title>sideclaw · job queue · Sequence participant</title>
+        <g id="node-agent-gateway" data-node-id="agent-gateway" data-node-label="agent-gateway" tabindex="0" role="button" aria-label="Focus agent-gateway, job queue, Sequence participant" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="job queue" data-node-context="Sequence participant">
+          <title>agent-gateway · job queue · Sequence participant</title>
           <rect x="670.25" y="72" width="167" height="54" rx="6" class="c-mask"/>
           <rect x="670.25" y="72" width="167" height="54" rx="6" class="c-messagebus" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(676.25 78) scale(0.6875)">
@@ -5268,7 +5268,7 @@
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="753.75" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">sideclaw</text>
+          <text data-node-label="" data-detail-anchor="" x="753.75" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">agent-gateway</text>
           <text data-detail="context" x="753.75" y="111" class="t-muted" font-size="7" text-anchor="middle">job queue</text>
         </g>
 

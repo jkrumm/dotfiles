@@ -130,7 +130,7 @@ the Claude session id (herdr exposes `agent_session.value`, the daemon
 `sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
 
 Four lanes start agent work (`docs/agent-platform.md`): `@implementer`,
-`sideclaw dispatch`, an `rd wave` tab, `warden run`. `agent-dispatch` and
+`agw dispatch`, an `rd wave` tab, `warden run`. `agent-dispatch` and
 `rd bg` were removed 2026-10-04 — work that must outlive a pane is `warden run`.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the

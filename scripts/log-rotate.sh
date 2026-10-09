@@ -43,8 +43,8 @@ MAX_BYTES="${LOG_ROTATE_MAX_BYTES:-16777216}"
 # Every log written by a LaunchAgent this repo installs or owns. Paths are
 # relative to LOG_DIR unless absolute.
 FILES=(
-  sideclaw.log
-  sideclaw.err
+  agent-gateway.log
+  agent-gateway.err
   walkingpad.log
   walkingpad.err
   usage-tracker.log

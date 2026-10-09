@@ -27,7 +27,7 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
 - **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26), audio-gateway, image-gen, email-gateway, image-share. Detail: brain `gateways`.
 
-**The agent platform** — one engine (sideclaw), one autonomous loop (warden),
+**The agent platform** — one engine (agent-gateway), one autonomous loop (warden),
 one front door (Hermes), one cockpit (herdr), four lanes, one repo contract —
 is specified in [`agent-platform.md`](agent-platform.md), which wins over any
 older doc on that topic. This map only places its parts on machines.
@@ -41,7 +41,7 @@ own image export, so a screenshot is never the way to share one.
 | File | The question it answers |
 |-|-|
 | `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
-| `agent-platform.html` | How the agent platform fits together: sources, front doors, warden's loop, sideclaw, the four lanes, the repo contract. Spec: `agent-platform.md`. |
+| `agent-platform.html` | How the agent platform fits together: sources, front doors, warden's loop, agent-gateway, the four lanes, the repo contract. Spec: `agent-platform.md`. |
 | `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
 Both are compiled from the `.json` beside them with the vendored `archify`
@@ -76,8 +76,8 @@ instead — same validated geometry, without that one crossing guarantee.
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
 | `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work via `warden run` or an issue, 5-job cron layer | see [[agent-estate-model]] |
-| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `sideclaw dispatch` is a session's bounded episode, `rd wave` a human's long one |
-| `sideclaw` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
+| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `agw dispatch` is a session's bounded episode, `rd wave` a human's long one |
+| `agent-gateway` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
@@ -125,7 +125,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
-| `com.jkrumm.sideclaw-server` | KeepAlive | sideclaw MCP daemon |
+| `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway MCP daemon |
 | `herdr.collie` | KeepAlive | collie bridge (upstream plist) |
 
 ### hermes-agent
@@ -162,7 +162,7 @@ plain HTTP client, not the gateway's live connection.
 | Label | Schedule | What |
 |-|-|-|
 | `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics` on `127.0.0.1:7735` |
-| `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into items and sideclaw `investigate` episodes in the owning repo; Slack gets one line on `fixed` / `needs_decision`, Argo `/warden` is the queue. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
+| `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into items and agent-gateway `investigate` episodes in the owning repo; Slack gets one line on `fixed` / `needs_decision`, Argo `/warden` is the queue. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
 | `com.jkrumm.warden-poll` | 1800s | Ingest. Was gateway cron job `4b1faabda97d`; promoted for the same reason — ingest running inside the process it supervises is how the loop kept ticking against a ledger that had stopped receiving signals. Posts its own digest and pings the `watchdog` UptimeKuma push URL on a clean poll. |
 | `com.jkrumm.warden-sweep` | 300s | Folds finished episodes onto their items, then runs the implement chain. Was gateway cron job `4dd759917dd1`. |
 | `com.jkrumm.warden-backup` | daily 03:10 | `VACUUM INTO` snapshot of the ledger, rotated, rsynced to `homelab:/mnt/hdd/backups/warden/` — inside the restic source mount, so it reaches B2 with no homelab-side change. Between `hermes-backup` (03:00) and restic (03:30). |
@@ -245,7 +245,7 @@ Rationale for every one of these: `docs/macbook.md`.
 ## Doors (inbound)
 
 Every dev app's own `<name>.test` / `<name>.mini.jkrumm.com` door (25 of them —
-argo, sideclaw, weatherorb, rollhook, …) is one row in `config/Caddyfile`, the single
+argo, agent-gateway, weatherorb, rollhook, …) is one row in `config/Caddyfile`, the single
 registry — not repeated here. This table is everything else: the fixed,
 non-Caddy doors.
 
@@ -286,7 +286,7 @@ Uptime Kuma.
 
 | Monitor | Pusher | Cadence |
 |-|-|-|
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (17 components, incl. sideclaw job health, the overview pane, Max quota, kernel panics) | 10 min |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (17 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min |
 | `MacMini Collie - Push` | collie behavioural check | 10 min |
 | `MacMini Secret Seed - Push` | cache-freshness check | 8 days |
 | `MacMini Drift - Push` | drift-check agent | 2 days |

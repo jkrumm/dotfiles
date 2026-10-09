@@ -18,7 +18,7 @@ set -euo pipefail
 # that, and it is right. The hazard is SILENT CONFIG REVERT: caddy loses its DNS
 # module and nothing fails for ~60 days; colima's plist reverts and nothing fails
 # until the next power cut. An unattended upgrader on the host that runs herdr,
-# colima, sideclaw, Hermes and every dev door is a mechanism for introducing
+# colima, agent-gateway, Hermes and every dev door is a mechanism for introducing
 # exactly that class of fault at 3am with nobody watching. So this reports and a
 # human applies — the same trade the caddy pin already makes, and the same one
 # the runaway reaper in devhost-health-check.sh makes when it refuses to kill.

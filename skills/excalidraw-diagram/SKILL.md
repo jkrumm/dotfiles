@@ -1,6 +1,6 @@
 ---
 name: excalidraw-diagram
-description: Create Excalidraw diagram files that make visual arguments. Use when the user wants to visualize workflows, architectures, or concepts. Delegates JSON generation + hydration to the sideclaw `excalidraw_diagram` MCP tool.
+description: Create Excalidraw diagram files that make visual arguments. Use when the user wants to visualize workflows, architectures, or concepts. Delegates JSON generation + hydration to the agent-gateway `excalidraw_diagram` MCP tool.
 ---
 
 # Excalidraw Diagram Creator
@@ -9,19 +9,19 @@ Generate `.excalidraw` files that **argue visually**, not just display informati
 
 This skill is the **design director**: you decide depth, pattern variety, and
 evidence. The mechanical work — JSON shape, element bindings, hydration into a
-portable `.excalidraw` v2 file — lives in the sideclaw MCP tool
-(`mcp__sideclaw__excalidraw_diagram`). You author the prompt; the tool delivers
+portable `.excalidraw` v2 file — lives in the agent-gateway MCP tool
+(`mcp__agent-gateway__excalidraw_diagram`). You author the prompt; the tool delivers
 a portable file.
 
 ## Output portability (the guarantee)
 
-The sideclaw tool emits **fully-hydrated `.excalidraw` v2 files**: complete
+The agent-gateway tool emits **fully-hydrated `.excalidraw` v2 files**: complete
 `type`/`version`/`source`/`elements`/`appState`/`files` envelope with all IDs,
 seeds, versionNonces, and bindings computed. The same file opens cleanly in:
 
 | Target                                | How                                                       |
 |---------------------------------------|-----------------------------------------------------------|
-| sideclaw DiagramPanel                 | Open at `https://sideclaw.test`                           |
+| agent-gateway DiagramPanel                 | Open at `https://agent-gateway.test`                           |
 | Obsidian Excalidraw plugin (zsviczian)| Drop the file anywhere in the vault                       |
 | excalidraw.com                        | Drag-and-drop the file onto the canvas, or *File → Open*  |
 | Any third-party Excalidraw renderer   | Standard v2 envelope — no plugin-specific fields          |
@@ -35,7 +35,7 @@ You don't pick the target — the file is universal.
 3. **Design the visual argument** — pattern variety, multi-zoom, evidence.
 4. **Resolve the output path** — infer from context (brain vault path, working
    dir) and state the chosen path in the output.
-5. **Call `mcp__sideclaw__excalidraw_diagram`** with the prompt + outputPath.
+5. **Call `mcp__agent-gateway__excalidraw_diagram`** with the prompt + outputPath.
 6. **Open the result** — read the path back to the user. They open it in their
    editor of choice.
 
@@ -63,7 +63,7 @@ in the output.
 
 ## Design Philosophy
 
-The technical JSON shape is owned by the sideclaw tool. The design quality is
+The technical JSON shape is owned by the agent-gateway tool. The design quality is
 owned by **you, here**. The rest of this file is about how to think before you
 call the tool.
 
@@ -146,7 +146,7 @@ Typography (font size + color) creates hierarchy without boxes. **Aim for
 
 ### Color as Meaning
 
-Colors encode information, not decoration. The sideclaw skill prompt owns the
+Colors encode information, not decoration. The agent-gateway skill prompt owns the
 palette — don't redefine colors here. When telling the tool what to make,
 describe roles ("primary action", "external dependency", "error state",
 "cached/secondary path") rather than hex values. The worker will pick the right
@@ -171,7 +171,7 @@ Trace how the eye moves through the diagram. Left→right or top→bottom for
 sequences, radial for hub-and-spoke. There should be a clear visual story.
 
 ### Step 4: Compose the tool prompt
-Pass a *design brief* to `mcp__sideclaw__excalidraw_diagram`:
+Pass a *design brief* to `mcp__agent-gateway__excalidraw_diagram`:
 
 - The subject of the diagram (be specific — actual system / actual concept).
 - The depth mode you chose (conceptual or technical).
@@ -185,7 +185,7 @@ The worker handles colors, sizes, fonts, bindings, and JSON shape.
 
 ### Step 5: Call the tool
 ```
-mcp__sideclaw__excalidraw_diagram({
+mcp__agent-gateway__excalidraw_diagram({
   prompt: "<design brief>",
   outputPath: "/absolute/path/to/diagram.excalidraw",
   mode: "create" | "extend"   // default "create"
@@ -196,7 +196,7 @@ The tool returns `{ outputPath, elementCount, viewport, hydratedBytes }`.
 
 ### Step 6: Hand the file to the user
 Tell the user where it landed and how to open it (browser at
-`https://sideclaw.test` for sideclaw, drop into the brain vault for Obsidian,
+`https://agent-gateway.test` for agent-gateway, drop into the brain vault for Obsidian,
 drag onto canvas for excalidraw.com).
 
 If the user wants edits, call again with `mode: "extend"` and the same path.
@@ -225,7 +225,7 @@ If the user wants edits, call again with `mode: "extend"` and the same path.
 
 ### Delivery
 13. File written and reported back to the user.
-14. User knows which app to open it in (sideclaw / Obsidian / excalidraw.com).
+14. User knows which app to open it in (agent-gateway / Obsidian / excalidraw.com).
 15. If extending an existing diagram, used `mode: "extend"` (not "create").
 
 ---
