@@ -129,6 +129,12 @@ SIDECLAW_URL="${SIDECLAW_URL:-http://127.0.0.1:7705}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 AUDIO_GATEWAY_URL="${AUDIO_GATEWAY_URL:-http://127.0.0.1:7719}"
 RESEARCH_GATEWAY_URL="${RESEARCH_GATEWAY_URL:-http://127.0.0.1:7780}"
+# The gateway's deploy clone and the marker its poller (scripts/mini-deploy.sh) writes only after a
+# healthy install — the pair probe_research_gateway compares to catch a deploy that is stuck.
+RG_APP_DIR="${RG_APP_DIR:-$HOME/.research-gateway/app}"
+RG_DEPLOYED_SHA_FILE="${RG_DEPLOYED_SHA_FILE:-$HOME/.research-gateway/data/deployed-sha}"
+RG_DEPLOY_STUCK_MIN="${RG_DEPLOY_STUCK_MIN:-15}"
+GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
 USAGE_TRACKER_LOG="${USAGE_TRACKER_LOG:-$HOME/Library/Logs/usage-tracker.log}"
@@ -974,6 +980,44 @@ probe_research_gateway() {
   # field reads as unhealthy rather than silently "fine").
   tavily=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/tavily" 2>/dev/null || true)
   [[ "$tavily" == *'"overPlan":false'* ]] || { echo "research-gateway Tavily plan over quota or unreadable (${tavily:-no answer})"; return 1; }
+  probe_research_gateway_deploy
+}
+
+# A push to master deploys within ~2 min (CI-gated, idle-gated poller), so a deploy marker that
+# lags origin/master for RG_DEPLOY_STUCK_MIN is stuck: CI red or pending, the idle gate never
+# opening, a failed install, or a dead poller. Reads only local state — the poller fetches every
+# tick, so the clone's origin/master is as fresh as FETCH_HEAD, which doubles as the poller's
+# liveness signal. "Behind for how long" needs a clock, so the first tick that sees a given
+# origin sha ahead of the marker records it in STATE_DIR and later ticks measure from there.
+probe_research_gateway_deploy() {
+  [[ -d "$RG_APP_DIR/.git" ]] || return 0 # no deploy clone on this machine — nothing to be behind
+  local limit=$(( RG_DEPLOY_STUCK_MIN * 60 )) now fetched origin deployed state since
+  now=$("$DATE_BIN" +%s)
+  fetched=$("$STAT_BIN" -f %m "$RG_APP_DIR/.git/FETCH_HEAD" 2>/dev/null) || fetched=0
+  if (( fetched > 0 && now - fetched > limit )); then
+    echo "research-gateway deploy poller has not fetched in $(( (now - fetched) / 60 ))m (max ${RG_DEPLOY_STUCK_MIN}m) — check make logs"
+    return 1
+  fi
+  origin=$("$GIT_BIN" -C "$RG_APP_DIR" rev-parse origin/master 2>/dev/null) || return 0
+  deployed=$(<"$RG_DEPLOYED_SHA_FILE" 2>/dev/null) || deployed=""
+  state="$STATE_DIR/rg-deploy-behind"
+  if [[ "$deployed" == "$origin" ]]; then
+    rm -f "$state" 2>/dev/null || true
+    return 0
+  fi
+  since=""
+  if [[ -f "$state" ]]; then
+    read -r state_sha state_ts <"$state" || true
+    [[ "${state_sha:-}" == "$origin" ]] && since="${state_ts:-}"
+  fi
+  if [[ -z "$since" ]]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+    echo "$origin $now" >"$state" 2>/dev/null || true
+    return 0
+  fi
+  (( now - since > limit )) || return 0
+  echo "research-gateway deploy stuck: ${deployed:0:7} deployed, origin/master ${origin:0:7} for $(( (now - since) / 60 ))m (CI red or pending, idle gate, failed install — see make logs)"
+  return 1
 }
 
 probe_brain_web() {
