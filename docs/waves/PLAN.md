@@ -11,10 +11,20 @@ every doc surface describes the final names.
 **Gate:** the touched repo's `make check` + `/review` on each wave's diff.
 dotfiles: `make check`.
 
-**Pre-flight on go (Wave 0, orchestrator, no code):** the audit numbers below
-are a 2026-10-09 snapshot. Re-verify each wave's premises before it starts
-(job stats, LOC, ledger counts, open owner actions) and amend the plan in one
-`docs:` commit if reality moved.
+**Wave 0 pre-flight: done, 2026-10-09 17:25.** The audit was taken a few hours earlier and no premise has moved.
+- All herdr agents were quiet (`scripts/herdr-wait-quiet.sh`). `warden-improve` was told to end its `/loop`; Wave 6 re-arms it as outcome-triggered.
+- Tree state at start. Waves never commit, stash or revert files they did not change in these repos:
+
+  | Repo | State | Cause |
+  |-|-|-|
+  | weatherorb | 22 dirty files | a blocked `wo-lead-w7` |
+  | hermes-agent | 1 dirty file | |
+  | modelpick | 2 dirty files | |
+  | sy-serendipity | 3 dirty files | |
+  | jkrumm.com | 1 commit ahead of origin | the WIP-banner agent's own work, leave it |
+  | free-planning-poker | sits on branch `fix/leave-beacon-cors-and-bea-url` | |
+
+  A wave that must edit one of these repos works around the foreign changes. The exception is when its own file is dirty: skip that file and record it.
 
 **Cross-repo:** waves edit sideclaw, warden, hermes-agent, argo, brain,
 jkrumm.com, usage-tracker, modelpick, basalt-ui, free-planning-poker,
@@ -23,7 +33,7 @@ homelab-private. Each repo gets its own commits; PR-required repos
 
 **No owner gates except a herdr restart.** Go was given on 2026-10-09 with Johannes away. Renames on GitHub and on disk, publishing on jkrumm.com, global config edits and Hermes skill changes are all in scope. PR-required repos follow one loop: PR, `/review`, fix and re-review until clean, merge, deploy, verify live, and if broken, the next PR. A table the plan used to hold for the owner (Wave 8 mapping, Wave 9 verdicts) is still written, committed and followed, but not waited on. The only real stop is a herdr restart, which kills every pane including the orchestrator's: record it in Left behind and move on. IuRoot repos are never touched.
 
-## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: pending -->
+## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: active -->
 - [ ] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
 - [ ] Delete UI-only routes and libs: `server/routes/{repos,notes,markdown,events,diagrams,kiosk}.ts`, `server/lib/{repo-scanner,markdown-scanner,notes-bus,diagram-bus,diagram-lock,chrome,workspace}.ts` (~1k LOC), and the dashboard-only env keys `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH`.
 - [ ] **Keep:** `GET/POST /api/usage` (statusline + `fetch_usage.py` post to it), `server/lib/excalidraw*.ts` (the `excalidraw_diagram` tool), Octokit in `dispatch-git.ts` (live PR creation).
