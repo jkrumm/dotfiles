@@ -68,10 +68,14 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 - [ ] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
 - [ ] Dedupe `opencode-runner.ts` / `session-runner.ts` shared code (the fallow-flagged clone).
 - [ ] Docs/skills that still say dispatch runs `claude -p` → corrected.
+- [ ] From the 2026-10-09 prometheus-scripts run:
+  - a busy repo **queues** implement jobs instead of refusing them; a refusal is synchronous and loud, never a "running" ack followed by a refusal one second later
+  - the caller may set branch name and PR/MR title (an auto-name `dispatch/remove-openspec-…-c0c0dd73` reached main)
+  - editorial briefs (AGENTS.md, docs, prose) route to a Claude model
 **Left behind:**
 
 ## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: pending -->
-Prerequisite (owner): GitHub App or PAT with Checks:Read, Actions:Read, Issues:Write, PRs:Write in 1Password; fresh `gh` token. Without it the merge train stays dead on private repos (weatherorb 0/26 fixed).
+Prerequisite (owner): add **Checks: Read** to the fine-grained PAT `op://mini/github/token` (verified 2026-10-09: check-runs 403 with `x-accepted-github-permissions: checks=read`; repo/pulls/issues/actions read are 200), then `make secrets-seed`; re-login `gh` on the mini (token invalid). Without Checks the merge train stays dead on private repos (weatherorb 0/26 fixed).
 - [ ] `improve` loop: trigger on outcomes (failed / needs_decision / revision-exhausted items), not hourly; no journal commit for a quiet iteration.
 - [ ] Duplicate detection before dispatch (same repo + overlapping brief/carrier); revision cap 2, then one escalation.
 - [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
@@ -79,19 +83,30 @@ Prerequisite (owner): GitHub App or PAT with Checks:Read, Actions:Read, Issues:W
 - [ ] Owner gate: herdr under launchd / restart window (decision open since 2026-10-07 in `docs/improve/JOURNAL.md`). Implement whatever he picks.
 **Left behind:**
 
-## Wave 7 — /wave gets the shutterflow fleet roles            <!-- status: pending -->
-Source (read over `ssh iumac`, read-only): `~/SourceRoot/shutterflow/fleet/{MISSION,PROTOCOL}.md`, `fleet/roles/*.md`, `scripts/fleet/{spawn.sh,watch.py,fleet.py,lead-merge.sh,retire.sh}`, `fleet/handoff/mother-4.md`. Port roles and discipline, not the 210-task state machine.
-- [ ] `skills/wave/roles/{mother,lead,worker}.md`: lean mother (never reads code, rotates via handoff), standing lead (strong model per routing, owns review + merge, default on for ≥3-wave plans), fresh worker per wave. `SKILL.md` gets a Roles section, handoff protocol (`docs/waves/handoff/<name>.md`), the four stop reasons from MISSION §Autonomy.
-- [ ] PLAN template fields: `**Owns:**`, `**Depends:**`, `**Review:** lead|reviewer`, `**Asks:**`. Disjoint `owns` may run in parallel worktrees; otherwise sequential as today.
-- [ ] `scripts/wave-watch.py` (from `watch.py`): wake the mother on agent leaving `working`/vanishing, a new `docs/waves/events.jsonl` line, or a 20-min heartbeat; replaces the one-shot `herdr agent wait`.
-- [ ] `remote-dev.sh`: start-prompt delivery check in `cmd_wave` (context counter off 0k, else re-send — shutterflow measured ~1/6 dropped), `--role`/`--model`, `--worktree`, `rd merge` (rebase, ff, `make check`, push, close), `rd ask` (writes **Asks:** + push notification).
-- [ ] Gates: cheap per-wave check, full `make check` at merge; a wave cannot flip to `done` with "Review: none" unless the reason is recorded. Update `skills/remote-dev` + `docs/remote-dev.md` (no more "one wave per repo" absolute).
+## Wave 7 — /wave: one simple skill that picks the right shape            <!-- status: pending -->
+Evidence, three runs: shutterflow fleet on the MacBook (great; `~/SourceRoot/shutterflow/fleet/{MISSION,PROTOCOL}.md`, `fleet/roles/*.md`, `scripts/fleet/*` over `ssh iumac`, read-only), the IuRoot prometheus-scripts fan-out on 2026-10-09 (great: an orchestrator tab plus 11 herdr worktrees, one Claude per MR, merge train), weatherorb waves (weird; Wave 0 reads its transcripts and PLAN to say why). Port discipline, not machinery. Simplest shape that fits wins.
+- [ ] `SKILL.md` opens with a shape picker, three shapes, one paragraph each:
+  - **sequential**: the default, one wave at a time in the main checkout. Mandatory when validation is a shared resource (shutterflow: one app build, e2e lock, screenshots).
+  - **fan-out**: N independent changes with disjoint files and cheap independent validation. One worktree and Claude tab per change, plus an orchestrator tab running the merge train.
+  - **fleet**: long multi-phase work. A lean mother that never reads code, a standing lead that owns review and merge, a fresh worker per task, rotation via `docs/waves/handoff/<name>.md`.
+- [ ] Roles and the brief template as files, not prose repeated per run: `skills/wave/roles/{mother,lead,worker}.md`. Brief template fields: owned files, exact branch, title and commit message, validation command, finish with commit, push and draft PR/MR, "never touch files outside your ownership". The four stop reasons from shutterflow MISSION §Autonomy.
+- [ ] `rd fan <repo> <brief-files…>` / `rd fan --clean`:
+  - creates worktrees through the repo's own tooling, so `.wtp.yml`/setup hooks run (deps install, env/config copy)
+  - opens tabs inside the repo's **existing** workspace (never a new workspace per worktree; the prometheus run left 11 under OTHER)
+  - starts Claude and sends its brief, with a start-prompt delivery check (context counter off 0k, else re-send; shutterflow measured ~1/6 dropped)
+  - also applies the delivery check to `rd wave`
+- [ ] Merge train helper (`rd merge`): rebase, checks, merge, re-rebase whenever main moves. GitHub path plus a GitLab ff-only path (API rebase, then arm auto-merge, since a push drops approvals). Push with `git -C <worktree>` so `protect-branches` judges the worktree, not the orchestrator's cwd.
+- [ ] `scripts/wave-watch.py` (from shutterflow `watch.py`) for fan-out and fleet only: wake on an agent leaving `working`/vanishing, an event line, or a 20-min heartbeat. Gates: cheap per-change check, full `make check` at merge, no `done` with "Review: none" without a recorded reason. Update `skills/remote-dev` + `docs/remote-dev.md`.
 **Left behind:**
 
 ## Wave 8 — global config: contradictions out, guardrails kept            <!-- status: pending -->
 No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
 - [ ] Build a mapping table (old line → kept / moved to `<file>:<section>` / duplicate of `<file>`) for every proposed change. **Owner gate: Johannes reviews the table before any edit is committed.** Operating contract, secrets/mini warnings, herdr, waves, mini vs MacBook, lanes stay verbatim.
 - [ ] Fix the lanes contradiction (four lanes vs Explore/@verifier/`/check` vs `global-reference.md` §Parallelism vs `skills/implement`) with one consistent sentence.
+- [ ] Narrow the lane table:
+  - dispatch = "one bounded change, unattended, in a repo you are not working in"; it is no longer "default for settled multi-file edits", which pushed the prometheus run into dispatch first
+  - "N independent changes in one repo" → `/wave` fan-out
+- [ ] Sweep checked-in repo `.claude/settings.json` for `ask` permission rules. They still prompt under `--dangerously-skip-permissions` and stall unattended agents (push, glab). Hard stops go in `deny`; personal prompts belong in `settings.local.json`. Add a one-line rule to `docs/agents-md.md`.
 - [ ] Model ids out of prose: `AGENTS.md:~441`, `docs/{opencode,codex,agents-md,agent-platform}.md`, `skills/podcast/SKILL.md` → point at routing.
 - [ ] `rules/dockerfile.md:11,86` dead reference to `docker-makefile.md`. `docker-makefile.ts` (762 lines): shrink to a deny list of destructive verbs + a `make help` hint, keep the tests meaningful.
 - [ ] Housekeeping: `~/.claude/skills/.trash`, redundant allow-list entries, `docs/hooks.md` title/event count, fold `docs/herdr.md` into `remote-dev.md`, `sc-note.md` at repo root.
