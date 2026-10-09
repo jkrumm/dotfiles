@@ -1,89 +1,112 @@
-# dotfiles — one core, four lanes, one repo contract
+# Setup round 4 — agent-gateway, a loop that ships, fleet-style waves
 
-**Goal:** the dotfiles side of `docs/agent-platform.md`: four lanes, a global
-CLAUDE.md that routes instead of restating, `/wave` with an orchestrated mode,
-OpenCode parity, the repo contract applied across every repo, and the platform
-documented once (dotfiles → brain → jkrumm.com draft).
+**Status: PARKED.** Johannes is mid-build elsewhere. Do not start, spawn or
+flip any wave to `active` until he gives the explicit go. No worktree or
+parallel-branch tricks to "get ahead" — when the go comes, waves run one after
+another on the normal branches.
 
-**Gate:** `make architecture-check secrets-lint hooks-test` (or `make check` once W1 adds it) + `/review` on each wave's diff.
+**Goal:** act on the 2026-10-09 holistic review: sideclaw becomes a lean
+`agent-gateway` (CLI `agw`), warden ships on every repo instead of feeding
+itself, `/wave` gains the shutterflow fleet roles, the global config loses its
+contradictions without losing a guardrail, Hermes is audited (not gutted), and
+every doc surface describes the final names.
 
-**Spec:** `docs/agent-platform.md` — read it first.
+**Gate:** the touched repo's `make check` + `/review` on each wave's diff.
+dotfiles: `make check`.
 
-**Live system:** `config/global.CLAUDE.md`, `rules/`, `skills/`, `agents/` are symlinked into `~/.claude` and load in every session, including this one. Edits are live on save — keep each file valid at every commit.
+**Pre-flight on go (Wave 0, orchestrator, no code):** the audit numbers below
+are a 2026-10-09 snapshot. Re-verify each wave's premises before it starts
+(job stats, LOC, ledger counts, open owner actions) and amend the plan in one
+`docs:` commit if reality moved.
 
-**Cross-repo:** Wave 3 and Wave 4 edit other repos; each repo gets its own commits. PR-required repos (`config/pr-required-repos.json`) get a draft PR, never a direct push.
+**Cross-repo:** waves edit sideclaw, warden, hermes-agent, argo, brain,
+jkrumm.com, usage-tracker, modelpick, basalt-ui, free-planning-poker,
+homelab-private. Each repo gets its own commits; PR-required repos
+(`config/pr-required-repos.json`) get a draft PR, never a direct push.
 
-## Wave 1 — lanes, contract, a lean global CLAUDE.md            <!-- status: done -->
-- [x] `docs/agents-md.md` gains the repo contract (spec §Repo contract) as the authority. dotfiles itself gets `check` (= architecture-check + secrets-lint + hooks-test), a target wrapping setup, `verify` (= doctor), `logs`.
-- [x] Four lanes (spec §Four lanes). Delete `rd bg` and `scripts/agent-dispatch.sh` + its PATH link **after** grepping consumers in `~/SourceRoot/{hermes-agent,warden,sideclaw}`: code callers block the deletion (note them in Left behind, hermes-agent's plan removes them); doc callers just get updated. Remove the "colleague" lane wording everywhere. Put `rd` (as a script, not only a zsh function), `ask-human` and `warden` on PATH in `~/.local/bin` via `make setup`.
-- [x] `config/global.CLAUDE.md` 23k → ≤10k chars: every model id → "see `sideclaw routing`"; move basalt-ui consumers, sudo, dev proxy, IuRoot repo list, Codex lane, parallelism tiers, async-contract detail, skills table behind links (docs/ or the owning repo). The operating contract lives here once; `config/output-styles/Direct.md` keeps tone only. Fix Direct.md's "multi-file edits → @implementer" to match the lanes.
-- [x] Fix the stale facts list (dotfiles audit #3–#18): ask-human push default, `rd wave` creates a tab not a workspace, herdr restart via `make herdr-restart`, verifier in AGENTS.md, one launcher table, repo descriptions in exactly one place, `dispatch-scratch` duplicate row. AGENTS.md back under its own 40k limit by moving Codex / OpenCode / Theme / Tailnet sections to docs/.
-- [x] Make `dependency-hygiene`, `agent-limits`, `typescript` (`paths: **/*.ts,**/*.tsx`), `commit-conventions` lazy; delete the `docker-makefile` rule (the hook enforces it).
+**Owner gates (stop and ask, never decide):** GitHub repo renames (outward),
+the PAT/GitHub App scopes, the herdr restart window, the Wave 7 mapping table,
+the Wave 8 verdict table, publishing on jkrumm.com.
+
+## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: pending -->
+- [ ] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
+- [ ] Delete UI-only routes and libs: `server/routes/{repos,notes,markdown,events,diagrams,kiosk}.ts`, `server/lib/{repo-scanner,markdown-scanner,notes-bus,diagram-bus,diagram-lock,chrome,workspace}.ts` (~1k LOC), and the dashboard-only env keys `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH`.
+- [ ] **Keep:** `GET/POST /api/usage` (statusline + `fetch_usage.py` post to it), `server/lib/excalidraw*.ts` (the `excalidraw_diagram` tool), Octokit in `dispatch-git.ts` (live PR creation).
+- [ ] Drop the now-unused deps (blueprint, codemirror, `@uiw/*`, `@excalidraw/excalidraw`, mermaid, shiki, react*, remark/rehype, vite, …) — `bun remove`, then confirm nothing imports them.
+- [ ] Delete one-off scripts (`ab-review-angles.ts`, `probe-implement.ts`, `ralph*.sh`) and `docs/ui-and-caching.md`; README stops describing an "offload daemon"/dashboard.
+- [ ] `make reload` (drains), then `/api/jobs/health` green and one `check` + one `dispatch investigate` job round-trip.
 **Left behind:**
-- **Gate:** `secrets-lint` and `hooks-test` green (135 pass). `architecture-check` is **red on clean HEAD too** (exit 2): loaded/on-disk launchd labels unmapped in `docs/architecture.md` — weatherorb ×6, modelpick-web, prometheus-dashboard-autodeploy, helium-sparkle ×2, google keystone ×2. Not touched by this wave; needs map rows or removal.
-- **Review:** `/review` ran 5 angles but synthesis failed (`OAuth session expired` on the Max backend) — **no review verdict exists**. Re-run `/review` on `25e78f6..HEAD` after `/login` on the mini.
-- No code callers of `rd bg`/`agent-dispatch` in hermes-agent, warden, sideclaw. Doc callers still to update in their own repos: `hermes-agent/skills/herdr/SKILL.md:193-199`, `warden/README.md:40` (colleague lane row), `warden/docs/handover-field-review.md:194`, `sideclaw/AGENTS.md:366`.
-- `rd`/`ask-human` are symlinks, `warden` is an exec wrapper (its launcher resolves the venv from `$0`) in `~/.local/bin`, all via `make setup`. `ask-human.sh` now resolves its lib through `readlink -f`.
-- `make check` = architecture-check + secrets-lint + hooks-test; `deploy` wraps `setup`; `verify` = `doctor`; `logs` tails devhost-health. Repo contract authority is `docs/agents-md.md`.
-- Moved to docs/: `codex.md`, `opencode.md`, `tailnet.md`, `herdr.md` (sidebar groups), `theme.md` (look), new `global-reference.md` (parallelism, async detail, skills, workspaces, sudo, dev proxy, basalt-ui). Global CLAUDE.md 23.4k → 7.5k, AGENTS.md 47.9k → 36.2k.
-- Lazy rules: `typescript`, `dependency-hygiene`, `agent-limits`, `commit-conventions` (the last via `/commit` reading it). `docker-makefile` rule deleted from rules and from the OpenCode `instructions`; the hook stays. OpenCode still loads the lazy ones unconditionally (it ignores `paths:`) — Wave 2 decides.
-- Stale facts: `docs/architecture.md` `dispatch-scratch` duplicate removed; `rd wave` adds a tab to the repo's existing workspace (creates one only if none). `skills/remote-dev` and `docs/remote-dev.md` lost `rd bg`/`agent-dispatch`; Wave 2 owns the skill merge and its stale facts #8–#11.
 
-## Wave 2 — /wave orchestrated mode, OpenCode parity            <!-- status: done -->
-- [x] `/wave` gets two modes (spec §herdr): **chain** (today) and **orchestrated**: the orchestrator tab runs `rd wave`, then `herdr agent wait <agent> --until done` (one blocking call), reads PLAN.md, decides the next. Fix the busy guard so a working orchestrator tab in the same repo does not block its own spawns. Auto-close the finished wave tab after its close-out commit is pushed.
-- [x] `rd wave` / `rd work` accept `--kind opencode`.
-- [x] Merge the agent-control half of the `remote-dev` skill with herdr guidance into one skill; keep the generated herdr skill as raw reference only. Fix remote-dev skill stale facts (#8–#11).
-- [x] OpenCode parity: add research-gateway and chrome-devtools MCP to `config/opencode/opencode.json`; symlink `agents/` into `~/.config/opencode/agent/`; add the lazy global rules to `instructions`; a small branch-protection plugin mirroring `hooks/protect-branches.ts`; GPT ids on an `@ai-sdk/openai` (Responses) provider — generated from sideclaw's registry if sideclaw Wave 1 is done, else hand-written with a pointer.
+## Wave 2 — rename sideclaw → agent-gateway (core + runtime)            <!-- status: pending -->
+Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tools `mcp__agent-gateway__*`), env prefix `AGENT_GATEWAY_*`, launchd label `com.jkrumm.agent-gateway`, state `~/.local/{share,state}/agent-gateway`, logs `~/Library/Logs/agent-gateway*`.
+- [ ] Scripted codemod (committed under `scripts/`, re-runnable) over the sideclaw repo: identifiers, env vars, paths, docs. Env reads accept `SIDECLAW_*` as a fallback for one deprecation window, logged once at boot.
+- [ ] Runtime migration: drain (`make reload` semantics), stop the old agent, move `jobs.db`/`sideclaw.db`/salvage to the new paths, load the **new** label (never reuse `com.jkrumm.sideclaw` — BTM-denied), boot, health green.
+- [ ] CLI `agw` on PATH via `make setup`; `sideclaw` stays as a thin deprecation shim that execs `agw` and prints one stderr line.
+- [ ] MCP registration in `~/.claude.json` and `config/opencode/opencode.json` → `agent-gateway`. Grep the live `settings.json` and `hooks/` for `mcp__sideclaw` matchers.
+- [ ] Owner gate: GitHub repo rename `jkrumm/sideclaw` → `jkrumm/agent-gateway` (GitHub redirects the old URL), local dir `~/SourceRoot/agent-gateway`.
 **Left behind:**
-- **Gate:** `secrets-lint` (7) and `hooks-test` (135) green; shellcheck clean on `remote-dev.sh`. `architecture-check` still **red on clean HEAD** (same unmapped launchd labels as Wave 1 — weatherorb ×6, modelpick-web, helium-sparkle, google keystone, prometheus-dashboard-autodeploy); unchanged by this wave. sideclaw `/check` job itself failed (`is_error` envelope, not a check result).
-- **Review: none.** `/review` ran 5 angles, synthesis died again on `OAuth session expired` (Max backend) — **no verdict for Wave 1 *or* Wave 2**. `/login` in a herdr pane on the mini, then `/review` on `25e78f6..HEAD`. Self-review of the diff only.
-- **Spec correction:** orchestrators wait on `--until idle --until done --until blocked`, not `--until done` — `done` is idle+unseen, so it never fires while the wave tab is watched. Fixed in `docs/agent-platform.md`, `/wave`, `remote-dev` skill.
-- `rd`: `--kind claude|opencode` on `wave`/`work`; `rd close <agent>` (wave tab only, not working, clean, nothing unpushed — so waves must push in close-out; `/wave` now says so); busy guard excludes the caller's pane **and tab**. opencode panes eval `_oc_env` (new in `claude.zsh`, `oc` uses it too) — exports `IU_*`, `RESEARCH_GATEWAY_AUTH`, `OPENCODE_CONFIG`. Not run live end-to-end (spawning would start a real agent): only dry/guard/refusal paths exercised.
-- `/wave` has chain + orchestrated modes; chain mode leaves tabs open. `remote-dev` skill absorbed the herdr stack guidance (the generated `herdr` skill is untouched raw reference) and lost its stale facts (`brew services restart herdr` → `make herdr-restart`, `--push` default, lid-close/`--bg`, `herdr update`). `docs/remote-dev.md` `--bg` prose fixed; `scripts/doctor.sh` hint too.
-- OpenCode: `iu-responses` provider (`@ai-sdk/openai`) holds the GPT ids, hand-written to mirror sideclaw's registry wires (pointer in `docs/opencode.md`); `small_model` → `iu-responses/gpt-6-luna`. **Deviations from the plan:** agents are *rendered* (`scripts/opencode-agents.py`), not symlinked — OpenCode fails the whole config on Claude's `tools: A, B` / `color: green`; the stack-specific lazy rules are **not** added to `instructions` (~40k chars on every turn, `paths:` ignored) — only the four already there.
-- Verified live against opencode 1.18.30: `opencode models` lists both providers, config loads with the plugin and both MCPs, `agent list` shows implementer/verifier, the plugin blocks `git push origin master` in a PR-required repo and allows it in dotfiles. chrome-devtools/research-gateway tool calls themselves not exercised.
-- **Incident:** a debug `sed` in this wave printed the research-gateway bearer into the session transcript (`_oc_env` output, `(q)`-escaped space defeated the redaction). Consider rotating `op://vps/research-gateway/API_SECRET` (+ `security delete-generic-password -s research-gateway-token`, `make setup`).
-- Not done: `make setup` not re-run end to end (linked the plugin and rendered agents by hand with the same commands the targets use); `docs/architecture.md` untouched (no new running thing).
 
-## Wave 3 — repo contract sweep            <!-- status: done -->
-- [x] Make `make check` green: map the unmapped launchd labels in `docs/architecture.md` (weatherorb ×6, modelpick-web, prometheus-dashboard-autodeploy, helium-sparkle, google keystone — third-party ones as an explicit ignore list) so `architecture-check` passes on clean HEAD.
-- [x] For every repo in the readiness table (in this wave's brief below), add the four Make targets (aliases / thin wrappers around existing scripts are fine) and the four AGENTS.md sections with real values (full health URL, Kuma monitor name, OTel `service.name`). Skip warden, sideclaw, hermes-agent, dotfiles (their own plans cover them) and brain, kobo-mods, dotfiles-private (no runtime; `check` only if trivial). homelab-private: contract only, never mention its contents elsewhere.
-- [x] Delegate per repo via `mcp__sideclaw__dispatch` (tier implement, `workspace: "in-place"`) in batches of 3; read every diff before committing it in that repo.
-- Readiness snapshot (2026-10-02): has `check` → add rest: audio-gateway, email-gateway, image-gen, linewatch, research-gateway. Makefile but no `check`: homelab, king-smith-walkingpad-mac, rb, weatherorb, usage-tracker, modelpick, basalt-ui (PR), basalt-ui-obsidian, vps (`deploy APP=x` / `verify APP=x`). No Makefile: argo, image-share, jkrumm.com, free-planning-poker (PR), rollhook (PR), rollhook-action (PR). Missing AGENTS.md: rollhook-action, usage-tracker.
+## Wave 3 — rename sweep: consumers and docs            <!-- status: pending -->
+- [ ] dotfiles: `config/global.CLAUDE.md` ("`sideclaw routing`", the lane table), every skill calling `mcp__sideclaw__*` (check, review, implement, excalidraw-diagram, otel, upgrade-deps, wave, remote-dev, research), `rules/agent-limits.md`, `docs/{agent-platform,architecture,global-reference,remote-dev,opencode}.md`, diagrams, Makefile, statusline, `devhost-health-check.sh`.
+- [ ] warden: `scripts/clients/sideclaw.py` → `agent_gateway.py`, tests, docs, the `warden.board_unavailable` caller; LaunchAgents that reference the old paths.
+- [ ] hermes-agent, argo (`routes/agents.ts` overview client), usage-tracker, modelpick (skip generated run-log dirs), research-gateway.
+- [ ] brain: rename `projects/sideclaw.md` + the narrator's repo map together; wiki pages (`model-routing`, `gateways` — agent-gateway joins the gateway family —, `agent-harness`, `herdr`, `remote-dev-*`). jkrumm.com: `agent-infrastructure.mdx`, `public/diagrams/agent-platform.html`, `facts.ts`.
+- [ ] Final grep: `rg -i sideclaw ~/SourceRoot --glob '!node_modules' --glob '!.git' --glob '!**/history/**'` returns only the shim, deprecation fallbacks and archived history.
 **Left behind:**
-- **Gate:** `make check` green on dotfiles (architecture-check, secrets-lint 7, hooks-test 135). `architecture-check` fixed: weatherorb round/retention/verify + mother-wake/-watch, modelpick-web, prometheus-dashboard-autodeploy mapped in `docs/architecture.md`; google keystone and helium-sparkle vendor updaters are an allowlist in the script. **Review: none** — sideclaw `/review` has failed on `OAuth session expired` in Waves 1-2 and the dotfiles diff here is a map + allowlist only; per-repo diffs were read by the orchestrator, not reviewed by `/review`.
-- **Direct-to-master repos — committed locally, NOT pushed** (push is the owner's call): audio-gateway, email-gateway, image-gen, linewatch, research-gateway, king-smith-walkingpad-mac, weatherorb, usage-tracker (new AGENTS.md + CLAUDE.md shim), modelpick (WIP in `epoch-benchmarks.ts` left untouched; its `make check` is red on pre-existing typecheck/lint errors), basalt-ui-obsidian, vps, argo, image-share, jkrumm.com, rb. Two traps: **rb was already 13 commits ahead of origin** before this wave, and **homelab's commit landed on `fix/garmin-auth-probe-classification`** (in-place edits hit whatever branch was checked out) — move or cherry-pick it before pushing either.
-- **PR-required repos — draft PRs:** basalt-ui #99 (`make verify` is now the prod probe; the old full gate is `make check`; stale `make verify` refs in `docs/STATUS.md`/`MATURATION-LEDGER.md` still to fix), free-planning-poker #288 (worker also trimmed ~230 lines from AGENTS.md to fit 40k — owner must confirm nothing is lost), rollhook #34, rollhook-action #8 (new AGENTS.md/CLAUDE.md/Makefile; `deploy`/`verify`/`logs` are explicit no-ops).
-- Not done: kobo-mods, brain, dotfiles-private (no runtime, skipped as planned); homelab-private not touched. Kuma/OTel values are real where a monitor/service.name exists, else `none` + reason (rb, linewatch-OTel, modelpick, king-smith, usage-tracker, research-gateway have no dedicated Kuma monitor). Public repos use `<your-domain>` placeholders in health URLs (email-gateway, image-gen, research-gateway, rb).
-- Dispatch quirks: workers could not always read `~/SourceRoot/dotfiles/docs` / homelab files from their sandbox; the orchestrator corrected Kuma names (argo, image-share, jkrumm.com) and the argo `logs` container filter by hand. The sideclaw `check` step reports `is_error` on every dispatch (infra, not a repo result), so every worktree dispatch pushed a branch with no PR — PRs were opened manually via `GH_TOKEN` from `secrets-run`.
 
-## Wave 4 — document the platform            <!-- status: done -->
-Runs after warden Wave 2 and sideclaw Wave 1 are done, so the docs describe the real thing.
-- [x] `docs/architecture.md` mental-model section → short, links `docs/agent-platform.md`; update `agent-platform.md` STATUS to what has landed.
-- [x] Brain: `wiki/engineering/agent-estate-model.md` becomes the human-readable page for the platform (or symlinks `agent-platform.md`, matching how `dotfiles-architecture.md` works); fix `gateways.md` (research-gateway is mini-only; add email-gateway, image-share); mark superseded pages (`warden-control-plane.md`, `hermes-as-control-surface.md`, `agent-dispatch-paths.md`) as pointers. Load `~/SourceRoot/brain/voice.md` first.
-- [x] One diagram of the picture via `/archify`, embedded in brain and the site.
-- [x] jkrumm.com: rewrite `src/content/guide/personal-stack.mdx` (or add `agent-infrastructure.mdx`, `order: 2`) as `status: draft` — concise, rendered version of the spec, no hostnames/IPs/secrets (rules/security.md). **Publishing is the owner's call** — stop after the draft commit.
+## Wave 4 — agent-gateway hardening            <!-- status: pending -->
+- [ ] `narrative` (23% failed): surface the real cause instead of "Session exited with code 1" (deploy the pending `classifyExitFailure`), add one retry/fallback.
+- [ ] Alerting: push `/api/jobs/health` (`failedLastHour`, `degradedRoutes`) to Kuma; a failing route pages, not just logs.
+- [ ] Keep terminal job rows 90 days (or a slim `usage` table) so effectiveness stats stop needing log scraping.
+- [ ] Per-route circuit breaker for IU/Requesty 503s (`check` fell back to Max 69/70 times). Rate-limit `warden.board_unavailable` (18.9k lines of noise).
+- [ ] MCP: SDK `^1.32`, `job_cancel` tool, consistent `title` + annotations (`dispatch`: destructive/openWorld), deterministic `tools/list` order. Stay on stdio and 1.x — no v2/Streamable HTTP yet; verify the Tasks extension (`io.modelcontextprotocol/tasks`) status via `/research` and note when `job_wait` can map onto it.
 **Left behind:**
-- **Gate:** `make check` green on dotfiles (architecture-check, secrets-lint 7, hooks-test 135); jkrumm.com `make check` + build green. **Review: none** — docs-only diff, read by the orchestrator; sideclaw `/review` was not run.
-- **Ran before its stated precondition:** warden Wave 3 was still active (merge train, deploy/verify, auto-revert = warden W4) and sideclaw W4 pending. `agent-platform.md` STATUS carries a per-part landed / rolling-out table; the jkrumm.com draft marks the merge train and auto-revert as rolling out. Re-check both against reality before publishing.
-- **Brain** (committed, local, not pushed): `agent-estate-model.md` is now a symlink to `dotfiles/docs/agent-platform.md` (frontmatter added there); the old one-page estate model is in brain git history only. `gateways.md` fixed (research-gateway mini-only, email-gateway, image-share added from their AGENTS.md). `warden-control-plane`, `hermes-as-control-surface`, `agent-dispatch-paths` carry a superseded banner and index line; bodies kept as history.
-- **Diagram:** `docs/diagrams/agent-platform.html` via archify `deliver` (showcase, validates clean). `visual-check` fails `viewer/viewport-overflow`, same as `estate`. Archify has no CLI export, so the site embeds the HTML in an iframe (`public/diagrams/agent-platform.html`) rather than an SVG; re-export an SVG from the viewer if preferred. Spec assumption: investigate and implement are drawn as two nodes though the spec runs them as one item.
-- **jkrumm.com:** new `agent-infrastructure.mdx` (`status: draft`, order 2), `personal-stack.mdx` untouched. Committed on master, **not pushed, not published** — owner's call. Prose is written to `brain/voice.md` but not human-edited.
-- Not pruned: `docs/diagrams/estate.html` spec still carries its one open crossing; `docs/architecture.md` mental model lost the `#agents` digest/Argo history detail (pointed at by nothing else).
 
-## Wave 5 — review fixes            <!-- status: done -->
-From the `/review` of `25e78f6..HEAD` (2026-10-05). Fix, then `make check`, then `/review` the fix diff.
-- [x] `config/opencode/plugins/protect-branches.js`: run the policy for every bash call (no `git` substring pre-filter — `g\it push` bypasses it); fail CLOSED when the hook exits non-zero or crashes; only a clean exit with empty stdout means allow.
-- [x] `scripts/remote-dev.sh` `cmd_close`: fail closed when `git status` cannot be read (ssh failure, empty cwd) — refuse to close; check `herdr tab close`'s response for an `error` field before printing success.
-- [x] `scripts/remote-dev.sh`: `RD_ORCHESTRATED` triggers only on `=1`; `parse_kind` consumes only leading flags (prompt text containing `--kind` stays intact); surface `_oc_env` failure in `cmd_wave`/`cmd_work` instead of starting an opencode agent with no credentials; parameterize `USAGE_LANE` in `agent_pane_setup`.
-- [x] `config/zsh/claude.zsh` `_oc_env`: emit the bearer with `${(qq)…}` (single-quoted, literal space) so redactors recognize it — never the backslash-escaped form that leaked once.
-- [x] `docs/global-reference.md` sudo pattern: pipe the password through stdin (`secrets-run read … | ssh HOST 'sudo -S …'` / `op read … | ssh …`), never inside the remote argv.
-- [x] `Makefile`: `_setup-scripts` removes the stale `~/.local/bin/agent-dispatch` link; `check` also runs the hermetic either-machine suites (`opbackup-seed-test`, `brew-service-test`, `launchd-restarts-test`, `human-queue-test`) if they are hermetic.
-- [x] `scripts/opencode-agents.py`: a missing `description` is a clear error, not a KeyError traceback. `config/opencode/opencode.json`: pin `chrome-devtools-mcp` to an exact version.
-- [x] `config/zsh/iu-models.sh`: header still cites the deleted agent-dispatch as a bash-3.2 consumer — drop the stale justification (keep the shape unless trivially foldable).
-- Not a bug: `ask-human.sh` `readlink -f` works on this macOS (26.x supports `-f`).
+## Wave 5 — OpenCode as the settled dispatch default            <!-- status: pending -->
+- [ ] Retry transient 503s on write tiers before the worktree is touched; make the "no fallback on half-applied worktree" rule explicit in the result.
+- [ ] Fix `session.opencode_db_locked` contention (per-session DB or serialized open).
+- [ ] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
+- [ ] Dedupe `opencode-runner.ts` / `session-runner.ts` shared code (the fallow-flagged clone).
+- [ ] Docs/skills that still say dispatch runs `claude -p` → corrected.
 **Left behind:**
-- **Gate:** `make check` green (architecture-check, secrets-lint, hooks-test 135, plus the four hermetic suites now in `check`). sideclaw `/review` ran this time (outcome `needs-human`): blocking finding fixed (`require_oc_env` now also requires `RESEARCH_GATEWAY_AUTH` in `_oc_env` output); also fixed: plugin hook timeout (10s, fail-closed) + stderr in the error, `opencode-agents.py` validates all agents before writing anything, stale bash-3.2 comments. The fix diff was not re-reviewed.
-- **Deviations / not done:** `parse_kind` consumes `--kind` before the repo and right after it (the usage lines put the flag there), not strictly leading-only. Declined review suggestions: single-pass `parse_kind` rewrite; `rd work` Claude sessions never get `USAGE_LANE` (pre-existing — claude `cmd_work` never called `agent_pane_setup`); a shared schema between the plugin and `hooks/protect-branches.ts` (the plugin's fail-closed handling assumes the hook emits stdout only to deny — an architecture call).
-- `skills/secrets/SKILL.md` sudo example moved to the stdin pattern too. `rd wave`/`rd work` `--kind opencode` still not run end to end.
-- Still open from Wave 2: consider rotating `op://vps/research-gateway/API_SECRET` (bearer leaked into a transcript once).
+
+## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: pending -->
+Prerequisite (owner): GitHub App or PAT with Checks:Read, Actions:Read, Issues:Write, PRs:Write in 1Password; fresh `gh` token. Without it the merge train stays dead on private repos (weatherorb 0/26 fixed).
+- [ ] `improve` loop: trigger on outcomes (failed / needs_decision / revision-exhausted items), not hourly; no journal commit for a quiet iteration.
+- [ ] Duplicate detection before dispatch (same repo + overlapping brief/carrier); revision cap 2, then one escalation.
+- [ ] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
+- [ ] Repo contract (`check`/`deploy`/`verify`) for basalt-ui (draft PR), free-planning-poker (draft PR), homelab-private; bring basalt-ui and jkrumm.com into triage scope.
+- [ ] Owner gate: herdr under launchd / restart window (decision open since 2026-10-07 in `docs/improve/JOURNAL.md`). Implement whatever he picks.
+**Left behind:**
+
+## Wave 7 — /wave gets the shutterflow fleet roles            <!-- status: pending -->
+Source (read over `ssh iumac`, read-only): `~/SourceRoot/shutterflow/fleet/{MISSION,PROTOCOL}.md`, `fleet/roles/*.md`, `scripts/fleet/{spawn.sh,watch.py,fleet.py,lead-merge.sh,retire.sh}`, `fleet/handoff/mother-4.md`. Port roles and discipline, not the 210-task state machine.
+- [ ] `skills/wave/roles/{mother,lead,worker}.md`: lean mother (never reads code, rotates via handoff), standing lead (strong model per routing, owns review + merge, default on for ≥3-wave plans), fresh worker per wave. `SKILL.md` gets a Roles section, handoff protocol (`docs/waves/handoff/<name>.md`), the four stop reasons from MISSION §Autonomy.
+- [ ] PLAN template fields: `**Owns:**`, `**Depends:**`, `**Review:** lead|reviewer`, `**Asks:**`. Disjoint `owns` may run in parallel worktrees; otherwise sequential as today.
+- [ ] `scripts/wave-watch.py` (from `watch.py`): wake the mother on agent leaving `working`/vanishing, a new `docs/waves/events.jsonl` line, or a 20-min heartbeat; replaces the one-shot `herdr agent wait`.
+- [ ] `remote-dev.sh`: start-prompt delivery check in `cmd_wave` (context counter off 0k, else re-send — shutterflow measured ~1/6 dropped), `--role`/`--model`, `--worktree`, `rd merge` (rebase, ff, `make check`, push, close), `rd ask` (writes **Asks:** + push notification).
+- [ ] Gates: cheap per-wave check, full `make check` at merge; a wave cannot flip to `done` with "Review: none" unless the reason is recorded. Update `skills/remote-dev` + `docs/remote-dev.md` (no more "one wave per repo" absolute).
+**Left behind:**
+
+## Wave 8 — global config: contradictions out, guardrails kept            <!-- status: pending -->
+No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
+- [ ] Build a mapping table (old line → kept / moved to `<file>:<section>` / duplicate of `<file>`) for every proposed change. **Owner gate: Johannes reviews the table before any edit is committed.** Operating contract, secrets/mini warnings, herdr, waves, mini vs MacBook, lanes stay verbatim.
+- [ ] Fix the lanes contradiction (four lanes vs Explore/@verifier/`/check` vs `global-reference.md` §Parallelism vs `skills/implement`) with one consistent sentence.
+- [ ] Model ids out of prose: `AGENTS.md:~441`, `docs/{opencode,codex,agents-md,agent-platform}.md`, `skills/podcast/SKILL.md` → point at routing.
+- [ ] `rules/dockerfile.md:11,86` dead reference to `docker-makefile.md`. `docker-makefile.ts` (762 lines): shrink to a deny list of destructive verbs + a `make help` hint, keep the tests meaningful.
+- [ ] Housekeeping: `~/.claude/skills/.trash`, redundant allow-list entries, `docs/hooks.md` title/event count, fold `docs/herdr.md` into `remote-dev.md`, `sc-note.md` at repo root.
+**Left behind:**
+
+## Wave 9 — Hermes: audit and improve the wiring (no blind deletion)            <!-- status: pending -->
+- [ ] Verdict table for every live skill in `~/.hermes/skills` (73 + 24 archived): learn-from (pattern worth porting into our skills) / adapt-port / keep in Hermes / retire, with a one-line reason. **Owner gate: Johannes picks before anything is disabled.**
+- [ ] Wiring map Hermes ↔ global setup: shared facts duplicated in Hermes skills (`herdr` 279 vs 195 lines, `podcast`, research, homelab/homelab-ops, dispatch/warden) → which become links to one doc, which stay Hermes-specific.
+- [ ] Port the "learn-from" patterns into dotfiles skills as agreed; remove retired terms (`agent-dispatch`, `rd bg`, "colleague", `claude --bg`) from `capture` and `herdr`.
+- [ ] Review the stale/oversized ones (`karakeep`, `reading`, `work` 618 lines); add a check that the live skill set matches the declared `HERMES_SKILLS` list.
+**Left behind:**
+
+## Wave 10 — docs on every surface            <!-- status: pending -->
+- [ ] jkrumm.com `personal-stack.mdx` (published, stale: CLAUDE.md → AGENTS.md, Grafana/Loki → ClickStack, no agent stack); `agent-infrastructure.mdx` "rolling out" paragraph → current; cross-link the two. **Publishing is the owner's call.**
+- [ ] brain: `agent-overview-loop.md` and `agent-harness.md` rewritten or bannered superseded; `Areas/Engineering/Engineering.md` links the agent platform page; rename `agent-estate-model` → `agent-platform` (keep an alias); four superseded pages → one History page.
+- [ ] Narrator prompt stops writing "merge-approval gate" for warden; one human "daily workflow" note in brain Areas/Engineering (lanes, waves with roles, Argo/Hermes queue).
+- [ ] Website diagram generated from or pointing at `dotfiles/docs/diagrams` source.
+**Left behind:**
