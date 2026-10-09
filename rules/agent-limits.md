@@ -5,7 +5,7 @@ paths: ["**/*.ts", "**/*.py", "**/*.sh", "**/Makefile"]
 
 # Agent Limits: None
 
-Agent workers — anything that spawns `claude -p`, `claude_iu`, a agent-gateway
+Agent workers — anything that spawns `claude -p`, `claude_iu`, an agent-gateway
 episode, a Hermes tool loop, a research run, a Codex/Droid run, or an Agent
 SDK `query()` — run **as long as the work takes**.
 

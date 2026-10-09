@@ -30,7 +30,7 @@ any older doc that contradicts it; rollout is tracked in each repo's
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 | warden: gates cut, nine states, one queue | **landed** (W1–W2) |
 | warden: intake fingerprint + triage dedup, revisions as attempts | **landed** (W3) |
-| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs a agent-gateway PR delta scope) |
+| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs an agent-gateway PR delta scope) |
 | warden: docs, loop split into modules, own `check`/`deploy`/`verify`/`logs` | **landed** (W5) |
 
 ## Why this rewrite

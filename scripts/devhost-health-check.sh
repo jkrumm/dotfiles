@@ -1074,7 +1074,7 @@ check_services() {
 # agent-gateway's job runner, as distinct from its HTTP liveness in probe_agent_gateway:
 # a daemon that answers /health while every check/review job wedges is the
 # failure that hid behind "services up". The endpoint is agent-gateway's own verdict
-# (`ok:false` = FAIL); a 404 means a agent-gateway that predates it and is reported
+# (`ok:false` = FAIL); a 404 means an agent-gateway that predates it and is reported
 # as starting, not failed — grading an endpoint that does not exist yet would
 # page on every machine the moment this check shipped ahead of it.
 check_agent_gateway_jobs() {
