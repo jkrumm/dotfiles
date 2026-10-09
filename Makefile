@@ -93,7 +93,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-tools
 	@$(MAKE) --no-print-directory _setup-caddy
 	@$(MAKE) --no-print-directory _setup-browser
-	@$(MAKE) --no-print-directory _setup-sideclaw-mcp
+	@$(MAKE) --no-print-directory _setup-agent-gateway
 	@$(MAKE) --no-print-directory _setup-pnpm
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-secrets
@@ -1395,15 +1395,17 @@ _setup-browser:
 # client falls back to a 60s default per tool call, which hard-aborts any
 # job_wait({maxWaitMs}) above 60000 even though sideclaw's own worker will
 # happily run up to MAX_WAIT_MS (29 min) — see CLAUDE.md's Async-job contract.
-.PHONY: _setup-sideclaw-mcp
-_setup-sideclaw-mcp:
-	@echo "  sideclaw MCP..."
-	@if [ -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
+.PHONY: _setup-agent-gateway
+_setup-agent-gateway:
+	@echo "  agent-gateway MCP..."
+	@if [ -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
 		claude mcp remove sideclaw --scope user 2>/dev/null || true; \
-		claude mcp add-json sideclaw --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/sideclaw/server/mcp.ts"],"timeout":1800000}'; \
-		echo "    ✓ sideclaw MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
+		claude mcp remove agent-gateway --scope user 2>/dev/null || true; \
+		claude mcp add-json agent-gateway --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/agent-gateway/server/mcp.ts"],"timeout":1800000}'; \
+		echo "    ✓ agent-gateway MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
+		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-gateway" install-cli; \
 	else \
-		echo "    · sideclaw not cloned at $(SOURCEROOT)/sideclaw — skipping"; \
+		echo "    · agent-gateway not cloned at $(SOURCEROOT)/agent-gateway — skipping"; \
 	fi
 
 # research-gateway is a REMOTE HTTP MCP (research.mini.jkrumm.com/mcp, the mini's native instance) — unlike the
@@ -1708,13 +1710,13 @@ status:
 	@colima status >/dev/null 2>&1 \
 		&& echo "    ✓ colima VM running" \
 		|| echo "    ✗ colima VM [not running — run: make colima-start]"
-	@echo "  sideclaw MCP"
-	@if [ ! -f "$(SOURCEROOT)/sideclaw/server/mcp.ts" ]; then \
-		echo "    · sideclaw not cloned — skipping"; \
-	elif claude mcp list 2>/dev/null | grep -q "sideclaw"; then \
-		echo "    ✓ sideclaw MCP registered"; \
+	@echo "  agent-gateway MCP"
+	@if [ ! -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
+		echo "    · agent-gateway not cloned — skipping"; \
+	elif claude mcp list 2>/dev/null | grep -q "agent-gateway"; then \
+		echo "    ✓ agent-gateway MCP registered"; \
 	else \
-		echo "    ✗ sideclaw MCP [not registered — run make setup]"; \
+		echo "    ✗ agent-gateway MCP [not registered — run make setup]"; \
 	fi
 	@echo "  research-gateway MCP"
 	@if claude mcp list 2>/dev/null | grep -q "research-gateway"; then \
@@ -2088,7 +2090,7 @@ _render-plists:
 # Separate repo (~/SourceRoot/usage-tracker). It owns its own LaunchAgent
 # template + installer; here we just install deps and hand off to its installer,
 # so the plist (absolute bun + repo paths) stays the repo's concern. Skips
-# cleanly if the repo isn't cloned, mirroring _setup-sideclaw-mcp.
+# cleanly if the repo isn't cloned, mirroring _setup-agent-gateway.
 
 .PHONY: _setup-usage-tracker
 _setup-usage-tracker:

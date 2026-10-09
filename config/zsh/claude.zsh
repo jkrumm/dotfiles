@@ -375,10 +375,10 @@ _oc_env() {
   local auth
   auth=$("$HOME/SourceRoot/dotfiles/scripts/mcp-research-headers.sh" 2>/dev/null | sed -n 's/.*"Authorization":"\([^"]*\)".*/\1/p')
   [[ -n $auth ]] && print -r -- "export RESEARCH_GATEWAY_AUTH=${(qq)auth}"
-  # sideclaw's MCP is stdio-only against a repo that lives on the mini, so layer
+  # agent-gateway's MCP is stdio-only against a repo that lives on the mini, so layer
   # it in with OPENCODE_CONFIG (merged over the global config) only where it
-  # exists — the MacBook stays sideclaw-free.
-  if [[ -f "$HOME/SourceRoot/sideclaw/server/mcp.ts" ]]; then
+  # exists — the MacBook stays agent-gateway-free.
+  if [[ -f "$HOME/SourceRoot/agent-gateway/server/mcp.ts" ]]; then
     print -r -- "export OPENCODE_CONFIG=${(q)HOME}/SourceRoot/dotfiles/config/opencode/mini.json"
   fi
 }
