@@ -14,14 +14,18 @@ repo=${1:?usage: merge-train.sh <repo-path> [--check cmd] <branch>...}; shift
 check="make check" branches=()
 while (($#)); do
   case $1 in
-    --check) check=$2; shift 2 ;;
+    --check) [[ -n ${2:-} && $2 != --* ]] || die "--check needs a command"; check=$2; shift 2 ;;
     --no-check) check=""; shift ;;
     *) branches+=("$1"); shift ;;
   esac
 done
 ((${#branches[@]})) || die "no branches"
-[[ -z ${GH_TOKEN:-} ]] && GH_TOKEN=$(secrets-run read op://mini/github/token 2>/dev/null) && export GH_TOKEN
-git -C "$repo" remote get-url origin | grep -q 'github' || die "origin is not GitHub — the train is GitHub-only"
+if [[ -z ${GH_TOKEN:-} ]]; then
+  GH_TOKEN=$(secrets-run read op://mini/github/token) || die "could not resolve the GitHub token (secrets-run read op://mini/github/token)"
+fi
+export GH_TOKEN
+origin_url=$(git -C "$repo" remote get-url origin)
+[[ $origin_url =~ (^git@|//)([^/:]*github[^/:]*)[:/] ]] || die "origin is not a GitHub host — the train is GitHub-only"
 
 wt_of() { # worktree path holding branch $1
   git -C "$repo" worktree list --porcelain | awk -v b="refs/heads/$1" '/^worktree /{p=$2} $0=="branch " b{print p}'
@@ -35,8 +39,10 @@ for br in "${branches[@]}"; do
   landed=0
   for attempt in 1 2 3; do
     timeout 90 git -C "$wt" fetch -q origin || die "fetch failed"
-    base=$(git -C "$wt" symbolic-ref -q --short refs/remotes/origin/HEAD) || base=origin/master
-    git -C "$wt" rebase -q "$base" || { git -C "$wt" rebase --abort; die "$br: rebase onto $base conflicts — back to its worker"; }
+    base=$(git -C "$wt" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || {
+      base=""; for b in origin/master origin/main; do git -C "$wt" rev-parse -q --verify "$b" >/dev/null && { base=$b; break; }; done; }
+    [[ -n $base ]] || die "no origin default branch in $wt"
+    git -C "$wt" rebase -q "$base" || { git -C "$wt" rebase --abort 2>/dev/null || true; die "$br: rebase onto $base conflicts — back to its worker"; }
     if [[ -n $check ]]; then
       (cd "$wt" && eval "$check") || die "$br: check failed after rebase on $base"
     fi
@@ -45,8 +51,16 @@ for br in "${branches[@]}"; do
     if (cd "$wt" && gh pr merge "$pr" --rebase 2>"$errf"); then
       echo "merged $br (#$pr) onto $base"; landed=1; break
     fi
-    if grep -qiE 'policy|approv|required' "$errf"; then
-      (cd "$wt" && gh pr merge "$pr" --rebase --auto) && { echo "armed auto-merge for $br (#$pr)"; landed=1; break; }
+    if grep -qiE 'base branch policy|required (status|review|approving)|review is required' "$errf"; then
+      if (cd "$wt" && gh pr merge "$pr" --rebase --auto); then
+        echo "armed auto-merge for $br (#$pr), waiting for it to land"
+        for _ in $(seq 60); do
+          [[ $(cd "$wt" && gh pr view "$pr" --json state -q .state) == MERGED ]] && { landed=1; break; }
+          sleep 20
+        done
+        ((landed)) && break
+        die "$br (#$pr): auto-merge armed but not merged after 20 min — the next branch would rebase onto a stale main"
+      fi
     fi
     echo "merge of $br attempt $attempt failed ($(head -c 200 "$errf")) — main probably moved, re-rebasing" >&2
   done

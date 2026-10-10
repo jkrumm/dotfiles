@@ -409,7 +409,8 @@ cmd_work() {
 # to do). A delivered prompt makes the agent leave idle within seconds, so no `working`
 # state inside 30 s means re-send, once. base64 carries the text across the ssh hop and
 # herdr's argv handling byte-identical (quotes, newlines, a literal `$(...)`).
-# $1 pane  $2 agent name  $3 prompt. Returns 0 delivered, 1 never picked up, 2 rejected.
+# $1 pane  $2 agent name  $3 prompt. Returns 0 delivered, 1 never picked up, 2 rejected
+# (the rejection body is left in the global DELIVER_ERR).
 deliver_prompt() {
   local pane=$1 agent=$2 prompt=$3 b64 sent try
   b64=$(printf %s "$prompt" | base64 | tr -d '\n')
@@ -420,7 +421,9 @@ deliver_prompt() {
     if echo "$sent" | grep -q '"error"'; then
       DELIVER_ERR=$sent; return 2
     fi
-    host_run "herdr agent wait '$agent' --until working --timeout 30000" >/dev/null 2>&1 && return 0
+    # blocked/done count as delivered too: a prompt that went straight to a question or finished
+    # fast must not be re-sent (duplicate execution).
+    host_run "herdr agent wait '$agent' --until working --until blocked --until done --timeout 30000" >/dev/null 2>&1 && return 0
     (( try == 1 )) && note "   no 'working' from $agent within 30s — re-sending the prompt once"
   done
   return 1
@@ -461,9 +464,8 @@ cmd_wave() {
 
   # The repo's space is the one labelled with its bare name — the convention
   # `work` establishes and `herdr-groups.py` groups by. Waves live inside it as
-  # tabs labelled `wave <n>`, so the number comes from that tab list rather than
-  # from a counter anywhere: herdr already holds the durable record, and a
-  # second source of truth would only drift from it.
+  # tabs labelled `wave <n>`. The label carries the plan's wave number (below);
+  # herdr's tab list is only the fallback counter and the spawn-depth record.
   local ws n
   ws=$(NAME="$name" python3 -c '
 import json, os, sys
@@ -693,8 +695,11 @@ for w in workspaces:
     pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
     [[ -n $pane ]] || die "herdr tab create failed for $wt: $json (worktree kept — 'rd fan --clean $name' reclaims it)"
 
+    local leaf plen
+    leaf=$(agent_name "${branch##*/}"); leaf=${leaf:0:20}
+    plen=$((31 - ${#leaf})); (( plen < 1 )) && plen=1
     agent="$(agent_name "$name")"
-    agent="${agent:0:$((32 - 1 - ${#branch##*/}))}-$(agent_name "${branch##*/}")"; agent=${agent:0:32}
+    agent="${agent:0:$plen}-${leaf}"
     local model start_cmd i=0 started=""
     if [[ $AGENT_KIND == opencode ]]; then
       model="${RD_WAVE_MODEL:-iu/deepseek-v4.1-flash}"
@@ -738,19 +743,22 @@ fan_clean() {
   rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" '$path'" 2>&1) \
     || die "could not list worktrees of $path: $rows"
   [[ -n $rows ]] || { echo "no extra worktrees for $name"; return 0; }
-  local verb reason
+  local verb reason st qwt qbr
   while IFS=$'\t' read -r verb wt br reason; do
     [[ -n $verb ]] || continue
     if [[ $verb == keep ]]; then echo "keep  $br ($reason)  $wt"; continue; fi
-    [[ -n ${RD_DRY_RUN:-} ]] && { echo "would remove $br  $wt"; continue; }
-    tab=$(WT="$wt" python3 -c '
+    read -r tab st <<<"$(WT="$wt" python3 -c '
 import json, os, sys
 for a in json.load(sys.stdin)["result"]["agents"]:
     if a.get("cwd") == os.environ["WT"]:
-        print(a.get("tab_id") or ""); break
-' <<<"$roster" 2>/dev/null)
-    [[ -n $tab ]] && host_run "herdr tab close '$tab'" >/dev/null 2>&1
-    host_run "git -C '$path' worktree remove '$wt' && git -C '$path' branch -d '$br'" >/dev/null 2>&1 \
+        print(a.get("tab_id") or "-", a.get("agent_status") or "-"); break
+' <<<"$roster" 2>/dev/null)"
+    # Same bar as `close`: an agent still working or blocked is not finished.
+    if [[ ${st:-} == working || ${st:-} == blocked ]]; then echo "keep  $br (agent $st)  $wt"; continue; fi
+    [[ -n ${RD_DRY_RUN:-} ]] && { echo "would remove $br  $wt"; continue; }
+    [[ -n ${tab:-} && $tab != - ]] && host_run "herdr tab close '$tab'" >/dev/null 2>&1
+    qwt=$(printf '%q' "$wt"); qbr=$(printf '%q' "$br")
+    host_run "git -C $(printf '%q' "$path") worktree remove $qwt && git -C $(printf '%q' "$path") branch -D $qbr" >/dev/null 2>&1 \
       && echo "removed $br  $wt" || echo "keep  $br (remove failed)  $wt"
   done <<<"$rows"
 }
@@ -762,7 +770,7 @@ cmd_merge() {
   require_server
   local path args="" a
   path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
-  for a in "$@"; do args+=" '${a//\'/\'\\\'\'}'"; done
+  for a in "$@"; do args+=" $(printf '%q' "$a")"; done
   host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/merge-train.sh\" '$path'$args"
 }
 

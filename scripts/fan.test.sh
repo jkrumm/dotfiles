@@ -34,9 +34,23 @@ is "branch has no upstream" "$(g -C "$path" rev-parse --abbrev-ref '@{u}' 2>/dev
 # fan-list: unmerged worktree is kept; after its branch lands on origin it is dropped; dirty is kept
 echo x > "$path/new"; g -C "$path" add new; g -C "$path" commit -qm work
 is "unmerged worktree is kept" "$("$HERE/fan-list.sh" "$TMP/repo" | cut -f1,4)" "$(printf 'keep\tunmerged')"
-g -C "$path" push -q origin fan/one:master 2>/dev/null
+# GitHub rebase-merge rewrites SHAs: land the same patch on origin/master as a NEW commit
+g -C "$path" push -q origin fan/one
+g -C "$TMP/other" pull -q origin master 2>/dev/null
+g -C "$TMP/other" fetch -q origin fan/one
+GIT_COMMITTER_DATE="2001-01-01T00:00:00" g -C "$TMP/other" cherry-pick "$(g -C "$path" rev-parse HEAD)" >/dev/null 2>&1
+g -C "$TMP/other" push -q origin master
 is "merged worktree is dropped" "$("$HERE/fan-list.sh" "$TMP/repo" | cut -f1,4)" "$(printf 'drop\tmerged')"
 echo dirt > "$path/dirt"
 is "dirty worktree is kept" "$("$HERE/fan-list.sh" "$TMP/repo" | cut -f1,4)" "$(printf 'keep\tdirty')"
+
+# main-default repo without origin/HEAD: the scripts must find origin/main
+g init -q --bare -b main "$TMP/m.git"
+g clone -q "$TMP/m.git" "$TMP/mrepo" 2>/dev/null
+echo a > "$TMP/mrepo/f"; g -C "$TMP/mrepo" add f; g -C "$TMP/mrepo" commit -qm one; g -C "$TMP/mrepo" push -q origin HEAD:main
+g -C "$TMP/mrepo" remote set-head origin -d >/dev/null 2>&1 || true
+mo=$("$HERE/fan-worktree.sh" "$TMP/mrepo" fan/m) || bad "main-default fan-worktree failed"
+is "main-default: base is origin/main" "$(sed -n 2p <<<"$mo")" "origin/main"
+is "fresh worktree is kept, not dropped" "$("$HERE/fan-list.sh" "$TMP/mrepo" | cut -f1,4)" "$(printf 'keep\tfresh')"
 
 echo; [ "$fails" -eq 0 ] && echo "fan: all passed" || { echo "fan: $fails failed"; exit 1; }

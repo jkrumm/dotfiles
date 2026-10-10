@@ -2207,6 +2207,12 @@ opbackup-seed-test:
 # supervise/status/restart targets read and rewrite, so a bug here disarms a boot
 # path silently — the exact failure the resolver exists to end. Hermetic: it
 # drives the lib over a scratch dir and never touches a live LaunchAgent.
+# Hermetic suite for the rd fan / rd merge host scripts (base-from-origin, worktree verdicts).
+.PHONY: fan-test
+fan-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
+
 .PHONY: brew-service-test
 brew-service-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/brew-service.sh $(DOTFILES_DIR)/scripts/brew-service.test.sh
@@ -2217,11 +2223,6 @@ brew-service-test:
 # are report-only (deliberate-restart markers, SIGTERM, kills, exit codes) and
 # the marker lifecycle. Hermetic — a stubbed launchctl over a scratch state dir,
 # never a live job or the real heartbeat state. Runs on either machine.
-.PHONY: fan-test
-fan-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
-	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
-
 .PHONY: launchd-restarts-test
 launchd-restarts-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh

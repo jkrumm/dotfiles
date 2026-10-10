@@ -7,7 +7,7 @@
 #
 #   wave-watch.sh --agents a,b,c [--repo <dir>] [--events <file>] [--heartbeat 20] [--stall 45]
 #       fan-out / fleet: wakes on ANY listed agent leaving `working` or vanishing, a new
-#       line in --events, a 20-minute heartbeat, or the stall rule. Output starts with
+#       line in --events, a 20-minute heartbeat, or (with --repo) the stall rule. Output starts with
 #       DONE | AGENT | EVENT | HEARTBEAT | STALL so the caller can branch on one word.
 #
 # "Change" = HEAD + status + diff across EVERY worktree of the repo, so a worker busy in a
@@ -19,15 +19,16 @@ stall_min=45 heartbeat_min=20 events="" repo="" agents="" single=""
 if [[ ${1:-} == --agents ]]; then
   while (($#)); do
     case $1 in
-      --agents) agents=$2; shift 2 ;;
-      --repo) repo=$2; shift 2 ;;
-      --events) events=$2; shift 2 ;;
-      --heartbeat) heartbeat_min=$2; shift 2 ;;
-      --stall) stall_min=$2; shift 2 ;;
+      --agents) agents=${2:?--agents needs a comma list}; shift 2 ;;
+      --repo) repo=${2:?--repo needs a dir}; shift 2 ;;
+      --events) events=${2:?--events needs a file}; shift 2 ;;
+      --heartbeat) heartbeat_min=${2:?--heartbeat needs minutes}; shift 2 ;;
+      --stall) stall_min=${2:?--stall needs minutes}; shift 2 ;;
       *) echo "unknown flag $1" >&2; exit 2 ;;
     esac
   done
   [[ -n $agents ]] || { echo "--agents needs a comma list" >&2; exit 2; }
+  IFS=, read -r -a agent_list <<<"$agents"
 else
   agent=${1:?usage: wave-watch.sh <agent> <repo-dir> <plan-file> <wave-number> | --agents a,b,c ...}
   repo=${2:?repo-dir} plan=${3:?plan-file} wave=${4:?wave-number}; shift 4
@@ -36,7 +37,8 @@ else
   plan_dir=$(dirname "$(dirname "$(dirname "$plan")")")
 fi
 
-status_of() { herdr agent list | jq -r --arg n "$1" '.result.agents[] | select(.name==$n) | .agent_status'; }
+# A transient herdr/jq error yields "" (= gone), never an aborted watcher.
+status_of() { herdr agent list 2>/dev/null | jq -r --arg n "$1" '.result.agents[]? | select(.name==$n) | .agent_status' 2>/dev/null || true; }
 repo_sig() {
   [[ -n $repo ]] || return 0
   git -C "$repo" worktree list --porcelain | awk '/^worktree /{print $2}' |
@@ -53,7 +55,7 @@ while :; do
     st=$(status_of "$agent")
     case $st in idle|blocked|done|"") echo "AGENT $agent status=${st:-gone}"; exit 0;; esac
   else
-    for a in ${agents//,/ }; do
+    for a in "${agent_list[@]}"; do
       st=$(status_of "$a")
       case $st in working) ;; *) echo "AGENT $a status=${st:-gone}"; exit 0;; esac
     done
@@ -64,7 +66,8 @@ while :; do
     if ((now - start >= heartbeat_min * 60)); then echo "HEARTBEAT ${heartbeat_min}m"; exit 0; fi
   fi
   sig=$(repo_sig)
-  if [[ $sig != "$last_sig" ]]; then last_sig=$sig last_change=$now
+  if [[ -z $repo ]]; then :  # no --repo: no stall signal, only the heartbeat bounds the wait
+  elif [[ $sig != "$last_sig" ]]; then last_sig=$sig last_change=$now
   elif ((now - last_change > stall_min * 60)); then echo "STALL: no repo change for ${stall_min}m"; exit 0; fi
   sleep 90
 done
