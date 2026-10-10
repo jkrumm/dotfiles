@@ -75,7 +75,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | Repo | Purpose | Notes |
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
-| `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work via `warden run` or an issue, 5-job cron layer | see [[agent-estate-model]] |
+| `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work via `warden run` or an issue, 5-job cron layer | see [[agent-platform]] |
 | `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `agw dispatch` is a session's bounded episode, `rd wave` a human's long one |
 | `agent-gateway` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
@@ -144,7 +144,7 @@ brain drift audit, project narratives; the agents-overview digest was paused
 watchdog poll and dispatch sweep that used to run here were promoted to
 `warden-poll`/`warden-sweep` LaunchAgents above on 2026-09-09 — a control
 plane cannot depend on the process it supervises being up. Registry:
-`hermes-agent/docs/scheduled-jobs.md`; model: [[agent-estate-model]]
+`hermes-agent/docs/scheduled-jobs.md`; model: [[agent-platform]]
 (superseded on the dispatch mechanics — see its own banner).
 
 ### warden
@@ -306,4 +306,4 @@ Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
 `caddy` is pinned (its dependencies too, or the pin rots); `colima` is
 deliberately unpinned and asserted instead. Full rationale: `docs/homebrew.md`.
 
-Related: [[remote-dev-stack]] · [[mac-host-monitoring]] · [[agent-overview-loop]] · [[agent-estate-model]]
+Related: [[remote-dev-stack]] · [[mac-host-monitoring]] · [[agent-overview-loop]] · [[agent-platform]]

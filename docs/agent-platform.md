@@ -1,7 +1,9 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-gateway), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the target design, its rollout status, and the loop's nine states. The page a new agent reads first.
+description: One worker engine (agent-gateway), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the design, its status table and the loop's nine states. The page a new agent reads first.
+aliases:
+  - agent-estate-model
 tags:
   - engineering
   - agents
@@ -9,7 +11,7 @@ tags:
 timestamp: 2026-10-04
 ---
 
-# Agent platform — target design
+# Agent platform
 
 **Verdict:** one worker engine (agent-gateway), one autonomous loop (warden), one
 conversational front door (Hermes), one human cockpit (herdr). Every repo
@@ -18,9 +20,11 @@ sections, so no central component holds per-repo knowledge. Trust comes from
 the infrastructure (Tailscale, the owner's GitHub account); the only gates left
 are quality gates.
 
-STATUS: adopted 2026-10-02, rolling out (as of 2026-10-04). This page wins over
-any older doc that contradicts it; rollout is tracked in each repo's
-`docs/waves/PLAN.md`.
+STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
+rename to agent-gateway, OpenCode as the dispatch default and warden's ship-on-every-repo
+work). This page wins over any older doc that contradicts it; open work is
+tracked in each repo's `docs/waves/PLAN.md`. Before-the-rewrite design:
+[[agent-platform-history]].
 
 | Part | State |
 |-|-|
@@ -215,7 +219,7 @@ wave per repo; parallel waves only in different repos. A pane-less supervisor
 | `failed` | Argo only; daily one-line count |
 | everything else | Argo `/warden` |
 
-## Open facts to verify during rollout
+## Open facts to verify
 
 - DeepSeek flash rates conflict (agent-gateway 0.15/0.6 vs modelpick 0.50/1.50
   per MTok) — re-probe before cost claims.

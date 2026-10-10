@@ -157,7 +157,7 @@
       "id": "merge",
       "type": "backend",
       "label": "merge train",
-      "sublabel": "rolling out",
+      "sublabel": "checks, review, squash",
       "pos": [
         472,
         600
@@ -185,7 +185,7 @@
       "id": "verify",
       "type": "backend",
       "label": "verify",
-      "sublabel": "revert: rolling out",
+      "sublabel": "auto-revert on failure",
       "pos": [
         760,
         600
@@ -198,7 +198,7 @@
     {
       "id": "agent-gateway",
       "type": "backend",
-      "label": "Agent-Gateway",
+      "label": "agent-gateway",
       "sublabel": "the one worker engine · triage, dispatch, review, check · models from its registry",
       "pos": [
         40,
@@ -553,7 +553,8 @@
       "dot": "violet",
       "title": "rd wave",
       "items": [
-        "Long work the owner watches or steers"
+        "Long work the owner watches or steers",
+        "rd fan: N disjoint changes, one tab each"
       ]
     },
     {
