@@ -195,7 +195,7 @@ No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
 - **Retired terms:** `agent-dispatch` and `rd bg` already had no occurrences; `claude --bg` survives only as a prohibition; `colleague` in `capture` is a routing keyword. Nothing to remove.
 - **Not done / for the owner:** `skills/work/iu-epos-ops` is gitignored and employer-internal (1 use, agent-created); only its stale "approval layer" line was fixed locally. It still tells Hermes to read IuRoot repos and run `make`, against SOUL.md. Retire or rewrite it (not in git, so I did not delete it). The `agent-platform.md` "four lanes" wording is unchanged.
 
-## Wave 10 — docs on every surface            <!-- status: pending -->
+## Wave 10 — docs on every surface            <!-- status: active -->
 - [ ] jkrumm.com `personal-stack.mdx` (published, stale: CLAUDE.md → AGENTS.md, Grafana/Loki → ClickStack, no agent stack); `agent-infrastructure.mdx` "rolling out" paragraph → current; cross-link the two. Publish it (the site is WIP-flagged).
 - [ ] brain: `agent-overview-loop.md` and `agent-harness.md` rewritten or bannered superseded; `Areas/Engineering/Engineering.md` links the agent platform page; rename `agent-estate-model` → `agent-platform` (keep an alias); four superseded pages → one History page.
 - [ ] Narrator prompt stops writing "merge-approval gate" for warden; one human "daily workflow" note in brain Areas/Engineering (lanes, waves with roles, Argo/Hermes queue).
