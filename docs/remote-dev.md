@@ -699,3 +699,15 @@ succeeds** — the real `git push --dry-run` lives in `make doctor`, because at 
 300 s cadence a provider outage would page as "dev host down". That split earned
 itself once already: the credential resolved fine while the deployed helper still
 pointed at a read-only token, and only the dry-run saw it.
+
+## Fan-out and the merge train
+
+`rd fan <repo> <brief…>` cuts one worktree per brief from **fetched** `origin/<default>`
+(`scripts/fan-worktree.sh`; the repo's `.wtp.yml` hooks run when it has one), opens a
+`fan <branch>` tab for each in the repo's existing workspace, starts Claude and delivers
+the brief with a `Base: origin/<default> @ <sha>` line prepended. Each brief names its
+branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.sh`) rebases
+each onto the current origin default, runs `make check`, pushes with lease, merges the PR
+by rebase and re-fetches before the next; GitHub only. `rd fan --clean <repo>` removes
+clean, fully merged worktrees and their tabs. Hermetic suite: `make fan-test`.
+Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.

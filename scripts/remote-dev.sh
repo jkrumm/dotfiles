@@ -404,6 +404,28 @@ cmd_work() {
 #      automated form of "open a tab, start claude solo, paste the handover".
 #   4. It is bounded. See RD_WAVE_MAX below — a wave that can spawn its own
 #      successor is exactly the shape of a chain with no natural end.
+# Submit a prompt and PROVE it landed. Measured ~1 in 6 prompts is dropped when sent right
+# after `agent start` (the pane exists, a fresh Claude sits in it, nothing ever told it what
+# to do). A delivered prompt makes the agent leave idle within seconds, so no `working`
+# state inside 30 s means re-send, once. base64 carries the text across the ssh hop and
+# herdr's argv handling byte-identical (quotes, newlines, a literal `$(...)`).
+# $1 pane  $2 agent name  $3 prompt. Returns 0 delivered, 1 never picked up, 2 rejected.
+deliver_prompt() {
+  local pane=$1 agent=$2 prompt=$3 b64 sent try
+  b64=$(printf %s "$prompt" | base64 | tr -d '\n')
+  for try in 1 2; do
+    sent=$(host_run "herdr agent prompt '$pane' \"\$(echo $b64 | base64 -d)\"" 2>&1)
+    # `herdr agent prompt` EXITS 0 ON FAILURE and reports it in the body
+    # (`{"error":{"code":"agent_not_found",…}}`), so the body is the signal.
+    if echo "$sent" | grep -q '"error"'; then
+      DELIVER_ERR=$sent; return 2
+    fi
+    host_run "herdr agent wait '$agent' --until working --timeout 30000" >/dev/null 2>&1 && return 0
+    (( try == 1 )) && note "   no 'working' from $agent within 30s — re-sending the prompt once"
+  done
+  return 1
+}
+
 cmd_wave() {
   parse_kind "$@"
   local name="${REST[0]:-}"
@@ -464,17 +486,27 @@ except Exception:
     tabs = []
 nums = [int(m.group(1)) for t in tabs
         for m in [re.match(r"^wave (\d+)$", (t.get("label") or "").strip())] if m]
-print((max(nums) + 1) if nums else 1)
+print(len(nums) + 1, (max(nums) + 1) if nums else 1, ",".join(map(str, nums)))
 ' 2>/dev/null)
   fi
-  [[ -n $n ]] || n=1
+  # depth = live wave tabs + 1 (what RD_WAVE_MAX bounds); n = next free tab number.
+  local depth taken=""
+  read -r depth n taken <<<"${n:-}"
+  [[ -n $n ]] || { n=1; depth=1; }
+
+  # The label and agent name carry the PLAN's wave number ("Execute the active wave (Wave 7)"),
+  # not the tab counter: closed tabs reset the counter, so every wave used to be `-w1`.
+  # No "(Wave N)" in the prompt (an ad-hoc spawn) falls back to the counter. RD_WAVE_MAX still
+  # bounds the counter (spawn depth), not the plan's numbering.
+  local wnum=$n
+  if [[ $prompt =~ \(Wave\ ([0-9]+)\) ]]; then wnum=${BASH_REMATCH[1]}; fi
 
   # An agent that can spawn its own successor is exactly the shape of a chain
   # with no natural end. RD_WAVE_MAX is the backstop — the failure mode this
   # guards against is not "one wave too many", it is "did not stop".
   local wave_max=${RD_WAVE_MAX:-10}
-  (( n <= wave_max )) \
-    || die "wave $n would exceed RD_WAVE_MAX=$wave_max — refusing to keep an unbounded self-spawning chain going"
+  (( depth <= wave_max )) \
+    || die "wave $depth would exceed RD_WAVE_MAX=$wave_max — refusing to keep an unbounded self-spawning chain going"
 
   # Same hazard `work`'s comment describes: two agents editing one checkout race
   # each other. But the CALLER is the orchestrator (or a finishing wave handing
@@ -511,7 +543,8 @@ for a in agents:
   # suffix's width first. A name that overflows is rejected at `agent start`,
   # i.e. after the tab already exists.
   local suffix agent
-  suffix="-w${n}"
+  [[ ",$taken," == *",$wnum,"* ]] && die "a 'wave $wnum' tab already exists in this space — 'rd close' it (or 'rd read' it) before respawning"
+  suffix="-w${wnum}"
   agent="$(agent_name "$name")"
   agent="${agent:0:$((32 - ${#suffix}))}${suffix}"
 
@@ -519,7 +552,7 @@ for a in agents:
   # stops here for the same reason `say` stops before the send.
   if [[ -n ${RD_DRY_RUN:-} ]]; then
     if [[ -n $ws ]]; then
-      echo "would add tab 'wave $n' to existing space $ws ($name) at $path"
+      echo "would add tab 'wave $wnum' to existing space $ws ($name) at $path"
     else
       echo "would create space '$name' at $path (no space exists yet) and use its first tab"
     fi
@@ -532,7 +565,7 @@ for a in agents:
   local created json pane tab
   if [[ -n $ws ]]; then
     created=tab
-    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $n' --no-focus")
+    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus")
   else
     created=workspace
     json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus")
@@ -585,30 +618,152 @@ for a in agents:
     die "agent start failed: $out"
   fi
 
-  # The same two-shell quoting hazard `bg` documents at length: an ssh hop,
-  # then herdr's own argv handling, sit between here and the pane. base64
-  # removes the problem rather than escaping around it — a prompt with single
-  # quotes, double quotes, newlines or a literal `$(...)` all survive
-  # byte-identical.
-  local b64 sent
-  b64=$(printf %s "$prompt" | base64 | tr -d '\n')
-  sent=$(host_run "herdr agent prompt '$pane' \"\$(echo $b64 | base64 -d)\"" 2>&1)
+  deliver_prompt "$pane" "$agent" "$prompt"
+  case $? in
+    2) note "   pane $pane is live but UNPROMPTED — recover with:"
+       note "     rd say $agent '<the handover prompt>'"
+       die "wave $wnum started but the prompt was rejected: $DELIVER_ERR" ;;
+    1) note "   pane $pane never left idle after two sends — check 'rd read $agent', then 'rd say $agent …'" ;;
+  esac
 
-  # `herdr agent prompt` EXITS 0 ON FAILURE and reports it in the body
-  # (`{"error":{"code":"agent_not_found",…}}`, verified 2026-09-10 against a
-  # bogus pane id), so `rc` is not the signal — the body is. Unchecked, a
-  # failed submission is the worst outcome this command has: the pane exists,
-  # a fresh Claude is sitting in it, and it was never told what to do. Nothing
-  # is rolled back here — unlike the `agent start` failure above there is a
-  # live agent in it now, and the fix is one `rd say` rather than a respawn.
-  if echo "$sent" | grep -q '"error"'; then
-    note "   pane $pane is live but UNPROMPTED — recover with:"
-    note "     rd say $agent '<the handover prompt>'"
-    die "wave $n started but the prompt was rejected: $sent"
-  fi
-
-  echo "→ wave $n started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)"
+  echo "→ wave $wnum started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
+}
+
+# Fan-out: one worktree + one Claude tab per brief file, in the repo's EXISTING workspace.
+# Each brief declares its branch on a `Branch: <name>` line (the brief template's "exact
+# branch" field). Worktrees are cut from FETCHED origin state by scripts/fan-worktree.sh and
+# the brief is prefixed with that base, so a stale or ahead local checkout cannot brief a
+# worker against the wrong tree. `rd fan --clean <repo>` reclaims merged worktrees.
+cmd_fan() {
+  parse_kind "$@"
+  local name="${REST[0]:-}"
+  [[ -n $name ]] || die "usage: fan <repo> [--kind K] <brief-file…>   |   fan --clean <repo>"
+  if [[ $name == --clean ]]; then fan_clean "${REST[1]:-}"; return; fi
+  local briefs=("${REST[@]:1}")
+  (( ${#briefs[@]} )) || die "usage: fan <repo> [--kind K] <brief-file…>"
+  require_server
+
+  local path
+  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
+
+  # Validate every brief before anything is created: a typo in the third must not leave
+  # two worktrees and two running agents behind.
+  local b branch seen=" "
+  for b in "${briefs[@]}"; do
+    [[ -r $b ]] || die "brief '$b' is not readable"
+    branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
+    [[ -n $branch ]] || die "brief '$b' has no 'Branch: <name>' line"
+    [[ $seen == *" $branch "* ]] && die "two briefs claim branch '$branch'"
+    seen+="$branch "
+  done
+
+  local ws
+  ws=$(NAME="$name" python3 -c '
+import json, os, sys
+try:
+    workspaces = json.load(sys.stdin)["result"]["workspaces"]
+except Exception:
+    workspaces = []
+for w in workspaces:
+    if (w.get("label") or "").strip() == os.environ["NAME"]:
+        print(w["workspace_id"]); break
+' <<<"$(host_run 'herdr workspace list' 2>/dev/null)" 2>/dev/null)
+
+  if [[ -n ${RD_DRY_RUN:-} ]]; then
+    for b in "${briefs[@]}"; do echo "would fan '$b' -> worktree + tab in ${ws:-<new space $name>}"; done
+    return 0
+  fi
+  require_oc_env
+
+  local wt out base sha pane tab json tabname agent prompt rc
+  for b in "${briefs[@]}"; do
+    branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
+    out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
+      || die "worktree for '$branch' failed:"$'\n'"$out"
+    wt=$(sed -n 1p <<<"$out"); base=$(sed -n 2p <<<"$out"); sha=$(sed -n 3p <<<"$out")
+
+    tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
+    if [[ -n $ws ]]; then
+      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus")
+    else
+      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus")
+      ws=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['workspace']['workspace_id'])" 2>/dev/null)
+    fi
+    pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
+    [[ -n $pane ]] || die "herdr tab create failed for $wt: $json (worktree kept — 'rd fan --clean $name' reclaims it)"
+
+    agent="$(agent_name "$name")"
+    agent="${agent:0:$((32 - 1 - ${#branch##*/}))}-$(agent_name "${branch##*/}")"; agent=${agent:0:32}
+    local model start_cmd i=0 started=""
+    if [[ $AGENT_KIND == opencode ]]; then
+      model="${RD_WAVE_MODEL:-iu/deepseek-v4.1-flash}"
+      start_cmd="herdr agent start '$agent' --kind opencode --pane '$pane' -- -m '$model'"
+    else
+      model="${RD_WAVE_MODEL:-sonnet}"
+      start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
+    fi
+    agent_pane_setup "$AGENT_KIND" "$pane" fan
+    while (( i < 10 )); do
+      sleep 1; i=$((i+1))
+      started=$(host_run "$start_cmd")
+      echo "$started" | grep -q 'agent_pane_busy' || break
+    done
+    echo "$started" | grep -q '"type":"agent_started"' \
+      || { note "   agent start failed for $branch: $started (tab and worktree kept)"; continue; }
+
+    prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
+    deliver_prompt "$pane" "$agent" "$prompt"; rc=$?
+    case $rc in
+      0) echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)" ;;
+      1) echo "→ fan: '$agent' on $branch started but never left idle — 'rd read $agent'" ;;
+      2) echo "→ fan: '$agent' on $branch UNPROMPTED ($DELIVER_ERR) — 'rd say $agent …'" ;;
+    esac
+  done
+  note "   'rd agents' to watch · scripts/wave-watch.sh --agents … to block · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
+}
+
+# Reclaim fan worktrees whose branch is fully merged into origin's default and whose tree
+# is clean: close the agent's tab, remove the worktree (through wtp when the repo has one),
+# delete the branch. Anything unmerged or dirty is listed and left alone.
+fan_clean() {
+  local name=${1:-}
+  [[ -n $name ]] || die "usage: fan --clean <repo>"
+  require_server
+  local path
+  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
+  local roster
+  roster=$(herdr_agent_list) || exit 1
+  local rows wt br tab
+  rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" '$path'" 2>&1) \
+    || die "could not list worktrees of $path: $rows"
+  [[ -n $rows ]] || { echo "no extra worktrees for $name"; return 0; }
+  local verb reason
+  while IFS=$'\t' read -r verb wt br reason; do
+    [[ -n $verb ]] || continue
+    if [[ $verb == keep ]]; then echo "keep  $br ($reason)  $wt"; continue; fi
+    [[ -n ${RD_DRY_RUN:-} ]] && { echo "would remove $br  $wt"; continue; }
+    tab=$(WT="$wt" python3 -c '
+import json, os, sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a.get("cwd") == os.environ["WT"]:
+        print(a.get("tab_id") or ""); break
+' <<<"$roster" 2>/dev/null)
+    [[ -n $tab ]] && host_run "herdr tab close '$tab'" >/dev/null 2>&1
+    host_run "git -C '$path' worktree remove '$wt' && git -C '$path' branch -d '$br'" >/dev/null 2>&1 \
+      && echo "removed $br  $wt" || echo "keep  $br (remove failed)  $wt"
+  done <<<"$rows"
+}
+
+# Merge train: scripts/merge-train.sh runs on the host (GitHub only, rebase/fast-forward only).
+cmd_merge() {
+  local name=${1:-}; shift || true
+  [[ -n $name && $# -gt 0 ]] || die "usage: merge <repo> [--check '<cmd>'|--no-check] <branch…>"
+  require_server
+  local path args="" a
+  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
+  for a in "$@"; do args+=" '${a//\'/\'\\\'\'}'"; done
+  host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/merge-train.sh\" '$path'$args"
 }
 
 # Close a finished wave's tab — the orchestrator's last step after reading the
@@ -826,6 +981,9 @@ usage() {
     rd work <repo> [--kind K]   herdr workspace + claude (or opencode) for that repo (idempotent)
     rd wave <repo> [--kind K] <prompt…>
                               fresh tab + solo agent + prompt — claude (default) or opencode
+    rd fan <repo> <brief…>    worktree + tab + Claude per brief file (fan-out)
+                              (fan --clean <repo> reclaims merged worktrees)
+    rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          close a finished wave's tab (clean + pushed only)
     rd agents                 every agent on the host, both lanes
     rd read <agent> [src]     read an agent's output without attaching
@@ -857,6 +1015,8 @@ case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
   work)   shift; cmd_work "$@" ;;
   wave)   shift; cmd_wave "$@" ;;
+  fan)    shift; cmd_fan "$@" ;;
+  merge)  shift; cmd_merge "$@" ;;
   close)  shift; cmd_close "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   read)   shift; cmd_read "$@" ;;

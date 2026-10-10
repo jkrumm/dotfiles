@@ -19,6 +19,43 @@ someone has to copy.
 A plan that says round, phase, stage, milestone or iteration is renamed at
 authoring time. Nothing downstream searches for synonyms.
 
+## Pick the shape first
+
+Simplest shape that fits wins. Ask: is validation a shared resource, are there N
+independent changes, or is it long multi-phase work?
+
+| Shape | Use when | Mechanics |
+|-|-|-|
+| **sequential** (default) | One change stream, or validation is a shared resource (one app build, an e2e lock, screenshots). | One wave at a time in the main checkout: this file's chain/orchestrated modes. |
+| **fan-out** | N independent changes with disjoint files and cheap independent validation. | Briefs from `roles/worker.md`'s template, one per change; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief in the repo's existing workspace; the orchestrator tab waits with `wave-watch.sh --agents …` and lands them with `rd merge <repo> <branches…>` (rebase, check, merge by rebase, re-rebase as main moves; GitHub only). `rd fan --clean <repo>` after. |
+| **fleet** | Long multi-phase work that outlives any one context. | A lean **mother** (`roles/mother.md`, never reads code), a standing **lead** (`roles/lead.md`, owns review and merge), a fresh **worker** per task (`roles/worker.md`). Rotation through `docs/waves/handoff/<name>.md`. Fan-out mechanics for the workers. |
+
+Roles and the brief template are files under `roles/`; briefs reference them, they are not
+re-typed per run.
+
+### The watcher: `~/SourceRoot/dotfiles/scripts/wave-watch.sh`
+
+One tool, on PATH via its full path above. Sequential/orchestrated: `wave-watch.sh <agent> <repo-dir> <plan> <n>` (PLAN
+status flips to done, the agent idles/blocks/vanishes, or 45 min with no change in any of
+the repo's worktrees). Fan-out/fleet: `wave-watch.sh --agents a,b,c [--events <file>]
+[--heartbeat 20]` wakes on any listed agent leaving `working`, a new event line, or the
+heartbeat. Output begins `DONE|AGENT|EVENT|HEARTBEAT|STALL`. Wrap it in `timeout` when the
+caller must not block forever.
+
+### Fan-out rules
+
+- Brief workers from the `Base:` line `rd fan` prepends (fetched `origin/<default>`), never
+  from the local checkout: a stale or ahead local master briefed a worker against the wrong
+  tree once.
+- Prompt delivery is verified (`rd wave` and `rd fan`): no `working` state within 30 s
+  means one re-send. Still idle after that, `rd read` it.
+- Gates: the cheap check per change inside the worker; full `make check` at merge. No
+  `done` with "Review: none" without a recorded reason.
+- Never `git push` from the orchestrator's cwd for a worktree's branch; the train uses
+  `git -C <worktree>` so `protect-branches` judges the right tree.
+- Probing an LLM endpoint (`opencode run`) uses `opencode-safe` and `timeout`; bare
+  `opencode run` retries forever against a dead endpoint.
+
 ## Two modes
 
 | Mode | Who spawns the next wave | Use when |
@@ -37,7 +74,7 @@ The orchestrator holds no plan state of its own; PLAN.md is the state.
 1. Spawn: `RD_ORCHESTRATED=1 rd wave <repo> [--kind opencode] 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'`
    `RD_ORCHESTRATED=1` skips the gate's outward-facing keyword stop — the orchestrator, not a keyword, decides when a merge or deploy happens; every other gate check still runs.
    Its own tab being `working` does not block the spawn — `rd wave` excludes the caller's pane and tab. Any *other* working agent in the checkout still does.
-2. Block on it, one call each: `herdr agent wait <repo>-w<n> --until working --timeout 60000`, then `herdr agent wait <repo>-w<n> --until idle --until done --until blocked`. All three settled states — `done` alone never fires while the tab is being watched (it reports `idle`). `blocked` → `rd read` it before answering.
+2. Block on it with `wave-watch.sh <repo>-w<n> <repo-dir> docs/waves/PLAN.md <n>` (or by hand, one call each): `herdr agent wait <repo>-w<n> --until working --timeout 60000`, then `herdr agent wait <repo>-w<n> --until idle --until done --until blocked`. All three settled states — `done` alone never fires while the tab is being watched (it reports `idle`). `blocked` → `rd read` it before answering.
 3. Review the close-out: read PLAN.md (the wave's **Left behind**, status flips), `git log` and the diff it produced. A wave's report is a claim, the diff is the proof. Re-run `/check` if the wave's own gate result is not in its Left behind.
 4. Decide: red or incomplete → fix inline or `rd say` the wave; green → `rd close <repo>-w<n>` (refuses unless the tab is a `wave <n>` tab, the agent is not working, the checkout is clean and everything is pushed), then spawn the next. A next step that is outward-facing (merge, publish, release, deploy) stops at the owner.
 5. One active wave per repo; parallel waves only across repos.
@@ -68,7 +105,7 @@ line; everything else is in the file.
 ```
 
 Exactly one wave is `active`. The status comments are the machine-readable part —
-`rd wave` does not parse them, but every wave agent reads them first and the human
+`rd wave` does not parse them (it reads `(Wave <n>)` from the prompt for the tab label and agent name `<repo>-w<n>`), but every wave agent reads them first and the human
 greps them.
 
 ## Running a wave

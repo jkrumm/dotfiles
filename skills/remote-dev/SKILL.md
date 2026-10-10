@@ -22,6 +22,9 @@ repos [filter]                    # what's on the dev host, with branch + dirty 
 work <repo> [--kind opencode]     # herdr workspace + claude for that repo (idempotent)
 rd wave <repo> [--kind opencode] '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
 rd close <agent>                  # close a finished wave tab (clean + pushed only)
+rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + Claude tab per brief file
+rd fan --clean <repo>             # reclaim clean, merged fan worktrees + their tabs
+rd merge <repo> [--check cmd] <branch…>   # merge train: rebase, check, merge by rebase (GitHub only)
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
 rd say <agent> "…"                # send it a prompt
@@ -38,7 +41,7 @@ Four lanes start agent work: `@implementer`, `agw dispatch`, `rd wave`
 
 `/wave` owns the contract (chain vs orchestrated mode, the green gate). The
 mechanics this skill owns: `rd wave` adds a tab labelled `wave <n>` to the repo's
-workspace and prints the agent name (`<repo>-w<n>`). Waiting on it:
+workspace and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, in `fan <branch>` tabs. `scripts/wave-watch.sh` is the one watcher (`/wave` documents both modes). Waiting on it:
 
 ```bash
 herdr agent wait <agent> --until working --timeout 60000   # prompt landed

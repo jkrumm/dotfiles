@@ -798,7 +798,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2217,6 +2217,11 @@ brew-service-test:
 # are report-only (deliberate-restart markers, SIGTERM, kills, exit codes) and
 # the marker lifecycle. Hermetic — a stubbed launchctl over a scratch state dir,
 # never a live job or the real heartbeat state. Runs on either machine.
+.PHONY: fan-test
+fan-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
+
 .PHONY: launchd-restarts-test
 launchd-restarts-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
@@ -3248,6 +3253,7 @@ help:
 	@echo "  make opbackup-seed-test Hermetic reseed-guard regression suite"
 	@echo "  make brew-service-test  scripts/lib/brew-service.sh resolver suite"
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
+	@echo "  make fan-test           rd fan / merge-train worktree + base-from-origin suite"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
