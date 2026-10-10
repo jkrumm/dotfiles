@@ -2618,6 +2618,20 @@ agent-overview:
 	herdr pane run "$$PANE" watch --color -t -n 30 'curl -sfG localhost:7705/api/overview.txt -d color=1 -d cols=$(AGENT_OVERVIEW_COLS) || echo agent-gateway unreachable' >/dev/null; \
 	echo "  ✓ overview loop running in $$PANE (workspace $$WS)"
 
+.PHONY: herdr-launchd-status
+herdr-launchd-status: ## Read-only: is the running herdr server launchd-supervised, and is the plist ready for the cutover?
+	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
+	WRAP="$(DOTFILES_DIR)/herdr/herdr-server-start.py"; \
+	[ -n "$$PLIST" ] || { echo "  ✗ no herdr plist under either name — run: make herdr-setup"; exit 1; }; \
+	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ] \
+	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ] \
+	  && [ -x "$$WRAP" ]; then echo "  ✓ plist ready: $$PLIST (session-leader wrapper, KeepAlive)"; \
+	else echo "  ✗ plist not converged — run: make _herdr-supervise"; exit 1; fi; \
+	TARGET=$$($(BREW_SERVICE) target herdr 2>/dev/null); \
+	if launchctl print "$$TARGET" >/dev/null 2>&1; then echo "  ✓ job loaded in launchd ($$TARGET)"; \
+	else echo "  · job NOT loaded: the running server is not supervised — a crash loses every pane"; \
+	     echo "    cutover (kills every pane, human-timed):  rd agents  &&  make herdr-restart YES=1"; fi
+
 .PHONY: herdr-restart
 herdr-restart:
 	@if [ "$(YES)" != "1" ]; then \

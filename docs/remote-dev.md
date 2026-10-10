@@ -69,6 +69,9 @@ client attached (`herdr workspace create …` succeeds with zero clients).
   before exec, `_herdr-supervise` pins it into the brew plist, and
   `brew-upgrade.sh` asserts it — **`brew upgrade herdr` and any `brew services
   start|restart` regenerate that plist and strip the wrapper, silently.**
+- **`make herdr-launchd-status`** (read-only) says whether the running server is launchd-supervised
+  and whether the plist is ready for the cutover. Until `herdr-restart` has run once, a server started
+  by hand (parent pid 1, no launchd job) is not restarted by KeepAlive on a crash.
 - **Apply a fix to the running server with `make herdr-restart YES=1`** (bootout
   + bootstrap; never `brew services restart`, never `launchctl kickstart -k`). It
   **kills every pane**, so it is human-timed and not in `make setup`.
