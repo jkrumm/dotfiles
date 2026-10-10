@@ -33,4 +33,20 @@ fi
 [[ -d $path ]] || { echo "worktree path '$path' missing after create" >&2; exit 1; }
 # A branch cut from origin/<default> must not track it: `git push` would target master.
 git -C "$path" branch --unset-upstream "$branch" 2>/dev/null || true
+# Claude Code asks "do you trust this folder?" for every new path, even under a trusted
+# repo, and the prompt blocks `herdr agent start` (agent_not_ready). Accept it the way the
+# dialog would: hasTrustDialogAccepted on the worktree's ~/.claude.json project entry,
+# written by atomic replace (measured 2026-10-10, 2.1.296).
+python3 - "$path" <<'PY' || echo "warning: could not pre-trust $path in ~/.claude.json" >&2
+import json, os, sys, tempfile
+cfg = os.path.expanduser("~/.claude.json")
+with open(cfg) as f:
+    data = json.load(f)
+data.setdefault("projects", {}).setdefault(sys.argv[1], {})["hasTrustDialogAccepted"] = True
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cfg), prefix=".claude.json.")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+os.chmod(tmp, os.stat(cfg).st_mode & 0o777)
+os.replace(tmp, cfg)
+PY
 printf '%s\n%s\n%s\n' "$path" "$default" "$sha"
