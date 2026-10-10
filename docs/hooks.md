@@ -1,10 +1,9 @@
-# Claude Code Hooks — notify.ts
+# Claude Code Hooks
 
 ## Overview
 
-A single Bun script (`~/.claude/hooks/notify.ts`) handles all four Claude Code
-hook events. It provides rich macOS notifications, workspace identification by
-sound, and session timing.
+`~/.claude/hooks/notify.ts` handles four Claude Code hook events (the table below maps the guard hooks that sit beside it). It provides rich
+macOS notifications, workspace identification by sound, and session timing.
 
 ## Hook Events Handled
 

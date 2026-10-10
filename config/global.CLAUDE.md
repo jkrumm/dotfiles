@@ -61,7 +61,8 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Work | Route |
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
-| Settled, bounded work in a repo; result is a branch/PR or a verdict | `agw dispatch` (`implement` / `investigate`) — default for settled multi-file edits |
+| One bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | `agw dispatch` (`implement` / `investigate`) |
+| N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
 | Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
 | Unattended work tracked to an outcome | `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>`, or a GitHub issue |
 | Search across many files | `Agent` → `Explore` |
@@ -70,12 +71,14 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
 
-Those four lanes — `@implementer`, `agw dispatch`, `rd wave`, `warden run` —
-are the only ways to start agent work (`docs/agent-platform.md`). Brief a worker
-completely: exact paths, the change, acceptance criteria, scope limits, and any
-research baked in (it can't see yours). A worker owns its files until it returns;
-parallelize only on disjoint file groups. Delegate for context, not latency;
-editorial work stays inline.
+The four lanes — `@implementer`, `agw dispatch`, `rd wave` (incl. fan-out),
+`warden run` — are the only ways to start *another agent*
+(`docs/agent-platform.md`); `Explore`, `@verifier`, `/check`, `/research` and
+`/review` are in-session tools, not lanes. Brief a worker completely: exact
+paths, the change, acceptance criteria, scope limits, and any research baked in
+(it can't see yours). A worker owns its files until it returns; parallelize only
+on disjoint file groups. Delegate for context, not latency; editorial work stays
+inline.
 
 - **Model ids live only in `agw routing`** (`GET /api/routing`; rationale
   `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`). Never write one in prose.
@@ -143,8 +146,10 @@ Commit format and the amend rule: `rules/commit-conventions.md`.
   gets deleted; narrative goes to `docs/` behind a link.
 - **Per repo:** `AGENTS.md` (all content, tool-neutral, no `@imports`) + `CLAUDE.md`
   = `@AGENTS.md` shim + `.claude/{rules,skills}/`. Contract:
-  `docs/agents-md.md`. Update AGENTS.md in the same commit as the code it
-  describes; AGENTS.md-only changes use `docs:`.
+  `docs/agents-md.md`. Checked-in `.claude/settings.json` has no `ask` rules
+  (they prompt even under yolo and stall unattended agents): hard stops in
+  `deny`, personal prompts in `settings.local.json`. Update AGENTS.md in the
+  same commit as the code it describes; AGENTS.md-only changes use `docs:`.
 - **Rules:** `~/.claude/rules/` ← `dotfiles/rules/`. Always on: attribution,
   code-style, formatting, research-first, security. Lazy (`paths:`): the rest.
 - **Output style:** `output-styles/Direct.md` — tone only; does not reach subagents.

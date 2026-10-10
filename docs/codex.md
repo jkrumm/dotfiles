@@ -11,9 +11,9 @@ worth building.
 
 | Command | Model | Effort |
 |-|-|-|
-| `cx` | `gpt-5.6-sol` | `high` |
-| `cxa` | `gpt-6-astra` — several times the price, opt-in on purpose | `xhigh` |
-| `astra '<question>'` | `gpt-6-astra`, **no agent loop, no tools** | `xhigh` + `mode="pro"` |
+| `cx` | per `config/codex/config.toml.tpl` (`model`) | `high` |
+| `cxa` | per `config/codex/astra.config.toml` (`model`) — several times the price, opt-in on purpose | `xhigh` |
+| `astra '<question>'` | `MODEL` default in `scripts/astra.sh` (the `cxa` model), **no agent loop, no tools** | `xhigh` + `mode="pro"` |
 
 - **`reasoning.mode = "pro"` is why `astra` exists.** The endpoint accepts it;
   codex has no config key for it (only `model_reasoning_effort`), so the

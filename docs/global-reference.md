@@ -8,7 +8,7 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 | Tier | Mechanism | Use when |
 |-|-|-|
-| 1 | Parallel `mcp__agent-gateway__*` calls in **one turn** | Independent verifiable work — the default for fan-out |
+| 1 | Parallel `mcp__agent-gateway__*` calls in **one turn** | Independent verifiable *reads and checks* (`check`, `review`, `investigate`). Independent *changes* in one repo are `/wave` fan-out, not parallel dispatch |
 | 2 | `agw dispatch` / `claude_iu` subprocess, ~0 Max cost | Read-heavy, isolated output |
 | 3 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
 | 4–5 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |

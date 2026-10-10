@@ -33,8 +33,9 @@ rd say <agent> "…"                # send it a prompt
 `--kind opencode` starts OpenCode on the IU endpoint (default model `iu/…` from
 `oc`; `RD_WAVE_MODEL` overrides) instead of Claude Code (`sonnet`).
 
-Four lanes start agent work: `@implementer`, `agw dispatch`, `rd wave`
-(a tab you watch), `warden run` (unattended, tracked). `agent-dispatch` and
+Four lanes start agent work: `@implementer`, `agw dispatch` (one bounded
+unattended change), `rd wave` (a tab you watch; `rd fan` for N independent
+changes), `warden run` (unattended, tracked). `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
 ### Wave tabs and the orchestrator

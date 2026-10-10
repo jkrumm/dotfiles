@@ -8,8 +8,8 @@ paths: ["**/Dockerfile", "**/Dockerfile.*", "**/*.dockerfile", "**/.dockerignore
 Most Dockerfile advice in training data predates BuildKit becoming the default
 (Docker Engine 23.0). The list below is the part that is unconditionally true;
 everything genuinely conditional is in **Decisions**, and must be asked, not
-defaulted. Running the containers is `docker-makefile.md`'s business, not this
-file's.
+defaulted. Running the containers is the `hooks/docker-makefile.ts` hook's
+business, not this file's.
 
 ## Always
 
@@ -83,7 +83,8 @@ Two tools, and they check different things — run both.
 **`docker build --check <context>`** is BuildKit's own linter: it resolves the
 frontend the `# syntax=` line pins and evaluates the build graph against it,
 producing no image and running no build step. It is the only check that sees what
-that specific frontend sees. Allowed by the docker-makefile hook for that reason.
+that specific frontend sees. Allowed by the `docker-makefile.ts` hook for that
+reason.
 
 **`droast <path>`** lints Dockerfiles, and discovers them from compose/bake files
 too — it reads compose only to find Dockerfile paths, so it says nothing about

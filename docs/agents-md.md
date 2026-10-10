@@ -42,6 +42,14 @@ double-loads (documented, and `/memory` shows `./CLAUDE.md → AGENTS.md
 CLAUDE.md — but it is a feature-flag path too, so it fails the same cold lanes.
 Not used.
 
+## Permissions in checked-in settings
+
+A repo's checked-in `.claude/settings.json` carries **no `ask` rules**. An `ask`
+rule still prompts under `--dangerously-skip-permissions`, so it stalls every
+unattended agent (push, glab) with nobody to answer. Hard stops go in `deny`;
+personal prompts belong in the untracked `settings.local.json`. Swept
+2026-10-10: no SourceRoot repo had any.
+
 ## Measured matrix (shim in place)
 
 | Source | Claude (all lanes) | OpenCode | Codex |
@@ -76,7 +84,7 @@ every turn.
 
 Provider wiring (verified 2026-09-24): `anthropic` → `{env:IU_ANTHROPIC_BASE}/v1`
 for Claude ids, and `iu` (`"npm": "@ai-sdk/openai-compatible"`) →
-`{env:IU_OPENAI_BASE}` for `deepseek-v4.1-flash` (the default; per-model
+`{env:IU_OPENAI_BASE}` for the default DeepSeek id (per-model
 `options.reasoningEffort` + `variants`). Both keys are `{env:IU_KEY}` — env
 substitution keeps the host out of git. Full block: `config/opencode/opencode.json`.
 

@@ -15,21 +15,20 @@ Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
 `{env:IU_OPENAI_BASE}` (`oc` derives it from the Keychain base, `/anthropic` →
 `/openai/v1`); `iu-responses` = `@ai-sdk/openai` (the **Responses** wire) on the
 same base, carrying every GPT id — they are Responses-only for agent loops
-(reasoning items must survive tool calls), so `-m iu-responses/gpt-6-sol`, not
+(reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw routing`), not
 `iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
 wire split mirror agent-gateway's registry (`server/lib/models.ts`, `wire`), which
 generates the same blocks for its workers. **This file's rows are hand-written
 and can drift from the registry** — agent-gateway owns ids, limits and verification
 (`GET /api/routing`); re-check there before editing a row, and an id the
 registry marks unverified is not a recommendation. `iu` declares the rest of the
-roster: `deepseek-v4.1-flash` stays the default (that id is **not** served on
-the Anthropic route), with `DeepSeek-V4-Pro`, `glm-5.3-flash`,
-`gemini-3.{5,8}-flash`, `kimi-k2.7-code` and `minimax-m3` alongside it;
-`iu-responses` holds `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra`,
-`gpt-6-luna`, `gpt-6-astra` — context windows, prices and `reasoningEffort` variants
+roster: the default model is the `model` key in `config/opencode/opencode.json`
+(a DeepSeek id, **not** served on the Anthropic route), with the other DeepSeek,
+GLM, Gemini, Kimi and MiniMax ids declared alongside it;
+`iu-responses` holds the GPT ids (`agw routing` lists them) — context windows, prices and `reasoningEffort` variants
 come from **modelpick** (`bun run scripts/cap.ts --json --all` on the mini;
 `metric_snapshot` for the frontier ids), so re-check there before editing a row.
-`small_model` is `iu-responses/gpt-6-luna` (cheap) for title/summary generation. On `iu`,
+`small_model` (a cheap `iu-responses` id, set in `config/opencode/opencode.json`) is for title/summary generation. On `iu`,
 `reasoningEffort` reaches the model (`--variant max|none`, default `high`) and prompt
 caching works (95–98% hits in real episodes). Headless `opencode run` auto-**rejects**
 any `ask` permission and that ends the session — workers must set every prompting
@@ -53,7 +52,7 @@ a repo that wants one ships it in its own `.claude/rules/`.
 
 **Waves on OpenCode:** `rd wave|work <repo> --kind opencode` starts it in a herdr
 tab; the pane evals `_oc_env` (claude.zsh) first so `IU_*` and the gateway bearer
-are in its shell without touching argv. Default model `iu/deepseek-v4.1-flash`,
+are in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
 **agent-gateway is wired in, mini-only.** `config/opencode/mini.json` declares the

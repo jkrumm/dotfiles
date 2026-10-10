@@ -82,9 +82,9 @@ lead, humor, minutes — once the editorial pass has run), downloads
 
 | Var | Default | Meaning |
 |-|-|-|
-| `PODCAST_RESEARCH_MODEL` / `PODCAST_EDITORIAL_MODEL` | `deepseek-v4.1-flash` / `deepseek-v4.1-flash` | tool-calling researcher (brain, past episodes, research gateway) / decides format, roles, tone, humor, length per episode |
-| `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | `deepseek-v4.1-flash` / `claude-opus-4-6` | story pass / the voice owner (segments + every revision) |
-| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | `gemini-3.8-flash,deepseek-v4.1-flash` / `deepseek-v4.1-flash` | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles, topics |
+| `PODCAST_RESEARCH_MODEL` / `PODCAST_EDITORIAL_MODEL` | audio-gateway `config.ts` default / audio-gateway `config.ts` default | tool-calling researcher (brain, past episodes, research gateway) / decides format, roles, tone, humor, length per episode |
+| `PODCAST_OUTLINE_MODEL` / `PODCAST_WRITE_MODEL` | audio-gateway `config.ts` default / audio-gateway `config.ts` default | story pass / the voice owner (segments + every revision) |
+| `PODCAST_REVIEW_MODELS` / `PODCAST_METADATA_MODEL` | audio-gateway `config.ts` default (CSV) / audio-gateway `config.ts` default | three review lenses × each model, notes only / title, show notes, cover prompt, chapter titles, topics |
 | `PODCAST_SHOW_BIBLE` | `./docs/show-bible.md` | binding house style injected into every writer and reviewer prompt |
 | `BRAIN_DIR` / `RESEARCH_API_KEY` | `../brain` (repo-relative) / — | unset either and research + the brain note are skipped |
 | `PODCAST_TTS_MODEL` | `elevenlabs/v3` | per-turn synthesis |

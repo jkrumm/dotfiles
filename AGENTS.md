@@ -225,7 +225,7 @@ Five facts to hold:
 **Sidebar groups** — `config/herdr/groups.json` declares the taxonomy; `make
 herdr-groups` applies it (headers are separator workspaces), `make
 herdr-groups-check` prints the plan, `herdr-groups.py clear` is the undo. Adding
-a repo is one line in the JSON. Rationale: `docs/herdr.md`.
+a repo is one line in the JSON. Rationale: `docs/remote-dev.md` §Sidebar groups.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
@@ -438,11 +438,11 @@ startup — `source ~/.zshrc` after editing.
 |-|-|-|
 | `c` | Max subscription | whatever `/model` last left it on |
 | `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
-| `ca [model]` | IU unified endpoint, native Anthropic route | `claude-sonnet-5[1m]` default; any served id as the first arg |
+| `ca [model]` | IU unified endpoint, native Anthropic route | default set in `config/zsh/claude.zsh`; served ids per `agw routing`, any as the first arg |
 | `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
-| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | `iu/deepseek-v4.1-flash` default (`--variant max` / `none`); `-m anthropic/claude-opus-5-5`; `docs/opencode.md` |
-| `cx` / `cxa` | Codex on the IU endpoint (Responses API) | `gpt-5.6-sol` / `gpt-6-astra`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
+| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
+| `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
 | `rd wave` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.

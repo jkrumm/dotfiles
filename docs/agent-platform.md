@@ -86,7 +86,8 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | Lane | When | Engine |
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `agw dispatch` | settled, bounded work; result is a branch/PR or a verdict | OpenCode worker |
+| `agw dispatch` | one bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | OpenCode worker |
+| `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
 | `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
 | `warden run` / issue | unattended, tracked to `fixed` | warden → agent-gateway |
 
@@ -175,7 +176,7 @@ merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
 
 One model registry (`server/lib/models.ts`): id, wire (`anthropic` / `chat` /
 `responses`), harnesses, limits, rates with source + date, verified date.
-Unverified ids are refused. GPT ids (gpt-6.1-sol …) run only over the Responses
+Unverified ids are refused. GPT ids run only over the Responses
 wire. The dotfiles OpenCode provider block is generated from it. Everything
 else points at `GET /api/routing` — never a model id in prose.
 
@@ -216,7 +217,7 @@ wave per repo; parallel waves only in different repos. A pane-less supervisor
 
 ## Open facts to verify during rollout
 
-- deepseek-v4.1-flash rates conflict (agent-gateway 0.15/0.6 vs modelpick 0.50/1.50
+- DeepSeek flash rates conflict (agent-gateway 0.15/0.6 vs modelpick 0.50/1.50
   per MTok) — re-probe before cost claims.
-- gpt-6.1-sol, DeepSeek-V4-Pro, kimi, minimax on the OpenAI leg are declared but
+- the newest GPT ids, DeepSeek Pro, kimi, minimax on the OpenAI leg are declared but
   never probed — the registry refuses them until verified.
