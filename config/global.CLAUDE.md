@@ -144,8 +144,8 @@ Commit format and the amend rule: `rules/commit-conventions.md`.
 - **Global:** `~/.claude/CLAUDE.md` ← `dotfiles/config/global.CLAUDE.md` (this
   file). Optimize for **density, not length** — every line changes a decision or
   gets deleted; narrative goes to `docs/` behind a link.
-- **Per repo:** `AGENTS.md` (all content, tool-neutral, no `@imports`) + `CLAUDE.md`
-  = `@AGENTS.md` shim + `.claude/{rules,skills}/`. Contract:
+- **Per repo:** `AGENTS.md` (all content, tool-neutral, no `@imports`; never a
+  `CLAUDE.md`/`CLAUDE.local.md` — either suppresses it) + `.claude/{rules,skills}/`. Contract:
   `docs/agents-md.md`. Checked-in `.claude/settings.json` has no `ask` rules
   (they prompt even under yolo and stall unattended agents): hard stops in
   `deny`, personal prompts in `settings.local.json`. Update AGENTS.md in the

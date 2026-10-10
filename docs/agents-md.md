@@ -10,37 +10,43 @@ file, each agent asked which markers are in its context), plus an interactive
 
 ```
 AGENTS.md            ← all content, tool-neutral, no @imports
-CLAUDE.md            ← "@AGENTS.md" (+ Claude-only lines below it, e.g. "@./DESIGN.md")
 sub/AGENTS.md        ← nested content
-sub/CLAUDE.md        ← "@AGENTS.md" — needed, see below
 .claude/rules/*.md   ← unchanged
 .claude/skills/*/    ← unchanged
 ```
 
+**AGENTS.md is the only per-repo instruction file.** No `CLAUDE.md`, root or
+nested: any `CLAUDE.md` in cwd or above suppresses Claude Code's direct
+AGENTS.md reading (root and nested alike). That includes `CLAUDE.local.md` —
+**never commit one**, and keep personal notes out of repo roots (`sc-note.md` is
+gitignored for that reason).
+
 Global: `~/.claude/CLAUDE.md` stays as is — Claude and OpenCode both load it.
 OpenCode gets the rules through `instructions` globs in its global config.
 
-## Why not a bare AGENTS.md (no CLAUDE.md)
+## History — why the shim existed, why it is gone
 
-Claude Code reads AGENTS.md directly only when the session fetches Anthropic
-feature flags. Measured:
+Through Claude Code 2.1.280, AGENTS.md was read only when the session fetched
+Anthropic feature flags (`tengu_agents_md_mod`), so a cold `CLAUDE_CONFIG_DIR`
+(fresh machine, isolated worker) silently dropped project instructions. A
+`CLAUDE.md` containing `@AGENTS.md` was the only setup that worked on every lane,
+at the price of one 11-byte file per directory and of nested AGENTS.md being
+suppressed by a root CLAUDE.md (so each nested dir needed its own shim).
 
-| Setup | Max (`c`, `claude -p`) | IU endpoint, warm `~/.claude` | IU endpoint, cold config dir |
-|-|-|-|-|
-| AGENTS.md only | loads (root + nested) | loads — rides the flag cached by a Max session | **nothing loads** |
-| `CLAUDE.md` = `@AGENTS.md` | loads | loads | loads |
+Re-measured 2026-10-09 on 2.1.295: AGENTS.md alone loaded on the IU endpoint with
+a cold config dir and with a warm one; per the docs the flag dependency ended in
+v2.1.281. 2026-10-10 on 2.1.296 (Max, mini): root and nested AGENTS.md both load
+with no CLAUDE.md anywhere in the tree. Every shim in SourceRoot was deleted in
+Wave 11 (`docs/waves/PLAN.md`).
 
-The warm-IU case works only because a Max session cached
-`tengu_agents_md_mod` into `~/.claude.json` — any cold config (a fresh machine,
-an isolated worker `CLAUDE_CONFIG_DIR`) silently drops the project instructions.
-The shim is the only setup that works on every lane. The import never
-double-loads (documented, and `/memory` shows `./CLAUDE.md → AGENTS.md
-@-imported`).
+Not re-measured 2026-10-10 (the mini holds no IU credentials; `codex exec`
+printed nothing): IU warm/cold, `rd wave`, an agent-gateway Claude-harness
+worker, OpenCode, Codex. OpenCode and Codex never depended on CLAUDE.md; if a
+cold lane ever stops loading instructions, restore the shim for that repo and
+re-run *Reproduce* below.
 
-`pluginConfigs["agents-md@builtin"].options.instructionFiles =
-"claude-md-and-agents-md"` would make nested AGENTS.md load next to a root
-CLAUDE.md — but it is a feature-flag path too, so it fails the same cold lanes.
-Not used.
+Hooks: `InstructionsLoaded` does not fire for directly-read AGENTS.md. None is in
+use today.
 
 ## Permissions in checked-in settings
 
@@ -50,13 +56,13 @@ unattended agent (push, glab) with nobody to answer. Hard stops go in `deny`;
 personal prompts belong in the untracked `settings.local.json`. Swept
 2026-10-10: no SourceRoot repo had any.
 
-## Measured matrix (shim in place)
+## Measured matrix
 
 | Source | Claude (all lanes) | OpenCode | Codex |
 |-|-|-|-|
-| root AGENTS.md | via import | yes | yes |
-| `@imports` inside AGENTS.md | yes | **no** | **no** |
-| nested `sub/AGENTS.md` | only with `sub/CLAUDE.md` shim (a root CLAUDE.md suppresses nested AGENTS.md) | yes, lazily | from cwd upward only |
+| root AGENTS.md | yes | yes | yes |
+| `@imports` inside AGENTS.md | no (not needed — none in use) | **no** | **no** |
+| nested `sub/AGENTS.md` | yes (2.1.296, no CLAUDE.md anywhere) | yes, lazily | from cwd upward only |
 | `.claude/rules/*.md` | yes (`paths:` honoured) | only via `instructions` glob — loaded always, `paths:` ignored | no |
 | `.claude/skills/` + `~/.claude/skills/` | yes | yes, natively (symlinks fine) | no — `.agents/skills` symlink would work, deliberately not done |
 | global | `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` (fallback when no `~/.config/opencode/AGENTS.md`) | `~/.codex/AGENTS.md` |
@@ -117,24 +123,20 @@ tag, OTel `service.name`, GitHub repo); the fallback is triage reading candidate
 repos' `## Verify & Monitor`. Never put hostnames or secrets in these sections
 for repos that are public (`rules/security.md`).
 
-## Migration rules per repo
+## Rules per repo
 
-1. Move `CLAUDE.md` content to `AGENTS.md` verbatim; `CLAUDE.md` becomes
-   `@AGENTS.md`. Same for every nested `CLAUDE.md`.
-2. Any `@path` import line (`@./DESIGN.md` in argo, image-gen, rb,
-   linewatch/web) moves to `CLAUDE.md` below `@AGENTS.md`; AGENTS.md gets a
-   plain pointer ("Design system: read `DESIGN.md` before UI work") so
-   OpenCode/Codex still find it. Lines like `@router.get(...)` are code, not
-   imports — leave them.
+1. Content lives in `AGENTS.md`, root and nested. Never add a `CLAUDE.md` or
+   `CLAUDE.local.md` to a repo.
+2. No `@path` imports (OpenCode/Codex ignore them). A design-system file gets a
+   plain pointer in AGENTS.md ("read `DESIGN.md` before UI work").
 3. Wording: say "agents", not "Claude", where the fact is tool-neutral. Skill
    names (`/check`, `/commit`) stay — OpenCode loads the same skills.
-4. **Special cases:** `brain/AGENTS.md` is already the Hermes traversal
-   contract and `brain/CLAUDE.md` only *mentions* it — merge deliberately, don't
-   overwrite. `basalt-ui/packages/basalt-ui/AGENTS.md` ships in the NPM package
-   for consumers — it is not the maintainer file; leave it and keep that
-   directory's CLAUDE.md as-is. `modelpick/fixtures/bench/house-rules/CLAUDE.md`
-   is a benchmark fixture — don't touch.
+4. Exceptions: `modelpick/fixtures/bench/house-rules/CLAUDE.md` is a benchmark
+   fixture — don't touch. `basalt-ui/packages/basalt-ui/AGENTS.md` ships in the
+   NPM package; maintainer-only content must not land in it.
 5. Keep `.claude/rules` and `.claude/skills` where they are.
+6. basalt-ui's managed `<!-- basalt:begin -->` block is placed in **AGENTS.md**
+   (basalt-ui ≥ the Wave 11 release); the CLI migrates an old CLAUDE.md block out.
 
 ## Reproduce
 

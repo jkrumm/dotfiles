@@ -19,7 +19,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 
 | File here | Live path | Notes |
 |-|-|-|
-| `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions (single source — no per-workspace layer). Claude Code and OpenCode both load it; per-repo files are `AGENTS.md` + a `CLAUDE.md` shim — `docs/agents-md.md` |
+| `config/global.CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions (single source — no per-workspace layer). Claude Code and OpenCode both load it; the per-repo file is `AGENTS.md` alone, no `CLAUDE.md` — `docs/agents-md.md` |
 | `config/zshrc` | `~/.zshrc` | Thin loader — sources all modules in conf.d |
 | `config/zsh/*.zsh` | `~/.zsh/conf.d/` (dir symlink) | aliases, brew, claude, claude-auth, codex, git, keybindings, path, prompt, remote-dev, secrets, secrets-cache, ssh-agent, tools |
 | `config/gitconfig{,-personal,-work}` | `~/.gitconfig*` | `includeIf` per workspace; 1Password commit signing |
@@ -116,7 +116,7 @@ skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:
 | Concern | Lives in | Why |
 |-|-|-|
 | Response shape, autonomy, question budget, delegation posture | `output-styles/Direct.md` | Appended at the *end* of the system prompt and survives `/clear` |
-| Project/machine facts, routing, conventions | `AGENTS.md` (+ `CLAUDE.md` = `@AGENTS.md` shim) | Reference material to look things up in |
+| Project/machine facts, routing, conventions | `AGENTS.md` (alone — a `CLAUDE.md` would suppress it) | Reference material to look things up in |
 
 `keep-coding-instructions: true` is load-bearing (`false` drops the built-in
 coding prompt). Read at session start (`/clear` to apply), never reaches
