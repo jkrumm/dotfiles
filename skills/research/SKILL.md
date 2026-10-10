@@ -17,6 +17,8 @@ The standalone research-gateway service (Elysia + Bun, native on the Mac mini, T
 
    **Read `confidence` and `unverified` before passing a claim on.** A citation only means a worker tied that claim to that URL — it is not proof the page supports it. Treat `low` confidence and anything in `unverified` as a lead to check, not a fact; for a crisp value (version number, EOL date, API signature) where the report names a primary source, opening that source directly is a cheap confirmation.
 
+   **`result.status` / `warnings` / `grounding`:** `status: "partial"` means the run finished with gaps — the `warnings` array says which, and `grounding` is the code-computed check of citations against fetched pages, not the model's opinion. Treat a partial result as leads, and when research fails outright never fall back to answering from memory: say it failed.
+
    On `done`, the text content already inlines the report plus a Citations and Sources section, so text-only clients still get the full picture. When `status` is `error`, `error` holds the failure message.
 
 Depth: `quick` = fast, snippet-level; `standard` (default) balances quality and speed; `deep` = most thorough but slowest. Submit is instant at every depth, and one `job_wait` covers any of them — only how long that single call blocks grows with depth, so `deep` is safe to use. If the gateway refuses the submit, `research` returns an `isError` whose text says which of three reasons it was — `queue_full` (backlog), memory pressure (it is shedding new work to protect running jobs), or draining (it is restarting). All three mean retry shortly, not that the query was bad.

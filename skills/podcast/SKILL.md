@@ -96,6 +96,10 @@ lead, humor, minutes — once the editorial pass has run), downloads
 
 ## Errors
 
+- `status: done` with `abs: null` and `publish.ok === false` is produced but NOT published: quote `publish.error` verbatim and repeat only the upload with `POST /v1/podcasts/{id}/publish`, never `/retry` (that makes a new episode).
+- A transport hiccup (socket closed, timeout, 502/503) is retried once before it is reported.
+- Build the submit JSON with `jq --rawfile` for long briefs; shell-quoting a multi-paragraph brief corrupts it.
+
 - `failed` with `error` mentioning `Replicate` → ElevenLabs lane hiccup; re-run
   once. Repeated → `/otel` on `audio.podcast` spans.
 - `no podcast library named …` → `ABS_LIBRARY` doesn't match a mediaType=podcast

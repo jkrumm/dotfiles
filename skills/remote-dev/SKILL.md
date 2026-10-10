@@ -63,6 +63,9 @@ groups. What it does not know about this stack:
   pane is the owner's. `HERDR_PANE_ID` is your own.
 - `herdr agent prompt` and `agent wait` exit 0 on some failures — read the JSON
   body for `"error"`.
+- A non-empty **input line** in a pane is usually the owner's unsent draft. Never press Enter on it or re-send it through `agent prompt`; name it in the report. If the next step is already authorized, relay it in your own words instead. Pass the owner's brief verbatim when steering.
+- After steering a pane agent in a repo whose files are symlinked live (dotfiles, hermes-agent), restore its branch (`git -C <repo> switch master`): the branch *is* the running configuration.
+- Integrations: `herdr integration status` separates *lifecycle* integrations (herdr sees the agent start/stop) from *identity* ones (it only recognises the process); a pane with the wrong kind reports `unknown` and `wait` never settles.
 - Never close a workspace, tab or pane you did not create. `rd close` enforces it
   for wave tabs.
 - Never `herdr server stop` or kill the herdr process: every pane dies with it.

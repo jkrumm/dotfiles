@@ -81,7 +81,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work (that is warden) |
 | **Argo** | the single status + "needs you" surface | hold state of its own |
 
-## Four lanes — the only ways to start agent work
+## Four lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
 
 | Lane | When | Engine |
 |-|-|-|
