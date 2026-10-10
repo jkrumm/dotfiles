@@ -252,3 +252,10 @@ That is the "unnecessary human intervention" the owner named. The orchestrator d
 - **Argo and Slack:** no column, migration or Argo release. Both render the item's note (`notify.py` posts it, Argo's `reason` is the note), so the `[category]` tag reaches both; verified by reading the code paths, not on a live card.
 - **Not done:** step-7 review `needs-human` (3 of the 14) is a `review` job outcome with no category in its schema; it still pages. Same fix shape: a category on the review verdict and the same tag in `train._fold_review`. The 14 existing items were not touched (another agent owned them). MCP clients need a `/mcp` reconnect to see the v7 tool description.
 - One existing test changed target, not strength: the schema-mismatch case used `DISPATCH_SCHEMA_VERSION - 2`, now `min(window) - 1`; `dispatch-in-place` pinned the exact current version (6), now pins the bump floor.
+
+## Wave 13 — review verdicts name their escalation too            <!-- status: active -->
+Wave 12 left this gap: step-7 review `needs-human` (items 1370, 1390, 1456) has no category in the review schema, so it still pages for reversible calls. Fix it the same way Wave 12 fixed investigate verdicts.
+- [ ] agent-gateway review verdict: optional `escalationCategory` (same six values), allowed only with `needs-human`. The review prompt lists the owner-only reasons and the usual false positives: accept a descope, which of two PRs, a fixable blocking finding. Bump `REVIEW_SCHEMA_VERSION`, and have warden widen its acceptance window first.
+- [ ] warden `train._fold_review`: with a category → `needs_decision`, note led by `[category]`. Without one → one re-review or revision with "decide it yourself", then take the recommendation, or send blocking findings back to the worker as a revision.
+- [ ] Tests on both sides, deploy both, and replay one real review on a live PR. The verdict must decide, not page.
+**Left behind:**
