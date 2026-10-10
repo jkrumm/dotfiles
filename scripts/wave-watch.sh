@@ -39,6 +39,13 @@ fi
 
 # A transient herdr/jq error yields "" (= gone), never an aborted watcher.
 status_of() { herdr agent list 2>/dev/null | jq -r --arg n "$1" '.result.agents[]? | select(.name==$n) | .agent_status' 2>/dev/null || true; }
+# An idle/done agent still waiting on its own background subagents, shells or monitors
+# (Claude Code's footer: "2 background tasks", "Waiting for 1 background agent", "1 monitor")
+# is not finished — its close-out lands when they return.
+waiting_on_background() {
+  rd read "$1" 2>/dev/null | tail -8 |
+    grep -qE '[0-9]+ background tasks?|Waiting for [0-9]+ background|[0-9]+ monitors?\b'
+}
 repo_sig() {
   [[ -n $repo ]] || return 0
   git -C "$repo" worktree list --porcelain | awk '/^worktree /{print $2}' |
@@ -53,11 +60,18 @@ while :; do
     git -C "$plan_dir" pull -q --rebase 2>/dev/null || true
     if grep -qE "^## Wave $wave .*status: done" "$plan"; then echo "DONE wave $wave"; exit 0; fi
     st=$(status_of "$agent")
-    case $st in idle|blocked|done|"") echo "AGENT $agent status=${st:-gone}"; exit 0;; esac
+    case $st in
+      idle|done) waiting_on_background "$agent" || { echo "AGENT $agent status=$st"; exit 0; } ;;
+      blocked|"") echo "AGENT $agent status=${st:-gone}"; exit 0 ;;
+    esac
   else
     for a in "${agent_list[@]}"; do
       st=$(status_of "$a")
-      case $st in working) ;; *) echo "AGENT $a status=${st:-gone}"; exit 0;; esac
+      case $st in
+        working) ;;
+        idle|done) waiting_on_background "$a" || { echo "AGENT $a status=$st"; exit 0; } ;;
+        *) echo "AGENT $a status=${st:-gone}"; exit 0 ;;
+      esac
     done
     if [[ -n $events && -f $events ]]; then
       n=$(wc -l <"$events")
