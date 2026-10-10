@@ -95,16 +95,26 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 
 
 ## Wave 5 — OpenCode as the settled dispatch default            <!-- status: done -->
-- [ ] Retry transient 503s on write tiers before the worktree is touched; make the "no fallback on half-applied worktree" rule explicit in the result.
-- [ ] Fix `session.opencode_db_locked` contention (per-session DB or serialized open).
-- [ ] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
-- [ ] Dedupe `opencode-runner.ts` / `session-runner.ts` shared code (the fallow-flagged clone).
-- [ ] Docs/skills that still say dispatch runs `claude -p` → corrected.
-- [ ] From the 2026-10-09 prometheus-scripts run:
+- [~] Retry transient 503s on write tiers before the worktree is touched; make the "no fallback on half-applied worktree" rule explicit in the result.
+- [~] Fix `session.opencode_db_locked` contention (per-session DB or serialized open).
+- [x] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
+- [x] Dedupe `opencode-runner.ts` / `session-runner.ts` shared code (the fallow-flagged clone).
+- [x] Docs/skills that still say dispatch runs `claude -p` → corrected.
+- [x] From the 2026-10-09 prometheus-scripts run:
   - a busy repo **queues** implement jobs instead of refusing them; a refusal is synchronous and loud, never a "running" ack followed by a refusal one second later
   - the caller may set branch name and PR/MR title (an auto-name `dispatch/remove-openspec-…-c0c0dd73` reached main)
   - editorial briefs (AGENTS.md, docs, prose) route to a Claude model
-**Left behind:**
+**Left behind:** (written by the orchestrator — the wave's own close-out flipped the status but did not record this)
+- Shipped in agent-gateway `9379f1c`, deployed. Implement, in-place and update_pr jobs queue per repo behind a lease (`pending` + `queuedBehind`, FIFO). Every refusal that is knowable at submit is a synchronous 400 with no job row. The caller sets `branch` and `prTitle`. `kind: editorial` routes to Claude. The Claude dispatch harness is opt-in. `fallbackWithheld` is on the verdict. Shared runner code is in `worker-shared.ts`. **DISPATCH_SCHEMA_VERSION is 6.**
+- Verified live on 2026-10-10: a default investigate ran opencode/IU (deepseek-v4.1-flash) and an editorial investigate ran Claude on Max. Both returned `verdict_only` at v6.
+- warden had pinned dispatch schema {4,5}, so v6 would have struck every dispatch. The orchestrator moved the window to {5,6} (warden `3aa4b00`, deployed, 513/513). **Wave 6:** warden must also treat the new synchronous 400 refusals as a refusal, not as an infra failure.
+- **Gaps `[~]`:**
+  - The 503-retry-on-write-tier behaviour is unverified.
+  - The `opencode_db_locked` fix was cut. Its worker hung for about 14h because it probed `opencode run` against a dead endpoint, and OpenCode retries forever. The existing 3-retry jitter backstop stays.
+  - The opencode-runner ↔ session-runner import cycle is still there (it predates this wave).
+  - The dispatch.ts split was skipped.
+- **Wave 7:** every `opencode run`, in probes and dispatches alike, must fail fast on an unreachable endpoint. `scripts/wave-watch.sh` (done / idle / 45-minute stall) replaces the blind PLAN-status waiter.
+- MCP clients need `/mcp` reconnect for the v6 schema and the new params.
 
 ## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: active -->
 Premise (ledger, checked read-only 2026-10-09): the token is **not** the weatherorb blocker. Fine-grained PATs have no Checks permission, and warden already falls back to Actions runs, which it can read. The real causes:
