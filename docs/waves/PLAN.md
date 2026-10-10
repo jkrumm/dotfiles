@@ -1,6 +1,6 @@
 # Setup round 4 — agent-gateway, a loop that ships, fleet-style waves
 
-**Status: DONE (Wave 11 closed 2026-10-10)** (go given 2026-10-09). Orchestrated from a herdr tab in `~/SourceRoot`, one wave at a time, on the normal branches.
+**Status: DONE (Wave 12 closed 2026-10-10)** (go given 2026-10-09). Orchestrated from a herdr tab in `~/SourceRoot`, one wave at a time, on the normal branches.
 
 **Goal:** act on the 2026-10-09 holistic review: sideclaw becomes a lean
 `agent-gateway` (CLI `agw`), warden ships on every repo instead of feeding
@@ -225,7 +225,7 @@ Independent of the other waves, so it can run in any quiet slot, but before Wave
 - **Measurement:** only Max warm (root + nested AGENTS.md, no CLAUDE.md) was measured, on 2.1.296. IU warm/cold, `rd wave`, a Claude-harness dispatch worker, OpenCode and Codex were not (no IU credentials on the mini; `codex exec` printed nothing). Recorded in `docs/agents-md.md`.
 - Left as is: `sy-serendipity-codex` (a local `v2` worktree with its own shim, no remote), `modelpick/fixtures/**`, local checkouts parked on foreign branches (homelab, rollhook, free-planning-poker; their origin master is clean). No `/review` on the pure-deletion PRs (fpp, rollhook): 11-byte import files only.
 
-## Wave 12 — warden decides its own reversible questions            <!-- status: active -->
+## Wave 12 — warden decides its own reversible questions            <!-- status: done -->
 Found in final validation (2026-10-10): 14 items sat in `needs_decision`. Nearly all were A-or-B operational questions an agent can answer:
 - keep a heartbeat strict or dampen it
 - route a build failure or wait a night
@@ -234,14 +234,21 @@ Found in final validation (2026-10-10): 14 items sat in `needs_decision`. Nearly
 - which of two PRs to land
 
 That is the "unnecessary human intervention" the owner named. The orchestrator decided the backlog by hand via the warden CLI. This wave removes the cause.
-- [ ] Find where the escalation is born. Likely candidates:
+- [x] Find where the escalation is born. Likely candidates:
   - agent-gateway's investigate/implement verdict instructions (`nextAction=human` + an options question)
   - warden's mapping of that verdict to `needs_decision`
 
   Measure on the ledger which verdict shapes produced the 14.
-- [ ] Encode the owner-stop policy at both ends.
+- [x] Encode the owner-stop policy at both ends.
   - **Worker prompt:** escalate ONLY for product direction / user-visible product semantics, irreversible data loss, spend, other people, or security policy. Otherwise pick the reversible, root-cause option, state it, and proceed (`nextAction` = implement / close).
   - **warden:** a `needs_decision` verdict must name one of those categories (a schema field). Without it, warden re-drives once with "decide it yourself", then takes the recommended option.
-- [ ] Tests on both sides. Deploy both. Verify with a replay of two of today's backlog questions through a real investigate episode: the verdict must decide, not ask.
-- [ ] Argo `/warden` and the Slack line show the category for anything still escalated.
+- [x] Tests on both sides. Deploy both. Verify with a replay of two of today's backlog questions through a real investigate episode: the verdict must decide, not ask.
+- [x] Argo `/warden` and the Slack line show the category for anything still escalated.
 **Left behind:**
+- agent-gateway `64e4ed5`, `f2d0e19`, `fcec70a` on master, pushed, `make deploy` green; `/check` 5/5. warden `5090f79`, `500e777`, `6425f50`, `55e414a` on master, `make deploy` green, `make check` green, `test_triage.py` **534/534** (AGENTS.md gate number moved from 526). `/review` on both diffs: warden 1 blocking + 7 improvements, agent-gateway 3 blocking + 5 improvements, all fixed except the `_member_outcome` nesting (narrowed by extracting `_uncategorized_human_outcome`, not flattened further).
+- **Where it was born (ledger, read-only):** of the 14 `needs_decision`, 11 were investigate `human` verdicts (`working` to `needs_decision`) and 3 were step-7 review `needs-human` (1370, 1390, 1456). Every investigate question was a reversible A-or-B. The worker prompt already said "`human` is the exception", but the schema had a question field and no reason, so nothing forced a justification, and warden mapped any `human` straight to `needs_decision`.
+- **Shipped:** dispatch verdicts carry `escalationCategory` (`product | data_loss | spend | other_people | security | blocker`), allowed only with `nextAction=human`, optional in the schema, survives sensitive redaction; **`DISPATCH_SCHEMA_VERSION` is 7** and warden accepts {5, 6, 7} (widened and deployed before the gateway). The shared prompt lists the six as the only reasons to stop for the owner and names the usual false positives (strict vs dampened, route now vs wait, re-pin vs retire, patch vs upstream, which of two PRs). warden: a `human` verdict with a category goes to `needs_decision` with the note led by `[category]`; an investigate verdict without one returns to `triaged` once (note `re-driven to decide: ...` is the guard; the next brief opens with a `PRIOR ESCALATION` paragraph), and the second one takes its `recommendation` (investigate-only item: `closed(resolved)` with it; otherwise `working` with the stored verdict rewritten to `nextAction=implement`). A re-route via `owningRepo` still wins; an implement-episode `human` is tagged (`[category]` or `[no category]`), not re-driven.
+- **Replay on the deployed pair** (standalone `agw` investigate episodes, no ledger item touched): the homelab Kuma-push question (item 1496's shape) returned `nextAction=implement`, the hermes-agent stale cron pin (item 1497's shape) `none`; neither asked the owner, both at `schemaVersion` 7. Caveat: both repos already held the answer in their docs, so this proves "decides when it can", not "never asks".
+- **Argo and Slack:** no column, migration or Argo release. Both render the item's note (`notify.py` posts it, Argo's `reason` is the note), so the `[category]` tag reaches both; verified by reading the code paths, not on a live card.
+- **Not done:** step-7 review `needs-human` (3 of the 14) is a `review` job outcome with no category in its schema; it still pages. Same fix shape: a category on the review verdict and the same tag in `train._fold_review`. The 14 existing items were not touched (another agent owned them). MCP clients need a `/mcp` reconnect to see the v7 tool description.
+- One existing test changed target, not strength: the schema-mismatch case used `DISPATCH_SCHEMA_VERSION - 2`, now `min(window) - 1`; `dispatch-in-place` pinned the exact current version (6), now pins the bump floor.
