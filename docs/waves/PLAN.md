@@ -224,3 +224,24 @@ Independent of the other waves, so it can run in any quiet slot, but before Wave
 - **NOT done: rb and weatherorb still carry a `CLAUDE.md` with the basalt block** (and so suppress their AGENTS.md). The bump is the only way to move it: the old CLI checks CLAUDE.md. rb jumps 1.30.2 to 1.41.0 and trips ~35 new `oxlint` errors (`basalt/raw-breakpoint`, `control-outside-home`) plus `check-theme` violations: a UI migration. weatherorb's `/map` bundle is 1162 bytes over its 716800 gzip bar after the bump. Both need an owner call (migrate the UI / raise the budget). weatherorb trap: `sync` fails if AGENTS.md mentions the literal `basalt:begin` marker in prose. rb also carries 13 unpushed local commits.
 - **Measurement:** only Max warm (root + nested AGENTS.md, no CLAUDE.md) was measured, on 2.1.296. IU warm/cold, `rd wave`, a Claude-harness dispatch worker, OpenCode and Codex were not (no IU credentials on the mini; `codex exec` printed nothing). Recorded in `docs/agents-md.md`.
 - Left as is: `sy-serendipity-codex` (a local `v2` worktree with its own shim, no remote), `modelpick/fixtures/**`, local checkouts parked on foreign branches (homelab, rollhook, free-planning-poker; their origin master is clean). No `/review` on the pure-deletion PRs (fpp, rollhook): 11-byte import files only.
+
+## Wave 12 — warden decides its own reversible questions            <!-- status: active -->
+Found in final validation (2026-10-10): 14 items sat in `needs_decision`. Nearly all were A-or-B operational questions an agent can answer:
+- keep a heartbeat strict or dampen it
+- route a build failure or wait a night
+- re-pin a cron model or retire the job
+- local patch or file upstream
+- which of two PRs to land
+
+That is the "unnecessary human intervention" the owner named. The orchestrator decided the backlog by hand via the warden CLI. This wave removes the cause.
+- [ ] Find where the escalation is born. Likely candidates:
+  - agent-gateway's investigate/implement verdict instructions (`nextAction=human` + an options question)
+  - warden's mapping of that verdict to `needs_decision`
+
+  Measure on the ledger which verdict shapes produced the 14.
+- [ ] Encode the owner-stop policy at both ends.
+  - **Worker prompt:** escalate ONLY for product direction / user-visible product semantics, irreversible data loss, spend, other people, or security policy. Otherwise pick the reversible, root-cause option, state it, and proceed (`nextAction` = implement / close).
+  - **warden:** a `needs_decision` verdict must name one of those categories (a schema field). Without it, warden re-drives once with "decide it yourself", then takes the recommended option.
+- [ ] Tests on both sides. Deploy both. Verify with a replay of two of today's backlog questions through a real investigate episode: the verdict must decide, not ask.
+- [ ] Argo `/warden` and the Slack line show the category for anything still escalated.
+**Left behind:**
