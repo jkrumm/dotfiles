@@ -33,17 +33,26 @@ Anthropic feature flags (`tengu_agents_md_mod`), so a cold `CLAUDE_CONFIG_DIR`
 at the price of one 11-byte file per directory and of nested AGENTS.md being
 suppressed by a root CLAUDE.md (so each nested dir needed its own shim).
 
-Re-measured 2026-10-09 on 2.1.295: AGENTS.md alone loaded on the IU endpoint with
-a cold config dir and with a warm one; per the docs the flag dependency ended in
-v2.1.281. 2026-10-10 on 2.1.296 (Max, mini): root and nested AGENTS.md both load
-with no CLAUDE.md anywhere in the tree. Every shim in SourceRoot was deleted in
-Wave 11 (`docs/waves/PLAN.md`).
+Measured 2026-10-10 on 2.1.296 (mini, `claude -p` in warden, no CLAUDE.md in
+the tree; IU creds via `secrets-run read op://common/anthropic/{API_KEY,BASE_URL}`):
 
-Not re-measured 2026-10-10 (the mini holds no IU credentials; `codex exec`
-printed nothing): IU warm/cold, `rd wave`, an agent-gateway Claude-harness
-worker, OpenCode, Codex. OpenCode and Codex never depended on CLAUDE.md; if a
-cold lane ever stops loading instructions, restore the shim for that repo and
-re-run *Reproduce* below.
+| Lane | AGENTS.md loaded |
+|-|-|
+| Max, warm `~/.claude` (root + nested) | yes |
+| IU endpoint, warm `~/.claude` | yes |
+| IU endpoint, cold `CLAUDE_CONFIG_DIR` (twice, same dir; haiku and sonnet) | **no** — global CLAUDE.md only |
+
+**The flag dependency did not end.** A cold dir never caches the GrowthBook
+features, so `tengu_agents_md_mod` is unset and AGENTS.md is skipped; the warm
+`~/.claude.json` has it cached `true`. The 2026-10-09 "cold loads it" reading was
+wrong. Every production lane (interactive, `rd wave`, `claude_iu`, agent-gateway
+and warden workers) runs on the warm `~/.claude`; only modelpick's bench sandbox
+uses a cold dir, and its fixtures carry their own CLAUDE.md. Shims stay deleted;
+the risk is the flag flipping, which `devhost-health-check.sh`
+`check_agents_md_flag` reports as WARN. A new lane with its own config dir must
+either copy `cachedGrowthBookFeatures` or keep a `CLAUDE.md` → `@AGENTS.md` shim
+for its repos. OpenCode and Codex read AGENTS.md natively and never depended on
+this.
 
 Hooks: `InstructionsLoaded` does not fire for directly-read AGENTS.md. None is in
 use today.

@@ -433,6 +433,19 @@ check_herdr() {
   echo "herdr up"
 }
 
+check_agents_md_flag() {
+  # Repos carry AGENTS.md only (no @AGENTS.md shim since setup round 4), and
+  # Claude Code reads it only while the cached GrowthBook flag
+  # tengu_agents_md_mod is true in ~/.claude.json (measured 2026-10-10 on
+  # 2.1.296: a cold config dir loads no AGENTS.md). If the flag flips, every
+  # repo silently loses its instructions — WARN, it is not a host outage.
+  local v
+  v=$(/usr/bin/python3 -c 'import json,os; print(json.load(open(os.path.expanduser("~/.claude.json"))).get("cachedGrowthBookFeatures",{}).get("tengu_agents_md_mod"))' 2>/dev/null) || true
+  [[ "$v" == "True" ]] \
+    || { echo "tengu_agents_md_mod=$v: Claude Code may not load AGENTS.md (docs/agents-md.md)"; return 2; }
+  echo "AGENTS.md flag on"
+}
+
 check_boot_path() {
   # The colima/herdr plist gap, made impossible to repeat. On 2026-08-29 both
   # plists were observed missing from disk while launchd kept running the jobs
@@ -1327,7 +1340,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
-                 check_memory check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth \
+                 check_memory check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_agents_md_flag \
                  check_obsidian check_disk check_runaways check_agent_gateway_jobs check_overview_pane \
                  check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
