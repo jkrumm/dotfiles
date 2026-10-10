@@ -7,7 +7,7 @@
 #
 # Comments and blank lines are ignored. Edit this file directly to add/drop a
 # model from the health-check set. This is the roster actually in use — `ca`/`cap`
-# (modelpick), sideclaw workers, research-gateway and Hermes — not a catalog
+# (modelpick), agent-gateway workers, research-gateway and Hermes — not a catalog
 # sample; every id was verified live against /openai/v1/models on 2026-09-07.
 # Hermes's own model config lives in ~/SourceRoot/hermes-agent, not here.
 
