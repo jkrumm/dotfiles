@@ -94,7 +94,7 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
 - **Slip, repaired:** I committed the homelab monitor onto the open branch `fix/garmin-auth-probe-classification` (PR #13) by mistake and pushed; I cherry-picked it to master and force-with-lease'd the branch back to its original tip `2b00620`. If anyone fetched it in that window it was for about two minutes.
 
 
-## Wave 5 — OpenCode as the settled dispatch default            <!-- status: active -->
+## Wave 5 — OpenCode as the settled dispatch default            <!-- status: done -->
 - [ ] Retry transient 503s on write tiers before the worktree is touched; make the "no fallback on half-applied worktree" rule explicit in the result.
 - [ ] Fix `session.opencode_db_locked` contention (per-session DB or serialized open).
 - [ ] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
@@ -106,7 +106,7 @@ Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tool
   - editorial briefs (AGENTS.md, docs, prose) route to a Claude model
 **Left behind:**
 
-## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: pending -->
+## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: active -->
 Premise (ledger, checked read-only 2026-10-09): the token is **not** the weatherorb blocker. Fine-grained PATs have no Checks permission, and warden already falls back to Actions runs, which it can read. The real causes:
   - PRs #21, #33, #44, #47 and #48 **did merge**, but the 1h `merged` deadline closed them as `resolved`, not `fixed`. The "0/26 fixed" figure is a bookkeeping artifact.
   - The live checkout diverged from origin, so ff-only deploys failed. That happened because Johannes's own wave commits sat unpushed on the live master.
