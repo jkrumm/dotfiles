@@ -2011,7 +2011,9 @@ orbstack-remove:
 .PHONY: brew-check
 brew-check:
 	@echo "  Checking machine against Brewfile..."
-	@brew bundle check --verbose --file=$(DOTFILES_DIR)/Brewfile
+	@# --no-upgrade: membership, not freshness. Self-updating casks (tinycast@beta)
+	@# move ahead of brew's Caskroom record; outdated-ness is brew-upgrade's report.
+	@brew bundle check --verbose --no-upgrade --file=$(DOTFILES_DIR)/Brewfile
 
 .PHONY: brew-diff
 brew-diff:
@@ -2020,10 +2022,10 @@ brew-diff:
 
 .PHONY: brew-dump
 brew-dump:
-	@brew bundle dump --describe --formulae --casks --taps --force --file=/tmp/Brewfile.gen
-	@# Strip restart_service: service lifecycle is owned by the _setup-* config steps
+	@# Descriptions are brew bundle's default since Homebrew 7 (--describe was removed).
+	@# --no-restart: service lifecycle is owned by the _setup-* config steps
 	@# (they handle root vs user correctly); the Brewfile stays install-only/declarative.
-	@sed -i '' 's/, restart_service: :changed//' /tmp/Brewfile.gen
+	@brew bundle dump --no-restart --formulae --casks --taps --force --file=/tmp/Brewfile.gen
 	@awk '/^[^#[:space:]]/{exit} {print}' $(DOTFILES_DIR)/Brewfile > /tmp/Brewfile.head
 	@cat /tmp/Brewfile.head /tmp/Brewfile.gen > $(DOTFILES_DIR)/Brewfile
 	@echo "  ✓ Brewfile regenerated — REVIEW THE DIFF: git -C $(DOTFILES_DIR) diff Brewfile"

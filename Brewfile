@@ -15,6 +15,7 @@ tap "oven-sh/bun"
 tap "satococoa/tap"
 tap "abue-ammar/tinycast"
 tap "penso/tap"
+tap "jkrumm/tap"
 # Simple, modern, secure file encryption
 brew "age"
 # Editor of encrypted files (paired with age for the headless secrets cache)
@@ -33,6 +34,8 @@ brew "awscli"
 brew "b2-tools"
 # Limit max battery charge on Apple silicon (MacBook only — see `make batt-setup`)
 brew "batt"
+# Forward ntfy notifications to macOS Notification Center (own tap; MacBook service)
+brew "jkrumm/tap/ntfy-mac"
 # Powerful, enterprise-ready, open source web server with automatic HTTPS
 brew "caddy"
 # Container runtimes on MacOS (and Linux) with minimal setup
