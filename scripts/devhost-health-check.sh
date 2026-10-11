@@ -1012,7 +1012,7 @@ probe_research_gateway_deploy() {
     return 1
   fi
   origin=$("$GIT_BIN" -C "$RG_APP_DIR" rev-parse origin/master 2>/dev/null) || return 0
-  deployed=$(<"$RG_DEPLOYED_SHA_FILE" 2>/dev/null) || deployed=""
+  read -r deployed <"$RG_DEPLOYED_SHA_FILE" 2>/dev/null || deployed="" # $(<f 2>…) reads nothing: an extra redirect disables the $(<f) form
   state="$STATE_DIR/rg-deploy-behind"
   if [[ "$deployed" == "$origin" ]]; then
     rm -f "$state" 2>/dev/null || true
