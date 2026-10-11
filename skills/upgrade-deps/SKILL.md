@@ -1,11 +1,11 @@
 ---
 name: upgrade-deps
-description: Dependency upgrade assistant with research and validation phases
+description: Dependency upgrade assistant with research and validation phases — npm/bun projects, plus machine mode for Homebrew casks and third-party taps on the MacBook and mini
 ---
 
 # Upgrade Dependencies Skill
 
-Analyze, validate, upgrade npm/bun dependencies, run validation, and commit changes.
+Analyze, validate, upgrade npm/bun dependencies, run validation, and commit changes. Machine upgrades (Homebrew casks, taps): see *Machine mode* below.
 
 ## Skill Architecture (Token Efficiency)
 
@@ -35,6 +35,48 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 ### Token Savings
 
 `/research` routes through the **research-gateway** MCP (hosted VPS service on IU models, off Max — async: submit returns `{ jobId }`, then one `job_wait` blocks for the whole job) and `/check` routes through **agent-gateway** (async job; backend per `GET /api/routing`). Verbose work stays off the main thread; only the structured result returns.
+
+---
+
+## Machine mode — Homebrew casks and third-party taps
+
+`make brew-upgrade` upgrades homebrew/core formulae only and routes the rest
+here ("use /upgrade-deps"). When the ask is a machine upgrade rather than a
+project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
+`ssh mini '… </dev/null'` — a cask upgrade that reads stdin hangs headless).
+
+1. **Formulae first:** `make brew-upgrade-dry`, then `make brew-upgrade`. A
+   `brew link` failure aborts the assertions: `brew link --overwrite --dry-run X`
+   names the conflict — a stray non-brew file (vendor installer binary, pip
+   leftovers in `site-packages`); move it aside, `brew link --overwrite X`,
+   re-run `make brew-upgrade` until it prints its assertions.
+2. **Cooldown, per cask:** `brew outdated --cask --greedy --json=v2`. Big
+   vendors (1Password, OpenAI, Spotify, Zed, …) go now. A third-party tap or
+   single-maintainer cask waits until its release is older than
+   `minimumReleaseAge` in `~/.bunfig.toml` (3 days) —
+   `gh api repos/<owner>/<repo>/releases/tags/<tag> --jq .published_at`. The
+   same rule holds for the `oven-sh/bun` tap formula. Name the casks explicitly:
+   `brew upgrade --cask --greedy <list>`; never a bare `brew upgrade --cask`.
+3. **Fixups after casks:**
+   - `1password-cli` → re-add `/opt/homebrew/Caskroom/1password-cli/<ver>/op`
+     to Full Disk Access **by hand** on the MacBook (`docs/homebrew.md`).
+   - Obsidian on the mini → `pgrep -x Obsidian || open -a Obsidian`; it is an
+     agent door.
+   - Checksum mismatch → never `--no-quarantine`/skip the check; retry later.
+   - A cask whose app is gone and that the Brewfile does not declare →
+     `brew uninstall --cask --force X`. That also autoremoves orphaned deps.
+   - A cask whose `/Applications` bundle is root-owned needs `sudo` — hand it
+     to the human; the MacBook has no passwordless sudo.
+4. **Held formulae** print their own follow-up. caddy on the mini needs sudo:
+   `brew unpin caddy && brew upgrade caddy </dev/null` over ssh, then
+   `op read "op://Private/mac-mini-server/password" --account tkrumm | ssh mini 'cd ~/SourceRoot/dotfiles && make caddy-dns-build'`,
+   then `brew pin caddy`.
+5. **Never unattended on the mini:** the `tailscale` follow-up (its restart is
+   the ssh session you are using — run it only with a human able to reach the
+   mini another way), macOS majors, `make herdr-upgrade` from inside a herdr
+   pane (it refuses).
+6. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
+   failures against their `persisted N runs` count before blaming the upgrade.
 
 ---
 
