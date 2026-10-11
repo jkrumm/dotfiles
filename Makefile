@@ -2660,7 +2660,20 @@ herdr-restart:
 		i=$$((i+1)); [ $$i -gt 30 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
 		sleep 0.5; \
 	done; \
+	if pgrep -f 'bin/herdr server$$' >/dev/null; then \
+		herdr server stop >/dev/null 2>&1 || true; \
+		i=0; while pgrep -f 'bin/herdr server$$' >/dev/null; do \
+			i=$$((i+1)); [ $$i -gt 120 ] && { echo "  ✗ old herdr server never exited — bootstrap would flap on 'already running'"; exit 1; }; \
+			sleep 0.5; \
+		done; \
+		echo "  ✓ old herdr server stopped"; \
+	fi; \
 	launchctl bootstrap "gui/$$U" "$$PLIST" || { echo "  ✗ bootstrap failed"; exit 1; }
+	@# STOP THE DAEMON EXPLICITLY. `bootout` never stops it, and it does not exit
+	@# on its own: on 2026-10-11 a restart left the Oct-1 server running, the
+	@# version gate passed on the OLD process (same 0.9.3), and the freshly
+	@# bootstrapped job flapped on "herdr server is already running" — a silent
+	@# no-op restart. `herdr server stop` + wait-for-exit happens before bootstrap.
 	@# WAIT, DO NOT SLEEP. `bootout` retires the launchd job but does not stop the
 	@# server — since 0.9.0 it is a detached daemon and holds the socket until it
 	@# exits itself, so for a moment the OLD binary still answers. A `sleep 2`
