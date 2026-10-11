@@ -59,13 +59,13 @@ CADDY_DNS_MODULE_VERSION ?= v0.2.4
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
-FALLOW_VERSION := 3.27.0
+FALLOW_VERSION := 3.33.1
 
 # ocr — alibaba/open-code-review, one input to agent-gateway's review pipeline. A
 # GitHub-release Go binary (the npm package only wraps it behind a postinstall
 # download), checksum-verified against the release's sha256sum.txt; pinned for
 # the same reason as fallow.
-OCR_VERSION := 1.12.8
+OCR_VERSION := 1.12.13
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
