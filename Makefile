@@ -1325,11 +1325,11 @@ _setup-settings:
 		echo "    ✓ settings.json created from template"; \
 	else \
 		jq --slurpfile existing "$(CLAUDE_DIR)/settings.json" \
-			'del(._NOTE) * {permissions: (($$existing[0].permissions // .permissions) * {deny: .permissions.deny})} * ($$existing[0] | {model, effortLevel, alwaysThinkingEnabled} | with_entries(select(.value != null)))' \
+			'del(._NOTE) * {permissions: (($$existing[0].permissions // .permissions) * {deny: .permissions.deny, defaultMode: .permissions.defaultMode})} * ($$existing[0] | {model, effortLevel, alwaysThinkingEnabled} | with_entries(select(.value != null)))' \
 			"$(DOTFILES_DIR)/config/settings.template.json" \
 			> /tmp/claude-settings-merged.json \
 		&& mv /tmp/claude-settings-merged.json "$(CLAUDE_DIR)/settings.json"; \
-		echo "    ✓ settings.json merged (template applied, allow + model/effort preserved, deny from template)"; \
+		echo "    ✓ settings.json merged (template applied, allow + model/effort preserved, deny + defaultMode from template)"; \
 	fi
 
 .PHONY: _setup-gitignore

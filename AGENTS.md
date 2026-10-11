@@ -98,7 +98,9 @@ exit fails only if the plist sets `KeepAlive` **and** the job is not running
 logs, missing programs and plaintext credentials.
 
 **settings.json merge:** the template wins on structural keys (hooks, statusLine,
-plugins, env) and on `permissions.deny`; `permissions.allow` and
+plugins, env) and on `permissions.deny` + `permissions.defaultMode`
+(`bypassPermissions`, so herdr's `claude --resume` and `rd work` panes come back
+in bypass, not manual); `permissions.allow` and
 `model`/`effortLevel`/`alwaysThinkingEnabled` are preserved from the live file.
 
 **Hooks:** symlinked live, so a change applies on the *next tool call* — no

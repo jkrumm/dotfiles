@@ -40,7 +40,7 @@
       "EnterPlanMode",
       "ExitPlanMode"
     ],
-    "defaultMode": "default"
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "PreToolUse": [
