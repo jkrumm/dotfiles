@@ -178,9 +178,18 @@ check_macos() {
     info_add "macOS: no pending updates"
     return
   }
-  local names
-  names=$(echo "$out" | /usr/bin/sed -n 's/.*"Display Name" = "\{0,1\}\([^";]*\)"\{0,1\};.*/\1/p' \
+  # A major (Identifier ending _major) is a deliberate owner decision, never
+  # drift — the host stays on its current major until a human upgrades it, and
+  # mini-macos-update never applies one remotely. Majors are reported, not flagged.
+  local pending names majors
+  pending=$(echo "$out" | /usr/bin/awk '
+    /"Display Name" =/ { n=$0; sub(/.*"Display Name" = "?/, "", n); sub(/"?;.*/, "", n) }
+    /Identifier =/     { id=$0 }
+    /}/                { if (n != "") print (id ~ /_major/ ? "M" : "P") "\t" n; n=""; id="" }')
+  names=$(echo "$pending" | /usr/bin/awk -F'\t' '$1=="P"{print $2}' \
     | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//; s/\\\{1,\}U00a0/ /g')
+  majors=$(echo "$pending" | /usr/bin/awk -F'\t' '$1=="M"{print $2}' | /usr/bin/tr '\n' ',' | /usr/bin/sed 's/,$//')
+  if [[ -n "$majors" ]]; then info_add "macOS major available, held by policy: $majors"; fi
   if [[ -z "$names" ]]; then
     info_add "macOS: no pending updates"
   else
