@@ -19,7 +19,6 @@ secrets/access split between the two: `docs/architecture.md`.
 git clone git@github.com:jkrumm/dotfiles.git ~/SourceRoot/dotfiles
 cd ~/SourceRoot/dotfiles
 make setup              # idempotent — safe to re-run after any change
-coderabbit auth login   # one-time CodeRabbit CLI auth (GitHub OAuth)
 ```
 
 `make setup` handles: symlinks, Homebrew tools (from `Brewfile`), 1Password

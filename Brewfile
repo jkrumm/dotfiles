@@ -137,8 +137,6 @@ brew "satococoa/tap/wtp"
 cask "audacity"
 # Downloads videos and audio from websites
 cask "clipgrab"
-# AI code review CLI
-cask "coderabbit"
 # OpenAI Codex CLI — the non-Anthropic second opinion, pointed at the IU
 # unified endpoint (config/codex/, launched with `cx`/`cxa`). Cask, so it is
 # reported by `make brew-upgrade` and never auto-upgraded.

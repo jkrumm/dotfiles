@@ -428,8 +428,7 @@ only there, so `/check`, `/review`, `/otel`, `/excalidraw-diagram` and
 (remote reach = a StreamableHTTP transport).
 HyperDX is deliberately *not*
 registered — `/otel` speaks its endpoint over HTTP rather than costing every
-session ~60 deferred tool names. Keep project MCPs minimal. **CodeRabbit CLI**
-needs a one-time `coderabbit auth login`.
+session ~60 deferred tool names. Keep project MCPs minimal.
 
 ## Claude Code launchers
 

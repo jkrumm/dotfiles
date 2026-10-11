@@ -52,7 +52,7 @@ Based on detected state, pick up from the right step:
 - Run `/commit`
 
 **Step 2 — Committed but no PR:**
-- Run `/review` (CodeRabbit CLI + Claude review)
+- Run `/review`
 - If review finds issues → ask user: implement fixes? (default: yes for clear fixes, ask for subjective ones)
 - If fixes made → amend commit (`git reset --soft HEAD~1 && git commit --amend`)
 - Run `/git-cleanup` if ≥3 commits on branch

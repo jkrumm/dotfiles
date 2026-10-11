@@ -261,10 +261,6 @@ _setup-tools:
 			fi; \
 		fi; \
 	done
-	@# coderabbit cask ships from the Brewfile; auth is a manual one-time step
-	@command -v coderabbit >/dev/null 2>&1 \
-		&& echo "    · coderabbit (run: coderabbit auth login)" \
-		|| echo "    ✗ coderabbit [missing — run: make brew-check]"
 	@# fallow — npm global (not brew: needs Node on PATH), pinned to FALLOW_VERSION.
 	@# Linked into ~/.local/bin as well: the fnm-global bin dir is a per-shell
 	@# multishell path that a LaunchAgent (agent-gateway's `which fallow`) never sees.
@@ -1666,7 +1662,7 @@ status:
 	done
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.local/bin/imgcli"
 	@echo "  Tools"
-	@for tool in jq gh fzf zoxide wtp fnm bun uv age coderabbit fallow; do \
+	@for tool in jq gh fzf zoxide wtp fnm bun uv age fallow; do \
 		command -v $$tool >/dev/null 2>&1 \
 			&& echo "    ✓ $$tool" \
 			|| echo "    ✗ $$tool [not installed — run make setup]"; \
