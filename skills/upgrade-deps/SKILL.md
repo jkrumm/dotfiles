@@ -75,7 +75,29 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    the ssh session you are using — run it only with a human able to reach the
    mini another way), macOS majors, `make herdr-upgrade` from inside a herdr
    pane (it refuses).
-6. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
+6. **Agent tooling, and what is *running*.** Installed ≠ running; check both.
+   - **Cooldown override** only on the owner's explicit ask for "recent agent
+     tooling" — per command (`brew upgrade --cask <name>`), never by editing
+     `minimumReleaseAge` or `brew-upgrade.sh`.
+   - **Hermes: never a bare `hermes update`.** It autostashes the local
+     patches and restarts the gateway unpatched. Run it through the
+     `hermes-update` skill in an agent in the mini's `hermes-agent` workspace
+     (`rd work hermes-agent` + `rd say`); `make patch-check` must end green.
+   - **herdr server:** compare the running keg
+     (`lsof -p $(pgrep -f 'bin/herdr server') | grep txt`) with the installed
+     one. Mini: `make herdr-upgrade` / `make herdr-restart YES=1` (human-timed).
+     A server hosting your own session is restarted by the human.
+   - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
+     unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
+     `collie pair` on the phone.
+   - **Pinned npm/binary tools** (`FALLOW_VERSION`, `OCR_VERSION` in the
+     Makefile): bump the pin, `make _setup-tools` on the mini, install the
+     same version on the MacBook.
+   - **Bun services:** agent-gateway `make reload` (refuses while jobs run).
+   - **macOS:** majors are held by policy; drift-check reports them as info.
+     Same-major companions (CLT, Safari) install with the exact label from
+     `softwareupdate -l` (e.g. `Command Line Tools for Xcode 27.0-27.0`).
+7. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
    failures against their `persisted N runs` count before blaming the upgrade.
 
 ---
