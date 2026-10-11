@@ -160,6 +160,9 @@ cask "font-jetbrains-mono-nerd-font"
 # only), so `make theme` resolves /Applications/Ghostty.app explicitly rather
 # than trusting PATH.
 cask "ghostty"
+# Hermes Agent desktop app. The bundle is Nous's setup shell (bundle version
+# 0.0.1 at every release); the cask version tracks the website label.
+cask "hermes-desktop"
 # Horizontal and vertical rulers
 cask "free-ruler"
 # Keep your computer awake
