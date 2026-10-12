@@ -1,46 +1,111 @@
 #!/usr/bin/env bash
-# imgcli — upload to and address the image CDN (imgproxy + B2 + Cloudflare).
+# imgcli — the personal image stack: generate, upload, address.
 #
-# Secrets resolve through `secrets-run`, the op shim: live biometric `op` on the
-# MacBook, the age-encrypted offline cache on the headless mini. Same refs on
-# both. Nothing here embeds a hostname, bucket, or credential — this repo is
-# public.
+#   gen       prompt -> local file via the image-gateway (VPS, tailnet-only);
+#             --public / --private hand each result on to one of the two lanes
+#   upload    local file -> public CDN: straight to B2 img/, served by imgproxy
+#             behind Cloudflare (unsigned URLs — an opaque key is the access control)
+#   private   local file -> B2 private/ + a time-limited presigned URL. imgproxy
+#             is locked to img/, so private/ is only ever reachable by presign.
 #
-# Infra side lives in ~/SourceRoot/vps/apps/imgproxy/ (docs/image-cdn.md).
+# One B2 bucket, two prefixes, one key per scope (all in 1Password, resolved
+# through `secrets-run` — live biometric `op` on the MacBook, the age-encrypted
+# offline cache on the headless mini; same refs on both). Nothing here embeds a
+# hostname, bucket, or credential — this repo is public.
+#
+#   op://common/b2-images-write    img/ write, no delete      upload, sync, ls, info, url
+#   op://common/b2-images-private  private/ read/write/list   private, private-url, private-ls
+#   op://common/b2-images-admin    img/ incl. deleteFiles     rm only — MacBook-only by design:
+#                                  deliberately NOT in the mini's headless cache
+#   op://common/backblaze-s3       bucket coordinates         every B2 command
+#   op://vps/image-gateway         gateway BASE_URL/API_SECRET   gen
+#
+# Infra side lives in ~/SourceRoot/vps/apps/imgproxy/ (docs/image-cdn.md);
+# generation in ~/SourceRoot/image-gateway/gateway/.
 
 set -euo pipefail
 
 REF_ITEM="op://common/b2-images-write"
 REF_BUCKET_ITEM="op://common/backblaze-s3"
-# Private layer (image-share, homelab). Resolved lazily inside share/publish
-# only, so every other command keeps working on a mini that hasn't cached
-# these refs yet.
-REF_SHARE_ITEM="op://homelab/image-share"
-# Generation (image-gen gateway, VPS, tailnet-only). Resolved lazily inside
-# `gen` only, same reasoning as the image-share refs.
-REF_GEN_ITEM="op://vps/image-gen-gateway"
+# Resolved lazily inside the private commands / `rm` only, so every other
+# command keeps working on a mini that hasn't cached these refs.
+REF_PRIVATE_ITEM="op://common/b2-images-private"
+REF_ADMIN_ITEM="op://common/b2-images-admin"
+# Generation (image-gateway, VPS, tailnet-only). Resolved lazily inside `gen`
+# only, same reasoning.
+REF_GEN_ITEM="op://vps/image-gateway"
 GEN_DIR="${HOME}/Pictures/imgcli"
+
+PRIVATE_PREFIX="private/"
+MAX_BYTES=52428800          # 50 MB
+MAX_PIXELS=100000000        # 100 MP
+MAX_PRESIGN_SECONDS=604800  # 7 days, the SigV4 maximum
 
 die() { printf 'imgcli: %s\n' "$*" >&2; exit 1; }
 
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 
 # --- config -----------------------------------------------------------------
-# Resolved once per invocation and exported for the aws CLI.
-load_config() {
+# Resolved once per invocation and exported for the aws CLI. Bucket coordinates
+# are shared; each lane then activates its own key with `use_key`.
+load_coords() {
   need secrets-run
   need aws
+  need python3
 
-  AWS_ACCESS_KEY_ID=$(secrets-run read "$REF_ITEM/B2_KEY_ID")
-  AWS_SECRET_ACCESS_KEY=$(secrets-run read "$REF_ITEM/B2_APP_KEY")
-  CDN_BASE=$(secrets-run read "$REF_ITEM/CDN_BASE")
-  PREFIX=$(secrets-run read "$REF_ITEM/BUCKET_PREFIX")
   BUCKET=$(secrets-run read "$REF_BUCKET_ITEM/BUCKET")
   ENDPOINT=$(secrets-run read "$REF_BUCKET_ITEM/ENDPOINT")
   AWS_DEFAULT_REGION=$(secrets-run read "$REF_BUCKET_ITEM/REGION")
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION
+  export AWS_DEFAULT_REGION
 
-  [ -n "$BUCKET" ] && [ -n "$CDN_BASE" ] || die "config incomplete"
+  [ -n "$BUCKET" ] && [ -n "$ENDPOINT" ] || die "config incomplete"
+}
+
+use_key() {
+  AWS_ACCESS_KEY_ID="$1"
+  AWS_SECRET_ACCESS_KEY="$2"
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+}
+
+# Public lane: the images-write key, left active.
+load_config() {
+  load_coords
+
+  WRITE_KEY_ID=$(secrets-run read "$REF_ITEM/B2_KEY_ID")
+  WRITE_APP_KEY=$(secrets-run read "$REF_ITEM/B2_APP_KEY")
+  CDN_BASE=$(secrets-run read "$REF_ITEM/CDN_BASE")
+  PREFIX=$(secrets-run read "$REF_ITEM/BUCKET_PREFIX")
+
+  [ -n "$CDN_BASE" ] && [ -n "$PREFIX" ] && [ -n "$WRITE_KEY_ID" ] && [ -n "$WRITE_APP_KEY" ] \
+    || die "config incomplete"
+  use_key "$WRITE_KEY_ID" "$WRITE_APP_KEY"
+}
+
+# Private lane: the images-private key, left active.
+load_private_config() {
+  load_coords
+
+  PRIV_KEY_ID=$(secrets-run read "$REF_PRIVATE_ITEM/B2_KEY_ID") \
+    || die "could not resolve $REF_PRIVATE_ITEM — add it to dotfiles-private/headless.refs and run 'make secrets-seed'"
+  PRIV_APP_KEY=$(secrets-run read "$REF_PRIVATE_ITEM/B2_APP_KEY") \
+    || die "could not resolve $REF_PRIVATE_ITEM — add it to dotfiles-private/headless.refs and run 'make secrets-seed'"
+
+  [ -n "$PRIV_KEY_ID" ] && [ -n "$PRIV_APP_KEY" ] || die "private key config incomplete"
+  use_key "$PRIV_KEY_ID" "$PRIV_APP_KEY"
+}
+
+# Delete lane: the only credential that can remove objects. Not seeded into the
+# mini's headless cache on purpose — a headless agent must not be able to delete.
+load_admin_key() {
+  load_coords
+  ADMIN_KEY_ID=$(secrets-run read "$REF_ADMIN_ITEM/B2_KEY_ID" 2>/dev/null) \
+    || die "rm is MacBook-only: $REF_ADMIN_ITEM resolves only where live biometric op exists"
+  ADMIN_APP_KEY=$(secrets-run read "$REF_ADMIN_ITEM/B2_APP_KEY" 2>/dev/null) \
+    || die "rm is MacBook-only: $REF_ADMIN_ITEM resolves only where live biometric op exists"
+
+  [ -n "$ADMIN_KEY_ID" ] && [ -n "$ADMIN_APP_KEY" ] \
+    || die "rm is MacBook-only: $REF_ADMIN_ITEM resolves only where live biometric op exists"
+  use_key "$ADMIN_KEY_ID" "$ADMIN_APP_KEY"
 }
 
 s3() { aws s3 "$@" --endpoint-url "$ENDPOINT"; }
@@ -50,11 +115,19 @@ s3api() { aws s3api "$@" --endpoint-url "$ENDPOINT"; }
 # `img/blog/x.jpg` address the same object.
 norm_key() { printf '%s' "${1#"$PREFIX"}" | sed 's#^/##'; }
 
-# Normalizes an upload/publish prefix argument to the bare enum value the
-# image-share service expects (fuji|blog|gen|misc): strips an optional
-# leading img/ and trailing slash, defaults to misc. Opaque naming for
-# gen/misc now happens server-side (lib/naming.ts), so this is the only
-# prefix handling left on the client.
+# Same for the private lane: `2026/10/x.png` and `private/2026/10/x.png`.
+norm_private_key() { printf '%s' "${1#/}" | sed "s#^${PRIVATE_PREFIX}##"; }
+
+# Keys end up inside an object path — refuse anything that could climb out of it.
+check_key() {
+  case "$1" in
+    ''|*..*|*[[:cntrl:]]*) die "invalid key: ${1:-(empty)}" ;;
+  esac
+}
+
+# Normalizes an upload prefix argument to the bare enum value
+# (fuji|blog|gen|misc): strips an optional leading img/ and trailing slash,
+# defaults to misc.
 norm_upload_prefix() {
   local p="${1:-misc}"
   p="${p#img/}"
@@ -82,28 +155,155 @@ human() {
   }'
 }
 
-# --- private layer (image-share) --------------------------------------------
-# Bearer-auth'd HTTP service on the homelab. Ingests files into a durable
-# private copy and, on publish, hands them off to the same B2/imgproxy CDN
-# `upload`/`sync` write to directly.
+# 16 chars of [a-z0-9] — the unguessable object name.
+random_name() {
+  python3 -c 'import secrets, string; print("".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(16)))'
+}
 
-is_valid_publish_prefix() {
+# Source guard shared by `upload` and `private`: extension allow-list (also
+# fixes Content-Type), <= 50 MB, <= 100 MP. `name` overrides the filename the
+# extension and (for fuji/blog) the object stem are taken from. Sets SRC_STEM,
+# SRC_EXT (with dot, original case), SRC_CT, SRC_BYTES, SRC_DIMS ("WxH" or empty).
+check_source() {
+  local file="$1" name="$2" base ext lower
+  [ -f "$file" ] || die "no such file: $file"
+
+  # The extension (and so Content-Type) always comes from the real file;
+  # `name` may rename the stem but never change the type.
+  base="${file##*/}"
+  case "$base" in
+    *.*) ext=".${base##*.}" ;;
+    *) ext="" ;;
+  esac
+  if [ -n "$name" ]; then
+    name="${name##*/}"
+    case "$name" in
+      *.*) [ "$(printf '%s' "${name##*.}" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${ext#.}" | tr '[:upper:]' '[:lower:]')" ] \
+        || die "--name extension \".${name##*.}\" does not match the file's \"$ext\""
+        base="${name%.*}$ext" ;;
+      *) base="$name$ext" ;;
+    esac
+  fi
+  lower="$(printf '%s' "${ext#.}" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
+    jpg|jpeg) SRC_CT="image/jpeg" ;;
+    png) SRC_CT="image/png" ;;
+    webp) SRC_CT="image/webp" ;;
+    avif) SRC_CT="image/avif" ;;
+    heic) SRC_CT="image/heic" ;;
+    raf) SRC_CT="application/octet-stream" ;;
+    *) die "unsupported file extension \"${lower:-(none)}\" — allowed: avif, heic, jpeg, jpg, png, raf, webp" ;;
+  esac
+  SRC_STEM="${base%"$ext"}"
+  SRC_EXT="$ext"
+
+  SRC_BYTES="$(wc -c <"$file" | tr -d ' ')"
+  [ "$SRC_BYTES" -le "$MAX_BYTES" ] || die "file too large ($SRC_BYTES bytes) — max $MAX_BYTES bytes (50 MB)"
+
+  SRC_DIMS="$(dims_of "$file" || true)"
+  if [ -n "$SRC_DIMS" ]; then
+    local w="${SRC_DIMS%x*}" h="${SRC_DIMS#*x}"
+    [ $((w * h)) -le "$MAX_PIXELS" ] || die "image too large (${SRC_DIMS}) — max 100 MP"
+  fi
+}
+
+# fuji/ and blog/ keep their (sanitized) filename — a browsable gallery. gen/
+# and misc/ get a random name: the CDN serves unsigned URLs, so an unguessable
+# key IS the access control.
+object_filename() {
+  local stem
   case "$1" in
-    fuji|blog|gen|misc) return 0 ;;
-    *) return 1 ;;
+    gen|misc) printf '%s%s' "$(random_name)" "$SRC_EXT" ;;
+    *)
+      stem="$(printf '%s' "$SRC_STEM" | sed -E 's/[^a-zA-Z0-9_-]+/_/g')"
+      printf '%s%s' "${stem:-upload}" "$SRC_EXT"
+      ;;
   esac
 }
 
-load_share_config() {
-  need secrets-run
-  need curl
+# Writes one object with its Content-Type and, when sips could read them, the
+# source dimensions as `width`/`height` object metadata (what `info` reads).
+# Needs check_source to have run for this file.
+put_object() {
+  local file="$1" key="$2"
+  local args=(--no-progress --only-show-errors --content-type "$SRC_CT")
+  [ -z "$SRC_DIMS" ] || args+=(--metadata "width=${SRC_DIMS%x*},height=${SRC_DIMS#*x}")
+  s3 cp "$file" "s3://${BUCKET}/${key}" "${args[@]}"
+}
 
-  SHARE_BASE=$(secrets-run read "$REF_SHARE_ITEM/BASE_URL") \
-    || die "could not resolve image-share secrets — add $REF_SHARE_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
-  SHARE_SECRET=$(secrets-run read "$REF_SHARE_ITEM/API_SECRET") \
-    || die "could not resolve image-share secrets — add $REF_SHARE_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
+# The one upload path for the public CDN — `upload` and `gen --public` both go
+# through here. Needs load_config. Skips (never overwrites) an existing key.
+# Sets U_UPLOADED (true|false), U_KEY (without img/), U_URL, U_DIMS, U_BYTES.
+upload_object() {
+  local file="$1" prefix="$2" name="$3" filename
+  check_source "$file" "$name"
+  filename="$(object_filename "$prefix")"
 
-  [ -n "$SHARE_BASE" ] && [ -n "$SHARE_SECRET" ] || die "image-share config incomplete"
+  U_KEY="${prefix}/${filename}"
+  U_URL="${CDN_BASE}/${U_KEY}"
+  U_DIMS="$SRC_DIMS"
+  U_BYTES="$SRC_BYTES"
+
+  # A missing key under a prefix-scoped B2 key answers 403, not 404, so any
+  # head failure counts as "absent"; a real permission problem surfaces on put.
+  if s3api head-object --bucket "$BUCKET" --key "${PREFIX}${U_KEY}" >/dev/null 2>&1; then
+    U_UPLOADED=false
+    return 0
+  fi
+  put_object "$file" "${PREFIX}${U_KEY}"
+  U_UPLOADED=true
+}
+
+# --- private lane (B2 private/) ----------------------------------------------
+# Same bucket, a prefix imgproxy cannot see. Objects are reachable only through
+# S3 presigned GET URLs, which expire (SigV4 caps that at 7 days).
+
+# "7d" | "12h" | "30m" | "90s" | "1w" | plain seconds -> EXPIRES_SECS.
+parse_expires() {
+  local v="${1:-7d}" n u=s mult
+  case "$v" in
+    *[smhdw]) u="${v: -1}"; n="${v%?}" ;;
+    *) n="$v" ;;
+  esac
+  case "$n" in
+    ''|*[!0-9]*) die "bad --expires: $v (use e.g. 90s, 30m, 12h, 7d, 1w, or plain seconds)" ;;
+  esac
+  [ "${#n}" -le 9 ] || die "bad --expires: $v (too large)"
+  case "$u" in
+    s) mult=1 ;;
+    m) mult=60 ;;
+    h) mult=3600 ;;
+    d) mult=86400 ;;
+    w) mult=604800 ;;
+  esac
+  EXPIRES_SECS=$((10#$n * mult))
+  [ "$EXPIRES_SECS" -ge 1 ] || die "bad --expires: $v (must be positive)"
+  [ "$EXPIRES_SECS" -le "$MAX_PRESIGN_SECONDS" ] \
+    || die "--expires $v exceeds the 7 day presign maximum (${MAX_PRESIGN_SECONDS}s, the SigV4 limit)"
+}
+
+# Presigned GET for a full private key. Sets P_URL, P_EXPIRES_AT (UTC ISO).
+presign_url() {
+  P_URL="$(aws s3 presign "s3://${BUCKET}/$1" --expires-in "$EXPIRES_SECS" --endpoint-url "$ENDPOINT")" \
+    || die "presign failed"
+  P_EXPIRES_AT="$(python3 -c '
+import datetime, sys
+t = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=int(sys.argv[1]))
+print(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
+' "$EXPIRES_SECS")"
+}
+
+# Puts a file to private/<yyyy>/<mm>/<random>.<ext> and presigns it. Needs
+# load_private_config + parse_expires. Sets P_KEY (without private/), P_URL,
+# P_EXPIRES_AT, P_BYTES.
+private_put() {
+  local file="$1" full
+  check_source "$file" ""
+  P_KEY="$(date -u +%Y/%m)/$(random_name)${SRC_EXT}"
+  P_BYTES="$SRC_BYTES"
+  full="${PRIVATE_PREFIX}${P_KEY}"
+  put_object "$file" "$full"
+  presign_url "$full"
 }
 
 # Reads a single field out of a JSON object on stdin. No jq dependency, same
@@ -113,98 +313,13 @@ json_field() {
   python3 -c 'import json, sys; d = json.load(sys.stdin); print(d[sys.argv[1]])' "$field" <<<"$json"
 }
 
-# POST /api/images — shared by `share` and `publish` (publish always stages
-# through the private layer first).
-share_ingest() {
-  local file="$1" dir="$2"
-  local args=(-sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 \
-    -X POST "${SHARE_BASE}/api/images" \
-    -H "Authorization: Bearer ${SHARE_SECRET}" \
-    -F "file=@${file}")
-  [ -n "$dir" ] && args+=(-F "dir=${dir}")
-
-  local out status body
-  out="$(curl "${args[@]}")" || die "image-share ingest request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "201" ] || die "image-share ingest failed (HTTP $status): $body"
-  printf '%s' "$body"
-}
-
-# POST /api/publish for a single already-ingested image id.
-share_publish() {
-  local id="$1" prefix="$2"
-  case "$id" in
-    '' | *[!0-9]*) die "image-share ingest returned a non-numeric id: $id" ;;
-  esac
-  local payload
-  payload="$(printf '{"imageIds":[%s],"prefix":"%s"}' "$id" "$prefix")"
-
-  local out status body
-  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/publish" \
-    -H "Authorization: Bearer ${SHARE_SECRET}" \
-    -H "Content-Type: application/json" \
-    -d "$payload")" || die "image-share publish request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "200" ] || die "image-share publish failed (HTTP $status): $body"
-  printf '%s' "$body"
-}
-
-# POST /api/b2/upload — service-routed direct-to-CDN upload. Skips (does not
-# overwrite) a key that already exists, mirroring /api/publish's behavior; the
-# route reports that in the response body rather than as an error.
-share_upload() {
-  local file="$1" prefix="$2" name="$3"
-  local filepart="file=@${file}"
-  [ -n "$name" ] && filepart="file=@${file};filename=${name}"
-
-  local out status body
-  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/b2/upload" \
-    -H "Authorization: Bearer ${SHARE_SECRET}" \
-    -F "$filepart" \
-    -F "prefix=${prefix}")" || die "image-share upload request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "200" ] || die "image-share upload failed (HTTP $status): $body"
-  printf '%s' "$body"
-}
-
-# Pulls the CDN key for `id` out of a /api/publish response — from `published`
-# normally, or from `skipped` when the image was already published before
-# (that is success, not an error). Prints a note to stderr in the latter case,
-# unless `json` is set — --json output must be the JSON object and nothing else.
-publish_result_key() {
-  local body="$1" id="$2" json="$3"
-  ID="$id" JSON="$json" python3 -c '
-import json, os, sys
-
-d = json.loads(sys.argv[1])
-target = os.environ["ID"]
-as_json = os.environ["JSON"] == "1"
-
-for item in d.get("published", []):
-    if str(item.get("id")) == target:
-        print(item["key"])
-        sys.exit(0)
-
-for item in d.get("skipped", []):
-    if str(item.get("id")) == target and item.get("key"):
-        if not as_json:
-            print(item.get("reason", "already published"), file=sys.stderr)
-        print(item["key"])
-        sys.exit(0)
-
-sys.exit(1)
-' "$body"
-}
-
-# --- generation (image-gen gateway) -----------------------------------------
+# --- generation (image-gateway) ----------------------------------------------
 # Stateless bearer-auth'd gateway on the VPS wrapping gpt-image-2.5 (flare /
-# sunburst). No model is sent: the gateway auto-routes by quality/endpoint. `gen` is
-# the agent lane into it: generate (or edit / plan-then-generate), write the
-# PNGs under ~/Pictures/imgcli/, then hand each one to `share` (default) or
-# `publish` (--public) so the result is a URL, not a local file.
+# sunburst). No model is sent: the gateway auto-routes by quality/endpoint. `gen`
+# is the agent lane into it: generate (or edit / plan-then-generate) and write
+# the PNGs under ~/Pictures/imgcli/. --public uploads each one to the CDN
+# through the same path as `upload`; --private puts it under private/ and
+# presigns it.
 
 load_gen_config() {
   need secrets-run
@@ -212,11 +327,11 @@ load_gen_config() {
   need python3
 
   GEN_BASE=$(secrets-run read "$REF_GEN_ITEM/BASE_URL") \
-    || die "could not resolve image-gen gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
+    || die "could not resolve image-gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
   GEN_SECRET=$(secrets-run read "$REF_GEN_ITEM/API_SECRET") \
-    || die "could not resolve image-gen gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
+    || die "could not resolve image-gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
 
-  [ -n "$GEN_BASE" ] && [ -n "$GEN_SECRET" ] || die "image-gen gateway config incomplete"
+  [ -n "$GEN_BASE" ] && [ -n "$GEN_SECRET" ] || die "image-gateway config incomplete"
   GEN_BASE="${GEN_BASE%/}"
 }
 
@@ -229,7 +344,7 @@ gen_request() {
   status="$(curl -sS -o "$out_file" -w '%{http_code}' --connect-timeout 5 --max-time 300 \
     -X POST "${GEN_BASE}${path}" \
     -H "@${GEN_TMP}/hdr" "$@")" \
-    || die "image-gen gateway request failed (network error — the gateway is tailnet-only)"
+    || die "image-gateway request failed (network error — the gateway is tailnet-only)"
   [ "$status" = "200" ] && return 0
   local message
   message="$(python3 -c '
@@ -240,11 +355,11 @@ try:
 except Exception:
     print(open(sys.argv[1], errors="replace").read()[:400])
 ' "$out_file")"
-  die "image-gen gateway ${path} failed (HTTP $status): $message"
+  die "image-gateway ${path} failed (HTTP $status): $message"
 }
 
 cmd_gen() {
-  local prompt="" size="" n="" quality="" edit="" enhance=0 public=0 prefix="gen" dir="gen" copy=0 open=0 json=0
+  local prompt="" size="" n="" quality="" edit="" enhance=0 public=0 private=0 prefix="gen" expires="" copy=0 open=0 json=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --size) size="$2"; shift 2 ;;
@@ -254,7 +369,8 @@ cmd_gen() {
       --enhance) enhance=1; shift ;;
       --public) public=1; shift ;;
       --prefix) prefix="$2"; shift 2 ;;
-      --dir) dir="$2"; shift 2 ;;
+      --private) private=1; shift ;;
+      --expires) expires="$2"; shift 2 ;;
       --copy) copy=1; shift ;;
       --open) open=1; shift ;;
       --json) json=1; shift ;;
@@ -262,7 +378,7 @@ cmd_gen() {
       *) if [ -z "$prompt" ]; then prompt="$1"; else die "unexpected argument: $1"; fi; shift ;;
     esac
   done
-  [ -n "$prompt" ] || die "usage: imgcli gen \"<prompt>\" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto] [--edit <file>] [--enhance] [--public] [--prefix fuji|blog|gen|misc] [--dir <d>] [--copy] [--open] [--json]"
+  [ -n "$prompt" ] || die "usage: imgcli gen \"<prompt>\" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto] [--edit <file>] [--enhance] [--public [--prefix fuji|blog|gen|misc]] [--private [--expires <dur>]] [--copy] [--open] [--json]"
   [ -z "$edit" ] || [ -f "$edit" ] || die "no such file: $edit"
   local mime=""
   if [ -n "$edit" ]; then
@@ -288,9 +404,10 @@ cmd_gen() {
     ''|low|medium|high|xhigh|max|auto) : ;;
     *) die "unknown quality: $quality (must be one of: low, medium, high, xhigh, max, auto)" ;;
   esac
-  prefix="${prefix%/}"
-  is_valid_publish_prefix "$prefix" \
-    || die "unknown publish prefix: $prefix (must be one of: fuji, blog, gen, misc)"
+  [ "$public" = 1 ] && [ "$private" = 1 ] && die "--public and --private are mutually exclusive"
+  [ -z "$expires" ] || [ "$private" = 1 ] || die "--expires needs --private"
+  prefix="$(norm_upload_prefix "$prefix")"
+  [ "$private" = 1 ] && parse_expires "$expires"
 
   # Not `local`: the EXIT trap runs after the function's scope is gone.
   GEN_TMP="$(mktemp -d)"
@@ -299,7 +416,7 @@ cmd_gen() {
 
   load_gen_config
   [ "$public" = 1 ] && load_config
-  load_share_config
+  [ "$private" = 1 ] && load_private_config
   # The bearer reaches curl through a file, never argv — `ps` shows argv for
   # the whole request, and a gen call runs 10-300 s.
   ( umask 077; printf 'Authorization: Bearer %s\n' "$GEN_SECRET" >"$tmp/hdr" )
@@ -388,41 +505,43 @@ for i, img in enumerate(d["images"], 1):
   local gen_id model gsize gquality cost latency
   IFS=$'\t' read -r gen_id model gsize gquality cost latency <<<"$meta"
 
-  # Hand each file to the private layer; --public goes on to the CDN.
-  local results="$tmp/results.jsonl" file body id publish_body key url
+  # --public: through the same path as `upload`. --private: put under private/
+  # and presign. Neither: the file stays local.
+  local results="$tmp/results.jsonl" file url="" target
   : >"$results"
   for file in "${files[@]}"; do
-    body="$(share_ingest "$file" "$dir")"
-    id="$(json_field "$body" id)"
     if [ "$public" = 1 ]; then
-      publish_body="$(share_publish "$id" "$prefix")"
-      key="$(publish_result_key "$publish_body" "$id" "$json")" \
-        || die "image-share publish did not return image $id in published or skipped: $publish_body"
-      key="$(norm_key "$key")"
-      url="${CDN_BASE}/${key}"
-      FILE="$file" ID="$id" KEY="$key" URL="$url" EMBED="${CDN_BASE}/rs:fit:800/f:jpg/${key}" python3 -c '
+      upload_object "$file" "$prefix" ""
+      url="$U_URL"
+      FILE="$file" ID="$gen_id" KEY="$U_KEY" URL="$U_URL" EMBED="${CDN_BASE}/rs:fit:800/f:jpg/${U_KEY}" python3 -c '
 import json, os
 e = os.environ
-print(json.dumps({"file": e["FILE"], "id": int(e["ID"]), "key": e["KEY"], "cdnUrl": e["URL"], "markdown": f"![]({e["EMBED"]})"}))
+print(json.dumps({"file": e["FILE"], "id": e["ID"], "key": e["KEY"], "cdnUrl": e["URL"], "markdown": "![](%s)" % e["EMBED"]}))
+' >>"$results"
+    elif [ "$private" = 1 ]; then
+      private_put "$file"
+      url="$P_URL"
+      FILE="$file" ID="$gen_id" KEY="$P_KEY" URL="$P_URL" EXPIRES_AT="$P_EXPIRES_AT" python3 -c '
+import json, os
+e = os.environ
+print(json.dumps({"file": e["FILE"], "id": e["ID"], "key": e["KEY"], "url": e["URL"], "expiresAt": e["EXPIRES_AT"]}))
 ' >>"$results"
     else
-      url="$(json_field "$body" adminFileUrl)"
-      FILE="$file" python3 -c '
-import json, os, sys
-d = json.load(sys.stdin)
-print(json.dumps({"file": os.environ["FILE"], "id": d["id"], "relPath": d["relPath"], "adminFileUrl": d["adminFileUrl"]}))
-' <<<"$body" >>"$results"
+      FILE="$file" ID="$gen_id" python3 -c '
+import json, os
+print(json.dumps({"file": os.environ["FILE"], "id": os.environ["ID"]}))
+' >>"$results"
     fi
   done
 
   if [ "$json" = 1 ]; then
     GEN_ID="$gen_id" MODEL="$model" SIZE="$gsize" QUALITY="$gquality" COST="$cost" LATENCY="$latency" \
-      PUBLIC="$public" PLAN="$plan_json" python3 -c '
+      PUBLIC="$public" PRIVATE="$private" PLAN="$plan_json" python3 -c '
 import json, os, sys
 e = os.environ
 out = {"id": e["GEN_ID"], "model": e["MODEL"], "size": e["SIZE"], "quality": e["QUALITY"],
        "cost_usd": float(e["COST"]) if e["COST"] else None, "latency_ms": int(e["LATENCY"]),
-       "public": e["PUBLIC"] == "1",
+       "public": e["PUBLIC"] == "1", "private": e["PRIVATE"] == "1",
        "images": [json.loads(l) for l in open(sys.argv[1]) if l.strip()]}
 if e["PLAN"]:
     out["plan"] = json.loads(e["PLAN"])
@@ -437,16 +556,19 @@ for line in open(sys.argv[1]):
     r = json.loads(line)
     print(f"  {r['file']}")
     if "cdnUrl" in r:
-        print(f"    id {r['id']}  key {r['key']}")
+        print(f"    key {r['key']}")
+        print(f"    {r['cdnUrl']}")
         print(f"    {r['markdown']}")
-    else:
-        print(f"    id {r['id']}  relPath {r['relPath']}")
-        print(f"    {r['adminFileUrl']}")
+    elif "url" in r:
+        print(f"    key {r['key']}  (expires {r['expiresAt']})")
+        print(f"    {r['url']}")
 PY
   fi
 
-  [ "$copy" = 1 ] && printf '%s' "$url" | pbcopy && printf '  (copied)\n'
-  [ "$open" = 1 ] && open "$url"
+  # --copy / --open act on the last result: its URL, or the local file.
+  target="${url:-${files[${#files[@]} - 1]}}"
+  [ "$copy" = 1 ] && printf '%s' "$target" | pbcopy && printf '  (copied)\n'
+  [ "$open" = 1 ] && open "$target"
   return 0
 }
 
@@ -467,37 +589,28 @@ cmd_upload() {
   [ -n "$file" ] || die "usage: imgcli upload <file> [prefix/] [--name N] [--copy] [--open] [--json]"
   [ -f "$file" ] || die "no such file: $file"
 
-  load_share_config
   local prefix; prefix="$(norm_upload_prefix "$dest")"
-
-  local dims; dims="$(dims_of "$file" || true)"
-  local bytes; bytes="$(wc -c <"$file" | tr -d ' ')"
-
-  local body uploaded key url reason=""
-  body="$(share_upload "$file" "$prefix" "$name")"
-  uploaded="$(json_field "$body" uploaded)"
-  key="$(json_field "$body" key)"
-  url="$(json_field "$body" cdnUrl)"
-  [ "$uploaded" = "True" ] || reason="$(json_field "$body" reason 2>/dev/null)" || reason="key already exists"
+  load_config
+  upload_object "$file" "$prefix" "$name"
 
   if [ "$json" = 1 ]; then
-    if [ "$uploaded" = "True" ]; then
+    if [ "$U_UPLOADED" = true ]; then
       printf '{"uploaded":true,"key":"%s","url":"%s","dimensions":"%s","bytes":%s}\n' \
-        "$key" "$url" "${dims:-}" "$bytes"
+        "$U_KEY" "$U_URL" "$U_DIMS" "$U_BYTES"
     else
-      printf '{"uploaded":false,"key":"%s","url":"%s","reason":"%s"}\n' "$key" "$url" "$reason"
+      printf '{"uploaded":false,"key":"%s","url":"%s","reason":"key already exists"}\n' "$U_KEY" "$U_URL"
     fi
   else
-    if [ "$uploaded" = "True" ]; then
-      printf 'uploaded  %s\n' "$url"
-      [ -n "$dims" ] && printf '  %s  %s\n' "$dims" "$(human "$bytes")"
+    if [ "$U_UPLOADED" = true ]; then
+      printf 'uploaded  %s\n' "$U_URL"
+      [ -z "$U_DIMS" ] || printf '  %s  %s\n' "$U_DIMS" "$(human "$U_BYTES")"
     else
-      printf 'skipped, key exists  %s\n' "$url"
+      printf 'skipped, key exists  %s\n' "$U_URL"
     fi
   fi
 
-  [ "$copy" = 1 ] && printf '%s' "$url" | pbcopy && printf '  (copied)\n'
-  [ "$open" = 1 ] && open "$url"
+  [ "$copy" = 1 ] && printf '%s' "$U_URL" | pbcopy && printf '  (copied)\n'
+  [ "$open" = 1 ] && open "$U_URL"
   return 0
 }
 
@@ -690,257 +803,120 @@ NOTES
 EOF
 }
 
-cmd_share() {
-  local file="" dir="" copy=0 json=0
+cmd_private() {
+  local file="" expires="" copy=0 json=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --dir) dir="$2"; shift 2 ;;
+      --expires) expires="$2"; shift 2 ;;
       --copy) copy=1; shift ;;
       --json) json=1; shift ;;
       -*) die "unknown flag: $1" ;;
       *) if [ -z "$file" ]; then file="$1"; else die "unexpected argument: $1"; fi; shift ;;
     esac
   done
-  [ -n "$file" ] || die "usage: imgcli share <file> [--dir <dir>] [--copy] [--json]"
+  [ -n "$file" ] || die "usage: imgcli private <file> [--expires <dur>] [--copy] [--json]"
   [ -f "$file" ] || die "no such file: $file"
+  parse_expires "$expires"
 
-  load_share_config
-
-  local body id root relpath adminurl
-  body="$(share_ingest "$file" "$dir")"
-  id="$(json_field "$body" id)"
-  root="$(json_field "$body" root)"
-  relpath="$(json_field "$body" relPath)"
-  adminurl="$(json_field "$body" adminFileUrl)"
+  load_private_config
+  private_put "$file"
 
   if [ "$json" = 1 ]; then
-    printf '{"id":%s,"root":"%s","relPath":"%s","adminFileUrl":"%s"}\n' \
-      "$id" "$root" "$relpath" "$adminurl"
+    printf '{"key":"%s","url":"%s","expiresAt":"%s","bytes":%s}\n' \
+      "$P_KEY" "$P_URL" "$P_EXPIRES_AT" "$P_BYTES"
   else
-    printf 'id            %s\n' "$id"
-    printf 'relPath       %s\n' "$relpath"
-    printf 'admin file    %s\n' "$adminurl"
+    printf 'key         %s\n' "$P_KEY"
+    printf 'expires     %s\n' "$P_EXPIRES_AT"
+    printf '\n%s\n' "$P_URL"
   fi
 
-  [ "$copy" = 1 ] && printf '%s' "$adminurl" | pbcopy && printf '  (copied)\n'
+  [ "$copy" = 1 ] && printf '%s' "$P_URL" | pbcopy && printf '  (copied)\n'
   return 0
 }
 
-cmd_publish() {
-  local file="" prefix="" dir="" id="" copy=0 open=0 json=0
+cmd_private_url() {
+  local key="" expires="" copy=0 json=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --id) id="$2"; shift 2 ;;
-      --dir) dir="$2"; shift 2 ;;
+      --expires) expires="$2"; shift 2 ;;
       --copy) copy=1; shift ;;
-      --open) open=1; shift ;;
       --json) json=1; shift ;;
       -*) die "unknown flag: $1" ;;
-      *) if [ -z "$file" ] && [ -z "$id" ]; then file="$1"; else prefix="$1"; fi; shift ;;
+      *) if [ -z "$key" ]; then key="$1"; else die "unexpected argument: $1"; fi; shift ;;
     esac
   done
+  [ -n "$key" ] || die "usage: imgcli private-url <key> [--expires <dur>] [--copy] [--json]"
+  parse_expires "$expires"
 
-  if [ -n "$id" ]; then
-    [ -z "$file" ] || die "usage: imgcli publish --id <imageId> [prefix/] [--copy] [--open] [--json]  (don't combine --id with a file)"
-    case "$id" in
-      ''|*[!0-9]*) die "--id must be numeric: $id" ;;
-    esac
-  else
-    [ -n "$file" ] || die "usage: imgcli publish <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]  (or: imgcli publish --id <imageId> [prefix/])"
-    [ -f "$file" ] || die "no such file: $file"
-  fi
+  load_private_config
+  key="$(norm_private_key "$key")"
+  check_key "$key"
 
-  prefix="${prefix:-gen/}"
-  prefix="${prefix%/}"
-  is_valid_publish_prefix "$prefix" \
-    || die "unknown publish prefix: $prefix (must be one of: fuji, blog, gen, misc)"
-
-  load_config
-  load_share_config
-
-  local image_id
-  if [ -n "$id" ]; then
-    image_id="$id"
-  else
-    local ingest_body
-    ingest_body="$(share_ingest "$file" "$dir")"
-    image_id="$(json_field "$ingest_body" id)"
-  fi
-
-  local publish_body key
-  publish_body="$(share_publish "$image_id" "$prefix")"
-  key="$(publish_result_key "$publish_body" "$image_id" "$json")" \
-    || die "image-share publish did not return image $image_id in published or skipped: $publish_body"
-  key="$(norm_key "$key")"
-
-  local url="${CDN_BASE}/${key}"
-  local embed_url="${CDN_BASE}/rs:fit:800/f:jpg/${key}"
-  local markdown="![](${embed_url})"
+  s3api head-object --bucket "$BUCKET" --key "${PRIVATE_PREFIX}${key}" >/dev/null 2>&1 \
+    || die "not found: $key"
+  presign_url "${PRIVATE_PREFIX}${key}"
 
   if [ "$json" = 1 ]; then
-    printf '{"id":%s,"key":"%s","cdnUrl":"%s","markdown":"%s","renditions":{"thumb_400":"%s","web_800":"%s","web_1600":"%s","og_jpg":"%s","original":"%s"}}\n' \
-      "$image_id" "$key" "$url" "$markdown" \
-      "${CDN_BASE}/rs:fill:400:400/${key}" \
-      "${CDN_BASE}/rs:fit:800/${key}" \
-      "${CDN_BASE}/rs:fit:1600/${key}" \
-      "${CDN_BASE}/rs:fill:1200:630/f:jpg/${key}" \
-      "$url"
+    printf '{"key":"%s","url":"%s","expiresAt":"%s"}\n' "$key" "$P_URL" "$P_EXPIRES_AT"
   else
-    printf 'key         %s\n' "$key"
-    printf 'cdnUrl      %s\n' "$url"
-    printf '\n%s\n' "$markdown"
+    printf 'expires     %s\n' "$P_EXPIRES_AT"
+    printf '\n%s\n' "$P_URL"
   fi
 
-  [ "$copy" = 1 ] && printf '%s' "$url" | pbcopy && printf '  (copied)\n'
-  [ "$open" = 1 ] && open "$url"
+  [ "$copy" = 1 ] && printf '%s' "$P_URL" | pbcopy && printf '  (copied)\n'
   return 0
 }
 
-cmd_library() {
-  local root="" dir="" stem="" min_rating="" page="1" limit="50" recursive=0 json=0
+cmd_private_ls() {
+  local dest="" json=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --root) root="$2"; shift 2 ;;
-      --dir) dir="$2"; shift 2 ;;
-      --stem) stem="$2"; shift 2 ;;
-      --min-rating) min_rating="$2"; shift 2 ;;
-      --page) page="$2"; shift 2 ;;
-      --limit) limit="$2"; shift 2 ;;
-      --recursive) recursive=1; shift ;;
       --json) json=1; shift ;;
       -*) die "unknown flag: $1" ;;
-      *) die "unexpected argument: $1" ;;
+      *) dest="$1"; shift ;;
     esac
   done
-  case "$root" in
-    ''|fuji|raws|share) : ;;
-    *) die "unknown root: $root (must be one of: fuji, raws, share)" ;;
-  esac
+  load_private_config
+  dest="$(norm_private_key "${dest:-}")"
 
-  load_share_config
+  local out
+  out=$(s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PRIVATE_PREFIX}${dest}" \
+        --query 'Contents[].{k:Key,s:Size,m:LastModified}' --output json) \
+    || die "could not list ${PRIVATE_PREFIX}${dest}"
+  [ "$out" = "null" ] && out='[]'
 
-  local args=(-sS -G -w '\n%{http_code}' --connect-timeout 5 --max-time 120 \
-    "${SHARE_BASE}/api/library/images" \
-    -H "Authorization: Bearer ${SHARE_SECRET}" \
-    --data-urlencode "page=${page}" --data-urlencode "limit=${limit}")
-  [ -n "$root" ] && args+=(--data-urlencode "root=${root}")
-  [ -n "$dir" ] && args+=(--data-urlencode "dir=${dir}")
-  [ -n "$stem" ] && args+=(--data-urlencode "stem=${stem}")
-  [ -n "$min_rating" ] && args+=(--data-urlencode "minRating=${min_rating}")
-  [ "$recursive" = 1 ] && args+=(--data-urlencode "recursive=true")
-
-  local out status body
-  out="$(curl "${args[@]}")" || die "image-share library request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "200" ] || die "image-share library query failed (HTTP $status): $body"
-
-  JSON="$json" python3 - "$body" <<'PY'
+  PREFIX="$PRIVATE_PREFIX" JSON="$json" python3 - "$out" <<'PY'
 import sys, json, os
-d = json.loads(sys.argv[1])
-rows, total = d.get('data', []), d.get('total', 0)
+rows = json.loads(sys.argv[1]) or []
+prefix = os.environ['PREFIX']
 as_json = os.environ['JSON'] == '1'
 
-if as_json:
-    print(json.dumps(d, indent=2)); sys.exit()
+def human(b):
+    for u in ('B','KB','MB','GB'):
+        if b < 1024: return f"{b:.0f}{u}" if u=='B' else f"{b:.1f}{u}"
+        b /= 1024
+    return f"{b:.1f}TB"
 
-if not rows:
-    print('(no images)'); sys.exit()
-
+items = []
 for r in rows:
-    rating = r.get('rating')
-    print(f"{r['id']:>6}  {r['relPath']:<50} {r['kind']:<6} rating={rating if rating is not None else '-'}  {r.get('captureAt') or '-'}")
+    key = r['k'][len(prefix):] if r['k'].startswith(prefix) else r['k']
+    if not key or key.endswith('/'):
+        continue
+    items.append({'key': key, 'bytes': r['s'], 'modified': r['m']})
 
-print(f"\n{len(rows)} of {total} shown"
-      + ('  (more available — narrow --dir/--stem or use --page/--limit)' if total > len(rows) else ''))
+if as_json:
+    print(json.dumps(items, indent=2)); sys.exit()
+
+if not items:
+    print('(empty)'); sys.exit()
+
+w = max(len(i['key']) for i in items)
+print(f"{'KEY'.ljust(w)}  {'SIZE':>8}  MODIFIED")
+print('-' * (w + 32))
+for i in items:
+    print(f"{i['key'].ljust(w)}  {human(i['bytes']):>8}  {i['modified'][:16].replace('T',' ')}")
+print(f"\n{len(items)} object(s)   presign one with: imgcli private-url <key>")
 PY
-}
-
-cmd_link() {
-  local role="view" label="" expires="" json=0
-  local ids=()
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --role) role="$2"; shift 2 ;;
-      --label) label="$2"; shift 2 ;;
-      --expires) expires="$2"; shift 2 ;;
-      --json) json=1; shift ;;
-      -*) die "unknown flag: $1" ;;
-      *) ids+=("$1"); shift ;;
-    esac
-  done
-  [ ${#ids[@]} -gt 0 ] \
-    || die "usage: imgcli link <imageId> [<imageId>...] [--role view|download|full] [--label <text>] [--expires <ISO date>] [--json]"
-  case "$role" in
-    view|download|full) : ;;
-    *) die "unknown role: $role (must be one of: view, download, full)" ;;
-  esac
-  local id
-  for id in "${ids[@]}"; do
-    case "$id" in
-      ''|*[!0-9]*) die "not a numeric image id: $id" ;;
-    esac
-  done
-
-  load_share_config
-
-  local id_list; id_list="$(printf '%s,' "${ids[@]}")"; id_list="${id_list%,}"
-  local title="${label:-imgcli selection (${#ids[@]} image$([ ${#ids[@]} -eq 1 ] || printf 's'))}"
-
-  local payload
-  payload="$(TITLE="$title" IDS="$id_list" EXPIRES="$expires" python3 -c '
-import json, os
-ids = [int(x) for x in os.environ["IDS"].split(",") if x]
-body = {"title": os.environ["TITLE"], "source": {"type": "selection", "imageIds": ids}}
-expires = os.environ.get("EXPIRES") or None
-if expires:
-    body["expiresAt"] = expires
-print(json.dumps(body))
-')"
-
-  local out status body
-  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/shares" \
-    -H "Authorization: Bearer ${SHARE_SECRET}" \
-    -H "Content-Type: application/json" \
-    -d "$payload")" || die "image-share create request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "201" ] || die "image-share create failed (HTTP $status): $body"
-
-  local share_id url
-  share_id="$(json_field "$body" id)"
-
-  if [ "$role" = "view" ] && [ -z "$label" ]; then
-    url="$(python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["tokens"][0]["url"])' <<<"$body")"
-  else
-    local token_payload
-    token_payload="$(ROLE="$role" LABEL="$label" python3 -c '
-import json, os
-body = {"role": os.environ["ROLE"]}
-label = os.environ.get("LABEL")
-if label:
-    body["label"] = label
-print(json.dumps(body))
-')"
-    local tout tstatus tbody
-    tout="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X POST "${SHARE_BASE}/api/shares/${share_id}/tokens" \
-      -H "Authorization: Bearer ${SHARE_SECRET}" \
-      -H "Content-Type: application/json" \
-      -d "$token_payload")" || die "image-share token mint request failed (network error)"
-    tstatus="${tout##*$'\n'}"
-    tbody="${tout%$'\n'"${tstatus}"}"
-    [ "$tstatus" = "201" ] || die "image-share token mint failed (HTTP $tstatus): $tbody"
-    url="$(json_field "$tbody" url)"
-  fi
-
-  if [ "$json" = 1 ]; then
-    printf '{"shareId":%s,"role":"%s","url":"%s"}\n' "$share_id" "$role" "$url"
-  else
-    printf 'shareId  %s\n' "$share_id"
-    printf 'role     %s\n' "$role"
-    printf '\n%s\n' "$url"
-  fi
-  return 0
 }
 
 cmd_rm() {
@@ -955,15 +931,15 @@ cmd_rm() {
   done
   [ -n "$key" ] || die "usage: imgcli rm <key> [--yes] [--json]"
 
-  load_share_config
-  key="$(printf '%s' "$key" | sed 's#^/##')"
-  case "$key" in
-    img/*) : ;;
-    *) key="img/${key}" ;;
-  esac
+  # Config first (it supplies PREFIX), then the admin key — resolved before the
+  # prompt so a headless caller fails immediately instead of after confirming.
+  load_config
+  load_admin_key
+  key="$(norm_key "$key")"
+  check_key "$key"
 
   if [ "$yes" != 1 ]; then
-    printf 'Delete %s from B2? This is irreversible. [y/N] ' "$key"
+    printf 'Delete %s%s from B2? This is irreversible. [y/N] ' "$PREFIX" "$key"
     read -r confirm || confirm=""
     case "$confirm" in
       y|Y|yes|Yes) : ;;
@@ -974,95 +950,102 @@ cmd_rm() {
     esac
   fi
 
-  local encoded
-  encoded="$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$key")"
-
-  local out status body
-  out="$(curl -sS -w '\n%{http_code}' --connect-timeout 5 --max-time 120 -X DELETE "${SHARE_BASE}/api/b2/${encoded}" \
-    -H "Authorization: Bearer ${SHARE_SECRET}")" || die "image-share delete request failed (network error)"
-  status="${out##*$'\n'}"
-  body="${out%$'\n'"${status}"}"
-  [ "$status" = "200" ] || die "image-share delete failed (HTTP $status): $body"
+  s3api delete-object --bucket "$BUCKET" --key "${PREFIX}${key}" >/dev/null \
+    || die "delete failed: $key"
 
   if [ "$json" = 1 ]; then
     printf '{"deleted":true,"key":"%s"}\n' "$key"
   else
-    printf 'deleted  %s\n' "$key"
+    printf 'deleted  %s%s\n' "$PREFIX" "$key"
   fi
 }
 
 usage() {
-  cat <<'EOF'
-imgcli — image CDN upload and addressing, the private image-share layer, and generation
+  cat <<'EOT'
+imgcli — generate images, publish them to the CDN, share them privately
+
+  imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
+                 [--edit <file>] [--enhance] [--public [--prefix gen/]] [--private [--expires <dur>]]
+                 [--copy] [--open] [--json]
 
   imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]
-  imgcli sync    <dir> <prefix/> [--json]           (legacy direct-B2 lane, unmigrated)
+  imgcli publish <file> [prefix/] ...              (alias of upload)
+  imgcli sync    <dir> <prefix/> [--json]          (bulk upload of a folder)
   imgcli ls      [prefix/] [--json]
   imgcli info    <key> [--json]
   imgcli url     <key> [transform ...]
   imgcli transforms
-  imgcli rm      <key> [--yes] [--json]
+  imgcli rm      <key> [--yes] [--json]            (MacBook-only)
 
-  imgcli share   <file> [--dir <dir>] [--copy] [--json]
-  imgcli publish <file> [prefix/] [--dir <dir>] [--copy] [--open] [--json]
-  imgcli publish --id <imageId> [prefix/] [--copy] [--open] [--json]
-  imgcli library [--root fuji|raws|share] [--dir <d>] [--stem <s>] [--min-rating n] [--page n] [--limit n] [--recursive] [--json]
-  imgcli link    <imageId> [<imageId>...] [--role view|download|full] [--label <text>] [--expires <ISO date>] [--json]
+  imgcli private     <file> [--expires <dur>] [--copy] [--json]
+  imgcli private-url <key> [--expires <dur>] [--copy] [--json]
+  imgcli private-ls  [prefix/] [--json]
 
-  imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
-                 [--edit <file>] [--enhance] [--public] [--prefix gen/] [--dir <d>] [--copy] [--open] [--json]
+TWO LANES, ONE BUCKET
+  img/      public CDN (imgproxy, unsigned URLs) — anything here is public; for
+            gen/ and misc/ an unguessable random name is the access control.
+  private/  never reachable through imgproxy — shared only via time-limited
+            presigned URLs. Keys are given without the private/ prefix.
 
-PREFIXES (upload, sync, publish)
+PREFIXES (upload, sync, gen --public)
   fuji/   curated camera exports   — readable names kept
   blog/   article images           — readable names kept
-  gen/    generated / ad-hoc       — random names auto-assigned  (publish default)
+  gen/    generated / ad-hoc       — random names auto-assigned  (gen default)
   misc/   everything else          — random names auto-assigned  (upload default)
 
 Keys are given without the bucket's img/ prefix; `blog/x.jpg` and
-`img/blog/x.jpg` both work. `upload` is now service-routed (POST /api/b2/upload)
-so the CDN index (GET /api/b2) is never stale for it; `sync` is the one
-remaining direct-B2 lane (bulk photo mirrors), pending its own migration.
+`img/blog/x.jpg` both work. upload skips (never overwrites) a key that exists.
+Sources: jpg, jpeg, png, webp, avif, heic, raf; at most 50 MB and 100 MP.
 
-PRIVATE LAYER
-  share    ingests a file into the private image-share service on the
-           homelab (durable copy, shareable later via token pages).
-  publish  ingests, then publishes to the public CDN — for generated or
-           final images headed for notes/articles. Always lands in the
-           private layer first. --id publishes an already-indexed image
-           with no local file.
-  library  browses the image-share index (GET /api/library/images).
-  link     creates a selection share + mints its token — the payoff verb
-           for handing a friend a ready-to-send public link in one command.
-
-  All private-layer commands need op://homelab/image-share/{BASE_URL,API_SECRET};
-  on the headless mini these must be seeded first (dotfiles-private/headless.refs +
-  `make secrets-seed`).
+PRIVATE
+  private  puts the file at private/<yyyy>/<mm>/<random>.<ext> and prints a
+           presigned GET URL. --expires takes 90s, 30m, 12h, 7d, 1w or plain
+           seconds; default and maximum 7d (the SigV4 limit).
+  private-url  re-presigns an existing object. private-ls lists private/.
 
 GENERATION
-  gen      generates on the image-gen gateway (VPS, gpt-image-2.5), writes the
-           PNGs to ~/Pictures/imgcli/, then shares each one privately — or
-           publishes it to the CDN with --public. --edit <file> sends the
-           prompt as an edit of that reference image; --enhance runs the brief
-           through the gateway's Plan step first (playbook prompt + derived
-           size/quality/n, explicit flags win). Quality is the cost lever:
-           low ~$0.006, high ~$0.053, xhigh ~$0.094, max ~$0.21 per 1024x1024 image.
-           Needs op://vps/image-gen-gateway/{BASE_URL,API_SECRET} as well.
-EOF
+  gen      generates on the image-gateway (VPS, gpt-image-2.5) and writes the
+           PNGs to ~/Pictures/imgcli/. --public uploads each one to the CDN
+           (same path as `upload`) and prints the URL + markdown; --private
+           puts it under private/ and prints a presigned URL (not combinable).
+           --edit <file> sends the prompt as an edit of that reference image;
+           --enhance runs the brief through the gateway's Plan step first
+           (playbook prompt + derived size/quality/n, explicit flags win).
+           Quality is the cost lever: low ~$0.006, high ~$0.053, xhigh ~$0.094,
+           max ~$0.21 per 1024x1024 image.
+
+JSON
+  gen      {"id","model","size","quality","cost_usd","latency_ms","public","private",
+            "images":[{"file","id"}],"plan"?}; --public adds key,cdnUrl,markdown
+            per image, --private adds key,url,expiresAt
+  upload   {"uploaded","key","url","dimensions","bytes"}   (skipped: uploaded:false + reason)
+  private  {"key","url","expiresAt","bytes"}
+
+SECRETS (1Password via secrets-run; never bare op)
+  op://common/b2-images-write    img/ write, no delete       upload, sync, ls, info, url
+  op://common/b2-images-private  private/ read/write, no delete   private, private-url, private-ls
+  op://common/b2-images-admin    img/ incl. delete           rm only — MacBook-only by design,
+                                 deliberately not in the mini's headless cache
+  op://common/backblaze-s3       bucket coordinates          every B2 command
+  op://vps/image-gateway         gateway BASE_URL/API_SECRET gen
+On the headless mini the write/private/gateway refs must be seeded first
+(dotfiles-private/headless.refs + `make secrets-seed`).
+EOT
 }
 
 case "${1:-}" in
-  upload)     shift; cmd_upload "$@" ;;
-  sync)       shift; cmd_sync "$@" ;;
-  ls)         shift; cmd_ls "$@" ;;
-  info)       shift; cmd_info "$@" ;;
-  url)        shift; cmd_url "$@" ;;
-  transforms) cmd_transforms ;;
-  rm)         shift; cmd_rm "$@" ;;
-  share)      shift; cmd_share "$@" ;;
-  publish)    shift; cmd_publish "$@" ;;
-  library)    shift; cmd_library "$@" ;;
-  link)       shift; cmd_link "$@" ;;
-  gen)        shift; cmd_gen "$@" ;;
+  upload|publish) shift; cmd_upload "$@" ;;
+  sync)           shift; cmd_sync "$@" ;;
+  ls)             shift; cmd_ls "$@" ;;
+  info)           shift; cmd_info "$@" ;;
+  url)            shift; cmd_url "$@" ;;
+  transforms)     cmd_transforms ;;
+  rm)             shift; cmd_rm "$@" ;;
+  private)        shift; cmd_private "$@" ;;
+  private-url)    shift; cmd_private_url "$@" ;;
+  private-ls)     shift; cmd_private_ls "$@" ;;
+  gen)            shift; cmd_gen "$@" ;;
   ""|-h|--help|help) usage ;;
+  share|library|link) die "'$1' was removed with image-share (2026-10) — use 'private', 'private-url' or 'private-ls'" ;;
   *) die "unknown command: $1 (try --help)" ;;
 esac

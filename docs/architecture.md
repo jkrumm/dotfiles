@@ -25,7 +25,7 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 - **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` and `/warden` (the durable record and the one queue), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
-- **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26), audio-gateway, image-gen, email-gateway, image-share. Detail: brain `gateways`.
+- **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26), audio-gateway, image-gateway, email-gateway. Detail: brain `gateways`.
 
 **The agent platform** — one engine (agent-gateway), one autonomous loop (warden),
 one front door (Hermes), one cockpit (herdr), four lanes, one repo contract —
@@ -82,7 +82,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
-| `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `image-share`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
+| `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
 | `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents (legacy pattern, retired at weatherorb's next wave boundary (`agent-platform.md` §herdr)) | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
 | `homelab`, `homelab-private`, `vps` | server stacks, reached over Tailscale SSH | |
@@ -92,8 +92,8 @@ instead — same validated geometry, without that one crossing guarantee.
 | Repo | Purpose |
 |-|-|
 | `photo-flow` · `shutterflow` | the two photography apps |
-| `image-gen` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
-| `basalt-ui` | followed image-gen: it is consumed as a `file:` dependency, so the studio's machine needs the build |
+| `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
+| `basalt-ui` | followed image-gateway: it is consumed as a `file:` dependency, so the studio's machine needs the build |
 | `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
 
 ## LaunchAgents — mini (gui/501 unless noted)

@@ -40,8 +40,8 @@
  * the hook could not see that: a session opened in a PR-required repo refused
  * every push to a protected branch in EVERY other repo, including the ones the
  * denylist deliberately omits. Measured cost — a fleet upgrade run from
- * `basalt-ui` stranded commits in six direct-to-master repos (rb, image-share,
- * image-gen, linewatch, weatherorb, basalt-ui-obsidian) and burned a session
+ * `basalt-ui` stranded commits in six direct-to-master repos (rb, linewatch,
+ * weatherorb, basalt-ui-obsidian and two image repos) and burned a session
  * rediscovering why.
  *
  * `repoDirectories()` now reads the target out of the command. An explicit

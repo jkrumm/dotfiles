@@ -168,14 +168,6 @@
       "size": [180, 64]
     },
     {
-      "id": "imgshare",
-      "type": "database",
-      "label": "image-share",
-      "sublabel": "private shares, B2 mirror",
-      "pos": [370, 1596],
-      "size": [180, 64]
-    },
-    {
       "id": "kuma",
       "type": "security",
       "label": "Uptime Kuma",
@@ -212,7 +204,7 @@
     {
       "kind": "region",
       "label": "HomeLab — his own container world",
-      "wraps": ["abs", "imgshare", "kuma"],
+      "wraps": ["abs", "kuma"],
       "pad": 30
     }
   ],
@@ -365,14 +357,6 @@
         [570, 1390],
         [570, 1482]
       ]
-    },
-    {
-      "from": "imggw",
-      "to": "imgshare",
-      "label": "private by default",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "via": [[570, 1565], [460, 1565]]
     },
     {
       "from": "audio",

@@ -17,7 +17,7 @@ owns the voice (deliberate — the only slot that stays Claude), Gemini 3.8 Flas
 DeepSeek V4.1 Flash review, DeepSeek V4.1 Flash writes the metadata)
 produces the two-host script, every turn is synthesized on ElevenLabs v3 with
 its host's voice and per-host loudness matching, ffmpeg masters it (loudnorm
-−16 LUFS, ID3 tags, chapter markers, embedded cover), the image-gen gateway
+−16 LUFS, ID3 tags, chapter markers, embedded cover), the image-gateway
 paints the cover, and Audiobookshelf's upload + scan API files it as an episode
 of a podcast (show) in the `Podcasts` library. The finished transcript is also
 written back into the brain under `Areas/Podcasts/`. It is an **async job**:
@@ -92,7 +92,7 @@ lead, humor, minutes — once the editorial pass has run), downloads
 | `PODCAST_STABILITY` / `PODCAST_SPEEDS` | `0.5` / `0.94,1` | v3 stability preset (0 / 0.5 / 1) · per-host speed |
 | `PODCAST_SERIES` | `Brain Sonderausgabe` | default show name in Audiobookshelf |
 | `ABS_URL` / `ABS_API_KEY` / `ABS_LIBRARY` | — / — / `Podcasts` | publishing target; unset = publish disabled |
-| `IMAGE_GEN_URL` / `IMAGE_GEN_API_KEY` | — | cover generation; unset = no cover |
+| `IMAGE_GATEWAY_URL` / `IMAGE_GATEWAY_API_KEY` | — | cover generation; unset = no cover |
 
 ## Errors
 
