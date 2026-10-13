@@ -142,8 +142,11 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
    implement — review is the gate, not the investigator's self-assessment. A
    matching `rootCause` on another open item merges the two.
 4. **Revisions are attempts, not items.** A blocked review re-dispatches on the
-   same item from the prior branch (agent-gateway cuts the worktree from it). Up to
-   4 attempts; the third switches to the stronger implement model.
+   same item from the prior branch (agent-gateway cuts the worktree from it). The
+   cap counts only *stalled* rounds — a review that still finds a prior blocking
+   finding unresolved (or a red check, conflict or revert); a round whose findings
+   are all new is converging and keeps revising. Three stalled rounds land
+   `failed`; attempt 3 onward runs on the stronger implement model.
 5. **Merge train, one per repo, single-flight:**
    update the PR onto the latest default branch → `make check` / CI green on that
    SHA → review on that SHA (delta-only if a prior review confirmed) → squash
