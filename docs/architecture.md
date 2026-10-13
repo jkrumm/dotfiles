@@ -93,7 +93,7 @@ instead — same validated geometry, without that one crossing guarantee.
 |-|-|
 | `photo-flow` · `shutterflow` | the two photography apps |
 | `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
-| `basalt-ui` | followed image-gateway: it is consumed as a `file:` dependency, so the studio's machine needs the build |
+| `basalt-ui` | followed image-gateway when the studio consumed it as a `file:` dependency; every consumer now pins the published npm version, so this placement is convenience, not a requirement |
 | `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
 
 ## LaunchAgents — mini (gui/501 unless noted)

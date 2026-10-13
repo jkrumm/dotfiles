@@ -89,6 +89,8 @@ imgcli gen "…" --private --json        # → images:[{"file","id","key","url",
 # images[].id is the gateway generation id (a string, shared by every image of one call), not a per-image id.
 imgcli upload ~/x.png blog/ --json     # → {"uploaded","key","url","dimensions","bytes"}
 imgcli private ~/x.png --json          # → {"key","url","expiresAt","bytes"}
+imgcli cutout ~/x.png --json           # → {"id","model","file","width","height","cost_usd","latency_ms"}
+imgcli icon "…" --bg "#1e3a8a" --json # → {"id","dir","source","steps":[{"step","model","cost_usd","latency_ms"}],"svg_skipped_reason","cost_usd","files":[…],"html","manifest"}
 ```
 
 For anything the CLI does not wrap, the gateway exposes `<base>/openapi/json` (same bearer).
