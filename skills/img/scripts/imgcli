@@ -1098,16 +1098,20 @@ open(os.path.join(out, "head.html"), "w").write(d["html"].rstrip() + "\n")
 with open(os.path.join(out, "manifest.webmanifest"), "w") as m:
     json.dump(d["manifest"], m, indent=2); m.write("\n")
 cost = (d.get("cost", {}).get("usd") or 0) + float(os.environ["GEN_COST"] or 0)
+steps = d.get("steps", [])
 summary = {"id": d["id"], "dir": out, "source": os.path.abspath(os.environ["SRC"]),
-           "cutout": d.get("cutout"), "cost_usd": round(cost, 4), "files": files,
+           "steps": steps, "svg_skipped_reason": d.get("svg_skipped_reason"),
+           "cost_usd": round(cost, 4), "files": files,
            "html": os.path.join(out, "head.html"), "manifest": os.path.join(out, "manifest.webmanifest")}
 if os.environ["JSON"] == "1":
     print(json.dumps(summary))
 else:
-    cut = d.get("cutout")
-    print("icons      %d files  cutout=%s  $%.4f\n  %s" % (len(files), cut["model"] if cut else "skipped", cost, out))
+    ran = ", ".join("%s (%s)" % (st["step"], st["model"].split("/")[-1]) for st in steps) or "none"
+    print("icons      %d files  steps: %s  $%.4f\n  %s" % (len(files), ran, cost, out))
     for f in files:
         print("  %-22s %sx%s" % (f["name"], f["width"], f["height"]))
+    if d.get("svg_skipped_reason"):
+        print("  no favicon.svg: " + d["svg_skipped_reason"])
 ' "$res"
 }
 
@@ -1173,16 +1177,20 @@ CUTOUT & ICONS
   cutout   removes the background via the gateway (Replicate; recraft $0.01
            default, bria $0.018) and writes <file>-cutout.png next to the source.
   icon     builds a complete favicon / app-icon set into ~/Pictures/imgcli/icons-<stamp>/:
-           favicon.ico (16/32/48), icon-192/512.png, icon-mask.png (maskable),
+           favicon.ico (16/32/48), favicon.svg (vectorized, skipped for gradient-heavy
+           art), icon-192/512.png, icon-mask.png (maskable),
            apple-touch-icon.png (180, opaque on --bg), icon-1024.png (opaque,
            Xcode/App Store), AppIcon.icns (macOS), head.html, manifest.webmanifest.
            From a prompt it generates 1024x1024 with native alpha (no cutout
            needed); --from <file> takes existing art and cuts it out when it has
-           no transparency (--cutout auto). Typical cost: medium ~$0.013 total.
+           no transparency (--cutout auto); sources under 512px are upscaled first
+           (real-esrgan, $0.002). Vectorizing adds $0.01. Typical total from a
+           prompt at medium: ~$0.023.
 
 JSON
   cutout   {"id","model","file","width","height","cost_usd","latency_ms"}
-  icon     {"id","dir","source","cutout","cost_usd","files":[{"name","file","width","height"}],"html","manifest"}
+  icon     {"id","dir","source","steps":[{"step","model","cost_usd","latency_ms"}],"svg_skipped_reason",
+            "cost_usd","files":[{"name","file","width","height"}],"html","manifest"}
   gen      {"id","model","size","quality","cost_usd","latency_ms","public","private",
             "images":[{"file","id"}],"plan"?}; --public adds key,cdnUrl,markdown
             per image, --private adds key,url,expiresAt
