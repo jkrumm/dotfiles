@@ -43,7 +43,7 @@ The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Every
 
 ```bash
 imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
-               [--edit <file>] [--enhance] [--public [--prefix gen/]] [--private [--expires <dur>]] [--copy] [--open] [--json]
+               [--background transparent|opaque|auto] [--edit <file>] [--enhance] [--public [--prefix gen/]] [--private [--expires <dur>]] [--copy] [--open] [--json]
 imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]      # publish = alias
 imgcli private <file> [--expires <dur>] [--copy] [--json]
 imgcli private-url <key> [--expires <dur>] [--copy] [--json]  ·  private-ls [prefix/] [--json]
@@ -56,7 +56,7 @@ imgcli ls [prefix/] · info <key> · url <key> [transform ...] · transforms · 
 
 `POST /generate` on the image-gateway (gpt-image-2.5, VPS, tailnet-only — `gen` sends no model, so the gateway auto-routes: `low`/`medium`/`auto` generates to `gpt-image-2.5-flare`, `high`/`xhigh`/`max` and every edit to `gpt-image-2.5-sunburst`), or `POST /edit` with `--edit <file>` (png/jpeg/webp reference; the prompt describes the change). Each image lands at `~/Pictures/imgcli/gen-<stamp>-<id>-<i>.png`. `--public` uploads each through the same code path as `upload` (prefix `--prefix`, default `gen/`) and prints the CDN URL plus a `![]()` embed; `--private` puts it under `private/` and prints a presigned URL (`--expires`, default 7d). The two are mutually exclusive. `--enhance` first runs the brief through `POST /enhance`, the studio's Plan step: its playbook-conditioned prompt and derived size/quality/n apply unless a flag overrides, assumptions and warnings go to stderr, and a `hard` policy warning aborts before anything is paid for.
 
-**Quality is the cost lever** — per 1024×1024 image `low` ≈ $0.006, `medium` ≈ $0.013, `high` ≈ $0.053 (~9×), `xhigh` ≈ $0.094, `max` ≈ $0.21 (~36×). Draft at `low`, promote the winner. Transparency is available again: both 2.5 models have a real alpha channel, so the gateway accepts `background: "transparent"` with `png`/`webp` output (`jpeg` + transparent is rejected). `gen` has no background flag, so it always gets an opaque image — and prompt text asking for a "transparent background" on an opaque request still gets a painted checkerboard; use the studio for real alpha. The interactive studio is the optional ImageGen Mac app from the `image-gateway` repo (MacBook); `gen` is the agent lane.
+**Quality is the cost lever** — per 1024×1024 image `low` ≈ $0.006, `medium` ≈ $0.013, `high` ≈ $0.053 (~9×), `xhigh` ≈ $0.094, `max` ≈ $0.21 (~36×). Draft at `low`, promote the winner. Transparency is available again: both 2.5 models have a real alpha channel, so the gateway accepts `background: "transparent"` with `png`/`webp` output (`jpeg` + transparent is rejected). For real alpha pass `gen --background transparent` (png output, real RGBA) and say "transparent background" in the prompt; prompt text asking for transparency on an opaque request still gets a painted checkerboard. `--enhance` carries the plan's chosen background through automatically. The interactive studio is the optional ImageGen Mac app from the `image-gateway` repo (MacBook); `gen` is the agent lane.
 
 ## Prefixes, naming, URLs
 
