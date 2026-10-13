@@ -972,6 +972,145 @@ cmd_rm() {
   fi
 }
 
+# --- cutout & icons (image-gateway) ------------------------------------------
+# Both are thin clients: the gateway owns background removal (Replicate,
+# recraft by default) and the whole icon-set build, so the studio and agents
+# get byte-identical results.
+
+image_mime() {
+  case "${1##*.}" in
+    png|PNG) printf 'image/png' ;;
+    jpg|jpeg|JPG|JPEG) printf 'image/jpeg' ;;
+    webp|WEBP) printf 'image/webp' ;;
+    *) die "image must be png, jpeg or webp: $1" ;;
+  esac
+}
+
+# Not `local`-scoped: the EXIT trap runs after the caller's scope is gone.
+gen_session() {
+  GEN_TMP="$(mktemp -d)"
+  trap 'rm -rf "$GEN_TMP"' EXIT
+  load_gen_config
+  ( umask 077; printf 'Authorization: Bearer %s\n' "$GEN_SECRET" >"$GEN_TMP/hdr" )
+}
+
+cutout_model_id() {
+  case "$1" in
+    ''|recraft) printf 'recraft-ai/recraft-remove-background' ;;
+    bria) printf 'bria/remove-background' ;;
+    *) die "unknown cutout model: $1 (must be recraft or bria)" ;;
+  esac
+}
+
+cmd_cutout() {
+  local src="" model="" out="" json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --model) model="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$src" ]; then src="$1"; else die "unexpected argument: $1"; fi; shift ;;
+    esac
+  done
+  [ -n "$src" ] || die "usage: imgcli cutout <file> [--model recraft|bria] [--out <file.png>] [--json]"
+  [ -f "$src" ] || die "no such file: $src"
+  local mime model_id
+  mime="$(image_mime "$src")"
+  model_id="$(cutout_model_id "$model")"
+  [ -n "$out" ] || out="${src%.*}-cutout.png"
+
+  gen_session
+  local res="$GEN_TMP/cutout-res.json"
+  gen_request /cutout "$res" -F "image=@${src};type=${mime}" --form-string "model=${model_id}"
+  OUT="$out" JSON="$json" python3 -c '
+import base64, json, os, sys
+d = json.load(open(sys.argv[1]))
+open(os.environ["OUT"], "wb").write(base64.b64decode(d["image"]["b64_json"]))
+cost = d.get("cost", {}).get("usd")
+if os.environ["JSON"] == "1":
+    print(json.dumps({"id": d["id"], "model": d["model"], "file": os.path.abspath(os.environ["OUT"]),
+                      "width": d["width"], "height": d["height"], "cost_usd": cost, "latency_ms": d["latency_ms"]}))
+else:
+    print("cutout     %s  %sx%s  $%s  %sms\n  %s" % (d["model"], d["width"], d["height"], cost, d["latency_ms"], os.path.abspath(os.environ["OUT"])))
+' "$res"
+}
+
+ICON_PROMPT_SUFFIX="App icon artwork: one simple, bold, centered subject with a clear silhouette that still reads at 16 pixels; no text, no frame, no drop shadow; transparent background."
+
+cmd_icon() {
+  local prompt="" from="" quality="medium" bg="#ffffff" cutout="auto" out="" json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --from) from="$2"; shift 2 ;;
+      --quality) quality="$2"; shift 2 ;;
+      --bg) bg="$2"; shift 2 ;;
+      --cutout) cutout="$2"; shift 2 ;;
+      --out) out="$2"; shift 2 ;;
+      --json) json=1; shift ;;
+      -*) die "unknown flag: $1" ;;
+      *) if [ -z "$prompt" ]; then prompt="$1"; else die "unexpected argument: $1"; fi; shift ;;
+    esac
+  done
+  { [ -n "$prompt" ] && [ -z "$from" ]; } || { [ -z "$prompt" ] && [ -n "$from" ]; } \
+    || die "usage: imgcli icon \"<prompt>\" | --from <file>  [--quality low|medium|high|xhigh|max] [--bg #rrggbb] [--cutout auto|always|never] [--out <dir>] [--json]"
+  [ -z "$from" ] || [ -f "$from" ] || die "no such file: $from"
+  case "$quality" in low|medium|high|xhigh|max) : ;; *) die "unknown quality: $quality" ;; esac
+  case "$bg" in \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) : ;; *) die "--bg must be #rrggbb: $bg" ;; esac
+  case "$cutout" in auto|always|never) : ;; *) die "--cutout must be auto, always or never: $cutout" ;; esac
+  [ -n "$out" ] || out="${GEN_DIR}/icons-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$out"
+
+  gen_session
+  local src="$from" gen_cost=""
+  if [ -n "$prompt" ]; then
+    # Square + native alpha straight from the model, so `cutout: auto` skips
+    # the Replicate step for a fresh generation.
+    local req="$GEN_TMP/icon-gen-req.json" res="$GEN_TMP/icon-gen-res.json"
+    PROMPT="$prompt $ICON_PROMPT_SUFFIX" QUALITY="$quality" python3 -c '
+import json, os, sys
+json.dump({"prompt": os.environ["PROMPT"], "size": "1024x1024", "quality": os.environ["QUALITY"],
+           "background": "transparent", "output_format": "png"}, open(sys.argv[1], "w"))
+' "$req"
+    gen_request /generate "$res" -H "Content-Type: application/json" --data-binary "@$req"
+    src="$out/source.png"
+    gen_cost="$(SRC="$src" python3 -c '
+import base64, json, os, sys
+d = json.load(open(sys.argv[1]))
+open(os.environ["SRC"], "wb").write(base64.b64decode(d["images"][0]["b64_json"]))
+print(d.get("cost", {}).get("usd") or 0)
+' "$res")"
+  fi
+
+  local mime res="$GEN_TMP/icons-res.json"
+  mime="$(image_mime "$src")"
+  gen_request /icons "$res" -F "image=@${src};type=${mime}" --form-string "background=${bg}" --form-string "cutout=${cutout}"
+  OUT="$out" JSON="$json" GEN_COST="$gen_cost" SRC="$src" python3 -c '
+import base64, json, os, sys
+d = json.load(open(sys.argv[1]))
+out = os.environ["OUT"]
+files = []
+for f in d["files"]:
+    path = os.path.join(out, f["name"])
+    open(path, "wb").write(base64.b64decode(f["b64"]))
+    files.append({"name": f["name"], "file": path, "width": f["width"], "height": f["height"]})
+open(os.path.join(out, "head.html"), "w").write(d["html"].rstrip() + "\n")
+with open(os.path.join(out, "manifest.webmanifest"), "w") as m:
+    json.dump(d["manifest"], m, indent=2); m.write("\n")
+cost = (d.get("cost", {}).get("usd") or 0) + float(os.environ["GEN_COST"] or 0)
+summary = {"id": d["id"], "dir": out, "source": os.path.abspath(os.environ["SRC"]),
+           "cutout": d.get("cutout"), "cost_usd": round(cost, 4), "files": files,
+           "html": os.path.join(out, "head.html"), "manifest": os.path.join(out, "manifest.webmanifest")}
+if os.environ["JSON"] == "1":
+    print(json.dumps(summary))
+else:
+    cut = d.get("cutout")
+    print("icons      %d files  cutout=%s  $%.4f\n  %s" % (len(files), cut["model"] if cut else "skipped", cost, out))
+    for f in files:
+        print("  %-22s %sx%s" % (f["name"], f["width"], f["height"]))
+' "$res"
+}
+
 usage() {
   cat <<'EOT'
 imgcli — generate images, publish them to the CDN, share them privately
@@ -979,6 +1118,10 @@ imgcli — generate images, publish them to the CDN, share them privately
   imgcli gen     "<prompt>" [--size WxH|auto] [--n 1-10] [--quality low|medium|high|xhigh|max|auto]
                  [--background transparent|opaque|auto] [--edit <file>] [--enhance] [--public [--prefix gen/]] [--private [--expires <dur>]]
                  [--copy] [--open] [--json]
+
+  imgcli cutout  <file> [--model recraft|bria] [--out <file.png>] [--json]
+  imgcli icon    "<prompt>" | --from <file> [--quality medium] [--bg #rrggbb] [--cutout auto|always|never]
+                 [--out <dir>] [--json]
 
   imgcli upload  <file> [prefix/] [--name N] [--copy] [--open] [--json]
   imgcli publish <file> [prefix/] ...              (alias of upload)
@@ -1026,7 +1169,20 @@ GENERATION
            Quality is the cost lever: low ~$0.006, high ~$0.053, xhigh ~$0.094,
            max ~$0.21 per 1024x1024 image.
 
+CUTOUT & ICONS
+  cutout   removes the background via the gateway (Replicate; recraft $0.01
+           default, bria $0.018) and writes <file>-cutout.png next to the source.
+  icon     builds a complete favicon / app-icon set into ~/Pictures/imgcli/icons-<stamp>/:
+           favicon.ico (16/32/48), icon-192/512.png, icon-mask.png (maskable),
+           apple-touch-icon.png (180, opaque on --bg), icon-1024.png (opaque,
+           Xcode/App Store), AppIcon.icns (macOS), head.html, manifest.webmanifest.
+           From a prompt it generates 1024x1024 with native alpha (no cutout
+           needed); --from <file> takes existing art and cuts it out when it has
+           no transparency (--cutout auto). Typical cost: medium ~$0.013 total.
+
 JSON
+  cutout   {"id","model","file","width","height","cost_usd","latency_ms"}
+  icon     {"id","dir","source","cutout","cost_usd","files":[{"name","file","width","height"}],"html","manifest"}
   gen      {"id","model","size","quality","cost_usd","latency_ms","public","private",
             "images":[{"file","id"}],"plan"?}; --public adds key,cdnUrl,markdown
             per image, --private adds key,url,expiresAt
@@ -1057,6 +1213,8 @@ case "${1:-}" in
   private-url)    shift; cmd_private_url "$@" ;;
   private-ls)     shift; cmd_private_ls "$@" ;;
   gen)            shift; cmd_gen "$@" ;;
+  cutout)         shift; cmd_cutout "$@" ;;
+  icon|icons)     shift; cmd_icon "$@" ;;
   ""|-h|--help|help) usage ;;
   share|library|link) die "'$1' was removed with image-share (2026-10) — use 'private', 'private-url' or 'private-ls'" ;;
   *) die "unknown command: $1 (try --help)" ;;
