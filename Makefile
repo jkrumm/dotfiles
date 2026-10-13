@@ -1395,7 +1395,6 @@ _setup-browser:
 _setup-agent-gateway:
 	@echo "  agent-gateway MCP..."
 	@if [ -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
-		claude mcp remove sideclaw --scope user 2>/dev/null || true; \
 		claude mcp remove agent-gateway --scope user 2>/dev/null || true; \
 		claude mcp add-json agent-gateway --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/agent-gateway/server/mcp.ts"],"timeout":1800000}'; \
 		echo "    ✓ agent-gateway MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
