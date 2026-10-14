@@ -433,6 +433,9 @@
       },
       "models": {
         "claude-haiku-5-5-eu": {
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          },
           "name": "Claude Haiku 5.5 (EU)",
           "limit": {
             "context": 1000000,
