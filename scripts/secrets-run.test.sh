@@ -186,6 +186,17 @@ EOF
 out="$(run run --env-file="$TESTREPO/short.env.tpl" -- printenv SHORTV 2>/dev/null)"
 assert_eq "redact: sub-threshold value passes through" "$SHORT" "$out"
 
+# === 7b. SECRETS_RUN_NO_MASK exempts the named keys only =====================
+cat > "$TESTREPO/nomask.env.tpl" <<'EOF'
+KEEPV=op://test/app/token
+MASKV=op://test/app/quoted
+EOF
+out="$(SECRETS_RUN_NO_MASK="KEEPV" run run --env-file="$TESTREPO/nomask.env.tpl" -- bash -c 'echo "$KEEPV $MASKV"' 2>/dev/null)"
+assert_contains     "no-mask: named key passes through unmasked" "$LONG" "$out"
+assert_not_contains "no-mask: other long keys still masked"      "$QUOTED" "$out"
+out="$(run run --env-file="$TESTREPO/nomask.env.tpl" -- bash -c 'echo "$KEEPV"' 2>/dev/null)"
+assert_not_contains "no-mask: unset var masks as before"         "$LONG" "$out"
+
 # === 8. clean $() capture: stdout redacted, stderr not folded in =============
 # child writes secret to stderr and a marker to stdout; captured stdout must be marker only.
 out="$(run run --env-file="$TESTREPO/app.env.tpl" -- bash -c 'echo MARKER; printenv TOKEN 1>&2' 2>/dev/null)"
