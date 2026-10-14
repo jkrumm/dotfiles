@@ -150,7 +150,7 @@ MEM_SWAP_PCT_MAX="${DEVHOST_MEM_SWAP_PCT_MAX:-25}"
 # the delta logic and why it is a rate is scripts/lib/swapout-rate.sh.
 # shellcheck disable=SC2034  # read by check_swapouts() in lib/swapout-rate.sh
 SWAPOUT_MB_PER_300S_MAX="${DEVHOST_SWAPOUT_MB_PER_300S_MAX:-2048}"
-DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-93}"
+DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-96}"
 DISK_FREE_GB_MIN="${DEVHOST_DISK_FREE_GB_MIN:-20}"
 # 30d, not the cert check's 21d, and the asymmetry is the point: an expired
 # wildcard cert is fixable over the tailnet, an expired NODE KEY takes the
@@ -1273,11 +1273,13 @@ check_disk() {
   # this host at once with errors that name anything but the disk.
   #
   # Both a percentage and an absolute floor, because neither alone is right on
-  # a 926G volume: 93% still leaves ~65G (plenty of warning), while a small
+  # a 926G volume: 96% still leaves ~37G (plenty of warning), while a small
   # volume at 85% can have less headroom than a day of snapshots. The ceiling
-  # sits above the ~86-91% band this volume occupies in normal use, so the
-  # heartbeat does not page on routine work while the floor still guards a
-  # small volume.
+  # has to sit above the band this volume occupies in normal use, or the
+  # heartbeat pages on routine occupancy — and that band MOVED: 81-84% when
+  # this check was written, 92-95% now (measured 2026-10-14; docker volumes,
+  # build cache and unrotated logs accumulated in between). 96 leaves a point
+  # above the observed maximum while the 20G floor still guards a small volume.
   local line parsed pct free_gb
   line=$("$DF_BIN" -kP "$HOME" 2>/dev/null | tail -1) || true
   [[ -n "$line" ]] || { echo "disk: could not read df for $HOME"; return 1; }
