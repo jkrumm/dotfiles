@@ -71,6 +71,25 @@ direct-to-master by default. PR-required repos are one list in
 and any with a collaborator get the full ruleset; other public repos get lite (no
 PR rule). Private repos can't be protected for free.
 
+**GitHub Actions on private repos run on the VPS, never `ubuntu-latest`.** The
+account's free hosted minutes for private repos run out mid-month (2026-10:
+every run failed before its first job until the month reset); self-hosted
+minutes are free. A personal account has no account-level runners, so each
+private repo gets its own registration `vps-<repo>` (labels `self-hosted`,
+`vps`) on the VPS, under one isolated user with its own rootless Docker (no
+access to the prod daemon or secrets). Live: `shutterflow`, `weatherorb`, `rb`.
+
+- Workflows: `runs-on: [self-hosted, vps]` plus a `timeout-minutes` per job; install
+  toolchains per job (`setup-bun`, `setup-uv`, …), the host has only git/curl/unzip/
+  rootless docker. `jkrumm/rollhook-action` builds and deploys from it unchanged.
+  Service containers: loopback + dynamic port (`127.0.0.1::5432`).
+- New private repo with workflows: `make -C ~/SourceRoot/vps gh-runner-sync` (from the
+  mini or MacBook; registers every private repo that lacks a runner, `DRY_RUN=1`
+  previews), then switch its `runs-on`. Remove: `make gh-runner-remove`.
+- **Never on a public repo** (a fork PR would run code on the prod host); the setup
+  script refuses. Public repos keep `ubuntu-latest` — hosted minutes are free there.
+- Model, security, add/remove, operate: `vps/docs/gh-runner.md`.
+
 Workflow facts per repo:
 
 | Repo | Fact |

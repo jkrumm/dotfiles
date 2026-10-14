@@ -103,7 +103,9 @@ exemption: `docs/global-reference.md`.
   direct-to-master by default. PR-required repos: `config/pr-required-repos.json`
   (the single source). **`basalt-ui` is always its own commit.**
   **`homelab-private` is self-contained** — never reference its services or hosts
-  elsewhere.
+  elsewhere. **Private repos' GitHub Actions: `runs-on: [self-hosted, vps]`**, never
+  `ubuntu-latest` (hosted minutes run out); public repos stay hosted. New private
+  repo: `make -C ~/SourceRoot/vps gh-runner-sync` — `docs/global-reference.md` §Workspaces.
 - **`~/IuRoot/`** — 1Password `careerpartner`, GitLab, `EP-XX` ticket prefixes on
   branches and commits, every repo PRs against `main`.
 - Every repo, what it is and where it lives: `docs/architecture.md` §Repos.
