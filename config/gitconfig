@@ -29,3 +29,9 @@
 # keyring above remains the MacBook's helper.
 [include]
 	path = ~/.gitconfig-headless
+
+# Optional, machine-local per-org routing (identity via hasconfig:remote.*.url, credential helper
+# per org path). Untracked and read LAST so its helper stanza overrides the host-wide ones above;
+# a missing file is ignored. Written by whichever repo owns the org (kept out of this public repo).
+[include]
+	path = ~/.gitconfig-orgs
