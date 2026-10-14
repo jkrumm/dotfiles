@@ -212,9 +212,10 @@ the weatherorb session workflow.
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
+| `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
 
-Four of the six IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
-`artefact-daily`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
+Five of the seven IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
+`artefact-daily`, `stack-dashboard`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
 not fixed here because IuRoot repos are out of this map's write scope, and one
 that bites on a schedule: macOS sweeps `/tmp` files untouched for three days,
 and launchd opens its stdio once at spawn, so a swept log leaves the job writing
