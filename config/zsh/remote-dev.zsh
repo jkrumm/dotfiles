@@ -46,8 +46,8 @@ work()   { rd work "$@"; }
 agents() { rd agents "$@"; }
 repos()  { rd repos "$@"; }
 
-# `se-stack up|down|status|tunnel` — the IU dev stack (backend, dashboard, FEs) in
-# one herdr tab on the mini, tunnelled to this machine's localhost. The script
-# lives in prometheus-scripts; on the mini it runs locally (hostname matches).
+# `se-stack status|up|down|restart-backend|logs` — thin CLI over the IU dev stack's
+# dashboard on the mini (backend, FEs). The script lives in prometheus-scripts; on
+# the mini it runs locally (hostname matches).
 export STACK_REMOTE_HOST=mini
 se-stack() { "$HOME/IuRoot/prometheus-scripts/bash/stack-remote.sh" "$@"; }
