@@ -25,7 +25,7 @@ components:
 | services | agent-gateway, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), research-gateway (`/health`, renderer, Tavily plan, and a deploy marker that lags `origin/master` > 15 min or a poller silent > 15 min), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | obsidian | CLI answers (i.e. the app is running) |
-| disk | used % under the ceiling (96) **and** free space above the floor (20G) — the ceiling sits above the ~92-95% band this volume occupies in normal use (81-84% when the check was written), the floor guards a small volume |
+| disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
 | agent-gateway jobs | agent-gateway `GET /api/jobs/health` — `ok:false` FAILs; a 404 (older agent-gateway) reports `starting` |
 | overview pane | the `make agent-overview` `watch` loop is alive — **WARN**, never FAIL |

@@ -150,7 +150,7 @@ MEM_SWAP_PCT_MAX="${DEVHOST_MEM_SWAP_PCT_MAX:-25}"
 # the delta logic and why it is a rate is scripts/lib/swapout-rate.sh.
 # shellcheck disable=SC2034  # read by check_swapouts() in lib/swapout-rate.sh
 SWAPOUT_MB_PER_300S_MAX="${DEVHOST_SWAPOUT_MB_PER_300S_MAX:-2048}"
-DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-96}"
+DISK_USED_PCT_MAX="${DEVHOST_DISK_USED_PCT_MAX:-93}"
 DISK_FREE_GB_MIN="${DEVHOST_DISK_FREE_GB_MIN:-20}"
 # 30d, not the cert check's 21d, and the asymmetry is the point: an expired
 # wildcard cert is fixable over the tailnet, an expired NODE KEY takes the
@@ -1273,13 +1273,17 @@ check_disk() {
   # this host at once with errors that name anything but the disk.
   #
   # Both a percentage and an absolute floor, because neither alone is right on
-  # a 926G volume: 96% still leaves ~37G (plenty of warning), while a small
-  # volume at 85% can have less headroom than a day of snapshots. The ceiling
-  # has to sit above the band this volume occupies in normal use, or the
-  # heartbeat pages on routine occupancy — and that band MOVED: 81-84% when
-  # this check was written, 92-95% now (measured 2026-10-14; docker volumes,
-  # build cache and unrotated logs accumulated in between). 96 leaves a point
-  # above the observed maximum while the 20G floor still guards a small volume.
+  # a 926G volume: 93% still leaves ~65G (plenty of warning), while a small
+  # volume at 85% can have less headroom than a day of snapshots.
+  #
+  # The ceiling is NOT raised when the volume's band climbs into it. It was 90
+  # until 2026-10-10, when df read 90% used (8b4dd91); the oldest rotated
+  # devhost-health.log entries still on disk read 81-84% used, and today reads
+  # 92-94%. A ceiling moved up to track that climb turns a genuinely near-full
+  # volume green — the one outcome this check exists to prevent — and the 20G
+  # floor only fires near 98% on a volume this size. The climb is a reclamation
+  # signal (docker images, build cache, unrotated logs), not a miscalibration:
+  # reclaim, and 93 sits above the reduced band again.
   local line parsed pct free_gb
   line=$("$DF_BIN" -kP "$HOME" 2>/dev/null | tail -1) || true
   [[ -n "$line" ]] || { echo "disk: could not read df for $HOME"; return 1; }
