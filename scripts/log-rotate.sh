@@ -163,6 +163,8 @@ FILES=(
   weatherorb.backfill.err
   weatherorb.watchdog.log
   weatherorb.watchdog.err
+  weatherorb.worker-ingest.log
+  weatherorb.worker-ingest.err
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
 
