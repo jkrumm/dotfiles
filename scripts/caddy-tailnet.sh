@@ -165,6 +165,29 @@ while IFS=$'\t' read -r name port rewrite; do
   APP_EXCLUDED+=(0)
 done <<< "$registry"
 
+# Machine-local apps: `<name> <port> [rewrite]` per line, merged into the same
+# arrays. For apps that must not be named in the tracked (public) Caddyfile —
+# work repos, internal service names. They get the clean tailnet door only, no
+# `.test` twin, since there is no Caddyfile block behind them.
+APPS_FILE="${CADDY_TAILNET_APPS:-$HOME/.config/caddy-tailnet.apps}"
+if [[ -f "$APPS_FILE" ]]; then
+  while read -r l_name l_port l_flag _ || [[ -n ${l_name:-} ]]; do
+    [[ -z ${l_name:-} || $l_name == \#* ]] && continue
+    [[ $l_name =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] \
+      || die "$APPS_FILE: '$l_name' is not a single DNS label"
+    [[ ${l_port:-} =~ ^[0-9]+$ ]] || die "$APPS_FILE: '$l_name' needs a numeric port"
+    [[ -z ${l_flag:-} || $l_flag == rewrite ]] \
+      || die "$APPS_FILE: unknown flag '$l_flag' for '$l_name' (only 'rewrite')"
+    for existing in "${APP_NAME[@]}"; do
+      [[ $existing != "$l_name" ]] || die "$APPS_FILE: '$l_name' is already in the Caddyfile registry"
+    done
+    APP_NAME+=("$l_name")
+    APP_PORT+=("$l_port")
+    APP_REWRITE+=("$([[ ${l_flag:-} == rewrite ]] && echo 1 || echo 0)")
+    APP_EXCLUDED+=(0)
+  done < "$APPS_FILE"
+fi
+
 (( ${#APP_NAME[@]} > 0 )) || die "registry came back empty — refusing to tear down every dev door"
 
 # Index of an app by name, or empty. Linear over ~17 entries; a hash would buy

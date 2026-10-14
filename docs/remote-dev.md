@@ -194,6 +194,10 @@ tailnet door — a new app needs nothing else. `~/.config/caddy-tailnet.ports` i
 two drifted silently (17 apps vs 4). `~/.config/caddy-tailnet.conf` carries
 `DEV_DOMAIN` and the Cloudflare token path.
 
+Apps that must not be named in the tracked Caddyfile (work repos, internal services) go in the
+untracked `~/.config/caddy-tailnet.apps` instead — one `<name> <port> [rewrite]` per line, merged into the same
+registry; they get the clean tailnet door only, no `.test` twin.
+
 | Door | URL | Scope |
 |-|-|-|
 | Local | `https://<name>.test` | this machine only (`bind 127.0.0.1`; dnsmasq wildcards `*.test` → 127.0.0.1) |
