@@ -55,6 +55,18 @@ tab; the pane evals `_oc_env` (claude.zsh) first so `IU_*` and the gateway beare
 are in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
+**The shared service needs the credentials too (2026-10-14).** OpenCode v2 attaches `oc` and
+`opencode run` to one per-user background service (`opencode serve --service`) that is started
+*without* the pane's environment, so every `{env:IU_*}` placeholder resolved empty there and the
+first message failed with `Route.model(openai-compatible-chat) requires an endpoint baseURL`.
+`_oc_env` now ends by running `scripts/opencode-service-env.sh`, which merges `IU_KEY`,
+`IU_OPENAI_BASE`, `IU_ANTHROPIC_BASE` and `RESEARCH_GATEWAY_AUTH` into the service's own
+`~/.config/opencode/service.json` (`env` map, mode 0600, local — that directory is not the
+symlinked `config/opencode`) and restarts the service when a value changed and no session is
+running. Values travel by environment only; `opencode service set env K V` would put the key
+on argv. Re-running is a no-op. agent-gateway episodes do not depend on this: they run on
+agw's own server (`docs/opencode-v2.md` in agent-gateway).
+
 **agent-gateway is wired in, mini-only.** `config/opencode/mini.json` declares the
 `agent-gateway` MCP (`bun run …/agent-gateway/server/mcp.ts`, `timeout` 30 min so a `job_wait`
 is not cut off at the default 5 s). It is deliberately *not* in the shared

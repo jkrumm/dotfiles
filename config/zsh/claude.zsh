@@ -381,6 +381,9 @@ _oc_env() {
   if [[ -f "$HOME/SourceRoot/agent-gateway/server/mcp.ts" ]]; then
     print -r -- "export OPENCODE_CONFIG=${(q)HOME}/SourceRoot/dotfiles/config/opencode/mini.json"
   fi
+  # v2 attaches to ONE shared background service that never saw this shell's env, so the
+  # {env:IU_*} placeholders resolve empty there. Hand it the values (env-only, idempotent).
+  print -r -- "\"\$HOME/SourceRoot/dotfiles/scripts/opencode-service-env.sh\" || true"
 }
 
 oc() {
