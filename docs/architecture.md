@@ -126,6 +126,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
 | `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway MCP daemon |
+| `com.jkrumm.agent-gateway-opencode` | KeepAlive | shared OpenCode v2 server dispatch episodes attach to |
 | `herdr.collie` | KeepAlive | collie bridge (upstream plist) |
 
 ### hermes-agent
