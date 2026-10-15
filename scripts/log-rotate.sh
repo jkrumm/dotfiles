@@ -145,12 +145,14 @@ FILES=(
   # modelpick — daily 06:00 refresh (com.jkrumm.modelpick-refresh).
   modelpick-refresh.log
   modelpick-refresh.err
-  # weatherorb's eight LaunchAgents (com.jkrumm.weatherorb.<job>), moved off /tmp into
+  # weatherorb's nine LaunchAgents (com.jkrumm.weatherorb.<job>), moved off /tmp into
   # ~/Library/Logs/weatherorb.<job>.{log,err} by the weatherorb repo's own pass.
   weatherorb.serve.log
   weatherorb.serve.err
   weatherorb.tileserver.log
   weatherorb.tileserver.err
+  weatherorb.public.log
+  weatherorb.public.err
   weatherorb.sync.log
   weatherorb.sync.err
   weatherorb.obs.log

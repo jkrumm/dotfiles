@@ -181,6 +181,7 @@ plain HTTP client, not the gateway's live connection.
 |-|-|-|
 | `com.jkrumm.weatherorb.serve` | KeepAlive | API server (:8080, loopback) |
 | `com.jkrumm.weatherorb.tileserver` | KeepAlive | map tiles (:8081) |
+| `com.jkrumm.weatherorb.public` | KeepAlive | blend-only public app (:8082), the VPS edge's only door |
 | `com.jkrumm.weatherorb.sync` | KeepAlive | data sync |
 | `com.jkrumm.weatherorb.obs` | 1200s | observations ingest |
 | `com.jkrumm.weatherorb.fcstlog` | 900s | forecast logging |
