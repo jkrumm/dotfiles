@@ -154,7 +154,11 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
    attempt from the new base with the old diff as context.
 6. **Deploy + verify:** `make deploy`, then `make verify` and the item's own
    signal quiet for its window. Failure → automatic `git revert` PR through the
-   same train, item back to `working` with the evidence.
+   same train, item back to `working` with the evidence. `make verify` also runs
+   once just before the merge, as a baseline: red before AND after the deploy is
+   pre-existing, not the merge's doing — it neither fails the item nor reverts
+   it, and the item is judged on its own signal (the verify twin of a CI red that
+   is also red on the base, which parks instead of revising).
 7. **Fixed-by sweep:** after every merge, triage re-checks the repo's open items
    against the merged diff; plausible matches move to `verifying` and close when
    their own signal stays quiet.
