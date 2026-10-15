@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Life of an OpenCode episode",
+    "viewBox": [
+      1000,
+      1380
+    ],
+    "quality_profile": "showcase",
+    "animation": "none",
+    "column_fit": "spread"
+  },
+  "participants": [
+    {
+      "id": "caller",
+      "type": "external",
+      "label": "Caller",
+      "sublabel": "warden \u00b7 agw \u00b7 MCP"
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "agent-gateway",
+      "sublabel": "HTTP server, LaunchAgent"
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "jobs.db",
+      "sublabel": "jobs \u00b7 session ledger"
+    },
+    {
+      "id": "opencode",
+      "type": "messagebus",
+      "label": "OpenCode server",
+      "sublabel": "shared, pinned build"
+    }
+  ],
+  "segments": [
+    {
+      "label": "Submit and run",
+      "from": 150,
+      "to": 440
+    },
+    {
+      "label": "Steer",
+      "from": 460,
+      "to": 610
+    },
+    {
+      "label": "Reload: detach",
+      "from": 630,
+      "to": 860
+    },
+    {
+      "label": "Boot: re-attach",
+      "from": 930,
+      "to": 1300
+    }
+  ],
+  "messages": [
+    {
+      "from": "caller",
+      "to": "gateway",
+      "y": 190,
+      "label": "submit dispatch, queued in its lane",
+      "variant": "emphasis"
+    },
+    {
+      "from": "gateway",
+      "to": "caller",
+      "y": 250,
+      "label": "jobId",
+      "variant": "return"
+    },
+    {
+      "from": "gateway",
+      "to": "db",
+      "y": 320,
+      "label": "persist job, session id"
+    },
+    {
+      "from": "gateway",
+      "to": "opencode",
+      "y": 390,
+      "label": "create session, prompt",
+      "variant": "emphasis",
+      "note": "Session runs under an agw-readonly, agw-check, agw-toolless or agw-implement agent. The runner checks server health and the pinned version first."
+    },
+    {
+      "from": "caller",
+      "to": "gateway",
+      "y": 500,
+      "label": "steer: POST /api/jobs/:id/steer",
+      "variant": "security",
+      "note": "MCP job_steer or agw steer. 409 when no session is live."
+    },
+    {
+      "from": "gateway",
+      "to": "opencode",
+      "y": 560,
+      "label": "text injected as delivery: steer"
+    },
+    {
+      "from": "caller",
+      "to": "gateway",
+      "y": 670,
+      "label": "make reload: drain starts",
+      "variant": "dashed",
+      "note": "Drain waits only for jobs it cannot detach, such as claude -p sessions and check steps."
+    },
+    {
+      "from": "gateway",
+      "to": "db",
+      "y": 740,
+      "label": "mark jobs detached_at"
+    },
+    {
+      "from": "gateway",
+      "to": "opencode",
+      "y": 810,
+      "label": "detach: session keeps running",
+      "variant": "dashed"
+    },
+    {
+      "from": "gateway",
+      "to": "db",
+      "y": 970,
+      "label": "boot: recover requeues detached jobs",
+      "variant": "emphasis",
+      "note": "The attempt is refunded, so a later genuine crash still gets its requeue."
+    },
+    {
+      "from": "db",
+      "to": "gateway",
+      "y": 1030,
+      "label": "ledger row: session id",
+      "variant": "return"
+    },
+    {
+      "from": "gateway",
+      "to": "opencode",
+      "y": 1100,
+      "label": "re-attach by state",
+      "variant": "emphasis",
+      "note": "Live: wait only. Finished while down: read the result. Cut off: prompt with resume. Never prompted: first prompt."
+    },
+    {
+      "from": "opencode",
+      "to": "gateway",
+      "y": 1190,
+      "label": "wait done, messages",
+      "variant": "return"
+    },
+    {
+      "from": "gateway",
+      "to": "caller",
+      "y": 1260,
+      "label": "verdict via job_wait",
+      "variant": "return"
+    }
+  ]
+}

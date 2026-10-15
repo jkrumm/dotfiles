@@ -6,7 +6,7 @@
     "quality_profile": "showcase",
     "viewBox": [
       930,
-      1400
+      1250
     ],
     "legend": {
       "mode": "auto"
@@ -17,7 +17,7 @@
       "id": "hermes",
       "type": "frontend",
       "label": "Hermes",
-      "sublabel": "Slack/Argo chat · files work, narrates",
+      "sublabel": "Slack/Argo chat \u00b7 files work, narrates",
       "pos": [
         40,
         100
@@ -31,7 +31,7 @@
       "id": "herdr",
       "type": "frontend",
       "label": "herdr",
-      "sublabel": "orchestrator tab → wave tabs",
+      "sublabel": "orchestrator tab \u2192 wave tabs",
       "pos": [
         700,
         100
@@ -42,66 +42,24 @@
       ]
     },
     {
-      "id": "github",
+      "id": "sources",
       "type": "external",
-      "label": "GitHub issues",
-      "sublabel": "owner and agents",
+      "label": "Trusted sources",
+      "sublabel": "GitHub issues \u00b7 Uptime Kuma \u00b7 HyperDX \u00b7 warden run",
       "pos": [
         40,
         290
       ],
       "size": [
-        180,
+        840,
         64
       ]
     },
     {
-      "id": "kuma",
-      "type": "security",
-      "label": "Uptime Kuma",
-      "sublabel": "alerts",
-      "pos": [
-        260,
-        290
-      ],
-      "size": [
-        180,
-        64
-      ]
-    },
-    {
-      "id": "otel",
-      "type": "cloud",
-      "label": "HyperDX / OTel",
-      "sublabel": "alerts",
-      "pos": [
-        480,
-        290
-      ],
-      "size": [
-        180,
-        64
-      ]
-    },
-    {
-      "id": "wardenrun",
+      "id": "warden",
       "type": "backend",
-      "label": "warden run",
-      "sublabel": "the unattended lane",
-      "pos": [
-        700,
-        290
-      ],
-      "size": [
-        180,
-        64
-      ]
-    },
-    {
-      "id": "intake",
-      "type": "backend",
-      "label": "Warden intake",
-      "sublabel": "every source writes an event, deduplicated by fingerprint",
+      "label": "Warden \u2014 the loop",
+      "sublabel": "intake (deduped) \u2192 triage \u2192 investigate \u2192 implement \u2192 merge train \u2192 deploy \u2192 verify",
       "pos": [
         40,
         480
@@ -112,114 +70,30 @@
       ]
     },
     {
-      "id": "triage",
-      "type": "backend",
-      "label": "triage",
-      "sublabel": "single-shot",
+      "id": "session",
+      "type": "messagebus",
+      "label": "Session lane",
+      "sublabel": "check \u00b7 review \u00b7 dispatch \u00b7 overview \u00b7 narrative \u00b7 cap 3",
       "pos": [
         40,
-        600
+        670
       ],
       "size": [
-        120,
+        400,
         64
       ]
     },
     {
-      "id": "investigate",
-      "type": "backend",
-      "label": "investigate",
-      "sublabel": "root cause",
+      "id": "single",
+      "type": "messagebus",
+      "label": "Single-shot lane",
+      "sublabel": "triage \u00b7 decide \u00b7 cap 6 \u00b7 no session",
       "pos": [
-        184,
-        600
+        480,
+        670
       ],
       "size": [
-        120,
-        64
-      ]
-    },
-    {
-      "id": "implement",
-      "type": "backend",
-      "label": "implement",
-      "sublabel": "one item",
-      "pos": [
-        328,
-        600
-      ],
-      "size": [
-        120,
-        64
-      ]
-    },
-    {
-      "id": "merge",
-      "type": "backend",
-      "label": "merge train",
-      "sublabel": "checks, review, squash",
-      "pos": [
-        472,
-        600
-      ],
-      "size": [
-        120,
-        64
-      ]
-    },
-    {
-      "id": "deploy",
-      "type": "backend",
-      "label": "deploy",
-      "sublabel": "make deploy",
-      "pos": [
-        616,
-        600
-      ],
-      "size": [
-        120,
-        64
-      ]
-    },
-    {
-      "id": "verify",
-      "type": "backend",
-      "label": "verify",
-      "sublabel": "auto-revert on failure",
-      "pos": [
-        760,
-        600
-      ],
-      "size": [
-        120,
-        64
-      ]
-    },
-    {
-      "id": "agent-gateway",
-      "type": "backend",
-      "label": "agent-gateway",
-      "sublabel": "the one worker engine · triage, dispatch, review, check · models from its registry",
-      "pos": [
-        40,
-        800
-      ],
-      "size": [
-        680,
-        64
-      ]
-    },
-    {
-      "id": "workers",
-      "type": "backend",
-      "label": "Claude Code · OpenCode · every worker",
-      "sublabel": "all read the same core identically",
-      "pos": [
-        40,
-        990
-      ],
-      "size": [
-        560,
+        200,
         64
       ]
     },
@@ -227,55 +101,41 @@
       "id": "argo",
       "type": "frontend",
       "label": "Argo /warden",
-      "sublabel": "the single queue and status",
+      "sublabel": "queue and status",
       "pos": [
-        700,
-        990
+        720,
+        670
       ],
       "size": [
-        180,
+        160,
         64
       ]
     },
     {
-      "id": "claude",
-      "type": "database",
-      "label": "~/.claude",
-      "sublabel": "global CLAUDE.md, skills, agents",
+      "id": "opencode",
+      "type": "backend",
+      "label": "Shared OpenCode server",
+      "sublabel": "own LaunchAgent \u00b7 pinned \u00b7 four agw agents",
       "pos": [
         40,
-        1180
+        880
       ],
       "size": [
-        180,
-        64
-      ]
-    },
-    {
-      "id": "agents",
-      "type": "database",
-      "label": "AGENTS.md",
-      "sublabel": "per-repo brief",
-      "pos": [
         260,
-        1180
-      ],
-      "size": [
-        180,
         64
       ]
     },
     {
-      "id": "makefile",
-      "type": "database",
-      "label": "Makefile",
-      "sublabel": "check · deploy · verify · logs",
+      "id": "claudep",
+      "type": "backend",
+      "label": "claude -p",
+      "sublabel": "otel \u00b7 review frontend angle \u00b7 Max reverse lane",
       "pos": [
-        480,
-        1180
+        340,
+        880
       ],
       "size": [
-        180,
+        220,
         64
       ]
     },
@@ -286,10 +146,24 @@
       "sublabel": "done / needs decision",
       "pos": [
         720,
-        1180
+        880
       ],
       "size": [
-        140,
+        160,
+        64
+      ]
+    },
+    {
+      "id": "core",
+      "type": "database",
+      "label": "Core \u2014 the repo contract",
+      "sublabel": "~/.claude \u00b7 AGENTS.md \u00b7 Makefile, read identically by every worker",
+      "pos": [
+        40,
+        1070
+      ],
+      "size": [
+        520,
         64
       ]
     }
@@ -306,42 +180,28 @@
     },
     {
       "kind": "region",
-      "label": "Trusted sources",
+      "label": "Warden \u2014 the autonomous loop",
       "wraps": [
-        "github",
-        "kuma",
-        "otel",
-        "wardenrun"
+        "sources",
+        "warden"
       ],
       "pad": 30
     },
     {
       "kind": "region",
-      "label": "Warden — the autonomous loop",
+      "label": "agent-gateway \u2014 durable job queue, loopback only",
       "wraps": [
-        "intake",
-        "triage",
-        "investigate",
-        "implement",
-        "merge",
-        "deploy",
-        "verify"
+        "session",
+        "single"
       ],
       "pad": 30
     },
     {
       "kind": "region",
-      "label": "Worker engine",
+      "label": "Workers",
       "wraps": [
-        "agent-gateway"
-      ],
-      "pad": 30
-    },
-    {
-      "kind": "region",
-      "label": "Readers",
-      "wraps": [
-        "workers"
+        "opencode",
+        "claudep"
       ],
       "pad": 30
     },
@@ -350,16 +210,6 @@
       "label": "Status surface",
       "wraps": [
         "argo"
-      ],
-      "pad": 30
-    },
-    {
-      "kind": "region",
-      "label": "Core — the repo contract",
-      "wraps": [
-        "claude",
-        "agents",
-        "makefile"
       ],
       "pad": 24
     },
@@ -383,143 +233,66 @@
     },
     {
       "from": "hermes",
-      "to": "github",
-      "label": "files an issue",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 24,
-      "labelDx": -50
-    },
-    {
-      "from": "hermes",
-      "to": "wardenrun",
+      "to": "sources",
       "label": "files work",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "from": "github",
-      "to": "intake",
+      "from": "sources",
+      "to": "warden",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "from": "kuma",
-      "to": "intake",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "otel",
-      "to": "intake",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "wardenrun",
-      "to": "intake",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "intake",
-      "to": "triage",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "triage",
-      "to": "investigate",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "investigate",
-      "to": "implement",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "implement",
-      "to": "merge",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "merge",
-      "to": "deploy",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "deploy",
-      "to": "verify",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "triage",
-      "to": "agent-gateway",
-      "label": "single-shot",
-      "variant": "emphasis",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 24
-    },
-    {
-      "from": "investigate",
-      "to": "agent-gateway",
-      "label": "dispatch",
+      "from": "warden",
+      "to": "session",
+      "label": "dispatch, review, check",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "from": "implement",
-      "to": "agent-gateway",
-      "label": "dispatch",
-      "variant": "emphasis",
-      "fromSide": "bottom",
-      "toSide": "top",
-      "labelDy": 56
-    },
-    {
-      "from": "merge",
-      "to": "agent-gateway",
-      "label": "review",
+      "from": "warden",
+      "to": "single",
+      "label": "triage, decide",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top"
     },
     {
-      "from": "agent-gateway",
-      "to": "workers",
-      "label": "runs",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "workers",
-      "to": "claude",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "workers",
-      "to": "agents",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "workers",
-      "to": "makefile",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "verify",
+      "from": "warden",
       "to": "argo",
       "label": "queue, status",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "session",
+      "to": "opencode",
+      "label": "HTTP: prompt, wait",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -40
+    },
+    {
+      "from": "session",
+      "to": "claudep",
+      "label": "runs",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 40
+    },
+    {
+      "from": "opencode",
+      "to": "core",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "claudep",
+      "to": "core",
       "fromSide": "bottom",
       "toSide": "top"
     },
@@ -530,7 +303,7 @@
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top",
-      "labelDy": 24
+      "labelDy": 50
     }
   ],
   "cards": [
@@ -546,7 +319,8 @@
       "title": "agw dispatch",
       "items": [
         "Settled, bounded work",
-        "Result is a branch, PR or verdict"
+        "Haiku 5.5 EU on OpenCode, Sonnet on Max as reverse lane",
+        "Steerable; survives a gateway reload"
       ]
     },
     {

@@ -42,7 +42,7 @@
       "id": "worker",
       "type": "backend",
       "label": "the worker",
-      "sublabel": "in a worktree"
+      "sublabel": "OpenCode session"
     }
   ],
   "segments": [
@@ -52,12 +52,12 @@
       "to": 300
     },
     {
-      "label": "Investigate — or defer on budget",
+      "label": "Investigate \u2014 or defer on budget",
       "from": 320,
       "to": 620
     },
     {
-      "label": "Gate — case 1/2/4 only",
+      "label": "Gate \u2014 case 1/2/4 only",
       "from": 640,
       "to": 900
     },
@@ -84,8 +84,8 @@
       "from": "hermes",
       "to": "warden",
       "y": 250,
-      "label": "warden run — the brief on stdin",
-      "note": "hermes-cc.sh is retired. A six-line shim in hermes-agent execs straight into this repo's `scripts/warden` — there is no bridge process left to be the thing that is down when Hermes is down."
+      "label": "warden run \u2014 the brief on stdin",
+      "note": "hermes-cc.sh is retired. A six-line shim in hermes-agent execs straight into this repo's `scripts/warden` \u2014 there is no bridge process left to be the thing that is down when Hermes is down."
     },
     {
       "from": "warden",
@@ -93,13 +93,13 @@
       "y": 360,
       "label": "opens the item, dispatches investigate",
       "variant": "emphasis",
-      "note": "The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits — overflow is never dropped, only deferred."
+      "note": "The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits \u2014 overflow is never dropped, only deferred."
     },
     {
       "from": "agent-gateway",
       "to": "worker",
       "y": 430,
-      "label": "cuts a read-only worktree"
+      "label": "read-only worktree, agw-readonly session"
     },
     {
       "from": "worker",
@@ -129,7 +129,7 @@
       "y": 780,
       "label": "Approve",
       "variant": "dashed",
-      "note": "A denial, a timeout, or no case firing at all: the item parks at `needs_human` and waits on the board — the other way this stops. Nothing merges until a human clears it."
+      "note": "A denial, a timeout, or no case firing at all: the item parks at `needs_human` and waits on the board \u2014 the other way this stops. Nothing merges until a human clears it."
     },
     {
       "from": "warden",
@@ -142,7 +142,7 @@
       "from": "agent-gateway",
       "to": "worker",
       "y": 950,
-      "label": "writable worktree, opens draft PR"
+      "label": "writable worktree, agw-implement session, draft PR"
     },
     {
       "from": "worker",
@@ -162,13 +162,13 @@
       "from": "warden",
       "to": "agent-gateway",
       "y": 1170,
-      "label": "dispatches review — a second session"
+      "label": "dispatches review \u2014 a second session"
     },
     {
       "from": "agent-gateway",
       "to": "worker",
       "y": 1250,
-      "label": "reads the diff, no write access"
+      "label": "angle sessions read the diff, no write access"
     },
     {
       "from": "worker",
@@ -196,7 +196,7 @@
       "from": "hermes",
       "to": "human",
       "y": 1560,
-      "label": "fixed — card updated in place",
+      "label": "fixed \u2014 card updated in place",
       "variant": "return"
     }
   ]

@@ -34,7 +34,7 @@ older doc on that topic. This map only places its parts on machines.
 
 ## Diagrams
 
-Two validated artifacts in `docs/diagrams/`, each one self-contained HTML: open
+Three validated artifacts in `docs/diagrams/`, each one self-contained HTML: open
 the file, no server. They carry pan/zoom, search, relationship tracing and their
 own image export, so a screenshot is never the way to share one.
 
@@ -42,9 +42,10 @@ own image export, so a screenshot is never the way to share one.
 |-|-|
 | `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
 | `agent-platform.html` | How the agent platform fits together: sources, front doors, warden's loop, agent-gateway, the four lanes, the repo contract. Spec: `agent-platform.md`. |
+| `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a gateway reload that detaches the session, and the re-attach by state on the next boot. |
 | `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
-Both are compiled from the `.json` beside them with the vendored `archify`
+All are compiled from the `.json` beside them with the vendored `archify`
 skill, which validates geometry and composition before it will deliver: an
 arrow through a box or a label over a node fails the build. Regenerate with
 `node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html>

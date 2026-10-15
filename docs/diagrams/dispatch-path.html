@@ -5078,11 +5078,11 @@
         <text data-detail="fine" x="570" y="378" class="t-dim" font-size="7">The item is written to ~/.warden/warden.db before anything is spent. Past MAX_OPEN_INVESTIGATIONS the item stays `new` and waits — overflow is never dropped, only deferred.</text>
         </g>
 
-        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="cuts a read-only worktree" data-edge-key="3">
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="read-only worktree, agw-readonly session" data-edge-key="3">
           <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,430;949.5,430" d="M 760.75 430 L 949.5 430" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="784.125" y="410" width="142" height="16" rx="3" class="c-mask"/>
-          <text x="855.125" y="420" class="t-backend" font-size="9" text-anchor="middle">cuts a read-only worktree</text>
+          <rect x="745.125" y="410" width="220" height="16" rx="3" class="c-mask"/>
+          <text x="855.125" y="420" class="t-backend" font-size="9" text-anchor="middle">read-only worktree, agw-readonly session</text>
         </g>
         </g>
 
@@ -5128,11 +5128,11 @@
         </g>
         </g>
 
-        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="writable worktree, opens draft PR" data-edge-key="9">
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="writable worktree, agw-implement session, draft PR" data-edge-key="9">
           <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,950;949.5,950" d="M 760.75 950 L 949.5 950" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="763.325" y="930" width="183.6" height="16" rx="3" class="c-mask"/>
-          <text x="855.125" y="940" class="t-backend" font-size="9" text-anchor="middle">writable worktree, opens draft PR</text>
+          <rect x="719.125" y="930" width="272" height="16" rx="3" class="c-mask"/>
+          <text x="855.125" y="940" class="t-backend" font-size="9" text-anchor="middle">writable worktree, agw-implement session, draft PR</text>
         </g>
         </g>
 
@@ -5160,11 +5160,11 @@
         </g>
         </g>
 
-        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="reads the diff, no write access" data-edge-key="13">
+        <g data-edge-from="agent-gateway" data-edge-to="worker" data-edge-label="angle sessions read the diff, no write access" data-edge-key="13">
           <path data-composition-edge-from="agent-gateway" data-composition-edge-to="worker" data-composition-points="760.75,1250;949.5,1250" d="M 760.75 1250 L 949.5 1250" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <g data-detail="context">
-          <rect x="768.525" y="1230" width="173.20000000000002" height="16" rx="3" class="c-mask"/>
-          <text x="855.125" y="1240" class="t-backend" font-size="9" text-anchor="middle">reads the diff, no write access</text>
+          <rect x="732.125" y="1230" width="246" height="16" rx="3" class="c-mask"/>
+          <text x="855.125" y="1240" class="t-backend" font-size="9" text-anchor="middle">angle sessions read the diff, no write access</text>
         </g>
         </g>
 
@@ -5272,15 +5272,15 @@
           <text data-detail="context" x="753.75" y="111" class="t-muted" font-size="7" text-anchor="middle">job queue</text>
         </g>
 
-        <g id="node-worker" data-node-id="worker" data-node-label="the worker" tabindex="0" role="button" aria-label="Focus the worker, in a worktree, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="in a worktree" data-node-context="Sequence participant">
-          <title>the worker · in a worktree · Sequence participant</title>
+        <g id="node-worker" data-node-id="worker" data-node-label="the worker" tabindex="0" role="button" aria-label="Focus the worker, OpenCode session, Sequence participant" aria-pressed="false" data-node-kind="backend" data-node-sublabel="OpenCode session" data-node-context="Sequence participant">
+          <title>the worker · OpenCode session · Sequence participant</title>
           <rect x="873" y="72" width="167" height="54" rx="6" class="c-mask"/>
           <rect x="873" y="72" width="167" height="54" rx="6" class="c-backend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(879 78) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="956.5" y="94" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">the worker</text>
-          <text data-detail="context" x="956.5" y="111" class="t-muted" font-size="7" text-anchor="middle">in a worktree</text>
+          <text data-detail="context" x="956.5" y="111" class="t-muted" font-size="7" text-anchor="middle">OpenCode session</text>
         </g>
 
         <!-- Legend -->
