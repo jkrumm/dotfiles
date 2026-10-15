@@ -191,6 +191,8 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |
 | `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
 | `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
+| `com.jkrumm.weatherorb.worker-ingest` | KeepAlive | durable-jobs worker: ingest (DBOS, ADR 0010) |
+| `com.jkrumm.weatherorb.worker-round` | KeepAlive | durable-jobs worker: blend rounds (DBOS, ADR 0010) |
 
 The last two are not templated in `weatherorb/ops` — installed by hand, owned by
 the weatherorb session workflow.
