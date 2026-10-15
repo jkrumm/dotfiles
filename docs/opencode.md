@@ -68,6 +68,16 @@ running. Values travel by environment only; `opencode service set env K V` would
 on argv. Re-running is a no-op. agent-gateway episodes do not depend on this: they run on
 agw's own server (`docs/opencode-v2.md` in agent-gateway).
 
+**One OpenCode build on the machine (2026-10-15).** Homebrew's `opencode` is uninstalled (it
+lagged the npm releases and a `brew upgrade` once broke every dispatch). `~/.local/bin/opencode`
+is agent-gateway's shim (`make install-cli` there), which execs the pinned npm build under
+`~/.local/share/agent-gateway/opencode-bin/current` — the same binary agw's server runs. `oc`,
+`rd wave|work|fan --kind opencode`, herdr agent panes and the shared per-user service
+(`opencode service restart` after a pin bump) therefore all run one version. A pin bump:
+`make install-cli install-opencode-agent` in agent-gateway (`docs/opencode-v2.md` § Version pin).
+The first start on a new version shows a one-time release-notes dialog that swallows the pane's
+initial prompt — press Enter once, then `rd say` it again.
+
 **agent-gateway is wired in, mini-only.** `config/opencode/mini.json` declares the
 `agent-gateway` MCP (`bun run …/agent-gateway/server/mcp.ts`, `timeout` 30 min so a `job_wait`
 is not cut off at the default 5 s). It is deliberately *not* in the shared
