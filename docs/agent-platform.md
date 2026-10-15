@@ -30,7 +30,7 @@ tracked in each repo's `docs/waves/PLAN.md`. Before-the-rewrite design:
 |-|-|
 | Four lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
-| agent-gateway: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa adopted (frontend stays on Max, measured) |
+| agent-gateway: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa, frontend adopted (frontend in Wave 11, measured on real findings) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 | warden: gates cut, nine states, one queue | **landed** (W1–W2) |
 | warden: intake fingerprint + triage dedup, revisions as attempts | **landed** (W3) |
