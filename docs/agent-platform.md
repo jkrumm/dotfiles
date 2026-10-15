@@ -151,7 +151,10 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
    update the PR onto the latest default branch → `make check` / CI green on that
    SHA → review on that SHA (delta-only if a prior review confirmed) → squash
    merge pinned to the SHA. A conflict is not hand-resolved: the item gets a new
-   attempt from the new base with the old diff as context.
+   attempt from the new base with the old diff as context. A CI red on the head
+   SHA while the base is green first re-runs the failed jobs once on that same
+   SHA; only a second red goes back for a revision (a flaky test is not the PR's
+   defect, and a worker sent to fix it edits code outside its brief).
 6. **Deploy + verify:** `make deploy`, then `make verify` and the item's own
    signal quiet for its window. Failure → automatic `git revert` PR through the
    same train, item back to `working` with the evidence. `make verify` also runs
