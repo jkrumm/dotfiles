@@ -129,6 +129,20 @@ greps them.
      wave cannot be closed by `rd close`, and the next wave starts from the remote.
 4. **Gate, then chain** (chain mode) — or stop at the committed close-out (orchestrated). Below.
 
+## Never end the turn while waiting
+
+A wave's turn ends only at its committed close-out (orchestrated) or after the explicit
+spawn/stop decision (chain). Ending a turn with a background monitor, shell or agent still
+running ("1 shell still running") strands the chain: nothing resumes it. Rules:
+
+- Wait **in the foreground, bounded**: `timeout <s> <cmd>` or a poll loop of at most ~10 minutes
+  per call, then decide (keep waiting, `rd read`, steer, cancel). No unbounded `Monitor` or
+  `run_in_background` as the last act of a turn.
+- Anything started in the background is collected (`job_wait`, `TaskOutput`) or stopped
+  (`TaskStop`) before the close-out commit. A wave with a live background task has not closed out.
+- The close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" written into
+  **Left behind**. Silence is neither.
+
 ## The green gate
 
 **A wave spawns its successor only if its own close-out was green.**
