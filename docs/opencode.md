@@ -34,8 +34,9 @@ caching works (95–98% hits in real episodes). Headless `opencode run` auto-**r
 any `ask` permission and that ends the session — workers must set every prompting
 permission to `allow`/`deny` (`deny` returns an error and the run continues).
 `--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
-shared `opencode.db` — retry. agent-gateway's dispatch runs on this lane (its own per-run
-config, not this file).
+shared `opencode.db` — retry. agent-gateway's dispatch is NOT on this lane: it drives its own
+shared server (`com.jkrumm.agent-gateway-opencode`) over HTTP, config on that server process
+(`agent-gateway/docs/opencode-v2.md`), with no db-lock retry.
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
 `research-gateway` (remote MCP; `oc` exports `RESEARCH_GATEWAY_AUTH` from the same
@@ -79,7 +80,7 @@ resolve to real tools on the mini.
 never stops to ask. It is also what makes the lane usable headlessly: `run`
 **ends the session** on an `ask` rather than prompting, so a worker with a
 leftover `ask` rule is not slow, it is broken. This is the one config file
-agent-gateway does *not* share — its dispatch ships its own per-run permissions, so
+agent-gateway does *not* share — its dispatch uses two permission agents (`agw-readonly`, `agw-implement`) in its own server config, so
 widening this one cannot loosen a dispatch worker.
 
 **Config is two files, and the split is enforced.** `opencode.json` is

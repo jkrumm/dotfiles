@@ -16,7 +16,7 @@ SDK `query()` — run **as long as the work takes**.
   agent run. A slow episode is not a stuck one — slow models spend
   minutes per turn on hard work by design.
 - **The one liveness rule is an idle watchdog:** no output for N minutes
-  (agent-gateway: 5 min of no stdout) means wedged, and only then is the worker
+  (agent-gateway: 5 min of no stdout on a `claude` route, of no new message on an OpenCode session) means wedged, and only then is the worker
   killed. Ledger lifecycle deadlines (an item waiting on a human for 7 days)
   are a different fact and stay.
 - **A redeploy never discards an episode.** Drain waits for running work;

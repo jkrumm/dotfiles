@@ -179,11 +179,11 @@ merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
 | Job | Default | Why |
 |-|-|-|
 | `triage`, review router | single-shot `iu-openai` cheap model, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
-| `dispatch` investigate | OpenCode, cheap OpenCode model `high` | measured ~$0.06/episode, 95 % cache hits |
-| `dispatch` implement | OpenCode, cheap OpenCode model `max`; escalation model from the registry | strong enough on settled briefs; escalation for attempt 3+ |
-| `review` angles | OpenCode cheap model after A/B; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
+| `dispatch` investigate | OpenCode session on agw's shared server, Haiku 5.5 EU (`iu-anthropic`) | ~$0.001–0.01/episode, ~100 % cache reads (Wave 5 bench) |
+| `dispatch` implement | OpenCode, Haiku 5.5 EU; DeepSeek-V4-Pro (`max`) escalation for attempt 3+ | 6/6 on the Wave 5 bench; episodes survive an agw restart (re-attach) and take `agw steer` |
+| `review` angles | OpenCode Haiku 5.5 EU for senior-dev/typescript/qa; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
 | `review` synthesis | Sonnet | the judgment that gates every merge |
-| `check` | OpenCode or single-shot | mechanical |
+| `check` | `claude` harness, Haiku 4.5 over IU (Haiku 5.5 is 4× slower there) | mechanical |
 
 One model registry (`server/lib/models.ts`): id, wire (`anthropic` / `chat` /
 `responses`), harnesses, limits, rates with source + date, verified date.

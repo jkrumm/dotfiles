@@ -494,7 +494,7 @@
     {
       "from": "agent-gateway",
       "to": "workers",
-      "label": "spawns",
+      "label": "runs",
       "fromSide": "bottom",
       "toSide": "top"
     },
