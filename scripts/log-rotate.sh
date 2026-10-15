@@ -55,6 +55,11 @@ FILES=(
   hermes-liveness.err
   hermes-backup.log
   hermes-backup.err
+  # hermes serve for Hermes Desktop, restored 2026-10-15 (hermes-agent launchd/).
+  hermes-serve.log
+  hermes-serve.err
+  hermes-serve-liveness.log
+  hermes-serve-liveness.err
   hermes-triage.log
   hermes-triage.err
   # warden's five agents (com.jkrumm.warden-{loop,poll,sweep,backup,api}) — the
