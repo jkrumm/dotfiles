@@ -228,10 +228,10 @@ How:
   measured against awake time. `StartInterval` ticks missed while asleep are not failures.
 - **The mini → MacBook state pull is deferred** until something consumes it (decision 6). When it
   comes, it goes over the existing `ssh iumac` and serves history only, never escalation.
-- **When netgear-watchdog moves to launchd, delete what the move makes obsolete:**
+- **netgear-watchdog moved to launchd (Wave 12, install pending on the MacBook); the move deleted:**
   - the view-driven ticker;
   - the cross-process action lock (launchd already prevents overlap);
-  - the LocalStorage watchdog state. It moves to a state file the Tinycast view reads.
+  - the LocalStorage watchdog state. It is a state file the Tinycast view reads.
 - `opbackup` keeps its weekly Kuma monitor, because its data leaves the box (§2).
 
 **Catch: van-sampler and Bluetooth TCC.**

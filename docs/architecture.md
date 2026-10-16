@@ -239,7 +239,9 @@ such stray fails the assertion instead of hiding from it.
 
 `com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
-`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.opbackup` (hourly guard) ·
+`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.netgear-watchdog` (60 s, `jobrun`,
+owner `tinycast-extensions`; installed by `make watchdog-setup` there) ·
+`com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
 (KeepAlive, :2222 door) · `sh.brew.colima` · `sh.brew.sleepwatcher` ·
 `sh.brew.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the

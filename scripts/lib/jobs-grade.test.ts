@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Expected, type JobState, cronEvery, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -232,5 +232,24 @@ describe("hermes cron adapter", () => {
     expect(new Set(rows.map((r) => r.label)).size).toBe(2)
     expect(rows[0].fails_24h).toBe(1)
     expect(readCronStates(write([cron({ last_status: "error", last_run_at: ago(2 * 86400) })]), NOW)[0].fails_24h).toBe(0)
+  })
+})
+
+describe("--notify: staleness against awake time", () => {
+  const stale = gradeOne(job({ started: ago(7200), last_ok: ago(7200), finished: ago(7199), every: 300 }), { now: NOW, loaded })
+  const failing = gradeOne(job({ rc: 1, consecutive_fail: 3 }), { now: NOW, loaded })
+
+  test("parses sysctl kern.waketime", () => {
+    expect(awakeSeconds("{ sec = 1760616000, usec = 123 } Fri Oct 16 12:00:00 2026", 1760616600_000)).toBe(600)
+    expect(awakeSeconds("garbage", NOW)).toBeNull()
+  })
+  test("stale is dropped while awake for less than its window, kept after", () => {
+    expect(stale.grade).toBe("stale")
+    expect(judgeAgainstAwake([stale], 60)).toEqual([])
+    expect(judgeAgainstAwake([stale], windowSeconds(300))).toEqual([stale])
+  })
+  test("failing is never dropped, an unreadable wake time drops nothing", () => {
+    expect(judgeAgainstAwake([failing], 0)).toEqual([failing])
+    expect(judgeAgainstAwake([stale], null)).toEqual([stale])
   })
 })

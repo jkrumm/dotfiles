@@ -27,3 +27,10 @@ if "${BREW}/bin/brew" services list 2>/dev/null | grep -E '^colima' | grep -q st
 		"${BREW}/bin/brew" services start colima >/dev/null 2>&1  # clean start → fresh VM + fresh socket forward
 	fi
 fi
+
+# 3) Grade the background jobs against awake time and notify on a bad row. A stale row is only
+#    reported once the machine has been awake for the job's whole window (jobs-grade --notify),
+#    so a closed lid is not a stalled job. Backgrounded: the hook must return at once.
+if [ -x "${HOME}/.local/bin/jobs-grade" ]; then
+	( /bin/sleep 120; "${HOME}/.local/bin/jobs-grade" --notify >/dev/null 2>&1 ) >/dev/null 2>&1 &
+fi

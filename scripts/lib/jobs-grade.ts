@@ -7,6 +7,9 @@
 //   jobs-grade            JSON array on stdout
 //   jobs-grade --table    human table, verdict line last (exit 0 / 2 like --summary)
 //   jobs-grade --summary  one line, exit 0 (all ok) / 2 (WARN) — what the heartbeat and doctor relay
+//   jobs-grade --notify   MacBook wake hook: like --summary, plus a macOS notification for the bad rows.
+//                         A closed lid is not a stalled job, so `stale` is judged against AWAKE time:
+//                         a row is dropped unless the machine has been awake for its whole window.
 //
 // Expected set: every installed plist whose ProgramArguments invoke `jobrun` declares a label this
 // grader must see. A declared label with no state file is graded (never invisible); the plists are
@@ -301,6 +304,22 @@ export function gradeAll(dir: string, o: GradeOpts): Graded[] {
   return rows.sort((a, b) => a.label.localeCompare(b.label))
 }
 
+/** Seconds since the last wake from `sysctl -n kern.waketime` (`{ sec = 1760000000, usec = 0 } Fri ...`). null = unreadable. */
+export function awakeSeconds(waketime: string, now: number): number | null {
+  const sec = /sec\s*=\s*(\d+)/.exec(waketime)?.[1]
+  return sec ? Math.max(0, Math.round(now / 1000 - Number(sec))) : null
+}
+
+/** A `stale` row is only proof of a stalled job if the machine was awake for the job's whole window; asleep time proves nothing. */
+export function judgeAgainstAwake(rows: Graded[], awakeS: number | null): Graded[] {
+  if (awakeS === null) return rows
+  return rows.filter((r) => r.grade !== "stale" || r.every === null || windowSeconds(r.every) <= awakeS)
+}
+
+function notify(message: string): void {
+  Bun.spawnSync(["/usr/bin/osascript", "-e", `display notification ${JSON.stringify(message)} with title "jobs-grade"`], { stdout: "ignore", stderr: "ignore" })
+}
+
 export function renderTable(rows: Graded[]): string {
   if (rows.length === 0) return "no jobs recorded"
   const w = Math.max(...rows.map((r) => r.label.length), 5)
@@ -316,6 +335,13 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
 
 if (import.meta.main) {
   const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), cron: readCronStates(defaultCronJobs()) })
+  if (process.argv.includes("--notify")) {
+    const wake = Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString()
+    const { line, code } = summarize(judgeAgainstAwake(rows, awakeSeconds(wake, Date.now())))
+    if (code !== 0) notify(line)
+    console.log(line)
+    process.exit(code)
+  }
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
     console.log(line)

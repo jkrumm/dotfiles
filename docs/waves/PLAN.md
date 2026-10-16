@@ -231,23 +231,29 @@ instead of claiming done.
 
 - _Orchestrator: Kuma/HyperDX webhooks and the Kuma diet wait on the MacBook asks; the MacBook code waves (now 12, 13) run first. Webhooks 14–15, diet 16, review 17._
 
-## Wave 12 — MacBook: netgear-watchdog on launchd            <!-- status: active -->
-- [ ] **Run from the mini** (the MacBook is offline): clone `jkrumm/tinycast-extensions` into a fresh dir under `~/SourceRoot/` if absent. Work on a branch `wave/<name>` and push the **branch**, not master: the MacBook may hold unpushed work. The handoff ask includes merging the branch on the MacBook
-- [ ] tinycast-extensions:
+## Wave 12 — MacBook: netgear-watchdog on launchd            <!-- status: done -->
+- [x] **Run from the mini** (the MacBook is offline): clone `jkrumm/tinycast-extensions` into a fresh dir under `~/SourceRoot/` if absent. Work on a branch `wave/<name>` and push the **branch**, not master: the MacBook may hold unpushed work. The handoff ask includes merging the branch on the MacBook
+- [x] tinycast-extensions:
   - a bun entry point running the existing pure `netgear/watchdog.ts` tick;
   - a launchd plist template (60 s) wrapped in `jobrun`;
   - state in a file that the Tinycast `netgear` view reads
-- [ ] **Delete what the move makes obsolete:** the `netgear-watchdog` no-view command and its view-driven ticker, the cross-process action lock, the LocalStorage watchdog state (`watchdog-storage.ts` → the file). Tests updated
-- [ ] dotfiles: `~/.wakeup` runs `jobs-grade --notify` on the MacBook (staleness against awake time); `architecture.md` MacBook row
-- [ ] `make check` green in both repos, committed and pushed. **Deploy and verify need the MacBook:** end with `ask-human ask` carrying the exact install command and the three checks:
+- [x] **Delete what the move makes obsolete:** the `netgear-watchdog` no-view command and its view-driven ticker, the cross-process action lock, the LocalStorage watchdog state (`watchdog-storage.ts` → the file). Tests updated
+- [x] dotfiles: `~/.wakeup` runs `jobs-grade --notify` on the MacBook (staleness against awake time); `architecture.md` MacBook row
+- [x] `make check` green in both repos, committed and pushed. **Deploy and verify need the MacBook:** end with `ask-human ask` carrying the exact install command and the three checks:
   - it keeps ticking with a Tinycast view open;
   - the state file updates;
   - the view reads it.
 
   Do not mark it live
 **Left behind:**
+- **Done in code, not live: the install needs the MacBook.** Ask `20261016T190047-10176` (iumac unreachable, queued; `make human-queue` there) merges branch `wave/netgear-launchd` into tinycast-extensions master and pushes it, then `make install && make check && make deploy && make watchdog-setup`, then dotfiles `git pull && make setup`. It carries the three checks (ticks with a view open, `state.json` mtime moves every minute, the view reads it). Nothing was run on the MacBook; do not mark live until the ask is answered.
+- **tinycast-extensions** (cloned to `~/SourceRoot/tinycast-extensions`, branch `wave/netgear-launchd` at `b7e1272`, pushed; master untouched). `extension/scripts/netgear-watchdog.ts` (bun) runs the unchanged pure tick; `launchd/com.jkrumm.netgear-watchdog.plist.tmpl` (60 s, `jobrun --owner tinycast-extensions --every 60 --timeout 90`); `make watchdog-setup|-teardown|-status`. State: `~/.local/state/netgear-watchdog/` with daemon-owned `state.json`, UI-owned `paused` flag and `reboot-marker.json` (the tick folds it in and deletes it), so no file has two writers; the log is still Tinycast's `netgear.log`. Smoke: the entry run by hand against a dead host wrote state and printed `idle` (rc 0).
+- **Deleted:** the `netgear-watchdog` command (`netgear-watchdog.tsx`, manifest entry), the view ticker (`startViewTicker`, `shouldRunViewTick`), `action-lock.ts` + its tests and every `withUiActionLock`/`waitMessage` use, the LocalStorage watchdog state. `make check` rc 0 (952+ unit tests incl. 12 new for storage and runner, e2e 49).
+- **Behaviour changes to know:** (a) no cross-process router lock any more (plan-mandated); a tick's login can still invalidate a UI POST in flight. Documented as accepted in `docs/netgear-m2.md`. (b) The password is Keychain-only for the daemon (`make secrets`); the Tinycast preference override no longer reaches it. (c) The old LocalStorage state is not migrated: event history, reconnect streak and a **paused flag reset** on first run. (d) `make deploy` now warns when the LaunchAgent is not loaded; rolling back to a Tinycast-hosted watchdog needs `make watchdog-teardown` first.
+- **dotfiles:** `jobs-grade --notify` (osascript notification; `stale` rows are dropped unless the machine has been awake for the job's whole window, from `sysctl kern.waketime`; 3 tests) and `~/.wakeup` runs it 2 min after wake. Limit: the hook fires once per wake, so a job that goes stale later in an awake session is not notified by it. `architecture.md` MacBook row, `background-jobs.md` ladder row (level 2, written not live) and `ops-signals.md` updated. `make check` rc 0.
+- **/review** (agent-gateway, 1 round, tinycast-extensions diff; 2 blocking, 19 improvements): fixed the deploy cutover gap (warning), state-file shape validation (+ test), `tinycast-status.py` shape check and dead parameter, a stale comment, an `await` on a sync call, the accepted-lock note and rollback note. **Declined:** restoring the lock (plan says delete it), a single-instance guard (launchd never overlaps a job), a cooldown write before `client.reboot()` and a mid-tick pause re-check (pre-existing tick semantics, not this move), a LocalStorage migration, fsync/tmp sweep, stdout noise (dotfiles `log-rotate` derives its list from the plist, so the log is capped), extracting a shared composition root, refactoring `netgear.tsx`/`runTick` size, unused-export cleanup. The dotfiles diff (`--notify`, 5-line hook) got no `/review`. The fix commits were not re-reviewed.
 
-## Wave 13 — MacBook: van-sampler Bluetooth TCC spike, then migrate            <!-- status: pending -->
+## Wave 13 — MacBook: van-sampler Bluetooth TCC spike, then migrate            <!-- status: active -->
 - [ ] **Run from the mini** (the MacBook is offline): clone `jkrumm/tinycast-extensions` into `~/SourceRoot/` if absent (Wave 12 may have done it). Work on a branch `wave/<name>` and push the **branch**, not master: the MacBook may hold unpushed work. The handoff ask includes merging the branch on the MacBook
 - [ ] Spike: a minimal signed Swift executable with an embedded Info.plist (`-sectcreate __TEXT __info_plist`, `NSBluetoothAlwaysUsageDescription`) as the launchd **program**. Does the BLE scan get a TCC prompt and grant attributed to it, with Tinycast quit? Use `/research` for current TCC attribution rules first
 - [ ] On success: van-sampler becomes that Swift program (reusing `van-ble`'s CoreBluetooth code), wrapped in `jobrun`, with state in a file the `van-power` view reads. Delete the Tinycast `van-sampler` command and its LocalStorage state. On failure: record the evidence and the `.app`-bundle alternative, and stop
