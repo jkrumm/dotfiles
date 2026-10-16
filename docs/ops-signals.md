@@ -31,7 +31,7 @@ description: How a background-job failure travels from the job to a fix or a hum
    **IuRoot stays out of warden.**
 3. **Every alert source feeds warden directly**, not via Slack or Kuma snapshots:
    - the `job` source (`jobs-grade`);
-   - Uptime Kuma, as a webhook to warden-api, replacing the 30-minute poll snapshot;
+   - Uptime Kuma, as a webhook to warden-api, replacing the 30-minute poll snapshot; **live since Wave 14** (provider `Warden - Ingest`, declared in `homelab/uptime-kuma/monitors.yaml` `settings.webhooks`, attached to every leaf next to Slack; the snapshot poll is retired). Kuma does not redeliver a webhook warden missed while down, so Slack stays the fallback;
    - HyperDX alerts, as a webhook to warden-api instead of #alerts → `slack_alert`.
 
    **Slack #alerts becomes a human-readable mirror**, plus the fallback for when warden itself is
