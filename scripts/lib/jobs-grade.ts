@@ -12,7 +12,10 @@
 // grader must see. A declared label with no state file is graded (never invisible); the plists are
 // the single source, there is no hand list.
 //
-// Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents.
+// Hermes cron jobs (~/.hermes/cron/jobs.json) are graded too, through an adapter below.
+//
+// Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
+// JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -80,8 +83,8 @@ const CORRUPT = "corrupt"
 const CORRUPT_STREAK = 99
 
 /** A state file we cannot trust is a visible failure, never a job that silently vanishes from grading. */
-function corrupt(file: string, why: string): JobState {
-  return { label: file.replace(/\.json$/, ""), owner: "?", started: "", finished: "", rc: -1, consecutive_fail: CORRUPT_STREAK, fails_24h: 0, last_ok: null, every: null, run_id: CORRUPT, duration_ms: 0, owner_sha: null, fail_times: [], tail: [why], runs: [] }
+function corrupt(label: string, why: string): JobState {
+  return { label, owner: "?", started: "", finished: "", rc: -1, consecutive_fail: CORRUPT_STREAK, fails_24h: 0, last_ok: null, every: null, run_id: CORRUPT, duration_ms: 0, owner_sha: null, fail_times: [], tail: [why], runs: [] }
 }
 
 export function readStates(dir: string): JobState[] {
@@ -96,10 +99,84 @@ export function readStates(dir: string): JobState[] {
       const cadence = s.every === null || Number.isFinite(s.every)
       const lastOk = s.last_ok === null || Number.isFinite(Date.parse(s.last_ok))
       if (strings && numeric && cadence && lastOk) out.push({ ...s, tail: Array.isArray(s.tail) ? s.tail : [] })
-      else out.push(corrupt(f, "state file is missing required fields"))
+      else out.push(corrupt(f.replace(/\.json$/, ""), "state file is missing required fields"))
     } catch (e) {
-      out.push(corrupt(f, `state file unreadable: ${(e as Error).message}`))
+      out.push(corrupt(f.replace(/\.json$/, ""), `state file unreadable: ${(e as Error).message}`))
     }
+  }
+  return out
+}
+
+// --- Hermes cron adapter -------------------------------------------------------------------------
+// Hermes cron jobs are not launchd jobs and never go through jobrun: the gateway runs them and keeps
+// the last outcome in ~/.hermes/cron/jobs.json. They are translated into the same JobState records
+// and graded by the same gradeOne, so a failing cron job becomes a `job` item for hermes-agent through
+// warden's one path. Only the LAST run is known (no history): a failed daily/weekly job is `failing`
+// at once, which is the right reading for a job that runs once a day or a week.
+export const CRON_PREFIX = "hermes-cron."
+export const CRON_GATEWAY_LABEL = "ai.hermes.gateway" // the launchd job that runs every cron job
+export const CRON_OWNER = "hermes-agent"
+export const defaultCronJobs = () => process.env.JOBRUN_HERMES_CRON || join(homedir(), ".hermes/cron/jobs.json")
+
+/** The longest gap between two runs of a fixed-time cron expression, in seconds; null for anything else
+ *  (then only a failure is graded, never staleness). Supports `M H * * <dow>` with `*`, lists and ranges. */
+export function cronEvery(expr: unknown): number | null {
+  if (typeof expr !== "string") return null
+  const f = expr.trim().split(/\s+/)
+  if (f.length !== 5 || !/^\d+$/.test(f[0]) || !/^\d+$/.test(f[1]) || f[2] !== "*" || f[3] !== "*") return null
+  if (f[4] === "*") return 86400
+  const days = new Set<number>()
+  for (const part of f[4].split(",")) {
+    const m = /^(\d)(?:-(\d))?$/.exec(part)
+    if (!m) return null
+    const [lo, hi] = [Number(m[1]), Number(m[2] ?? m[1])]
+    if (lo > 7 || hi > 7 || lo > hi) return null
+    for (let d = lo; d <= hi; d++) days.add(d % 7)
+  }
+  const sorted = [...days].sort((a, b) => a - b)
+  const gap = Math.max(...sorted.map((d, i) => (i === sorted.length - 1 ? sorted[0] + 7 : sorted[i + 1]) - d))
+  return gap * 86400
+}
+
+const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+
+/** Enabled cron jobs that have run at least once, as run records. A missing file is no cron jobs; a registry
+ *  or an entry we cannot read is a visible failure, like a corrupt jobrun state file, never a silent gap. */
+export function readCronStates(path: string, now: number = Date.now()): JobState[] {
+  if (!existsSync(path)) return []
+  const broken = (label: string, why: string): JobState => ({ ...corrupt(label, why), owner: CRON_OWNER })
+  let jobs: unknown[]
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"))
+    if (!Array.isArray(parsed?.jobs)) return [broken(`${CRON_PREFIX}registry`, "cron registry has no jobs array")]
+    jobs = parsed.jobs
+  } catch (e) {
+    return [broken(`${CRON_PREFIX}registry`, `cron registry unreadable: ${(e as Error).message}`)]
+  }
+  const out: JobState[] = []
+  const used = new Set<string>()
+  for (const [i, entry] of jobs.entries()) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      out.push(broken(`${CRON_PREFIX}entry-${i}`, "cron registry entry is not an object"))
+      continue
+    }
+    const j = entry as Record<string, unknown>
+    const started = typeof j.last_run_at === "string" ? j.last_run_at : ""
+    if (j.enabled === false || !started || !Number.isFinite(Date.parse(started)) || typeof j.last_status !== "string") continue
+    const name = typeof j.name === "string" && j.name ? j.name : String(j.id ?? i)
+    const ok = j.last_status === "ok"
+    const sched = typeof j.schedule_display === "string" ? j.schedule_display : (j.schedule as { expr?: string } | undefined)?.expr
+    let label = `${CRON_PREFIX}${slug(name) || i}`
+    if (used.has(label)) label = `${label}-${j.id ?? i}` // two names slugging alike stay two jobs
+    used.add(label)
+    const failTail = `hermes cron job '${name}' (id ${j.id}, schedule ${sched ?? "?"}) ended status=${j.last_status}: ${j.last_error ?? "no error recorded"}`
+    out.push({
+      label, run_id: started, started, finished: started, rc: ok ? 0 : 1, duration_ms: 0, // Hermes records one outcome: it is the run
+      every: cronEvery(sched), owner: CRON_OWNER, owner_sha: null, last_ok: ok ? started : null,
+      consecutive_fail: ok ? 0 : 1, fails_24h: !ok && now - Date.parse(started) < 86400_000 ? 1 : 0, fail_times: ok ? [] : [started],
+      tail: ok ? [] : [failTail],
+      runs: [{ run_id: started, started, rc: ok ? 0 : 1, duration_ms: 0 }],
+    })
   }
   return out
 }
@@ -116,6 +193,7 @@ export interface GradeOpts {
   now: number // epoch ms (clock injection)
   loaded: (label: string) => boolean
   expected?: Expected[]
+  cron?: JobState[] // Hermes cron jobs, already translated by readCronStates
 }
 
 export const defaultPlistDir = () => process.env.JOBRUN_PLIST_DIR || join(homedir(), "Library/LaunchAgents")
@@ -195,6 +273,9 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
     return done("failing", `no success for ${sinceOk}, last rc=${s.rc}`)
   }
   if (daily && s.consecutive_fail > 0) return done("failing", `daily job failed (rc=${s.rc})`)
+  // A cron job's only record is its last outcome and its schedule may be one we cannot turn into a cadence:
+  // a failure there must still grade, or it would read "retrying" forever.
+  if (!s.every && s.label.startsWith(CRON_PREFIX) && s.consecutive_fail > 0) return done("failing", "cron job's last run failed")
   if (windowS && ageS(s.started) > windowS) {
     return done("stale", `last run ${Math.round(ageS(s.started) / 60)} min ago, window ${Math.round(windowS / 60)} min`)
   }
@@ -208,7 +289,9 @@ function recovered(s: JobState): boolean {
 }
 
 export function gradeAll(dir: string, o: GradeOpts): Graded[] {
-  const rows = readStates(dir).map((s) => gradeOne(s, o))
+  // A cron job runs inside the Hermes gateway, so it is loaded exactly when the gateway is.
+  const cronLoaded = { ...o, loaded: (l: string) => o.loaded(l.startsWith(CRON_PREFIX) ? CRON_GATEWAY_LABEL : l) }
+  const rows = [...readStates(dir).map((s) => gradeOne(s, o)), ...(o.cron ?? []).map((s) => gradeOne(s, cronLoaded))]
   const seen = new Set(rows.map((r) => r.label))
   for (const e of o.expected ?? []) {
     if (seen.has(e.label)) continue
@@ -232,7 +315,7 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
 }
 
 if (import.meta.main) {
-  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()) })
+  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), cron: readCronStates(defaultCronJobs()) })
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
     console.log(line)

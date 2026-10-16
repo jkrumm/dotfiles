@@ -54,11 +54,11 @@ local `man launchd.plist`.
 
 | Job class | Path from failure to human | Gap |
 |-|-|-|
-| launchd timer, log-only (`warden-backup`'s twins, `weatherorb.{retention,verify}`; `modelpick-refresh`, `log-rotate`, `research-gateway-deploy` and `brain-web-refresh` moved onto `jobrun`) | failure → `~/Library/Logs/*.err` → **nothing** | Invisible. The heartbeat checks only KeepAlive labels (`lib/launchd-restarts.sh`), not timer jobs |
+| launchd timer, log-only (`modelpick-refresh`, `log-rotate`, `research-gateway-deploy`, `brain-web-refresh`, `weatherorb.{retention,verify}` moved onto `jobrun`) | failure → `~/Library/Logs/*.err` → **nothing** | Invisible. The heartbeat checks only KeepAlive labels (`lib/launchd-restarts.sh`), not timer jobs |
 | launchd timer with a Kuma push (`brain-sync`, `brain-backup`, `hermes-backup`, `warden-backup`, `drift-check`) | missed push → Kuma DOWN after one interval (`maxretries: 0` everywhere) → **Slack #alerts → human at once**. In parallel `warden-poll` (every 30 min, snapshot via Argo) → `uk` item → 30 min debounce → triage → investigate | A human is paged **before** any self-heal or remediation. A DOWN that recovers between two polls is invisible to warden. The push carries success only, so `hermes-backup`'s nightly rotation error stays green |
 | KeepAlive service | crash/restart → `check_launchd_restarts` (edge-triggered) → composite DOWN at once → #alerts. Dead port → `services` component → 3 runs (~15 min) → DOWN | Composite → warden only via `uk`. **0 of 14 `uk` items in 30 days reached `fixed`** (8 quiet, 6 resolved) |
 | In-process loop | warn log or `/health`. research-gateway, audio-gateway and weatherorb also export OTel → HyperDX alert → #alerts webhook → warden `slack_alert`. weatherorb's own alerts become a GitHub issue → `github_go` | Only 3 of about 25 owners export OTel. agent-gateway, warden, hermes, linewatch, usage-tracker and modelpick don't |
-| Hermes cron | error → `jobs.json` `last_status` → warden `hermes_cron` **event**, read only by the morning briefing; never made an item (`loop/core.py:56`) | The drift audit's 10-10 model 404 was never triaged |
+| Hermes cron | error → `jobs.json` `last_status` → `jobs-grade` cron adapter (`hermes-cron.<slug>`) → warden `job` item for hermes-agent (the `hermes_cron` event source is retired, Wave 11) | Only the last outcome is recorded, no history |
 | warden itself | loop wedged → no `Warden Loop` push → Kuma DOWN (≈40 min). Poller dead → no `Hermes Watchdog` push (35 min) | `warden-sweep` dead → only `/health` staleness, which no monitor watches |
 | MacBook | Tinycast background commands; only `opbackup` has a Kuma monitor | Not represented in warden (`WARDEN_MACHINE` defaults to `mini`) |
 

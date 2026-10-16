@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Expected, type JobState, gradeAll, gradeOne, parseJobrunArgs, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type JobState, cronEvery, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -156,5 +156,81 @@ describe("expected set (never-recorded gap)", () => {
     writeFileSync(join(dir, "c.plist"), "not a plist")
     expect(readExpected(dir).map((e) => [e.label, e.owner, e.every])).toEqual([["a", "dotfiles", 600]])
     expect(readExpected(join(dir, "missing"))).toEqual([])
+  })
+})
+
+describe("hermes cron adapter", () => {
+  const write = (jobs: unknown) => {
+    const p = join(mkdtempSync(join(tmpdir(), "cron-")), "jobs.json")
+    writeFileSync(p, typeof jobs === "string" ? jobs : JSON.stringify({ jobs }))
+    return p
+  }
+  const cron = (over: Record<string, unknown> = {}) => ({
+    id: "abc", name: "Brain drift audit", enabled: true, schedule_display: "0 9 * * 6", last_status: "ok",
+    last_run_at: ago(3600), last_error: null, ...over,
+  })
+  const none = join(tmpdir(), "no-such-state-dir")
+
+  test("cronEvery: longest gap of a fixed-time expression, null for anything else", () => {
+    expect(cronEvery("30 6 * * *")).toBe(86400)
+    expect(cronEvery("0 9 * * 6")).toBe(7 * 86400)
+    expect(cronEvery("0 7 * * 1-5")).toBe(3 * 86400) // Friday -> Monday
+    expect(cronEvery("0 22 * * 1-4")).toBe(4 * 86400)
+    expect(cronEvery("0 9 * * 0,7")).toBe(7 * 86400)
+    expect(cronEvery("*/5 * * * *")).toBeNull()
+    expect(cronEvery("0 9 1 * *")).toBeNull()
+    expect(cronEvery(undefined)).toBeNull()
+  })
+
+  test("an ok job is ok, a failed one is failing with its error as the tail", () => {
+    const failed = cron({ id: "z", name: "Evening report", last_status: "error", last_error: "HTTP 404" })
+    const rows = gradeAll(none, { now: NOW, loaded, cron: readCronStates(write([cron(), failed])) })
+    expect(rows.map((r) => [r.label, r.grade, r.owner])).toEqual([
+      ["hermes-cron.brain-drift-audit", "ok", "hermes-agent"],
+      ["hermes-cron.evening-report", "failing", "hermes-agent"],
+    ])
+    expect(rows[1].tail?.[0]).toContain("HTTP 404")
+  })
+
+  test("a cron job is loaded exactly when the gateway is", () => {
+    const seen: string[] = []
+    const rows = gradeAll(none, { now: NOW, cron: readCronStates(write([cron()])), loaded: (l) => (seen.push(l), l !== "ai.hermes.gateway") })
+    expect(seen).toEqual(["ai.hermes.gateway"])
+    expect(rows[0].grade).toBe("unloaded")
+  })
+
+  test("a missed scheduled run is stale", () => {
+    const rows = gradeAll(none, { now: NOW, loaded, cron: readCronStates(write([cron({ schedule_display: "30 6 * * *", last_run_at: ago(30 * 3600) })])) })
+    expect(rows[0].grade).toBe("stale")
+  })
+
+  test("disabled and never-run jobs are skipped; a missing file is no jobs; a corrupt one fails visibly", () => {
+    expect(readCronStates(write([cron({ enabled: false }), cron({ last_run_at: null, last_status: null })]))).toEqual([])
+    expect(readCronStates(join(tmpdir(), "nope.json"))).toEqual([])
+    const bad = gradeAll(none, { now: NOW, loaded, cron: readCronStates(write("{not json")) })
+    expect(bad[0].grade).toBe("failing")
+  })
+
+  test("a failure on a schedule we cannot read still grades failing", () => {
+    for (const schedule_display of ["every 2h", "*/5 * * * *", "0 9 1 * *"]) {
+      const rows = gradeAll(none, { now: NOW, loaded, cron: readCronStates(write([cron({ schedule_display, last_status: "error" })]), NOW) })
+      expect(rows[0].grade).toBe("failing")
+    }
+  })
+
+  test("registry shape drift and bad entries are visible rows, never a throw or a silent gap", () => {
+    for (const body of ['{"jobs":{}}', "{}", "[]", "null"]) {
+      expect(gradeAll(none, { now: NOW, loaded, cron: readCronStates(write(body)) })[0].grade).toBe("failing")
+    }
+    const rows = gradeAll(none, { now: NOW, loaded, cron: readCronStates(write([null, 7, "x", cron()])) })
+    expect(rows.filter((r) => r.grade === "failing")).toHaveLength(3)
+    expect(rows.some((r) => r.label === "hermes-cron.brain-drift-audit" && r.grade === "ok")).toBe(true)
+  })
+
+  test("two names that slug alike are two jobs, and fails_24h follows the injected clock", () => {
+    const rows = readCronStates(write([cron({ id: "a", last_status: "error" }), cron({ id: "b", last_status: "error" })]), NOW)
+    expect(new Set(rows.map((r) => r.label)).size).toBe(2)
+    expect(rows[0].fails_24h).toBe(1)
+    expect(readCronStates(write([cron({ last_status: "error", last_run_at: ago(2 * 86400) })]), NOW)[0].fails_24h).toBe(0)
   })
 })
