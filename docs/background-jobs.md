@@ -67,16 +67,16 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `warden-sweep` | warden | 300s | **1** | 3 | Only `/health` staleness, unmonitored. Check-runs 403 is by design (fine-grained PATs have no Checks permission; warden uses the Actions-runs fallback) — no fault |
 | `warden-api` | warden | KeepAlive | 2 | 2 | — |
 | `warden-backup` | warden | 03:10 | 2 | 2 | Kuma `Warden Backup` (25 h) exists; v1 wrongly called it log-only. warden can't fix its own backup → Kuma |
-| `modelpick-refresh` | modelpick | 06:00 | 0 | 4 | lmarena `coding` returns 0 rows: degraded but rc=0. Needs the step rc to propagate |
+| `modelpick-refresh` | modelpick | 06:00 | 2 (on `jobrun`; graded) | 4 | Wave 10: a failed collector or one returning 0 rows now exits 1 (`RefreshResult.degraded`), so a half-empty refresh grades `failing` and becomes a `job` item for modelpick. Per-category emptiness inside one source (lmarena `coding`) is still not caught |
 | `modelpick-web` | modelpick | KeepAlive | 1 | 2 | — |
 | `weatherorb.*` services + DBOS workers | weatherorb | KeepAlive / DBOS cron | **4** | 4 | Reference citizen: DBOS (concurrency 1, stale cancel) + watchdog `overdue_after` + HyperDX → GitHub issue → warden |
 | `weatherorb.{retention,verify}` | weatherorb | 04:30/05:45 | 0 | 4 | Or fold into DBOS schedules (owner's call) |
 | `linewatch-*` | linewatch | KeepAlive/60s | 3 | 3 | ISP and router faults are human-only. Kuma `Home Line` stays (a symptom) |
-| `usage-tracker` | usage-tracker | 900s | 2 | 4 | Heartbeat staleness today |
+| `usage-tracker` | usage-tracker | 900s | 2 (on `jobrun`; graded) | 4 | Wave 10: `--timeout 600`; the heartbeat's log-mtime probe is gone (the `jobs` component is WARN-only, so staleness no longer FAILs the composite) |
 | `walkingpad` | walkingpad | KeepAlive | 1 | 2 | — |
 | `audio-gateway` | audio-gateway | KeepAlive | 3 | 4 | OTel → HyperDX → #alerts → `slack_alert`. Last exit 127 inside `secrets-run`, unexplained |
 | `research-gateway`, `-lightpanda` | research-gateway | KeepAlive | 4 | 4 | Leases + crash-loop guard + 10 HyperDX alerts |
-| `research-gateway-deploy` | research-gateway | 120s | 1 | 4 | Own lock and deadline; failures are log lines only |
+| `research-gateway-deploy` | research-gateway | 120s | 2 (on `jobrun`; graded) | 4 | Wave 10: `jobrun --lock research-gateway-deploy --timeout 7200` replaced the mkdir lock and stale-lock reclaim (also behind `make deploy`). A red CI or a deferred (busy) tick is rc 0 by design; only fetch/install/unhealthy-restart fail |
 
 ### Mini: IuRoot (`com.iu.prometheus-*`, prometheus-scripts)
 

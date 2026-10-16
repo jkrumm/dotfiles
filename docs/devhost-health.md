@@ -22,7 +22,7 @@ components:
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | agent-gateway, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), research-gateway (`/health`, renderer, Tavily plan, and a deploy marker that lags `origin/master` > 15 min or a poller silent > 15 min), brain-web (`:7733/`), usage-tracker (log mtime < 30 min), walkingpad (`:7706/status`) — each gated on its plist |
+| services | agent-gateway, hermes gateway, colima, caddy, dnsmasq, audio-gateway (`:7719/health`), research-gateway (`/health`, renderer, Tavily plan, and a deploy marker that lags `origin/master` > 15 min or a poller silent > 15 min), brain-web (`:7733/`), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | obsidian | CLI answers (i.e. the app is running) |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |

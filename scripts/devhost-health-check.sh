@@ -137,7 +137,6 @@ RG_DEPLOY_STUCK_MIN="${RG_DEPLOY_STUCK_MIN:-15}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
-USAGE_TRACKER_LOG="${USAGE_TRACKER_LOG:-$HOME/Library/Logs/usage-tracker.log}"
 PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
@@ -169,8 +168,6 @@ PANIC_MAX_AGE_DAYS="${DEVHOST_PANIC_MAX_AGE_DAYS:-3}"
 # machine (point it at a fixture dir), the same reason every threshold above is
 # overridable — the only other way to test the alarm is to panic the host.
 DIAGNOSTIC_REPORTS_DIR="${DEVHOST_DIAGNOSTIC_REPORTS_DIR:-/Library/Logs/DiagnosticReports}"
-# usage-tracker runs every 900s; twice that plus slack before "it stopped".
-USAGE_TRACKER_MAX_AGE_MIN="${DEVHOST_USAGE_TRACKER_MAX_AGE_MIN:-30}"
 # Max quota is reported, never graded — except a WARN (never FAIL) when the
 # 5-hour window is nearly spent, which is the one reading that changes what an
 # agent should do next.
@@ -876,7 +873,6 @@ dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected
 audio-gateway|$HOME/Library/LaunchAgents/com.jkrumm.audio-gateway.plist|probe_audio_gateway
 research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist|probe_research_gateway
 brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
-usage-tracker|$HOME/Library/LaunchAgents/com.jkrumm.usage-tracker.plist|probe_usage_tracker
 walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad"
 
 probe_agent_gateway() {
@@ -1053,19 +1049,6 @@ probe_brain_web() {
   local code
   code=$(http_code "$BRAIN_WEB_URL/")
   [[ "$code" == "200" ]] || { echo "brain-web not answering on $BRAIN_WEB_URL (got ${code:-000})"; return 1; }
-}
-
-probe_usage_tracker() {
-  # A scheduled job, not a listener: liveness is "it ran recently". The log
-  # mtime moves on every run (launchd appends stdout each time), so it is the
-  # last-run timestamp without parsing a line format that is free to change.
-  [[ -f "$USAGE_TRACKER_LOG" ]] || { echo "usage-tracker has never written $USAGE_TRACKER_LOG"; return 1; }
-  local mtime age
-  mtime=$("$STAT_BIN" -f %m "$USAGE_TRACKER_LOG" 2>/dev/null) || mtime=0
-  (( mtime > 0 )) || { echo "usage-tracker log mtime unreadable at $USAGE_TRACKER_LOG"; return 1; }
-  age=$(( ($("$DATE_BIN" +%s) - mtime) / 60 ))
-  (( age <= USAGE_TRACKER_MAX_AGE_MIN )) \
-    || { echo "usage-tracker last ran ${age}m ago (max ${USAGE_TRACKER_MAX_AGE_MIN}m on a 15m cadence)"; return 1; }
 }
 
 probe_walkingpad() {
