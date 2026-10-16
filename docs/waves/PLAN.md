@@ -67,13 +67,18 @@ instead of claiming done.
 - Evidence: manual `hermes-backup.sh` run exit 0, `sidecars-excluded-20260921` and `.env` gone on homelab; `hermes cron list` no longer shows the job; `make check` in hermes-agent green. The script runs from the repo path under launchd, so it is live; the next 03:00 run is the final proof.
 - Review: no `/review` run (35-line bash diff, read and tested live by hand).
 
-## Wave 2 — the remaining known defects            <!-- status: active -->
-- [ ] `audio-gateway` last exit 127: `secrets-run: line 770: from_cache: command not found` (10-15 14:35). Find the root cause. A likely hypothesis is bash reading `secrets-run` while it was being rewritten by the 10-14 commit, but confirm or refute it. Fix in the owner repo; any `secrets-run` edit takes its full guardrail (AGENTS.md §Secrets)
-- [ ] `warden-sweep` 403 reading check-runs on weatherorb: confirm which token and scope (read-only). Any code-side fallback goes in warden (worktree). The scope grant itself → `ask-human ask` with the exact GitHub UI step
-- [ ] Verify: `audio-gateway` restart history is clean; `warden-sweep.err` shows no new 403 after the grant (or the ask id is recorded)
+## Wave 2 — the remaining known defects            <!-- status: done -->
+- [x] `audio-gateway` last exit 127: `secrets-run: line 770: from_cache: command not found` (10-15 14:35). Find the root cause. A likely hypothesis is bash reading `secrets-run` while it was being rewritten by the 10-14 commit, but confirm or refute it. Fix in the owner repo; any `secrets-run` edit takes its full guardrail (AGENTS.md §Secrets)
+- [x] `warden-sweep` 403 reading check-runs on weatherorb: confirm which token and scope (read-only). Any code-side fallback goes in warden (worktree). The scope grant itself → `ask-human ask` with the exact GitHub UI step
+- [x] Verify: `audio-gateway` restart history is clean; `warden-sweep.err` shows no new 403 after the grant (or the ask id is recorded)
 **Left behind:**
+- `audio-gateway`: hypothesis **confirmed byte-exact**. The wrapper `secrets-run run -- bun` outlived the 10-14 in-place rewrite (34826 → 35291 bytes); when bun exited **0**, bash resumed at the old EOF offset and byte 34826 of the new file is `from_cache` (line 770 = old 769 lines + 1). A non-zero child exit hides it (`set -e`). Fix: `main "$@"; exit $?` (dotfiles `d3d2e59` + follow-up), regression `secrets-run.test.sh` §13b1 (red on old shim: got 99; green now), `forward_signal` got a SC2329 disable. `make secrets-test` 48/48 and the harness 119/119, `make secrets-lint` clean. Design D7 + security-review notes in dotfiles-private (pushed). Adversarial `/review`: 0 blocking; the comment and the test's sleep-ordering were fixed; a re-exec-from-copy hardening was declined (the `exit` closes it, rename-replace was never affected).
+- **Known one-off:** my own in-place edit of `secrets-run` hit the 6 live `secrets-run run` wrappers still on the old image. Each may fail once on its next *clean* child exit, then launchd restarts it onto the fixed script. `audio-gateway` `LastExitStatus` stays 127 until then; I did not kickstart anything (Wave rule). Edit shell scripts via `git`/rename, not in place, while daemons run.
+- `warden-sweep`: it is `op://mini/github/token`, a fine-grained PAT, and it lacks `Checks: read` on `jkrumm/weatherorb` (probe: 403, `x-accepted-github-permissions: checks=read`; `/user` 200). warden already has the code-side fallback (`lifecycle/merge.py::read_check_runs` → Actions workflow runs, `ChecksPending` when none), so the line in `warden-sweep.err` is an informational log, not a failure. No warden change was needed. Grant requested: `ask-human` id `20261016T122335-23766` (GitHub UI: the token → Repository permissions → Checks → Read-only). Same token, no reseed. Verify after the grant: the check-runs probe returns 200 and no new `check runs unreadable` line.
+- Not verified yet (depends on the above): clean `audio-gateway` restart history, and no new 403 after the grant.
 
-## Wave 3 — the map tells the truth            <!-- status: pending -->
+
+## Wave 3 — the map tells the truth            <!-- status: active -->
 - [ ] `docs/architecture.md`: drop the five weatherorb timers that are now DBOS schedules (`obs`, `fcstlog`, `archive`, `backfill`, `round`); §Monitoring adds `Agent Gateway`, `Warden Loop`, `Warden Backup`, `Hermes Serve`, `WeatherOrb Degraded`, `Home Line - Watchdog`
 - [ ] `scripts/architecture-check.sh`: also assert map ⊆ live on the machine that owns the row (the mini section on the mini, the MacBook section on the MacBook), with a hermetic test
 - [ ] Verify: `make doctor` green; a fake stale row fails it
