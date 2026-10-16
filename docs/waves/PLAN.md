@@ -55,14 +55,19 @@ instead of claiming done.
 - Done inline by the orchestrator (editorial work).
 - Ledger baseline over 14 days: `uk` 5 items, 0 fixed; `slack_alert` 17 items, 0 fixed; `hermes_log` 11 items, 1 fixed.
 
-## Wave 1 — hermes-agent defects            <!-- status: active -->
-- [ ] `hermes-backup.sh`: fix the rotation, which has failed nightly since 09-21 with `cannot delete non-empty directory sidecars-excluded-20260921`. Make every step's failure propagate to the exit code, so a broken rotation can no longer push Kuma green
-- [ ] Morning briefing: the warden board URL `127.0.0.1:7734` → `7735` (warden-api). Hermes keeps the briefing job; it just reads the right port
-- [ ] Delete Hermes cron `91800bba0031` (human-queue push retry, hard-coded to a request resolved 10-01) and its row in `hermes-agent/docs/scheduled-jobs.md`
-- [ ] Verify: the next 03:00 run, or a manual run of the backup script with rotation, exits 0 and the stale dir is gone; `hermes cron list` no longer shows the job; the briefing context script reaches the board
+## Wave 1 — hermes-agent defects            <!-- status: done -->
+- [x] `hermes-backup.sh`: fix the rotation, which has failed nightly since 09-21 with `cannot delete non-empty directory sidecars-excluded-20260921`. Make every step's failure propagate to the exit code, so a broken rotation can no longer push Kuma green
+- [x] Morning briefing: the warden board URL `127.0.0.1:7734` → `7735` (warden-api). Hermes keeps the briefing job; it just reads the right port
+- [x] Delete Hermes cron `91800bba0031` (human-queue push retry, hard-coded to a request resolved 10-01) and its row in `hermes-agent/docs/scheduled-jobs.md`
+- [x] Verify: the next 03:00 run, or a manual run of the backup script with rotation, exits 0 and the stale dir is gone; `hermes cron list` no longer shows the job; the briefing context script reaches the board
 **Left behind:**
+- Commit `hermes-agent` master (pushed). Root cause was not a rotation step: `--delete` cannot remove a dir holding only excluded `*-shm`/`*-wal` files, and rsync **exits 0** on `cannot delete non-empty directory`, so launchd's last exit was 0 and Kuma stayed green. Fix: `--delete-excluded` (also removed the plaintext `.env` that sat on homelab, against the script's own intent), rsync output captured and `cannot delete` → rc 1, unresolved or failed Kuma ping → rc 1 (was silently skipped).
+- Briefing: only `cron/morning-briefing.prompt.txt` carried `7734` (now `7735`, `/board` → 200); `briefing-context.py` already reached the board (`WATCHDOG_AVAILABLE=true`).
+- Cron `91800bba0031` removed via `hermes cron remove`; orphaned `scripts/human-queue-push-retry.sh` deleted too; doc row gone; `check-cron-registry` matches (4 live).
+- Evidence: manual `hermes-backup.sh` run exit 0, `sidecars-excluded-20260921` and `.env` gone on homelab; `hermes cron list` no longer shows the job; `make check` in hermes-agent green. The script runs from the repo path under launchd, so it is live; the next 03:00 run is the final proof.
+- Review: no `/review` run (35-line bash diff, read and tested live by hand).
 
-## Wave 2 — the remaining known defects            <!-- status: pending -->
+## Wave 2 — the remaining known defects            <!-- status: active -->
 - [ ] `audio-gateway` last exit 127: `secrets-run: line 770: from_cache: command not found` (10-15 14:35). Find the root cause. A likely hypothesis is bash reading `secrets-run` while it was being rewritten by the 10-14 commit, but confirm or refute it. Fix in the owner repo; any `secrets-run` edit takes its full guardrail (AGENTS.md §Secrets)
 - [ ] `warden-sweep` 403 reading check-runs on weatherorb: confirm which token and scope (read-only). Any code-side fallback goes in warden (worktree). The scope grant itself → `ask-human ask` with the exact GitHub UI step
 - [ ] Verify: `audio-gateway` restart history is clean; `warden-sweep.err` shows no new 403 after the grant (or the ask id is recorded)
