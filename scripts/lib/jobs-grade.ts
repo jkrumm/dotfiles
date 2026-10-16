@@ -48,6 +48,10 @@ export interface Graded {
   last_ok: string | null
   last_started: string
   every: number | null
+  /** Owner repo HEAD when the last run started, the last 5 runs and the output tail: what warden's job brief quotes. Absent on a never-recorded job. */
+  owner_sha?: string | null
+  runs?: JobState["runs"]
+  tail?: string[]
 }
 
 // T1 thresholds (ops-signals.md §3). Exported so the tests pin the numbers.
@@ -169,6 +173,9 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
     last_ok: s.last_ok,
     last_started: s.started,
     every: s.every,
+    owner_sha: s.owner_sha,
+    runs: s.runs ?? [],
+    tail: s.tail,
   }
   const done = (grade: Grade, reason: string): Graded => ({ ...base, grade, reason })
 

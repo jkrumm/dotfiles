@@ -85,6 +85,11 @@ describe("jobs-grade", () => {
     expect(rows.map((r) => r.grade)).toEqual(["failing", "failing", "failing"])
     expect(() => renderTable(rows)).not.toThrow()
   })
+  test("a graded row carries owner_sha, the last runs and the output tail (warden's job brief quotes them)", () => {
+    const runs = [{ run_id: "r1", started: ago(60), rc: 1, duration_ms: 5 }]
+    const row = gradeOne(job({ rc: 1, consecutive_fail: 3, owner_sha: "abc123", runs, tail: ["boom"] }), { now: NOW, loaded })
+    expect([row.owner_sha, row.runs, row.tail]).toEqual(["abc123", runs, ["boom"]])
+  })
   test("summarize relays one verdict: exit 0 all ok, 2 otherwise", () => {
     const ok = gradeOne(job(), { now: NOW, loaded })
     const bad = gradeOne(job({ label: "b", rc: 1, consecutive_fail: 3 }), { now: NOW, loaded })
