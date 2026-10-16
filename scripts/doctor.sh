@@ -308,10 +308,28 @@ section_kuma() {
   esac
 }
 
+# --- Background jobs (both machines) -------------------------------------------
+# The graded table from jobs-grade — the only grading logic. Informational: a bad
+# grade is a skip-style note here, warden/the heartbeat own the reaction.
+section_jobs() {
+  hdr "Background jobs (jobrun state dir)"
+  local bun_dir out summary rc=0
+  bun_dir=$(/bin/bash "$DOTFILES_DIR/scripts/lib/bun-bin.sh" 2>/dev/null) || { skip "jobs" "bun not found — not graded"; return; }
+  out=$("$bun_dir/bun" "$DOTFILES_DIR/scripts/lib/jobs-grade.ts" --table 2>&1) || rc=$?   # one grading run: table + verdict line
+  summary=$(printf '%s\n' "$out" | tail -n 1)
+  printf '%s\n' "$out" | sed '$d' | sed 's/^/    /'
+  case "$rc" in
+    0) ok "jobs" "$summary" ;;
+    2) skip "jobs" "$summary (warden owns the fix)" ;;
+    *) skip "jobs" "jobs-grade failed (rc=$rc): $summary" ;;
+  esac
+}
+
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
 section_architecture
+section_jobs
 section_brew
 section_worktrees
 

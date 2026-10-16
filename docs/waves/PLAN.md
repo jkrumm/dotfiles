@@ -94,21 +94,29 @@ instead of claiming done.
 - Verify: `make check` rc 0; `make doctor` architecture line "all 57 mapped mini labels exist", 42 passed, 4 skipped, clean; a fake stale `weatherorb.round` row on the real map exits 1 with `mapped-but-absent (mini)` (restored). MacBook half is covered by the test only, not run on the MacBook.
 - `/review` (agent-gateway): 1 blocking (filename vs `Label` key) and the fail-open paths fixed. Declined: switching the machine selector from backend to `machine-role.ts`, generating the Kuma table from `monitors.yaml`, a retired-label list (the plists are already gone), tidying the test's `expect` signature.
 
-## Wave 4 — `jobrun` and `jobs-grade`            <!-- status: active -->
-- [ ] `scripts/jobrun.ts` (bun): `jobrun <label> --owner <repo> [--every s] [--timeout s] [--lock name] [--kuma op-ref] -- <cmd>`. It:
+## Wave 4 — `jobrun` and `jobs-grade`            <!-- status: done -->
+- [x] `scripts/jobrun.ts` (bun): `jobrun <label> --owner <repo> [--every s] [--timeout s] [--lock name] [--kuma op-ref] -- <cmd>`. It:
   - prefixes output lines with timestamps;
   - enforces the deadline with TERM, then KILL;
   - takes an optional cross-label lock;
   - writes `~/.local/state/jobs/<label>.json` atomically (`run_id`, `started`, `finished`, `rc`, `duration_ms`, `every`, `owner`, `last_ok`, `consecutive_fail`, `fails_24h`, `tail`, plus the owner repo's HEAD SHA);
   - pushes Kuma only via `--kuma`, on rc=0, with the URL resolved through `secrets-run`.
   `make setup` links it to `~/.local/bin/jobrun`
-- [ ] `scripts/lib/jobs-grade.ts`: state dir + `launchctl print` → per label `ok|failing|stale|flapping|unloaded`, as JSON on stdout. The thresholds are `ops-signals.md` §3 T1 and §5 (flapping = ≥ 3 failures in 24 h). This is the **only** grading logic
-- [ ] Hermetic `bun test` suites in `make check` (deadline, lock, atomic write, every grade state, clock injection)
-- [ ] Heartbeat: a `jobs` component that is **WARN-only** (exit 2, never DOWN); `make doctor` prints the graded table
-- [ ] Verify: `make check` green; `make devhost-health-check` shows the jobs line (0 jobs yet = `jobs ok (0)`)
+- [x] `scripts/lib/jobs-grade.ts`: state dir + `launchctl print` → per label `ok|failing|stale|flapping|unloaded`, as JSON on stdout. The thresholds are `ops-signals.md` §3 T1 and §5 (flapping = ≥ 3 failures in 24 h). This is the **only** grading logic
+- [x] Hermetic `bun test` suites in `make check` (deadline, lock, atomic write, every grade state, clock injection)
+- [x] Heartbeat: a `jobs` component that is **WARN-only** (exit 2, never DOWN); `make doctor` prints the graded table
+- [x] Verify: `make check` green; `make devhost-health-check` shows the jobs line (0 jobs yet = `jobs ok (0)`)
 **Left behind:**
+- `scripts/jobrun.ts` + `scripts/lib/jobs-grade.ts` (bun/TS), 45 hermetic `bun test` cases in `make check` via new `make jobs-test`. `make setup` links `~/.local/bin/{jobrun,jobs-grade}` (shebang `env bun`: **Wave 5 plist templates must put bun's dir on `PATH`**, launchd has none).
+- State file = spec fields plus `owner_sha`, `runs` (last 5), `fail_times` (what `fails_24h` counts). Grades, in order: `unloaded`, `failing` (≥3 consecutive, or interval job red with no success for `max(3×every,30 min)`, or a daily job red), `stale` (no run in that window; daily = `every`+2 h), `flapping` (≥3 fails/24 h), else `ok`. No `--every` = only failure and loaded state are graded. A corrupt/incomplete state file grades `failing` (never vanishes).
+- `jobs-grade --summary` / `--table` (verdict on the last line) exit 0/2 and are the **single verdict** the heartbeat (`jobs` component, WARN-only) and `make doctor` relay; neither re-grades.
+- Semantics Wave 5+ must know: a held `--lock` skips the run (rc 0, no state write; absence grading catches a lock that never frees); deadline = rc 124; a run interrupted by jobrun's own SIGTERM (unload/reboot) records its rc but is not a failure; `--kuma` failing to resolve/push exits 1 after the run is recorded ok; lock is published atomically with pid+start time (pid reuse safe), unknown start time = held.
+- Verify: `make check` rc 0; live `make devhost-health-check` → `jobs ok (0)` (a temp state dir produced `jobs WARN (1): smoke=unloaded`, so the WARN path works); `make doctor` jobs line `jobs ok (0)`. Heartbeat and doctor run from the repo path, so they are live. The heartbeat's `swap 34%` FAIL in that same run is pre-existing and unrelated.
+- `/review` ×2 (agent-gateway). Round 1: 7 blocking fixed (lock races/path escape/error masking, fsync, Kuma timeout + release-before-push, pid reuse), plus drain-after-exit, interrupted runs, single verdict, corrupt files. Round 2: 4 blocking, 3 fixed (steal re-verification, unknown start = held, schema validation); exhausted lock attempts now throw (rc 70).
+- **Declined, with reason:** orphan-pgid reclaim (launchd kills the job's process group when jobrun dies); per-label state lock (launchd already forbids overlap, a manual overlap is the owner's act); default deadline (would kill legitimately long jobs); splitting `jobrun.ts` / extracting a shared `job-state` module; IuRoot owner dirs (IuRoot is out of the chain).
+- **For Wave 5/6:** `jobs-grade` only grades labels that have a state file, so a job that has *never* run (or whose first run is lock-skipped) is invisible. Wave 5's six wrapped jobs need an expected-label list (or Wave 6's `job` source must carry one) to flag "never recorded". Also: a retired job's `<label>.json` grades `unloaded` forever, so teardown targets must `rm` it.
 
-## Wave 5 — dotfiles jobs on `jobrun` + the canary            <!-- status: pending -->
+## Wave 5 — dotfiles jobs on `jobrun` + the canary            <!-- status: active -->
 - [ ] Wrap `brain-web-refresh`, `log-rotate`, `brain-sync`, `brain-backup` and `drift-check` in their plist templates (`--kuma` only where a §2 backstop monitor stays). Re-render them through the existing `make <x>-setup`
 - [ ] `log-rotate.sh`: derive its file list from our plists' `StandardOutPath`/`StandardErrorPath` (`com.jkrumm.*`, `com.iu.*`). Nothing outside those labels is touched
 - [ ] Canary: `com.jkrumm.jobrun-canary` (300 s) runs `scripts/jobrun-canary.ts`, which exits 1 unless `config/jobrun-canary.json` has `"healthy": true`. Keep it healthy and committed. It is the end-to-end probe for Wave 7.

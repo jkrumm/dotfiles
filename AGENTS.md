@@ -51,6 +51,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
+| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern); `bun test` via `make jobs-test` |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload` on wake |
 
 **Not symlinked:** `~/.codex/config.toml` (rendered by `_setup-codex` from
@@ -76,7 +77,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
-| `make check` | All local validation: architecture-check + secrets-lint + hooks-test + the hermetic suites (opbackup-seed, brew-service, launchd-restarts, human-queue). No side effects. |
+| `make check` | All local validation: architecture-check + secrets-lint + hooks-test + jobs-test + the hermetic suites (opbackup-seed, brew-service, launchd-restarts, human-queue). No side effects. |
 | `make verify` | `make doctor`, under the repo-contract name. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. |
@@ -317,10 +318,10 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is the composite over **18 components**: tailscale,
+`MacMini Dev Host - Push` is the composite over **19 components**: tailscale,
 sshd, herdr, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
 services (9), claude auth, obsidian, disk, runaways, agent-gateway jobs, overview
-pane, quota (in every msg; WARN never pages). Push, not probe (no ACL grant runs
+pane, jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). Push, not probe (no ACL grant runs
 `tag:homelab → tag:mac`) — full rationale, transient-tolerance knobs, and the
 paired `make mini-macos-update` applier: `docs/devhost-health.md`,
 [[mac-host-monitoring]].

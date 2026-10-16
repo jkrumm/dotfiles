@@ -7,7 +7,7 @@ one-line gotchas live in `AGENTS.md`.
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent and pushes **three** Uptime Kuma
-monitors. `MacMini Dev Host - Push` is the composite, covering **eighteen**
+monitors. `MacMini Dev Host - Push` is the composite, covering **nineteen**
 components:
 
 | Component | Checks |
@@ -29,6 +29,7 @@ components:
 | runaways | report-only CPU-time reaper |
 | agent-gateway jobs | agent-gateway `GET /api/jobs/health` — `ok:false` FAILs; a 404 (older agent-gateway) reports `starting` |
 | overview pane | the `make agent-overview` `watch` loop is alive — **WARN**, never FAIL |
+| jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL (warden owns the fix); a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
 | quota | Max utilisation from agent-gateway `GET /api/usage`, appended ungraded (`quota 5h 48% · 7d 21%`); **WARN** at 5 h ≥ 90 % |
 
 A component exits 0 (healthy), 2 (WARN — named in the msg, no streak, never a

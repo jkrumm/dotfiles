@@ -1343,6 +1343,19 @@ check_runaways() {
   echo "no runaways"
 }
 
+# Graded background jobs (jobrun state dir -> scripts/lib/jobs-grade.ts, the only grading
+# logic). WARN-only by design (exit 2, never DOWN): warden owns the fix, Kuma stays calm
+# (ops-signals.md §2/§3). A grader that cannot run is also a WARN, never a page.
+check_jobs() {
+  local bun_dir out rc=0
+  bun_dir=$(/bin/bash "$(dirname "${BASH_SOURCE[0]}")/lib/bun-bin.sh" 2>/dev/null) || { echo "jobs: bun not found, not graded"; return 2; }
+  out=$("$bun_dir/bun" "${JOBS_GRADE_TS:-$(dirname "${BASH_SOURCE[0]}")/lib/jobs-grade.ts}" --summary) || rc=$?
+  case "$rc" in
+    0|2) echo "$out"; return "$rc" ;;
+    *)   echo "jobs: jobs-grade failed (rc=$rc), not graded"; return 2 ;;
+  esac
+}
+
 # --- Run --------------------------------------------------------------------
 
 details=()
@@ -1365,7 +1378,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_agents_md_flag \
                  check_obsidian check_disk check_runaways check_agent_gateway_jobs check_overview_pane \
-                 check_quota; do
+                 check_jobs check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).
   is_transient=1
