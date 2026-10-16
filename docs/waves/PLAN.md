@@ -195,10 +195,10 @@ instead of claiming done.
 - _Orchestrator 2026-10-16: the two `jobrun` adoption waves moved ahead (now 10, 11) while the MacBook is offline; Kuma/HyperDX/diet are now 12–14._
 - **Stopped, not done: two biometric asks are queued and the MacBook (`iumac`) was unreachable (ssh timeout) all session.** Run `make human-queue` there, or the dialogs fire when it is back. In this order: (1) `20261016T170519-9342` creates `op://mini/warden-ingest/token` (random 32-byte hex, mini vault) if missing and runs `make secrets-seed`; (2) `20261016T170531-21347` pulls `dotfiles-private`, runs `make tailscale-acl-diff`, **aborts if the live ACL has any line the file lacks**, else `ACL_PUSH_YES=1 make tailscale-acl-push`. Expected diff: one added grant, `tag:homelab` + `tag:vps` -> `tag:devhost` `tcp:443` (plus its comment, after the homelab -> devhost `tcp:22` grant). `make tailscale-acl-diff` itself refuses on the mini, so the real diff output could not be attached; the guard in the command is the substitute.
 - **Verify still open (needs both asks):** `ssh homelab curl -s -o /dev/null -w '%{http_code}' -X POST https://warden-ingest.mini.jkrumm.com/ingest/hyperdx -H "Authorization: Bearer $T" -d '{"alert":"wave9 test","state":"ALERT"}'` -> 202 and one `hyperdx` event (then `OK` resolves it; close the item if one opens); the same without the header -> 401. Pass `$T` from `secrets-run read op://mini/warden-ingest/token` on the mini through ssh stdin, never on a command line. **Live now, proven on the mini:** `make deploy` + `make verify` green at warden `a73a676`; a POST through the Caddy door reaches warden-api and answers 503 (fail closed, no token seeded yet); `GET /board` on the door is 404; a GET on `/ingest/kuma` is 405.
-- **warden** (`99ae4e2` + `a73a676`, worktree, fast-forwarded, pushed): `scripts/lifecycle/ingest.py` + the POST handlers in `api.py`. `POST /ingest/kuma` -> `uk` (Kuma status 0 opens/refreshes, 1 resolves, 2/3 and group monitors ignored, Kuma's Test ping answered 202 ignored), `POST /ingest/hyperdx` -> new state source `hyperdx` (our body contract `{alert, state ALERT|OK|firing|resolved, message?, url?, service?, value?}`; **Wave 13 (was 11) must template HyperDX's webhook body to it**). Bearer token `op://mini/warden-ingest/token` resolved lazily via `secrets-run` (a seed after deploy needs no restart); no token = 503, bad/missing = 401 before the body is read, 64 KiB cap, socket timeout, token never logged. `hyperdx` is in `INGEST_SOURCES`. `make check` green (test_ingest 39, test_api 46, test_triage 671).
+- **warden** (`99ae4e2` + `a73a676`, worktree, fast-forwarded, pushed): `scripts/lifecycle/ingest.py` + the POST handlers in `api.py`. `POST /ingest/kuma` -> `uk` (Kuma status 0 opens/refreshes, 1 resolves, 2/3 and group monitors ignored, Kuma's Test ping answered 202 ignored), `POST /ingest/hyperdx` -> new state source `hyperdx` (our body contract `{alert, state ALERT|OK|firing|resolved, message?, url?, service?, value?}`; **Wave 15 (was 11) must template HyperDX's webhook body to it**). Bearer token `op://mini/warden-ingest/token` resolved lazily via `secrets-run` (a seed after deploy needs no restart); no token = 503, bad/missing = 401 before the body is read, 64 KiB cap, socket timeout, token never logged. `hyperdx` is in `INGEST_SOURCES`. `make check` green (test_ingest 39, test_api 46, test_triage 671).
 - **Caddy / ACL** (dotfiles `fe339c7`, dotfiles-private `feat(acl)`): the ACL grants `tcp:443` on the whole mini, which the file's own comment had rejected for the VPS ("every dev app at once"). Containment instead of a policy change: `scripts/caddy-tailnet.sh` now generates a reserved `warden-ingest` host (proxies `/ingest/*` of warden-api only) and a source guard that answers 403 to every `tag:homelab` / `tag:vps` peer address (read from `tailscale status`, 4 now) for every other host. Live: `make caddy-tailnet` ran on the mini, config validated and reloaded. A new homelab/VPS node needs a regeneration. Token ref declared in `dotfiles-private/headless.refs`.
 - **/review** (agent-gateway, 1 round, needs-human): fixed: socket timeout, oversized `Content-Length`, query string routing, the `poll_uk()` INSERT race (`ON CONFLICT DO NOTHING`), unbounded HyperDX string value. **Declined with reason:** (a) "blocking" sender text reaching triage: the event is already fenced as untrusted data (`intake._fence`) exactly like every Slack and Kuma line; the bearer token is the control. (b) "blocking" HyperDX fingerprint on the truncated title: `normalize_title()` caps every fingerprint at 120 chars anyway (`slack_alert` too), so the fix is correct but changes nothing below 200 chars. (c) 503-before-401 kept (distinguishes "not seeded" for the operator). (d) per-source event caps, versioned hyperdx keys, a shared identity/row module, a source descriptor table: scope. **Owner-visible trust model:** one shared bearer token now authorizes work for agents; the reviewer asked for it to be recorded in `agent-platform.md`; not done here (plan prescribes the token, per-sender tokens are a Wave 18 option). **Known race kept:** a `poll_uk()` snapshot taken before a Kuma UP webhook can reopen that row once, until Wave 10 retires the poll. The review run was not repeated after the fixes (covered by tests).
-- Wave 12 (was 10, Kuma webhook) must not start until the verify above is green: it depends on a working token and ACL.
+- Wave 14 (was 10, Kuma webhook) must not start until the verify above is green: it depends on a working token and ACL.
 
 ## Wave 10 — adopt `jobrun`: research-gateway, modelpick, usage-tracker            <!-- status: done -->
 - [x] `research-gateway-deploy`: `jobrun` with `--lock` replacing its mkdir lock (keep the 2h-stale semantics through `--timeout`)
@@ -229,37 +229,10 @@ instead of claiming done.
 - **/review** (agent-gateway): dotfiles diff, 3 blocking (failure on an unreadable schedule graded `ok`; a null entry in the registry threw; `jobs` shape drift failed open) fixed with tests; also fixed: injected clock, `corrupt()` label parameter, slug collisions. The warden review's one blocking claim (docs-only commit) was false (the reviewer could not run git; the code was in a sibling commit, since squashed). **Declined:** extracting the adapter to its own file/`job-types.ts`, a `loadedLabel` field, a `{states, errors}` return, a never-run grace row for fresh cron jobs (they appear after the first run), a status enum filter (`delivery_failed` is a real failure), retry on a half-written registry, an explicit `kind` field in the job payload instead of the label prefix. Not re-reviewed after the fixes; the add-on and the follow-up were not separately reviewed.
 - **For Wave 12:** `research-gateway-deploy` showed `stale` for a moment (poller, `--every 120`) and recovered by itself. `jobs WARN` will clear when the drift audit runs. The ledger read from a session needs `sqlite3 -readonly` (`mode=ro` URIs failed intermittently).
 
-## Wave 12 — Kuma → warden webhook            <!-- status: active -->
-- [ ] Carry-over from Wave 9, first: asks `20261016T170519-9342` (token + seed) and `20261016T170531-21347` (ACL push) are done → run Wave 9's verify (POST from homelab → 202 + one `hyperdx` event, closed after; no token → 401). If the asks are still open, stop and record it — every later step depends on them
-- [ ] `homelab/uptime-kuma/monitors.yaml`: add a webhook notification → `/ingest/kuma` on every leaf monitor, **keeping** "Slack - Alerts" as the human-readable mirror and fallback. Apply with `make uk-sync`
-- [ ] warden: retire the `uk` Argo snapshot poll in `watchdog-poll.py` only after one real DOWN/UP pair has arrived by webhook. Until then both run, and dedup keeps one item
-- [ ] Verify: pause a test push monitor → DOWN webhook → one `uk` item within a loop pass; resume → resolved
-**Left behind:**
+- _Orchestrator: Kuma/HyperDX webhooks and the Kuma diet wait on the MacBook asks; the MacBook code waves (now 12, 13) run first. Webhooks 14–15, diet 16, review 17._
 
-## Wave 13 — HyperDX → warden webhook            <!-- status: pending -->
-- [ ] `~/SourceRoot/vps/observability/alerts/*.json`: add the `/ingest/hyperdx` webhook to all 21 alerts. Slack #alerts stays as the mirror. Apply through the repo's own sync
-- [ ] warden: stop turning HyperDX-shaped #alerts messages into `slack_alert` items once the webhook path is proven (`watchdog-poll.py` filter, like the `[… Push]` one). weatherorb's alert → GitHub issue path stays (it already reaches warden directly as `github_go`)
-- [ ] Verify: a test alert (temporary threshold) → one `hyperdx` item, not a duplicate `slack_alert`; restore the threshold
-**Left behind:**
-
-## Wave 14 — Kuma becomes the calm backstop            <!-- status: pending -->
-- [ ] `monitors.yaml`, per `ops-signals.md` §2:
-  - keep the three duties: chain-alive, user-facing symptoms, data leaving the box;
-  - `maxretries ≥ 1` everywhere;
-  - intervals of at least 2× warden's T2 budget for everything that isn't chain-alive;
-  - retire or lengthen `Brain Sync`, `Hermes Watchdog`, `Drift`, `Hermes Serve`, `Collie` and `Secret Seed` as §2 says
-- [ ] warden: the `Warden Loop` push requires loop, poll and sweep heartbeat freshness (`/health`), so a dead sweep pages through Kuma
-- [ ] Docs: `architecture.md` §Monitoring and `ops-signals.md` §2 match the result
-- [ ] Verify: `uk-sync` diff reviewed and applied; a stale-sweep simulation on a copied ledger makes the push skip
-**Left behind:**
-
-## Wave 15 — review cycle 2            <!-- status: pending -->
-- [ ] Metrics and the §9 checklist, compared against Wave 8's numbers. Tune
-- [ ] Every owned mini job is at ladder level ≥ 2, and the remediable ones are at 4. Fix the stragglers or record why
-- [ ] Docs: `background-jobs.md` ladder table reflects the live state; `ops-signals.md` §1 rewritten as "flow today" (after), with the old flow moved to a short history note
-**Left behind:**
-
-## Wave 16 — MacBook: netgear-watchdog on launchd            <!-- status: pending -->
+## Wave 12 — MacBook: netgear-watchdog on launchd            <!-- status: active -->
+- [ ] **Run from the mini** (the MacBook is offline): clone `jkrumm/tinycast-extensions` into a fresh dir under `~/SourceRoot/` if absent. Work on a branch `wave/<name>` and push the **branch**, not master: the MacBook may hold unpushed work. The handoff ask includes merging the branch on the MacBook
 - [ ] tinycast-extensions:
   - a bun entry point running the existing pure `netgear/watchdog.ts` tick;
   - a launchd plist template (60 s) wrapped in `jobrun`;
@@ -274,10 +247,41 @@ instead of claiming done.
   Do not mark it live
 **Left behind:**
 
-## Wave 17 — MacBook: van-sampler Bluetooth TCC spike, then migrate            <!-- status: pending -->
+## Wave 13 — MacBook: van-sampler Bluetooth TCC spike, then migrate            <!-- status: pending -->
+- [ ] **Run from the mini** (the MacBook is offline): clone `jkrumm/tinycast-extensions` into `~/SourceRoot/` if absent (Wave 12 may have done it). Work on a branch `wave/<name>` and push the **branch**, not master: the MacBook may hold unpushed work. The handoff ask includes merging the branch on the MacBook
 - [ ] Spike: a minimal signed Swift executable with an embedded Info.plist (`-sectcreate __TEXT __info_plist`, `NSBluetoothAlwaysUsageDescription`) as the launchd **program**. Does the BLE scan get a TCC prompt and grant attributed to it, with Tinycast quit? Use `/research` for current TCC attribution rules first
 - [ ] On success: van-sampler becomes that Swift program (reusing `van-ble`'s CoreBluetooth code), wrapped in `jobrun`, with state in a file the `van-power` view reads. Delete the Tinycast `van-sampler` command and its LocalStorage state. On failure: record the evidence and the `.app`-bundle alternative, and stop
 - [ ] Commit and push, then hand off with `ask-human ask`: build/sign/install command, grant the prompt, and the checks (a reading lands every 15 min with Tinycast quit; a low-battery notification fires). Do not mark it live
+**Left behind:**
+
+## Wave 14 — Kuma → warden webhook            <!-- status: pending -->
+- [ ] Carry-over from Wave 9, first: asks `20261016T170519-9342` (token + seed) and `20261016T170531-21347` (ACL push) are done → run Wave 9's verify (POST from homelab → 202 + one `hyperdx` event, closed after; no token → 401). If the asks are still open, stop and record it — every later step depends on them
+- [ ] `homelab/uptime-kuma/monitors.yaml`: add a webhook notification → `/ingest/kuma` on every leaf monitor, **keeping** "Slack - Alerts" as the human-readable mirror and fallback. Apply with `make uk-sync`
+- [ ] warden: retire the `uk` Argo snapshot poll in `watchdog-poll.py` only after one real DOWN/UP pair has arrived by webhook. Until then both run, and dedup keeps one item
+- [ ] Verify: pause a test push monitor → DOWN webhook → one `uk` item within a loop pass; resume → resolved
+**Left behind:**
+
+## Wave 15 — HyperDX → warden webhook            <!-- status: pending -->
+- [ ] `~/SourceRoot/vps/observability/alerts/*.json`: add the `/ingest/hyperdx` webhook to all 21 alerts. Slack #alerts stays as the mirror. Apply through the repo's own sync
+- [ ] warden: stop turning HyperDX-shaped #alerts messages into `slack_alert` items once the webhook path is proven (`watchdog-poll.py` filter, like the `[… Push]` one). weatherorb's alert → GitHub issue path stays (it already reaches warden directly as `github_go`)
+- [ ] Verify: a test alert (temporary threshold) → one `hyperdx` item, not a duplicate `slack_alert`; restore the threshold
+**Left behind:**
+
+## Wave 16 — Kuma becomes the calm backstop            <!-- status: pending -->
+- [ ] `monitors.yaml`, per `ops-signals.md` §2:
+  - keep the three duties: chain-alive, user-facing symptoms, data leaving the box;
+  - `maxretries ≥ 1` everywhere;
+  - intervals of at least 2× warden's T2 budget for everything that isn't chain-alive;
+  - retire or lengthen `Brain Sync`, `Hermes Watchdog`, `Drift`, `Hermes Serve`, `Collie` and `Secret Seed` as §2 says
+- [ ] warden: the `Warden Loop` push requires loop, poll and sweep heartbeat freshness (`/health`), so a dead sweep pages through Kuma
+- [ ] Docs: `architecture.md` §Monitoring and `ops-signals.md` §2 match the result
+- [ ] Verify: `uk-sync` diff reviewed and applied; a stale-sweep simulation on a copied ledger makes the push skip
+**Left behind:**
+
+## Wave 17 — review cycle 2            <!-- status: pending -->
+- [ ] Metrics and the §9 checklist, compared against Wave 8's numbers. Tune
+- [ ] Every owned mini job is at ladder level ≥ 2, and the remediable ones are at 4. Fix the stragglers or record why
+- [ ] Docs: `background-jobs.md` ladder table reflects the live state; `ops-signals.md` §1 rewritten as "flow today" (after), with the old flow moved to a short history note
 **Left behind:**
 
 ## Wave 18 — review cycle 3 and close            <!-- status: pending -->
