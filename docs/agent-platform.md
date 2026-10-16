@@ -146,7 +146,9 @@ quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resol
    cap counts only *stalled* rounds — a review that still finds a prior blocking
    finding unresolved (or a red check, conflict or revert); a round whose findings
    are all new is converging and keeps revising. Three stalled rounds land
-   `failed`; attempt 3 onward runs on the stronger implement model.
+   `failed`; attempt 3 onward runs on the stronger implement model. A blocking
+   finding that repeats a prior one on a file the PR no longer changes is not a
+   block: the revision dropped that change, so the diff resolved it.
 5. **Merge train, one per repo, single-flight:**
    update the PR onto the latest default branch → `make check` / CI green on that
    SHA → review on that SHA (delta-only if a prior review confirmed) → squash
