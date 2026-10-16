@@ -46,7 +46,7 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `brain-web-refresh` | 300s | 2 (on `jobrun`; graded) | 4 | was log-only |
 | `log-rotate` | 3600s | 2 (on `jobrun`; graded) | 2 | Its failures are cheap; list derived from plists (done) |
 | `drift-check` | 09:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 while a drift is open, so it grades `failing` until cleared. 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
-| `jobrun-canary` | 300s | 2 | 2 | The chain probe, see §Canary |
+| `jobrun-canary` | 300s | 2 | 4 | The chain probe, see §Canary. **Proven live 2026-10-16:** committed `healthy:false` → warden fixed, merged, deployed and closed it with no page |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |
 | `lock-at-boot`, `obsidian-autostart` | RunAtLoad | 2 | 2 | — |
 | `agent-gateway`, `-opencode` | KeepAlive | 3 | 3 | warden's own dependency, so Kuma is its backstop, not warden |
@@ -125,6 +125,13 @@ Tally: about 50 jobs. **Level 4 today: 3** (hermes gateway, weatherorb, research
 `com.jkrumm.jobrun-canary` (300 s, `make jobrun-canary-setup`, converged by `make setup` on the dev host) runs
 `scripts/jobrun-canary.ts`, which exits 1 unless `config/jobrun-canary.json` has `"healthy": true`. The committed
 value is always `true`. It is the end-to-end probe for Wave 7.
+
+On failure it prints `canary unhealthy: config/jobrun-canary.json has healthy:false; the fix is to set healthy:true and
+commit`, which lands in the run record's tail and so in warden's job brief: a tail that names its own fix is a normal
+implement, not a question for the owner (the brief says so). To exercise the chain again, commit `"healthy": false` to
+master (the commit is the owner's, the fix is warden's), and expect: `failing` after 3 runs, an item within one loop
+pass, a PR within ~10 min, merge + deploy, `fixed` once a run after the deploy succeeds. Measured 2026-10-16 (re-drive
+to `fixed`): investigation 6.6 min after the dispatch pass, PR +8 min, merged +5 min, deployed +7 min, `fixed` +11 min.
 
 **Owner checkout decision (2026-10-16):** the canary's owner repo is `dotfiles`, because the file, the deploy
 (`make deploy`) and the job all live here, and a canary in a repo nobody works in would not exercise the real

@@ -147,8 +147,8 @@ instead of claiming done.
 - **Reviewed** (agent-gateway, 1 round): 4 blocking (per-item pause check in verify/train, non-UTF-8 flag file, merge-exemption wording) fixed with tests; cheap cleanups done. **Not re-reviewed after the fixes** (covered by mutation-style tests). **Declined:** moving the event reconcile out of `watchdog-poll.py` into `lifecycle/`, a Kuma/`/health` alert for a forgotten pause or a dark job source, a post-claim pause re-check (TOCTOU window of one submit), an opt-in flag for the first-pass dispatch backlog (all six jobs graded `ok` at deploy, so nothing queued).
 - **For Wave 7:** `jobs-grade` default output omits `owner_sha`, `runs` and `tail`; the brief needs them (the client keeps extra fields it receives, so print them in the grader first). `drift-check` grades `failing` whenever a drift is open, which will open a job item. `audio-gateway` `LastExitStatus` is still 127 (not cycled, nothing kickstarted).
 
-## Wave 7 — warden: job brief, verified closure, canary end to end            <!-- status: active -->
-- [ ] Job brief template next to `_build_cluster_brief()` (`ops-signals.md` §6). It contains:
+## Wave 7 — warden: job brief, verified closure, canary end to end            <!-- status: done -->
+- [x] Job brief template next to `_build_cluster_brief()` (`ops-signals.md` §6). It contains:
   - label, machine, owner repo and plist;
   - grade and the last 5 runs, with a 40-line tail;
   - `git log` since `last_ok`, plus brew changes;
@@ -156,12 +156,19 @@ instead of claiming done.
   - the acceptance check.
 
   The tier is **implement** from day one
-- [ ] Verified closure: a `job` item goes `verifying` → `fixed` only when the state file shows `last_ok` after the merged SHA was deployed. A timeout means a `work` strike
-- [ ] **Canary end to end, live:** commit `"healthy": false` to dotfiles master. warden must take it through item → implement → merge → `make deploy` → next canary run ok → `fixed`, with no human touch. Record the timings
-- [ ] Verify: the canary item is `fixed` with closure evidence; time from first failure to fixed is recorded; no second item was opened
+- [x] Verified closure: a `job` item goes `verifying` → `fixed` only when the state file shows `last_ok` after the merged SHA was deployed. A timeout means a `work` strike
+- [x] **Canary end to end, live:** commit `"healthy": false` to dotfiles master. warden must take it through item → implement → merge → `make deploy` → next canary run ok → `fixed`, with no human touch. Record the timings
+- [x] Verify: the canary item is `fixed` with closure evidence; time from first failure to fixed is recorded; no second item was opened
 **Left behind:**
+- **warden master `5622e7f`** (worktree, rebased, fast-forwarded, pushed, `make deploy` + `make verify` green after each of three deploys; `make check` 667/667 in test_triage, 95/95 CLI). dotfiles: `jobs-grade` rows carry `owner_sha`, `runs`, `tail`; the canary prints its own fix line on failure.
+- **Brief** (`lifecycle/intake.job_brief()` + `gather_job_context()`): label, machine, owner, plist, cadence, last 5 runs, 40-line tail, owner `git log` and Cellar changes since `last_ok`, allowed / forbidden actions, the rule that a tail naming its own fix is a normal implement (never `needs_decision`), acceptance. 8000 chars, untrusted fields capped, fences defanged. `JOB_MAX_TIER` = `implement`.
+- **Verified closure** (`verify._job_closure()`): `fixed` needs a `last_ok` after the deploy **and** the latest run green (`consecutive_fail == 0`; `flapping` after a fix would otherwise block it). Window `max(30, 2×every+10)` min; expiry = `work` strike to `triaged`, never a revert; the 3rd expiry (counted from `item_transitions`, because `strikes` resets on re-advance) is `failed(work)`.
+- **Canary, live (planted 13:31:51Z, item #1582, no second item):** the first attempt did not complete. Two defects found live and fixed: (1) `reopen_if_needed()` runs after `ingest_jobs()`, so the reopened item was dispatched at its old `investigate` tier and closed `resolved` with the canary still red (13:52→13:55); (2) such an item has no way back. Fixed by setting the tier in `route_job_items()` and letting `warden reinvestigate` take a `closed` job item whose job is still red. **One owner verb was used:** `warden reinvestigate 1582` at 14:06:03Z. From there, hands-off: dispatch 14:12:40 → PR #21 14:20:42 → merged 14:25:46 → deployed 14:32:56 → job ok 14:37 → `fixed` 14:43:53 (37 min 50 s from the re-drive, 72 min from the plant; the 10-min loop and the 5-min canary dominate). No `needs_decision`, no page. The squash message and diff are the one-line `healthy:true`.
+- **Chronic rule refined** (found because #1582 was hand-closed): an item the owner closed with `warden close` is not counted as "warden acted" (`core.HAND_CLOSE_NOTE_PREFIX`), so its recurrence is new work. Without it the live run would have been a `[chronic]` page.
+- **/review** (agent-gateway, 1 round): 4 blocking fixed (git failure read as "no commits", rules truncation, fence/trim bugs, closure on a red latest run). **Not re-reviewed after the fixes or the three later changes** (covered by tests; the live run is the proof). Declined: `gather_job_context` into `clients/`, a `closure_expiries` column, a per-origin closure strategy, caching context per pass, keeping the first deploy pass at `investigate` (this plan fixes the tier).
+- **For Wave 8:** (a) a job item closed `resolved` by an investigation (`nextAction=none`) while the job stays red is silent forever (level-based source, no reopen until it recovers); consider a re-open after N hours still red. (b) The grade stays `flapping` for 24 h after a fix (`fails_24h`); the heartbeat WARN and the job event persist until then. (c) The canary's failure history is in the ledger (#1582 has 3 cycles). (d) `jobs-grade` runs once per pass for ingest and again per verifying job item; fine at 6 jobs. (e) The loop pass was ~10 min late during the run (weatherorb merges in flight); `maybe_verify` runs `make verify` (doctor) every pass for every verifying item.
 
-## Wave 8 — review cycle 1            <!-- status: pending -->
+## Wave 8 — review cycle 1            <!-- status: active -->
 - [ ] Run `docs/waves/jobs-metrics.sql` and work through the `ops-signals.md` §9 checklist. Record the numbers in Left behind
 - [ ] Tune what the numbers say: T1 thresholds in `jobs-grade`, the brief, dedup and chronic rules. One commit per tuning, each with its evidence
 - [ ] Make it recurring: extend `warden/docs/improve/LOOP.md` step 1 (Measure) with the job metrics query and the §9 checklist, so the outcome-triggered improve loop owns it after the chain. Not a second loop
