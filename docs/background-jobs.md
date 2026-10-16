@@ -31,7 +31,7 @@ remediate itself.
 
 ## Inventory with level today → target
 
-Health notes are as of 2026-10-16 and come from logs only.
+Levels are as of 2026-10-17 (Wave 17). A `jobrun`-wrapped job is level 4 by construction: `jobs-grade` feeds warden's `job` source, which briefs the owner repo and closes only on a verified next run. That path is proven live on two items (the canary, Wave 7; the drift-audit cron, Wave 11).
 
 ### Mini: dotfiles
 
@@ -41,12 +41,12 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `caddy`, `dnsmasq`, `tailscale`, `docker-socket` (root) | daemon | 2 | 2 | vendor |
 | `postgresql@18`, `sleepwatcher`, `beszel-agent` | KeepAlive | 2 | 2 | `services` component |
 | `~/.wakeup` | on wake | 0 | n/a on mini | Becomes the MacBook's on-wake grader (§MacBook) |
-| `brain-sync` | 300s | 2 (on `jobrun`; graded) | 4 | Kuma 600 s → becomes a backstop; failures → warden |
-| `brain-backup` | 03:30 | 2 (on `jobrun`; graded) | 4 | Keeps Kuma (data leaves the box) |
-| `brain-web-refresh` | 300s | 2 (on `jobrun`; graded) | 4 | was log-only |
+| `brain-sync` | 300s | 4 (`jobrun` + `job` item) | 4 | Kuma 600 s → becomes a backstop; failures → warden |
+| `brain-backup` | 03:30 | 4 (`jobrun` + `job` item) | 4 | Keeps Kuma (data leaves the box) |
+| `brain-web-refresh` | 300s | 4 (`jobrun` + `job` item) | 4 | was log-only |
 | `log-rotate` | 3600s | 2 (on `jobrun`; graded) | 2 | Its failures are cheap; list derived from plists (done) |
 | `drift-check` | 09:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 while a drift is open, so it grades `failing` until cleared. 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
-| `jobrun-canary` | 300s | 2 | 4 | The chain probe, see §Canary. **Proven live 2026-10-16:** committed `healthy:false` → warden fixed, merged, deployed and closed it with no page |
+| `jobrun-canary` | 300s | 4 | 4 | The chain probe, see §Canary. **Proven live 2026-10-16:** committed `healthy:false` → warden fixed, merged, deployed and closed it with no page |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |
 | `lock-at-boot`, `obsidian-autostart` | RunAtLoad | 2 | 2 | — |
 | `agent-gateway`, `-opencode` | KeepAlive | 3 | 3 | warden's own dependency, so Kuma is its backstop, not warden |
@@ -60,22 +60,22 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `ai.hermes.gateway` | hermes-agent | KeepAlive | 4 | 4 | `hermes_log` → triage; warden holds the restart verb. The one existing level-4 service |
 | `hermes-liveness`, `-serve-liveness` | hermes-agent | 300s | 2 | 2 | Detectors |
 | `hermes-serve` | hermes-agent | KeepAlive | 2 | 3 | — |
-| `hermes-backup` | hermes-agent | 03:00 | 2 (on `jobrun`; graded) | 4 | Wave 11: `jobrun --every 86400 --kuma op://hermes/uptime-kuma/backup-push-url`; the script no longer pushes (Wave 1 made its rc honest, `jobrun --kuma` pushes only on rc 0) |
-| Hermes cron: briefing, report, narratives, drift audit | hermes-agent | daily/weekly | 2 (graded via the `jobs-grade` cron adapter) | 4 | Wave 11: `jobs.json` `last_status` → `hermes-cron.<slug>` run record → `job` item for hermes-agent; the `hermes_cron` event source is retired. Only the last outcome is known, so a failed daily/weekly job grades `failing` at once. The 10-10 drift-audit model 404 is the first live item |
+| `hermes-backup` | hermes-agent | 03:00 | 4 (`jobrun` + `job` item) | 4 | Wave 11: `jobrun --every 86400 --kuma op://hermes/uptime-kuma/backup-push-url`; the script no longer pushes (Wave 1 made its rc honest, `jobrun --kuma` pushes only on rc 0) |
+| Hermes cron: briefing, report, narratives, drift audit | hermes-agent | daily/weekly | 4 (`jobs-grade` cron adapter + `job` item) | 4 | Wave 11: `jobs.json` `last_status` → `hermes-cron.<slug>` run record → `job` item for hermes-agent; the `hermes_cron` event source is retired. Only the last outcome is known, so a failed daily/weekly job grades `failing` at once. The 10-10 drift-audit model 404 is the first live item |
 | `warden-loop`, `-poll` | warden | 600/1800s | 3 | 3 | Kuma `Warden Loop` / `Hermes Watchdog` → fold into one |
-| `warden-sweep` | warden | 300s | **1** | 3 | Only `/health` staleness, unmonitored. Check-runs 403 is by design (fine-grained PATs have no Checks permission; warden uses the Actions-runs fallback) — no fault |
+| `warden-sweep` | warden | 300s | 2 (Wave 16: its `/health` heartbeat gates the `Warden Loop` push, so a dead sweep pages through Kuma) | 3 | Only `/health` staleness, unmonitored. Check-runs 403 is by design (fine-grained PATs have no Checks permission; warden uses the Actions-runs fallback) — no fault |
 | `warden-api` | warden | KeepAlive | 2 | 2 | — |
 | `warden-backup` | warden | 03:10 | 2 (on `jobrun`; graded) | 2 | Wave 11: no `--kuma`, the script pushes `Warden Backup` (25 h) itself from a mode-600 file (its op:// ref cannot be seeded from the mini). warden can't fix its own backup → Kuma stays the backstop |
-| `modelpick-refresh` | modelpick | 06:00 | 2 (on `jobrun`; graded) | 4 | Wave 10: a failed collector or one returning 0 rows now exits 1 (`RefreshResult.degraded`), so a half-empty refresh grades `failing` and becomes a `job` item for modelpick. Per-category emptiness inside one source (lmarena `coding`) is still not caught |
-| `modelpick-web` | modelpick | KeepAlive | 1 | 2 | — |
+| `modelpick-refresh` | modelpick | 06:00 | 4 (`jobrun` + `job` item) | 4 | Wave 10: a failed collector or one returning 0 rows now exits 1 (`RefreshResult.degraded`), so a half-empty refresh grades `failing` and becomes a `job` item for modelpick. Per-category emptiness inside one source (lmarena `coding`) is still not caught |
+| `modelpick-web` | modelpick | KeepAlive | 1 | 1 | **Accepted straggler (Wave 17):** a read-only dashboard on :7727, no job and no consumer that pages on it. A probe would cost a services row for a UI nobody depends on |
 | `weatherorb.*` services + DBOS workers | weatherorb | KeepAlive / DBOS cron | **4** | 4 | Reference citizen: DBOS (concurrency 1, stale cancel) + watchdog `overdue_after` + HyperDX → GitHub issue → warden |
-| `weatherorb.{retention,verify}` | weatherorb | 04:30/05:45 | 2 (on `jobrun`; graded) | 4 | Wave 11: `jobrun --every 86400`; a failure opens a `job` item routed to weatherorb. Folding into DBOS schedules stays the owner's call |
+| `weatherorb.{retention,verify}` | weatherorb | 04:30/05:45 | 4 (`jobrun` + `job` item) | 4 | Wave 11: `jobrun --every 86400`; a failure opens a `job` item routed to weatherorb. Folding into DBOS schedules stays the owner's call |
 | `linewatch-*` | linewatch | KeepAlive/60s | 3 | 3 | ISP and router faults are human-only. Kuma `Home Line` stays (a symptom) |
-| `usage-tracker` | usage-tracker | 900s | 2 (on `jobrun`; graded) | 4 | Wave 10: `--timeout 600`; the heartbeat's log-mtime probe is gone (the `jobs` component is WARN-only, so staleness no longer FAILs the composite) |
-| `walkingpad` | walkingpad | KeepAlive | 1 | 2 | — |
-| `audio-gateway` | audio-gateway | KeepAlive | 3 | 4 | OTel → HyperDX → `Warden ingest` webhook → `hyperdx` item. Last exit 127 inside `secrets-run`, unexplained |
+| `usage-tracker` | usage-tracker | 900s | 4 (`jobrun` + `job` item) | 4 | Wave 10: `--timeout 600`; the heartbeat's log-mtime probe is gone (the `jobs` component is WARN-only, so staleness no longer FAILs the composite) |
+| `walkingpad` | walkingpad | KeepAlive | 2 | 2 | The heartbeat `services` component probes its HTTP port (`probe_walkingpad`) |
+| `audio-gateway` | audio-gateway | KeepAlive | 4 | 4 | OTel → HyperDX → `Warden ingest` webhook → `hyperdx` item. `LastExitStatus` 127 is the 10-14 in-place `secrets-run` rewrite (Wave 2, fixed); the process is running and the value clears at its next restart, nothing kickstarted |
 | `research-gateway`, `-lightpanda` | research-gateway | KeepAlive | 4 | 4 | Leases + crash-loop guard + 10 HyperDX alerts |
-| `research-gateway-deploy` | research-gateway | 120s | 2 (on `jobrun`; graded) | 4 | Wave 10: `jobrun --lock research-gateway-deploy --timeout 7200` replaced the mkdir lock and stale-lock reclaim (also behind `make deploy`). A red CI or a deferred (busy) tick is rc 0 by design; only fetch/install/unhealthy-restart fail |
+| `research-gateway-deploy` | research-gateway | 120s | 4 (`jobrun` + `job` item) | 4 | Wave 10: `jobrun --lock research-gateway-deploy --timeout 7200` replaced the mkdir lock and stale-lock reclaim (also behind `make deploy`). A red CI or a deferred (busy) tick is rc 0 by design; only fetch/install/unhealthy-restart fail |
 
 ### Mini: IuRoot (`com.iu.prometheus-*`, prometheus-scripts)
 
@@ -99,14 +99,14 @@ These stay in their processes and inherit their service's level. Visibility goes
 
 | Job | Today | Target | Note |
 |-|-|-|-|
-| netgear-watchdog (`com.jkrumm.netgear-watchdog`, launchd 60 s, `jobrun`) | 2 (written, **not yet live**: install is a MacBook ask) | 3 | The self-heal ladder is unchanged and now runs outside Tinycast (no kill, no pause, ticks with a view open). The view reads `~/.local/state/netgear-watchdog/state.json`. Live proof pending the MacBook install |
-| van-sampler (`com.jkrumm.van-sampler`, launchd 15 min, `jobrun`, signed `van-ble --supervise`) | 1 → 2 (written, **not live**: gated on the Bluetooth TCC spike, a MacBook ask) | 3 | Leaves Tinycast (which ran it only with no view open). The Tinycast `van-sampler` command and its LocalStorage state are deleted on the branch; state is files in `~/.local/state/van-sampler/` that the Van Power view shares. Spike, evidence and the `.app` fallback: `tinycast-extensions/docs/van-sampler-tcc.md`. Becomes level 2 only when the spike passes and the install is verified |
+| netgear-watchdog (`com.jkrumm.netgear-watchdog`, launchd 60 s, `jobrun`) | **not live** (still the Tinycast-hosted watchdog, level 1; the level-2 version is written and pushed on `wave/netgear-launchd`, install is a pending owner ask on the MacBook) | 3 | The self-heal ladder is unchanged and now runs outside Tinycast (no kill, no pause, ticks with a view open). The view reads `~/.local/state/netgear-watchdog/state.json`. Live proof pending the MacBook install |
+| van-sampler (`com.jkrumm.van-sampler`, launchd 15 min, `jobrun`, signed `van-ble --supervise`) | **not live** (still the Tinycast command, level 1; the level-2 version is on `wave/van-sampler`, gated on the Bluetooth TCC spike, a pending owner ask on the MacBook) | 3 | Leaves Tinycast (which ran it only with no view open). The Tinycast `van-sampler` command and its LocalStorage state are deleted on the branch; state is files in `~/.local/state/van-sampler/` that the Van Power view shares. Spike, evidence and the `.app` fallback: `tinycast-extensions/docs/van-sampler-tcc.md`. Becomes level 2 only when the spike passes and the install is verified |
 | `opbackup` | 2 | 2 | Kuma weekly (data leaves the box) |
 | `brain-sync`, `batt-reset`, `appearance-sync`, `db-tunnel`, `tailnet-sshd` | 0–1 | 2 | Graded on wake, local notification |
 | `photoflow` | 0 | 2 | `/tmp` log |
 
-Tally: about 50 jobs. **Level 4 today: 3** (hermes gateway, weatherorb, research-gateway).
-**Level 0–1: about 30** — mostly timer jobs, IuRoot and the MacBook.
+Tally (2026-10-17): about 50 jobs. **Level 4: 3 services** (hermes gateway, weatherorb, research-gateway) **plus 17 graded `jobrun`/cron-adapter jobs** on the mini (13 launchd, 4 Hermes cron) — every owned mini job is at ≥ 2; the one level-1 straggler is `modelpick-web` (accepted above). The MacBook's two level-2 rows are written and **not live**.
+**Level 0–1: IuRoot's `com.iu.*` jobs (out of the chain), the MacBook's unmigrated jobs and `modelpick-web`.**
 
 ## Pattern
 

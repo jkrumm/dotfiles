@@ -50,25 +50,30 @@ Evidence comes from the code with file:line references, and from warden's ledger
 queries. External practice was checked through `/research`; the launchd semantics come from the
 local `man launchd.plist`.
 
-## 1. Today's actual flow
+## 1. Flow today
 
-| Job class | Path from failure to human | Gap |
+Every alert source reaches warden directly; Slack #alerts is the human-readable mirror and the
+fallback for when warden is down. State as of Wave 17 (2026-10-17).
+
+| Source | Path from failure to fix | Closure / human |
 |-|-|-|
-| launchd timer, log-only (`modelpick-refresh`, `log-rotate`, `research-gateway-deploy`, `brain-web-refresh`, `weatherorb.{retention,verify}` moved onto `jobrun`) | failure → `~/Library/Logs/*.err` → **nothing** | Invisible. The heartbeat checks only KeepAlive labels (`lib/launchd-restarts.sh`), not timer jobs |
-| launchd timer with a Kuma push (`brain-sync`, `brain-backup`, `hermes-backup`, `warden-backup`, `drift-check`) | missed push → Kuma DOWN after one interval (`maxretries: 0` everywhere) → **Slack #alerts → human at once**. In parallel `warden-poll` (every 30 min, snapshot via Argo) → `uk` item → 30 min debounce → triage → investigate | A human is paged **before** any self-heal or remediation. A DOWN that recovers between two polls is invisible to warden. The push carries success only, so `hermes-backup`'s nightly rotation error stays green |
-| KeepAlive service | crash/restart → `check_launchd_restarts` (edge-triggered) → composite DOWN at once → #alerts. Dead port → `services` component → 3 runs (~15 min) → DOWN | Composite → warden only via `uk`. **0 of 14 `uk` items in 30 days reached `fixed`** (8 quiet, 6 resolved) |
-| In-process loop | warn log or `/health`. research-gateway, audio-gateway and weatherorb also export OTel → HyperDX alert → `Warden ingest` webhook → warden `hyperdx` (Slack #alerts is the mirror). weatherorb's own alerts become a GitHub issue → `github_go` | Only 3 of about 25 owners export OTel. agent-gateway, warden, hermes, linewatch, usage-tracker and modelpick don't |
-| Hermes cron | error → `jobs.json` `last_status` → `jobs-grade` cron adapter (`hermes-cron.<slug>`) → warden `job` item for hermes-agent (the `hermes_cron` event source is retired, Wave 11) | Only the last outcome is recorded, no history |
-| warden itself | loop wedged, poller dead, sweep dead or Slack polling blind → no `Warden Loop` push → Kuma DOWN (≈30 min; Wave 16, the `Hermes Watchdog` push is retired) | none known |
-| MacBook | Tinycast background commands; only `opbackup` has a Kuma monitor | Not represented in warden (`WARDEN_MACHINE` defaults to `mini`) |
+| Owned job on `jobrun` (13 launchd jobs) or a Hermes cron job (4, via the `jobs-grade` adapter) | run record → `jobs-grade` (the only grader) → warden `job` source, one item per `job:<machine>:<label>`, routed to the owner repo, tier implement → merge → deploy | `fixed` only when `last_ok` follows the deployed SHA and the latest run is green. A reopen within 7 days, or a still-red job after 6 h, is `needs_decision` |
+| Uptime Kuma monitor | status change → `Warden - Ingest` webhook → `uk` event (DOWN opens, UP resolves); Slack stays the mirror. The snapshot poll is retired | Kuma pages only when the chain itself is down (§2). A missed UP webhook leaves the row open until the next transition |
+| HyperDX alert (21) | alert and OK → `Warden ingest` webhook → `hyperdx` event; Slack #alerts mirrors; the `slack_alert` poll skips the `🚨`/`✅` lines. weatherorb's four alerts keep their own GitHub-issue path (`github_go`) | OK resolves the event |
+| KeepAlive service | `services` and `check_launchd_restarts` components of the 300 s heartbeat → composite Kuma push | Dead port or restart loop pages through Kuma |
+| warden itself | the `Warden Loop` push requires loop, poll and sweep freshness (`/health`) and a readable Slack cursor; otherwise no push → Kuma DOWN in ≈ 30 min | Nothing watches Kuma |
+| MacBook | `~/.wakeup` runs `jobs-grade --notify` (local notification). The netgear-watchdog and van-sampler moves to `jobrun` are written and **not live** (pending the owner's MacBook installs) | Not represented in warden (`WARDEN_MACHINE` defaults to `mini`) |
 
-What warden *does* convert well:
-- human/issue origins: 17 + 11 fixed in 30 days;
-- `hermes_log`: 1 fixed and 30 resolved.
+A human hears only `needs_decision` (Slack #agents) or a physical, biometric or TCC ask.
 
-Signals arriving through Kuma are mostly transient: of 14 `uk` items, 8 went quiet and 6 resolved.
-That is the evidence for the owner's intuition. Kuma pages a human for things that heal on their
-own, while the real defects (hermes-backup rotation, warden-sweep 403, log-only jobs) never page at all.
+### History (before the chain, 2026-10-16)
+
+There were four half-frameworks side by side. Log-only timer jobs failed invisibly; Kuma pushed with
+`maxretries: 0` and paged a human before any remediation; warden saw Kuma only through a lossy
+30-minute snapshot (0 of 14 `uk` items reached `fixed`, 8 quiet, 6 resolved); only research-gateway,
+audio-gateway and weatherorb exported OTel to HyperDX; Hermes cron failures were an event-only source;
+a wedged warden sweep was unmonitored. Waves 4-16 replaced each of those paths; the owner decisions
+above are the reason.
 
 ## 2. Kuma's role (confirmed with one amendment)
 
