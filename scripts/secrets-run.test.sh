@@ -286,9 +286,9 @@ sig_scenario "SIGTERM to the wrapper only" wrapper
 cp "$SHIM" "$TESTREPO/sr-live"
 chmod +x "$TESTREPO/sr-live"
 SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
-  "$TESTREPO/sr-live" run --env-file="$TESTREPO/app.env.tpl" -- bash -c 'sleep 1; exit 0' >/dev/null 2>&1 &
+  "$TESTREPO/sr-live" run --env-file="$TESTREPO/app.env.tpl" -- bash -c "touch '$TESTREPO/live-up'; sleep 1; exit 0" >/dev/null 2>&1 &
 live_pid=$!
-sleep 0.5
+for _ in $(seq 100); do [[ -e "$TESTREPO/live-up" ]] && break; sleep 0.1; done
 printf '\necho reread >&2; exit 99\n' >> "$TESTREPO/sr-live"   # in place, same inode, like an editor
 wait "$live_pid"
 assert_eq "live-edit: wrapper exits with the child's code after its own file is rewritten" "0" "$?"
