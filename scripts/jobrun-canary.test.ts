@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { readHealthy } from "./jobrun-canary.ts"
+import { CANARY_FIX, readHealthy } from "./jobrun-canary.ts"
 
 const cfg = (body: string) => {
   const p = join(mkdtempSync(join(tmpdir(), "canary-")), "c.json")
@@ -21,5 +21,10 @@ describe("jobrun-canary", () => {
     const run = (path: string) => Bun.spawnSync(["bun", join(import.meta.dir, "jobrun-canary.ts")], { env: { ...process.env, JOBRUN_CANARY_CONFIG: path } }).exitCode
     expect(run(cfg('{"healthy": true}'))).toBe(0)
     expect(run(cfg('{"healthy": false}'))).toBe(1)
+  })
+  test("a failing run prints its own fix on stdout, a healthy run does not", () => {
+    const out = (path: string) => Bun.spawnSync(["bun", join(import.meta.dir, "jobrun-canary.ts")], { env: { ...process.env, JOBRUN_CANARY_CONFIG: path } }).stdout.toString()
+    expect(out(cfg('{"healthy": false}'))).toContain(CANARY_FIX)
+    expect(out(cfg('{"healthy": true}'))).not.toContain("the fix is")
   })
 })

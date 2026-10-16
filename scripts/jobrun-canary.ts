@@ -9,6 +9,9 @@ import { dirname, join } from "node:path"
 
 const DEFAULT_CONFIG = join(dirname(import.meta.dir), "config/jobrun-canary.json")
 
+/** What the run record's tail says on failure: the cause and the one-line fix, for the implementer that reads it. */
+export const CANARY_FIX = "canary unhealthy: config/jobrun-canary.json has healthy:false; the fix is to set healthy:true and commit"
+
 /** Anything but a literal `"healthy": true` is unhealthy, including a missing or unparseable file. */
 export function readHealthy(path: string): { healthy: boolean; why: string } {
   try {
@@ -22,5 +25,8 @@ export function readHealthy(path: string): { healthy: boolean; why: string } {
 if (import.meta.main) {
   const { healthy, why } = readHealthy(process.env.JOBRUN_CANARY_CONFIG || DEFAULT_CONFIG)
   console.log(`jobrun-canary: ${why}`)
+  // The failure names its own fix, so warden's job brief shows an implementer that this is a plain code/config
+  // fault in the owner repo (a normal implement), not a question for the owner.
+  if (!healthy) console.log(CANARY_FIX)
   process.exit(healthy ? 0 : 1)
 }
