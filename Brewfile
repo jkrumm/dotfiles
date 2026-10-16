@@ -172,12 +172,12 @@ cask "free-ruler"
 cask "jiggler"
 # Caps Lock -> ctrl+alt+shift, held. No app, no macOS shortcut and no readline
 # binding uses all three at once, so it is the only collision-free namespace
-# left on the platform. Two consumers share it: herdr's direct keybindings
-# inside a terminal (config/herdr/config.toml), and global Hyper+letter app
-# launchers everywhere else — both in config/karabiner/karabiner.json, installed
-# by `_setup-karabiner`. The five letters herdr also uses are scoped with
-# `frontmost_application_unless` on Ghostty's bundle id, so inside Ghostty
-# herdr wins and outside it the app launches.
+# left on the platform. Karabiner does ONLY that one remap
+# (config/karabiner/karabiner.json, installed by `_setup-karabiner`). Every
+# Hyper+letter launcher (apps and Tinycast extension commands) is a Tinycast
+# hotkey in config/tinycast/defaults.json since 2026-10-16 — global Carbon
+# hotkeys, so they win over herdr's ctrl+alt+shift bindings in any app. MacBook
+# only: the mini has no Tinycast, so it keeps the bare Hyper key for herdr.
 #
 # The keymap is documented in the brain: "Keyboard — the Hyper layer"
 # (Areas/Engineering/keyboard.md); the reasoning is in the wiki note
@@ -238,7 +238,8 @@ cask "spotify"
 # Raycast extensions in JavaScriptCore, AGPL-3.0, single maintainer, third-party
 # tap (trusted by `_setup-packages` like the others). Settings are tracked in
 # config/tinycast/defaults.json (`make tinycast-check`). Its own Hyper key stays
-# OFF: it rides a CGEventTap (see Karabiner above), Karabiner owns Hyper.
+# OFF: it rides a CGEventTap (see Karabiner above) and its chord adds ⌘, so
+# Karabiner owns the key and Tinycast only binds the ⌃⌥⇧+letter hotkeys.
 # The beta channel on purpose: it draws extension menu-bar commands and gives
 # extension views more room (stable 0.11.3 does neither) — separate app, own
 # com.tinycast.app.beta domain, self-updates within the beta channel.

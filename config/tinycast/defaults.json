@@ -4,8 +4,28 @@
       "appleIntelligence": {}
     }
   },
+  "boundAppBundleIDs": [
+    "com.TickTick.task.mac",
+    "md.obsidian",
+    "com.spotify.client",
+    "com.microsoft.teams2",
+    "com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip",
+    "com.goodsnooze.MacWhisper",
+    "so.pen.herdr-gpui",
+    "com.google.Chrome",
+    "net.imput.helium",
+    "dev.zed.Zed"
+  ],
   "boundCustomCommandIDs": [],
   "boundCustomWindowSizeIDs": [],
+  "boundExtensionCommandEntryIDs": [
+    "extension:jkrumm/quick-add",
+    "extension:jkrumm/claude-usage",
+    "extension:jkrumm/hub",
+    "extension:jkrumm/netgear",
+    "extension:jkrumm/van-power",
+    "extension:jkrumm/shortcuts"
+  ],
   "boundQuickActionIDs": [],
   "boundQuicklinkIDs": [],
   "boundWindowLayoutIDs": [],
@@ -25,8 +45,169 @@
     "extension:jkrumm/netgear",
     "extension:jkrumm/speed-test",
     "extension:jkrumm/battery",
-    "extension:jkrumm/van-power"
+    "extension:jkrumm/van-power",
+    "extension:jkrumm/shortcuts"
   ],
+  "hotkey.app.com.TickTick.task.mac": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 17
+        }
+      }
+    }
+  },
+  "hotkey.app.com.goodsnooze.MacWhisper": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 2
+        }
+      }
+    }
+  },
+  "hotkey.app.com.google.Chrome": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 8
+        }
+      }
+    }
+  },
+  "hotkey.app.com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 0
+        }
+      }
+    }
+  },
+  "hotkey.app.com.microsoft.teams2": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 46
+        }
+      }
+    }
+  },
+  "hotkey.app.com.spotify.client": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 1
+        }
+      }
+    }
+  },
+  "hotkey.app.dev.zed.Zed": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 6
+        }
+      }
+    }
+  },
+  "hotkey.app.md.obsidian": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 31
+        }
+      }
+    }
+  },
+  "hotkey.app.net.imput.helium": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 4
+        }
+      }
+    }
+  },
+  "hotkey.app.so.pen.herdr-gpui": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 5
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/claude-usage": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 32
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/hub": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 16
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/netgear": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 34
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/quick-add": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 12
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/shortcuts": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 15
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/van-power": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6656,
+          "carbonKeyCode": 3
+        }
+      }
+    }
+  },
   "hotkey.togglePalette": {
     "$jsonString": {
       "combo": {
@@ -45,6 +226,7 @@
     "extension:jkrumm/my-tasks": "tt",
     "extension:jkrumm/netgear": "ng",
     "extension:jkrumm/quick-add": "ta",
+    "extension:jkrumm/shortcuts": "sc",
     "extension:jkrumm/speed-test": "st",
     "extension:jkrumm/van-power": "vp"
   },
