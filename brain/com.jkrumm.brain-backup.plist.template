@@ -12,8 +12,19 @@
        sync mechanism and the durability. -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/dotfiles/brain/brain-backup.sh</string>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.brain-backup</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/brain/brain-backup.sh</string>
   </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
+       PATH, so bun's dir must be on it. The wrapped script keeps its own PATH setup. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key><integer>3</integer>

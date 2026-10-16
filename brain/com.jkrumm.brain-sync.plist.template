@@ -13,8 +13,19 @@
        See brain/brain-sync.sh and ~/SourceRoot/brain/docs/brain-access.md. -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/dotfiles/brain/brain-sync.sh</string>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.brain-sync</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>300</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/brain/brain-sync.sh</string>
   </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
+       PATH, so bun's dir must be on it. The wrapped script keeps its own PATH setup. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <!-- Every 5 minutes: the paired Kuma monitor's interval must be LONGER (600s,
        same convention as devhost-health) so a single skipped run — a closed
        lid, a reboot, a slow network — does not page on its own. The script

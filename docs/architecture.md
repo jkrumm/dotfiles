@@ -124,7 +124,8 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.drift-check` | 09:40 daily | upstream drift notice |
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
-| `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap |
+| `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
+| `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → warden chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
 | `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway MCP daemon |
 | `com.jkrumm.agent-gateway-opencode` | KeepAlive | shared OpenCode v2 server dispatch episodes attach to |

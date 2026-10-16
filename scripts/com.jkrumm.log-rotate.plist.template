@@ -13,8 +13,19 @@
        deliberately MacBook-only). -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/dotfiles/scripts/log-rotate.sh</string>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.log-rotate</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>3600</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/log-rotate.sh</string>
   </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
+       PATH, so bun's dir must be on it. The wrapped script keeps its own PATH setup. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <!-- Hourly, not daily. A single `stat` per declared file costs nothing, and
        the cadence is what bounds a crash-looping agent to one hour's output
        above the cap instead of a day's. -->

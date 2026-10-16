@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type JobState, gradeAll, gradeOne, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type JobState, gradeAll, gradeOne, parseJobrunArgs, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -103,5 +103,46 @@ describe("jobs-grade", () => {
     expect(renderTable(rows)).toContain("ok")
     expect(gradeAll(join(dir, "missing"), { now: NOW, loaded })).toEqual([])
     expect(renderTable([])).toBe("no jobs recorded")
+  })
+})
+
+describe("expected set (never-recorded gap)", () => {
+  const exp = (p: Partial<Expected> = {}): Expected => ({ label: "com.jkrumm.new", owner: "dotfiles", every: 300, installedAt: NOW - 60_000, ...p })
+  const run = (e: Expected, l: (x: string) => boolean = loaded) => gradeAll(mkdtempSync(join(tmpdir(), "jg-")), { now: NOW, loaded: l, expected: [e] })[0]
+
+  test("parseJobrunArgs reads label, owner and every; ignores non-jobrun plists", () => {
+    const a = ["/Users/x/.local/bin/jobrun", "com.jkrumm.t", "--owner", "dotfiles", "--every", "300", "--", "/bin/true"]
+    expect(parseJobrunArgs(a)).toEqual({ label: "com.jkrumm.t", owner: "dotfiles", every: 300 })
+    expect(parseJobrunArgs(["/bin/bash", "x.sh"])).toBeNull()
+    expect(parseJobrunArgs(["jobrun", "--owner", "x", "--", "y"])).toBeNull()
+    expect(parseJobrunArgs(["jobrun", "l", "--", "y", "--every", "5"])?.every).toBeNull() // after `--` is the command's
+  })
+  test("a declared job with no state file is never invisible", () => {
+    expect(run(exp({ installedAt: NOW - 1801_000 })).grade).toBe("stale")
+    expect(run(exp({ installedAt: NOW - 1801_000 }), () => false).grade).toBe("unloaded")
+  })
+  test("inside its first window a not-yet-run job is ok (fresh install, daily job)", () => {
+    expect(run(exp()).grade).toBe("ok")
+    expect(run(exp({ every: 86400, installedAt: NOW - 3600_000 })).grade).toBe("ok")
+    expect(run(exp({ every: 86400, installedAt: NOW - (86400 + 7201) * 1000 })).grade).toBe("stale")
+  })
+  test("one label declared twice is one row", () => {
+    expect(gradeAll(mkdtempSync(join(tmpdir(), "jg-")), { now: NOW, loaded, expected: [exp(), exp()] })).toHaveLength(1)
+  })
+  test("a state file wins over the declaration; no duplicate row", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jg-"))
+    writeFileSync(join(dir, "com.jkrumm.new.json"), JSON.stringify(job({ label: "com.jkrumm.new" })))
+    const rows = gradeAll(dir, { now: NOW, loaded, expected: [exp()] })
+    expect(rows.map((r) => [r.label, r.grade])).toEqual([["com.jkrumm.new", "ok"]])
+  })
+  test("readExpected derives the set from real plists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jp-"))
+    const plist = (label: string, args: string[]) =>
+      `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array>${args.map((a) => `<string>${a}</string>`).join("")}</array></dict></plist>`
+    writeFileSync(join(dir, "a.plist"), plist("a", ["/h/.local/bin/jobrun", "a", "--owner", "dotfiles", "--every", "600", "--", "/bin/true"]))
+    writeFileSync(join(dir, "b.plist"), plist("b", ["/bin/true"]))
+    writeFileSync(join(dir, "c.plist"), "not a plist")
+    expect(readExpected(dir).map((e) => [e.label, e.owner, e.every])).toEqual([["a", "dotfiles", 600]])
+    expect(readExpected(join(dir, "missing"))).toEqual([])
   })
 })

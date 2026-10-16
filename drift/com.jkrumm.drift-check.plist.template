@@ -23,9 +23,20 @@
 
   <key>ProgramArguments</key>
   <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.drift-check</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--</string>
     <string>/bin/bash</string>
     <string>__DOTFILES_DIR__/scripts/drift-check.sh</string>
   </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
+       PATH, so bun's dir must be on it. The wrapped script keeps its own PATH setup. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>WorkingDirectory</key><string>__DOTFILES_DIR__</string>
 
   <!-- Deliberately NOT /tmp: macOS deletes files there after 3 days untouched

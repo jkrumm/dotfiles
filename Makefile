@@ -107,6 +107,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
 	@$(MAKE) --no-print-directory _setup-usage-tracker
+	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -771,7 +772,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -975,8 +976,8 @@ brain-sync-setup:
 brain-sync-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-sync.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ brain-sync torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.brain-sync.json"; \
+	echo "  ✓ brain-sync torn down (unloaded, plist and jobrun state removed)"
 
 # The subtraction pass's enforcement half (docs/PRD.md phase 0.4): every launchd
 # label loaded on this machine must appear in docs/architecture.md. Read-only,
@@ -1048,8 +1049,8 @@ brain-backup-setup:
 brain-backup-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-backup.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ brain-backup torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.brain-backup.json"; \
+	echo "  ✓ brain-backup torn down (unloaded, plist and jobrun state removed)"
 
 # Content-refresh for the brain vault reader (~/SourceRoot/basalt-ui-obsidian,
 # served as the always-on `brain-web` container on the mini). Downstream of
@@ -1069,8 +1070,8 @@ brain-web-refresh-setup:
 brain-web-refresh-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.brain-web-refresh.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ brain-web-refresh torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.brain-web-refresh.json"; \
+	echo "  ✓ brain-web-refresh torn down (unloaded, plist and jobrun state removed)"
 
 .PHONY: _setup-rules
 _setup-rules:
@@ -2053,6 +2054,7 @@ clean:
 	@echo ""
 
 LAUNCHAGENTS  := $(HOME)/Library/LaunchAgents
+JOBRUN_STATE_DIR := $(HOME)/.local/state/jobs
 # Source dir for _render-plists; every surviving caller overrides this.
 PLIST_DIR     ?= $(DOTFILES_DIR)/scripts
 
@@ -2312,7 +2314,7 @@ opbackup-check:
 # /tmp/walkingpad.err was 35 MB with nothing rotating it. newsyslog.d is not an
 # option: it needs root, and this machine's root password is deliberately
 # MacBook-only. See scripts/log-rotate.sh for the copytruncate rationale.
-.PHONY: log-rotate-setup log-rotate-teardown log-rotate-check
+.PHONY: log-rotate-setup log-rotate-teardown log-rotate-check log-rotate-test
 log-rotate-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.log-rotate" PLIST_DIR="$(DOTFILES_DIR)/scripts"
@@ -2320,10 +2322,31 @@ log-rotate-setup:
 log-rotate-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.log-rotate.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ log-rotate torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.log-rotate.json"; \
+	echo "  ✓ log-rotate torn down (unloaded, plist and jobrun state removed)"
 log-rotate-check:
 	@bash $(DOTFILES_DIR)/scripts/log-rotate.sh
+log-rotate-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/log-rotate.sh $(DOTFILES_DIR)/scripts/log-rotate.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/log-rotate.test.sh
+
+# The end-to-end probe for the job -> warden chain (docs/background-jobs.md §Canary). Dev host
+# only: warden runs there. Converged by `make setup`. Teardown removes its state file too, or
+# jobs-grade would grade the retired label `unloaded` forever.
+.PHONY: jobrun-canary-setup jobrun-canary-teardown
+jobrun-canary-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — jobrun-canary skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/jobrun-canary.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.jobrun-canary" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ every 300s → exit 1 unless config/jobrun-canary.json is healthy; log: ~/Library/Logs/jobrun-canary.log"
+jobrun-canary-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.jobrun-canary.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.jobrun-canary.json"; \
+	echo "  ✓ jobrun-canary torn down (unloaded, plist and jobrun state removed)"
 
 # Order caddy's boot behind the tailnet address it binds. NEEDS SUDO — caddy is
 # a SYSTEM LaunchDaemon in /Library, so this cannot run unattended on the mini
@@ -3088,8 +3111,8 @@ drift-check-setup:
 drift-check-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.drift-check.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ drift-check torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.drift-check.json"; \
+	echo "  ✓ drift-check torn down (unloaded, plist and jobrun state removed)"
 
 # ----------------------------------------------------------------------------
 # Beszel agent (dev host only)
@@ -3291,7 +3314,9 @@ help:
 	@echo "  make brew-upgrade-dry   Preview without upgrading"
 	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
-	@echo "  make jobs-test          bun test jobrun + jobs-grade"
+	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
+	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
+	@echo "  make jobrun-canary-setup     Dev-host only: load the 300s canary job (exits 1 unless config/jobrun-canary.json is healthy)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"
 	@echo "  make worktree-audit     List stale git worktrees across SourceRoot + IuRoot (read-only)"
 	@echo "  make worktree-prune     Remove the ones that are clean and fully merged into origin's default branch"

@@ -8,8 +8,12 @@
 //   jobs-grade --table    human table, verdict line last (exit 0 / 2 like --summary)
 //   jobs-grade --summary  one line, exit 0 (all ok) / 2 (WARN) — what the heartbeat and doctor relay
 //
-// Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs.
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+// Expected set: every installed plist whose ProgramArguments invoke `jobrun` declares a label this
+// grader must see. A declared label with no state file is graded (never invisible); the plists are
+// the single source, there is no hand list.
+//
+// Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents.
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -94,9 +98,65 @@ export function readStates(dir: string): JobState[] {
   return out
 }
 
+/** A label a plist promises to run through jobrun. */
+export interface Expected {
+  label: string
+  owner: string
+  every: number | null
+  installedAt: number // epoch ms, the plist's mtime: the grace clock for a job that has not run yet
+}
+
 export interface GradeOpts {
   now: number // epoch ms (clock injection)
   loaded: (label: string) => boolean
+  expected?: Expected[]
+}
+
+export const defaultPlistDir = () => process.env.JOBRUN_PLIST_DIR || join(homedir(), "Library/LaunchAgents")
+
+/** The `jobrun <label> --owner <repo> --every <s> ...` invocation inside a plist's ProgramArguments, if any. */
+export function parseJobrunArgs(args: string[]): { label: string; owner: string; every: number | null } | null {
+  const i = args.findIndex((a) => a === "jobrun" || a.endsWith("/jobrun"))
+  if (i < 0) return null
+  const label = args[i + 1]
+  if (!label || label.startsWith("--")) return null
+  const dd = args.indexOf("--", i)
+  const head = args.slice(i + 2, dd < 0 ? undefined : dd)
+  const opt = (name: string) => {
+    const k = head.indexOf(name)
+    return k >= 0 ? (head[k + 1] ?? null) : null
+  }
+  const every = Number(opt("--every"))
+  return { label, owner: opt("--owner") ?? "?", every: Number.isFinite(every) && every > 0 ? every : null }
+}
+
+export function readExpected(plistDir: string): Expected[] {
+  if (!existsSync(plistDir)) return []
+  const out: Expected[] = []
+  for (const f of readdirSync(plistDir).sort()) {
+    if (!f.endsWith(".plist")) continue
+    const path = join(plistDir, f)
+    const r = Bun.spawnSync(["/usr/bin/plutil", "-convert", "json", "-o", "-", "--", path], { stdout: "pipe", stderr: "ignore" })
+    if (r.exitCode !== 0) continue
+    try {
+      const args = (JSON.parse(r.stdout.toString()) as { ProgramArguments?: unknown }).ProgramArguments
+      const parsed = Array.isArray(args) ? parseJobrunArgs(args.map(String)) : null
+      if (parsed) out.push({ ...parsed, installedAt: statSync(path).mtimeMs })
+    } catch {
+      // an unparseable plist declares nothing
+    }
+  }
+  return out
+}
+
+/** Declared by a plist, but jobrun never wrote a state file: not loaded = unloaded, past its first window = stale. */
+export function gradeNeverRecorded(e: Expected, o: GradeOpts): Graded {
+  const base = { label: e.label, owner: e.owner, rc: -1, consecutive_fail: 0, fails_24h: 0, last_ok: null, last_started: "", every: e.every }
+  if (!o.loaded(e.label)) return { ...base, grade: "unloaded", reason: "declared by a plist but not loaded in launchd" }
+  const windowS = windowSeconds(e.every ?? 0)
+  const sinceInstallS = (o.now - e.installedAt) / 1000
+  if (sinceInstallS > windowS) return { ...base, grade: "stale", reason: `never recorded, installed ${Math.round(sinceInstallS / 60)} min ago, window ${Math.round(windowS / 60)} min` }
+  return { ...base, grade: "ok", reason: "not run yet, inside its first window" }
 }
 
 export function gradeOne(s: JobState, o: GradeOpts): Graded {
@@ -134,7 +194,14 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
 }
 
 export function gradeAll(dir: string, o: GradeOpts): Graded[] {
-  return readStates(dir).map((s) => gradeOne(s, o))
+  const rows = readStates(dir).map((s) => gradeOne(s, o))
+  const seen = new Set(rows.map((r) => r.label))
+  for (const e of o.expected ?? []) {
+    if (seen.has(e.label)) continue
+    seen.add(e.label) // two plists declaring one label are one job
+    rows.push(gradeNeverRecorded(e, o))
+  }
+  return rows.sort((a, b) => a.label.localeCompare(b.label))
 }
 
 export function renderTable(rows: Graded[]): string {
@@ -151,7 +218,7 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
 }
 
 if (import.meta.main) {
-  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded })
+  const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()) })
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
     console.log(line)

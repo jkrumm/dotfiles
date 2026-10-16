@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.jobrun-canary</string>
+  <!-- The end-to-end probe for the job -> warden chain: exits 1 unless
+       config/jobrun-canary.json says "healthy": true. Always healthy and committed;
+       it is flipped only to exercise the chain (docs/background-jobs.md §Canary).
+       Dev host only (jobrun-canary-setup). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.jobrun-canary</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>300</string>
+    <string>--timeout</string><string>60</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/jobrun-canary.ts</string>
+  </array>
+  <!-- jobrun and the canary are bun scripts (`#!/usr/bin/env bun`); launchd's minimal PATH has no bun. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/jobrun-canary.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/jobrun-canary.log</string>
+</dict>
+</plist>

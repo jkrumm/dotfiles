@@ -25,9 +25,13 @@
 # password is deliberately MacBook-only (see dotfiles AGENTS.md, Secrets). A
 # rotation that cannot be installed headlessly is not a rotation.
 #
-# The file list is DECLARED, never globbed. ~/Library/Logs also holds Apple and
-# vendor logs (PhotosSearch.aapbz, Homebrew/, DiagnosticReports/) and truncating
-# someone else's log because it matched *.log is a bug waiting for a bad week.
+# The file list is DERIVED, never hand-kept and never globbed. ~/Library/Logs also holds
+# Apple and vendor logs (PhotosSearch.aapbz, Homebrew/, DiagnosticReports/) and truncating
+# someone else's log because it matched *.log is a bug waiting for a bad week. So the
+# list is exactly the StandardOutPath/StandardErrorPath of the plists WE install —
+# labels com.jkrumm.* and com.iu.* — and nothing else. A new agent's logs are rotated
+# the moment its plist lands; a retired agent's stop being rotated the moment its plist goes.
+# EXTRA below is the only hand list: audit logs our scripts append to that no plist names.
 
 set -euo pipefail
 
@@ -40,140 +44,44 @@ LOG_DIR="${LOG_ROTATE_DIR:-$HOME/Library/Logs}"
 # one hour's output.
 MAX_BYTES="${LOG_ROTATE_MAX_BYTES:-16777216}"
 
-# Every log written by a LaunchAgent this repo installs or owns. Paths are
-# relative to LOG_DIR unless absolute.
-FILES=(
-  agent-gateway.log
-  agent-gateway.err
-  walkingpad.log
-  walkingpad.err
-  usage-tracker.log
-  usage-tracker.err
-  brain-backup.log
-  brain-sync.log
-  hermes-liveness.log
-  hermes-liveness.err
-  hermes-backup.log
-  hermes-backup.err
-  # hermes serve for Hermes Desktop, restored 2026-10-15 (hermes-agent launchd/).
-  hermes-serve.log
-  hermes-serve.err
-  hermes-serve-liveness.log
-  hermes-serve-liveness.err
-  hermes-triage.log
-  hermes-triage.err
-  # warden's five agents (com.jkrumm.warden-{loop,poll,sweep,backup,api}) — the
-  # control plane extracted out of hermes-agent. warden-loop replaced
-  # com.jkrumm.hermes-triage on 2026-09-09; the two triage entries above are kept
-  # only so the logs that agent already wrote still get rotated, and can go once
-  # they age out. warden-poll and warden-sweep are the ingest and
-  # verdict-folding jobs promoted off the gateway's scheduler, which is the whole
-  # point of the split (a control plane cannot live inside the thing it
-  # supervises). Declared ahead of the agents existing: a missing file is skipped
-  # below, and a log that appears before its rotation entry does is the failure
-  # this list exists to prevent.
-  warden-loop.log
-  warden-loop.err
-  warden-poll.log
-  warden-poll.err
-  warden-sweep.log
-  warden-sweep.err
-  warden-backup.log
-  warden-backup.err
-  # warden-api is the only LONG-RUNNING one, and the only one whose log grows
-  # per request rather than per scheduled pass: BaseHTTPRequestHandler writes a
-  # line to stderr for every GET. Negligible while `make status` is the only
-  # caller; not negligible once Argo polls it (warden Wave 4), which is exactly
-  # the kind of "it was fine until it wasn't" this list exists to get ahead of.
-  warden-api.log
-  warden-api.err
-  # The Hermes gateway's OWN launchd streams. Absolute because `hermes gateway
-  # install` generates that plist and points it at ~/.hermes/logs, not
-  # ~/Library/Logs, and the plist is upstream's to write — this list bends to it
-  # rather than the other way round.
-  #
-  # Hermes rotates agent.log and errors.log itself (agent.log.1/.2/.3), but NOT
-  # these two, and nothing else did either. Found at 115 MB on 2026-08-25: a
-  # slack_bolt reconnect task whose aiohttp session had been closed retried every
-  # 10s for 48 hours — ~17,300 identical lines — and the file simply grew. The
-  # size was the only durable evidence that anything was wrong, which is the
-  # argument for capping it, not for leaving it as an accidental flight recorder.
+PLIST_DIR="${LOG_ROTATE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
+
+# Not LaunchAgent logs, so no plist names them, and not ours to derive:
+# - the Hermes gateway's own launchd streams (`hermes gateway install` writes that plist
+#   upstream, pointing at ~/.hermes/logs). Hermes rotates agent.log itself but NOT these
+#   two; one was found at 115 MB on 2026-08-25 (a reconnect task retrying every 10 s for
+#   48 hours), so they stay capped.
+# - hermes-ops.log / warden-cli.log: one audit line per invocation of the bounded
+#   dispatchers, the only record of what Hermes did unattended. Rotated, not deleted.
+# - the herdr collie plugin's own log.
+EXTRA=(
   "$HOME/.hermes/logs/gateway.error.log"
   "$HOME/.hermes/logs/gateway.log"
-  # Not a LaunchAgent log: hermes-agent/scripts/hermes-ops.sh appends one audit
-  # line per invocation, so it grows with agent activity rather than on a
-  # schedule. It is the only record of what Hermes did unattended, so it is
-  # rotated rather than truncated.
   hermes-ops.log
-  # Same shape, for the other bounded dispatcher: warden/scripts/warden (the
-  # Python CLI that replaced hermes-cc.sh on 2026-09-10; hermes-agent's
-  # scripts/hermes-cc.sh is an exec shim into it) appends one audit line per
-  # invocation — including refusals — and is the only record of which repos
-  # Hermes opened a Claude Code episode against. hermes-cc.log is the retired
-  # file's name, kept until it has rotated out.
   warden-cli.log
-  hermes-cc.log
-  opbackup.log
-  # The MacBook's userland sshd on :2222 — the only door the mini has back to
-  # this machine. Its plist is KeepAlive-on-failure with a 10s throttle, so a
-  # tailscaled that never hands out an IP turns .err into one respawn message
-  # every 10 seconds with nothing to stop it.
-  tailnet-sshd.log
-  tailnet-sshd.err
-  # The MacBook's forwards into the mini's dev databases. The one log here whose
-  # agent holds a SINGLE fd open for the life of the tunnel, so a rename-based
-  # rotation would leave it writing to a deleted inode until the next respawn —
-  # copytruncate, which is what this script does, is safe for exactly this shape.
-  # Its plist says so; this line is what makes that true. An unreachable mini is
-  # a normal laptop state and each retry logs a line, so it grows with lid-closes
-  # rather than on a schedule.
-  db-tunnel.log
-  devhost-health.log
-  drift-check.log
-  drift-check.err
-  # Push-mode agent to the homelab Beszel hub — com.jkrumm.beszel-agent.
-  beszel-agent.log
-  beszel-agent.err
-  lock-at-boot.log
-  linewatch-collector.log
-  batt-reset.log
-  appearance-sync.log
-  # audio-gateway — KeepAlive LaunchAgent (com.jkrumm.audio-gateway).
-  audio-gateway.log
-  audio-gateway.err
-  # research-gateway — gateway + lightpanda sidecar KeepAlive LaunchAgents, deploy poller.
-  research-gateway.log
-  research-gateway.err
-  research-gateway-lightpanda.log
-  research-gateway-lightpanda.err
-  research-gateway-deploy.log
-  # modelpick — daily 06:00 refresh (com.jkrumm.modelpick-refresh).
-  modelpick-refresh.log
-  modelpick-refresh.err
-  # weatherorb's nine LaunchAgents (com.jkrumm.weatherorb.<job>), moved off /tmp into
-  # ~/Library/Logs/weatherorb.<job>.{log,err} by the weatherorb repo's own pass.
-  weatherorb.serve.log
-  weatherorb.serve.err
-  weatherorb.tileserver.log
-  weatherorb.tileserver.err
-  weatherorb.public.log
-  weatherorb.public.err
-  weatherorb.sync.log
-  weatherorb.sync.err
-  weatherorb.obs.log
-  weatherorb.obs.err
-  weatherorb.fcstlog.log
-  weatherorb.fcstlog.err
-  weatherorb.blendfield.log
-  weatherorb.blendfield.err
-  weatherorb.backfill.log
-  weatherorb.backfill.err
-  weatherorb.watchdog.log
-  weatherorb.watchdog.err
-  weatherorb.worker-ingest.log
-  weatherorb.worker-ingest.err
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
+
+# Log paths of every com.jkrumm.* / com.iu.* plist, one per line. log-rotate's own log stays
+# out (see its plist: truncating the file it is writing to), and anything outside $HOME
+# (/dev/null, /var/log) is not ours to truncate.
+derive_files() {
+  local plist label key path
+  for plist in "$PLIST_DIR"/com.jkrumm.*.plist "$PLIST_DIR"/com.iu.*.plist; do
+    [ -f "$plist" ] || continue
+    label=$(basename "$plist" .plist)
+    [ "$label" = "com.jkrumm.log-rotate" ] && continue
+    for key in StandardOutPath StandardErrorPath; do
+      path=$(/usr/bin/plutil -extract "$key" raw -o - -- "$plist" 2>/dev/null) || continue
+      # A symlink under $HOME could point at a non-log file; cp and `: >` would follow it.
+      [ -L "$path" ] && { echo "warn: $path ($label) is a symlink — not rotated" >&2; continue; }
+      case "$path" in "$HOME"/*) printf '%s\n' "$path" ;; esac
+    done
+  done
+}
+
+FILES=()
+while IFS= read -r line; do FILES+=("$line"); done < <({ derive_files; printf '%s\n' "${EXTRA[@]}"; } | awk '!seen[$0]++')
 
 rotated=0
 checked=0

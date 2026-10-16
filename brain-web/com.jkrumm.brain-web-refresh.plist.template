@@ -12,7 +12,12 @@
        with no restart. See brain-web-refresh.sh. -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/dotfiles/brain-web/brain-web-refresh.sh</string>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.brain-web-refresh</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>300</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/brain-web/brain-web-refresh.sh</string>
   </array>
   <!-- Every 5 minutes, same cadence as brain-sync — a no-op tick (HEAD
        unchanged) costs one `git rev-parse` and nothing else. -->
@@ -31,7 +36,7 @@
        `[enabled, disallowed]`, skipping RunAtLoad. -->
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <!-- ~/Library/Logs, never /tmp — same reasoning as brain-sync's plist:
        /tmp is world-writable and macOS's periodic cleanup deletes files

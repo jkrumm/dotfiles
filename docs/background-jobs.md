@@ -41,11 +41,12 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `caddy`, `dnsmasq`, `tailscale`, `docker-socket` (root) | daemon | 2 | 2 | vendor |
 | `postgresql@18`, `sleepwatcher`, `beszel-agent` | KeepAlive | 2 | 2 | `services` component |
 | `~/.wakeup` | on wake | 0 | n/a on mini | Becomes the MacBook's on-wake grader (§MacBook) |
-| `brain-sync` | 300s | 2 | 4 | Kuma 600 s → becomes a backstop; failures → warden |
-| `brain-backup` | 03:30 | 2 | 4 | Keeps Kuma (data leaves the box) |
-| `brain-web-refresh` | 300s | 0 | 4 | log-only today |
-| `log-rotate` | 3600s | 0 | 2 | Its failures are cheap; list derived from plists |
-| `drift-check` | 09:40 | 2 | 2 | 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
+| `brain-sync` | 300s | 2 (on `jobrun`; graded) | 4 | Kuma 600 s → becomes a backstop; failures → warden |
+| `brain-backup` | 03:30 | 2 (on `jobrun`; graded) | 4 | Keeps Kuma (data leaves the box) |
+| `brain-web-refresh` | 300s | 2 (on `jobrun`; graded) | 4 | was log-only |
+| `log-rotate` | 3600s | 2 (on `jobrun`; graded) | 2 | Its failures are cheap; list derived from plists (done) |
+| `drift-check` | 09:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 while a drift is open, so it grades `failing` until cleared. 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
+| `jobrun-canary` | 300s | 2 | 2 | The chain probe, see §Canary |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |
 | `lock-at-boot`, `obsidian-autostart` | RunAtLoad | 2 | 2 | — |
 | `agent-gateway`, `-opencode` | KeepAlive | 3 | 3 | warden's own dependency, so Kuma is its backstop, not warden |
@@ -113,11 +114,23 @@ Tally: about 50 jobs. **Level 4 today: 3** (hermes gateway, weatherorb, research
 | Piece | Spec |
 |-|-|
 | `jobrun` (**built**, Wave 4) | `jobrun <label> --owner <repo> [--every <s>] [--timeout <s>] [--lock <name>] [--kuma <op-ref>] -- <cmd>`. Lives in dotfiles `scripts/jobrun.ts` (bun/TS, owner decision 6) → `~/.local/bin/jobrun`, tested with `bun test` in `make check`. It writes `~/.local/state/jobs/<label>.json` atomically: `run_id`, `started`, `finished`, `rc`, `duration_ms`, `every`, `owner`, `last_ok`, `consecutive_fail`, `fails_24h`, `tail` (40 lines), plus `owner_sha` (owner repo HEAD), `runs` (last 5) and `fail_times` (24 h, what `fails_24h` counts). A held `--lock` skips the run (rc 0, no state write, so absence grading catches a lock that never frees); a missed deadline is rc 124. Optionally it mirrors one OTLP log per run, best effort. `--kuma` only for the §2 backstop jobs |
-| `jobs-grade` (**built**: heartbeat `jobs` WARN component + `make doctor` table; warden and `~/.wakeup` consumers come later) | `scripts/lib/jobs-grade.ts` reads the state dir plus `launchctl print` and outputs `ok`, `failing`, `stale`, `flapping` or `unloaded` per job, as JSON. **The only grading logic.** It is called by the heartbeat (WARN lines), warden's `job` source (items), `make doctor` (table) and the MacBook's `~/.wakeup` (notify) |
+| `jobs-grade` (**built**, expected set Wave 5: heartbeat `jobs` WARN component + `make doctor` table; warden and `~/.wakeup` consumers come later) | `scripts/lib/jobs-grade.ts` reads the state dir plus `launchctl print` and outputs `ok`, `failing`, `stale`, `flapping` or `unloaded` per job, as JSON. **The only grading logic.** The expected set is derived from the installed plists (`~/Library/LaunchAgents/*.plist`) whose ProgramArguments invoke `jobrun`: a declared label with no state file grades `unloaded` (not loaded) or `stale` (never recorded, once its first window since the plist mtime has passed), so a job that never ran is never invisible. Teardown targets `rm` the label's state file. It is called by the heartbeat (WARN lines), warden's `job` source (items), `make doctor` (table) and the MacBook's `~/.wakeup` (notify) |
 | Labels and plists | `com.jkrumm.<repo>-<job>` for new jobs; no renames. The plist template lives in the owner repo, installed by its `make <x>-setup` |
 | Logs | `~/Library/Logs/<label-suffix>.{log,err}`. `log-rotate.sh` derives its list from our plists' `Standard{Out,Error}Path`, so it is declared but never hand-kept |
 | Map | `architecture-check.sh` also asserts map ⊆ live. Five stale weatherorb rows pass today |
 | Step rc | A job with steps exits non-zero when any step fails. `jobrun` can't see inside a script that swallows errors; that bug belongs to the owner repo (hermes-backup, modelpick-refresh) |
+
+## Canary
+
+`com.jkrumm.jobrun-canary` (300 s, `make jobrun-canary-setup`, converged by `make setup` on the dev host) runs
+`scripts/jobrun-canary.ts`, which exits 1 unless `config/jobrun-canary.json` has `"healthy": true`. The committed
+value is always `true`. It is the end-to-end probe for Wave 7.
+
+**Owner checkout decision (2026-10-16):** the canary's owner repo is `dotfiles`, because the file, the deploy
+(`make deploy`) and the job all live here, and a canary in a repo nobody works in would not exercise the real
+deploy. warden *parks* a merge into a checkout with a `working` herdr agent, so Wave 7 must run with the
+dotfiles checkout idle: the orchestrator tab spawns it from another cwd and waits without working in
+dotfiles, and no wave agent holds the checkout while the canary item is in flight.
 
 ## Defects found (fixes belong in the owner repos, not this plan)
 
