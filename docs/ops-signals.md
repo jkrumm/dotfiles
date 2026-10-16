@@ -5,17 +5,46 @@ description: How a background-job failure travels from the job to a fix or a hum
 # Ops signals — from a failing job to a fix
 
 > **Verdict: there is no framework today. There are four half-frameworks running side by side, and
-> warden is attached to them only through a lossy, 30-minute Kuma snapshot.** The owner's intuition
-> is right, with one correction:
-> - **Kuma becomes the calm outside-in backstop.** It watches only the remediation chain itself,
->   user-facing symptoms, and data leaving the box.
-> - **Job failures become warden items**, read from local run state.
-> - **Humans see** only what warden can't fix (`needs_decision`), what only a human can do
->   (human-queue), or the backstop (Kuma).
-> - **The correction: Hermes stays out of the remediation path.** Judgment already lives in warden's
->   triage step, which is an agent-gateway model call. Putting Hermes in the path would re-couple
->   the control plane to the gateway it was extracted from (`architecture.md` §warden). Hermes
->   narrates: it delivers the digest.
+> warden is attached to them only through a lossy, 30-minute Kuma snapshot.** The target:
+> - **warden is the self-healing loop.** Every alert source feeds it directly.
+> - **Kuma is the calm outside-in backstop.**
+> - **A human is reached only through warden's own `needs_decision`, and that should be rare.**
+>
+> Implementation runs as the wave chain in `docs/waves/PLAN.md`.
+
+## Owner decisions (2026-10-16) — these override anything below
+
+1. **warden is THE self-healing loop. Hermes is out of the path entirely:** no digest, no
+   narration, no remediation of job signals. Human contact goes through warden's own
+   `needs_decision` (Slack #agents), and it should be extremely rare. Human-queue is used only for
+   physical, biometric or TCC work.
+2. **There is no investigate-only ceiling.** warden implements fixes from day one in every owned
+   SourceRoot repo, backups and secrets-adjacent repos included. Secret *values* are never touched:
+   a missing grant or scope becomes a human-queue ask. Autonomy is kept safe by guardrails rather
+   than a ceiling:
+   - the canary job proves the full loop end to end before real jobs are wired in;
+   - closure is verified: an item is `fixed` only when the job's next run succeeds;
+   - dedup is per label;
+   - chronic detection: a reopen within 7 days goes to `needs_decision`;
+   - **a single kill-switch.**
+
+   **IuRoot stays out of warden.**
+3. **Every alert source feeds warden directly**, not via Slack or Kuma snapshots:
+   - the `job` source (`jobs-grade`);
+   - Uptime Kuma, as a webhook to warden-api, replacing the 30-minute poll snapshot;
+   - HyperDX alerts, as a webhook to warden-api instead of #alerts → `slack_alert`.
+
+   **Slack #alerts becomes a human-readable mirror**, plus the fallback for when warden itself is
+   down. Kuma watches warden; nothing else watches Kuma.
+4. **Kuma is the calm backstop** per §2: three duties, `maxretries ≥ 1`, never faster than warden
+   could act.
+5. **Self-improvement cycles are part of the system** (§9). They run during the chain, then as a
+   recurring warden duty folded into warden's existing improve loop (`warden/docs/improve/LOOP.md`).
+6. **`jobrun` and `jobs-grade` are written in bun/TS**, not bash-with-JSON. **The MacBook → mini
+   state pull is deferred until something consumes it.**
+
+Where the analysis below still mentions Hermes digests, investigate ceilings or #alerts paging,
+the decisions above win. The sections have been edited to match.
 
 Evidence comes from the code with file:line references, and from warden's ledger read with read-only
 queries. External practice was checked through `/research`; the launchd semantics come from the
@@ -60,7 +89,7 @@ Kuma keeps exactly three duties. All three are things only an outside observer c
 | **Data left the box** | `Brain Backup`, `Hermes Backup`, `Warden Backup`, `1Password Backup` (25 h / weekly) | Only the receiving side can confirm an off-site copy |
 
 Everything else leaves Kuma or becomes a slow backstop: `Brain Sync` (600 s), `Hermes Watchdog`
-(folds into `Warden Loop`), `Drift` (it is information and belongs in the digest), `Hermes Serve`,
+(folds into `Warden Loop`), `Drift` (its findings become warden items), `Hermes Serve`,
 `Collie`, `Secret Seed`. The backstop rule:
 - interval at least 2× the job's own escalation budget;
 - `maxretries` at least 1;
@@ -85,11 +114,12 @@ T3 channels, one purpose each:
 
 | Channel | When | Latency |
 |-|-|-|
-| Slack **#agents** (warden) | `needs_decision`: warden cannot or may not fix it. This is the ticket channel | async; same day |
-| **human-queue** (`ask-human`) | The fix needs a present human: biometric `op`, a TCC grant, an ACL push, physical access. warden would file it; today warden never uses it | when the MacBook answers |
-| **Kuma → #alerts** | Only the three outside-in duties in §2. This is the page channel | ≤ 20 min for chain-alive, 25 h for backups |
-| **Hermes morning briefing** | The digest: failed, flapping and chronic jobs, open items, ladder regressions. P3, no action expected | next 07:00 |
-| **macOS notification / ntfy** | MacBook only. Local consequences for a present human (van battery, router) | immediate |
+| Slack **#agents** (warden) | `needs_decision` only: chronic, or warden truly cannot decide. Should be rare | async |
+| **human-queue** (`ask-human`, filed by warden) | Physical, biometric (`op`, ACL push, secret seed) or a TCC grant, and nothing else | when the MacBook answers |
+| **Kuma → #alerts** | Only the three outside-in duties in §2, i.e. the chain itself is down. #alerts also mirrors what warden received, for reading, not acting | ≤ 20 min for chain-alive, 25 h for backups |
+| **macOS notification** | MacBook only. Local consequences for a present human (van battery, router) | immediate |
+
+There is no Hermes digest (decision 1). warden's ledger and Argo `/warden` are the record.
 
 ## 4. Source of truth (one per question)
 
@@ -99,6 +129,13 @@ T3 channels, one purpose each:
 | **Is something being done about it?** | **warden's ledger** (item per `job:<machine>:<label>`) | It does not duplicate run history. It stores the incident and points at the state file |
 | **What happened over time?** | **OTel, as a mirror only**: `jobrun` emits one best-effort OTLP log per run (`service.name=jobrun`, attributes `job`, `rc`, `duration_ms`) for dashboards and trends. Never alerting. Optional, late in the migration | — |
 | **Is the chain itself alive?** | **Kuma** (§2) | — |
+| **How does an alert reach warden?** | **Directly.** `jobs-grade` is read locally. Kuma and HyperDX post webhooks to a new warden-api ingest route (bearer token via `secrets-run`, behind a Caddy door) | The Argo snapshot poll (30 min, loses flaps) and #alerts → `slack_alert` (a human sees it first, and parsing is lossy). Both retire once their webhook is proven |
+
+**Catch for the webhooks:** the mini is push-only today, because the tailnet ACL grants nothing
+inbound from the homelab or VPS tags to the mini (`architecture.md` §Monitoring). An ingest door
+therefore needs a new, narrow ACL grant: those two tags → the devhost on `tcp:443` only. That grant
+is declared in `dotfiles-private` and applied from the MacBook (biometric), so it goes through
+human-queue.
 
 ## 5. Dead-man's switch vs failure
 
@@ -121,15 +158,24 @@ launchd facts this relies on (from `man launchd.plist` on the mini):
 
 ## 6. What warden can own
 
-| Failure class | Warden ceiling | Why |
+| Failure class | warden action | Why |
 |-|-|-|
-| Code or config bug in an owned SourceRoot repo (rotation logic, schema skew, a broken parser) | **implement** (per-repo cap, canary first) | This is warden's normal lane. Closure is verifiable from the state file |
+| Code or config bug in any owned SourceRoot repo, backups and secrets-adjacent included | **implement**, from day one | warden's normal lane. Closure is verified from the state file |
 | External transient (GitHub/network outage, upstream 5xx) | none: T1 absorbs it | It would only flap. The grade threshold filters it out before warden sees it |
-| Credential or token scope (`warden-sweep` 403) | **investigate → human-queue** | The fix needs 1Password or a GitHub UI. warden writes the exact ask |
+| Credential or token scope (`warden-sweep` 403) | implement what can be done in code; the grant itself goes to **human-queue** | Secret values are never touched. warden writes the exact ask |
 | TCC grant, FDA after an upgrade, `/login`, physical | **human-queue** directly | Only a human can do these |
-| Resource (disk, swap) | investigate | It can name the cause, but deleting data is an owner decision |
+| Resource (disk, swap) | implement (e.g. retention or a cleanup target in the owner repo) | Deleting data the owner hasn't scoped is `needs_decision` |
 | warden's own jobs, agent-gateway | **none: Kuma** | A remediator cannot remediate itself |
-| IuRoot jobs | none today | A work repo, outside warden's repo scope (open question) |
+| IuRoot jobs | **out** | Owner decision 2 |
+
+**Guardrails in place of a ceiling:**
+- **Canary first:** `com.jkrumm.jobrun-canary` must go failing → item → implement → merge → deploy
+  → next run ok → `fixed` live before any real job is wired in.
+- **Verified closure:** `fixed` requires a `last_ok` after the deploy SHA.
+- **Dedup per label.**
+- **Chronic:** a reopen within 7 days goes to `needs_decision`.
+- **One kill-switch** (`warden pause`, plus a flag file read every pass) that stops all `job`
+  dispatches without stopping ingest.
 
 **Remediation brief** for a `job` item: one new template next to `_build_cluster_brief()`, capped
 at 8000 characters like the others. It contains:
@@ -177,9 +223,12 @@ How:
 - The same `jobrun` and state dir.
 - Grade **on wake**: `~/.wakeup` (sleepwatcher) runs `jobs-grade --notify`, with staleness
   measured against awake time. `StartInterval` ticks missed while asleep are not failures.
-- The mini pulls with `ssh iumac`, which already exists, is non-interactive and uses a dedicated
-  key. The state dir is rsynced into `~/.local/state/jobs/iumac/` for `make doctor` and the
-  digest only, never for escalation.
+- **The mini → MacBook state pull is deferred** until something consumes it (decision 6). When it
+  comes, it goes over the existing `ssh iumac` and serves history only, never escalation.
+- **When netgear-watchdog moves to launchd, delete what the move makes obsolete:**
+  - the view-driven ticker;
+  - the cross-process action lock (launchd already prevents overlap);
+  - the LocalStorage watchdog state. It moves to a state file the Tinycast view reads.
 - `opbackup` keeps its weekly Kuma monitor, because its data leaves the box (§2).
 
 **Catch: van-sampler and Bluetooth TCC.**
@@ -207,3 +256,34 @@ How:
 | Check-in | healthchecks.io start/success/fail + `rid` + exit status, period + grace; Cronitor run/complete/fail + `series` | The `jobrun` state file *is* a local check-in. `jobs-grade` is period + grace. No SaaS needed |
 | Page vs ticket | SRE: page = urgent and novel; batch/backup failures = ticket; 1:1 alert:incident | Kuma = page (§2), #agents = ticket, briefing = P3 |
 | Alert on symptoms | SRE ch. 6 | Kuma watches symptoms and the chain; causes go to warden |
+
+## 9. Self-improvement cycle
+
+The cycle runs as review waves during the chain (`docs/waves/PLAN.md`). After the chain it becomes
+a recurring duty in warden's existing outcome-triggered improve loop
+(`warden/docs/improve/LOOP.md`), not a second loop.
+
+**Metrics** come from one read-only query, `docs/waves/jobs-metrics.sql`, run as
+`sqlite3 -header -column "file:$HOME/.warden/warden.db?immutable=1" < docs/waves/jobs-metrics.sql`.
+Per source over 14 days it reports:
+- opened, fixed, needs_decision, failed, quiet, false positives (closed as ignored), duplicates;
+- average and maximum hours to fix;
+- redrives;
+- signatures opened more than once (reopen and chronic candidates);
+- raw events vs items (alert noise).
+
+**Review checklist** (each finding becomes a tuned threshold, brief or grade rule, or nothing):
+
+| # | Question | Healthy | Tune |
+|-|-|-|-|
+| 1 | Did every job failure reach warden as exactly one item? | events ≈ items for `job`; no dup | dedup key, flap rule |
+| 2 | Fixed vs opened for `job`, `uk`, `hyperdx` | ≥ 70 % fixed; the rest quiet for a reason | brief content, routing rules |
+| 3 | Time to fix | median ≤ 2 h, max ≤ 24 h | debounce, loop cadence, cooldowns |
+| 4 | Reopened within 7 days | 0. Each one is a wrong fix or a wrong grade | brief acceptance check, grade thresholds |
+| 5 | `needs_decision` count | ≤ 1 per week | Why could warden not decide? Move that class to implement or to human-queue |
+| 6 | False positives (closed ignored) | trending to 0 | T1 thresholds (§3), `ignore` patterns |
+| 7 | Kuma DOWNs that reached #alerts while warden was up | 0 (Kuma should only fire when the chain is down) | Kuma intervals and retries (§2) |
+| 8 | Any job still at ladder level 0–1 | none in owned repos | adopt `jobrun` |
+| 9 | Kill-switch used? Why? | — | whatever made it necessary |
+
+The cycle records one journal line per cycle in `warden/docs/improve/JOURNAL.md`.

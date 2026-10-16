@@ -1,265 +1,203 @@
-# Setup round 4 — agent-gateway, a loop that ships, fleet-style waves
+# Background jobs → warden self-healing
 
-**Status: DONE (Wave 12 closed 2026-10-10)** (go given 2026-10-09). Orchestrated from a herdr tab in `~/SourceRoot`, one wave at a time, on the normal branches.
+**Goal:** every owned background job on the mini records each run (`jobrun`) and is graded
+(`jobs-grade`). Every alert source (job, Kuma, HyperDX) feeds warden directly. warden fixes
+failures end to end and proves each fix by the job's next successful run. Kuma is a calm backstop
+that watches the chain itself. A human hears only `needs_decision` (rare) or a physical,
+biometric or TCC ask. Self-improvement runs as warden's recurring duty.
 
-**Goal:** act on the 2026-10-09 holistic review: sideclaw becomes a lean
-`agent-gateway` (CLI `agw`), warden ships on every repo instead of feeding
-itself, `/wave` gains the shutterflow fleet roles, the global config loses its
-contradictions without losing a guardrail, Hermes is audited (not gutted), and
-every doc surface describes the final names.
+**Spec:** `docs/ops-signals.md` (its *Owner decisions* section wins) and `docs/background-jobs.md`.
 
-**Gate:** the touched repo's `make check` + `/review` on each wave's diff.
-dotfiles: `make check`.
+**Mode:** orchestrated. The orchestrator tab (dotfiles) spawns every wave and reviews its
+close-out. **A wave never spawns the next one.**
 
-**Wave 0 pre-flight: done, 2026-10-09 17:25.** The audit was taken a few hours earlier and no premise has moved.
-- All herdr agents were quiet (`scripts/herdr-wait-quiet.sh`). `warden-improve` was told to end its `/loop`; Wave 6 re-arms it as outcome-triggered.
-- Tree state at start. Waves never commit, stash or revert files they did not change in these repos:
+**Gate (every wave):**
+1. `make check` (or `/check`) green in **every repo the wave touched**, failures quoted verbatim
+   in Left behind.
+2. `/review` on everything non-trivial, findings fixed and re-reviewed.
+3. Committed and pushed.
+4. **Deployed and verified live** (`make deploy` + `make verify`, or the repo's equivalent). The
+   evidence goes in Left behind.
 
-  | Repo | State | Cause |
-  |-|-|-|
-  | weatherorb | 22 dirty files | a blocked `wo-lead-w7` |
-  | hermes-agent | 1 dirty file | |
-  | modelpick | 2 dirty files | |
-  | sy-serendipity | 3 dirty files | |
-  | jkrumm.com | 1 commit ahead of origin | the WIP-banner agent's own work, leave it |
-  | free-planning-poker | sits on branch `fix/leave-beacon-cors-and-bea-url` | |
+A wave whose deploy can only happen on the MacBook ends with a precise `ask-human ask` handoff
+instead of claiming done.
 
-  A wave that must edit one of these repos works around the foreign changes. The exception is when its own file is dirty: skip that file and record it.
+## Rules for every wave
 
-**Cross-repo:** waves edit sideclaw, warden, hermes-agent, argo, brain,
-jkrumm.com, usage-tracker, modelpick, basalt-ui, free-planning-poker,
-homelab-private. Each repo gets its own commits; PR-required repos
-(`config/pr-required-repos.json`) get a draft PR, never a direct push.
+- **Cross-repo work.** The plan lives in dotfiles, and waves edit other repos. Before touching a
+  repo, run `rd agents`:
+  - another agent `working` in that checkout → do the work in a worktree on a branch, or as
+    `agw dispatch` `implement`, and merge when green. Never edit a busy checkout. weatherorb has
+    a live chain of its own.
+  - **warden:** always a worktree, then fast-forward master when green (`warden/AGENTS.md`
+    §Gotchas: the checkout is live). Never migrate the live ledger from a session. Never start a
+    second loop. `triage.py` has no `--help`. Follow its §Git (history log + `STATE.md` in the
+    same commit).
+- PR-required repos (`config/pr-required-repos.json`) go via PR. None are expected here.
+- **Secret values are never read into the session or committed.** A missing grant, scope, ACL
+  push or secret seed becomes `ask-human ask '<exact ask>' --cmd '<exact command>'`. Record its
+  id in Left behind.
+- **Investigation is read-only until the fix.** Never kickstart or bootout a job just to test it
+  (exceptions: the canary, and a deploy target that does so itself).
+- **No dev servers. Logs go to `~/Library/Logs`.** Every new launchd label gets a row in
+  `docs/architecture.md` in the same commit.
+- **Each wave updates the docs it made stale:** `background-jobs.md` ladder levels,
+  `ops-signals.md`, `architecture.md`, the owner repo's AGENTS.md.
 
-**No owner gates except a herdr restart.** Go was given on 2026-10-09 with Johannes away. Renames on GitHub and on disk, publishing on jkrumm.com, global config edits and Hermes skill changes are all in scope. PR-required repos follow one loop: PR, `/review`, fix and re-review until clean, merge, deploy, verify live, and if broken, the next PR. A table the plan used to hold for the owner (Wave 8 mapping, Wave 9 verdicts) is still written, committed and followed, but not waited on. The only real stop is a herdr restart, which kills every pane including the orchestrator's: record it in Left behind and move on. IuRoot repos are never touched.
+---
 
-## Wave 1 — sideclaw: drop the side-panel legacy            <!-- status: done -->
-- [x] Delete the React UI: `src/`, `index.html`, `vite.config.ts`, `dist/`, `tsconfig.src.json`, `build`/`dev:client` scripts, the static plugin and SSE endpoint (~4k LOC).
-- [x] Delete UI-only routes and libs: `server/routes/{repos,notes,markdown,events,diagrams,kiosk}.ts`, `server/lib/{repo-scanner,markdown-scanner,notes-bus,diagram-bus,diagram-lock,chrome,workspace}.ts` (~1k LOC), and the dashboard-only env keys `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH`.
-- [x] **Keep:** `GET/POST /api/usage` (statusline + `fetch_usage.py` post to it), `server/lib/excalidraw*.ts` (the `excalidraw_diagram` tool), Octokit in `dispatch-git.ts` (live PR creation).
-- [x] Drop the now-unused deps (blueprint, codemirror, `@uiw/*`, `@excalidraw/excalidraw`, mermaid, shiki, react*, remark/rehype, vite, …) — `bun remove`, then confirm nothing imports them.
-- [x] Delete one-off scripts (`ab-review-angles.ts`, `probe-implement.ts`, `ralph*.sh`) and `docs/ui-and-caching.md`; README stops describing an "offload daemon"/dashboard.
-- [x] `make reload` (drains), then `/api/jobs/health` green and one `check` + one `dispatch investigate` job round-trip.
-**Left behind:** sideclaw `63d47aa` on master, pushed, deployed (`make deploy` green), `make check` 1148 tests pass, `/review` findings (6 cleanups) fixed in the same commit. Round-trips: `check` job passed, `dispatch investigate` job returned a verdict, `/api/usage` still answers.
-- Deviations from the plan: `server/lib/workspace.ts` is **kept, slimmed to `WORKSPACE_ROOTS`**, and `PERSONAL_REPOS_PATH`/`WORK_REPOS_PATH` are **kept**: they are not dashboard-only, `dispatch-policy.ts` builds its default dispatch roots from them (README row reworded). `server/lib/chrome.ts` is **kept**: `image.ts` (SVG rasterizer) and `excalidraw-hydrate.ts` use it. The hydrator loads `@excalidraw/excalidraw` from esm.sh, so dropping the npm dep is safe.
-- Also removed: `/api/build-id`, the `make build` target (reload/install-agent no longer depend on it), the `react` oxlint plugin, `.ralph*` gitignore entries. `docs/routing-and-quota.md` keeps its A/B evidence prose, now noting the two scripts are deleted (in git history).
-- Wave 2 note: the codemod must also rewrite the `https://sideclaw.local` diagram `source` stamp in `excalidraw-hydrate.ts` and `x-sideclaw-shutdown` (header read by `make reload` and `routes/shutdown.ts`). The first `make reload` attempt this wave refused because another agent's `review` job was running; waiting for idle was enough, no `FORCE`.
-
-## Wave 2 — rename sideclaw → agent-gateway (core + runtime)            <!-- status: done -->
-Names: repo/service `agent-gateway`, CLI `agw`, MCP server `agent-gateway` (tools `mcp__agent-gateway__*`), env prefix `AGENT_GATEWAY_*`, launchd label `com.jkrumm.agent-gateway`, state `~/.local/{share,state}/agent-gateway`, logs `~/Library/Logs/agent-gateway*`.
-- [x] Scripted codemod (committed under `scripts/`, re-runnable) over the sideclaw repo: identifiers, env vars, paths, docs. Env reads accept `SIDECLAW_*` as a fallback for one deprecation window, logged once at boot.
-- [x] (post-move, scripted) Runtime migration: drain (`make reload` semantics), stop the old agent, move `jobs.db`/`sideclaw.db`/salvage to the new paths, load the **new** label (never reuse `com.jkrumm.sideclaw` — BTM-denied), boot, health green.
-- [x] CLI `agw` built, `make setup` wired (dotfiles `645eb45`); PATH install runs post-move. CLI `agw` on PATH via `make setup`; `sideclaw` stays as a thin deprecation shim that execs `agw` and prints one stderr line.
-- [x] dotfiles sources done, live registration post-move. MCP registration in `~/.claude.json` and `config/opencode/opencode.json` → `agent-gateway`. Grep the live `settings.json` and `hooks/` for `mcp__sideclaw` matchers.
-- [x] GitHub rename + remote done; local `mv` is the orchestrator's. GitHub repo rename `jkrumm/sideclaw` → `jkrumm/agent-gateway` (`gh repo rename`; GitHub redirects the old URL), update the remote, move the local dir to `~/SourceRoot/agent-gateway` (fix `~/.claude.json` project paths, launchd plist, symlinks).
-**Left behind:** **Orchestrator post-move done 2026-10-09:** `mv`, `scripts/post-move.sh` ran clean: the MCP is re-registered as `agent-gateway`, `agw` plus the `sideclaw` shim are on PATH, state and logs are moved, and `com.jkrumm.agent-gateway` is loaded (the old label is gone). `make verify` was red only on `failedLastHour: 3`. Warden had dispatched three investigate jobs for the renamed repo's issues (items 1492, 1493, 1494) with `cwd ~/SourceRoot/agent-gateway` seconds before the move. They are on warden retry 1/2 and the health check self-clears within the hour. `~/Library/Logs/sideclaw.jsonl` was left in place because `agent-gateway.jsonl` already existed.
- agent-gateway `f373640` (rename) + `182f7e8` (review fixes) on master, pushed to the renamed `jkrumm/agent-gateway` (remote URL updated). `make check` 1151 pass; `/review` of the rename commit: 6 blocking + 9 improvements, all fixed or dismissed (`readlink -f` works on this macOS; the CLI env-compat import was already present). **The live server is untouched and still runs the old code under `com.jkrumm.sideclaw-server`** — the plist points at `~/SourceRoot/agent-gateway/...`, which does not exist until the move, so the runtime migration could not run in this wave.
-- **Post-move (orchestrator, after closing the wave tab):**
-  1. `mv ~/SourceRoot/sideclaw ~/SourceRoot/agent-gateway`
-  2. `cd ~/SourceRoot/agent-gateway && scripts/post-move.sh` — one idempotent script: `~/.claude.json` project key + `~/.claude/projects/-Users-jkrumm-SourceRoot-sideclaw` (memory) follow the new path (backup `~/.claude.json.pre-agent-gateway`); `make -C ~/SourceRoot/dotfiles _setup-agent-gateway` (re-registers the user-scope MCP as `agent-gateway`, removes `sideclaw`, runs `make install-cli` → `~/.local/bin/agw` + the deprecated `~/.local/bin/sideclaw` shim); then `scripts/migrate-runtime.sh` (refuses while jobs run, `FORCE=1` discards; drains + boots out `com.jkrumm.sideclaw-server`, moves `~/.local/share/sideclaw` and `~/.local/state/sideclaw` entry-wise to `agent-gateway`, logs `~/Library/Logs/sideclaw.*` → `agent-gateway.*`, `make install-agent` installs `com.jkrumm.agent-gateway`, `make install-cli`, `make verify`).
-  3. Verify BTM took the new label: `log show --last 2m --info | grep -A3 agent-gateway.plist | grep effectiveItemDisposition` → `[enabled, allowed]`; reconnect `/mcp` (tool names are now `mcp__agent-gateway__*`; `mcp__sideclaw__*` is gone in new sessions).
-  4. `make reload` refuses with a pointer to `migrate-runtime.sh` while the old-named agent is still loaded (intended).
-- **Deliberately still named `sideclaw` (renamed with their owner in Wave 3):** usage-tracker contracts `~/.local/share/usage-tracker/sideclaw-iu.jsonl` and `sideclaw-sessions.jsonl`, `src: "sideclaw"` and `USAGE_LANE=sideclaw:<tool>` (usage-tracker/argo key on them); Caddy host `sideclaw.test` + `exclude sideclaw` in `~/.config/caddy-tailnet.ports`.
-- **Wave 3 must also fix (consumers of the old names, found while grepping):** dotfiles `scripts/devhost-health-check.sh` (lines ~830–1110, plist path `com.jkrumm.sideclaw-server.plist`) and Makefile `~2601`, `docs/architecture.md:128`, `deliberate-restart/com.jkrumm.sideclaw-server` marker (reload now writes `com.jkrumm.agent-gateway`), skills' `mcp__sideclaw__*`, `docs/{global-reference,opencode}.md`, diagrams, `AGENTS.md:423`; warden `docs/improve/LOOP.md` (log path), `scripts/clients/sideclaw.py`; hermes-agent `skills/homelab-ops/references/{launchd-restart-triage,alert-patterns}.md`, `scripts/hermes-ops.sh:130` + `tests/test_hermes_ops.py` (label allow-list), `skills/hermes-gateway/...`, `skills/verify/...` (`~/.local/share/sideclaw/jobs.db` → `agent-gateway`); brain `wiki/engineering/agent-dispatch-paths.md`; linewatch `collector/run-agent.sh` comment.
-- Env: callers/`.env` may keep `SIDECLAW_*` for the deprecation window (aliased + one `env.legacy_prefix` warn at boot). Dead `SIDECLAW_GIT_ENABLED`/`VITE_SIDECLAW_GIT_ENABLED` removed from the local `.env`.
-- No `mcp__sideclaw` matchers exist in `~/.claude/settings.json` or `dotfiles/hooks`; `config/opencode/mini.json` (the only opencode MCP entry) is updated.
-
-## Wave 3 — rename sweep: consumers and docs            <!-- status: done -->
-- [x] dotfiles: `config/global.CLAUDE.md` ("`sideclaw routing`", the lane table), every skill calling `mcp__sideclaw__*` (check, review, implement, excalidraw-diagram, otel, upgrade-deps, wave, remote-dev, research), `rules/agent-limits.md`, `docs/{agent-platform,architecture,global-reference,remote-dev,opencode}.md`, diagrams, Makefile, statusline, `devhost-health-check.sh`.
-- [x] warden: `scripts/clients/sideclaw.py` → `agent_gateway.py`, tests, docs, the `warden.board_unavailable` caller; LaunchAgents that reference the old paths.
-- [x] hermes-agent, argo (`routes/agents.ts` overview client), usage-tracker, modelpick (skip generated run-log dirs), research-gateway.
-- [x] brain: rename `projects/sideclaw.md` + the narrator's repo map together; wiki pages (`model-routing`, `gateways` — agent-gateway joins the gateway family —, `agent-harness`, `herdr`, `remote-dev-*`). jkrumm.com: `agent-infrastructure.mdx`, `public/diagrams/agent-platform.html`, `facts.ts`.
-- [x] Final grep: `rg -i sideclaw ~/SourceRoot --glob '!node_modules' --glob '!.git' --glob '!**/history/**'` returns only the shim, deprecation fallbacks and archived history.
-**Left behind:** dotfiles `312e2c9`; warden `c4a6dd7` + `ebc2c97` (client is `scripts/clients/agent_gateway.py`, deployed, `make verify` green, LaunchAgents re-rendered); hermes-agent `3c06096` (deployed, `make verify` green); argo `36ff55d` (live, health ok); usage-tracker `a19425d`; modelpick (deployment service renamed, DB reseeded, doc `agent-gateway-tiers.md`); research-gateway, linewatch, image-gen, vps, dotfiles-private, weatherorb (`docs/loop-prompt.md` only), brain `47735d8` (page is `wiki/engineering/projects/agent-gateway.md`, alias `sideclaw`), agent-gateway AGENTS.md. Gates: `/check` green wherever the repo has one (modelpick: the 5 lint errors are pre-existing on master); warden `/review` blocking findings fixed; the rest is a mechanical rename whose diffs I read. Caddy door is now `agent-gateway.test` (`~/.config/caddy-tailnet.ports` exclude updated, `make caddy-tailnet` run, door answers 200).
-- **Deliberate deviation from the final-grep line: the usage data contract keeps the old name, on both sides.** usage-tracker's collector/source names `sideclaw-iu` / `sideclaw-sessions`, the `sideclaw:<tool>` lane values, `src: "sideclaw"` and `SIDECLAW_SESSIONS_LOG` are persisted in its SQLite and jsonl logs and keyed on by argo (`USAGE_SOURCE`, series colour). Renaming means a data migration plus an argo release for no functional gain, so they stay; documented in usage-tracker README and agent-gateway AGENTS.md. Everything else was renamed, including identifiers.
-- Left alone on purpose: warden ledger history rows (`repo = 'sideclaw'`, 17 closed + 1 `needs_decision` + 53 dispatches), `docs/history/` (append-only), hermes `cron/output/`, modelpick run-log dirs and fixtures, basalt-ui `docs/archive` + `.claude/maturation`, email-gateway `docs/waves/PLAN.md` and weatherorb `PROGRESS.md` (past-wave records), brain `log.md` + `Inbox/` notes, `.claude/worktrees/`.
-- Env renames without fallback: `HERMES_AGENTS_AGENT_GATEWAY_BASE`, `HERMES_NARRATIVE_AGENT_GATEWAY_BASE` (nothing sets them). warden keeps `WARDEN_SIDECLAW_BASE` as a fallback to `WARDEN_AGENT_GATEWAY_BASE`.
-- **Not pushed:** jkrumm.com `e777fb7` is committed locally on top of the WIP-banner agent's unpushed `bddaace`; pushing would publish theirs. Wave 10 publishes the site. hermes-agent `skills/verify/references/agent-claim-verification.md` was dirty (foreign) and was skipped, so it still says sideclaw. modelpick untracked `20260913_084257_b6063e` and `src/routeTree.gen.ts` untouched.
-- Not regenerated: the dotfiles diagram HTML/JSON and jkrumm.com `agent-platform.html` got the text rename only, so the longer name may overflow a node box; Wave 10 regenerates the website diagram from the dotfiles source.
-- `make doctor` stays red on pre-existing drift (collie pin, tailscale daemon, pending macOS update), not on anything this wave touched.
-
-## Wave 4 — agent-gateway hardening            <!-- status: done -->
-- [x] `narrative` (23% failed): surface the real cause instead of "Session exited with code 1" (deploy the pending `classifyExitFailure`), add one retry/fallback.
-- [x] Alerting: push `/api/jobs/health` (`failedLastHour`, `degradedRoutes`) to Kuma; a failing route pages, not just logs.
-- [x] Keep terminal job rows 90 days (or a slim `usage` table) so effectiveness stats stop needing log scraping.
-- [x] Per-route circuit breaker for IU/Requesty 503s (`check` fell back to Max 69/70 times). Rate-limit `warden.board_unavailable` (18.9k lines of noise).
-- [x] MCP: SDK `^1.32`, `job_cancel` tool, consistent `title` + annotations (`dispatch`: destructive/openWorld), deterministic `tools/list` order. Stay on stdio and 1.x — no v2/Streamable HTTP yet; verify the Tasks extension (`io.modelcontextprotocol/tasks`) status via `/research` and note when `job_wait` can map onto it.
-**Left behind:** agent-gateway `4ee9d1b` (job_stats), `19a2e69` (breaker, narrative retry, board-warning rate limit), `ee9728c` (Kuma push), `d6307be` (MCP), `356bcc3` (docs), `9ddfe53` (review `shell()` fix + CodeRabbit switch) on master, pushed, `make deploy` green, `make check` 1206 pass / 0 fail. Live: `agw health` ok, `/api/jobs/health` has `pageable:false`, a real `check` job round-tripped (4/4 steps), Kuma monitor `Agent Gateway - Push` (id 245) shows UP heartbeats from the gateway. homelab `0c9bea9` (monitor in `monitors.yaml`, `make uk-sync` applied; that sync also created the already-declared `WeatherOrb Accounts Backup - Push`, id 243, whose push URL file does not exist yet). Push URL is at `~/.config/uptime-kuma/agent-gateway-push-url` (chmod 600, not in git).
-- **narrative (23% failures):** `classifyExitFailure` was already in HEAD, so "deploy the pending" meant nothing pending. A bare `Session exited with code 1` is a session with no result envelope and empty stderr: no cause exists in-band, so it still prints that string (pinned by `tests/session-retry.test.ts`). What changed: one retry for exit/transport failures with backoff (not only invalid output); on double failure the error carries both causes. `routeFor("narrative")` has a Max→IU fallback but it fires only on quota-flavoured failures, so a bare exit 1 never switches lane. The 23% figure could not be re-measured (new `jobs.db` has 5 narrative rows, all done).
-- **Breaker:** `tool@iu/model` opens after 3 consecutive transport failures for 5 min (`AGENT_GATEWAY_BREAKER_COOLDOWN_MS`), then one half-open probe; routes without a fallback never short-circuit. It shows in `/api/jobs/health` as `openBreakers` and counts toward `pageable`. Consequence to know: an IU outage now pages Kuma even when Max fallback keeps jobs succeeding.
-- **Retention:** full rows keep 24 h / 200 rows; slim `job_stats` keeps 90 days (`jobStatsSummary(days)`). `backend`/`model` come out null for `check`/`review` rows because those fields are not at the top level of their result JSON; follow-up if the stats need them.
-- **MCP:** SDK 1.32.1, `job_cancel` (+ `agw cancel` already existed), every tool has all four annotation hints, `tools/list` is alphabetical via `server/mcp/tools/index.ts`; `excalidraw_diagram` flipped to `destructiveHint:true`. **An `/mcp` reconnect is needed to see `job_cancel` and the changed output schema.** Tasks extension (`io.modelcontextprotocol/tasks`, SEP-2663, Final) is not implemented by SDK 1.x (v1 stops at spec 2025-11-25), so stdio + 1.x stays; mapping (`jobId`≙`taskId`, `job_wait`≙`tasks/get`, `job_cancel`≙`tasks/cancel`; no `tasks/result` exists) is in AGENTS.md.
-- **Found and fixed on the way:** the `coderabbit` CLI on this host hangs on every invocation (even `--version`); `review`'s `shell()` only killed `bash`, so the hung child held the pipe and wedged a review in "gathering" for 29 min with 100+ orphans. `shell()` now kills the tree and bounds the reads. New `AGENT_GATEWAY_REVIEW_CODERABBIT=0` switch (set in the local `.env`, README row) — the CodeRabbit CLI itself needs a reinstall/login before that switch comes off. The 6 `review-opencode-config` timeouts that were red on a clean HEAD were this hang; they pass now.
-- **Review (`/review`, HEAD~6 + fixes):** 3 blocking, all in my new `shell()` code, fixed (exit guard, timers in `finally`, bounded exit wait, stronger test). Improvements fixed: warden eviction order, env URL trim. Left as follow-ups, not done: extracting the breaker out of the 2.6k-line `session-runner.ts`, merging `routeStreaks` and `breakers`, a nested ternary in the fallback message, `okCancel` duplicating `ok`, untested `redact()` pathname branch / board-log eviction / `requestJobCancel` 500 path.
-- **Slip, repaired:** I committed the homelab monitor onto the open branch `fix/garmin-auth-probe-classification` (PR #13) by mistake and pushed; I cherry-picked it to master and force-with-lease'd the branch back to its original tip `2b00620`. If anyone fetched it in that window it was for about two minutes.
-
-
-## Wave 5 — OpenCode as the settled dispatch default            <!-- status: done -->
-- [~] Retry transient 503s on write tiers before the worktree is touched; make the "no fallback on half-applied worktree" rule explicit in the result.
-- [~] Fix `session.opencode_db_locked` contention (per-session DB or serialized open).
-- [x] Claude harness for dispatch becomes explicit opt-in (`AGENT_GATEWAY_HARNESS_DISPATCH=claude`); routing doc says so.
-- [x] Dedupe `opencode-runner.ts` / `session-runner.ts` shared code (the fallow-flagged clone).
-- [x] Docs/skills that still say dispatch runs `claude -p` → corrected.
-- [x] From the 2026-10-09 prometheus-scripts run:
-  - a busy repo **queues** implement jobs instead of refusing them; a refusal is synchronous and loud, never a "running" ack followed by a refusal one second later
-  - the caller may set branch name and PR/MR title (an auto-name `dispatch/remove-openspec-…-c0c0dd73` reached main)
-  - editorial briefs (AGENTS.md, docs, prose) route to a Claude model
-**Left behind:** (written by the orchestrator — the wave's own close-out flipped the status but did not record this)
-- Shipped in agent-gateway `9379f1c`, deployed. Implement, in-place and update_pr jobs queue per repo behind a lease (`pending` + `queuedBehind`, FIFO). Every refusal that is knowable at submit is a synchronous 400 with no job row. The caller sets `branch` and `prTitle`. `kind: editorial` routes to Claude. The Claude dispatch harness is opt-in. `fallbackWithheld` is on the verdict. Shared runner code is in `worker-shared.ts`. **DISPATCH_SCHEMA_VERSION is 6.**
-- Verified live on 2026-10-10: a default investigate ran opencode/IU (deepseek-v4.1-flash) and an editorial investigate ran Claude on Max. Both returned `verdict_only` at v6.
-- warden had pinned dispatch schema {4,5}, so v6 would have struck every dispatch. The orchestrator moved the window to {5,6} (warden `3aa4b00`, deployed, 513/513). **Wave 6:** warden must also treat the new synchronous 400 refusals as a refusal, not as an infra failure.
-- **Gaps `[~]`:**
-  - The 503-retry-on-write-tier behaviour is unverified.
-  - The `opencode_db_locked` fix was cut. Its worker hung for about 14h because it probed `opencode run` against a dead endpoint, and OpenCode retries forever. The existing 3-retry jitter backstop stays.
-  - The opencode-runner ↔ session-runner import cycle is still there (it predates this wave).
-  - The dispatch.ts split was skipped.
-- **Wave 7:** every `opencode run`, in probes and dispatches alike, must fail fast on an unreachable endpoint. `scripts/wave-watch.sh` (done / idle / 45-minute stall) replaces the blind PLAN-status waiter.
-- MCP clients need `/mcp` reconnect for the v6 schema and the new params.
-
-## Wave 6 — warden: ship on every repo, stop feeding itself            <!-- status: done -->
-Premise (ledger, checked read-only 2026-10-09): the token is **not** the weatherorb blocker. Fine-grained PATs have no Checks permission, and warden already falls back to Actions runs, which it can read. The real causes:
-  - PRs #21, #33, #44, #47 and #48 **did merge**, but the 1h `merged` deadline closed them as `resolved`, not `fixed`. The "0/26 fixed" figure is a bookkeeping artifact.
-  - The live checkout diverged from origin, so ff-only deploys failed. That happened because Johannes's own wave commits sat unpushed on the live master.
-  - Carriers were superseded while waves reshaped master underneath them (#17, #30).
-  - Step-7 review blocked twice after 3 revisions (#57, #58).
-
-  Correct the stale "lacks Actions: Read" note in STATE.md §Open.
-- [x] `improve` loop: trigger on outcomes (failed / needs_decision / revision-exhausted items), not hourly; no journal commit for a quiet iteration.
-- [x] Duplicate detection before dispatch (same repo + overlapping brief/carrier); revision cap 2, then one escalation.
-- [x] Coexistence with live wave work: when a repo has an active herdr/wave agent or a dirty/diverged live checkout, warden parks that repo's implement/merge (one line to Argo, no strikes) instead of racing it. Rebase stale carriers rather than superseding them.
-- [x] Remove the 1h "sat in `merged`" deadline expiry in `sweep_deadlines` (it recorded real merges as `resolved`), and backfill the five misrecorded weatherorb items as `fixed`; rotate/cap `warden-*.err` logs; Kuma monitor on the loop heartbeat.
-- [x] Repo contract (`check`/`deploy`/`verify`) for basalt-ui (draft PR), free-planning-poker (draft PR), homelab-private; bring basalt-ui and jkrumm.com into triage scope.
-- [x] herdr under launchd: prepare everything that doesn't need a restart (plist, `make` target, docs). The restart itself is the one deferred step: record it in Left behind.
+## Wave 0 — record the owner decisions            <!-- status: done -->
+- [x] `ops-signals.md`: *Owner decisions* section (warden is THE loop, Hermes out, no ceiling + guardrails, direct webhooks, Kuma backstop, self-improvement §9, bun/TS)
+- [x] `background-jobs.md`: pattern in bun/TS, migration → this plan, open questions resolved
+- [x] `docs/waves/jobs-metrics.sql` (read-only ledger metrics, tested against the live ledger with `immutable=1`)
+- [x] Previous plan archived to `docs/waves/archive/2026-10-platform-PLAN.md`
 **Left behind:**
-- warden `b42d502` + `d70155a` on master, pushed, `make deploy` green, `make check` green (`test_triage.py` **519/519**: +6 new, the AGENTS.md gate number moved from 512; `test_ledger.py` +1). `/review` found 3 blocking and 7 improvements; the 3 blocking and 6 of the 7 are fixed. Not done: one shared git-state predicate for `rollout.checkout_in_use()` and `_sync_checkout()`. Live: schema 17 migrated on the loop's 09:02 UTC tick (pre-migration backup written), `/health` ok, `make verify` green, the five weatherorb items (1281, 1290, 1314, 1317, 1321) read `fixed`, and the `Warden Loop - Push` Kuma monitor takes UP heartbeats.
-- **Premises that were already stale** (checked in code, ledger and `origin/master`): the 1h `merged` deadline code was already gone, so only the backfill was left. `warden-*.err` rotation was already declared in `scripts/log-rotate.sh` (16 MB cap; the biggest log is 2 MB). The "lacks Actions: Read" note in STATE.md §Open was corrected: fine-grained PATs have no Checks permission, the gate falls back to Actions runs, and the real causes were the ones above. agent-gateway's v6 synchronous 400s already arrived as `SubmitRefused` → `failed(policy)`, and `pending`/`queuedBehind` is simply a non-terminal job; a test now pins the shape. basalt-ui and jkrumm.com were already in triage scope (`known_repos()` is every checkout with an AGENTS.md; the dispatch policy has no rule against them).
-- **Shipped:** `core.park` + `rollout.checkout_in_use`: a repo whose checkout is dirty, off-default, ahead of origin, or has a herdr agent working in it parks its merge and deploy (note `parked: …`, retry in 25 min, no strike, one note line per park). A failed fetch still strikes. **Consequence to know: an agent working in `~/SourceRoot/warden` (a wave, `warden-improve`) holds warden's own merges and deploys until it goes idle.** `MAX_IMPLEMENT_ATTEMPTS` 4 → 3 (first plus two revisions; the last one is the one escalation). `warden run` reuses an open `human` item whose brief overlaps ≥ 0.8. `clients/kuma.py` pings the new monitor at the end of every completed pass (homelab `4721ee2`; push URL in `~/.config/uptime-kuma/warden-loop-push-url`). `scripts/improve-trigger.py` makes the improve loop outcome-triggered; `warden-improve` was told to re-arm (`rd say`). Rebasing stale carriers was already the train's `update_pr` step; only a true conflict re-derives from the new base.
-- **Repo contract:** free-planning-poker and basalt-ui already had `check`/`deploy`/`verify`/`logs` on `origin/master`. My dispatch for basalt-ui (PR #106) was written against a local checkout 30 commits behind and would have weakened it, so I closed it. **Lesson for Wave 7's `rd fan`: brief workers from `git fetch`ed state, never from the local checkout.** homelab-private got `check`/`deploy`/`verify` and a bounded `logs` inline (`681a836`, direct to master) because agent-gateway's ceiling for it is `investigate`.
-- **herdr under launchd — PREPARE ONLY, restart NOT done.** The brew plist is already converged (session-leader wrapper, `KeepAlive`, `RunAtLoad`); the live server (pid 1193) was started outside launchd, so a crash loses every pane. Added the read-only `make herdr-launchd-status` (Makefile + `docs/remote-dev.md`). **Owner-timed cutover: `rd agents` then `make herdr-restart YES=1`. It kills every pane, orchestrator included.**
-- Slips: `agw dispatch` takes the brief as an argument, not stdin; the homelab checkout sits on a foreign branch, so the monitor went in through a worktree off `origin/master` (no foreign branch touched). `make check` takes about 3 minutes on this host.
+- Done inline by the orchestrator (editorial work).
+- Ledger baseline over 14 days: `uk` 5 items, 0 fixed; `slack_alert` 17 items, 0 fixed; `hermes_log` 11 items, 1 fixed.
 
-## Wave 7 — /wave: one simple skill that picks the right shape            <!-- status: done -->
-Evidence, three runs: shutterflow fleet on the MacBook (great; `~/SourceRoot/shutterflow/fleet/{MISSION,PROTOCOL}.md`, `fleet/roles/*.md`, `scripts/fleet/*` over `ssh iumac`, read-only), the IuRoot prometheus-scripts fan-out on 2026-10-09 (great: an orchestrator tab plus 11 herdr worktrees, one Claude per MR, merge train), weatherorb waves (weird; Wave 0 reads its transcripts and PLAN to say why). Port discipline, not machinery. Simplest shape that fits wins.
-- [x] `SKILL.md` opens with a shape picker, three shapes, one paragraph each:
-  - **sequential**: the default, one wave at a time in the main checkout. Mandatory when validation is a shared resource (shutterflow: one app build, e2e lock, screenshots).
-  - **fan-out**: N independent changes with disjoint files and cheap independent validation. One worktree and Claude tab per change, plus an orchestrator tab running the merge train.
-  - **fleet**: long multi-phase work. A lean mother that never reads code, a standing lead that owns review and merge, a fresh worker per task, rotation via `docs/waves/handoff/<name>.md`.
-- [x] Roles and the brief template as files, not prose repeated per run: `skills/wave/roles/{mother,lead,worker}.md`. Brief template fields: owned files, exact branch, title and commit message, validation command, finish with commit, push and draft PR/MR, "never touch files outside your ownership". The four stop reasons from shutterflow MISSION §Autonomy.
-- [x] `rd fan <repo> <brief-files…>` / `rd fan --clean`:
-  - creates worktrees through the repo's own tooling, so `.wtp.yml`/setup hooks run (deps install, env/config copy)
-  - opens tabs inside the repo's **existing** workspace (never a new workspace per worktree; the prometheus run left 11 under OTHER)
-  - starts Claude and sends its brief, with a start-prompt delivery check (context counter off 0k, else re-send; shutterflow measured ~1/6 dropped)
-  - also applies the delivery check to `rd wave`
-- [x] Merge train helper (`rd merge`): rebase, checks, merge, re-rebase whenever main moves. GitHub only, **fast-forward/rebase-only** (SourceRoot now; IuRoot work repos move from GitLab to GitHub Enterprise soon, so no GitLab path). Where a push drops approvals: API rebase, then arm auto-merge. Push with `git -C <worktree>` so `protect-branches` judges the worktree, not the orchestrator's cwd.
-- [x] `scripts/wave-watch.sh` (kept as the one watcher, extended with `--agents`; no `.py` port): wake on an agent leaving `working`/vanishing, an event line, or a 20-min heartbeat. Gates: cheap per-change check, full `make check` at merge, no `done` with "Review: none" without a recorded reason. Update `skills/remote-dev` + `docs/remote-dev.md`.
+## Wave 1 — hermes-agent defects            <!-- status: active -->
+- [ ] `hermes-backup.sh`: fix the rotation, which has failed nightly since 09-21 with `cannot delete non-empty directory sidecars-excluded-20260921`. Make every step's failure propagate to the exit code, so a broken rotation can no longer push Kuma green
+- [ ] Morning briefing: the warden board URL `127.0.0.1:7734` → `7735` (warden-api). Hermes keeps the briefing job; it just reads the right port
+- [ ] Delete Hermes cron `91800bba0031` (human-queue push retry, hard-coded to a request resolved 10-01) and its row in `hermes-agent/docs/scheduled-jobs.md`
+- [ ] Verify: the next 03:00 run, or a manual run of the backup script with rotation, exits 0 and the stale dir is gone; `hermes cron list` no longer shows the job; the briefing context script reaches the board
 **Left behind:**
-- dotfiles `8b5ff37` + `c6d3708` on master (pushed with the plan commit); agent-gateway `6e269e6` + `b1fd827`, pushed, `make deploy` green, `agw health` ok, `make check` 1296 pass. dotfiles `make check` rc 0, including the new `make fan-test`. `/review` of both diffs: 6 + 2 blocking, all fixed (an `rd fan` bad-substitution crash, shell injection in `fan --clean`/`merge` argv, `fan --clean` killing fresh or working agents, merge-train advancing before an armed auto-merge landed, a 5xx probe counted reachable, a wall-clock ceiling in `opencode-safe`). Improvements not done: one shared git-worktree parser lib, extracting `start_agent`/`workspace_id_for` from `cmd_wave`/`cmd_fan`, a typed transport discriminator for the preflight, splitting the 344-line `runOpencodeAttempt`, `opencode-safe` re-implementing `getIuConfig`'s base derivation in bash.
-- **Not read: shutterflow.** The MacBook (`iumac:2222`) timed out all session, so `fleet/{MISSION,PROTOCOL}.md`, `fleet/roles/*.md` and `scripts/fleet/*` were never read. The roles (`skills/wave/roles/{mother,lead,worker}.md`), the four stop reasons and the watcher are written from this plan's description only. Compare them against shutterflow once the MacBook is back; the prometheus-scripts transcripts and the weatherorb Wave 0 read were skipped for the same reason (no source for the "weird" diagnosis).
-- **Shipped:** `skills/wave/SKILL.md` opens with the shape picker (sequential / fan-out / fleet), the watcher section and fan-out rules. `rd fan <repo> <briefs…>` (each brief names `Branch:`; worktree from **fetched** `origin/<default>` via `scripts/fan-worktree.sh`, `.wtp.yml` hooks when present; tab `fan <leaf>` in the repo's existing workspace; `Base: origin/<default> @ <sha>` prepended), `rd fan --clean <repo>` (`scripts/fan-list.sh`: clean, has commits, patch-id merged, agent not working), `rd merge <repo> [--check cmd] <branches…>` (`scripts/merge-train.sh`, GitHub host only, rebase-merge, waits for armed auto-merge). `deliver_prompt` backs both `rd wave` and `rd fan`: no `working`/`blocked`/`done` within 30 s means one re-send. `rd wave` labels the tab and names the agent from `(Wave <n>)` in the prompt (Wave 7 is `dotfiles-w7`), the tab counter only as fallback, and refuses a respawn onto an existing `wave <n>` tab. `RD_WAVE_MAX` now bounds the live wave-tab count, not the number.
-- **Watcher:** `scripts/wave-watch.sh` is the one tool: `<agent> <repo> <plan> <n>` for sequential/orchestrated, `--agents a,b,c [--repo] [--events] [--heartbeat 20]` for fan-out/fleet. Documented in the `/wave` skill, `skills/remote-dev`, `docs/remote-dev.md`.
-- **agent-gateway fail-fast:** `runOpencodeAttempt` probes the IU base (5 s, `AGENT_GATEWAY_OPENCODE_PREFLIGHT_MS`) before every `opencode run`; a connect error, timeout or 500/502/503/504/529 fails the attempt as a transport failure (retry once, then Max fallback; the breaker counts it) and writes attribution. It is the only `opencode` spawn site. No mid-run guard was added: the fixtures hold no retry events and retry chatter goes to stderr, which never resets the 5 min idle watchdog. `~/.local/bin/opencode-safe` (installed, live) is the probe wrapper for workers: curl probe, exit 75 unreachable, 78 config, no wall-clock ceiling unless `OPENCODE_SAFE_TIMEOUT` is set (`rules/agent-limits.md`). Live: `opencode-safe` against a dead port exits 75 in 15 ms; a default `agw dispatch` investigate round-tripped on opencode/IU after the deploy. The unreachable-endpoint path on the live server was not exercised (no way to kill the endpoint safely); unit tests cover it.
-- **Gaps to know:** read-only dispatch tiers' bash allowlist does not include `opencode-safe`, so only implement-tier workers can run it. `rd fan`/`rd merge` were never run against a live herdr (no throwaway repo), only the hermetic `fan-test` and `bash -n`/shellcheck; the first real fan-out is the real test. agent-gateway `AGENTS.md` is ~44.5k chars, over the 40k guideline. A `make deploy` waited ~28 min behind a running warden dispatch job (it refuses while jobs run, by design).
 
-## Wave 8 — global config: contradictions out, guardrails kept            <!-- status: done -->
-No line-count target. Nothing leaves `config/global.CLAUDE.md` without a home.
-- [x] Build a mapping table (old line → kept / moved to `<file>:<section>` / duplicate of `<file>`) for every proposed change. Commit the table first (`docs/waves/round4-claude-md-map.md`), then apply it. Operating contract, secrets/mini warnings, herdr, waves, mini vs MacBook, lanes stay verbatim.
-- [x] Fix the lanes contradiction (four lanes vs Explore/@verifier/`/check` vs `global-reference.md` §Parallelism vs `skills/implement`) with one consistent sentence.
-- [x] Narrow the lane table:
-  - dispatch = "one bounded change, unattended, in a repo you are not working in"; it is no longer "default for settled multi-file edits", which pushed the prometheus run into dispatch first
-  - "N independent changes in one repo" → `/wave` fan-out
-- [x] Sweep checked-in repo `.claude/settings.json` for `ask` permission rules. They still prompt under `--dangerously-skip-permissions` and stall unattended agents (push, glab). Hard stops go in `deny`; personal prompts belong in `settings.local.json`. Add a one-line rule to `docs/agents-md.md`.
-- [x] Model ids out of prose: `AGENTS.md:~441`, `docs/{opencode,codex,agents-md,agent-platform}.md`, `skills/podcast/SKILL.md` → point at routing.
-- [~] `rules/dockerfile.md:11,86` dead reference to `docker-makefile.md`. `docker-makefile.ts` (762 lines): shrink to a deny list of destructive verbs + a `make help` hint, keep the tests meaningful.
-- [x] Housekeeping: `~/.claude/skills/.trash`, redundant allow-list entries, `docs/hooks.md` title/event count, fold `docs/herdr.md` into `remote-dev.md`, `sc-note.md` at repo root.
+## Wave 2 — the remaining known defects            <!-- status: pending -->
+- [ ] `audio-gateway` last exit 127: `secrets-run: line 770: from_cache: command not found` (10-15 14:35). Find the root cause. A likely hypothesis is bash reading `secrets-run` while it was being rewritten by the 10-14 commit, but confirm or refute it. Fix in the owner repo; any `secrets-run` edit takes its full guardrail (AGENTS.md §Secrets)
+- [ ] `warden-sweep` 403 reading check-runs on weatherorb: confirm which token and scope (read-only). Any code-side fallback goes in warden (worktree). The scope grant itself → `ask-human ask` with the exact GitHub UI step
+- [ ] Verify: `audio-gateway` restart history is clean; `warden-sweep.err` shows no new 403 after the grant (or the ask id is recorded)
 **Left behind:**
-- dotfiles `99aa60b` (the map, committed first) and `04fb7c3` (the edit), `make check` rc 0 twice. `/review` (uncommitted diff): 2 blocking + 5 improvements. Fixed: the leftover model id in `docs/agents-md.md`, and the five improvements (fan-out row and narrowed dispatch row in `docs/agent-platform.md`, the sixth lanes copy in `skills/remote-dev`, the `ca` row naming `config/zsh/claude.zsh` as the default's source, the doubled `oc` cell, the `docs/hooks.md` pointer). The other blocking finding (herdr.md content lost) was a false positive: it is in `docs/remote-dev.md` §Sidebar groups.
-- Global file: every old line is kept (map table). Three changes: the dispatch row is narrowed, a `/wave` fan-out row is added, the lanes sentence now separates "start another agent" from in-session tools, and one clause carries the no-`ask`-rules rule. The PR-is-not-a-gate bullet is untouched. Live: `~/.claude/CLAUDE.md` is the symlink to the repo file (no install step needed); a fresh `claude -p` quoted both new passages back.
-- **`ask` sweep:** no checked-in `.claude/settings.json` or `settings.local.json` under `~/SourceRoot` has an `ask` rule. The rule is in `docs/agents-md.md` §Permissions and the global file.
-- **Not done, deliberately:** shrinking `hooks/docker-makefile.ts` (762 lines) to a deny list. The global file promises "Docker via Makefile targets only (a hook enforces it)", and a deny list of destructive verbs would drop that, which the owner constraint forbids. The dead reference in `rules/dockerfile.md` is fixed (`[~]`). If the shrink is wanted, change the guardrail line in the same commit.
-- Housekeeping: `~/.claude/skills/.trash` emptied (13 removed-skill dirs), the redundant `Bash(rm -rf *)` allow entry dropped from the live settings (covered by `rm *`; backup was `/tmp/settings.pre-w8.json`), `docs/hooks.md` retitled, `docs/herdr.md` folded into `remote-dev.md`. `sc-note.md` is an untracked, gitignored personal note: left in place.
-- Model ids: removed from prose in `AGENTS.md` launcher table, `docs/{opencode,codex,agent-platform,agents-md}.md` and `skills/podcast/SKILL.md`; ids remain only in config files. Cost: the `docs/codex.md` table no longer says which model `cx`/`cxa`/`astra` use (it names the file). `scripts/astra.sh` and `config/codex/*.toml` comments still carry ids.
-- `skills/implement/SKILL.md` no longer says dispatch is the default for settled multi-file work. AGENTS.md is 37.2k chars (limit 40k).
 
-## Wave 9 — Hermes: audit and improve the wiring (no blind deletion)            <!-- status: done -->
-- [x] Verdict table for every live skill in `~/.hermes/skills` (73 + 24 archived): learn-from (pattern worth porting into our skills) / adapt-port / keep in Hermes / retire, with a one-line reason. Commit the table, then act on it. Retire only what has no use and nothing to learn from.
-- [x] Wiring map Hermes ↔ global setup: shared facts duplicated in Hermes skills (`herdr` 279 vs 195 lines, `podcast`, research, homelab/homelab-ops, dispatch/warden) → which become links to one doc, which stay Hermes-specific.
-- [x] Port the "learn-from" patterns into dotfiles skills as agreed; remove retired terms (`agent-dispatch`, `rd bg`, "colleague", `claude --bg`) from `capture` and `herdr`.
-- [x] Review the stale/oversized ones (`karakeep`, `reading`, `work` 618 lines); add a check that the live skill set matches the declared `HERMES_SKILLS` list.
+## Wave 3 — the map tells the truth            <!-- status: pending -->
+- [ ] `docs/architecture.md`: drop the five weatherorb timers that are now DBOS schedules (`obs`, `fcstlog`, `archive`, `backfill`, `round`); §Monitoring adds `Agent Gateway`, `Warden Loop`, `Warden Backup`, `Hermes Serve`, `WeatherOrb Degraded`, `Home Line - Watchdog`
+- [ ] `scripts/architecture-check.sh`: also assert map ⊆ live on the machine that owns the row (the mini section on the mini, the MacBook section on the MacBook), with a hermetic test
+- [ ] Verify: `make doctor` green; a fake stale row fails it
 **Left behind:**
-- hermes-agent `4c8be53` + `e4849da` on master, pushed; `make check` rc 0, `make deploy` green ("deployed and verified"), `make status` has no ✗. `/review`: 3 blocking, 4 improvements. Fixed: the dangling briefing-prompt reference (and restored the two-level MR check the split had flattened; the cron job was re-pushed with `hermes cron edit`), the `homelab` anchor, bare `references/` paths. **Dismissed with evidence:** the Makefile `$` escaping claim (the target ran and flagged a planted probe symlink) and the `ideation` "typo" (it is the skill's frontmatter name; the doc now says so). Not done: extracting the skills check into a `scripts/` file; making `cron-skills-check` also read `skills.disabled`.
-- **Premise corrected:** "73 live + 24 archived" are *upstream-bundled* skills and curator archives, not ours. Ours is the 20 in `HERMES_SKILLS`; the ~100 agent-authored records in `.usage.json` (`warden-*`, `homelab-watchdog` 365 uses) were folded into `references/` by agent-platform Wave 2. Table with evidence: `hermes-agent/docs/skills-audit.md`.
-- **Nothing deleted.** 22 upstream skills with no usage record (14 `mlops`, 2 `gaming`, `ideation`, `pixel-art`, `box`, `linear`, `petdex`, `sdlc-review`) are in `skills.disabled`; live `hermes skills list` shows them `disabled`. Reverse by removing the line.
-- **Split (lossless, URL/curl-checked):** `work` 618 → 104 lines, `wildrift` 320 → 124, `capture` 279 → 149, `reading` 222 → 165, `karakeep` 160 → 63, `image-delivery` 99 → 54, detail in each skill's `references/`. Per-skill report formats dropped in favour of SOUL.md. Fixed: `herdr` waited on `--until done` only (never fires on a watched tab), rd verb table, hard-coded herdr version; `homelab`/`homelab-ops` blamed Watchtower for the VPN stack (it is the 04:00 host reboot); `podcast` model roster in prose; `research-gateway` "VPS"; `capture` stale repo hints (`watchdog`, `dotfiles` owning Hermes).
-- **Ported into dotfiles** (uncommitted before this commit, now in it): `research` (partial/warnings/grounding, never answer from memory), `remote-dev` (unsent input line, branch restore after steering, lifecycle-vs-identity integrations), `podcast` (publish-failed honesty, retry once, `jq --rawfile`), `agent-platform.md` heading (`rd fan` is the fan-out form of the `rd wave` lane).
-- **New check:** `make skills-set-check` (in `make status`): repo `skills/`, live symlinks and `HERMES_SKILLS` must be one set.
-- **Retired terms:** `agent-dispatch` and `rd bg` already had no occurrences; `claude --bg` survives only as a prohibition; `colleague` in `capture` is a routing keyword. Nothing to remove.
-- **Not done / for the owner:** `skills/work/iu-epos-ops` is gitignored and employer-internal (1 use, agent-created); only its stale "approval layer" line was fixed locally. It still tells Hermes to read IuRoot repos and run `make`, against SOUL.md. Retire or rewrite it (not in git, so I did not delete it). The `agent-platform.md` "four lanes" wording is unchanged.
 
-## Wave 10 — docs on every surface            <!-- status: done -->
-- [x] jkrumm.com `personal-stack.mdx` (published, stale: CLAUDE.md → AGENTS.md, Grafana/Loki → ClickStack, no agent stack); `agent-infrastructure.mdx` "rolling out" paragraph → current; cross-link the two. Publish it (the site is WIP-flagged).
-- [x] brain: `agent-overview-loop.md` and `agent-harness.md` rewritten or bannered superseded; `Areas/Engineering/Engineering.md` links the agent platform page; rename `agent-estate-model` → `agent-platform` (keep an alias); four superseded pages → one History page.
-- [x] Narrator prompt stops writing "merge-approval gate" for warden; one human "daily workflow" note in brain Areas/Engineering (lanes, waves with roles, Argo/Hermes queue).
-- [x] Website diagram generated from or pointing at `dotfiles/docs/diagrams` source.
+## Wave 4 — `jobrun` and `jobs-grade`            <!-- status: pending -->
+- [ ] `scripts/jobrun.ts` (bun): `jobrun <label> --owner <repo> [--every s] [--timeout s] [--lock name] [--kuma op-ref] -- <cmd>`. It:
+  - prefixes output lines with timestamps;
+  - enforces the deadline with TERM, then KILL;
+  - takes an optional cross-label lock;
+  - writes `~/.local/state/jobs/<label>.json` atomically (`run_id`, `started`, `finished`, `rc`, `duration_ms`, `every`, `owner`, `last_ok`, `consecutive_fail`, `fails_24h`, `tail`, plus the owner repo's HEAD SHA);
+  - pushes Kuma only via `--kuma`, on rc=0, with the URL resolved through `secrets-run`.
+  `make setup` links it to `~/.local/bin/jobrun`
+- [ ] `scripts/lib/jobs-grade.ts`: state dir + `launchctl print` → per label `ok|failing|stale|flapping|unloaded`, as JSON on stdout. The thresholds are `ops-signals.md` §3 T1 and §5 (flapping = ≥ 3 failures in 24 h). This is the **only** grading logic
+- [ ] Hermetic `bun test` suites in `make check` (deadline, lock, atomic write, every grade state, clock injection)
+- [ ] Heartbeat: a `jobs` component that is **WARN-only** (exit 2, never DOWN); `make doctor` prints the graded table
+- [ ] Verify: `make check` green; `make devhost-health-check` shows the jobs line (0 jobs yet = `jobs ok (0)`)
 **Left behind:**
-- jkrumm.com `d959cf3` + `cfd8bce` (on top of the owner-approved `bddaace`, `e777fb7`) pushed; CI Deploy run green; `bun run build` 0 errors / 0 warnings. Live, fetched: `/guide/agent-infrastructure` and `/guide/personal-stack` return 200, the guide index and `rss.xml` list the first, the second says ClickStack (no Loki), the embedded `/diagrams/agent-platform.html` has no "rolling out". The WIP gate is an overlay, so the markup is public but visitors see the gate unless they use `?preview`.
-- `personal-stack`: AGENTS.md instead of CLAUDE.md, ClickStack/HyperDX instead of Grafana/Loki, Traefik only (Caddy is the dev host's), a paragraph on the mini and the agent stack. `agent-infrastructure`: published, "rolling out" replaced by the merge train as it runs (warden lands its own PRs, parks while a checkout is busy), the `/wave` shapes added to the lanes section, the deleted merge-approval gate listed. The two link to each other.
-- Website diagram: dotfiles `agent-platform.architecture.json` is the source (merge/verify no longer "rolling out", `agent-gateway` label, `rd fan` on the wave card), regenerated with archify at showcase quality; the site copy is `make diagrams` (new target, documented in jkrumm.com AGENTS.md). It is a copy, so a diagram change is two commits in two repos.
-- brain `61aed99`: `agent-estate-model` renamed `agent-platform` (still the symlink to `dotfiles/docs/agent-platform.md`, which now carries `aliases: [agent-estate-model]`; every wikilink rewritten, 12 files). Four superseded pages (`agent-dispatch-paths`, `hermes-as-control-surface`, `warden-control-plane`, `incident-triage-loop`) folded into `agent-platform-history` and deleted (full text in git). `agent-harness` and `agent-overview-loop` kept with a dated banner (OpenCode is the dispatch default; the Slack card board is history). `Areas/Engineering/Engineering.md` links the platform page; new `Areas/Engineering/daily-workflow.md` (lanes, wave shapes and roles, Argo `/warden`, Slack one line, human queue).
-- Narrator: the prompt is agent-gateway's `server/skills/narrative.md`, not hermes-agent. Added a rule there (agent-gateway `bf40351`, pushed, `make check` 1296 pass) and a pointer in hermes-agent `docs/project-narratives.md` (`488bc1e`). The brain `warden` page's two "merge-approval gate" lines now say it was deleted.
-- **Not done: `make deploy` for agent-gateway `bf40351`.** It refuses while a job runs (two attempts). Until it lands the live narrator still has the old prompt. Re-run `make deploy` in `~/SourceRoot/agent-gateway` when idle.
-- Deviations/gaps: `remote-dev-orchestration` stays (its `rd`/`desk` split still holds, banner already says what is history), so it is not part of the History page. No `/review` on these docs-only diffs; dotfiles `make check` passed. The narrator rule is unverified end to end (needs the deployed prompt and the next narrative run). The `Projects/dotfiles.md` page in brain is link-fixed only.
 
-
-## Wave 11 — AGENTS.md only, no CLAUDE.md shims            <!-- status: done -->
-Independent of the other waves, so it can run in any quiet slot, but before Wave 8 rewrites `docs/agents-md.md` is cleanest. Premise re-measured 2026-10-09 on Claude Code 2.1.295: a repo with only `AGENTS.md` loaded it on the IU endpoint with a **cold** `CLAUDE_CONFIG_DIR` and with a warm one (`docs/agents-md.md` §Why not a bare AGENTS.md is stale; per the docs, the flag dependency ended in v2.1.281). Any `CLAUDE.md`/`CLAUDE.local.md` in cwd or above suppresses direct AGENTS.md reading, so the shims are what must go.
-- [x] Re-run the measurement matrix (Max `c`/`claude -p`, IU warm, IU cold, `rd wave`, an agent-gateway dispatch worker, OpenCode, Codex) with root + nested AGENTS.md and no CLAUDE.md. Rewrite `docs/agents-md.md`: AGENTS.md is the only per-repo file; never commit `CLAUDE.local.md` (it suppresses AGENTS.md); `InstructionsLoaded` hooks don't fire for directly read AGENTS.md (none in use today).
-- [x] Delete every 11-byte `@AGENTS.md` shim, root and nested (~30 across SourceRoot, incl. `argo/apps/{api,dashboard}`, `basalt-ui/apps/marketing`, `free-planning-poker/{apps/server,fpp-analytics}`). One commit per repo; PR-required repos get a draft PR.
-- [x] basalt-ui (own commit, draft PR): the CLI placement engine (`src/cli/index.ts`, `agent/templates/CLAUDE-block.md.tpl`, `placement-engine`/`template-ledger`/`doctor` tests) writes the `<!-- basalt:start/end -->` block into **AGENTS.md** and migrates an existing CLAUDE.md block on upgrade. Then re-run it in the consumers: argo, basalt-ui-obsidian, image-gen, image-share/apps/admin, linewatch/web, rb, weatherorb/apps/web.
-- [x] `basalt-ui/packages/basalt-ui/CLAUDE.md` (50 KB, real content next to an AGENTS.md): merge it into that AGENTS.md deliberately. It references `../../CLAUDE.md`, and `agent/` ships to npm, so check what consumers rely on.
-- [x] `sy-serendipity/CLAUDE.md` (3.4 KB, no AGENTS.md) → `AGENTS.md`. Leave `modelpick/fixtures/**` (benchmark fixture) and vendored `.venv` files alone. Update every AGENTS.md "CLAUDE.md shim" mention, `scripts/architecture-check.sh` or any lint that asserts the shim, and `Projects/dotfiles.md` in brain.
+## Wave 5 — dotfiles jobs on `jobrun` + the canary            <!-- status: pending -->
+- [ ] Wrap `brain-web-refresh`, `log-rotate`, `brain-sync`, `brain-backup` and `drift-check` in their plist templates (`--kuma` only where a §2 backstop monitor stays). Re-render them through the existing `make <x>-setup`
+- [ ] `log-rotate.sh`: derive its file list from our plists' `StandardOutPath`/`StandardErrorPath` (`com.jkrumm.*`, `com.iu.*`). Nothing outside those labels is touched
+- [ ] Canary: `com.jkrumm.jobrun-canary` (300 s) runs `scripts/jobrun-canary.ts`, which exits 1 unless `config/jobrun-canary.json` has `"healthy": true`. Keep it healthy and committed. It is the end-to-end probe for Wave 7.
+  **Catch:** warden *parks* merges into a checkout that has a `working` herdr agent (`warden/AGENTS.md`), and the orchestrator and every wave sit in the dotfiles checkout. Decide where the canary's owner checkout lives so Wave 7 can actually merge there, and record the decision. Options: run Wave 7 from another cwd with the orchestrator idle, or give the canary an owner repo that nobody works in
+- [ ] Verify: six state files, all graded `ok`; flipping the canary to unhealthy *locally, uncommitted* → `failing` after 3 ticks → restore → `ok`
 **Left behind:**
-- **Shims gone** on origin master in agent-gateway, argo (root block removed by the bump, nested shims by `c78415a`), audio-gateway, brain, email-gateway, hermes-agent, homelab, homelab-private, image-share, jkrumm.com, king-smith-walkingpad-mac, kobo-mods, linewatch, modelpick, research-gateway, usage-tracker, vps, warden, weatherorb (root), free-planning-poker (PR #289), rollhook (PR #36), dotfiles (`e03bcc4`, docs rewritten: `docs/agents-md.md`, AGENTS.md, global file, codex brief, agents). sy-serendipity: `CLAUDE.md` renamed to `AGENTS.md`. brain pages fixed (`3dc0b90`). Foreign trees untouched: homelab done from a worktree off origin, weatherorb/modelpick via path-limited commits.
-- **basalt-ui PR #107 merged, v1.41.0 published** (feat: the CLI places the managed block in AGENTS.md and migrates it out of CLAUDE.md; malformed or conflicting blocks refuse before any write; doctor warns on a shadowing CLAUDE.md). The package maintainer file is now `packages/basalt-ui/MAINTAINING.md`, **not** merged into AGENTS.md: AGENTS.md ships to npm and consumer agents read it. Three `/review` rounds; the last one's blocking finding (orphan `basalt:end`) was a false positive, already handled and tested (`scanBlock`, placement-engine tests). Dismissed: the import-detector strictness (review rounds disagreed; strict is the safe side, a false warning is harmless). Not done: init/sync dedup, doctor() complexity, manifest re-key ordering. The CLI line budget in `scripts/check-budgets.ts` was raised 4000 to 4250 (three times); the owner may want that file split instead.
-- **Consumers on 1.41.0 with the block in AGENTS.md and no CLAUDE.md:** argo `c9f62f0`, basalt-ui-obsidian `57023d8` (deployed), image-gen `b4c19ce`, image-share `8cd7684` (deployed), linewatch `6a72239`. All gates green. `make verify` red only for image-gen: the commit touches no `gateway/` or `shared/`, so CI does not deploy it; run `make gateway-deploy` if the deployed image should follow.
-- **NOT done: rb and weatherorb still carry a `CLAUDE.md` with the basalt block** (and so suppress their AGENTS.md). The bump is the only way to move it: the old CLI checks CLAUDE.md. rb jumps 1.30.2 to 1.41.0 and trips ~35 new `oxlint` errors (`basalt/raw-breakpoint`, `control-outside-home`) plus `check-theme` violations: a UI migration. weatherorb's `/map` bundle is 1162 bytes over its 716800 gzip bar after the bump. Both need an owner call (migrate the UI / raise the budget). weatherorb trap: `sync` fails if AGENTS.md mentions the literal `basalt:begin` marker in prose. rb also carries 13 unpushed local commits.
-- **Measurement:** only Max warm (root + nested AGENTS.md, no CLAUDE.md) was measured, on 2.1.296. IU warm/cold, `rd wave`, a Claude-harness dispatch worker, OpenCode and Codex were not (no IU credentials on the mini; `codex exec` printed nothing). Recorded in `docs/agents-md.md`.
-- Left as is: `sy-serendipity-codex` (a local `v2` worktree with its own shim, no remote), `modelpick/fixtures/**`, local checkouts parked on foreign branches (homelab, rollhook, free-planning-poker; their origin master is clean). No `/review` on the pure-deletion PRs (fpp, rollhook): 11-byte import files only.
 
-## Wave 12 — warden decides its own reversible questions            <!-- status: done -->
-Found in final validation (2026-10-10): 14 items sat in `needs_decision`. Nearly all were A-or-B operational questions an agent can answer:
-- keep a heartbeat strict or dampen it
-- route a build failure or wait a night
-- re-pin a cron model or retire the job
-- local patch or file upstream
-- which of two PRs to land
-
-That is the "unnecessary human intervention" the owner named. The orchestrator decided the backlog by hand via the warden CLI. This wave removes the cause.
-- [x] Find where the escalation is born. Likely candidates:
-  - agent-gateway's investigate/implement verdict instructions (`nextAction=human` + an options question)
-  - warden's mapping of that verdict to `needs_decision`
-
-  Measure on the ledger which verdict shapes produced the 14.
-- [x] Encode the owner-stop policy at both ends.
-  - **Worker prompt:** escalate ONLY for product direction / user-visible product semantics, irreversible data loss, spend, other people, or security policy. Otherwise pick the reversible, root-cause option, state it, and proceed (`nextAction` = implement / close).
-  - **warden:** a `needs_decision` verdict must name one of those categories (a schema field). Without it, warden re-drives once with "decide it yourself", then takes the recommended option.
-- [x] Tests on both sides. Deploy both. Verify with a replay of two of today's backlog questions through a real investigate episode: the verdict must decide, not ask.
-- [x] Argo `/warden` and the Slack line show the category for anything still escalated.
+## Wave 6 — warden: kill-switch and the `job` source            <!-- status: pending -->
+- [ ] Kill-switch: `warden pause [--reason]` / `warden resume`, plus a flag file read at the start of every pass. While paused, ingest continues and **no dispatch of any origin** happens. Surface it on `/health` and the Argo snapshot
+- [ ] `job` source: each loop pass runs `jobs-grade` locally; `failing|stale|flapping|unloaded` → event with dedup key `job:<machine>:<label>`, routed to the job's `owner` repo (no triage guess needed). Level-based: it stays one event while the grade is bad
+- [ ] Chronic rule: a reopen of the same `job:` key within 7 days → `needs_decision` instead of a dispatch. Same for a `fixed` job failing again within 24 h (a `work` strike)
+- [ ] Ledger migration through the loop's own `connect(migrate=True)` path only; tested on a copied ledger
+- [ ] Verify: the canary unhealthy locally → exactly one `job` item; `warden pause` → no dispatch; `resume` → dispatch; restore the canary
 **Left behind:**
-- agent-gateway `64e4ed5`, `f2d0e19`, `fcec70a` on master, pushed, `make deploy` green; `/check` 5/5. warden `5090f79`, `500e777`, `6425f50`, `55e414a` on master, `make deploy` green, `make check` green, `test_triage.py` **534/534** (AGENTS.md gate number moved from 526). `/review` on both diffs: warden 1 blocking + 7 improvements, agent-gateway 3 blocking + 5 improvements, all fixed except the `_member_outcome` nesting (narrowed by extracting `_uncategorized_human_outcome`, not flattened further).
-- **Where it was born (ledger, read-only):** of the 14 `needs_decision`, 11 were investigate `human` verdicts (`working` to `needs_decision`) and 3 were step-7 review `needs-human` (1370, 1390, 1456). Every investigate question was a reversible A-or-B. The worker prompt already said "`human` is the exception", but the schema had a question field and no reason, so nothing forced a justification, and warden mapped any `human` straight to `needs_decision`.
-- **Shipped:** dispatch verdicts carry `escalationCategory` (`product | data_loss | spend | other_people | security | blocker`), allowed only with `nextAction=human`, optional in the schema, survives sensitive redaction; **`DISPATCH_SCHEMA_VERSION` is 7** and warden accepts {5, 6, 7} (widened and deployed before the gateway). The shared prompt lists the six as the only reasons to stop for the owner and names the usual false positives (strict vs dampened, route now vs wait, re-pin vs retire, patch vs upstream, which of two PRs). warden: a `human` verdict with a category goes to `needs_decision` with the note led by `[category]`; an investigate verdict without one returns to `triaged` once (note `re-driven to decide: ...` is the guard; the next brief opens with a `PRIOR ESCALATION` paragraph), and the second one takes its `recommendation` (investigate-only item: `closed(resolved)` with it; otherwise `working` with the stored verdict rewritten to `nextAction=implement`). A re-route via `owningRepo` still wins; an implement-episode `human` is tagged (`[category]` or `[no category]`), not re-driven.
-- **Replay on the deployed pair** (standalone `agw` investigate episodes, no ledger item touched): the homelab Kuma-push question (item 1496's shape) returned `nextAction=implement`, the hermes-agent stale cron pin (item 1497's shape) `none`; neither asked the owner, both at `schemaVersion` 7. Caveat: both repos already held the answer in their docs, so this proves "decides when it can", not "never asks".
-- **Argo and Slack:** no column, migration or Argo release. Both render the item's note (`notify.py` posts it, Argo's `reason` is the note), so the `[category]` tag reaches both; verified by reading the code paths, not on a live card.
-- **Not done:** step-7 review `needs-human` (3 of the 14) is a `review` job outcome with no category in its schema; it still pages. Same fix shape: a category on the review verdict and the same tag in `train._fold_review`. The 14 existing items were not touched (another agent owned them). MCP clients need a `/mcp` reconnect to see the v7 tool description.
-- One existing test changed target, not strength: the schema-mismatch case used `DISPATCH_SCHEMA_VERSION - 2`, now `min(window) - 1`; `dispatch-in-place` pinned the exact current version (6), now pins the bump floor.
 
-## Wave 13 — review verdicts name their escalation too            <!-- status: done -->
-Wave 12 left this gap: step-7 review `needs-human` (items 1370, 1390, 1456) has no category in the review schema, so it still pages for reversible calls. Fix it the same way Wave 12 fixed investigate verdicts.
-- [x] agent-gateway review verdict: optional `escalationCategory` (same six values), allowed only with `needs-human`. The review prompt lists the owner-only reasons and the usual false positives: accept a descope, which of two PRs, a fixable blocking finding. Bump `REVIEW_SCHEMA_VERSION`, and have warden widen its acceptance window first.
-- [x] warden `train._fold_review`: with a category → `needs_decision`, note led by `[category]`. Without one → one re-review or revision with "decide it yourself", then take the recommendation, or send blocking findings back to the worker as a revision.
-- [x] Tests on both sides, deploy both, and replay one real review on a live PR. The verdict must decide, not page.
+## Wave 7 — warden: job brief, verified closure, canary end to end            <!-- status: pending -->
+- [ ] Job brief template next to `_build_cluster_brief()` (`ops-signals.md` §6). It contains:
+  - label, machine, owner repo and plist;
+  - grade and the last 5 runs, with a 40-line tail;
+  - `git log` since `last_ok`, plus brew changes;
+  - the allowed and forbidden actions;
+  - the acceptance check.
+
+  The tier is **implement** from day one
+- [ ] Verified closure: a `job` item goes `verifying` → `fixed` only when the state file shows `last_ok` after the merged SHA was deployed. A timeout means a `work` strike
+- [ ] **Canary end to end, live:** commit `"healthy": false` to dotfiles master. warden must take it through item → implement → merge → `make deploy` → next canary run ok → `fixed`, with no human touch. Record the timings
+- [ ] Verify: the canary item is `fixed` with closure evidence; time from first failure to fixed is recorded; no second item was opened
 **Left behind:**
-- agent-gateway `60d0c51`, `70f7728` on master, pushed, `make deploy` green (waited out 2 foreign running jobs); `make check` 1310 pass. warden `72c1d6d`, `37fd11e`, docs commit on master, pushed, `make deploy` green, `test_triage.py` **539/539** (AGENTS.md gate number moved from 534). `/review` on both diffs: warden 3 blocking + 6 improvements, agent-gateway 3 blocking + 6 improvements; all blocking fixed, stale comment/docstring/constant fixed, the rest (shared constants module, discriminated union, `runReview` size, duplicated paragraph builder) skipped as out of scope.
-- **Shipped:** review `REVIEW_SCHEMA_VERSION` **2**, optional `escalationCategory` (the dispatch six) on `needs-human` only, coerced before validation, `blocker` forced when a reviewer failed or the pipeline salvaged. warden accepts review schemas {1, 2} (widened and deployed BEFORE the gateway). `train._fold_review`: category → `needs_decision` tagged `[category]`; schema-2 without one → one re-review per head (latch `dispatches.validation_status='redriven:<sha>'`, `PRIOR ESCALATION` paragraph in the review context), then read as the decision: blocking findings revise, none confirms. Schema-1 and revert reviews keep the old path to the owner.
-- **Replay on the deployed pair:** gateway review of open warden PR #25 returned schemaVersion 2, `actionable` with one concrete blocking finding, no `needs-human`. Caveat: proves "decides when it can", not "never asks"; items 1370/1390/1456 were not re-run. The gateway's forced-blocker paths have no end-to-end test (the coercion, normalizer, enum and prompt do).
-- MCP clients need a `/mcp` reconnect to see the new review tool description. Wave 13 is the last wave; nothing is active.
+
+## Wave 8 — review cycle 1            <!-- status: pending -->
+- [ ] Run `docs/waves/jobs-metrics.sql` and work through the `ops-signals.md` §9 checklist. Record the numbers in Left behind
+- [ ] Tune what the numbers say: T1 thresholds in `jobs-grade`, the brief, dedup and chronic rules. One commit per tuning, each with its evidence
+- [ ] Make it recurring: extend `warden/docs/improve/LOOP.md` step 1 (Measure) with the job metrics query and the §9 checklist, so the outcome-triggered improve loop owns it after the chain. Not a second loop
+- [ ] Verify: an improve-loop iteration run by hand reads the new metrics; JOURNAL line written
+**Left behind:**
+
+## Wave 9 — warden-api ingest door            <!-- status: pending -->
+- [ ] warden-api: `POST /ingest/kuma` and `POST /ingest/hyperdx`. Bearer token resolved via `secrets-run` (new `op://` ref, declared in `dotfiles-private/headless.refs`). The payload is mapped to the existing `uk` and `slack_alert`-equivalent event shapes (`hyperdx` source) with the same dedup keys. Idempotent; 202 on accept. Tests
+- [ ] Caddy door for the ingest route only (`config/Caddyfile`), plus `make caddy-tailnet`
+- [ ] ACL: declare a narrow grant (homelab and VPS tags → devhost `tcp:443`) in `dotfiles-private`. The push is biometric → `ask-human ask` with `make tailscale-acl-diff` then `make tailscale-acl-push`. The token item and secret seed → `ask-human ask` (`make secrets-seed`)
+- [ ] Verify: a POST from homelab (`ssh homelab curl …`) returns 202 and creates an event (the test event is then closed); without the token → 401
+**Left behind:**
+
+## Wave 10 — Kuma → warden webhook            <!-- status: pending -->
+- [ ] `homelab/uptime-kuma/monitors.yaml`: add a webhook notification → `/ingest/kuma` on every leaf monitor, **keeping** "Slack - Alerts" as the human-readable mirror and fallback. Apply with `make uk-sync`
+- [ ] warden: retire the `uk` Argo snapshot poll in `watchdog-poll.py` only after one real DOWN/UP pair has arrived by webhook. Until then both run, and dedup keeps one item
+- [ ] Verify: pause a test push monitor → DOWN webhook → one `uk` item within a loop pass; resume → resolved
+**Left behind:**
+
+## Wave 11 — HyperDX → warden webhook            <!-- status: pending -->
+- [ ] `~/SourceRoot/vps/observability/alerts/*.json`: add the `/ingest/hyperdx` webhook to all 21 alerts. Slack #alerts stays as the mirror. Apply through the repo's own sync
+- [ ] warden: stop turning HyperDX-shaped #alerts messages into `slack_alert` items once the webhook path is proven (`watchdog-poll.py` filter, like the `[… Push]` one). weatherorb's alert → GitHub issue path stays (it already reaches warden directly as `github_go`)
+- [ ] Verify: a test alert (temporary threshold) → one `hyperdx` item, not a duplicate `slack_alert`; restore the threshold
+**Left behind:**
+
+## Wave 12 — Kuma becomes the calm backstop            <!-- status: pending -->
+- [ ] `monitors.yaml`, per `ops-signals.md` §2:
+  - keep the three duties: chain-alive, user-facing symptoms, data leaving the box;
+  - `maxretries ≥ 1` everywhere;
+  - intervals of at least 2× warden's T2 budget for everything that isn't chain-alive;
+  - retire or lengthen `Brain Sync`, `Hermes Watchdog`, `Drift`, `Hermes Serve`, `Collie` and `Secret Seed` as §2 says
+- [ ] warden: the `Warden Loop` push requires loop, poll and sweep heartbeat freshness (`/health`), so a dead sweep pages through Kuma
+- [ ] Docs: `architecture.md` §Monitoring and `ops-signals.md` §2 match the result
+- [ ] Verify: `uk-sync` diff reviewed and applied; a stale-sweep simulation on a copied ledger makes the push skip
+**Left behind:**
+
+## Wave 13 — adopt `jobrun`: research-gateway, modelpick, usage-tracker            <!-- status: pending -->
+- [ ] `research-gateway-deploy`: `jobrun` with `--lock` replacing its mkdir lock (keep the 2h-stale semantics through `--timeout`)
+- [ ] `modelpick-refresh`: wrap it, and make a degraded step (0 rows from a source) a non-zero exit
+- [ ] `usage-tracker`: wrap it. Remove the heartbeat's bespoke staleness check for it once graded
+- [ ] Verify: all three graded `ok` live; `background-jobs.md` ladder updated
+**Left behind:**
+
+## Wave 14 — adopt `jobrun`: weatherorb, backups, Hermes cron            <!-- status: pending -->
+- [ ] `weatherorb.{retention,verify}`: wrap them (weatherorb has a live chain → worktree or `agw dispatch`; never its main checkout while busy)
+- [ ] `hermes-backup` and `warden-backup`: wrap them, `--kuma` keeping their 25 h backstop
+- [ ] Hermes cron: an adapter turns `jobs.json` `last_status` into `jobs-grade` states, so cron failures become `job` items for hermes-agent through the same path. Retire the `hermes_cron` event-only source
+- [ ] Verify: all graded; a forced failure on a test cron job → one `job` item; ladder updated
+**Left behind:**
+
+## Wave 15 — review cycle 2            <!-- status: pending -->
+- [ ] Metrics and the §9 checklist, compared against Wave 8's numbers. Tune
+- [ ] Every owned mini job is at ladder level ≥ 2, and the remediable ones are at 4. Fix the stragglers or record why
+- [ ] Docs: `background-jobs.md` ladder table reflects the live state; `ops-signals.md` §1 rewritten as "flow today" (after), with the old flow moved to a short history note
+**Left behind:**
+
+## Wave 16 — MacBook: netgear-watchdog on launchd            <!-- status: pending -->
+- [ ] tinycast-extensions:
+  - a bun entry point running the existing pure `netgear/watchdog.ts` tick;
+  - a launchd plist template (60 s) wrapped in `jobrun`;
+  - state in a file that the Tinycast `netgear` view reads
+- [ ] **Delete what the move makes obsolete:** the `netgear-watchdog` no-view command and its view-driven ticker, the cross-process action lock, the LocalStorage watchdog state (`watchdog-storage.ts` → the file). Tests updated
+- [ ] dotfiles: `~/.wakeup` runs `jobs-grade --notify` on the MacBook (staleness against awake time); `architecture.md` MacBook row
+- [ ] `make check` green in both repos, committed and pushed. **Deploy and verify need the MacBook:** end with `ask-human ask` carrying the exact install command and the three checks:
+  - it keeps ticking with a Tinycast view open;
+  - the state file updates;
+  - the view reads it.
+
+  Do not mark it live
+**Left behind:**
+
+## Wave 17 — MacBook: van-sampler Bluetooth TCC spike, then migrate            <!-- status: pending -->
+- [ ] Spike: a minimal signed Swift executable with an embedded Info.plist (`-sectcreate __TEXT __info_plist`, `NSBluetoothAlwaysUsageDescription`) as the launchd **program**. Does the BLE scan get a TCC prompt and grant attributed to it, with Tinycast quit? Use `/research` for current TCC attribution rules first
+- [ ] On success: van-sampler becomes that Swift program (reusing `van-ble`'s CoreBluetooth code), wrapped in `jobrun`, with state in a file the `van-power` view reads. Delete the Tinycast `van-sampler` command and its LocalStorage state. On failure: record the evidence and the `.app`-bundle alternative, and stop
+- [ ] Commit and push, then hand off with `ask-human ask`: build/sign/install command, grant the prompt, and the checks (a reading lands every 15 min with Tinycast quit; a low-battery notification fires). Do not mark it live
+**Left behind:**
+
+## Wave 18 — review cycle 3 and close            <!-- status: pending -->
+- [ ] Metrics and checklist run a third time. Final tuning
+- [ ] Final docs: `ops-signals.md` and `background-jobs.md` describe the live system; AGENTS.md pointers in dotfiles, warden and hermes-agent; `docs/agent-platform.md` names warden as the sole remediation loop
+- [ ] Confirm the recurring review is live in warden's improve loop; archive this plan to `docs/waves/archive/`
+**Left behind:**

@@ -9,7 +9,7 @@ description: Inventory of everything that repeats or watches on both Macs, each 
 >   calendar jobs, KeepAlive restarts. A shared daemon would add a single point of failure and
 >   fix nothing.
 > - **What's missing is a run record and a route to a fix.** `jobrun` writes the record. warden
->   gets a `job` source and owns the fix. Kuma shrinks to an outside-in backstop
+>   gets a `job` source and owns the fix, implementing from day one under guardrails. Kuma shrinks to an outside-in backstop
 >   (`ops-signals.md` §2).
 > - **One exception to "no daemon":** the MacBook's van-sampler needs a signed Swift executable as
 >   its launchd program, for the Bluetooth TCC grant (`ops-signals.md` §7).
@@ -45,7 +45,7 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `brain-backup` | 03:30 | 2 | 4 | Keeps Kuma (data leaves the box) |
 | `brain-web-refresh` | 300s | 0 | 4 | log-only today |
 | `log-rotate` | 3600s | 0 | 2 | Its failures are cheap; list derived from plists |
-| `drift-check` | 09:40 | 2 | 2 | 2 drifts open. Findings → digest, not Kuma; drifts are `/upgrade-deps` work for a human |
+| `drift-check` | 09:40 | 2 | 2 | 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |
 | `lock-at-boot`, `obsidian-autostart` | RunAtLoad | 2 | 2 | — |
 | `agent-gateway`, `-opencode` | KeepAlive | 3 | 3 | warden's own dependency, so Kuma is its backstop, not warden |
@@ -112,8 +112,8 @@ Tally: about 50 jobs. **Level 4 today: 3** (hermes gateway, weatherorb, research
 
 | Piece | Spec |
 |-|-|
-| `jobrun` | `jobrun <label> --owner <repo> [--every <s>] [--timeout <s>] [--lock <name>] [--kuma <op-ref>] -- <cmd>`. Lives in dotfiles `scripts/jobrun` → `~/.local/bin`, bash, about 100 lines. It writes `~/.local/state/jobs/<label>.json` atomically: `run_id`, `started`, `finished`, `rc`, `duration_ms`, `every`, `owner`, `last_ok`, `consecutive_fail`, `fails_24h`, `tail` (40 lines). Optionally it mirrors one OTLP log per run, best effort. `--kuma` only for the §2 backstop jobs |
-| `jobs-grade` | `scripts/lib/jobs-grade` reads the state dir plus `launchctl print` and outputs `ok`, `failing`, `stale`, `flapping` or `unloaded` per job, as JSON. **The only grading logic.** It is called by the heartbeat (WARN lines), warden (items), `make doctor` (table) and the MacBook's `~/.wakeup` (notify) |
+| `jobrun` | `jobrun <label> --owner <repo> [--every <s>] [--timeout <s>] [--lock <name>] [--kuma <op-ref>] -- <cmd>`. Lives in dotfiles `scripts/jobrun.ts` (bun/TS, owner decision 6) → `~/.local/bin/jobrun`, tested with `bun test` in `make check`. It writes `~/.local/state/jobs/<label>.json` atomically: `run_id`, `started`, `finished`, `rc`, `duration_ms`, `every`, `owner`, `last_ok`, `consecutive_fail`, `fails_24h`, `tail` (40 lines). Optionally it mirrors one OTLP log per run, best effort. `--kuma` only for the §2 backstop jobs |
+| `jobs-grade` | `scripts/lib/jobs-grade.ts` reads the state dir plus `launchctl print` and outputs `ok`, `failing`, `stale`, `flapping` or `unloaded` per job, as JSON. **The only grading logic.** It is called by the heartbeat (WARN lines), warden's `job` source (items), `make doctor` (table) and the MacBook's `~/.wakeup` (notify) |
 | Labels and plists | `com.jkrumm.<repo>-<job>` for new jobs; no renames. The plist template lives in the owner repo, installed by its `make <x>-setup` |
 | Logs | `~/Library/Logs/<label-suffix>.{log,err}`. `log-rotate.sh` derives its list from our plists' `Standard{Out,Error}Path`, so it is declared but never hand-kept |
 | Map | `architecture-check.sh` also asserts map ⊆ live. Five stale weatherorb rows pass today |
@@ -132,32 +132,23 @@ Tally: about 50 jobs. **Level 4 today: 3** (hermes gateway, weatherorb, research
 
 ## Migration order
 
-Least risky first. Each step can be verified on its own.
+This is the wave chain in **`docs/waves/PLAN.md`** (orchestrated, started 2026-10-16). The owner
+decisions in `ops-signals.md` override the v2 analysis:
+- warden is the only remediation loop, with no Hermes;
+- implement from day one, with guardrails instead of a ceiling;
+- direct webhooks into warden;
+- IuRoot stays out of warden;
+- bun/TS tooling;
+- the MacBook pull is deferred.
 
-| # | Step | Repo | Verify |
-|-|-|-|-|
-| 1 | Map hygiene: stale rows out, missing Kuma monitors in, the map ⊆ live assertion | dotfiles | `make doctor` green; a fake stale row fails it |
-| 2 | Delete cron `91800bba0031`; fix the briefing port | hermes-agent | `hermes cron list`; the next briefing shows the board |
-| 3 | `jobrun` + `jobs-grade`, the heartbeat WARN line, the `make doctor` table. Adopt on `brain-web-refresh` and `log-rotate` | dotfiles | State files appear; the heartbeat line shows `jobs ok (2)`; `make check` covers both with a hermetic suite |
-| 4 | **Canary:** `com.jkrumm.jobrun-canary`, which exits 1 while a flag file exists | dotfiles | `jobs-grade` shows `failing` after 3 ticks; removing the flag clears it |
-| 5 | warden `job` source + job brief, **ceiling `investigate`**, dedup per label | warden (PR) | The canary becomes one item → investigate → closes on `last_ok`; flapping the flag doesn't create a second item |
-| 6 | Adopt `jobrun` per repo, one commit each: `research-gateway-deploy`, `modelpick-refresh` (+ step rc), `weatherorb.{retention,verify}`, `usage-tracker`, `brain-sync`, `brain-backup`, `hermes-backup` (+ step rc) | owners | Each one graded in `make doctor` |
-| 7 | Promote `hermes_cron` events to items through the same grade semantics (adapter over `jobs.json`, no `jobrun`) | warden | A forced bad model pin on a test job → item |
-| 8 | Raise the warden ceiling to `implement`, per repo, after two weeks with no false items | warden policy | `fixed` items closed by `last_ok` |
-| 9 | Kuma diet: retire or lengthen per `ops-signals.md` §2; make the `Warden Loop` push require poll and sweep freshness | homelab monitors (owner) | `uk-sync` diff reviewed; a week of #alerts limited to the §2 duties |
-| 10 | MacBook: netgear-watchdog → launchd + `jobrun` (bun). `~/.wakeup` grades. The mini pulls state over `ssh iumac` | tinycast-extensions, dotfiles | It keeps ticking with a Tinycast view open; on wake a stale job notifies |
-| 11 | MacBook: van-sampler TCC spike (Swift program with embedded Info.plist under launchd), then migrate | tinycast-extensions | BLE read succeeds from launchd with Tinycast quit |
-| 12 | IuRoot: logs out of `/tmp`, a vpn-watcher push surface, drop the duplicate plists | prometheus-scripts (work PR) | Logs in `~/Library/Logs`; vpn-watcher alerts reach a non-desktop channel |
+IuRoot hygiene (`/tmp` logs, vpn-watcher alert surface, duplicate plists) is out of the chain, as
+work-repo follow-ups.
 
 ## Open questions
 
-1. **#alerts:** should it keep fanning HyperDX alerts out to humans in parallel to warden, or
-   should non-backstop alerts move to a warden-read channel that humans mute? My tendency is to
-   split, so #alerts carries only the three Kuma duties plus HyperDX alerts on user-facing
-   symptoms. This is the change that actually makes Kuma "calm".
-2. **warden scope:** does the job ceiling stop at `investigate` for some repos for good
-   (backups, secrets-adjacent), and do IuRoot jobs enter warden at all? My tendency is IuRoot
-   stays out (work repo, different owner chain) and keeps its own level 2.
-3. **van-sampler:** Swift executable as the launchd program (owns the TCC grant, and BLE is
-   already Swift), or a bundled `.app` that keeps the TS logic? My tendency is Swift, decided by
-   the step-11 spike.
+None blocking. Resolved 2026-10-16:
+- #alerts → a mirror plus the fallback;
+- no ceiling;
+- IuRoot out.
+
+The van-sampler program shape (Swift executable vs `.app`) is settled by that wave's spike.
