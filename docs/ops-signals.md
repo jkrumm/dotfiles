@@ -10,7 +10,7 @@ description: How a background-job failure travels from the job to a fix or a hum
 > - **Kuma is the calm outside-in backstop.**
 > - **A human is reached only through warden's own `needs_decision`, and that should be rare.**
 >
-> Implementation runs as the wave chain in `docs/waves/PLAN.md`.
+> Implementation ran as the wave chain archived in `docs/waves/archive/2026-10-background-jobs-PLAN.md`.
 
 ## Owner decisions (2026-10-16) — these override anything below
 
@@ -278,7 +278,7 @@ How:
 
 ## 9. Self-improvement cycle
 
-The cycle runs as review waves during the chain (`docs/waves/PLAN.md`). After the chain it becomes
+The cycle ran as review waves during the chain (`docs/waves/archive/2026-10-background-jobs-PLAN.md`). It is now
 a recurring duty in warden's existing outcome-triggered improve loop
 (`warden/docs/improve/LOOP.md`), not a second loop.
 

@@ -99,14 +99,18 @@ These stay in their processes and inherit their service's level. Visibility goes
 
 | Job | Today | Target | Note |
 |-|-|-|-|
-| netgear-watchdog (`com.jkrumm.netgear-watchdog`, launchd 60 s, `jobrun`) | **not live** (still the Tinycast-hosted watchdog, level 1; the level-2 version is written and pushed on `wave/netgear-launchd`, install is a pending owner ask on the MacBook) | 3 | The self-heal ladder is unchanged and now runs outside Tinycast (no kill, no pause, ticks with a view open). The view reads `~/.local/state/netgear-watchdog/state.json`. Live proof pending the MacBook install |
+| netgear-watchdog (`com.jkrumm.netgear-watchdog`, launchd 60 s, `jobrun`) | **DOWN on the MacBook, level 0** (Tinycast no longer hosts it and the launchd install is still pending: ask `20261016T190047-10176`, the `macbook-installs` herdr agent; the level-2 version is written and pushed on `wave/netgear-launchd`) | 3 | The self-heal ladder is unchanged and now runs outside Tinycast (no kill, no pause, ticks with a view open). The view reads `~/.local/state/netgear-watchdog/state.json`. Live proof pending the MacBook install |
 | van-sampler (`com.jkrumm.van-sampler`, launchd 15 min, `jobrun`, signed `van-ble --supervise`) | **not live** (still the Tinycast command, level 1; the level-2 version is on `wave/van-sampler`, gated on the Bluetooth TCC spike, a pending owner ask on the MacBook) | 3 | Leaves Tinycast (which ran it only with no view open). The Tinycast `van-sampler` command and its LocalStorage state are deleted on the branch; state is files in `~/.local/state/van-sampler/` that the Van Power view shares. Spike, evidence and the `.app` fallback: `tinycast-extensions/docs/van-sampler-tcc.md`. Becomes level 2 only when the spike passes and the install is verified |
 | `opbackup` | 2 | 2 | Kuma weekly (data leaves the box) |
 | `brain-sync`, `batt-reset`, `appearance-sync`, `db-tunnel`, `tailnet-sshd` | 0–1 | 2 | Graded on wake, local notification |
 | `photoflow` | 0 | 2 | `/tmp` log |
 
-Tally (2026-10-17): about 50 jobs. **Level 4: 3 services** (hermes gateway, weatherorb, research-gateway) **plus 17 graded `jobrun`/cron-adapter jobs** on the mini (13 launchd, 4 Hermes cron) — every owned mini job is at ≥ 2; the one level-1 straggler is `modelpick-web` (accepted above). The MacBook's two level-2 rows are written and **not live**.
+Tally (2026-10-17): about 50 jobs. **Level 4: 3 services** (hermes gateway, weatherorb, research-gateway) **plus 17 graded `jobrun`/cron-adapter jobs** on the mini (13 launchd, 4 Hermes cron) — every owned mini job is at ≥ 2; the one level-1 straggler is `modelpick-web` (accepted above). The MacBook's two level-2 rows are written and **not live**; netgear-watchdog is **down** until its install (above).
 **Level 0–1: IuRoot's `com.iu.*` jobs (out of the chain), the MacBook's unmigrated jobs and `modelpick-web`.**
+
+**Open owner actions (MacBook installs, not closed by any wave):**
+- netgear-watchdog launchd install: ask `20261016T190047-10176` (the `macbook-installs` herdr agent). Until it lands the watchdog does not run.
+- van-sampler install, gated on the Bluetooth TCC spike (`make van-sampler-spike`): ask `20261016T193742-5588`.
 
 ## Pattern
 
@@ -151,7 +155,7 @@ dotfiles, and no wave agent holds the checkout while the canary item is in fligh
 
 ## Migration order
 
-This is the wave chain in **`docs/waves/PLAN.md`** (orchestrated, started 2026-10-16). The owner
+This was the wave chain in **`docs/waves/archive/2026-10-background-jobs-PLAN.md`** (orchestrated, 2026-10-16 to 2026-10-17; closed). The owner
 decisions in `ops-signals.md` override the v2 analysis:
 - warden is the only remediation loop, with no Hermes;
 - implement from day one, with guardrails instead of a ceiling;

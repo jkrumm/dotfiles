@@ -119,6 +119,8 @@ the triage step reading the candidate repos' `## Verify & Monitor` sections.
 
 ## Warden — the loop
 
+Warden is the **sole remediation loop**: every alert source (jobs via `jobrun`/`jobs-grade`, Kuma and HyperDX by webhook, Slack and log lines, GitHub, `warden run`) opens an item here, and nothing else dispatches a fix. Hermes narrates, Kuma only watches the chain itself. Source model and thresholds: `docs/ops-signals.md`.
+
 Nine states:
 
 ```
@@ -178,6 +180,15 @@ permissions, CI, review hiccups and "low confidence" do not.
 
 Kept gates — quality, not trust: CI/`make check` green, review confirmed on the
 merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
+
+### Ingest trust model
+
+Kuma and HyperDX reach warden's ingest door (`POST` webhook, Wave 14/15) with **one shared bearer token**.
+Whoever holds it can open an item that goes to triage and, for a routable repo, to an agent. Each event is fenced
+as untrusted data in every brief (`intake._fence`), exactly like Slack and Kuma text, so the token is the control,
+not the payload. Consequences: the token is `op://mini/warden-ingest/token` (the mini's secret cache) plus the two senders' configs, and the door is loopback with an off-box forward of `/ingest/*` only; rotating it
+means re-seeding both; one compromised sender can forge the other's events. Per-sender tokens are the known
+upgrade, deliberately not built (two senders, solo owner).
 
 ## Agent-Gateway — the engine
 

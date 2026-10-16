@@ -51,7 +51,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
-| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
+| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; every alert source feeds warden directly, flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload`, Colima socket heal, and (MacBook) `jobs-grade --notify` 2 min after wake, staleness judged against awake time |
 
 **Not symlinked:** `~/.codex/config.toml` (rendered by `_setup-codex` from
