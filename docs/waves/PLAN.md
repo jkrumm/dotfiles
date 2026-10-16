@@ -78,18 +78,23 @@ instead of claiming done.
 - Not verified yet (depends on the above): clean `audio-gateway` restart history, and no new 403 after the grant.
 
 
-## Wave 3 — the map tells the truth            <!-- status: active -->
-- [ ] Carry-over from Wave 2. Check whether these have happened; don't force either one:
+## Wave 3 — the map tells the truth            <!-- status: done -->
+- [x] Carry-over from Wave 2. Check whether these have happened; don't force either one:
   - `audio-gateway` cycled onto the fixed `secrets-run` (`LastExitStatus` no longer 127);
   - if ask `20261016T122335-23766` was granted: the check-runs probe returns 200 and no new `check runs unreadable` line.
 
   Record the state either way
-- [ ] `docs/architecture.md`: drop the five weatherorb timers that are now DBOS schedules (`obs`, `fcstlog`, `archive`, `backfill`, `round`); §Monitoring adds `Agent Gateway`, `Warden Loop`, `Warden Backup`, `Hermes Serve`, `WeatherOrb Degraded`, `Home Line - Watchdog`
-- [ ] `scripts/architecture-check.sh`: also assert map ⊆ live on the machine that owns the row (the mini section on the mini, the MacBook section on the MacBook), with a hermetic test
-- [ ] Verify: `make doctor` green; a fake stale row fails it
+- [x] `docs/architecture.md`: drop the five weatherorb timers that are now DBOS schedules (`obs`, `fcstlog`, `archive`, `backfill`, `round`); §Monitoring adds `Agent Gateway`, `Warden Loop`, `Warden Backup`, `Hermes Serve`, `WeatherOrb Degraded`, `Home Line - Watchdog`
+- [x] `scripts/architecture-check.sh`: also assert map ⊆ live on the machine that owns the row (the mini section on the mini, the MacBook section on the MacBook), with a hermetic test
+- [x] Verify: `make doctor` green; a fake stale row fails it
 **Left behind:**
+- **Carry-over state (recorded, not forced):** `audio-gateway` `LastExitStatus` is still 127 — it has not cycled onto the fixed `secrets-run` (nothing kickstarted, per the wave rule). Ask `20261016T122335-23766` is `done` ("marked done via dialog", 12:23Z) but the check-runs probe (read-only, token passed through `secrets-run run`, never printed) still returns **403** at 12:40 CEST; `warden-sweep.err` has no line newer than 11:25 only because no weatherorb merge has been evaluated since. Either the PAT edit was not saved or the repo list/permission differs; re-probe, and if still 403 re-ask with the exact GitHub UI step. warden's Actions-run fallback keeps working meanwhile.
+- `architecture.md`: dropped the five weatherorb timers (`obs`, `fcstlog`, `archive`, `backfill`, `round`; none loaded or on disk) with a note that they are DBOS schedules now. §Monitoring added `Agent Gateway - Push`, `Warden Loop - Push`, `Warden Backup - Push`, `Hermes Serve - Push`, `Home Line - Watchdog`, `WeatherOrb Watchdog - Degraded` (the plan said "WeatherOrb Degraded"; the monitors.yaml name is the longer one). The rows are the declarations in `homelab/uptime-kuma/monitors.yaml`; `make uk-sync` was not run (homelab repo, out of scope), so whether Kuma already has them is unverified.
+- `architecture-check.sh` now also asserts map ⊆ live for the machine's own section (backend `cache` → mini, `op` → MacBook; labels matched against `launchctl list` or a plist's `Label` on disk, brew generations interchangeable). Fails closed on: empty `launchctl list`, a renamed section heading (zero labels). An unknown backend skips the reverse half with a notice. Hermetic suite `scripts/architecture-check.test.sh` (9 cases, `make architecture-check-test`, wired into `make check`). `doctor.sh` wording covers both modes.
+- Verify: `make check` rc 0; `make doctor` architecture line "all 57 mapped mini labels exist", 42 passed, 4 skipped, clean; a fake stale `weatherorb.round` row on the real map exits 1 with `mapped-but-absent (mini)` (restored). MacBook half is covered by the test only, not run on the MacBook.
+- `/review` (agent-gateway): 1 blocking (filename vs `Label` key) and the fail-open paths fixed. Declined: switching the machine selector from backend to `machine-role.ts`, generating the Kuma table from `monitors.yaml`, a retired-label list (the plists are already gone), tidying the test's `expect` signature.
 
-## Wave 4 — `jobrun` and `jobs-grade`            <!-- status: pending -->
+## Wave 4 — `jobrun` and `jobs-grade`            <!-- status: active -->
 - [ ] `scripts/jobrun.ts` (bun): `jobrun <label> --owner <repo> [--every s] [--timeout s] [--lock name] [--kuma op-ref] -- <cmd>`. It:
   - prefixes output lines with timestamps;
   - enforces the deadline with TERM, then KILL;

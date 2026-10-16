@@ -54,6 +54,12 @@ else
   owned_regex='.'
 fi
 
+# One snapshot for both directions; an empty list means launchctl failed (no GUI
+# session), and asserting against it would be all noise in one direction and a
+# false pass in the other.
+loaded=$($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
+[[ -n "$loaded" ]] || { echo "✗ launchctl list returned nothing — no GUI session to assert against"; exit 1; }
+
 unmapped=""
 
 # Is this label in the map? For a Homebrew service, strip whichever generation
@@ -81,9 +87,12 @@ while IFS= read -r label; do
     unmapped="${unmapped}  loaded-but-unmapped: $label
 "
   fi
-done < <($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
+done <<<"$loaded"
 
-# 2. plists on disk, un-loaded or not
+# 2. plists on disk, un-loaded or not. Also collect their Label keys: launchd
+# does not require the filename to match, and the reverse check wants the same
+# definition of "exists on disk".
+disk_labels=""
 # shellcheck disable=SC2068
 for dir in ${LAUNCHD_DIRS[@]}; do
   [[ -d "$dir" ]] || continue
@@ -91,6 +100,8 @@ for dir in ${LAUNCHD_DIRS[@]}; do
     [[ -e "$plist" ]] || continue
     label=$(/usr/libexec/PlistBuddy -c 'Print :Label' "$plist" 2>/dev/null) || label=""
     [[ -n "$label" ]] || label=$(basename "$plist" .plist)
+    disk_labels="${disk_labels}${label}
+"
     [[ "$label" =~ $allowlist_regex ]] && continue
     [[ "$label" =~ $owned_regex ]] || continue
     if ! mapped "$label"; then
@@ -107,16 +118,13 @@ done
 # else (the weatherorb timers that turned into DBOS schedules) fails here instead
 # of lingering as a map that lies. Only labels with an owned prefix are asserted;
 # prose mentions of vendor labels are not rows.
-if [[ "$BACKEND" == "op" ]]; then
-  section_re='^## LaunchAgents — MacBook'
-  machine=MacBook
-else
-  section_re='^## LaunchAgents — mini'
-  machine=mini
-fi
-loaded=$($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
+case "$BACKEND" in
+  op)    section_re='^## LaunchAgents — MacBook'; machine=MacBook ;;
+  cache) section_re='^## LaunchAgents — mini';    machine=mini ;;
+  *)     section_re=""; machine="" ;;
+esac
 label_live() {
-  local label="$1" name="" cand dir
+  local label="$1" name="" cand
   local -a cands=("$label")
   case "$label" in
     sh.brew.*)       name=${label#sh.brew.} ;;
@@ -125,16 +133,18 @@ label_live() {
   [[ -n "$name" ]] && cands=("sh.brew.$name" "homebrew.mxcl.$name")
   for cand in "${cands[@]}"; do
     grep -qxF "$cand" <<<"$loaded" && return 0
-    # shellcheck disable=SC2068
-    for dir in ${LAUNCHD_DIRS[@]}; do
-      [[ -e "$dir/$cand.plist" ]] && return 0
-    done
+    grep -qxF "$cand" <<<"$disk_labels" && return 0
   done
   return 1
 }
 stale=""
+checked=0
+if [[ -z "$machine" ]]; then
+  echo "· secrets backend '${BACKEND:-unset}' is neither op nor cache — skipping the map-to-machine assertion"
+else
 while IFS= read -r label; do
   [[ -n "$label" ]] || continue
+  checked=$((checked + 1))
   label_live "$label" || stale="${stale}  mapped-but-absent ($machine): $label
 "
 done < <(/usr/bin/awk -v re="$section_re" '
@@ -143,6 +153,12 @@ done < <(/usr/bin/awk -v re="$section_re" '
     on' "$MAP" \
   | grep -oE '`(com\.jkrumm\.|com\.iu\.|com\.colima\.|ai\.hermes\.|herdr\.|sh\.brew\.|homebrew\.mxcl\.|cc\.chlc\.)[A-Za-z0-9._@-]*[A-Za-z0-9@_-]`' \
   | tr -d '`' | sort -u)
+# A renamed heading would extract nothing and pass green; fail closed instead.
+if [[ $checked -eq 0 ]]; then
+  stale="  no $machine labels found under '$section_re' in the map — heading renamed?
+"
+fi
+fi
 
 if [[ -n "$unmapped" || -n "$stale" ]]; then
   if [[ -n "$unmapped" ]]; then
@@ -155,4 +171,4 @@ if [[ -n "$unmapped" || -n "$stale" ]]; then
   fi
   exit 1
 fi
-echo "✓ every loaded and on-disk launchd label is mapped, and every mapped $machine label exists (architecture.md)"
+echo "✓ every loaded and on-disk launchd label is mapped${machine:+, and all $checked mapped $machine labels exist} (architecture.md)"

@@ -56,7 +56,7 @@ expect() { # name, want-rc, want-substring, got-rc, out
 }
 
 write_map "" ""
-out=$(run cache); expect "clean mini map passes" 0 "every mapped mini label exists" $? "$out"
+out=$(run cache); expect "clean mini map passes" 0 "mapped mini labels exist" $? "$out"
 
 write_map '| `com.jkrumm.gone` | stale row |' ""
 out=$(run cache); expect "stale mini row fails" 1 "mapped-but-absent (mini): com.jkrumm.gone" $? "$out"
@@ -70,5 +70,23 @@ out=$(run op); expect "MacBook label absent here fails on the MacBook backend" 1
 write_map "" ""
 out=$(run cache); expect "on-disk label missing from the map still fails" 1 "on-disk-but-unmapped: com.jkrumm.beta" $? "$out"
 rm "$TMP/agents/com.jkrumm.beta.plist"
+
+# Fail closed: a renamed section heading must not read as a green pass.
+sed -i '' 's/^## LaunchAgents — mini/## Agents — mini/' "$TMP/docs/architecture.md"
+out=$(run cache); rc=$?; expect "renamed heading fails closed" 1 "heading renamed?" "$rc" "$out"
+
+# A plist whose filename differs from its Label key counts by its Label.
+write_map '| `com.jkrumm.renamed` | label differs from filename |' ""
+/usr/libexec/PlistBuddy -c 'Add :Label string com.jkrumm.renamed' "$TMP/agents/other-name.plist" >/dev/null
+out=$(run cache); rc=$?; expect "plist matched by Label key, not filename" 0 "mapped mini labels exist" "$rc" "$out"
+rm "$TMP/agents/other-name.plist"
+
+# Unknown backend skips the map-to-machine assertion rather than guessing mini.
+write_map '| `com.jkrumm.gone` | stale |' ""
+out=$(run weird); rc=$?; expect "unknown backend skips the reverse check" 0 "skipping the map-to-machine" "$rc" "$out"
+
+# launchctl with no output (no GUI session) fails closed.
+printf '#!/bin/sh\nexit 1\n' > "$TMP/launchctl"
+out=$(run cache); rc=$?; expect "empty launchctl fails closed" 1 "no GUI session" "$rc" "$out"
 
 [[ $fails -eq 0 ]] && echo "architecture-check: all passed" || { echo "architecture-check: $fails failed"; exit 1; }

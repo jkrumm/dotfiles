@@ -136,7 +136,7 @@ section_architecture() {
   if [ "$rc" -eq 0 ]; then
     ok "architecture map" "every loaded/on-disk label is mapped, every mapped label exists"
   else
-    bad "architecture map" "unmapped labels — see above"
+    bad "architecture map" "map drift (unmapped or stale labels) — see above"
   fi
 }
 
