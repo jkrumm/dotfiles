@@ -117,6 +117,7 @@ instead of claiming done.
 **Left behind:**
 
 ## Wave 6 — warden: kill-switch and the `job` source            <!-- status: pending -->
+- [ ] Carry-over: re-probe check-runs on `jkrumm/weatherorb` with `op://mini/github/token` (read-only). Ask `20261016T122335-23766` was marked done but still returned 403 at 12:40. If still 403, re-ask with the exact fine-grained-PAT path (Settings → Developer settings → Fine-grained tokens → <token> → Repository access includes weatherorb → Permissions → Checks: Read-only → **Update**)
 - [ ] Kill-switch: `warden pause [--reason]` / `warden resume`, plus a flag file read at the start of every pass. While paused, ingest continues and **no dispatch of any origin** happens. Surface it on `/health` and the Argo snapshot
 - [ ] `job` source: each loop pass runs `jobs-grade` locally; `failing|stale|flapping|unloaded` → event with dedup key `job:<machine>:<label>`, routed to the job's `owner` repo (no triage guess needed). Level-based: it stays one event while the grade is bad
 - [ ] Chronic rule: a reopen of the same `job:` key within 7 days → `needs_decision` instead of a dispatch. Same for a `fixed` job failing again within 24 h (a `work` strike)
