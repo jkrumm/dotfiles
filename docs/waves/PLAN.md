@@ -121,6 +121,7 @@ instead of claiming done.
 - [ ] `log-rotate.sh`: derive its file list from our plists' `StandardOutPath`/`StandardErrorPath` (`com.jkrumm.*`, `com.iu.*`). Nothing outside those labels is touched
 - [ ] Canary: `com.jkrumm.jobrun-canary` (300 s) runs `scripts/jobrun-canary.ts`, which exits 1 unless `config/jobrun-canary.json` has `"healthy": true`. Keep it healthy and committed. It is the end-to-end probe for Wave 7.
   **Catch:** warden *parks* merges into a checkout that has a `working` herdr agent (`warden/AGENTS.md`), and the orchestrator and every wave sit in the dotfiles checkout. Decide where the canary's owner checkout lives so Wave 7 can actually merge there, and record the decision. Options: run Wave 7 from another cwd with the orchestrator idle, or give the canary an owner repo that nobody works in
+- [ ] **Never-recorded gap (from Wave 4):** `jobs-grade` must also know which labels it *expects*, so a wrapped job that never wrote a state file grades `stale`/`unloaded` instead of being invisible. Derive the expected set from the plists that invoke `jobrun` (single source, no hand list). Teardown targets `rm` the label's state file
 - [ ] Verify: six state files, all graded `ok`; flipping the canary to unhealthy *locally, uncommitted* → `failing` after 3 ticks → restore → `ok`
 **Left behind:**
 
