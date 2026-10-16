@@ -64,7 +64,7 @@ Health notes are as of 2026-10-16 and come from logs only.
 | Hermes cron: briefing, report, narratives, drift audit | hermes-agent | daily/weekly | 1 | 4 | `last_status` → warden event, never an item. The 10-10 model 404 went untriaged |
 | Hermes cron `91800bba0031` (human-queue retry) | hermes-agent | 15m | — | **delete** | Hard-coded to one request, resolved 10-01 |
 | `warden-loop`, `-poll` | warden | 600/1800s | 3 | 3 | Kuma `Warden Loop` / `Hermes Watchdog` → fold into one |
-| `warden-sweep` | warden | 300s | **1** | 3 | Only `/health` staleness, unmonitored. Recurring 403 on check-runs |
+| `warden-sweep` | warden | 300s | **1** | 3 | Only `/health` staleness, unmonitored. Check-runs 403 is by design (fine-grained PATs have no Checks permission; warden uses the Actions-runs fallback) — no fault |
 | `warden-api` | warden | KeepAlive | 2 | 2 | — |
 | `warden-backup` | warden | 03:10 | 2 | 2 | Kuma `Warden Backup` (25 h) exists; v1 wrongly called it log-only. warden can't fix its own backup → Kuma |
 | `modelpick-refresh` | modelpick | 06:00 | 0 | 4 | lmarena `coding` returns 0 rows: degraded but rc=0. Needs the step rc to propagate |
@@ -138,7 +138,7 @@ dotfiles, and no wave agent holds the checkout while the canary item is in fligh
 |-|-|
 | `hermes-backup` rotation has failed nightly since 09-21 while Kuma shows green | hermes-agent |
 | Morning briefing reads the warden board on `:7734`, but warden moved to `:7735`. The 10-09 briefing showed "Board nicht erreichbar" | hermes-agent |
-| `warden-sweep` gets 403 on check-runs (token scope) | warden + secrets (human) |
+| `warden-sweep` 403 on check-runs: not a defect — Checks is GitHub-App-only for fine-grained tokens, the Actions-runs fallback handles it (never ask for a grant) | none |
 | `hermes_cron` failures are never triaged | warden |
 | `audio-gateway` last exit 127 (`secrets-run: from_cache: command not found`) | dotfiles (`secrets-run`), unverified |
 | `architecture.md` §Monitoring is missing `Agent Gateway`, `Warden Loop`, `Warden Backup`, `Hermes Serve`, `WeatherOrb Degraded`, `Home Line - Watchdog`, and lists five weatherorb timers that are now DBOS schedules | dotfiles |
