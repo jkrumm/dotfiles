@@ -135,7 +135,10 @@ There is no Hermes digest (decision 1). warden's ledger and Argo `/warden` are t
 inbound from the homelab or VPS tags to the mini (`architecture.md` §Monitoring). An ingest door
 therefore needs a new, narrow ACL grant: those two tags → the devhost on `tcp:443` only. That grant
 is declared in `dotfiles-private` and applied from the MacBook (biometric), so it goes through
-human-queue.
+human-queue. A portless :443 grant cannot be narrower than the port, so the containment is in the
+Caddy door: `scripts/caddy-tailnet.sh` answers 403 to every homelab/VPS source for every host but
+`warden-ingest.<dev-domain>`, and that host proxies `/ingest/*` of warden-api only (never its
+GET routes).
 
 ## 5. Dead-man's switch vs failure
 

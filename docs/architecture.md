@@ -166,7 +166,7 @@ plain HTTP client, not the gateway's live connection.
 
 | Label | Schedule | What |
 |-|-|-|
-| `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics` on `127.0.0.1:7735` |
+| `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics`, `/board`, `/items/<id>` on `127.0.0.1:7735`, plus the bearer-token `POST /ingest/{kuma,hyperdx}` door (reached over the tailnet only through the `warden-ingest` Caddy host) |
 | `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into items and agent-gateway `investigate` episodes in the owning repo; Slack gets one line on `fixed` / `needs_decision`, Argo `/warden` is the queue. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
 | `com.jkrumm.warden-poll` | 1800s | Ingest. Was gateway cron job `4b1faabda97d`; promoted for the same reason — ingest running inside the process it supervises is how the loop kept ticking against a ledger that had stopped receiving signals. Posts its own digest and pings the `watchdog` UptimeKuma push URL on a clean poll. |
 | `com.jkrumm.warden-sweep` | 300s | Folds finished episodes onto their items, then runs the implement chain. Was gateway cron job `4dd759917dd1`. |
@@ -259,6 +259,7 @@ non-Caddy doors.
 |-|-|-|
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |
 | `https://<app>.mini.jkrumm.com` | mini Caddy wildcard block | tailnet, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on 443 |
+| `https://warden-ingest.mini.jkrumm.com/ingest/*` | mini Caddy wildcard block → warden-api `127.0.0.1:7735` (`/ingest/*` only, bearer token) | tailnet, ACL `tag:homelab/tag:vps → tag:devhost` on 443; the generator makes every *other* host answer 403 to those two tags |
 | `:7730` (`rb`) | `tailscale serve` → 127.0.0.1:4050 | tailnet only |
 | `:8081` (weatherorb tiles) | `tailscale serve` → 127.0.0.1:8081 | tailnet only |
 | `:8788` (Collie) | `tailscale serve` → 127.0.0.1:8787 | tailnet, ACL `tag:phone → tag:mac` |

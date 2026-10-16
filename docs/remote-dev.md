@@ -203,6 +203,8 @@ registry; they get the clean tailnet door only, no `.test` twin.
 | Local | `https://<name>.test` | this machine only (`bind 127.0.0.1`; dnsmasq wildcards `*.test` → 127.0.0.1) |
 | Clean | `https://<name>.mini.jkrumm.com` | tailnet — one wildcard site block, Cloudflare DNS-01 cert, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on `tcp:443` |
 
+The one non-registry door is **`warden-ingest`** (`INGEST_NAME`/`INGEST_PORT` in `scripts/caddy-tailnet.sh`): it proxies `/ingest/*` to warden-api and nothing else, and the generator reads the tailnet addresses of every `tag:homelab` / `tag:vps` peer from `tailscale status` and makes the wildcard block answer `403` to them for every other host (the ACL grants them `tcp:443` on the whole mini, a portless grant cannot be narrower). A new homelab/VPS node is covered by the next `make caddy-tailnet`; the summary prints how many addresses the guard holds.
+
 | Command | Purpose |
 |-|-|
 | `make caddy-tailnet` | Dev host only: regenerate the tailnet door, validate, reload |

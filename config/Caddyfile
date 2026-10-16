@@ -286,7 +286,9 @@ sy-serendipity.test {
 	reverse_proxy localhost:7734
 }
 # 7735 — warden-api (~/SourceRoot/warden, scripts/api.py), 127.0.0.1 only, no
-# .test host and no proxy: reserved here so nothing else claims it. It sat on
+# .test host: reserved here so nothing else claims it. Its only tailnet door is
+# the generated `warden-ingest` host (scripts/caddy-tailnet.sh), which proxies
+# POST /ingest/* and nothing else. It sat on
 # 7734 until 2026-09-11, where sy-serendipity's `kill-port 7734` would have
 # killed it on every `bun run dev`.
 
