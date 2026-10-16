@@ -170,76 +170,18 @@ cask "hermes-desktop"
 cask "free-ruler"
 # Keep your computer awake
 cask "jiggler"
-# Caps Lock -> ctrl+alt+shift, held. No app, no macOS shortcut and no readline
-# binding uses all three at once, so it is the only collision-free namespace
-# left on the platform. Karabiner does ONLY that one remap
-# (config/karabiner/karabiner.json, installed by `_setup-karabiner`). Every
-# Hyper+letter launcher (apps and Tinycast extension commands) is a Tinycast
-# hotkey in config/tinycast/defaults.json since 2026-10-16 — global Carbon
-# hotkeys, so they win over herdr's ctrl+alt+shift bindings in any app. MacBook
-# only: the mini has no Tinycast, so it keeps the bare Hyper key for herdr.
-#
-# The keymap is documented in the brain: "Keyboard — the Hyper layer"
-# (Areas/Engineering/keyboard.md); the reasoning is in the wiki note
-# "terminal key encoding".
-#
-# NOT Hyperkey, and this is a macOS 26 fact rather than a preference. Hyperkey
-# (and BetterTouchTool, and Raycast's hyper key) drive a CGEventTap, and on
-# Tahoe a CGEventTap no longer receives events from EXTERNAL keyboards. A Mac
-# mini has no other kind. Measured 2026-07-28: Hyperkey 1.56 with both
-# Bedienungshilfen and Eingabeüberwachung granted never saw a single Caps Lock
-# key-down. Karabiner grabs the device at HID level instead, which still works.
-#
-# Wanted on BOTH machines, unlike `batt`. The mini is headless most of the time
-# but is worked at directly often enough, and that headful-at-the-mini case is
-# the best one for Hyper — local Ghostty into a local herdr, no ssh in
-# between, so nothing can eat the key encoding.
-#
-# The MacBook was expected to sit on the OPPOSITE macOS 26 regression — 26.4+
-# blocking DriverKit from the BUILT-IN keyboard (com.apple.iohid.protectedDevice-
-# Access), the failure that broke Karabiner for everyone else. MEASURED 2026-08-02
-# on macOS 26.6 with Karabiner 16.1.0: it does not happen here. All three
-# keyboards were grabbed at HID level, built-in included, with the fallback OFF:
-#
-#   enable_cgeventtap_fallback unchanged: effective=false
-#   Apple Internal Keyboard / Trackpad  ... hid queue value monitor is started (grabbed).
-#   USB Receiver                        ... (grabbed).
-#   Magic Keyboard von Johannes         ... (grabbed).
-#
-# So BOTH machines run `effective=false`. Karabiner 16.0's "Enable CGEventTap
-# fallback" (Settings → Expert) remains the escape hatch if a future macOS does
-# revoke built-in access — but turn it on only when the log shows no `(grabbed)`
-# line, never prophylactically. It is not free: with it on and the grab already
-# working, the daemon logged `keyboard suppression expired before matching event`
-# twice within the hour, which is a dropped or doubled keystroke.
-#
-# It is also a PER-MACHINE setting and must stay OUT of the tracked config —
-# it is a root-level `global` key, and this file is shared by both Macs.
-# Setting it via the UI writes it to the live karabiner.json and makes
-# `_setup-karabiner` report a diverged file forever.
-#
-# Setup is per-machine and cannot be automated from here — two approvals, both
-# requiring a human at that Mac:
-#   1. Systemeinstellungen → Allgemein → Anmeldeobjekte & Erweiterungen →
-#      Treibererweiterungen → org.pqrs.Karabiner-DriverKit-VirtualHIDDevice.
-#      It only appears AFTER Karabiner-Elements.app has been launched once —
-#      launching is what registers the extension.
-#   2. Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung →
-#      Karabiner-Core-Service (named karabiner_grabber before 16.x).
-# Leave Sondertasten on "Feststelltaste". "Keine Aktion" takes the key away
-# from Karabiner too and yields a dead key, not a Hyper key.
-#
-# Flagged `auto_updates`, so brew will not upgrade it and the pinned-version
-# discipline elsewhere in this file does not apply to it.
-cask "karabiner-elements"
 # Music streaming service
 cask "spotify"
 # The launcher (Raycast's replacement since 2026-09-26): native SwiftUI, runs
 # Raycast extensions in JavaScriptCore, AGPL-3.0, single maintainer, third-party
 # tap (trusted by `_setup-packages` like the others). Settings are tracked in
-# config/tinycast/defaults.json (`make tinycast-check`). Its own Hyper key stays
-# OFF: it rides a CGEventTap (see Karabiner above) and its chord adds ⌘, so
-# Karabiner owns the key and Tinycast only binds the ⌃⌥⇧+letter hotkeys.
+# config/tinycast/defaults.json (`make tinycast-check`). It owns the keyboard
+# layer since 2026-10-16: its Hyper Key turns Caps Lock into ⌃⌥⌘ (a per-keyboard
+# HID remap to F18 plus an event tap) and every Hyper+letter launcher is one of
+# its hotkeys. Replaced Karabiner-Elements, which only did that remap. Verified
+# on the MacBook's built-in keyboard; macOS 26 event taps were measured blind to
+# EXTERNAL keyboards with Hyperkey on the mini (2026-07-28) — if the Magic
+# Keyboard turns out dead, reinstall karabiner-elements for the remap only.
 # The beta channel on purpose: it draws extension menu-bar commands and gives
 # extension views more room (stable 0.11.3 does neither) — separate app, own
 # com.tinycast.app.beta domain, self-updates within the beta channel.

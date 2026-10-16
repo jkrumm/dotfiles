@@ -101,7 +101,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
 	@$(MAKE) --no-print-directory _setup-codex
 	@$(MAKE) --no-print-directory _setup-ssh
-	@$(MAKE) --no-print-directory _setup-karabiner
 	@$(MAKE) --no-print-directory _setup-tinycast
 	@$(MAKE) --no-print-directory _setup-appearance-sync
 	@$(MAKE) --no-print-directory _setup-rules
@@ -534,32 +533,10 @@ _setup-ssh:
 		echo "    ✓ colima Include re-appended"; \
 	fi
 
-.PHONY: _setup-karabiner
-_setup-karabiner:
-	@echo "  Karabiner-Elements (Caps Lock -> Hyper)..."
-	@if [ ! -d /Applications/Karabiner-Elements.app ]; then \
-		echo "    - not installed, skipping (Brewfile installs it; the pkg needs sudo)"; \
-	else \
-		mkdir -p "$(HOME)/.config/karabiner"; \
-		if [ ! -f "$(HOME)/.config/karabiner/karabiner.json" ]; then \
-			install -m 600 "$(DOTFILES_DIR)/config/karabiner/karabiner.json" "$(HOME)/.config/karabiner/karabiner.json"; \
-			echo "    ✓ karabiner.json installed"; \
-		elif cmp -s "$(DOTFILES_DIR)/config/karabiner/karabiner.json" "$(HOME)/.config/karabiner/karabiner.json"; then \
-			echo "    ✓ karabiner.json matches the repo"; \
-		else \
-			echo "    ! karabiner.json differs from the repo — NOT overwritten."; \
-			echo "      Karabiner rewrites this file on every UI change, so the live copy"; \
-			echo "      is authoritative until you decide otherwise. Compare, then pick one:"; \
-			echo "        diff $(DOTFILES_DIR)/config/karabiner/karabiner.json $(HOME)/.config/karabiner/karabiner.json"; \
-			echo "        cp $(HOME)/.config/karabiner/karabiner.json $(DOTFILES_DIR)/config/karabiner/  # adopt live"; \
-			echo "        cp $(DOTFILES_DIR)/config/karabiner/karabiner.json $(HOME)/.config/karabiner/  # adopt repo"; \
-		fi; \
-	fi
-
 .PHONY: _setup-tinycast tinycast-export tinycast-apply tinycast-check
 # Tinycast (the launcher) keeps its settings in the com.tinycast.app.beta defaults
 # domain; config/tinycast/defaults.json tracks it as readable JSON (hotkeys and
-# custom commands are JSON-in-plist, decoded by the script). Like karabiner.json
+# custom commands are JSON-in-plist, decoded by the script). Like a rewritten-in-place config,
 # the live domain wins on divergence: setup applies only on a fresh install.
 _setup-tinycast:
 	@echo "  Tinycast (launcher settings)..."

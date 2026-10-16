@@ -58,8 +58,6 @@ monitors what. Anything running on a machine appears there or gets deleted:
 enters git) · `~/.ssh/config` (copied from `config/ssh_config` — colima
 appends its own `Include`; all four hosts are MagicDNS short names, so it installs
 identically on a headless machine, no secret and no `op` call) ·
-`config/karabiner/karabiner.json` (copied; Karabiner rewrites the live file on
-every UI change and `_setup-karabiner` refuses to overwrite a diverged copy) ·
 `config/tinycast/defaults.json` (applied to Tinycast's defaults domain by
 `scripts/tinycast-config.py`, never on the mini; live wins, `make tinycast-check`) ·
 `~/.claude/settings.json` (merged, below) · `~/.gitconfig-headless` (written only

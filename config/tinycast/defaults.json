@@ -52,7 +52,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 17
         }
       }
@@ -62,7 +62,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 2
         }
       }
@@ -72,7 +72,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 8
         }
       }
@@ -82,7 +82,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 0
         }
       }
@@ -92,7 +92,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 46
         }
       }
@@ -102,7 +102,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 1
         }
       }
@@ -112,8 +112,8 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
-          "carbonKeyCode": 6
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 16
         }
       }
     }
@@ -122,7 +122,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 31
         }
       }
@@ -132,7 +132,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 4
         }
       }
@@ -142,7 +142,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 5
         }
       }
@@ -152,7 +152,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 32
         }
       }
@@ -162,8 +162,8 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
-          "carbonKeyCode": 16
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 6
         }
       }
     }
@@ -172,7 +172,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 34
         }
       }
@@ -182,7 +182,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 12
         }
       }
@@ -192,7 +192,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 15
         }
       }
@@ -202,7 +202,7 @@
     "$jsonString": {
       "combo": {
         "_0": {
-          "carbonModifiers": 6656,
+          "carbonModifiers": 6400,
           "carbonKeyCode": 3
         }
       }
@@ -218,6 +218,8 @@
       }
     }
   },
+  "hyperKeyIncludesShift": false,
+  "hyperKeyPhysicalKey": "capsLock",
   "interfaceSize": "standard",
   "launcherAliases": {
     "extension:jkrumm/battery": "bt",
