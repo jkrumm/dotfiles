@@ -186,16 +186,15 @@ plain HTTP client, not the gateway's live connection.
 | `com.jkrumm.weatherorb.tileserver` | KeepAlive | map tiles (:8081) |
 | `com.jkrumm.weatherorb.public` | KeepAlive | blend-only public app (:8082), the VPS edge's only door |
 | `com.jkrumm.weatherorb.sync` | KeepAlive | data sync |
-| `com.jkrumm.weatherorb.obs` | 1200s | observations ingest |
-| `com.jkrumm.weatherorb.fcstlog` | 900s | forecast logging |
-| `com.jkrumm.weatherorb.archive` | hourly at :40 | archive pass — stage the past track of every committed blend (`ops/run-archive.sh`) |
-| `com.jkrumm.weatherorb.backfill` | 07:15 daily | backfill |
 | `com.jkrumm.weatherorb.watchdog` | 900s | Kuma push monitor |
-| `com.jkrumm.weatherorb.round` | 3 h at :00, RunAtLoad | new blend engine — one immutable round per run |
 | `com.jkrumm.weatherorb.retention` | daily 04:30 | member-store retention (`--apply`) |
 | `com.jkrumm.weatherorb.verify` | daily 05:45 | blend-vs-member verification report |
 | `com.jkrumm.weatherorb.worker-ingest` | KeepAlive | durable-jobs worker: ingest (DBOS, ADR 0010) |
 | `com.jkrumm.weatherorb.worker-round` | KeepAlive | durable-jobs worker: blend rounds (DBOS, ADR 0010) |
+
+The 1200s/900s/hourly/daily/3 h timers that used to ingest, log, archive,
+backfill and run blend rounds (`obs`, `fcstlog`, `archive`, `backfill`, `round`) are
+DBOS schedules inside the two workers now, not launchd jobs.
 
 The last two are not templated in `weatherorb/ops` — installed by hand, owned by
 the weatherorb session workflow.
@@ -302,7 +301,13 @@ Uptime Kuma.
 | `Hermes Watchdog - Push` | hermes watchdog poll | 35 min |
 | `Hermes Backup - Push` | hermes-backup agent | 25 h |
 | `WeatherOrb Watchdog - Push` | weatherorb watchdog | 35 min |
+| `WeatherOrb Watchdog - Degraded` | weatherorb watchdog (degraded-state beat) | 35 min |
 | `Home Line - Push` | linewatch | 4 min |
+| `Home Line - Watchdog` | linewatch watchdog latch | 10 min, 2 retries |
+| `Agent Gateway - Push` | agent-gateway job-queue health | 5 min, 1 retry |
+| `Warden Loop - Push` | warden-loop | 20 min, 1 retry |
+| `Warden Backup - Push` | warden-backup | 25 h |
+| `Hermes Serve - Push` | hermes-serve-liveness | 6 min |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
 
 Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).

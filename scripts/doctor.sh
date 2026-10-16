@@ -134,7 +134,7 @@ section_architecture() {
   rc=$?
   printf '%s\n' "$out" | sed 's/^/    /'
   if [ "$rc" -eq 0 ]; then
-    ok "architecture map" "every loaded/on-disk label is mapped"
+    ok "architecture map" "every loaded/on-disk label is mapped, every mapped label exists"
   else
     bad "architecture map" "unmapped labels — see above"
   fi

@@ -771,7 +771,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -984,6 +984,11 @@ brain-sync-teardown:
 .PHONY: architecture-check
 architecture-check:
 	@bash $(DOTFILES_DIR)/scripts/architecture-check.sh
+
+.PHONY: architecture-check-test
+architecture-check-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/architecture-check.sh $(DOTFILES_DIR)/scripts/architecture-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/architecture-check.test.sh
 
 # Worktrees accumulate across the estate in four different parent directories
 # (repo/.claude/worktrees/, ~/IuRoot/worktrees/, ~/IuRoot/.wt/, and inside the
@@ -3272,7 +3277,8 @@ help:
 	@echo "  make brew-dump          Regenerate the Brewfile from the machine — then review the git diff"
 	@echo "  make brew-upgrade       Upgrade outdated homebrew/core formulae (skips pinned caddy + casks + third-party taps, then asserts the invariants)"
 	@echo "  make brew-upgrade-dry   Preview without upgrading"
-	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md"
+	@echo "  make architecture-check Assert every loaded/on-disk launchd label is in docs/architecture.md, and every mapped label for this machine exists"
+	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"
 	@echo "  make worktree-audit     List stale git worktrees across SourceRoot + IuRoot (read-only)"
 	@echo "  make worktree-prune     Remove the ones that are clean and fully merged into origin's default branch"

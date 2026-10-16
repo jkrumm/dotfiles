@@ -33,7 +33,9 @@ set -u
 
 DOTFILES="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MAP="$DOTFILES/docs/architecture.md"
-LAUNCHCTL=/bin/launchctl
+LAUNCHCTL="${LAUNCHCTL_BIN:-/bin/launchctl}"
+# Overridable so the hermetic test can point at a fake machine.
+LAUNCHD_DIRS=("${LAUNCHD_AGENT_DIRS[@]:-$HOME/Library/LaunchAgents /Library/LaunchAgents /Library/LaunchDaemons}")
 
 [[ -f "$MAP" ]] || { echo "✗ $MAP not found"; exit 1; }
 
@@ -45,7 +47,7 @@ allowlist_regex='^(com\.apple\.|application\.|com\.google\.GoogleUpdater|com\.je
 # The MacBook is MDM-managed: Jamf, Okta, Adobe and the cancom hardening daemons
 # ship dozens of plists nobody here owns, so on the `op` backend only the prefixes
 # this repo manages are asserted. The mini is entirely ours — full scan there.
-BACKEND=$(tr -d '[:space:]' < "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null || echo "")
+BACKEND=$(tr -d '[:space:]' < "${BACKEND_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend}" 2>/dev/null || echo "")
 if [[ "$BACKEND" == "op" ]]; then
   owned_regex='^(com\.jkrumm\.|homebrew\.mxcl\.|sh\.brew\.|cc\.chlc\.)'
 else
@@ -82,7 +84,8 @@ while IFS= read -r label; do
 done < <($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
 
 # 2. plists on disk, un-loaded or not
-for dir in "$HOME/Library/LaunchAgents" "/Library/LaunchAgents" "/Library/LaunchDaemons"; do
+# shellcheck disable=SC2068
+for dir in ${LAUNCHD_DIRS[@]}; do
   [[ -d "$dir" ]] || continue
   for plist in "$dir"/*.plist; do
     [[ -e "$plist" ]] || continue
@@ -97,9 +100,59 @@ for dir in "$HOME/Library/LaunchAgents" "/Library/LaunchAgents" "/Library/Launch
   done
 done
 
-if [[ -n "$unmapped" ]]; then
-  echo "✗ launchd labels not in docs/architecture.md — add a row or delete the agent:"
-  printf '%s' "$unmapped"
+# 3. The reverse: every label the map lists for THIS machine must still exist
+# here — loaded, or a plist on disk (root daemons never show in the user's
+# `launchctl list`). The section is picked by backend: `op` is the MacBook, the
+# `cache` backend the mini. A row for a job that was deleted or became something
+# else (the weatherorb timers that turned into DBOS schedules) fails here instead
+# of lingering as a map that lies. Only labels with an owned prefix are asserted;
+# prose mentions of vendor labels are not rows.
+if [[ "$BACKEND" == "op" ]]; then
+  section_re='^## LaunchAgents — MacBook'
+  machine=MacBook
+else
+  section_re='^## LaunchAgents — mini'
+  machine=mini
+fi
+loaded=$($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
+label_live() {
+  local label="$1" name="" cand dir
+  local -a cands=("$label")
+  case "$label" in
+    sh.brew.*)       name=${label#sh.brew.} ;;
+    homebrew.mxcl.*) name=${label#homebrew.mxcl.} ;;
+  esac
+  [[ -n "$name" ]] && cands=("sh.brew.$name" "homebrew.mxcl.$name")
+  for cand in "${cands[@]}"; do
+    grep -qxF "$cand" <<<"$loaded" && return 0
+    # shellcheck disable=SC2068
+    for dir in ${LAUNCHD_DIRS[@]}; do
+      [[ -e "$dir/$cand.plist" ]] && return 0
+    done
+  done
+  return 1
+}
+stale=""
+while IFS= read -r label; do
+  [[ -n "$label" ]] || continue
+  label_live "$label" || stale="${stale}  mapped-but-absent ($machine): $label
+"
+done < <(/usr/bin/awk -v re="$section_re" '
+    $0 ~ re {on=1; next}
+    /^## / {on=0}
+    on' "$MAP" \
+  | grep -oE '`(com\.jkrumm\.|com\.iu\.|com\.colima\.|ai\.hermes\.|herdr\.|sh\.brew\.|homebrew\.mxcl\.|cc\.chlc\.)[A-Za-z0-9._@-]*[A-Za-z0-9@_-]`' \
+  | tr -d '`' | sort -u)
+
+if [[ -n "$unmapped" || -n "$stale" ]]; then
+  if [[ -n "$unmapped" ]]; then
+    echo "✗ launchd labels not in docs/architecture.md — add a row or delete the agent:"
+    printf '%s' "$unmapped"
+  fi
+  if [[ -n "$stale" ]]; then
+    echo "✗ docs/architecture.md lists labels that do not exist on this machine — delete the row or restore the agent:"
+    printf '%s' "$stale"
+  fi
   exit 1
 fi
-echo "✓ every loaded and on-disk launchd label is mapped (architecture.md)"
+echo "✓ every loaded and on-disk launchd label is mapped, and every mapped $machine label exists (architecture.md)"
