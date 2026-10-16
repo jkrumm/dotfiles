@@ -53,6 +53,13 @@ describe("jobs-grade", () => {
     expect(grade({ fails_24h: 3 })).toBe("flapping")
     expect(grade({ fails_24h: 2 })).toBe("ok")
   })
+  test("flapping clears once the latest 3 runs are green; interleaved failures keep it", () => {
+    const run = (rc: number, i: number) => ({ run_id: `r${i}`, started: ago(900 - i * 300), rc, duration_ms: 1 })
+    expect(grade({ fails_24h: 12, runs: [0, 0, 0].map(run) })).toBe("ok")
+    expect(grade({ fails_24h: 12, runs: [1, 0, 0].map(run) })).toBe("flapping")
+    expect(grade({ fails_24h: 12, runs: [0, 1, 0, 0].map(run) })).toBe("flapping")
+    expect(grade({ fails_24h: 12, runs: [0, 0].map(run) })).toBe("flapping")
+  })
   test("failing outranks flapping; stale outranks flapping", () => {
     expect(grade({ fails_24h: 5, rc: 1, consecutive_fail: 3 })).toBe("failing")
     expect(grade({ fails_24h: 5, started: ago(9999) })).toBe("stale")

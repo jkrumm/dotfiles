@@ -57,6 +57,8 @@ export interface Graded {
 // T1 thresholds (ops-signals.md §3). Exported so the tests pin the numbers.
 export const FAILING_STREAK = 3
 export const FLAPPING_FAILS_24H = 3
+// A job whose latest runs are all green has recovered: its 24 h failure count is history, not flapping.
+export const RECOVERED_RUNS = 3
 export const MIN_WINDOW_S = 30 * 60
 export const DAILY_EVERY_S = 86400
 export const DAILY_GRACE_S = 2 * 3600
@@ -196,8 +198,13 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
   if (windowS && ageS(s.started) > windowS) {
     return done("stale", `last run ${Math.round(ageS(s.started) / 60)} min ago, window ${Math.round(windowS / 60)} min`)
   }
-  if (s.fails_24h >= FLAPPING_FAILS_24H) return done("flapping", `${s.fails_24h} failures in 24 h`)
+  if (s.fails_24h >= FLAPPING_FAILS_24H && !recovered(s)) return done("flapping", `${s.fails_24h} failures in 24 h`)
   return done("ok", s.consecutive_fail > 0 ? `last run failed (rc=${s.rc}), retrying` : "ok")
+}
+
+function recovered(s: JobState): boolean {
+  const last = s.runs.slice(-RECOVERED_RUNS)
+  return last.length === RECOVERED_RUNS && last.every((r) => r.rc === 0)
 }
 
 export function gradeAll(dir: string, o: GradeOpts): Graded[] {

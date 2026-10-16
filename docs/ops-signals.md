@@ -147,7 +147,7 @@ human-queue.
 | Machine dark, heartbeat dead, or warden dead | — | **Kuma** (outside-in) | The only layer that survives the mini being off |
 | Hung, still running | a deadlocked run | `jobrun --timeout` (TERM, then KILL); KeepAlive services through `/health` | launchd skips `StartInterval` firings while the job runs (`man launchd.plist`), so a hang otherwise looks exactly like "didn't run" |
 | Crash-looping service | KeepAlive restart storm | `check_launchd_restarts` (exists) | launchd has no `StartLimitBurst` equivalent: it retries forever at the 10 s throttle. That makes this check our start limiter |
-| Flapping | ok/fail alternating, so the consecutive counter never trips | `jobs-grade`: ≥ 3 failures in 24 h counts as failing even if interleaved | One item stays open, never reopen churn |
+| Flapping | ok/fail alternating, so the consecutive counter never trips | `jobs-grade`: ≥ 3 failures in 24 h counts as failing even if interleaved, until the latest 3 runs are all green (a recovered job is not flapping; Wave 8) | One item stays open, never reopen churn |
 
 launchd facts this relies on (from `man launchd.plist` on the mini):
 - `StartInterval` firings are **missed** while the machine is asleep **or the job is still
