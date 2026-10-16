@@ -133,7 +133,7 @@ instead of claiming done.
 ## Wave 9 — warden-api ingest door            <!-- status: pending -->
 - [ ] warden-api: `POST /ingest/kuma` and `POST /ingest/hyperdx`. Bearer token resolved via `secrets-run` (new `op://` ref, declared in `dotfiles-private/headless.refs`). The payload is mapped to the existing `uk` and `slack_alert`-equivalent event shapes (`hyperdx` source) with the same dedup keys. Idempotent; 202 on accept. Tests
 - [ ] Caddy door for the ingest route only (`config/Caddyfile`), plus `make caddy-tailnet`
-- [ ] ACL: declare a narrow grant (homelab and VPS tags → devhost `tcp:443`) in `dotfiles-private`. The push is biometric → `ask-human ask` with `make tailscale-acl-diff` then `make tailscale-acl-push`. The token item and secret seed → `ask-human ask` (`make secrets-seed`)
+- [ ] ACL: declare a narrow grant (homelab and VPS tags → devhost `tcp:443`) in `dotfiles-private`. **Pre-approved by the owner 2026-10-16. There is no policy decision to wait for. The human-queue ask must carry the exact `make tailscale-acl-diff` output so it can be pushed as-is.** The push is biometric → `ask-human ask` with `make tailscale-acl-diff` then `make tailscale-acl-push`. The token item and secret seed → `ask-human ask` (`make secrets-seed`)
 - [ ] Verify: a POST from homelab (`ssh homelab curl …`) returns 202 and creates an event (the test event is then closed); without the token → 401
 **Left behind:**
 
