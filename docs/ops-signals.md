@@ -32,7 +32,7 @@ description: How a background-job failure travels from the job to a fix or a hum
 3. **Every alert source feeds warden directly**, not via Slack or Kuma snapshots:
    - the `job` source (`jobs-grade`);
    - Uptime Kuma, as a webhook to warden-api, replacing the 30-minute poll snapshot; **live since Wave 14** (provider `Warden - Ingest`, declared in `homelab/uptime-kuma/monitors.yaml` `settings.webhooks`, attached to every leaf next to Slack; the snapshot poll is retired). Kuma does not redeliver a webhook warden missed while down, so Slack stays the fallback;
-   - HyperDX alerts, as a webhook to warden-api instead of #alerts → `slack_alert`.
+   - HyperDX alerts, as a webhook to warden-api instead of #alerts → `slack_alert`; **live since Wave 15** (generic webhook `Warden ingest`, created by `vps` `make hyperdx-warden-webhook-setup`, listed in `channels` of all 21 `vps/observability/alerts/*.json` next to `Slack #alerts`; fires on ALERT and OK; the `slack_alert` poll skips `🚨`/`✅`-prefixed #alerts lines). weatherorb's four alerts keep their own `ops.alert` webhook;
 
    **Slack #alerts becomes a human-readable mirror**, plus the fallback for when warden itself is
    down. Kuma watches warden; nothing else watches Kuma.
@@ -57,7 +57,7 @@ local `man launchd.plist`.
 | launchd timer, log-only (`modelpick-refresh`, `log-rotate`, `research-gateway-deploy`, `brain-web-refresh`, `weatherorb.{retention,verify}` moved onto `jobrun`) | failure → `~/Library/Logs/*.err` → **nothing** | Invisible. The heartbeat checks only KeepAlive labels (`lib/launchd-restarts.sh`), not timer jobs |
 | launchd timer with a Kuma push (`brain-sync`, `brain-backup`, `hermes-backup`, `warden-backup`, `drift-check`) | missed push → Kuma DOWN after one interval (`maxretries: 0` everywhere) → **Slack #alerts → human at once**. In parallel `warden-poll` (every 30 min, snapshot via Argo) → `uk` item → 30 min debounce → triage → investigate | A human is paged **before** any self-heal or remediation. A DOWN that recovers between two polls is invisible to warden. The push carries success only, so `hermes-backup`'s nightly rotation error stays green |
 | KeepAlive service | crash/restart → `check_launchd_restarts` (edge-triggered) → composite DOWN at once → #alerts. Dead port → `services` component → 3 runs (~15 min) → DOWN | Composite → warden only via `uk`. **0 of 14 `uk` items in 30 days reached `fixed`** (8 quiet, 6 resolved) |
-| In-process loop | warn log or `/health`. research-gateway, audio-gateway and weatherorb also export OTel → HyperDX alert → #alerts webhook → warden `slack_alert`. weatherorb's own alerts become a GitHub issue → `github_go` | Only 3 of about 25 owners export OTel. agent-gateway, warden, hermes, linewatch, usage-tracker and modelpick don't |
+| In-process loop | warn log or `/health`. research-gateway, audio-gateway and weatherorb also export OTel → HyperDX alert → `Warden ingest` webhook → warden `hyperdx` (Slack #alerts is the mirror). weatherorb's own alerts become a GitHub issue → `github_go` | Only 3 of about 25 owners export OTel. agent-gateway, warden, hermes, linewatch, usage-tracker and modelpick don't |
 | Hermes cron | error → `jobs.json` `last_status` → `jobs-grade` cron adapter (`hermes-cron.<slug>`) → warden `job` item for hermes-agent (the `hermes_cron` event source is retired, Wave 11) | Only the last outcome is recorded, no history |
 | warden itself | loop wedged → no `Warden Loop` push → Kuma DOWN (≈40 min). Poller dead → no `Hermes Watchdog` push (35 min) | `warden-sweep` dead → only `/health` staleness, which no monitor watches |
 | MacBook | Tinycast background commands; only `opbackup` has a Kuma monitor | Not represented in warden (`WARDEN_MACHINE` defaults to `mini`) |
@@ -129,7 +129,7 @@ There is no Hermes digest (decision 1). warden's ledger and Argo `/warden` are t
 | **Is something being done about it?** | **warden's ledger** (item per `job:<machine>:<label>`) | It does not duplicate run history. It stores the incident and points at the state file |
 | **What happened over time?** | **OTel, as a mirror only**: `jobrun` emits one best-effort OTLP log per run (`service.name=jobrun`, attributes `job`, `rc`, `duration_ms`) for dashboards and trends. Never alerting. Optional, late in the migration | — |
 | **Is the chain itself alive?** | **Kuma** (§2) | — |
-| **How does an alert reach warden?** | **Directly.** `jobs-grade` is read locally. Kuma and HyperDX post webhooks to a new warden-api ingest route (bearer token via `secrets-run`, behind a Caddy door) | The Argo snapshot poll (30 min, loses flaps) and #alerts → `slack_alert` (a human sees it first, and parsing is lossy). Both retire once their webhook is proven |
+| **How does an alert reach warden?** | **Directly.** `jobs-grade` is read locally. Kuma and HyperDX post webhooks to a new warden-api ingest route (bearer token via `secrets-run`, behind a Caddy door) | The Argo snapshot poll (30 min, loses flaps) and #alerts → `slack_alert` for HyperDX/Kuma lines (a human sees it first, and parsing is lossy). Both retired in Waves 14–15 |
 
 **Catch for the webhooks:** the mini is push-only today, because the tailnet ACL grants nothing
 inbound from the homelab or VPS tags to the mini (`architecture.md` §Monitoring). An ingest door

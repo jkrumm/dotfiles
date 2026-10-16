@@ -73,7 +73,7 @@ Health notes are as of 2026-10-16 and come from logs only.
 | `linewatch-*` | linewatch | KeepAlive/60s | 3 | 3 | ISP and router faults are human-only. Kuma `Home Line` stays (a symptom) |
 | `usage-tracker` | usage-tracker | 900s | 2 (on `jobrun`; graded) | 4 | Wave 10: `--timeout 600`; the heartbeat's log-mtime probe is gone (the `jobs` component is WARN-only, so staleness no longer FAILs the composite) |
 | `walkingpad` | walkingpad | KeepAlive | 1 | 2 | — |
-| `audio-gateway` | audio-gateway | KeepAlive | 3 | 4 | OTel → HyperDX → #alerts → `slack_alert`. Last exit 127 inside `secrets-run`, unexplained |
+| `audio-gateway` | audio-gateway | KeepAlive | 3 | 4 | OTel → HyperDX → `Warden ingest` webhook → `hyperdx` item. Last exit 127 inside `secrets-run`, unexplained |
 | `research-gateway`, `-lightpanda` | research-gateway | KeepAlive | 4 | 4 | Leases + crash-loop guard + 10 HyperDX alerts |
 | `research-gateway-deploy` | research-gateway | 120s | 2 (on `jobrun`; graded) | 4 | Wave 10: `jobrun --lock research-gateway-deploy --timeout 7200` replaced the mkdir lock and stale-lock reclaim (also behind `make deploy`). A red CI or a deferred (busy) tick is rc 0 by design; only fetch/install/unhealthy-restart fail |
 
