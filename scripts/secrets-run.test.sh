@@ -277,6 +277,22 @@ sig_scenario() {
 sig_scenario "SIGTERM to the process group" group
 sig_scenario "SIGTERM to the wrapper only" wrapper
 
+# === 13b1. the script file can be rewritten under a live wrapper ====================
+# Regression for 2026-10-15: audio-gateway's `secrets-run run -- bun` parent held the old
+# file open; an in-place edit (same inode) made bash resume at its stale byte offset when
+# the child exited and run text it was never given (there: a fragment, exit 127; here:
+# an appended `exit 99`, which a correct wrapper must never reach). Needs a CLEAN child
+# exit: under `set -e` a non-zero one kills the wrapper before bash re-reads anything.
+cp "$SHIM" "$TESTREPO/sr-live"
+chmod +x "$TESTREPO/sr-live"
+SECRETS_PRIVATE_REPO="$TESTREPO" SOPS_AGE_KEY_FILE="$AGE_KEY_FILE" \
+  "$TESTREPO/sr-live" run --env-file="$TESTREPO/app.env.tpl" -- bash -c 'sleep 1; exit 0' >/dev/null 2>&1 &
+live_pid=$!
+sleep 0.5
+printf '\necho reread >&2; exit 99\n' >> "$TESTREPO/sr-live"   # in place, same inode, like an editor
+wait "$live_pid"
+assert_eq "live-edit: wrapper exits with the child's code after its own file is rewritten" "0" "$?"
+
 # === 13b2. stdin reaches the child on both backgrounded paths ======================
 # The relay path runs the child with `&`; piped input must still arrive, whether or
 # not anything is redacted.
