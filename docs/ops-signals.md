@@ -234,15 +234,18 @@ How:
   - the LocalStorage watchdog state. It is a state file the Tinycast view reads.
 - `opbackup` keeps its weekly Kuma monitor, because its data leaves the box (§2).
 
-**Catch: van-sampler and Bluetooth TCC.**
+**Catch: van-sampler and Bluetooth TCC (Wave 13: built, not proven).**
 - `van-ble` works today because Tinycast Beta is the TCC-responsible process for Bluetooth.
-- Under launchd the responsible process is the job's **program**. If that is `bun`, which then
-  spawns `van-ble`, the grant would likely attach to bun, not the helper (unverified; spike first).
-- So the launchd job's program must be the binary carrying the usage string. That means either a
-  signed CLI with an embedded Info.plist (`-sectcreate __TEXT __info_plist`) declaring
-  `NSBluetoothAlwaysUsageDescription`, or a minimal `.app` bundle.
-- This is the one place the "Swift daemon" idea earns its keep: van-sampler becomes a small Swift
-  executable, since it is Swift already in `van-ble`.
+- Under launchd the responsible process is the job's **program**, and every child inherits it
+  (`fork`/`posix_spawn` copy it, `exec` keeps it; only `responsibility_spawnattrs_setdisclaim`
+  resets it). If the program were `jobrun`/`bun`, the grant would attach to bun, which carries no
+  usage string, and CoreBluetooth aborts. So the launchd **program** is the signed `van-ble`
+  (embedded Info.plist), in `--supervise` mode: it spawns the job as a child and waits, never `exec`.
+- Grants are keyed by the designated requirement: ad-hoc = cdhash, lost on every changed rebuild;
+  a stable identity survives. Whether a bare binary with an embedded plist gets a prompt and a
+  persistent grant under launchd is **unsettled in the sources** — `make van-sampler-spike` on the
+  MacBook decides (pass/fail line, three launchd jobs, Tinycast quit). Fail = the `.app`-bundle
+  fallback. Research, spike design and fallback: `tinycast-extensions/docs/van-sampler-tcc.md`.
 - netgear-watchdog (curl, `networksetup`) has no TCC surface and stays bun under launchd.
 
 ## 8. How mature setups map here

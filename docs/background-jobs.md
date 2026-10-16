@@ -100,7 +100,7 @@ These stay in their processes and inherit their service's level. Visibility goes
 | Job | Today | Target | Note |
 |-|-|-|-|
 | netgear-watchdog (`com.jkrumm.netgear-watchdog`, launchd 60 s, `jobrun`) | 2 (written, **not yet live**: install is a MacBook ask) | 3 | The self-heal ladder is unchanged and now runs outside Tinycast (no kill, no pause, ticks with a view open). The view reads `~/.local/state/netgear-watchdog/state.json`. Live proof pending the MacBook install |
-| van-sampler (Tinycast, 15m) | 1 | 3 | BLE TCC catch → Swift program |
+| van-sampler (`com.jkrumm.van-sampler`, launchd 15 min, `jobrun`, signed `van-ble --supervise`) | 1 → 2 (written, **not live**: gated on the Bluetooth TCC spike, a MacBook ask) | 3 | Leaves Tinycast (which ran it only with no view open). The Tinycast `van-sampler` command and its LocalStorage state are deleted on the branch; state is files in `~/.local/state/van-sampler/` that the Van Power view shares. Spike, evidence and the `.app` fallback: `tinycast-extensions/docs/van-sampler-tcc.md`. Becomes level 2 only when the spike passes and the install is verified |
 | `opbackup` | 2 | 2 | Kuma weekly (data leaves the box) |
 | `brain-sync`, `batt-reset`, `appearance-sync`, `db-tunnel`, `tailnet-sshd` | 0–1 | 2 | Graded on wake, local notification |
 | `photoflow` | 0 | 2 | `/tmp` log |

@@ -241,6 +241,8 @@ such stray fails the assertion instead of hiding from it.
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.netgear-watchdog` (60 s, `jobrun`,
 owner `tinycast-extensions`; installed by `make watchdog-setup` there) ·
+`com.jkrumm.van-sampler` (15 min, `jobrun`, owner `tinycast-extensions`; program = signed
+`van-ble --supervise`; `make van-sampler-setup` there, gated on a passing Bluetooth spike) ·
 `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
 (KeepAlive, :2222 door) · `sh.brew.colima` · `sh.brew.sleepwatcher` ·
