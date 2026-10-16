@@ -59,7 +59,7 @@ local `man launchd.plist`.
 | KeepAlive service | crash/restart → `check_launchd_restarts` (edge-triggered) → composite DOWN at once → #alerts. Dead port → `services` component → 3 runs (~15 min) → DOWN | Composite → warden only via `uk`. **0 of 14 `uk` items in 30 days reached `fixed`** (8 quiet, 6 resolved) |
 | In-process loop | warn log or `/health`. research-gateway, audio-gateway and weatherorb also export OTel → HyperDX alert → `Warden ingest` webhook → warden `hyperdx` (Slack #alerts is the mirror). weatherorb's own alerts become a GitHub issue → `github_go` | Only 3 of about 25 owners export OTel. agent-gateway, warden, hermes, linewatch, usage-tracker and modelpick don't |
 | Hermes cron | error → `jobs.json` `last_status` → `jobs-grade` cron adapter (`hermes-cron.<slug>`) → warden `job` item for hermes-agent (the `hermes_cron` event source is retired, Wave 11) | Only the last outcome is recorded, no history |
-| warden itself | loop wedged → no `Warden Loop` push → Kuma DOWN (≈40 min). Poller dead → no `Hermes Watchdog` push (35 min) | `warden-sweep` dead → only `/health` staleness, which no monitor watches |
+| warden itself | loop wedged, poller dead, sweep dead or Slack polling blind → no `Warden Loop` push → Kuma DOWN (≈30 min; Wave 16, the `Hermes Watchdog` push is retired) | none known |
 | MacBook | Tinycast background commands; only `opbackup` has a Kuma monitor | Not represented in warden (`WARDEN_MACHINE` defaults to `mini`) |
 
 What warden *does* convert well:
@@ -94,6 +94,14 @@ Everything else leaves Kuma or becomes a slow backstop: `Brain Sync` (600 s), `H
 - interval at least 2× the job's own escalation budget;
 - `maxretries` at least 1;
 - never faster than warden could have acted.
+
+**Applied in Wave 16** (`homelab/uptime-kuma/monitors.yaml`): every push monitor is `maxretries: 1` with
+`retry_interval = min(interval, 1 h)`, so time-to-DOWN stays ≈ the interval. `Brain Sync`, `Collie` and
+`Hermes Serve` are 4 h backstops (2× the 2 h verdict budget in §3); `Drift` (2 d) and `Secret Seed` (8 d)
+were already slower. `Hermes Watchdog` is deleted: `Warden Loop` now pings only while loop, poll and
+sweep heartbeats are fresh and the poll is not Slack-blind (`warden/scripts/lifecycle/freshness.py`, the
+same test as `/health`). The 4 h rule is read as applying to the six monitors §2 names; user-facing
+symptoms (`Hermes Agent`, `WeatherOrb`, `Home Line`) and chain-alive monitors keep their short intervals.
 
 **Amendment: the composite must not go DOWN for a job failure.** If the planned `check_jobs`
 component (v1) failed the composite, Kuma would become the reporting bridge again, which is

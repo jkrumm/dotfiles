@@ -293,18 +293,24 @@ instead of claiming done.
 - **Owner-visible:** one shared bearer authorizes both Kuma and HyperDX ingest (Wave 9 trade). HyperDX Slack lines no longer reach warden when the webhook is down (Kuma has the same trade from Wave 14); Slack still carries them for a human.
 - Docs: `ops-signals.md` §3 marks the webhook live; `background-jobs.md` audio-gateway row; vps `docs/observability.md` ("Alerts → warden"), `observability/README.md`, `AGENTS.md`; warden `STATE.md` + state-log §179. Nothing spawned.
 
-## Wave 16 — Kuma becomes the calm backstop            <!-- status: active -->
-- [ ] `monitors.yaml`, per `ops-signals.md` §2:
+## Wave 16 — Kuma becomes the calm backstop            <!-- status: done -->
+- [x] `monitors.yaml`, per `ops-signals.md` §2:
   - keep the three duties: chain-alive, user-facing symptoms, data leaving the box;
   - `maxretries ≥ 1` everywhere;
   - intervals of at least 2× warden's T2 budget for everything that isn't chain-alive;
   - retire or lengthen `Brain Sync`, `Hermes Watchdog`, `Drift`, `Hermes Serve`, `Collie` and `Secret Seed` as §2 says
-- [ ] warden: the `Warden Loop` push requires loop, poll and sweep heartbeat freshness (`/health`), so a dead sweep pages through Kuma
-- [ ] Docs: `architecture.md` §Monitoring and `ops-signals.md` §2 match the result
-- [ ] Verify: `uk-sync` diff reviewed and applied; a stale-sweep simulation on a copied ledger makes the push skip
+- [x] warden: the `Warden Loop` push requires loop, poll and sweep heartbeat freshness (`/health`), so a dead sweep pages through Kuma
+- [x] Docs: `architecture.md` §Monitoring and `ops-signals.md` §2 match the result
+- [x] Verify: `uk-sync` diff reviewed and applied; a stale-sweep simulation on a copied ledger makes the push skip
 **Left behind:**
+- **homelab `bb8758e`** (pushed; `make test` 27/27): all 24 push monitors with `maxretries: 0` are now `1`, `retry_interval = min(interval, 3600)` so time-to-DOWN stays ≈ the interval (the 4× arithmetic comment was rewritten). `Brain Sync`, `Collie`, `Hermes Serve` are 4 h backstops (2× the 2 h verdict budget); `Drift` (2 d) and `Secret Seed` (8 d) were already slower; `Hermes Watchdog - Push` deleted. **Reading recorded:** the 4 h rule applies to the six monitors §2 names; user-facing symptoms (`Hermes Agent`, `WeatherOrb`, `Home Line`) and chain-alive monitors keep short intervals. `Warden Loop` is now interval 1200 + 1 retry at 600 (~30 min), not the 20 min §3 states.
+- **Applied live:** `uk-dry-run` reviewed (only orphan: `Hermes Watchdog - Push` id=185), then `sync.py --delete-orphans` run on homelab (the Makefile target has no such flag); orphan deleted. Found: 1Password's API returned 400/500 on `op run` for ~8 of 12 attempts (a flaky upstream, not the diff); retries succeeded. Everything shows `[UPDATE]` on every run (sync.py's normal output), so convergence was not separately diffed.
+- **warden `33476e8`** (worktree `warden-w16`, removed; ff-merged, pushed, `make deploy` + `make verify` green: `deployed 33476e8`, schema 23/23, loop heartbeat fresh; `make check` rc 0, test_triage 674). New `lifecycle/freshness.py` (poller table moved out of `api.py`, shared with `/health`) + `stale_pollers()`; `triage.run()` pings `Warden Loop` only when loop, poll and sweep are within 3× their interval and the poll is not `slack_blind` (an unreadable cursor payload fails closed). `watchdog-poll.py` no longer pushes (`_push_uptime_heartbeat`, `UPTIME_PUSH_WATCHDOG` gone; `--post` inert). Tests: `test_freshness.py` (6), push-gating test in `test_triage.py`, `test_watchdog_delivery.py` rewritten around the cursor. No coexist change from the improve loop had landed (`origin/master` unchanged), so nothing to rebase on; `rollout.py` and `triage-policy.json` untouched.
+- **Verify:** stale-sweep simulation on a copy of the live ledger: `stale_pollers` `[]` on the copy, `['dispatch_sweep']` with the sweep aged 30 min (push skipped; covered by the triage test). Live: the first loop pass after deploy (23:11Z) logged no `heartbeat withheld`. Not observed: Kuma's `Warden Loop` monitor state itself.
+- **`/review`** (agent-gateway, 1 round): 1 blocking (delete the Hermes Watchdog monitor with the rollout) done in the order uk-sync → deploy; fixed: fail-closed cursor, one clock per pass, alias shim removed, stale plist comment, header wrap, rollout note. **Declined:** splitting `slack_blind` out of `stale_pollers`, moving the cursor read behind a watchdog-poll accessor, removing the inert `--post` flag (a plist change needs `make agents`), a heartbeat on the `LedgerBehind` skip (documented in §180 instead).
+- **Open:** `make agents` was not run, so the rendered `com.jkrumm.warden-poll` plist still carries the old comment (deploy warned); harmless, converges on the next `make agents`. Docs: `architecture.md` §Monitoring and `ops-signals.md` §1/§2 updated. Nothing spawned.
 
-## Wave 17 — review cycle 2            <!-- status: pending -->
+## Wave 17 — review cycle 2            <!-- status: active -->
 - [ ] Metrics and the §9 checklist, compared against Wave 8's numbers. Tune
 - [ ] Every owned mini job is at ladder level ≥ 2, and the remediable ones are at 4. Fix the stragglers or record why
 - [ ] Docs: `background-jobs.md` ladder table reflects the live state; `ops-signals.md` §1 rewritten as "flow today" (after), with the old flow moved to a short history note

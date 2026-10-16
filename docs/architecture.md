@@ -297,24 +297,25 @@ Uptime Kuma.
 
 | Monitor | Pusher | Cadence |
 |-|-|-|
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (18 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min |
-| `MacMini Collie - Push` | collie behavioural check | 10 min |
-| `MacMini Secret Seed - Push` | cache-freshness check | 8 days |
-| `MacMini Drift - Push` | drift-check agent | 2 days |
-| `Brain Sync - Push` | brain-sync agent | 10 min |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (18 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min, 1 retry |
+| `MacMini Collie - Push` | collie behavioural check | 4 h backstop, 1 retry |
+| `MacMini Secret Seed - Push` | cache-freshness check | 8 days, 1 retry |
+| `MacMini Drift - Push` | drift-check agent | 2 days, 1 retry |
+| `Brain Sync - Push` | brain-sync agent | 4 h backstop, 1 retry |
 | `Brain Backup - Push` | brain-backup agent | 25 h |
 | `Hermes Agent - Push` | hermes-liveness | 6 min |
-| `Hermes Watchdog - Push` | hermes watchdog poll | 35 min |
 | `Hermes Backup - Push` | hermes-backup agent | 25 h |
 | `WeatherOrb Watchdog - Push` | weatherorb watchdog | 35 min |
 | `WeatherOrb Watchdog - Degraded` | weatherorb watchdog (degraded-state beat) | 35 min |
 | `Home Line - Push` | linewatch | 4 min |
 | `Home Line - Watchdog` | linewatch watchdog latch | 10 min, 2 retries |
 | `Agent Gateway - Push` | agent-gateway job-queue health | 5 min, 1 retry |
-| `Warden Loop - Push` | warden-loop | 20 min, 1 retry |
+| `Warden Loop - Push` | warden-loop, only while loop + poll + sweep heartbeats are fresh and the poll is not Slack-blind (`/health`'s test) | 20 min, 1 retry at 10 min |
 | `Warden Backup - Push` | warden-backup | 25 h |
-| `Hermes Serve - Push` | hermes-serve-liveness | 6 min |
+| `Hermes Serve - Push` | hermes-serve-liveness | 4 h backstop, 1 retry |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
+
+Every push monitor has `maxretries: 1` with `retry_interval = min(interval, 1 h)`, so a flake does not page and time-to-DOWN stays ≈ interval. Backstops (Brain Sync, Collie, Hermes Serve) run at ≥ 2× warden's 2 h verdict budget so warden acts first; the poller's own `Hermes Watchdog - Push` was retired into `Warden Loop - Push`.
 
 Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
 
