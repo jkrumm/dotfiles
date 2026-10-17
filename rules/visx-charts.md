@@ -1,11 +1,13 @@
 ---
-description: visx charting conventions for a non-basalt-ui repo — primitives, kind-registry, centralized CSS-variable palette, theme reactivity. In a basalt-ui consumer, `basalt-charts.md` (shipped by the package) supersedes this file entirely.
+description: visx charting conventions — only for repos without basalt-ui 2.x (modelpick, basalt-ui 1.x apps). In a basalt-ui 2.x consumer, `basalt-charts.md` (shipped by the package) supersedes this file. Routing: `frontend-routing.md`.
 paths: ["**/charts/**", "**/*chart*.tsx", "**/*chart*.ts", "**/*Chart*.tsx", "**/*Chart*.ts"]
 ---
 
-# Visx Charts — Library Conventions (non-basalt-ui repos)
+# Visx Charts — Library Conventions (only for repos without basalt-ui 2.x)
 
-**If this repo installs `basalt-ui`, stop here** — `agent/rules/basalt-charts.md` (shipped by the
+Routing: `frontend-routing.md`. This file is for repos without basalt-ui 2.x.
+
+**If this repo is on basalt-ui 2.x, stop here** — `agent/rules/basalt-charts.md` (shipped by the
 package via `basalt-ui init`/`sync`) is the doctrine for that repo; it names `CartesianChart` as
 the one mandatory assembly primitive and this file's older `ChartHoverSync`/`useChartTooltip`
 shapes do not apply there.

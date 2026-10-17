@@ -99,7 +99,7 @@ Workflow facts per repo:
 | `research-gateway` | Behind `/research`, tailnet-only; cloud routines can't reach it. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for skill domains. |
 | `warden` | The control plane; `DESIGN.md` is authoritative, `STATE.md` the build state. Hermes narrates, it does not dispatch. |
-| `basalt-ui` | Mantine v9 + visx (NPM). No Tailwind. Always its own commit. |
+| `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
 | `brain` | `wiki/` = agentic knowledge (strict lint); PARA `Projects`/`Areas` = human surface; use `/brain`. |
 | `modelpick` | Source of truth for model-choice rationale; backs `cap`. |
 

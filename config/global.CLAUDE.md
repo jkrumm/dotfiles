@@ -101,7 +101,7 @@ exemption: `docs/global-reference.md`.
 
 - **`~/SourceRoot/`** — 1Password `tkrumm`, GitHub, no ticket prefixes,
   direct-to-master by default. PR-required repos: `config/pr-required-repos.json`
-  (the single source). **`basalt-ui` is always its own commit.**
+  (the single source). **`basalt-ui` is always its own commit.** Frontend guidance per repo/artifact: `rules/frontend-routing.md`.
   **`homelab-private` is self-contained** — never reference its services or hosts
   elsewhere. **Private repos' GitHub Actions: `runs-on: [self-hosted, vps]`**, never
   `ubuntu-latest` (hosted minutes run out); public repos stay hosted. New private
