@@ -128,6 +128,16 @@ case "${1:-}" in
           if [[ "$ref" == *readfail* ]]; then
             echo "[ERROR] could not read secret: item not found" >&2; exit 1
           fi
+          # Access-path failures (cases 14-16). Real op 2.x strings: the authorization
+          # dialog being dismissed, and a hang that only the watchdog ends.
+          if [[ "$ref" == *authfail* ]]; then
+            echo "[ERROR] 2026/10/17 00:00:00 could not read secret '$ref': authorization prompt dismissed" >&2; exit 1
+          fi
+          if [[ "$ref" == *slowinject* ]]; then sleep 30; exit 0; fi
+          # A genuine bad ref: op's own wording for an unknown item.
+          if [[ "$ref" == *badref* || "$ref" == *authread* ]]; then
+            echo "[ERROR] 2026/10/17 00:00:00 could not read secret '$ref': \"x\" isn't an item in the \"test\" vault" >&2; exit 1
+          fi
           stub_value "$acct" "$ref"; printf '\n' ;;
         *) printf '%s\n' "$line" ;;
       esac
@@ -157,6 +167,16 @@ case "${1:-}" in
     # real one does — non-zero, with a diagnostic on stderr.
     if [[ "$ref" == *readfail* ]]; then
       echo "[ERROR] 2026/07/16 00:00:00 could not read secret: item not found" >&2
+      exit 1
+    fi
+    # Cases 14-16: authfail/authread = the access path breaks (op names no ref problem);
+    # badref = a genuine unknown item.
+    if [[ "$ref" == *authfail* || "$ref" == *authread* ]]; then
+      echo "[ERROR] 2026/10/17 00:00:00 could not read secret '$ref': authorization prompt dismissed" >&2
+      exit 1
+    fi
+    if [[ "$ref" == *badref* ]]; then
+      echo "[ERROR] 2026/10/17 00:00:00 could not read secret '$ref': \"x\" isn't an item in the \"test\" vault" >&2
       exit 1
     fi
     stub_value "$acct" "$ref"; printf '\n'
@@ -203,7 +223,9 @@ run_seed() {
   # variable for the function call but bash does not export it onward to the seed
   # process, so case 13's fallback run would silently have taken the batch path.
   PATH="$TESTREPO/bin:$PATH" SECRETS_PRIVATE_REPO="$TESTREPO" \
-    SECRETS_SEED_OP_BATCH="${SECRETS_SEED_OP_BATCH:-1}" "$SEED" >/dev/null 2>"$errf"
+    SECRETS_SEED_OP_BATCH="${SECRETS_SEED_OP_BATCH:-1}" \
+    SECRETS_SEED_OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-180}" \
+    "$SEED" >/dev/null 2>"$errf"
   SEED_CODE=$?
   SEED_ERR="$(cat "$errf")"
   rm -f "$errf"
@@ -437,6 +459,83 @@ fallback_injects="$(grep -c . "$TESTREPO/op-injected.log" 2>/dev/null || true)"
 fallback_injects="${fallback_injects:-0}" # the whole point: the file never appears
 assert_eq "13. paths: SECRETS_SEED_OP_BATCH=0 really skips the batch" "0" "$fallback_injects"
 assert_eq "13. paths: both resolve paths seal an identical cache" "$batched_keys" "$fallback_keys"
+
+# --- cases 14-16: the op access path breaks (TCC / authorization / hang) ---------
+#
+# Regression for the dialog storm: a batch that died on the macOS "op wants to access
+# data from other apps" dialog used to fall back to one `op read` PROCESS per ref, up to
+# 3 attempts each, and every process raised its own dialog (dozens, and Allow does not
+# persist). Now only a REF problem may fan out; an access failure aborts at once with
+# the Full Disk Access instruction, after a small, bounded number of op processes.
+OP_REAL="$(realpath "$TESTREPO/bin/op")"
+# count_op <inject|read>: ref-resolving op processes only (the recipient read is not one)
+count_op() {
+  local n=0
+  case "$1" in
+    inject) n=$(grep -c '^inject ' "$TESTREPO/op-calls.log" 2>/dev/null || true) ;;
+    read)   n=$(grep '^read ' "$TESTREPO/op-calls.log" 2>/dev/null | grep -vc 'mini age key' || true) ;;
+  esac
+  echo "${n:-0}"
+}
+assert_fda_abort() {  # $1=label prefix
+  assert_refused "$1: aborts"
+  assert_contains "$1: names the exact resolved op path" "$OP_REAL" "$SEED_ERR"
+  assert_contains "$1: points at Full Disk Access" "Full Disk Access" "$SEED_ERR"
+  assert_contains "$1: says Allow does not persist" "Allow button does NOT persist" "$SEED_ERR"
+  assert_contains "$1: states the cache was left alone" "cache untouched" "$SEED_ERR"
+  assert_cache_absent "$1: nothing sealed or delivered"
+}
+
+# === 14. batch authorization error: abort, ZERO per-ref reads ================
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/authfail/x" "op://test/other/field"
+run_seed
+assert_fda_abort "14a. access: batch authorization error"
+assert_eq "14a. access: exactly one op inject, no per-ref reads (no fan-out)" "1 0" "$(count_op inject) $(count_op read)"
+
+# a failing FIRST account must not go on to start the second account's batch
+reset_case
+write_refs headless.refs "op://test/authfail/x"
+write_refs headless.iu.refs "op://Private/feuer/api-server-key"
+run_seed
+assert_fda_abort "14b. access: failing first account"
+assert_eq "14b. access: the second account's batch never started" "1 0" "$(count_op inject) $(count_op read)"
+
+# === 15. batch hangs (watchdog, rc 124): abort, zero per-ref reads ===========
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/slowinject/x"
+SECRETS_SEED_OP_BATCH_TIMEOUT=2 run_seed
+assert_fda_abort "15. access: batch timeout"
+assert_contains "15. access: timeout is reported as the watchdog kill" "killed by the watchdog" "$SEED_ERR"
+assert_eq "15. access: exactly one op inject, no per-ref reads (no fan-out)" "1 0" "$(count_op inject) $(count_op read)"
+
+# === 16. bad ref on inject, then per-ref diagnostics (the kept diagnostic path) ===
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/badref/x" "op://test/other/field"
+run_seed
+assert_refused "16a. ref problem: aborts (dead ref)"
+assert_contains "16a. ref problem: names the bad ref" "op://test/badref/x" "$SEED_ERR"
+assert_contains "16a. ref problem: says it fell back per-ref to find it" "falling back to per-reference reads" "$SEED_ERR"
+assert_not_contains "16a. ref problem: is NOT reported as an access failure" "Full Disk Access" "$SEED_ERR"
+assert_contains "16a. ref problem: states the cache was left alone" "cache untouched" "$SEED_ERR"
+assert_eq "16a. ref problem: one inject, then one read per ref (good refs read too)" "1 3" "$(count_op inject) $(count_op read)"
+assert_cache_absent "16a. ref problem: nothing sealed"
+
+# the circuit breaker inside the per-ref loop: a bad ref first (collected), then the
+# access path breaks on the second ref -> stop, the third is never read
+reset_case
+write_refs headless.refs "op://test/badref/x" "op://test/authread/y" "op://test/other/field"
+run_seed
+assert_fda_abort "16b. breaker: access error mid per-ref loop"
+assert_eq "16b. breaker: one inject + exactly two reads (third ref never read)" "1 2" "$(count_op inject) $(count_op read)"
+
+# per-ref mode (batch off): the first access failure stops the loop, no retry
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/authfail/x" "op://test/other/field"
+SECRETS_SEED_OP_BATCH=0 run_seed
+assert_fda_abort "16c. breaker: access error with batching off"
+assert_eq "16c. breaker: no inject, reads stop at the failing ref (no retry, no third read)" "0 2" "$(count_op inject) $(count_op read)"
+
 
 # --- guards deliberately NOT covered here (documented, not silently skipped) --
 # - deliver_remote_cache (ssh mini): needs a live SSH target; local delivery

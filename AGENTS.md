@@ -392,6 +392,11 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   asserted by `make brew-upgrade`. A grant earned through a Claude Code chain
   never sticks: claude's TCC client is `~/.local/share/claude/versions/<ver>`,
   a fresh client on every auto-update — run the seed from a plain terminal.
+- **`secrets-seed` never fans out on an access failure.** A batch/read that dies on
+  authorization, a timeout or the desktop-app handshake aborts the run at once (no
+  per-ref fallback, no retry) and prints the resolved `op` path to add to Full Disk
+  Access; only a genuine ref error (`isn't an item`…) falls back per-ref to name the
+  dead ref. Seeing the TCC dialog = grant FDA on that exact path, then re-run.
 - **"mini unreachable" usually means "1Password is locked"** — the same agent
   serves `ssh mini`, and a locked app fails it as `Permission denied (publickey)`.
 - **The login Keychain is not a headless credential store and it fails quietly** —

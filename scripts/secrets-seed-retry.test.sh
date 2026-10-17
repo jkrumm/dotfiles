@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Regression tests for secrets-seed.sh's op-read retry loop.
+# Regression tests for secrets-seed.sh's per-ref read loop and its circuit breaker.
 #
 # Separate from secrets-seed.test.sh because that suite is mini-gated (it refuses
 # to run unless the backend marker says `cache`, to avoid an ssh to the mini).
 # This one must run on the MacBook, since the MacBook is where the failure it
 # guards actually happens.
 #
-# WHAT IT GUARDS. The reseed resolves a few hundred refs with one `op read`
-# PROCESS each. A small number of those handshakes with the 1Password desktop app
-# fail transiently (`response: promptError`, `You are not currently signed in`)
-# or hang outright on a dialog that never renders. Before the retry loop, the
-# first such hiccup threw away the whole run — after the human had already spent
-# a Touch ID approval — and armed a 6h backoff. That is why the mini's cache sat
-# 11 days stale on 2026-08-17 across repeated automated attempts.
+# WHAT IT GUARDS. Every `op` PROCESS that hits a missing macOS TCC grant raises its
+# own "op wants to access data from other apps" dialog, and the dialog's Allow
+# button does not persist. The loop used to retry "transient" handshake failures
+# (up to 3 attempts per ref) and carry on to the next ref, so one broken access path
+# became dozens of dialogs. The contract now:
+#   - a genuine ref problem ("isn't an item") is collected and the loop continues,
+#     so one pass names every dead ref;
+#   - an access failure (authorization, handshake, timeout) stops the whole loop at
+#     the FIRST occurrence with the Full Disk Access instruction — no retry, no
+#     next ref.
 #
 # It drives the loop by EXTRACTING it from the real script rather than
 # duplicating it, so the two cannot drift apart quietly: if the markers move, the
@@ -26,54 +29,53 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/secrets-seed-retry.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 # --- the op stub --------------------------------------------------------------
-# A PATH stub, deliberately NOT a shell function: `op_read_once` invokes op
-# through coreutils `timeout`, which execs the binary it finds on PATH and would
-# sail straight past a function. A first draft of this test used a function, hit
-# the REAL op, and "passed" while proving nothing — the error text in the output
-# was the giveaway (it named actual vaults).
+# A PATH stub, deliberately NOT a shell function: a function would be sailed past by
+# anything that execs the binary it finds on PATH. A first draft of this test used a
+# function, hit the REAL op, and "passed" while proving nothing — the error text in
+# the output was the giveaway (it named actual vaults).
 mkdir -p "$TMP/bin"
-cat >"$TMP/bin/op" <<'EOF'
+cat >"$TMP/bin/op" <<'EOF2'
 #!/usr/bin/env bash
 # argv: read --account <acct> <ref>
 ref="${4:-}"
 n_file="$FAKE_OP_COUNT_DIR/$(echo "$ref" | tr -c 'a-zA-Z0-9' _)"
 n=$(cat "$n_file" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" >"$n_file"
+echo x >>"$FAKE_OP_COUNT_DIR/_all"
 case "$ref" in
-  # Fails twice with the exact transient error observed in the wild, then works.
-  op://flaky/a/b)   if [ "$n" -lt 3 ]; then
-                      echo "[ERROR] error initializing client: response: promptError" >&2; exit 1
-                    fi
-                    echo "flaky-value" ;;
+  # The handshake failure that used to be retried 3x. Now an access failure: abort.
+  op://flaky/a/b)   echo "[ERROR] error initializing client: response: promptError" >&2; exit 1 ;;
+  # The authorization dialog being dismissed.
+  op://auth/a/b)    echo "[ERROR] could not read secret '$ref': authorization prompt dismissed" >&2; exit 1 ;;
   # Hangs on a dialog that never renders — must be killed by the timeout bound.
   op://hang/a/b)    sleep 60; echo "never" ;;
-  # A genuinely absent ref. Not a hiccup: must fail on the FIRST attempt.
+  # Genuinely absent refs. Not an access problem: collected, loop continues.
   op://missing/a/b) echo '[ERROR] "a" isn'"'"'t an item in the "missing" vault' >&2; exit 1 ;;
   op://missing2/a/b) echo '[ERROR] "a" isn'"'"'t an item in the "missing2" vault' >&2; exit 1 ;;
   *) echo "ok-value" ;;
 esac
-EOF
+EOF2
 chmod +x "$TMP/bin/op"
 
 # --- extract the loop under test ---------------------------------------------
 DRIVER="$TMP/drive.sh"
-cat >"$DRIVER" <<'EOF'
+cat >"$DRIVER" <<'EOF2'
 #!/usr/bin/env bash
 set -euo pipefail
 die() { echo "DIE: $*" >&2; exit 1; }
 indent() { sed 's/^/      /'; }
 refs=("$@")
 accts=(); for _ in "${refs[@]}"; do accts+=(tkrumm); done
-EOF
+EOF2
 sed -n '/^OP_READ_TIMEOUT=/,/^echo "    ✓ resolved/p' "$SCRIPT" >>"$DRIVER"
 
 # Guard the extraction itself. A silently-empty range would make every assertion
 # below vacuous, which is the one way a test like this rots without going red.
-grep -q 'op_read_transient' "$DRIVER" || {
-  echo "extraction failed: the retry block was not found in $SCRIPT — did the markers move?" >&2
+grep -q 'op_failure_is_ref_problem' "$DRIVER" || {
+  echo "extraction failed: the classifier was not found in $SCRIPT — did the markers move?" >&2
   exit 1
 }
-grep -q 'attempt >= OP_READ_ATTEMPTS' "$DRIVER" || {
-  echo "extraction failed: the attempt loop was not found in $SCRIPT" >&2
+grep -q 'abort_op_access' "$DRIVER" || {
+  echo "extraction failed: the access-failure abort was not found in $SCRIPT" >&2
   exit 1
 }
 bash -n "$DRIVER"
@@ -81,58 +83,78 @@ bash -n "$DRIVER"
 export PATH="$TMP/bin:$PATH"
 export FAKE_OP_COUNT_DIR="$TMP/counts"
 mkdir -p "$FAKE_OP_COUNT_DIR"
-# 2s per attempt keeps the hang case bearable; the real default is 30s.
+# 2s per read keeps the hang case bearable; the real default is 30s. Batching off:
+# this harness drives the per-ref loop directly.
 export SECRETS_SEED_OP_READ_TIMEOUT=2
+export SECRETS_SEED_OP_BATCH=0
+OP_REAL="$(realpath "$TMP/bin/op")"
 
 calls_for() { cat "$FAKE_OP_COUNT_DIR/$(echo "$1" | tr -c 'a-zA-Z0-9' _)" 2>/dev/null || echo 0; }
+total_calls() { wc -l <"$FAKE_OP_COUNT_DIR/_all" 2>/dev/null | tr -d ' ' || echo 0; }
 
-run_ref() {  # $1=ref → prints output; sets RC
+fail() { echo "$1" >&2; exit 1; }
+
+run_refs() {  # $@=refs → sets OUT, RC; resets the counters
+  rm -rf "$FAKE_OP_COUNT_DIR"; mkdir -p "$FAKE_OP_COUNT_DIR"; : >"$FAKE_OP_COUNT_DIR/_all"
   set +e
-  OUT=$(bash "$DRIVER" "$1" 2>&1)
+  OUT=$(bash "$DRIVER" "$@" 2>&1)
   RC=$?
   set -e
 }
 
-# --- a transient promptError must be retried, and the run must survive it ------
-run_ref op://flaky/a/b
-test "$RC" -eq 0 || { echo "flaky ref should have resolved, rc=$RC: $OUT" >&2; exit 1; }
-test "$(calls_for op://flaky/a/b)" -eq 3 \
-  || { echo "expected 3 op calls for the flaky ref, got $(calls_for op://flaky/a/b)" >&2; exit 1; }
-case "$OUT" in *"resolved 1 value"*) ;; *) echo "expected a resolved value: $OUT" >&2; exit 1 ;; esac
+assert_fda_abort() {  # $1=label ; uses OUT/RC
+  test "$RC" -ne 0 || fail "$1: should have aborted: $OUT"
+  case "$OUT" in *"$OP_REAL"*) ;; *) fail "$1: abort must name the resolved op path $OP_REAL: $OUT" ;; esac
+  case "$OUT" in *"Full Disk Access"*) ;; *) fail "$1: abort must point at Full Disk Access: $OUT" ;; esac
+  case "$OUT" in *"Allow button does NOT persist"*) ;; *) fail "$1: abort must say Allow does not persist: $OUT" ;; esac
+  case "$OUT" in *"cache untouched"*) ;; *) fail "$1: expected the untouched-cache abort: $OUT" ;; esac
+}
 
-# --- a genuinely missing ref must NOT be retried ------------------------------
-# Retrying it only delays an error a human has to fix, and on a few hundred refs
-# that is minutes of pointless waiting per broken entry.
-run_ref op://missing/a/b
-test "$RC" -ne 0 || { echo "missing ref should have aborted: $OUT" >&2; exit 1; }
-test "$(calls_for op://missing/a/b)" -eq 1 \
-  || { echo "missing ref must not be retried, got $(calls_for op://missing/a/b) calls" >&2; exit 1; }
-case "$OUT" in *"cache untouched"*) ;; *) echo "expected the untouched-cache abort: $OUT" >&2; exit 1 ;; esac
+# --- a handshake failure is NOT retried: one op process, FDA abort ------------
+run_refs op://flaky/a/b
+assert_fda_abort "handshake failure"
+test "$(calls_for op://flaky/a/b)" -eq 1 \
+  || fail "handshake failure must not be retried, got $(calls_for op://flaky/a/b) calls"
 
-# --- a hanging read must be bounded, retried, and then abort ------------------
+# --- an authorization error stops the loop: the next ref is never read --------
+run_refs op://ok/a/b op://auth/a/b op://ok2/a/b op://ok3/a/b
+assert_fda_abort "authorization error"
+test "$(total_calls)" -eq 2 \
+  || fail "loop must stop at the first access failure (2 op processes), got $(total_calls)"
+test "$(calls_for op://ok2/a/b)" -eq 0 || fail "ref after the failure must never be read"
+
+# --- a hanging read is bounded, NOT retried, and aborts -----------------------
 # Unbounded, this wedges the LaunchAgent until the next tick collides with it.
 start=$(date +%s)
-run_ref op://hang/a/b
+run_refs op://hang/a/b op://ok/a/b
 elapsed=$(( $(date +%s) - start ))
-test "$RC" -ne 0 || { echo "hanging ref should have aborted: $OUT" >&2; exit 1; }
-test "$(calls_for op://hang/a/b)" -eq 3 \
-  || { echo "expected 3 bounded attempts, got $(calls_for op://hang/a/b)" >&2; exit 1; }
-# 3 attempts x 2s, plus 3s + 6s of backoff. Generous ceiling; the point is that
-# it terminated at all rather than sitting on the stub's 60s sleep.
-test "$elapsed" -lt 45 \
-  || { echo "hanging ref was not time-bounded: ${elapsed}s" >&2; exit 1; }
+assert_fda_abort "hang"
+case "$OUT" in *"killed by the watchdog"*) ;; *) fail "timeout abort should say the watchdog killed op: $OUT" ;; esac
+test "$(total_calls)" -eq 1 || fail "hanging read must be a single attempt, got $(total_calls) op processes"
+test "$elapsed" -lt 20 || fail "hanging ref was not time-bounded: ${elapsed}s"
+
+# --- a genuinely missing ref is collected, not an access failure --------------
+run_refs op://missing/a/b
+test "$RC" -ne 0 || fail "missing ref should have aborted: $OUT"
+test "$(calls_for op://missing/a/b)" -eq 1 \
+  || fail "missing ref must not be retried, got $(calls_for op://missing/a/b) calls"
+case "$OUT" in *"cache untouched"*) ;; *) fail "expected the untouched-cache abort: $OUT" ;; esac
+case "$OUT" in *"Full Disk Access"*) fail "a missing ref must not be reported as an access failure: $OUT" ;; esac
 
 # --- every dead ref is reported, not just the first ---------------------------
 # A deleted 1Password item blocks EVERY reseal (fail-closed), and reporting one
 # ref per biometric pass turns a five-ref outage into five passes — which is
 # exactly what happened on 2026-08-29 with careerpartner's deleted `care-stage`.
-set +e
-OUT=$(bash "$DRIVER" op://missing/a/b op://missing2/a/b op://ok/a/b 2>&1)
-RC=$?
-set -e
-test "$RC" -ne 0 || { echo "dead refs should still abort: $OUT" >&2; exit 1; }
-case "$OUT" in *"op://missing/a/b"*) ;; *) echo "first dead ref missing from the report: $OUT" >&2; exit 1 ;; esac
-case "$OUT" in *"op://missing2/a/b"*) ;; *) echo "second dead ref missing from the report: $OUT" >&2; exit 1 ;; esac
-case "$OUT" in *"cache untouched"*) ;; *) echo "expected the untouched-cache abort: $OUT" >&2; exit 1 ;; esac
+run_refs op://missing/a/b op://missing2/a/b op://ok/a/b
+test "$RC" -ne 0 || fail "dead refs should still abort: $OUT"
+case "$OUT" in *"op://missing/a/b"*) ;; *) fail "first dead ref missing from the report: $OUT" ;; esac
+case "$OUT" in *"op://missing2/a/b"*) ;; *) fail "second dead ref missing from the report: $OUT" ;; esac
+case "$OUT" in *"cache untouched"*) ;; *) fail "expected the untouched-cache abort: $OUT" ;; esac
+test "$(total_calls)" -eq 3 || fail "all three refs should be read exactly once, got $(total_calls)"
+
+# --- a dead ref followed by an access failure: the breaker still trips --------
+run_refs op://missing/a/b op://auth/a/b op://ok/a/b
+assert_fda_abort "breaker after a dead ref"
+test "$(total_calls)" -eq 2 || fail "third ref must not be read after the breaker, got $(total_calls)"
 
 printf '%s\n' 'secrets-seed-retry: all tests passed'

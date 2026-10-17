@@ -220,36 +220,28 @@ fi
 
 # --- resolve every ref (biometric) into an in-memory value array -------------
 # Values live only in the vals[] shell array (process memory, never disk — R1).
-# A ref that cannot be resolved even after retries aborts before any crypto, so
-# the cache stays untouched. That invariant is unchanged; what changed is what
-# counts as unresolvable.
+# A ref that cannot be resolved aborts before any crypto, so the cache stays
+# untouched. An access failure (authorization, timeout, handshake) aborts at once.
 #
-# WHY RETRIES. This loop is one `op read` PROCESS per ref — a few hundred of them
-# back to back, each doing its own handshake with the 1Password desktop app. A
-# small number of those handshakes fail transiently:
-#   error initializing client: response: promptError
-#   error initializing client: You are not currently signed in
-# and the ref is perfectly readable one second later — verified 2026-08-17 by
-# re-reading, by hand, the exact refs two consecutive automated runs died on
-# (op://hermes/slack/app-token at 11:17, op://vps/argo/GITLAB_TOKEN at 12:41):
-# both returned in ~1s, rc=0, no prompt. So the failure is in the app handshake,
-# not the ref, not the vault and not the account.
+# WHY NO RETRIES (changed 2026-10-17). This used to retry a "transient" handshake
+# failure (`promptError`, `You are not currently signed in`) up to 3 times per ref,
+# and fall back to one `op read` per ref when a batch failed for ANY reason. Both
+# multiply the one thing that must never be multiplied: every `op` PROCESS that
+# hits a missing macOS TCC grant raises its own "op wants to access data from other
+# apps" dialog, and the dialog's Allow button does not persist. A batch that died on
+# that dialog fell back to per-ref reads and put dozens of dialogs on screen, owner
+# furious. Authorization / timeout / handshake failures are now NOT retried and NOT
+# fanned out: the run stops at the first one (see abort_op_access) and tells the
+# human the one durable fix, a Full Disk Access grant on the exact op path.
+# Only a genuine ref/template problem (unknown vault/item/field, bad syntax) is
+# worth more `op` processes, because the per-ref path is what names the broken ref.
 #
-# Aborting the whole run on the first of those is what made the reseed feel
-# impossible: it spends the human's Touch ID approval, resolves hundreds of refs,
-# then throws all of it away over one hiccup near the end and arms a 6h backoff.
-# Three attempts with backoff turn that into a hiccup. A ref that is genuinely
-# gone still fails on the first attempt and is NOT retried — a typo'd ref must
-# not cost 30s of pointless waiting, and "item not found" is not a hiccup.
-#
-# WHY EACH READ IS TIME-BOUNDED. A transient handshake failure has a third form:
-# `op read` hangs indefinitely waiting on an authorization dialog that never
-# renders (observed here — 2 minutes, no output, no dialog on screen). From a
-# LaunchAgent that wedges the job until launchd's next tick collides with it.
-# The deadline is enforced by run_bounded (below), which escalates TERM to KILL
-# because op does not reliably die on SIGTERM.
+# WHY EACH READ IS TIME-BOUNDED. `op read` can hang indefinitely waiting on an
+# authorization dialog that never renders (observed here — 2 minutes, no output, no
+# dialog on screen). From a LaunchAgent that wedges the job until launchd's next tick
+# collides with it. The deadline is enforced by run_bounded (below), which escalates
+# TERM to KILL because op does not reliably die on SIGTERM. A timeout is an abort.
 OP_READ_TIMEOUT="${SECRETS_SEED_OP_READ_TIMEOUT:-30}"
-OP_READ_ATTEMPTS="${SECRETS_SEED_OP_READ_ATTEMPTS:-3}"
 # One batch covers hundreds of refs, so it gets a proportionally larger deadline.
 OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-180}"
 # Escape hatch: set to 0 to skip batching entirely and read ref-by-ref.
@@ -301,7 +293,7 @@ run_bounded() {  # $1=seconds  $2..=command ; stdout passes through untouched
   kill "$wd_pid" 2>/dev/null || true
   wait "$wd_pid" 2>/dev/null || true
   # A watchdog kill surfaces as 143 (TERM). Normalise it to coreutils' 124 so
-  # op_read_transient's existing contract keeps working unchanged.
+  # op_failure_is_ref_problem's contract (timeout == 124) keeps working.
   (( rc == 143 )) && rc=124
   return "$rc"
 }
@@ -371,26 +363,67 @@ resolve_batch() {  # $1=account  $2..=indices into refs[] ; fills vals[] by inde
   return 0
 }
 
-# Transient == the desktop-app handshake, never the ref. Keep this list tight:
-# retrying a genuine "item not found" only delays an error the human must fix.
-op_read_transient() {  # $1=exit status of op_read_once
-  [[ "$1" == 124 || "$1" == 137 ]] && return 0   # timeout / SIGKILL after -k
-  case "$(cat "$rerr" 2>/dev/null || true)" in
-    *promptError*|*"not currently signed in"*|*"error initializing client"*|\
-    *"could not connect"*|*"connection refused"*|*"deadline exceeded"*) return 0 ;;
+# Is this `op` failure the REF's fault (unknown vault/item/field, bad syntax) rather
+# than 1Password's access path (authorization, sign-in, desktop-app handshake,
+# timeout)? Only the former may fan out into per-ref reads. This is an ALLOWLIST of
+# op 2.x's own ref-error phrases and everything else fails toward ABORT: the cost of
+# a wrong "ref problem" is dozens of dialogs, the cost of a wrong "access problem" is
+# one clearly-worded abort. No denylist on purpose — op prefixes both kinds with
+# "could not read secret", and item names echoed in a ref error may themselves contain
+# words like "authorization", so only op's fixed phrases are trusted.
+# Phrases (read out of the op 2.x binary): `"x" isn't an item in the "y" vault`,
+# `isn't a vault`, `isn't a field in the item`, `field doesn't exist`, `invalid secret
+# reference`, `More than one item matches`.
+op_failure_is_ref_problem() {  # $1=exit status ; diagnostics in $rerr
+  [[ "$1" == 124 || "$1" == 137 ]] && return 1   # timeout / SIGKILL after the watchdog
+  local err
+  err=$(tr '[:upper:]' '[:lower:]' <"$rerr" 2>/dev/null || true)
+  case "$err" in
+    *"isn't an item"*|*"isn't a vault"*|*"isn't a field"*|*"field doesn't exist"*|\
+    *"invalid secret reference"*|*"invalid character in secret reference"*|\
+    *"reference contains invalid"*|*"more than one item"*|*"multiple items"*|\
+    *"item not found"*|*"no fields matched"*) return 0 ;;
   esac
   return 1
+}
+
+# The ONE abort for an access failure. Prints the resolved op path (the exact thing
+# macOS keys the grant on), the durable fix, and stops: no loop, no retry, no
+# per-ref fallback. Fail closed — nothing sealed, nothing delivered.
+abort_op_access() {  # $1=what was running  $2=exit status ; diagnostics in $rerr
+  local op_real
+  op_real=$(realpath "$(command -v op)" 2>/dev/null || command -v op)
+  echo "" >&2
+  echo "  ✗ 1Password access failed while $1 — this is NOT a bad reference." >&2
+  if [[ "$2" == 124 || "$2" == 137 ]]; then
+    echo "    op did not answer in time (killed by the watchdog) — typical of an authorization dialog nobody saw." >&2
+  else
+    indent <"$rerr" >&2
+  fi
+  echo "    macOS raises \"op wants to access data from other apps\" for every op process" >&2
+  echo "    that lacks a grant, and that dialog's Allow button does NOT persist." >&2
+  echo "    Stopped at the first failure on purpose: retrying or reading ref-by-ref" >&2
+  echo "    only stacks more dialogs." >&2
+  echo "    Fix (once per op upgrade): add exactly this path to System Settings →" >&2
+  echo "    Privacy & Security → Full Disk Access (reveal it with: open -R '$op_real'," >&2
+  echo "    then drag it into the list):" >&2
+  echo "        $op_real" >&2
+  echo "    Then re-run make secrets-seed." >&2
+  rm -f "$rerr"
+  die "aborting — cache untouched"
 }
 
 echo "  Resolving references..."
 vals=()
 rerr=$(mktemp "${TMPDIR:-/tmp}/secrets-seed.XXXXXX")
 
-# Try one batched call per account first. On ANY failure fall back to the per-ref
-# loop below for that account — `op inject` reports a bad template as one error for
-# the whole batch, and "which ref is wrong" is the single most useful thing this
-# script tells a human. Speed is not worth losing that, so the fallback is not an
-# afterthought: it is the diagnostic path, and the batch is the fast path.
+# Try one batched call per account first. Fall back to the per-ref loop for that
+# account ONLY when the batch failed because of a ref/template problem — `op inject`
+# reports a bad template as one error for the whole batch, and "which ref is wrong" is
+# the single most useful thing this script tells a human. Any other failure (timeout,
+# authorization, sign-in, handshake, unknown) aborts at once via abort_op_access:
+# the per-ref path would spawn one `op` process per ref against the same broken
+# access path, one macOS dialog each.
 declare -a _pending_idx=()
 if (( OP_BATCH )); then
   declare -a _seen_accts=()
@@ -406,12 +439,16 @@ if (( OP_BATCH )); then
     for ((i = 0; i < ${#refs[@]}; i++)); do
       [[ "${accts[$i]}" == "$_acct" ]] && _idx+=("$i")
     done
-    if resolve_batch "$_acct" "${_idx[@]}"; then
+    _brc=0
+    resolve_batch "$_acct" "${_idx[@]}" || _brc=$?
+    if (( _brc == 0 )); then
       echo "    ✓ $_acct: resolved ${#_idx[@]} reference(s) in one call"
-    else
-      echo "    … $_acct: batch resolve failed — falling back to per-reference reads" >&2
+    elif (( _brc == 91 || _brc == 92 )) || op_failure_is_ref_problem "$_brc"; then
+      echo "    … $_acct: batch resolve failed on a reference — falling back to per-reference reads to find it" >&2
       indent <"$rerr" >&2
       _pending_idx+=("${_idx[@]}")
+    else
+      abort_op_access "resolving the $_acct batch" "$_brc"
     fi
   done
 else
@@ -428,34 +465,23 @@ dead_refs=""
 
 for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
   ref="${refs[$i]}"
-  attempt=1
-  _dead=0
-  while :; do
-    # `rc` is captured on the OR side, NOT read from `$?` after an `if`: an `if`
-    # whose condition fails and which has no `else` exits 0, so the obvious
-    # spelling would classify every failure as status 0 and never see a timeout.
-    rc=0
-    v=$(op_read_once "${accts[$i]}" "$ref") || rc=$?
-    if (( rc == 0 )); then
-      break
-    fi
-    if (( attempt >= OP_READ_ATTEMPTS )) || ! op_read_transient "$rc"; then
-      echo "    ✗ op read failed for $ref (account ${accts[$i]}, attempt $attempt/$OP_READ_ATTEMPTS):" >&2
-      indent <"$rerr" >&2
-      dead_refs="${dead_refs}${ref}  (account ${accts[$i]})
+  # `rc` is captured on the OR side, NOT read from `$?` after an `if`: an `if`
+  # whose condition fails and which has no `else` exits 0, so the obvious
+  # spelling would classify every failure as status 0 and never see a timeout.
+  rc=0
+  v=$(op_read_once "${accts[$i]}" "$ref") || rc=$?
+  if (( rc != 0 )); then
+    # Circuit breaker: an access failure (authorization, handshake, timeout) hits
+    # every remaining ref the same way and each would raise its own dialog.
+    op_failure_is_ref_problem "$rc" || abort_op_access "reading $ref (account ${accts[$i]})" "$rc"
+    echo "    ✗ op read failed for $ref (account ${accts[$i]}):" >&2
+    indent <"$rerr" >&2
+    dead_refs="${dead_refs}${ref}  (account ${accts[$i]})
 "
-      _dead=1
-      break
-    fi
-    # Backoff gives the app time to settle, and — when the cause is a lock — the
-    # human a moment to answer. Never printed as a failure: it is not one yet.
-    echo "    … transient op error on $ref (attempt $attempt/$OP_READ_ATTEMPTS), retrying" >&2
-    sleep $(( attempt * 3 ))
-    attempt=$(( attempt + 1 ))
-  done
-  # Keep going: the point is to end with the COMPLETE list of dead refs, not the
-  # first one. vals[i] stays unset — the abort below fires before the jq fold.
-  if (( _dead )); then continue; fi
+    # Keep going: the point is to end with the COMPLETE list of dead refs, not the
+    # first one. vals[i] stays unset — the abort below fires before the jq fold.
+    continue
+  fi
   # v1 constraint: single-line values only. A multi-line value would misalign the
   # newline-paired jq fold below and silently corrupt the cache — refuse it.
   case "$v" in

@@ -64,6 +64,11 @@ covers it — and the assertion reports *unassertable* rather than *missing*
 when it cannot read the TCC databases, which is what happens whenever the
 upgrade is driven from an agent session instead of a terminal.
 
+`scripts/secrets-seed.sh` prints this same instruction (the resolved `op` path) and
+**aborts at the first access failure** instead of falling back to per-ref reads —
+every extra `op` process would raise its own dialog, and Allow does not persist.
+Only a real ref error falls back per-ref. Design: dotfiles-private `docs/design.md` D5.
+
 Homebrew 6 also **renames** what it regenerates — `homebrew.mxcl.<name>` →
 `sh.brew.<name>`, written on the next `brew services start|restart` (the old file
 is deleted then, not at upgrade time). Both names are therefore live across the

@@ -2161,7 +2161,7 @@ secrets-lint:
 	@shellcheck $(DOTFILES_DIR)/scripts/secrets-run $(DOTFILES_DIR)/scripts/secrets-run-diagnostics.sh \
 		$(DOTFILES_DIR)/scripts/secrets-run.test.sh \
 		$(DOTFILES_DIR)/scripts/secrets-seed.sh $(DOTFILES_DIR)/scripts/secrets-seed.test.sh \
-		$(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
+		$(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh $(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
 	@echo "  ✓ shellcheck clean (secrets-run + diagnostics + secrets-seed + harnesses)"
 	@# The batch-resolve harness is hermetic (stubbed op, no account, no age key, no
 	@# cache backend), so unlike secrets-seed.test.sh it can run HERE — on the machine
