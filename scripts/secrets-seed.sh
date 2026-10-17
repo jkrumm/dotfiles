@@ -394,7 +394,7 @@ abort_op_access() {  # $1=what was running  $2=exit status ; diagnostics in $rer
   local op_real
   op_real=$(realpath "$(command -v op)" 2>/dev/null || command -v op)
   echo "" >&2
-  echo "  ✗ 1Password access failed while $1 — this is NOT a bad reference." >&2
+  echo "  ✗ 1Password access failed while $1 — not recognised as a bad reference." >&2
   if [[ "$2" == 124 || "$2" == 137 ]]; then
     echo "    op did not answer in time (killed by the watchdog) — typical of an authorization dialog nobody saw." >&2
   else
