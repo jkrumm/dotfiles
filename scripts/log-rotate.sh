@@ -32,6 +32,14 @@
 # labels com.jkrumm.* and com.iu.* — and nothing else. A new agent's logs are rotated
 # the moment its plist lands; a retired agent's stop being rotated the moment its plist goes.
 # EXTRA below is the only hand list: audit logs our scripts append to that no plist names.
+#
+# ALSO SWEPT, once per run: stale Chrome code-sign clones. Every headless Chrome launch leaves a
+# code_sign_clone.<random> directory under $(dirname DARWIN_USER_TEMP_DIR)/X/com.google.Chrome.code_sign_clone
+# and nothing removes them (2026-10-17 on the mini: 62 dirs, du 128 GB; deleting the 61 older than 24 h
+# freed 24 GB real, APFS shares blocks). sweep_chrome_clones removes those directories older than 24 h,
+# skipping any that lsof reports open. Only that one root is touched — net.imput.helium.code_sign_clone
+# and every other sibling are out of scope. CHROME_CLONE_ROOT overrides the root (the test suite uses it).
+# On a machine without the root (Linux, other Macs) it logs one line and does nothing.
 
 set -euo pipefail
 
@@ -109,5 +117,34 @@ for entry in "${FILES[@]}"; do
     echo "warn: could not copy $f — left untouched" >&2
   fi
 done
+
+sweep_chrome_clones() {
+  local root=${CHROME_CLONE_ROOT:-} tmp before after removed=0 d
+  if [ -z "$root" ]; then
+    tmp=$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)
+    tmp=${tmp%/}
+    [ -n "$tmp" ] && root="$(dirname "$tmp")/X/com.google.Chrome.code_sign_clone"
+  fi
+  if [ -z "$root" ] || [ ! -d "$root" ]; then
+    echo "chrome-clone: no root${root:+ at $root} — nothing to sweep"
+    return 0
+  fi
+  if [ ! -x /usr/sbin/lsof ]; then
+    echo "chrome-clone: /usr/sbin/lsof missing — cannot check open clones, sweep skipped"
+    return 0
+  fi
+  before=$(df -k "$root" | awk 'NR==2 {print $4}')
+  while IFS= read -r -d '' d; do
+    if [ -n "$(/usr/sbin/lsof -t +D "$d" 2>/dev/null)" ]; then
+      echo "chrome-clone: $d is open — kept"
+      continue
+    fi
+    rm -rf -- "$d" && removed=$((removed + 1))
+  done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'code_sign_clone.*' -mmin +1440 -print0)
+  after=$(df -k "$root" | awk 'NR==2 {print $4}')
+  echo "chrome-clone: $removed removed from $root, free space +$(( (after - before) / 1024 )) MB"
+}
+
+sweep_chrome_clones
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') log-rotate: $checked checked, $rotated rotated (cap ${MAX_BYTES} bytes)"
