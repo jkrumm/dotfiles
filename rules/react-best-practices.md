@@ -6,6 +6,11 @@ source: vercel-labs/agent-skills@73140fc (2026-04-02)
 
 # React Best Practices
 
+> Local annotation (vendored text below is unchanged). Routing: `frontend-routing.md`.
+> Where the React Compiler is on (every basalt-ui 2.x app), skip the `rerender-memo*` rules and
+> manual `useMemo`/`useCallback`: the compiler memoizes, and basalt's lint flags manual memoization.
+> The Next.js server-side sections (`server-*`, RSC) apply only to Next.js apps.
+
 Comprehensive performance optimization guide for React and Next.js applications. 69 rules across 8 categories, prioritized by impact.
 
 ## Rule Categories by Priority
