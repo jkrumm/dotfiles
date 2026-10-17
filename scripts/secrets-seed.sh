@@ -223,24 +223,17 @@ fi
 # A ref that cannot be resolved aborts before any crypto, so the cache stays
 # untouched. An access failure (authorization, timeout, handshake) aborts at once.
 #
-# WHY NO RETRIES (changed 2026-10-17). This used to retry a "transient" handshake
-# failure (`promptError`, `You are not currently signed in`) up to 3 times per ref,
-# and fall back to one `op read` per ref when a batch failed for ANY reason. Both
-# multiply the one thing that must never be multiplied: every `op` PROCESS that
-# hits a missing macOS TCC grant raises its own "op wants to access data from other
-# apps" dialog, and the dialog's Allow button does not persist. A batch that died on
-# that dialog fell back to per-ref reads and put dozens of dialogs on screen, owner
-# furious. Authorization / timeout / handshake failures are now NOT retried and NOT
-# fanned out: the run stops at the first one (see abort_op_access) and tells the
-# human the one durable fix, a Full Disk Access grant on the exact op path.
-# Only a genuine ref/template problem (unknown vault/item/field, bad syntax) is
-# worth more `op` processes, because the per-ref path is what names the broken ref.
+# ACCESS FAILURES NEVER FAN OUT. Every `op` process that lacks a macOS TCC grant
+# raises its own "op wants to access data from other apps" dialog, and Allow does
+# not persist. So a timeout, authorization, sign-in or handshake failure stops the
+# run at its first occurrence (abort_op_access): no retry, no per-ref fallback.
+# Only a genuine ref error is worth more `op` processes, because the per-ref path
+# is what names the broken ref.
 #
-# WHY EACH READ IS TIME-BOUNDED. `op read` can hang indefinitely waiting on an
-# authorization dialog that never renders (observed here — 2 minutes, no output, no
-# dialog on screen). From a LaunchAgent that wedges the job until launchd's next tick
-# collides with it. The deadline is enforced by run_bounded (below), which escalates
-# TERM to KILL because op does not reliably die on SIGTERM. A timeout is an abort.
+# EACH READ IS TIME-BOUNDED. `op` can hang waiting on an authorization dialog that
+# never renders; from a LaunchAgent that wedges the job until launchd's next tick
+# collides with it. run_bounded enforces the deadline (TERM, then KILL — op does not
+# reliably die on SIGTERM); a timeout is an abort.
 OP_READ_TIMEOUT="${SECRETS_SEED_OP_READ_TIMEOUT:-30}"
 # One batch covers hundreds of refs, so it gets a proportionally larger deadline.
 OP_BATCH_TIMEOUT="${SECRETS_SEED_OP_BATCH_TIMEOUT:-180}"
@@ -320,7 +313,14 @@ op_read_once() {  # $1=account  $2=ref ; value on stdout, diagnostics in $rerr
 # it: the pairing would silently misalign and corrupt the cache.
 SEED_MARK="@@secrets-seed-$$-${RANDOM}@@"
 
+# Return contract: 0 = every index filled. Non-zero = op's own exit status (124 = the
+# watchdog), with BATCH_FAULT empty. A LOCAL fault (output we cannot trust) returns 1
+# with BATCH_FAULT set — a separate channel, so it can never collide with an exit
+# status op returns. The caller treats a fault as an abort, never a fallback: op
+# itself succeeded, so a per-ref re-read would only multiply processes.
+BATCH_FAULT=""
 resolve_batch() {  # $1=account  $2..=indices into refs[] ; fills vals[] by index
+  BATCH_FAULT=""
   local acct="$1"; shift
   local -a idx=("$@")
   (( ${#idx[@]} )) || return 0
@@ -342,7 +342,7 @@ resolve_batch() {  # $1=account  $2..=indices into refs[] ; fills vals[] by inde
   while (( p < n )); do
     case "${lines[$p]}" in
       "${SEED_MARK}"*) ;;
-      *) echo "    ! batch output did not line up with its markers" >&2; return 91 ;;
+      *) BATCH_FAULT="output did not line up with its markers"; return 1 ;;
     esac
     tag="${lines[$p]#"$SEED_MARK"}"; tag="${tag%:}"
     [[ "$tag" == "END" ]] && break
@@ -358,57 +358,70 @@ resolve_batch() {  # $1=account  $2..=indices into refs[] ; fills vals[] by inde
 
   # Every index we asked for must have come back, or the mapping is not trustworthy.
   for i in "${idx[@]}"; do
-    [[ -n "${vals[$i]+set}" ]] || { echo "    ! batch output was missing ${refs[$i]}" >&2; return 92; }
+    [[ -n "${vals[$i]+set}" ]] || { BATCH_FAULT="output was missing ${refs[$i]}"; return 1; }
   done
   return 0
 }
 
 # Is this `op` failure the REF's fault (unknown vault/item/field, bad syntax) rather
 # than 1Password's access path (authorization, sign-in, desktop-app handshake,
-# timeout)? Only the former may fan out into per-ref reads. This is an ALLOWLIST of
-# op 2.x's own ref-error phrases and everything else fails toward ABORT: the cost of
-# a wrong "ref problem" is dozens of dialogs, the cost of a wrong "access problem" is
-# one clearly-worded abort. No denylist on purpose — op prefixes both kinds with
-# "could not read secret", and item names echoed in a ref error may themselves contain
-# words like "authorization", so only op's fixed phrases are trusted.
-# Phrases (read out of the op 2.x binary): `"x" isn't an item in the "y" vault`,
-# `isn't a vault`, `isn't a field in the item`, `field doesn't exist`, `invalid secret
-# reference`, `More than one item matches`.
+# timeout)? Only the former may fan out into per-ref reads. Default is ABORT: the
+# cost of a wrong "ref problem" is dozens of dialogs, the cost of a wrong "access
+# problem" is one clearly-worded abort.
+#
+# Only op's `[ERROR]` lines are read, and the echoed `op://…` reference is cut out of
+# each first, so an item name containing "isn't an item" inside an authorization
+# error cannot flip the verdict. The case below accepts EXACTLY these op 2.x phrases
+# (each verified present in the op binary's error strings), and nothing else:
+#   %q isn't an item                       %q isn't a vault in this account
+#   %q isn't a field in the %q item        More than one item matches %q
+#   invalid secret reference '%s'          invalid character in secret reference
 op_failure_is_ref_problem() {  # $1=exit status ; diagnostics in $rerr
   [[ "$1" == 124 || "$1" == 137 ]] && return 1   # timeout / SIGKILL after the watchdog
-  local err
-  err=$(tr '[:upper:]' '[:lower:]' <"$rerr" 2>/dev/null || true)
-  case "$err" in
-    *"isn't an item"*|*"isn't a vault"*|*"isn't a field"*|*"field doesn't exist"*|\
-    *"invalid secret reference"*|*"invalid character in secret reference"*|\
-    *"reference contains invalid"*|*"more than one item"*|*"multiple items"*|\
-    *"item not found"*|*"no fields matched"*) return 0 ;;
-  esac
+  local line head rest
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "[ERROR]"* ]] || continue
+    if [[ "$line" == *"op://"*"': "* ]]; then
+      head="${line%%op://*}"; rest="${line#*op://}"
+      line="${head}${rest#*"': "}"
+    fi
+    line=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
+    case "$line" in
+      *"isn't an item"*|*"isn't a vault"*|*"isn't a field in the"*|\
+      *"more than one item matches"*|*"invalid secret reference"*|\
+      *"invalid character in secret reference"*) return 0 ;;
+    esac
+  done <"$rerr"
   return 1
 }
 
-# The ONE abort for an access failure. Prints the resolved op path (the exact thing
-# macOS keys the grant on), the durable fix, and stops: no loop, no retry, no
-# per-ref fallback. Fail closed — nothing sealed, nothing delivered.
-abort_op_access() {  # $1=what was running  $2=exit status ; diagnostics in $rerr
-  local op_real
-  op_real=$(realpath "$(command -v op)" 2>/dev/null || command -v op)
+# The ONE abort for an access failure: stops the run (no loop, no retry, no per-ref
+# fallback), fail closed — nothing sealed, nothing delivered. Names the resolved op
+# path, the exact thing macOS keys the Full Disk Access grant on.
+abort_op_access() {  # $1=what was running  $2=exit status  $3=account ; diagnostics in $rerr
+  local op_bin op_real="" acct="${3:-$OP_ACCOUNT}"
+  op_bin=$(command -v op 2>/dev/null || true)
+  [[ -n "$op_bin" ]] && op_real=$(realpath "$op_bin" 2>/dev/null || printf '%s' "$op_bin")
   echo "" >&2
-  echo "  ✗ 1Password access failed while $1 — not recognised as a bad reference." >&2
+  echo "  ✗ 1Password access failed while $1 — not recognised as a bad reference; most often a missing grant or a locked 1Password." >&2
   if [[ "$2" == 124 || "$2" == 137 ]]; then
     echo "    op did not answer in time (killed by the watchdog) — typical of an authorization dialog nobody saw." >&2
   else
     indent <"$rerr" >&2
   fi
-  echo "    macOS raises \"op wants to access data from other apps\" for every op process" >&2
-  echo "    that lacks a grant, and that dialog's Allow button does NOT persist." >&2
+  echo "    Locked or signed out gives the same errors: unlock 1Password / run" >&2
+  echo "    op signin --account $acct first, and re-run." >&2
+  if [[ -z "$op_real" ]]; then
+    echo "    op is not on PATH — install it (brew install --cask 1password-cli)." >&2
+  else
+    echo "    If it persists: macOS raises \"op wants to access data from other apps\" for every" >&2
+    echo "    op process that lacks a grant, and that dialog's Allow button does NOT persist." >&2
+    echo "    Add exactly this path to System Settings → Privacy & Security → Full Disk Access" >&2
+    echo "    (reveal it with: open -R '$op_real', then drag it into the list):" >&2
+    echo "        $op_real" >&2
+  fi
   echo "    Stopped at the first failure on purpose: retrying or reading ref-by-ref" >&2
-  echo "    only stacks more dialogs." >&2
-  echo "    Fix (once per op upgrade): add exactly this path to System Settings →" >&2
-  echo "    Privacy & Security → Full Disk Access (reveal it with: open -R '$op_real'," >&2
-  echo "    then drag it into the list):" >&2
-  echo "        $op_real" >&2
-  echo "    Then re-run make secrets-seed." >&2
+  echo "    only stacks more dialogs. Then re-run make secrets-seed." >&2
   rm -f "$rerr"
   die "aborting — cache untouched"
 }
@@ -443,12 +456,14 @@ if (( OP_BATCH )); then
     resolve_batch "$_acct" "${_idx[@]}" || _brc=$?
     if (( _brc == 0 )); then
       echo "    ✓ $_acct: resolved ${#_idx[@]} reference(s) in one call"
-    elif (( _brc == 91 || _brc == 92 )) || op_failure_is_ref_problem "$_brc"; then
+    elif [[ -n "$BATCH_FAULT" ]]; then
+      abort_op_access "resolving the $_acct batch ($BATCH_FAULT)" "$_brc" "$_acct"
+    elif op_failure_is_ref_problem "$_brc"; then
       echo "    … $_acct: batch resolve failed on a reference — falling back to per-reference reads to find it" >&2
       indent <"$rerr" >&2
       _pending_idx+=("${_idx[@]}")
     else
-      abort_op_access "resolving the $_acct batch" "$_brc"
+      abort_op_access "resolving the $_acct batch" "$_brc" "$_acct"
     fi
   done
 else
@@ -473,7 +488,7 @@ for i in ${_pending_idx[@]+"${_pending_idx[@]}"}; do
   if (( rc != 0 )); then
     # Circuit breaker: an access failure (authorization, handshake, timeout) hits
     # every remaining ref the same way and each would raise its own dialog.
-    op_failure_is_ref_problem "$rc" || abort_op_access "reading $ref (account ${accts[$i]})" "$rc"
+    op_failure_is_ref_problem "$rc" || abort_op_access "reading $ref (account ${accts[$i]})" "$rc" "${accts[$i]}"
     echo "    ✗ op read failed for $ref (account ${accts[$i]}):" >&2
     indent <"$rerr" >&2
     dead_refs="${dead_refs}${ref}  (account ${accts[$i]})

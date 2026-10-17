@@ -47,13 +47,14 @@ cat > "$STUBDIR/op" <<'STUB'
 set -uo pipefail
 [[ "${1:-}" == "inject" ]] || exit 1
 mode=$(cat "${OP_STUB_MODE_FILE}")
+[[ "$mode" == garbage ]] && printf 'junk-before-the-first-marker\n'
 while IFS= read -r line; do
   case "$line" in
     '{{ '*' }}')
       ref="${line#\{\{ }"; ref="${ref% \}\}}"
       case "$mode" in
         multiline) printf 'one\ntwo\n' ;;
-        failing)   echo "could not read secret: item not found" >&2; exit 1 ;;
+        failing)   echo "[ERROR] \"x\" isn't an item in the \"a\" vault" >&2; exit 1 ;;
         *)         printf 'v-%s\n' "${ref##*/}" ;;
       esac ;;
     *) printf '%s\n' "$line" ;;
@@ -103,6 +104,26 @@ if resolve_batch t 0 >/dev/null 2>&1; then
   bad "a failing op is not reported as success"
 else
   ok "a failing op is reported as failure (caller falls back per-ref)"
+fi
+
+# --- case 4b: untrustworthy output is a LOCAL fault, on its own channel ---------
+# BATCH_FAULT (not an exit status op could return) tells the caller to abort rather
+# than fall back to per-ref reads.
+make_stub garbage
+refs=("op://a/x/one"); accts=(t); vals=()
+resolve_batch t 0 >/dev/null 2>&1; rc=$?
+if [[ $rc -ne 0 && -n "$BATCH_FAULT" ]]; then
+  ok "misaligned output returns non-zero and sets BATCH_FAULT"
+else
+  bad "misaligned output returns non-zero and sets BATCH_FAULT" "rc=$rc fault=[$BATCH_FAULT]"
+fi
+make_stub failing
+refs=("op://a/x/one"); accts=(t); vals=()
+resolve_batch t 0 >/dev/null 2>&1
+if [[ -z "$BATCH_FAULT" ]]; then
+  ok "an op failure leaves BATCH_FAULT empty (op's rc is the signal)"
+else
+  bad "an op failure leaves BATCH_FAULT empty" "fault=[$BATCH_FAULT]"
 fi
 
 # --- case 5: run_bounded enforces its deadline without coreutils timeout -----

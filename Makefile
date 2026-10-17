@@ -2169,6 +2169,10 @@ secrets-lint:
 	@# dialogs a reseal costs, which is exactly the thing that regressed.
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed-batch.test.sh
+	@# Same for the per-ref breaker + ref-vs-access classifier suite (stubbed op, no
+	@# account): it guards that an access failure aborts instead of fanning out dialogs.
+	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
+	@$(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
 
 # Functional regression suite for the shim + the seed. MINI-ONLY: both harnesses'
 # preflight requires the `cache` backend (+ secrets-run.test.sh needs an age key).
@@ -2177,12 +2181,6 @@ secrets-lint:
 secrets-test: secrets-lint
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-run.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-run.test.sh
-	@# Runs BEFORE the mini-gated suite because it is the one that can run here:
-	@# it stubs op on PATH and guards the read loop (retries, the time bound, and
-	@# the dead-ref collector). It was written as a regression test and then wired
-	@# into no target at all — an unrun test is a comment.
-	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
-	@$(DOTFILES_DIR)/scripts/secrets-seed-retry.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 	@$(DOTFILES_DIR)/scripts/secrets-seed.test.sh
 

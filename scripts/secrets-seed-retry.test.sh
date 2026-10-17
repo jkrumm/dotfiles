@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
-# Regression tests for secrets-seed.sh's per-ref read loop and its circuit breaker.
+# Regression tests for secrets-seed.sh's per-ref read loop, its circuit breaker and
+# the ref-vs-access classifier.
 #
 # Separate from secrets-seed.test.sh because that suite is mini-gated (it refuses
 # to run unless the backend marker says `cache`, to avoid an ssh to the mini).
-# This one must run on the MacBook, since the MacBook is where the failure it
-# guards actually happens.
+# This one runs on the MacBook (it is wired into `make secrets-lint`), since the
+# MacBook is where the failure it guards actually happens.
 #
 # WHAT IT GUARDS. Every `op` PROCESS that hits a missing macOS TCC grant raises its
 # own "op wants to access data from other apps" dialog, and the dialog's Allow
-# button does not persist. The loop used to retry "transient" handshake failures
-# (up to 3 attempts per ref) and carry on to the next ref, so one broken access path
-# became dozens of dialogs. The contract now:
-#   - a genuine ref problem ("isn't an item") is collected and the loop continues,
-#     so one pass names every dead ref;
-#   - an access failure (authorization, handshake, timeout) stops the whole loop at
-#     the FIRST occurrence with the Full Disk Access instruction — no retry, no
-#     next ref.
+# button does not persist. The contract:
+#   - a genuine ref problem (op's own "isn't an item" family) is collected and the
+#     loop continues, so one pass names every dead ref;
+#   - an access failure (authorization, handshake, timeout, anything unrecognised)
+#     stops the whole loop at the FIRST occurrence with the Full Disk Access
+#     instruction — no retry, no next ref.
 #
-# It drives the loop by EXTRACTING it from the real script rather than
+# It drives the code by EXTRACTING it from the real script rather than
 # duplicating it, so the two cannot drift apart quietly: if the markers move, the
 # extraction comes back short and the test fails loudly instead of testing a
 # stale copy of the logic.
@@ -28,13 +27,15 @@ SCRIPT="$HERE/secrets-seed.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/secrets-seed-retry.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
+fail() { echo "$1" >&2; exit 1; }
+
 # --- the op stub --------------------------------------------------------------
 # A PATH stub, deliberately NOT a shell function: a function would be sailed past by
 # anything that execs the binary it finds on PATH. A first draft of this test used a
 # function, hit the REAL op, and "passed" while proving nothing — the error text in
 # the output was the giveaway (it named actual vaults).
 mkdir -p "$TMP/bin"
-cat >"$TMP/bin/op" <<'EOF2'
+cat >"$TMP/bin/op" <<'EOF'
 #!/usr/bin/env bash
 # argv: read --account <acct> <ref>
 ref="${4:-}"
@@ -42,10 +43,12 @@ n_file="$FAKE_OP_COUNT_DIR/$(echo "$ref" | tr -c 'a-zA-Z0-9' _)"
 n=$(cat "$n_file" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" >"$n_file"
 echo x >>"$FAKE_OP_COUNT_DIR/_all"
 case "$ref" in
-  # The handshake failure that used to be retried 3x. Now an access failure: abort.
+  # A handshake failure.
   op://flaky/a/b)   echo "[ERROR] error initializing client: response: promptError" >&2; exit 1 ;;
   # The authorization dialog being dismissed.
   op://auth/a/b)    echo "[ERROR] could not read secret '$ref': authorization prompt dismissed" >&2; exit 1 ;;
+  # The same, with op's own ref-error phrase inside the echoed item name.
+  "op://auth/isn't an item/b") echo "[ERROR] could not read secret '$ref': authorization prompt dismissed" >&2; exit 1 ;;
   # Hangs on a dialog that never renders — must be killed by the timeout bound.
   op://hang/a/b)    sleep 60; echo "never" ;;
   # Genuinely absent refs. Not an access problem: collected, loop continues.
@@ -53,32 +56,35 @@ case "$ref" in
   op://missing2/a/b) echo '[ERROR] "a" isn'"'"'t an item in the "missing2" vault' >&2; exit 1 ;;
   *) echo "ok-value" ;;
 esac
-EOF2
+EOF
 chmod +x "$TMP/bin/op"
 
-# --- extract the loop under test ---------------------------------------------
+# --- extract the code under test ---------------------------------------------
 DRIVER="$TMP/drive.sh"
-cat >"$DRIVER" <<'EOF2'
+cat >"$DRIVER" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 die() { echo "DIE: $*" >&2; exit 1; }
 indent() { sed 's/^/      /'; }
 refs=("$@")
 accts=(); for _ in "${refs[@]}"; do accts+=(tkrumm); done
-EOF2
+EOF
 sed -n '/^OP_READ_TIMEOUT=/,/^echo "    ✓ resolved/p' "$SCRIPT" >>"$DRIVER"
 
 # Guard the extraction itself. A silently-empty range would make every assertion
 # below vacuous, which is the one way a test like this rots without going red.
-grep -q 'op_failure_is_ref_problem' "$DRIVER" || {
-  echo "extraction failed: the classifier was not found in $SCRIPT — did the markers move?" >&2
-  exit 1
-}
-grep -q 'abort_op_access' "$DRIVER" || {
-  echo "extraction failed: the access-failure abort was not found in $SCRIPT" >&2
-  exit 1
-}
+grep -q 'op_failure_is_ref_problem' "$DRIVER" \
+  || fail "extraction failed: the classifier was not found in $SCRIPT — did the markers move?"
+grep -q 'abort_op_access' "$DRIVER" \
+  || fail "extraction failed: the access-failure abort was not found in $SCRIPT"
 bash -n "$DRIVER"
+
+CLASSIFIER="$TMP/classifier.sh"
+sed -n '/^op_failure_is_ref_problem() {/,/^}/p' "$SCRIPT" >"$CLASSIFIER"
+grep -q 'return 0' "$CLASSIFIER" || fail "extraction failed: classifier body not found"
+ABORT="$TMP/abort.sh"
+sed -n '/^abort_op_access() {/,/^}/p' "$SCRIPT" >"$ABORT"
+grep -q 'Full Disk Access' "$ABORT" || fail "extraction failed: abort body not found"
 
 export PATH="$TMP/bin:$PATH"
 export FAKE_OP_COUNT_DIR="$TMP/counts"
@@ -90,9 +96,11 @@ export SECRETS_SEED_OP_BATCH=0
 OP_REAL="$(realpath "$TMP/bin/op")"
 
 calls_for() { cat "$FAKE_OP_COUNT_DIR/$(echo "$1" | tr -c 'a-zA-Z0-9' _)" 2>/dev/null || echo 0; }
-total_calls() { wc -l <"$FAKE_OP_COUNT_DIR/_all" 2>/dev/null | tr -d ' ' || echo 0; }
-
-fail() { echo "$1" >&2; exit 1; }
+total_calls() {
+  local n
+  n=$(wc -l <"$FAKE_OP_COUNT_DIR/_all") || return 1   # run_refs always creates it
+  echo "${n// /}"
+}
 
 run_refs() {  # $@=refs → sets OUT, RC; resets the counters
   rm -rf "$FAKE_OP_COUNT_DIR"; mkdir -p "$FAKE_OP_COUNT_DIR"; : >"$FAKE_OP_COUNT_DIR/_all"
@@ -107,8 +115,43 @@ assert_fda_abort() {  # $1=label ; uses OUT/RC
   case "$OUT" in *"$OP_REAL"*) ;; *) fail "$1: abort must name the resolved op path $OP_REAL: $OUT" ;; esac
   case "$OUT" in *"Full Disk Access"*) ;; *) fail "$1: abort must point at Full Disk Access: $OUT" ;; esac
   case "$OUT" in *"Allow button does NOT persist"*) ;; *) fail "$1: abort must say Allow does not persist: $OUT" ;; esac
+  case "$OUT" in *"op signin --account tkrumm"*) ;; *) fail "$1: abort must mention the locked/signed-out case: $OUT" ;; esac
   case "$OUT" in *"cache untouched"*) ;; *) fail "$1: expected the untouched-cache abort: $OUT" ;; esac
 }
+
+# --- classifier, table-driven: every accepted phrase is pinned ----------------
+# shellcheck source=/dev/null
+. "$CLASSIFIER"
+rerr="$TMP/rerr"
+classify() {  # $1=exit status  $2=stderr text → rc of op_failure_is_ref_problem
+  printf '%s\n' "$2" >"$rerr"
+  op_failure_is_ref_problem "$1"
+}
+while IFS= read -r phrase_line; do
+  classify 1 "$phrase_line" || fail "allowlisted phrase not accepted as a ref problem: $phrase_line"
+done <<'EOF'
+[ERROR] 2026/10/17 00:00:00 "x" isn't an item in the "v" vault. Specify the item with its UUID, name, or domain.
+[ERROR] 2026/10/17 00:00:00 "x" isn't a vault in this account. Specify the vault with its ID or name.
+[ERROR] 2026/10/17 00:00:00 could not read secret 'op://v/i/f': "f" isn't a field in the "i" item
+[ERROR] 2026/10/17 00:00:00 More than one item matches "x". Try again and specify the item by its ID:
+[ERROR] 2026/10/17 00:00:00 invalid secret reference 'op://v': it needs a vault, an item and a field
+[ERROR] 2026/10/17 00:00:00 invalid character in secret reference: '!' in token "op://v/i!/f"
+EOF
+# negatives: each must fall through to the abort
+classify 1 "[ERROR] could not read secret 'op://v/isn't an item/x': authorization prompt dismissed" \
+  && fail "an item name containing a ref-error phrase flipped an authorization error to a ref problem"
+classify 1 "[ERROR] error initializing client: response: promptError" && fail "handshake error accepted as ref problem"
+classify 1 "[ERROR] something op has never said before" && fail "unrecognised error accepted as ref problem"
+classify 1 '"x" isn'"'"'t an item in the "v" vault' && fail "a line without op's [ERROR] prefix was accepted"
+classify 124 "[ERROR] \"x\" isn't an item in the \"v\" vault" && fail "a timeout was accepted as a ref problem"
+classify 137 "[ERROR] \"x\" isn't an item in the \"v\" vault" && fail "a SIGKILL was accepted as a ref problem"
+
+# --- abort text when op is not on PATH -------------------------------------
+OUT=$(PATH=/usr/bin:/bin bash -c 'die() { echo "DIE: $*" >&2; exit 1; }; indent() { sed "s/^/      /"; }
+  OP_ACCOUNT=tkrumm; rerr="$2"; echo "[ERROR] boom" >"$rerr"; . "$1"; abort_op_access "testing" 1 tkrumm' _ "$ABORT" "$TMP/rerr2" 2>&1 || true)
+case "$OUT" in *"op is not on PATH"*) ;; *) fail "missing op must be named explicitly: $OUT" ;; esac
+case "$OUT" in *"Full Disk Access"*) fail "missing op must not print an FDA path: $OUT" ;; esac
+case "$OUT" in *"op signin --account tkrumm"*) ;; *) fail "missing op still gets the locked/signed-out hint: $OUT" ;; esac
 
 # --- a handshake failure is NOT retried: one op process, FDA abort ------------
 run_refs op://flaky/a/b
@@ -122,6 +165,11 @@ assert_fda_abort "authorization error"
 test "$(total_calls)" -eq 2 \
   || fail "loop must stop at the first access failure (2 op processes), got $(total_calls)"
 test "$(calls_for op://ok2/a/b)" -eq 0 || fail "ref after the failure must never be read"
+
+# --- a ref-error phrase inside the echoed ref must not flip the verdict -------
+run_refs op://ok/a/b "op://auth/isn't an item/b" op://ok2/a/b
+assert_fda_abort "echoed phrase"
+test "$(total_calls)" -eq 2 || fail "echoed-phrase auth error must stop the loop, got $(total_calls) op processes"
 
 # --- a hanging read is bounded, NOT retried, and aborts -----------------------
 # Unbounded, this wedges the LaunchAgent until the next tick collides with it.

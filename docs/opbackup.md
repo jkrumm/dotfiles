@@ -30,9 +30,11 @@ it is a prompt at a sane moment, on a machine with a human in front of it.
 - **A skip line in `~/Library/Logs/opbackup.log` is a claim, not a diagnosis** —
   three Secrets gotchas above (whoami, per-binary approval, a locked app reading as
   "mini unreachable") each present as a clean deliberate skip.
-- **One transient `op read` failure must not discard a whole ~150-ref run** — reads
-  are `timeout -k`-bounded and retried 3× **on transient errors only**; retrying a
-  genuinely missing ref just delays an error a human has to fix.
+- **The hourly auto-reseal does not retry a transient sign-in / `promptError` blip.**
+  `secrets-seed.sh` aborts at the first `op` access failure (timeout, authorization,
+  handshake) and the guard backs off — accepted on purpose: a retry or per-ref fallback
+  multiplies macOS TCC dialogs, one per `op` process, and Allow does not persist. Only a
+  genuine missing ref falls back per-ref, to name it.
 
 ## The reseed trigger — why age is not enough
 

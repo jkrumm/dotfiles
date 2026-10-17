@@ -117,6 +117,8 @@ case "${1:-}" in
         *) shift ;;
       esac
     done
+    # Case 17: op "succeeds" but its output does not start with a marker.
+    [[ -e "$HERE/misalign.flag" ]] && printf 'garbage-before-the-first-marker\n'
     while IFS= read -r line; do
       case "$line" in
         '{{ '*' }}')
@@ -126,7 +128,7 @@ case "${1:-}" in
           printf '%s\n' "$ref" >> "$HERE/op-injected.log"
           if [[ "$ref" == *multiline* ]]; then printf 'line-one\nline-two\n'; continue; fi
           if [[ "$ref" == *readfail* ]]; then
-            echo "[ERROR] could not read secret: item not found" >&2; exit 1
+            echo "[ERROR] 2026/10/17 00:00:00 \"x\" isn't an item in the \"test\" vault" >&2; exit 1
           fi
           # Access-path failures (cases 14-16). Real op 2.x strings: the authorization
           # dialog being dismissed, and a hang that only the watchdog ends.
@@ -166,7 +168,7 @@ case "${1:-}" in
     # Probe ref for case 11: any ref containing "readfail" makes `op read` fail the way a
     # real one does — non-zero, with a diagnostic on stderr.
     if [[ "$ref" == *readfail* ]]; then
-      echo "[ERROR] 2026/07/16 00:00:00 could not read secret: item not found" >&2
+      echo "[ERROR] 2026/07/16 00:00:00 \"x\" isn't an item in the \"test\" vault" >&2
       exit 1
     fi
     # Cases 14-16: authfail/authread = the access path breaks (op names no ref problem);
@@ -207,7 +209,7 @@ write_refs() {  # $1=headless.refs|headless.iu.refs  $2..=lines (verbatim)
 
 reset_case() {  # clears per-case state; restores the canonical single-recipient .sops.yaml
   rm -f "$TESTREPO/headless.refs" "$TESTREPO/headless.iu.refs" "$TESTREPO/op-calls.log" \
-        "$TESTREPO/op-injected.log"
+        "$TESTREPO/op-injected.log" "$TESTREPO/misalign.flag"
   rm -rf "$TESTREPO/cache"
   mkdir -p "$TESTREPO/cache"
   write_sops_yaml "$RECIPIENT"
@@ -536,6 +538,29 @@ SECRETS_SEED_OP_BATCH=0 run_seed
 assert_fda_abort "16c. breaker: access error with batching off"
 assert_eq "16c. breaker: no inject, reads stop at the failing ref (no retry, no third read)" "0 2" "$(count_op inject) $(count_op read)"
 
+
+# === 17. batch output misaligned (op succeeded, output untrustworthy): abort, no fan-out ===
+reset_case
+write_refs headless.refs "op://test/app/token" "op://test/other/field"
+: > "$TESTREPO/misalign.flag"
+run_seed
+assert_fda_abort "17. misaligned batch output"
+assert_contains "17. misaligned batch output: names the fault" "did not line up" "$SEED_ERR"
+assert_eq "17. misaligned batch output: one inject, zero per-ref reads" "1 0" "$(count_op inject) $(count_op read)"
+
+# === 18. an item name inside an AUTH error must not read as a ref problem ====
+# The stub echoes the ref inside the error; this ref's vault name contains op's own
+# ref-error phrase. The verdict must come from op's reason clause, not the echo.
+reset_case
+write_refs headless.refs "op://test/authfail isn't an item/x" "op://test/other/field"
+run_seed
+assert_fda_abort "18a. echoed phrase, batch"
+assert_eq "18a. echoed phrase, batch: one inject, zero per-ref reads" "1 0" "$(count_op inject) $(count_op read)"
+reset_case
+write_refs headless.refs "op://test/other/field" "op://test/authfail isn't an item/x" "op://test/third/field"
+SECRETS_SEED_OP_BATCH=0 run_seed
+assert_fda_abort "18b. echoed phrase, per-ref"
+assert_eq "18b. echoed phrase, per-ref: stops at the failing ref" "0 2" "$(count_op inject) $(count_op read)"
 
 # --- guards deliberately NOT covered here (documented, not silently skipped) --
 # - deliver_remote_cache (ssh mini): needs a live SSH target; local delivery
