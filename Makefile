@@ -1102,9 +1102,11 @@ _setup-hooks:
 	@# which is imported by bun and never executed, so every `make setup` left
 	@# a stray 100644 -> 100755 mode change in `git status`.
 	@find $(DOTFILES_DIR)/hooks -maxdepth 1 -name '*.ts' ! -name '*.test.ts' -exec chmod +x {} +
+	@# notify.ts (osascript desktop notifications) was replaced by session-env.ts.
+	@[ -L $(CLAUDE_DIR)/hooks/notify.ts ] && rm -f $(CLAUDE_DIR)/hooks/notify.ts || true
 	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/hooks/notify.ts" \
-		DST="$(CLAUDE_DIR)/hooks/notify.ts"
+		SRC="$(DOTFILES_DIR)/hooks/session-env.ts" \
+		DST="$(CLAUDE_DIR)/hooks/session-env.ts"
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/protect-branches.ts" \
 		DST="$(CLAUDE_DIR)/hooks/protect-branches.ts"
@@ -1619,7 +1621,7 @@ status:
 		echo "    ✗ settings.json MISSING — run make setup"; \
 	fi
 	@echo "  Hooks"
-	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/notify.ts"
+	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/session-env.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/protect-branches.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/docker-makefile.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/machine-role.ts"

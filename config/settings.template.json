@@ -73,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/notify.ts"
+            "command": "~/.claude/hooks/session-env.ts"
           },
           {
             "type": "command",
@@ -93,39 +93,6 @@
             "type": "command",
             "command": "test -x ~/SourceRoot/dotfiles/scripts/claude-appearance.sh && ~/SourceRoot/dotfiles/scripts/claude-appearance.sh session || true",
             "timeout": 5
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/notify.ts"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/notify.ts"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/notify.ts"
           }
         ]
       }

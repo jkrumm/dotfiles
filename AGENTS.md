@@ -41,7 +41,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md`, activated by `outputStyle` in settings.json |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
-| `hooks/{notify,protect-branches,docker-makefile,machine-role,model-discipline}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
+| `hooks/{session-env,protect-branches,docker-makefile,machine-role,model-discipline}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · Claude.ai usage-% fetcher (uv script) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
@@ -554,5 +554,5 @@ the running app** and exits 1 on every subcommand when it is down, so a closed
 Obsidian is a closed agent door for `/brain` and Hermes. `docs/brain-access.md`.
 
 **Debug logs** — structured JSONL at `~/.claude/logs/YYYY-MM-DD.jsonl` from
-`hooks/notify.ts` and `scripts/fetch_usage.py`, 3-day auto-cleanup; filter with
-`jq 'select(.event == "stop_decision")'` or `select(.src == "fetch_usage")`.
+`hooks/session-env.ts` and `scripts/fetch_usage.py`, 3-day auto-cleanup; filter with
+`jq 'select(.event == "session_env")'` or `select(.src == "fetch_usage")`.
