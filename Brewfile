@@ -109,6 +109,8 @@ brew "pkgconf"
 brew "pnpm"
 # Fast, efficient and secure backup program
 brew "restic"
+# rsync for cloud storage — `hl` (scripts/hl) drives it against the HomeLab S3 gateway
+brew "rclone"
 # Search tool like grep and The Silver Searcher
 brew "ripgrep"
 # Monitors sleep, wakeup, and idleness of a Mac

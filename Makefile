@@ -1154,6 +1154,11 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/ask-human.sh" \
 		DST="$(HOME)/.local/bin/ask-human"
+	@# hl: HomeLab files over S3 (rclone + an env-defined remote; key per machine)
+	@chmod +x $(DOTFILES_DIR)/scripts/hl
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/hl" \
+		DST="$(HOME)/.local/bin/hl"
 	@# jobrun + jobs-grade: bun/TS (shebang `env bun`; launchd plists must put bun on PATH)
 	@chmod +x $(DOTFILES_DIR)/scripts/jobrun.ts $(DOTFILES_DIR)/scripts/lib/jobs-grade.ts
 	@$(MAKE) --no-print-directory _link \

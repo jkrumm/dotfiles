@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# hl — HomeLab files over S3 (VersityGW, tailnet-only), for agents and scripts.
+#
+#   hl <rclone args…>          rclone with an env-defined `homelab:` remote
+#                              hl lsd homelab:fuji
+#                              hl copy ./x homelab:inbox/2026-10/
+#   hl presign <bucket>/<key> [ttl]
+#                              time-limited GET URL (ttl: 3600 default, or
+#                              30m / 12h / 7d; 7d is the SigV4 maximum)
+#   hl mount <bucket>          MacBook: Finder-visible mount at ~/Homelab/<bucket>
+#                              via `rclone nfsmount` (no FUSE); `hl umount <bucket>`
+#
+# One key per machine, resolved through `secrets-run` (live biometric `op` on the
+# MacBook, the age-encrypted offline cache on the mini) and handed to rclone/aws
+# as environment only — never argv, never printed:
+#
+#   op://homelab/s3-agent   mini (backend=cache)   read all buckets, write inbox, no delete
+#   op://homelab/s3-admin   MacBook (backend=op)   full access — never in the mini's cache
+#
+# A `user`-role key's ListBuckets is empty: address buckets by name. Buckets and
+# server side: ~/SourceRoot/homelab/docs/s3.md. Nothing here embeds a hostname
+# or credential — this repo is public.
+
+set -euo pipefail
+
+MARKER="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend"
+MOUNT_ROOT="${HOME}/Homelab"
+MAX_PRESIGN_SECONDS=604800
+
+die() { printf 'hl: %s\n' "$*" >&2; exit 1; }
+
+need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
+
+# --- config -----------------------------------------------------------------
+# Same role marker as every other machine-aware script here: `cache` is the
+# headless mini, anything else is a present-human machine.
+key_item() {
+  case "$(tr -d '[:space:]' < "$MARKER" 2>/dev/null || true)" in
+    cache) printf 'op://homelab/s3-agent' ;;
+    *)     printf 'op://homelab/s3-admin' ;;
+  esac
+}
+
+load_config() {
+  need secrets-run
+  local item
+  item=$(key_item)
+
+  KEY_ID=$(secrets-run read "$item/ACCESS_KEY_ID") \
+    || die "could not resolve $item — on the mini it must be in dotfiles-private/headless.refs (then 'make secrets-seed')"
+  KEY_SECRET=$(secrets-run read "$item/SECRET_ACCESS_KEY") || die "could not resolve $item/SECRET_ACCESS_KEY"
+  ENDPOINT=$(secrets-run read "$item/ENDPOINT") || die "could not resolve $item/ENDPOINT"
+  REGION=$(secrets-run read "$item/REGION") || die "could not resolve $item/REGION"
+
+  [ -n "$KEY_ID" ] && [ -n "$KEY_SECRET" ] && [ -n "$ENDPOINT" ] && [ -n "$REGION" ] \
+    || die "config incomplete in $item"
+}
+
+# rclone's env-defined remote: RCLONE_CONFIG_<NAME>_<OPTION>. no_check_bucket
+# because a user-role key may neither list nor create buckets.
+export_rclone_env() {
+  # Empty = in-memory config: no rclone.conf is read or written.
+  export RCLONE_CONFIG=
+  export RCLONE_CONFIG_HOMELAB_TYPE=s3
+  export RCLONE_CONFIG_HOMELAB_PROVIDER=Other
+  export RCLONE_CONFIG_HOMELAB_ACCESS_KEY_ID="$KEY_ID"
+  export RCLONE_CONFIG_HOMELAB_SECRET_ACCESS_KEY="$KEY_SECRET"
+  export RCLONE_CONFIG_HOMELAB_ENDPOINT="$ENDPOINT"
+  export RCLONE_CONFIG_HOMELAB_REGION="$REGION"
+  export RCLONE_CONFIG_HOMELAB_FORCE_PATH_STYLE=true
+  export RCLONE_CONFIG_HOMELAB_NO_CHECK_BUCKET=true
+}
+
+# --- presign ----------------------------------------------------------------
+ttl_seconds() {
+  local ttl="$1" n
+  case "$ttl" in
+    *[!0-9smhd]* | '') die "invalid ttl: $ttl (seconds, or 30m / 12h / 7d)" ;;
+  esac
+  n="${ttl%[smhd]}"
+  [ -n "$n" ] && [ "$n" -gt 0 ] 2>/dev/null || die "invalid ttl: $ttl"
+  case "$ttl" in
+    *m) n=$((n * 60)) ;;
+    *h) n=$((n * 3600)) ;;
+    *d) n=$((n * 86400)) ;;
+  esac
+  [ "$n" -le "$MAX_PRESIGN_SECONDS" ] || die "ttl above the SigV4 maximum of 7d"
+  printf '%s' "$n"
+}
+
+cmd_presign() {
+  [ $# -ge 1 ] && [ $# -le 2 ] || die "usage: hl presign <bucket>/<key> [ttl]"
+  local path="${1#homelab:}" seconds
+  path="${path#/}"
+  case "$path" in */?*) ;; *) die "expected <bucket>/<key>, got: $1" ;; esac
+  seconds=$(ttl_seconds "${2:-3600}")
+
+  need aws
+  load_config
+  # Path-style addressing: the gateway serves one hostname, no bucket subdomains.
+  # A throwaway config file carries it, since the CLI has no flag for it.
+  AWS_CFG=$(mktemp)
+  trap 'rm -f "$AWS_CFG"' EXIT
+  printf '[default]\ns3 =\n  addressing_style = path\n' > "$AWS_CFG"
+  AWS_CONFIG_FILE="$AWS_CFG" AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+    AWS_ACCESS_KEY_ID="$KEY_ID" AWS_SECRET_ACCESS_KEY="$KEY_SECRET" AWS_DEFAULT_REGION="$REGION" \
+    aws s3 presign "s3://$path" --expires-in "$seconds" --endpoint-url "$ENDPOINT"
+}
+
+# --- mount (MacBook) ----------------------------------------------------------
+# `rclone nfsmount` = rclone's built-in NFSv3 server + the system mount_nfs, so
+# Homebrew's FUSE-less rclone can still mount. --vfs-cache-mode writes is what
+# makes it writable on macOS. ~/Homelab, never ~/Documents or ~/Desktop — those
+# are TCC-protected and a mount there raises consent dialogs.
+valid_bucket() {
+  case "$1" in
+    '' | */* | .* | *[!a-z0-9.-]*) die "invalid bucket name: $1" ;;
+  esac
+}
+
+cmd_mount() {
+  [ $# -eq 1 ] || die "usage: hl mount <bucket>"
+  [ "$(tr -d '[:space:]' < "$MARKER" 2>/dev/null || true)" != cache ] \
+    || die "mount is MacBook-only — agents on the mini use 'hl <rclone cmd>' directly"
+  valid_bucket "$1"
+  local dir="$MOUNT_ROOT/$1"
+  mount | grep -qF " on $dir " && die "already mounted: $dir"
+
+  need rclone
+  load_config
+  export_rclone_env
+  mkdir -p "$dir"
+  rclone nfsmount "homelab:$1" "$dir" \
+    --vfs-cache-mode writes --volname "homelab-$1" --daemon
+  printf 'hl: mounted homelab:%s at %s\n' "$1" "$dir"
+}
+
+cmd_umount() {
+  [ $# -eq 1 ] || die "usage: hl umount <bucket>"
+  valid_bucket "$1"
+  umount "$MOUNT_ROOT/$1" || diskutil unmount force "$MOUNT_ROOT/$1"
+}
+
+usage() {
+  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+# --- dispatch ---------------------------------------------------------------
+case "${1:-}" in
+  '' | -h | --help | help) usage ;;
+  presign) shift; cmd_presign "$@" ;;
+  mount)   shift; cmd_mount "$@" ;;
+  umount)  shift; cmd_umount "$@" ;;
+  *)
+    need rclone
+    load_config
+    export_rclone_env
+    exec rclone "$@"
+    ;;
+esac
