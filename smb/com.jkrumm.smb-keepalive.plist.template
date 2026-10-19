@@ -8,8 +8,19 @@
        are declared in dotfiles-private/smb-shares.conf; the password is the
        login Keychain entry Finder saved, so nothing secret lives here.
        MacBook-only: the script no-ops on the mini (cache backend). -->
+  <!-- Under jobrun, like every graded job (docs/background-jobs.md §Pattern):
+       each run leaves a state record, and jobs-grade (on wake, `--notify`)
+       reports it failing or stale. The script exits non-zero only on a real
+       fault (a remount that failed, no declaration) — an unreachable server
+       is a normal laptop state, not a failure. -->
   <key>ProgramArguments</key>
   <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.smb-keepalive</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>60</string>
+    <string>--timeout</string><string>240</string>
+    <string>--</string>
     <string>__DOTFILES_DIR__/smb/smb-keepalive.sh</string>
   </array>
   <!-- Periodic job, not KeepAlive: each run is bounded and exits. -->
@@ -23,9 +34,10 @@
   </array>
   <!-- A network change rewrites several files in a burst; one run per 15 s. -->
   <key>ThrottleInterval</key><integer>15</integer>
+  <!-- jobrun is a bun script; launchd's minimal PATH must reach bun. -->
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <!-- ~/Library/Logs, never /tmp; bounded by scripts/log-rotate.sh. -->
   <key>StandardOutPath</key><string>__HOME__/Library/Logs/smb-keepalive.log</string>

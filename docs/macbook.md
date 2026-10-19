@@ -106,7 +106,8 @@ the foreground.
 
 macOS never reconnects an SMB mount after sleep or a network change; the stale
 mount then blocks the first Finder/`stat` that touches it.
-`com.jkrumm.smb-keepalive` runs `smb/smb-keepalive.sh` every 60 s and on every
+`com.jkrumm.smb-keepalive` runs `smb/smb-keepalive.sh` under `jobrun` (graded by
+`jobs-grade` on wake) every 60 s and on every
 network change (`WatchPaths` on `/Library/Preferences/SystemConfiguration`): per
 share in `dotfiles-private/smb-shares.conf` (it names the server, so not here),
 `:445` unreachable → skip; mounted and a bounded `stat`+`ls` hangs or fails →

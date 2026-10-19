@@ -11,6 +11,10 @@
 #   not mounted, automount=yes        → mount
 #   not mounted, automount=no         → nothing (opt-in per share)
 #
+# Runs under `jobrun`, so the exit code is graded: non-zero only when a mount or
+# remount failed or the declaration is missing. Unreachable is a normal laptop
+# state and exits 0.
+#
 # Mounting goes through `osascript mount volume`, which takes the password from
 # the login Keychain entry Finder saved — no secret here or in the plist.
 # Every external call is bounded: a hung smbfs call is abandoned, never waited
@@ -34,7 +38,7 @@ if [ "$(tr -d '[:space:]' 2>/dev/null < "$MARKER" || true)" = cache ]; then
   exit 0
 fi
 
-[ -f "$CONF" ] || { log "no share declaration at $CONF — nothing to do"; exit 0; }
+[ -f "$CONF" ] || { log "no share declaration at $CONF"; exit 1; }
 
 # Run "$@" for at most $1 seconds. 0 = exited 0; 1 = failed; 124 = still running
 # after the deadline (abandoned, never waited on — a hung smbfs call can sit in
@@ -77,10 +81,11 @@ smb_mount() {
   bounded "$MOUNT_SECONDS" osascript -e "mount volume \"smb://${user}@${server}/${share}\""
   rc=$?
   case "$rc" in
-    0)   log "$share: mounted at $(mount_point "$server" "$share")" ;;
+    0)   log "$share: mounted at $(mount_point "$server" "$share")"; return 0 ;;
     124) log "$share: mount timed out after ${MOUNT_SECONDS}s" ;;
     *)   log "$share: mount failed (Keychain entry missing? mount it once in Finder with 'Remember')" ;;
   esac
+  return 1
 }
 
 force_unmount() {
@@ -92,6 +97,7 @@ force_unmount() {
 }
 
 checked=0
+failed=0
 while read -r server user share automount _rest; do
   case "${server:-}" in ''|\#*) continue ;; esac
   [ -n "${share:-}" ] || { log "malformed row: '$server $user'"; continue; }
@@ -105,7 +111,7 @@ while read -r server user share automount _rest; do
   mp=$(mount_point "$server" "$share")
   if [ -z "$mp" ]; then
     if [ "$automount" = yes ]; then
-      smb_mount "$server" "$user" "$share"
+      smb_mount "$server" "$user" "$share" || failed=$((failed + 1))
     else
       log "$share: reachable, not mounted (automount off)"
     fi
@@ -124,8 +130,9 @@ while read -r server user share automount _rest; do
   fi
 
   log "$share: mount at $mp is stale (probe $([ "$rc" -eq 124 ] && echo "hung > ${PROBE_SECONDS}s" || echo failed twice)) — remounting"
-  force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"
+  { force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"; } || failed=$((failed + 1))
 done < "$CONF"
 
-[ "$checked" -gt 0 ] || log "no shares declared in $CONF"
+[ "$checked" -gt 0 ] || { log "no shares declared in $CONF"; exit 1; }
+[ "$failed" -eq 0 ] || { log "$failed share(s) could not be (re)mounted"; exit 1; }
 exit 0

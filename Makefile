@@ -1052,9 +1052,9 @@ smb-keepalive-status:
 smb-keepalive-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.smb-keepalive.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.smb-keepalive.json"; \
 	[ -L "$(HOME)/Library/Preferences/nsmb.conf" ] && rm -f "$(HOME)/Library/Preferences/nsmb.conf"; \
-	echo "  ✓ smb-keepalive torn down (unloaded, plist + nsmb.conf link removed)"
+	echo "  ✓ smb-keepalive torn down (unloaded, plist, jobrun state + nsmb.conf link removed)"
 
 # The nightly (03:30) leftover-dirt sweep on the mini — commits any working tree
 # the day's Claude Code sessions left dirty (claude_iu/Haiku writes the commit
