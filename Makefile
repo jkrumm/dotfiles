@@ -1042,8 +1042,8 @@ smb-keepalive-setup:
 		echo "  smb-keepalive: backend is 'cache' (the mini) — agents use hl, skipping."; exit 0; fi; \
 	chmod +x "$(DOTFILES_DIR)/smb/smb-keepalive.sh"; \
 	mkdir -p "$(LAUNCHAGENTS)"; \
-	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/smb/nsmb.conf" DST="$(HOME)/Library/Preferences/nsmb.conf"; \
-	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.smb-keepalive" PLIST_DIR="$(DOTFILES_DIR)/smb"; \
+	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/smb/nsmb.conf" DST="$(HOME)/Library/Preferences/nsmb.conf" || exit 1; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.smb-keepalive" PLIST_DIR="$(DOTFILES_DIR)/smb" || exit 1; \
 	echo "    ↳ shares: $(SECRETS_PRIVATE_REPO)/smb-shares.conf · log: ~/Library/Logs/smb-keepalive.log"
 smb-keepalive-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.smb-keepalive" 2>/dev/null | grep -E '^\s+(state|last exit code|runs) =' \

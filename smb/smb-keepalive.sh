@@ -29,7 +29,7 @@ MOUNT_SECONDS=45
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] smb-keepalive: $*"; }
 
 MARKER="${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend"
-if [ "$(tr -d '[:space:]' < "$MARKER" 2>/dev/null || true)" = cache ]; then
+if [ "$(tr -d '[:space:]' 2>/dev/null < "$MARKER" || true)" = cache ]; then
   log "secrets backend is 'cache' (the mini) — agents use hl, nothing to keep alive."
   exit 0
 fi
@@ -42,7 +42,7 @@ fi
 bounded() {
   local secs="$1" pid i
   shift
-  "$@" >/dev/null 2>&1 &
+  "$@" </dev/null >/dev/null 2>&1 &
   pid=$!
   for ((i = 0; i < secs * 4; i++)); do
     kill -0 "$pid" 2>/dev/null || { wait "$pid"; return $(( $? == 0 ? 0 : 1 )); }
@@ -61,6 +61,15 @@ mount_point() {
       src = tolower($1); sub(/^\/\/([^@]*@)?/, "", src)
       if (src == want) { sub(/^[^ ]+ on /, ""); sub(/ \(smbfs.*$/, ""); print; exit }
     }'
+}
+
+# Each command bounded on its own, run directly (no `sh -c` wrapper), so the
+# process killed on a timeout is the one actually stuck — no orphaned grandchild.
+probe() {
+  local rc
+  bounded "$PROBE_SECONDS" stat "$1"; rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+  bounded "$PROBE_SECONDS" ls -a "$1"
 }
 
 smb_mount() {
@@ -104,14 +113,17 @@ while read -r server user share automount _rest; do
   fi
 
   # stat the root AND list it: the root's attributes can come from cache, the
-  # listing has to reach the server.
-  # shellcheck disable=SC2016  # \$1 expands in the child shell, by design
-  if bounded "$PROBE_SECONDS" sh -c 'stat "$1" && ls -a "$1"' _ "$mp"; then
+  # listing has to reach the server. A fast failure gets one retry before the
+  # destructive path (a vanished entry is not a dead mount); a hang does not.
+  probe "$mp"
+  rc=$?
+  [ "$rc" -eq 1 ] && { sleep 2; probe "$mp"; rc=$?; }
+  if [ "$rc" -eq 0 ]; then
     log "$share: healthy at $mp"
     continue
   fi
 
-  log "$share: mount at $mp is stale (probe failed or hung > ${PROBE_SECONDS}s) — remounting"
+  log "$share: mount at $mp is stale (probe $([ "$rc" -eq 124 ] && echo "hung > ${PROBE_SECONDS}s" || echo failed twice)) — remounting"
   force_unmount "$mp" "$share" && smb_mount "$server" "$user" "$share"
 done < "$CONF"
 

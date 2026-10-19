@@ -33,18 +33,21 @@ need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 
 # --- config -----------------------------------------------------------------
 # Same role marker as every other machine-aware script here: `cache` is the
-# headless mini, anything else is a present-human machine.
+# headless mini, `op` the MacBook. Anything else fails closed — never guess admin.
+backend() { tr -d '[:space:]' 2>/dev/null < "$MARKER" || true; }
+
 key_item() {
-  case "$(tr -d '[:space:]' < "$MARKER" 2>/dev/null || true)" in
+  case "$(backend)" in
     cache) printf 'op://homelab/s3-agent' ;;
-    *)     printf 'op://homelab/s3-admin' ;;
+    op)    printf 'op://homelab/s3-admin' ;;
+    *)     die "cannot pick a key: $MARKER missing or holds an unknown backend" ;;
   esac
 }
 
 load_config() {
   need secrets-run
   local item
-  item=$(key_item)
+  item=$(key_item) || exit 1
 
   KEY_ID=$(secrets-run read "$item/ACCESS_KEY_ID") \
     || die "could not resolve $item — on the mini it must be in dotfiles-private/headless.refs (then 'make secrets-seed')"
@@ -120,7 +123,7 @@ valid_bucket() {
 
 cmd_mount() {
   [ $# -eq 1 ] || die "usage: hl mount <bucket>"
-  [ "$(tr -d '[:space:]' < "$MARKER" 2>/dev/null || true)" != cache ] \
+  [ "$(backend)" != cache ] \
     || die "mount is MacBook-only — agents on the mini use 'hl <rclone cmd>' directly"
   valid_bucket "$1"
   local dir="$MOUNT_ROOT/$1"
@@ -132,7 +135,15 @@ cmd_mount() {
   mkdir -p "$dir"
   rclone nfsmount "homelab:$1" "$dir" \
     --vfs-cache-mode writes --volname "homelab-$1" --daemon
-  printf 'hl: mounted homelab:%s at %s\n' "$1" "$dir"
+  # --daemon detaches, so its exit status says nothing about the export: wait
+  # for the mount to appear, and never leave a plain local dir posing as one.
+  local i
+  for ((i = 0; i < 20; i++)); do
+    mount | grep -qF " on $dir " && { printf 'hl: mounted homelab:%s at %s\n' "$1" "$dir"; return; }
+    sleep 0.5
+  done
+  rmdir "$dir" 2>/dev/null || true
+  die "nfsmount of homelab:$1 did not come up within 10s"
 }
 
 cmd_umount() {
