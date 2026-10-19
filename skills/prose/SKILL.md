@@ -1,6 +1,6 @@
 ---
 name: prose
-description: Polish a finished human-facing draft through the agent-gateway prose tool — lint, cross-lab review, Opus rewrite, keep gate. Use after drafting articles, vault pages, docs/README, landing or UI copy, or briefings against brain/voice.md, or when the user says "prose", "polish this", "de-slop", "run it through prose". Not for chat replies, code comments, or commit messages.
+description: Polish a finished human-facing draft through the agent-gateway prose tool — lint, cross-lab review, Opus rewrite, keep gate. Use after drafting articles, vault pages, docs/README, landing or UI copy, or briefings against brain/voice.md, or when the user says "prose", "polish this", "de-slop", "run it through prose". Not for chat replies, code comments, or commit messages. Mini-only: needs agent-gateway.
 ---
 
 # Prose — via `agw prose`
@@ -9,15 +9,18 @@ One call runs a finished draft through agent-gateway's `prose` tool: mechanical 
 
 ## When
 
+**Mini-only** — `agw` talks to the gateway on the mini; the MacBook has no agent-gateway MCP or CLI target. Same as `/check`, `/review`, `/otel`.
+
 After drafting against `~/SourceRoot/brain/voice.md`: articles, vault pages, docs/README, landing and UI copy, briefings. Not chat replies, code comments, commit messages, or anything you have not drafted yet — it polishes, it does not write from facts.
 
 ## How
 
-1. Write the draft to a temp file (`mktemp`), nothing but the text to polish. Custom components, callouts and shortcodes are **not preserved** — exclude them from the file and splice the result back around them.
+1. Write the draft to a temp file (`DRAFT=$(mktemp)`), nothing but the text to polish. Custom components, callouts and shortcodes are **not preserved** — exclude them from the file and splice the result back around them.
 2. Run the CLI (prefer it over the MCP tool; it works when the MCP server is disconnected):
 
 ```bash
-agw prose /tmp/draft.md --medium article --language en --out /tmp/draft.out.md
+OUT=$(mktemp)
+agw prose "$DRAFT" --medium article --language en --out "$OUT"
 ```
 
 | Flag | Use |
@@ -28,7 +31,12 @@ agw prose /tmp/draft.md --medium article --language en --out /tmp/draft.out.md
 | `--brief <text>` | Reader and goal in a sentence when the medium alone does not say |
 | `--context <file>` | The document outline — **always** when sending one section of a larger doc |
 | `--no-verdict-first` | The order is deliberate (e.g. compare-then-decide); otherwise the rewrite leads with the verdict |
-| `--out <file>` / `-` / `--json` | Text goes to stdout or `--out`; stdin via `-`; `--json` for the structured result |
+
+| Input / output | Use |
+|-|-|
+| `<file>` or `-` | Input: the draft path, or `-` for stdin |
+| `--out <file>` | Output: write the text here instead of stdout |
+| `--json` | Output: the structured result |
 
 Exit non-zero = job failure; say so, do not fall back to claiming it was polished. MCP alternative: `mcp__agent-gateway__prose` returns `{ jobId }` → `mcp__agent-gateway__job_wait({ jobId })`.
 

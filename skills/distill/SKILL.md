@@ -83,7 +83,9 @@ Never skipped. Remind the human:
 - The "I" rule: any sentence containing "I," "my," "we," "our," or an opinion must have been written or explicitly approved by the human. The model may draft opinions as placeholders, but the human must replace or confirm them.
 - Links, citations, dates, and technical claims need manual verification.
 
-Optional after the human's polish: run the finished page through `/prose` (lint, cross-lab review, keep-gated rewrite) and review its diff before accepting.
+## Optional: `/prose` pass
+
+After the human polish (step 7), the finished page can go through `/prose` (lint, cross-lab review, keep-gated rewrite). Mini-only; review its diff before accepting. Not part of the checklist.
 
 ## Constraints
 

@@ -427,7 +427,7 @@ second. Rotating `op://vps/research-gateway/API_SECRET` means
 `security delete-generic-password -s research-gateway-token` then
 `make setup`), and **`agent-gateway` on the mini only** — its
 MCP is stdio-only against `~/SourceRoot/agent-gateway/server/mcp.ts`, a repo that lives
-only there, so `/check`, `/review`, `/otel`, `/excalidraw-diagram` and
+only there, so `/check`, `/review`, `/otel`, `/prose`, `/excalidraw-diagram` and
 `dispatch` are mini-only skills. Don't clone agent-gateway to the MacBook to "fix"
 (remote reach = a StreamableHTTP transport).
 HyperDX is deliberately *not*
