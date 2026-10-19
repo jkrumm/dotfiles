@@ -542,6 +542,16 @@ plus a running `smbd` is not a working SMB server** — macOS stores no NTLM
 (`SMB-NT`) hash by default and `smbd` then refuses every principal with what reads
 like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
 
+**HomeLab files** — agents on the mini use **`hl`** (S3 against the HomeLab
+VersityGW: `hl lsd homelab:fuji`, `hl copy ./x homelab:inbox/…`, `hl presign
+<bucket>/<key> [ttl]`), **never an SMB mount**. The mini's key (`s3-agent`, in
+the headless cache) reads every bucket and writes only `inbox`, no delete; the
+MacBook's `hl` resolves `s3-admin` (full access) through live `op`. Humans use
+Finder SMB, kept alive by `com.jkrumm.smb-keepalive` (`docs/macbook.md`), or
+Cyberduck; `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
+nfsmount` — implemented, **untested on the MacBook** (verified only on the mini: ls,
+inbox write, dokumente AccessDenied, presign). Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
+
 **The look** — `make theme` applies the terminal + herdr layers (run it on both
 machines); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
 on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
