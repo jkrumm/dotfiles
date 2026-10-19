@@ -80,7 +80,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | Component | Does | Never does |
 |-|-|-|
 | **warden** | owns the ledger; decides and drives every unattended item to `fixed` | hold per-repo config, ask for approval, edit code itself |
-| **agent-gateway** | runs bounded jobs: triage, investigate, implement, review, check | decide what to work on, merge |
+| **agent-gateway** | runs bounded jobs: triage, investigate, implement, review, check, prose (`agw prose`, the `/prose` skill: lint → cross-lab review → Opus rewrite → keep gate on a finished human-facing draft) | decide what to work on, merge |
 | **Hermes** | answers, narrates in one line per item, files work via `warden run` or an issue, opens herdr tabs when asked | dispatch on its own, land PRs, repeat warden cards, author skills unattended |
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work (that is warden) |
 | **Argo** | the single status + "needs you" surface | hold state of its own |

@@ -4,7 +4,7 @@ Johannes Krumm — solo senior full-stack dev / tech lead. Iterative and
 quality-focused: several small verified steps over one big change. Writes German
 in chat; **every artifact (code, commits, docs, specs) is English**. Replies in
 English. Prose for humans (articles, docs, README, vault pages, copy) → load
-`~/SourceRoot/brain/voice.md` first; chat and code comments are exempt.
+`~/SourceRoot/brain/voice.md` first, then long artifacts through `/prose`; chat and code comments are exempt.
 
 Sessions run `--dangerously-skip-permissions`: **permission is pre-granted, not a
 decision point.** The judgment that still applies is the contract below.
