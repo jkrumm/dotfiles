@@ -244,7 +244,8 @@ owner `tinycast-extensions`; installed by `make watchdog-setup` there) ·
 `com.jkrumm.van-sampler` (15 min, `jobrun`, owner `tinycast-extensions`; program = signed
 `van-ble --supervise`; `make van-sampler-setup` there, gated on a passing Bluetooth spike) ·
 `com.jkrumm.opbackup` (hourly guard) ·
-`com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.tailnet-sshd`
+`com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.smb-keepalive` (60 s +
+network change, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`
 (KeepAlive, :2222 door) · `sh.brew.colima` · `sh.brew.sleepwatcher` ·
 `sh.brew.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the
 charge limiter). The machine is MDM-managed — Jamf, Okta, Adobe and the cancom

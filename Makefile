@@ -1032,6 +1032,30 @@ db-tunnel-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ db-tunnel torn down (unloaded + plist removed)"
 
+# HomeLab Samba on the MacBook: a 60 s + on-network-change LaunchAgent that
+# remounts a stale share (macOS never reconnects SMB after sleep/roam), and a
+# managed ~/Library/Preferences/nsmb.conf. Shares: dotfiles-private/smb-shares.conf.
+# MacBook-only — refuses on the cache backend; agents on the mini use `hl`.
+.PHONY: smb-keepalive-setup smb-keepalive-status smb-keepalive-teardown
+smb-keepalive-setup:
+	@if [ "$(SECRETS_BACKEND)" = "cache" ]; then \
+		echo "  smb-keepalive: backend is 'cache' (the mini) — agents use hl, skipping."; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/smb/smb-keepalive.sh"; \
+	mkdir -p "$(LAUNCHAGENTS)"; \
+	$(MAKE) --no-print-directory _link SRC="$(DOTFILES_DIR)/smb/nsmb.conf" DST="$(HOME)/Library/Preferences/nsmb.conf"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.smb-keepalive" PLIST_DIR="$(DOTFILES_DIR)/smb"; \
+	echo "    ↳ shares: $(SECRETS_PRIVATE_REPO)/smb-shares.conf · log: ~/Library/Logs/smb-keepalive.log"
+smb-keepalive-status:
+	@launchctl print "gui/$$(id -u)/com.jkrumm.smb-keepalive" 2>/dev/null | grep -E '^\s+(state|last exit code|runs) =' \
+		|| echo "  agent: NOT loaded — run 'make smb-keepalive-setup'"
+	@tail -n 6 "$(HOME)/Library/Logs/smb-keepalive.log" 2>/dev/null || true
+smb-keepalive-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.smb-keepalive.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST"; \
+	[ -L "$(HOME)/Library/Preferences/nsmb.conf" ] && rm -f "$(HOME)/Library/Preferences/nsmb.conf"; \
+	echo "  ✓ smb-keepalive torn down (unloaded, plist + nsmb.conf link removed)"
+
 # The nightly (03:30) leftover-dirt sweep on the mini — commits any working tree
 # the day's Claude Code sessions left dirty (claude_iu/Haiku writes the commit
 # message) and pushes. It is NOT the sync layer: brain-sync above is, on a

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.smb-keepalive</string>
+  <!-- Health-checks the HomeLab Samba mounts and remounts a stale one; macOS
+       never reconnects SMB after sleep or a network change by itself. Shares
+       are declared in dotfiles-private/smb-shares.conf; the password is the
+       login Keychain entry Finder saved, so nothing secret lives here.
+       MacBook-only: the script no-ops on the mini (cache backend). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/smb/smb-keepalive.sh</string>
+  </array>
+  <!-- Periodic job, not KeepAlive: each run is bounded and exits. -->
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <!-- Fires on every network change (interface up/down, Wi-Fi roam, wake):
+       configd rewrites this directory each time. -->
+  <key>WatchPaths</key>
+  <array>
+    <string>/Library/Preferences/SystemConfiguration</string>
+  </array>
+  <!-- A network change rewrites several files in a burst; one run per 15 s. -->
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- ~/Library/Logs, never /tmp; bounded by scripts/log-rotate.sh. -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/smb-keepalive.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/smb-keepalive.log</string>
+</dict>
+</plist>

@@ -5,12 +5,12 @@ tags:
   - engineering
   - macbook
 timestamp: 2026-09-07
-description: The four subsystems that exist only on the MacBook — opbackup + secrets auto-reseed, the battery charge limiter, the database tunnel, and the tailnet-facing sshd on :2222 — moved out of CLAUDE.md because they cost every mini agent context for no benefit (agents load CLAUDE.md on the mini, where none of this runs).
+description: The subsystems that exist only on the MacBook — opbackup + secrets auto-reseed, the battery charge limiter, the database tunnel, the HomeLab SMB keepalive, and the tailnet-facing sshd on :2222 — moved out of CLAUDE.md because they cost every mini agent context for no benefit (agents load CLAUDE.md on the mini, where none of this runs).
 ---
 
 # MacBook-only subsystems
 
-These four run only on the MacBook (`iumac`), never on the mini — `make
+These run only on the MacBook (`iumac`), never on the mini — `make
 setup`'s per-target guards no-op on the wrong machine. They matter little to an
 agent working on the mini, which is why they live here rather than in
 `AGENTS.md`.
@@ -101,6 +101,23 @@ A `KeepAlive` LaunchAgent holding one `ssh -N` with every `-L` in
 §Database access: launchd's `SSH_AUTH_SOCK` has zero identities, `IdentityAgent`
 needs literal quotes, `ControlMaster=no`+`ControlPath=none`, and ssh must stay in
 the foreground.
+
+## HomeLab Samba — `make smb-keepalive-setup`
+
+macOS never reconnects an SMB mount after sleep or a network change; the stale
+mount then blocks the first Finder/`stat` that touches it.
+`com.jkrumm.smb-keepalive` runs `smb/smb-keepalive.sh` every 60 s and on every
+network change (`WatchPaths` on `/Library/Preferences/SystemConfiguration`): per
+share in `dotfiles-private/smb-shares.conf` (it names the server, so not here),
+`:445` unreachable → skip; mounted and a bounded `stat`+`ls` hangs or fails →
+`diskutil unmount force` + remount; absent and `automount yes` → mount. Mounting
+is `osascript mount volume`, password from the Keychain entry Finder saved — mount
+each share once in Finder with *Remember* first. Every call is bounded and a hung
+one is abandoned, never waited on. Same target links `smb/nsmb.conf` →
+`~/Library/Preferences/nsmb.conf` (`soft=yes`, SMB3-only, no NetBIOS, no
+multichannel — each key checked against nsmb.conf(5)). `make smb-keepalive-status`
+shows the launchd state and the log tail. Both shares ship `automount no`; flip
+per share to opt in.
 
 ## The reverse reach — mini → iumac on :2222
 

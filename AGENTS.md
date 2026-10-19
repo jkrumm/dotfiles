@@ -519,7 +519,8 @@ the physical-possession trade and `docs/remote-dev.md` own the rationale.
 
 opbackup + secrets auto-reseed (hourly guard, `make opbackup-{setup,check,teardown}`),
 the battery charge limiter (`make batt-{setup,limit,status}`), the database
-tunnel (`make db-tunnel-setup`) and the reverse `ssh iumac` reach on :2222 all
+tunnel (`make db-tunnel-setup`), the HomeLab SMB keepalive (`make
+smb-keepalive-setup`) and the reverse `ssh iumac` reach on :2222 all
 run only on the MacBook and cost every mini agent context for no benefit — full
 command tables and gotchas: `docs/macbook.md`.
 
