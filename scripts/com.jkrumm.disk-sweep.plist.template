@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.disk-sweep</string>
+  <!-- Daily sweep of what regrows on disk: Docker build cache and dangling images, the Colima
+       data disk (fstrim), OCR session logs, stale $TMPDIR entries, package-manager caches,
+       unavailable simulators. Every step self-skips when its tool is missing, so this runs on
+       both machines. See scripts/disk-sweep.sh for what each step removes and what it refuses
+       to touch. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.disk-sweep</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/disk-sweep.sh</string>
+  </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
+       PATH, so bun's dir must be on it. Homebrew (docker, colima, uv, brew) too. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- StartCalendarInterval, not StartInterval: launchd coalesces fires missed while the
+       machine slept into one run on wake (see com.jkrumm.opbackup.plist.template), so a
+       MacBook shut at 04:40 still sweeps once it is opened. Not RunAtLoad: a speculative
+       sweep at login would compete with the boot path for nothing. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>4</integer>
+    <key>Minute</key><integer>40</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <!-- ~/Library/Logs, rotated by log-rotate (which derives it from this plist). -->
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/disk-sweep.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/disk-sweep.log</string>
+</dict>
+</plist>
