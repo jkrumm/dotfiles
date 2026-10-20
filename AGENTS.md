@@ -547,8 +547,8 @@ VersityGW: `hl lsd homelab:fuji`, `hl copy ./x homelab:inbox/…`, `hl presign
 <bucket>/<key> [ttl]`), **never an SMB mount**. The mini's key (`s3-agent`, in
 the headless cache) reads every bucket and writes only `inbox`, no delete; the
 MacBook's `hl` resolves `s3-admin` (full access) through live `op`. Humans use
-Finder SMB, kept alive by `com.jkrumm.smb-keepalive` (`docs/macbook.md`), or
-Cyberduck; `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
+Finder SMB, kept alive by `com.jkrumm.smb-keepalive` (`docs/macbook.md`; `SSD` automounts), or
+Cyberduck (manual install — not in the Brewfile); `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
 nfsmount` — implemented, **untested on the MacBook** (verified only on the mini: ls,
 inbox write, dokumente AccessDenied, presign). Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
 

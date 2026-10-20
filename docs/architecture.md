@@ -275,6 +275,8 @@ non-Caddy doors.
 | `tcp:2222` → iumac | userland sshd behind `tailscale serve --tcp` | tailnet `tag:mac → tag:mac` |
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |
 | `tcp:445` (SMB `~/Shuttle`) | macOS smbd | tailnet `tag:mac → tag:mac` |
+| `https://s3.jkrumm.com` (HomeLab files, S3) | homelab Caddy → VersityGW over existing folders (`homelab/docs/s3.md`); agents via `hl` | tailnet, `tag:mac` on 443 |
+| `smb://samba.jkrumm.com` (`SSD`, `HDD`) | homelab Samba, bound to its Tailscale IP | tailnet, `tag:mac` + `tag:phone` on 445 |
 
 Live rows: `dotfiles-private/tailscale-serve.mini.conf` (serve/funnel) and
 `tailscale-acl.jsonc` (grants) — this table is a snapshot, that repo is the
