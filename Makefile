@@ -2363,9 +2363,9 @@ log-rotate-test:
 # Daily sweep of what regrows on disk (Docker build cache, Colima fstrim, OCR sessions, $TMPDIR,
 # package caches, simulators). Both machines — every step self-skips when its tool is missing.
 # Converged by `make setup`. Teardown removes the jobrun state file too, or jobs-grade would
-# grade the retired label `unloaded` forever. `disk-sweep-check` runs every step once, docker
+# grade the retired label `unloaded` forever. `disk-sweep-run` runs every step once, docker
 # included — the sanctioned route for those commands, since a hook blocks raw docker here.
-.PHONY: disk-sweep-setup disk-sweep-teardown disk-sweep-check disk-sweep-test
+.PHONY: disk-sweep-setup disk-sweep-teardown disk-sweep-run disk-sweep-test
 disk-sweep-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
@@ -2375,7 +2375,7 @@ disk-sweep-teardown:
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.disk-sweep.json"; \
 	echo "  ✓ disk-sweep torn down (unloaded, plist and jobrun state removed)"
-disk-sweep-check:
+disk-sweep-run:
 	@bash $(DOTFILES_DIR)/scripts/disk-sweep.sh
 disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
@@ -3441,7 +3441,7 @@ help:
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
-	@echo "  make disk-sweep-check           Run the sweep once on demand, every step (also the sanctioned docker route)"
+	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"

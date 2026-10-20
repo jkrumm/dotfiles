@@ -3,7 +3,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+trap 'chflags -R nouchg "$TMP" 2>/dev/null; rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export DISK_SWEEP_TMPDIR="$TMP/tmproot"
@@ -11,6 +11,8 @@ export OCR_SESSIONS_ROOT="$TMP/ocr"
 T="$DISK_SWEEP_TMPDIR"
 O="$OCR_SESSIONS_ROOT"
 mkdir -p "$T" "$O"
+FAKE="$TMP/fake"
+mkdir -p "$FAKE"
 
 fail=0
 check() { # $1 = name, rest = a condition; passes when it exits 0
@@ -23,7 +25,10 @@ old() { touch -t "$(date -v-"$1"d +%Y%m%d%H%M)" "${@:2}"; }
 mkdir "$T/old-dir" "$T/fresh-dir" "$T/held" "$T/com.apple.keep"
 echo x > "$T/old-dir/f"; echo x > "$T/old-file"; echo x > "$T/fresh-file"
 echo x > "$T/held/f"
-old 5 "$T/old-dir" "$T/old-file" "$T/held" "$T/com.apple.keep"
+mkdir "$T/old-dir-fresh-child"
+echo x > "$T/old-dir-fresh-child/new"
+old 5 "$T/old-dir-fresh-child"
+old 5 "$T/old-dir/f" "$T/old-dir" "$T/old-file" "$T/held" "$T/com.apple.keep"
 sleep 60 > "$T/held/f" &
 holder=$!
 
@@ -43,6 +48,7 @@ check "fresh tmp dir kept" test -d "$T/fresh-dir"
 check "fresh tmp file kept" test -f "$T/fresh-file"
 check "old tmp dir with an open file kept" test -f "$T/held/f"
 check "Apple-owned tmp entry kept" test -d "$T/com.apple.keep"
+check "old tmp dir holding a fresh file kept" test -f "$T/old-dir-fresh-child/new"
 check "old ocr session removed" test ! -e "$O/a/b/old.jsonl"
 check "emptied ocr dirs removed" test ! -e "$O/a"
 check "empty ocr dir removed" test ! -e "$O/emptyfromstart"
@@ -55,5 +61,32 @@ check "missing ocr root is a skip, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" 
 
 bash "$HERE/disk-sweep.sh" nonsense >/dev/null 2>&1; rc3=$?
 check "unknown step exits 2" test "$rc3" -eq 2
+
+# (a) lsof gives no answer: the open set cannot be trusted, so nothing is removed and the step fails.
+printf '#!/bin/sh\nexit 2\n' > "$FAKE/lsof-dead"; chmod +x "$FAKE/lsof-dead"
+printf '#!/bin/sh\necho p1; echo "n/not/under/root"; exit 1\n' > "$FAKE/lsof-partial"; chmod +x "$FAKE/lsof-partial"
+T2="$TMP/tmproot2"; mkdir -p "$T2/stale" "$T2/stale2"
+old 5 "$T2/stale" "$T2/stale2"
+out4=$(DISK_SWEEP_TMPDIR="$T2" DISK_SWEEP_LSOF="$FAKE/lsof-dead" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc4=$?
+check "dead lsof: step fails" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "lsof gave no open-file set"' _ "$rc4" "$out4"
+check "dead lsof: nothing removed" test -d "$T2/stale" -a -d "$T2/stale2"
+DISK_SWEEP_TMPDIR="$T2" DISK_SWEEP_LSOF="$FAKE/lsof-partial" bash "$HERE/disk-sweep.sh" tmpdir >/dev/null 2>&1; rc5=$?
+check "lsof exit 1 (partial open set): nothing removed, step fails" sh -c '[ "$1" -ne 0 ] && [ -d "$2/stale" ]' _ "$rc5" "$T2"
+
+# (b) an old entry rm cannot remove: counted as left behind, step exits non-zero.
+T3="$TMP/tmproot3"; mkdir -p "$T3/locked" "$T3/gone"
+echo x > "$T3/locked/f"
+old 5 "$T3/locked/f" "$T3/locked" "$T3/gone"
+chflags uchg "$T3/locked/f"
+out6=$(DISK_SWEEP_TMPDIR="$T3" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc6=$?
+check "unremovable entry: step fails and says so" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc6" "$out6"
+check "unremovable entry: the removable one still went" test ! -e "$T3/gone"
+chflags nouchg "$T3/locked/f"
+
+# (d) pkg-caches with no package manager on PATH: an over-cap npm cache is removed, the rest is silent.
+mkdir -p "$HOME/.npm/_cacache"; echo x > "$HOME/.npm/_cacache/blob"
+out7=$(PATH=/usr/bin:/bin DISK_SWEEP_NPM_MAX_GB=0 /bin/bash "$HERE/disk-sweep.sh" pkg-caches 2>&1); rc7=$?
+check "pkg-caches: npm cache removed, exit 0" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/.npm/_cacache" ] && printf "%s" "$3" | grep -q "npm cache removed"' _ "$rc7" "$HOME" "$out7"
+check "pkg-caches: absent tools stay silent" sh -c '! printf "%s" "$1" | grep -qE "uv|brew|bun"' _ "$out7"
 
 exit "$fail"

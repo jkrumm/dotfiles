@@ -14,9 +14,12 @@
     <string>com.jkrumm.disk-sweep</string>
     <string>--owner</string><string>dotfiles</string>
     <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>3600</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/scripts/disk-sweep.sh</string>
   </array>
+  <!-- --timeout 3600: a wedged tool (a hung Docker daemon, a stuck fstrim) must not hold the
+       job open forever; each tool also has its own 600 s bound inside the script. -->
   <!-- jobrun is a bun script (`#!/usr/bin/env bun`) and launchd hands agents a minimal
        PATH, so bun's dir must be on it. Homebrew (docker, colima, uv, brew) too. -->
   <key>EnvironmentVariables</key>
