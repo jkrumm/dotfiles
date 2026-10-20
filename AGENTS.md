@@ -542,6 +542,11 @@ plus a running `smbd` is not a working SMB server** — macOS stores no NTLM
 (`SMB-NT`) hash by default and `smbd` then refuses every principal with what reads
 like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
 
+**Disk** — the mini's budget per owner, the daily `com.jkrumm.disk-sweep` (`make
+disk-sweep-run` runs it once), what moved to the HomeLab bucket `mini-archive` and how to
+restore it: `docs/disk.md`. **Agents cannot see `~/.Trash`** (no Full Disk Access; it held
+246 GiB unnoticed) — measure it through `ask-human` over `ssh mini`.
+
 **HomeLab files** — agents on the mini use **`hl`** (S3 against the HomeLab
 VersityGW: `hl lsd homelab:fuji`, `hl copy ./x homelab:inbox/…`, `hl presign
 <bucket>/<key> [ttl]`), **never an SMB mount**. The mini's key (`s3-agent`, in
