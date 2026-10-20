@@ -102,7 +102,10 @@ brew "micro"
 brew "nss"
 # OpenCode — third agent lane on the IU endpoint's Anthropic route
 # (config/opencode/, launched with `oc`). Reads AGENTS.md and ~/.claude skills.
-brew "opencode"
+# Not on a machine running agent-gateway (the mini): there one pinned npm build serves every
+# caller via ~/.local/bin/opencode, and a Homebrew copy earlier on PATH silently shadowed it
+# with an unpinned version (reinstalled by `brew bundle` 2026-10-16). docs/opencode.md.
+brew "opencode" unless File.directory?(File.expand_path("~/.local/share/agent-gateway/opencode-bin"))
 # Package compiler and linker metadata toolkit
 brew "pkgconf"
 # Fast, disk space efficient package manager
