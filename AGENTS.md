@@ -549,8 +549,9 @@ the headless cache) reads every bucket and writes only `inbox`, no delete; the
 MacBook's `hl` resolves `s3-admin` (full access) through live `op`. Humans use
 Finder SMB, kept alive by `com.jkrumm.smb-keepalive` (`docs/macbook.md`; `SSD` automounts), or
 Cyberduck (manual install — not in the Brewfile); `hl mount <bucket>` (MacBook) is the S3 Finder mount via `rclone
-nfsmount` — implemented, **untested on the MacBook** (verified only on the mini: ls,
-inbox write, dokumente AccessDenied, presign). Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
+nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
+**Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
+permitted". Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
 
 **The look** — `make theme` applies the terminal + herdr layers (run it on both
 machines); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`

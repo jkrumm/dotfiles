@@ -45,6 +45,7 @@ Levels are as of 2026-10-17 (Wave 17). A `jobrun`-wrapped job is level 4 by cons
 | `brain-backup` | 03:30 | 4 (`jobrun` + `job` item) | 4 | Keeps Kuma (data leaves the box) |
 | `brain-web-refresh` | 300s | 4 (`jobrun` + `job` item) | 4 | was log-only |
 | `log-rotate` | 3600s | 2 (on `jobrun`; graded) | 2 | Its failures are cheap; list derived from plists (done) |
+| `disk-sweep` | 04:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 if any step failed (steps self-skip when their tool is missing); `make disk-sweep-check` runs it once |
 | `drift-check` | 09:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 while a drift is open, so it grades `failing` until cleared. 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
 | `jobrun-canary` | 300s | 4 | 4 | The chain probe, see §Canary. **Proven live 2026-10-16:** committed `healthy:false` → warden fixed, merged, deployed and closed it with no page |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |

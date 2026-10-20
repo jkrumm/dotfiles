@@ -9,7 +9,7 @@
 #                              30m / 12h / 7d; 7d is the SigV4 maximum)
 #   hl mount <bucket>          MacBook: Finder-visible mount at ~/Homelab/<bucket>
 #                              via `rclone nfsmount` (no FUSE); `hl umount <bucket>`
-#                              (untested on the MacBook as of 2026-10-19)
+#                              (first run from a Terminal: grant Network Volumes)
 #
 # One key per machine, resolved through `secrets-run` (live biometric `op` on the
 # MacBook, the age-encrypted offline cache on the mini) and handed to rclone/aws

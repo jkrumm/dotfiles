@@ -125,6 +125,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
+| `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, OCR sessions > 14 d, stale `$TMPDIR` entries, package caches |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → warden chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
 | `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway MCP daemon |

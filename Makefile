@@ -108,6 +108,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-output-styles
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
+	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -772,7 +773,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2359,6 +2360,27 @@ log-rotate-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/log-rotate.sh $(DOTFILES_DIR)/scripts/log-rotate.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/log-rotate.test.sh
 
+# Daily sweep of what regrows on disk (Docker build cache, Colima fstrim, OCR sessions, $TMPDIR,
+# package caches, simulators). Both machines — every step self-skips when its tool is missing.
+# Converged by `make setup`. Teardown removes the jobrun state file too, or jobs-grade would
+# grade the retired label `unloaded` forever. `disk-sweep-check` runs every step once, docker
+# included — the sanctioned route for those commands, since a hook blocks raw docker here.
+.PHONY: disk-sweep-setup disk-sweep-teardown disk-sweep-check disk-sweep-test
+disk-sweep-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
+	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
+	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale OCR sessions/tmp entries, package caches; log: ~/Library/Logs/disk-sweep.log"
+disk-sweep-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-sweep.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.disk-sweep.json"; \
+	echo "  ✓ disk-sweep torn down (unloaded, plist and jobrun state removed)"
+disk-sweep-check:
+	@bash $(DOTFILES_DIR)/scripts/disk-sweep.sh
+disk-sweep-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
+
 # The end-to-end probe for the job -> warden chain (docs/background-jobs.md §Canary). Dev host
 # only: warden runs there. Converged by `make setup`. Teardown removes its state file too, or
 # jobs-grade would grade the retired label `unloaded` forever.
@@ -3345,6 +3367,7 @@ help:
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
+	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir + ocr-sessions steps)"
 	@echo "  make jobrun-canary-setup     Dev-host only: load the 300s canary job (exits 1 unless config/jobrun-canary.json is healthy)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"
 	@echo "  make worktree-audit     List stale git worktrees across SourceRoot + IuRoot (read-only)"
@@ -3417,6 +3440,9 @@ help:
 	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
+	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
+	@echo "  make disk-sweep-check           Run the sweep once on demand, every step (also the sanctioned docker route)"
+	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
 	@echo "  make drift-check-setup          Dev-host only: load the daily 09:40 upstream-drift agent → Uptime Kuma"
