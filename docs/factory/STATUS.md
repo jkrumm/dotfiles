@@ -127,6 +127,7 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
     Most minors fixed: wave ids after the split, gameday rows 5 and 15 assigned to W10, `auth.expired` observer, replica retention, the CodeRabbit chore, SVG facts, an IuRoot label removed.
   - **Rendering:** phone overflow, leaked wave-status comments, 5 px diagram text and the placeholder badge fixed in `build.py`.
   - **Warden plan:** its header no longer contradicts W1a (warden 131a3da), and its gate passes.
+- 13:11Z Verified report rebuilt (d998740, 75ce3b5) and resubmitted to the same Inbox thread (msg_01M5HRYJ6ZHFHBH96GXVA6ZC63, new message msg_01M5HVS39WH0A2H28SSKA6XY4R); warden plan 83df981; both wave gates pass.
 
 ## Resume here (a fresh context)
 
