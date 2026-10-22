@@ -1,0 +1,28 @@
+{
+ "kind": "sqlite",
+ "loadavg_at_start": [
+  14.4,
+  18.4,
+  18.7
+ ],
+ "rounds": 10,
+ "killed_before_exit": 10,
+ "acknowledged_creates": 35727,
+ "found_after": 35736,
+ "acknowledged_but_missing": {
+  "count": 0,
+  "first": []
+ },
+ "found_but_not_acknowledged": 9,
+ "next_command_after_kill": {
+  "all_ok": true,
+  "failures": [],
+  "median_s": 0.02
+ },
+ "sqlite_integrity_check": "ok",
+ "loadavg_at_end": [
+  13.9,
+  18.3,
+  18.7
+ ]
+}

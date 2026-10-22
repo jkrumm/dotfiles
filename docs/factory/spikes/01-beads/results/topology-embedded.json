@@ -1,0 +1,499 @@
+{
+ "topology": "embedded",
+ "loadavg_at_start": [
+  23.6,
+  28.4,
+  21.9
+ ],
+ "setup": {
+  "repos": {
+   "dotfiles": {
+    "init_s": 6.99,
+    "init_cpu_s": 3.12,
+    "commits_after_init": 2,
+    "tracked_files": [
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json",
+     ".gitignore",
+     "README.md"
+    ],
+    "untracked_after_init": [],
+    "beads_dir_kb": 2248
+   },
+   "weatherorb": {
+    "init_s": 5.01,
+    "init_cpu_s": 2.67,
+    "commits_after_init": 2,
+    "tracked_files": [
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json",
+     ".gitignore",
+     "README.md"
+    ],
+    "untracked_after_init": [],
+    "beads_dir_kb": 2228
+   },
+   "basalt-ui": {
+    "init_s": 4.53,
+    "init_cpu_s": 2.6,
+    "commits_after_init": 2,
+    "tracked_files": [
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json",
+     ".gitignore",
+     "README.md"
+    ],
+    "untracked_after_init": [],
+    "beads_dir_kb": 2260
+   }
+  },
+  "setup_total_s": 16.85,
+  "setup_commands": 3,
+  "dolt_server_processes_after_setup": 0,
+  "dolt_server_rss_mb_after_setup": 0
+ },
+ "load": {
+  "dotfiles": {
+   "tasks": 79,
+   "create_total_s": 81.94,
+   "create": {
+    "n": 79,
+    "median_ms": 1028.4,
+    "p90_ms": 1265.6,
+    "min_ms": 620.8,
+    "max_ms": 1427.7,
+    "mean_ms": 1037.2
+   },
+   "edges": 14,
+   "dep_bulk_s": 4.37,
+   "defer_s": 0.0,
+   "load_total_s": 86.31
+  },
+  "weatherorb": {
+   "tasks": 50,
+   "create_total_s": 51.14,
+   "create": {
+    "n": 50,
+    "median_ms": 998.3,
+    "p90_ms": 1361.4,
+    "min_ms": 625.0,
+    "max_ms": 1911.9,
+    "mean_ms": 1022.7
+   },
+   "edges": 4,
+   "dep_bulk_s": 1.69,
+   "defer_s": 2.24,
+   "load_total_s": 55.08
+  },
+  "basalt-ui": {
+   "tasks": 81,
+   "create_total_s": 90.46,
+   "create": {
+    "n": 81,
+    "median_ms": 1092.3,
+    "p90_ms": 1460.8,
+    "min_ms": 567.6,
+    "max_ms": 1852.9,
+    "mean_ms": 1116.7
+   },
+   "edges": 13,
+   "dep_bulk_s": 5.15,
+   "defer_s": 0.0,
+   "load_total_s": 95.62
+  }
+ },
+ "load_total_s": 237.0,
+ "dolt_server_processes_after_load": 0,
+ "ready_vs_oracle": {
+  "dotfiles": {
+   "ready_rows": 20,
+   "oracle_with_parent_propagation": 20,
+   "match_with_parent_propagation": true,
+   "oracle_direct_edges_only": 70,
+   "match_direct_only": false,
+   "ready_json_bytes": 14058,
+   "ready_secs": 0.641,
+   "ready_types": [
+    "bug",
+    "decision",
+    "epic",
+    "feature",
+    "task"
+   ],
+   "ready_leaf_work_rows": 17
+  },
+  "weatherorb": {
+   "ready_rows": 32,
+   "oracle_with_parent_propagation": 26,
+   "match_with_parent_propagation": false,
+   "oracle_direct_edges_only": 42,
+   "match_direct_only": false,
+   "ready_json_bytes": 22165,
+   "ready_secs": 0.5,
+   "ready_types": [
+    "bug",
+    "epic",
+    "feature",
+    "task"
+   ],
+   "ready_leaf_work_rows": 28
+  },
+  "basalt-ui": {
+   "ready_rows": 6,
+   "oracle_with_parent_propagation": 6,
+   "match_with_parent_propagation": true,
+   "oracle_direct_edges_only": 68,
+   "match_direct_only": false,
+   "ready_json_bytes": 3914,
+   "ready_secs": 0.377,
+   "ready_types": [
+    "epic",
+    "task"
+   ],
+   "ready_leaf_work_rows": 5
+  }
+ },
+ "ops_df": {
+  "create": {
+   "n": 20,
+   "median_ms": 943.4,
+   "p90_ms": 1049.7,
+   "min_ms": 819.0,
+   "max_ms": 1078.0,
+   "mean_ms": 941.3,
+   "median_cpu_ms": 492.4,
+   "op": "create",
+   "failures": 0,
+   "loadavg_before": [
+    20.5,
+    20.5,
+    19.7
+   ],
+   "loadavg_after": [
+    18.8,
+    20.1,
+    19.6
+   ]
+  },
+  "update": {
+   "n": 20,
+   "median_ms": 774.6,
+   "p90_ms": 904.2,
+   "min_ms": 512.3,
+   "max_ms": 1281.2,
+   "mean_ms": 770.9,
+   "median_cpu_ms": 367.6,
+   "op": "update",
+   "failures": 0,
+   "loadavg_before": [
+    18.8,
+    20.1,
+    19.6
+   ],
+   "loadavg_after": [
+    16.8,
+    19.6,
+    19.4
+   ]
+  },
+  "ready": {
+   "n": 20,
+   "median_ms": 561.0,
+   "p90_ms": 622.3,
+   "min_ms": 386.1,
+   "max_ms": 849.6,
+   "mean_ms": 549.3,
+   "median_cpu_ms": 287.3,
+   "op": "ready",
+   "failures": 0,
+   "loadavg_before": [
+    16.8,
+    19.6,
+    19.4
+   ],
+   "loadavg_after": [
+    16.9,
+    19.4,
+    19.4
+   ]
+  },
+  "ready_brief": {
+   "n": 20,
+   "median_ms": 503.0,
+   "p90_ms": 637.1,
+   "min_ms": 371.1,
+   "max_ms": 788.5,
+   "mean_ms": 537.6,
+   "median_cpu_ms": 279.7,
+   "op": "ready --brief",
+   "failures": 0,
+   "loadavg_before": [
+    16.9,
+    19.4,
+    19.4
+   ],
+   "loadavg_after": [
+    16.2,
+    19.2,
+    19.3
+   ]
+  },
+  "list": {
+   "n": 20,
+   "median_ms": 897.8,
+   "p90_ms": 1240.7,
+   "min_ms": 687.2,
+   "max_ms": 1365.9,
+   "mean_ms": 949.8,
+   "median_cpu_ms": 408.8,
+   "op": "list",
+   "failures": 0,
+   "loadavg_before": [
+    16.2,
+    19.2,
+    19.3
+   ],
+   "loadavg_after": [
+    17.1,
+    19.2,
+    19.3
+   ]
+  },
+  "show": {
+   "n": 20,
+   "median_ms": 663.8,
+   "p90_ms": 862.4,
+   "min_ms": 493.9,
+   "max_ms": 1378.6,
+   "mean_ms": 689.3,
+   "median_cpu_ms": 347.8,
+   "op": "show",
+   "failures": 0,
+   "loadavg_before": [
+    17.1,
+    19.2,
+    19.3
+   ],
+   "loadavg_after": [
+    15.4,
+    18.7,
+    19.1
+   ]
+  },
+  "claim": {
+   "n": 20,
+   "median_ms": 502.6,
+   "p90_ms": 648.0,
+   "min_ms": 461.3,
+   "max_ms": 678.9,
+   "mean_ms": 534.7,
+   "median_cpu_ms": 294.5,
+   "op": "claim",
+   "failures": 0,
+   "loadavg_before": [
+    15.4,
+    18.7,
+    19.1
+   ],
+   "loadavg_after": [
+    14.1,
+    18.3,
+    19.0
+   ]
+  },
+  "heartbeat": {
+   "n": 20,
+   "median_ms": 462.7,
+   "p90_ms": 609.9,
+   "min_ms": 351.8,
+   "max_ms": 1185.9,
+   "mean_ms": 516.3,
+   "median_cpu_ms": 264.1,
+   "op": "heartbeat",
+   "failures": 0,
+   "loadavg_before": [
+    14.1,
+    18.3,
+    19.0
+   ],
+   "loadavg_after": [
+    13.3,
+    18.0,
+    18.9
+   ]
+  },
+  "close": {
+   "n": 20,
+   "median_ms": 349.3,
+   "p90_ms": 625.8,
+   "min_ms": 272.7,
+   "max_ms": 804.4,
+   "mean_ms": 396.3,
+   "median_cpu_ms": 212.0,
+   "op": "close",
+   "failures": 20,
+   "loadavg_before": [
+    13.3,
+    18.0,
+    18.9
+   ],
+   "loadavg_after": [
+    13.0,
+    17.8,
+    18.8
+   ],
+   "first_failure": "cannot close df-9dh: assignee is \"bench\", actor is \"Spike\"; reclaim or use --force to override\n"
+  },
+  "floor_bd_version": {
+   "n": 20,
+   "median_ms": 141.9,
+   "p90_ms": 242.2,
+   "min_ms": 89.5,
+   "max_ms": 309.4,
+   "mean_ms": 161.9,
+   "median_cpu_ms": 100.3,
+   "op": "floor: bd --version",
+   "failures": 0,
+   "loadavg_before": [
+    13.0,
+    17.8,
+    18.8
+   ],
+   "loadavg_after": [
+    13.1,
+    17.8,
+    18.8
+   ]
+  }
+ },
+ "semantics": {
+  "chain": {
+   "b_ready_before_close": false,
+   "a_ready_before_close": true,
+   "b_ready_after_close_a": true
+  },
+  "fan_in_concurrent_close": {
+   "rounds": 8,
+   "dependent_missing_from_ready": 0,
+   "detail": [
+    {
+     "close_exit_codes": [
+      0,
+      0
+     ],
+     "dependent_ready": true,
+     "stderr": []
+    },
+    {
+     "close_exit_codes": [
+      0,
+      0
+     ],
+     "dependent_ready": true,
+     "stderr": []
+    },
+    {
+     "close_exit_codes": [
+      0,
+      0
+     ],
+     "dependent_ready": true,
+     "stderr": []
+    }
+   ]
+  },
+  "reopen_blocker": {
+   "dependent_ready_after_close": true,
+   "dependent_ready_after_reopen": false
+  },
+  "edge_types": {
+   "related_blocks": false,
+   "discovered_from_blocks": false
+  },
+  "cycle_rejected": {
+   "exit_code": 1,
+   "message": "Error: adding dependency would create a cycle"
+  },
+  "cas": {
+   "first_if_status_exit": 0,
+   "stale_if_status_exit": 1,
+   "claim_on_foreign_claim_exit": 1,
+   "claim_on_foreign_claim_msg": "Error updating df-lux: issue already claimed by w1\nError: 1 of 1 issues failed to update\n  df-lux: updating issue: issue already claimed by "
+  }
+ },
+ "external": {
+  "config_set_exit": 0,
+  "dep_add": {
+   "exit": 0,
+   "msg": "\u2713 Added dependency: wo-6te (ext consumer) depends on external:bu:cap1 (blocks)"
+  },
+  "ready_before": true,
+  "ready_after_provider_closed_not_shipped": true,
+  "ship": {
+   "exit": 0,
+   "msg": "\u2713 Shipped cap1 (bu-d2p)\n  Added label: provides:cap1\n\nExternal projects can now depend on: external:<this-project>:cap1"
+  },
+  "ready_after_ship": true,
+  "ready_query_with_external_s": 0.347,
+  "config_yaml_has_external_projects": true,
+  "git_status_wo": [
+   " M .beads/config.yaml"
+  ],
+  "git_diff_stat_wo": [
+   ".beads/config.yaml | 3 +++",
+   " 1 file changed, 3 insertions(+)"
+  ]
+ },
+ "dataset_external_edges": {
+  "added": 2,
+  "exit": 0,
+  "ready_rows": 33,
+  "oracle_rows": 26,
+  "match": false,
+  "extra_in_bd": [
+   "wheld",
+   "wheld.1",
+   "wheld.2",
+   "wheld.3",
+   "wheld.4",
+   "wheld.5",
+   "wo-6te"
+  ],
+  "missing_in_bd": []
+ },
+ "dolt_server_processes_end": 0,
+ "dolt_server_rss_mb_end": 0,
+ "disk_kb": {
+  "dotfiles": 17056,
+  "weatherorb": 7844,
+  "basalt-ui": 11780
+ },
+ "git_after": {
+  "dotfiles": {
+   "commits": 2,
+   "status": []
+  },
+  "weatherorb": {
+   "commits": 2,
+   "status": [
+    " M .beads/config.yaml"
+   ]
+  },
+  "basalt-ui": {
+   "commits": 2,
+   "status": []
+  }
+ },
+ "id_maps_saved": true,
+ "loadavg_at_end": [
+  11.6,
+  16.5,
+  18.2
+ ]
+}

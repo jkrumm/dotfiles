@@ -1,0 +1,35 @@
+{
+ "kind": "embedded",
+ "loadavg_at_start": [
+  16.6,
+  19.7,
+  19.2
+ ],
+ "rounds": 10,
+ "killed_before_exit": 8,
+ "acknowledged_creates": 2,
+ "found_after": 5,
+ "acknowledged_but_missing": [],
+ "found_but_not_acknowledged": 3,
+ "next_command_after_kill": {
+  "all_ok": true,
+  "failures": [],
+  "median_s": 0.67
+ },
+ "bd_doctor": {
+  "exit": 0,
+  "tail": [
+   "\u2022 Reinitialize if needed:  bd init --reinit-local",
+   "\u2022 Switch to server mode:   bd init --server",
+   "Checks available in embedded mode:",
+   "\u2022 bd doctor --check=artifacts",
+   "\u2022 bd doctor --check=conventions",
+   "\u2022 bd doctor --check=pollution"
+  ]
+ },
+ "loadavg_at_end": [
+  15.0,
+  19.1,
+  19.0
+ ]
+}

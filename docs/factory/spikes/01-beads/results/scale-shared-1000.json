@@ -1,0 +1,149 @@
+{
+ "topology": "shared",
+ "tasks": 1000,
+ "loadavg_at_start": [
+  24.1,
+  18.3,
+  17.3
+ ],
+ "import": {
+  "exit": 0,
+  "seconds": 44.3,
+  "error": ""
+ },
+ "ready_rows": 367,
+ "db_kb": 298016,
+ "ops": {
+  "ready": {
+   "n": 10,
+   "median_ms": 139.9,
+   "p90_ms": 170.0,
+   "min_ms": 120.2,
+   "max_ms": 186.9,
+   "mean_ms": 146.1,
+   "median_cpu_ms": 91.5,
+   "op": "ready",
+   "failures": 0,
+   "loadavg_before": [
+    19.7,
+    17.9,
+    17.2
+   ],
+   "loadavg_after": [
+    19.0,
+    17.8,
+    17.1
+   ]
+  },
+  "ready_limit_1": {
+   "n": 10,
+   "median_ms": 122.7,
+   "p90_ms": 163.8,
+   "min_ms": 107.0,
+   "max_ms": 168.8,
+   "mean_ms": 127.7,
+   "median_cpu_ms": 89.0,
+   "op": "ready --limit 1",
+   "failures": 0,
+   "loadavg_before": [
+    19.0,
+    17.8,
+    17.1
+   ],
+   "loadavg_after": [
+    19.0,
+    17.8,
+    17.1
+   ]
+  },
+  "create": {
+   "n": 10,
+   "median_ms": 303.1,
+   "p90_ms": 369.8,
+   "min_ms": 255.3,
+   "max_ms": 404.8,
+   "mean_ms": 315.7,
+   "median_cpu_ms": 109.9,
+   "op": "create",
+   "failures": 0,
+   "loadavg_before": [
+    19.0,
+    17.8,
+    17.1
+   ],
+   "loadavg_after": [
+    17.9,
+    17.6,
+    17.1
+   ]
+  },
+  "claim": {
+   "n": 10,
+   "median_ms": 305.6,
+   "p90_ms": 372.0,
+   "min_ms": 226.4,
+   "max_ms": 373.0,
+   "mean_ms": 303.7,
+   "median_cpu_ms": 87.2,
+   "op": "claim",
+   "failures": 0,
+   "loadavg_before": [
+    17.9,
+    17.6,
+    17.1
+   ],
+   "loadavg_after": [
+    17.9,
+    17.6,
+    17.1
+   ]
+  },
+  "heartbeat": {
+   "n": 10,
+   "median_ms": 222.7,
+   "p90_ms": 254.5,
+   "min_ms": 188.4,
+   "max_ms": 328.3,
+   "mean_ms": 231.8,
+   "median_cpu_ms": 78.7,
+   "op": "heartbeat",
+   "failures": 0,
+   "loadavg_before": [
+    17.9,
+    17.6,
+    17.1
+   ],
+   "loadavg_after": [
+    17.7,
+    17.6,
+    17.1
+   ]
+  },
+  "close": {
+   "n": 10,
+   "median_ms": 309.4,
+   "p90_ms": 326.3,
+   "min_ms": 254.3,
+   "max_ms": 359.0,
+   "mean_ms": 304.6,
+   "median_cpu_ms": 85.0,
+   "op": "close",
+   "failures": 0,
+   "loadavg_before": [
+    17.7,
+    17.6,
+    17.1
+   ],
+   "loadavg_after": [
+    17.7,
+    17.6,
+    17.1
+   ]
+  }
+ },
+ "loadavg_at_end": [
+  17.7,
+  17.6,
+  17.1
+ ]
+}

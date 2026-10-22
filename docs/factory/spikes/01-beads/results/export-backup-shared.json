@@ -1,0 +1,136 @@
+{
+ "topology": "shared",
+ "loadavg_at_start": [
+  17.8,
+  20.1,
+  19.3
+ ],
+ "tasks_in_db": 211,
+ "jsonl_export": {
+  "exit": 0,
+  "secs": 0.36,
+  "bytes": 96548,
+  "lines": 211,
+  "keys_of_first_record": [
+   "_type",
+   "assignee",
+   "close_reason",
+   "closed_at",
+   "comment_count",
+   "created_at",
+   "created_by",
+   "dependency_count",
+   "dependent_count",
+   "id",
+   "issue_type",
+   "owner",
+   "priority",
+   "started_at",
+   "status",
+   "title",
+   "updated_at"
+  ],
+  "has_dependencies_field": true,
+  "has_labels_field": true
+ },
+ "list_json_all": {
+  "exit": 0,
+  "secs": 0.25,
+  "bytes": 124921,
+  "rows": 211
+ },
+ "list_json_all_brief": {
+  "exit": 0,
+  "secs": 0.36,
+  "bytes": 123038
+ },
+ "ready_json_default_vs_brief_bytes": {
+  "default": 33588,
+  "brief": 32986
+ },
+ "events_journal_enable": {
+  "exit": 0,
+  "secs": 0.24
+ },
+ "events_tail": {
+  "exit": 0,
+  "secs": 0.3,
+  "records": 2,
+  "operations": [
+   "create",
+   "update"
+  ],
+  "keys": [
+   "actor",
+   "issue",
+   "issue_id",
+   "op",
+   "seq",
+   "ts"
+  ]
+ },
+ "git_footprint": {
+  "tracked_beads_files": [
+   ".beads/.gitignore",
+   ".beads/README.md",
+   ".beads/config.yaml",
+   ".beads/metadata.json"
+  ],
+  "git_status_short": [
+   " M .beads/config.yaml"
+  ],
+  "commits": 2,
+  "bd_made_commits": [
+   "bd init: initialize beads issue tracking",
+   "initial"
+  ]
+ },
+ "dolt_remote_add": {
+  "exit": 0,
+  "secs": 0.31
+ },
+ "dolt_push": {
+  "exit": 0,
+  "secs": 3.55
+ },
+ "git_remote_refs_after_push": [
+  "HEAD",
+  "refs/dolt/data",
+  "refs/heads/__dolt_remote_info__",
+  "refs/heads/main"
+ ],
+ "git_remote_size_kb": 3740,
+ "code_branch_history_untouched_commits": 2,
+ "clone_bootstrap": {
+  "exit": 0,
+  "secs": 0.36,
+  "tasks_after_bootstrap": 212,
+  "expected": 212,
+  "files_present_in_fresh_clone": [
+   "README.md",
+   "config.yaml",
+   "metadata.json"
+  ]
+ },
+ "backup_init": {
+  "exit": 0,
+  "secs": 0.25
+ },
+ "backup_sync": {
+  "exit": 0,
+  "secs": 0.44,
+  "backup_kb": 4792
+ },
+ "backup_restore_into_fresh_workspace": {
+  "exit": 0,
+  "secs": 0.5,
+  "init_secs": 7.09,
+  "tasks_after_restore": 212,
+  "expected": 212
+ },
+ "loadavg_at_end": [
+  17.6,
+  20.0,
+  19.3
+ ]
+}

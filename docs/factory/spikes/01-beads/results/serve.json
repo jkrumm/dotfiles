@@ -1,0 +1,161 @@
+{
+ "loadavg_at_start": [
+  25.0,
+  21.4,
+  19.7
+ ],
+ "serve_start_to_healthz_s": 1.04,
+ "context": {
+  "api_version": "v0",
+  "backend": "dolt",
+  "bd_version": "1.3.1",
+  "beads_dir": "<spike>/data/shared/dotfiles/.beads",
+  "capabilities": "['config.get', 'config.list', 'config.set', 'config.unset', 'dependencies.add', ",
+  "database": "df",
+  "dolt_mode": "server",
+  "project_id": "04cba96c-da8c-4f67-9259-d39730bb9d37",
+  "repo_root": "<spike>/data/shared/dotfiles",
+  "schema_version": "1"
+ },
+ "ready_response_shape": [
+  "has_more",
+  "items"
+ ],
+ "http_reads": [
+  {
+   "n": 20,
+   "median_ms": 0.7,
+   "p90_ms": 1.1,
+   "min_ms": 0.5,
+   "max_ms": 1.6,
+   "mean_ms": 0.8,
+   "op": "GET /healthz",
+   "status": 200,
+   "response_bytes": 16
+  },
+  {
+   "n": 20,
+   "median_ms": 28.9,
+   "p90_ms": 42.2,
+   "min_ms": 23.3,
+   "max_ms": 48.5,
+   "mean_ms": 31.5,
+   "op": "GET /v0/beads/ready?limit=100",
+   "status": 200,
+   "response_bytes": 36280
+  },
+  {
+   "n": 20,
+   "median_ms": 10.0,
+   "p90_ms": 10.7,
+   "min_ms": 8.2,
+   "max_ms": 18.5,
+   "mean_ms": 10.2,
+   "op": "GET /v0/beads/ready?limit=1",
+   "status": 200,
+   "response_bytes": 596
+  },
+  {
+   "n": 20,
+   "median_ms": 4.0,
+   "p90_ms": 6.6,
+   "min_ms": 2.5,
+   "max_ms": 7.9,
+   "mean_ms": 4.4,
+   "op": "GET /v0/beads/stats",
+   "status": 200,
+   "response_bytes": 259
+  },
+  {
+   "n": 20,
+   "median_ms": 13.2,
+   "p90_ms": 20.5,
+   "min_ms": 11.0,
+   "max_ms": 27.9,
+   "mean_ms": 14.7,
+   "op": "GET /v0/beads/issues?limit=50",
+   "status": 200,
+   "response_bytes": 16381
+  },
+  {
+   "n": 20,
+   "median_ms": 12.0,
+   "p90_ms": 24.3,
+   "min_ms": 7.5,
+   "max_ms": 32.9,
+   "mean_ms": 14.6,
+   "op": "GET /v0/beads/issues/{id}",
+   "status": 200,
+   "response_bytes": 602
+  }
+ ],
+ "cli_ready_same_moment": {
+  "n": 20,
+  "median_ms": 161.1,
+  "p90_ms": 241.4,
+  "min_ms": 123.3,
+  "max_ms": 602.9,
+  "mean_ms": 193.9,
+  "median_cpu_ms": 101.9,
+  "op": "CLI: bd ready --json",
+  "failures": 0,
+  "loadavg_before": [
+   25.1,
+   21.5,
+   19.7
+  ],
+  "loadavg_after": [
+   24.4,
+   21.4,
+   19.7
+  ]
+ },
+ "http_claimNext_x20": {
+  "n": 20,
+  "median_ms": 53.9,
+  "p90_ms": 83.1,
+  "min_ms": 38.6,
+  "max_ms": 120.9,
+  "mean_ms": 59.4,
+  "claimed": 20,
+  "first_response_keys": [
+   "claimed"
+  ]
+ },
+ "claim_on_held_task": {
+  "http_status": 409,
+  "code": "already_claimed",
+  "assignee_in_problem": "http-w"
+ },
+ "lease_fields_present_on_claimed_issue": [
+  "heartbeat_at",
+  "lease_expires_at"
+ ],
+ "http_close_x20": {
+  "n": 20,
+  "median_ms": 89.9,
+  "p90_ms": 192.7,
+  "min_ms": 60.0,
+  "max_ms": 302.1,
+  "mean_ms": 122.9
+ },
+ "spec_has_heartbeat_endpoint": false,
+ "spec_has_reclaim_endpoint": false,
+ "spec_paths": 35,
+ "events_endpoint": {
+  "status": 409,
+  "keys": [
+   "code",
+   "detail",
+   "request_id",
+   "status",
+   "title"
+  ],
+  "secs": 0.003
+ },
+ "loadavg_at_end": [
+  24.4,
+  21.4,
+  19.7
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "proxy_children_before_serve": 0,
+ "proxy_children_while_serve_runs": 1,
+ "serve_exited_after_sigterm": true,
+ "proxy_children_after_serve_exit": 1,
+ "leftover": {
+  "parent_pid": 1,
+  "rss_mb": 6,
+  "idle_timeout_flag": true
+ }
+}

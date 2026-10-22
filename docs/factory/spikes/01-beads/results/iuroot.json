@@ -1,0 +1,197 @@
+{
+ "loadavg_at_start": [
+  13.4,
+  15.2,
+  16.7
+ ],
+ "A_init_contributor": {
+  "wizard_exit": 0,
+  "wizard_seconds": 15.8,
+  "prompts_answered_with_default": 3,
+  "transcript_tail": [
+   "Dolt remotes/backups handle cross-machine sync and backup.",
+   "Enable auto-export? [y/N]:",
+   "\u2713 Auto-export disabled (enable later with: bd config set export.auto true)",
+   "\u2713 Committed beads files to git",
+   "\u26a0 Git upstream not configured",
+   "For sync workflows, set your upstream with:",
+   "git remote add upstream <repo-url>",
+   "\u2713 bd initialized successfully!",
+   "Backend: dolt",
+   "Mode: embedded",
+   "Database: wra",
+   "Issue prefix: wra",
+   "Issues will be named: wra-<hash> (e.g., wra-a3f2dd)",
+   "Run bd quickstart to get started."
+  ],
+  "after_init": {
+   "tracked_files_changed": true,
+   "commits_added_by_bd": 1,
+   "head_moved": true,
+   "git_status_porcelain": [],
+   "ignored_or_untracked_incl_ignored": [
+    "!! .beads.gate.lock",
+    "!! .beads/.local_version",
+    "!! .beads/embeddeddolt/"
+   ],
+   "git_config_added_lines": [
+    "[beads]",
+    "\trole = contributor"
+   ],
+   "info_exclude_added_lines": []
+  },
+  "files_created_in_work_repo": [
+   ".beads.gate.lock",
+   ".beads/.gitignore",
+   ".beads/.local_version",
+   ".beads/README.md",
+   ".beads/config.yaml",
+   ".beads/metadata.json",
+   ".gitignore",
+   "AGENTS.md",
+   "README.md",
+   "src/app.py"
+  ],
+  "planning_repo_exists_outside_work_repo": true,
+  "planning_repo_is_git_repo": true,
+  "config_yaml_routing": [
+   "#     - ~/beads-planning  # Personal planning repo",
+   "#     - ~/work-planning   # Work planning repo",
+   "repos:",
+   "    - \"~/.local/share/factory/spikes/01-beads/home/.beads-planning\""
+  ],
+  "role": "contributor",
+  "create_exit": 0,
+  "create_secs": 7.56,
+  "created_id": "wra-1bk",
+  "where_work_repo": "<spike>/data/iuroot/work-repo-a/.beads\n  prefix: wra\n  database: <spike>/data/iuroot/work-repo-a/.beads/embeddeddolt",
+  "list_in_work_repo_shows_it": true,
+  "list_in_planning_repo_shows_it": true,
+  "ready_in_work_repo_shows_it": true,
+  "after_create": {
+   "tracked_files_changed": true,
+   "commits_added_by_bd": 1,
+   "head_moved": true,
+   "git_status_porcelain": [],
+   "ignored_or_untracked_incl_ignored": [
+    "!! .beads.gate.lock",
+    "!! .beads/.local_version",
+    "!! .beads/backup.lock",
+    "!! .beads/backup/",
+    "!! .beads/embeddeddolt.gate.lock",
+    "!! .beads/embeddeddolt/",
+    "!! .beads/last-touched"
+   ],
+   "git_config_added_lines": [
+    "[beads]",
+    "\trole = contributor"
+   ],
+   "info_exclude_added_lines": []
+  }
+ },
+ "B_beads_dir_pointer_stealth": {
+  "init_exit": 0,
+  "init_secs": 6.93,
+  "init_err": "",
+  "create_exit": 0,
+  "ready_from_work_repo_with_pointer": true,
+  "without_pointer_bd_finds_nothing": true,
+  "after": {
+   "tracked_files_changed": false,
+   "commits_added_by_bd": 0,
+   "head_moved": false,
+   "git_status_porcelain": [],
+   "ignored_or_untracked_incl_ignored": [],
+   "git_config_added_lines": [
+    "[beads]",
+    "\trole = maintainer"
+   ],
+   "info_exclude_added_lines": [
+    "# Beads stealth mode (added by bd init --stealth)",
+    ".beads/",
+    ".claude/settings.<local>.json"
+   ]
+  },
+  "beads_dir_outside_work_repo": true
+ },
+ "C_stealth_in_repo": {
+  "init_exit": 0,
+  "init_secs": 6.12,
+  "after": {
+   "tracked_files_changed": false,
+   "commits_added_by_bd": 0,
+   "head_moved": false,
+   "git_status_porcelain": [],
+   "ignored_or_untracked_incl_ignored": [
+    "!! .beads.gate.lock",
+    "!! .beads/"
+   ],
+   "git_config_added_lines": [
+    "[beads]",
+    "\trole = maintainer"
+   ],
+   "info_exclude_added_lines": [
+    "# Beads stealth mode (added by bd init --stealth)",
+    ".beads/",
+    ".claude/settings.<local>.json",
+    "# Beads: Dolt files kept local via .git/info/exclude (stealth / no-git-ops)",
+    ".dolt/",
+    "*.db",
+    ".beads-credential-key",
+    ".beads/proxieddb/",
+    "*.gate.lock*"
+   ]
+  },
+  "beads_dir_inside_work_repo": true
+ },
+ "D_default_init_for_contrast": {
+  "init_exit": 0,
+  "init_secs": 6.7,
+  "after": {
+   "tracked_files_changed": true,
+   "commits_added_by_bd": 1,
+   "head_moved": true,
+   "git_status_porcelain": [],
+   "ignored_or_untracked_incl_ignored": [
+    "!! .beads.gate.lock",
+    "!! .beads/.local_version",
+    "!! .beads/embeddeddolt/"
+   ],
+   "git_config_added_lines": [
+    "\thooksPath = ~/.local/share/factory/spikes/01-beads/data/iuroot/work-repo-d/.beads/hooks",
+    "[beads]",
+    "\trole = maintainer"
+   ],
+   "info_exclude_added_lines": []
+  },
+  "tracked_files_added": [
+   ".agents/skills/beads/SKILL.md",
+   ".agents/skills/beads/agents/openai.yaml",
+   ".beads/.gitignore",
+   ".beads/README.md",
+   ".beads/config.yaml",
+   ".beads/hooks/post-checkout",
+   ".beads/hooks/post-merge",
+   ".beads/hooks/pre-commit",
+   ".beads/hooks/pre-push",
+   ".beads/hooks/prepare-commit-msg",
+   ".beads/metadata.json",
+   ".claude/settings.json",
+   ".codex/config.toml",
+   ".codex/hooks.json",
+   ".cursor/hooks.json",
+   ".cursor/rules/beads.mdc",
+   ".gitignore",
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "claude_md_created": true,
+  "agents_md_modified": true,
+  "core_hooksPath_set": "<spike>/data/iuroot/work-repo-d/.beads/hooks"
+ },
+ "loadavg_at_end": [
+  17.8,
+  15.8,
+  16.8
+ ]
+}

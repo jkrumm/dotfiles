@@ -1,0 +1,74 @@
+{
+ "backend": "beads",
+ "topology": "shared",
+ "loadavg_at_start": [
+  12.4,
+  15.4,
+  16.8
+ ],
+ "tasks_created": 8,
+ "two_workers_claimed_and_heartbeating": true,
+ "seconds_between_last_alpha_heartbeat_and_kill": 0.5,
+ "right_after_kill": {
+  "killed_worker_task": {
+   "status": "in_progress",
+   "assignee": "alpha"
+  },
+  "frozen_worker_task": {
+   "status": "in_progress",
+   "assignee": "zed"
+  },
+  "stranded_tasks_visible_in_ready": false
+ },
+ "beta_drain_of_free_tasks_s": 28.4,
+ "beta_closed_while_two_were_stranded": 6,
+ "stranded_when_beta_went_idle": {
+  "killed": "in_progress",
+  "frozen": "in_progress",
+  "at_s_after_kill": 30.1
+ },
+ "reclaim_seconds_after_kill": {
+  "killed_worker_task": 308.7,
+  "frozen_worker_task": 308.8
+ },
+ "reaper_poll_interval_s": 10,
+ "reaper_polls_before_first_reclaim": [
+  {
+   "t": 3.0,
+   "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+  },
+  {
+   "t": 14.2,
+   "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+  },
+  {
+   "t": 25.1,
+   "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+  }
+ ],
+ "reaper_polls_total": 28,
+ "resumed_zombie_learns_lease_is_gone": true,
+ "recovery_second_pass_s": 6.9,
+ "both_recovered_tasks_closed": true,
+ "total_s_kill_to_all_closed": 316.5,
+ "all_8_closed": true,
+ "race_two_loops_12_tasks": {
+  "drain_s": 23.4,
+  "claims_total": 12,
+  "distinct_tasks_claimed": 12,
+  "double_claims": 0,
+  "lost_claims_seen_by_loops": 1,
+  "closed": 12,
+  "close_failed": 0,
+  "claims_by_worker": {
+   "alpha": 6,
+   "beta": 6
+  },
+  "all_12_closed": true
+ },
+ "loadavg_at_end": [
+  13.4,
+  16.1,
+  16.9
+ ]
+}

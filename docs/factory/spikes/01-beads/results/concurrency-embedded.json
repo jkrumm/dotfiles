@@ -1,0 +1,143 @@
+{
+ "topology": "embedded",
+ "loadavg_at_start": [
+  18.6,
+  18.9,
+  18.7
+ ],
+ "two_writers_25_creates_each": {
+  "wall_s": 51.1,
+  "ok": 50,
+  "failed": 0,
+  "errors": {},
+  "rows_found_in_db": 50,
+  "lost_acknowledged_writes": 0,
+  "per_call": {
+   "n": 50,
+   "median_ms": 1050.6,
+   "p90_ms": 3445.4,
+   "min_ms": 731.6,
+   "max_ms": 13047.6,
+   "mean_ms": 1862.3
+  }
+ },
+ "four_readers_10_ready_each": {
+  "wall_s": 17.6,
+  "failed": 0,
+  "errors": {},
+  "per_call": {
+   "n": 40,
+   "median_ms": 1048.7,
+   "p90_ms": 2536.3,
+   "min_ms": 374.0,
+   "max_ms": 7658.2,
+   "mean_ms": 1367.2
+  }
+ },
+ "one_writer_one_reader_15_each": {
+  "wall_s": 19.0,
+  "writer": {
+   "failed": 0,
+   "stats": {
+    "n": 15,
+    "median_ms": 1079.4,
+    "p90_ms": 2163.6,
+    "min_ms": 758.1,
+    "max_ms": 2335.7,
+    "mean_ms": 1265.1
+   }
+  },
+  "reader": {
+   "failed": 0,
+   "stats": {
+    "n": 15,
+    "median_ms": 603.8,
+    "p90_ms": 2795.9,
+    "min_ms": 307.7,
+    "max_ms": 3162.3,
+    "mean_ms": 1092.7
+   },
+   "errors": {}
+  }
+ },
+ "claim_race_12_tasks_2_workers": {
+  "outcomes": {
+   "winners=1": 12
+  },
+  "winner_matches_assignee": 12,
+  "loser_exit_codes_and_messages": [
+   {
+    "exit": 1,
+    "message": "Error updating df-5qq: issue already claimed by wA",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-1ax: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-h6s: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-bnw: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-4ud: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-pjd: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-fit: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-bkp: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-362: issue already claimed by wA",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-1qi: issue already claimed by wA",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-9pn: issue already claimed by wB",
+    "n": 1
+   },
+   {
+    "exit": 1,
+    "message": "Error updating df-069: issue already claimed by wB",
+    "n": 1
+   }
+  ]
+ },
+ "fencing_on_a_held_task": {
+  "intruder_claim_exit": 1,
+  "intruder_close_exit": 1,
+  "close_message": "cannot close df-y31d: assignee is \"owner\", actor is \"intruder\"; reclaim or use --force to override",
+  "status_after": "in_progress",
+  "assignee_after": "owner"
+ },
+ "loadavg_at_end": [
+  38.4,
+  23.0,
+  20.2
+ ]
+}

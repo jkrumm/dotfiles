@@ -1,0 +1,56 @@
+{
+ "versions": {
+  "old": "bd version 1.1.2 (20e493e56)",
+  "new": "bd version 1.3.1 (c1c4b642a)"
+ },
+ "steps": [
+  {
+   "step": "old_init",
+   "exit": 0,
+   "seconds": 3.52,
+   "output": ""
+  },
+  {
+   "step": "old_create",
+   "exit": 0,
+   "seconds": 0.65,
+   "output": "{ \"created_at\": \"2026-10-22T08:49:12.065472Z\", \"created_by\": \"Spike\", \"id\": \"ls-bhx\", \"issue_type\": \"task\", \"owner\": \"<author>\", \"priority\": 2, \"schema_version\": 1, \"status\": \"open\", \"title\": \"made by 1.1.2\", \"updated_at\": \"2026-10-22T08:49:12.065472Z\" }"
+  },
+  {
+   "step": "old_version_schema",
+   "exit": 0,
+   "seconds": 0.39,
+   "output": "Beads Database Information =========================== Database: ~/.local/share/factory/spikes/01-beads/data/lockstep/.beads/embeddeddolt Mode: direct Issue Count: 1 \u26a0\ufe0f Git hooks not installed (5 missing) Run: bd hooks install"
+  },
+  {
+   "step": "new_first_command",
+   "exit": 0,
+   "seconds": 2.17,
+   "output": "[ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dependency_count\": 0, \"dependent_count\": 0, \"comment_count\": 0 } ]"
+  },
+  {
+   "step": "new_info",
+   "exit": 0,
+   "seconds": 0.61,
+   "output": "{ \"config\": { \"auto_compact_enabled\": \"false\", \"compact_batch_size\": \"50\", \"compact_parallel_workers\": \"5\", \"compact_tier1_days\": \"30\", \"compact_tier1_dep_levels\": \"2\", \"compact_tier2_commits\": \"100\", \"compact_tier2_days\": \"90\", \"compact_tier2_dep_levels\": \"5\", \"compaction_enabled\": \"false\", \"issue_prefix\": \"ls\" }, \"database_pat"
+  },
+  {
+   "step": "old_after_migration",
+   "exit": 1,
+   "seconds": 0.45,
+   "output": "{ \"error\": \"schema version mismatch: database is at v66, binary knows up to v53 (13 migrations ahead)\", \"hint\": \"BD_IGNORE_SCHEMA_SKEW=1 bd \\u003ccommand\\u003e or bd --ignore-schema-skew \\u003ccommand\\u003e\", \"schema_skew\": { \"current_version\": 66, \"delta\": 13, \"required_version\": 53 }, \"schema_version\": 1 }"
+  },
+  {
+   "step": "old_after_migration_with_skew_override",
+   "exit": 0,
+   "seconds": 0.62,
+   "output": "Warning: schema skew ignored \u2014 database (v66) is ahead of binary (v53); some queries may fail [ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dep"
+  },
+  {
+   "step": "new_still_fine",
+   "exit": 0,
+   "seconds": 0.99,
+   "output": "[ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dependency_count\": 0, \"dependent_count\": 0, \"comment_count\": 0 } ]"
+  }
+ ]
+}

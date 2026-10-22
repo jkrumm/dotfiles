@@ -1,0 +1,22 @@
+{
+ "embedded": {
+  "guard_mismatch_if_status_closed_on_open_task": 13,
+  "guard_mismatch_if_assignee_nobody": 13,
+  "guard_matches": 0,
+  "cas_claim_status_and_assignee": 0,
+  "second_cas_claimer_exit": 1,
+  "second_cas_claimer_message": "Error: 1 of 1 issues failed to update",
+  "cas_claimed_task_has_lease": false,
+  "heartbeat_on_cas_claimed_task_exit": 0
+ },
+ "shared": {
+  "guard_mismatch_if_status_closed_on_open_task": 13,
+  "guard_mismatch_if_assignee_nobody": 13,
+  "guard_matches": 0,
+  "cas_claim_status_and_assignee": 0,
+  "second_cas_claimer_exit": 1,
+  "second_cas_claimer_message": "Error: 1 of 1 issues failed to update",
+  "cas_claimed_task_has_lease": false,
+  "heartbeat_on_cas_claimed_task_exit": 0
+ }
+}

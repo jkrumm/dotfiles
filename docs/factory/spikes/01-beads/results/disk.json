@@ -1,0 +1,42 @@
+{
+ "embedded": {
+  "dotfiles": {
+   "dolt_commits": 481,
+   "db_kb": 31432,
+   "kb_per_commit": 65.3
+  },
+  "weatherorb": {
+   "dolt_commits": 145,
+   "db_kb": 7836,
+   "kb_per_commit": 54.0
+  },
+  "basalt-ui": {
+   "dolt_commits": 174,
+   "db_kb": 11476,
+   "kb_per_commit": 66.0
+  }
+ },
+ "shared": {
+  "df": {
+   "dolt_commits": 452,
+   "db_kb": 31320
+  },
+  "wo": {
+   "dolt_commits": 139,
+   "db_kb": 7448
+  },
+  "bu": {
+   "dolt_commits": 167,
+   "db_kb": 11664
+  },
+  "server_dir_kb_total": 298340
+ },
+ "sqlite_baseline": {
+  "tasks_db_kb_210_tasks": 128,
+  "tasks_loaded": 210
+ },
+ "binaries_mb": {
+  "bd": 138,
+  "dolt": 113
+ }
+}

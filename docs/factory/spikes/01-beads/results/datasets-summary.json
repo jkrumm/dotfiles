@@ -1,0 +1,45 @@
+{
+ "as_of": "2026-10-22",
+ "warden_snapshot": {
+  "open_items": 43,
+  "alert_origin_excluded": 18,
+  "work_items": 25,
+  "feature_shaped": 4,
+  "fix_shaped": 21,
+  "by_origin": {
+   "github_issue": 15,
+   "human": 4,
+   "job": 6
+  }
+ },
+ "round5": {
+  "waves": 10,
+  "checklist_tasks": 56,
+  "order_edges": 13,
+  "decision_tasks": 1
+ },
+ "weatherorb_plan": {
+  "waves": 5,
+  "checklist_tasks": 20
+ },
+ "basalt_ui_plan": {
+  "waves": 14,
+  "checklist_tasks": 66
+ },
+ "per_repo_tasks": {
+  "bu": 81,
+  "df": 79,
+  "wo": 50
+ },
+ "total_tasks": 210,
+ "edges": {
+  "blocks_local": 31,
+  "external": 2,
+  "parent_child": 158
+ },
+ "repo_map": {
+  "df": "dotfiles (Round 5 epic + every non-weatherorb warden item)",
+  "wo": "weatherorb (current plan + its warden items)",
+  "bu": "basalt-ui (current plan)"
+ }
+}

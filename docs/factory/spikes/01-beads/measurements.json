@@ -1,0 +1,3748 @@
+{
+ "spike": "01-beads",
+ "as_of": "2026-10-22",
+ "environment": {
+  "os": "macOS-26.7.1-arm64-arm-64bit-Mach-O",
+  "arch": "arm64",
+  "cpus": 12,
+  "note": "Measured on the always-on dev host while other agent sessions were running: the 1-minute load average ranged about 10-35 on 12 cores. Wall-clock figures are inflated by that contention; CPU-seconds per operation (median_cpu_ms) are the load-independent number."
+ },
+ "experiments": {
+  "baseline": {
+   "loadavg_at_start": [
+    14.0,
+    15.6,
+    16.6
+   ],
+   "lines_of_code": 65,
+   "load": {
+    "tasks": 210,
+    "create_cli_calls": {
+     "n": 210,
+     "median_ms": 38.0,
+     "p90_ms": 54.3,
+     "min_ms": 30.1,
+     "max_ms": 128.6,
+     "mean_ms": 42.5
+    },
+    "create_total_s": 8.95,
+    "edges": 33,
+    "dep_cli_calls_total_s": 1.31,
+    "load_total_s": 10.26
+   },
+   "ready_vs_oracle": {
+    "df": {
+     "ready_rows": 20,
+     "oracle_rows": 20,
+     "match": true,
+     "extra": [],
+     "missing": []
+    },
+    "wo": {
+     "ready_rows": 26,
+     "oracle_rows": 26,
+     "match": true,
+     "extra": [],
+     "missing": []
+    },
+    "bu": {
+     "ready_rows": 6,
+     "oracle_rows": 6,
+     "match": true,
+     "extra": [],
+     "missing": []
+    }
+   },
+   "ops": {
+    "create": {
+     "n": 20,
+     "median_ms": 45.5,
+     "p90_ms": 66.2,
+     "min_ms": 31.3,
+     "max_ms": 92.5,
+     "mean_ms": 48.8,
+     "median_cpu_ms": 35.9,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      16.9,
+      16.2,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "update_cas": {
+     "n": 20,
+     "median_ms": 41.8,
+     "p90_ms": 80.6,
+     "min_ms": 33.2,
+     "max_ms": 100.9,
+     "mean_ms": 50.8,
+     "median_cpu_ms": 34.7,
+     "op": "update (CAS)",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "ready": {
+     "n": 20,
+     "median_ms": 39.5,
+     "p90_ms": 45.8,
+     "min_ms": 34.3,
+     "max_ms": 189.2,
+     "mean_ms": 48.4,
+     "median_cpu_ms": 33.4,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "list": {
+     "n": 20,
+     "median_ms": 37.3,
+     "p90_ms": 67.0,
+     "min_ms": 33.1,
+     "max_ms": 87.5,
+     "mean_ms": 44.2,
+     "median_cpu_ms": 31.6,
+     "op": "list",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "show": {
+     "n": 20,
+     "median_ms": 38.6,
+     "p90_ms": 45.1,
+     "min_ms": 31.2,
+     "max_ms": 84.8,
+     "mean_ms": 41.6,
+     "median_cpu_ms": 32.8,
+     "op": "show",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "claim": {
+     "n": 20,
+     "median_ms": 38.5,
+     "p90_ms": 44.3,
+     "min_ms": 34.9,
+     "max_ms": 50.5,
+     "mean_ms": 39.9,
+     "median_cpu_ms": 33.9,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      16.4,
+      16.1,
+      16.8
+     ]
+    },
+    "heartbeat": {
+     "n": 20,
+     "median_ms": 40.1,
+     "p90_ms": 55.6,
+     "min_ms": 34.0,
+     "max_ms": 86.5,
+     "mean_ms": 44.4,
+     "median_cpu_ms": 33.8,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      16.1,
+      16.8
+     ],
+     "loadavg_after": [
+      15.7,
+      15.9,
+      16.7
+     ]
+    },
+    "close": {
+     "n": 20,
+     "median_ms": 35.1,
+     "p90_ms": 44.9,
+     "min_ms": 31.1,
+     "max_ms": 104.0,
+     "mean_ms": 40.5,
+     "median_cpu_ms": 30.5,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      15.7,
+      15.9,
+      16.7
+     ],
+     "loadavg_after": [
+      15.7,
+      15.9,
+      16.7
+     ]
+    },
+    "floor_python_startup": {
+     "n": 20,
+     "median_ms": 30.6,
+     "p90_ms": 42.3,
+     "min_ms": 26.0,
+     "max_ms": 81.4,
+     "mean_ms": 34.9,
+     "median_cpu_ms": 24.3,
+     "op": "floor: python3 -c pass",
+     "failures": 0,
+     "loadavg_before": [
+      15.7,
+      15.9,
+      16.7
+     ],
+     "loadavg_after": [
+      15.7,
+      15.9,
+      16.7
+     ]
+    }
+   },
+   "in_process_ready_query_ms": 0.34,
+   "scale_ready_query": {
+    "1000": {
+     "ready_query_ms": 0.93,
+     "rows": 100,
+     "db_kb": 108
+    },
+    "5000": {
+     "ready_query_ms": 5.54,
+     "rows": 100,
+     "db_kb": 452
+    },
+    "20000": {
+     "ready_query_ms": 26.06,
+     "rows": 100,
+     "db_kb": 1764
+    }
+   },
+   "loadavg_at_end": [
+    15.7,
+    15.9,
+    16.7
+   ]
+  },
+  "cas-probe": {
+   "embedded": {
+    "guard_mismatch_if_status_closed_on_open_task": 13,
+    "guard_mismatch_if_assignee_nobody": 13,
+    "guard_matches": 0,
+    "cas_claim_status_and_assignee": 0,
+    "second_cas_claimer_exit": 1,
+    "second_cas_claimer_message": "Error: 1 of 1 issues failed to update",
+    "cas_claimed_task_has_lease": false,
+    "heartbeat_on_cas_claimed_task_exit": 0
+   },
+   "shared": {
+    "guard_mismatch_if_status_closed_on_open_task": 13,
+    "guard_mismatch_if_assignee_nobody": 13,
+    "guard_matches": 0,
+    "cas_claim_status_and_assignee": 0,
+    "second_cas_claimer_exit": 1,
+    "second_cas_claimer_message": "Error: 1 of 1 issues failed to update",
+    "cas_claimed_task_has_lease": false,
+    "heartbeat_on_cas_claimed_task_exit": 0
+   }
+  },
+  "concurrency-embedded": {
+   "topology": "embedded",
+   "loadavg_at_start": [
+    18.6,
+    18.9,
+    18.7
+   ],
+   "two_writers_25_creates_each": {
+    "wall_s": 51.1,
+    "ok": 50,
+    "failed": 0,
+    "errors": {},
+    "rows_found_in_db": 50,
+    "lost_acknowledged_writes": 0,
+    "per_call": {
+     "n": 50,
+     "median_ms": 1050.6,
+     "p90_ms": 3445.4,
+     "min_ms": 731.6,
+     "max_ms": 13047.6,
+     "mean_ms": 1862.3
+    }
+   },
+   "four_readers_10_ready_each": {
+    "wall_s": 17.6,
+    "failed": 0,
+    "errors": {},
+    "per_call": {
+     "n": 40,
+     "median_ms": 1048.7,
+     "p90_ms": 2536.3,
+     "min_ms": 374.0,
+     "max_ms": 7658.2,
+     "mean_ms": 1367.2
+    }
+   },
+   "one_writer_one_reader_15_each": {
+    "wall_s": 19.0,
+    "writer": {
+     "failed": 0,
+     "stats": {
+      "n": 15,
+      "median_ms": 1079.4,
+      "p90_ms": 2163.6,
+      "min_ms": 758.1,
+      "max_ms": 2335.7,
+      "mean_ms": 1265.1
+     }
+    },
+    "reader": {
+     "failed": 0,
+     "stats": {
+      "n": 15,
+      "median_ms": 603.8,
+      "p90_ms": 2795.9,
+      "min_ms": 307.7,
+      "max_ms": 3162.3,
+      "mean_ms": 1092.7
+     },
+     "errors": {}
+    }
+   },
+   "claim_race_12_tasks_2_workers": {
+    "outcomes": {
+     "winners=1": 12
+    },
+    "winner_matches_assignee": 12,
+    "loser_exit_codes_and_messages": [
+     {
+      "exit": 1,
+      "message": "Error updating df-5qq: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-1ax: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-h6s: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-bnw: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-4ud: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-pjd: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-fit: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-bkp: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-362: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-1qi: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-9pn: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-069: issue already claimed by wB",
+      "n": 1
+     }
+    ]
+   },
+   "fencing_on_a_held_task": {
+    "intruder_claim_exit": 1,
+    "intruder_close_exit": 1,
+    "close_message": "cannot close df-y31d: assignee is \"owner\", actor is \"intruder\"; reclaim or use --force to override",
+    "status_after": "in_progress",
+    "assignee_after": "owner"
+   },
+   "loadavg_at_end": [
+    38.4,
+    23.0,
+    20.2
+   ]
+  },
+  "concurrency-shared": {
+   "topology": "shared",
+   "loadavg_at_start": [
+    36.0,
+    22.8,
+    20.1
+   ],
+   "two_writers_25_creates_each": {
+    "wall_s": 8.7,
+    "ok": 50,
+    "failed": 0,
+    "errors": {},
+    "rows_found_in_db": 50,
+    "lost_acknowledged_writes": 0,
+    "per_call": {
+     "n": 50,
+     "median_ms": 305.6,
+     "p90_ms": 419.3,
+     "min_ms": 225.7,
+     "max_ms": 860.4,
+     "mean_ms": 343.2
+    }
+   },
+   "four_readers_10_ready_each": {
+    "wall_s": 1.8,
+    "failed": 0,
+    "errors": {},
+    "per_call": {
+     "n": 40,
+     "median_ms": 160.5,
+     "p90_ms": 235.7,
+     "min_ms": 135.8,
+     "max_ms": 342.0,
+     "mean_ms": 182.2
+    }
+   },
+   "one_writer_one_reader_15_each": {
+    "wall_s": 4.1,
+    "writer": {
+     "failed": 0,
+     "stats": {
+      "n": 15,
+      "median_ms": 258.4,
+      "p90_ms": 338.2,
+      "min_ms": 200.3,
+      "max_ms": 349.5,
+      "mean_ms": 272.7
+     }
+    },
+    "reader": {
+     "failed": 0,
+     "stats": {
+      "n": 15,
+      "median_ms": 130.5,
+      "p90_ms": 190.9,
+      "min_ms": 105.9,
+      "max_ms": 197.5,
+      "mean_ms": 143.4
+     },
+     "errors": {}
+    }
+   },
+   "claim_race_12_tasks_2_workers": {
+    "outcomes": {
+     "winners=1": 12
+    },
+    "winner_matches_assignee": 12,
+    "loser_exit_codes_and_messages": [
+     {
+      "exit": 1,
+      "message": "Error updating df-q5t: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-yct: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-ocv: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-dle: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-0fb: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-qhz: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-1lf: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-0mq: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-0yj: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-6cc: issue already claimed by wB",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-zxi: issue already claimed by wA",
+      "n": 1
+     },
+     {
+      "exit": 1,
+      "message": "Error updating df-3xv: issue already claimed by wA",
+      "n": 1
+     }
+    ]
+   },
+   "fencing_on_a_held_task": {
+    "intruder_claim_exit": 1,
+    "intruder_close_exit": 1,
+    "close_message": "cannot close df-606: assignee is \"owner\", actor is \"intruder\"; reclaim or use --force to override",
+    "status_after": "in_progress",
+    "assignee_after": "owner"
+   },
+   "loadavg_at_end": [
+    26.5,
+    21.6,
+    19.7
+   ]
+  },
+  "crash-beads-embedded": {
+   "backend": "beads",
+   "topology": "embedded",
+   "loadavg_at_start": [
+    12.4,
+    15.4,
+    16.8
+   ],
+   "tasks_created": 8,
+   "two_workers_claimed_and_heartbeating": true,
+   "seconds_between_last_alpha_heartbeat_and_kill": 2.5,
+   "right_after_kill": {
+    "killed_worker_task": {
+     "status": "in_progress",
+     "assignee": "alpha"
+    },
+    "frozen_worker_task": {
+     "status": "in_progress",
+     "assignee": "zed"
+    },
+    "stranded_tasks_visible_in_ready": false
+   },
+   "beta_drain_of_free_tasks_s": 39.4,
+   "beta_closed_while_two_were_stranded": 6,
+   "stranded_when_beta_went_idle": {
+    "killed": "in_progress",
+    "frozen": "in_progress",
+    "at_s_after_kill": 44.8
+   },
+   "reclaim_seconds_after_kill": {
+    "killed_worker_task": 305.1,
+    "frozen_worker_task": 305.5
+   },
+   "reaper_poll_interval_s": 10,
+   "reaper_polls_before_first_reclaim": [
+    {
+     "t": 3.7,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    },
+    {
+     "t": 17.7,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    },
+    {
+     "t": 32.9,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    }
+   ],
+   "reaper_polls_total": 25,
+   "resumed_zombie_learns_lease_is_gone": true,
+   "recovery_second_pass_s": 9.6,
+   "both_recovered_tasks_closed": true,
+   "total_s_kill_to_all_closed": 317.0,
+   "all_8_closed": true,
+   "race_two_loops_12_tasks": {
+    "drain_s": 35.1,
+    "claims_total": 12,
+    "distinct_tasks_claimed": 12,
+    "double_claims": 0,
+    "lost_claims_seen_by_loops": 0,
+    "closed": 12,
+    "close_failed": 0,
+    "claims_by_worker": {
+     "alpha": 6,
+     "beta": 6
+    },
+    "all_12_closed": true
+   },
+   "loadavg_at_end": [
+    13.2,
+    15.9,
+    16.8
+   ]
+  },
+  "crash-beads-shared": {
+   "backend": "beads",
+   "topology": "shared",
+   "loadavg_at_start": [
+    12.4,
+    15.4,
+    16.8
+   ],
+   "tasks_created": 8,
+   "two_workers_claimed_and_heartbeating": true,
+   "seconds_between_last_alpha_heartbeat_and_kill": 0.5,
+   "right_after_kill": {
+    "killed_worker_task": {
+     "status": "in_progress",
+     "assignee": "alpha"
+    },
+    "frozen_worker_task": {
+     "status": "in_progress",
+     "assignee": "zed"
+    },
+    "stranded_tasks_visible_in_ready": false
+   },
+   "beta_drain_of_free_tasks_s": 28.4,
+   "beta_closed_while_two_were_stranded": 6,
+   "stranded_when_beta_went_idle": {
+    "killed": "in_progress",
+    "frozen": "in_progress",
+    "at_s_after_kill": 30.1
+   },
+   "reclaim_seconds_after_kill": {
+    "killed_worker_task": 308.7,
+    "frozen_worker_task": 308.8
+   },
+   "reaper_poll_interval_s": 10,
+   "reaper_polls_before_first_reclaim": [
+    {
+     "t": 3.0,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    },
+    {
+     "t": 14.2,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    },
+    {
+     "t": 25.1,
+     "output": "{   \"count\": 0,   \"reclaimed\": null,   \"schema_version\": 1, "
+    }
+   ],
+   "reaper_polls_total": 28,
+   "resumed_zombie_learns_lease_is_gone": true,
+   "recovery_second_pass_s": 6.9,
+   "both_recovered_tasks_closed": true,
+   "total_s_kill_to_all_closed": 316.5,
+   "all_8_closed": true,
+   "race_two_loops_12_tasks": {
+    "drain_s": 23.4,
+    "claims_total": 12,
+    "distinct_tasks_claimed": 12,
+    "double_claims": 0,
+    "lost_claims_seen_by_loops": 1,
+    "closed": 12,
+    "close_failed": 0,
+    "claims_by_worker": {
+     "alpha": 6,
+     "beta": 6
+    },
+    "all_12_closed": true
+   },
+   "loadavg_at_end": [
+    13.4,
+    16.1,
+    16.9
+   ]
+  },
+  "crash-sqlite": {
+   "backend": "sqlite",
+   "topology": "sqlite",
+   "loadavg_at_start": [
+    12.5,
+    15.5,
+    16.3
+   ],
+   "tasks_created": 8,
+   "two_workers_claimed_and_heartbeating": true,
+   "seconds_between_last_alpha_heartbeat_and_kill": 0.2,
+   "right_after_kill": {
+    "killed_worker_task": {
+     "status": "in_progress",
+     "assignee": "alpha"
+    },
+    "frozen_worker_task": {
+     "status": "in_progress",
+     "assignee": "zed"
+    },
+    "stranded_tasks_visible_in_ready": false
+   },
+   "beta_drain_of_free_tasks_s": 15.2,
+   "beta_closed_while_two_were_stranded": 6,
+   "stranded_when_beta_went_idle": {
+    "killed": "in_progress",
+    "frozen": "in_progress",
+    "at_s_after_kill": 15.5
+   },
+   "reclaim_seconds_after_kill": {
+    "killed_worker_task": 30.1,
+    "frozen_worker_task": 30.1
+   },
+   "reaper_poll_interval_s": 1,
+   "reaper_polls_before_first_reclaim": [
+    {
+     "t": 0.2,
+     "output": "{\"reclaimed\": 0}"
+    },
+    {
+     "t": 1.5,
+     "output": "{\"reclaimed\": 0}"
+    },
+    {
+     "t": 2.8,
+     "output": "{\"reclaimed\": 0}"
+    }
+   ],
+   "reaper_polls_total": 23,
+   "resumed_zombie_learns_lease_is_gone": true,
+   "recovery_second_pass_s": 5.4,
+   "both_recovered_tasks_closed": true,
+   "total_s_kill_to_all_closed": 36.0,
+   "all_8_closed": true,
+   "race_two_loops_12_tasks": {
+    "drain_s": 15.2,
+    "claims_total": 12,
+    "distinct_tasks_claimed": 12,
+    "double_claims": 0,
+    "lost_claims_seen_by_loops": 1,
+    "closed": 12,
+    "close_failed": 0,
+    "claims_by_worker": {
+     "alpha": 6,
+     "beta": 6
+    },
+    "all_12_closed": true
+   },
+   "loadavg_at_end": [
+    16.6,
+    16.2,
+    16.5
+   ]
+  },
+  "datasets-summary": {
+   "as_of": "2026-10-22",
+   "warden_snapshot": {
+    "open_items": 43,
+    "alert_origin_excluded": 18,
+    "work_items": 25,
+    "feature_shaped": 4,
+    "fix_shaped": 21,
+    "by_origin": {
+     "github_issue": 15,
+     "human": 4,
+     "job": 6
+    }
+   },
+   "round5": {
+    "waves": 10,
+    "checklist_tasks": 56,
+    "order_edges": 13,
+    "decision_tasks": 1
+   },
+   "weatherorb_plan": {
+    "waves": 5,
+    "checklist_tasks": 20
+   },
+   "basalt_ui_plan": {
+    "waves": 14,
+    "checklist_tasks": 66
+   },
+   "per_repo_tasks": {
+    "bu": 81,
+    "df": 79,
+    "wo": 50
+   },
+   "total_tasks": 210,
+   "edges": {
+    "blocks_local": 31,
+    "external": 2,
+    "parent_child": 158
+   },
+   "repo_map": {
+    "df": "dotfiles (Round 5 epic + every non-weatherorb warden item)",
+    "wo": "weatherorb (current plan + its warden items)",
+    "bu": "basalt-ui (current plan)"
+   }
+  },
+  "disk": {
+   "embedded": {
+    "dotfiles": {
+     "dolt_commits": 481,
+     "db_kb": 31432,
+     "kb_per_commit": 65.3
+    },
+    "weatherorb": {
+     "dolt_commits": 145,
+     "db_kb": 7836,
+     "kb_per_commit": 54.0
+    },
+    "basalt-ui": {
+     "dolt_commits": 174,
+     "db_kb": 11476,
+     "kb_per_commit": 66.0
+    }
+   },
+   "shared": {
+    "df": {
+     "dolt_commits": 452,
+     "db_kb": 31320
+    },
+    "wo": {
+     "dolt_commits": 139,
+     "db_kb": 7448
+    },
+    "bu": {
+     "dolt_commits": 167,
+     "db_kb": 11664
+    },
+    "server_dir_kb_total": 298340
+   },
+   "sqlite_baseline": {
+    "tasks_db_kb_210_tasks": 128,
+    "tasks_loaded": 210
+   },
+   "binaries_mb": {
+    "bd": 138,
+    "dolt": 113
+   }
+  },
+  "export-backup-embedded": {
+   "topology": "embedded",
+   "loadavg_at_start": [
+    23.4,
+    21.2,
+    19.6
+   ],
+   "tasks_in_db": 232,
+   "jsonl_export": {
+    "exit": 0,
+    "secs": 0.82,
+    "bytes": 103201,
+    "lines": 232,
+    "keys_of_first_record": [
+     "_type",
+     "assignee",
+     "close_reason",
+     "closed_at",
+     "comment_count",
+     "created_at",
+     "created_by",
+     "dependency_count",
+     "dependent_count",
+     "id",
+     "issue_type",
+     "owner",
+     "priority",
+     "started_at",
+     "status",
+     "title",
+     "updated_at"
+    ],
+    "has_dependencies_field": true,
+    "has_labels_field": true
+   },
+   "list_json_all": {
+    "exit": 0,
+    "secs": 0.79,
+    "bytes": 132900,
+    "rows": 232
+   },
+   "list_json_all_brief": {
+    "exit": 0,
+    "secs": 0.96,
+    "bytes": 131017
+   },
+   "ready_json_default_vs_brief_bytes": {
+    "default": 48184,
+    "brief": 46301
+   },
+   "events_journal_enable": {
+    "exit": 0,
+    "secs": 0.31
+   },
+   "events_tail": {
+    "exit": 0,
+    "secs": 0.2,
+    "records": 2,
+    "operations": [
+     "create",
+     "update"
+    ],
+    "keys": [
+     "actor",
+     "issue",
+     "issue_id",
+     "op",
+     "seq",
+     "ts"
+    ]
+   },
+   "git_footprint": {
+    "tracked_beads_files": [
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json"
+    ],
+    "git_status_short": [
+     " M .beads/config.yaml"
+    ],
+    "commits": 2,
+    "bd_made_commits": [
+     "bd init: initialize beads issue tracking",
+     "initial"
+    ]
+   },
+   "dolt_remote_add": {
+    "exit": 0,
+    "secs": 2.5
+   },
+   "dolt_push": {
+    "exit": 0,
+    "secs": 3.15
+   },
+   "git_remote_refs_after_push": [
+    "HEAD",
+    "refs/dolt/data",
+    "refs/heads/__dolt_remote_info__",
+    "refs/heads/main"
+   ],
+   "git_remote_size_kb": 3972,
+   "code_branch_history_untouched_commits": 2,
+   "clone_bootstrap": {
+    "exit": 0,
+    "secs": 2.35,
+    "tasks_after_bootstrap": 233,
+    "expected": 233,
+    "files_present_in_fresh_clone": [
+     "README.md",
+     "backup",
+     "backup.lock",
+     "config.yaml",
+     "dolt.gate.lock",
+     "embeddeddolt",
+     "embeddeddolt.gate.lock",
+     "metadata.json"
+    ]
+   },
+   "backup_init": {
+    "exit": 0,
+    "secs": 0.5
+   },
+   "backup_sync": {
+    "exit": 0,
+    "secs": 1.05,
+    "backup_kb": 5736
+   },
+   "backup_restore_into_fresh_workspace": {
+    "exit": 0,
+    "secs": 0.68,
+    "init_secs": 6.09,
+    "tasks_after_restore": 233,
+    "expected": 233
+   },
+   "loadavg_at_end": [
+    20.1,
+    20.6,
+    19.5
+   ]
+  },
+  "export-backup-shared": {
+   "topology": "shared",
+   "loadavg_at_start": [
+    17.8,
+    20.1,
+    19.3
+   ],
+   "tasks_in_db": 211,
+   "jsonl_export": {
+    "exit": 0,
+    "secs": 0.36,
+    "bytes": 96548,
+    "lines": 211,
+    "keys_of_first_record": [
+     "_type",
+     "assignee",
+     "close_reason",
+     "closed_at",
+     "comment_count",
+     "created_at",
+     "created_by",
+     "dependency_count",
+     "dependent_count",
+     "id",
+     "issue_type",
+     "owner",
+     "priority",
+     "started_at",
+     "status",
+     "title",
+     "updated_at"
+    ],
+    "has_dependencies_field": true,
+    "has_labels_field": true
+   },
+   "list_json_all": {
+    "exit": 0,
+    "secs": 0.25,
+    "bytes": 124921,
+    "rows": 211
+   },
+   "list_json_all_brief": {
+    "exit": 0,
+    "secs": 0.36,
+    "bytes": 123038
+   },
+   "ready_json_default_vs_brief_bytes": {
+    "default": 33588,
+    "brief": 32986
+   },
+   "events_journal_enable": {
+    "exit": 0,
+    "secs": 0.24
+   },
+   "events_tail": {
+    "exit": 0,
+    "secs": 0.3,
+    "records": 2,
+    "operations": [
+     "create",
+     "update"
+    ],
+    "keys": [
+     "actor",
+     "issue",
+     "issue_id",
+     "op",
+     "seq",
+     "ts"
+    ]
+   },
+   "git_footprint": {
+    "tracked_beads_files": [
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json"
+    ],
+    "git_status_short": [
+     " M .beads/config.yaml"
+    ],
+    "commits": 2,
+    "bd_made_commits": [
+     "bd init: initialize beads issue tracking",
+     "initial"
+    ]
+   },
+   "dolt_remote_add": {
+    "exit": 0,
+    "secs": 0.31
+   },
+   "dolt_push": {
+    "exit": 0,
+    "secs": 3.55
+   },
+   "git_remote_refs_after_push": [
+    "HEAD",
+    "refs/dolt/data",
+    "refs/heads/__dolt_remote_info__",
+    "refs/heads/main"
+   ],
+   "git_remote_size_kb": 3740,
+   "code_branch_history_untouched_commits": 2,
+   "clone_bootstrap": {
+    "exit": 0,
+    "secs": 0.36,
+    "tasks_after_bootstrap": 212,
+    "expected": 212,
+    "files_present_in_fresh_clone": [
+     "README.md",
+     "config.yaml",
+     "metadata.json"
+    ]
+   },
+   "backup_init": {
+    "exit": 0,
+    "secs": 0.25
+   },
+   "backup_sync": {
+    "exit": 0,
+    "secs": 0.44,
+    "backup_kb": 4792
+   },
+   "backup_restore_into_fresh_workspace": {
+    "exit": 0,
+    "secs": 0.5,
+    "init_secs": 7.09,
+    "tasks_after_restore": 212,
+    "expected": 212
+   },
+   "loadavg_at_end": [
+    17.6,
+    20.0,
+    19.3
+   ]
+  },
+  "iuroot": {
+   "loadavg_at_start": [
+    13.4,
+    15.2,
+    16.7
+   ],
+   "A_init_contributor": {
+    "wizard_exit": 0,
+    "wizard_seconds": 15.8,
+    "prompts_answered_with_default": 3,
+    "transcript_tail": [
+     "Dolt remotes/backups handle cross-machine sync and backup.",
+     "Enable auto-export? [y/N]:",
+     "\u2713 Auto-export disabled (enable later with: bd config set export.auto true)",
+     "\u2713 Committed beads files to git",
+     "\u26a0 Git upstream not configured",
+     "For sync workflows, set your upstream with:",
+     "git remote add upstream <repo-url>",
+     "\u2713 bd initialized successfully!",
+     "Backend: dolt",
+     "Mode: embedded",
+     "Database: wra",
+     "Issue prefix: wra",
+     "Issues will be named: wra-<hash> (e.g., wra-a3f2dd)",
+     "Run bd quickstart to get started."
+    ],
+    "after_init": {
+     "tracked_files_changed": true,
+     "commits_added_by_bd": 1,
+     "head_moved": true,
+     "git_status_porcelain": [],
+     "ignored_or_untracked_incl_ignored": [
+      "!! .beads.gate.lock",
+      "!! .beads/.local_version",
+      "!! .beads/embeddeddolt/"
+     ],
+     "git_config_added_lines": [
+      "[beads]",
+      "\trole = contributor"
+     ],
+     "info_exclude_added_lines": []
+    },
+    "files_created_in_work_repo": [
+     ".beads.gate.lock",
+     ".beads/.gitignore",
+     ".beads/.local_version",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/metadata.json",
+     ".gitignore",
+     "AGENTS.md",
+     "README.md",
+     "src/app.py"
+    ],
+    "planning_repo_exists_outside_work_repo": true,
+    "planning_repo_is_git_repo": true,
+    "config_yaml_routing": [
+     "#     - ~/beads-planning  # Personal planning repo",
+     "#     - ~/work-planning   # Work planning repo",
+     "repos:",
+     "    - \"~/.local/share/factory/spikes/01-beads/home/.beads-planning\""
+    ],
+    "role": "contributor",
+    "create_exit": 0,
+    "create_secs": 7.56,
+    "created_id": "wra-1bk",
+    "where_work_repo": "<spike>/data/iuroot/work-repo-a/.beads\n  prefix: wra\n  database: <spike>/data/iuroot/work-repo-a/.beads/embeddeddolt",
+    "list_in_work_repo_shows_it": true,
+    "list_in_planning_repo_shows_it": true,
+    "ready_in_work_repo_shows_it": true,
+    "after_create": {
+     "tracked_files_changed": true,
+     "commits_added_by_bd": 1,
+     "head_moved": true,
+     "git_status_porcelain": [],
+     "ignored_or_untracked_incl_ignored": [
+      "!! .beads.gate.lock",
+      "!! .beads/.local_version",
+      "!! .beads/backup.lock",
+      "!! .beads/backup/",
+      "!! .beads/embeddeddolt.gate.lock",
+      "!! .beads/embeddeddolt/",
+      "!! .beads/last-touched"
+     ],
+     "git_config_added_lines": [
+      "[beads]",
+      "\trole = contributor"
+     ],
+     "info_exclude_added_lines": []
+    }
+   },
+   "B_beads_dir_pointer_stealth": {
+    "init_exit": 0,
+    "init_secs": 6.93,
+    "init_err": "",
+    "create_exit": 0,
+    "ready_from_work_repo_with_pointer": true,
+    "without_pointer_bd_finds_nothing": true,
+    "after": {
+     "tracked_files_changed": false,
+     "commits_added_by_bd": 0,
+     "head_moved": false,
+     "git_status_porcelain": [],
+     "ignored_or_untracked_incl_ignored": [],
+     "git_config_added_lines": [
+      "[beads]",
+      "\trole = maintainer"
+     ],
+     "info_exclude_added_lines": [
+      "# Beads stealth mode (added by bd init --stealth)",
+      ".beads/",
+      ".claude/settings.<local>.json"
+     ]
+    },
+    "beads_dir_outside_work_repo": true
+   },
+   "C_stealth_in_repo": {
+    "init_exit": 0,
+    "init_secs": 6.12,
+    "after": {
+     "tracked_files_changed": false,
+     "commits_added_by_bd": 0,
+     "head_moved": false,
+     "git_status_porcelain": [],
+     "ignored_or_untracked_incl_ignored": [
+      "!! .beads.gate.lock",
+      "!! .beads/"
+     ],
+     "git_config_added_lines": [
+      "[beads]",
+      "\trole = maintainer"
+     ],
+     "info_exclude_added_lines": [
+      "# Beads stealth mode (added by bd init --stealth)",
+      ".beads/",
+      ".claude/settings.<local>.json",
+      "# Beads: Dolt files kept local via .git/info/exclude (stealth / no-git-ops)",
+      ".dolt/",
+      "*.db",
+      ".beads-credential-key",
+      ".beads/proxieddb/",
+      "*.gate.lock*"
+     ]
+    },
+    "beads_dir_inside_work_repo": true
+   },
+   "D_default_init_for_contrast": {
+    "init_exit": 0,
+    "init_secs": 6.7,
+    "after": {
+     "tracked_files_changed": true,
+     "commits_added_by_bd": 1,
+     "head_moved": true,
+     "git_status_porcelain": [],
+     "ignored_or_untracked_incl_ignored": [
+      "!! .beads.gate.lock",
+      "!! .beads/.local_version",
+      "!! .beads/embeddeddolt/"
+     ],
+     "git_config_added_lines": [
+      "\thooksPath = ~/.local/share/factory/spikes/01-beads/data/iuroot/work-repo-d/.beads/hooks",
+      "[beads]",
+      "\trole = maintainer"
+     ],
+     "info_exclude_added_lines": []
+    },
+    "tracked_files_added": [
+     ".agents/skills/beads/SKILL.md",
+     ".agents/skills/beads/agents/openai.yaml",
+     ".beads/.gitignore",
+     ".beads/README.md",
+     ".beads/config.yaml",
+     ".beads/hooks/post-checkout",
+     ".beads/hooks/post-merge",
+     ".beads/hooks/pre-commit",
+     ".beads/hooks/pre-push",
+     ".beads/hooks/prepare-commit-msg",
+     ".beads/metadata.json",
+     ".claude/settings.json",
+     ".codex/config.toml",
+     ".codex/hooks.json",
+     ".cursor/hooks.json",
+     ".cursor/rules/beads.mdc",
+     ".gitignore",
+     "AGENTS.md",
+     "CLAUDE.md"
+    ],
+    "claude_md_created": true,
+    "agents_md_modified": true,
+    "core_hooksPath_set": "<spike>/data/iuroot/work-repo-d/.beads/hooks"
+   },
+   "loadavg_at_end": [
+    17.8,
+    15.8,
+    16.8
+   ]
+  },
+  "lockstep": {
+   "versions": {
+    "old": "bd version 1.1.2 (20e493e56)",
+    "new": "bd version 1.3.1 (c1c4b642a)"
+   },
+   "steps": [
+    {
+     "step": "old_init",
+     "exit": 0,
+     "seconds": 3.52,
+     "output": ""
+    },
+    {
+     "step": "old_create",
+     "exit": 0,
+     "seconds": 0.65,
+     "output": "{ \"created_at\": \"2026-10-22T08:49:12.065472Z\", \"created_by\": \"Spike\", \"id\": \"ls-bhx\", \"issue_type\": \"task\", \"owner\": \"<author>\", \"priority\": 2, \"schema_version\": 1, \"status\": \"open\", \"title\": \"made by 1.1.2\", \"updated_at\": \"2026-10-22T08:49:12.065472Z\" }"
+    },
+    {
+     "step": "old_version_schema",
+     "exit": 0,
+     "seconds": 0.39,
+     "output": "Beads Database Information =========================== Database: ~/.local/share/factory/spikes/01-beads/data/lockstep/.beads/embeddeddolt Mode: direct Issue Count: 1 \u26a0\ufe0f Git hooks not installed (5 missing) Run: bd hooks install"
+    },
+    {
+     "step": "new_first_command",
+     "exit": 0,
+     "seconds": 2.17,
+     "output": "[ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dependency_count\": 0, \"dependent_count\": 0, \"comment_count\": 0 } ]"
+    },
+    {
+     "step": "new_info",
+     "exit": 0,
+     "seconds": 0.61,
+     "output": "{ \"config\": { \"auto_compact_enabled\": \"false\", \"compact_batch_size\": \"50\", \"compact_parallel_workers\": \"5\", \"compact_tier1_days\": \"30\", \"compact_tier1_dep_levels\": \"2\", \"compact_tier2_commits\": \"100\", \"compact_tier2_days\": \"90\", \"compact_tier2_dep_levels\": \"5\", \"compaction_enabled\": \"false\", \"issue_prefix\": \"ls\" }, \"database_pat"
+    },
+    {
+     "step": "old_after_migration",
+     "exit": 1,
+     "seconds": 0.45,
+     "output": "{ \"error\": \"schema version mismatch: database is at v66, binary knows up to v53 (13 migrations ahead)\", \"hint\": \"BD_IGNORE_SCHEMA_SKEW=1 bd \\u003ccommand\\u003e or bd --ignore-schema-skew \\u003ccommand\\u003e\", \"schema_skew\": { \"current_version\": 66, \"delta\": 13, \"required_version\": 53 }, \"schema_version\": 1 }"
+    },
+    {
+     "step": "old_after_migration_with_skew_override",
+     "exit": 0,
+     "seconds": 0.62,
+     "output": "Warning: schema skew ignored \u2014 database (v66) is ahead of binary (v53); some queries may fail [ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dep"
+    },
+    {
+     "step": "new_still_fine",
+     "exit": 0,
+     "seconds": 0.99,
+     "output": "[ { \"id\": \"ls-bhx\", \"title\": \"made by 1.1.2\", \"status\": \"open\", \"priority\": 2, \"issue_type\": \"task\", \"owner\": \"<author>\", \"created_at\": \"2026-10-22T08:49:12Z\", \"created_by\": \"Spike\", \"updated_at\": \"2026-10-22T08:49:12Z\", \"dependency_count\": 0, \"dependent_count\": 0, \"comment_count\": 0 } ]"
+    }
+   ]
+  },
+  "release-churn": {
+   "beads": {
+    "latest_stable": {
+     "tag": "v1.3.1",
+     "date": "2026-09-30",
+     "prerelease": false
+    },
+    "latest_any": {
+     "tag": "v1.3.2-rc.2",
+     "date": "2026-10-10",
+     "prerelease": true
+    },
+    "tags_in_api_page": 40,
+    "stable_tags": 30,
+    "stable_tags_since_v1_0_0": 10,
+    "tags_since_v1_0_0_incl_rc": 20,
+    "tags_per_month": {
+     "2026-01": 2,
+     "2026-02": 11,
+     "2026-03": 7,
+     "2026-04": 4,
+     "2026-05": 1,
+     "2026-06": 1,
+     "2026-07": 3,
+     "2026-08": 4,
+     "2026-09": 5,
+     "2026-10": 2
+    },
+    "incident": {
+     "v1.2.1": {
+      "tag": "v1.2.1",
+      "date": "2026-08-11",
+      "prerelease": true
+     },
+     "v1.2.2": {
+      "tag": "v1.2.2",
+      "date": "2026-08-15",
+      "prerelease": false
+     },
+     "github_marks_v1_2_1_prerelease": true,
+     "npm_published_1_2_1": "2026-08-11T22:19:09.790Z",
+     "npm_published_1_2_2": "2026-08-15T04:07:44.983Z",
+     "npm_latest_tag_now": "1.3.1"
+    },
+    "schema_versions_seen": {
+     "v1.1.x/v1.2.2": 53,
+     "v1.2.1 (accidental)": 65,
+     "v1.3.0/v1.3.1": 66
+    }
+   },
+   "dolt": {
+    "pinned_by_beads": "2.2.0",
+    "pinned_release_date": "2026-07-15",
+    "latest_stable": {
+     "tag": "v2.5.1",
+     "date": "2026-10-20"
+    },
+    "minor_versions_published_after_pin": [
+     "v2.2",
+     "v2.3",
+     "v2.4",
+     "v2.5"
+    ],
+    "release_created_out_of_order": "v1.88.2 was created 2026-08-17, after v2.2.4 and v2.3.0 (beads docs: releases/latest can move backwards)",
+    "homebrew_beads_formula_depends_on_unpinned_dolt": true
+   },
+   "main_vs_stable": {
+    "main_commits_ahead_of_v1_3_1": 630,
+    "note": "queried with gh api compare v1.3.1...main on 2026-10-22; external-dependency enforcement sits in [Unreleased]"
+   }
+  },
+  "scale-embedded-1000": {
+   "topology": "embedded",
+   "tasks": 1000,
+   "loadavg_at_start": [
+    16.9,
+    17.4,
+    17.0
+   ],
+   "import": {
+    "exit": 0,
+    "seconds": 25.8,
+    "error": ""
+   },
+   "ready_rows": 367,
+   "db_kb": 102604,
+   "ops": {
+    "ready": {
+     "n": 10,
+     "median_ms": 382.6,
+     "p90_ms": 655.1,
+     "min_ms": 305.8,
+     "max_ms": 705.7,
+     "mean_ms": 463.1,
+     "median_cpu_ms": 305.6,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      15.0,
+      16.9,
+      16.8
+     ],
+     "loadavg_after": [
+      15.0,
+      16.9,
+      16.8
+     ]
+    },
+    "ready_limit_1": {
+     "n": 10,
+     "median_ms": 651.3,
+     "p90_ms": 1711.5,
+     "min_ms": 579.8,
+     "max_ms": 1960.6,
+     "mean_ms": 903.5,
+     "median_cpu_ms": 377.3,
+     "op": "ready --limit 1",
+     "failures": 0,
+     "loadavg_before": [
+      15.0,
+      16.9,
+      16.8
+     ],
+     "loadavg_after": [
+      15.3,
+      16.9,
+      16.8
+     ]
+    },
+    "create": {
+     "n": 10,
+     "median_ms": 824.6,
+     "p90_ms": 939.2,
+     "min_ms": 757.8,
+     "max_ms": 952.9,
+     "mean_ms": 840.6,
+     "median_cpu_ms": 580.5,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      15.3,
+      16.9,
+      16.8
+     ],
+     "loadavg_after": [
+      14.7,
+      16.7,
+      16.8
+     ]
+    },
+    "claim": {
+     "n": 10,
+     "median_ms": 518.8,
+     "p90_ms": 611.9,
+     "min_ms": 430.1,
+     "max_ms": 704.2,
+     "mean_ms": 540.5,
+     "median_cpu_ms": 361.2,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      14.7,
+      16.7,
+      16.8
+     ],
+     "loadavg_after": [
+      14.4,
+      16.6,
+      16.7
+     ]
+    },
+    "heartbeat": {
+     "n": 10,
+     "median_ms": 393.5,
+     "p90_ms": 492.9,
+     "min_ms": 344.7,
+     "max_ms": 517.6,
+     "mean_ms": 411.0,
+     "median_cpu_ms": 281.9,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      14.4,
+      16.6,
+      16.7
+     ],
+     "loadavg_after": [
+      13.7,
+      16.4,
+      16.7
+     ]
+    },
+    "close": {
+     "n": 10,
+     "median_ms": 889.5,
+     "p90_ms": 1390.7,
+     "min_ms": 579.3,
+     "max_ms": 2099.1,
+     "mean_ms": 1039.6,
+     "median_cpu_ms": 532.3,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      13.7,
+      16.4,
+      16.7
+     ],
+     "loadavg_after": [
+      14.4,
+      16.5,
+      16.7
+     ]
+    }
+   },
+   "loadavg_at_end": [
+    14.4,
+    16.5,
+    16.7
+   ]
+  },
+  "scale-embedded-2000": {
+   "topology": "embedded",
+   "tasks": 2000,
+   "loadavg_at_start": [
+    11.1,
+    14.7,
+    16.2
+   ],
+   "import": {
+    "exit": 0,
+    "seconds": 87.3,
+    "error": ""
+   },
+   "ready_rows": 660,
+   "db_kb": 218680,
+   "ops": {
+    "ready": {
+     "n": 10,
+     "median_ms": 498.6,
+     "p90_ms": 542.0,
+     "min_ms": 405.4,
+     "max_ms": 725.4,
+     "mean_ms": 507.2,
+     "median_cpu_ms": 399.7,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      16.6,
+      15.5,
+      16.3
+     ],
+     "loadavg_after": [
+      15.5,
+      15.3,
+      16.2
+     ]
+    },
+    "ready_limit_1": {
+     "n": 10,
+     "median_ms": 590.0,
+     "p90_ms": 703.5,
+     "min_ms": 470.0,
+     "max_ms": 718.2,
+     "mean_ms": 587.5,
+     "median_cpu_ms": 457.3,
+     "op": "ready --limit 1",
+     "failures": 0,
+     "loadavg_before": [
+      15.5,
+      15.3,
+      16.2
+     ],
+     "loadavg_after": [
+      16.1,
+      15.4,
+      16.3
+     ]
+    },
+    "create": {
+     "n": 10,
+     "median_ms": 1501.8,
+     "p90_ms": 2530.4,
+     "min_ms": 828.9,
+     "max_ms": 2882.5,
+     "mean_ms": 1591.7,
+     "median_cpu_ms": 832.5,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      16.1,
+      15.4,
+      16.3
+     ],
+     "loadavg_after": [
+      17.1,
+      15.6,
+      16.4
+     ]
+    },
+    "claim": {
+     "n": 10,
+     "median_ms": 934.7,
+     "p90_ms": 1097.4,
+     "min_ms": 678.3,
+     "max_ms": 1249.0,
+     "mean_ms": 920.9,
+     "median_cpu_ms": 549.9,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      17.1,
+      15.6,
+      16.4
+     ],
+     "loadavg_after": [
+      17.5,
+      15.8,
+      16.4
+     ]
+    },
+    "heartbeat": {
+     "n": 10,
+     "median_ms": 434.3,
+     "p90_ms": 565.5,
+     "min_ms": 402.1,
+     "max_ms": 661.5,
+     "mean_ms": 479.6,
+     "median_cpu_ms": 362.5,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      17.5,
+      15.8,
+      16.4
+     ],
+     "loadavg_after": [
+      17.1,
+      15.7,
+      16.4
+     ]
+    },
+    "close": {
+     "n": 10,
+     "median_ms": 730.5,
+     "p90_ms": 773.7,
+     "min_ms": 654.8,
+     "max_ms": 826.3,
+     "mean_ms": 727.0,
+     "median_cpu_ms": 591.7,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      17.1,
+      15.7,
+      16.4
+     ],
+     "loadavg_after": [
+      16.6,
+      15.6,
+      16.3
+     ]
+    }
+   },
+   "loadavg_at_end": [
+    16.6,
+    15.6,
+    16.3
+   ]
+  },
+  "scale-shared-1000": {
+   "topology": "shared",
+   "tasks": 1000,
+   "loadavg_at_start": [
+    24.1,
+    18.3,
+    17.3
+   ],
+   "import": {
+    "exit": 0,
+    "seconds": 44.3,
+    "error": ""
+   },
+   "ready_rows": 367,
+   "db_kb": 298016,
+   "ops": {
+    "ready": {
+     "n": 10,
+     "median_ms": 139.9,
+     "p90_ms": 170.0,
+     "min_ms": 120.2,
+     "max_ms": 186.9,
+     "mean_ms": 146.1,
+     "median_cpu_ms": 91.5,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      19.7,
+      17.9,
+      17.2
+     ],
+     "loadavg_after": [
+      19.0,
+      17.8,
+      17.1
+     ]
+    },
+    "ready_limit_1": {
+     "n": 10,
+     "median_ms": 122.7,
+     "p90_ms": 163.8,
+     "min_ms": 107.0,
+     "max_ms": 168.8,
+     "mean_ms": 127.7,
+     "median_cpu_ms": 89.0,
+     "op": "ready --limit 1",
+     "failures": 0,
+     "loadavg_before": [
+      19.0,
+      17.8,
+      17.1
+     ],
+     "loadavg_after": [
+      19.0,
+      17.8,
+      17.1
+     ]
+    },
+    "create": {
+     "n": 10,
+     "median_ms": 303.1,
+     "p90_ms": 369.8,
+     "min_ms": 255.3,
+     "max_ms": 404.8,
+     "mean_ms": 315.7,
+     "median_cpu_ms": 109.9,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      19.0,
+      17.8,
+      17.1
+     ],
+     "loadavg_after": [
+      17.9,
+      17.6,
+      17.1
+     ]
+    },
+    "claim": {
+     "n": 10,
+     "median_ms": 305.6,
+     "p90_ms": 372.0,
+     "min_ms": 226.4,
+     "max_ms": 373.0,
+     "mean_ms": 303.7,
+     "median_cpu_ms": 87.2,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      17.9,
+      17.6,
+      17.1
+     ],
+     "loadavg_after": [
+      17.9,
+      17.6,
+      17.1
+     ]
+    },
+    "heartbeat": {
+     "n": 10,
+     "median_ms": 222.7,
+     "p90_ms": 254.5,
+     "min_ms": 188.4,
+     "max_ms": 328.3,
+     "mean_ms": 231.8,
+     "median_cpu_ms": 78.7,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      17.9,
+      17.6,
+      17.1
+     ],
+     "loadavg_after": [
+      17.7,
+      17.6,
+      17.1
+     ]
+    },
+    "close": {
+     "n": 10,
+     "median_ms": 309.4,
+     "p90_ms": 326.3,
+     "min_ms": 254.3,
+     "max_ms": 359.0,
+     "mean_ms": 304.6,
+     "median_cpu_ms": 85.0,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      17.7,
+      17.6,
+      17.1
+     ],
+     "loadavg_after": [
+      17.7,
+      17.6,
+      17.1
+     ]
+    }
+   },
+   "loadavg_at_end": [
+    17.7,
+    17.6,
+    17.1
+   ]
+  },
+  "scale-shared-2000": {
+   "topology": "shared",
+   "tasks": 2000,
+   "loadavg_at_start": [
+    17.0,
+    15.8,
+    16.4
+   ],
+   "import": {
+    "exit": 1,
+    "seconds": 32.7,
+    "error": "bd import: 250/2000 issues committed\nbd import: 500/2000 issues committed\nbd import: 750/2000 issues committed\nbd import: 1000/2000 issues committed\n[mysql] 2026/10/22 10:59:25 packets.go:58 read tcp "
+   },
+   "ready_rows": 363,
+   "db_kb": 161832,
+   "ops": {
+    "ready": {
+     "n": 10,
+     "median_ms": 444.7,
+     "p90_ms": 995.0,
+     "min_ms": 261.7,
+     "max_ms": 2112.8,
+     "mean_ms": 681.5,
+     "median_cpu_ms": 137.7,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      16.4,
+      15.8,
+      16.4
+     ],
+     "loadavg_after": [
+      24.8,
+      17.6,
+      17.0
+     ]
+    },
+    "ready_limit_1": {
+     "n": 10,
+     "median_ms": 228.8,
+     "p90_ms": 299.5,
+     "min_ms": 181.0,
+     "max_ms": 883.4,
+     "mean_ms": 295.4,
+     "median_cpu_ms": 94.1,
+     "op": "ready --limit 1",
+     "failures": 0,
+     "loadavg_before": [
+      24.8,
+      17.6,
+      17.0
+     ],
+     "loadavg_after": [
+      24.8,
+      17.6,
+      17.0
+     ]
+    },
+    "create": {
+     "n": 10,
+     "median_ms": 375.0,
+     "p90_ms": 613.0,
+     "min_ms": 269.7,
+     "max_ms": 681.3,
+     "mean_ms": 436.7,
+     "median_cpu_ms": 121.0,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      24.8,
+      17.6,
+      17.0
+     ],
+     "loadavg_after": [
+      25.0,
+      17.8,
+      17.1
+     ]
+    },
+    "claim": {
+     "n": 10,
+     "median_ms": 309.0,
+     "p90_ms": 426.1,
+     "min_ms": 240.6,
+     "max_ms": 426.4,
+     "mean_ms": 333.4,
+     "median_cpu_ms": 83.4,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      25.0,
+      17.8,
+      17.1
+     ],
+     "loadavg_after": [
+      24.5,
+      17.8,
+      17.1
+     ]
+    },
+    "heartbeat": {
+     "n": 10,
+     "median_ms": 236.3,
+     "p90_ms": 277.8,
+     "min_ms": 202.3,
+     "max_ms": 308.4,
+     "mean_ms": 242.3,
+     "median_cpu_ms": 84.6,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      24.5,
+      17.8,
+      17.1
+     ],
+     "loadavg_after": [
+      24.5,
+      17.8,
+      17.1
+     ]
+    },
+    "close": {
+     "n": 10,
+     "median_ms": 286.7,
+     "p90_ms": 330.7,
+     "min_ms": 220.8,
+     "max_ms": 379.6,
+     "mean_ms": 290.0,
+     "median_cpu_ms": 79.5,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      24.5,
+      17.8,
+      17.1
+     ],
+     "loadavg_after": [
+      23.6,
+      17.7,
+      17.1
+     ]
+    }
+   },
+   "loadavg_at_end": [
+    23.6,
+    17.7,
+    17.1
+   ]
+  },
+  "serve-leak": {
+   "proxy_children_before_serve": 0,
+   "proxy_children_while_serve_runs": 1,
+   "serve_exited_after_sigterm": true,
+   "proxy_children_after_serve_exit": 1,
+   "leftover": {
+    "parent_pid": 1,
+    "rss_mb": 6,
+    "idle_timeout_flag": true
+   }
+  },
+  "serve": {
+   "loadavg_at_start": [
+    25.0,
+    21.4,
+    19.7
+   ],
+   "serve_start_to_healthz_s": 1.04,
+   "context": {
+    "api_version": "v0",
+    "backend": "dolt",
+    "bd_version": "1.3.1",
+    "beads_dir": "<spike>/data/shared/dotfiles/.beads",
+    "capabilities": "['config.get', 'config.list', 'config.set', 'config.unset', 'dependencies.add', ",
+    "database": "df",
+    "dolt_mode": "server",
+    "project_id": "04cba96c-da8c-4f67-9259-d39730bb9d37",
+    "repo_root": "<spike>/data/shared/dotfiles",
+    "schema_version": "1"
+   },
+   "ready_response_shape": [
+    "has_more",
+    "items"
+   ],
+   "http_reads": [
+    {
+     "n": 20,
+     "median_ms": 0.7,
+     "p90_ms": 1.1,
+     "min_ms": 0.5,
+     "max_ms": 1.6,
+     "mean_ms": 0.8,
+     "op": "GET /healthz",
+     "status": 200,
+     "response_bytes": 16
+    },
+    {
+     "n": 20,
+     "median_ms": 28.9,
+     "p90_ms": 42.2,
+     "min_ms": 23.3,
+     "max_ms": 48.5,
+     "mean_ms": 31.5,
+     "op": "GET /v0/beads/ready?limit=100",
+     "status": 200,
+     "response_bytes": 36280
+    },
+    {
+     "n": 20,
+     "median_ms": 10.0,
+     "p90_ms": 10.7,
+     "min_ms": 8.2,
+     "max_ms": 18.5,
+     "mean_ms": 10.2,
+     "op": "GET /v0/beads/ready?limit=1",
+     "status": 200,
+     "response_bytes": 596
+    },
+    {
+     "n": 20,
+     "median_ms": 4.0,
+     "p90_ms": 6.6,
+     "min_ms": 2.5,
+     "max_ms": 7.9,
+     "mean_ms": 4.4,
+     "op": "GET /v0/beads/stats",
+     "status": 200,
+     "response_bytes": 259
+    },
+    {
+     "n": 20,
+     "median_ms": 13.2,
+     "p90_ms": 20.5,
+     "min_ms": 11.0,
+     "max_ms": 27.9,
+     "mean_ms": 14.7,
+     "op": "GET /v0/beads/issues?limit=50",
+     "status": 200,
+     "response_bytes": 16381
+    },
+    {
+     "n": 20,
+     "median_ms": 12.0,
+     "p90_ms": 24.3,
+     "min_ms": 7.5,
+     "max_ms": 32.9,
+     "mean_ms": 14.6,
+     "op": "GET /v0/beads/issues/{id}",
+     "status": 200,
+     "response_bytes": 602
+    }
+   ],
+   "cli_ready_same_moment": {
+    "n": 20,
+    "median_ms": 161.1,
+    "p90_ms": 241.4,
+    "min_ms": 123.3,
+    "max_ms": 602.9,
+    "mean_ms": 193.9,
+    "median_cpu_ms": 101.9,
+    "op": "CLI: bd ready --json",
+    "failures": 0,
+    "loadavg_before": [
+     25.1,
+     21.5,
+     19.7
+    ],
+    "loadavg_after": [
+     24.4,
+     21.4,
+     19.7
+    ]
+   },
+   "http_claimNext_x20": {
+    "n": 20,
+    "median_ms": 53.9,
+    "p90_ms": 83.1,
+    "min_ms": 38.6,
+    "max_ms": 120.9,
+    "mean_ms": 59.4,
+    "claimed": 20,
+    "first_response_keys": [
+     "claimed"
+    ]
+   },
+   "claim_on_held_task": {
+    "http_status": 409,
+    "code": "already_claimed",
+    "assignee_in_problem": "http-w"
+   },
+   "lease_fields_present_on_claimed_issue": [
+    "heartbeat_at",
+    "lease_expires_at"
+   ],
+   "http_close_x20": {
+    "n": 20,
+    "median_ms": 89.9,
+    "p90_ms": 192.7,
+    "min_ms": 60.0,
+    "max_ms": 302.1,
+    "mean_ms": 122.9
+   },
+   "spec_has_heartbeat_endpoint": false,
+   "spec_has_reclaim_endpoint": false,
+   "spec_paths": 35,
+   "events_endpoint": {
+    "status": 409,
+    "keys": [
+     "code",
+     "detail",
+     "request_id",
+     "status",
+     "title"
+    ],
+    "secs": 0.003
+   },
+   "loadavg_at_end": [
+    24.4,
+    21.4,
+    19.7
+   ]
+  },
+  "storage-crash-embedded": {
+   "kind": "embedded",
+   "loadavg_at_start": [
+    16.6,
+    19.7,
+    19.2
+   ],
+   "rounds": 10,
+   "killed_before_exit": 8,
+   "acknowledged_creates": 2,
+   "found_after": 5,
+   "acknowledged_but_missing": [],
+   "found_but_not_acknowledged": 3,
+   "next_command_after_kill": {
+    "all_ok": true,
+    "failures": [],
+    "median_s": 0.67
+   },
+   "bd_doctor": {
+    "exit": 0,
+    "tail": [
+     "\u2022 Reinitialize if needed:  bd init --reinit-local",
+     "\u2022 Switch to server mode:   bd init --server",
+     "Checks available in embedded mode:",
+     "\u2022 bd doctor --check=artifacts",
+     "\u2022 bd doctor --check=conventions",
+     "\u2022 bd doctor --check=pollution"
+    ]
+   },
+   "loadavg_at_end": [
+    15.0,
+    19.1,
+    19.0
+   ]
+  },
+  "storage-crash-shared": {
+   "kind": "shared",
+   "loadavg_at_start": [
+    11.4,
+    15.5,
+    17.4
+   ],
+   "rounds": [
+    {
+     "round": 0,
+     "server_pids_killed": 1,
+     "acknowledged_before_kill": 14,
+     "writer_errors_after_kill": 69,
+     "first_error": "Error: failed to open database: Dolt server unreachable at loopback:43308: dial tcp loopback:43308: connect: connection refused",
+     "plain_command_after_cooldown": {
+      "exit": 1,
+      "error": "Error: failed to open database: dolt circuit breaker is open: server appears down, failing fast (cooldown 5s)"
+     },
+     "server_restarted_by_bd_on_its_own": false,
+     "bd_dolt_start": {
+      "exit": 0,
+      "seconds": 1.26
+     },
+     "first_successful_read_after_start_s": 4.17,
+     "first_write_after_restart_exit": 0,
+     "acknowledged_but_missing": [],
+     "found_total": 15
+    },
+    {
+     "round": 1,
+     "server_pids_killed": 1,
+     "acknowledged_before_kill": 9,
+     "writer_errors_after_kill": 1,
+     "first_error": "[mysql] 2026/10/22 10:41:56 packets.go:58 unexpected EOF",
+     "plain_command_after_cooldown": {
+      "exit": 1,
+      "error": "  bd dolt start"
+     },
+     "server_restarted_by_bd_on_its_own": false,
+     "bd_dolt_start": {
+      "exit": 0,
+      "seconds": 2.04
+     },
+     "first_successful_read_after_start_s": 0.23,
+     "first_write_after_restart_exit": 0,
+     "acknowledged_but_missing": [],
+     "found_total": 25
+    },
+    {
+     "round": 2,
+     "server_pids_killed": 1,
+     "acknowledged_before_kill": 14,
+     "writer_errors_after_kill": 16,
+     "first_error": "Error: failed to open database: Dolt server unreachable at loopback:43308: dial tcp loopback:43308: connect: connection refused",
+     "plain_command_after_cooldown": {
+      "exit": 1,
+      "error": "Error: failed to open database: dolt circuit breaker is open: server appears down, failing fast (cooldown 5s)"
+     },
+     "server_restarted_by_bd_on_its_own": false,
+     "bd_dolt_start": {
+      "exit": 0,
+      "seconds": 1.26
+     },
+     "first_successful_read_after_start_s": 4.53,
+     "first_write_after_restart_exit": 0,
+     "acknowledged_but_missing": [],
+     "found_total": 40
+    }
+   ],
+   "loadavg_at_end": [
+    14.5,
+    15.2,
+    17.1
+   ]
+  },
+  "storage-crash-sqlite": {
+   "kind": "sqlite",
+   "loadavg_at_start": [
+    14.4,
+    18.4,
+    18.7
+   ],
+   "rounds": 10,
+   "killed_before_exit": 10,
+   "acknowledged_creates": 35727,
+   "found_after": 35736,
+   "acknowledged_but_missing": {
+    "count": 0,
+    "first": []
+   },
+   "found_but_not_acknowledged": 9,
+   "next_command_after_kill": {
+    "all_ok": true,
+    "failures": [],
+    "median_s": 0.02
+   },
+   "sqlite_integrity_check": "ok",
+   "loadavg_at_end": [
+    13.9,
+    18.3,
+    18.7
+   ]
+  },
+  "topology-embedded-rerun": {
+   "topology": "embedded",
+   "loadavg_at_start": [
+    20.5,
+    18.8,
+    18.5
+   ],
+   "ops_df": {
+    "create": {
+     "n": 20,
+     "median_ms": 963.1,
+     "p90_ms": 1245.9,
+     "min_ms": 723.1,
+     "max_ms": 1526.9,
+     "mean_ms": 998.7,
+     "median_cpu_ms": 482.9,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      20.5,
+      18.8,
+      18.5
+     ],
+     "loadavg_after": [
+      19.9,
+      18.8,
+      18.6
+     ]
+    },
+    "update": {
+     "n": 20,
+     "median_ms": 634.9,
+     "p90_ms": 713.3,
+     "min_ms": 468.5,
+     "max_ms": 758.0,
+     "mean_ms": 619.5,
+     "median_cpu_ms": 311.1,
+     "op": "update",
+     "failures": 0,
+     "loadavg_before": [
+      19.9,
+      18.8,
+      18.6
+     ],
+     "loadavg_after": [
+      20.8,
+      19.0,
+      18.6
+     ]
+    },
+    "ready": {
+     "n": 20,
+     "median_ms": 531.4,
+     "p90_ms": 640.8,
+     "min_ms": 408.0,
+     "max_ms": 853.2,
+     "mean_ms": 563.7,
+     "median_cpu_ms": 276.4,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      20.8,
+      19.0,
+      18.6
+     ],
+     "loadavg_after": [
+      20.9,
+      19.1,
+      18.7
+     ]
+    },
+    "ready_brief": {
+     "n": 20,
+     "median_ms": 485.3,
+     "p90_ms": 601.9,
+     "min_ms": 346.2,
+     "max_ms": 726.4,
+     "mean_ms": 495.2,
+     "median_cpu_ms": 264.3,
+     "op": "ready --brief",
+     "failures": 0,
+     "loadavg_before": [
+      20.9,
+      19.1,
+      18.7
+     ],
+     "loadavg_after": [
+      20.5,
+      19.1,
+      18.7
+     ]
+    },
+    "list": {
+     "n": 20,
+     "median_ms": 661.3,
+     "p90_ms": 846.5,
+     "min_ms": 499.1,
+     "max_ms": 905.9,
+     "mean_ms": 677.6,
+     "median_cpu_ms": 332.8,
+     "op": "list",
+     "failures": 0,
+     "loadavg_before": [
+      20.5,
+      19.1,
+      18.7
+     ],
+     "loadavg_after": [
+      21.1,
+      19.3,
+      18.8
+     ]
+    },
+    "show": {
+     "n": 20,
+     "median_ms": 653.1,
+     "p90_ms": 849.9,
+     "min_ms": 568.4,
+     "max_ms": 1045.4,
+     "mean_ms": 707.4,
+     "median_cpu_ms": 323.3,
+     "op": "show",
+     "failures": 0,
+     "loadavg_before": [
+      21.1,
+      19.3,
+      18.8
+     ],
+     "loadavg_after": [
+      21.4,
+      19.5,
+      18.8
+     ]
+    },
+    "claim": {
+     "n": 20,
+     "median_ms": 662.5,
+     "p90_ms": 753.9,
+     "min_ms": 489.0,
+     "max_ms": 864.0,
+     "mean_ms": 652.6,
+     "median_cpu_ms": 298.8,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      21.4,
+      19.5,
+      18.8
+     ],
+     "loadavg_after": [
+      20.1,
+      19.3,
+      18.8
+     ]
+    },
+    "heartbeat": {
+     "n": 20,
+     "median_ms": 482.1,
+     "p90_ms": 596.1,
+     "min_ms": 375.5,
+     "max_ms": 845.1,
+     "mean_ms": 508.7,
+     "median_cpu_ms": 259.9,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      20.1,
+      19.3,
+      18.8
+     ],
+     "loadavg_after": [
+      19.0,
+      19.1,
+      18.7
+     ]
+    },
+    "close": {
+     "n": 20,
+     "median_ms": 711.5,
+     "p90_ms": 1024.1,
+     "min_ms": 565.8,
+     "max_ms": 1147.0,
+     "mean_ms": 745.0,
+     "median_cpu_ms": 394.9,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      19.0,
+      19.1,
+      18.7
+     ],
+     "loadavg_after": [
+      17.8,
+      18.8,
+      18.6
+     ]
+    },
+    "close_fencing": {
+     "close_by_other_actor_exit": 0
+    },
+    "floor_bd_version": {
+     "n": 20,
+     "median_ms": 131.0,
+     "p90_ms": 307.9,
+     "min_ms": 88.6,
+     "max_ms": 364.7,
+     "mean_ms": 162.0,
+     "median_cpu_ms": 91.9,
+     "op": "floor: bd --version",
+     "failures": 0,
+     "loadavg_before": [
+      17.8,
+      18.8,
+      18.6
+     ],
+     "loadavg_after": [
+      17.8,
+      18.8,
+      18.6
+     ]
+    }
+   },
+   "external": {
+    "cases": [
+     {
+      "case": "A project not configured",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-bds [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-ann [P3] spread of re"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-bds [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-ann [P3] spread of re"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-bds [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-ann [P3] spread of re"
+       }
+      ]
+     },
+     {
+      "case": "B relative path",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-6la [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-ann [P3] spread of refuses cat"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-6la [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-ann [P3] spread of refuses cat"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-6la [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-ann [P3] spread of refuses cat"
+       }
+      ]
+     },
+     {
+      "case": "C absolute path",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-01a [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-ann [P3] spread of refuses cat"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-01a [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-ann [P3] spread of refuses cat"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-01a [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-ann [P3] spread of refuses cat"
+       }
+      ]
+     }
+    ],
+    "enforced_in_ready": false,
+    "config_yaml_has_external_projects": true,
+    "git_status_wo": [
+     " M .beads/config.yaml"
+    ]
+   },
+   "loadavg_at_end": [
+    19.5,
+    19.1,
+    18.7
+   ]
+  },
+  "topology-embedded": {
+   "topology": "embedded",
+   "loadavg_at_start": [
+    23.6,
+    28.4,
+    21.9
+   ],
+   "setup": {
+    "repos": {
+     "dotfiles": {
+      "init_s": 6.99,
+      "init_cpu_s": 3.12,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 2248
+     },
+     "weatherorb": {
+      "init_s": 5.01,
+      "init_cpu_s": 2.67,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 2228
+     },
+     "basalt-ui": {
+      "init_s": 4.53,
+      "init_cpu_s": 2.6,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 2260
+     }
+    },
+    "setup_total_s": 16.85,
+    "setup_commands": 3,
+    "dolt_server_processes_after_setup": 0,
+    "dolt_server_rss_mb_after_setup": 0
+   },
+   "load": {
+    "dotfiles": {
+     "tasks": 79,
+     "create_total_s": 81.94,
+     "create": {
+      "n": 79,
+      "median_ms": 1028.4,
+      "p90_ms": 1265.6,
+      "min_ms": 620.8,
+      "max_ms": 1427.7,
+      "mean_ms": 1037.2
+     },
+     "edges": 14,
+     "dep_bulk_s": 4.37,
+     "defer_s": 0.0,
+     "load_total_s": 86.31
+    },
+    "weatherorb": {
+     "tasks": 50,
+     "create_total_s": 51.14,
+     "create": {
+      "n": 50,
+      "median_ms": 998.3,
+      "p90_ms": 1361.4,
+      "min_ms": 625.0,
+      "max_ms": 1911.9,
+      "mean_ms": 1022.7
+     },
+     "edges": 4,
+     "dep_bulk_s": 1.69,
+     "defer_s": 2.24,
+     "load_total_s": 55.08
+    },
+    "basalt-ui": {
+     "tasks": 81,
+     "create_total_s": 90.46,
+     "create": {
+      "n": 81,
+      "median_ms": 1092.3,
+      "p90_ms": 1460.8,
+      "min_ms": 567.6,
+      "max_ms": 1852.9,
+      "mean_ms": 1116.7
+     },
+     "edges": 13,
+     "dep_bulk_s": 5.15,
+     "defer_s": 0.0,
+     "load_total_s": 95.62
+    }
+   },
+   "load_total_s": 237.0,
+   "dolt_server_processes_after_load": 0,
+   "ready_vs_oracle": {
+    "dotfiles": {
+     "ready_rows": 20,
+     "oracle_with_parent_propagation": 20,
+     "match_with_parent_propagation": true,
+     "oracle_direct_edges_only": 70,
+     "match_direct_only": false,
+     "ready_json_bytes": 14058,
+     "ready_secs": 0.641,
+     "ready_types": [
+      "bug",
+      "decision",
+      "epic",
+      "feature",
+      "task"
+     ],
+     "ready_leaf_work_rows": 17
+    },
+    "weatherorb": {
+     "ready_rows": 32,
+     "oracle_with_parent_propagation": 26,
+     "match_with_parent_propagation": false,
+     "oracle_direct_edges_only": 42,
+     "match_direct_only": false,
+     "ready_json_bytes": 22165,
+     "ready_secs": 0.5,
+     "ready_types": [
+      "bug",
+      "epic",
+      "feature",
+      "task"
+     ],
+     "ready_leaf_work_rows": 28
+    },
+    "basalt-ui": {
+     "ready_rows": 6,
+     "oracle_with_parent_propagation": 6,
+     "match_with_parent_propagation": true,
+     "oracle_direct_edges_only": 68,
+     "match_direct_only": false,
+     "ready_json_bytes": 3914,
+     "ready_secs": 0.377,
+     "ready_types": [
+      "epic",
+      "task"
+     ],
+     "ready_leaf_work_rows": 5
+    }
+   },
+   "ops_df": {
+    "create": {
+     "n": 20,
+     "median_ms": 943.4,
+     "p90_ms": 1049.7,
+     "min_ms": 819.0,
+     "max_ms": 1078.0,
+     "mean_ms": 941.3,
+     "median_cpu_ms": 492.4,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      20.5,
+      20.5,
+      19.7
+     ],
+     "loadavg_after": [
+      18.8,
+      20.1,
+      19.6
+     ]
+    },
+    "update": {
+     "n": 20,
+     "median_ms": 774.6,
+     "p90_ms": 904.2,
+     "min_ms": 512.3,
+     "max_ms": 1281.2,
+     "mean_ms": 770.9,
+     "median_cpu_ms": 367.6,
+     "op": "update",
+     "failures": 0,
+     "loadavg_before": [
+      18.8,
+      20.1,
+      19.6
+     ],
+     "loadavg_after": [
+      16.8,
+      19.6,
+      19.4
+     ]
+    },
+    "ready": {
+     "n": 20,
+     "median_ms": 561.0,
+     "p90_ms": 622.3,
+     "min_ms": 386.1,
+     "max_ms": 849.6,
+     "mean_ms": 549.3,
+     "median_cpu_ms": 287.3,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      16.8,
+      19.6,
+      19.4
+     ],
+     "loadavg_after": [
+      16.9,
+      19.4,
+      19.4
+     ]
+    },
+    "ready_brief": {
+     "n": 20,
+     "median_ms": 503.0,
+     "p90_ms": 637.1,
+     "min_ms": 371.1,
+     "max_ms": 788.5,
+     "mean_ms": 537.6,
+     "median_cpu_ms": 279.7,
+     "op": "ready --brief",
+     "failures": 0,
+     "loadavg_before": [
+      16.9,
+      19.4,
+      19.4
+     ],
+     "loadavg_after": [
+      16.2,
+      19.2,
+      19.3
+     ]
+    },
+    "list": {
+     "n": 20,
+     "median_ms": 897.8,
+     "p90_ms": 1240.7,
+     "min_ms": 687.2,
+     "max_ms": 1365.9,
+     "mean_ms": 949.8,
+     "median_cpu_ms": 408.8,
+     "op": "list",
+     "failures": 0,
+     "loadavg_before": [
+      16.2,
+      19.2,
+      19.3
+     ],
+     "loadavg_after": [
+      17.1,
+      19.2,
+      19.3
+     ]
+    },
+    "show": {
+     "n": 20,
+     "median_ms": 663.8,
+     "p90_ms": 862.4,
+     "min_ms": 493.9,
+     "max_ms": 1378.6,
+     "mean_ms": 689.3,
+     "median_cpu_ms": 347.8,
+     "op": "show",
+     "failures": 0,
+     "loadavg_before": [
+      17.1,
+      19.2,
+      19.3
+     ],
+     "loadavg_after": [
+      15.4,
+      18.7,
+      19.1
+     ]
+    },
+    "claim": {
+     "n": 20,
+     "median_ms": 502.6,
+     "p90_ms": 648.0,
+     "min_ms": 461.3,
+     "max_ms": 678.9,
+     "mean_ms": 534.7,
+     "median_cpu_ms": 294.5,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      15.4,
+      18.7,
+      19.1
+     ],
+     "loadavg_after": [
+      14.1,
+      18.3,
+      19.0
+     ]
+    },
+    "heartbeat": {
+     "n": 20,
+     "median_ms": 462.7,
+     "p90_ms": 609.9,
+     "min_ms": 351.8,
+     "max_ms": 1185.9,
+     "mean_ms": 516.3,
+     "median_cpu_ms": 264.1,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      14.1,
+      18.3,
+      19.0
+     ],
+     "loadavg_after": [
+      13.3,
+      18.0,
+      18.9
+     ]
+    },
+    "close": {
+     "n": 20,
+     "median_ms": 349.3,
+     "p90_ms": 625.8,
+     "min_ms": 272.7,
+     "max_ms": 804.4,
+     "mean_ms": 396.3,
+     "median_cpu_ms": 212.0,
+     "op": "close",
+     "failures": 20,
+     "loadavg_before": [
+      13.3,
+      18.0,
+      18.9
+     ],
+     "loadavg_after": [
+      13.0,
+      17.8,
+      18.8
+     ],
+     "first_failure": "cannot close df-9dh: assignee is \"bench\", actor is \"Spike\"; reclaim or use --force to override\n"
+    },
+    "floor_bd_version": {
+     "n": 20,
+     "median_ms": 141.9,
+     "p90_ms": 242.2,
+     "min_ms": 89.5,
+     "max_ms": 309.4,
+     "mean_ms": 161.9,
+     "median_cpu_ms": 100.3,
+     "op": "floor: bd --version",
+     "failures": 0,
+     "loadavg_before": [
+      13.0,
+      17.8,
+      18.8
+     ],
+     "loadavg_after": [
+      13.1,
+      17.8,
+      18.8
+     ]
+    }
+   },
+   "semantics": {
+    "chain": {
+     "b_ready_before_close": false,
+     "a_ready_before_close": true,
+     "b_ready_after_close_a": true
+    },
+    "fan_in_concurrent_close": {
+     "rounds": 8,
+     "dependent_missing_from_ready": 0,
+     "detail": [
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      },
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      },
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      }
+     ]
+    },
+    "reopen_blocker": {
+     "dependent_ready_after_close": true,
+     "dependent_ready_after_reopen": false
+    },
+    "edge_types": {
+     "related_blocks": false,
+     "discovered_from_blocks": false
+    },
+    "cycle_rejected": {
+     "exit_code": 1,
+     "message": "Error: adding dependency would create a cycle"
+    },
+    "cas": {
+     "first_if_status_exit": 0,
+     "stale_if_status_exit": 1,
+     "claim_on_foreign_claim_exit": 1,
+     "claim_on_foreign_claim_msg": "Error updating df-lux: issue already claimed by w1\nError: 1 of 1 issues failed to update\n  df-lux: updating issue: issue already claimed by "
+    }
+   },
+   "external": {
+    "config_set_exit": 0,
+    "dep_add": {
+     "exit": 0,
+     "msg": "\u2713 Added dependency: wo-6te (ext consumer) depends on external:bu:cap1 (blocks)"
+    },
+    "ready_before": true,
+    "ready_after_provider_closed_not_shipped": true,
+    "ship": {
+     "exit": 0,
+     "msg": "\u2713 Shipped cap1 (bu-d2p)\n  Added label: provides:cap1\n\nExternal projects can now depend on: external:<this-project>:cap1"
+    },
+    "ready_after_ship": true,
+    "ready_query_with_external_s": 0.347,
+    "config_yaml_has_external_projects": true,
+    "git_status_wo": [
+     " M .beads/config.yaml"
+    ],
+    "git_diff_stat_wo": [
+     ".beads/config.yaml | 3 +++",
+     " 1 file changed, 3 insertions(+)"
+    ]
+   },
+   "dataset_external_edges": {
+    "added": 2,
+    "exit": 0,
+    "ready_rows": 33,
+    "oracle_rows": 26,
+    "match": false,
+    "extra_in_bd": [
+     "wheld",
+     "wheld.1",
+     "wheld.2",
+     "wheld.3",
+     "wheld.4",
+     "wheld.5",
+     "wo-6te"
+    ],
+    "missing_in_bd": []
+   },
+   "dolt_server_processes_end": 0,
+   "dolt_server_rss_mb_end": 0,
+   "disk_kb": {
+    "dotfiles": 17056,
+    "weatherorb": 7844,
+    "basalt-ui": 11780
+   },
+   "git_after": {
+    "dotfiles": {
+     "commits": 2,
+     "status": []
+    },
+    "weatherorb": {
+     "commits": 2,
+     "status": [
+      " M .beads/config.yaml"
+     ]
+    },
+    "basalt-ui": {
+     "commits": 2,
+     "status": []
+    }
+   },
+   "id_maps_saved": true,
+   "loadavg_at_end": [
+    11.6,
+    16.5,
+    18.2
+   ],
+   "_note": "ops_df.close (20 refused closes: the bench did not pass the claiming actor) and the single-case external check in this first run are superseded by topology-embedded-rerun"
+  },
+  "topology-shared": {
+   "topology": "shared",
+   "loadavg_at_start": [
+    14.5,
+    15.7,
+    17.6
+   ],
+   "setup": {
+    "repos": {
+     "dotfiles": {
+      "init_s": 13.48,
+      "init_cpu_s": 0.94,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 20
+     },
+     "weatherorb": {
+      "init_s": 5.91,
+      "init_cpu_s": 0.53,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 20
+     },
+     "basalt-ui": {
+      "init_s": 6.16,
+      "init_cpu_s": 0.52,
+      "commits_after_init": 2,
+      "tracked_files": [
+       ".beads/.gitignore",
+       ".beads/README.md",
+       ".beads/config.yaml",
+       ".beads/metadata.json",
+       ".gitignore",
+       "README.md"
+      ],
+      "untracked_after_init": [],
+      "beads_dir_kb": 20
+     }
+    },
+    "setup_total_s": 25.89,
+    "setup_commands": 3,
+    "dolt_server_processes_after_setup": 1,
+    "dolt_server_rss_mb_after_setup": 214.5
+   },
+   "load": {
+    "dotfiles": {
+     "tasks": 79,
+     "create_total_s": 53.0,
+     "create": {
+      "n": 79,
+      "median_ms": 566.5,
+      "p90_ms": 1092.8,
+      "min_ms": 253.8,
+      "max_ms": 2505.0,
+      "mean_ms": 670.6
+     },
+     "edges": 14,
+     "dep_bulk_s": 2.41,
+     "defer_s": 0.0,
+     "load_total_s": 55.42
+    },
+    "weatherorb": {
+     "tasks": 50,
+     "create_total_s": 28.53,
+     "create": {
+      "n": 50,
+      "median_ms": 534.0,
+      "p90_ms": 873.5,
+      "min_ms": 213.1,
+      "max_ms": 1090.6,
+      "mean_ms": 570.4
+     },
+     "edges": 4,
+     "dep_bulk_s": 0.3,
+     "defer_s": 1.26,
+     "load_total_s": 30.08
+    },
+    "basalt-ui": {
+     "tasks": 81,
+     "create_total_s": 32.08,
+     "create": {
+      "n": 81,
+      "median_ms": 372.7,
+      "p90_ms": 511.3,
+      "min_ms": 234.9,
+      "max_ms": 863.1,
+      "mean_ms": 395.9
+     },
+     "edges": 13,
+     "dep_bulk_s": 1.11,
+     "defer_s": 0.0,
+     "load_total_s": 33.19
+    }
+   },
+   "load_total_s": 118.7,
+   "dolt_server_processes_after_load": 1,
+   "ready_vs_oracle": {
+    "dotfiles": {
+     "ready_rows": 20,
+     "oracle_with_parent_propagation": 20,
+     "match_with_parent_propagation": true,
+     "oracle_direct_edges_only": 70,
+     "match_direct_only": false,
+     "ready_json_bytes": 14058,
+     "ready_secs": 0.198,
+     "ready_types": [
+      "bug",
+      "decision",
+      "epic",
+      "feature",
+      "task"
+     ],
+     "ready_leaf_work_rows": 17
+    },
+    "weatherorb": {
+     "ready_rows": 32,
+     "oracle_with_parent_propagation": 26,
+     "match_with_parent_propagation": false,
+     "oracle_direct_edges_only": 42,
+     "match_direct_only": false,
+     "ready_json_bytes": 22165,
+     "ready_secs": 0.194,
+     "ready_types": [
+      "bug",
+      "epic",
+      "feature",
+      "task"
+     ],
+     "ready_leaf_work_rows": 28
+    },
+    "basalt-ui": {
+     "ready_rows": 6,
+     "oracle_with_parent_propagation": 6,
+     "match_with_parent_propagation": true,
+     "oracle_direct_edges_only": 68,
+     "match_direct_only": false,
+     "ready_json_bytes": 3914,
+     "ready_secs": 0.359,
+     "ready_types": [
+      "epic",
+      "task"
+     ],
+     "ready_leaf_work_rows": 5
+    }
+   },
+   "ops_df": {
+    "create": {
+     "n": 20,
+     "median_ms": 281.8,
+     "p90_ms": 435.3,
+     "min_ms": 198.4,
+     "max_ms": 457.1,
+     "mean_ms": 309.5,
+     "median_cpu_ms": 119.8,
+     "op": "create",
+     "failures": 0,
+     "loadavg_before": [
+      18.5,
+      17.8,
+      18.2
+     ],
+     "loadavg_after": [
+      17.7,
+      17.6,
+      18.1
+     ]
+    },
+    "update": {
+     "n": 20,
+     "median_ms": 262.3,
+     "p90_ms": 409.9,
+     "min_ms": 196.3,
+     "max_ms": 607.9,
+     "mean_ms": 294.8,
+     "median_cpu_ms": 100.7,
+     "op": "update",
+     "failures": 0,
+     "loadavg_before": [
+      17.7,
+      17.6,
+      18.1
+     ],
+     "loadavg_after": [
+      17.6,
+      17.6,
+      18.1
+     ]
+    },
+    "ready": {
+     "n": 20,
+     "median_ms": 172.4,
+     "p90_ms": 269.6,
+     "min_ms": 106.3,
+     "max_ms": 281.9,
+     "mean_ms": 181.4,
+     "median_cpu_ms": 103.1,
+     "op": "ready",
+     "failures": 0,
+     "loadavg_before": [
+      17.6,
+      17.6,
+      18.1
+     ],
+     "loadavg_after": [
+      17.6,
+      17.6,
+      18.1
+     ]
+    },
+    "ready_brief": {
+     "n": 20,
+     "median_ms": 203.8,
+     "p90_ms": 347.0,
+     "min_ms": 130.3,
+     "max_ms": 366.6,
+     "mean_ms": 222.4,
+     "median_cpu_ms": 91.9,
+     "op": "ready --brief",
+     "failures": 0,
+     "loadavg_before": [
+      17.6,
+      17.6,
+      18.1
+     ],
+     "loadavg_after": [
+      19.5,
+      18.0,
+      18.3
+     ]
+    },
+    "list": {
+     "n": 20,
+     "median_ms": 198.0,
+     "p90_ms": 291.1,
+     "min_ms": 107.1,
+     "max_ms": 370.1,
+     "mean_ms": 201.8,
+     "median_cpu_ms": 110.7,
+     "op": "list",
+     "failures": 0,
+     "loadavg_before": [
+      19.5,
+      18.0,
+      18.3
+     ],
+     "loadavg_after": [
+      19.6,
+      18.1,
+      18.3
+     ]
+    },
+    "show": {
+     "n": 20,
+     "median_ms": 185.1,
+     "p90_ms": 350.4,
+     "min_ms": 111.8,
+     "max_ms": 411.9,
+     "mean_ms": 211.8,
+     "median_cpu_ms": 103.8,
+     "op": "show",
+     "failures": 0,
+     "loadavg_before": [
+      19.6,
+      18.1,
+      18.3
+     ],
+     "loadavg_after": [
+      19.6,
+      18.1,
+      18.3
+     ]
+    },
+    "claim": {
+     "n": 20,
+     "median_ms": 370.4,
+     "p90_ms": 461.0,
+     "min_ms": 241.9,
+     "max_ms": 925.3,
+     "mean_ms": 387.8,
+     "median_cpu_ms": 106.7,
+     "op": "claim",
+     "failures": 0,
+     "loadavg_before": [
+      19.6,
+      18.1,
+      18.3
+     ],
+     "loadavg_after": [
+      21.0,
+      18.4,
+      18.4
+     ]
+    },
+    "heartbeat": {
+     "n": 20,
+     "median_ms": 278.1,
+     "p90_ms": 428.9,
+     "min_ms": 169.3,
+     "max_ms": 658.6,
+     "mean_ms": 309.1,
+     "median_cpu_ms": 94.5,
+     "op": "heartbeat",
+     "failures": 0,
+     "loadavg_before": [
+      21.0,
+      18.4,
+      18.4
+     ],
+     "loadavg_after": [
+      21.6,
+      18.6,
+      18.5
+     ]
+    },
+    "close": {
+     "n": 20,
+     "median_ms": 349.2,
+     "p90_ms": 482.6,
+     "min_ms": 228.9,
+     "max_ms": 508.4,
+     "mean_ms": 367.0,
+     "median_cpu_ms": 102.3,
+     "op": "close",
+     "failures": 0,
+     "loadavg_before": [
+      21.6,
+      18.6,
+      18.5
+     ],
+     "loadavg_after": [
+      21.9,
+      18.7,
+      18.5
+     ]
+    },
+    "close_fencing": {
+     "close_by_other_actor_exit": 0
+    },
+    "floor_bd_version": {
+     "n": 20,
+     "median_ms": 91.4,
+     "p90_ms": 155.4,
+     "min_ms": 65.6,
+     "max_ms": 213.4,
+     "mean_ms": 104.7,
+     "median_cpu_ms": 71.4,
+     "op": "floor: bd --version",
+     "failures": 0,
+     "loadavg_before": [
+      21.9,
+      18.7,
+      18.5
+     ],
+     "loadavg_after": [
+      21.9,
+      18.7,
+      18.5
+     ]
+    }
+   },
+   "semantics": {
+    "chain": {
+     "b_ready_before_close": false,
+     "a_ready_before_close": true,
+     "b_ready_after_close_a": true
+    },
+    "fan_in_concurrent_close": {
+     "rounds": 8,
+     "dependent_missing_from_ready": 0,
+     "detail": [
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      },
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      },
+      {
+       "close_exit_codes": [
+        0,
+        0
+       ],
+       "dependent_ready": true,
+       "stderr": []
+      }
+     ]
+    },
+    "reopen_blocker": {
+     "dependent_ready_after_close": true,
+     "dependent_ready_after_reopen": false
+    },
+    "edge_types": {
+     "related_blocks": false,
+     "discovered_from_blocks": false
+    },
+    "cycle_rejected": {
+     "exit_code": 1,
+     "message": "Error: adding dependency would create a cycle"
+    },
+    "cas": {
+     "first_if_status_exit": 0,
+     "stale_if_status_exit": 1,
+     "claim_on_foreign_claim_exit": 1,
+     "claim_on_foreign_claim_msg": "Error updating df-m3h: issue already claimed by w1\nError: 1 of 1 issues failed to update\n  df-m3h: updating issue: issue already claimed by "
+    }
+   },
+   "external": {
+    "cases": [
+     {
+      "case": "A project not configured",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-uwy [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-jxe [P3] spread of re"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-uwy [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-jxe [P3] spread of re"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-uwy [P2] ext consumer A project not configured Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capa wo-jxe [P3] spread of re"
+       }
+      ]
+     },
+     {
+      "case": "B relative path",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-g65 [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-jxe [P3] spread of refuses cat"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-g65 [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-jxe [P3] spread of refuses cat"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-g65 [P2] ext consumer B relative path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capb wo-jxe [P3] spread of refuses cat"
+       }
+      ]
+     },
+     {
+      "case": "C absolute path",
+      "dep_add_exit": 0,
+      "steps": [
+       {
+        "state": "capability unshipped (provider open)",
+        "consumer_in_ready": true,
+        "why": "wo-hh4 [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-jxe [P3] spread of refuses cat"
+       },
+       {
+        "state": "provider closed, not shipped",
+        "consumer_in_ready": true,
+        "why": "wo-hh4 [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-jxe [P3] spread of refuses cat"
+       },
+       {
+        "state": "shipped (bd ship exit 0)",
+        "consumer_in_ready": true,
+        "why": "wo-hh4 [P2] ext consumer C absolute path Reason: 1 blocker(s) resolved Resolved blockers: external:bu:capc wo-jxe [P3] spread of refuses cat"
+       }
+      ]
+     }
+    ],
+    "enforced_in_ready": false,
+    "config_yaml_has_external_projects": true,
+    "git_status_wo": [
+     " M .beads/config.yaml"
+    ]
+   },
+   "dataset_external_edges": {
+    "added": 2,
+    "exit": 0,
+    "ready_rows": 35,
+    "oracle_rows": 26,
+    "match": false,
+    "extra_in_bd": [
+     "wheld",
+     "wheld.1",
+     "wheld.2",
+     "wheld.3",
+     "wheld.4",
+     "wheld.5",
+     "wo-g65",
+     "wo-hh4"
+    ],
+    "missing_in_bd": []
+   },
+   "dolt_server_processes_end": 1,
+   "dolt_server_rss_mb_end": 312.0,
+   "disk_kb": {
+    "dotfiles": 24,
+    "weatherorb": 24,
+    "basalt-ui": 24,
+    "shared_server_dir": 40452
+   },
+   "git_after": {
+    "dotfiles": {
+     "commits": 2,
+     "status": []
+    },
+    "weatherorb": {
+     "commits": 2,
+     "status": [
+      " M .beads/config.yaml"
+     ]
+    },
+    "basalt-ui": {
+     "commits": 2,
+     "status": []
+    }
+   },
+   "id_maps_saved": true,
+   "loadavg_at_end": [
+    21.1,
+    18.8,
+    18.5
+   ]
+  }
+ }
+}

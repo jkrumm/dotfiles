@@ -1,0 +1,149 @@
+{
+ "topology": "shared",
+ "tasks": 2000,
+ "loadavg_at_start": [
+  17.0,
+  15.8,
+  16.4
+ ],
+ "import": {
+  "exit": 1,
+  "seconds": 32.7,
+  "error": "bd import: 250/2000 issues committed\nbd import: 500/2000 issues committed\nbd import: 750/2000 issues committed\nbd import: 1000/2000 issues committed\n[mysql] 2026/10/22 10:59:25 packets.go:58 read tcp "
+ },
+ "ready_rows": 363,
+ "db_kb": 161832,
+ "ops": {
+  "ready": {
+   "n": 10,
+   "median_ms": 444.7,
+   "p90_ms": 995.0,
+   "min_ms": 261.7,
+   "max_ms": 2112.8,
+   "mean_ms": 681.5,
+   "median_cpu_ms": 137.7,
+   "op": "ready",
+   "failures": 0,
+   "loadavg_before": [
+    16.4,
+    15.8,
+    16.4
+   ],
+   "loadavg_after": [
+    24.8,
+    17.6,
+    17.0
+   ]
+  },
+  "ready_limit_1": {
+   "n": 10,
+   "median_ms": 228.8,
+   "p90_ms": 299.5,
+   "min_ms": 181.0,
+   "max_ms": 883.4,
+   "mean_ms": 295.4,
+   "median_cpu_ms": 94.1,
+   "op": "ready --limit 1",
+   "failures": 0,
+   "loadavg_before": [
+    24.8,
+    17.6,
+    17.0
+   ],
+   "loadavg_after": [
+    24.8,
+    17.6,
+    17.0
+   ]
+  },
+  "create": {
+   "n": 10,
+   "median_ms": 375.0,
+   "p90_ms": 613.0,
+   "min_ms": 269.7,
+   "max_ms": 681.3,
+   "mean_ms": 436.7,
+   "median_cpu_ms": 121.0,
+   "op": "create",
+   "failures": 0,
+   "loadavg_before": [
+    24.8,
+    17.6,
+    17.0
+   ],
+   "loadavg_after": [
+    25.0,
+    17.8,
+    17.1
+   ]
+  },
+  "claim": {
+   "n": 10,
+   "median_ms": 309.0,
+   "p90_ms": 426.1,
+   "min_ms": 240.6,
+   "max_ms": 426.4,
+   "mean_ms": 333.4,
+   "median_cpu_ms": 83.4,
+   "op": "claim",
+   "failures": 0,
+   "loadavg_before": [
+    25.0,
+    17.8,
+    17.1
+   ],
+   "loadavg_after": [
+    24.5,
+    17.8,
+    17.1
+   ]
+  },
+  "heartbeat": {
+   "n": 10,
+   "median_ms": 236.3,
+   "p90_ms": 277.8,
+   "min_ms": 202.3,
+   "max_ms": 308.4,
+   "mean_ms": 242.3,
+   "median_cpu_ms": 84.6,
+   "op": "heartbeat",
+   "failures": 0,
+   "loadavg_before": [
+    24.5,
+    17.8,
+    17.1
+   ],
+   "loadavg_after": [
+    24.5,
+    17.8,
+    17.1
+   ]
+  },
+  "close": {
+   "n": 10,
+   "median_ms": 286.7,
+   "p90_ms": 330.7,
+   "min_ms": 220.8,
+   "max_ms": 379.6,
+   "mean_ms": 290.0,
+   "median_cpu_ms": 79.5,
+   "op": "close",
+   "failures": 0,
+   "loadavg_before": [
+    24.5,
+    17.8,
+    17.1
+   ],
+   "loadavg_after": [
+    23.6,
+    17.7,
+    17.1
+   ]
+  }
+ },
+ "loadavg_at_end": [
+  23.6,
+  17.7,
+  17.1
+ ]
+}

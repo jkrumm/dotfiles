@@ -1,0 +1,141 @@
+{
+ "topology": "embedded",
+ "loadavg_at_start": [
+  23.4,
+  21.2,
+  19.6
+ ],
+ "tasks_in_db": 232,
+ "jsonl_export": {
+  "exit": 0,
+  "secs": 0.82,
+  "bytes": 103201,
+  "lines": 232,
+  "keys_of_first_record": [
+   "_type",
+   "assignee",
+   "close_reason",
+   "closed_at",
+   "comment_count",
+   "created_at",
+   "created_by",
+   "dependency_count",
+   "dependent_count",
+   "id",
+   "issue_type",
+   "owner",
+   "priority",
+   "started_at",
+   "status",
+   "title",
+   "updated_at"
+  ],
+  "has_dependencies_field": true,
+  "has_labels_field": true
+ },
+ "list_json_all": {
+  "exit": 0,
+  "secs": 0.79,
+  "bytes": 132900,
+  "rows": 232
+ },
+ "list_json_all_brief": {
+  "exit": 0,
+  "secs": 0.96,
+  "bytes": 131017
+ },
+ "ready_json_default_vs_brief_bytes": {
+  "default": 48184,
+  "brief": 46301
+ },
+ "events_journal_enable": {
+  "exit": 0,
+  "secs": 0.31
+ },
+ "events_tail": {
+  "exit": 0,
+  "secs": 0.2,
+  "records": 2,
+  "operations": [
+   "create",
+   "update"
+  ],
+  "keys": [
+   "actor",
+   "issue",
+   "issue_id",
+   "op",
+   "seq",
+   "ts"
+  ]
+ },
+ "git_footprint": {
+  "tracked_beads_files": [
+   ".beads/.gitignore",
+   ".beads/README.md",
+   ".beads/config.yaml",
+   ".beads/metadata.json"
+  ],
+  "git_status_short": [
+   " M .beads/config.yaml"
+  ],
+  "commits": 2,
+  "bd_made_commits": [
+   "bd init: initialize beads issue tracking",
+   "initial"
+  ]
+ },
+ "dolt_remote_add": {
+  "exit": 0,
+  "secs": 2.5
+ },
+ "dolt_push": {
+  "exit": 0,
+  "secs": 3.15
+ },
+ "git_remote_refs_after_push": [
+  "HEAD",
+  "refs/dolt/data",
+  "refs/heads/__dolt_remote_info__",
+  "refs/heads/main"
+ ],
+ "git_remote_size_kb": 3972,
+ "code_branch_history_untouched_commits": 2,
+ "clone_bootstrap": {
+  "exit": 0,
+  "secs": 2.35,
+  "tasks_after_bootstrap": 233,
+  "expected": 233,
+  "files_present_in_fresh_clone": [
+   "README.md",
+   "backup",
+   "backup.lock",
+   "config.yaml",
+   "dolt.gate.lock",
+   "embeddeddolt",
+   "embeddeddolt.gate.lock",
+   "metadata.json"
+  ]
+ },
+ "backup_init": {
+  "exit": 0,
+  "secs": 0.5
+ },
+ "backup_sync": {
+  "exit": 0,
+  "secs": 1.05,
+  "backup_kb": 5736
+ },
+ "backup_restore_into_fresh_workspace": {
+  "exit": 0,
+  "secs": 0.68,
+  "init_secs": 6.09,
+  "tasks_after_restore": 233,
+  "expected": 233
+ },
+ "loadavg_at_end": [
+  20.1,
+  20.6,
+  19.5
+ ]
+}
