@@ -1,553 +1,434 @@
-<svg viewBox="0 0 1180 860" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="standard" style="" width="1180" height="860" xmlns="http://www.w3.org/2000/svg"><style>@font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 500; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 600; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono CJK SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace; }
-:root, [data-theme="dark"] { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-[data-theme="light"] { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; }
-[data-preset="signal-flow"][data-theme="dark"] { --bg: #030711; --grid: #15233a; --panel: rgba(6, 14, 28, 0.78); --panel-border: #1d3350; --lane-fill: rgba(9, 22, 40, 0.5); --lane-stroke: #2c4564; --text: #f5fbff; --text-muted: #9eb0c7; --text-dim: #52667f; --text-faint: #7890ad; --mask: #07101e; --frontend-fill: rgba(6, 182, 212, 0.14); --frontend-stroke: #67e8f9; --backend-fill: rgba(16, 185, 129, 0.14); --backend-stroke: #5eead4; --database-fill: rgba(139, 92, 246, 0.16); --database-stroke: #c4b5fd; --cloud-fill: rgba(245, 158, 11, 0.13); --cloud-stroke: #fcd34d; --security-fill: rgba(244, 63, 94, 0.13); --security-stroke: #fda4af; --messagebus-fill: rgba(249, 115, 22, 0.13); --messagebus-stroke: #fdba74; --external-fill: rgba(71, 85, 105, 0.24); --external-stroke: #a5b4c7; --arrow: #7890ad; --arrow-emphasis: #2dd4bf; --toolbar-bg: rgba(7, 16, 30, 0.86); --toolbar-border: #29415f; --toolbar-menu-bg: #07101e; }
-[data-preset="signal-flow"][data-theme="light"] { --bg: #f4f9fc; --grid: #d4e5ee; --panel: rgba(255, 255, 255, 0.82); --panel-border: #bfd5e2; --lane-fill: rgba(232, 243, 248, 0.62); --lane-stroke: #a9c5d5; --text: #102638; --text-muted: #587287; --text-dim: #8aa2b4; --text-faint: #668397; --mask: #f2f2f5; --frontend-fill: rgba(6, 182, 212, 0.09); --frontend-stroke: #0789a1; --backend-fill: rgba(5, 150, 105, 0.09); --backend-stroke: #087f69; --database-fill: rgba(124, 58, 237, 0.09); --database-stroke: #7254c7; --cloud-fill: rgba(217, 119, 6, 0.08); --cloud-stroke: #b9670b; --security-fill: rgba(225, 29, 72, 0.08); --security-stroke: #c53a59; --messagebus-fill: rgba(234, 88, 12, 0.08); --messagebus-stroke: #c65f27; --external-fill: rgba(100, 116, 139, 0.1); --external-stroke: #607a8c; --arrow: #7b97aa; --arrow-emphasis: #0d9488; }
-[data-preset="blueprint"][data-theme="dark"] { --bg: #06131f; --grid: #17425a; --panel: rgba(7, 27, 43, 0.9); --panel-border: #27627f; --lane-fill: rgba(10, 43, 66, 0.36); --lane-stroke: #34799a; --text: #e3f6ff; --text-muted: #91b8ca; --text-dim: #557e92; --text-faint: #739caf; --mask: #0a2031; --frontend-fill: rgba(26, 157, 193, 0.14); --frontend-stroke: #66d9ef; --backend-fill: rgba(31, 155, 124, 0.13); --backend-stroke: #69dfbd; --database-fill: rgba(120, 105, 196, 0.14); --database-stroke: #b4a8ff; --cloud-fill: rgba(197, 145, 43, 0.13); --cloud-stroke: #ffd166; --security-fill: rgba(199, 76, 104, 0.13); --security-stroke: #ff8da1; --messagebus-fill: rgba(207, 112, 49, 0.13); --messagebus-stroke: #ffad66; --external-fill: rgba(84, 119, 139, 0.18); --external-stroke: #a7cad9; --arrow: #78a3b7; --arrow-emphasis: #64dfc1; --toolbar-bg: rgba(7, 28, 45, 0.92); --toolbar-border: #34799a; --toolbar-text: #d8f3ff; --toolbar-hover: rgba(18, 58, 83, 0.95); --toolbar-menu-bg: #0a2031; }
-[data-preset="blueprint"][data-theme="light"] { --bg: #edf7fa; --grid: #b5d5e1; --panel: rgba(249, 253, 255, 0.94); --panel-border: #78aabd; --lane-fill: rgba(210, 232, 240, 0.42); --lane-stroke: #83b2c4; --text: #123344; --text-muted: #4e7486; --text-dim: #86a6b4; --text-faint: #668c9d; --mask: #f9fdff; --frontend-fill: rgba(8, 145, 178, 0.08); --frontend-stroke: #087f9c; --backend-fill: rgba(5, 128, 101, 0.08); --backend-stroke: #08755f; --database-fill: rgba(100, 75, 180, 0.08); --database-stroke: #6757a8; --cloud-fill: rgba(181, 120, 15, 0.08); --cloud-stroke: #a86609; --security-fill: rgba(190, 48, 80, 0.07); --security-stroke: #b32f50; --messagebus-fill: rgba(196, 81, 22, 0.07); --messagebus-stroke: #b65120; --external-fill: rgba(79, 112, 128, 0.08); --external-stroke: #506f7e; --arrow: #6d93a5; --arrow-emphasis: #087f69; --toolbar-bg: rgba(247, 252, 254, 0.94); --toolbar-border: #8ab5c5; --toolbar-text: #294f61; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f9fdff; }
-[data-preset="editorial"][data-theme="dark"] { --bg: #181611; --grid: #39342a; --panel: rgba(35, 31, 24, 0.96); --panel-border: #625a4a; --lane-fill: rgba(52, 46, 35, 0.46); --lane-stroke: #726957; --text: #f4eddf; --text-muted: #b9ae9b; --text-dim: #776e60; --text-faint: #9d917e; --mask: #231f18; --frontend-fill: rgba(43, 133, 142, 0.16); --frontend-stroke: #7fc6c7; --backend-fill: rgba(63, 132, 92, 0.16); --backend-stroke: #8fc29e; --database-fill: rgba(117, 91, 141, 0.17); --database-stroke: #c0a4d0; --cloud-fill: rgba(170, 119, 49, 0.16); --cloud-stroke: #d8ad68; --security-fill: rgba(157, 69, 65, 0.17); --security-stroke: #df9085; --messagebus-fill: rgba(174, 79, 42, 0.16); --messagebus-stroke: #df946f; --external-fill: rgba(126, 115, 96, 0.18); --external-stroke: #b8ad99; --arrow: #948978; --arrow-emphasis: #dd6b3d; --toolbar-bg: rgba(35, 31, 24, 0.92); --toolbar-border: #625a4a; --toolbar-text: #eee5d5; --toolbar-hover: #302a20; --toolbar-menu-bg: #231f18; }
-[data-preset="editorial"][data-theme="light"] { --bg: #f2eee5; --grid: #d8d0c2; --panel: rgba(251, 248, 241, 0.97); --panel-border: #c4b9a6; --lane-fill: rgba(229, 221, 207, 0.42); --lane-stroke: #b8aa94; --text: #242018; --text-muted: #6f6658; --text-dim: #a09788; --text-faint: #817767; --mask: #fbf8f1; --frontend-fill: rgba(31, 117, 126, 0.09); --frontend-stroke: #287e84; --backend-fill: rgba(42, 119, 75, 0.09); --backend-stroke: #397b53; --database-fill: rgba(105, 75, 130, 0.09); --database-stroke: #765d86; --cloud-fill: rgba(157, 103, 31, 0.1); --cloud-stroke: #9a671f; --security-fill: rgba(153, 58, 52, 0.09); --security-stroke: #9e463f; --messagebus-fill: rgba(182, 70, 27, 0.09); --messagebus-stroke: #ad4b25; --external-fill: rgba(101, 91, 75, 0.09); --external-stroke: #746b5e; --arrow: #8a806f; --arrow-emphasis: #bb4c23; --toolbar-bg: rgba(251, 248, 241, 0.94); --toolbar-border: #c4b9a6; --toolbar-text: #40392f; --toolbar-hover: #fffdf8; --toolbar-menu-bg: #fbf8f1; }
-svg { width: 100%; min-width: min(900px, 100%); display: block; transform-origin: 0px 0px; transition: transform 0.18s; }
-@keyframes archify-lens-in { 
-  0% { opacity: 0; transform: translateY(5px) scale(0.985); }
-  100% { opacity: 1; transform: translateY(0px) scale(1); }
-}
-@keyframes archify-guide-in { 
-  0% { opacity: 0; transform: translateY(-5px) scale(0.985); }
-  100% { opacity: 1; transform: translateY(0px) scale(1); }
-}
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="stay"] { opacity: 1; }
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="enter"] { opacity: 0.78; }
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="leave"] { opacity: 0.26; }
-@keyframes archify-chapter-anchor { 
-  0% { opacity: 0.35; stroke-dashoffset: 8; }
-  45% { opacity: 1; }
-  100% { opacity: 0.72; stroke-dashoffset: 0; }
-}
-@keyframes archify-story-caption-in { 
-  0% { opacity: 0; transform: translateY(3px); }
-  100% { opacity: 1; transform: translateY(0px); }
-}
-[data-theme="light"] #theme-icon { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='3.1'/%3E%3Cpath d='M10 2.2v1.4M10 16.4v1.4M2.2 10h1.4M16.4 10h1.4M4.5 4.5l1 1M14.5 14.5l1 1M15.5 4.5l-1 1M5.5 14.5l-1 1'/%3E%3C/g%3E%3C/svg%3E"); }
-[data-theme="dark"] #theme-icon { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E"); }
-.c-grid { stroke: var(--grid); fill: none; }
-.c-mask { fill: var(--mask); stroke: none; }
-.c-frontend { fill: var(--frontend-fill); stroke: var(--frontend-stroke); }
-.c-backend { fill: var(--backend-fill); stroke: var(--backend-stroke); }
-.c-database { fill: var(--database-fill); stroke: var(--database-stroke); }
-.c-cloud { fill: var(--cloud-fill); stroke: var(--cloud-stroke); }
-.c-security { fill: var(--security-fill); stroke: var(--security-stroke); }
-.c-messagebus { fill: var(--messagebus-fill); stroke: var(--messagebus-stroke); }
-.c-external { fill: var(--external-fill); stroke: var(--external-stroke); }
-.t-primary { fill: var(--text); }
-.t-muted { fill: var(--text-muted); }
-.t-dim { fill: var(--text-dim); }
-.t-frontend { fill: var(--frontend-stroke); }
-.t-backend { fill: var(--backend-stroke); }
-.t-database { fill: var(--database-stroke); }
-.t-cloud { fill: var(--cloud-stroke); }
-.t-security { fill: var(--security-stroke); }
-.t-messagebus { fill: var(--messagebus-stroke); }
-.t-external { fill: var(--external-stroke); }
-svg .semantic-sigil { fill: none; stroke: currentcolor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; opacity: 0.76; pointer-events: none; }
-svg .semantic-sigil &gt; * { vector-effect: non-scaling-stroke; }
-svg .semantic-sigil .sigil-fill { fill: currentcolor; stroke: none; }
-svg .s-frontend { color: var(--frontend-stroke); }
-svg .s-backend { color: var(--backend-stroke); }
-svg .s-database { color: var(--database-stroke); }
-svg .s-cloud { color: var(--cloud-stroke); }
-svg .s-security { color: var(--security-stroke); }
-svg .s-messagebus { color: var(--messagebus-stroke); }
-svg .s-external { color: var(--external-stroke); }
-svg .brand-mark { pointer-events: none; }
-svg .brand-mark-badge { fill: rgb(255, 255, 255); stroke: none; }
-svg .brand-mark-frame { fill: none; stroke: rgb(203, 213, 225); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
-svg .brand-mark-fallback { fill: none; stroke: rgb(71, 85, 105); stroke-width: 1.15; stroke-linecap: round; stroke-linejoin: round; }
-svg[data-preset="blueprint"] .brand-mark-badge, svg[data-preset="blueprint"] .brand-mark-frame { rx: 1px; }
-svg [data-detail] { transition: opacity 160ms; }
-svg [data-detail-anchor] { transform-box: fill-box; transform-origin: center center; transition: transform 160ms; }
-svg[data-focus-active] [data-focus-match][data-detail], svg[data-focus-active] [data-focus-match] [data-detail], svg[data-reach-active] [data-reach-match][data-detail], svg[data-reach-active] [data-reach-match] [data-detail], svg[data-lens-active] [data-lens-match][data-detail], svg[data-lens-active] [data-lens-match] [data-detail], svg[data-legend-preview-active] [data-legend-preview-match][data-detail], svg[data-legend-preview-active] [data-legend-preview-match] [data-detail], svg[data-intent-trace-active] [data-intent-trace-match][data-detail], svg[data-intent-trace-active] [data-intent-trace-match] [data-detail], svg[data-route-active] [data-route-match][data-detail], svg[data-route-active] [data-route-match] [data-detail], svg[data-story-active] [data-story-step][data-detail], svg[data-story-active] [data-story-step] [data-detail], svg[data-relationship-preview-active] [data-relationship-preview][data-detail], svg[data-relationship-preview-active] [data-relationship-preview] [data-detail], svg [data-node-id]:hover [data-detail], svg [data-node-id]:focus-visible [data-detail] { opacity: 1; pointer-events: auto; }
-svg[data-focus-active] [data-focus-match] [data-detail-anchor], svg[data-reach-active] [data-reach-match] [data-detail-anchor], svg[data-lens-active] [data-lens-match] [data-detail-anchor], svg[data-legend-preview-active] [data-legend-preview-match] [data-detail-anchor], svg[data-intent-trace-active] [data-intent-trace-match] [data-detail-anchor], svg[data-route-active] [data-route-match] [data-detail-anchor], svg[data-story-active] [data-story-step] [data-detail-anchor], svg [data-node-id]:hover [data-detail-anchor], svg [data-node-id]:focus-visible [data-detail-anchor] { transform: none; }
-.a-default { stroke: var(--arrow); fill: none; }
-.a-emphasis { stroke: var(--arrow-emphasis); fill: none; }
-.a-security { stroke: var(--security-stroke); fill: none; stroke-dasharray: 5, 5; }
-.a-dashed { stroke: var(--database-stroke); fill: none; stroke-dasharray: 4, 4; }
-.m-default { fill: var(--arrow); }
-.m-emphasis { fill: var(--arrow-emphasis); }
-.m-security { fill: var(--security-stroke); }
-.m-dashed { fill: var(--database-stroke); }
-svg [data-node-id] { cursor: pointer; transition: opacity 0.18s, filter 0.18s; }
-svg [data-edge-from] { transition: opacity 0.18s, filter 0.18s; }
-svg [data-node-id]:hover, svg [data-node-id]:focus-visible { filter: drop-shadow(0 0 7px var(--frontend-stroke)); outline: none; }
-svg [data-node-id]:hover .source-evidence-beacon, svg [data-node-id]:focus-visible .source-evidence-beacon, svg [data-node-id][data-focus-selected] .source-evidence-beacon { opacity: 1; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--backend-stroke) 72%, transparent)); }
-svg[data-preset="signal-flow"] .source-evidence-beacon { opacity: 0.9; }
-svg[data-preset="blueprint"] .source-evidence-beacon rect { rx: 0.8px; filter: none; }
-svg [data-legend-kind][role="button"] { cursor: pointer; }
-svg [data-legend-kind]:focus { outline: none; }
-svg [data-legend-hit] { fill: transparent; stroke: transparent; stroke-width: 1.4; pointer-events: all; vector-effect: non-scaling-stroke; transition: stroke 150ms, stroke-width 150ms, filter 150ms; }
-svg [data-legend-count-badge] { pointer-events: none; }
-svg [data-legend-count-badge] rect { fill: var(--mask); stroke: var(--panel-border); stroke-width: 1; vector-effect: non-scaling-stroke; }
-svg [data-legend-count-badge] text { fill: var(--text-muted); font-size: 8px; font-weight: 700; text-anchor: middle; }
-svg [data-legend-kind][role="button"]:hover [data-legend-hit] { stroke: color-mix(in srgb, var(--database-stroke) 58%, transparent); }
-svg [data-legend-kind][role="button"]:focus-visible [data-legend-hit] { stroke: var(--frontend-stroke); stroke-width: 1.8; filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg [data-legend-kind][data-legend-selected] [data-legend-hit] { stroke: var(--database-stroke); stroke-width: 2.2; stroke-dasharray: 3, 2; }
-svg [data-legend-kind][data-legend-selected] [data-legend-count-badge] rect { stroke: var(--database-stroke); stroke-width: 1.8; }
-svg [data-legend-kind][data-legend-zero] { opacity: 0.44; }
-svg[data-preset="signal-flow"] [data-legend-kind][data-legend-selected] [data-legend-hit] { filter: drop-shadow(0 0 4px var(--database-stroke)); }
-svg[data-preset="blueprint"] [data-legend-hit], svg[data-preset="blueprint"] [data-legend-count-badge] rect { rx: 0; filter: none; }
-svg[data-legend-preview-active] [data-node-id], svg[data-legend-preview-active] [data-edge-from] { opacity: 0.11; }
-svg[data-legend-preview-active] [data-legend-preview-match] { opacity: 1; }
-svg[data-legend-preview-active] [data-legend-preview-peer] { opacity: 0.62; }
-svg[data-legend-preview-active] [data-legend-preview-selected] { filter: drop-shadow(0 0 8px var(--database-stroke)); }
-svg[data-lens-active] [data-node-id], svg[data-lens-active] [data-edge-from] { opacity: 0.11; }
-svg[data-lens-active] [data-lens-match] { opacity: 1; }
-svg[data-lens-active] [data-lens-peer] { opacity: 0.62; }
-svg[data-lens-active] [data-lens-selected] { filter: drop-shadow(0 0 10px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow { stroke-width: 3.7; opacity: 1; }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="out"], svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="forward"] { filter: drop-shadow(0 0 6px var(--frontend-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="in"], svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="reverse"] { filter: drop-shadow(0 0 6px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="within"] { filter: drop-shadow(0 0 6px var(--messagebus-stroke)); }
-svg[data-preset="blueprint"] .semantic-lens-flow { stroke-width: 2.45; stroke-linecap: square; filter: none; opacity: 0.78; }
-svg[data-focus-active] [data-node-id], svg[data-focus-active] [data-edge-from] { opacity: 0.13; }
-svg[data-focus-active] [data-focus-match] { opacity: 1; }
-svg[data-focus-active] [data-focus-selected] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-reach-active] [data-node-id], svg[data-reach-active] [data-edge-from] { opacity: 0.09; }
-svg[data-reach-active] [data-reach-match] { opacity: 1; }
-svg[data-reach-active="upstream"] [data-reach-origin] { filter: drop-shadow(0 0 11px var(--database-stroke)); }
-svg[data-reach-active="downstream"] [data-reach-origin] { filter: drop-shadow(0 0 11px var(--backend-stroke)); }
-svg[data-reach-active="upstream"] [data-edge-from][data-reach-match] { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--database-stroke) 72%, transparent)); }
-svg[data-reach-active="downstream"] [data-edge-from][data-reach-match] { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--backend-stroke) 72%, transparent)); }
-svg[data-preset="blueprint"][data-reach-active] [data-reach-origin], svg[data-preset="blueprint"][data-reach-active] [data-edge-from][data-reach-match] { filter: none; }
-svg[data-preset="blueprint"] .relationship-hit-target:focus-visible .relationship-focus-rail { stroke-linecap: square; filter: none; }
-svg[data-relationship-direct-active] [data-node-id], svg[data-relationship-direct-active] [data-edge-from] { opacity: 0.16; }
-svg[data-relationship-direct-active] [data-relationship-preview], svg[data-relationship-direct-active] [data-relationship-preview-node] { opacity: 1; }
-svg[data-focus-active]:not([data-relationship-pin-active]) .relationship-hit-rail, svg[data-story-active] .relationship-hit-rail, svg[data-route-picking] .relationship-hit-rail, svg[data-route-active] .relationship-hit-rail, svg[data-lens-active] .relationship-hit-rail, svg[data-chapter-preview] .relationship-hit-rail { pointer-events: none; }
-svg[data-relationship-preview-active] [data-focus-match] { opacity: 0.18; }
-svg[data-relationship-preview-active] [data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview-node] { opacity: 1; }
-svg[data-relationship-preview-active] [data-relationship-preview] { filter: drop-shadow(0 0 5px var(--arrow-emphasis)); }
-svg[data-relationship-preview-active] [data-relationship-preview] path, svg[data-relationship-preview-active] path[data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview] line, svg[data-relationship-preview-active] line[data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview] polyline, svg[data-relationship-preview-active] polyline[data-relationship-preview] { stroke-width: 2.75; }
-svg[data-relationship-preview-active] [data-relationship-preview-source] { filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-svg[data-relationship-preview-active] [data-relationship-preview-target] { filter: drop-shadow(0 0 7px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .relationship-flow-pulse { stroke: var(--frontend-stroke); stroke-width: 3.85; filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-svg[data-preset="blueprint"] .relationship-flow-pulse { stroke-width: 2.5; stroke-linecap: square; filter: none; }
-svg[data-preset="editorial"] .relationship-flow-pulse { stroke: var(--arrow-emphasis); stroke-width: 2.75; filter: none; }
-svg[data-preset="signal-flow"] .semantic-flow-token { filter: drop-shadow(currentcolor 0px 0px 5px); }
-svg[data-preset="blueprint"] .semantic-flow-token { filter: none; }
-svg[data-preset="editorial"] .semantic-flow-token { filter: none; }
-svg[data-intent-trace-active] [data-node-id], svg[data-intent-trace-active] [data-edge-from] { opacity: 0.2; }
-svg[data-intent-trace-active] [data-intent-trace-match] { opacity: 1; }
-svg[data-intent-trace-active] [data-intent-trace-selected] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-preset="blueprint"] [data-intent-trace-selected], svg[data-preset="blueprint"] .intent-trace-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="editorial"] [data-intent-trace-selected], svg[data-preset="editorial"] .intent-trace-flow { filter: none; }
-svg[data-route-picking="target"] [data-node-id] { opacity: 0.24; }
-svg[data-route-picking="target"] [data-route-candidate], svg[data-route-picking="target"] [data-route-start] { opacity: 1; }
-svg[data-route-picking] [data-node-id] { cursor: crosshair; }
-svg[data-route-picking] [data-route-start] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-route-active] [data-node-id], svg[data-route-active] [data-edge-from] { opacity: 0.11; }
-svg[data-route-active] [data-route-match] { opacity: 1; }
-svg[data-route-active] [data-route-start] { filter: drop-shadow(0 0 11px var(--frontend-stroke)); }
-svg[data-route-active] [data-route-end] { filter: drop-shadow(0 0 11px var(--security-stroke)); }
-svg[data-route-active] [data-route-step]:not([data-route-start]):not([data-route-end]) { filter: drop-shadow(0 0 7px var(--backend-stroke)); }
-svg[data-route-journey] [data-route-match][data-route-journey-state="past"] { opacity: 0.62; }
-svg[data-route-journey] [data-route-match][data-route-journey-state="future"] { opacity: 0.34; }
-svg[data-route-journey] [data-route-match][data-route-journey-state="current"] { opacity: 1; }
-svg[data-route-journey] [data-node-id][data-route-journey-current] { filter: drop-shadow(0 0 10px var(--backend-stroke)); }
-svg[data-route-journey] [data-edge-from][data-route-journey-current] { opacity: 1; filter: drop-shadow(0 0 6px var(--backend-stroke)); }
-svg[data-preset="blueprint"] [data-route-start], svg[data-preset="blueprint"] [data-route-end], svg[data-preset="blueprint"] [data-route-step], svg[data-preset="blueprint"] .route-probe-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="blueprint"] .route-journey-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="editorial"] [data-route-start], svg[data-preset="editorial"] [data-route-end], svg[data-preset="editorial"] [data-route-step], svg[data-preset="editorial"] .route-probe-flow, svg[data-preset="editorial"] .route-journey-flow { filter: none; }
-svg[data-preset="editorial"] .c-grid { stroke-dasharray: 1, 4; opacity: 0.48; }
-svg[data-preset="editorial"] .c-region { fill: color-mix(in srgb, var(--cloud-fill) 48%, transparent); stroke-dasharray: 9, 4; }
-svg[data-preset="editorial"] [data-node-id]:hover, svg[data-preset="editorial"] [data-node-id]:focus-visible, svg[data-preset="editorial"][data-focus-active] [data-focus-selected] { filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 18%, transparent)); }
-svg[data-preset="blueprint"] .c-grid { stroke-dasharray: 1, 3; opacity: 0.78; }
-svg[data-preset="blueprint"] .c-region { fill: color-mix(in srgb, var(--cloud-fill) 58%, transparent); stroke-dasharray: 12, 4, 2, 4; }
-svg[data-preset="blueprint"] .c-security-group, svg[data-preset="blueprint"] .c-lane { stroke-dasharray: 7, 3; }
-svg[data-preset="blueprint"] [data-node-id]:hover, svg[data-preset="blueprint"] [data-node-id]:focus-visible { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-preset="blueprint"][data-focus-active] [data-focus-selected] { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-preset="blueprint"][data-focus-active][data-reach-active] [data-focus-selected][data-reach-origin] { filter: none; }
-svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview], svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview-source], svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview-target] { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-story-beat] [data-story-step] { opacity: 0.22; filter: saturate(0.42); transition: opacity 180ms, filter 180ms; }
-svg[data-story-beat] [data-story-step][data-story-beat-state="past"] { opacity: 0.72; filter: saturate(0.82); }
-svg[data-story-beat] [data-story-step][data-story-beat-state="next"] { opacity: 0.5; filter: saturate(0.66); }
-svg[data-story-beat] [data-story-step][data-story-beat-state="active"] { opacity: 1; filter: drop-shadow(0 0 7px var(--frontend-stroke)); animation: 360ms cubic-bezier(0.22, 1, 0.36, 1) 0s 1 normal both running archify-story-beat-node; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step] { opacity: 0.16; transition: opacity 160ms; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="past"] { opacity: 0.58; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="next"] { opacity: 0.34; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="active"] { opacity: 1; }
-svg[data-story-beat] .story-trail-flow { opacity: 0; transition: opacity 160ms; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="past"] { opacity: 0.34; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="next"] { opacity: 0.2; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="active"] { opacity: 0.92; }
-svg[data-story-beat] .story-trail-flow[data-story-pulse="true"] { stroke-dasharray: 2, 13; stroke-dashoffset: 30; opacity: 0.92; animation: 0.78s linear 0s 1 normal both running archify-story-flow; }
-svg[data-preset="blueprint"] .story-trail-flow { stroke-linecap: square; filter: none; opacity: 0.5; }
-svg[data-preset="blueprint"][data-story-beat] [data-story-step][data-story-beat-state="active"] { filter: none; animation: auto ease 0s 1 normal none running none; }
-svg[data-preset="editorial"] .story-trail-flow { filter: none; }
-svg[data-preset="editorial"][data-story-beat] [data-story-step][data-story-beat-state="active"] { filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 16%, transparent)); }
-svg[data-chapter-preview] [data-node-id], svg[data-chapter-preview] [data-edge-from] { opacity: 0.1 !important; filter: none !important; transition: none !important; }
-svg[data-chapter-preview] .story-trail-overlay { opacity: 0.08 !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="stay"] { opacity: 0.76 !important; filter: saturate(0.7) !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="enter"] { opacity: 1 !important; filter: saturate(1.2) !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="leave"] { opacity: 0.28 !important; filter: grayscale(0.72) !important; }
-svg[data-preset="blueprint"][data-chapter-preview] [data-node-id] { filter: none !important; }
-.c-security-group { fill: transparent; stroke: var(--security-stroke); stroke-dasharray: 4, 4; }
-.c-region { fill: rgba(251, 191, 36, 0.05); stroke: var(--cloud-stroke); stroke-dasharray: 8, 4; }
-.c-lane { fill: var(--lane-fill); stroke: var(--lane-stroke); stroke-dasharray: 6, 6; }
-svg[data-preset="signal-flow"][data-animation="trace"] [data-animate="edge"] { stroke-linecap: round; filter: drop-shadow(0 0 3px var(--arrow-emphasis)); animation-duration: 1.75s; }
-svg[data-preset="signal-flow"][data-animation="trace"] [data-animate="node"] { animation-duration: 3.1s; }
-svg[data-preset="blueprint"][data-animation="trace"] [data-animate="edge"] { stroke-linecap: square; filter: none; animation-duration: 2.15s; }
-svg[data-preset="blueprint"][data-animation="trace"] [data-animate="node"] { animation-name: archify-blueprint-node-pulse; animation-duration: 3.8s; }
-svg[data-preset="editorial"][data-animation="trace"] [data-animate="edge"] { filter: none; animation-duration: 2.2s; }
-svg[data-preset="editorial"][data-animation="trace"] [data-animate="node"] { animation-name: archify-editorial-node-pulse; animation-duration: 3.5s; }
-@keyframes archify-edge-flow { 
-  0% { stroke-dasharray: 10, 8; stroke-dashoffset: 54; opacity: 0.42; }
-  88% { stroke-dasharray: 10, 8; stroke-dashoffset: 0; opacity: 1; }
-  99.9% { stroke-dasharray: 10, 8; stroke-dashoffset: 0; opacity: 1; }
-  100% { stroke-dashoffset: 0; opacity: 1; }
-}
-@keyframes archify-node-pulse { 
-  0%, 72%, 100% { filter: none; stroke-width: 1.5; }
-  18%, 36% { filter: drop-shadow(0 0 8px var(--arrow-emphasis)); stroke-width: 2.4; }
-}
-@keyframes archify-blueprint-node-pulse { 
-  0%, 72%, 100% { opacity: 1; filter: none; }
-  18%, 36% { opacity: 0.72; filter: drop-shadow(0 0 2px var(--frontend-stroke)); }
-}
-@keyframes archify-editorial-node-pulse { 
-  0%, 72%, 100% { opacity: 1; filter: none; }
-  18%, 36% { opacity: 0.78; filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 18%, transparent)); }
-}
-@keyframes archify-signal-scan { 
-  0%, 18% { opacity: 1; transform: translateX(-70%); }
-  70% { opacity: 1; transform: translateX(70%); }
-  100% { opacity: 0; transform: translateX(70%); }
-}
-@keyframes archify-radar-live { 
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--backend-stroke) 52%, transparent); }
-  55%, 100% { box-shadow: transparent 0px 0px 0px 0.32rem; }
-}
-@keyframes archify-guided-progress { 
-  0% { transform: scaleX(var(--guided-progress-start, 0)); }
-  100% { transform: scaleX(1); }
-}
-@keyframes archify-story-flow { 
-  100% { stroke-dashoffset: 0; }
-}
-@keyframes archify-intent-trace-flow { 
-  0% { opacity: 0.28; stroke-dashoffset: 0; }
-  12%, 78% { opacity: 0.94; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-route-probe-flow { 
-  0% { stroke-dashoffset: 0; opacity: 0.96; }
-  78% { stroke-dashoffset: -1; opacity: 0.96; }
-  100% { stroke-dasharray: none; stroke-dashoffset: 0; opacity: 0.58; }
-}
-@keyframes archify-route-journey-flow { 
-  0% { opacity: 0.16; stroke-dashoffset: 0; }
-  14%, 76% { opacity: 1; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-semantic-lens-flow { 
-  0% { opacity: 0.2; stroke-dashoffset: 0; }
-  12%, 78% { opacity: 0.9; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-relationship-pulse { 
-  0% { opacity: 0.18; stroke-dashoffset: 0; }
-  10%, 76% { opacity: 0.98; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-relationship-token-life { 
-  0%, 7% { opacity: 0; }
-  13%, 82% { opacity: 1; }
-  100% { opacity: 0; }
-}
-@keyframes archify-story-beat-node { 
-  0% { opacity: 0.48; filter: saturate(0.6); }
-  58% { opacity: 1; filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-  100% { opacity: 1; filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-}
-@keyframes archify-share-cue-enter { 
-  0% { opacity: 0; transform: translate(-50%, -0.45rem); }
-  100% { opacity: 1; transform: translate(-50%, 0px); }
-}
-@keyframes archify-share-cue-pulse { 
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.48; transform: scale(0.78); }
-}
-:root, svg { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-@media (prefers-color-scheme: light) { :root, svg { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; } }
-svg[data-theme="light"] { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; }
-svg[data-theme="dark"] { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-rect.c-bg-rect { fill: var(--bg); }
-</style><rect width="100%" height="100%" class="c-bg-rect"/>
-        <title id="archify-diagram-title">Argo control plane — split hosting and the write path</title>
-        <desc id="archify-diagram-description">An architecture diagram generated by Archify.</desc>
-        <!-- Definitions -->
-        <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-default"/>
-          </marker>
-          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-emphasis"/>
-          </marker>
-          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-security"/>
-          </marker>
-          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-dashed"/>
-          </marker>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
-          </pattern>
-        </defs>
-
-        <!-- Background Grid -->
-        <rect width="100%" height="100%" fill="url(#grid)"/>
-
-        <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="VPS — always up" x="300" y="90" width="770" height="235" rx="12" class="c-region" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="mini — factory host" x="570" y="390" width="500" height="384" rx="12" class="c-region" stroke-width="1"/>
-
-        <!-- Connection paths (before components for correct z-order) -->
-        <path data-edge-from="browser" data-edge-to="spa" data-edge-label="HTTPS" data-edge-key="0" data-edge-id="e1" data-composition-points="115,330;115,306;306,306;306,155;330,155" d="M 115 330 L 115 314 Q 115 306 123 306 L 298 306 Q 306 306 306 298 L 306 163 Q 306 155 314 155 L 330 155" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="spa" data-edge-to="life" data-edge-label="life pages" data-edge-key="1" data-edge-id="e2" data-composition-points="520,155;620,155" d="M 520 155 L 620 155" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="life" data-edge-to="pg" data-edge-label="SQL" data-edge-key="2" data-edge-id="e3" data-composition-points="790,155;850,155" d="M 790 155 L 850 155" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="dead" data-edge-to="life" data-edge-label="mini unreachable" data-edge-key="3" data-edge-id="e4" data-composition-points="850,270;705,270;705,190" d="M 850 270 L 713 270 Q 705 270 705 262 L 705 190" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="beat" data-edge-to="dead" data-edge-label="5-min heartbeat" data-edge-key="4" data-edge-id="e5" data-composition-points="935,420;935,396;961,396;961,329;945,329;945,305" d="M 935 420 L 935 404 Q 935 396 943 396 L 953 396 Q 961 396 961 388 L 961 337 Q 961 329 953 329 L 953 329 Q 945 329 945 321 L 945 305" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="browser" data-edge-to="api" data-edge-label="1 write verb · reads" data-edge-key="5" data-edge-id="w1" data-composition-points="115,400;115,424;576,424;576,535;600,535" d="M 115 400 L 115 416 Q 115 424 123 424 L 568 424 Q 576 424 576 432 L 576 527 Q 576 535 584 535 L 600 535" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="api" data-edge-to="ledger" data-edge-label="2 intent entity" data-edge-key="6" data-edge-id="w2" data-composition-points="695,570;695,640" d="M 695 570 L 695 640" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="ledger" data-edge-to="exec" data-edge-label="3 executes" data-edge-key="7" data-edge-id="w3" data-composition-points="790,672;820,672;820,722;850,722" d="M 790 672 L 812 672 Q 820 672 820 680 L 820 714 Q 820 722 828 722 L 850 722" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="exec" data-edge-to="ledger" data-edge-label="4 audit event" data-edge-key="8" data-edge-id="w4" data-composition-points="945,754;945,790;695,790;695,704" d="M 945 754 L 945 782 Q 945 790 937 790 L 703 790 Q 695 790 695 782 L 695 704" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="api" data-edge-to="browser" data-edge-label="5 lifecycle strip" data-edge-key="9" data-edge-id="w5" data-composition-points="695,500;695,476;214,476;214,365;190,365" d="M 695 500 L 695 484 Q 695 476 687 476 L 222 476 Q 214 476 214 468 L 214 373 Q 214 365 206 365 L 190 365" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="herdr" data-edge-to="api" data-edge-label="live" data-edge-key="10" data-edge-id="r2" data-composition-points="850,528;790,528" d="M 850 528 L 790 528" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="usage" data-edge-to="api" data-edge-label="usage" data-edge-key="11" data-edge-id="r3" data-composition-points="850,608;820,608;820,542;790,542" d="M 850 608 L 828 608 Q 820 608 820 600 L 820 550 Q 820 542 812 542 L 790 542" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-        <!-- Components -->
-        <g id="node-browser" data-node-id="browser" data-node-label="Browser" tabindex="0" role="button" aria-label="Focus Browser, MacBook · phone, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="MacBook · phone" data-node-context="Architecture component">
-          <title>Browser · MacBook · phone · Architecture component</title>
-          <rect x="40" y="330" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="40" y="330" width="150" height="70" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(46 336) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="115" y="363" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Browser</text>
-        <text x="115" y="379" class="t-muted" font-size="9" text-anchor="middle">MacBook · phone</text>
-        </g>
-
-        <g id="node-spa" data-node-id="spa" data-node-label="Argo SPA" tabindex="0" role="button" aria-label="Focus Argo SPA, served from the VPS, VPS — always up" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="served from the VPS" data-node-tag="lifecycle strip" data-node-context="VPS — always up">
-          <title>Argo SPA · served from the VPS · VPS — always up · lifecycle strip</title>
-          <rect x="330" y="120" width="190" height="70" rx="6" class="c-mask"/>
-          <rect x="330" y="120" width="190" height="70" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(336 126) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" x="425" y="153" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo SPA</text>
-        <text x="425" y="169" class="t-muted" font-size="9" text-anchor="middle">served from the VPS</text>
-        <text x="425" y="182" class="t-frontend" font-size="7" text-anchor="middle">lifecycle strip</text>
-        </g>
-
-        <g id="node-life" data-node-id="life" data-node-label="Life API" tabindex="0" role="button" aria-label="Focus Life API, life pages, VPS — always up" aria-pressed="false" data-node-kind="backend" data-node-sublabel="life pages" data-node-context="VPS — always up">
-          <title>Life API · life pages · VPS — always up</title>
-          <rect x="620" y="120" width="170" height="70" rx="6" class="c-mask"/>
-          <rect x="620" y="120" width="170" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(626 126) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="705" y="153" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Life API</text>
-        <text x="705" y="169" class="t-muted" font-size="9" text-anchor="middle">life pages</text>
-        </g>
-
-        <g id="node-pg" data-node-id="pg" data-node-label="Postgres" tabindex="0" role="button" aria-label="Focus Postgres, life data, VPS — always up" aria-pressed="false" data-node-kind="database" data-node-sublabel="life data" data-node-context="VPS — always up">
-          <title>Postgres · life data · VPS — always up</title>
-          <rect x="850" y="120" width="170" height="70" rx="6" class="c-mask"/>
-          <rect x="850" y="120" width="170" height="70" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(856 126) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" x="935" y="153" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Postgres</text>
-        <text x="935" y="169" class="t-muted" font-size="9" text-anchor="middle">life data</text>
-        </g>
-
-        <g id="node-dead" data-node-id="dead" data-node-label="Dead-man receiver" tabindex="0" role="button" aria-label="Focus Dead-man receiver, expects 5-min heartbeat, VPS — always up" aria-pressed="false" data-node-kind="security" data-node-sublabel="expects 5-min heartbeat" data-node-tag="phone push at 15 min" data-node-context="VPS — always up">
-          <title>Dead-man receiver · expects 5-min heartbeat · VPS — always up · phone push at 15 min</title>
-          <rect x="850" y="235" width="190" height="70" rx="6" class="c-mask"/>
-          <rect x="850" y="235" width="190" height="70" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(856 241) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" x="945" y="268" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Dead-man receiver</text>
-        <text x="945" y="284" class="t-muted" font-size="9" text-anchor="middle">expects 5-min heartbeat</text>
-        <text x="945" y="297" class="t-security" font-size="7" text-anchor="middle">phone push at 15 min</text>
-        </g>
-
-        <g id="node-beat" data-node-id="beat" data-node-label="Heartbeat" tabindex="0" role="button" aria-label="Focus Heartbeat, mini → VPS, mini — factory host" aria-pressed="false" data-node-kind="backend" data-node-sublabel="mini → VPS" data-node-context="mini — factory host">
-          <title>Heartbeat · mini → VPS · mini — factory host</title>
-          <rect x="850" y="420" width="170" height="56" rx="6" class="c-mask"/>
-          <rect x="850" y="420" width="170" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(856 426) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="935" y="446" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Heartbeat</text>
-        <text x="935" y="462" class="t-muted" font-size="9" text-anchor="middle">mini → VPS</text>
-        </g>
-
-        <g id="node-api" data-node-id="api" data-node-label="Factory read API" tabindex="0" role="button" aria-label="Focus Factory read API, reads the ledger, mini — factory host" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reads the ledger" data-node-tag="7 write verbs" data-node-context="mini — factory host">
-          <title>Factory read API · reads the ledger · mini — factory host · 7 write verbs</title>
-          <rect x="600" y="500" width="190" height="70" rx="6" class="c-mask"/>
-          <rect x="600" y="500" width="190" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(606 506) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="695" y="533" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Factory read API</text>
-        <text x="695" y="549" class="t-muted" font-size="9" text-anchor="middle">reads the ledger</text>
-        <text x="695" y="562" class="t-backend" font-size="7" text-anchor="middle">7 write verbs</text>
-        </g>
-
-        <g id="node-herdr" data-node-id="herdr" data-node-label="herdr live state" tabindex="0" role="button" aria-label="Focus herdr live state, panes, agents, mini — factory host" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="panes, agents" data-node-context="mini — factory host">
-          <title>herdr live state · panes, agents · mini — factory host</title>
-          <rect x="850" y="500" width="170" height="56" rx="6" class="c-mask"/>
-          <rect x="850" y="500" width="170" height="56" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(856 506) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" x="935" y="526" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">herdr live state</text>
-        <text x="935" y="542" class="t-muted" font-size="9" text-anchor="middle">panes, agents</text>
-        </g>
-
-        <g id="node-usage" data-node-id="usage" data-node-label="usage.db" tabindex="0" role="button" aria-label="Focus usage.db, quota, cost, mini — factory host" aria-pressed="false" data-node-kind="database" data-node-sublabel="quota, cost" data-node-context="mini — factory host">
-          <title>usage.db · quota, cost · mini — factory host</title>
-          <rect x="850" y="580" width="170" height="56" rx="6" class="c-mask"/>
-          <rect x="850" y="580" width="170" height="56" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(856 586) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" x="935" y="606" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">usage.db</text>
-        <text x="935" y="622" class="t-muted" font-size="9" text-anchor="middle">quota, cost</text>
-        </g>
-
-        <g id="node-ledger" data-node-id="ledger" data-node-label="Ledger + event log" tabindex="0" role="button" aria-label="Focus Ledger + event log, intent entities, audit events, mini — factory host" aria-pressed="false" data-node-kind="database" data-node-sublabel="intent entities, audit events" data-node-context="mini — factory host">
-          <title>Ledger + event log · intent entities, audit events · mini — factory host</title>
-          <rect x="600" y="640" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="600" y="640" width="190" height="64" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(606 646) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" x="695" y="670" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Ledger + event log</text>
-        <text x="695" y="686" class="t-muted" font-size="9" text-anchor="middle">intent entities, audit events</text>
-        </g>
-
-        <g id="node-exec" data-node-id="exec" data-node-label="Reconciler or rd" tabindex="0" role="button" aria-label="Focus Reconciler or rd, executes the intent, mini — factory host" aria-pressed="false" data-node-kind="backend" data-node-sublabel="executes the intent" data-node-context="mini — factory host">
-          <title>Reconciler or rd · executes the intent · mini — factory host</title>
-          <rect x="850" y="690" width="190" height="64" rx="6" class="c-mask"/>
-          <rect x="850" y="690" width="190" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(856 696) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="945" y="720" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Reconciler or rd</text>
-        <text x="945" y="736" class="t-muted" font-size="9" text-anchor="middle">executes the intent</text>
-        </g>
-
-        <!-- Connection labels -->
-        <g data-edge-from="browser" data-edge-to="spa" data-edge-label="HTTPS" data-edge-key="0" data-edge-id="e1">
-          <rect x="193.5" y="286" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="210.5" y="296" class="t-muted" font-size="8" text-anchor="middle">HTTPS</text>
-        </g>
-        <g data-edge-from="spa" data-edge-to="life" data-edge-label="life pages" data-edge-key="1" data-edge-id="e2">
-          <rect x="541" y="135" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="570" y="145" class="t-muted" font-size="8" text-anchor="middle">life pages</text>
-        </g>
-        <g data-edge-from="life" data-edge-to="pg" data-edge-label="SQL" data-edge-key="2" data-edge-id="e3">
-          <rect x="805" y="135" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="820" y="145" class="t-muted" font-size="8" text-anchor="middle">SQL</text>
-        </g>
-        <g data-edge-from="dead" data-edge-to="life" data-edge-label="mini unreachable" data-edge-key="3" data-edge-id="e4">
-          <rect x="661.6" y="210" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="705" y="220" class="t-security" font-size="8" text-anchor="middle">mini unreachable</text>
-        </g>
-        <g data-edge-from="beat" data-edge-to="dead" data-edge-label="5-min heartbeat" data-edge-key="4" data-edge-id="e5">
-          <rect x="907" y="376" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="948" y="386" class="t-security" font-size="8" text-anchor="middle">5-min heartbeat</text>
-        </g>
-        <g data-edge-from="browser" data-edge-to="api" data-edge-label="1 write verb · reads" data-edge-key="5" data-edge-id="w1">
-          <rect x="292.5" y="404" width="106" height="14" rx="3" class="c-mask"/>
-          <text x="345.5" y="414" class="t-backend" font-size="8" text-anchor="middle">1 write verb · reads</text>
-        </g>
-        <g data-edge-from="api" data-edge-to="ledger" data-edge-label="2 intent entity" data-edge-key="6" data-edge-id="w2">
-          <rect x="661" y="574" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="702" y="584" class="t-backend" font-size="8" text-anchor="middle">2 intent entity</text>
-        </g>
-        <g data-edge-from="ledger" data-edge-to="exec" data-edge-label="3 executes" data-edge-key="7" data-edge-id="w3">
-          <rect x="791" y="677" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="820" y="687" class="t-backend" font-size="8" text-anchor="middle">3 executes</text>
-        </g>
-        <g data-edge-from="exec" data-edge-to="ledger" data-edge-label="4 audit event" data-edge-key="8" data-edge-id="w4">
-          <rect x="783.8" y="770" width="72.4" height="14" rx="3" class="c-mask"/>
-          <text x="820" y="780" class="t-backend" font-size="8" text-anchor="middle">4 audit event</text>
-        </g>
-        <g data-edge-from="api" data-edge-to="browser" data-edge-label="5 lifecycle strip" data-edge-key="9" data-edge-id="w5">
-          <rect x="408.7" y="456" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="454.5" y="466" class="t-messagebus" font-size="8" text-anchor="middle">5 lifecycle strip</text>
-        </g>
-        <g data-edge-from="herdr" data-edge-to="api" data-edge-label="live" data-edge-key="10" data-edge-id="r2">
-          <rect x="805" y="508" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="820" y="518" class="t-muted" font-size="8" text-anchor="middle">live</text>
-        </g>
-        <g data-edge-from="usage" data-edge-to="api" data-edge-label="usage" data-edge-key="11" data-edge-id="r3">
-          <rect x="803" y="555" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="820" y="565" class="t-muted" font-size="8" text-anchor="middle">usage</text>
-        </g>
-
-        <!-- Boundary labels (foreground masks keep routes out of titles) -->
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="VPS — always up">
-          <rect data-graph-role="structural-frame-label-mask" x="304" y="100" width="91" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="308" y="113" class="t-cloud" font-size="9" font-weight="600">VPS — always up</text>
-        </g>
-
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="mini — factory host">
-          <rect data-graph-role="structural-frame-label-mask" x="574" y="400" width="112.6" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="578" y="413" class="t-cloud" font-size="9" font-weight="600">mini — factory host</text>
-        </g>
-
-        <!-- Legend -->
-        <g data-legend="">
-          <text x="40" y="824" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-x="40" data-legend-baseline="844" data-legend-width="103">
-            <rect x="40" y="835" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="844" class="t-muted" font-size="10" font-weight="500">Client / SPA</text>
-          </g>
-          <g data-legend-semantic-kind="backend" data-legend-x="165" data-legend-baseline="844" data-legend-width="78">
-            <rect x="165" y="835" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="187" y="844" class="t-muted" font-size="10" font-weight="500">Service</text>
-          </g>
-          <g data-legend-semantic-kind="database" data-legend-x="265" data-legend-baseline="844" data-legend-width="68">
-            <rect x="265" y="835" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="287" y="844" class="t-muted" font-size="10" font-weight="500">Store</text>
-          </g>
-          <g data-legend-semantic-kind="cloud" data-legend-x="355" data-legend-baseline="844" data-legend-width="93">
-            <rect x="355" y="835" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="377" y="844" class="t-muted" font-size="10" font-weight="500">Live state</text>
-          </g>
-          <g data-legend-semantic-kind="security" data-legend-x="470" data-legend-baseline="844" data-legend-width="128">
-            <rect x="470" y="835" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="492" y="844" class="t-muted" font-size="10" font-weight="500">Dead-man's switch</text>
-          </g>
-          <g data-legend-semantic-kind="external" data-legend-x="620" data-legend-baseline="844" data-legend-width="128">
-            <rect x="620" y="835" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="642" y="844" class="t-muted" font-size="10" font-weight="500">Browser (tailnet)</text>
-          </g>
-        </g>
-      </svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="fx" viewBox="0 0 1384 808" width="1384" height="808" role="img" lang="en" aria-labelledby="fxc-title fxc-desc">
+<title id="fxc-title">Argo control plane: split hosting and the write path</title>
+<desc id="fxc-desc">Argo control plane: browser, VPS half (SPA, life API, dead-man receiver, PWA push), mini half (factory read API, ledger, effector, heartbeat), MacBook observer and actuator, and the write path from verb to intent, executor, audit event and end state.</desc>
+<style>
+svg.fx{--bg:#1f1f23;--grid:#2a2a30;--text:#f2f2f5;--text-muted:#a8a8b3;--text-dim:#7d7d88;--arrow:#8d8d98;--arrow-emphasis:#34d399;--mask:#1f1f23;--frontend-fill:rgba(8,51,68,.55);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,.55);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,.5);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,.45);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,.5);--security-stroke:#fb7185;--messagebus-fill:rgba(194,65,12,.4);--messagebus-stroke:#fb923c;--external-fill:rgba(63,63,70,.55);--external-stroke:#a1a1aa;}
+@media (prefers-color-scheme: light){svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}}
+[data-theme="dark"] svg.fx{--bg:#1f1f23;--grid:#2a2a30;--text:#f2f2f5;--text-muted:#a8a8b3;--text-dim:#7d7d88;--arrow:#8d8d98;--arrow-emphasis:#34d399;--mask:#1f1f23;--frontend-fill:rgba(8,51,68,.55);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,.55);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,.5);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,.45);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,.5);--security-stroke:#fb7185;--messagebus-fill:rgba(194,65,12,.4);--messagebus-stroke:#fb923c;--external-fill:rgba(63,63,70,.55);--external-stroke:#a1a1aa;}
+[data-theme="light"] svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}
+svg.fx,svg.fx text{font-family:'JetBrains Mono','JetBrainsMono Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace}
+svg.fx .fx-bg{fill:var(--bg)}
+svg.fx .c-grid{stroke:var(--grid);fill:none}
+svg.fx .c-mask{fill:var(--mask);stroke:none}
+svg.fx .c-region{fill:rgba(251,191,36,.05);stroke:var(--cloud-stroke);stroke-dasharray:8,4}
+svg.fx .c-security-group{fill:transparent;stroke:var(--security-stroke);stroke-dasharray:4,4}
+svg.fx .c-frontend{fill:var(--frontend-fill);stroke:var(--frontend-stroke)}
+svg.fx .c-backend{fill:var(--backend-fill);stroke:var(--backend-stroke)}
+svg.fx .c-database{fill:var(--database-fill);stroke:var(--database-stroke)}
+svg.fx .c-cloud{fill:var(--cloud-fill);stroke:var(--cloud-stroke)}
+svg.fx .c-security{fill:var(--security-fill);stroke:var(--security-stroke)}
+svg.fx .c-messagebus{fill:var(--messagebus-fill);stroke:var(--messagebus-stroke)}
+svg.fx .c-external{fill:var(--external-fill);stroke:var(--external-stroke)}
+svg.fx .t-primary{fill:var(--text)}
+svg.fx .t-muted{fill:var(--text-muted)}
+svg.fx .t-dim{fill:var(--text-dim)}
+svg.fx .t-frontend{fill:var(--frontend-stroke)}
+svg.fx .t-backend{fill:var(--backend-stroke)}
+svg.fx .t-database{fill:var(--database-stroke)}
+svg.fx .t-cloud{fill:var(--cloud-stroke)}
+svg.fx .t-security{fill:var(--security-stroke)}
+svg.fx .t-messagebus{fill:var(--messagebus-stroke)}
+svg.fx .t-external{fill:var(--external-stroke)}
+svg.fx .a-default{stroke:var(--arrow);fill:none}
+svg.fx .a-emphasis{stroke:var(--arrow-emphasis);fill:none}
+svg.fx .a-security{stroke:var(--security-stroke);fill:none;stroke-dasharray:5,5}
+svg.fx .a-dashed{stroke:var(--database-stroke);fill:none;stroke-dasharray:4,4}
+svg.fx .m-default{fill:var(--arrow)}
+svg.fx .m-emphasis{fill:var(--arrow-emphasis)}
+svg.fx .m-security{fill:var(--security-stroke)}
+svg.fx .m-dashed{fill:var(--database-stroke)}
+svg.fx .s-frontend{color:var(--frontend-stroke)}
+svg.fx .s-backend{color:var(--backend-stroke)}
+svg.fx .s-database{color:var(--database-stroke)}
+svg.fx .s-cloud{color:var(--cloud-stroke)}
+svg.fx .s-security{color:var(--security-stroke)}
+svg.fx .s-messagebus{color:var(--messagebus-stroke)}
+svg.fx .s-external{color:var(--external-stroke)}
+svg.fx .semantic-sigil{fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;opacity:.76;pointer-events:none}
+svg.fx .semantic-sigil>*{vector-effect:non-scaling-stroke}
+svg.fx .semantic-sigil .sigil-fill{fill:currentColor;stroke:none}
+@media print{svg.fx,[data-theme] svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}}
+</style>
+<defs>
+<marker id="fxc-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-default" />
+</marker>
+<marker id="fxc-arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-emphasis" />
+</marker>
+<marker id="fxc-arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-security" />
+</marker>
+<marker id="fxc-arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-dashed" />
+</marker>
+<pattern id="fxc-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+<path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
+</pattern>
+</defs>
+<rect class="fx-bg" width="100%" height="100%"/>
+<rect width="100%" height="100%" fill="url(#fxc-grid)" />
+<rect x="314" y="38" width="488" height="184" rx="12" class="c-region" stroke-width="1"/>
+<rect x="314" y="244" width="734" height="310" rx="12" class="c-region" stroke-width="1"/>
+<rect x="1122" y="342" width="222" height="112" rx="12" class="c-region" stroke-width="1"/>
+<rect x="44" y="578" width="1300" height="162" rx="12" class="c-region" stroke-width="1"/>
+<path d="M 130 266 L 130 98 Q 130 90 138 90 L 330 90" class="a-default" stroke-width="1.5" marker-end="url(#fxc-arrowhead)"/>
+<path d="M 330 174 L 288 174 Q 280 174 280 182 L 280 292 Q 280 300 272 300 L 230 300" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 130 334 L 130 392 Q 130 400 138 400 L 330 400" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 520 90 L 596 90" class="a-default" stroke-width="1.5" marker-end="url(#fxc-arrowhead)"/>
+<path d="M 691 146 L 691 118" class="a-dashed" stroke-width="1.5" marker-end="url(#fxc-arrowhead-dashed)"/>
+<path d="M 596 174 L 520 174" class="a-security" stroke-width="1.5" marker-end="url(#fxc-arrowhead-security)"/>
+<path d="M 691 268 L 691 202" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 866 174 L 786 174" class="a-default" stroke-width="1.5" marker-end="url(#fxc-arrowhead)"/>
+<path d="M 425 268 L 425 202" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 686 362 L 686 355 Q 686 348 679 348 L 433 348 Q 425 348 425 340 L 425 324" class="a-dashed" stroke-width="1.5" marker-end="url(#fxc-arrowhead-dashed)"/>
+<path d="M 686 478 L 686 438" class="a-default" stroke-width="1.5" marker-end="url(#fxc-arrowhead)"/>
+<path d="M 500 400 L 576 400" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 796 400 L 872 400" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 1032 400 L 1138 400" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 1233 434 L 1233 498 Q 1233 506 1225 506 L 796 506" class="a-default" stroke-width="1.5" marker-end="url(#fxc-arrowhead)"/>
+<path d="M 260 642 L 340 642" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 570 642 L 650 642" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 850 642 L 930 642" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 1100 642 L 1132 642 Q 1140 642 1140 634 L 1140 627 Q 1140 619 1148 619 L 1168 619" class="a-emphasis" stroke-width="1.8" marker-end="url(#fxc-arrowhead-emphasis)"/>
+<path d="M 1100 642 L 1132 642 Q 1140 642 1140 650 L 1140 653 Q 1140 661 1148 661 L 1168 661" class="a-security" stroke-width="1.5" marker-end="url(#fxc-arrowhead-security)"/>
+<path d="M 1100 642 L 1132 642 Q 1140 642 1140 650 L 1140 695 Q 1140 703 1148 703 L 1168 703" class="a-dashed" stroke-width="1.5" marker-end="url(#fxc-arrowhead-dashed)"/>
+<g id="fxc-node-browser">
+<title>Browser · MacBook · phone, on the tailnet · Architecture component · phone: Home-Screen PWA</title>
+<rect x="30" y="266" width="200" height="68" rx="6" class="c-mask"/>
+<rect x="30" y="266" width="200" height="68" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(36 272) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="130" y="298" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Browser</text>
+<text x="130" y="314" class="t-muted" font-size="9" text-anchor="middle">MacBook · phone, on the tailnet</text>
+<text x="130" y="326" class="t-external" font-size="7" text-anchor="middle">phone: Home-Screen PWA</text>
+</g>
+<g id="fxc-node-v_spa">
+<title>Argo SPA · static, served from the VPS · VPS · always up</title>
+<rect x="330" y="62" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="330" y="62" width="190" height="56" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(336 68) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="425" y="88" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo SPA</text>
+<text x="425" y="104" class="t-muted" font-size="9" text-anchor="middle">static, served from the VPS</text>
+</g>
+<g id="fxc-node-v_life">
+<title>Life API · life pages, Postgres data · VPS · always up</title>
+<rect x="596" y="62" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="596" y="62" width="190" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(602 68) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="691" y="88" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Life API</text>
+<text x="691" y="104" class="t-muted" font-size="9" text-anchor="middle">life pages, Postgres data</text>
+</g>
+<g id="fxc-node-v_push">
+<title>PWA web push · sent from the VPS half · VPS · always up</title>
+<rect x="330" y="146" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="330" y="146" width="190" height="56" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(336 152) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="425" y="172" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PWA web push</text>
+<text x="425" y="188" class="t-muted" font-size="9" text-anchor="middle">sent from the VPS half</text>
+</g>
+<g id="fxc-node-v_dead">
+<title>Dead-man receiver · mini + homelab, push at 15 min · VPS · always up</title>
+<rect x="596" y="146" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="596" y="146" width="190" height="56" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(602 152) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="691" y="172" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Dead-man receiver</text>
+<text x="691" y="188" class="t-muted" font-size="9" text-anchor="middle">mini + homelab, push at 15 min</text>
+</g>
+<g id="fxc-node-homelab">
+<title>Homelab · 5-min heartbeat · Architecture component</title>
+<rect x="866" y="146" width="150" height="56" rx="6" class="c-mask"/>
+<rect x="866" y="146" width="150" height="56" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(872 152) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="941" y="172" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Homelab</text>
+<text x="941" y="188" class="t-muted" font-size="9" text-anchor="middle">5-min heartbeat</text>
+</g>
+<g id="fxc-node-m_eff">
+<title>Effector · push deliveries, at-least-once · mini</title>
+<rect x="330" y="268" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="330" y="268" width="190" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(336 274) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="425" y="294" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Effector</text>
+<text x="425" y="310" class="t-muted" font-size="9" text-anchor="middle">push deliveries, at-least-once</text>
+</g>
+<g id="fxc-node-m_hb">
+<title>Heartbeat · 5 min · egress probe · mini</title>
+<rect x="596" y="268" width="190" height="56" rx="6" class="c-mask"/>
+<rect x="596" y="268" width="190" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(602 274) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="691" y="294" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Heartbeat</text>
+<text x="691" y="310" class="t-muted" font-size="9" text-anchor="middle">5 min · egress probe</text>
+</g>
+<g id="fxc-node-m_api">
+<title>Factory read API · ledger only · each as_of · mini</title>
+<rect x="330" y="372" width="170" height="56" rx="6" class="c-mask"/>
+<rect x="330" y="372" width="170" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(336 378) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="415" y="398" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Factory read API</text>
+<text x="415" y="414" class="t-muted" font-size="9" text-anchor="middle">ledger only · each as_of</text>
+</g>
+<g id="fxc-node-m_ledger">
+<title>Ledger + event log · herdr, quota, usage arrive as events · mini</title>
+<rect x="576" y="362" width="220" height="76" rx="6" class="c-mask"/>
+<rect x="576" y="362" width="220" height="76" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(582 368) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="686" y="398" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Ledger + event log</text>
+<text x="686" y="414" class="t-muted" font-size="9" text-anchor="middle">herdr, quota, usage arrive as events</text>
+</g>
+<g id="fxc-node-m_exec">
+<title>Reconciler or rd · Witness, decide, verifier · mini</title>
+<rect x="872" y="372" width="160" height="56" rx="6" class="c-mask"/>
+<rect x="872" y="372" width="160" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(878 378) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="952" y="398" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Reconciler or rd</text>
+<text x="952" y="414" class="t-muted" font-size="9" text-anchor="middle">Witness, decide, verifier</text>
+</g>
+<g id="fxc-node-m_ingest">
+<title>Ingest adapters · herdr record, usage.db → events · mini</title>
+<rect x="576" y="478" width="220" height="56" rx="6" class="c-mask"/>
+<rect x="576" y="478" width="220" height="56" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(582 484) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="686" y="504" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Ingest adapters</text>
+<text x="686" y="520" class="t-muted" font-size="9" text-anchor="middle">herdr record, usage.db → events</text>
+</g>
+<g id="fxc-node-mac">
+<title>herdr observer + actuator · events up · intents pulled · MacBook · intermittent · lid closed: host_asleep, intents wait</title>
+<rect x="1138" y="366" width="190" height="68" rx="6" class="c-mask"/>
+<rect x="1138" y="366" width="190" height="68" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(1144 372) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="1233" y="398" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">herdr observer + actuator</text>
+<text x="1233" y="414" class="t-muted" font-size="9" text-anchor="middle">events up · intents pulled</text>
+<text x="1233" y="426" class="t-cloud" font-size="7" text-anchor="middle">lid closed: host_asleep, intents wait</text>
+</g>
+<g id="fxc-node-w_verb">
+<title>Write verb · submit · steer · pause · decide · Write path · every write is an intent, never a call (ADR-015) · comment · re-verify · stop</title>
+<rect x="60" y="606" width="200" height="72" rx="6" class="c-mask"/>
+<rect x="60" y="606" width="200" height="72" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(66 612) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="160" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Write verb</text>
+<text x="160" y="656" class="t-muted" font-size="9" text-anchor="middle">submit · steer · pause · decide</text>
+<text x="160" y="670" class="t-frontend" font-size="7" text-anchor="middle">comment · re-verify · stop</text>
+</g>
+<g id="fxc-node-w_intent">
+<title>Intent on its target entity · an owner event, no new noun · Write path · every write is an intent, never a call (ADR-015) · Task · Agent · Decision · Artifact · runtime record</title>
+<rect x="340" y="606" width="230" height="72" rx="6" class="c-mask"/>
+<rect x="340" y="606" width="230" height="72" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(346 612) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="455" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Intent on its target entity</text>
+<text x="455" y="656" class="t-muted" font-size="9" text-anchor="middle">an owner event, no new noun</text>
+<text x="455" y="670" class="t-database" font-size="7" text-anchor="middle">Task · Agent · Decision · Artifact · runtime record</text>
+</g>
+<g id="fxc-node-w_exec">
+<title>Reconciler or rd · Witness, decide, verifier · Write path · every write is an intent, never a call (ADR-015) · MacBook agents: the actuator</title>
+<rect x="650" y="606" width="200" height="72" rx="6" class="c-mask"/>
+<rect x="650" y="606" width="200" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(656 612) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="750" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Reconciler or rd</text>
+<text x="750" y="656" class="t-muted" font-size="9" text-anchor="middle">Witness, decide, verifier</text>
+<text x="750" y="670" class="t-backend" font-size="7" text-anchor="middle">MacBook agents: the actuator</text>
+</g>
+<g id="fxc-node-w_audit">
+<title>Audit event · executor writes the end state · Write path · every write is an intent, never a call (ADR-015)</title>
+<rect x="930" y="606" width="170" height="72" rx="6" class="c-mask"/>
+<rect x="930" y="606" width="170" height="72" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(936 612) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1015" y="640" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Audit event</text>
+<text x="1015" y="656" class="t-muted" font-size="9" text-anchor="middle">executor writes the end state</text>
+</g>
+<g id="fxc-node-w_applied">
+<title>applied · Write path · every write is an intent, never a call (ADR-015)</title>
+<rect x="1168" y="602" width="160" height="34" rx="6" class="c-mask"/>
+<rect x="1168" y="602" width="160" height="34" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1174 608) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1248" y="623" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">applied</text>
+</g>
+<g id="fxc-node-w_rejected">
+<title>rejected(reason) · Write path · every write is an intent, never a call (ADR-015)</title>
+<rect x="1168" y="644" width="160" height="34" rx="6" class="c-mask"/>
+<rect x="1168" y="644" width="160" height="34" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(1174 650) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1248" y="665" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">rejected(reason)</text>
+</g>
+<g id="fxc-node-w_expired">
+<title>expired(budget) · Write path · every write is an intent, never a call (ADR-015)</title>
+<rect x="1168" y="686" width="160" height="34" rx="6" class="c-mask"/>
+<rect x="1168" y="686" width="160" height="34" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(1174 692) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="1248" y="707" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">expired(budget)</text>
+</g>
+<g>
+<rect x="193.8" y="70" width="72.4" height="14" rx="3" class="c-mask"/>
+<text x="230" y="80" class="t-muted" font-size="8" text-anchor="middle">tailnet HTTPS</text>
+</g>
+<g>
+<rect x="241.4" y="217" width="77.2" height="14" rx="3" class="c-mask"/>
+<text x="280" y="227" class="t-backend" font-size="8" text-anchor="middle">web push (PWA)</text>
+</g>
+<g>
+<rect x="160.2" y="380" width="139.6" height="14" rx="3" class="c-mask"/>
+<text x="230" y="390" class="t-backend" font-size="8" text-anchor="middle">read models · 7 write verbs</text>
+</g>
+<g>
+<rect x="529" y="70" width="58" height="14" rx="3" class="c-mask"/>
+<text x="558" y="80" class="t-muted" font-size="8" text-anchor="middle">life pages</text>
+</g>
+<g>
+<rect x="633.2" y="125" width="115.6" height="14" rx="3" class="c-mask"/>
+<text x="691" y="135" class="t-messagebus" font-size="8" text-anchor="middle">mini unreachable since</text>
+</g>
+<g>
+<rect x="521.8" y="154" width="72.4" height="14" rx="3" class="c-mask"/>
+<text x="558" y="164" class="t-security" font-size="8" text-anchor="middle">15 min silent</text>
+</g>
+<g>
+<rect x="614" y="228" width="154" height="14" rx="3" class="c-mask"/>
+<text x="691" y="238" class="t-backend" font-size="8" text-anchor="middle">5-min heartbeat + egress probe</text>
+</g>
+<g>
+<rect x="799.4" y="154" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
+<text x="826" y="164" class="t-muted" font-size="8" text-anchor="middle">heartbeat</text>
+</g>
+<g>
+<rect x="376.8" y="228" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+<text x="425" y="238" class="t-backend" font-size="8" text-anchor="middle">decision, heads-up</text>
+</g>
+<g>
+<rect x="466" y="332" width="58" height="14" rx="3" class="c-mask"/>
+<text x="495" y="342" class="t-messagebus" font-size="8" text-anchor="middle">deliveries</text>
+</g>
+<g>
+<rect x="666.6" y="451" width="38.8" height="14" rx="3" class="c-mask"/>
+<text x="686" y="461" class="t-muted" font-size="8" text-anchor="middle">events</text>
+</g>
+<g>
+<rect x="504.2" y="380" width="67.6" height="14" rx="3" class="c-mask"/>
+<text x="538" y="390" class="t-backend" font-size="8" text-anchor="middle">read · write</text>
+</g>
+<g>
+<rect x="812.2" y="380" width="43.6" height="14" rx="3" class="c-mask"/>
+<text x="834" y="390" class="t-backend" font-size="8" text-anchor="middle">intents</text>
+</g>
+<g>
+<rect x="1034.4" y="380" width="101.2" height="14" rx="3" class="c-mask"/>
+<text x="1085" y="390" class="t-backend" font-size="8" text-anchor="middle">resume, steer, stop</text>
+</g>
+<g>
+<rect x="951.9" y="486" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
+<text x="1014.5" y="496" class="t-muted" font-size="8" text-anchor="middle">herdr events when online</text>
+</g>
+<g>
+<rect x="268.6" y="622" width="62.8" height="14" rx="3" class="c-mask"/>
+<text x="300" y="632" class="t-backend" font-size="8" text-anchor="middle">factory API</text>
+</g>
+<g>
+<rect x="585.8" y="622" width="48.4" height="14" rx="3" class="c-mask"/>
+<text x="610" y="632" class="t-backend" font-size="8" text-anchor="middle">executes</text>
+</g>
+<g>
+<rect x="873" y="622" width="34" height="14" rx="3" class="c-mask"/>
+<text x="890" y="632" class="t-backend" font-size="8" text-anchor="middle">emits</text>
+</g>
+<g>
+<rect x="318" y="42" width="91" height="16" rx="3" class="c-mask"/>
+<text x="322" y="55" class="t-cloud" font-size="9" font-weight="600">VPS · always up</text>
+</g>
+<g>
+<rect x="318" y="248" width="31.599999999999998" height="16" rx="3" class="c-mask"/>
+<text x="322" y="261" class="t-cloud" font-size="9" font-weight="600">mini</text>
+</g>
+<g>
+<rect x="1126" y="346" width="128.8" height="16" rx="3" class="c-mask"/>
+<text x="1130" y="359" class="t-cloud" font-size="9" font-weight="600">MacBook · intermittent</text>
+</g>
+<g>
+<rect x="48" y="582" width="339.4" height="16" rx="3" class="c-mask"/>
+<text x="52" y="595" class="t-cloud" font-size="9" font-weight="600">Write path · every write is an intent, never a call (ADR-015)</text>
+</g>
+<g>
+<text x="40" y="772" class="t-primary" font-size="12" font-weight="650">Legend</text>
+<g>
+<rect x="40" y="783" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+<text x="62" y="792" class="t-muted" font-size="10" font-weight="500">SPA and verbs</text>
+</g>
+<g>
+<rect x="170" y="783" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+<text x="192" y="792" class="t-muted" font-size="10" font-weight="500">Service</text>
+</g>
+<g>
+<rect x="270" y="783" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+<text x="292" y="792" class="t-muted" font-size="10" font-weight="500">Ledger entity or event</text>
+</g>
+<g>
+<rect x="445" y="783" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+<text x="467" y="792" class="t-muted" font-size="10" font-weight="500">MacBook, expired</text>
+</g>
+<g>
+<rect x="590" y="783" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+<text x="612" y="792" class="t-muted" font-size="10" font-weight="500">Dead-man&#39;s switch, rejected</text>
+</g>
+<g>
+<rect x="789" y="783" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
+<text x="811" y="792" class="t-muted" font-size="10" font-weight="500">Push channel</text>
+</g>
+<g>
+<rect x="914" y="783" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+<text x="936" y="792" class="t-muted" font-size="10" font-weight="500">Client or other host</text>
+</g>
+</g>
+</svg>

@@ -1,806 +1,907 @@
-<svg viewBox="0 0 1500 960" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="standard" style="" width="1500" height="960" xmlns="http://www.w3.org/2000/svg"><style>@font-face { font-family: 'JetBrains Mono'; font-weight: 400; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 500; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 600; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-@font-face { font-family: 'JetBrains Mono'; font-weight: 700; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }
-svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono CJK SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace; }
-:root, [data-theme="dark"] { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-[data-theme="light"] { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; }
-[data-preset="signal-flow"][data-theme="dark"] { --bg: #030711; --grid: #15233a; --panel: rgba(6, 14, 28, 0.78); --panel-border: #1d3350; --lane-fill: rgba(9, 22, 40, 0.5); --lane-stroke: #2c4564; --text: #f5fbff; --text-muted: #9eb0c7; --text-dim: #52667f; --text-faint: #7890ad; --mask: #07101e; --frontend-fill: rgba(6, 182, 212, 0.14); --frontend-stroke: #67e8f9; --backend-fill: rgba(16, 185, 129, 0.14); --backend-stroke: #5eead4; --database-fill: rgba(139, 92, 246, 0.16); --database-stroke: #c4b5fd; --cloud-fill: rgba(245, 158, 11, 0.13); --cloud-stroke: #fcd34d; --security-fill: rgba(244, 63, 94, 0.13); --security-stroke: #fda4af; --messagebus-fill: rgba(249, 115, 22, 0.13); --messagebus-stroke: #fdba74; --external-fill: rgba(71, 85, 105, 0.24); --external-stroke: #a5b4c7; --arrow: #7890ad; --arrow-emphasis: #2dd4bf; --toolbar-bg: rgba(7, 16, 30, 0.86); --toolbar-border: #29415f; --toolbar-menu-bg: #07101e; }
-[data-preset="signal-flow"][data-theme="light"] { --bg: #f4f9fc; --grid: #d4e5ee; --panel: rgba(255, 255, 255, 0.82); --panel-border: #bfd5e2; --lane-fill: rgba(232, 243, 248, 0.62); --lane-stroke: #a9c5d5; --text: #102638; --text-muted: #587287; --text-dim: #8aa2b4; --text-faint: #668397; --mask: #f2f2f5; --frontend-fill: rgba(6, 182, 212, 0.09); --frontend-stroke: #0789a1; --backend-fill: rgba(5, 150, 105, 0.09); --backend-stroke: #087f69; --database-fill: rgba(124, 58, 237, 0.09); --database-stroke: #7254c7; --cloud-fill: rgba(217, 119, 6, 0.08); --cloud-stroke: #b9670b; --security-fill: rgba(225, 29, 72, 0.08); --security-stroke: #c53a59; --messagebus-fill: rgba(234, 88, 12, 0.08); --messagebus-stroke: #c65f27; --external-fill: rgba(100, 116, 139, 0.1); --external-stroke: #607a8c; --arrow: #7b97aa; --arrow-emphasis: #0d9488; }
-[data-preset="blueprint"][data-theme="dark"] { --bg: #06131f; --grid: #17425a; --panel: rgba(7, 27, 43, 0.9); --panel-border: #27627f; --lane-fill: rgba(10, 43, 66, 0.36); --lane-stroke: #34799a; --text: #e3f6ff; --text-muted: #91b8ca; --text-dim: #557e92; --text-faint: #739caf; --mask: #0a2031; --frontend-fill: rgba(26, 157, 193, 0.14); --frontend-stroke: #66d9ef; --backend-fill: rgba(31, 155, 124, 0.13); --backend-stroke: #69dfbd; --database-fill: rgba(120, 105, 196, 0.14); --database-stroke: #b4a8ff; --cloud-fill: rgba(197, 145, 43, 0.13); --cloud-stroke: #ffd166; --security-fill: rgba(199, 76, 104, 0.13); --security-stroke: #ff8da1; --messagebus-fill: rgba(207, 112, 49, 0.13); --messagebus-stroke: #ffad66; --external-fill: rgba(84, 119, 139, 0.18); --external-stroke: #a7cad9; --arrow: #78a3b7; --arrow-emphasis: #64dfc1; --toolbar-bg: rgba(7, 28, 45, 0.92); --toolbar-border: #34799a; --toolbar-text: #d8f3ff; --toolbar-hover: rgba(18, 58, 83, 0.95); --toolbar-menu-bg: #0a2031; }
-[data-preset="blueprint"][data-theme="light"] { --bg: #edf7fa; --grid: #b5d5e1; --panel: rgba(249, 253, 255, 0.94); --panel-border: #78aabd; --lane-fill: rgba(210, 232, 240, 0.42); --lane-stroke: #83b2c4; --text: #123344; --text-muted: #4e7486; --text-dim: #86a6b4; --text-faint: #668c9d; --mask: #f9fdff; --frontend-fill: rgba(8, 145, 178, 0.08); --frontend-stroke: #087f9c; --backend-fill: rgba(5, 128, 101, 0.08); --backend-stroke: #08755f; --database-fill: rgba(100, 75, 180, 0.08); --database-stroke: #6757a8; --cloud-fill: rgba(181, 120, 15, 0.08); --cloud-stroke: #a86609; --security-fill: rgba(190, 48, 80, 0.07); --security-stroke: #b32f50; --messagebus-fill: rgba(196, 81, 22, 0.07); --messagebus-stroke: #b65120; --external-fill: rgba(79, 112, 128, 0.08); --external-stroke: #506f7e; --arrow: #6d93a5; --arrow-emphasis: #087f69; --toolbar-bg: rgba(247, 252, 254, 0.94); --toolbar-border: #8ab5c5; --toolbar-text: #294f61; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f9fdff; }
-[data-preset="editorial"][data-theme="dark"] { --bg: #181611; --grid: #39342a; --panel: rgba(35, 31, 24, 0.96); --panel-border: #625a4a; --lane-fill: rgba(52, 46, 35, 0.46); --lane-stroke: #726957; --text: #f4eddf; --text-muted: #b9ae9b; --text-dim: #776e60; --text-faint: #9d917e; --mask: #231f18; --frontend-fill: rgba(43, 133, 142, 0.16); --frontend-stroke: #7fc6c7; --backend-fill: rgba(63, 132, 92, 0.16); --backend-stroke: #8fc29e; --database-fill: rgba(117, 91, 141, 0.17); --database-stroke: #c0a4d0; --cloud-fill: rgba(170, 119, 49, 0.16); --cloud-stroke: #d8ad68; --security-fill: rgba(157, 69, 65, 0.17); --security-stroke: #df9085; --messagebus-fill: rgba(174, 79, 42, 0.16); --messagebus-stroke: #df946f; --external-fill: rgba(126, 115, 96, 0.18); --external-stroke: #b8ad99; --arrow: #948978; --arrow-emphasis: #dd6b3d; --toolbar-bg: rgba(35, 31, 24, 0.92); --toolbar-border: #625a4a; --toolbar-text: #eee5d5; --toolbar-hover: #302a20; --toolbar-menu-bg: #231f18; }
-[data-preset="editorial"][data-theme="light"] { --bg: #f2eee5; --grid: #d8d0c2; --panel: rgba(251, 248, 241, 0.97); --panel-border: #c4b9a6; --lane-fill: rgba(229, 221, 207, 0.42); --lane-stroke: #b8aa94; --text: #242018; --text-muted: #6f6658; --text-dim: #a09788; --text-faint: #817767; --mask: #fbf8f1; --frontend-fill: rgba(31, 117, 126, 0.09); --frontend-stroke: #287e84; --backend-fill: rgba(42, 119, 75, 0.09); --backend-stroke: #397b53; --database-fill: rgba(105, 75, 130, 0.09); --database-stroke: #765d86; --cloud-fill: rgba(157, 103, 31, 0.1); --cloud-stroke: #9a671f; --security-fill: rgba(153, 58, 52, 0.09); --security-stroke: #9e463f; --messagebus-fill: rgba(182, 70, 27, 0.09); --messagebus-stroke: #ad4b25; --external-fill: rgba(101, 91, 75, 0.09); --external-stroke: #746b5e; --arrow: #8a806f; --arrow-emphasis: #bb4c23; --toolbar-bg: rgba(251, 248, 241, 0.94); --toolbar-border: #c4b9a6; --toolbar-text: #40392f; --toolbar-hover: #fffdf8; --toolbar-menu-bg: #fbf8f1; }
-svg { width: 100%; min-width: min(900px, 100%); display: block; transform-origin: 0px 0px; transition: transform 0.18s; }
-@keyframes archify-lens-in { 
-  0% { opacity: 0; transform: translateY(5px) scale(0.985); }
-  100% { opacity: 1; transform: translateY(0px) scale(1); }
-}
-@keyframes archify-guide-in { 
-  0% { opacity: 0; transform: translateY(-5px) scale(0.985); }
-  100% { opacity: 1; transform: translateY(0px) scale(1); }
-}
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="stay"] { opacity: 1; }
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="enter"] { opacity: 0.78; }
-svg[data-chapter-handoff] [data-node-id][data-chapter-role="leave"] { opacity: 0.26; }
-@keyframes archify-chapter-anchor { 
-  0% { opacity: 0.35; stroke-dashoffset: 8; }
-  45% { opacity: 1; }
-  100% { opacity: 0.72; stroke-dashoffset: 0; }
-}
-@keyframes archify-story-caption-in { 
-  0% { opacity: 0; transform: translateY(3px); }
-  100% { opacity: 1; transform: translateY(0px); }
-}
-[data-theme="light"] #theme-icon { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='3.1'/%3E%3Cpath d='M10 2.2v1.4M10 16.4v1.4M2.2 10h1.4M16.4 10h1.4M4.5 4.5l1 1M14.5 14.5l1 1M15.5 4.5l-1 1M5.5 14.5l-1 1'/%3E%3C/g%3E%3C/svg%3E"); }
-[data-theme="dark"] #theme-icon { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E"); }
-.c-grid { stroke: var(--grid); fill: none; }
-.c-mask { fill: var(--mask); stroke: none; }
-.c-frontend { fill: var(--frontend-fill); stroke: var(--frontend-stroke); }
-.c-backend { fill: var(--backend-fill); stroke: var(--backend-stroke); }
-.c-database { fill: var(--database-fill); stroke: var(--database-stroke); }
-.c-cloud { fill: var(--cloud-fill); stroke: var(--cloud-stroke); }
-.c-security { fill: var(--security-fill); stroke: var(--security-stroke); }
-.c-messagebus { fill: var(--messagebus-fill); stroke: var(--messagebus-stroke); }
-.c-external { fill: var(--external-fill); stroke: var(--external-stroke); }
-.t-primary { fill: var(--text); }
-.t-muted { fill: var(--text-muted); }
-.t-dim { fill: var(--text-dim); }
-.t-frontend { fill: var(--frontend-stroke); }
-.t-backend { fill: var(--backend-stroke); }
-.t-database { fill: var(--database-stroke); }
-.t-cloud { fill: var(--cloud-stroke); }
-.t-security { fill: var(--security-stroke); }
-.t-messagebus { fill: var(--messagebus-stroke); }
-.t-external { fill: var(--external-stroke); }
-svg .semantic-sigil { fill: none; stroke: currentcolor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; opacity: 0.76; pointer-events: none; }
-svg .semantic-sigil &gt; * { vector-effect: non-scaling-stroke; }
-svg .semantic-sigil .sigil-fill { fill: currentcolor; stroke: none; }
-svg .s-frontend { color: var(--frontend-stroke); }
-svg .s-backend { color: var(--backend-stroke); }
-svg .s-database { color: var(--database-stroke); }
-svg .s-cloud { color: var(--cloud-stroke); }
-svg .s-security { color: var(--security-stroke); }
-svg .s-messagebus { color: var(--messagebus-stroke); }
-svg .s-external { color: var(--external-stroke); }
-svg .brand-mark { pointer-events: none; }
-svg .brand-mark-badge { fill: rgb(255, 255, 255); stroke: none; }
-svg .brand-mark-frame { fill: none; stroke: rgb(203, 213, 225); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
-svg .brand-mark-fallback { fill: none; stroke: rgb(71, 85, 105); stroke-width: 1.15; stroke-linecap: round; stroke-linejoin: round; }
-svg[data-preset="blueprint"] .brand-mark-badge, svg[data-preset="blueprint"] .brand-mark-frame { rx: 1px; }
-svg [data-detail] { transition: opacity 160ms; }
-svg [data-detail-anchor] { transform-box: fill-box; transform-origin: center center; transition: transform 160ms; }
-svg[data-focus-active] [data-focus-match][data-detail], svg[data-focus-active] [data-focus-match] [data-detail], svg[data-reach-active] [data-reach-match][data-detail], svg[data-reach-active] [data-reach-match] [data-detail], svg[data-lens-active] [data-lens-match][data-detail], svg[data-lens-active] [data-lens-match] [data-detail], svg[data-legend-preview-active] [data-legend-preview-match][data-detail], svg[data-legend-preview-active] [data-legend-preview-match] [data-detail], svg[data-intent-trace-active] [data-intent-trace-match][data-detail], svg[data-intent-trace-active] [data-intent-trace-match] [data-detail], svg[data-route-active] [data-route-match][data-detail], svg[data-route-active] [data-route-match] [data-detail], svg[data-story-active] [data-story-step][data-detail], svg[data-story-active] [data-story-step] [data-detail], svg[data-relationship-preview-active] [data-relationship-preview][data-detail], svg[data-relationship-preview-active] [data-relationship-preview] [data-detail], svg [data-node-id]:hover [data-detail], svg [data-node-id]:focus-visible [data-detail] { opacity: 1; pointer-events: auto; }
-svg[data-focus-active] [data-focus-match] [data-detail-anchor], svg[data-reach-active] [data-reach-match] [data-detail-anchor], svg[data-lens-active] [data-lens-match] [data-detail-anchor], svg[data-legend-preview-active] [data-legend-preview-match] [data-detail-anchor], svg[data-intent-trace-active] [data-intent-trace-match] [data-detail-anchor], svg[data-route-active] [data-route-match] [data-detail-anchor], svg[data-story-active] [data-story-step] [data-detail-anchor], svg [data-node-id]:hover [data-detail-anchor], svg [data-node-id]:focus-visible [data-detail-anchor] { transform: none; }
-.a-default { stroke: var(--arrow); fill: none; }
-.a-emphasis { stroke: var(--arrow-emphasis); fill: none; }
-.a-security { stroke: var(--security-stroke); fill: none; stroke-dasharray: 5, 5; }
-.a-dashed { stroke: var(--database-stroke); fill: none; stroke-dasharray: 4, 4; }
-.m-default { fill: var(--arrow); }
-.m-emphasis { fill: var(--arrow-emphasis); }
-.m-security { fill: var(--security-stroke); }
-.m-dashed { fill: var(--database-stroke); }
-svg [data-node-id] { cursor: pointer; transition: opacity 0.18s, filter 0.18s; }
-svg [data-edge-from] { transition: opacity 0.18s, filter 0.18s; }
-svg [data-node-id]:hover, svg [data-node-id]:focus-visible { filter: drop-shadow(0 0 7px var(--frontend-stroke)); outline: none; }
-svg [data-node-id]:hover .source-evidence-beacon, svg [data-node-id]:focus-visible .source-evidence-beacon, svg [data-node-id][data-focus-selected] .source-evidence-beacon { opacity: 1; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--backend-stroke) 72%, transparent)); }
-svg[data-preset="signal-flow"] .source-evidence-beacon { opacity: 0.9; }
-svg[data-preset="blueprint"] .source-evidence-beacon rect { rx: 0.8px; filter: none; }
-svg [data-legend-kind][role="button"] { cursor: pointer; }
-svg [data-legend-kind]:focus { outline: none; }
-svg [data-legend-hit] { fill: transparent; stroke: transparent; stroke-width: 1.4; pointer-events: all; vector-effect: non-scaling-stroke; transition: stroke 150ms, stroke-width 150ms, filter 150ms; }
-svg [data-legend-count-badge] { pointer-events: none; }
-svg [data-legend-count-badge] rect { fill: var(--mask); stroke: var(--panel-border); stroke-width: 1; vector-effect: non-scaling-stroke; }
-svg [data-legend-count-badge] text { fill: var(--text-muted); font-size: 8px; font-weight: 700; text-anchor: middle; }
-svg [data-legend-kind][role="button"]:hover [data-legend-hit] { stroke: color-mix(in srgb, var(--database-stroke) 58%, transparent); }
-svg [data-legend-kind][role="button"]:focus-visible [data-legend-hit] { stroke: var(--frontend-stroke); stroke-width: 1.8; filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg [data-legend-kind][data-legend-selected] [data-legend-hit] { stroke: var(--database-stroke); stroke-width: 2.2; stroke-dasharray: 3, 2; }
-svg [data-legend-kind][data-legend-selected] [data-legend-count-badge] rect { stroke: var(--database-stroke); stroke-width: 1.8; }
-svg [data-legend-kind][data-legend-zero] { opacity: 0.44; }
-svg[data-preset="signal-flow"] [data-legend-kind][data-legend-selected] [data-legend-hit] { filter: drop-shadow(0 0 4px var(--database-stroke)); }
-svg[data-preset="blueprint"] [data-legend-hit], svg[data-preset="blueprint"] [data-legend-count-badge] rect { rx: 0; filter: none; }
-svg[data-legend-preview-active] [data-node-id], svg[data-legend-preview-active] [data-edge-from] { opacity: 0.11; }
-svg[data-legend-preview-active] [data-legend-preview-match] { opacity: 1; }
-svg[data-legend-preview-active] [data-legend-preview-peer] { opacity: 0.62; }
-svg[data-legend-preview-active] [data-legend-preview-selected] { filter: drop-shadow(0 0 8px var(--database-stroke)); }
-svg[data-lens-active] [data-node-id], svg[data-lens-active] [data-edge-from] { opacity: 0.11; }
-svg[data-lens-active] [data-lens-match] { opacity: 1; }
-svg[data-lens-active] [data-lens-peer] { opacity: 0.62; }
-svg[data-lens-active] [data-lens-selected] { filter: drop-shadow(0 0 10px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow { stroke-width: 3.7; opacity: 1; }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="out"], svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="forward"] { filter: drop-shadow(0 0 6px var(--frontend-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="in"], svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="reverse"] { filter: drop-shadow(0 0 6px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .semantic-lens-flow[data-direction="within"] { filter: drop-shadow(0 0 6px var(--messagebus-stroke)); }
-svg[data-preset="blueprint"] .semantic-lens-flow { stroke-width: 2.45; stroke-linecap: square; filter: none; opacity: 0.78; }
-svg[data-focus-active] [data-node-id], svg[data-focus-active] [data-edge-from] { opacity: 0.13; }
-svg[data-focus-active] [data-focus-match] { opacity: 1; }
-svg[data-focus-active] [data-focus-selected] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-reach-active] [data-node-id], svg[data-reach-active] [data-edge-from] { opacity: 0.09; }
-svg[data-reach-active] [data-reach-match] { opacity: 1; }
-svg[data-reach-active="upstream"] [data-reach-origin] { filter: drop-shadow(0 0 11px var(--database-stroke)); }
-svg[data-reach-active="downstream"] [data-reach-origin] { filter: drop-shadow(0 0 11px var(--backend-stroke)); }
-svg[data-reach-active="upstream"] [data-edge-from][data-reach-match] { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--database-stroke) 72%, transparent)); }
-svg[data-reach-active="downstream"] [data-edge-from][data-reach-match] { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--backend-stroke) 72%, transparent)); }
-svg[data-preset="blueprint"][data-reach-active] [data-reach-origin], svg[data-preset="blueprint"][data-reach-active] [data-edge-from][data-reach-match] { filter: none; }
-svg[data-preset="blueprint"] .relationship-hit-target:focus-visible .relationship-focus-rail { stroke-linecap: square; filter: none; }
-svg[data-relationship-direct-active] [data-node-id], svg[data-relationship-direct-active] [data-edge-from] { opacity: 0.16; }
-svg[data-relationship-direct-active] [data-relationship-preview], svg[data-relationship-direct-active] [data-relationship-preview-node] { opacity: 1; }
-svg[data-focus-active]:not([data-relationship-pin-active]) .relationship-hit-rail, svg[data-story-active] .relationship-hit-rail, svg[data-route-picking] .relationship-hit-rail, svg[data-route-active] .relationship-hit-rail, svg[data-lens-active] .relationship-hit-rail, svg[data-chapter-preview] .relationship-hit-rail { pointer-events: none; }
-svg[data-relationship-preview-active] [data-focus-match] { opacity: 0.18; }
-svg[data-relationship-preview-active] [data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview-node] { opacity: 1; }
-svg[data-relationship-preview-active] [data-relationship-preview] { filter: drop-shadow(0 0 5px var(--arrow-emphasis)); }
-svg[data-relationship-preview-active] [data-relationship-preview] path, svg[data-relationship-preview-active] path[data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview] line, svg[data-relationship-preview-active] line[data-relationship-preview], svg[data-relationship-preview-active] [data-relationship-preview] polyline, svg[data-relationship-preview-active] polyline[data-relationship-preview] { stroke-width: 2.75; }
-svg[data-relationship-preview-active] [data-relationship-preview-source] { filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-svg[data-relationship-preview-active] [data-relationship-preview-target] { filter: drop-shadow(0 0 7px var(--database-stroke)); }
-svg[data-preset="signal-flow"] .relationship-flow-pulse { stroke: var(--frontend-stroke); stroke-width: 3.85; filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-svg[data-preset="blueprint"] .relationship-flow-pulse { stroke-width: 2.5; stroke-linecap: square; filter: none; }
-svg[data-preset="editorial"] .relationship-flow-pulse { stroke: var(--arrow-emphasis); stroke-width: 2.75; filter: none; }
-svg[data-preset="signal-flow"] .semantic-flow-token { filter: drop-shadow(currentcolor 0px 0px 5px); }
-svg[data-preset="blueprint"] .semantic-flow-token { filter: none; }
-svg[data-preset="editorial"] .semantic-flow-token { filter: none; }
-svg[data-intent-trace-active] [data-node-id], svg[data-intent-trace-active] [data-edge-from] { opacity: 0.2; }
-svg[data-intent-trace-active] [data-intent-trace-match] { opacity: 1; }
-svg[data-intent-trace-active] [data-intent-trace-selected] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-preset="blueprint"] [data-intent-trace-selected], svg[data-preset="blueprint"] .intent-trace-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="editorial"] [data-intent-trace-selected], svg[data-preset="editorial"] .intent-trace-flow { filter: none; }
-svg[data-route-picking="target"] [data-node-id] { opacity: 0.24; }
-svg[data-route-picking="target"] [data-route-candidate], svg[data-route-picking="target"] [data-route-start] { opacity: 1; }
-svg[data-route-picking] [data-node-id] { cursor: crosshair; }
-svg[data-route-picking] [data-route-start] { filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-svg[data-route-active] [data-node-id], svg[data-route-active] [data-edge-from] { opacity: 0.11; }
-svg[data-route-active] [data-route-match] { opacity: 1; }
-svg[data-route-active] [data-route-start] { filter: drop-shadow(0 0 11px var(--frontend-stroke)); }
-svg[data-route-active] [data-route-end] { filter: drop-shadow(0 0 11px var(--security-stroke)); }
-svg[data-route-active] [data-route-step]:not([data-route-start]):not([data-route-end]) { filter: drop-shadow(0 0 7px var(--backend-stroke)); }
-svg[data-route-journey] [data-route-match][data-route-journey-state="past"] { opacity: 0.62; }
-svg[data-route-journey] [data-route-match][data-route-journey-state="future"] { opacity: 0.34; }
-svg[data-route-journey] [data-route-match][data-route-journey-state="current"] { opacity: 1; }
-svg[data-route-journey] [data-node-id][data-route-journey-current] { filter: drop-shadow(0 0 10px var(--backend-stroke)); }
-svg[data-route-journey] [data-edge-from][data-route-journey-current] { opacity: 1; filter: drop-shadow(0 0 6px var(--backend-stroke)); }
-svg[data-preset="blueprint"] [data-route-start], svg[data-preset="blueprint"] [data-route-end], svg[data-preset="blueprint"] [data-route-step], svg[data-preset="blueprint"] .route-probe-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="blueprint"] .route-journey-flow { filter: none; stroke-linecap: square; }
-svg[data-preset="editorial"] [data-route-start], svg[data-preset="editorial"] [data-route-end], svg[data-preset="editorial"] [data-route-step], svg[data-preset="editorial"] .route-probe-flow, svg[data-preset="editorial"] .route-journey-flow { filter: none; }
-svg[data-preset="editorial"] .c-grid { stroke-dasharray: 1, 4; opacity: 0.48; }
-svg[data-preset="editorial"] .c-region { fill: color-mix(in srgb, var(--cloud-fill) 48%, transparent); stroke-dasharray: 9, 4; }
-svg[data-preset="editorial"] [data-node-id]:hover, svg[data-preset="editorial"] [data-node-id]:focus-visible, svg[data-preset="editorial"][data-focus-active] [data-focus-selected] { filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 18%, transparent)); }
-svg[data-preset="blueprint"] .c-grid { stroke-dasharray: 1, 3; opacity: 0.78; }
-svg[data-preset="blueprint"] .c-region { fill: color-mix(in srgb, var(--cloud-fill) 58%, transparent); stroke-dasharray: 12, 4, 2, 4; }
-svg[data-preset="blueprint"] .c-security-group, svg[data-preset="blueprint"] .c-lane { stroke-dasharray: 7, 3; }
-svg[data-preset="blueprint"] [data-node-id]:hover, svg[data-preset="blueprint"] [data-node-id]:focus-visible { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-preset="blueprint"][data-focus-active] [data-focus-selected] { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-preset="blueprint"][data-focus-active][data-reach-active] [data-focus-selected][data-reach-origin] { filter: none; }
-svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview], svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview-source], svg[data-preset="blueprint"][data-relationship-preview-active] [data-relationship-preview-target] { filter: drop-shadow(0 0 3px var(--frontend-stroke)); }
-svg[data-story-beat] [data-story-step] { opacity: 0.22; filter: saturate(0.42); transition: opacity 180ms, filter 180ms; }
-svg[data-story-beat] [data-story-step][data-story-beat-state="past"] { opacity: 0.72; filter: saturate(0.82); }
-svg[data-story-beat] [data-story-step][data-story-beat-state="next"] { opacity: 0.5; filter: saturate(0.66); }
-svg[data-story-beat] [data-story-step][data-story-beat-state="active"] { opacity: 1; filter: drop-shadow(0 0 7px var(--frontend-stroke)); animation: 360ms cubic-bezier(0.22, 1, 0.36, 1) 0s 1 normal both running archify-story-beat-node; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step] { opacity: 0.16; transition: opacity 160ms; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="past"] { opacity: 0.58; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="next"] { opacity: 0.34; }
-svg[data-story-beat] [data-edge-from][data-story-beat-step][data-story-beat-state="active"] { opacity: 1; }
-svg[data-story-beat] .story-trail-flow { opacity: 0; transition: opacity 160ms; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="past"] { opacity: 0.34; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="next"] { opacity: 0.2; }
-svg[data-story-beat] .story-trail-flow[data-story-beat-state="active"] { opacity: 0.92; }
-svg[data-story-beat] .story-trail-flow[data-story-pulse="true"] { stroke-dasharray: 2, 13; stroke-dashoffset: 30; opacity: 0.92; animation: 0.78s linear 0s 1 normal both running archify-story-flow; }
-svg[data-preset="blueprint"] .story-trail-flow { stroke-linecap: square; filter: none; opacity: 0.5; }
-svg[data-preset="blueprint"][data-story-beat] [data-story-step][data-story-beat-state="active"] { filter: none; animation: auto ease 0s 1 normal none running none; }
-svg[data-preset="editorial"] .story-trail-flow { filter: none; }
-svg[data-preset="editorial"][data-story-beat] [data-story-step][data-story-beat-state="active"] { filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 16%, transparent)); }
-svg[data-chapter-preview] [data-node-id], svg[data-chapter-preview] [data-edge-from] { opacity: 0.1 !important; filter: none !important; transition: none !important; }
-svg[data-chapter-preview] .story-trail-overlay { opacity: 0.08 !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="stay"] { opacity: 0.76 !important; filter: saturate(0.7) !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="enter"] { opacity: 1 !important; filter: saturate(1.2) !important; }
-svg[data-chapter-preview] [data-node-id][data-chapter-preview-role="leave"] { opacity: 0.28 !important; filter: grayscale(0.72) !important; }
-svg[data-preset="blueprint"][data-chapter-preview] [data-node-id] { filter: none !important; }
-.c-security-group { fill: transparent; stroke: var(--security-stroke); stroke-dasharray: 4, 4; }
-.c-region { fill: rgba(251, 191, 36, 0.05); stroke: var(--cloud-stroke); stroke-dasharray: 8, 4; }
-.c-lane { fill: var(--lane-fill); stroke: var(--lane-stroke); stroke-dasharray: 6, 6; }
-svg[data-preset="signal-flow"][data-animation="trace"] [data-animate="edge"] { stroke-linecap: round; filter: drop-shadow(0 0 3px var(--arrow-emphasis)); animation-duration: 1.75s; }
-svg[data-preset="signal-flow"][data-animation="trace"] [data-animate="node"] { animation-duration: 3.1s; }
-svg[data-preset="blueprint"][data-animation="trace"] [data-animate="edge"] { stroke-linecap: square; filter: none; animation-duration: 2.15s; }
-svg[data-preset="blueprint"][data-animation="trace"] [data-animate="node"] { animation-name: archify-blueprint-node-pulse; animation-duration: 3.8s; }
-svg[data-preset="editorial"][data-animation="trace"] [data-animate="edge"] { filter: none; animation-duration: 2.2s; }
-svg[data-preset="editorial"][data-animation="trace"] [data-animate="node"] { animation-name: archify-editorial-node-pulse; animation-duration: 3.5s; }
-@keyframes archify-edge-flow { 
-  0% { stroke-dasharray: 10, 8; stroke-dashoffset: 54; opacity: 0.42; }
-  88% { stroke-dasharray: 10, 8; stroke-dashoffset: 0; opacity: 1; }
-  99.9% { stroke-dasharray: 10, 8; stroke-dashoffset: 0; opacity: 1; }
-  100% { stroke-dashoffset: 0; opacity: 1; }
-}
-@keyframes archify-node-pulse { 
-  0%, 72%, 100% { filter: none; stroke-width: 1.5; }
-  18%, 36% { filter: drop-shadow(0 0 8px var(--arrow-emphasis)); stroke-width: 2.4; }
-}
-@keyframes archify-blueprint-node-pulse { 
-  0%, 72%, 100% { opacity: 1; filter: none; }
-  18%, 36% { opacity: 0.72; filter: drop-shadow(0 0 2px var(--frontend-stroke)); }
-}
-@keyframes archify-editorial-node-pulse { 
-  0%, 72%, 100% { opacity: 1; filter: none; }
-  18%, 36% { opacity: 0.78; filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 18%, transparent)); }
-}
-@keyframes archify-signal-scan { 
-  0%, 18% { opacity: 1; transform: translateX(-70%); }
-  70% { opacity: 1; transform: translateX(70%); }
-  100% { opacity: 0; transform: translateX(70%); }
-}
-@keyframes archify-radar-live { 
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--backend-stroke) 52%, transparent); }
-  55%, 100% { box-shadow: transparent 0px 0px 0px 0.32rem; }
-}
-@keyframes archify-guided-progress { 
-  0% { transform: scaleX(var(--guided-progress-start, 0)); }
-  100% { transform: scaleX(1); }
-}
-@keyframes archify-story-flow { 
-  100% { stroke-dashoffset: 0; }
-}
-@keyframes archify-intent-trace-flow { 
-  0% { opacity: 0.28; stroke-dashoffset: 0; }
-  12%, 78% { opacity: 0.94; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-route-probe-flow { 
-  0% { stroke-dashoffset: 0; opacity: 0.96; }
-  78% { stroke-dashoffset: -1; opacity: 0.96; }
-  100% { stroke-dasharray: none; stroke-dashoffset: 0; opacity: 0.58; }
-}
-@keyframes archify-route-journey-flow { 
-  0% { opacity: 0.16; stroke-dashoffset: 0; }
-  14%, 76% { opacity: 1; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-semantic-lens-flow { 
-  0% { opacity: 0.2; stroke-dashoffset: 0; }
-  12%, 78% { opacity: 0.9; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-relationship-pulse { 
-  0% { opacity: 0.18; stroke-dashoffset: 0; }
-  10%, 76% { opacity: 0.98; }
-  100% { opacity: 0; stroke-dashoffset: -1; }
-}
-@keyframes archify-relationship-token-life { 
-  0%, 7% { opacity: 0; }
-  13%, 82% { opacity: 1; }
-  100% { opacity: 0; }
-}
-@keyframes archify-story-beat-node { 
-  0% { opacity: 0.48; filter: saturate(0.6); }
-  58% { opacity: 1; filter: drop-shadow(0 0 10px var(--frontend-stroke)); }
-  100% { opacity: 1; filter: drop-shadow(0 0 7px var(--frontend-stroke)); }
-}
-@keyframes archify-share-cue-enter { 
-  0% { opacity: 0; transform: translate(-50%, -0.45rem); }
-  100% { opacity: 1; transform: translate(-50%, 0px); }
-}
-@keyframes archify-share-cue-pulse { 
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.48; transform: scale(0.78); }
-}
-:root, svg { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-@media (prefers-color-scheme: light) { :root, svg { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; } }
-svg[data-theme="light"] { --bg: #f2f2f5; --grid: #e2e8f0; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; --text-faint: #64748b; --panel: #f2f2f5; --panel-border: #e2e8f0; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #94a3b8; --arrow-emphasis: #059669; --mask: #f2f2f5; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #f2f2f5; --toolbar-menu-bg: #f2f2f5; }
-svg[data-theme="dark"] { --bg: #1f1f23; --grid: #1e293b; --text: #f2f2f5; --text-muted: #94a3b8; --text-dim: #475569; --text-faint: #7d8da1; --panel: rgba(15, 23, 42, 0.5); --panel-border: #1e293b; --lane-fill: rgba(15, 23, 42, 0.22); --lane-stroke: #334155; --arrow: #64748b; --arrow-emphasis: #34d399; --mask: #0f172a; --frontend-fill: rgba(8, 51, 68, 0.4); --frontend-stroke: #22d3ee; --backend-fill: rgba(6, 78, 59, 0.4); --backend-stroke: #34d399; --database-fill: rgba(76, 29, 149, 0.4); --database-stroke: #a78bfa; --cloud-fill: rgba(120, 53, 15, 0.3); --cloud-stroke: #fbbf24; --security-fill: rgba(136, 19, 55, 0.4); --security-stroke: #fb7185; --messagebus-fill: rgba(251, 146, 60, 0.3); --messagebus-stroke: #fb923c; --external-fill: rgba(30, 41, 59, 0.5); --external-stroke: #94a3b8; --toolbar-bg: rgba(15, 23, 42, 0.8); --toolbar-border: #334155; --toolbar-text: #e2e8f0; --toolbar-hover: rgba(15, 23, 42, 0.95); --toolbar-menu-bg: #0f172a; }
-rect.c-bg-rect { fill: var(--bg); }
-</style><rect width="100%" height="100%" class="c-bg-rect"/>
-        <title id="archify-diagram-title">Factory rewrite — 17-day, three-lane plan</title>
-        <desc id="archify-diagram-description">An architecture diagram generated by Archify.</desc>
-        <!-- Definitions -->
-        <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-default"/>
-          </marker>
-          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-emphasis"/>
-          </marker>
-          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-security"/>
-          </marker>
-          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" class="m-dashed"/>
-          </marker>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
-          </pattern>
-        </defs>
-
-        <!-- Background Grid -->
-        <rect width="100%" height="100%" fill="url(#grid)"/>
-
-        <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Lane A — core loop" x="125" y="160" width="1342" height="122" rx="12" class="c-region" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Lane B — control plane" x="125" y="290" width="1266" height="122" rx="12" class="c-region" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="2" data-composition-frame-label="Lane C — tooling, telemetry" x="277" y="420" width="962" height="122" rx="12" class="c-region" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="3" data-composition-frame-label="What stops when" x="125" y="570" width="1038" height="200" rx="8" class="c-security-group" stroke-width="1"/>
-
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="4" data-composition-frame-label="Working day" x="125" y="760" width="1342" height="76" rx="12" class="c-region" stroke-width="1"/>
-
-        <!-- Connection paths (before components for correct z-order) -->
-        <path data-edge-from="w2" data-edge-to="w3" data-edge-label="needed by W3" data-edge-key="0" data-edge-id="n1" data-composition-points="297,356;416,356;416,262" d="M 297 356 L 408 356 Q 416 356 416 348 L 416 262" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="w5" data-edge-to="auto" data-edge-label="gate" data-edge-key="1" data-edge-id="g1" data-composition-points="872,190;872,110" d="M 872 190 L 872 110" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-
-        <!-- Components -->
-        <g id="node-w1" data-node-id="w1" data-node-label="W1 Ledger" tabindex="0" role="button" aria-label="Focus W1 Ledger, d1–2 · import, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d1–2 · import" data-node-tag="gate: import 100 %" data-node-context="Lane A — core loop">
-          <title>W1 Ledger · d1–2 · import · Lane A — core loop · gate: import 100 %</title>
-          <rect x="155" y="190" width="142" height="72" rx="6" class="c-mask"/>
-          <rect x="155" y="190" width="142" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(161 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="226" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W1 Ledger</text>
-        <text x="226" y="240" class="t-muted" font-size="9" text-anchor="middle">d1–2 · import</text>
-        <text x="226" y="254" class="t-backend" font-size="7" text-anchor="middle">gate: import 100 %</text>
-        </g>
-
-        <g id="node-w3" data-node-id="w3" data-node-label="W3 Signals → incidents" tabindex="0" role="button" aria-label="Focus W3 Signals → incidents, d3–5 · correlator, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d3–5 · correlator" data-node-tag="gate: backtest + 10-17 replay" data-node-context="Lane A — core loop">
-          <title>W3 Signals → incidents · d3–5 · correlator · Lane A — core loop · gate: backtest + 10-17 replay</title>
-          <rect x="307" y="190" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="307" y="190" width="218" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(313 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="416" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W3 Signals → incidents</text>
-        <text x="416" y="240" class="t-muted" font-size="9" text-anchor="middle">d3–5 · correlator</text>
-        <text x="416" y="254" class="t-backend" font-size="7" text-anchor="middle">gate: backtest + 10-17 replay</text>
-        </g>
-
-        <g id="node-w4" data-node-id="w4" data-node-label="W4 Tasks + spawner" tabindex="0" role="button" aria-label="Focus W4 Tasks + spawner, d6–8 · rd cutover, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d6–8 · rd cutover" data-node-tag="gate: oracle · 0 spawns off rd" data-node-context="Lane A — core loop">
-          <title>W4 Tasks + spawner · d6–8 · rd cutover · Lane A — core loop · gate: oracle · 0 spawns off rd</title>
-          <rect x="535" y="190" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="535" y="190" width="218" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(541 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="644" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W4 Tasks + spawner</text>
-        <text x="644" y="240" class="t-muted" font-size="9" text-anchor="middle">d6–8 · rd cutover</text>
-        <text x="644" y="254" class="t-backend" font-size="7" text-anchor="middle">gate: oracle · 0 spawns off rd</text>
-        </g>
-
-        <g id="node-w5" data-node-id="w5" data-node-label="W5 Ship" tabindex="0" role="button" aria-label="Focus W5 Ship, d9–11 · merge train, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d9–11 · merge train" data-node-tag="gate: revert 100 %" data-node-context="Lane A — core loop">
-          <title>W5 Ship · d9–11 · merge train · Lane A — core loop · gate: revert 100 %</title>
-          <rect x="763" y="190" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="763" y="190" width="218" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(769 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="872" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W5 Ship</text>
-        <text x="872" y="240" class="t-muted" font-size="9" text-anchor="middle">d9–11 · merge train</text>
-        <text x="872" y="254" class="t-backend" font-size="7" text-anchor="middle">gate: revert 100 %</text>
-        </g>
-
-        <g id="node-w10" data-node-id="w10" data-node-label="W10 Improve + heal" tabindex="0" role="button" aria-label="Focus W10 Improve + heal, d12–15 · same path, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d12–15 · same path" data-node-context="Lane A — core loop">
-          <title>W10 Improve + heal · d12–15 · same path · Lane A — core loop</title>
-          <rect x="991" y="190" width="294" height="72" rx="6" class="c-mask"/>
-          <rect x="991" y="190" width="294" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(997 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="1138" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W10 Improve + heal</text>
-        <text x="1138" y="240" class="t-muted" font-size="9" text-anchor="middle">d12–15 · same path</text>
-        </g>
-
-        <g id="node-w14" data-node-id="w14" data-node-label="W14 Archive" tabindex="0" role="button" aria-label="Focus W14 Archive, d16–17 · docs, Lane A — core loop" aria-pressed="false" data-node-kind="backend" data-node-sublabel="d16–17 · docs" data-node-context="Lane A — core loop">
-          <title>W14 Archive · d16–17 · docs · Lane A — core loop</title>
-          <rect x="1295" y="190" width="142" height="72" rx="6" class="c-mask"/>
-          <rect x="1295" y="190" width="142" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1301 196) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="1366" y="224" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W14 Archive</text>
-        <text x="1366" y="240" class="t-muted" font-size="9" text-anchor="middle">d16–17 · docs</text>
-        </g>
-
-        <g id="node-w2" data-node-id="w2" data-node-label="W2 Manifests" tabindex="0" role="button" aria-label="Focus W2 Manifests, d1–2 · 33 repos, Lane B — control plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="d1–2 · 33 repos" data-node-tag="gate: manifest check" data-node-context="Lane B — control plane">
-          <title>W2 Manifests · d1–2 · 33 repos · Lane B — control plane · gate: manifest check</title>
-          <rect x="155" y="320" width="142" height="72" rx="6" class="c-mask"/>
-          <rect x="155" y="320" width="142" height="72" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(161 326) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" x="226" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W2 Manifests</text>
-        <text x="226" y="370" class="t-muted" font-size="9" text-anchor="middle">d1–2 · 33 repos</text>
-        <text x="226" y="384" class="t-frontend" font-size="7" text-anchor="middle">gate: manifest check</text>
-        </g>
-
-        <g id="node-w6" data-node-id="w6" data-node-label="W6 Argo control plane" tabindex="0" role="button" aria-label="Focus W6 Argo control plane, d6–10 · read API + 7 write verbs, Lane B — control plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="d6–10 · read API + 7 write verbs" data-node-context="Lane B — control plane">
-          <title>W6 Argo control plane · d6–10 · read API + 7 write verbs · Lane B — control plane</title>
-          <rect x="535" y="320" width="370" height="72" rx="6" class="c-mask"/>
-          <rect x="535" y="320" width="370" height="72" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(541 326) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" x="720" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W6 Argo control plane</text>
-        <text x="720" y="370" class="t-muted" font-size="9" text-anchor="middle">d6–10 · read API + 7 write verbs</text>
-        </g>
-
-        <g id="node-w7" data-node-id="w7" data-node-label="W7 Artifacts (rv)" tabindex="0" role="button" aria-label="Focus W7 Artifacts (rv), d11–13, Lane B — control plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="d11–13" data-node-context="Lane B — control plane">
-          <title>W7 Artifacts (rv) · d11–13 · Lane B — control plane</title>
-          <rect x="915" y="320" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="915" y="320" width="218" height="72" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(921 326) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" x="1024" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W7 Artifacts (rv)</text>
-        <text x="1024" y="370" class="t-muted" font-size="9" text-anchor="middle">d11–13</text>
-        </g>
-
-        <g id="node-w11" data-node-id="w11" data-node-label="W11 Hermes = door" tabindex="0" role="button" aria-label="Focus W11 Hermes = door, d14–16, Lane B — control plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="d14–16" data-node-context="Lane B — control plane">
-          <title>W11 Hermes = door · d14–16 · Lane B — control plane</title>
-          <rect x="1143" y="320" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="1143" y="320" width="218" height="72" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(1149 326) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" x="1252" y="354" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W11 Hermes = door</text>
-        <text x="1252" y="370" class="t-muted" font-size="9" text-anchor="middle">d14–16</text>
-        </g>
-
-        <g id="node-w8" data-node-id="w8" data-node-label="W8 CLI-first tooling" tabindex="0" role="button" aria-label="Focus W8 CLI-first tooling, d3–7 · /check, /review cutover, Lane C — tooling, telemetry" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="d3–7 · /check, /review cutover" data-node-context="Lane C — tooling, telemetry">
-          <title>W8 CLI-first tooling · d3–7 · /check, /review cutover · Lane C — tooling, telemetry</title>
-          <rect x="307" y="450" width="370" height="72" rx="6" class="c-mask"/>
-          <rect x="307" y="450" width="370" height="72" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(313 456) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" x="492" y="484" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W8 CLI-first tooling</text>
-        <text x="492" y="500" class="t-muted" font-size="9" text-anchor="middle">d3–7 · /check, /review cutover</text>
-        </g>
-
-        <g id="node-w12" data-node-id="w12" data-node-label="W12 dotfiles rewired" tabindex="0" role="button" aria-label="Focus W12 dotfiles rewired, d8–10, Lane C — tooling, telemetry" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="d8–10" data-node-context="Lane C — tooling, telemetry">
-          <title>W12 dotfiles rewired · d8–10 · Lane C — tooling, telemetry</title>
-          <rect x="687" y="450" width="218" height="72" rx="6" class="c-mask"/>
-          <rect x="687" y="450" width="218" height="72" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(693 456) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" x="796" y="484" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W12 dotfiles rewired</text>
-        <text x="796" y="500" class="t-muted" font-size="9" text-anchor="middle">d8–10</text>
-        </g>
-
-        <g id="node-w9" data-node-id="w9" data-node-label="W9 One trace" tabindex="0" role="button" aria-label="Focus W9 One trace, d11–12, Lane C — tooling, telemetry" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="d11–12" data-node-context="Lane C — tooling, telemetry">
-          <title>W9 One trace · d11–12 · Lane C — tooling, telemetry</title>
-          <rect x="915" y="450" width="142" height="72" rx="6" class="c-mask"/>
-          <rect x="915" y="450" width="142" height="72" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(921 456) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" x="986" y="484" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W9 One trace</text>
-        <text x="986" y="500" class="t-muted" font-size="9" text-anchor="middle">d11–12</text>
-        </g>
-
-        <g id="node-w13" data-node-id="w13" data-node-label="W13 Brain" tabindex="0" role="button" aria-label="Focus W13 Brain, d13–14, Lane C — tooling, telemetry" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="d13–14" data-node-context="Lane C — tooling, telemetry">
-          <title>W13 Brain · d13–14 · Lane C — tooling, telemetry</title>
-          <rect x="1067" y="450" width="142" height="72" rx="6" class="c-mask"/>
-          <rect x="1067" y="450" width="142" height="72" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(1073 456) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" x="1138" y="484" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W13 Brain</text>
-        <text x="1138" y="500" class="t-muted" font-size="9" text-anchor="middle">d13–14</text>
-        </g>
-
-        <g id="node-auto" data-node-id="auto" data-node-label="Full autonomy returns" tabindex="0" role="button" aria-label="Focus Full autonomy returns, proof gate W1–W5 passes · day 11, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="proof gate W1–W5 passes · day 11" data-node-context="Architecture component">
-          <title>Full autonomy returns · proof gate W1–W5 passes · day 11 · Architecture component</title>
-          <rect x="763" y="50" width="218" height="60" rx="6" class="c-mask"/>
-          <rect x="763" y="50" width="218" height="60" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(769 56) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="872" y="78" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Full autonomy returns</text>
-        <text x="872" y="94" class="t-muted" font-size="9" text-anchor="middle">proof gate W1–W5 passes · day 11</text>
-        </g>
-
-        <g id="node-s_warden" data-node-id="s_warden" data-node-label="warden loop stops" tabindex="0" role="button" aria-label="Focus warden loop stops, W1 start, What stops when" aria-pressed="false" data-node-kind="security" data-node-sublabel="W1 start" data-node-context="What stops when">
-          <title>warden loop stops · W1 start · What stops when</title>
-          <rect x="155" y="600" width="142" height="60" rx="6" class="c-mask"/>
-          <rect x="155" y="600" width="142" height="60" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(161 606) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" x="226" y="628" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">warden loop stops</text>
-        <text x="226" y="644" class="t-muted" font-size="9" text-anchor="middle">W1 start</text>
-        </g>
-
-        <g id="node-s_agw" data-node-id="s_agw" data-node-label="agw MCP stops" tabindex="0" role="button" aria-label="Focus agw MCP stops, W8 cutover, What stops when" aria-pressed="false" data-node-kind="security" data-node-sublabel="W8 cutover" data-node-context="What stops when">
-          <title>agw MCP stops · W8 cutover · What stops when</title>
-          <rect x="307" y="600" width="218" height="60" rx="6" class="c-mask"/>
-          <rect x="307" y="600" width="218" height="60" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(313 606) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" x="416" y="628" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">agw MCP stops</text>
-        <text x="416" y="644" class="t-muted" font-size="9" text-anchor="middle">W8 cutover</text>
-        </g>
-
-        <g id="node-s_plan" data-node-id="s_plan" data-node-label="plannotator stops" tabindex="0" role="button" aria-label="Focus plannotator stops, W7 cutover, What stops when" aria-pressed="false" data-node-kind="security" data-node-sublabel="W7 cutover" data-node-context="What stops when">
-          <title>plannotator stops · W7 cutover · What stops when</title>
-          <rect x="915" y="600" width="218" height="60" rx="6" class="c-mask"/>
-          <rect x="915" y="600" width="218" height="60" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(921 606) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" x="1024" y="628" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">plannotator stops</text>
-        <text x="1024" y="644" class="t-muted" font-size="9" text-anchor="middle">W7 cutover</text>
-        </g>
-
-        <g id="node-s_argo" data-node-id="s_argo" data-node-label="Argo factory pages stop" tabindex="0" role="button" aria-label="Focus Argo factory pages stop, W6 start, What stops when" aria-pressed="false" data-node-kind="security" data-node-sublabel="W6 start" data-node-context="What stops when">
-          <title>Argo factory pages stop · W6 start · What stops when</title>
-          <rect x="535" y="690" width="218" height="60" rx="6" class="c-mask"/>
-          <rect x="535" y="690" width="218" height="60" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(541 696) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" x="644" y="718" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo factory pages stop</text>
-        <text x="644" y="734" class="t-muted" font-size="9" text-anchor="middle">W6 start</text>
-        </g>
-
-        <g id="node-day1" data-node-id="day1" data-node-label="1" tabindex="0" role="button" aria-label="Focus 1, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>1 · Working day</title>
-          <rect x="155" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="155" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(161 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="188" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">1</text>
-        </g>
-
-        <g id="node-day2" data-node-id="day2" data-node-label="2" tabindex="0" role="button" aria-label="Focus 2, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>2 · Working day</title>
-          <rect x="231" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="231" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(237 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="264" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">2</text>
-        </g>
-
-        <g id="node-day3" data-node-id="day3" data-node-label="3" tabindex="0" role="button" aria-label="Focus 3, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>3 · Working day</title>
-          <rect x="307" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="307" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(313 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="340" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">3</text>
-        </g>
-
-        <g id="node-day4" data-node-id="day4" data-node-label="4" tabindex="0" role="button" aria-label="Focus 4, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>4 · Working day</title>
-          <rect x="383" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="383" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(389 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="416" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">4</text>
-        </g>
-
-        <g id="node-day5" data-node-id="day5" data-node-label="5" tabindex="0" role="button" aria-label="Focus 5, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>5 · Working day</title>
-          <rect x="459" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="459" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(465 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="492" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">5</text>
-        </g>
-
-        <g id="node-day6" data-node-id="day6" data-node-label="6" tabindex="0" role="button" aria-label="Focus 6, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>6 · Working day</title>
-          <rect x="535" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="535" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(541 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="568" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">6</text>
-        </g>
-
-        <g id="node-day7" data-node-id="day7" data-node-label="7" tabindex="0" role="button" aria-label="Focus 7, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>7 · Working day</title>
-          <rect x="611" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="611" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(617 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="644" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">7</text>
-        </g>
-
-        <g id="node-day8" data-node-id="day8" data-node-label="8" tabindex="0" role="button" aria-label="Focus 8, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>8 · Working day</title>
-          <rect x="687" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="687" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(693 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="720" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">8</text>
-        </g>
-
-        <g id="node-day9" data-node-id="day9" data-node-label="9" tabindex="0" role="button" aria-label="Focus 9, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>9 · Working day</title>
-          <rect x="763" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="763" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(769 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="796" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">9</text>
-        </g>
-
-        <g id="node-day10" data-node-id="day10" data-node-label="10" tabindex="0" role="button" aria-label="Focus 10, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>10 · Working day</title>
-          <rect x="839" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="839" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(845 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="872" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">10</text>
-        </g>
-
-        <g id="node-day11" data-node-id="day11" data-node-label="11" tabindex="0" role="button" aria-label="Focus 11, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>11 · Working day</title>
-          <rect x="915" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="915" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(921 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="948" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">11</text>
-        </g>
-
-        <g id="node-day12" data-node-id="day12" data-node-label="12" tabindex="0" role="button" aria-label="Focus 12, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>12 · Working day</title>
-          <rect x="991" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="991" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(997 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1024" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">12</text>
-        </g>
-
-        <g id="node-day13" data-node-id="day13" data-node-label="13" tabindex="0" role="button" aria-label="Focus 13, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>13 · Working day</title>
-          <rect x="1067" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="1067" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1073 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1100" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">13</text>
-        </g>
-
-        <g id="node-day14" data-node-id="day14" data-node-label="14" tabindex="0" role="button" aria-label="Focus 14, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>14 · Working day</title>
-          <rect x="1143" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="1143" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1149 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1176" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">14</text>
-        </g>
-
-        <g id="node-day15" data-node-id="day15" data-node-label="15" tabindex="0" role="button" aria-label="Focus 15, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>15 · Working day</title>
-          <rect x="1219" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="1219" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1225 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1252" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">15</text>
-        </g>
-
-        <g id="node-day16" data-node-id="day16" data-node-label="16" tabindex="0" role="button" aria-label="Focus 16, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>16 · Working day</title>
-          <rect x="1295" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="1295" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1301 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1328" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">16</text>
-        </g>
-
-        <g id="node-day17" data-node-id="day17" data-node-label="17" tabindex="0" role="button" aria-label="Focus 17, Working day" aria-pressed="false" data-node-kind="external" data-node-context="Working day">
-          <title>17 · Working day</title>
-          <rect x="1371" y="790" width="66" height="26" rx="6" class="c-mask"/>
-          <rect x="1371" y="790" width="66" height="26" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(1377 796) scale(0.6875)">
-            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
-            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
-          </g>
-          <text data-node-label="" x="1404" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">17</text>
-        </g>
-
-        <!-- Connection labels -->
-        <g data-edge-from="w2" data-edge-to="w3" data-edge-label="needed by W3" data-edge-key="0" data-edge-id="n1">
-          <rect x="382.2" y="289" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="416" y="299" class="t-messagebus" font-size="8" text-anchor="middle">needed by W3</text>
-        </g>
-        <g data-edge-from="w5" data-edge-to="auto" data-edge-label="gate" data-edge-key="1" data-edge-id="g1">
-          <rect x="857" y="170" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="872" y="180" class="t-backend" font-size="8" text-anchor="middle">gate</text>
-        </g>
-
-        <!-- Boundary labels (foreground masks keep routes out of titles) -->
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Lane A — core loop">
-          <rect data-graph-role="structural-frame-label-mask" x="129" y="169" width="114.51613983225806" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="133" y="182.67742035483872" class="t-cloud" font-size="9.67742035483871" font-weight="600">Lane A — core loop</text>
-        </g>
-
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Lane B — control plane">
-          <rect data-graph-role="structural-frame-label-mask" x="129" y="299" width="137.74194868387093" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="133" y="312.6774203548387" class="t-cloud" font-size="9.67742035483871" font-weight="600">Lane B — control plane</text>
-        </g>
-
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="2" data-composition-frame-kind="region" data-composition-frame-label="Lane C — tooling, telemetry">
-          <rect data-graph-role="structural-frame-label-mask" x="281" y="429" width="166.7742097483871" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="285" y="442.6774203548387" class="t-cloud" font-size="9.67742035483871" font-weight="600">Lane C — tooling, telemetry</text>
-        </g>
-
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="3" data-composition-frame-kind="security-group" data-composition-frame-label="What stops when">
-          <rect data-graph-role="structural-frame-label-mask" x="129" y="579" width="97.09678319354838" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="133" y="592.6774203548387" class="t-security" font-size="9.67742035483871" font-weight="600">What stops when</text>
-        </g>
-
-        <g data-graph-role="structural-frame-label" data-composition-frame-id="4" data-composition-frame-kind="region" data-composition-frame-label="Working day">
-          <rect data-graph-role="structural-frame-label-mask" x="129" y="769" width="73.87097434193547" height="17" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="133" y="782.6774203548387" class="t-cloud" font-size="9.67742035483871" font-weight="600">Working day</text>
-        </g>
-
-        <!-- Legend -->
-        <g data-legend="">
-          <text x="40" y="924" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-x="40" data-legend-baseline="944" data-legend-width="118">
-            <rect x="40" y="935" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="944" class="t-muted" font-size="10" font-weight="500">B control plane</text>
-          </g>
-          <g data-legend-semantic-kind="backend" data-legend-x="180" data-legend-baseline="944" data-legend-width="98">
-            <rect x="180" y="935" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="202" y="944" class="t-muted" font-size="10" font-weight="500">A core loop</text>
-          </g>
-          <g data-legend-semantic-kind="cloud" data-legend-x="300" data-legend-baseline="944" data-legend-width="88">
-            <rect x="300" y="935" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="322" y="944" class="t-muted" font-size="10" font-weight="500">C tooling</text>
-          </g>
-          <g data-legend-semantic-kind="security" data-legend-x="410" data-legend-baseline="944" data-legend-width="113">
-            <rect x="410" y="935" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="432" y="944" class="t-muted" font-size="10" font-weight="500">Old part stops</text>
-          </g>
-          <g data-legend-semantic-kind="external" data-legend-x="545" data-legend-baseline="944" data-legend-width="118">
-            <rect x="545" y="935" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="567" y="944" class="t-muted" font-size="10" font-weight="500">Milestone · day</text>
-          </g>
-        </g>
-      </svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="fx" viewBox="0 0 1390 882" width="1390" height="882" role="img" lang="en" aria-labelledby="fxr-title fxr-desc">
+<title id="fxr-title">Factory rewrite: 26 working days, three lanes</title>
+<desc id="fxr-desc">Rewrite calendar: 26 working days on three lanes, the proof gates of W1a to W5, what stops and what returns on which day.</desc>
+<style>
+svg.fx{--bg:#1f1f23;--grid:#2a2a30;--text:#f2f2f5;--text-muted:#a8a8b3;--text-dim:#7d7d88;--arrow:#8d8d98;--arrow-emphasis:#34d399;--mask:#1f1f23;--frontend-fill:rgba(8,51,68,.55);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,.55);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,.5);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,.45);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,.5);--security-stroke:#fb7185;--messagebus-fill:rgba(194,65,12,.4);--messagebus-stroke:#fb923c;--external-fill:rgba(63,63,70,.55);--external-stroke:#a1a1aa;}
+@media (prefers-color-scheme: light){svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}}
+[data-theme="dark"] svg.fx{--bg:#1f1f23;--grid:#2a2a30;--text:#f2f2f5;--text-muted:#a8a8b3;--text-dim:#7d7d88;--arrow:#8d8d98;--arrow-emphasis:#34d399;--mask:#1f1f23;--frontend-fill:rgba(8,51,68,.55);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,.55);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,.5);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,.45);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,.5);--security-stroke:#fb7185;--messagebus-fill:rgba(194,65,12,.4);--messagebus-stroke:#fb923c;--external-fill:rgba(63,63,70,.55);--external-stroke:#a1a1aa;}
+[data-theme="light"] svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}
+svg.fx,svg.fx text{font-family:'JetBrains Mono','JetBrainsMono Nerd Font Mono','JetBrainsMono Nerd Font',ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace}
+svg.fx .fx-bg{fill:var(--bg)}
+svg.fx .c-grid{stroke:var(--grid);fill:none}
+svg.fx .c-mask{fill:var(--mask);stroke:none}
+svg.fx .c-region{fill:rgba(251,191,36,.05);stroke:var(--cloud-stroke);stroke-dasharray:8,4}
+svg.fx .c-security-group{fill:transparent;stroke:var(--security-stroke);stroke-dasharray:4,4}
+svg.fx .c-frontend{fill:var(--frontend-fill);stroke:var(--frontend-stroke)}
+svg.fx .c-backend{fill:var(--backend-fill);stroke:var(--backend-stroke)}
+svg.fx .c-database{fill:var(--database-fill);stroke:var(--database-stroke)}
+svg.fx .c-cloud{fill:var(--cloud-fill);stroke:var(--cloud-stroke)}
+svg.fx .c-security{fill:var(--security-fill);stroke:var(--security-stroke)}
+svg.fx .c-messagebus{fill:var(--messagebus-fill);stroke:var(--messagebus-stroke)}
+svg.fx .c-external{fill:var(--external-fill);stroke:var(--external-stroke)}
+svg.fx .t-primary{fill:var(--text)}
+svg.fx .t-muted{fill:var(--text-muted)}
+svg.fx .t-dim{fill:var(--text-dim)}
+svg.fx .t-frontend{fill:var(--frontend-stroke)}
+svg.fx .t-backend{fill:var(--backend-stroke)}
+svg.fx .t-database{fill:var(--database-stroke)}
+svg.fx .t-cloud{fill:var(--cloud-stroke)}
+svg.fx .t-security{fill:var(--security-stroke)}
+svg.fx .t-messagebus{fill:var(--messagebus-stroke)}
+svg.fx .t-external{fill:var(--external-stroke)}
+svg.fx .a-default{stroke:var(--arrow);fill:none}
+svg.fx .a-emphasis{stroke:var(--arrow-emphasis);fill:none}
+svg.fx .a-security{stroke:var(--security-stroke);fill:none;stroke-dasharray:5,5}
+svg.fx .a-dashed{stroke:var(--database-stroke);fill:none;stroke-dasharray:4,4}
+svg.fx .m-default{fill:var(--arrow)}
+svg.fx .m-emphasis{fill:var(--arrow-emphasis)}
+svg.fx .m-security{fill:var(--security-stroke)}
+svg.fx .m-dashed{fill:var(--database-stroke)}
+svg.fx .s-frontend{color:var(--frontend-stroke)}
+svg.fx .s-backend{color:var(--backend-stroke)}
+svg.fx .s-database{color:var(--database-stroke)}
+svg.fx .s-cloud{color:var(--cloud-stroke)}
+svg.fx .s-security{color:var(--security-stroke)}
+svg.fx .s-messagebus{color:var(--messagebus-stroke)}
+svg.fx .s-external{color:var(--external-stroke)}
+svg.fx .semantic-sigil{fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;opacity:.76;pointer-events:none}
+svg.fx .semantic-sigil>*{vector-effect:non-scaling-stroke}
+svg.fx .semantic-sigil .sigil-fill{fill:currentColor;stroke:none}
+@media print{svg.fx,[data-theme] svg.fx{--bg:#f2f2f5;--grid:#e1e1e7;--text:#1f1f23;--text-muted:#52525b;--text-dim:#8a8a95;--arrow:#71717a;--arrow-emphasis:#059669;--mask:#f2f2f5;--frontend-fill:rgba(34,211,238,.16);--frontend-stroke:#0e7490;--backend-fill:rgba(52,211,153,.2);--backend-stroke:#047857;--database-fill:rgba(167,139,250,.22);--database-stroke:#6d28d9;--cloud-fill:rgba(251,191,36,.2);--cloud-stroke:#b45309;--security-fill:rgba(251,113,133,.16);--security-stroke:#be123c;--messagebus-fill:rgba(251,146,60,.18);--messagebus-stroke:#c2410c;--external-fill:rgba(113,113,122,.14);--external-stroke:#52525b;}}
+</style>
+<defs>
+<marker id="fxr-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-default" />
+</marker>
+<marker id="fxr-arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-emphasis" />
+</marker>
+<marker id="fxr-arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-security" />
+</marker>
+<marker id="fxr-arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" class="m-dashed" />
+</marker>
+<pattern id="fxr-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+<path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
+</pattern>
+</defs>
+<rect class="fx-bg" width="100%" height="100%"/>
+<rect width="100%" height="100%" fill="url(#fxr-grid)" />
+<rect x="20" y="32" width="72" height="764" rx="12" class="c-region" stroke-width="1"/>
+<rect x="106" y="32" width="328" height="764" rx="12" class="c-region" stroke-width="1"/>
+<rect x="444" y="32" width="240" height="764" rx="12" class="c-region" stroke-width="1"/>
+<rect x="694" y="32" width="240" height="764" rx="12" class="c-region" stroke-width="1"/>
+<rect x="944" y="32" width="198" height="678" rx="8" class="c-security-group" stroke-width="1"/>
+<rect x="1152" y="32" width="198" height="782" rx="12" class="c-region" stroke-width="1"/>
+<g id="fxr-node-day1">
+<title>1 · Day</title>
+<rect x="30" y="56" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="56" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 62) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">1</text>
+</g>
+<g id="fxr-node-day2">
+<title>2 · Day</title>
+<rect x="30" y="84" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="84" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 90) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="98" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">2</text>
+</g>
+<g id="fxr-node-day3">
+<title>3 · Day</title>
+<rect x="30" y="112" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="112" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 118) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="126" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">3</text>
+</g>
+<g id="fxr-node-day4">
+<title>4 · Day</title>
+<rect x="30" y="140" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="140" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 146) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="154" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">4</text>
+</g>
+<g id="fxr-node-day5">
+<title>5 · Day</title>
+<rect x="30" y="168" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="168" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 174) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="182" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">5</text>
+</g>
+<g id="fxr-node-day6">
+<title>6 · Day</title>
+<rect x="30" y="196" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="196" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 202) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="210" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">6</text>
+</g>
+<g id="fxr-node-day7">
+<title>7 · Day</title>
+<rect x="30" y="224" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="224" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 230) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="238" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">7</text>
+</g>
+<g id="fxr-node-day8">
+<title>8 · Day</title>
+<rect x="30" y="252" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="252" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 258) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="266" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">8</text>
+</g>
+<g id="fxr-node-day9">
+<title>9 · Day</title>
+<rect x="30" y="280" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="280" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 286) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="294" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">9</text>
+</g>
+<g id="fxr-node-day10">
+<title>10 · Day</title>
+<rect x="30" y="308" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="308" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 314) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="322" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">10</text>
+</g>
+<g id="fxr-node-day11">
+<title>11 · Day</title>
+<rect x="30" y="336" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="336" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 342) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="350" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">11</text>
+</g>
+<g id="fxr-node-day12">
+<title>12 · Day</title>
+<rect x="30" y="364" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="364" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 370) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="378" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">12</text>
+</g>
+<g id="fxr-node-day13">
+<title>13 · Day</title>
+<rect x="30" y="392" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="392" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 398) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="406" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">13</text>
+</g>
+<g id="fxr-node-day14">
+<title>14 · Day</title>
+<rect x="30" y="420" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="420" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 426) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="434" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">14</text>
+</g>
+<g id="fxr-node-day15">
+<title>15 · Day</title>
+<rect x="30" y="448" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="448" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 454) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="462" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">15</text>
+</g>
+<g id="fxr-node-day16">
+<title>16 · Day</title>
+<rect x="30" y="476" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="476" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 482) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">16</text>
+</g>
+<g id="fxr-node-day17">
+<title>17 · Day</title>
+<rect x="30" y="504" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="504" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 510) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="518" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">17</text>
+</g>
+<g id="fxr-node-day18">
+<title>18 · Day</title>
+<rect x="30" y="532" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="532" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 538) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="546" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">18</text>
+</g>
+<g id="fxr-node-day19">
+<title>19 · Day</title>
+<rect x="30" y="560" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="560" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 566) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="574" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">19</text>
+</g>
+<g id="fxr-node-day20">
+<title>20 · Day</title>
+<rect x="30" y="588" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="588" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 594) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="602" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">20</text>
+</g>
+<g id="fxr-node-day21">
+<title>21 · Day</title>
+<rect x="30" y="616" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="616" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 622) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="630" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">21</text>
+</g>
+<g id="fxr-node-day22">
+<title>22 · Day</title>
+<rect x="30" y="644" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="644" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 650) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="658" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">22</text>
+</g>
+<g id="fxr-node-day23">
+<title>23 · Day</title>
+<rect x="30" y="672" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="672" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 678) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="686" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">23</text>
+</g>
+<g id="fxr-node-day24">
+<title>24 · Day</title>
+<rect x="30" y="700" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="700" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 706) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="714" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">24</text>
+</g>
+<g id="fxr-node-day25">
+<title>25 · Day</title>
+<rect x="30" y="728" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="728" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 734) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="742" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">25</text>
+</g>
+<g id="fxr-node-day26">
+<title>26 · Day</title>
+<rect x="30" y="756" width="52" height="20" rx="6" class="c-mask"/>
+<rect x="30" y="756" width="52" height="20" rx="6" class="c-messagebus" stroke-width="1.5"/>
+<g class="semantic-sigil s-messagebus" transform="translate(36 762) scale(0.6875)">
+<path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+<circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+<circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+<circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+</g>
+<text x="56" y="770" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">26</text>
+</g>
+<g id="fxr-node-a_w1a">
+<title>W1a · d1–2 · ledger, import · gate: import 100 %, baseline reproduced · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="56" width="300" height="48" rx="6" class="c-mask"/>
+<rect x="120" y="56" width="300" height="48" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 62) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="78" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W1a · d1–2 · ledger, import</text>
+<text x="270" y="94" class="t-muted" font-size="9" text-anchor="middle">gate: import 100 %, baseline reproduced</text>
+</g>
+<g id="fxr-node-a_w3a">
+<title>W3a · d3–5 · intake, read slice · gate: replay per source, live log path · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="112" width="300" height="76" rx="6" class="c-mask"/>
+<rect x="120" y="112" width="300" height="76" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 118) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="148" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W3a · d3–5 · intake, read slice</text>
+<text x="270" y="164" class="t-muted" font-size="9" text-anchor="middle">gate: replay per source, live log path</text>
+</g>
+<g id="fxr-node-a_w3b">
+<title>W3b · d6–8 · correlator, recipe · gate: backtest, blind replay, gamedays 1–2 · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="196" width="300" height="76" rx="6" class="c-mask"/>
+<rect x="120" y="196" width="300" height="76" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 202) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="232" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W3b · d6–8 · correlator, recipe</text>
+<text x="270" y="248" class="t-muted" font-size="9" text-anchor="middle">gate: backtest, blind replay, gamedays 1–2</text>
+</g>
+<g id="fxr-node-a_w4a">
+<title>W4a · d9 · gate: oracle, rd fail-closed · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="280" width="300" height="20" rx="6" class="c-mask"/>
+<rect x="120" y="280" width="300" height="20" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 286) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="294" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W4a · d9 · gate: oracle, rd fail-closed</text>
+</g>
+<g id="fxr-node-a_w4b">
+<title>W4b · d10–11 · Witness, admit · gate: gamedays 6–9, zombie, actuator · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="308" width="300" height="48" rx="6" class="c-mask"/>
+<rect x="120" y="308" width="300" height="48" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 314) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="330" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W4b · d10–11 · Witness, admit</text>
+<text x="270" y="346" class="t-muted" font-size="9" text-anchor="middle">gate: gamedays 6–9, zombie, actuator</text>
+</g>
+<g id="fxr-node-a_w5">
+<title>W5 · d12–14 · ship: verification · gate: rollback, bisect, N-1, schema-stamp stop · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="364" width="300" height="76" rx="6" class="c-mask"/>
+<rect x="120" y="364" width="300" height="76" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 370) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="400" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W5 · d12–14 · ship: verification</text>
+<text x="270" y="416" class="t-muted" font-size="9" text-anchor="middle">gate: rollback, bisect, N-1, schema-stamp stop</text>
+</g>
+<g id="fxr-node-a_w6">
+<title>W6 · d15–19 · Argo control plane · read API, 7 write verbs, timed test · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="448" width="300" height="132" rx="6" class="c-mask"/>
+<rect x="120" y="448" width="300" height="132" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 454) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="512" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W6 · d15–19 · Argo control plane</text>
+<text x="270" y="528" class="t-muted" font-size="9" text-anchor="middle">read API, 7 write verbs, timed test</text>
+</g>
+<g id="fxr-node-a_w7">
+<title>W7 · d20–22 · artifacts are ours · warden artifact, Argo Artifacts view · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="588" width="300" height="76" rx="6" class="c-mask"/>
+<rect x="120" y="588" width="300" height="76" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 594) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="624" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W7 · d20–22 · artifacts are ours</text>
+<text x="270" y="640" class="t-muted" font-size="9" text-anchor="middle">warden artifact, Argo Artifacts view</text>
+</g>
+<g id="fxr-node-a_w10">
+<title>W10 · d23–26 · improve and heal · infra runbooks, full autonomy gate · Lane A · warden spine · ≈ 26 days</title>
+<rect x="120" y="672" width="300" height="104" rx="6" class="c-mask"/>
+<rect x="120" y="672" width="300" height="104" rx="6" class="c-backend" stroke-width="1.5"/>
+<g class="semantic-sigil s-backend" transform="translate(126 678) scale(0.6875)">
+<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+</g>
+<text x="270" y="722" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W10 · d23–26 · improve and heal</text>
+<text x="270" y="738" class="t-muted" font-size="9" text-anchor="middle">infra runbooks, full autonomy gate</text>
+</g>
+<g id="fxr-node-b_w2a">
+<title>W2a · d1–2 · manifests · gate: manifest check, 22 repos · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="56" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="458" y="56" width="212" height="48" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(464 62) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="564" y="78" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W2a · d1–2 · manifests</text>
+<text x="564" y="94" class="t-muted" font-size="9" text-anchor="middle">gate: manifest check, 22 repos</text>
+</g>
+<g id="fxr-node-b_w2b">
+<title>W2b · d3–5 · project new · gate: check green, renders byte-equal · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="112" width="212" height="76" rx="6" class="c-mask"/>
+<rect x="458" y="112" width="212" height="76" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(464 118) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="564" y="148" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W2b · d3–5 · project new</text>
+<text x="564" y="164" class="t-muted" font-size="9" text-anchor="middle">gate: check green, renders byte-equal</text>
+</g>
+<g id="fxr-node-b_idle1">
+<title>idle · d6–19 · waits for W6&#39;s read API (W11) · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="196" width="212" height="384" rx="6" class="c-mask"/>
+<rect x="458" y="196" width="212" height="384" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(464 202) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="564" y="386" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">idle · d6–19</text>
+<text x="564" y="402" class="t-muted" font-size="9" text-anchor="middle">waits for W6&#39;s read API (W11)</text>
+</g>
+<g id="fxr-node-b_w11">
+<title>W11 · d20–22 · Hermes door · replay of 30 days, 0 code tool calls · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="588" width="212" height="76" rx="6" class="c-mask"/>
+<rect x="458" y="588" width="212" height="76" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(464 594) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="564" y="624" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W11 · d20–22 · Hermes door</text>
+<text x="564" y="640" class="t-muted" font-size="9" text-anchor="middle">replay of 30 days, 0 code tool calls</text>
+</g>
+<g id="fxr-node-b_w13">
+<title>W13 · d23–24 · brain notes · notes re-render from events · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="672" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="458" y="672" width="212" height="48" rx="6" class="c-frontend" stroke-width="1.5"/>
+<g class="semantic-sigil s-frontend" transform="translate(464 678) scale(0.6875)">
+<rect x="2" y="3" width="12" height="10" rx="2"/>
+<path d="M2 6.5h12"/>
+<circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+<circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+</g>
+<text x="564" y="694" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W13 · d23–24 · brain notes</text>
+<text x="564" y="710" class="t-muted" font-size="9" text-anchor="middle">notes re-render from events</text>
+</g>
+<g id="fxr-node-b_idle2">
+<title>idle · d25–26 · Lane B · manifests, Hermes, brain</title>
+<rect x="458" y="728" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="458" y="728" width="212" height="48" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(464 734) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="564" y="756" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">idle · d25–26</text>
+</g>
+<g id="fxr-node-c_idle1">
+<title>idle · d1–2 · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="56" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="708" y="56" width="212" height="48" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(714 62) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="814" y="84" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">idle · d1–2</text>
+</g>
+<g id="fxr-node-c_w1b">
+<title>W1b · d3–5 · effects · gate: kill tests, restore drill · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="112" width="212" height="76" rx="6" class="c-mask"/>
+<rect x="708" y="112" width="212" height="76" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(714 118) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="814" y="148" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W1b · d3–5 · effects</text>
+<text x="814" y="164" class="t-muted" font-size="9" text-anchor="middle">gate: kill tests, restore drill</text>
+</g>
+<g id="fxr-node-c_idle2">
+<title>idle · d6–11 · dotfiles held; W8 needs W4a&#39;s cutover · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="196" width="212" height="160" rx="6" class="c-mask"/>
+<rect x="708" y="196" width="212" height="160" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(714 202) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="814" y="274" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">idle · d6–11</text>
+<text x="814" y="290" class="t-muted" font-size="9" text-anchor="middle">dotfiles held; W8 needs W4a&#39;s cutover</text>
+</g>
+<g id="fxr-node-c_w8">
+<title>W8 · d12–16 · CLI tooling · agw, gateways, skills cutover · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="364" width="212" height="132" rx="6" class="c-mask"/>
+<rect x="708" y="364" width="212" height="132" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(714 370) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="814" y="428" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W8 · d12–16 · CLI tooling</text>
+<text x="814" y="444" class="t-muted" font-size="9" text-anchor="middle">agw, gateways, skills cutover</text>
+</g>
+<g id="fxr-node-c_w12">
+<title>W12 · d17–19 · dotfiles · closes the rollback horizons · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="504" width="212" height="76" rx="6" class="c-mask"/>
+<rect x="708" y="504" width="212" height="76" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(714 510) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="814" y="540" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W12 · d17–19 · dotfiles</text>
+<text x="814" y="556" class="t-muted" font-size="9" text-anchor="middle">closes the rollback horizons</text>
+</g>
+<g id="fxr-node-c_w9">
+<title>W9 · d20–21 · one trace · ClickStack, hosts, spawns · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="588" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="708" y="588" width="212" height="48" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(714 594) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="814" y="610" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W9 · d20–21 · one trace</text>
+<text x="814" y="626" class="t-muted" font-size="9" text-anchor="middle">ClickStack, hosts, spawns</text>
+</g>
+<g id="fxr-node-c_idle3">
+<title>idle · d22–24 · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="644" width="212" height="76" rx="6" class="c-mask"/>
+<rect x="708" y="644" width="212" height="76" rx="6" class="c-external" stroke-width="1.5"/>
+<g class="semantic-sigil s-external" transform="translate(714 650) scale(0.6875)">
+<rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+<path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+</g>
+<text x="814" y="686" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">idle · d22–24</text>
+</g>
+<g id="fxr-node-c_w14">
+<title>W14 · d25–26 · archive · stores archived, site rewritten · Lane C · tooling, telemetry, docs</title>
+<rect x="708" y="728" width="212" height="48" rx="6" class="c-mask"/>
+<rect x="708" y="728" width="212" height="48" rx="6" class="c-cloud" stroke-width="1.5"/>
+<g class="semantic-sigil s-cloud" transform="translate(714 734) scale(0.6875)">
+<path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+</g>
+<text x="814" y="750" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">W14 · d25–26 · archive</text>
+<text x="814" y="766" class="t-muted" font-size="9" text-anchor="middle">stores archived, site rewritten</text>
+</g>
+<g id="fxr-node-s0">
+<title>warden loop stops · d1 · intake, run lane · W1a · What stops when</title>
+<rect x="958" y="56" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="56" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 62) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="73" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">warden loop stops</text>
+<text x="1043" y="89" class="t-muted" font-size="9" text-anchor="middle">d1 · intake, run lane · W1a</text>
+</g>
+<g id="fxr-node-s1">
+<title>Argo pages freeze · d1 · /agents, /warden · W1a · What stops when</title>
+<rect x="958" y="102" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="102" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 108) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="119" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo pages freeze</text>
+<text x="1043" y="135" class="t-muted" font-size="9" text-anchor="middle">d1 · /agents, /warden · W1a</text>
+</g>
+<g id="fxr-node-s2">
+<title>Watchtower retires · d3 · factory containers · W3a · What stops when</title>
+<rect x="958" y="148" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="148" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 154) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="165" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Watchtower retires</text>
+<text x="1043" y="181" class="t-muted" font-size="9" text-anchor="middle">d3 · factory containers · W3a</text>
+</g>
+<g id="fxr-node-s3">
+<title>agw dispatch stops · d9 · worker profiles · W4a · What stops when</title>
+<rect x="958" y="280" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="280" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 286) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="297" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">agw dispatch stops</text>
+<text x="1043" y="313" class="t-muted" font-size="9" text-anchor="middle">d9 · worker profiles · W4a</text>
+</g>
+<g id="fxr-node-s4">
+<title>agw judgment tools · d12 · 4 unregistered · W8 · What stops when</title>
+<rect x="958" y="364" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="364" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 370) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="381" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">agw judgment tools</text>
+<text x="1043" y="397" class="t-muted" font-size="9" text-anchor="middle">d12 · 4 unregistered · W8</text>
+</g>
+<g id="fxr-node-s5">
+<title>Argo old pages go · d15 · pushes, queue · W6 · What stops when</title>
+<rect x="958" y="448" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="448" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 454) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="465" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo old pages go</text>
+<text x="1043" y="481" class="t-muted" font-size="9" text-anchor="middle">d15 · pushes, queue · W6</text>
+</g>
+<g id="fxr-node-s6">
+<title>agw MCP server · d16 · unregistered · W8 · What stops when</title>
+<rect x="958" y="494" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="494" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 500) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="511" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">agw MCP server</text>
+<text x="1043" y="527" class="t-muted" font-size="9" text-anchor="middle">d16 · unregistered · W8</text>
+</g>
+<g id="fxr-node-s7">
+<title>legacy deleted · d19 · rd, plists, skills · W12 · What stops when</title>
+<rect x="958" y="560" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="560" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 566) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="577" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">legacy deleted</text>
+<text x="1043" y="593" class="t-muted" font-size="9" text-anchor="middle">d19 · rd, plists, skills · W12</text>
+</g>
+<g id="fxr-node-s8">
+<title>Hermes crons stop · d20 · narratives, briefs · W11 · What stops when</title>
+<rect x="958" y="606" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="606" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 612) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="623" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hermes crons stop</text>
+<text x="1043" y="639" class="t-muted" font-size="9" text-anchor="middle">d20 · narratives, briefs · W11</text>
+</g>
+<g id="fxr-node-s9">
+<title>plannotator gone · d22 · removed at W7&#39;s gate · What stops when</title>
+<rect x="958" y="652" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="958" y="652" width="170" height="38" rx="6" class="c-security" stroke-width="1.5"/>
+<g class="semantic-sigil s-security" transform="translate(964 658) scale(0.6875)">
+<path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+<path d="m5.8 8 1.5 1.5 3-3"/>
+</g>
+<text x="1043" y="669" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">plannotator gone</text>
+<text x="1043" y="685" class="t-muted" font-size="9" text-anchor="middle">d22 · removed at W7&#39;s gate</text>
+</g>
+<g id="fxr-node-r0">
+<title>new warden watched · d1 · heartbeat liveness · What returns when</title>
+<rect x="1166" y="56" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="56" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 62) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="73" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">new warden watched</text>
+<text x="1251" y="89" class="t-muted" font-size="9" text-anchor="middle">d1 · heartbeat liveness</text>
+</g>
+<g id="fxr-node-r1">
+<title>jobs, logs, stub · d5 · job.ran, logs, Argo · W3a · What returns when</title>
+<rect x="1166" y="168" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="168" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 174) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="185" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">jobs, logs, stub</text>
+<text x="1251" y="201" class="t-muted" font-size="9" text-anchor="middle">d5 · job.ran, logs, Argo · W3a</text>
+</g>
+<g id="fxr-node-r2">
+<title>incidents, restarts · d8 · Conditions, recipe · W3b · What returns when</title>
+<rect x="1166" y="252" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="252" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 258) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="269" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">incidents, restarts</text>
+<text x="1251" y="285" class="t-muted" font-size="9" text-anchor="middle">d8 · Conditions, recipe · W3b</text>
+</g>
+<g id="fxr-node-r3">
+<title>fixes by workers · d9 · investigate, fix · W4a · What returns when</title>
+<rect x="1166" y="298" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="298" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 304) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="315" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">fixes by workers</text>
+<text x="1251" y="331" class="t-muted" font-size="9" text-anchor="middle">d9 · investigate, fix · W4a</text>
+</g>
+<g id="fxr-node-r4">
+<title>Witness resumes · d11 · MacBook actuator · W4b · What returns when</title>
+<rect x="1166" y="344" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="344" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 350) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="361" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Witness resumes</text>
+<text x="1251" y="377" class="t-muted" font-size="9" text-anchor="middle">d11 · MacBook actuator · W4b</text>
+</g>
+<g id="fxr-node-r5">
+<title>ship returns · d14 · restarts, config · W5 · What returns when</title>
+<rect x="1166" y="420" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="420" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 426) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="437" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ship returns</text>
+<text x="1251" y="453" class="t-muted" font-size="9" text-anchor="middle">d14 · restarts, config · W5</text>
+</g>
+<g id="fxr-node-r6">
+<title>fleet code fixes · d14+ · as holdouts bind · What returns when</title>
+<rect x="1166" y="466" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="466" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 472) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="483" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">fleet code fixes</text>
+<text x="1251" y="499" class="t-muted" font-size="9" text-anchor="middle">d14+ · as holdouts bind</text>
+</g>
+<g id="fxr-node-r7">
+<title>Argo cockpit · d19 · Home, push, verbs · W6 · What returns when</title>
+<rect x="1166" y="560" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="560" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 566) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="577" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Argo cockpit</text>
+<text x="1251" y="593" class="t-muted" font-size="9" text-anchor="middle">d19 · Home, push, verbs · W6</text>
+</g>
+<g id="fxr-node-r8">
+<title>Hermes is the door · d22 · briefings, events · W11 · What returns when</title>
+<rect x="1166" y="644" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="644" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 650) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="661" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hermes is the door</text>
+<text x="1251" y="677" class="t-muted" font-size="9" text-anchor="middle">d22 · briefings, events · W11</text>
+</g>
+<g id="fxr-node-r9">
+<title>full autonomy · d26 · W10 gate passes · What returns when</title>
+<rect x="1166" y="756" width="170" height="38" rx="6" class="c-mask"/>
+<rect x="1166" y="756" width="170" height="38" rx="6" class="c-database" stroke-width="1.5"/>
+<g class="semantic-sigil s-database" transform="translate(1172 762) scale(0.6875)">
+<ellipse cx="8" cy="4" rx="5" ry="2"/>
+<path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+</g>
+<text x="1251" y="773" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">full autonomy</text>
+<text x="1251" y="789" class="t-muted" font-size="9" text-anchor="middle">d26 · W10 gate passes</text>
+</g>
+<g>
+<rect x="24" y="36" width="30" height="16" rx="3" class="c-mask"/>
+<text x="28" y="49" class="t-cloud" font-size="9" font-weight="600">Day</text>
+</g>
+<g>
+<rect x="110" y="36" width="188.2" height="16" rx="3" class="c-mask"/>
+<text x="114" y="49" class="t-cloud" font-size="9" font-weight="600">Lane A · warden spine · ≈ 26 days</text>
+</g>
+<g>
+<rect x="448" y="36" width="188.2" height="16" rx="3" class="c-mask"/>
+<text x="452" y="49" class="t-cloud" font-size="9" font-weight="600">Lane B · manifests, Hermes, brain</text>
+</g>
+<g>
+<rect x="698" y="36" width="188.2" height="16" rx="3" class="c-mask"/>
+<text x="702" y="49" class="t-cloud" font-size="9" font-weight="600">Lane C · tooling, telemetry, docs</text>
+</g>
+<g>
+<rect x="948" y="36" width="91" height="16" rx="3" class="c-mask"/>
+<text x="952" y="49" class="t-security" font-size="9" font-weight="600">What stops when</text>
+</g>
+<g>
+<rect x="1156" y="36" width="101.8" height="16" rx="3" class="c-mask"/>
+<text x="1160" y="49" class="t-cloud" font-size="9" font-weight="600">What returns when</text>
+</g>
+<g>
+<text x="40" y="846" class="t-primary" font-size="12" font-weight="650">Legend</text>
+<g>
+<rect x="40" y="857" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+<text x="62" y="866" class="t-muted" font-size="10" font-weight="500">Lane B wave (IU)</text>
+</g>
+<g>
+<rect x="185" y="857" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+<text x="207" y="866" class="t-muted" font-size="10" font-weight="500">Lane A wave (Max; IU at a trip)</text>
+</g>
+<g>
+<rect x="404" y="857" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+<text x="426" y="866" class="t-muted" font-size="10" font-weight="500">Capability returns</text>
+</g>
+<g>
+<rect x="559" y="857" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+<text x="581" y="866" class="t-muted" font-size="10" font-weight="500">Lane C wave (IU)</text>
+</g>
+<g>
+<rect x="704" y="857" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+<text x="726" y="866" class="t-muted" font-size="10" font-weight="500">Old part stops</text>
+</g>
+<g>
+<rect x="839" y="857" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
+<text x="861" y="866" class="t-muted" font-size="10" font-weight="500">Working day</text>
+</g>
+<g>
+<rect x="959" y="857" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+<text x="981" y="866" class="t-muted" font-size="10" font-weight="500">Idle lane time</text>
+</g>
+</g>
+</svg>
