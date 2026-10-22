@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 852" width="980" height="852" role="img" aria-labelledby="days-from-lock-to-first-contradiction-pe-t days-from-lock-to-first-contradiction-pe-d">
+<title id="days-from-lock-to-first-contradiction-pe-t">Days from lock to first contradiction, per claim, by cause class</title>
+<desc id="days-from-lock-to-first-contradiction-pe-d">26 locked claims in four cause classes. prose: 11 claims; changed_on_purpose: 6 claims; enforced: 7 claims; cross_repo: 2 claims. Median 0.88 days from lock to first contradiction; 8 claims still hold.</desc>
+<style>
+:root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1f23;--t1:#f4f4f5;--t2:#c4c4cc;--tm:#8e8e98;
+--grid:#34343a;--axis:#4c4c54;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
+.bg{fill:var(--bg)}.ttl{font-size:19px;font-weight:600}.sub{font-size:12.5px;fill:var(--t2)}
+.lbl{font-size:12px;fill:var(--t2)}.val{font-size:12px;font-weight:600}.tick{font-size:11px;fill:var(--tm)}
+.src{font-size:11px;fill:var(--tm)}.ax{font-size:12px;fill:var(--t2)}.hd{font-size:12.5px;font-weight:600}
+.grid{stroke:var(--grid);stroke-width:1;fill:none}.axis{stroke:var(--axis);stroke-width:1;fill:none}
+.tgt{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:6 4;fill:none}
+.tgt2{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:2 3;fill:none}
+.gap{stroke:var(--bg);stroke-width:2}
+.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}
+.ghost{fill:var(--s1);fill-opacity:.2;stroke:var(--s1);stroke-width:1.5;stroke-dasharray:4 3}
+.hollow{fill:none;stroke:var(--t2);stroke-width:1.5;stroke-dasharray:3 3}
+</style>
+<rect class="bg" width="980" height="852"/>
+<text x="24.0" y="34.0" class="ttl" text-anchor="start" >Days from lock to first contradiction, per claim</text>
+<text x="24.0" y="56.0" class="sub" text-anchor="start" >26 claims, grouped by cause class. Median 0.88 d; 9 born false (0 d); 8 still hold.</text>
+<text x="24.0" y="73.0" class="sub" text-anchor="start" >Rows without a bar held through the as-of date.</text>
+<line x1="330.0" y1="110.0" x2="330.0" y2="750.0" class="axis"/>
+<text x="330.0" y="766.0" class="tick" text-anchor="middle" >0</text>
+<line x1="395.6" y1="110.0" x2="395.6" y2="750.0" class="grid"/>
+<text x="395.6" y="766.0" class="tick" text-anchor="middle" >5</text>
+<line x1="461.1" y1="110.0" x2="461.1" y2="750.0" class="grid"/>
+<text x="461.1" y="766.0" class="tick" text-anchor="middle" >10</text>
+<line x1="526.7" y1="110.0" x2="526.7" y2="750.0" class="grid"/>
+<text x="526.7" y="766.0" class="tick" text-anchor="middle" >15</text>
+<line x1="592.2" y1="110.0" x2="592.2" y2="750.0" class="grid"/>
+<text x="592.2" y="766.0" class="tick" text-anchor="middle" >20</text>
+<line x1="657.8" y1="110.0" x2="657.8" y2="750.0" class="grid"/>
+<text x="657.8" y="766.0" class="tick" text-anchor="middle" >25</text>
+<line x1="723.3" y1="110.0" x2="723.3" y2="750.0" class="grid"/>
+<text x="723.3" y="766.0" class="tick" text-anchor="middle" >30</text>
+<line x1="788.9" y1="110.0" x2="788.9" y2="750.0" class="grid"/>
+<text x="788.9" y="766.0" class="tick" text-anchor="middle" >35</text>
+<line x1="854.4" y1="110.0" x2="854.4" y2="750.0" class="grid"/>
+<text x="854.4" y="766.0" class="tick" text-anchor="middle" >40</text>
+<line x1="920.0" y1="110.0" x2="920.0" y2="750.0" class="grid"/>
+<text x="920.0" y="766.0" class="tick" text-anchor="middle" >45</text>
+<text x="625.0" y="786.0" class="ax" text-anchor="middle" >Days from lock to first contradiction</text>
+<rect x="24" y="118.0" width="12" height="12" rx="3" class="f1"/>
+<text x="42.0" y="129.0" class="hd" text-anchor="start" >Prose (a doc or prompt asserts it): 11 claims, 10 contradicted</text>
+<text x="320.0" y="156.5" class="lbl" text-anchor="end" >platform.herdr-never-unattended</text>
+<g><title>platform.herdr-never-unattended: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="146.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="156.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="176.5" class="lbl" text-anchor="end" >platform.no-model-ids-in-prose</text>
+<g><title>platform.no-model-ids-in-prose: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="166.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="176.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="196.5" class="lbl" text-anchor="end" >round4.wave-shapes-one-vocabulary</text>
+<g><title>round4.wave-shapes-one-vocabulary: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="186.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="196.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="216.5" class="lbl" text-anchor="end" >round5.agw-never-writes-code</text>
+<g><title>round5.agw-never-writes-code: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="206.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="216.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="236.5" class="lbl" text-anchor="end" >round5.hermes-never-codes</text>
+<g><title>round5.hermes-never-codes: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="226.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="236.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="256.5" class="lbl" text-anchor="end" >round5.warden-never-writes-code</text>
+<g><title>round5.warden-never-writes-code: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="246.0" width="4" height="13" rx="2" class="f1"/></g>
+<text x="338.0" y="256.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="276.5" class="lbl" text-anchor="end" >platform.hermes-never-codes</text>
+<g><title>platform.hermes-never-codes: 2.09 d from lock to first contradiction (born false)</title><path d="M330.0 266.0H353.4a4.0 4.0 0 0 1 4.0 4.0V275.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f1"/></g>
+<text x="365.4" y="276.5" class="val" text-anchor="start" >2.09 d · born false</text>
+<text x="320.0" y="296.5" class="lbl" text-anchor="end" >platform.no-model-ids-in-code</text>
+<g><title>platform.no-model-ids-in-code: 2.1 d from lock to first contradiction</title><path d="M330.0 286.0H353.5a4.0 4.0 0 0 1 4.0 4.0V295.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f1"/></g>
+<text x="365.5" y="296.5" class="val" text-anchor="start" >2.1 d</text>
+<text x="320.0" y="316.5" class="lbl" text-anchor="end" >platform.four-lanes</text>
+<g><title>platform.four-lanes: 7.86 d from lock to first contradiction</title><path d="M330.0 306.0H429.1a4.0 4.0 0 0 1 4.0 4.0V315.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f1"/></g>
+<text x="441.1" y="316.5" class="val" text-anchor="start" >7.86 d</text>
+<text x="320.0" y="336.5" class="lbl" text-anchor="end" >estate.control-plane-one-owner</text>
+<g><title>estate.control-plane-one-owner: 40.85 d from lock to first contradiction</title><path d="M330.0 326.0H861.6a4.0 4.0 0 0 1 4.0 4.0V335.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f1"/></g>
+<text x="873.6" y="336.5" class="val" text-anchor="start" >40.85 d</text>
+<text x="320.0" y="356.5" class="lbl" text-anchor="end" >round4.model-ids-out-of-global-config</text>
+<text x="336.0" y="356.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<rect x="24" y="368.0" width="12" height="12" rx="3" class="f2"/>
+<text x="42.0" y="379.0" class="hd" text-anchor="start" >Changed on purpose: 6 claims, 6 contradicted</text>
+<text x="320.0" y="406.5" class="lbl" text-anchor="end" >estate.hermes-no-read-path</text>
+<g><title>estate.hermes-no-read-path: 0.33 d from lock to first contradiction</title><path d="M330.0 396.0H332.2a2.2 2.2 0 0 1 2.2 2.2V406.8a2.2 2.2 0 0 1 -2.2 2.2H330.0Z" class="f2"/></g>
+<text x="342.3" y="406.5" class="val" text-anchor="start" >0.33 d</text>
+<text x="320.0" y="426.5" class="lbl" text-anchor="end" >round5.locked-binds-the-next-session</text>
+<g><title>round5.locked-binds-the-next-session: 0.86 d from lock to first contradiction</title><path d="M330.0 416.0H337.3a4.0 4.0 0 0 1 4.0 4.0V425.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f2"/></g>
+<text x="349.3" y="426.5" class="val" text-anchor="start" >0.86 d</text>
+<text x="320.0" y="446.5" class="lbl" text-anchor="end" >estate.host-fixes-need-a-human</text>
+<g><title>estate.host-fixes-need-a-human: 0.9 d from lock to first contradiction</title><path d="M330.0 436.0H337.8a4.0 4.0 0 0 1 4.0 4.0V445.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f2"/></g>
+<text x="349.8" y="446.5" class="val" text-anchor="start" >0.9 d</text>
+<text x="320.0" y="466.5" class="lbl" text-anchor="end" >estate.self-modification-pinned</text>
+<g><title>estate.self-modification-pinned: 4.68 d from lock to first contradiction</title><path d="M330.0 456.0H387.4a4.0 4.0 0 0 1 4.0 4.0V465.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f2"/></g>
+<text x="399.4" y="466.5" class="val" text-anchor="start" >4.68 d</text>
+<text x="320.0" y="486.5" class="lbl" text-anchor="end" >jobs.no-investigate-ceiling</text>
+<g><title>jobs.no-investigate-ceiling: 5.05 d from lock to first contradiction</title><path d="M330.0 476.0H392.2a4.0 4.0 0 0 1 4.0 4.0V485.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f2"/></g>
+<text x="404.2" y="486.5" class="val" text-anchor="start" >5.05 d</text>
+<text x="320.0" y="506.5" class="lbl" text-anchor="end" >estate.dispatch-lanes</text>
+<g><title>estate.dispatch-lanes: 24.02 d from lock to first contradiction</title><path d="M330.0 496.0H640.9a4.0 4.0 0 0 1 4.0 4.0V505.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f2"/></g>
+<text x="652.9" y="506.5" class="val" text-anchor="start" >24.02 d</text>
+<rect x="24" y="518.0" width="12" height="12" rx="3" class="f3"/>
+<text x="42.0" y="529.0" class="hd" text-anchor="start" >Enforced (code or a tool runs it): 7 claims, 1 contradicted</text>
+<text x="320.0" y="556.5" class="lbl" text-anchor="end" >round4.agents-md-only</text>
+<g><title>round4.agents-md-only: 0.0 d from lock to first contradiction (born false)</title><rect x="330.0" y="546.0" width="4" height="13" rx="2" class="f3"/></g>
+<text x="338.0" y="556.5" class="val" text-anchor="start" >0 d · born false</text>
+<text x="320.0" y="576.5" class="lbl" text-anchor="end" >estate.model-discipline-is-a-hook</text>
+<text x="336.0" y="576.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<text x="320.0" y="596.5" class="lbl" text-anchor="end" >estate.wave-gate-is-mechanical</text>
+<text x="336.0" y="596.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<text x="320.0" y="616.5" class="lbl" text-anchor="end" >jobs.kuma-and-hyperdx-reach-warden-directly</text>
+<text x="336.0" y="616.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<text x="320.0" y="636.5" class="lbl" text-anchor="end" >platform.deleted-lanes-stay-deleted</text>
+<text x="336.0" y="636.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<text x="320.0" y="656.5" class="lbl" text-anchor="end" >platform.repo-contract</text>
+<text x="336.0" y="656.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<text x="320.0" y="676.5" class="lbl" text-anchor="end" >round4.no-ask-rules</text>
+<text x="336.0" y="676.5" class="tick" text-anchor="start" >held, no contradiction</text>
+<rect x="24" y="688.0" width="12" height="12" rx="3" class="f4"/>
+<text x="42.0" y="699.0" class="hd" text-anchor="start" >Cross-repo: 2 claims, 2 contradicted</text>
+<text x="320.0" y="726.5" class="lbl" text-anchor="end" >opencode.brief-promise-vs-allowlist</text>
+<g><title>opencode.brief-promise-vs-allowlist: 0.06 d from lock to first contradiction (born false)</title><path d="M330.0 716.0H330.4a0.4 0.4 0 0 1 0.4 0.4V728.6a0.4 0.4 0 0 1 -0.4 0.4H330.0Z" class="f4"/></g>
+<text x="338.8" y="726.5" class="val" text-anchor="start" >0.06 d · born false</text>
+<text x="320.0" y="746.5" class="lbl" text-anchor="end" >platform.argo-verbs-mirror-warden</text>
+<g><title>platform.argo-verbs-mirror-warden: 3.29 d from lock to first contradiction</title><path d="M330.0 736.0H369.1a4.0 4.0 0 0 1 4.0 4.0V745.0a4.0 4.0 0 0 1 -4.0 4.0H330.0Z" class="f4"/></g>
+<text x="381.1" y="746.5" class="val" text-anchor="start" >3.29 d</text>
+<text x="24.0" y="838.0" class="src" text-anchor="start" >Source: evidence/postmortem/drift.out.json (models[].claims[].days_from_lock, cause_class, born_false; summary).</text>
+</svg>

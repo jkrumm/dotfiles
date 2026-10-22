@@ -26,7 +26,13 @@ Rework: 25.6 % of commits fix something touched in the previous 7 days (argo 51.
 39.4 %). Revert: 14 commits in 90 days; warden auto-reverted 0 of its 52 merges, because every
 merge was a rebase merge.
 
+{{asset:chart-rework}}
+
+
 **Capacity (`kpi/quota`, `kpi/engine_policy`):** Max's 7-day window p50 46 %, p90 96 %, ≥ 90 % on 12
+
+{{asset:chart-quota}}
+
 of 45 days, effectively unavailable Sep 16–20. Max is 97.8 % of agent cost at list price but 32 %
 of tokens; 1 % of the weekly window ≈ $32.
 
@@ -34,6 +40,9 @@ of tokens; 1 % of the weekly window ≈ $32.
 tabs; two dead `claude --bg` sessions, 705 h and 386 h old.
 
 ## 2.2 Where the owner's attention goes
+
+{{asset:chart-attention}}
+
 
 **Ten costliest incidents (`incidents/`)** — 180 pages; under the ideal path ≈ 8:
 
@@ -68,6 +77,9 @@ macOS-vs-GNU syntax.
 
 ## 2.3 Signals arrive second-hand
 
+{{asset:chart-signals}}
+
+
 63.7 % of warden's signals (1,121 of 1,761) are Slack relays (`signals/`). The relay keeps text and
 poll time only: 89 of 128 Slack alert items had no repo; an Up never closes its Down; the median lag
 is 15.7 min while 79.6 % of Kuma outages end inside one poll; each poll reads the newest 50
@@ -75,6 +87,9 @@ messages; since 10-16, 37 of 40 Kuma Downs via Slack duplicate the live webhook.
 are never ingested, and since 10-11 the notice stream has collapsed — deploys are invisible.
 
 ## 2.4 Why every locked model drifted
+
+{{asset:chart-drift}}
+
 
 Six "locked" models since the September estate round, 26 checkable claims (`postmortem/`): 18 were
 false at `AS_OF`, 15 of them within 7 days of their lock (median 0.9 days); 9 were false on the day

@@ -22,6 +22,9 @@ incidents.
 
 ## The numbers
 
+{{asset:chart-baseline}}
+
+
 | Metric | Baseline (evidence) | Target |
 |-|-|-|
 | Items with no owner touch, 14 d | **64.3 %** (`kpi/baseline`) | SLO ≥ 99 %, stretch 99.9 % |

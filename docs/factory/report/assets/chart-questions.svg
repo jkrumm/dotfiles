@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640" role="img" aria-labelledby="top-15-owner-questions-by-count-last-14--t top-15-owner-questions-by-count-last-14--d">
+<title id="top-15-owner-questions-by-count-last-14--t">Top 15 owner questions by count, last 14 days vs earlier</title>
+<desc id="top-15-owner-questions-by-count-last-14--d">Horizontal stacked bars. nudge continue: 24 in the last 14 days, 26 earlier; where are we: 18 in the last 14 days, 10 earlier; done shipped live: 11 in the last 14 days, 8 earlier; delegate decision: 5 in the last 14 days, 10 earlier; quota now: 10 in the last 14 days, 2 earlier; anything broken: 7 in the last 14 days, 4 earlier; why failing: 6 in the last 14 days, 5 earlier; agent alive: 5 in the last 14 days, 5 earlier; connectivity auth: 4 in the last 14 days, 5 earlier; tab cleanup: 4 in the last 14 days, 5 earlier; since away: 5 in the last 14 days, 3 earlier; all agents: 4 in the last 14 days, 3 earlier; spend: 4 in the last 14 days, 3 earlier; docs current: 5 in the last 14 days, 1 earlier; infra resources: 5 in the last 14 days, 1 earlier</desc>
+<style>
+:root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1f23;--t1:#f4f4f5;--t2:#c4c4cc;--tm:#8e8e98;
+--grid:#34343a;--axis:#4c4c54;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
+.bg{fill:var(--bg)}.ttl{font-size:19px;font-weight:600}.sub{font-size:12.5px;fill:var(--t2)}
+.lbl{font-size:12px;fill:var(--t2)}.val{font-size:12px;font-weight:600}.tick{font-size:11px;fill:var(--tm)}
+.src{font-size:11px;fill:var(--tm)}.ax{font-size:12px;fill:var(--t2)}.hd{font-size:12.5px;font-weight:600}
+.grid{stroke:var(--grid);stroke-width:1;fill:none}.axis{stroke:var(--axis);stroke-width:1;fill:none}
+.tgt{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:6 4;fill:none}
+.tgt2{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:2 3;fill:none}
+.gap{stroke:var(--bg);stroke-width:2}
+.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}
+.ghost{fill:var(--s1);fill-opacity:.2;stroke:var(--s1);stroke-width:1.5;stroke-dasharray:4 3}
+.hollow{fill:none;stroke:var(--t2);stroke-width:1.5;stroke-dasharray:3 3}
+</style>
+<rect class="bg" width="960" height="640"/>
+<text x="24.0" y="34.0" class="ttl" text-anchor="start" >Top 15 owner questions: last 14 days vs earlier</text>
+<text x="24.0" y="56.0" class="sub" text-anchor="start" >208 asks across 211 classified owner messages (1111 total).</text>
+<text x="24.0" y="73.0" class="sub" text-anchor="start" >Earlier = the 31 days before the last 14. * = implied question (the owner typed a statement, not a question).</text>
+<line x1="215.0" y1="106.0" x2="215.0" y2="562.0" class="axis"/>
+<text x="215.0" y="578.0" class="tick" text-anchor="middle" >0</text>
+<line x1="348.0" y1="106.0" x2="348.0" y2="562.0" class="grid"/>
+<text x="348.0" y="578.0" class="tick" text-anchor="middle" >10</text>
+<line x1="481.0" y1="106.0" x2="481.0" y2="562.0" class="grid"/>
+<text x="481.0" y="578.0" class="tick" text-anchor="middle" >20</text>
+<line x1="614.0" y1="106.0" x2="614.0" y2="562.0" class="grid"/>
+<text x="614.0" y="578.0" class="tick" text-anchor="middle" >30</text>
+<line x1="747.0" y1="106.0" x2="747.0" y2="562.0" class="grid"/>
+<text x="747.0" y="578.0" class="tick" text-anchor="middle" >40</text>
+<line x1="880.0" y1="106.0" x2="880.0" y2="562.0" class="grid"/>
+<text x="880.0" y="578.0" class="tick" text-anchor="middle" >50</text>
+<text x="205.0" y="126.0" class="lbl" text-anchor="end" >nudge continue*</text>
+<g><title>nudge continue*: 24 in the last 14 days</title><path d="M215.0 112.0H534.2a0.0 0.0 0 0 1 0.0 0.0V132.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>nudge continue*: 26 in the 31 days before</title><path d="M534.2 112.0H876.0a4.0 4.0 0 0 1 4.0 4.0V128.0a4.0 4.0 0 0 1 -4.0 4.0H534.2Z" class="f2 gap"/></g>
+<text x="888.0" y="126.0" class="val" text-anchor="start" >50  (24 | 26)</text>
+<text x="205.0" y="156.0" class="lbl" text-anchor="end" >where are we</text>
+<g><title>where are we: 18 in the last 14 days</title><path d="M215.0 142.0H454.4a0.0 0.0 0 0 1 0.0 0.0V162.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>where are we: 10 in the 31 days before</title><path d="M454.4 142.0H583.4a4.0 4.0 0 0 1 4.0 4.0V158.0a4.0 4.0 0 0 1 -4.0 4.0H454.4Z" class="f2 gap"/></g>
+<text x="595.4" y="156.0" class="val" text-anchor="start" >28  (18 | 10)</text>
+<text x="205.0" y="186.0" class="lbl" text-anchor="end" >done shipped live</text>
+<g><title>done shipped live: 11 in the last 14 days</title><path d="M215.0 172.0H361.3a0.0 0.0 0 0 1 0.0 0.0V192.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>done shipped live: 8 in the 31 days before</title><path d="M361.3 172.0H463.7a4.0 4.0 0 0 1 4.0 4.0V188.0a4.0 4.0 0 0 1 -4.0 4.0H361.3Z" class="f2 gap"/></g>
+<text x="475.7" y="186.0" class="val" text-anchor="start" >19  (11 | 8)</text>
+<text x="205.0" y="216.0" class="lbl" text-anchor="end" >delegate decision*</text>
+<g><title>delegate decision*: 5 in the last 14 days</title><path d="M215.0 202.0H281.5a0.0 0.0 0 0 1 0.0 0.0V222.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>delegate decision*: 10 in the 31 days before</title><path d="M281.5 202.0H410.5a4.0 4.0 0 0 1 4.0 4.0V218.0a4.0 4.0 0 0 1 -4.0 4.0H281.5Z" class="f2 gap"/></g>
+<text x="422.5" y="216.0" class="val" text-anchor="start" >15  (5 | 10)</text>
+<text x="205.0" y="246.0" class="lbl" text-anchor="end" >quota now</text>
+<g><title>quota now: 10 in the last 14 days</title><path d="M215.0 232.0H348.0a0.0 0.0 0 0 1 0.0 0.0V252.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>quota now: 2 in the 31 days before</title><path d="M348.0 232.0H370.6a4.0 4.0 0 0 1 4.0 4.0V248.0a4.0 4.0 0 0 1 -4.0 4.0H348.0Z" class="f2 gap"/></g>
+<text x="382.6" y="246.0" class="val" text-anchor="start" >12  (10 | 2)</text>
+<text x="205.0" y="276.0" class="lbl" text-anchor="end" >anything broken</text>
+<g><title>anything broken: 7 in the last 14 days</title><path d="M215.0 262.0H308.1a0.0 0.0 0 0 1 0.0 0.0V282.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>anything broken: 4 in the 31 days before</title><path d="M308.1 262.0H357.3a4.0 4.0 0 0 1 4.0 4.0V278.0a4.0 4.0 0 0 1 -4.0 4.0H308.1Z" class="f2 gap"/></g>
+<text x="369.3" y="276.0" class="val" text-anchor="start" >11  (7 | 4)</text>
+<text x="205.0" y="306.0" class="lbl" text-anchor="end" >why failing</text>
+<g><title>why failing: 6 in the last 14 days</title><path d="M215.0 292.0H294.8a0.0 0.0 0 0 1 0.0 0.0V312.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>why failing: 5 in the 31 days before</title><path d="M294.8 292.0H357.3a4.0 4.0 0 0 1 4.0 4.0V308.0a4.0 4.0 0 0 1 -4.0 4.0H294.8Z" class="f2 gap"/></g>
+<text x="369.3" y="306.0" class="val" text-anchor="start" >11  (6 | 5)</text>
+<text x="205.0" y="336.0" class="lbl" text-anchor="end" >agent alive</text>
+<g><title>agent alive: 5 in the last 14 days</title><path d="M215.0 322.0H281.5a0.0 0.0 0 0 1 0.0 0.0V342.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>agent alive: 5 in the 31 days before</title><path d="M281.5 322.0H344.0a4.0 4.0 0 0 1 4.0 4.0V338.0a4.0 4.0 0 0 1 -4.0 4.0H281.5Z" class="f2 gap"/></g>
+<text x="356.0" y="336.0" class="val" text-anchor="start" >10  (5 | 5)</text>
+<text x="205.0" y="366.0" class="lbl" text-anchor="end" >connectivity auth</text>
+<g><title>connectivity auth: 4 in the last 14 days</title><path d="M215.0 352.0H268.2a0.0 0.0 0 0 1 0.0 0.0V372.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>connectivity auth: 5 in the 31 days before</title><path d="M268.2 352.0H330.7a4.0 4.0 0 0 1 4.0 4.0V368.0a4.0 4.0 0 0 1 -4.0 4.0H268.2Z" class="f2 gap"/></g>
+<text x="342.7" y="366.0" class="val" text-anchor="start" >9  (4 | 5)</text>
+<text x="205.0" y="396.0" class="lbl" text-anchor="end" >tab cleanup*</text>
+<g><title>tab cleanup*: 4 in the last 14 days</title><path d="M215.0 382.0H268.2a0.0 0.0 0 0 1 0.0 0.0V402.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>tab cleanup*: 5 in the 31 days before</title><path d="M268.2 382.0H330.7a4.0 4.0 0 0 1 4.0 4.0V398.0a4.0 4.0 0 0 1 -4.0 4.0H268.2Z" class="f2 gap"/></g>
+<text x="342.7" y="396.0" class="val" text-anchor="start" >9  (4 | 5)</text>
+<text x="205.0" y="426.0" class="lbl" text-anchor="end" >since away</text>
+<g><title>since away: 5 in the last 14 days</title><path d="M215.0 412.0H281.5a0.0 0.0 0 0 1 0.0 0.0V432.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>since away: 3 in the 31 days before</title><path d="M281.5 412.0H317.4a4.0 4.0 0 0 1 4.0 4.0V428.0a4.0 4.0 0 0 1 -4.0 4.0H281.5Z" class="f2 gap"/></g>
+<text x="329.4" y="426.0" class="val" text-anchor="start" >8  (5 | 3)</text>
+<text x="205.0" y="456.0" class="lbl" text-anchor="end" >all agents</text>
+<g><title>all agents: 4 in the last 14 days</title><path d="M215.0 442.0H268.2a0.0 0.0 0 0 1 0.0 0.0V462.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>all agents: 3 in the 31 days before</title><path d="M268.2 442.0H304.1a4.0 4.0 0 0 1 4.0 4.0V458.0a4.0 4.0 0 0 1 -4.0 4.0H268.2Z" class="f2 gap"/></g>
+<text x="316.1" y="456.0" class="val" text-anchor="start" >7  (4 | 3)</text>
+<text x="205.0" y="486.0" class="lbl" text-anchor="end" >spend</text>
+<g><title>spend: 4 in the last 14 days</title><path d="M215.0 472.0H268.2a0.0 0.0 0 0 1 0.0 0.0V492.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>spend: 3 in the 31 days before</title><path d="M268.2 472.0H304.1a4.0 4.0 0 0 1 4.0 4.0V488.0a4.0 4.0 0 0 1 -4.0 4.0H268.2Z" class="f2 gap"/></g>
+<text x="316.1" y="486.0" class="val" text-anchor="start" >7  (4 | 3)</text>
+<text x="205.0" y="516.0" class="lbl" text-anchor="end" >docs current</text>
+<g><title>docs current: 5 in the last 14 days</title><path d="M215.0 502.0H281.5a0.0 0.0 0 0 1 0.0 0.0V522.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>docs current: 1 in the 31 days before</title><path d="M281.5 502.0H290.8a4.0 4.0 0 0 1 4.0 4.0V518.0a4.0 4.0 0 0 1 -4.0 4.0H281.5Z" class="f2 gap"/></g>
+<text x="302.8" y="516.0" class="val" text-anchor="start" >6  (5 | 1)</text>
+<text x="205.0" y="546.0" class="lbl" text-anchor="end" >infra resources*</text>
+<g><title>infra resources*: 5 in the last 14 days</title><path d="M215.0 532.0H281.5a0.0 0.0 0 0 1 0.0 0.0V552.0a0.0 0.0 0 0 1 -0.0 0.0H215.0Z" class="f1 gap"/></g>
+<g><title>infra resources*: 1 in the 31 days before</title><path d="M281.5 532.0H290.8a4.0 4.0 0 0 1 4.0 4.0V548.0a4.0 4.0 0 0 1 -4.0 4.0H281.5Z" class="f2 gap"/></g>
+<text x="302.8" y="546.0" class="val" text-anchor="start" >6  (5 | 1)</text>
+<text x="547.5" y="598.0" class="ax" text-anchor="middle" >Owner asks (count)</text>
+<rect x="215.0" y="616.0" width="12" height="12" rx="3" class="f1"/>
+<text x="233.0" y="626.0" class="lbl" text-anchor="start" >Last 14 days</text>
+<rect x="339.0" y="616.0" width="12" height="12" rx="3" class="f2"/>
+<text x="357.0" y="626.0" class="lbl" text-anchor="start" >Earlier (31 days before)</text>
+<text x="24.0" y="626.0" class="src" text-anchor="start" >Source: evidence/questions/questions.out.json (questions[].count, count_last_14d, count_prior_31d).</text>
+</svg>

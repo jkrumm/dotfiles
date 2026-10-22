@@ -5,6 +5,9 @@ Report section 4 is built from this file.
 
 ## 0. The shape in one picture
 
+{{asset:architecture}}
+
+
 ```
  primary sources ──ingest──► Signal ──schedules──► RECONCILE(project) ──► Condition open/close
  (Kuma, Docker, HyperDX,                               ▲ desired = manifest      │
@@ -52,6 +55,9 @@ Under the reconcile loop: Kuma webhooks carry source time 20:49 → `health.down
 each vps-hosted project → the correlator folds them under host `vps` into one candidate → every
 monitor reports Up by 20:57 → the Conditions resolve on observation → the candidate expires as a
 recovered blip. Owner pages: 0. Recorded: one candidate with its timeline.
+
+{{asset:outage-1017}}
+
 
 ## 2. Correlate — one cause, one incident
 

@@ -26,6 +26,9 @@ Argo/basalt-ui inventory. Report section 6 is built from this file.
 
 ## 2. Questions → read model → view
 
+{{asset:chart-questions}}
+
+
 `n` = classified asks (last 14 d). Every read model is a projection of the event log plus the
 manifests (model invariant 8); "answer budget" is the timed-test target.
 
@@ -107,6 +110,9 @@ Pages:
   their own nav group.
 
 ## 4. Where Argo runs (ADR-009 draft)
+
+{{asset:argo-control-plane}}
+
 
 | Option | Data locality | Availability | Cost of change |
 |-|-|-|-|

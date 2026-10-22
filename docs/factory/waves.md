@@ -42,6 +42,9 @@ Model: `RD_WAVE_MODEL` default; a wave that needs a stronger model says why in t
 
 ## Calendar
 
+{{asset:rewrite-plan}}
+
+
 ```
 day   1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17
 A     W1 W1 W3 W3 W3 W4 W4 W4 W5 W5 W5 W10 W10 W10 W10 W14 W14     core loop

@@ -30,6 +30,9 @@ Verification), *wave* and *plan* (an Artifact whose tasks are Tasks), *notificat
 
 ## 2. Statecharts
 
+{{asset:statecharts}}
+
+
 ```
 Condition   (none) ─observe(bad)→ open{firing ⇄ suppressed} ─observe(ok) ≥ hold→ resolved
             resolved ─observe(bad) within reopen window→ open (same id, flaps++)

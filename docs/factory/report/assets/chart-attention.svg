@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 600" width="1040" height="600" role="img" aria-labelledby="owner-facing-notifications-by-kind-and-t-t owner-facing-notifications-by-kind-and-t-d">
+<title id="owner-facing-notifications-by-kind-and-t-t">Owner-facing notifications by kind, and the ten costliest incidents&#x27; pages today vs the ideal path</title>
+<desc id="owner-facing-notifications-by-kind-and-t-d">Left: 577 owner-facing notifications split into decision entries 140, legacy notifications 281, reminders 156; 76 % never went through needs_decision. Right: the ten costliest incidents page 180 times today and at most 8 times on the ideal path.</desc>
+<style>
+:root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1f23;--t1:#f4f4f5;--t2:#c4c4cc;--tm:#8e8e98;
+--grid:#34343a;--axis:#4c4c54;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
+.bg{fill:var(--bg)}.ttl{font-size:19px;font-weight:600}.sub{font-size:12.5px;fill:var(--t2)}
+.lbl{font-size:12px;fill:var(--t2)}.val{font-size:12px;font-weight:600}.tick{font-size:11px;fill:var(--tm)}
+.src{font-size:11px;fill:var(--tm)}.ax{font-size:12px;fill:var(--t2)}.hd{font-size:12.5px;font-weight:600}
+.grid{stroke:var(--grid);stroke-width:1;fill:none}.axis{stroke:var(--axis);stroke-width:1;fill:none}
+.tgt{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:6 4;fill:none}
+.tgt2{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:2 3;fill:none}
+.gap{stroke:var(--bg);stroke-width:2}
+.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}
+.ghost{fill:var(--s1);fill-opacity:.2;stroke:var(--s1);stroke-width:1.5;stroke-dasharray:4 3}
+.hollow{fill:none;stroke:var(--t2);stroke-width:1.5;stroke-dasharray:3 3}
+</style>
+<rect class="bg" width="1040" height="600"/>
+<text x="24.0" y="34.0" class="ttl" text-anchor="start" >Owner attention: notifications by kind, and the ten costliest incidents</text>
+<text x="24.0" y="56.0" class="sub" text-anchor="start" >Left: 577 owner-facing notifications in the ledger, by kind. Right: pages per incident, today vs ideal path (180 → at most 8).</text>
+<text x="24.0" y="73.0" class="sub" text-anchor="start" >Ideal-path pages are the upper bounds of the incident review&#x27;s own estimates, not measurements.</text>
+<text x="24.0" y="116.0" class="hd" text-anchor="start" >Notifications by kind</text>
+<line x1="150.0" y1="126.0" x2="150.0" y2="278.0" class="axis"/>
+<text x="150.0" y="294.0" class="tick" text-anchor="middle" >0</text>
+<line x1="233.3" y1="126.0" x2="233.3" y2="278.0" class="grid"/>
+<text x="233.3" y="294.0" class="tick" text-anchor="middle" >100</text>
+<line x1="316.7" y1="126.0" x2="316.7" y2="278.0" class="grid"/>
+<text x="316.7" y="294.0" class="tick" text-anchor="middle" >200</text>
+<line x1="400.0" y1="126.0" x2="400.0" y2="278.0" class="grid"/>
+<text x="400.0" y="294.0" class="tick" text-anchor="middle" >300</text>
+<text x="140.0" y="147.0" class="lbl" text-anchor="end" >Decision entries</text>
+<g><title>Decision entries: 140 (24 % of 577)</title><path d="M150.0 130.0H262.7a4.0 4.0 0 0 1 4.0 4.0V152.0a4.0 4.0 0 0 1 -4.0 4.0H150.0Z" class="f1"/></g>
+<text x="274.7" y="147.0" class="val" text-anchor="start" >140 (24 %)</text>
+<text x="140.0" y="199.0" class="lbl" text-anchor="end" >Legacy notifications</text>
+<g><title>Legacy notifications: 281 (49 % of 577)</title><path d="M150.0 182.0H380.2a4.0 4.0 0 0 1 4.0 4.0V204.0a4.0 4.0 0 0 1 -4.0 4.0H150.0Z" class="f1"/></g>
+<text x="392.2" y="199.0" class="val" text-anchor="start" >281 (49 %)</text>
+<text x="140.0" y="251.0" class="lbl" text-anchor="end" >Reminders</text>
+<g><title>Reminders: 156 (27 % of 577)</title><path d="M150.0 234.0H276.0a4.0 4.0 0 0 1 4.0 4.0V256.0a4.0 4.0 0 0 1 -4.0 4.0H150.0Z" class="f1"/></g>
+<text x="288.0" y="251.0" class="val" text-anchor="start" >156 (27 %)</text>
+<text x="275.0" y="314.0" class="ax" text-anchor="middle" >Notifications (count)</text>
+<text x="24.0" y="348.0" class="lbl" text-anchor="start" >76 % of 577 never went</text>
+<text x="24.0" y="365.0" class="lbl" text-anchor="start" >through needs_decision (legacy + reminders).</text>
+<text x="450.0" y="98.0" class="hd" text-anchor="start" >Pages per incident (ten costliest)</text>
+<line x1="640.0" y1="106.0" x2="640.0" y2="506.0" class="axis"/>
+<text x="640.0" y="522.0" class="tick" text-anchor="middle" >0</text>
+<line x1="691.4" y1="106.0" x2="691.4" y2="506.0" class="grid"/>
+<text x="691.4" y="522.0" class="tick" text-anchor="middle" >5</text>
+<line x1="742.9" y1="106.0" x2="742.9" y2="506.0" class="grid"/>
+<text x="742.9" y="522.0" class="tick" text-anchor="middle" >10</text>
+<line x1="794.3" y1="106.0" x2="794.3" y2="506.0" class="grid"/>
+<text x="794.3" y="522.0" class="tick" text-anchor="middle" >15</text>
+<line x1="845.7" y1="106.0" x2="845.7" y2="506.0" class="grid"/>
+<text x="845.7" y="522.0" class="tick" text-anchor="middle" >20</text>
+<line x1="897.1" y1="106.0" x2="897.1" y2="506.0" class="grid"/>
+<text x="897.1" y="522.0" class="tick" text-anchor="middle" >25</text>
+<line x1="948.6" y1="106.0" x2="948.6" y2="506.0" class="grid"/>
+<text x="948.6" y="522.0" class="tick" text-anchor="middle" >30</text>
+<line x1="1000.0" y1="106.0" x2="1000.0" y2="506.0" class="grid"/>
+<text x="1000.0" y="522.0" class="tick" text-anchor="middle" >35</text>
+<text x="630.0" y="129.0" class="lbl" text-anchor="end" >e52 outbound outage</text>
+<g><title>e52 outbound outage: 31 pages today</title><path d="M640.0 112.0H954.9a4.0 4.0 0 0 1 4.0 4.0V123.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="964.9" y="124.0" class="val" text-anchor="start" >31</text>
+<g><title>e52 outbound outage: at most 1 page(s) on the ideal path</title><path d="M640.0 129.0H646.3a4.0 4.0 0 0 1 4.0 4.0V140.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="141.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="169.0" class="lbl" text-anchor="end" >e3 healthcheck</text>
+<g><title>e3 healthcheck: 20 pages today</title><path d="M640.0 152.0H841.7a4.0 4.0 0 0 1 4.0 4.0V163.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="851.7" y="164.0" class="val" text-anchor="start" >20</text>
+<g><title>e3 healthcheck: at most 1 page(s) on the ideal path</title><path d="M640.0 169.0H646.3a4.0 4.0 0 0 1 4.0 4.0V180.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="181.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="209.0" class="lbl" text-anchor="end" >e599 config sync</text>
+<g><title>e599 config sync: 20 pages today</title><path d="M640.0 192.0H841.7a4.0 4.0 0 0 1 4.0 4.0V203.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="851.7" y="204.0" class="val" text-anchor="start" >20</text>
+<g><title>e599 config sync: at most 1 page(s) on the ideal path</title><path d="M640.0 209.0H646.3a4.0 4.0 0 0 1 4.0 4.0V220.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="221.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="249.0" class="lbl" text-anchor="end" >e944 group monitors</text>
+<g><title>e944 group monitors: 19 pages today</title><path d="M640.0 232.0H831.4a4.0 4.0 0 0 1 4.0 4.0V243.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="841.4" y="244.0" class="val" text-anchor="start" >19</text>
+<g><title>e944 group monitors: at most 1 page(s) on the ideal path</title><path d="M640.0 249.0H646.3a4.0 4.0 0 0 1 4.0 4.0V260.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="261.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="289.0" class="lbl" text-anchor="end" >e268 laptop heartbeat</text>
+<g><title>e268 laptop heartbeat: 18 pages today</title><path d="M640.0 272.0H821.1a4.0 4.0 0 0 1 4.0 4.0V283.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="831.1" y="284.0" class="val" text-anchor="start" >18</text>
+<text x="646.0" y="301.0" class="val" text-anchor="start" >0</text>
+<text x="630.0" y="329.0" class="lbl" text-anchor="end" >e77 VPS reboot</text>
+<g><title>e77 VPS reboot: 18 pages today</title><path d="M640.0 312.0H821.1a4.0 4.0 0 0 1 4.0 4.0V323.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="831.1" y="324.0" class="val" text-anchor="start" >18</text>
+<text x="646.0" y="341.0" class="val" text-anchor="start" >0</text>
+<text x="630.0" y="369.0" class="lbl" text-anchor="end" >e1060 poller + race</text>
+<g><title>e1060 poller + race: 16 pages today</title><path d="M640.0 352.0H800.6a4.0 4.0 0 0 1 4.0 4.0V363.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="810.6" y="364.0" class="val" text-anchor="start" >16</text>
+<g><title>e1060 poller + race: at most 1 page(s) on the ideal path</title><path d="M640.0 369.0H646.3a4.0 4.0 0 0 1 4.0 4.0V380.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="381.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="409.0" class="lbl" text-anchor="end" >e1114 checkpoint noise</text>
+<g><title>e1114 checkpoint noise: 15 pages today</title><path d="M640.0 392.0H790.3a4.0 4.0 0 0 1 4.0 4.0V403.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="800.3" y="404.0" class="val" text-anchor="start" >15</text>
+<g><title>e1114 checkpoint noise: at most 1 page(s) on the ideal path</title><path d="M640.0 409.0H646.3a4.0 4.0 0 0 1 4.0 4.0V420.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="421.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="449.0" class="lbl" text-anchor="end" >e267 hard reset</text>
+<g><title>e267 hard reset: 12 pages today</title><path d="M640.0 432.0H759.4a4.0 4.0 0 0 1 4.0 4.0V443.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="769.4" y="444.0" class="val" text-anchor="start" >12</text>
+<g><title>e267 hard reset: at most 1 page(s) on the ideal path</title><path d="M640.0 449.0H646.3a4.0 4.0 0 0 1 4.0 4.0V460.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="461.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="630.0" y="489.0" class="lbl" text-anchor="end" >e1368 crash + self-noise</text>
+<g><title>e1368 crash + self-noise: 11 pages today</title><path d="M640.0 472.0H749.1a4.0 4.0 0 0 1 4.0 4.0V483.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f2 gap"/></g>
+<text x="759.1" y="484.0" class="val" text-anchor="start" >11</text>
+<g><title>e1368 crash + self-noise: at most 1 page(s) on the ideal path</title><path d="M640.0 489.0H646.3a4.0 4.0 0 0 1 4.0 4.0V500.0a4.0 4.0 0 0 1 -4.0 4.0H640.0Z" class="f1 gap"/></g>
+<text x="656.3" y="501.0" class="val" text-anchor="start" >≤ 1</text>
+<text x="820.0" y="542.0" class="ax" text-anchor="middle" >Pages to the owner (count)</text>
+<rect x="450.0" y="558.0" width="12" height="12" rx="3" class="f2"/>
+<text x="468.0" y="568.0" class="lbl" text-anchor="start" >Today</text>
+<rect x="525.0" y="558.0" width="12" height="12" rx="3" class="f1"/>
+<text x="543.0" y="568.0" class="lbl" text-anchor="start" >Ideal path (upper bound)</text>
+<text x="24.0" y="571.0" class="src" text-anchor="start" >Source: evidence/incidents/costliest.out.json (meta.page_totals, ranking.top10, incidents[].pages).</text>
+<text x="24.0" y="586.0" class="src" text-anchor="start" >Ideal-path bounds: closing table in evidence/incidents/incidents.md.</text>
+</svg>

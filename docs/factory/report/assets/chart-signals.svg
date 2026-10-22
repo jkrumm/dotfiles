@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" role="img" aria-labelledby="signals-per-month-via-slack-relays-vs-di-t signals-per-month-via-slack-relays-vs-di-d">
+<title id="signals-per-month-via-slack-relays-vs-di-t">Signals per month: via Slack relays vs direct to the ledger</title>
+<desc id="signals-per-month-via-slack-relays-vs-di-d">Stacked bars per month. 2026-04: 0 relayed, 7 direct; 2026-05: 107 relayed, 58 direct; 2026-06: 75 relayed, 6 direct; 2026-07: 236 relayed, 13 direct; 2026-08: 212 relayed, 51 direct; 2026-09: 304 relayed, 130 direct; 2026-10: 187 relayed, 202 direct. Over all months 71 % of signals arrive via Slack relays.</desc>
+<style>
+:root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1f23;--t1:#f4f4f5;--t2:#c4c4cc;--tm:#8e8e98;
+--grid:#34343a;--axis:#4c4c54;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
+.bg{fill:var(--bg)}.ttl{font-size:19px;font-weight:600}.sub{font-size:12.5px;fill:var(--t2)}
+.lbl{font-size:12px;fill:var(--t2)}.val{font-size:12px;font-weight:600}.tick{font-size:11px;fill:var(--tm)}
+.src{font-size:11px;fill:var(--tm)}.ax{font-size:12px;fill:var(--t2)}.hd{font-size:12.5px;font-weight:600}
+.grid{stroke:var(--grid);stroke-width:1;fill:none}.axis{stroke:var(--axis);stroke-width:1;fill:none}
+.tgt{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:6 4;fill:none}
+.tgt2{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:2 3;fill:none}
+.gap{stroke:var(--bg);stroke-width:2}
+.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}
+.ghost{fill:var(--s1);fill-opacity:.2;stroke:var(--s1);stroke-width:1.5;stroke-dasharray:4 3}
+.hollow{fill:none;stroke:var(--t2);stroke-width:1.5;stroke-dasharray:3 3}
+</style>
+<rect class="bg" width="920" height="500"/>
+<text x="24.0" y="34.0" class="ttl" text-anchor="start" >Signals per month: via Slack relays vs direct</text>
+<text x="24.0" y="56.0" class="sub" text-anchor="start" >Relay = Slack alert and update posts (slack_alert, slack_update). Direct = every other intake source (12 sources).</text>
+<text x="24.0" y="73.0" class="sub" text-anchor="start" >71 % of 1588 signals came through Slack. Last month is partial (to 22th).</text>
+<line x1="70.0" y1="400.0" x2="880.0" y2="400.0" class="axis"/>
+<text x="62.0" y="404.0" class="tick" text-anchor="end" >0</text>
+<line x1="70.0" y1="342.4" x2="880.0" y2="342.4" class="grid"/>
+<text x="62.0" y="346.4" class="tick" text-anchor="end" >100</text>
+<line x1="70.0" y1="284.8" x2="880.0" y2="284.8" class="grid"/>
+<text x="62.0" y="288.8" class="tick" text-anchor="end" >200</text>
+<line x1="70.0" y1="227.2" x2="880.0" y2="227.2" class="grid"/>
+<text x="62.0" y="231.2" class="tick" text-anchor="end" >300</text>
+<line x1="70.0" y1="169.6" x2="880.0" y2="169.6" class="grid"/>
+<text x="62.0" y="173.6" class="tick" text-anchor="end" >400</text>
+<line x1="70.0" y1="112.0" x2="880.0" y2="112.0" class="grid"/>
+<text x="62.0" y="116.0" class="tick" text-anchor="end" >500</text>
+<text x="18.0" y="256.0" class="ax" text-anchor="middle" transform="rotate(-90 18 256.0)">Signals (count, by first timestamp)</text>
+<g><title>2026-04: 7 direct</title><path d="M100.9 400.0V398.0a2.0 2.0 0 0 1 2.0 -2.0H152.8a2.0 2.0 0 0 1 2.0 2.0V400.0Z" class="f2 gap"/></g>
+<text x="127.9" y="389.0" class="val" text-anchor="middle" >7</text>
+<text x="127.9" y="417.0" class="lbl" text-anchor="middle" >Apr 2026</text>
+<g><title>2026-05: 58 direct</title><path d="M216.6 400.0V366.6a0.0 0.0 0 0 1 0.0 -0.0H270.6a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-05: 107 via Slack relays</title><path d="M216.6 366.6V309.0a4.0 4.0 0 0 1 4.0 -4.0H266.6a4.0 4.0 0 0 1 4.0 4.0V366.6Z" class="f1 gap"/></g>
+<text x="243.6" y="298.0" class="val" text-anchor="middle" >165</text>
+<text x="243.6" y="417.0" class="lbl" text-anchor="middle" >May 2026</text>
+<g><title>2026-06: 6 direct</title><path d="M332.3 400.0V396.5a0.0 0.0 0 0 1 0.0 -0.0H386.3a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-06: 75 via Slack relays</title><path d="M332.3 396.5V357.3a4.0 4.0 0 0 1 4.0 -4.0H382.3a4.0 4.0 0 0 1 4.0 4.0V396.5Z" class="f1 gap"/></g>
+<text x="359.3" y="346.3" class="val" text-anchor="middle" >81</text>
+<text x="359.3" y="417.0" class="lbl" text-anchor="middle" >Jun 2026</text>
+<g><title>2026-07: 13 direct</title><path d="M448.0 400.0V392.5a0.0 0.0 0 0 1 0.0 -0.0H502.0a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-07: 236 via Slack relays</title><path d="M448.0 392.5V260.6a4.0 4.0 0 0 1 4.0 -4.0H498.0a4.0 4.0 0 0 1 4.0 4.0V392.5Z" class="f1 gap"/></g>
+<text x="475.0" y="249.6" class="val" text-anchor="middle" >249</text>
+<text x="475.0" y="417.0" class="lbl" text-anchor="middle" >Jul 2026</text>
+<g><title>2026-08: 51 direct</title><path d="M563.7 400.0V370.6a0.0 0.0 0 0 1 0.0 -0.0H617.7a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-08: 212 via Slack relays</title><path d="M563.7 370.6V252.5a4.0 4.0 0 0 1 4.0 -4.0H613.7a4.0 4.0 0 0 1 4.0 4.0V370.6Z" class="f1 gap"/></g>
+<text x="590.7" y="241.5" class="val" text-anchor="middle" >263</text>
+<text x="590.7" y="417.0" class="lbl" text-anchor="middle" >Aug 2026</text>
+<g><title>2026-09: 130 direct</title><path d="M679.4 400.0V325.1a0.0 0.0 0 0 1 0.0 -0.0H733.4a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-09: 304 via Slack relays</title><path d="M679.4 325.1V154.0a4.0 4.0 0 0 1 4.0 -4.0H729.4a4.0 4.0 0 0 1 4.0 4.0V325.1Z" class="f1 gap"/></g>
+<text x="706.4" y="143.0" class="val" text-anchor="middle" >434</text>
+<text x="706.4" y="417.0" class="lbl" text-anchor="middle" >Sep 2026</text>
+<g><title>2026-10: 202 direct</title><path d="M795.1 400.0V283.6a0.0 0.0 0 0 1 0.0 -0.0H849.1a0.0 0.0 0 0 1 0.0 0.0V400.0Z" class="f2 gap"/></g>
+<g><title>2026-10: 187 via Slack relays</title><path d="M795.1 283.6V179.9a4.0 4.0 0 0 1 4.0 -4.0H845.1a4.0 4.0 0 0 1 4.0 4.0V283.6Z" class="f1 gap"/></g>
+<text x="822.1" y="168.9" class="val" text-anchor="middle" >389</text>
+<text x="822.1" y="417.0" class="lbl" text-anchor="middle" >Oct 2026*</text>
+<text x="475.0" y="442.0" class="ax" text-anchor="middle" >Month of first signal timestamp (* partial month)</text>
+<rect x="70.0" y="82.0" width="12" height="12" rx="3" class="f1"/>
+<text x="88.0" y="92.0" class="lbl" text-anchor="start" >Via Slack relays</text>
+<rect x="222.0" y="82.0" width="12" height="12" rx="3" class="f2"/>
+<text x="240.0" y="92.0" class="lbl" text-anchor="start" >Direct</text>
+<text x="24.0" y="471.0" class="src" text-anchor="start" >Source: evidence/signals/signals.out.json (monthly_by_source); excluded as non-signals: human, warden_canary, warden_self.</text>
+<text x="24.0" y="486.0" class="src" text-anchor="start" >Slack-relay share per the ledger: slack_share.share_pct = 63.7 % of all events.</text>
+</svg>

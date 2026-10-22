@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 520" width="1120" height="520" role="img" aria-labelledby="baseline-kpis-vs-targets-autonomy-escala-t baseline-kpis-vs-targets-autonomy-escala-d">
+<title id="baseline-kpis-vs-targets-autonomy-escala-t">Baseline KPIs vs targets: autonomy, escalated share, reopen, regression, time to resolve</title>
+<desc id="baseline-kpis-vs-targets-autonomy-escala-d">Five panels, each with three bars for the last 14 days, last 30 days and all time, and the target as a dashed line. Autonomy: 14 d 64.3 %, 30 d 52.2 %, all 52.5 % (target SLO 99 %, stretch 99.9 %). Escalated share: 14 d 32.2 %, 30 d 28.8 %, all 20.5 % (target SLO &lt; 1 %). Reopen rate: 14 d 10.4 %, 30 d 15.3 %, all 17.5 % (target target ≤ 5 %). Regression rate: 14 d n/a, 30 d n/a, all 10.4 % (target target ≤ 5 %). Time to resolve, median: 14 d 0.72 h, 30 d 1.10 h, all 1.68 h (target target ≤ 0.5 h).</desc>
+<style>
+:root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1f23;--t1:#f4f4f5;--t2:#c4c4cc;--tm:#8e8e98;
+--grid:#34343a;--axis:#4c4c54;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
+.bg{fill:var(--bg)}.ttl{font-size:19px;font-weight:600}.sub{font-size:12.5px;fill:var(--t2)}
+.lbl{font-size:12px;fill:var(--t2)}.val{font-size:12px;font-weight:600}.tick{font-size:11px;fill:var(--tm)}
+.src{font-size:11px;fill:var(--tm)}.ax{font-size:12px;fill:var(--t2)}.hd{font-size:12.5px;font-weight:600}
+.grid{stroke:var(--grid);stroke-width:1;fill:none}.axis{stroke:var(--axis);stroke-width:1;fill:none}
+.tgt{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:6 4;fill:none}
+.tgt2{stroke:var(--t1);stroke-width:1.5;stroke-dasharray:2 3;fill:none}
+.gap{stroke:var(--bg);stroke-width:2}
+.f1{fill:var(--s1)}.f2{fill:var(--s2)}.f3{fill:var(--s3)}.f4{fill:var(--s4)}
+.ghost{fill:var(--s1);fill-opacity:.2;stroke:var(--s1);stroke-width:1.5;stroke-dasharray:4 3}
+.hollow{fill:none;stroke:var(--t2);stroke-width:1.5;stroke-dasharray:3 3}
+</style>
+<rect class="bg" width="1120" height="520"/>
+<text x="24.0" y="34.0" class="ttl" text-anchor="start" >Baseline vs target: five headline KPIs over 14 d, 30 d and all time</text>
+<text x="24.0" y="56.0" class="sub" text-anchor="start" >Items in window: 230 (14 d), 364 (30 d), 556 (all). Dashed line = target. Regression is only evaluable on all time.</text>
+<text x="24.0" y="73.0" class="sub" text-anchor="start" ></text>
+<text x="24.0" y="106.0" class="hd" text-anchor="start" >Autonomy</text>
+<text x="24.0" y="122.0" class="tick" text-anchor="start" >higher is better</text>
+<text x="24.0" y="138.0" class="tick" text-anchor="start" >target: SLO 99 %, stretch 99.9 %</text>
+<line x1="60.0" y1="380.0" x2="220.8" y2="380.0" class="axis"/>
+<text x="54.0" y="384.0" class="tick" text-anchor="end" >0</text>
+<line x1="60.0" y1="322.5" x2="220.8" y2="322.5" class="grid"/>
+<text x="54.0" y="326.5" class="tick" text-anchor="end" >25</text>
+<line x1="60.0" y1="265.0" x2="220.8" y2="265.0" class="grid"/>
+<text x="54.0" y="269.0" class="tick" text-anchor="end" >50</text>
+<line x1="60.0" y1="207.5" x2="220.8" y2="207.5" class="grid"/>
+<text x="54.0" y="211.5" class="tick" text-anchor="end" >75</text>
+<line x1="60.0" y1="150.0" x2="220.8" y2="150.0" class="grid"/>
+<text x="54.0" y="154.0" class="tick" text-anchor="end" >100</text>
+<g><title>Autonomy, 14 d: 64.3 %</title><path d="M71.8 380.0V236.0a4.0 4.0 0 0 1 4.0 -4.0H97.8a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="86.8" y="226.0" class="val" text-anchor="middle" >64.3</text>
+<text x="86.8" y="397.0" class="lbl" text-anchor="middle" >14 d</text>
+<g><title>Autonomy, 30 d: 52.2 %</title><path d="M125.4 380.0V263.9a4.0 4.0 0 0 1 4.0 -4.0H151.4a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="140.4" y="253.9" class="val" text-anchor="middle" >52.2</text>
+<text x="140.4" y="397.0" class="lbl" text-anchor="middle" >30 d</text>
+<g><title>Autonomy, all: 52.5 %</title><path d="M179.0 380.0V263.2a4.0 4.0 0 0 1 4.0 -4.0H205.0a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="194.0" y="253.2" class="val" text-anchor="middle" >52.5</text>
+<text x="194.0" y="397.0" class="lbl" text-anchor="middle" >all</text>
+<line x1="60.0" y1="152.3" x2="220.8" y2="152.3" class="tgt"/>
+<line x1="60.0" y1="150.2" x2="220.8" y2="150.2" class="tgt2"/>
+<text x="140.4" y="420.0" class="ax" text-anchor="middle" >unit: %</text>
+<text x="242.8" y="106.0" class="hd" text-anchor="start" >Escalated share</text>
+<text x="242.8" y="122.0" class="tick" text-anchor="start" >lower is better</text>
+<text x="242.8" y="138.0" class="tick" text-anchor="start" >target: SLO &lt; 1 %</text>
+<line x1="278.8" y1="380.0" x2="439.6" y2="380.0" class="axis"/>
+<text x="272.8" y="384.0" class="tick" text-anchor="end" >0</text>
+<line x1="278.8" y1="322.5" x2="439.6" y2="322.5" class="grid"/>
+<text x="272.8" y="326.5" class="tick" text-anchor="end" >10</text>
+<line x1="278.8" y1="265.0" x2="439.6" y2="265.0" class="grid"/>
+<text x="272.8" y="269.0" class="tick" text-anchor="end" >20</text>
+<line x1="278.8" y1="207.5" x2="439.6" y2="207.5" class="grid"/>
+<text x="272.8" y="211.5" class="tick" text-anchor="end" >30</text>
+<line x1="278.8" y1="150.0" x2="439.6" y2="150.0" class="grid"/>
+<text x="272.8" y="154.0" class="tick" text-anchor="end" >40</text>
+<g><title>Escalated share, 14 d: 32.2 %</title><path d="M290.6 380.0V199.0a4.0 4.0 0 0 1 4.0 -4.0H316.6a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="305.6" y="189.0" class="val" text-anchor="middle" >32.2</text>
+<text x="305.6" y="397.0" class="lbl" text-anchor="middle" >14 d</text>
+<g><title>Escalated share, 30 d: 28.8 %</title><path d="M344.2 380.0V218.1a4.0 4.0 0 0 1 4.0 -4.0H370.2a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="359.2" y="208.1" class="val" text-anchor="middle" >28.8</text>
+<text x="359.2" y="397.0" class="lbl" text-anchor="middle" >30 d</text>
+<g><title>Escalated share, all: 20.5 %</title><path d="M397.8 380.0V266.1a4.0 4.0 0 0 1 4.0 -4.0H423.8a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="412.8" y="256.1" class="val" text-anchor="middle" >20.5</text>
+<text x="412.8" y="397.0" class="lbl" text-anchor="middle" >all</text>
+<line x1="278.8" y1="374.2" x2="439.6" y2="374.2" class="tgt"/>
+<text x="359.2" y="420.0" class="ax" text-anchor="middle" >unit: %</text>
+<text x="461.6" y="106.0" class="hd" text-anchor="start" >Reopen rate</text>
+<text x="461.6" y="122.0" class="tick" text-anchor="start" >lower is better</text>
+<text x="461.6" y="138.0" class="tick" text-anchor="start" >target: target ≤ 5 %</text>
+<line x1="497.6" y1="380.0" x2="658.4" y2="380.0" class="axis"/>
+<text x="491.6" y="384.0" class="tick" text-anchor="end" >0</text>
+<line x1="497.6" y1="322.5" x2="658.4" y2="322.5" class="grid"/>
+<text x="491.6" y="326.5" class="tick" text-anchor="end" >5</text>
+<line x1="497.6" y1="265.0" x2="658.4" y2="265.0" class="grid"/>
+<text x="491.6" y="269.0" class="tick" text-anchor="end" >10</text>
+<line x1="497.6" y1="207.5" x2="658.4" y2="207.5" class="grid"/>
+<text x="491.6" y="211.5" class="tick" text-anchor="end" >15</text>
+<line x1="497.6" y1="150.0" x2="658.4" y2="150.0" class="grid"/>
+<text x="491.6" y="154.0" class="tick" text-anchor="end" >20</text>
+<g><title>Reopen rate, 14 d: 10.4 %</title><path d="M509.4 380.0V264.9a4.0 4.0 0 0 1 4.0 -4.0H535.4a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="524.4" y="254.9" class="val" text-anchor="middle" >10.4</text>
+<text x="524.4" y="397.0" class="lbl" text-anchor="middle" >14 d</text>
+<g><title>Reopen rate, 30 d: 15.3 %</title><path d="M563.0 380.0V208.2a4.0 4.0 0 0 1 4.0 -4.0H589.0a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="578.0" y="198.2" class="val" text-anchor="middle" >15.3</text>
+<text x="578.0" y="397.0" class="lbl" text-anchor="middle" >30 d</text>
+<g><title>Reopen rate, all: 17.5 %</title><path d="M616.6 380.0V182.4a4.0 4.0 0 0 1 4.0 -4.0H642.6a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="631.6" y="172.4" class="val" text-anchor="middle" >17.5</text>
+<text x="631.6" y="397.0" class="lbl" text-anchor="middle" >all</text>
+<line x1="497.6" y1="322.5" x2="658.4" y2="322.5" class="tgt"/>
+<text x="578.0" y="420.0" class="ax" text-anchor="middle" >unit: %</text>
+<text x="680.4" y="106.0" class="hd" text-anchor="start" >Regression rate</text>
+<text x="680.4" y="122.0" class="tick" text-anchor="start" >lower is better</text>
+<text x="680.4" y="138.0" class="tick" text-anchor="start" >target: target ≤ 5 %</text>
+<line x1="716.4" y1="380.0" x2="877.2" y2="380.0" class="axis"/>
+<text x="710.4" y="384.0" class="tick" text-anchor="end" >0</text>
+<line x1="716.4" y1="322.5" x2="877.2" y2="322.5" class="grid"/>
+<text x="710.4" y="326.5" class="tick" text-anchor="end" >5</text>
+<line x1="716.4" y1="265.0" x2="877.2" y2="265.0" class="grid"/>
+<text x="710.4" y="269.0" class="tick" text-anchor="end" >10</text>
+<line x1="716.4" y1="207.5" x2="877.2" y2="207.5" class="grid"/>
+<text x="710.4" y="211.5" class="tick" text-anchor="end" >15</text>
+<line x1="716.4" y1="150.0" x2="877.2" y2="150.0" class="grid"/>
+<text x="710.4" y="154.0" class="tick" text-anchor="end" >20</text>
+<text x="743.2" y="372.0" class="val" text-anchor="middle" >n/a</text>
+<text x="743.2" y="358.0" class="tick" text-anchor="middle" >0 fixes</text>
+<text x="743.2" y="397.0" class="lbl" text-anchor="middle" >14 d</text>
+<text x="796.8" y="372.0" class="val" text-anchor="middle" >n/a</text>
+<text x="796.8" y="358.0" class="tick" text-anchor="middle" >0 fixes</text>
+<text x="796.8" y="397.0" class="lbl" text-anchor="middle" >30 d</text>
+<g><title>Regression rate, all: 10.4 %</title><path d="M835.4 380.0V264.2a4.0 4.0 0 0 1 4.0 -4.0H861.4a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="850.4" y="254.2" class="val" text-anchor="middle" >10.4</text>
+<text x="850.4" y="397.0" class="lbl" text-anchor="middle" >all</text>
+<line x1="716.4" y1="322.5" x2="877.2" y2="322.5" class="tgt"/>
+<text x="796.8" y="420.0" class="ax" text-anchor="middle" >unit: %</text>
+<text x="899.2" y="106.0" class="hd" text-anchor="start" >Time to resolve, median</text>
+<text x="899.2" y="122.0" class="tick" text-anchor="start" >lower is better</text>
+<text x="899.2" y="138.0" class="tick" text-anchor="start" >target: target ≤ 0.5 h</text>
+<line x1="935.2" y1="380.0" x2="1096.0" y2="380.0" class="axis"/>
+<text x="929.2" y="384.0" class="tick" text-anchor="end" >0</text>
+<line x1="935.2" y1="322.5" x2="1096.0" y2="322.5" class="grid"/>
+<text x="929.2" y="326.5" class="tick" text-anchor="end" >0.5</text>
+<line x1="935.2" y1="265.0" x2="1096.0" y2="265.0" class="grid"/>
+<text x="929.2" y="269.0" class="tick" text-anchor="end" >1</text>
+<line x1="935.2" y1="207.5" x2="1096.0" y2="207.5" class="grid"/>
+<text x="929.2" y="211.5" class="tick" text-anchor="end" >1.5</text>
+<line x1="935.2" y1="150.0" x2="1096.0" y2="150.0" class="grid"/>
+<text x="929.2" y="154.0" class="tick" text-anchor="end" >2</text>
+<g><title>Time to resolve, median, 14 d: 0.72 h</title><path d="M947.0 380.0V301.2a4.0 4.0 0 0 1 4.0 -4.0H973.0a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="962.0" y="291.2" class="val" text-anchor="middle" >0.72</text>
+<text x="962.0" y="397.0" class="lbl" text-anchor="middle" >14 d</text>
+<g><title>Time to resolve, median, 30 d: 1.10 h</title><path d="M1000.6 380.0V257.5a4.0 4.0 0 0 1 4.0 -4.0H1026.6a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="1015.6" y="247.5" class="val" text-anchor="middle" >1.10</text>
+<text x="1015.6" y="397.0" class="lbl" text-anchor="middle" >30 d</text>
+<g><title>Time to resolve, median, all: 1.68 h</title><path d="M1054.2 380.0V190.8a4.0 4.0 0 0 1 4.0 -4.0H1080.2a4.0 4.0 0 0 1 4.0 4.0V380.0Z" class="f1"/></g>
+<text x="1069.2" y="180.8" class="val" text-anchor="middle" >1.68</text>
+<text x="1069.2" y="397.0" class="lbl" text-anchor="middle" >all</text>
+<line x1="935.2" y1="322.5" x2="1096.0" y2="322.5" class="tgt"/>
+<text x="1015.6" y="420.0" class="ax" text-anchor="middle" >unit: h</text>
+<text x="24.0" y="446.0" class="ax" text-anchor="start" >x-axis: window; y-axis: value in the panel&#x27;s unit. Autonomy shows both targets (99 % dashed, 99.9 % dotted),</text>
+<text x="24.0" y="463.0" class="ax" text-anchor="start" >about 2 px apart at this scale.</text>
+<text x="24.0" y="491.0" class="src" text-anchor="start" >Source: evidence/kpi/baseline.out.json (headline: autonomy_rate, escalated_rate, reopen_rate,</text>
+<text x="24.0" y="506.0" class="src" text-anchor="start" >regression_rate, time_to_resolve_median_h). Targets are design targets, not data.</text>
+</svg>
