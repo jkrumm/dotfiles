@@ -82,8 +82,9 @@ function subscribe(sock: string, dir: string, subs: Json[], onEvent: (e: Json) =
         },
         data(s, d) {
           buf = splitLines(buf + decoder.decode(d, { stream: true }), (l) => {
+            if (done) return
             let e: Json
-            try { e = JSON.parse(l) } catch { record(dir, { event: "recorder.unparsed", raw: l.slice(0, 2000) }); return }
+            try { e = JSON.parse(l); if (typeof e !== "object" || e === null) throw new Error("not an object") } catch { record(dir, { event: "recorder.unparsed", raw: l.slice(0, 2000) }); return }
             // A rejected subscription would leave this connection open and deaf: record it and drop the
             // connection so the reconnect + gap path runs.
             if (e.error) {

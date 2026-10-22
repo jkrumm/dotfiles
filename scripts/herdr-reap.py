@@ -11,7 +11,7 @@ Closes herdr tabs whose agents are finished, and nothing else:
            any tab in a repo whose docs/waves/PLAN.md has an `active` wave (mother/lead/wave tabs),
            the caller's own tab
 
-Also stops `claude --bg` sessions older than 24 h that are not working (`claude stop` keeps the
+Also stops `claude --bg` sessions older than 24 h whose state is blocked/idle/done (`claude stop` keeps the
 conversation). --dry-run prints the plan and writes nothing. Every live action is one line in
 ~/Library/Logs/herdr-reap.log.
 
@@ -218,6 +218,7 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
                     continue
                 j.line("message", tab=tab, pane=key, repo=repo, reason=f'"{detail}"')
                 messaged[key] = now
+                save_messaged(messaged)
             continue
 
         j.line("close", tab=tab, panes=",".join(p["pane_id"] for p in tpanes), repo=repo,
@@ -269,13 +270,15 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
     args = ap.parse_args()
     idle_h = float(os.environ.get("REAP_IDLE_H", "12"))
-    os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    lock = open(STATE + ".lock", "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("another herdr-reap run holds the lock; exiting")
-        return
+    lock = None
+    if not args.dry_run:  # a dry run writes nothing, so it neither needs nor blocks on the lock
+        os.makedirs(os.path.dirname(STATE), exist_ok=True)
+        lock = open(STATE + ".lock", "w")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print("another herdr-reap run holds the lock; exiting")
+            return
     j = Journal(args.dry_run)
     print(f"herdr-reap {'DRY RUN ' if args.dry_run else ''}idle>{idle_h:g}h")
     reap_tabs(idle_h, j)
