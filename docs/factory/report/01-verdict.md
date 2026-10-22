@@ -2,8 +2,8 @@
 
 **Rebuild warden as level-triggered reconcilers over one ledger, describe every repo in one
 manifest, take signals from their sources, and let verification — not the owner — gate every
-ship. Adopt no heavy runtime: beads, a workflow engine and Keep each lost a measured spike; their
-designs are copied instead.** The factory's real cost today is owner attention, not tokens: 577
+ship. Adopt no heavy runtime: beads and a workflow engine each lost a measured spike, and their
+designs are copied instead; Keep's model is scored in the backtest ⟨spike 3, pending⟩.** The factory's real cost today is owner attention, not tokens: 577
 owner-facing notifications and 50 "continue" nudges, against $2.60 of agent spend on the ten worst
 incidents.
 
