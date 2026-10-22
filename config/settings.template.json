@@ -63,6 +63,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/model-discipline.ts"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/iu-model-guard.ts"
           }
         ]
       }
@@ -93,6 +97,16 @@
             "type": "command",
             "command": "test -x ~/SourceRoot/dotfiles/scripts/claude-appearance.sh && ~/SourceRoot/dotfiles/scripts/claude-appearance.sh session || true",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/iu-model-guard.ts"
           }
         ]
       }

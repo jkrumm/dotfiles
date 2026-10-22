@@ -86,6 +86,10 @@ inline.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
+- **IU-billed runs are cheap-model only:** DeepSeek V4.1 Flash first (`cdf`),
+  Sonnet the Claude ceiling (`ca`, `claude_iu --model sonnet`); never Opus/Fable
+  on IU (`hooks/iu-model-guard.ts` blocks both); use the launchers, never
+  hand-rolled Keychain creds.
 - Don't switch the orchestrator's model mid-session (cache invalidation).
   Worktree isolation only when asked, up front.
 - Grep before reading; never re-read a file; never read 10 files to find one thing

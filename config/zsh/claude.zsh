@@ -107,8 +107,9 @@ cs() {
 # Anthropic transport (real Claude models, API-billed per-token) instead of the
 # Max subscription. Default model: claude-sonnet-5 (latest Sonnet tier). To use a
 # different model permanently, change the --model default below; a one-off
-# `ca --model claude-opus-5` also works for any model the IU Anthropic endpoint
-# serves (run /iu-endpoint for the live catalog).
+# `ca <id>` works for any model the IU Anthropic endpoint serves (run
+# /iu-endpoint for the live catalog) — except Opus/Fable, which
+# hooks/iu-model-guard.ts blocks on every metered session (Max-only models).
 #
 # Full Anthropic protocol fidelity. Prompt caching works (first turn builds
 # the cache, subsequent turns read at ~10% cost), tool use is native,

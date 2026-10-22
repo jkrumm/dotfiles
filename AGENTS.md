@@ -41,7 +41,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`. Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md`, activated by `outputStyle` in settings.json |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
-| `hooks/{session-env,protect-branches,docker-makefile,machine-role,model-discipline}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
+| `hooks/{session-env,protect-branches,docker-makefile,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · Claude.ai usage-% fetcher (uv script) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
