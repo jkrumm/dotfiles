@@ -15,7 +15,7 @@ effort. Started 2026-10-22 07:40 UTC.
 | 4 — spikes → ADRs | done: spikes 1–6, ADR-001…015 | `spikes/`, `adr/` |
 | 5 — Argo | pending | |
 | 6 — proof | pending | |
-| 7 — panel ×2 | prompts ready (11 roles incl. the owner-intent advocate; `~/.local/share/factory/panel/make_prompts.py`); runs on IU opus via `~/.local/share/factory/tools/iu-run.sh` after spike 3 lands | `panel/` |
+| 7 — panel ×2 | pass 1 running on IU opus (11 roles incl. the owner-intent advocate), launched 10:16Z; raw output `~/.local/share/factory/panel/pass1/*.json` | `panel/` |
 | 8 — migration | pending | `waves.md` |
 | report | pending | `report.html` |
 
@@ -86,4 +86,5 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
 - 09:59Z Render jobs launched on IU (sonnet, `~/.local/share/factory/tools/iu-run.sh`): charts, diagrams (updated for the rewrite and write verbs), HTML builder (`report/build.py`). Report sections added: 00 reading order, 01b what changes for you, 04b drawings mapped, 05 decision map; `design/argo.md` draft 2 (write verbs, situation-adaptive Home, capability-composed project pages, Traffic page restored, UX patterns from `research/2026-10-22-cockpit-ux-patterns.md`).
 - 10:01Z Remaining before Phase 7: spike 3 (backtest, Max agent, running), the three IU render jobs (running). Panel pass 1 launches on IU opus as soon as ADR-003 is written from spike 3. Owner review door (addendum 9): plannotator Inbox (spike 5's scratch binary, own data dir) behind `rv-pn`, Caddy block `plannotator.test` + `make caddy-tailnet`, set up once `report.html` builds; the draft is submitted, the final supersedes it.
 - 10:15Z Spike 3 done (`evidence/golden/backtest.*`, `spikes/03-correlation/REPORT.md`): held-out, scored once — grouping passes (B³ P 0.937, R 0.846, F1 0.889 vs warden 0.744), owner touch 0.62 % (warden 14.09 %), KE false match 0.007; fail: escalation recall/precision (1 genuine decision held out; keyword policy overfit dev) and KE match 0.479; Keep-style F1 0.737 = singletons. Disclosure: positive ids were listed in both halves before rules were written. ADR-003 written (deterministic grouping, typed decision class + capability limits for spend/data loss/other people, cross-source known errors, fresh-sample re-test after W3). `kpi/owner_pages`: ≈ 62 owner pages/week (28 d); genuine share of escalations 3.8 % (4/105). All placeholders filled.
+- 10:16Z Panel pass 1 launched on IU opus (11 parallel `iu-run.sh` jobs). Next: consolidate objections → resolution log (`panel/pass1-resolutions.md`) → revise design → pass 2 → `/review` → report build → owner review via `rv`.
 
