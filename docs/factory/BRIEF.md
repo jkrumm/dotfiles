@@ -414,3 +414,32 @@ Each item below overrides the matching default above; log each in `STATUS.md` as
       migration" becomes "rewrite and cutover".
     - **Warden W8.** Phase 0's W8 loses its rationale, which assumed the old warden keeps
       running. Close it at its current step and start no further old-warden work.
+11. **CLI-first, MCP only where a non-shell client needs it.** The owner said this mid-run:
+    move away from MCP. research-gateway may keep an MCP endpoint for Claude Desktop and
+    similar clients; everything else becomes a CLI plus skills. This overrides ADR-004's mix
+    per gateway. Revise ADR-004 with spike 4's own numbers: the CLI condition's one failure
+    was the long-job polling spiral, and one policy sentence fixed it (2 calls, 38.9k tokens).
+    - **One agent-CLI contract** for every gateway and factory tool:
+      - `--format json|jsonl|tsv|plain`, `--fields` and `--limit`;
+      - a list envelope carrying count, truncation and cursor;
+      - typed error kinds and an exit-code table;
+      - `schema [cmd]`, which emits JSON Schema;
+      - for long jobs, `--wait` under the shell cap, otherwise a job id plus the exact resume
+        command. Interactive sessions use Bash background with a notification instead.
+    - **Commands defined once, in code.** Help, docs, each skill's `references/cli.md` and the
+      AGENTS.md routing block are generated from that one definition, with a drift check in
+      CI. Flags are never typed by hand.
+    - **Stack.** Python tools use cyclopts plus pydantic, the owner's choice in
+      prometheus-scripts. For the Bun/TS gateways, research an equivalent with an
+      introspectable command tree, or generate the commands from the gateways' existing tool
+      schemas. One conformance suite covers both stacks.
+    - **Prior art:** the 2026-10-22 tooling wave plan in the prometheus-scripts repo
+      (§Settled decisions; the orchestrator's steer gives the path). It is IuRoot: read it and
+      restate the generic contract in your own words. Never copy its content into dotfiles.
+    - **W11 becomes:**
+      - CLIs for agw, warden, rv and the email, audio and image gateways;
+      - `/check`, `/review`, `/otel`, `/prose`, dispatch and the other skills move onto those
+        CLIs;
+      - agw's MCP server and the deferred-tool path are retired;
+      - MCP registration shrinks to research-gateway, plus chrome-devtools until a browser
+        CLI replaces it.
