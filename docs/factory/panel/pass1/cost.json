@@ -1,0 +1,70 @@
+{
+ "role": "cost",
+ "verdict": "ADR-008's direction is right: routine work goes to IU and judgment work to Max. But the design has no steady-state cost forecast, and its Max baseline already runs at about 120 % of the nominal weekly window. The quota guard only gates new spawns, the owner reserve is half of measured owner use, and the IU cap does not say what it meters, so the 'never starves the owner' claim is unproven.",
+ "objections": [
+  {
+   "id": "cos-1",
+   "severity": "blocker",
+   "claim": "Nobody forecast what the fully running factory costs per week in Max percent and IU dollars, and the baseline it would build on is already over capacity. Max list spend over the last 30 days was $16,552, which at $32.25 per 1 % is about 120 % of one weekly window per calendar week. That only fit because 2 of the 8 observed resets were unscheduled (09-20 and 10-17) and because Max was effectively down from Sep 16 to 20. The design then adds load on Max: 6 always-on fleet mothers that rotate daily, one lead per active plan, attempt ≥ 3 escalations, and the rewrite waves themselves.",
+   "evidence": "evidence/kpi/cost.out.md:141 ($16,552.13 Max list-eq in 30 d); evidence/kpi/engine_policy.out.md:5 ($32.25 per 1 %); evidence/kpi/quota.out.md:50,55 (unscheduled resets), :68-69 (10-14 cycle hit 98 % in 3 days, rescued by the 10-17 reset), :76 (flat span); adr/ADR-007-agent-topology.md:22-30 (mothers, leads, daily rotation); cost.out.md:183-187 (wave 35 %, interactive 32 %, fleet 24 %, fan 15 %, agw review 14 % of a window per week); report/05-decisions.md:14 (mother cost measured only after W4)",
+   "test": "Add evidence/kpi/forecast.py. It takes per-class weekly tokens from the 30-day sub_tool breakdown, assigns each class to its ADR-008 engine, adds the mother and lead load (per-agent tokens per day from the fleet sub_tool), and replays the last 45 days with the unscheduled resets removed. Output: weekly Max % (p50/p90), hours at 100 %, and IU $/week.",
+   "proposal": "Put a capacity table in report/02-baseline and ADR-008 with Max %/week and IU $/week per class, for today and for the full design. Make the W4 acceptance criteria include a per-mother token budget, for example ≤ X % of the window per week, enforced by the spawner instead of only reported after the fact."
+  },
+  {
+   "id": "cos-2",
+   "severity": "major",
+   "claim": "The 15 % owner reserve covers about half of what the owner actually uses. Interactive Claude Code on Max averaged $4,364 per 30 days, about 31.6 % of a weekly window per week. With non-urgent work flipping at 80 % and the reserve at 15 %, the owner hits the limit in any week where their share is above 15 %, and the 30-day average is twice that.",
+   "evidence": "evidence/kpi/cost.out.md:184 (interactive max $4,363.64 in 30 d; ÷30×7÷32.25 = 31.6 %); adr/ADR-008-engine-policy.md:39-42; report/11-faq.md:21-23 ('15 % stays reserved for you')",
+   "test": "Compute the per-cycle owner-interactive share of the window and its p90 from usage.db (sub_tool=interactive, billing=max) per reset cycle. Then replay: with the factory capped at 85 %, how many hours per cycle would the owner have been blocked?",
+   "proposal": "Derive the reserve from data, set to the p90 owner-interactive share per cycle (about 30–35 %, not 15 %). Replace the fixed 80 % flip with a forecast check: projected factory use plus projected owner use must stay below 100 % at the reset. Report 'owner sessions blocked' per cycle as the headline KPI."
+  },
+  {
+   "id": "cos-3",
+   "severity": "major",
+   "claim": "The guard only sees new spawns through rd. Most Max burn never passes through it. Mothers and leads are long-lived and only rotate daily, and wave chains and fan tabs that are already running keep going after the guard trips. Gateway calls such as agw review sessions on Max (14 % of a window per week) and narrative are not classified in ADR-008 at all. So at 90 % the guard stops only the cheapest new work.",
+   "evidence": "adr/ADR-008-engine-policy.md:33-43 (table covers spawned work classes only; the guard acts on 'new Max spawns'); evidence/kpi/cost.out.md:187 (agent-gateway:review max $1,942.88 in 30 d), :190 (narrative on max); adr/ADR-007-agent-topology.md:26-27,44-45 (mothers rotate daily, rotation at the context mark)",
+   "test": "Gameday 8 (design/proof.md:37) currently feeds a 95 % reading and checks only that new spawns flip. Extend it: with 3 mothers, 1 wave chain and an agw review in flight, measure Max % consumed in the next 6 h after the trip. Pass means ≤ 2 points.",
+   "proposal": "Make the guard level-triggered over all Max consumers. At the trip, running non-urgent Max agents checkpoint to their hook and park (Witness owns this), the next rotation of a mother or lead restarts it on IU, and every gateway tool gets an engine-by-class row that reads the same guard. Write the full consumer list (spawns, rotations, gateway tools) into ADR-008."
+  },
+  {
+   "id": "cos-4",
+   "severity": "major",
+   "claim": "Witness auto-resume adds Max demand and creates a burst at the reset. Today the owner's 50 manual 'continue' nudges act as a throttle on demand, and Witness removes it. Resuming every quota-parked agent on a timer at Wed 16:00 starts them all at once. The only check is 'resume ≤ 5 min after reset'. The 5-hour window reached 70 % under human-paced resumes, and the forecast trip runs on integer readings every 300 s, so a herd can drain a large share of the fresh window before the guard sees it. Unscheduled resets (2 of 8) are not on the Wednesday timer at all.",
+   "evidence": "adr/ADR-007-agent-topology.md:39-42; design/argo.md:34 (50 nudges, 24 quota-related); design/proof.md:37 (pass criterion only resume latency); evidence/kpi/quota.out.md:23,37 (5 h max 70 %), :47-56 (unscheduled resets)",
+   "test": "Replay the herdr event record for the 10-21 cycle: take every agent parked on a quota limit, resume them all at 16:00, and model their per-agent token rate from usage.db. Report peak 5 h % and 7 d % at 24 h. Then run the same replay with staggered admission.",
+   "proposal": "Resume through an admission queue, not a timer. Order the queue by priority (incident > owner-started > fleet > improve) and admit agents at a token rate set by the forecast. Trigger on the reading going level (any drop of ≥ 20 points), not on Wednesday 16:00. Give each Attempt a token budget, and make an exceeded budget a runaway-breaker input next to the attempt count."
+  },
+  {
+   "id": "cos-5",
+   "severity": "major",
+   "claim": "The IU budget in D1 is not well defined. It calls about $34/day 'the factory's IU spend', but most of that is not the factory: of the agw direct IU calls that could be matched to a job, warden got about 9 % ($18.40 of $200.56 matched). The rest was session and wave reviews. Warden's own IU cash is about $3.90/day. The $34 figure also comes from the 10-14 to 10-19 peak, while 10-20 and 10-21 ran $8–10/day. So a $30/day cap on 'non-urgent factory work' is about 8× the factory's own spend, yet D1 calls it today's level. ADR-008 meanwhile uses $52/week for the same workload.",
+   "evidence": "report/10-open-decisions.md:8-13; evidence/kpi/cost.out.md:9 ($54.58 IU in 14 d for warden items), :118 (windowed agw IU: $18.40 warden vs $182.16 other callers), :167-174 (daily IU $8–50); adr/ADR-008-engine-policy.md:19",
+   "test": "Recompute IU $/day for the last 14 days split by origin (warden item, fleet or wave, owner session, research) from usage.db plus the OpenCode v2 store, and project W7 and W12 additions per class from forecast.py (cos-1).",
+   "proposal": "Restate D1 with the metered scope named: factory-originated (spawner-tagged origin), non-urgent, IU cash. Give a measured baseline and a projected range with W12 running, and pick the default cap from that projection. Meter it in the spawner and gateways with the same Attempt tag that cost attribution uses, so the cap and the KPI count the same dollars."
+  },
+  {
+   "id": "cos-6",
+   "severity": "major",
+   "claim": "'Cost per resolved item' is not usable as a control input or a confirmation KPI. The 14-day figure ($0.36 IU + $1.08 Max-eq) mixes two regimes: Max review was the bulk until 10-15, and no warden job since then has a Max row (W43: $0.12 and $0). It also excludes the work that will dominate under the new design: herdr tabs, mother and lead time, and wave or session reviews that resolve items. On top of that, ADR-012 and proof.md set no target for 8 weeks, so ADR-008's confirmation 'cost per resolved item by engine' has no bar to meet.",
+   "evidence": "evidence/kpi/cost.out.md:9,21-27 (review = $1.18 of the $1.22 Max-eq per resolved over 30 d), :64 ('No warden job created after 2026-10-15 has a Max row'), :116, :137; design/proof.md:79; adr/ADR-008-engine-policy.md:52-53",
+   "test": "Recompute from 10-15 onward only, by class and engine, with attribution through warden.item.id on herdr panes (ADR-006, spike 6), and check that ≥ 95 % of factory spend is attributed to an item.",
+   "proposal": "Define the KPI per action class and engine, attributed through the Attempt record, with the 10-15+ regime as the baseline. Set an interim ceiling now, for example 3× the baseline p90 per class. Feed it to the runaway breaker as a per-class rate, and have the 8-week revisit tighten the ceiling rather than create the first one."
+  },
+  {
+   "id": "cos-7",
+   "severity": "minor",
+   "claim": "The guard is one-sided, so it pays IU cash while prepaid Max capacity expires. Three of 7 complete cycles peaked at 55–79 %, so 21–45 % of the window (about $680–1,450 at list price) lapsed at the reset while routine work kept running on IU. Max is sunk cost and IU is cash, yet the policy never moves IU-class work onto spare Max. The KPI '≥ 90 % days ≤ 2/month' also counts full use of capacity already paid for as a failure.",
+   "evidence": "evidence/kpi/quota.out.md:72 (peaks [96, 55, 100, 79, 79, 98, 98]); evidence/kpi/cost.out.md:119-ish note in quota.out.md:119 (Max = sunk, IU = cash); adr/ADR-008-engine-policy.md:52; report/01-verdict.md:35",
+   "test": "Count, per complete cycle, the IU $ spent on non-urgent work during the last 48 h before a reset when the projected peak was below 70 %.",
+   "proposal": "Add the inverse rule: when the forecast at the reset is below (100 % − owner reserve − margin), non-urgent IU-class work spawns on Max. Replace the '≥ 90 % days' KPI with 'owner sessions blocked per cycle' (target 0) plus 'Max lapsed % per cycle'."
+  },
+  {
+   "id": "cos-8",
+   "severity": "minor",
+   "claim": "The 5-hour trip at 70 % equals the highest 5-hour reading ever observed (70 % in the heartbeat, 30 % in fetch_usage), so it has never fired on real data. The 7-day $/1 % calibration varies by ±15 % across cycles (26.9–35.3), and the 26.9 cycle covers the 11-day span that includes the Max outage. The '+24 % → p90 120 %' claim adds a point estimate to a percentile and is more precise than the data supports.",
+   "evidence": "evidence/kpi/quota.out.md:23,37; evidence/kpi/engine_policy.out.json (cycles [26.86, 27.18, 30.36, 32.26, 32.25, 35.29, 34.47]); evidence/kpi/quota.out.md:63,76; evidence/kpi/engine_policy.py:54",
+   "test": "Exclude the cycle containing the flat span and report the move's effect as a range, using the min and max $/1 %. Backtest the 5-hour threshold for how often it would have fired at 50/60/70 %.",
+   "proposal": "State the engine-move impact as a range (about +22 to +29 %). Set the 5-hour trip from a backtest, or drop it in favour of the burn-rate forecast. Recompute $/1 % weekly as a monitored calibration, not a constant."
+  }
+ ]
+}

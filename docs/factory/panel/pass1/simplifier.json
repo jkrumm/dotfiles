@@ -1,0 +1,70 @@
+{
+ "role": "simplifier",
+ "verdict": "Most of the deletion happens at the edges: Slack intake, four snapshot pushes, the action queue, agw dispatch and MCP, the overview pane and the narratives cron all go. The core grows from about 9 factory-layer processes, 4 CLIs and 11 stores to about 25 named loops and adapters, 7 contract CLIs plus 2 libraries, a runner and a suite, and about 14 stores. The only budget the design checks is the noun count, which it breaks itself through hidden tables, so the owner cannot draw the system from memory.",
+ "objections": [
+  {
+   "id": "sim-1",
+   "severity": "major",
+   "claim": "The concept budget counts nouns only. It sets no limit on loops, processes, CLIs or stores, and that is where the design grows. Before: warden loop, agw (dispatch, tool jobs, MCP), Argo's factory pages and pushes, Hermes crons, decide lane, Slack poller, overview pane, reaper, herdr recorder, usage-tracker (about 9 processes); CLIs rd, warden run, agw, ask-human. After: 8 ingest adapters, 8 reconciler observers, correlator, planner and plan projector, spawner, Witness, verifier, merge train, deployer, decide loop, breaker, quota guard, at least 5 projectors, factory read API, Argo VPS, dead-man receiver, rv service, Hermes, reduced agw, 4 gateways, holdout verifier, Renovate, CrowdSec, interim plannotator (25 or more). CLIs: warden, factory, rv, agw, email, audio, image, each on 2 contract libraries with an in-house TS runner and a conformance suite. Stores: ledger.db with 16 or more tables, 53 project.yaml, dotfiles-private/projects, per-repo threads.jsonl, holdouts repo, factory-kpi repo, ClickHouse, usage.db, state.db, TickTick, brain, herdr JSONL, the archives. The loops.md §0 picture shows 7 boxes; the text names about 25.",
+   "evidence": "proof.md:103 (concept budget = glossary ≤ 12 nouns); loops.md:8-27 vs loops.md:36-45, ADR-013 source table, waves.md:33-41; ADR-004 'Python tools (warden, factory, rv)'; waves.md:64, :72, :112 (three separate Python CLIs); ADR-011:17",
+   "test": "Ask the owner to draw the runtime cold, in 5 minutes: processes, which machine each runs on, the stores each writes. Score it against an inventory generated from the manifests and launchd. The design passes if they get ≥ 80 % of it.",
+   "proposal": "Extend the concept-budget check to a generated inventory with caps: processes per host, CLIs, stores. Fold `factory` and `rv` into one CLI as `<cli> manifest …` and `<cli> artifact …` subcommands. Run every loop as a phase of one resident warden tick, not as a separate service, and redraw loops.md §0 so it matches the text one-to-one."
+  },
+  {
+   "id": "sim-2",
+   "severity": "major",
+   "claim": "There are more than twelve nouns, hidden in tables and verbs. operations, timers, leases and task_deps are ledger tables. ADR-015's 'Agent message', artifact comments and threads, the signal candidate and the holdout scenario are entities with their own lifecycle. Calling pause 'a Decision' to save the budget breaks model invariant 5: an owner-decided Decision may exist only for the four business classes, and pausing automation is none of them.",
+   "evidence": "ADR-011:17 (events, operations, timers, leases); ADR-015:22 ('Writes: Agent message'), :23, :29 ('no new noun: pause is a Decision'); model.md:82-83 (invariant 5); proof.md:103 ('a ledger table maps to no noun' fails CI)",
+   "test": "Run the concept-budget check as specified against W1's schema. It fails today on operations, timers and leases, and on any messages table.",
+   "proposal": "Name the infrastructure tables (events, operations, timers, leases) as plumbing that the check exempts. Make pause desired state on Project (`automation: paused until`), set through the same verb, rather than a Decision. Store agent messages as events on the Agent rather than as a table, so invariant 5 holds as written."
+  },
+  {
+   "id": "sim-3",
+   "severity": "major",
+   "claim": "Agent and Attempt are two nouns, two statecharts and two writers for one thing in the common case. A worker is one Attempt, both records are written by the spawner and both statuses are set by the herdr observer. Their states duplicate each other: stalled/stuck, dead/abandoned, spawning/spawning.",
+   "evidence": "model.md:17 and :22 (same writer pair); model.md:49-51 vs :66-68; ADR-007:31 ('Worker (one per Attempt)'); loops.md:117-118",
+   "test": "List every query and transition that needs Attempt without Agent, or Agent without Attempt, apart from mother, lead, Hermes and session agents. If the only difference is an optional task_id, the merge is safe.",
+   "proposal": "Drop Attempt. An Agent carries an optional task_id and the hook (worktree, branch, base sha). A Task's attempts are its Agents with role = worker. This frees a noun and deletes one statechart."
+  },
+  {
+   "id": "sim-4",
+   "severity": "major",
+   "claim": "The decision-model step survives in the plan, but the ADR it cites rejects it. ADR-003 says no single-shot model groups or triages and puts judgment in the investigating agent; it names no 'ambiguous residue'. waves.md and the drawings section still build a decision-model step 'only on the ambiguous residue ADR-003 names'. That is a component with no requirement, and its own numbers (60 % agreement with truth) argue against it.",
+   "evidence": "ADR-003:41-44; waves.md:36, :85, :156; report/04b-drawings.md:24; evidence/kpi/decision_shadow (60.1 % vs truth, cited in STATUS.md:84)",
+   "test": "Ask W3's author to define 'ambiguous residue' from ADR-003's text. They cannot, because it is not there. Then replay the held-out half with and without the step; it should not change F1 or owner touch.",
+   "proposal": "Delete the step from W3, the stop table and the drawings mapping. The addendum item 5 answer becomes: model judgment lives only in the investigate worker (recipe choice, decision_class), backed by the decision_shadow numbers."
+  },
+  {
+   "id": "sim-5",
+   "severity": "major",
+   "claim": "The Artifact noun has three systems of record. The model names 'the review store'; ADR-005 puts Artifact entities in the ledger; the directory contract has rv write `threads.jsonl` into every repo's docs/artifacts, committed in SourceRoot and symlinked from dotfiles-private in IuRoot. So comments live in git, in the ledger and in the rv service, and an unstated process commits into repos.",
+   "evidence": "model.md:21 (SoR 'review store'); ADR-005:29 ('Artifact entities in the ledger; versions stored per repo'), :38 ('one system of record'); model.md:178 ('threads.jsonl — written by the rv service', committed)",
+   "test": "Write the drop-and-rebuild test for artifacts (invariant 8). Which store is rebuilt from which? Who runs `git commit` when the owner comments from the phone, and on which branch?",
+   "proposal": "Keep artifact versions in git (`path@sha`). Store threads and comments as ledger events only, and render them into the repo on demand, never committed. rv becomes a module of the ledger CLI and API, not a separate service."
+  },
+  {
+   "id": "sim-6",
+   "severity": "major",
+   "claim": "W8 builds contract CLIs for agw tools the design retires elsewhere, and leaves agw's surviving role unclear. `decide` belongs to the decide lane that stops at W1. `narrative` belongs to the Hermes narratives cron that retires into W13. ADR-007 still has agw keeping triage and investigate, while waves.md moves investigate into a herdr worker and drops LLM triage for the deterministic correlator.",
+   "evidence": "waves.md:119 (CLIs for 'narrative … decide'); waves.md:36, :39, :132; ADR-007:52 (agw keeps triage, review, check, prose, investigate); waves.md:34 (investigate becomes a read-only worker profile); ADR-003:41-44",
+   "test": "For each agw tool, name its caller after W11. Tools with no caller fail.",
+   "proposal": "Delete agw's decide, triage, narrative and investigate tools before W8. W8 then wraps only review, check, prose, read_image and read_drawing. State agw's post-rewrite role in one line in ADR-007: a bounded tool server, no loop."
+  },
+  {
+   "id": "sim-7",
+   "severity": "major",
+   "claim": "The mother overlaps the code that already creates Tasks. The correlator and planner file Tasks from Conditions, the plan projector turns checklists into Tasks, the ready queue plus `rd` spawn. The mother does the same thing — 'turns new Conditions, requests and plan items into Tasks' — as a resident, daily-rotated LLM context in six repos. The lead's 'spawns workers' likewise duplicates the ready queue plus spawner.",
+   "evidence": "ADR-007:28-31; loops.md:15 (PLAN → Task), :110-112; ADR-001:139-141 (projector turns checklists into Tasks); report/04b-drawings.md:17 ('correlator … files Tasks'); ADR-007 confidence 70 %, reversal measured only after W4 (report/05-decisions.md:14)",
+   "test": "For one fleet repo, replay a week of Conditions and plan items through the planner and projector with no mother. Count the Tasks a mother would have added or reprioritised. If there are near zero, the mother is cost without function.",
+   "proposal": "Keep the owner's mother → lead → worker shape, but make the mother an on-demand judgment call: spawned by the planner when a Condition has no recipe or a plan needs re-sequencing, then reaped. Do not run it as a resident context with daily rotation. Drop 'spawns workers' from the lead; the spawner does that off the ready queue."
+  },
+  {
+   "id": "sim-8",
+   "severity": "minor",
+   "claim": "Two additions have no requirement behind them. (a) Hermes keeps scheduled morning and evening briefings with audio beside Home's 'Since you left', the project changelog and the brain changelog: four digest surfaces, while the evidence says the briefing already fails, since he asked about its classes 37 times anyway. (b) W2 creates directories in every repo with placeholder READMEs, which contradicts the model's own drift check (`docs/waves/` only when the project has plans) and multiplies IuRoot symlinks.",
+   "evidence": "waves.md:132; design/argo.md:14-15, :93-94; ADR-011:28; waves.md:73 ('empty dirs get a one-line README'); model.md:186",
+   "test": "(a) After W6, count briefing opens versus Home visits over 14 days. (b) Count placeholder READMEs that W2 would create in session-class repos.",
+   "proposal": "(a) Keep one digest projection, shown on Home; Hermes reads it on request and runs no schedule. (b) The directory contract fixes where things go when they exist; it creates nothing empty, and the drift check enforces the location only."
+  }
+ ]
+}

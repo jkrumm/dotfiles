@@ -1,0 +1,70 @@
+{
+ "role": "data",
+ "verdict": "The noun table is sound, but the design breaks its own one-store, one-writer rule in three places: plan checklists, artifact threads, and Changes and Deployments that do not go through the train. Several headline KPIs and read models depend on stores outside the event log, and the manifest has neither the fields nor the versioning the reconcilers and the rebuild guarantee need.",
+ "objections": [
+  {
+   "id": "dat-1",
+   "severity": "blocker",
+   "claim": "Task state has two stores and two writers. Plan files stay the place where agents tick wave checkboxes and status markers, and a plan projector also turns those checklists into ledger Tasks with their own lifecycle. Nothing says which side wins, or whether a Task reaching done writes back to PLAN.md.",
+   "evidence": "ADR-001-task-system-of-record.md:34-36 ('Plan files remain plans (Artifacts); a projector turns their checklists into Tasks'); waves.md:58-66 (the wave format itself carries '- [ ]' items, '<!-- status: pending -->' and 'Left behind:', which agents edit when closing a wave); waves.md W4 'plan projector'; design/argo.md:35 and :50 (plan_progress is read from ledger tasks); design/model.md:16 lists the writers as 'planner (create), spawner (claim)', which is already two, and ADR-015:21/26 add owner submit and Witness retry.",
+   "test": "Close a wave the current way (an agent ticks '- [x]' and sets status: done in PLAN.md) while its ledger Task is still in_progress. Then drop plan_progress and rebuild it from events. Does it match what PLAN.md says, and which artifact does the owner see as true?",
+   "proposal": "Make the ledger the only home of task state. After the one-time projection, a PLAN.md checklist is either generated from the ledger (a marker block, same drift check as AGENTS.md) or carries only task ids with no checkbox state. Ban hand-ticking in the doc-contradiction lint. Fix the Writer column so it lists every command source per noun, with one write module each, so the one-writer CI check tests what the table claims."
+  },
+  {
+   "id": "dat-2",
+   "severity": "blocker",
+   "claim": "Artifacts and their comment threads sit in three stores with different writers: ledger Artifact rows plus artifact.commented events, threads.jsonl written by the rv service into each repo's committed docs/artifacts/, and plannotator's JSONL in the interim. The rv service committing into repos is also a second writer of git, outside the Change noun's single writer (the ship loop). For IuRoot repos those paths are symlinks into dotfiles-private, so comments land in another repo's working tree with no committer named.",
+   "evidence": "design/model.md:21 (SoR 'review store'; content in git as path@sha); design/model.md:178 ('docs/artifacts/<slug>/ … threads.jsonl — written by the rv service', committed; IuRoot 'linked, excluded'); ADR-005-artifact-review.md:29 ('Artifact entities in the ledger; versions stored per repo'); waves.md W7 line 112; ADR-015:25 (comment audit event artifact.commented); design/model.md:18 (Change writer = ship loop).",
+   "test": "Post a comment from Argo on an artifact in a PR-required repo and in an IuRoot repo. Count where the comment now exists (ledger row, event, threads.jsonl, git commit) and name the process that committed it. Then delete threads.jsonl and check whether the thread can be rebuilt from events alone.",
+   "proposal": "The ledger (Artifact plus comment events with the anchor triple) is the only SoR for threads. Artifact version content stays in git as path@sha, committed through the normal Change path by the submitting agent. threads.jsonl is either a generated export (marked, drift-checked, never read back) or dropped. The rv service never commits."
+  },
+  {
+   "id": "dat-3",
+   "severity": "major",
+   "claim": "The ledger's Change mirror is written only by the ship loop, so merges that skip the train never become chg_ records: the owner's direct pushes in the manual lane (SourceRoot is direct-to-master by default), Renovate's own automerges, and IuRoot work. Regression detection ('fixing change deployed'), deployment suspects, change-failure rate, revert rate and DORA lead time all need the complete set.",
+   "evidence": "design/model.md:18 (SoR git/GitHub, 'the ledger mirrors refs', writer 'ship loop (merge train)'); design/loops.md:136 (Renovate does patch/minor automerge behind CI); design/loops.md:76-77 and ADR-003:51-53 (regression keyed on the fixing Change); waves.md W3 adapters cover only 'GitHub Actions failures and issues', not pushes or merges; proof.md:73-74 (change failure rate, revert success); invariant 7 at design/model.md:85 cannot hold for Renovate merges.",
+   "test": "Over the 90-day git history of weatherorb and dotfiles, count merges to the default branch that would have passed through the ship loop versus all commits on the default branch. Recompute change-failure rate and the regression link for the five known regressions using only train-recorded Changes.",
+   "proposal": "Add a git/GitHub push-and-merge adapter: a default-branch ref poll per manifest repo that emits change.merged for every new sha, with actor push|renovate|train. The ship loop then owns only train state on those records. Either route Renovate through the train or treat its merges as a declared action class, so invariant 7 stays true."
+  },
+  {
+   "id": "dat-4",
+   "severity": "major",
+   "claim": "Deployment has several writers (the make deploy wrapper and the Watchtower/RollHook adapters) and the same fact also arrives as a Signal of kind deployed. The manifest's 'deploy: ci' mode (GitHub Actions) has no named writer at all. The deploy reconciler's 'default-branch head deployed' check needs the running sha, and the manifest declares no way to observe it.",
+   "evidence": "design/model.md:19 (writer 'deployer (make deploy wrapper; Watchtower/RollHook adapters)'); ADR-013-signal-intake.md:26 (RollHook deploys as signal.received kind deployed); design/model.md:147 (runtime … deploy: ci); design/loops.md:39 (deploy observer: head deployed within N min); design/model.md:133-166 (no version endpoint, image-tag or sha probe field).",
+   "test": "For a deploy: ci service such as weatherorb, trace a merge to a Deployment row. Which process writes dep_*, and from what observation does the reconciler learn the running sha? Replay the 1,453 recorded ClickStack deploy markers and count the Deployments that end up with a Change sha attached.",
+   "proposal": "One Deployment writer: the deploy reconciler. It consumes deployed/failed Signals from every source (wrapper, RollHook, CI) and turns them into Deployment transitions keyed by change+target, the idempotency key loops §4 already names. Add runtime[].version, e.g. {http: <url>, jsonPath: sha} or {image_label: org.opencontainers.image.revision}, so 'observed sha' is declared desired state."
+  },
+  {
+   "id": "dat-5",
+   "severity": "major",
+   "claim": "Several read models, KPIs and a control input read stores outside the event log, which breaks invariant 8. Quota (Max 5 h/7 d %, resets), cost per project and per item, 'what burns quota', live agent heartbeat and last output, owner continue nudges, and 'status questions asked outside Argo' come from the usage API, usage.db, herdr's live state, Claude Code transcripts and Hermes state.db. The spawner's quota guard decides engine routing from a reading the log never records, so spawn decisions cannot be replayed.",
+   "evidence": "design/model.md:86 (invariant 8); ADR-009-argo-hosting.md:29-31 (read API serves 'from the ledger … herdr's live state and usage.db'); design/argo.md:37, :43, :47, :56 (quota, heartbeat or last line, cost, usage by session); ADR-006:33 (cost per item = join on session.id to usage rows); proof.md:75, :78, :79 (continue nudges and outside-Argo questions measured from transcripts via questions.py; cost per item); design/loops.md:151-155 (quota guard); proof.md row 8 ('feed the quota guard a recorded 95 % reading', which only works if the reading is an event); ADR-013 source table lists no usage, quota, transcript or Hermes adapter.",
+   "test": "Run the W1 projection-rebuild check against the quota, cost, agents_live and KPI read models on a ledger copy with usage.db, the herdr socket and ~/.claude/projects unavailable. Then replay a past day and check whether the spawner picks the same engine for each spawn.",
+   "proposal": "Add ingest adapters that emit signals for quota.sampled (each fetch_usage reading), usage.recorded (per session, carrying the factory.root attribute), owner.message (from transcripts and Hermes, classified by the questions.py classes) and agent heartbeats. The quota guard logs its input reading in the spawn event's data. Or name usage.db as an explicit SoR with its own rebuild rule, and drop invariant 8's 'every' to match."
+  },
+  {
+   "id": "dat-6",
+   "severity": "major",
+   "claim": "The headline SLO (owner touch under 1 % of items) has no definition in the new model. 'Item' was warden's row and is not one of the twelve nouns. ADR-015 counts every owner verb as a touch, so owner-originated submits and pauses push the autonomy number up. Pause is stored as a Decision with decider owner, which invariant 5 forbids outside the four business classes and which Argo Q7 counts as a defect.",
+   "evidence": "proof.md:67 ('Autonomy: items with no owner touch'); design/model.md:25-29 (no 'item' noun); ADR-015-argo-write-verbs.md:23 (pause = Decision kind automation.pause) and :35 ('every owner action … counts toward owner_touch'); design/model.md:82-83 (invariant 5); design/argo.md:40 ('any non-business card is a defect counted on the KPI page'); argo.md:8 (199 of 211 asks went to Claude Code sessions, a channel the log does not see; see dat-5).",
+   "test": "Write the autonomy KPI as SQL over events alone. If it needs a type list or an entity set the docs do not define, it fails. Apply it to a synthetic week with 10 owner submits, 1 pause and 0 escalations, and check that autonomy comes out at 100 % and the Q7 defect count at 0.",
+   "proposal": "Define item = an Incident, plus a Task whose origin is not owner. Define owner_touch = an event with actor owner on an item the owner did not originate, excluding *.created. Give pause a non-question Decision kind (decider owner, class policy_override) that is explicitly exempt from invariant 5 and the Q7 defect count. Ship the KPI as a named query in the factory-kpi repo."
+  },
+  {
+   "id": "dat-7",
+   "severity": "major",
+   "claim": "Projections are meant to rebuild from 'the event log plus the manifests', but manifests change in git and events record no manifest revision. A rebuild therefore evaluates old events against today's desired state, topology and autonomy. A repo rename changes the project id, since metadata.name equals the repo dir, and orphans its history.",
+   "evidence": "design/model.md:86 (invariant 8); design/model.md:91-105 (events schema: project TEXT, no manifest_sha); design/model.md:12 and :137 (id = repo dir name); design/loops.md:62-63 (topology fold uses the manifest graph); ADR-010:46-47 (Argo's project list equals the set of manifests: current, not historical).",
+   "test": "Rebuild incident groupings for the 10-17 window after moving one service between runtime targets in its project.yaml. Do the groupings change? Then rename a repo directory and check whether its Conditions, Incidents and cost history still join to it.",
+   "proposal": "Stamp manifest_sha (the default-branch blob sha the reconciler or correlator read) on every event the manifest influences, and have reconcilers read the default-branch manifest only, never the working tree. Add a stable metadata.uid that survives a rename, with metadata.name as the display key, and a project.renamed event."
+  },
+  {
+   "id": "dat-8",
+   "severity": "major",
+   "claim": "The manifest schema lacks fields that the loops, views and drift check already depend on: no launchd jobs or host binding for mini and homelab units; runtime.target is a bare string rather than a reference to an infra project; no dependsOn or consumers; no databases or backups; no domains for certs; no traffic source; no CI workflow; no lifecycle 'archived'. ADR-014's retired-class policy file has no home in the directory contract.",
+   "evidence": "design/loops.md:38 (desired includes 'containers/launchd jobs in runtime') vs design/model.md:147 (runtime has target, kind, services and deploy only); ADR-010:36-37 (drift check: 'topology covers every … launchd job'); design/loops.md:62 (host → container/job → service → project); design/argo.md:84 (library 'consumers (basalt-ui → argo, rb)'), :85 (infra page: certs, backups) and :105 (Traffic page); design/loops.md:90 (migration ladder: 'backup taken and test-restored'); design/model.md:72 statechart has 'archived' vs :143 enum 'experimental | production | deprecated'; ADR-014-owner-decisions.md:23-25 ('the policy file of the new loop'); design/model.md:28 ('policy (manifest and policy files)'); design/model.md:173-183 (no policy path).",
+   "test": "Run factory manifest draft on dotfiles (launchd-heavy), vps (host project), basalt-ui (library) and weatherorb (DB-backed service). Try to express every observer input from loops §1, every widget from argo §3, and the migration ladder's backup precondition using only schema fields; count what needs free text or code.",
+   "proposal": "Extend factory/v1 with: runtime[].{host: <infra project ref>, containers[], launchd[], version}; spec.dependsOn and providesApis (Backstage relations; consumers derived from them); data.{databases[], backups: {target, maxAge}}; domains[] for certs; integrations.traffic; integrations.ci.workflows; lifecycle 'archived'. Add policy/ (decision classes, defaults, expiries, retired classes) to the directory contract or as a section in project.yaml, and cover all of it in factory manifest check."
+  }
+ ]
+}

@@ -1,0 +1,70 @@
+{
+ "role": "dx",
+ "verdict": "The contract and the generated-docs idea are right, but the design has no onboarding path at all. The one per-repo block carries global tool routing that cannot stay deterministic across 33 + 20 repos, and the TS generator's source of truth is the MCP layer this same plan deletes, so flags and facts will keep being typed by hand in the places that matter most.",
+ "objections": [
+  {
+   "id": "dx-1",
+   "severity": "blocker",
+   "claim": "There is no one-command onboarding. `factory manifest draft` is a migration drafter that builds a manifest from what already exists. The drift check only verifies that integrations exist; nothing creates them. A new repo therefore fails the check until someone hand-creates the Kuma monitor, the herdr workspace, the brain note, the TickTick list and the OTel service.",
+   "evidence": "waves.md:72-74 (draft|check|gen, drafts 'from what exists'); ADR-010-project-manifest.md:34-37 and design/model.md:193-195 (the drift check requires the Kuma monitor, herdr workspace and brain note to exist, and an OTel service seen in 7 days); grep for onboard, new repo, scaffold and init across BRIEF, report, design, adr and waves finds only the panel brief itself (BRIEF.md:243). No wave owns it.",
+   "test": "Create a scratch repo. Using only the commands the design specifies, count the manual steps and hand-typed values until `factory manifest check` is green and the repo shows up in Argo, herdr groups and usage-tracker. Target: one command and zero facts beyond name and type.",
+   "proposal": "Add `factory project new <name> --type <service|library|...>` to W2. It writes `project.yaml` from a per-type template, creates the directory contract and renders every generated file. Treat `integrations` as desired state and give it a reconciler that creates what it can (herdr workspace, brain note stub, Kuma monitor through its API, runner sync, the PR-required entry). Facts that can only be observed (OTel seen in 7 days) become a Condition rather than a check failure while lifecycle is `experimental`."
+  },
+  {
+   "id": "dx-2",
+   "severity": "major",
+   "claim": "At least four project registries survive outside the manifest, and two topology checkers would run side by side. That recreates the 'nine places that disagree' problem ADR-010 exists to remove.",
+   "evidence": "Neither config/pr-required-repos.json (read by protect-branches.ts and github-config.sh), docs/architecture.md §Repos and §LaunchAgents (enforced by scripts/architecture-check.sh, which exits 1), config/Caddyfile ('the single app registry') nor `make gh-runner-sync` appears in design/, adr/ or waves.md (grep: 0 hits). ADR-010:31-33's generated list omits all of them. ADR-010:36-37 adds a second checker for 'every launchd job'.",
+   "test": "Add a repo with a dev server, a launchd job and PR-required status. List every file a human or agent must edit by hand. Pass means only `project.yaml`.",
+   "proposal": "Extend ADR-010 §3 so pr-required-repos.json, architecture.md's Repos and LaunchAgents tables, the Caddyfile app blocks and the runner list are rendered from manifest fields (`spec.runtime[].doors`, `spec.policy.prRequired`, `runtime.launchd`). Fold architecture-check.sh into `factory manifest check` so one checker owns topology."
+  },
+  {
+   "id": "dx-3",
+   "severity": "major",
+   "claim": "Global tool routing lives inside each repo's manifest block. One flag change in agw therefore re-renders and commits 33 SourceRoot AGENTS.md files and touches tracked files in IuRoot work repos, against ADR-010's own rule that nothing tracked changes there. IuRoot's generated block also has no defined home.",
+   "evidence": "ADR-004-gateway-access.md:37-39 (routing block 'inside the manifest-generated block, ADR-010'); ADR-010:24-26 ('nothing tracked changes in a work repo'). Measured on ~/IuRoot: 1 repo tracks AGENTS.md, 6 track CLAUDE.md, and 1 tracks docs/waves, which collides with the linked `docs/waves/` of design/model.md:176. waves.md:137 (W12 'global CLAUDE.md and AGENTS.md generated blocks') leaves ownership ambiguous.",
+   "test": "Rename one agw flag and run the generators. Count changed tracked files across both workspaces (target: 1 global file plus that CLI's own repo). Then open a Claude Code and an OpenCode session in an IuRoot repo and confirm the per-repo block is loaded while `git status` stays clean.",
+   "proposal": "Split the outputs. Tool routing renders once into a global generated file: a ~/.claude/rules file plus the same file in the opencode `instructions`. The per-repo block holds only manifest facts: role, runtime, commands, monitors, directory map. For IuRoot, use a linked, excluded file the harness loads, chosen by the test above. Where a tracked path already exists (docs/waves), the drift check skips the link."
+  },
+  {
+   "id": "dx-4",
+   "severity": "major",
+   "claim": "The generation inputs are not pinned, so the drift check is non-deterministic. The routing block and every skill's references/cli.md live in dotfiles but are rendered from CLIs in six other repos at whatever version happens to be installed. dotfiles has no CI, and spike 4's renderer parses `--help` text, not definitions.",
+   "evidence": "spikes/04-cli-mcp/REPORT.md:63 (render_routing.py parses each CLI's `--help` Usage section); dotfiles AGENTS.md §Deploy 'No CI, no release'; ADR-004:37-39 and :53 claim 'a drift check re-renders and diffs in CI'; research/2026-10-22-ts-cli-introspection.md:82 (treat your own emitted IR as the contract's source of truth); ADR-004:42-43 uses two different generators (cyclopts generate_docs and an in-house TS runner).",
+   "test": "Run the drift check on the MacBook and the mini with one gateway a commit apart on each. If the verdicts differ, or the check cannot say which version it rendered from, it fails.",
+   "proposal": "Make `<cli> schema --all --format json` the single cross-language IR. Each CLI repo commits it as a CI-checked artifact. dotfiles' renderer reads only those snapshots (by repo@sha) and stamps the generated header with the source shas. Drift then means a stamp mismatch, and `make check` in dotfiles fails on it. Nothing ever parses help text."
+  },
+  {
+   "id": "dx-5",
+   "severity": "major",
+   "claim": "For TS, ADR-004 generates commands from 'the Zod schemas behind today's MCP tools'. That premise is false or self-defeating: one gateway has no schemas, email's MCP covers a minority of its routes, most agw tools have no output schema, and the MCP layer is the thing W8 deletes.",
+   "evidence": "ADR-004:43. Measured: audio-gateway has no zod, typebox or elysia import and no MCP. email-gateway has 7 MCP tool registrations against 19 REST routes, and spike 4's CLI won the unread probe 3/3 against MCP's 1/3 precisely because it wrapped REST (REPORT.md:51-54). agent-gateway: 5 of 16 tools/*.ts declare outputSchema, so `schema [cmd]` outputs, `--fields` and the envelope cannot be generated. agent-gateway/bin/agw.ts already hand-maps argv to request bodies.",
+   "test": "For each gateway, count HTTP routes that have both an input and an output schema, and MCP tools that have both. The generator source is whichever set covers every route the CLI must expose.",
+   "proposal": "Generate from the HTTP contract: Elysia route schemas, Zod via z.toJSONSchema(io) or TypeBox natively (research:56-58). Make 'every exposed route has input and output schemas' a W8 entry gate, which for audio-gateway means a schema layer first. Retire bin/agw.ts's hand mapping in the same cutover."
+  },
+  {
+   "id": "dx-6",
+   "severity": "major",
+   "claim": "Long-job behaviour is left to a policy sentence the agent must interpret: whether the job fits the cap, and whether the session is interactive. That is prose enforcement, the kind the postmortem measured holding 1 of 11. It also forces a per-call guess, because review and check medians already exceed the cap.",
+   "evidence": "ADR-004:33 ('--wait while the job fits under the shell's foreground cap … the routing block carries the one policy sentence'); REPORT.md:41-45 (reviews median 258 s, 85 % over 120 s; checks median 372 s); 02-baseline.md:84-96 (prose 1 of 11; 5,782 sleeps and 3,499 poll loops at :66). The cap differs between Claude Code, OpenCode and cron.",
+   "test": "Re-run spike 4's long-job probe with the policy sentence removed from the routing block, in headless Claude Code, OpenCode and cron. Pass: at most 2 calls in every harness.",
+   "proposal": "Move the decision into the CLI. `--wait` is the default and blocks until a budget read from an env var the harness sets (session-env.ts hook, the opencode plugin, a cron default). It then exits with a fixed domain code `pending` whose stderr JSON carries the exact idempotent resume command. The conformance suite asserts it: a 5 s budget on a 30 s job exits `pending`, and the resume completes. The policy sentence goes away."
+  },
+  {
+   "id": "dx-7",
+   "severity": "major",
+   "claim": "The manifest has no command verbs. The repo-level interface agents type most (check, verify, deploy, restart, logs) stays hand-written in AGENTS.md prose, and W3's restart recipe assumes a Makefile target that almost no repo has.",
+   "evidence": "waves.md:86 (restart recipe `make -C <project> restart svc=<name>`). Measured across ~/SourceRoot Makefiles: `restart:` exists only in homelab (plus its worktree) of 27. vps has none despite 36 services. shutterflow has only `check`; tinycast-extensions lacks `verify`. design/model.md:133-166 has no commands field.",
+   "test": "For every fleet project and vps service, run the restart recipe as specified. Count how many resolve to a real target that accepts `svc=`.",
+   "proposal": "Add `spec.commands: {check, verify, deploy, restart, logs}` to the schema. `factory manifest check` validates each one (target exists, `make -n` parses, required params declared). Render them into the per-repo block in place of the hand-written Validate, Deploy and Verify sections. Recipes read `spec.commands.restart` and never construct make lines themselves."
+  },
+  {
+   "id": "dx-8",
+   "severity": "major",
+   "claim": "The contract and drift checks cover six CLIs, but agents hand-type a much wider surface. The spawner `rd`, `factory`, `hl`, `secrets-run`, `ask-human`, `jobrun`, `imgcli` and the research CLI are outside the list. SKILL.md prose names flags that no check validates. The measured macOS-vs-GNU toil has no wave at all.",
+   "evidence": "ADR-004:22 lists agw, warden, rv, email, audio and image only. Measured distinct `--flag` mentions in hand-written SKILL.md: remote-dev 14, prose 11, wave 5, otel 3. W12's 'flags generated' (waves.md:137) covers references/cli.md, not SKILL.md prose. 02-baseline.md:66-67 records 530 failed commands on macOS-vs-GNU syntax and 5,782 sleeps, and nothing in waves.md addresses either (grep 'GNU': only baseline and STATUS).",
+   "test": "(a) A lint that fails any `--flag` in a SKILL.md or AGENTS.md that is absent from the referenced CLI's `schema`. Run it on today's skills and count the hits. (b) Re-run the toil script 7 days after W12. Target: fewer than 50 GNU-syntax failures per 30 days.",
+   "proposal": "Define contract scope as every factory binary on PATH (~/.local/bin) plus the gateway CLIs. The conformance suite enumerates them, so nothing is opted in by memory. Bring `rd` onto the contract in W4, the same cutover that rewrites it. Add the SKILL.md flag lint to the doc-contradiction lint. Put GNU coreutils, sed and grep first on PATH for agent shells through the session-env hook, and record the before and after toil numbers as W12's proof gate."
+  }
+ ]
+}

@@ -1,0 +1,62 @@
+{
+ "role": "intent",
+ "verdict": "The design follows most of the owner's explicit asks: rewrite and cutover, CLI-first, Artifacts in Argo, the per-repo directory contract, Argo's write verbs and the <1 % SLO. But the three things he stressed most are designed and never scheduled or proven: mother-led fleets, autonomous self-improvement and self-healing of the whole infrastructure, and decision models. Product direction, the one business class he plainly owns, has no structural protection.",
+ "objections": [
+  {
+   "id": "int-1",
+   "severity": "blocker",
+   "claim": "He asked for mother agents on the big projects that coordinate the resolving with warden, and for herdr cleanup that hands over to new mothers and leads and compacts old ones. ADR-007, the verdict and the drawing map all treat this as kept. No wave builds it: waves.md never mentions mothers or leads, and nothing covers rotation, handover or daily mother restarts. W4 delivers only the ready queue, rd and Witness. This is missing, not argued.",
+   "evidence": "report/01-verdict.md:17 (mothers for six fleet projects); adr/ADR-007-agent-topology.md:23-45 (roles, rotation at ~60 %, mothers rotate daily); report/04b-drawings.md:11-14 (mother → lead → wave 'kept'); waves.md:92-96 (W4 bullets: ready queue, rd, Witness only); grep -i 'mother|lead|rotation' waves.md returns nothing",
+   "test": "Search waves.md for any bullet or gate that spawns a mother for a fleet project, lets a lead spawn a worker, or proves a handover at the context mark. The test passes only if one exists with a proof gate, for example a mother rotating with zero lost tasks.",
+   "proposal": "Add a wave after W4, or a W4 sub-bullet with its own gate. It spawns one mother per fleet project (manifest class: fleet) through rd. The mother turns Conditions and plan items into Tasks, and leads spawn workers. Rotation and handover come from the hook. Gate: a gameday that kills or rotates a mother mid-plan, with 0 lost or duplicated tasks and 0 owner nudges. Then the verdict's line 6 can stay."
+  },
+  {
+   "id": "int-2",
+   "severity": "major",
+   "claim": "He asked that self-improvement and self-healing be autonomous: recurring jobs for deps, docs, bloated setups, basalt-ui dogfooding, big files, duplication, GitHub issues, perf, bugs and OTel; continuous healing of mini, homelab and VPS including databases, ClickHouse and containers; and attacks prevented without him. loops.md §6 designs all of it. In the plan, W10 (improve and heal) and W9 (trace) are headings with no bullets and no gate. The only infra recipe scheduled anywhere is a container restart (W3). CrowdSec and the infra runbooks for disk, mount, certs, backups and DB health appear in no wave. Gameday rows 3, 4, 5 and 14 are gated by no wave. Yet W5 claims full autonomous operation resumes on day 11.",
+   "evidence": "design/loops.md:129-144 (the improve/heal table); waves.md:123-127 (W9 and W10 have no content); waves.md:86 (restart is the only recipe); waves.md:101 ('Full autonomous operation resumes' at W5); design/proof.md:32-33,43 (rows 3, 4, 5, 14); waves.md gates cite only rows 1, 2, 6-13",
+   "test": "For every row in loops.md §6 and every gameday row, find the wave whose gate exercises it. Any row without a gate counts as unplanned. Separately, run gameday rows 3 and 4 at the W5 gate and check whether the factory heals them with 0 owner touches.",
+   "proposal": "Specify W10 the way W1-W3 are specified. One bullet per §6 job. Infra runbooks per host for disk, mount, cert, backup, restart loops and DB/ClickHouse health. CrowdSec on the public hosts feeding security.anomaly. Gate: gameday rows 3, 4, 5 and 14 plus one improve-loop item per class shipped through the ladder. Reword W5's exit to say what is autonomous at day 11: restart-class healing only. Full operation is claimed at W10's gate."
+  },
+  {
+   "id": "int-3",
+   "severity": "major",
+   "claim": "He asked for a durable agent loop with OpenCode and decision models, and addendum item 5 requires the plan to back the decide lane with decision_shadow numbers or keep it. ADR-003 decides that no single-shot model groups or triages, because the model scored 60 % against the truth, and it puts judgment in the investigating agent. waves.md, the drawing map and the architecture asset still promise a decision-model step on 'the ambiguous residue ADR-003 names'. ADR-003 names no residue. The text was written before spike 3 finished and never reconciled, so the owner reads a promise that the ADR rules out.",
+   "evidence": "adr/ADR-003-correlation.md:40-44 (no single-shot model; judgment lives in the investigating agent); waves.md:36, 85, 156 ('decision-model step only for the ambiguous residue ADR-003 names'); report/04b-drawings.md:24; report/assets/architecture.html:5590; STATUS.md:84 ('final with spike 3')",
+   "test": "Grep 'residue' across adr/, design/, waves.md and report/. Each hit must point to a defined residue set, with a size from the backtest and a decision_shadow agreement figure for that set, or be removed.",
+   "proposal": "Pick one answer and apply it everywhere. Either (a) drop the step and state in 04b, W3 and the FAQ that the owner's decision models become the investigate worker on OpenCode/IU making recipe and decision-class choices, citing the 92 %/60 % numbers. Or (b) define the residue: events the deterministic rules leave as similarity-fallback-only. Measure decision_shadow on that subset and keep the step only if it beats the deterministic fallback on the dev half."
+  },
+  {
+   "id": "int-4",
+   "severity": "major",
+   "claim": "He wants business decisions to reach him in under 1 % of cases, and BRIEF §Fixed lists product direction first among what he decides. ADR-003 enforces spend, data loss and other people with capability limits. It leaves product direction to the agent's own classification, which escalation recall and precision did not validate (both failed, with 1 genuine positive held out). D4 then lets leads draft the holdout scenarios that encode product intent, binding by default. The one class that is unambiguously his rests on unproven agent judgment, and the report does not raise this as a tradeoff.",
+   "evidence": "BRIEF.md:74-75; adr/ADR-003-correlation.md:45-50 ('Product direction remains the agent's call'); adr/ADR-003-correlation.md:22-23 (escalation recall and precision fail); report/10-open-decisions.md:33-40 (D4); report/01-verdict.md:20",
+   "test": "Build a labelled set of past product-direction moments, such as feature-vs-fix calls like items 1708-1712, store or pricing changes and UX direction changes. Replay them through the investigator's decision_class step. Recall must be 1.00 before W5 ships code fixes autonomously on fleet products.",
+   "proposal": "Make product-class detection structural rather than judged, without adding a gate. The manifest declares product surfaces: holdout scenario edits, public routes, store listings, pricing, deleted features. The ladder classifies any Change touching them as product-class and opens a Decision with a reversible default and expiry. State in §5 and the FAQ that product direction is guaranteed by diff paths, not agent opinion."
+  },
+  {
+   "id": "int-5",
+   "severity": "minor",
+   "claim": "He asked that each repo be a project in Beads, TickTick and Obsidian. Dropping Beads is argued with spike 1, which is fine. But the manifest still carries a `beads:` prefix key and ADR-010 a 'beads-compatible task prefix'. TickTick is read-only and no projector creates a per-project list. The drift check requires every integration key to resolve, so a repo without a TickTick list fails or the key is left blank. The owner's TickTick-per-project ask is neither honoured nor argued.",
+   "evidence": "design/model.md:158-159 (beads: {prefix}, ticktick: {list}); adr/ADR-010-project-manifest.md:22; design/model.md:29 ('TickTick is its own SoR, read-only'); design/model.md:192-195 (every integration key resolves); adr/ADR-001-task-system-of-record.md:20; grep -i ticktick waves.md returns nothing",
+   "test": "Run `factory manifest check` (W2's gate) on the 33 drafts. Count repos whose ticktick key does not resolve, and check whether any generated output consumes the `beads` key.",
+   "proposal": "Rename `beads:` to `tasks: {prefix}`, since the ledger uses bd's verbs. Either give W2 or W13 a projector that ensures a TickTick list per project (titles only, the factory never writes the owner's todos), or state in 04b that per-project TickTick is dropped and why."
+  },
+  {
+   "id": "int-6",
+   "severity": "minor",
+   "claim": "He named state machines, Mastra and durable execution for warden and waves. ADR-002 delivers explicit statecharts, which honours the state-machine half. Mastra, the one framework he named, is dismissed as 'unverified, not run', with no research or spike behind it. Every other candidate got a reason.",
+   "evidence": "adr/ADR-002-durable-execution.md:27; report/11-faq.md:3-9 (no mention of Mastra)",
+   "test": "Run a /research pass on Mastra's workflow persistence: SQLite storage, suspend/resume across process restarts, behaviour on redeploy. Check whether it fails any ADR-002 driver the way DBOS did.",
+   "proposal": "Add a one-row result for Mastra to ADR-002's options with a cited reason (for example: needs a long-lived TS runtime, versioning on redeploy, a second system of record), and add one FAQ sentence. No spike is needed unless the research shows it beats the ledger on a driver."
+  },
+  {
+   "id": "int-7",
+   "severity": "minor",
+   "claim": "He accepted rewrite and cutover. But 'What changes for you' shows only the end state. It never says that from day 1 to day 11 nothing heals, and raw Kuma/HyperDX alerts reach his Slack again, which is worse than the post-Phase-0 state. The gap is mentioned only at the end of the FAQ and in waves.md. Section 1b is the part the reading order sends him to.",
+   "evidence": "report/01b-what-changes.md:5-27; waves.md:52-54; report/11-faq.md:57-59; addendum item 9 (BRIEF.md:387-390: his daily loop before and after)",
+   "test": "Read only §1, §1b, §5 and §7, the 20-minute reading order. Check whether the owner learns that the alert gap spans days 1-11 and what he is expected to do with those alerts.",
+   "proposal": "Add a 'During the rewrite (days 1-11)' row to §1b: raw alerts in Slack, no automatic healing, the manual herdr lane as the fix path, and the day each capability returns (W3 restart, W5 ship, W10 infra)."
+  }
+ ]
+}

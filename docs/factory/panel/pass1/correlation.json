@@ -1,0 +1,62 @@
+{
+ "role": "correlation",
+ "verdict": "The deterministic design (fingerprint plus refinements, topology fold, windows) is the right shape, and the F1 gain over warden is real, but the backtest cannot see the failures that matter most for an auto-closing factory: its gold groups are chunk-local, its frame is ±30 min over warden rows that already collapsed earlier episodes, and its precision pass (flipped 0.902, CI lower bound 0.893) is thin; silent merges on the host fold and the long windows are therefore unmeasured, not shown to be absent.",
+ "objections": [
+  {
+   "id": "cor-1",
+   "severity": "blocker",
+   "claim": "The labels make every true incident that spans chunks look split, and the backtest never re-joins them, so recall is measured only inside time-packed bursts of about 50 events. Slow-burn and recurring incidents, the ones the windows exist for, cannot be scored as splits. A correct cross-chunk link counts as a merge error when both chunks fall in the same split, and is dropped by restrict_out when they do not.",
+   "evidence": "evidence/golden/LABELS.md:89 (incident_group is chunk-local), LABELS.md:113 promises 'a later step merges groups across chunks by these summaries'. backtest.py uses e.gold['incident_group'] directly (lines 1168, 1495, 1575) and uses group_summary only for the noise prefix (1135, 1378). No script implements the merge (grep finds no matches). chunk.py docstring: chunks are bursts with gaps ≤ 30 min, packed in time order. backtest.py:1660 restrict_out.",
+   "test": "Implement the summary-based cross-chunk merge (or have a labeller join groups across adjacent chunks using entity.peers and cluster_outside_set). Then re-score dev and held-out B-cubed with cross-chunk gold, and report how many gold groups grow and how recall and precision move.",
+   "proposal": "Build cross-chunk gold before W3's gate and re-run the frozen backtest against it. Until then, ADR-003 should claim recall only for incidents inside one burst."
+  },
+  {
+   "id": "cor-2",
+   "severity": "blocker",
+   "claim": "The long windows (dedup 12 h, open 6 h, recurrence 7 d, similarity 4 h) are frozen into production, but the data can barely see them. The frame holds only events within ±30 min of a sampled event. Warden reuses one event row per fingerprint and sets first_seen to the latest episode, so earlier episodes and their occurrences never enter the replay. In effect warden has already deduplicated the input. A 12 h same-fingerprint dedup that merges a flaky CI failure with a real regression a few hours later cannot appear as a merge error.",
+   "evidence": "evidence/golden/backtest.out.md:391 ('a recovery or a recurrence further away is invisible; w_open is fitted to that frame'). sample.out.json data_notes: 'events.first_seen is the start of the LATEST episode: a recurring fingerprint reuses its row'. sample.py docstring: 'Occurrences are a counter on the item, not separate rows'. backtest.out.md:46-55 (w_dedup 720, w_open 360, w_rec 10080, chosen from grids the frame cannot discriminate). design/loops.md:61,65.",
+   "test": "Use the full 1,761-event population and the per-episode history in transitions. Enumerate every pair that w_dedup or w_open joins at gaps over 30 min, label a stratified sample of about 60 pairs as same cause or not, and estimate the pair-level false-merge rate per window. Repeat at 30 min, 3 h and 12 h.",
+   "proposal": "Ship short defaults that the frame can actually see (dedup ≤ 30 min, open ≤ 60 min) and let the investigator propose any longer link, recorded as an explicit edge it can undo. Or keep the long windows only for stateful sources whose recovery signal (a Kuma Up) closes the episode, and never for stateless sources such as GitHub failures and log lines."
+  },
+  {
+   "id": "cor-3",
+   "severity": "major",
+   "claim": "Precision is the fragile side and the costly side, yet the pre-registration treats it like recall. Precision fell from 0.990 on dev to 0.937 held-out, so the error rate is about six times higher. The flipped reading is 0.902 against a 0.90 threshold, and the CI lower bound is 0.893. In this factory a merge is a silent loss: an absorbed incident's member resolves with the group, or the group is closed by a recipe that never addressed it. A split only costs one extra candidate. B-cubed also counts 'noise:' groups (deploy notices, chat) as elements, which dilutes incident precision.",
+   "evidence": "evidence/golden/backtest.out.md:16 vs :31; :77 (CI [0.893, 0.970]); :378 ('not settled by the sample'), while ADR-003:16 reports it as a plain pass. design/loops.md:52-54 (the candidate expires once its conditions resolve); design/model.md:35-41. LABELS.md:108-109 (noise groups).",
+   "test": "Add a 'hidden-incident rate': the weighted share of non-noise gold groups whose events all sit inside a predicted group dominated by a different gold group. Compute it held-out under both readings, and compute B-cubed P/R restricted to non-noise gold groups.",
+   "proposal": "Add an asymmetric guard: an incident may close only when every member's own Condition has resolved, not when the group's has. Also give the correlator a split operation that detaches a member whose condition outlives the group, with its timeline kept. Report hidden-incident rate ≤ 2 % as the merge metric alongside B-cubed on the fresh sample."
+  },
+  {
+   "id": "cor-4",
+   "severity": "major",
+   "claim": "The host fold (k_host = 2 distinct subjects within 45 min) is the main merge hazard on an estate with three hosts and about 36 vps services, and the sparse, low-concurrency frame understates it. Once a host candidate is open, any unrelated failure on that host inside the window joins it. The 10-17 reboot case that justifies the fold is exactly the case where a coincident real failure would be swallowed.",
+   "evidence": "backtest.out.md:47 (k_host 2), :233 (fold:host merge of 1693 kuma with 13 beszel across gold groups), :258 (a fold:proj merge of 26 events). design/loops.md:52 (fold under host vps). waves.md Wave 2 gate notes 19 of 36 vps services are unmonitored, so subjects are incomplete.",
+   "test": "Concurrency injection: take real held-out incidents from different days and time-shift single-cause incidents onto the same host and window as other incidents (vary the offset from 0 to 45 min). Then measure the merge rate of the full system against minus-topology as a function of concurrency. Run the same overlay on the 10-17 replay with one injected unrelated container crash.",
+   "proposal": "Fold to the host only on host-level evidence (a reboot, a Beszel host-down, a Docker daemon event, or ≥ 50 % of the host's monitored subjects firing), and otherwise fold no higher than service or project. Each folded member keeps its own Condition so the guard in cor-3 applies."
+  },
+  {
+   "id": "cor-5",
+   "severity": "major",
+   "claim": "The uncertain-label sensitivity covers only one direction. A grouping-uncertain event is flipped by detaching it into a singleton, which tests 'gold over-merged' and never 'gold under-merged'. With 185 uncertain labels (19 %), the dual-reading rule is not the worst case it presents itself as, and the flipped recall rising to 0.881 is an artefact of shrinking gold groups.",
+   "evidence": "backtest.py:529-534 (flipped_gold_groups maps every group-uncertain event to ('flip', id)). backtest.out.md:9 (definition), :16-17. agreement.out.md:3 (uncertain 185).",
+   "test": "Add a second flip: each group-uncertain event joins the alternative group its why_uncertain names (or the nearest neighbouring gold group in time). Report P/R under labelled, detach and join readings, and pass only if all three pass.",
+   "proposal": "Amend PREREGISTRATION with a dated section adding the join reading for future samples, and state in ADR-003 that the current grouping pass holds under the detach reading only."
+  },
+  {
+   "id": "cor-6",
+   "severity": "major",
+   "claim": "The gold labels are not independent of the features being scored. LLM labellers saw warden's entity, the dup chain and the mechanical pre_group hints (same_signature_30m, same_repo_30m, cluster), which encode the same signals the fingerprint and window rules use. Agreement of 1.000 between labellers who shared those hints shows reliability, not validity. ADR-003 rejects single-shot model grouping for 60 % agreement with this same LLM-made gold.",
+   "evidence": "LABELS.md:40,51 (entity and pre_group in every packet). STATUS.md:79 ('both saw the same mechanical pre_* hints, so this is reliability, not validity'). agreement.out.md:7-9 (B³ 1.0 on all three chunks). backtest.out.md:389. ADR-003:40-41; evidence/kpi/decision_shadow.out.md:11.",
+   "test": "Blind relabel: strip entity, pre_group, item.duplicate_of and transitions from about 100 held-out packets, have a different model family label them, and score the proposed system and warden against the blind gold. If proposed precision or recall moves by more than 0.03, the anchoring is material.",
+   "proposal": "Use blind packets (raw signal text, source time and topology only) for the fresh post-cutover sample ADR-003 already plans, and keep hinted packets only as a second, reported reading."
+  },
+  {
+   "id": "cor-7",
+   "severity": "major",
+   "claim": "The frozen parameters were fitted on warden's stream (63.7 % Slack relays, alert-channel chat, poll-anchored reused rows, live 2026-10-22 topology applied to every date) but will run on ADR-013 webhooks with source time and raw occurrences. The largest held-out merge errors are fingerprint merges on chat and relay sources that ADR-013 retires. The report dismisses chat splits as a 'frame artefact' but keeps chat merges, so the post-cutover numbers are unknown in both directions. ADR-003 decision 5 (cross-source fingerprint normalisation) was motivated by held-out misses and changes merge behaviour untested. The W3 gate ('same held-out numbers on the live code') therefore either does not exercise the live intake or cannot be met.",
+   "evidence": "backtest.out.md:227-231 (top merges are fp on chat and human sources), :356 (chat as frame artefact), :392 (one live topology map for every date), :393. ADR-003:51-53 (decision 5 cites held-out ids 1449→1458 and 1585→1497), :62. waves.md W3 proof gate ('held-out golden-set backtest passes PREREGISTRATION on the live code'), which also requires the escalation and KE thresholds that already fail held-out (backtest.out.md:19-22).",
+   "test": "(a) Re-score held-out restricted to the sources that survive ADR-013 (drop slack_alert chat, map relays to their monitors) and report P/R. (b) After W3 cutover, label a fresh blind sample of 2 weeks of webhook signals and score it once against the pre-registered grouping thresholds plus hidden-incident rate.",
+   "proposal": "Recast the W3 gate: the frozen held-out serves as a byte-level regression check of the correlator code only, and grouping acceptance moves to the fresh post-cutover sample. Declare the held-out spent for grouping as well as escalation, since decision 5 was designed from it. Run decision 5 as a new rule scored on the fresh sample."
+  }
+ ]
+}

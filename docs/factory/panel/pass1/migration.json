@@ -1,0 +1,70 @@
+{
+ "role": "migration",
+ "verdict": "The rewrite-and-cutover shape is sound, but the plan as written cannot run unattended: the W3 gate can never pass, so the coverage gap has no end; W1 stops two things the build lane still uses; the 17-day calendar breaks the plan's own one-wave-per-repo rule and ignores Max quota; and no wave has a rollback.",
+ "objections": [
+  {
+   "id": "mig-1",
+   "severity": "blocker",
+   "claim": "W3's proof gate cannot be met, so W3, W4 and W5 can never close and the old loop's coverage gap has no end. The gate requires the held-out backtest to pass PREREGISTRATION. That half has already failed escalation and known-error matching, and it is spent. The fresh sample ADR-003 calls for needs at least 30 genuine decisions, which at today's rate takes years. The gate also requires 48 h of live Kuma Down/Up pairs. That is a waiting period, which the plan's own rules ban, and it passes trivially if no outage happens in those 48 h.",
+   "evidence": "waves.md:87 ('passes PREREGISTRATION' plus '48 h of live operation'); waves.md:24 ('a measured exit, never a waiting period'); evidence/golden/backtest.out.md §1 (held-out: escalation recall 0/1, precision 0.000 of 4, known-error match 0.479, all FAIL); adr/ADR-003-correlation.md:62-64 (the W3 gate only re-runs the frozen numbers; fresh sample once ≥ 30 genuine candidates exist); STATUS.md:79 (6 genuine in 959 events over six months).",
+   "test": "Run backtest.py on the W3 code against the frozen held-out half. Check whether 'pass' can ever be reached. Count the genuine decision candidates per month in the live ledger.",
+   "proposal": "Make the W3 gate measurable within the wave: (a) the frozen held-out numbers reproduce exactly on the live code; (b) the three grouping thresholds pass; (c) gameday rows 1 and 2 pass; (d) at least 10 injected Down/Up pairs on a test Kuma monitor each produce exactly one Condition open and close. Move escalation and known-error matching to a standing SLO measured after W5, not a wave gate. Make waves.md and ADR-003 say the same thing."
+  },
+  {
+   "id": "mig-2",
+   "severity": "blocker",
+   "claim": "W1 stops agent-gateway dispatch on the grounds that 'its only caller stops'. That is false: the build lane calls it. Every rewrite wave runs under /wave, which sends settled edits to mcp__agent-gateway__dispatch. The global CLAUDE.md also routes work to two lanes that die on day 1, `agw dispatch` and `warden run`, and keeps doing so until W12. So day 1 either breaks the wave runner or pushes all implementation onto Max.",
+   "evidence": "waves.md:34; skills/wave/SKILL.md:116-122 (dispatch, tier implement, and fixes 'via dispatch'); config/global.CLAUDE.md:65,75 (the four lanes include agw dispatch and warden run); scripts/remote-dev.sh:897,1028 (`rd` help still points to 'warden run'); waves.md:137 (routing is only regenerated in W12).",
+   "test": "On a scratch day-1 state (dispatch stopped, warden unloaded), run one /wave close-out. Grep every skill and the global file for dispatch and warden run, and list the calls that fail.",
+   "proposal": "Count dispatch as part of the build lane until W4's read-only and implement worker profiles pass their gate, and stop it at the W4 cutover. W1 retires `warden run` in the same commit: remove it from the global CLAUDE.md lane table, the rd help text and skills/wave."
+  },
+  {
+   "id": "mig-3",
+   "severity": "major",
+   "claim": "The W1 stop list misses several consumers of the old warden, and the gap is longer than stated. The plan says raw alerts in Slack cover the gap. They do not cover HyperDX: since 10-17 it posts only to warden's ingest, so after W1 production errors go nowhere until W3. On day 1 the two Warden Kuma push monitors go DOWN and page the owner. The jobrun canary fails every 300 s. launchd job failures lose their only owner for the whole rewrite, because W3 has no `job` adapter. The gap is also not days 1–5: investigation and fixes return with W4 (day 8) and shipping with W5 (day 11). weatherorb alone sees about 3 items a day.",
+   "evidence": "waves.md:35,52-53; evidence/signals/signals.md:18 (HyperDX posted to Slack only before 2026-10-17, now via /ingest/hyperdx); docs/architecture.md:129 (jobrun-canary), :172 (warden-api ingest), :319-320 (Warden Loop and Warden Backup push monitors); scripts/devhost-health-check.sh:1330 and scripts/doctor.sh:323 ('warden owns the fix'); scripts/wave-watch.sh:56; agent-gateway server/lib/warden-board.ts and overview-payload.ts (feed the overview pane until W6); waves.md:83 (no job source); evidence/projects/classify.out.md (weatherorb 96 items in 30 d, 26 escalated).",
+   "test": "In a dry run of W1's stop, grep all SourceRoot repos and docs/architecture.md for warden, 7735 and warden-ingest. For each consumer, list what it does after unload: page, silent drop, or fail-soft.",
+   "proposal": "W1's first bullet becomes a generated consumer inventory, with a disposition for each consumer in the same commit as the stop: point HyperDX back at the Slack webhook for days 1–5; delete the Warden push monitors and the canary; give jobs-grade findings an interim owner. Add a `job` adapter to W3. State the gap honestly as days 1–11 and say what the owner's apps get in each phase."
+  },
+  {
+   "id": "mig-4",
+   "severity": "major",
+   "claim": "The calendar breaks the plan's own rule of one active wave per repo on most days, and it hides dependencies. warden has two or three waves running at once: W3+W8 on days 3–5, W4+W6+W8 on days 6–7, W5+W6 on days 9–10, W5+W7+W9 on day 11. dotfiles has W4+W8, then W4+W12, then W5+W12. Run serially, the warden waves alone (W1 2 + W3 3 + W4 3 + W5 3 + W6 5 + W7 3 + W10 4) take about 23 days before W8, W9 and W13 touch warden. Three dependencies are also out of order: (1) W1 and W2 build CLIs on the agent-CLI contract, but its library only arrives in W8 (days 3–7). (2) W6's steer and stop verbs execute through W4's rd Agent records, yet both start on day 6. (3) W5's holdouts only become binding 7 days after submission.",
+   "evidence": "waves.md:20, :47-49 (calendar), :64, :72, :94, :106, :118; report/10-open-decisions.md D4 (binding after 7 days).",
+   "test": "Build the repo-by-day matrix from the Repos lines in waves.md and count cells with more than one wave. Recompute the critical path with warden serial.",
+   "proposal": "Either make warden the serial spine and re-plan honestly (about 25–30 working days), or allow parallel warden waves only on separate worktrees with a declared merge order (rd fan / rd merge) and drop the one-per-repo rule. Move the contract library into W1. Start W6's write verbs only after W4's gate. Let W5 run on drafted holdouts while the 7-day window is still open."
+  },
+  {
+   "id": "mig-5",
+   "severity": "major",
+   "claim": "The calendar ignores Max quota. Three lanes run in parallel on the default wave model, which bills Max. W1 removes the off-Max implement offload (dispatch), and the quota guard only exists after W4. The 7-day window already sits near its ceiling without a rewrite. If it hits 90–100 %, all three lanes stall, the old loop is already gone, and nothing auto-resumes them, because Witness also arrives with W4.",
+   "evidence": "STATUS.md:67 (Max 7 d p50 46 %, p90 96 %, ≥ 90 % on 12 of 45 days, Sep 16–20 effectively unavailable); STATUS.md:72 (moving the agw workload onto Max adds ≈ 24 % of the weekly window); STATUS.md:81 (the design session itself reached 62–65 % of the 5 h window); waves.md:21.",
+   "test": "Project Max use per lane-day from the transcript token cost of past rd waves (usage.db by project) and overlay it on the 7-day window for days 1–17.",
+   "proposal": "Each spawn names its engine. Lanes B and C default to OpenCode on IU (`--kind opencode`); lane A uses Max. Add a calendar rule: at a 7-day reading of 80 % or more, only lane A runs. Count days as quota-available days, and log quota stalls as gate extensions."
+  },
+  {
+   "id": "mig-6",
+   "severity": "major",
+   "claim": "The build-lane cutovers in W4 (rd) and W8 (/check, /review) have no isolation, and W4 makes the crane depend on the factory. rd is a live symlink, so every edit during W4 changes the spawner the orchestrator and lanes B and C are using. After W4, rd writes Agent and Attempt records, so a broken ledger or warden CLI breaks spawning. W8 removes the agw MCP server while other lanes' sessions still have those tools loaded for their gates.",
+   "evidence": "AGENTS.md symlink map (scripts/remote-dev.sh → ~/.local/bin/rd); waves.md:14, :94, :120; config/global.CLAUDE.md:96 (mcp__agent-gateway__{check,review} async jobs); waves.md:47-49 (W8 days 3–7 overlap W3, W4 and W6 gates).",
+   "test": "After W4, chmod 000 ledger.db and run `rd wave <repo>`: it must still spawn. Cut W8 over while another wave is mid close-out: its /check and /review must still complete.",
+   "proposal": "Ledger writes from rd fail open: spool to JSONL and replay later. Install the new rd next to the old one and switch it with one symlink flip after the gate; keep the old binary for one wave so `ln -sf` reverts it. Run the W8 skill cutover at a lane barrier, and delay removing the MCP server to W12, after two full waves have run on the CLIs."
+  },
+  {
+   "id": "mig-7",
+   "severity": "major",
+   "claim": "No wave has a rollback. Under cutover the only way back for W1 is the old warden, and the plan rules that out: LaunchAgents unloaded, warden.db set to 444, the code tree replaced in place. W1's own gate can also fail for the wrong reason. It asks for the exact baseline from the archived DB, but the baseline was computed on the 08:00Z snapshot, and warden W8 changed rows after it.",
+   "evidence": "waves.md:58-66 (no rollback line in any wave; 'reproduce baseline.out.json exactly'); STATUS.md:24 (AS_OF snapshot), STATUS.md:83 (needs_decision 25 → 2 after AS_OF); adr/ADR-011-ledger-and-event-log.md:15-20.",
+   "test": "Run the W1 import from the archive and re-point the KPI scripts. Diff against baseline.out.json and attribute every difference to rows changed after AS_OF. Separately, restore the legacy warden from tag plus archive once and time it.",
+   "proposal": "Give every wave a Rollback line. W1: tag `warden-legacy`, keep the plists on disk, and make the dormant restore (writable copy of the archive, then bootstrap) part of the W1 gate, tested once. This is not co-running. Import from the frozen AS_OF snapshot plus a recorded delta, and carry the legacy item id on every imported entity so 'exactly' can be checked. W2 and W3: reverting the generated blocks and pointing webhooks back are scripted steps."
+  },
+  {
+   "id": "mig-8",
+   "severity": "minor",
+   "claim": "W1–W3 cannot start without a question. (1) W3's gate contradicts ADR-003 (mig-1). (2) W2 drafts all 33 repos and its gate needs topology to cover every running container. It also writes groups.json and usage-tracker's project map in public dotfiles. That collides with the rule that homelab-private is self-contained, the same rule that withheld its 50 entities from the golden set. (3) W2's commits reach four PR-required repos, but the plan only routes basalt-ui by PR; protect-branches blocks the other three. (4) W1 must give 293 Left-behind items an owner, 55 % of them with none named, and gives no rule for it. (5) The open-decision defaults still point at the old wave numbers.",
+   "evidence": "waves.md:70, :74, :76, :63; config/global.CLAUDE.md §Workspaces (homelab-private never referenced elsewhere); STATUS.md:60 (50 homelab-private entities withheld); config/pr-required-repos.json (basalt-ui, free-planning-poker, rollhook, rollhook-action); STATUS.md:65 (293 open, 55 % without an owner); report/10-open-decisions.md D1 ('herdr (W7)', 'improve (W12)'), D2 ('after W7'), D4 ('from W8') vs waves.md W4, W10, W5.",
+   "test": "Brief a fresh agent with only waves.md W1–W3 and count the points where it must ask or break a rule.",
+   "proposal": "Write the answers into waves.md: homelab-private's manifest and topology stay inside homelab-private, and every generated output excludes it; all four PR-required repos go by PR; the default owner of an unowned Left-behind item is the plan's repo, then its mother or session; renumber D1–D5 to the current waves."
+  }
+ ]
+}

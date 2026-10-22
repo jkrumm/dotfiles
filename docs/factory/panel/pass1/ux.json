@@ -1,0 +1,70 @@
+{
+ "role": "ux",
+ "verdict": "Argo's read half covers the head of the question list. But its biggest question (parked agents) mostly happens on a herdr the read API cannot see, seven canonical questions were dropped from the timed test, and most write verbs have no defined terminal state or place where the result shows up, so the ≤ 10 s claim and the control-plane claim are not yet testable as written.",
+ "objections": [
+  {
+   "id": "ux-1",
+   "severity": "blocker",
+   "claim": "Question #1 (which parked agent to nudge, 50 asks, the owner's most frequent action) mostly concerns agents the factory read API cannot observe. 41 of 50 asks came from Claude Code on the MacBook, and 38 were in shutterflow, whose mother and lead run in the MacBook's local herdr. ADR-009 reads only the mini's herdr live state, and Witness is driven by the mini's herdr event record. The quiet Home would read '0 parked' while the agents the owner actually nudges sit parked on the laptop.",
+   "evidence": "evidence/questions/questions.md:50 (cc macbook 41, shutterflow 38); questions.md:372 (prompt B: 'the MacBook's local herdr (Shutterflow)'); adr/ADR-007-agent-topology.md:9 (shutterflow's mother-6/lead-8 on the MacBook); adr/ADR-009-argo-hosting.md:29-31 (read API serves the mini's herdr live state); design/argo.md:34; research/2026-10-22-cockpit-ux-patterns.md:112 (phone-to-Mac dies on lid-close or Maintenance Sleep)",
+   "test": "Replay the 50 nudge events against the agents_live projection fed only by the mini's herdr-events record (~/.local/share/herdr-events). Count how many of the nudged agents appear in it at all. If the share is below ~80 %, Q1 is unanswerable from Argo.",
+   "proposal": "Decide this explicitly in ADR-007/008. Preferred: every factory agent, shutterflow's fleet included, is spawned by `rd` on the mini, and the MacBook's herdr becomes a manual lane that Argo labels 'not observed'. Otherwise, add a MacBook herdr observer that writes Agent status to the ledger, plus an explicit `host_asleep since hh:mm` state, so a lid-closed laptop shows as such and not as 'parked' or '0 parked'."
+  },
+  {
+   "id": "ux-2",
+   "severity": "major",
+   "claim": "The timed Argo test passes by construction. design/argo.md §2 keeps canonical questions 1–20 and replaces 21–27 with three brief questions under the same numbers. Dropped: version per environment, update state, configured model or tool, 'why did this reach me', data freshness, 'did the scheduled job run', 'why does this keep coming back'. The 'left Argo' metric counts 'classes 2–23', which are questions.md's numbers, not argo.md's, so asks in classes 24–27 can never count as leaving Argo.",
+   "evidence": "evidence/questions/questions.md:70-76 (canonical 21–27, median answers 42 s–6 min, which are the slowest today); design/argo.md:54-56 (rows 21–23 are different questions); design/argo.md:141 ('classes 2–23'); design/proof.md:91-93",
+   "test": "Map every canonical class 1–27 to a read model and view, then run the timed test on all 27. Recompute the 60-day 'left Argo' baseline over classes 2–27 and compare it with 2–23.",
+   "proposal": "Add these read models: `deployments_by_env` (Q21, Deployment already has the data); `job_runs` from jobrun/jobs-grade (Q26); `regressions` from Incident.regression_of plus known-error history (Q27); a 'why this reached you' line on every card, giving the decider class and the policy that failed to cover it (Q24); and `as_of` on every widget (Q25, see ux-3). Give each one budget. Use one numbering in both files, and have the metric count all classes."
+  },
+  {
+   "id": "ux-3",
+   "severity": "major",
+   "claim": "Freshness is handled only for the case where the whole mini is down ('unreachable since'). Partial staleness is invisible. Home line 1 merges five sources of different ages into one sentence ('all up · Max 46 % · €3.20 IU today'). A dead collector produces a confident wrong 'all up' or a frozen quota, which is exactly the failure already seen: usage-tracker read the wrong store from 10-14 and reported ok.",
+   "evidence": "adr/ADR-009-argo-hosting.md:18,34 ('never show stale numbers', handled only for mini-unreachable); design/argo.md:91 (line 1); report/02-baseline.md:105 (usage-tracker blind, reported ok); design/proof.md:43 (gameday 14 asserts a condition opens, not what Argo shows); questions.md:74 (Q25 freshness, 4 min to answer today)",
+   "test": "Extend gameday 14. Stop the quota fetcher, the herdr observer and the Kuma adapter one at a time. Within one cadence, line 1 must replace the affected term (e.g. 'quota ? stale 40 min') and must never render 'all up' while the health source is stale.",
+   "proposal": "Every read model returns `as_of` and its expected cadence. The quiet-line component (StatusVerdict extension) renders a stale term in place of its value. 'All up' requires every health source to be fresh, and a stale source turns the quiet state into 'degraded factory'."
+  },
+  {
+   "id": "ux-4",
+   "severity": "major",
+   "claim": "Most verbs have no defined end state or place where the result appears, so the promised 'requested → applied' strip has nothing to show. Steer: 'delivered through rd say, acknowledged' means typed into the pane, not read or acted on. 'Expects-reply' has no reply event and no place where the reply appears, and `rd say` text is already mis-recorded as owner-typed. Submit: no read model shows queue position, quota-guard deferral or planner rejection. Stop: ends in 'a listed exception' with no named list. No verb has a timeout. And every write goes to the mini API, so pause (the manual breaker) fails during a mini outage, which is when it matters most.",
+   "evidence": "adr/ADR-015-argo-write-verbs.md:21-27,36; report/02-baseline.md:109 (rd say recorded as owner-typed); adr/ADR-009-argo-hosting.md:29-31 (writes through the mini API); report/05-decisions.md:22 (the reversal trigger is latency, but no budget is set)",
+   "test": "W6 gate per verb: (a) p95 requested→applied latency against a stated budget; (b) kill the executor mid-intent and confirm the strip ends in applied, rejected(reason) or expired, never 'requested' forever; (c) steer with expects-reply: the agent's reply appears on the agent row and in Since you left without opening the pane; (d) stop the mini and press pause from the phone: is the outcome visible and queued?",
+   "proposal": "Give every intent the terminal states applied, rejected(reason) and expired(budget), and set a budget per verb (steer ≤ 10 s delivered, ≤ 2 min `agent.replied`; stop ≤ 60 s; submit shows `claimed` or 'queued #n, deferred by quota guard until hh:mm'). Add `agent.replied` and `task.rejected` events. An intent older than its budget opens a condition. Let the VPS half accept a global pause into a durable inbox that the mini drains on return, with the strip showing 'queued, mini unreachable'."
+  },
+  {
+   "id": "ux-5",
+   "severity": "major",
+   "claim": "Modelling pause as a Decision breaks ADR-014 and pollutes the views and KPIs. Invariant 5 allows decider `owner` only for the four business classes, yet `automation.pause` is an owner Decision that is open until it expires. As written, it lands in decisions_open, so it shows as a 'Needs you' card and turns Home's 'decision' situation on. It also counts in the 'defaulted on expiry' KPI and the genuine-share KPI. A 48 h expiry with 'resume' as the default means a pause silently lifts.",
+   "evidence": "adr/ADR-015-argo-write-verbs.md:23,29; design/model.md:82-83 (invariant 5); adr/ADR-014-owner-decisions.md:19-21,39-41; design/argo.md:40,51,76 (Needs you and Home are built from decisions_open)",
+   "test": "Apply a pause on fixtures. Does the invariant-5 CI check reject it? Does Home leave the quiet state, and does 'Needs you' show a card? Do owner-touch and genuine-share move?",
+   "proposal": "Make pause a desired-state override on the Project (or global), written by the owner and read by every reconciler. Show it as one ambient term on line 1 ('argo paused until Thu 18:00'), never as a card. Exclude it from decisions_open and the escalation KPIs. If it stays a Decision, give it a non-escalation kind that the invariant names explicitly."
+  },
+  {
+   "id": "ux-6",
+   "severity": "major",
+   "claim": "One fact appears in several Home slots, and the quiet state is not quiet. The agents reconciler opens `agent.stuck` Conditions that correlate into incidents, so a stuck agent appears under Broken, under Parked/stuck and in Fleet. An open breaker is 'shown as stuck' and also raises the degraded-factory banner. The 'degraded' banner breaks the design's own rule ('shell never changes shape', ambient status instead of banners). In the quiet state, *Fixed alone* and *Since you left* are unbounded lists: at 110 deploys a week plus expired correlator candidates, they become the new Slack feed.",
+   "evidence": "design/loops.md:43 (agent.stuck Condition), :93-97 (breaker 'Argo shows it as stuck'); design/argo.md:74,78 (quiet state and banner), :92-94 (sections); design/argo.md:25 and research/2026-10-22-cockpit-ux-patterns.md:108 (no banners, one attention queue); report/02-baseline.md:22 (110 deploys/week)",
+   "test": "Replay the 10-17 reboot and a typical 24 h day from the event log into Home fixtures. Assert that no entity id renders in more than one Home section, and that quiet Home is at most about 5 visible rows on a 390 px phone.",
+   "proposal": "Rule: each entity renders in exactly one Home slot, picked by precedence (decision > broken > parked > in flight). *Fixed alone* becomes a count with a drill-down, and it lists items only when they touched a production project. The degraded banner becomes a line-1 term. Advance the *Since you left* cursor on an explicit 'seen', not on page load, so a two-second phone glance doesn't swallow the desktop digest."
+  },
+  {
+   "id": "ux-7",
+   "severity": "major",
+   "claim": "No phone push channel is named, yet three tiers depend on one: decision, heads-up and the dead-man. Slack exits in W6/W11, the dead-man must work with the mini dark, and iOS web push only works for a Home-Screen PWA in a secure context. With no channel, the decision card's 48 h expiry and its 're-push once' run silently, and the default is taken without the owner ever having seen the card.",
+   "evidence": "adr/ADR-014-owner-decisions.md:20-22,26; adr/ADR-009-argo-hosting.md:36-38; report/01b-what-changes.md:25; waves.md:35 (Slack keeps raw alerts only until W6); research/2026-10-22-cockpit-ux-patterns.md:104,112 (push must carry context; iOS web push constraints)",
+   "test": "Gameday 13 plus a decision fixture. On a locked iPhone, a decision push and a dead-man push must each arrive within their budget, carry the question, default and expiry in the body, and deep-link to the card with working option buttons. Measure this with Slack turned off.",
+   "proposal": "Name one channel in ADR-014/ADR-009 and send it from the VPS: either Argo as an installed PWA with web push from the VPS half, or a self-hosted push service there. Make the push body self-contained (question, default, expiry, a link to the card). Record 'push delivered' and 'card opened' as events, so a default taken on an unseen card is countable."
+  },
+  {
+   "id": "ux-8",
+   "severity": "major",
+   "claim": "Several read-model fields have no producer in the model. Q1's agents_live needs 'stop reason (quota / API error / turn end / waiting), open plan items, auto-resume ETA'. The Agent statechart has no parked state, no reason attribute and no resume_at, and the herdr observer (the Agent status writer) only sees working/idle/blocked/done. Witness classifies parked agents, but it is not a named writer of Agent status. Adding it as one would break the one-writer invariant.",
+   "evidence": "design/argo.md:34; design/model.md:23 (Agent status writer = herdr observer), :66-68 (Agent statechart), :77-78 (one writer per entity); adr/ADR-007-agent-topology.md:39-43 (Witness parked classes)",
+   "test": "A lineage CI check: every field of every read model in design/argo.md §2 resolves to an event type or attribute in model.md §2/§4 with exactly one writer. Run it now and list the fields that don't resolve.",
+   "proposal": "Add an `idle.parked{reason, resume_at}` substate. Make Witness the single writer of the parked reason and resume timer as an Agent sub-record (or an observer output), and emit an `agent.parked` / `agent.resumed` event pair. Make the lineage check part of the CI structural checks in proof.md."
+  }
+ ]
+}
