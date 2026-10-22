@@ -1,5 +1,7 @@
 # Round 5 — the dark factory
 
+> **Superseded 2026-10-22** by the factory rewrite (`docs/factory/waves.md`, which dispositions every wave below). History only: its `pending` and `blocked` markers are not live.
+
 **Goal:** the owner sits at the wheel and nothing else. Work flows from signal to
 shipped fix or feature without him; every layer has one job and every repo says
 so; Argo is the one place he looks, and it tells him in a few precise sentences

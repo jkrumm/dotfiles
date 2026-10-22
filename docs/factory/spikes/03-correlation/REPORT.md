@@ -2,7 +2,7 @@
 
 - Status: result, input to ADR-003. Date 2026-10-22. The full, reproducible report section is rendered by `evidence/golden/backtest.py` into `evidence/golden/backtest.out.md` ("Report section"); `backtest.py --verify` reproduces both outputs byte for byte. This file is the spike agent's final summary, saved verbatim by the orchestrator (subagent report writes are refused).
 
-**Spike 3 backtest, held-out odd chunks scored once.** Grouping and owner-touch pass; escalation and known-error match fail. Pass count 1, script sha256 `78a7b5b4…`, `--verify` reproduces both outputs byte for byte, redaction check clean, nothing committed.
+**Spike 3 backtest, held-out odd chunks scored once.** Grouping and owner-touch pass; escalation and known-error match fail. Pass count 1, script sha256 `78a7b5b4…`, `--verify` reproduced both outputs byte for byte at the time, redaction check clean, nothing committed. Since then two amendments were appended to `PREREGISTRATION.md` (scoped to future samples, thresholds unchanged), so `--verify` now exits 1 on the pre-registration hash alone: the pre-amendment text still hashes to `3f142e52…` (commit 835dc80), and every result field reproduces (final verification, 2026-10-22).
 
 The harness refused `REPORT.md` as a report-style file, so I did not work around it. The MADR-ready section is rendered into `backtest.out.md` ("Report section") and the narrative follows below. The empty `spikes/03-correlation/` directory is left in place.
 

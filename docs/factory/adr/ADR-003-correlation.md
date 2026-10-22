@@ -1,7 +1,7 @@
 # ADR-003 — Correlation is deterministic; judgment stays with the investigating agent; Keep is not adopted
 
 - Status: accepted · 2026-10-22 · revised after panel pass 1 and pass 2 (cor-1…cor-7, mig-1, int-11, sre-3, sre-5, ver-8)
-- Evidence: `evidence/golden/backtest.out.md` (held-out, scored once; `backtest.py --verify` reproduces it), `spikes/03-correlation/REPORT.md`, `evidence/golden/PREREGISTRATION.md`, `evidence/kpi/decision_shadow.out.md`, `research/2026-10-22-ops-correlation-catalog-eval.md`, `research/2026-10-22-known-error-regression.md`, `evidence/incidents/incidents.md` #6 (the 10-17 timeline)
+- Evidence: `evidence/golden/backtest.out.md` (held-out, scored once; `backtest.py --verify` reproduces every result field. Since two amendments were appended to `PREREGISTRATION.md`, with thresholds unchanged and scoped to future samples, it exits 1 on that file's hash alone. The pre-amendment text still hashes to `3f142e52…`), `spikes/03-correlation/REPORT.md`, `evidence/golden/PREREGISTRATION.md`, `evidence/kpi/decision_shadow.out.md`, `research/2026-10-22-ops-correlation-catalog-eval.md`, `research/2026-10-22-known-error-regression.md`, `evidence/incidents/incidents.md` #6 (the 10-17 timeline)
 
 ## Context and problem statement
 
@@ -90,8 +90,8 @@ for design.
 6. **Known errors:** a fixing Change is attached to its incident at closure (not inferred from notes);
    fingerprints are normalised across sources through the topology subject, so a Kuma monitor, its
    Slack relay and a HyperDX alert share priors (the misses were cross-source: 1449→1458, 1585→1497).
-   W3 builds this rule (int-11). It was designed from held-out misses, so it counts as a new rule
-   and is scored on a fresh sample, as a standing SLO whose first measurement is W10's gate.
+   W3b builds this rule (int-11). It was designed from held-out misses, so it counts as a new rule
+   and is scored on a fresh sample, as a standing SLO, read when the fresh sample reaches its size — never at a wave's gate.
    Promotion and demotion follow the post-deploy hold (ADR-012 §8); a recipe that is not promoted
    goes into the investigator's brief on an exact match.
 
@@ -102,14 +102,14 @@ for design.
 
 ### Confirmation
 
-- **W3 gate (a) is a fixture regression, not a score.** `backtest.py` v2 — the revised rules behind a
+- **W3b gate (a) is a fixture regression, not a score.** `backtest.py` v2 — the revised rules behind a
   flag, v1 kept — writes its frozen output for all 959 events, and the live correlator must reproduce
   it event for event; no thresholds (cor-1). v2 is built first: it runs on the development chunks
   only, and its P / R / F1, plus the change in the `fp`-class merge and window-class split masses
   (`backtest.out.md` §8), are published in the table above beside v1, labelled development-only.
   v1 stays reproducible with `backtest.py --verify`. The held-out is declared spent for grouping as
   well as escalation.
-- **W3 gate (b) is a replay** (mig-1): a never-labelled window of recorded primary-source history —
+- **W3b gate (b) is a replay** (mig-1): a never-labelled window of recorded primary-source history —
   Kuma webhook rows since 10-16, HyperDX alerts, Docker events after the golden set's `AS_OF`, the
   10-17 burst — labelled blind from packets of raw signal text, source time and topology only;
   hinted packets are a second, reported reading. The comparator is old warden's recorded grouping of
@@ -128,7 +128,7 @@ for design.
   (`evidence/incidents/incidents.md` #6). Pass: one incident after the `merge`, no recipe fired at the
   unreachable host, 0 pages. An unrelated container crash injected at 0–45 min offsets measures the
   host-fold merge rate (reported).
-- **Escalation and known-error thresholds** are standing SLOs, not W3 gates (int-11): first measured
-  at W10's gate on a fresh sample drawn under the same frame once ≥ 30 decision candidates exist. The
+- **Escalation and known-error thresholds** are standing SLOs, not wave gates (int-11): first measured
+  on the fresh sample drawn under the same frame, once ≥ 30 decision candidates exist. The
   gold-label doubts the spike listed (1071/1074/1078/1079, 1372/1373/1380/1381, 1450/1451) are
   re-labelled by two labellers before that test.

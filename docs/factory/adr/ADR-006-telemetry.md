@@ -33,7 +33,7 @@ per item is a guess. Can one trace run from an item through a herdr worker to a 
    and usage rows, so cost per item is a join.
 4. **One always-on ClickHouse:** the VPS ClickStack through its authenticated OTLP tier; the local
    stack stays an on-demand dev target. Hand-rolled stdlib/TS emitters, no SDKs.
-5. Order (migration W11): agw's Claude env block and warden's header → research-gateway patch, then
+5. Order (migration W9): agw's Claude env block and warden's header → research-gateway patch, then
    email and audio → OpenCode env + header → `rd` pane env (attribute only) → Hermes plugin.
 6. Remove the settings `"0"` (or override per spawn) — today it silently disables all Claude Code telemetry.
 
@@ -46,4 +46,4 @@ per item is a guess. Can one trace run from an item through a herdr worker to a 
 
 A gameday item traced from signal to gateway call in one query; a CI check that every spawn path
 sets the resource attribute; the `/otel` preset fixes noted in the spike (status-code and column
-names) land with W11.
+names) land with W9.

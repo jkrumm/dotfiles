@@ -50,7 +50,7 @@ and its hook.
 ### Consequences
 
 - Good: tasks join with incidents, worker Agents and changes in one store; PLAN.md holds no state, so it cannot disagree with the ledger and no transition writes to git; one backup; IuRoot fits (the ledger sits outside every repo).
-- Bad: about 300–400 lines to build (history, labels, comments, export); one SQLite file is one disk — add a nightly off-box copy (Litestream or the existing snapshot job) in the same wave.
+- Bad: about 300–400 lines to build (history, labels, comments, export); one SQLite file is one disk — W1b replicates its WAL off-box continuously (ADR-011).
 
 ### Confirmation and flip conditions
 

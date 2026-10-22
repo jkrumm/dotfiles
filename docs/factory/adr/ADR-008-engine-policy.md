@@ -27,7 +27,7 @@ OpenCode on IU models. Which engine runs which work, and what happens near the q
 | Burn rate across two resets | 204 % (187–245) over the last 7 calendar days, which span the 10-17 (unscheduled) and 10-21 (scheduled) resets — a burn-rate signal, not a window reading (`forecast.out.md` notes) |
 | Who fills Max today | owner-steered fleet waves 74 %, owner-interactive 32 %, agw review on Max 14 % |
 | IU per week today | $147 (agw tools $91, agw OpenCode $28, research $18, Hermes $4) |
-| Mother and lead wakes at the forecast's assumption | $707 list per week (mothers $442, leads $265; 336 wakes, ≈ $2.11 each) — an assumption, not a measurement; W4 replaces the per-wake cost and the wake rate with measured values (p2 cos-14) |
+| Mother and lead wakes at the forecast's assumption | $707 list per week (mothers $442, leads $265; 336 wakes, ≈ $2.11 each) — an assumption, not a measurement; W4b replaces the per-wake cost and the wake rate with measured values (p2 cos-14) |
 
 ## Considered options
 

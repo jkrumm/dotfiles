@@ -26,7 +26,7 @@ beginning, so deploy intent is a Signal and the deploy reconciler stays the only
 |-|-|
 | Uptime Kuma (homelab, 120 monitors) | webhook (live since 10-16); `heartbeat.status` pairs Up with Down; group monitors are topology parents, never subjects of their own Conditions (`design/loops.md` §1); state read at every resync (below) |
 | HyperDX / ClickStack alerts | webhook (live); alert state read at every resync (below) |
-| Application logs (152 `hermes_log` rows today, `evidence/signals/signals.md`) | the mini's logs (`~/Library/Logs`, Hermes, agent-gateway) ship to the VPS ClickStack through an OpenTelemetry collector's file receiver, so the adapter has live input from W3 (the file poller that fed warden stops with it at W1); the log adapter reads ClickStack alert rules on the structured severity field, never substring matches; fingerprint = logger + normalised message; output of the factory's own workers dropped at intake by provenance (ADR-006's resource attribute); a log-sourced Condition resolves by quiet, with no Up to wait for (`design/loops.md` §1) |
+| Application logs (152 `hermes_log` rows today, `evidence/signals/signals.md`) | the mini's logs (`~/Library/Logs`, Hermes, agent-gateway) ship to the VPS ClickStack through an OpenTelemetry collector's file receiver, so the adapter has live input from W3a (the file poller that fed warden stops with it at W1); the log adapter reads ClickStack alert rules on the structured severity field, never substring matches; fingerprint = logger + normalised message; output of the factory's own workers dropped at intake by provenance (ADR-006's resource attribute); a log-sourced Condition resolves by quiet, with no Up to wait for (`design/loops.md` §1) |
 | git / GitHub refs | a ref adapter per manifest repo emits `merged` for every new default-branch sha, actor push \| renovate \| train; the Change module records `change.merged` from it (`design/model.md` §1), and the ship loop owns only train state |
 | Deploys: RollHook, WUD, the `make deploy` wrapper, CI | each emits only `started`, `deployed` and `failed` (RollHook: its job webhook, or the OTLP deploy markers already in ClickStack, 1,453 ok / 5 failed in 30 d); the deploy reconciler alone turns them into Deployment transitions |
 | GitHub (Actions, issues, PRs) | `gh` poll on the mini (the ingest door is not reachable from GitHub); 553 failed Actions runs in 90 d are unread today |
@@ -36,11 +36,11 @@ beginning, so deploy intent is a Signal and the deploy reconciler stays the only
 | herdr | the Phase 0 event record; also agent heartbeat and last output |
 | Quota and usage | `quota.sampled` (each quota reading); `usage.recorded` per session, carrying `factory.root` |
 | Owner messages | `owner.message` from transcripts and Hermes, classified; joined to its root through the receiving Agent's `correlation` |
-| jobrun / `jobs-grade` | `job.ran` per scheduled run with its grade; launchd failures reach the health reconciler through it from W3 |
+| jobrun / `jobs-grade` | `job.ran` per scheduled run with its grade; launchd failures reach the health reconciler through it from W3a |
 | Updates poll (daily: brew, OS and image updates, restart-needed flags) | `update.available` |
 | agent-gateway routing, CLI and gateway versions | `config.observed`, on change |
 | Owner and Hermes requests | `warden task add` / Hermes → Task (not a Signal) |
-| Watchtower | archived upstream (last release 2023-11): retired for factory-managed containers in W3 — RollHook or WUD with recorded intent (`started`) replace it; any other replacement is an unplanned Deployment |
+| Watchtower | archived upstream (last release 2023-11): retired for factory-managed containers in W3a — RollHook or WUD with recorded intent (`started`) replace it; any other replacement is an unplanned Deployment |
 
 **Webhooks only schedule reconciles.** The Kuma and HyperDX webhooks carry the transition and its
 source time and wake the project's reconciler, but a webhook is never the only record of a

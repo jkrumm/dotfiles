@@ -100,7 +100,7 @@ LLM tokens only where judgment is needed; the manual Claude Code + herdr lane ke
    Intents for a sleeping laptop queue and expire per ADR-015. shutterflow's fleet stays on the
    MacBook (Mac-only work) and is observed and actuated there, not moved.
 9. **agw is a bounded tool server, no loop** (sim-6). Before W8 its `decide`, `triage`,
-   `narrative` and `investigate` tools are deleted; W8 wraps review, check, prose, read_image and
+   `narrative` and `investigate` tools are unregistered (their code stays on disk until W12); W8 wraps review, check, prose, read_image and
    read_drawing.
 10. **Gas Town, explicitly.** Copy: the hook, Witness, Refinery (warden's merge train), Deacon
     (reconcilers on patrol), persistent identity with ephemeral sessions (the mother). Reject: a

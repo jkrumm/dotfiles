@@ -12,9 +12,16 @@ through a pull queue; live agent state is impossible. The owner's most frequent 
 about live agents ("parked?", "stuck or done?", "where are we?"). Argo also hosts the life pages
 (Garmin, strength, body, reading, walking pad), whose data and crons live on the VPS.
 
+The owner asked whether Argo should "move to local mini instead of needing APIs for everything".
+Measured against that criterion:
+- **Today:** Argo depends on four push paths (agw overview, warden snapshot and action queue,
+  usage-tracker records, hermes narratives) plus a pull queue for actions.
+- **C:** replaces all of them with one read API on the mini, which reads the ledger in place.
+- **B:** would remove that last API as well, but the mini would then take the life pages down with it.
+
 ## Decision drivers
 
-Answer from live data where it lives; keep the life pages up when the mini is down; never show
+Fewer APIs (the owner's criterion); answer from live data where it lives; keep the life pages up when the mini is down; never show
 stale numbers as current; delete pushes rather than add relays; an off-site dead-man's switch.
 
 ## Considered options

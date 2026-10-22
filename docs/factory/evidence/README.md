@@ -30,7 +30,7 @@ append-only stores, read-only.
   `python3 -I lib/redact.py --check $(git ls-files -mo --exclude-standard .)`.
 - **Header:** each script starts with a docstring naming the question it answers, the
   definition keys from `DEFINITIONS.md` it implements, its inputs, and how to run it.
-- `run-all.sh` re-runs every script in dependency order.
+- Scripts run one by one; there is no `run-all.sh`. Scripts that read live systems over ssh, gh or herdr (signals, dora, toil, herdr hygiene, the MacBook transcript leg, gameday) reproduce only from this host.
 
 ## Layout
 

@@ -231,6 +231,8 @@ spec:
                                        #   compose revision, bundle hash
       version: {http: <version-url>, jsonPath: sha}   # or {image_label: org.opencontainers.image.revision}
       availability: always             # always | intermittent (the MacBook)
+      canary: {kind: preview}          # preview | scratch | window: where seeded faults run so holdouts
+                                       #   can bind (ADR-012); absent = code fixes stay propose-only
       deploy: ci
   data:
     databases: [<db name>]
@@ -338,7 +340,7 @@ Incident load is shown, not decisive — incidents reach warden for every class.
 | shutterflow | fleet | 818 | 286 (fleet/ handoff phases) | 1 |
 | dotfiles | fleet | 558 | 45 | 15 |
 | warden | fleet | 528 | 12 | 55 |
-| brain, hermes-agent, research-gateway, agent-gateway, vps, homelab, … (27 more) | session | 2–493 | 0–17 | 0–33 |
+| brain, hermes-agent, research-gateway, agent-gateway, vps, homelab, … (21 more) | session | 2–493 | 0–17 | 0–33 |
 | IuRoot repos (20, names only) | session | ≤ 140 | ≤ 8 | — |
 
 The owner's guess named prometheus-scripts as a fleet candidate; the rule says session (92 commits

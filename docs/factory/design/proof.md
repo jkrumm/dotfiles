@@ -100,7 +100,7 @@ the ledger or its snapshot read-only. Error budgets are per 28 days.
 | Present-human asks per month (`present_human_ask`, `evidence/DEFINITIONS.md`: biometric renewals, one per credential expiry, coalesced) | not recorded today | ≤ 2, outside the decision SLO | — |
 | Decisions defaulted on expiry, split into acked and never-acked cards (ADR-014) | not measurable today (no card, no ack) | never-acked 0 | — |
 | Holdout churn per product per month and the fail→update rate (an edit after a failing story; ADR-012) | no holdouts today | churn tracked; an agent edit without a plan item 0 | — |
-| Status questions asked outside Argo | ≈ 25 per week | ≤ 5 per week | — |
+| Status questions asked outside Argo | ≈ 32 per week | ≤ 5 per week | — |
 | Cost per resolved item, per action class × engine, attributed through Agent records | IU $0.12 per resolved item, Max $0 in the post-10-15 regime, all classes (W43, `kpi/cost`); per class × engine from W4a (`cost.py` re-cut from the post-10-15 regime); the 14 d mixed-regime $0.36 IU + $1.08 Max-eq is not a baseline | budgets count engine-tagged tokens per session — Max % and dollars are display only; interim ceiling 3 × baseline p90 per class, fed to the lineage budget; a class or engine with no baseline (Max after 10-15, mother wakes, herdr OpenCode tabs) starts from the measured p90 of W4b's first week × 1.5; the 8-week revisit tightens both | — |
 
 ## 4. Holdout scenarios

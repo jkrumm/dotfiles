@@ -5,7 +5,7 @@
 
 ## Context and problem statement
 
-The owner decides business questions only and wants ≤ 0.1 % of items to reach him. Self-approval
+The owner decides business questions only and wants under 1 % of items to reach him (SLO), with 0.1 % as the stretch target (ADR-014). Self-approval
 is principled only if the evidence that authorises a ship is named per kind of action, rollback is
 automatic, and runaway loops stop themselves — without turning any of that into an owner gate.
 

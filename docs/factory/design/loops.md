@@ -68,7 +68,7 @@ Running it twice gives the same result; it holds no memory between runs.
 | deps | `maintenance.deps` policy | `deps.stale`, `deps.vulnerable` |
 | docs | generated blocks in sync, age ≤ `maxAgeDays`, no contradiction lint hit | `docs.drift`, `docs.stale` |
 | agents | no agent stuck or finished-but-open | `agent.stuck`, `agent.finished_open` |
-| infra (host projects) | disk floor, certs, backups age, container restarts, DB/ClickHouse health, mounts and attached devices present ("device absent" arrives from the HomeLab WatchDog, ADR-013), factory-host egress | `infra.disk`, `infra.cert`, `infra.backup`, `infra.restart_loop`, `infra.mount`, `infra.egress` … |
+| infra (host projects) | disk floor, certs, backups age, container restarts, DB/ClickHouse health, mounts and attached devices present ("device absent" arrives from the HomeLab WatchDog, ADR-013), factory-host egress | `infra.disk`, `infra.cert`, `infra.backup`, `infra.restart_loop`, `infra.mount`, `infra.egress` …, `auth.expired` (7 days ahead) |
 | security | CrowdSec decisions, auth anomalies | `security.anomaly` |
 | lineage (`factory-self`) | automatic changes, rollbacks, restarts and budget inside the breaker's limits (ADR-012 §11) | `lineage.breaker` |
 
@@ -166,7 +166,7 @@ Agent review is a signal; deterministic evidence is the gate (research `dark-fac
 No rung is an owner gate. The rules that hold on every rung — propose-only and its substitute
 producers, `factory-self`, rollback, holdouts, the two-observation restart rule, hold before reuse,
 the breaker, budgets — are ADR-012's; this table is the per-class matrix they apply to. The
-factory's own services (agent-gateway, Hermes, warden) get verified evidence producers first, in W3
+factory's own services (agent-gateway, Hermes, warden) get verified evidence producers first, in W3b
 (`waves.md`), so their fixes ride the ladder instead of sitting propose-only.
 
 | Action class | Evidence that authorises auto-ship | Automatic rollback | Blast radius and rate |
@@ -219,6 +219,7 @@ spawn → verify like any outage.
 | Claude Code setup | CLAUDE.md/AGENTS.md size, skill count, resident tool-definition tokens | `setup.bloat` |
 | basalt-ui dogfooding | components duplicated in consumers | `ui.upstream` |
 | performance, OTel | p95/error-rate regressions per service vs baseline | `perf.regression` |
+| bugs | weekly correctness sweep: `/code-review` over each repo's merged diffs since the last sweep, plus new OTel error clusters per service | `code.bug` |
 | GitHub issues | open issues on owned repos | Signals → Tasks |
 | infra | disk, certs, backups, mounts and devices, containers, databases, ClickHouse per host | `infra.*` with runbooks |
 | factory-host egress | a network-independent runbook and the heartbeat's egress probe (ADR-009); gameday row 15 (resolver blackhole) | `infra.egress` (#1: a 7-hour outbound outage, `evidence/incidents/incidents.md`) |

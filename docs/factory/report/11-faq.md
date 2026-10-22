@@ -32,7 +32,7 @@ Details: section 1b, *During the rewrite*.
 Not by design, and it will not waste it either. Max demand is already 120 % (109–144) of a weekly window per week before any factory judgment (`kpi/forecast`). So routine work and mother wakes run on IU.
 
 - **Guard:** projects your burn for the rest of the cycle as p90 rate × hours to the reset.
-- **Park order:** when the projection reaches 100 %, the guard parks improve first, then fleet, then your unattended waves. Unattended waves continue on IU with a Claude-class model.
+- **Park order:** when the projection reaches 100 %, the guard parks improve first, then fleet. Your unattended waves are not parked: they checkpoint to the hook and continue on IU with a Claude-class model (ADR-008).
 - **Protected:** your interactive sessions and the waves you attend are never victims (ADR-008).
 - **Resume:** parked work returns through the admission queue at the forecast's token rate, never in a burst.
 - **Inverse rule:** late in light cycles, the factory spends capacity that would lapse. 3 of 7 cycles peaked at 55–79 %.

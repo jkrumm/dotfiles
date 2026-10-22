@@ -43,11 +43,11 @@ incidents.
 | Pages for the ten costliest incidents | **180** → ≈ 8 under the ideal path (`incidents/`) | — |
 | Time to resolve, median / p90, 14 d | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h |
 | Reopen / regression rate | 10.4 % / 10.4 % | ≤ 5 % each |
-| Automatic revert when post-deploy verify fails | **0 of 52** merges (rebase merges) | 100 % |
+| Automatic revert when post-deploy verify fails | **0 of 52** merges (48 receipts record `rebase`, none `squash`) | 100 % |
 | Max load per week (30 d) | **120 %** (109–144) of a weekly window: owner-steered waves 74 %, interactive 32 %, agw review 14 % (`kpi/forecast`); burn rate across two resets, last 7 d: 204 % | factory work off Max unless capacity would lapse; owner interactive sessions blocked per cycle → 0 (measured from W4b) |
 | Max lapsed at the reset | p50 **4 %**, p90 30.6 % (`kpi/forecast`); 3 of 7 cycles peaked at 55–79 % (`kpi/quota`) | spent late in light cycles by the inverse rule, on the in-cycle projection of your burn (ADR-008) |
-| Status questions asked outside Argo | ≈ 25 per week (`questions/`) | ≤ 5 per week |
-| Signals arriving through Slack relays | **63.7 %** (`signals/`) | 0 % |
+| Status questions asked outside Argo | ≈ 32 per week (`questions/`) | ≤ 5 per week |
+| Signals arriving through Slack relays | **63.7 %** of 1,761 events (`signals/`) | 0 % |
 | Locked-model claims that held | 8 of 26 — enforced 7/7, prose 1/11 (`postmortem/`) | every invariant enforced or labelled `target` |
 | Backtest, held-out, pre-registered thresholds | v1 rules: grouping F1 **0.889** vs warden 0.744; 5 of 8 pass — escalation and known-error matching fail (`golden/backtest`) | v2 rules: grouping accepted at W3b by a frozen-output regression and a blind replay; escalation and known-error matching are standing SLOs, read on the fresh pre-registered sample when it reaches its size, not at a wave's gate |
 

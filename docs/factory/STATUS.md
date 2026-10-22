@@ -9,7 +9,7 @@ effort. Started 2026-10-22 07:40 UTC.
 | Phase | State | Artifacts |
 |-|-|-|
 | 0 — stop the bleeding | done: agw W12 (69deb89), dotfiles W3 (6e8a45c..16f3373), usage-tracker W1 (a5fbd23), warden W8 closed early at the owner's steer (c633ef7..e0301c9) | see *Phase 0* below |
-| 1 — evidence | 8 workers running: kpi (warden), kpi (delivery/DORA/quota/herdr), postmortem, incidents, interventions, golden sampling, toil, signals | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
+| 1 — evidence | done: kpi (warden), kpi (delivery/DORA/quota/herdr), postmortem, incidents, interventions, golden sampling, toil, signals | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
 | 2 — model | done | `design/model.md` (eleven nouns), ADR-010, ADR-011 |
 | 3 — loops | done | `design/loops.md`, ADR-002, ADR-003, ADR-007, ADR-008, ADR-012 |
 | 4 — spikes → ADRs | done: spikes 1–6, ADR-001…015 | `spikes/`, `adr/` |
@@ -97,12 +97,41 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
 - 11:59Z Review fixes applied (Max workflow wf_9e691ea8-2f3) and committed (c9974d9; warden lane plan 2847cad): W3→W3a/W3b, W4→W4a/W4b, legacy rollback horizon, WAL replication, measured holdout binding, admission in warden; runnable copies regenerated; both gates pass. Remaining: diagram re-render (running, told about the final calendar), final `report.html` build, `rv` submission to the owner's Inbox, final commit and message.
 - 12:21Z **Done.** Final `report.html` built (check clean, 0 placeholders, no external resources, redaction clean) and submitted to the owner's review Inbox through `rv` (`spikes/05-artifact-review/rv/rv-pn.ts`, project `dotfiles`, message msg_01M5HRYJ6ZHFHBH96GXVA6ZC63, default "proceed as designed: start W1a and W2a; D1–D5 take their defaults"). Memory note `factory-design` updated.
 
-## Resume here (a fresh context)
-
-1. **Owner comments:** `cd ~/SourceRoot/dotfiles/docs/factory/spikes/05-artifact-review/rv && PLANNOTATOR_BIN=~/.local/share/factory/tools/pn-review PLANNOTATOR_DATA_DIR=~/.local/share/factory/review/home/.plannotator RV_SESSION=factory-design bun rv-pn.ts wait msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 ~/SourceRoot/dotfiles --timeout 60 --default proceed` — fold any feedback into the ADRs and `waves.md`, rebuild with `report/build.py`, resubmit (supersedes).
-2. **Review door** is interim and unsupervised: the Inbox (spike 5 binary, data in `~/.local/share/factory/review/`) and `~/.local/share/factory/tools/review-door.py` on :7790 behind Caddy's `plannotator.test` block. If the door answers 502: `nohup python3 -I ~/.local/share/factory/tools/review-door.py >> ~/Library/Logs/factory-review-door.log 2>&1 &`. W7 replaces both.
-3. **Start the rewrite:** `waves.md` §How to start — W1a (warden Wave 9) and W2a (dotfiles Wave 1) are active and gate-green.
-4. **Open decisions D1–D5:** `report/10-open-decisions.md`; defaults apply on expiry.
 - 12:24Z `/prose` (agw, IU: Opus writer, DeepSeek reviewer; $0.43 total) on the reading-order sections — verdict, what changes for you, FAQ: all three rewrites kept, every number and link preserved (checked by script); report rebuilt, check clean. The owner's Inbox copy was submitted before this polish; the next `rv` resubmission supersedes it.
 - 12:24Z Final report resubmitted to the same Inbox thread (thread msg_01M5HRYJ6ZHFHBH96GXVA6ZC63, new message msg_01M5HS3RF27AVYEQR6A51NSY4Q); the resume command above reads that thread.
+- 13:08Z Final verification, from orchestrator session 94025058. Four independent audits:
+  - **Owner intent** against the verbatim prompt: 33 of 41 asks met. Added:
+    - the `bugs` improve job;
+    - a canary or scratch window per fleet project, so holdouts can bind;
+    - the cutover of today's mothers and leads;
+    - a Hermes inventory and ADR-017;
+    - ADR-016 for attack detection;
+    - the owner's "fewer APIs" criterion in ADR-009.
+  - **Numbers:** 17 of 36 groups re-ran identical and 12 traced. Corrected:
+    - status asks ≈ 32 per week, not 25;
+    - median wave 2.4 h, not 4.2;
+    - 713 `#updates` rows;
+    - 387 h;
+    - backfill at `AS_OF`;
+    - the queue 43 → 25 → 2;
+    - 48 rebase receipts;
+    - `--verify` on the amended pre-registration.
+  - **Consistency:** 0 blockers, 6 majors fixed:
+    - launches name an engine `rd` can start, and there is no `ca` kind;
+    - W1b runs from a `w1b` worktree's copy of the plan;
+    - W1a enacts and gates its *What stops when* rows;
+    - `comment` is gated at W7;
+    - the SLO is < 1 % in ADR-012;
+    - ADR-003's SLO is read on the fresh sample.
+
+    Most minors fixed: wave ids after the split, gameday rows 5 and 15 assigned to W10, `auth.expired` observer, replica retention, the CodeRabbit chore, SVG facts, an IuRoot label removed.
+  - **Rendering:** phone overflow, leaked wave-status comments, 5 px diagram text and the placeholder badge fixed in `build.py`.
+  - **Warden plan:** its header no longer contradicts W1a (warden 131a3da), and its gate passes.
+
+## Resume here (a fresh context)
+
+1. **Owner comments:** `cd ~/SourceRoot/dotfiles/docs/factory/spikes/05-artifact-review/rv && PLANNOTATOR_BIN=~/.local/share/factory/tools/pn-review PLANNOTATOR_DATA_DIR=~/.local/share/factory/review/home/.plannotator RV_SESSION=factory-design bun rv-pn.ts wait msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 ~/SourceRoot/dotfiles --timeout 60 --default proceed` — fold any feedback into the ADRs and `waves.md`, rebuild with `report/build.py`, resubmit with the same env and `bun rv-pn.ts submit ~/SourceRoot/dotfiles ~/SourceRoot/dotfiles/docs/factory/report.html --default proceed` (same file path = same thread; the new revision supersedes).
+2. **Review door** is interim and unsupervised: the Inbox (spike 5 binary, data in `~/.local/share/factory/review/`) and `~/.local/share/factory/tools/review-door.py` on :7790 behind Caddy's `plannotator.test` block. If the door answers 502: `nohup python3 -I ~/.local/share/factory/tools/review-door.py >> ~/Library/Logs/factory-review-door.log 2>&1 &`. W7 replaces both.
+3. **Start the rewrite:** `waves.md` §How to start — W1a (warden Wave 9) and W2a (dotfiles Wave 1) are active; each gate passes on a clean, pushed checkout. W1b runs from the `w1b` worktree (§How to start).
+4. **Open decisions D1–D5:** `report/10-open-decisions.md`; defaults apply on expiry.
 

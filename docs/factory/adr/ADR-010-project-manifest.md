@@ -68,7 +68,7 @@ nothing can join them.
      not a red `make check`.
 4. **Onboarding is one command; drift is proposed, not discovered.** `warden project new <name>
    --type …` (the former `factory` CLI, folded into warden — ADR-004) writes `project.yaml` from a
-   per-type template, creates the directory contract and renders every generated file. The same
+   per-type template, creates the directory contract's paths that hold content (nothing empty) and renders every generated file. The same
    template writes the repo's `Makefile` with one target per declared `commands` entry, so
    `make -n` parses on a fresh repo (a Makefile that holds targets is not an empty placeholder), and
    the CI workflow (self-hosted runner for a private repo, hosted for a public one).

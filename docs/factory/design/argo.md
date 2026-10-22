@@ -7,7 +7,7 @@ Argo/basalt-ui inventory. Revised against panel pass 1 and pass 2 (`panel/pass1-
 ## 1. What the evidence says before any view is drawn
 
 - He asks his session agents, not his tools: 199 of 211 classified asks went to a Claude Code
-  session, 12 to Hermes, 2 through Argo's chat in 60 days. Each answer is rebuilt from scratch:
+  session and 12 to Hermes; of Hermes' 77 owner messages in 60 days, 2 came through Argo's chat. Each answer is rebuilt from scratch:
   median 48 s and 5 tool calls (`git log`, `herdr agent`, `curl`, ssh probes).
 - The loudest owner action is not a question: 50 `continue` nudges to parked agents (quota
   reset, API-error stall, ended turn) on 25 of 45 days. Argo cannot fix that by displaying it;
@@ -158,11 +158,11 @@ Pages:
 - The life pages (Garmin, strength, body, reading, walking pad, astro) stay as they are, in
   their own nav group.
 
-**Before Home exists.** W3 ships a read slice so days 5–16 are visible: `warden status --json` and
+**Before Home exists.** W3a ships a read slice so days 5–19 are visible: `warden status --json` and
 one Argo stub page with `incidents_open`, `decisions_open` and `freshness` (rows 5, 18 and 25).
 Home, the push channel and the write verbs arrive with W6 (`waves.md`).
 
-## 4. Where Argo runs (ADR-009 draft)
+## 4. Where Argo runs (ADR-009)
 
 {{asset:argo-control-plane}}
 
@@ -174,8 +174,8 @@ Home, the push channel and the write verbs arrive with W6 (`waves.md`).
 | **C. Split (recommended)** | the SPA and the life API stay on the VPS; a **factory read API runs on the mini** next to the ledger; the browser (MacBook, phone — both on the tailnet, which already reaches the mini on 443) calls it directly | life pages always up; the cockpit shows "mini unreachable since hh:mm" from the VPS dead-man instead of stale numbers | new mini API; delete the snapshot pushes (agw overview, warden snapshot, usage records) |
 
 **Dead-man's switch, off-site:** Kuma runs on the homelab, in the same house and on the same
-power as the mini, so it cannot be the switch. A VPS-side receiver expects the mini's 5-min
-heartbeat and pushes to the phone after 15 min of silence; Argo's VPS half shows the same fact.
+power as the mini, so it cannot be the switch. A VPS-side receiver expects the mini's and the homelab's 5-min
+heartbeats and pushes to the phone after 15 min of silence; Argo's VPS half shows the same fact.
 
 ## 5. basalt-ui: have, land, build
 
@@ -199,4 +199,4 @@ the improve loop's `ui.upstream` condition counts components duplicated in consu
   run; the fixtures and the property test over Home's situation function are in `design/proof.md` §5.
 - "Left Argo to find out" is measured, not asked: the weekly count of owner messages in Claude Code
   and Hermes that fall in any of the 27 classes (`evidence/questions/questions.py`, the numbering of
-  §2). Baseline: 211 in 60 days ≈ 25 per week. Target: ≤ 5 per week.
+  §2). Baseline: 211 asks (199 in 45 days of Claude Code, 12 in 60 days of Hermes) ≈ 32 per week. Target: ≤ 5 per week.

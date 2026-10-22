@@ -25,7 +25,7 @@ Days are working days of wave time from the `waves.md` Calendar (≈ 26 on the w
 | Job and log failures | unwatched: the heartbeat's jobs component still shows failed jobs as a WARN, but nothing pages or fixes; Hermes log errors have no reader, because the file poller that read them stops with the old warden | W3a (day 5): jobrun runs enter as `job.ran` events, and the mini's logs (launchd, Hermes, agent-gateway) reach the VPS ClickStack for the log adapter |
 | Healing | none; the manual herdr lane (`c`, `rd wave`) is the fix path | W3b (day 8): the *restart* recipe; W4a (day 9): investigation and fixes through workers |
 | Parked agents | you nudge them, as today | W4b (day 11): Witness resumes them, MacBook agents through an actuator while the laptop is awake |
-| Ship | merges and deploys as today, by hand or from your sessions | W5 (day 14): restarts and producer-backed config ship automatically; fleet code fixes project by project, as each project's holdouts bind on measurement, never on a timer — until then they are propose-only: opened and verified, not merged |
+| Ship | merges and deploys as today, by hand or from your sessions | W3b (day 8): the restart recipe acts by itself, only when two independent observations agree; W5 (day 14): restarts and producer-backed config ship automatically through the ladder; fleet code fixes project by project, as each project's holdouts bind on measurement, never on a timer — until then they are propose-only: opened and verified, not merged |
 | Argo cockpit | the old `/agents` and `/warden` pages frozen (stale, no writes) | W3a (day 5): `warden status --json` and one stub page — open incidents, decisions, freshness; no push before W6. W6 (day 19): read models, Home, push, write verbs |
 | Hermes | briefings without `warden.db` reads | W11 (day 22): the door, briefings from the event log |
 | Improve and infra healing | none | W10 (day 26): infra runbooks per host, improve jobs and attack blocking — full autonomous operation once its gate passes: gameday rows 3, 4, 14 and 16 and one shipped item per improve class. Escalation recall and known-error matching are read as standing SLOs when the fresh sample reaches its size, not at the gate |
@@ -44,5 +44,6 @@ Days are working days of wave time from the `waves.md` Calendar (≈ 26 on the w
   - a production SLO burning while automation is stuck (heads-up)
   - a host fault only hands can fix (`needs_hands`, information only)
   - the mini going dark (dead-man)
+  - the morning and evening briefing: one push with an audio link
 - **Credential expiry:** one ask per expiry that needs your fingerprint, at most 2 a month. Asks are scheduled from the 7-day lead and coalesced across credentials. This is physical presence, not a decision, so it does not count toward the decision SLO.
 - **herdr, Claude Code and `rd`:** exactly as now — the build lane never breaks.
