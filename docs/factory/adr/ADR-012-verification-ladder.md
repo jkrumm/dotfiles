@@ -1,6 +1,6 @@
 # ADR-012 — Verification replaces approval: a ladder per action class, no owner gates
 
-- Status: accepted · 2026-10-22 · revised after panel pass 1 (ver-1…ver-8, sre-4, int-4, cos-6) and pass 2 (ver-1…ver-7, sim-4, sim-5, sre-5, int-8, dat-9, dat-12, cos-15). In the body, `p2` marks a pass-2 id.
+- Status: accepted · 2026-10-22 · revised after panel pass 1 (ver-1…ver-8, sre-4, int-4, cos-6), pass 2 (ver-1…ver-7, sim-4, sim-5, sre-5, int-8, dat-9, dat-12, cos-15) and the cross-lab review (R7, R16, T3). In the body, `p2` marks a pass-2 id; `R` and `T` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/kpi/baseline.out.md` (warden revert 0 of 52 merges: all rebase merges, 3 failed verifications "cannot auto-revert"; reopen 10.4 %; regression 10.4 %, 5 of 48 evaluable fixes), `evidence/kpi/dora.out.md` (CFR 2.0 % attributed, recovery median 0.27 h; 1418 deploys in 90 d, mostly Actions-on-push), `evidence/signals/signals.md` (19 of 36 vps services without a Kuma monitor or push), `evidence/incidents/incidents.md` #2–#4 (the observer was wrong, not the service), `evidence/interventions/interventions.md` (4 of 20 genuine), `research/2026-10-21-dark-factory-landscape.md` §3 (agent review is a signal, deterministic checks gate), `research/2026-10-22-agents-durable-mcp-otel.md` §3 (StrongDM holdouts)
 
 ## Context and problem statement
@@ -33,13 +33,15 @@ Rules that hold on every rung:
    producer stands in — library: consumer-build holdouts; infra: dry run plus plan diff; tooling
    without a runtime: the test suite plus a canary run. A propose-only Change whose gap stays open
    closes after 14 days with its Task kept — never merged by the owner.
-3. **`factory-self`** (ver-2, p2 ver-2): changes to the factory's own ship path, verifier, holdout
+3. **`factory-self`** (ver-2, p2 ver-2, R16): changes to the factory's own ship path, verifier, holdout
    runner, breaker and rollback, to manifest `autonomy`/rate limits/holdout locations, and any
    Change that adds, removes or weakens an evidence producer (probes, monitors, verify commands,
    rollback references) are their own action class. N-1 verification is a CI job: the previous
    release's verifier and holdout suite run against the Change; no second release stays installed
    (p2 sim-5, tradeoff below). A small watchdog outside the warden process restores warden's last
-   `held` release. No Change can raise its own gate.
+   `held` release **only if that release supports the ledger's current schema stamp** (ADR-011
+   item 7); otherwise it stops automation and sends a heads-up (ADR-014 rule 4). Rule 6 is what
+   makes that restore possible. No Change can raise its own gate.
 4. **Rollback is a Deployment operation** (ver-3, p2 ver-1): a Deployment is `verified` when its
    post-deploy checks pass and `held` when its hold (rule 8) confirms it. The rollback target is
    the last `held` Deployment, redeployed by image digest, compose revision or previous launchd
@@ -53,14 +55,19 @@ Rules that hold on every rung:
    (0 of 52).
 5. **Holdout scenarios** per fleet project live outside every agent-writable checkout (a private
    repo run by the verifier against the deployed app), scored on observed behaviour. They change
-   only through a Change to the holdouts repo by a verifier-role agent that sees the approved plan
-   Artifact, never the product diff (ver-7). Each Verification that gates a deploy records the
-   holdouts sha it ran against; holdout churn and the fail→update rate are KPIs, so a holdout
-   weakened by an agent leaves a trail. Drafted holdouts run from W5; their binding date (open
-   decision D4) gates only a project's switch from propose-only to auto-ship.
-6. **Migrations** (ver-6): the auto rung allows only expand/contract migrations whose expand step
-   keeps the previous release working, so rollback is code-only; a contract step that drops data is
-   the data-loss class — an owner Decision by the fixed rule.
+   only through a Change to the holdouts repo — by a verifier-role agent that sees the approved plan
+   Artifact, never the product diff (ver-7), or by the owner, who may edit at any time. Each
+   Verification that gates a deploy records the holdouts sha it ran against; holdout churn and the
+   fail→update rate are KPIs, so a holdout weakened by an agent leaves a trail. Drafted holdouts
+   (who defines "it works" is open decision D4) run from W5. **A set binds on measurement, not on a
+   clock** (R7): it passes against the project's current production release, and each of its
+   scenarios has been watched failing against a seeded fault in a canary or scratch window — rule
+   2's verified-producer test, recorded as Verifications. There is no timer. Binding gates only the
+   project's switch from propose-only to auto-ship.
+6. **Migrations** (ver-6, R16): the auto rung allows only expand/contract migrations whose expand step
+   keeps the previous release working, so rollback is code-only; `factory-self` releases use
+   expand/contract migrations only (ADR-011 item 7); a contract step that drops data is the
+   data-loss class — an owner Decision by the fixed rule.
 7. **Two independent observations before a restart** (sre-4, p2 sre-5): the restart recipe acts
    only when two observations by different mechanisms agree. A Kuma docker monitor and the
    container's own healthcheck count as one — both read the same HEALTHCHECK (incident #2); the
@@ -107,13 +114,13 @@ The simplifier proposed generic rollback plus a pinned CI job for `factory-self`
 restore folded into the existing heartbeat. Kept: N-1 verification as a CI job that runs the
 previous release's verifier and holdout suite — no second installed release. Kept against the
 proposal: a small watchdog outside the warden process that rolls warden back to its last `held`
-release, because a bad warden deploy cannot be trusted to roll itself back. Given up: an
-always-warm second release as verifier.
+release when the ledger's schema stamp allows it (rule 3), because a bad warden deploy cannot be
+trusted to roll itself back. Given up: an always-warm second release as verifier.
 
 ### Consequences
 
-- Good: autonomy rises without lowering the evidence bar; every auto-ship has a queryable reason (its Verification records); a subject without evidence producers is visible as propose-only plus a Task that closes on a clock, not silently auto-shipped; the factory cannot ship its own gate, and a producer cannot be faked into one; rollback never lands on a version that has not held.
-- Bad: holdouts must be written and kept honest per fleet project; squash merges lose intra-PR history (acceptable: the PR keeps it); per-runtime rollback targets must be recorded, and the target trails the head by at least one hold; every new probe needs a scratch-window failure test; the previous release's verifier and holdout suite must stay runnable in CI, and the watchdog is one process outside warden.
+- Good: autonomy rises without lowering the evidence bar; every auto-ship has a queryable reason (its Verification records); a subject without evidence producers is visible as propose-only plus a Task that closes on a clock, not silently auto-shipped; the factory cannot ship its own gate, and a producer cannot be faked into one; rollback never lands on a version that has not held; a holdout set binds on evidence, not on elapsed days.
+- Bad: holdouts must be written and kept honest per fleet project, and every scenario needs a seeded-fault run before its set binds; squash merges lose intra-PR history (acceptable: the PR keeps it); per-runtime rollback targets must be recorded, and the target trails the head by at least one hold; every new probe needs a scratch-window failure test; the previous release's verifier and holdout suite must stay runnable in CI, and the watchdog is one process outside warden; a bad release that migrated the ledger past what the last `held` release can read ends in stopped automation and a heads-up, not a rollback.
 
 ### Confirmation
 
@@ -124,6 +131,11 @@ per month, lineages with ≥ 3 restarts in 7 days, Renovate merges outside the t
 churn and fail→update rate.
 Gamedays (`design/proof.md`) exercise each rung, plus: a failure that arrives during a hold rolls
 back to the last `held` Deployment and puts the known-bad marker on the bisected change, not on the
-target; a probe added to a scratch project that never goes red leaves its rung propose-only; a
+target; a probe added to a scratch project that never goes red leaves its rung propose-only, and a
+holdout set holding a scenario that never fails against its seeded fault does not bind (R7); a
 `factory-self` Change that weakens the verifier is rejected by the N-1 CI job; a container that
 OOMs every 20 h trips its lineage breaker within 7 days instead of closing clean each time.
+W5's migrating-release gameday (row 21, T3): a deliberately bad `factory-self` release that migrates
+the ledger is met by the watchdog's rollback when the last `held` release supports the new stamp, and
+by its safe stop — automation stopped, a heads-up sent — when it does not; never by a restore onto a
+ledger the older release cannot read.

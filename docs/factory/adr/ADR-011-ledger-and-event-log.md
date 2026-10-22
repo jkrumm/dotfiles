@@ -1,7 +1,7 @@
 # ADR-011 — One ledger, one event log, one writer per entity
 
-- Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dat-3, dat-4, dat-9, dat-12, dat-13, dur-4…dur-6, sim-2, sim-6)
-- Evidence: `findings-2026-10-22.md` (65-column `triage_items`, 44 transition pairs, `working → working` 768), `evidence/kpi/baseline.out.md` §data quality (`fixed_by_pr`, `revert_pr`, `reverting_sha` never populated; signatures unique per row), `evidence/incidents/incidents.md` (577 owner-facing notifications, only 140 visible to the KPI), `evidence/signals/signals.md` (`slack_update` never ingested), Round 5 *Established facts* (Hermes reads `warden.db` directly), `design/model.md`
+- Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dat-3, dat-4, dat-9, dat-12, dat-13, dur-4…dur-6, sim-2, sim-6) and the cross-lab review (`panel/review-resolutions.md`: R8–R11, R14–R17, T1, T3)
+- Evidence: `findings-2026-10-22.md` (65-column `triage_items`, 44 transition pairs, `working → working` 768), `evidence/kpi/baseline.out.md` §data quality (`fixed_by_pr`, `revert_pr`, `reverting_sha` never populated; signatures unique per row), `evidence/incidents/incidents.md` (577 owner-facing notifications, only 140 visible to the KPI), `evidence/signals/signals.md` (`slack_update` never ingested), `research/2026-10-22-durable-await-sqlite.md` §1.8 (Litestream: replication interval, restore, its own table), Round 5 *Established facts* (Hermes reads `warden.db` directly), `design/model.md`
 
 ## Context and problem statement
 
@@ -27,26 +27,37 @@ does every view stay consistent?
    dual-writes. *Amended 2026-10-22 (owner: rewrite, not co-run) — "evolved in place" no longer
    binds.*
    - **The import is a pure function** of the frozen snapshot plus the delta recorded at the stop,
-     into a new file swapped in by rename; ids are deterministic (`inc_` + hash of the old id,
-     likewise per noun), so a re-run yields the same rows. The archive is a `sqlite3 .backup` taken
-     after the old loop is stopped and nothing holds the file open (W1a). Imported events carry
-     actor `import`; an imported open Decision's deadline is anchored at go-live plus its class
-     expiry (ADR-014), never at its original creation.
+     into a new file; ids are deterministic (`inc_` + hash of the old id, likewise per noun), so a
+     re-run yields the same rows. **The order is fixed: stop the old loop → import into the new
+     file → swap it in by rename → only then does the new ledger go live.** Nothing writes to
+     `ledger.db` before the swap, so the swap discards no row. The archive is a `sqlite3 .backup`
+     taken after the old loop is stopped and nothing holds the file open (W1a). Imported events
+     carry actor `import`; an imported open Decision's deadline is anchored at go-live plus its
+     class expiry (ADR-014), never at its original creation.
    - **Adoption pass.** Before the first effect, every non-terminal old item has its external state
      probed — open PRs, in-flight deploys, in-doubt operations — and so does the work that keeps
      running after the old loop stops: agent-gateway jobs still in flight (each result adopted by
      its old item id when it lands, so the job's PR becomes that item's Change with no extra
      worker), live herdr tabs (recorded as observed Agents) and the Argo action queue (each entry
-     ends applied or rejected, with an event). The new entity is set from what the probe finds (a
-     Change adopting the open PR, a Deployment at the observed version, a resolved operation), so
-     the spawner duplicates nothing.
-   - **Restore is an adopt mode.** After restoring the off-box copy or failing an integrity check,
-     the ledger refuses effects, and `rd` refuses every spawn (ADR-007 §3), until the adoption pass
-     has probed every in-doubt operation.
+     is an owner intent from before the stop and ends `applied`, `rejected` or `expired(stale)`,
+     with an event. An imported intent applies only if its target's observed state still matches
+     the state when it was issued; otherwise it expires as stale, shows once in *Since you left*
+     (ADR-015) and, since no executor missed a budget, opens no Condition). The new entity is set
+     from what the probe finds (a Change adopting the open PR, a Deployment at the observed
+     version, a resolved operation), so the spawner duplicates nothing.
+   - **Restore is an adopt mode.** After restoring the off-box copy (item 6) or failing an
+     integrity check, the ledger refuses effects, and `rd` refuses every spawn (ADR-007 §3), until
+     the adoption pass has probed every in-doubt operation.
+   - **Rollback has a horizon.** The legacy loop can resume only until the new ledger performs its
+     first external effect; the first row the effect registry writes for one (`operations` or
+     `deliveries`, ADR-002) records that moment. After it, rollback is roll-forward: the fix is
+     made in the new ledger, re-entering the adopt mode above, and the legacy loop never runs
+     again — it would re-execute effects the new ledger already took (W1a).
 2. **One append-only `events` table** (schema in `design/model.md` §4) written by one `emit()`
    inside the transaction that changes the entity (transactional outbox). Signals are
-   `signal.received` events. Every event carries `trace_id` (derived from the root incident or
-   task id), `causation` and `correlation` (the lineage root, enforced by `emit()`). Every decision
+   `signal.received` events. Every event carries `trace_id` (derived from its root id),
+   `causation` and `correlation` (its lineage root, enforced by `emit()`; a Signal is its own root
+   until `incident.member_added` merges it, `design/model.md` §3 invariant 9). Every decision
    a loop takes is itself an event carrying its outcome and reason, so a rebuild replays decisions
    and never re-evaluates policy against a manifest, rule or calibration that has since changed; an
    event a manifest influenced also carries `manifest_sha` for audit and replay-diffing
@@ -74,13 +85,26 @@ does every view stay consistent?
    `warden artifact …`). The concept-budget check covers a generated inventory of processes per
    host, agent-facing CLIs and stores; its terms and caps (today's measured count minus the cuts
    this design claims, measured in W12) are in `design/proof.md` §6.
-6. **Retention:** events forever (1.7k in six months; a hundredfold is still small); nightly
-   off-box copy.
+6. **Retention and replication:** events forever (1.7k in six months; a hundredfold is still
+   small). The ledger's WAL is replicated continuously to the homelab bucket by a Litestream-class
+   replicator (a LaunchAgent declared in warden's manifest; the version is pinned after `/research`
+   in W1b, which also settles retention, since the mini's bucket key cannot delete). The recovery
+   point is seconds — Litestream replicates every second and a crash loses at most that window
+   (`research/2026-10-22-durable-await-sqlite.md` §1.8) — where a nightly copy would lose up to a
+   day of operations and owner intents. `synchronous=FULL` stays: the replica is the off-box
+   copy, not a synchronous commit. The replicator keeps its own lock table in the file
+   (Litestream: `_litestream_lock`), which the table check in item 1 exempts. A restore enters the
+   adopt mode above and re-executes nothing (Confirmation).
+7. **Schema stamp, expand/contract.** The ledger carries a schema stamp (`PRAGMA user_version`)
+   that each migration advances, and every release declares the stamps it supports. Releases of
+   the factory itself (`factory-self`, ADR-012) change the schema by expand/contract migrations
+   only, so the previous release keeps reading it; the independent watchdog reads the stamp to
+   decide whether the last `held` release can still run against the ledger (ADR-012 rule 3).
 
 ### Consequences
 
 - Good: statecharts become explicit; every owner page is an event, so `owner_pages` is a query; Argo needs no snapshots; no legacy column survives into the new schema.
-- Bad: an import to write and reconcile once; the ledger becomes the single most important file on the mini (backup, integrity check in the heartbeat).
+- Bad: an import to write and reconcile once; the ledger becomes the single most important file on the mini (a replicator to run; replica and integrity check in the heartbeat).
 
 ### Confirmation
 
@@ -89,9 +113,13 @@ compare; effectors rebuilt alongside re-send nothing already accepted, and every
 from cursor 0 sends 0 for imported events); the inventory caps check; `PRAGMA integrity_check` in
 the heartbeat; an import reconciliation that accounts for every archived event, item and
 transition, and an identical second run from the same snapshot; an adoption test — a snapshot
-holding a live agent-gateway job, a live herdr tab, an Argo queue entry and an open Decision older
-than its class expiry yields the job's PR adopted as the item's Change with 0 extra workers, the
-tab as an observed Agent, the queue entry ended with an event and the Decision's deadline at
-go-live plus its expiry, identical across two runs; a restore test — yesterday's copy wired to a
-world that already ran the effects re-executes 0 of them; KPI scripts in `evidence/` reproduce the
-baseline from the imported events.
+holding a live agent-gateway job, a live herdr tab, two Argo queue entries (one whose target still
+matches the state it was issued against, one whose target has since changed) and an open Decision
+older than its class expiry yields the job's PR adopted as the item's Change with 0 extra
+workers, the tab as an observed Agent, the first entry applied or rejected and the second
+`expired(stale)` — each ended with an event, the stale one shown once in *Since you left* — and
+the Decision's deadline at go-live plus its expiry, identical across two runs; a restore test
+(W1b's gate; gameday row 20 in `design/proof.md` §2) — a copy restored to a point a day back,
+wired to a world that already ran that day's effects, re-executes 0 of them; the schema stamp
+(W5's gameday, row 21) — a deliberately migrating bad release ends in the watchdog's rollback or
+its safe stop; KPI scripts in `evidence/` reproduce the baseline from the imported events.

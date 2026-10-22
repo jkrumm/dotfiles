@@ -9,9 +9,9 @@ incidents.
 
 ## The target in ten lines
 
-1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`) with an append-only event log; eleven nouns, one writer each.
+1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`, replicated continuously to the homelab bucket) with an append-only event log; eleven nouns, one writer each.
 2. **One `project.yaml` per repo**; the per-repo AGENTS.md block, herdr groups, Argo's registry and reconciler policies are generated from it, and tool routing renders once into a global rules file.
-3. **Signals from their primary sources** with source time; Slack intake stops at W1a and the adapters replace it from W3.
+3. **Signals from their primary sources** with source time; Slack intake stops at W1a and the adapters replace it from W3a.
 4. **Per-project reconcilers** open and close Conditions; a webhook only schedules a reconcile.
 5. **A correlator** folds conditions by fingerprint, topology and time window into one incident per cause; closed incidents with a recipe are the known-error store.
 6. **Tasks live in the ledger** with a blocker-aware ready queue; mothers (six fleet projects) and sessions (everything else) work them through one spawner, `rd`.
@@ -35,12 +35,12 @@ incidents.
 | Time to resolve, median / p90, 14 d | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h |
 | Reopen / regression rate | 10.4 % / 10.4 % | ≤ 5 % each |
 | Automatic revert when post-deploy verify fails | **0 of 52** merges (rebase merges) | 100 % |
-| Max load per week (30 d) | **120 %** (109–144) of a weekly window: owner-steered waves 74 %, interactive 32 %, agw review 14 % (`kpi/forecast`); burn rate across two resets, last 7 d: 204 % | factory work off Max unless capacity would lapse; owner interactive sessions blocked per cycle → 0 (measured from W4) |
+| Max load per week (30 d) | **120 %** (109–144) of a weekly window: owner-steered waves 74 %, interactive 32 %, agw review 14 % (`kpi/forecast`); burn rate across two resets, last 7 d: 204 % | factory work off Max unless capacity would lapse; owner interactive sessions blocked per cycle → 0 (measured from W4b) |
 | Max lapsed at the reset | p50 **4 %**, p90 30.6 % (`kpi/forecast`); 3 of 7 cycles peaked at 55–79 % (`kpi/quota`) | spent late in light cycles by the inverse rule, on the in-cycle projection of your burn (ADR-008) |
 | Status questions asked outside Argo | ≈ 25 per week (`questions/`) | ≤ 5 per week |
 | Signals arriving through Slack relays | **63.7 %** (`signals/`) | 0 % |
 | Locked-model claims that held | 8 of 26 — enforced 7/7, prose 1/11 (`postmortem/`) | every invariant enforced or labelled `target` |
-| Backtest, held-out, pre-registered thresholds | v1 rules: grouping F1 **0.889** vs warden 0.744; 5 of 8 pass — escalation and known-error matching fail (`golden/backtest`) | v2 rules: grouping accepted at W3 by a frozen-output regression and a blind replay; escalation and known-error matching are standing SLOs, first measured at W10's gate |
+| Backtest, held-out, pre-registered thresholds | v1 rules: grouping F1 **0.889** vs warden 0.744; 5 of 8 pass — escalation and known-error matching fail (`golden/backtest`) | v2 rules: grouping accepted at W3b by a frozen-output regression and a blind replay; escalation and known-error matching are standing SLOs, read on the fresh pre-registered sample when it reaches its size, not at a wave's gate |
 
 ## Decisions taken
 
@@ -69,5 +69,5 @@ Five, all business, each with a default that applies if nobody answers — secti
 1. **IU cash for factory-originated work** — default: A, 3 mother wakes per mother per day (≈ $294/week with the ≈ $28 base); the forecast's rate, 8 per mother per day, is ≈ $735/week.
 2. **Claude subscription tier** — default: keep it; the spillover of owner-started work to IU (≈ $19–94 a week across the forecast range) is priced against the next tier's price, which you read from your account.
 3. **Autonomy in work repos** — default: read, investigate and open PRs; never merge or deploy.
-4. **Who defines "it works" for each product** — default: the project's mother drafts holdout scenarios from W5; each set binds 7 days after submission unless edited.
-5. **Retention of agent transcripts and dead sessions** — default: archive to the homelab, delete local copies after 90 days.
+4. **Who defines "it works" for each product** — default: the project's mother drafts holdout scenarios from W5; a set binds on measurement, never on a timer, and you can edit it at any time.
+5. **Retention of agent transcripts and dead sessions** — default: archive to the homelab and keep the local copies; deleting them (after 90 days) is never defaulted and waits for your yes.

@@ -200,7 +200,7 @@ Witness (the agent reconciler, `agents` in §1), the hook, rotation and the Gas 
 ADR-007; the engine-by-class table and the quota guard are ADR-008; budgets are ADR-012 §12; the
 Agent noun and its statechart are `model.md` §1–2. Two loop-level facts:
 
-- **One module admits.** The admission module inside the spawner is the only place that can refuse,
+- **One module admits.** The admission module in warden (`warden admit`, called by `rd`, ADR-007) is the only place that can refuse,
   defer or re-engine a spawn or a resume, and it records each verdict as an event with its inputs.
   The breaker and the per-action limits of §3 gate shipping, not spawning.
 - **Parked agents resume by themselves.** Witness resumes a parked agent through the admission

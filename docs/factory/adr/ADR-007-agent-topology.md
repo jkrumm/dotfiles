@@ -1,6 +1,6 @@
 # ADR-007 — Agent topology and lifecycle: on-demand mothers for fleets, sessions for the rest, one spawner
 
-- Status: accepted · 2026-10-22 · revised after panel pass 1 (int-1, sim-3, sim-6, sim-7, ux-1, cos-4, ver-5, dur-2) and pass 2 (sim-3, sim-4, dur-1, dur-2, dur-8, ux-1, cos-9). In the body, `p2` marks a pass-2 id.
+- Status: accepted · 2026-10-22 · revised after panel pass 1 (int-1, sim-3, sim-6, sim-7, ux-1, cos-4, ver-5, dur-2), pass 2 (sim-3, sim-4, dur-1, dur-2, dur-8, ux-1, cos-9) and the cross-lab review (R2, R6). In the body, `p2` marks a pass-2 id; `R<n>` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/projects/classify.out.md` (fleet/session rule), `evidence/questions/questions.md` (50 `continue` nudges, #1 owner action; 41 of 50 from Claude Code on the MacBook, 38 in shutterflow), `evidence/interventions/interventions.md` (26 API-error stalls, median 1.2 h), `evidence/kpi/herdr_hygiene.out.md` (20 finished-but-open tabs), `research/2026-10-22-agents-durable-mcp-otel.md` §2 (Gas Town), Round 5 *Established facts* (326 implement episodes outside herdr in 12 days; Hermes typing `c`/`cf` into panes)
 
 ## Context and problem statement
@@ -41,19 +41,23 @@ LLM tokens only where judgment is needed; the manual Claude Code + herdr lane ke
      sessions. Never edits code — enforced by its tool allowlist, not by prose (postmortem: prose
      claims held 1 of 11).
 3. **One spawner: `rd`.** The only code path that creates a herdr agent. warden, mothers and
-   Hermes call it; it writes the Agent record (optional `task_id`), cuts the hook, delivers and
-   verifies the brief, and sets tab metadata (role, project, task, origin, engine). Engine per
-   ADR-008. Tasks are claimed only through the ready queue and `rd`.
-   - **One admission module** (p2 sim-4) decides every spawn and every resume:
-     `admit(task, class, lineage)` → run on engine X, defer until T, or reject(budget). It folds
-     the quota guard and the admission order (ADR-008) with the per-Task, per-lineage and per-wake
-     budgets (ADR-012 rule 12), so a resume at a quota reset passes the same module at the
+   Hermes call it; it writes the Agent record through warden's API (optional `task_id`), cuts the
+   hook, delivers and verifies the brief, and sets tab metadata (role, project, task, origin,
+   engine). Engine per ADR-008. Tasks are claimed only through the ready queue and `rd`. `rd` stays
+   a thin spawner (R6): it never opens `ledger.db`, and nothing outside warden reads the ledger for
+   policy.
+   - **One admission module, in warden** (p2 sim-4, R6): `warden admit`, a verb of the factory API,
+     decides every spawn and every resume: `admit(task, class, lineage)` → run on engine X, defer
+     until T, or reject(budget). `rd` calls it before it creates anything and acts on the verdict.
+     It folds the quota guard and the admission order (ADR-008) with the per-Task, per-lineage and
+     per-wake budgets (ADR-012 rule 12), so a resume at a quota reset passes the same module at the
      forecast's token rate and never bursts (cos-4). The breaker and the per-action rate limits
      stay on the ship side (ADR-012): they gate shipping, not spawning.
-   - **`rd` fails closed** (p2 dur-1): a spawn carrying a `task_id` is refused while the ledger is
-     unreadable, and every spawn is refused in adopt mode (ADR-011) — none is spooled. The spool
-     exists only for the owner's manual `rd wave` sessions without a task; each line carries a
-     client uuid, and replay records an observed Agent (adopt), never a spawn.
+   - **`rd` fails closed** (p2 dur-1, R6): a spawn carrying a `task_id` is refused while
+     `warden admit` cannot answer — warden down or the ledger unreadable — and every spawn is
+     refused in adopt mode (ADR-011); none is spooled. The spool exists only for the owner's manual
+     `rd wave` sessions without a task; each line carries a client uuid, and replay records an
+     observed Agent (adopt), never a spawn.
 4. **The hook owns the work** (Gas Town): worktree + branch + base sha + `.factory/attempt.md`
    (task, progress, handover) + the lease **epoch** + an inbox for messages to the agent (§5). A
    successor resumes from the hook, never from a re-prompt. Branch and PR naming: ADR-002.
@@ -110,12 +114,12 @@ duplicates the code that already turns Conditions and plan items into Tasks, and
 spawns workers duplicates the spawner and the ready queue. Kept: one mother identity per fleet
 project, its continuity in the hook, plan-scoped lead wakes, handover and rotation through the
 hook. Given up: an idle resident context per project — the mother runs only when the planner wakes
-it — and a separate lead mechanism. W4 builds mothers and lead wakes explicitly.
+it — and a separate lead mechanism. W4b builds mothers and lead wakes explicitly (R2).
 
 ### Consequences
 
-- Good: the #1 owner action (nudging) is handled by Witness, MacBook agents included, with no burst at a quota reset; implementation leaves agent-gateway (it keeps bounded tool jobs: review, check, prose, read_image, read_drawing); no resident mother contexts burn Max between wakes; one mechanism (a mother wake) replaces mother plus lead, and one module decides every spawn.
-- Bad: `rd`, the admission module and epoch fencing (the pre-push hook included) are critical-path code with their own tests; a mother's wake carries hook-reload cost every time; a task-carrying spawn waits while the ledger is down; the MacBook actuator is a second small component, and an intent for a sleeping laptop expires instead of waiting.
+- Good: the #1 owner action (nudging) is handled by Witness, MacBook agents included, with no burst at a quota reset; implementation leaves agent-gateway (it keeps bounded tool jobs: review, check, prose, read_image, read_drawing); no resident mother contexts burn Max between wakes; one mechanism (a mother wake) replaces mother plus lead, and one module, in warden, decides every spawn — so `rd` carries no policy and no ledger access.
+- Bad: `rd`, `warden admit` and epoch fencing (the pre-push hook included) are critical-path code with their own tests; a mother's wake carries hook-reload cost every time; a task-carrying spawn waits while warden or the ledger is down, because admission lives in warden; the MacBook actuator is a second small component, and an intent for a sleeping laptop expires instead of waiting.
 
 ### Confirmation
 
@@ -123,13 +127,22 @@ KPIs from read-only scripts: owner `continue` nudges per week (baseline 50 in 45
 MacBook included); finished-but-open tabs > 24 h (→ 0); agent spawns not through `rd` (→ 0, from
 tab metadata); Task claims outside the ready queue and `rd` (→ 0); implement episodes outside
 herdr (326 per 12 days → 0).
-Gamedays (W4):
+
+CI: a check fails if `rd` opens `ledger.db` (R6).
+
+Gamedays, one set per half of W4 (R2; the halves and their gates are in `waves.md`).
+
+**W4a** — ready queue, claim leases, the `rd` cutover:
+
+- `ledger.db` unreadable or warden unreachable → a spawn carrying a `task_id` is refused and a
+  manual `rd wave` still spawns; replaying the spool twice adds 0 rows; in adopt mode 0 spawns.
+
+**W4b** — Witness actions, mothers and leads, the admission module, the MacBook actuator:
+
 - kill and rotate a mother mid-plan → 0 lost or duplicated tasks, 0 owner nudges;
 - SIGSTOP a worker past its TTL, re-drive, SIGCONT, and have the revived pane run raw `git commit`,
   `git push` and `gh pr create` → the successor's tree never contains its edits, the push is
   rejected, no PR from it survives, the train merges no head pushed under a stale epoch;
-- `ledger.db` unreadable → a spawn carrying a `task_id` is refused and a manual `rd wave` still
-  spawns; replaying the spool twice adds 0 rows; in adopt mode 0 spawns;
 - kill warden between `rd say` and the timer-clear commit, 20 times, across resume, nudge and steer
   → each message appears once in the pane transcript, and a resume admitted before the crash is not
   admitted again;

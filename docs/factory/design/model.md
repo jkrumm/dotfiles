@@ -1,8 +1,9 @@
 # Model — draft 2 (Phase 2)
 
-Revised against Phase 1 evidence, spikes 1, 2, 6 and panel passes 1 and 2 (`panel/pass1-resolutions.md`,
-`panel/pass2-resolutions.md`). Each fact is stated here or in `loops.md` once; ADRs and report sections
-link to it. Report section 3 is built from this file.
+Revised against Phase 1 evidence, spikes 1, 2, 6, panel passes 1 and 2 (`panel/pass1-resolutions.md`,
+`panel/pass2-resolutions.md`) and the cross-lab review (`panel/review-resolutions.md`). Each fact is
+stated here or in `loops.md` once; ADRs and report sections link to it. Report section 3 is built
+from this file.
 
 ## 1. Eleven nouns
 
@@ -83,7 +84,7 @@ Change      branch → proposed → checking → reviewing → queued → merged
             a push to the default branch outside the train enters at `merged` (ref adapter)
 
 Deployment  pending → deploying → deployed → verifying → verified → held
-            deploying = the target's deploy lock is held (ADR-002);  deploying ─fail→ failed
+            deploying = the target's deploy lock is held, not stale (ADR-002);  deploying ─fail→ failed
             verifying ─fail→ rolling_back → rolled_back
             verified ─hold fails→ rolling_back → rolled_back
             verified = post-deploy checks passed;  held = its hold confirmed it (ADR-012)
@@ -139,9 +140,12 @@ Project     experimental → production → deprecated → archived;  class: fle
    feeding a KPI or a control input. Effectors send through `deliveries(event_id, channel)`
    (ADR-011): an accepted delivery is never re-sent, a decision or heads-up push is retried until
    accepted, and an effector skips events with actor `import`.
-9. Every event carries `correlation` = its lineage root (an Incident, or the Task an owner brief or
-   the planner created); `emit()` enforces it, and planner, spawner and decide inherit it. The
-   autonomy KPI counts per root (`evidence/DEFINITIONS.md`).
+9. Every event carries `correlation` = its lineage root; `emit()` enforces it, and planner,
+   spawner and decide inherit it. The root is an Incident, or the Task an owner brief or the planner
+   created — or, until correlated, the Signal itself (`correlation` = the signal id). Attaching a
+   Signal emits `incident.member_added`, which records the merge of roots; nothing already written
+   is rewritten. The autonomy KPI counts per root, and items count only Incident and Task roots, so
+   a Signal root is never an item (`evidence/DEFINITIONS.md`).
 
 ## 4. One event log
 
@@ -156,7 +160,7 @@ events(
   actor       TEXT NOT NULL,      -- loop:<name> | agent:<id> | owner | source:<adapter> | import
   trace_id    TEXT, span_id TEXT, -- W3C; trace_id = sha256("<noun>:" + root id)[:32] (ADR-006)
   causation   TEXT,               -- event that caused this one
-  correlation TEXT NOT NULL,      -- lineage root: an Incident, or the originating Task; emit() enforces it
+  correlation TEXT NOT NULL,      -- lineage root: an Incident, the originating Task, or the Signal's own id until correlated (invariant 9); emit() enforces it
   manifest_sha TEXT,              -- default-branch manifest blob read, on manifest-influenced events (audit, replay-diffing)
   idem        TEXT UNIQUE,        -- idempotency key of a side effect
   data        TEXT NOT NULL,      -- JSON, schema per type
@@ -171,7 +175,8 @@ with its outcome and reason (invariant 8): `incident.member_added{rule, ancestor
 `agent.spawn_decided{engine, guard_verdict}`, `change.ladder_evaluated{rungs, effective_autonomy}`.
 Argo's read models, briefings, KPIs and every projection consume the log by cursor; effectors
 (push, vault write) follow invariant 8. Reconcilers read default-branch manifests only, never a
-working tree.
+working tree. The ledger's schema carries a stamp and changes by expand/contract migrations only
+(ADR-011 item 7).
 
 ## 5. Warden's 65-column row, decomposed
 

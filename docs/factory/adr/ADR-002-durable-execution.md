@@ -1,6 +1,6 @@
 # ADR-002 — Durable execution: the ledger with explicit statecharts, no engine
 
-- Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dur-1…dur-8, int-6)
+- Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dur-1…dur-8, int-6) and the cross-lab review (`panel/review-resolutions.md`: R10, R14, R16, I3, T1)
 - Evidence: `spikes/02-durable/REPORT.md` (175 scripted kill runs), `research/2026-10-22-durable-await-sqlite.md`, `research/2026-10-22-agents-durable-mcp-otel.md` §5
 
 ## Context and problem statement
@@ -52,8 +52,10 @@ Primitives, each written once in the ledger module and tested by the spike harne
 | at-most-once with receipt | the briefing push | a recorded receipt (`deliveries`) means sent; a lost one costs nothing, the digest is in Home |
 
 **Deploys.** A deploy runs detached under `jobrun`, holding a per-target lock with a start record
-(holder, key, artifact). The probe reads the lock first: held → wait; stale → read the deployed
-artifact and decide; only then is a retry possible. A `deploy: ci` target's effect is the merge and
+(key, artifact) that names its holder by pid, boot id and start time. The lock is **stale** when
+the holder is dead (no live process with that pid and start time) or the boot id differs from the
+current boot. The probe reads the lock first: held → wait; stale → read the deployed artifact and
+decide; only then is a retry possible. A `deploy: ci` target's effect is the merge and
 its probe is the workflow run for the merge sha. Every runtime with a deploy command declares how
 to read what runs (`version` or `artifact`; drift check, `design/model.md` §6.1), so no in-doubt
 deploy is unresolvable.
@@ -73,7 +75,7 @@ lease, so `rd` fails closed without one (ADR-007 §3).
 ### Consequences
 
 - Good: zero dependencies; crash recovery is "run the reconcilers again" (0.06–0.5 s in the spike); any SQL reader sees every flow.
-- Bad: we own CAS and lease correctness; the loop needs a resident 1–5 s tick or an event nudge; every loop runs as a phase of that one warden process, never a second loop process (ADR-011); state renames need migrations; no replay tooling.
+- Bad: we own CAS and lease correctness; the loop needs a resident 1–5 s tick or an event nudge; every loop runs as a phase of that one warden process, never a second loop process (ADR-011); state renames need migrations (expand/contract only, under the ledger's schema stamp, ADR-011); no replay tooling.
 
 ### Confirmation
 
@@ -82,18 +84,20 @@ when it passes it in CI, with one case per effect-registry entry — spawn, pane
 integrations create and `hl` copy included. The spike's 0 duplicates came from a stub that honours
 the key (`spikes/02-durable/REPORT.md`), so W1b's gate re-runs kill tests b, b_deploy and h against
 real-shaped adapters — a scratch GitHub repo returning real 422s, counting fakes for deploy and
-restart — pass = every target counts exactly one effect. Added by pass 2:
+restart — pass = every target counts exactly one effect. W1b's gate also runs ADR-011's restore
+test (a restored copy re-executes 0 effects). Added by pass 2:
 
 - **Key uniqueness**, generated from the statecharts (`design/model.md` §2): every path that
   repeats an effect (two restarts in one flap, a deploy retried after `failed`, a second revert)
   gets a distinct key and runs; only the rate limit stops a third restart.
 - **Deploy kills**: kill warden at three points of a deploy against a counting fake, on a compose
   target, a launchd target and a `deploy: ci` target; pass = exactly one deploy per key, never two
-  overlapping, and each in-doubt operation resolves without a blind retry.
+  overlapping, and each in-doubt operation resolves without a blind retry; a live holder's lock
+  reads held, while a killed holder or a reboot (a new boot id) turns it stale.
 - **Pane messages**: kill warden between `rd say` and the timer-clear commit across resume,
   continue, nudge and steer; pass = each message appears once in the pane transcript and a resume
   admitted before the crash is not admitted again.
-- **Fencing gameday** (W1b, W4): SIGSTOP an agent past its TTL, re-drive, SIGCONT, and have the
+- **Fencing gameday** (W1b, W4b): SIGSTOP an agent past its TTL, re-drive, SIGCONT, and have the
   zombie run raw `git commit -am x && git push && gh pr create` in its pane; pass = the successor's
   tree never holds the zombie's edits, the push is rejected, no PR from the zombie survives, and the
   train merges no head that was not pushed under the current epoch.

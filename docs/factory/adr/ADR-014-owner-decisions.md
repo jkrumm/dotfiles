@@ -1,6 +1,6 @@
 # ADR-014 — The owner decides business questions only; every decision has a default and an expiry
 
-- Status: accepted · 2026-10-22 · revised after panel pass 1 (dat-6, sre-1, int-4, ux-5, ux-7, dur-7) and pass 2 (dat-11, dat-12, dur-4, int-8, int-12, ux-4, sim-6). In the body, `p2` marks a pass-2 id.
+- Status: accepted · 2026-10-22 · revised after panel pass 1 (dat-6, sre-1, int-4, ux-5, ux-7, dur-7), pass 2 (dat-11, dat-12, dur-4, int-8, int-12, ux-4, sim-6) and the cross-lab review (R13, R17, I4, T2). In the body, `p2` marks a pass-2 id; `R`, `I` and `T` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/kpi/baseline.out.md` (escalated 32.2 % of new items, 14 d; autonomy 64.3 %), `evidence/interventions/interventions.md` (4 of the latest 20 genuine), `evidence/incidents/incidents.md` (577 owner-facing notifications vs 140 decision entries; #9, the disconnected drive, is the one legitimate page), `evidence/DEFINITIONS.md` (item, owner touch), `evidence/golden/` (genuine share on the labelled set), `BRIEF.md` §Fixed
 
 ## Context and problem statement
@@ -12,12 +12,13 @@ new items reach him, most of them obstacle reports and choices an agent could ma
 
 ## Decision outcome
 
-0. **What is counted** (dat-6, p2 dat-11). *Item* and *owner touch* are defined once, in
+0. **What is counted** (dat-6, p2 dat-11, R17). *Item* and *owner touch* are defined once, in
    `evidence/DEFINITIONS.md`, per **lineage root**: every event carries `correlation` = its root id
-   (an Incident, or the originating Task), enforced by `emit()`, so his decide, steer, stop and
+   (an Incident or the originating Task — or, until it is correlated, the Signal itself,
+   `design/model.md` §3 invariant 9), enforced by `emit()`, so his decide, steer, stop and
    re-verify events count on the item they act on and a brief the planner decomposes into N Tasks is
-   one root, not N items. The SLO is owner-touched items ÷ items; pause (ADR-015) and rule 7's
-   physical-presence asks are outside it.
+   one root, not N items. Only Incident and Task roots are items. The SLO is owner-touched items ÷
+   items; pause (ADR-015) and rule 7's physical-presence asks are outside it.
 1. **Decider by class.** `policy` (a written rule), `agent` (the investigating agent or the mother
    wake picks and records why), `owner` (only the four business classes). Security policy is not an
    owner class; this follows the brief and contradicts the global CLAUDE.md, which a migration wave
@@ -31,12 +32,15 @@ new items reach him, most of them obstacle reports and choices an agent could ma
    re-reading the policy file.
 2. **Every Decision carries options, a reversible default and an expiry** (48 h unless the class
    says otherwise). On expiry the default is taken if it is reversible; otherwise the card is
-   re-pushed once and holds. Ack stops re-pushes but does not resolve. Timing (dur-7, p2 dur-4):
-   the 48 h clock starts when the push service has accepted the card's push (ADR-009), not at
-   creation; `decided_at` is the factory API's server receipt time; an answer counts only if
-   received before the deadline (ADR-002); an answer after the deadline is an override intent with
-   its own generation keys, never a decision; a deadline is extended by the factory API's measured
-   downtime across it, so a mini outage never fires a default the owner could not answer.
+   re-pushed once and holds. Ack stops re-pushes but does not resolve. Timing (dur-7, p2 dur-4,
+   I4, R13): the 48 h clock starts at the card's **creation**; the push service's acceptance
+   (ADR-009) only ends that push's retries, so a push that is never accepted cannot hold a card open
+   silently — a permanent push failure opens `push.channel_dead` (ADR-009). `decided_at` is the
+   factory API's server receipt time; an answer counts only if received before the deadline
+   (ADR-002); an answer after the deadline is an override intent with its own generation keys,
+   never a decision; a deadline is extended by the factory API's measured downtime across it, and a
+   dark mini sends no decision or heads-up push (ADR-009), so a mini outage never fires a default
+   the owner could not answer.
    **Pause is not a Decision** (ux-5, p2 ux-4): ADR-015 defines it once; it never enters the
    defaulted-on-expiry KPI.
 3. **Every genuine escalation retires a class:** the wave that answers it writes the policy line
@@ -71,7 +75,7 @@ interruption; the separate KPI carries that part.
 ### Consequences
 
 - Good: the owner's queue holds only his questions; each one shrinks the next week's queue; the one legitimate page class (physical host faults) still reaches him, as information; a product change with no owner event in its lineage cannot ship on an agent's judgment.
-- Bad: defaults must be written per class; a wrong default costs a revert — acceptable because defaults are reversible by rule; `product_surfaces[]` must be declared per project for the product class to fire; a Decision whose push is never accepted waits, visibly pending, instead of defaulting; the SLO no longer counts biometric renewals.
+- Bad: defaults must be written per class; a wrong default costs a revert — acceptable because defaults are reversible by rule; `product_surfaces[]` must be declared per project for the product class to fire; a reversible Decision whose push is never accepted still defaults at its expiry, on a card the owner may never have seen — counted apart as never-acked, with `push.channel_dead` open (ADR-009) — and an irreversible one holds, visible in Needs you; the SLO no longer counts biometric renewals.
 
 ### Confirmation
 
@@ -80,5 +84,7 @@ KPIs: owner-touch share < 1 % of items as the SLO, ≤ 0.1 % as the stretch (bas
 retired class (→ 0), `needs_hands` sent per month, present-human asks per month (≤ 2, rule 7).
 Tests: replaying incident #9 yields exactly one `needs_hands`; a Decision created during an
 injected egress blackhole has its push accepted once after the egress heals and no default earlier
-than 48 h after acceptance (ADR-009); a Change that edits a declared public route and traces only to
-a plan Artifact reviewed by an agent becomes a Decision, one traced to a submitted brief ships.
+than 48 h after its creation (ADR-009, I4); with the mini dark and a Decision open (gameday row 13,
+T2) no default fires during the downtime and the deadline is extended by the measured downtime; a
+Change that edits a declared public route and traces only to a plan Artifact reviewed by an agent
+becomes a Decision, one traced to a submitted brief ships.

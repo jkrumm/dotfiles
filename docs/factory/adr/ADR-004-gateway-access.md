@@ -32,7 +32,7 @@ that no manifest declares, so nothing is opted in by memory and third-party bina
 `passthrough` binary is a drop-in shim whose CLI shape belongs to someone else — `secrets-run`
 shadows `op`, `hl` fronts rclone, `git-credential-secrets-cache` speaks git's credential protocol —
 and the suite tests its compatibility with that tool, not format or envelope. Join order: `rd` in
-W4, the cutover that rewrites it; the gateway CLIs (agw, email, audio, image), `ask-human`,
+W4a, the cutover that rewrites it; the gateway CLIs (agw, email, audio, image), `ask-human`,
 `jobrun`, `imgcli` and the research CLI in W8, with the passthrough shims.
 
 **MCP stays only for research-gateway** (Claude Desktop and similar non-shell clients) **and

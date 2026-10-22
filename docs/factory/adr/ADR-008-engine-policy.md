@@ -54,15 +54,15 @@ Max %/week and IU $/week, today and fully running. Its verdict: owner-started wo
 74 % + interactive 32 %) already fills the window, so **Max has no standing room for factory work** —
 putting mothers and leads on Max would take it to 142 % (130–170). Factory judgment therefore runs on
 IU unless the projection shows lapsing capacity (the inverse rule). Its IU cost is business decision
-D1 and the owner-started spillover to IU is D2 (report §10). W4 sets the per-wake token budget at
+D1 and the owner-started spillover to IU is D2 (report §10). W4b sets the per-wake token budget at
 the first week's measured p90 × 1.5 and replaces the forecast's wake rate with the planner's
 measured trigger rate; D1 is re-issued from both (p2 cos-14).
 
 **Quota guard.** This section is the only statement of the guard (p2 cos-11); other documents link
 here. It is a forecast, level-triggered over every Max consumer and evaluated by the spawner's
 admission module (ADR-007 §3). Its parameters — owner-rate percentile, margin, evaluation
-interval — live once in the spawner's config and a generated block (built in W4) renders them
-here; W4's gate tests this version.
+interval — live once in warden's admission config and a generated block (built in W4b) renders them
+here; W4b's gate tests this version.
 
 1. **Projection, not reserve** (cos-2, cos-8, p2 cos-10). Each evaluation projects window use at the
    next reset: the current reading + the owner's in-cycle burn (p90 rate × hours to the reset) +
@@ -122,11 +122,11 @@ baseline is $0; it is fed to the lineage budget (ADR-012 rule 12). A class with 
 
 ### Confirmation
 
-Before W4 ships the guard, `forecast.py` replays the 7 complete cycles through it (quota samples
+Before W4b ships the guard, `forecast.py` replays the 7 complete cycles through it (quota samples
 plus per-class burn from usage.db): trip time, hours parked and hours moved to IU per class,
 owner-interactive minutes blocked at 100 %, inverse-rule firings and the lapsed % they recover. The
 result goes to `evidence/kpi/forecast.out.md` and sets the margin and the lapsed target (p2 cos-10).
-On one W4 gameday Task the budget check fires from live usage within one tool turn of the cap
+On one W4b gameday Task the budget check fires from live usage within one tool turn of the cap
 (p2 cos-15). Gameday row 8 (`design/proof.md`) asserts the behaviour: running non-urgent Max
 agents park or move to IU, owner-interactive spawns are still admitted, and post-reset admission
 stays at or below the forecast token rate with no burst.
