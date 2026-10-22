@@ -1,0 +1,3651 @@
+{
+ "beszel_relay_vs_primary": {
+  "history_resolved_share_pct": 100.0,
+  "primary_episodes_since_relay_start": 137,
+  "primary_episodes_total": 237,
+  "relay_rows": 11
+ },
+ "better_stack_relay": {
+  "distinct_subjects": 5,
+  "incident_rows_closed_by_prose_filter": 4,
+  "incident_rows_in_loop_era": 5,
+  "rows": 16
+ },
+ "deploy_relay_vs_primary": {
+  "before_change": {
+   "markers_success": 186,
+   "relay_rows": 174
+  },
+  "fingerprint_change_utc": "2026-10-04T15:33:06Z",
+  "max_deploys_folded_into_one_row": 8,
+  "primary_markers_failed": 5,
+  "primary_markers_success": 1453,
+  "relay_months_ts_first": {
+   "2026-05": 59,
+   "2026-06": 30,
+   "2026-07": 93,
+   "2026-08": 156,
+   "2026-09": 265,
+   "2026-10": 66
+  },
+  "relay_rows_ever": 669,
+  "relay_rows_failed_in_window": 5,
+  "relay_rows_success_in_window": 196,
+  "relay_rows_with_sha_in_key": 645,
+  "since_change": {
+   "markers_failed": 4,
+   "markers_success": 1267,
+   "relay_rows_created": 22,
+   "relay_rows_touched": 22
+  },
+  "window_start_utc": "2026-09-23T00:00:19Z"
+ },
+ "kuma_relay": {
+  "distinct_monitor_names": 89,
+  "double_intake": {
+   "skip_rule_covers": "monitor names ending in 'Push' only (watchdog-poll.py:384)",
+   "slack_items_escalated": 19,
+   "slack_kuma_down_rows": 40,
+   "uk_items_escalated": 14,
+   "webhook_live_since_utc": "2026-10-16T22:04:25Z",
+   "with_uk_event_same_monitor_within_60min": 37
+  },
+  "group_restatement_months_ts_first": {
+   "2026-04": 1,
+   "2026-05": 20,
+   "2026-06": 20,
+   "2026-07": 15,
+   "2026-08": 24,
+   "2026-09": 2
+  },
+  "group_restatement_rows": 82,
+  "leaf_monitors_without_warden_webhook": [
+   {
+    "id": 21,
+    "name": "FPP - DB - MySQL"
+   }
+  ],
+  "monitor_names_not_live_today": 16,
+  "monitors_with_2plus_down_fingerprints": 32,
+  "rows": 286,
+  "rows_naming_monitors_not_live_today": 35,
+  "rows_per_monitor_mean": 3.21
+ },
+ "kuma_relay_vs_primary": {
+  "down_up_transitions_total": 2251,
+  "important_heartbeats": {
+   "group_down": 325,
+   "group_pending": 10,
+   "group_up": 304,
+   "leaf_down": 793,
+   "leaf_pending": 5,
+   "leaf_up": 829
+  },
+  "important_total": 2266,
+  "outage_duration_buckets": {
+   "1:<5m": 338,
+   "2:5-30m": 286,
+   "3:30m-2h": 61,
+   "4:2-24h": 75,
+   "5:>=24h": 24
+  },
+  "outages_under_30min_pct": 79.6,
+  "outages_under_5min_pct": 43.1,
+  "relay_rows_down": 171,
+  "relay_rows_total": 286,
+  "relay_rows_up": 115
+ },
+ "meta": {
+  "as_of": "2026-10-22T08:00:00Z",
+  "definition_keys": [
+   "item",
+   "escalated"
+  ],
+  "limits": [
+   "rows are distinct fingerprints, not Slack messages",
+   "system per row inferred from text shape",
+   "first_seen is the last re-arm of a row",
+   "container lists are live at probe time",
+   "homelab-private and IuRoot items are counted, never named"
+  ],
+  "loop_era_starts_utc": "2026-09-08T17:52:06Z",
+  "repo_heads": {
+   "argo": "a669e617",
+   "dotfiles": "ddf437b",
+   "homelab": "4948d97",
+   "rollhook": "17f5cc3",
+   "vps": "daa8e2c",
+   "warden": "fb8761f"
+  },
+  "script": "evidence/signals/signals.py",
+  "warden_snapshot": "~/.local/share/factory/snapshots/2026-10-22/warden.db"
+ },
+ "monthly_by_source": {
+  "docker_homelab": {
+   "2026-04": 1,
+   "2026-07": 1,
+   "2026-09": 2,
+   "2026-10": 1
+  },
+  "docker_vps": {
+   "2026-08": 1,
+   "2026-09": 1
+  },
+  "github_go": {
+   "2026-09": 38,
+   "2026-10": 98
+  },
+  "github_issue": {
+   "2026-05": 1,
+   "2026-08": 1,
+   "2026-09": 10
+  },
+  "github_pr": {
+   "2026-04": 5,
+   "2026-07": 1,
+   "2026-09": 15,
+   "2026-10": 9
+  },
+  "hermes_cron": {
+   "2026-05": 1,
+   "2026-07": 1,
+   "2026-09": 1,
+   "2026-10": 1
+  },
+  "hermes_log": {
+   "2026-04": 1,
+   "2026-05": 55,
+   "2026-06": 5,
+   "2026-07": 9,
+   "2026-08": 18,
+   "2026-09": 41,
+   "2026-10": 23
+  },
+  "human": {
+   "2026-09": 73,
+   "2026-10": 89
+  },
+  "hyperdx": {
+   "2026-10": 4
+  },
+  "job": {
+   "2026-10": 7
+  },
+  "op_refs_homelab": {
+   "2026-09": 3
+  },
+  "slack_alert": {
+   "2026-05": 46,
+   "2026-06": 45,
+   "2026-07": 102,
+   "2026-08": 56,
+   "2026-09": 42,
+   "2026-10": 117
+  },
+  "slack_update": {
+   "2026-05": 61,
+   "2026-06": 30,
+   "2026-07": 134,
+   "2026-08": 156,
+   "2026-09": 262,
+   "2026-10": 70
+  },
+  "stray_skill": {
+   "2026-08": 13,
+   "2026-09": 3
+  },
+  "uk": {
+   "2026-05": 1,
+   "2026-06": 1,
+   "2026-07": 1,
+   "2026-08": 18,
+   "2026-09": 16,
+   "2026-10": 59
+  },
+  "warden_canary": {
+   "2026-09": 4
+  },
+  "warden_self": {
+   "2026-09": 6,
+   "2026-10": 1
+  }
+ },
+ "payload_keys_kept": {
+  "batch_count": 1121,
+  "batch_count_last": 1119,
+  "first_text": 1121,
+  "ts_first": 1121,
+  "ts_last": 1121
+ },
+ "poll_lag_all_slack_rows_min": {
+  "max": 72.5,
+  "median": 15.7,
+  "n": 1025,
+  "p90": 28.2
+ },
+ "probes": {
+  "beszel_homelab": {
+   "alert_definitions": {
+    "CPU": 1,
+    "Disk": 1,
+    "LoadAvg5": 1,
+    "Memory": 1,
+    "Status": 1,
+    "Temperature": 1
+   },
+   "history_by_month": {
+    "2025-08": {
+     "by_alert": {
+      "Temperature": 1
+     },
+     "episodes": 1,
+     "resolved": 1
+    },
+    "2025-10": {
+     "by_alert": {
+      "Status": 1
+     },
+     "episodes": 1,
+     "resolved": 1
+    },
+    "2025-12": {
+     "by_alert": {
+      "Temperature": 3
+     },
+     "episodes": 3,
+     "resolved": 3
+    },
+    "2026-01": {
+     "by_alert": {
+      "CPU": 1,
+      "LoadAvg5": 1,
+      "Temperature": 7
+     },
+     "episodes": 9,
+     "resolved": 9
+    },
+    "2026-02": {
+     "by_alert": {
+      "CPU": 1,
+      "Temperature": 17
+     },
+     "episodes": 18,
+     "resolved": 18
+    },
+    "2026-03": {
+     "by_alert": {
+      "CPU": 1,
+      "Temperature": 1
+     },
+     "episodes": 2,
+     "resolved": 2
+    },
+    "2026-04": {
+     "by_alert": {
+      "CPU": 6,
+      "LoadAvg5": 4,
+      "Temperature": 56
+     },
+     "episodes": 66,
+     "resolved": 66
+    },
+    "2026-05": {
+     "by_alert": {
+      "CPU": 1,
+      "LoadAvg5": 1,
+      "Temperature": 35
+     },
+     "episodes": 37,
+     "resolved": 37
+    },
+    "2026-06": {
+     "by_alert": {
+      "Temperature": 1
+     },
+     "episodes": 1,
+     "resolved": 1
+    },
+    "2026-07": {
+     "by_alert": {
+      "Disk": 1,
+      "Temperature": 8
+     },
+     "episodes": 9,
+     "resolved": 9
+    },
+    "2026-08": {
+     "by_alert": {
+      "CPU": 9,
+      "LoadAvg5": 9,
+      "Temperature": 22
+     },
+     "episodes": 40,
+     "resolved": 40
+    },
+    "2026-09": {
+     "by_alert": {
+      "CPU": 8,
+      "Disk": 2,
+      "LoadAvg5": 6,
+      "Temperature": 21
+     },
+     "episodes": 37,
+     "resolved": 37
+    },
+    "2026-10": {
+     "by_alert": {
+      "CPU": 1,
+      "LoadAvg5": 1,
+      "Temperature": 11
+     },
+     "episodes": 13,
+     "resolved": 13
+    }
+   },
+   "history_range": {
+    "first": "2025-08-30 09:29:56.467Z",
+    "last": "2026-10-20 21:52:16.455Z",
+    "rows": 237
+   }
+  },
+  "clickstack_vps": {
+   "by_service": {
+    "argo-api": {
+     "failed": 1,
+     "success": 314
+    },
+    "argo-dashboard": {
+     "failed": 0,
+     "success": 311
+    },
+    "audio-gateway": {
+     "failed": 0,
+     "success": 12
+    },
+    "basalt-ui-marketing": {
+     "failed": 0,
+     "success": 407
+    },
+    "bun-email-api": {
+     "failed": 0,
+     "success": 9
+    },
+    "email-gateway": {
+     "failed": 1,
+     "success": 72
+    },
+    "fpp-analytics": {
+     "failed": 0,
+     "success": 6
+    },
+    "fpp-analytics-updater": {
+     "failed": 0,
+     "success": 5
+    },
+    "fpp-server": {
+     "failed": 0,
+     "success": 5
+    },
+    "image-gateway": {
+     "failed": 0,
+     "success": 5
+    },
+    "image-gen-gateway": {
+     "failed": 0,
+     "success": 5
+    },
+    "jkrumm-com": {
+     "failed": 0,
+     "success": 37
+    },
+    "research-gateway": {
+     "failed": 0,
+     "success": 36
+    },
+    "research-gateway-lightpanda": {
+     "failed": 0,
+     "success": 1
+    },
+    "rollhook-marketing": {
+     "failed": 0,
+     "success": 12
+    },
+    "shutterflow-share": {
+     "failed": 0,
+     "success": 56
+    },
+    "weatherorb-account": {
+     "failed": 1,
+     "success": 35
+    },
+    "weatherorb-edge": {
+     "failed": 2,
+     "success": 125
+    }
+   },
+   "deploy_markers_by_month": {
+    "2026-09": {
+     "failed": 1,
+     "success": 142
+    },
+    "2026-10": {
+     "failed": 4,
+     "success": 1311
+    }
+   },
+   "marker_range": {
+    "first": "2026-09-23 00:00:19",
+    "last": "2026-10-22 07:10:48"
+   },
+   "since_fingerprint_change": {
+    "change_utc": "2026-10-04 15:33:06",
+    "failed": 4,
+    "success": 1267
+   },
+   "table_range": {
+    "first": "2026-09-22 00:00:00",
+    "last": "2026-10-22 07:59:59"
+   },
+   "ttl_days": 30
+  },
+  "docker_homelab": {
+   "containers": [
+    {
+     "compose_project": "homelab",
+     "compose_service": "dozzle",
+     "image": "amir20/dozzle",
+     "name": "dozzle",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "cloudflared",
+     "image": "cloudflare/cloudflared",
+     "name": "cloudflared",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "garmin-collector",
+     "image": "homelab-garmin-collector",
+     "name": "garmin-collector",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "restic-backup",
+     "image": "mazzolino/restic",
+     "name": "restic-backup",
+     "registry": "public",
+     "watchtower_label": "true"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "versitygw",
+     "image": "versity/versitygw",
+     "name": "versitygw",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "caddy",
+     "image": "caddybuilds/caddy-cloudflare",
+     "name": "caddy",
+     "registry": "public",
+     "watchtower_label": "true"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "immich-server",
+     "image": "ghcr.io/immich-app/immich-server",
+     "name": "immich_server",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "karakeep",
+     "image": "ghcr.io/karakeep-app/karakeep",
+     "name": "karakeep",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "glance",
+     "image": "glanceapp/glance",
+     "name": "glance",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "samba",
+     "image": "ghcr.io/servercontainers/samba",
+     "name": "samba",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "beszel-agent",
+     "image": "henrygd/beszel-agent",
+     "name": "beszel-agent",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "beszel",
+     "image": "henrygd/beszel",
+     "name": "beszel",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "uptime-kuma",
+     "image": "louislam/uptime-kuma",
+     "name": "uptime-kuma",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "proton-bridge",
+     "image": "homelab-proton-bridge",
+     "name": "proton-bridge",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "immich-machine-learning",
+     "image": "ghcr.io/immich-app/immich-machine-learning",
+     "name": "immich_machine_learning",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "immich_redis",
+     "image": "valkey/valkey",
+     "name": "immich_redis",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "karakeep-chrome",
+     "image": "ghcr.io/karakeep-app/karakeep-chrome",
+     "name": "karakeep-chrome",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "docker-socket-proxy-claude",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "docker-socket-proxy-claude",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "docker-socket-proxy-watchtower",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "docker-socket-proxy-watchtower",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "filebrowser",
+     "image": "filebrowser/filebrowser",
+     "name": "filebrowser",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "docker-socket-proxy",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "docker-socket-proxy",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "karakeep-meili",
+     "image": "getmeili/meilisearch",
+     "name": "karakeep-meili",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "watchtower",
+     "image": "containrrr/watchtower",
+     "name": "watchtower",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "immich_postgres",
+     "image": "ghcr.io/immich-app/postgres",
+     "name": "immich_postgres",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "homelab",
+     "compose_service": "dozzle-watchdog-logs",
+     "image": "alpine",
+     "name": "homelab-watchdog-logs",
+     "registry": "public",
+     "watchtower_label": "false"
+    }
+   ],
+   "containers_homelab_private_counted_not_named": 11,
+   "events_ring_buffer": {
+    "retained": 256,
+    "window_s": 143
+   }
+  },
+  "docker_vps": {
+   "containers": [
+    {
+     "compose_project": "basalt-ui-marketing",
+     "compose_service": "basalt-ui-marketing",
+     "image": "basalt-ui-marketing",
+     "name": "basalt-ui-marketing-basalt-ui-marketing-458",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "imgproxy",
+     "compose_service": "imgproxy",
+     "image": "ghcr.io/imgproxy/imgproxy",
+     "name": "imgproxy-imgproxy-1",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "photo-gallery",
+     "compose_service": "photo-gallery",
+     "image": "nginx",
+     "name": "photo-gallery",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "traefik",
+     "image": "traefik",
+     "name": "traefik",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "cloudflared",
+     "image": "cloudflare/cloudflared",
+     "name": "cloudflared",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "weatherorb",
+     "compose_service": "weatherorb-account",
+     "image": "weatherorb-account",
+     "name": "weatherorb-weatherorb-account-35",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "weatherorb",
+     "compose_service": "weatherorb-edge",
+     "image": "weatherorb-edge",
+     "name": "weatherorb-weatherorb-edge-127",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "argo",
+     "compose_service": "argo-dashboard",
+     "image": "argo-dashboard",
+     "name": "argo-argo-dashboard-471",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "argo",
+     "compose_service": "argo-api",
+     "image": "argo-api",
+     "name": "argo-argo-api-474",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "jkrumm-com",
+     "compose_service": "jkrumm-com",
+     "image": "jkrumm-com",
+     "name": "jkrumm-com-jkrumm-com-38",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "dozzle",
+     "image": "amir20/dozzle",
+     "name": "dozzle",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "audio-gateway",
+     "compose_service": "audio-gateway",
+     "image": "audio-gateway",
+     "name": "audio-gateway-audio-gateway-81",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "shutterflow",
+     "compose_service": "shutterflow-share",
+     "image": "shutterflow-share",
+     "name": "shutterflow-shutterflow-share-56",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "shutterflow",
+     "compose_service": "shutterflow-imgproxy-small",
+     "image": "ghcr.io/imgproxy/imgproxy",
+     "name": "shutterflow-shutterflow-imgproxy-small-1",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "shutterflow",
+     "compose_service": "shutterflow-imgproxy",
+     "image": "ghcr.io/imgproxy/imgproxy",
+     "name": "shutterflow-shutterflow-imgproxy-1",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "shutterflow",
+     "compose_service": "shutterflow-key-broker",
+     "image": "shutterflow-key-broker",
+     "name": "shutterflow-shutterflow-key-broker-1",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "weatherorb",
+     "compose_service": "weatherorb-probe",
+     "image": "python",
+     "name": "weatherorb-weatherorb-probe-1",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "weatherorb",
+     "compose_service": "weatherorb-egress",
+     "image": "python",
+     "name": "weatherorb-weatherorb-egress-1",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "rollhook-marketing",
+     "compose_service": "rollhook-marketing",
+     "image": "ghcr.io/jkrumm/rollhook-marketing",
+     "name": "rollhook-marketing-rollhook-marketing-19",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "rollhook",
+     "image": "ghcr.io/jkrumm/rollhook",
+     "name": "rollhook",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "email-gateway",
+     "compose_service": "email-gateway",
+     "image": "email-gateway",
+     "name": "email-gateway-email-gateway-73",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "clickstack",
+     "image": "clickhouse/clickstack-all-in-one",
+     "name": "clickstack",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "image-gateway",
+     "compose_service": "image-gateway",
+     "image": "image-gateway",
+     "name": "image-gateway-image-gateway-6",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "beszel-agent",
+     "image": "henrygd/beszel-agent",
+     "name": "beszel-agent",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "umami",
+     "image": "ghcr.io/umami-software/umami",
+     "name": "umami",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "fpp",
+     "compose_service": "fpp-analytics",
+     "image": "fpp-analytics",
+     "name": "fpp-fpp-analytics-39",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "fpp",
+     "compose_service": "fpp-server",
+     "image": "fpp-server",
+     "name": "fpp-fpp-server-38",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "fpp",
+     "compose_service": "fpp-analytics-updater",
+     "image": "fpp-analytics-updater",
+     "name": "fpp-fpp-analytics-updater-37",
+     "registry": "internal",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "watchtower",
+     "image": "containrrr/watchtower",
+     "name": "watchtower",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "socket-proxy-monitoring",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "socket-proxy-monitoring",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "socket-proxy-watchtower",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "socket-proxy-watchtower",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "socket-proxy-rollhook",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "socket-proxy-rollhook",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "socket-proxy",
+     "image": "tecnativa/docker-socket-proxy",
+     "name": "socket-proxy",
+     "registry": "public",
+     "watchtower_label": null
+    },
+    {
+     "compose_project": "fpp",
+     "compose_service": "mariadb",
+     "image": "mariadb",
+     "name": "mariadb",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "postgres",
+     "image": "postgres",
+     "name": "postgres",
+     "registry": "public",
+     "watchtower_label": "false"
+    },
+    {
+     "compose_project": "vps",
+     "compose_service": "valkey",
+     "image": "valkey/valkey",
+     "name": "redis",
+     "registry": "public",
+     "watchtower_label": "false"
+    }
+   ],
+   "containers_homelab_private_counted_not_named": 0,
+   "events_ring_buffer": {
+    "retained": 256,
+    "window_s": 30
+   }
+  },
+  "github": {
+   "failed": 553,
+   "failed_on_default_branch_push": 228,
+   "repos_pushed_in_window": 37,
+   "repos_with_actions": 18,
+   "runs": 6082,
+   "top_by_failures": [
+    {
+     "failed": 322,
+     "failed_on_default_branch_push": 58,
+     "private": false,
+     "repo": "basalt-ui",
+     "runs": 2500
+    },
+    {
+     "failed": 95,
+     "failed_on_default_branch_push": 66,
+     "private": true,
+     "repo": "weatherorb",
+     "runs": 1025
+    },
+    {
+     "failed": 69,
+     "failed_on_default_branch_push": 65,
+     "private": true,
+     "repo": "shutterflow",
+     "runs": 397
+    },
+    {
+     "failed": 39,
+     "failed_on_default_branch_push": 15,
+     "private": false,
+     "repo": "argo",
+     "runs": 1480
+    },
+    {
+     "failed": 10,
+     "failed_on_default_branch_push": 9,
+     "private": false,
+     "repo": "research-gateway",
+     "runs": 159
+    },
+    {
+     "failed": 5,
+     "failed_on_default_branch_push": 5,
+     "private": true,
+     "repo": "rb",
+     "runs": 41
+    },
+    {
+     "failed": 3,
+     "failed_on_default_branch_push": 3,
+     "private": false,
+     "repo": "linewatch",
+     "runs": 55
+    },
+    {
+     "failed": 2,
+     "failed_on_default_branch_push": 2,
+     "private": false,
+     "repo": "email-gateway",
+     "runs": 88
+    },
+    {
+     "failed": 2,
+     "failed_on_default_branch_push": 2,
+     "private": false,
+     "repo": "image-gateway",
+     "runs": 39
+    },
+    {
+     "failed": 1,
+     "failed_on_default_branch_push": 1,
+     "private": false,
+     "repo": "basalt-ui-obsidian",
+     "runs": 21
+    }
+   ],
+   "window_days": 90
+  },
+  "kuma_homelab": {
+   "api_keys": 2,
+   "burst": {
+    "top_windows": [
+     {
+      "heartbeats": 98,
+      "window_utc": "2026-07-28 02:00"
+     },
+     {
+      "heartbeats": 48,
+      "window_utc": "2026-10-17 20:30"
+     },
+     {
+      "heartbeats": 29,
+      "window_utc": "2026-10-22 07:00"
+     }
+    ],
+    "win_all": {
+     "max_per_30min": 98,
+     "windows": 645,
+     "windows_over_50": 1
+    },
+    "win_leaf": {
+     "max_per_30min": 84,
+     "windows": 609,
+     "windows_over_50": 1
+    }
+   },
+   "by_type": {
+    "docker": 30,
+    "group": 22,
+    "http": 22,
+    "keyword": 8,
+    "mysql": 1,
+    "push": 37
+   },
+   "cofire_5m": {
+    "buckets_with_3plus_monitors": 34,
+    "leaf_down_transitions": 791,
+    "transitions_in_those_buckets": 210
+   },
+   "heartbeat_range": {
+    "first": "2026-04-25 04:02:29.947",
+    "last": "2026-10-22 07:59:59.080",
+    "rows": 75627
+   },
+   "important_heartbeats": {
+    "2026-04|group|0": 3,
+    "2026-04|group|1": 2,
+    "2026-04|group|2": 1,
+    "2026-04|leaf|0": 3,
+    "2026-04|leaf|1": 5,
+    "2026-05|group|0": 15,
+    "2026-05|group|1": 12,
+    "2026-05|group|2": 2,
+    "2026-05|leaf|0": 24,
+    "2026-05|leaf|1": 28,
+    "2026-05|leaf|2": 1,
+    "2026-06|group|0": 18,
+    "2026-06|group|1": 16,
+    "2026-06|group|2": 3,
+    "2026-06|leaf|0": 26,
+    "2026-06|leaf|1": 32,
+    "2026-07|group|0": 33,
+    "2026-07|group|1": 24,
+    "2026-07|leaf|0": 85,
+    "2026-07|leaf|1": 91,
+    "2026-08|group|0": 48,
+    "2026-08|group|1": 47,
+    "2026-08|group|2": 1,
+    "2026-08|leaf|0": 118,
+    "2026-08|leaf|1": 134,
+    "2026-09|group|0": 136,
+    "2026-09|group|1": 132,
+    "2026-09|group|2": 2,
+    "2026-09|leaf|0": 331,
+    "2026-09|leaf|1": 331,
+    "2026-09|leaf|2": 1,
+    "2026-10|group|0": 72,
+    "2026-10|group|1": 71,
+    "2026-10|group|2": 1,
+    "2026-10|leaf|0": 206,
+    "2026-10|leaf|1": 208,
+    "2026-10|leaf|2": 3
+   },
+   "leaf_without_warden_webhook": [
+    {
+     "id": 21,
+     "name": "FPP - DB - MySQL"
+    }
+   ],
+   "metrics_endpoint_http_status_without_credentials": 401,
+   "monitor_total": 120,
+   "monitors": [
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 4,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "HomeLab",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": "samba",
+     "id": 8,
+     "interval": 133,
+     "maxretries": 5,
+     "name": "Samba - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "beszel",
+     "id": 9,
+     "interval": 136,
+     "maxretries": 5,
+     "name": "Beszel - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "beszel-agent",
+     "id": 10,
+     "interval": 139,
+     "maxretries": 5,
+     "name": "Beszel Agent - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "glance",
+     "id": 11,
+     "interval": 148,
+     "maxretries": 5,
+     "name": "Glance - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "uptime-kuma",
+     "id": 14,
+     "interval": 130,
+     "maxretries": 5,
+     "name": "Uptime Kuma - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 15,
+     "interval": 205,
+     "maxretries": 3,
+     "name": "FreePlanningPoker",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 16,
+     "interval": 60,
+     "maxretries": 3,
+     "name": "FPP - Frontend - HTTP",
+     "parent": "FreePlanningPoker",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 17,
+     "interval": 60,
+     "maxretries": 3,
+     "name": "FPP - Server - HTTP",
+     "parent": "FreePlanningPoker",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 18,
+     "interval": 70,
+     "maxretries": 3,
+     "name": "FPP - Analytics - HTTP",
+     "parent": "FreePlanningPoker",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 20,
+     "interval": 130,
+     "maxretries": 5,
+     "name": "Uptime Kuma - Uptime",
+     "parent": "Infrastructure",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 21,
+     "interval": 60,
+     "maxretries": 3,
+     "name": "FPP - DB - MySQL",
+     "parent": "FreePlanningPoker",
+     "type": "mysql"
+    },
+    {
+     "class": "public",
+     "docker_container": "immich_server",
+     "id": 26,
+     "interval": 165,
+     "maxretries": 5,
+     "name": "Immich Server - Docker",
+     "parent": "Immich",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "immich_machine_learning",
+     "id": 27,
+     "interval": 170,
+     "maxretries": 5,
+     "name": "Immich ML - Docker",
+     "parent": "Immich",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "immich_redis",
+     "id": 28,
+     "interval": 175,
+     "maxretries": 5,
+     "name": "Immich Redis - Docker",
+     "parent": "Immich",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "immich_postgres",
+     "id": 29,
+     "interval": 180,
+     "maxretries": 5,
+     "name": "Immich Postgres - Docker",
+     "parent": "Immich",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 30,
+     "interval": 220,
+     "maxretries": 3,
+     "name": "Immich",
+     "parent": "HomeLab",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 31,
+     "interval": 140,
+     "maxretries": 5,
+     "name": "Immich - Uptime",
+     "parent": "Immich",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 35,
+     "interval": 215,
+     "maxretries": 3,
+     "name": "Websites",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 36,
+     "interval": 60,
+     "maxretries": 3,
+     "name": "Photos - HTTP",
+     "parent": "Websites",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 37,
+     "interval": 145,
+     "maxretries": 5,
+     "name": "Photos - Uptime",
+     "parent": "Websites",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": "filebrowser",
+     "id": 39,
+     "interval": 170,
+     "maxretries": 5,
+     "name": "FileBrowser - Docker",
+     "parent": "Files",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 40,
+     "interval": 650,
+     "maxretries": 1,
+     "name": "FPP - Analytics Readmodel - Push",
+     "parent": "FreePlanningPoker",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 41,
+     "interval": 700,
+     "maxretries": 1,
+     "name": "HomeLab Watchdog - Push",
+     "parent": "Infrastructure",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": "caddy",
+     "id": 42,
+     "interval": 118,
+     "maxretries": 5,
+     "name": "Caddy - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "cloudflared",
+     "id": 43,
+     "interval": 121,
+     "maxretries": 5,
+     "name": "Cloudflared - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 52,
+     "interval": 150,
+     "maxretries": 3,
+     "name": "Glance - HTTP",
+     "parent": "Infrastructure",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": "dozzle",
+     "id": 53,
+     "interval": 153,
+     "maxretries": 5,
+     "name": "Dozzle - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 54,
+     "interval": 155,
+     "maxretries": 3,
+     "name": "Dozzle - HTTP",
+     "parent": "Infrastructure",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 55,
+     "interval": 200,
+     "maxretries": 3,
+     "name": "Infrastructure",
+     "parent": "HomeLab",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": "docker-socket-proxy",
+     "id": 56,
+     "interval": 115,
+     "maxretries": 5,
+     "name": "Docker Socket Proxy - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 62,
+     "interval": 215,
+     "maxretries": 3,
+     "name": "Files",
+     "parent": "HomeLab",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": "watchtower",
+     "id": 84,
+     "interval": 127,
+     "maxretries": 5,
+     "name": "Watchtower - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "docker-socket-proxy-watchtower",
+     "id": 92,
+     "interval": 116,
+     "maxretries": 5,
+     "name": "Docker Socket Proxy Watchtower - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 93,
+     "interval": 185,
+     "maxretries": 3,
+     "name": "Immich - HTTP",
+     "parent": "Immich",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 95,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "VPS",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 96,
+     "interval": 200,
+     "maxretries": 3,
+     "name": "Networking",
+     "parent": "VPS",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 97,
+     "interval": 121,
+     "maxretries": 3,
+     "name": "Traefik - HTTP",
+     "parent": "Networking",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 98,
+     "interval": 205,
+     "maxretries": 3,
+     "name": "Infra",
+     "parent": "VPS",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 99,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Postgres - Backup - Push",
+     "parent": "Infra",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 100,
+     "interval": 131,
+     "maxretries": 3,
+     "name": "RollHook - HTTP",
+     "parent": "Networking",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 136,
+     "interval": 141,
+     "maxretries": 3,
+     "name": "HyperDX - HTTP",
+     "parent": "Monitoring",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 138,
+     "interval": 210,
+     "maxretries": 3,
+     "name": "Monitoring",
+     "parent": "VPS",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 139,
+     "interval": 131,
+     "maxretries": 3,
+     "name": "ClickStack OTel - HTTP",
+     "parent": "Monitoring",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 140,
+     "interval": 151,
+     "maxretries": 3,
+     "name": "Umami - HTTP",
+     "parent": "Monitoring",
+     "type": "http"
+    },
+    {
+     "class": "homelab-private",
+     "id": 141,
+     "name": null,
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "homelab-private",
+     "id": 142,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 143,
+     "name": null,
+     "parent": null,
+     "type": "http"
+    },
+    {
+     "class": "homelab-private",
+     "id": 144,
+     "name": null,
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "homelab-private",
+     "id": 145,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 146,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 147,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 148,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 149,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 150,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 151,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 152,
+     "interval": 691200,
+     "maxretries": 1,
+     "name": "1Password Backup - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 165,
+     "interval": 43200,
+     "maxretries": 1,
+     "name": "Garmin Collector - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 172,
+     "interval": 360,
+     "maxretries": 1,
+     "name": "Hermes Agent - Push",
+     "parent": "Hermes Agent",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 173,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Hermes Backup - Push",
+     "parent": "Hermes Agent",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 175,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "Hermes Agent",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 176,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Restic Backup - Push",
+     "parent": "Infrastructure",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": "restic-backup",
+     "id": 177,
+     "interval": 142,
+     "maxretries": 5,
+     "name": "Restic Backup - Docker",
+     "parent": "Infrastructure",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 178,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "FPP - DB Backup - Push",
+     "parent": "FreePlanningPoker",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 179,
+     "interval": 215,
+     "maxretries": 3,
+     "name": "Services",
+     "parent": "VPS",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 181,
+     "interval": 120,
+     "maxretries": 1,
+     "name": "Postgres - DB - Push",
+     "parent": "Infra",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 182,
+     "interval": 200,
+     "maxretries": 3,
+     "name": "Argo",
+     "parent": "Services",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 183,
+     "interval": 145,
+     "maxretries": 3,
+     "name": "Dashboard - HTTP",
+     "parent": "Argo",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 184,
+     "interval": 150,
+     "maxretries": 3,
+     "name": "API - HTTP",
+     "parent": "Argo",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 186,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "Local",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 187,
+     "interval": 248,
+     "maxretries": 3,
+     "name": "Karakeep",
+     "parent": "HomeLab",
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": "karakeep",
+     "id": 188,
+     "interval": 202,
+     "maxretries": 5,
+     "name": "Karakeep - Docker",
+     "parent": "Karakeep",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "karakeep-chrome",
+     "id": 189,
+     "interval": 205,
+     "maxretries": 5,
+     "name": "Karakeep Chrome - Docker",
+     "parent": "Karakeep",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": "karakeep-meili",
+     "id": 190,
+     "interval": 208,
+     "maxretries": 5,
+     "name": "Karakeep Meili - Docker",
+     "parent": "Karakeep",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 191,
+     "interval": 211,
+     "maxretries": 3,
+     "name": "Karakeep - HTTP",
+     "parent": "Karakeep",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 192,
+     "interval": 150,
+     "maxretries": 3,
+     "name": "Audio Gateway - HTTP",
+     "parent": "Services",
+     "type": "keyword"
+    },
+    {
+     "class": "homelab-private",
+     "id": 194,
+     "name": null,
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "homelab-private",
+     "id": 195,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 196,
+     "name": null,
+     "parent": null,
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 197,
+     "interval": 691200,
+     "maxretries": 1,
+     "name": "MacMini Secret Seed - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 198,
+     "interval": 165,
+     "maxretries": 3,
+     "name": "ImageCDN - HTTP",
+     "parent": "Infra",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 199,
+     "interval": 175,
+     "maxretries": 3,
+     "name": "ImageCDN Origin - HTTP",
+     "parent": "Infra",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 204,
+     "interval": 600,
+     "maxretries": 1,
+     "name": "MacMini Dev Host - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 205,
+     "interval": 14400,
+     "maxretries": 1,
+     "name": "MacMini Collie - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 206,
+     "interval": 134,
+     "maxretries": 3,
+     "name": "RollHook - Ready - HTTP",
+     "parent": "Networking",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 207,
+     "interval": 240,
+     "maxretries": 1,
+     "name": "Home Line - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 208,
+     "interval": 600,
+     "maxretries": 2,
+     "name": "Home Line - Watchdog",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 209,
+     "interval": 14400,
+     "maxretries": 1,
+     "name": "Brain Sync - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 210,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Brain Backup - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 211,
+     "interval": 14400,
+     "maxretries": 1,
+     "name": "Garmin Auto-Relogin - Push",
+     "parent": "Infrastructure",
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 212,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 213,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 215,
+     "interval": 172800,
+     "maxretries": 1,
+     "name": "MacMini Drift - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "work",
+     "id": 216,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "work",
+     "id": 217,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "work",
+     "id": 218,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 220,
+     "interval": 2100,
+     "maxretries": 1,
+     "name": "WeatherOrb Watchdog - Push",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 223,
+     "name": null,
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "homelab-private",
+     "id": 224,
+     "name": null,
+     "parent": null,
+     "type": "docker"
+    },
+    {
+     "class": "homelab-private",
+     "id": 225,
+     "name": null,
+     "parent": null,
+     "type": "http"
+    },
+    {
+     "class": "homelab-private",
+     "id": 226,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 228,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Immich Backup - Push",
+     "parent": "Immich",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 229,
+     "interval": 160,
+     "maxretries": 3,
+     "name": "Hermes - HTTP",
+     "parent": "Argo",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 230,
+     "interval": 165,
+     "maxretries": 3,
+     "name": "Image Gen Gateway - HTTP",
+     "parent": "Services",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 232,
+     "interval": 170,
+     "maxretries": 3,
+     "name": "WeatherOrb - HTTP",
+     "parent": "Websites",
+     "type": "http"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 233,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "Warden",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 234,
+     "interval": 90000,
+     "maxretries": 1,
+     "name": "Warden Backup - Push",
+     "parent": "Warden",
+     "type": "push"
+    },
+    {
+     "class": "work",
+     "id": 235,
+     "name": null,
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 236,
+     "interval": 161,
+     "maxretries": 3,
+     "name": "EmailGateway - HTTP",
+     "parent": "Services",
+     "type": "keyword"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 243,
+     "interval": 3700,
+     "maxretries": 1,
+     "name": "WeatherOrb Accounts Backup - Push",
+     "parent": "Immich",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 244,
+     "interval": 250,
+     "maxretries": 3,
+     "name": "Agent Gateway",
+     "parent": null,
+     "type": "group"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 245,
+     "interval": 300,
+     "maxretries": 1,
+     "name": "Agent Gateway - Push",
+     "parent": "Agent Gateway",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 246,
+     "interval": 1200,
+     "maxretries": 1,
+     "name": "Warden Loop - Push",
+     "parent": "Warden",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 247,
+     "interval": 3900,
+     "maxretries": 1,
+     "name": "WeatherOrb Archive - Push",
+     "parent": "Immich",
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 248,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "homelab-private",
+     "id": 249,
+     "name": null,
+     "parent": null,
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 250,
+     "interval": 2100,
+     "maxretries": 1,
+     "name": "WeatherOrb Watchdog - Degraded",
+     "parent": "Local",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 251,
+     "interval": 14400,
+     "maxretries": 1,
+     "name": "Hermes Serve - Push",
+     "parent": "Hermes Agent",
+     "type": "push"
+    },
+    {
+     "class": "public",
+     "docker_container": "versitygw",
+     "id": 253,
+     "interval": 181,
+     "maxretries": 5,
+     "name": "S3 Gateway - Docker",
+     "parent": "Files",
+     "type": "docker"
+    },
+    {
+     "class": "public",
+     "docker_container": null,
+     "id": 254,
+     "interval": 187,
+     "maxretries": 1,
+     "name": "S3 Gateway - HTTP",
+     "parent": "Files",
+     "type": "http"
+    }
+   ],
+   "notifications": {
+    "Slack - Alerts": 98,
+    "Warden - Ingest": 97
+   },
+   "outage_buckets": {
+    "1:<5m": 338,
+    "2:5-30m": 286,
+    "3:30m-2h": 61,
+    "4:2-24h": 75,
+    "5:>=24h": 24
+   },
+   "private_monitors": 22,
+   "tags": {
+    "monitor_tag_links": 0,
+    "tag_definitions": 0
+   },
+   "work_monitors": 4
+  },
+  "probed_at": "2026-10-22T08:40:13Z"
+ },
+ "recovery": {
+  "by_polarity": {
+   "chat": 98,
+   "fault": 224,
+   "info": 662,
+   "recovery": 133,
+   "test": 4
+  },
+  "by_system_recovery_pct": {
+   "beszel": 54.5,
+   "better_stack": 31.2,
+   "homelab_private": 6.2,
+   "homelab_watchdog": 40.0,
+   "hyperdx": 30.8,
+   "rollhook": 0.0,
+   "uptime_kuma": 40.2
+  },
+  "non_signal_rows_chat_test_pct": 9.1,
+  "policy_ignores_better_stack_resolved_lines": true,
+  "policy_ignores_kuma_up_lines": true,
+  "recovery_share_of_all_slack_rows_pct": 11.9,
+  "recovery_share_of_fault_plus_recovery_pct": 37.3,
+  "slack_rows": 1121,
+  "success_notice_rows_pct": 59.1
+ },
+ "relay_facts": {
+  "argo_messages_route_offers": [
+   "limit (max 100)",
+   "oldest",
+   "latest",
+   "cursor"
+  ],
+  "fetch_limit": 50,
+  "fingerprint_change": "2026-10-04 (commit 98d7798): hex ids, numbers, paths stripped",
+  "flap_threshold": 3,
+  "forwarded_by_argo_but_discarded_by_warden": [
+   "user_or_bot_id",
+   "thread_ts",
+   "reactions",
+   "files",
+   "edited",
+   "has_more",
+   "next_cursor"
+  ],
+  "grouped_ttl_days": 7,
+  "loop_interval_s": 600,
+  "pagination": "none",
+  "poll_interval_s": 1800,
+  "poll_skips": "names ending in Push, and glyph-prefixed HyperDX lines (watchdog-poll.py:384)",
+  "slack_api_fields_forwarded_by_argo": [
+   "ts",
+   "user_or_bot_id",
+   "text",
+   "type",
+   "thread_ts",
+   "reply_count",
+   "reactions",
+   "files",
+   "edited"
+  ],
+  "slack_fields_not_forwarded": [
+   "username",
+   "app_id",
+   "bot_profile",
+   "attachments",
+   "blocks",
+   "subtype"
+  ],
+  "warden_keeps": [
+   "text (first 240 chars, newlines to spaces)",
+   "ts"
+  ]
+ },
+ "slack_share": {
+  "brief_baseline": {
+   "share_pct": 63.5,
+   "slack": 1112,
+   "total": 1752
+  },
+  "events_total": 1761,
+  "share_pct": 63.7,
+  "slack_events": 1121
+ },
+ "source_map": [
+  {
+   "direct": "yes, live",
+   "direct_available": "y",
+   "direct_short": "y, live: webhook -> /ingest/kuma (uk)",
+   "direct_status": "live",
+   "evidence": "homelab/uptime-kuma/monitors.yaml settings; warden docs/api.md Ingest door; watchdog-poll.py:384",
+   "gap": "no redelivery while warden is down; the Slack copy of non-Push monitors is still ingested (double intake); leaf without the webhook: FPP - DB - MySQL",
+   "host": "homelab (one instance; probes homelab and vps, receives pushes from mini, cron, MacBook)",
+   "how": "notification 'Warden - Ingest' -> POST /ingest/kuma -> source uk; attached to 97 of 98 leaf monitors, Slack on 98; live since 2026-10-16T22:04:25Z",
+   "lost": "monitor id, type, tags (route_by_label reads a repo tag; Kuma holds 0 tags today), url, heartbeat time, retries, duration; group parents restate children; Down and Up are different fingerprints; identity breaks on a rename",
+   "lost_short": "id, type, tags, url, times; groups echo children; Down/Up split",
+   "primary": "Uptime Kuma",
+   "recommended": "make uk the only Kuma intake: attach the webhook to the DB monitor, skip every Kuma-shaped #alerts line, and let the webhook only wake a level reconcile of Kuma state per monitor id (Prometheus /metrics with an API key, or the heartbeat table)",
+   "recommended_short": "webhook wakes a state reconcile; drop Kuma lines from Slack intake",
+   "relay": "Slack - Alerts webhook, #alerts",
+   "relay_short": "Slack webhook",
+   "rows": 286,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "pull only",
+   "direct_available": "pull",
+   "direct_short": "pull: API (SaaS cannot reach the door)",
+   "direct_status": "API poll only; the push cannot reach the tailnet door",
+   "evidence": "monitors.yaml (- Uptime monitors); Better Stack docs (webhooks)",
+   "gap": "every subject is also probed by Kuma, so the same outage reaches warden through uk",
+   "host": "SaaS (external vantage)",
+   "how": "outgoing webhooks (incident created, acknowledged, resolved, reopened) cannot reach the tailnet-only door; API poll possible; 3 Kuma monitors already poll it with a bearer key",
+   "lost": "incident id, cause, start and resolve times; incidents do not start with a bracket or glyph, so the prose filter can close them",
+   "lost_short": "incident id, cause, times; prose filter closes them",
+   "primary": "Better Stack",
+   "recommended": "drop from intake (Kuma carries the external verdict); keep Slack as the human mirror",
+   "recommended_short": "drop; Kuma probes all 5 subjects",
+   "relay": "Slack integration, #alerts",
+   "relay_short": "Slack integration",
+   "rows": 16,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "yes, config only",
+   "direct_available": "y",
+   "direct_short": "y, config: generic webhook or alerts_history",
+   "direct_status": "config only",
+   "evidence": "Beszel docs (notifications); live alerts_history schema",
+   "gap": "no ingest route for it",
+   "host": "homelab (agents on homelab, vps, mini)",
+   "how": "Shoutrrr generic webhook (generic://host?template=json) to the ingest door, or read alerts_history (alert_id, created, resolved, system, value, name)",
+   "lost": "value, start and resolve time, system id; above and below are separate fingerprints; recurrences collapse",
+   "lost_short": "value, times; recurrences collapse",
+   "primary": "Beszel hub",
+   "recommended": "reconcile on alerts_history (open = resolved empty); the webhook only wakes it",
+   "recommended_short": "reconcile alerts_history",
+   "relay": "Shoutrrr Slack URL, #alerts",
+   "relay_short": "Shoutrrr Slack",
+   "rows": 11,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "no",
+   "direct_available": "n",
+   "direct_short": "n: notify() could POST to the door",
+   "direct_status": "none today",
+   "evidence": "homelab/scripts/homelab_watchdog.sh notify/flush; docs/watchdog-behaviors.md",
+   "gap": "escalation level and state files stay on the host",
+   "host": "homelab (cron, every 10 min)",
+   "how": "only liveness reaches warden (Kuma push); notify() could POST structured JSON to the ingest door (the homelab tag may reach it)",
+   "lost": "blocks flattened to one line, several notifications fused, cut at 240 characters; escalation level stays on the host",
+   "lost_short": "blocks flattened, cut at 240",
+   "primary": "HomeLab WatchDog",
+   "recommended": "POST the structured event next to Slack; low volume",
+   "recommended_short": "structured POST; low volume",
+   "relay": "Slack webhook, Block Kit",
+   "relay_short": "Slack Block Kit",
+   "rows": 5,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "yes, live",
+   "direct_available": "y",
+   "direct_short": "y, live: webhook -> /ingest/hyperdx",
+   "direct_status": "live",
+   "evidence": "vps observability/README.md; docs/observability.md",
+   "gap": "alert state is not reconciled; weatherorb's own alerts use a separate path",
+   "host": "vps (ClickStack; 21 alerts-as-code)",
+   "how": "webhook 'Warden ingest' on all 21 alerts -> POST /ingest/hyperdx -> source hyperdx; the poll skips glyph-prefixed lines",
+   "lost": "value, time range, alert url, service; an ALERT and OK glyph flip inside one batch leaves no trace",
+   "lost_short": "value, range, url, service",
+   "primary": "HyperDX alerts",
+   "recommended": "keep the webhook; add a reconcile of alert state (REST v2 /alerts)",
+   "recommended_short": "keep; reconcile alert state",
+   "relay": "Slack #alerts webhook",
+   "relay_short": "Slack webhook",
+   "rows": 13,
+   "warden_source": "slack_alert (before 2026-10-17)"
+  },
+  {
+   "direct": "no",
+   "direct_available": "n",
+   "direct_short": "n: POST to the door or push monitor",
+   "direct_status": "none today",
+   "evidence": "homelab-private (names withheld)",
+   "gap": "no structured channel",
+   "host": "homelab (apps and scripts; names withheld)",
+   "how": "same POST-to-door option; some Kuma push monitors already carry its liveness",
+   "lost": "structure, severity, which script or app; recoveries use a different sentence",
+   "lost_short": "structure, severity, origin",
+   "primary": "homelab-private stack",
+   "recommended": "POST structured events or push monitors with a DOWN reason; low volume",
+   "recommended_short": "structured POST; low volume",
+   "relay": "Slack webhook via its notify helper",
+   "relay_short": "Slack webhook",
+   "rows": 16,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "yes, config only (+ markers live)",
+   "direct_available": "y",
+   "direct_short": "y, config: job webhook; OTLP markers live",
+   "direct_status": "config only; OTLP markers already live",
+   "evidence": "rollhook README Notifications; ClickStack probe",
+   "gap": "no ingest route; nothing reads slack_update",
+   "host": "vps (deployer)",
+   "how": "NOTIFICATION_WEBHOOK_URL posts the full job JSON; OTLP deploy markers already land in ClickStack (service rollhook, 30-day TTL); GET /jobs (bearer)",
+   "lost": "job id, duration, error; since the 2026-10-04 fingerprint change one row per app folds every deploy (22 rows for 1267 deploys)",
+   "lost_short": "job id, duration, error; deploys folded per app",
+   "primary": "RollHook",
+   "recommended": "webhook -> a deploy event (deployment frequency, change failure); stop polling #updates",
+   "recommended_short": "webhook -> deploy event (DORA)",
+   "relay": "SLACK_WEBHOOK_URL, #updates",
+   "relay_short": "Slack webhook",
+   "rows": 669,
+   "warden_source": "slack_update (never ingested)"
+  },
+  {
+   "direct": "yes, other form",
+   "direct_available": "y",
+   "direct_short": "y, other: Docker events and digests",
+   "direct_status": "other form: Docker events and image digests",
+   "evidence": "Watchtower docs; docker events probe",
+   "gap": "daemon keeps only a 256-event ring: a stream consumer must record it",
+   "host": "homelab and vps (04:00 sweep)",
+   "how": "Docker events (image pull, create, start, die, oom, health_status) or image digests; HTTP API is trigger-only, /v1/metrics needs API mode and a token",
+   "lost": "which image changed, which container",
+   "lost_short": "image and container",
+   "primary": "Watchtower",
+   "recommended": "Docker state and events as the level source; ignore Watchtower text",
+   "recommended_short": "ignore; use Docker state",
+   "relay": "Shoutrrr Slack URL, #updates, level warn",
+   "relay_short": "Shoutrrr Slack",
+   "rows": 3,
+   "warden_source": "slack_update (never ingested)"
+  },
+  {
+   "direct": "n/a",
+   "direct_available": "n/a",
+   "direct_short": "n/a",
+   "direct_status": "not a signal",
+   "evidence": "loop/intake.py:878 classify",
+   "gap": "polled as if it were a signal",
+   "host": "mini (replies in #alerts and #updates)",
+   "how": "none needed",
+   "lost": "not a signal",
+   "lost_short": "not a signal",
+   "primary": "Hermes gateway chat",
+   "recommended": "stop reading prose; the policy already closes it as ignored",
+   "recommended_short": "stop reading prose",
+   "relay": "Slack messages",
+   "relay_short": "Slack messages",
+   "rows": 98,
+   "warden_source": "slack_alert, slack_update"
+  },
+  {
+   "direct": "n/a",
+   "direct_available": "n/a",
+   "direct_short": "n/a",
+   "direct_status": "not a signal",
+   "evidence": "-",
+   "gap": "-",
+   "host": "-",
+   "how": "n/a",
+   "lost": "n/a",
+   "lost_short": "-",
+   "primary": "tests and canaries",
+   "recommended": "none",
+   "recommended_short": "none",
+   "relay": "Slack",
+   "relay_short": "Slack",
+   "rows": 4,
+   "warden_source": "slack_alert"
+  },
+  {
+   "direct": "yes",
+   "direct_available": "y",
+   "direct_short": "y: events stream (nothing records it)",
+   "direct_status": "event stream, unrecorded",
+   "evidence": "watchdog-poll.py:235; docker events probe",
+   "gap": "nothing records the stream",
+   "host": "homelab, vps",
+   "how": "docker events stream; the daemon's ring (~256 events) covers under 1 min on the vps and 1 to 3 min on the homelab",
+   "lost": "only unhealthy and restart-loop lists every 30 minutes; no history",
+   "lost_short": "history; 30-min summary",
+   "primary": "Docker daemon",
+   "recommended": "stream consumer with a recorder; container state as the level source",
+   "recommended_short": "stream consumer + recorder",
+   "relay": "none (Argo /docker summary poll, 30 min)",
+   "relay_short": "Argo summary poll",
+   "rows": 7,
+   "warden_source": "docker_homelab, docker_vps"
+  },
+  {
+   "direct": "pull only",
+   "direct_available": "pull",
+   "direct_short": "pull: gh api",
+   "direct_status": "gh api; webhooks cannot reach the tailnet",
+   "evidence": "gh probe; loop/intake.py:169",
+   "gap": "CI failures reach nobody unless a PR gate sees them",
+   "host": "SaaS",
+   "how": "gh api works non-interactively; webhooks cannot reach the tailnet; 553 failed Actions runs in 90 days across 18 repos, 228 on a default-branch push",
+   "lost": "Actions results are not a source at all",
+   "lost_short": "Actions are no source",
+   "primary": "GitHub",
+   "recommended": "poll runs per repo with conditional requests, or a failure step on the self-hosted runners posting to the door",
+   "recommended_short": "poll runs (ETag) or runner step",
+   "relay": "none (gh search in poll and loop)",
+   "relay_short": "gh poll",
+   "rows": 178,
+   "warden_source": "github_go, github_pr, github_issue"
+  }
+ ],
+ "sources": {
+  "docker_homelab": {
+   "escalated_items": 0,
+   "events": 5,
+   "first_seen": "2026-04-30",
+   "ignored_by": {},
+   "intake_path": "poll every 1800 s: Argo /docker/<host>/summary alerts block (watchdog-poll.py:235)",
+   "item_lag_min_after_row": {
+    "max": 0.7,
+    "median": 0.5,
+    "n": 2,
+    "p90": 0.6
+   },
+   "items": 3,
+   "items_without_repo": 2,
+   "last_seen": "2026-10-21",
+   "link": {
+    "no_item": 2,
+    "worked": 3
+   },
+   "link_loop_era": {
+    "worked": 3
+   },
+   "loop_era_events": 3,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {
+    "quiet": 3
+   }
+  },
+  "docker_vps": {
+   "escalated_items": 0,
+   "events": 2,
+   "first_seen": "2026-08-18",
+   "ignored_by": {},
+   "intake_path": "same, vps",
+   "item_lag_min_after_row": {
+    "max": 7.2,
+    "median": 7.2,
+    "n": 1,
+    "p90": 7.2
+   },
+   "items": 1,
+   "items_without_repo": 0,
+   "last_seen": "2026-09-23",
+   "link": {
+    "no_item": 1,
+    "worked": 1
+   },
+   "link_loop_era": {
+    "worked": 1
+   },
+   "loop_era_events": 1,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {
+    "quiet": 1
+   }
+  },
+  "github_go": {
+   "escalated_items": 26,
+   "events": 136,
+   "first_seen": "2026-09-10",
+   "ignored_by": {},
+   "intake_path": "loop pass every 600 s: GitHub issue search per owner (loop/intake.py:169)",
+   "item_lag_min_after_row": {
+    "max": 0.0,
+    "median": 0.0,
+    "n": 121,
+    "p90": 0.0
+   },
+   "items": 121,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-22",
+   "link": {
+    "duplicate": 15,
+    "worked": 121
+   },
+   "link_loop_era": {
+    "duplicate": 15,
+    "worked": 121
+   },
+   "loop_era_events": 136,
+   "resolved_share_pct": 81.6,
+   "worked_outcomes": {
+    "closed_resolved": 86,
+    "failed": 1,
+    "fixed": 17,
+    "needs_decision": 15,
+    "quiet": 2
+   }
+  },
+  "github_issue": {
+   "escalated_items": 0,
+   "events": 12,
+   "first_seen": "2026-05-18",
+   "ignored_by": {},
+   "intake_path": "retired stale-issue digest (watchdog-poll.py:286 docstring)",
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "last_seen": "2026-09-15",
+   "link": {
+    "no_item": 12
+   },
+   "link_loop_era": {
+    "no_item": 10
+   },
+   "loop_era_events": 10,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {}
+  },
+  "github_pr": {
+   "escalated_items": 0,
+   "events": 30,
+   "first_seen": "2026-04-30",
+   "ignored_by": {},
+   "intake_path": "poll every 1800 s: gh search prs, open and stale > 3 days (watchdog-poll.py:286)",
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-09",
+   "link": {
+    "no_item": 30
+   },
+   "link_loop_era": {
+    "no_item": 24
+   },
+   "loop_era_events": 24,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {}
+  },
+  "hermes_cron": {
+   "escalated_items": 0,
+   "events": 4,
+   "first_seen": "2026-05-13",
+   "ignored_by": {},
+   "intake_path": "poll of the Hermes cron registry (reconcile retired)",
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-10",
+   "link": {
+    "no_item": 4
+   },
+   "link_loop_era": {
+    "no_item": 2
+   },
+   "loop_era_events": 2,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {}
+  },
+  "hermes_log": {
+   "escalated_items": 7,
+   "events": 152,
+   "first_seen": "2026-04-30",
+   "ignored_by": {},
+   "intake_path": "poll every 1800 s: tail of Hermes error logs with offsets (watchdog-poll.py:395)",
+   "item_lag_min_after_row": {
+    "max": 10.5,
+    "median": 4.4,
+    "n": 53,
+    "p90": 10.1
+   },
+   "items": 62,
+   "items_without_repo": 1,
+   "last_seen": "2026-10-15",
+   "link": {
+    "duplicate": 2,
+    "no_item": 88,
+    "worked": 62
+   },
+   "link_loop_era": {
+    "duplicate": 2,
+    "worked": 57
+   },
+   "loop_era_events": 59,
+   "resolved_share_pct": 99.3,
+   "worked_outcomes": {
+    "closed_fixed_by": 1,
+    "closed_resolved": 55,
+    "fixed": 1,
+    "quiet": 5
+   }
+  },
+  "human": {
+   "escalated_items": 33,
+   "events": 162,
+   "first_seen": "2026-09-10",
+   "ignored_by": {
+    "model_or_other": 4
+   },
+   "intake_path": "warden run CLI and Argo owner actions, on demand",
+   "item_lag_min_after_row": {
+    "max": 0.0,
+    "median": 0.0,
+    "n": 162,
+    "p90": 0.0
+   },
+   "items": 162,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-21",
+   "link": {
+    "ignored": 4,
+    "worked": 158
+   },
+   "link_loop_era": {
+    "ignored": 4,
+    "worked": 158
+   },
+   "loop_era_events": 162,
+   "resolved_share_pct": 0.0,
+   "worked_outcomes": {
+    "closed_resolved": 134,
+    "failed": 1,
+    "fixed": 19,
+    "needs_decision": 4
+   }
+  },
+  "hyperdx": {
+   "escalated_items": 1,
+   "events": 4,
+   "first_seen": "2026-10-16",
+   "ignored_by": {},
+   "intake_path": "webhook POST /ingest/hyperdx since 2026-10-17 (lifecycle/ingest.py:118)",
+   "item_lag_min_after_row": {
+    "max": 7.5,
+    "median": 7.5,
+    "n": 1,
+    "p90": 7.5
+   },
+   "items": 3,
+   "items_without_repo": 2,
+   "last_seen": "2026-10-21",
+   "link": {
+    "no_item": 1,
+    "worked": 3
+   },
+   "link_loop_era": {
+    "no_item": 1,
+    "worked": 3
+   },
+   "loop_era_events": 4,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {
+    "quiet": 3
+   }
+  },
+  "job": {
+   "escalated_items": 7,
+   "events": 7,
+   "first_seen": "2026-10-16",
+   "ignored_by": {},
+   "intake_path": "loop pass every 600 s: local jobs-grade read (loop/intake.py:236)",
+   "item_lag_min_after_row": {
+    "max": 0.0,
+    "median": 0.0,
+    "n": 4,
+    "p90": 0.0
+   },
+   "items": 7,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-22",
+   "link": {
+    "worked": 7
+   },
+   "link_loop_era": {
+    "worked": 7
+   },
+   "loop_era_events": 7,
+   "resolved_share_pct": 42.9,
+   "worked_outcomes": {
+    "fixed": 1,
+    "needs_decision": 6
+   }
+  },
+  "op_refs_homelab": {
+   "escalated_items": 0,
+   "events": 3,
+   "first_seen": "2026-09-01",
+   "ignored_by": {},
+   "intake_path": "poll every 1800 s: ssh op run probe (watchdog-poll.py:472)",
+   "item_lag_min_after_row": {
+    "max": 3.5,
+    "median": 3.5,
+    "n": 1,
+    "p90": 3.5
+   },
+   "items": 2,
+   "items_without_repo": 2,
+   "last_seen": "2026-09-29",
+   "link": {
+    "no_item": 1,
+    "worked": 2
+   },
+   "link_loop_era": {
+    "worked": 2
+   },
+   "loop_era_events": 2,
+   "resolved_share_pct": 100.0,
+   "worked_outcomes": {
+    "closed_resolved": 1,
+    "quiet": 1
+   }
+  },
+  "slack_alert": {
+   "escalated_items": 23,
+   "events": 408,
+   "first_seen": "2026-05-04",
+   "ignored_by": {
+    "closed_by_hand": 3,
+    "model_or_other": 24,
+    "policy_ignore_list": 28,
+    "prose_filter": 8
+   },
+   "intake_path": "poll every 1800 s: Argo /slack/channels/<id>/messages?limit=50 (newest 50, text and ts only) -> fingerprint -> upsert_grouped; loop pass every 600 s opens items (watchdog-poll.py:352-392, 805-918; loop/intake.py:23)",
+   "item_lag_min_after_row": {
+    "max": 9.7,
+    "median": 2.5,
+    "n": 78,
+    "p90": 8.1
+   },
+   "items": 128,
+   "items_without_repo": 89,
+   "last_seen": "2026-10-22",
+   "link": {
+    "duplicate": 17,
+    "ignored": 63,
+    "no_item": 263,
+    "worked": 65
+   },
+   "link_loop_era": {
+    "duplicate": 17,
+    "ignored": 60,
+    "no_item": 14,
+    "worked": 48
+   },
+   "loop_era_events": 139,
+   "resolved_share_pct": 75.7,
+   "worked_outcomes": {
+    "closed_resolved": 12,
+    "needs_decision": 18,
+    "quiet": 35
+   }
+  },
+  "slack_update": {
+   "escalated_items": 0,
+   "events": 713,
+   "first_seen": "2026-05-06",
+   "ignored_by": {},
+   "intake_path": "same poll on #updates; recorded, never ingested (loop/core.py:60 INGEST_SOURCES, :86)",
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-22",
+   "link": {
+    "no_item": 713
+   },
+   "link_loop_era": {
+    "no_item": 251
+   },
+   "loop_era_events": 251,
+   "resolved_share_pct": 98.3,
+   "worked_outcomes": {}
+  },
+  "stray_skill": {
+   "escalated_items": 0,
+   "events": 16,
+   "first_seen": "2026-08-02",
+   "ignored_by": {},
+   "intake_path": "poll every 1800 s: filesystem scan (watchdog-poll.py:576)",
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "last_seen": "2026-09-03",
+   "link": {
+    "no_item": 16
+   },
+   "link_loop_era": {},
+   "loop_era_events": 0,
+   "resolved_share_pct": 93.8,
+   "worked_outcomes": {}
+  },
+  "uk": {
+   "escalated_items": 17,
+   "events": 96,
+   "first_seen": "2026-05-04",
+   "ignored_by": {
+    "closed_by_hand": 1,
+    "model_or_other": 1
+   },
+   "intake_path": "webhook POST /ingest/kuma (bearer, tailnet door) since 2026-10-16; before: 1800 s snapshot poll (lifecycle/ingest.py:75)",
+   "item_lag_min_after_row": {
+    "max": 10.5,
+    "median": 4.2,
+    "n": 34,
+    "p90": 9.6
+   },
+   "items": 56,
+   "items_without_repo": 21,
+   "last_seen": "2026-10-22",
+   "link": {
+    "duplicate": 7,
+    "ignored": 2,
+    "no_item": 33,
+    "worked": 54
+   },
+   "link_loop_era": {
+    "duplicate": 7,
+    "ignored": 2,
+    "no_item": 9,
+    "worked": 51
+   },
+   "loop_era_events": 69,
+   "resolved_share_pct": 94.8,
+   "worked_outcomes": {
+    "closed_resolved": 13,
+    "failed": 1,
+    "quiet": 40
+   }
+  },
+  "warden_canary": {
+   "escalated_items": 0,
+   "events": 4,
+   "first_seen": "2026-09-10",
+   "ignored_by": {},
+   "intake_path": "internal canary items",
+   "item_lag_min_after_row": {
+    "max": 60.0,
+    "median": 60.0,
+    "n": 4,
+    "p90": 60.0
+   },
+   "items": 4,
+   "items_without_repo": 0,
+   "last_seen": "2026-09-10",
+   "link": {
+    "worked": 4
+   },
+   "link_loop_era": {
+    "worked": 4
+   },
+   "loop_era_events": 4,
+   "resolved_share_pct": 0.0,
+   "worked_outcomes": {
+    "closed_resolved": 3,
+    "fixed": 1
+   }
+  },
+  "warden_self": {
+   "escalated_items": 0,
+   "events": 7,
+   "first_seen": "2026-09-28",
+   "ignored_by": {},
+   "intake_path": "internal escalation notes",
+   "item_lag_min_after_row": {
+    "max": 0.0,
+    "median": 0.0,
+    "n": 7,
+    "p90": 0.0
+   },
+   "items": 7,
+   "items_without_repo": 0,
+   "last_seen": "2026-10-01",
+   "link": {
+    "worked": 7
+   },
+   "link_loop_era": {
+    "worked": 7
+   },
+   "loop_era_events": 7,
+   "resolved_share_pct": 71.4,
+   "worked_outcomes": {
+    "closed_resolved": 7
+   }
+  }
+ },
+ "systems": {
+  "beszel": {
+   "by_source": {
+    "slack_alert": 11
+   },
+   "escalated_items": 2,
+   "events": 11,
+   "ignored_by": {
+    "closed_by_hand": 1,
+    "model_or_other": 4,
+    "policy_ignore_list": 1
+   },
+   "item_lag_min_after_row": {
+    "max": 9.4,
+    "median": 8.3,
+    "n": 2,
+    "p90": 9.2
+   },
+   "items": 9,
+   "items_without_repo": 5,
+   "label": "Beszel hub (homelab)",
+   "link": {
+    "duplicate": 1,
+    "ignored": 6,
+    "no_item": 1,
+    "worked": 3
+   },
+   "link_loop_era": {
+    "duplicate": 1,
+    "ignored": 6,
+    "worked": 3
+   },
+   "loop_era_events": 10,
+   "max_span_days": 172.8,
+   "months_first_seen": {
+    "2026-05": 1,
+    "2026-09": 4,
+    "2026-10": 6
+   },
+   "months_ts_first": {
+    "2026-05": 7,
+    "2026-07": 1,
+    "2026-08": 1,
+    "2026-10": 2
+   },
+   "polarity": {
+    "fault": 5,
+    "recovery": 6
+   },
+   "poll_lag_min_single_message": {
+    "max": 36.5,
+    "median": 14.7,
+    "n": 3,
+    "p90": 32.1
+   },
+   "rows_batch_count_ge2": 0,
+   "rows_lag_over_6h_or_negative": 8,
+   "rows_recurring_over_1h": 8,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {
+    "closed_resolved": 1,
+    "quiet": 2
+   }
+  },
+  "better_stack": {
+   "by_source": {
+    "slack_alert": 16
+   },
+   "escalated_items": 0,
+   "events": 16,
+   "ignored_by": {
+    "model_or_other": 2,
+    "policy_ignore_list": 4,
+    "prose_filter": 4
+   },
+   "item_lag_min_after_row": {
+    "max": 3.5,
+    "median": 3.0,
+    "n": 8,
+    "p90": 3.5
+   },
+   "items": 10,
+   "items_without_repo": 10,
+   "label": "Better Stack (SaaS)",
+   "link": {
+    "ignored": 10,
+    "no_item": 6
+   },
+   "link_loop_era": {
+    "ignored": 10
+   },
+   "loop_era_events": 10,
+   "max_span_days": 163.0,
+   "months_first_seen": {
+    "2026-05": 2,
+    "2026-06": 3,
+    "2026-08": 1,
+    "2026-10": 10
+   },
+   "months_ts_first": {
+    "2026-05": 6,
+    "2026-06": 6,
+    "2026-08": 1,
+    "2026-10": 3
+   },
+   "polarity": {
+    "fault": 11,
+    "recovery": 5
+   },
+   "poll_lag_min_single_message": {
+    "max": 39.4,
+    "median": 21.9,
+    "n": 9,
+    "p90": 38.0
+   },
+   "rows_batch_count_ge2": 0,
+   "rows_lag_over_6h_or_negative": 7,
+   "rows_recurring_over_1h": 11,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {}
+  },
+  "hermes_chat": {
+   "by_source": {
+    "slack_alert": 57,
+    "slack_update": 41
+   },
+   "escalated_items": 0,
+   "events": 98,
+   "ignored_by": {
+    "model_or_other": 1
+   },
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 1,
+   "items_without_repo": 1,
+   "label": "Hermes gateway chat (not a signal)",
+   "link": {
+    "ignored": 1,
+    "no_item": 97
+   },
+   "link_loop_era": {},
+   "loop_era_events": 0,
+   "max_span_days": 0.4,
+   "months_first_seen": {
+    "2026-07": 97,
+    "2026-09": 1
+   },
+   "months_ts_first": {
+    "2026-07": 97,
+    "2026-09": 1
+   },
+   "polarity": {
+    "chat": 98
+   },
+   "poll_lag_min_single_message": {
+    "max": 58.7,
+    "median": 19.3,
+    "n": 97,
+    "p90": 28.4
+   },
+   "rows_batch_count_ge2": 1,
+   "rows_lag_over_6h_or_negative": 0,
+   "rows_recurring_over_1h": 1,
+   "rows_text_cut_at_240": 14,
+   "worked_outcomes": {}
+  },
+  "homelab_private": {
+   "by_source": {
+    "slack_alert": 16
+   },
+   "escalated_items": 1,
+   "events": 16,
+   "ignored_by": {
+    "model_or_other": 2,
+    "prose_filter": 2
+   },
+   "item_lag_min_after_row": {
+    "max": 9.7,
+    "median": 2.2,
+    "n": 5,
+    "p90": 8.7
+   },
+   "items": 9,
+   "items_without_repo": 6,
+   "label": "homelab-private apps and scripts",
+   "link": {
+    "duplicate": 1,
+    "ignored": 4,
+    "no_item": 6,
+    "worked": 5
+   },
+   "link_loop_era": {
+    "duplicate": 1,
+    "ignored": 4,
+    "worked": 3
+   },
+   "loop_era_events": 8,
+   "max_span_days": 39.5,
+   "months_first_seen": {
+    "2026-06": 3,
+    "2026-08": 3,
+    "2026-09": 4,
+    "2026-10": 6
+   },
+   "months_ts_first": {
+    "2026-06": 3,
+    "2026-08": 4,
+    "2026-09": 4,
+    "2026-10": 5
+   },
+   "polarity": {
+    "fault": 15,
+    "recovery": 1
+   },
+   "poll_lag_min_single_message": {
+    "max": 29.8,
+    "median": 9.9,
+    "n": 13,
+    "p90": 28.8
+   },
+   "rows_batch_count_ge2": 1,
+   "rows_lag_over_6h_or_negative": 2,
+   "rows_recurring_over_1h": 4,
+   "rows_text_cut_at_240": 3,
+   "worked_outcomes": {
+    "closed_resolved": 3,
+    "quiet": 2
+   }
+  },
+  "homelab_watchdog": {
+   "by_source": {
+    "slack_alert": 5
+   },
+   "escalated_items": 0,
+   "events": 5,
+   "ignored_by": {
+    "prose_filter": 2
+   },
+   "item_lag_min_after_row": {
+    "max": 3.7,
+    "median": 3.7,
+    "n": 2,
+    "p90": 3.7
+   },
+   "items": 2,
+   "items_without_repo": 2,
+   "label": "HomeLab WatchDog (homelab cron)",
+   "link": {
+    "ignored": 2,
+    "no_item": 3
+   },
+   "link_loop_era": {
+    "ignored": 2,
+    "no_item": 1
+   },
+   "loop_era_events": 3,
+   "max_span_days": 0.6,
+   "months_first_seen": {
+    "2026-08": 2,
+    "2026-10": 3
+   },
+   "months_ts_first": {
+    "2026-08": 2,
+    "2026-10": 3
+   },
+   "polarity": {
+    "fault": 3,
+    "recovery": 2
+   },
+   "poll_lag_min_single_message": {
+    "max": 25.1,
+    "median": 15.3,
+    "n": 4,
+    "p90": 24.1
+   },
+   "rows_batch_count_ge2": 1,
+   "rows_lag_over_6h_or_negative": 0,
+   "rows_recurring_over_1h": 1,
+   "rows_text_cut_at_240": 1,
+   "worked_outcomes": {}
+  },
+  "hyperdx": {
+   "by_source": {
+    "slack_alert": 13
+   },
+   "escalated_items": 1,
+   "events": 13,
+   "ignored_by": {},
+   "item_lag_min_after_row": {
+    "max": 9.6,
+    "median": 3.9,
+    "n": 8,
+    "p90": 9.3
+   },
+   "items": 13,
+   "items_without_repo": 7,
+   "label": "HyperDX alerts (vps)",
+   "link": {
+    "worked": 13
+   },
+   "link_loop_era": {
+    "worked": 12
+   },
+   "loop_era_events": 12,
+   "max_span_days": 15.7,
+   "months_first_seen": {
+    "2026-09": 5,
+    "2026-10": 8
+   },
+   "months_ts_first": {
+    "2026-09": 5,
+    "2026-10": 8
+   },
+   "polarity": {
+    "fault": 9,
+    "recovery": 4
+   },
+   "poll_lag_min_single_message": {
+    "max": 13.8,
+    "median": 5.5,
+    "n": 5,
+    "p90": 11.4
+   },
+   "rows_batch_count_ge2": 7,
+   "rows_lag_over_6h_or_negative": 1,
+   "rows_recurring_over_1h": 7,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {
+    "closed_resolved": 2,
+    "quiet": 11
+   }
+  },
+  "rollhook": {
+   "by_source": {
+    "slack_update": 669
+   },
+   "escalated_items": 0,
+   "events": 669,
+   "ignored_by": {},
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "label": "RollHook (vps)",
+   "link": {
+    "no_item": 669
+   },
+   "link_loop_era": {
+    "no_item": 250
+   },
+   "loop_era_events": 250,
+   "max_span_days": 15.9,
+   "months_first_seen": {
+    "2026-05": 59,
+    "2026-06": 30,
+    "2026-07": 93,
+    "2026-08": 156,
+    "2026-09": 262,
+    "2026-10": 69
+   },
+   "months_ts_first": {
+    "2026-05": 59,
+    "2026-06": 30,
+    "2026-07": 93,
+    "2026-08": 156,
+    "2026-09": 265,
+    "2026-10": 66
+   },
+   "polarity": {
+    "fault": 10,
+    "info": 659
+   },
+   "poll_lag_min_single_message": {
+    "max": 72.5,
+    "median": 14.0,
+    "n": 639,
+    "p90": 27.2
+   },
+   "rows_batch_count_ge2": 18,
+   "rows_lag_over_6h_or_negative": 12,
+   "rows_recurring_over_1h": 15,
+   "rows_text_cut_at_240": 15,
+   "worked_outcomes": {}
+  },
+  "test_canary": {
+   "by_source": {
+    "slack_alert": 4
+   },
+   "escalated_items": 0,
+   "events": 4,
+   "ignored_by": {},
+   "item_lag_min_after_row": {
+    "max": 9.5,
+    "median": 9.5,
+    "n": 1,
+    "p90": 9.5
+   },
+   "items": 4,
+   "items_without_repo": 4,
+   "label": "test and canary posts",
+   "link": {
+    "worked": 4
+   },
+   "link_loop_era": {
+    "worked": 1
+   },
+   "loop_era_events": 1,
+   "max_span_days": 0.0,
+   "months_first_seen": {
+    "2026-09": 4
+   },
+   "months_ts_first": {
+    "2026-09": 4
+   },
+   "polarity": {
+    "test": 4
+   },
+   "poll_lag_min_single_message": {
+    "max": 66.5,
+    "median": 63.1,
+    "n": 4,
+    "p90": 66.5
+   },
+   "rows_batch_count_ge2": 0,
+   "rows_lag_over_6h_or_negative": 0,
+   "rows_recurring_over_1h": 0,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {
+    "quiet": 4
+   }
+  },
+  "uptime_kuma": {
+   "by_source": {
+    "slack_alert": 286
+   },
+   "escalated_items": 19,
+   "events": 286,
+   "ignored_by": {
+    "closed_by_hand": 2,
+    "model_or_other": 15,
+    "policy_ignore_list": 23
+   },
+   "item_lag_min_after_row": {
+    "max": 8.5,
+    "median": 2.5,
+    "n": 52,
+    "p90": 7.5
+   },
+   "items": 80,
+   "items_without_repo": 54,
+   "label": "Uptime Kuma (homelab)",
+   "link": {
+    "duplicate": 15,
+    "ignored": 40,
+    "no_item": 191,
+    "worked": 40
+   },
+   "link_loop_era": {
+    "duplicate": 15,
+    "ignored": 38,
+    "no_item": 13,
+    "worked": 29
+   },
+   "loop_era_events": 95,
+   "max_span_days": 170.7,
+   "months_first_seen": {
+    "2026-05": 43,
+    "2026-06": 39,
+    "2026-07": 46,
+    "2026-08": 50,
+    "2026-09": 24,
+    "2026-10": 84
+   },
+   "months_ts_first": {
+    "2026-04": 1,
+    "2026-05": 58,
+    "2026-06": 41,
+    "2026-07": 51,
+    "2026-08": 45,
+    "2026-09": 24,
+    "2026-10": 66
+   },
+   "polarity": {
+    "fault": 171,
+    "recovery": 115
+   },
+   "poll_lag_min_single_message": {
+    "max": 50.6,
+    "median": 20.8,
+    "n": 249,
+    "p90": 30.1
+   },
+   "rows_batch_count_ge2": 1,
+   "rows_lag_over_6h_or_negative": 36,
+   "rows_recurring_over_1h": 99,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {
+    "closed_resolved": 6,
+    "needs_decision": 18,
+    "quiet": 16
+   }
+  },
+  "watchtower": {
+   "by_source": {
+    "slack_update": 3
+   },
+   "escalated_items": 0,
+   "events": 3,
+   "ignored_by": {},
+   "item_lag_min_after_row": {
+    "max": null,
+    "median": null,
+    "n": 0,
+    "p90": null
+   },
+   "items": 0,
+   "items_without_repo": 0,
+   "label": "Watchtower (homelab, vps)",
+   "link": {
+    "no_item": 3
+   },
+   "link_loop_era": {
+    "no_item": 1
+   },
+   "loop_era_events": 1,
+   "max_span_days": 87.0,
+   "months_first_seen": {
+    "2026-05": 2,
+    "2026-10": 1
+   },
+   "months_ts_first": {
+    "2026-05": 2,
+    "2026-10": 1
+   },
+   "polarity": {
+    "info": 3
+   },
+   "poll_lag_min_single_message": {
+    "max": 13.5,
+    "median": 6.9,
+    "n": 2,
+    "p90": 12.2
+   },
+   "rows_batch_count_ge2": 0,
+   "rows_lag_over_6h_or_negative": 1,
+   "rows_recurring_over_1h": 2,
+   "rows_text_cut_at_240": 0,
+   "worked_outcomes": {}
+  }
+ },
+ "uk_source": {
+  "group_monitor_rows": 16,
+  "rows": 96,
+  "via_snapshot_poll": 47,
+  "via_webhook": 49
+ }
+}

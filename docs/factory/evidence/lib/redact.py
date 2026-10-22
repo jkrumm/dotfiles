@@ -22,7 +22,7 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(?:Bearer\s+|(?:token|apikey|api_key|secret|password)\s*[:=]\s*[\"']?)[A-Za-z0-9._\-+/]{16,}", re.I), "<cred>"),
     (re.compile(r"(?i)\b(?:okta|epos)\b(?![._][a-z]|-(?:customers|data|orchestrator)-)"), "<work-stack>"),  # work-stack systems: IuRoot repo names only, never their content
     (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<email>"),
-    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"), "<ip>"),
+    (re.compile(r"\b(?!127\.0\.0\.1\b|0\.0\.0\.0\b)(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b"), "<ip>"),  # loopback is not an address leak
     (re.compile(r"\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b", re.I), "<ip6>"),
     (re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.ts\.net\b", re.I), "<tailnet-host>"),
     (re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.iu\.org\b", re.I), "<iu-host>"),
