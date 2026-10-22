@@ -1,6 +1,6 @@
 # ADR-009 — Argo runs split: the factory read API on the mini, the SPA and life data on the VPS
 
-- Status: accepted · 2026-10-22 · revised after panel pass 1 (ux-1, ux-3, ux-7, sre-3)
+- Status: accepted · 2026-10-22 · revised after panel pass 1 (ux-1, ux-3, ux-7, sre-3) and pass 2 (ux-1, dur-4, dat-13, ver-7; carry-through of pass-1 dat-5). In the body, `p2` marks a pass-2 id.
 - Evidence: Argo/basalt-ui inventory (Explore, 2026-10-22; `design/argo.md` §4), `evidence/questions/questions.md` (Q1: 41 of 50 nudges from the MacBook), `last reboot` on the mini (2 reboots since 2026-08-29), `evidence/signals/signals.md` (Kuma is one instance, on the homelab), `evidence/incidents/incidents.md` #1 (the mini's recurring DNS/egress failure: 7 h night, 31 alerts)
 
 ## Context and problem statement
@@ -26,12 +26,16 @@ stale numbers as current; delete pushes rather than add relays; an off-site dead
 ## Decision outcome
 
 **Chosen: C.**
-- The factory read API on the mini serves the read models of `design/argo.md` §2 straight from the
-  ledger (read-only), herdr's live state and usage.db; owner actions write intents through the
-  same API (no pull queue; ADR-015).
-- **Both herdr hosts** (ux-1): the MacBook's herdr event recorder pushes to the mini's ingest when
-  online, so MacBook agents (shutterflow's fleet) appear in the same read models; while the laptop
-  is closed they render `host_asleep since hh:mm`, never `0 parked`.
+- The factory read API on the mini serves the read models of `design/argo.md` §2 from the ledger
+  alone (read-only): herdr state, quota and usage reach it as events through ADR-013's adapters, so
+  it never opens the herdr socket or usage.db (dat-5). A read model with no event source is a
+  labelled live probe, not a projection (`design/argo.md`): it renders with `as_of` and feeds no
+  KPI or control input (p2 dat-13). Owner actions write intents through the same API (no pull
+  queue; ADR-015).
+- **Both herdr hosts** (ux-1, p2 ux-1): the MacBook herdr observer pushes to the mini's ingest when
+  online, so MacBook agents (shutterflow's fleet) appear in the same read models, and its actuator
+  makes resume, steer and stop work on them (ADR-007 §8); while the laptop is closed they render
+  `host_asleep since hh:mm`, never `0 parked`.
 - **Freshness per source** (ux-3): every read model returns `as_of` and its cadence; a stale source
   renders as a stale term in place of its value; "all up" needs every health source fresh.
 - Deleted: agw's overview push, warden's snapshot push and action queue, usage-tracker's record
@@ -46,15 +50,19 @@ stale numbers as current; delete pushes rather than add relays; an off-site dead
   "mini alive, egress dead" (heartbeat arrives, probe failed). The latter is the `infra.egress`
   condition for the factory host, healed by a network-independent runbook on the mini (flush the
   DNS cache, restart mDNSResponder, fail over to a secondary resolver); attempt failures during an
-  open egress condition are classed infra, not task failures.
+  open egress condition are classed infra, not task failures (how they count: ADR-012 rule 11).
 - **One push channel** (ux-7): Argo installed as a Home-Screen PWA, web push sent from the VPS half,
   so decision, heads-up and dead-man pushes work with the mini dark; every push body is
-  self-contained. Fallback if PWA push proves unreliable: a self-hosted push service on the VPS.
+  self-contained. Decision and heads-up pushes are **at-least-once** (p2 dur-4): the delivery state
+  in `deliveries` goes `pending` → `accepted` (the push service took it) and is retried until
+  accepted, egress outages included; the phone de-duplicates on the event id. The other pushes (the
+  briefing) stay at-most-once with a receipt (ADR-002). Fallback if PWA push proves unreliable: a
+  self-hosted push service on the VPS.
 
 ### Consequences
 
-- Good: every cockpit question is answered from live data, MacBook agents included; four push paths and their failure modes disappear; a dead collector shows as stale, not as a confident "all up".
-- Bad: two backends behind one SPA (two base URLs, two bearer secrets — inside the tailnet boundary); the factory API is new code on the mini; iOS web push requires the Home-Screen install.
+- Good: every cockpit question is answered from live data, MacBook agents included; four push paths and their failure modes disappear; a dead collector shows as stale, not as a confident "all up"; a Decision card is not lost to an outage between the ledger and the phone.
+- Bad: two backends behind one SPA (two base URLs, two bearer secrets — inside the tailnet boundary); the factory API is new code on the mini; iOS web push requires the Home-Screen install; the MacBook actuator is a second small component to keep alive.
 
 ### Confirmation
 
@@ -62,4 +70,6 @@ The timed Argo test (`design/argo.md` §6) passes from the phone and the desktop
 stops the mini shows the dead-man push within 15 minutes and the "unreachable since" line in Argo;
 gameday row 15 (resolver blackhole on the mini) shows "egress dead" on the VPS, opens
 `infra.egress` and heals it by runbook with 0 owner touches; a stopped collector renders as stale
-within one cadence.
+within one cadence. Push delivery: a Decision created during the blackhole, and separately the
+effector killed between the `deliveries` insert and the send, 20 times, ends with the push accepted
+after the egress heals and shown once on the device (p2 dur-4).

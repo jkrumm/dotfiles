@@ -1,7 +1,9 @@
 # 2. Baseline and postmortem
 
 Every number below reproduces from a script in `evidence/` (definitions fixed first in
-`evidence/DEFINITIONS.md`; `AS_OF` 2026-10-22 08:00 UTC; mutable stores read from frozen snapshots).
+`evidence/DEFINITIONS.md`; `AS_OF` 2026-10-22 08:00 UTC; mutable stores read from frozen snapshots —
+`warden.db` as of 07:51:56 UTC, before Phase 0's last warden work drained `needs_decision` from 25 to
+2, so W1a imports that snapshot plus a recorded delta).
 
 ## 2.1 The loop today
 
@@ -17,7 +19,9 @@ Every number below reproduces from a script in `evidence/` (definitions fixed fi
 | Agent cost per resolved item | IU $0.36 + Max-equivalent $1.08 | IU $0.41 + $1.22 | IU $0.31 + $0.88 | `kpi/cost` |
 
 Round 5's "74 / 228 = 32 %" and the findings' "114 / 597" both reproduce exactly; the unified
-definition gives 74 / 230 (`kpi/baseline.out.md` §Reconciliation).
+definition gives 74 / 230 (`kpi/baseline.out.md` §Reconciliation). The cost row mixes two regimes
+(Max review carried most of it until 10-15): the cost baseline is the post-10-15 regime, IU $0.12 and
+Max $0 per resolved item (W43, `kpi/cost`).
 
 **Delivery (DORA, 90 d, `kpi/dora`):** 1,418 deploys (110 per week) across 18 repos; lead time median
 0.53 h; change failure rate 2.0 % when each item is charged to the latest deploy (18.4 % under the
@@ -34,7 +38,10 @@ merge was a rebase merge.
 {{asset:chart-quota}}
 
 of 45 days, effectively unavailable Sep 16–20. Max is 97.8 % of agent cost at list price but 32 %
-of tokens; 1 % of the weekly window ≈ $32.
+of tokens; 1 % of the weekly window ≈ $32. Who fills it (`kpi/forecast`): owner-steered fleet waves
+74 %, owner-interactive sessions 32 % and agw review 14 % — 120 % (109–144) of a weekly window per
+week over 30 days. 3 of 7 complete cycles peaked at 55–79 % and lapsed the rest (p50 4 %, p90 30.6 %
+at the reset). The last 7 days burned at 204 % across two resets: a burn rate, not a window reading.
 
 **herdr (`kpi/herdr_hygiene`, live 08:55):** 29 workspaces, 50 tabs, 25 agents; 20 finished-but-open
 tabs; two dead `claude --bg` sessions, 705 h and 386 h old.
@@ -73,7 +80,8 @@ and 5 tool calls. The #1 owner action is not a question but 50 `continue` nudges
 
 **Toil (`toil/`):** the owner types the `c` launcher 479 times a month and `claude --resume` 123
 times; agents ran 5,782 `sleep` calls and 3,499 poll loops in 30 days, and 530 commands failed on
-macOS-vs-GNU syntax.
+macOS-vs-GNU syntax. The design answers the polls with the CLI's `--wait` default and the
+GNU-syntax failures with a PreToolUse rewrite in W12 (ADR-004, `waves.md`).
 
 ## 2.3 Signals arrive second-hand
 
@@ -118,8 +126,8 @@ becomes a Task with an owner.
 | Found | Effect | Status |
 |-|-|-|
 | usage-tracker read OpenCode's old store since 10-14 and reported ok | all IU OpenCode spend missing from usage.db and Argo | **fixed** (Phase 0, usage-tracker W1: 33,652 rows, $58.47 backfilled; stale collectors now fail verify) |
-| `settings.template.json` sets `CLAUDE_CODE_ENABLE_TELEMETRY=0` | all Claude Code telemetry silently off | migration W11 |
+| `settings.template.json` sets `CLAUDE_CODE_ENABLE_TELEMETRY=0` | all Claude Code telemetry silently off | migration W9 |
 | RollHook notice stream collapsed since 10-11 | deploys invisible to warden | migration W3 (primary-source adapter) |
-| `fixed_by_pr`, `revert_pr`, `reverting_sha` never populated | regressions invisible in the ledger | migration W1 (event log), W4 (known errors) |
-| `rd say` text is recorded as owner-typed | 61 % of "owner" transcript entries are agent-authored; every transcript KPI must filter | measurement rule in `evidence/` |
-| Watchtower is archived upstream (last release 2023-11) | an unmaintained tool in the deploy path | migration W3 |
+| `fixed_by_pr`, `revert_pr`, `reverting_sha` never populated | regressions invisible in the ledger | migration W1a (event log), W4 (known errors) |
+| `rd say` text is recorded as owner-typed | 61 % of "owner" transcript entries are agent-authored; every transcript KPI must filter | measurement rule in `evidence/`; from W4 steer messages are ledger events with their own actor (ADR-015) |
+| Watchtower is archived upstream (last release 2023-11) | an unmaintained tool in the deploy path, stopping containers without recorded intent | migration W3 retires it for factory-managed containers (RollHook or WUD with recorded intent); a container replaced without intent is recorded as an unplanned Deployment from Docker events |

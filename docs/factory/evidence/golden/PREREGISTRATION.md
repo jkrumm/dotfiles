@@ -61,3 +61,25 @@ an artefact of shrinking gold groups.
 - **The current held-out pass** (`backtest.out.md`, held-out passes recorded: 1) holds under the
   labelled and detach readings only. It is not re-scored under *join*: the held-out is spent.
 - `backtest.out.md` and the report show the readings side by side.
+
+## Amendment 2026-10-22 — frame, unit, size and comparator of the fresh sample
+
+Written before any post-cutover label exists. Thresholds above are unchanged, and so are the three
+grouping readings of the previous amendment (labelled, detach, join). Why (panel pass 2, cor-6,
+cor-7, mig-1): grouping acceptance moved to a fresh post-cutover sample, but its design still took
+its unit and its cross-burst joins from warden's entities, which the system under test replaces,
+and nothing fixed its frame, size or comparator before data exists. The first sample's unit was an
+entity — an item plus its `duplicate_of` children (`sample.out.json`, `design.unit`) — and its
+cross-burst joins ran along `entity.peers` (`LABELS.md` §2), warden's own group members, so a split
+that grouping itself made stayed invisible.
+
+| Item | Fixed before any label exists |
+|-|-|
+| Frame | Recorded primary-source history with no blind label: Kuma webhook rows since 2026-10-16, HyperDX alerts, Docker events after `AS_OF` (2026-10-22T08:00:00Z, `sample.out.json`) and the 2026-10-17 burst as its primary-source rows. A row that also sits in the golden set is labelled afresh from a blind packet; its golden label is neither shown nor reused. The frame is listed by id, and the draw script and seed are committed, before the first packet is cut. |
+| Sampling unit | A time window, stratified by source × host. A window is 30 minutes: the burst gap of the chunking (`chunks/index.json`, `params.burst_gap_min`) and the context window of the first sample (`sample.out.json`). Elements are the signals in the sampled windows; weights are the inverse inclusion probability of this design. No warden item, entity, `duplicate_of` link or correlator output enters the design. |
+| Size | ≥ 400 sampled elements. The first sample drew 404 across all 21 chunks and 208 in the held-out half that carried the grouping pass, whose precision interval [0.893, 0.970] straddles its threshold (`backtest.out.md` §1, §4); at the same per-element variance the 95 % half-width falls from 0.0385 to ≈ 0.028 at 400 (0.0385 × √(208 / 400)). Grouping acceptance (W3) is scored once the draw holds 400 elements. The draw then extends window by window under the same strata for the escalation and known-error tests, which run once ≥ 30 decision candidates are labelled — elements whose `genuine_owner_decision` is `y` under the labelled or the flipped reading (the first sample held 6 of 959, `agreement.out.md`). Until then they are reported as not measured, never as passed. |
+| Packets | Blind: `id`, `source`, `external_id`, `title`, `payload`, source time, and the topology subject with its ancestors. No `entity`, `item`, `escalation`, `transitions`, `dispatches`, `fix_commits`, `neighbours` or `pre_*` field. Hinted packets (today's fields) are a second reading, reported beside, never instead of. |
+| Cross-burst gold | A blind labeller searches ±7 d around each element for the same subject, the same topology ancestor or the same fingerprint and joins the groups; never along `entity.peers`, and not limited to adjacent chunks. Events the search finds are labelled as context and are never elements. |
+| Comparator | Old warden's recorded grouping of the same signals, read from the archive taken at the stop: its `duplicate_of` and attach links and its `needs_decision` transitions, as in *What is scored*. A signal old warden never ingested, such as a Docker event after `AS_OF`, is a singleton there, as before the ledger in the held-out era split (`backtest.out.md` §4). F1 "strictly higher" is judged against it. |
+| Correlator scored | The build that passes W3 gate (a), the fixture regression against `backtest.py` v2's frozen output (pass 2, cor-1). Its parameters are not refitted on this sample, and *Not allowed* above applies. |
+| Reported beside every grouping number | B-cubed precision and recall over non-noise gold groups; the hidden-incident rate, the weighted share of non-noise gold groups whose events all sit inside a predicted group dominated by a different gold group; and the count of multi-signal gold groups with the share of elements in them, so a sample of mostly singletons shows as one. No threshold attaches to these. |

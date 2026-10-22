@@ -24,14 +24,23 @@ censored, never dropped silently.
 | `max_headroom` | Distribution of the Max 7-day and 5-hour utilisation over the observable history; days at ≥ 90 % (7-day); when the window last hit 100 %. | best available quota log (state it) |
 | `herdr_hygiene` | Point in time (AS_OF, plus live at measurement): workspaces, tabs, agents by status, finished-but-open (`done`/`idle`) tabs older than 24 h, `claude --bg` leftovers. No history exists (herdr events are not recorded). | herdr API / `rd agents` |
 
-## Amendment 2026-10-22 — the new ledger (panel pass 1, dat-6)
+## Amendment 2026-10-22 — the new ledger (panel pass 1, dat-6; revised in pass 2, dat-11, int-12)
 
 The rows above stay the baseline definitions over `warden.db` and keep reproducing today's
 numbers. From the new ledger (ADR-011) onward, `item` and `owner_touch` are defined over the event
-log alone, so the autonomy KPI is one query with no type list or entity set left undefined:
+log alone and counted **per lineage root**: every event carries `correlation` = the root id of its
+lineage (`emit()` enforces it; planner, spawner and decide inherit it — `design/model.md` §3,
+invariant 9), so the autonomy KPI is one query with no type list or entity set left undefined.
 
 | Key | Definition | Source |
 |-|-|-|
-| `item` (ledger) | An Incident, or a Task the owner did not originate (its `task.created` event has an actor other than `owner`). Owner-submitted Tasks are work, not items. | `events` |
-| `owner_touch` (ledger) | An event with actor `owner` on an item the owner did not originate, excluding `*.created`. Pause (an override in the project runtime record) is excluded: it is never a Decision and never a touch. | `events` |
-| `autonomy_rate` (ledger) | `1 − items with ≥ 1 owner_touch / items`; SLO and stretch as above. | derived |
+| `item` (ledger) | A distinct lineage root that is an Incident, or a Task whose root `task.created` event has an actor other than `owner`. A Task created inside an existing lineage — the planner decomposing an owner brief, a fix Task for an Incident, a wave's Left-behind line — takes that root and adds no item; an owner-submitted Task is work, not an item. | `events` |
+| `owner_touch` (ledger) | An event with actor `owner` whose `correlation` is an item's root, excluding `*.created`. Decisions, steers, stops and re-verifies count because they carry the root of what they act on; `owner.message` joins through the agent's `correlation`. Pause (an override in the project runtime record) is excluded: it is never a Decision and never a touch. | `events` |
+| `autonomy_rate` (ledger) | `1 − items with ≥ 1 owner_touch / items`; SLO and stretch as above. The named query ships in the KPI scripts with the fixture below as its test. | derived |
+| `present_human_ask` (ledger) | A request the factory raises because only a person at the machine can complete it (a biometric credential renewal; schedule and target in ADR-014 rule 7). Counted per month as its own KPI; never an `owner_touch` and outside `autonomy_rate`. | `events` |
+
+**Fixture** (`panel/pass2/data.json`, dat-11): one owner brief decomposed by the planner into 20
+Tasks; 5 Incidents, each with a planner fix Task; the owner decides one Incident's Decision and
+steers another Incident's worker. Expected: 5 items, 2 touched, `autonomy_rate` 60 %. Reading by
+`entity` instead of `correlation` finds 0 touches, and counting every Task as an item finds 30
+items — both wrong.

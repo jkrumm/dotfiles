@@ -1,6 +1,6 @@
 # ADR-005 — Artifacts are ours: ledger threads behind `warden artifact`, Argo's Artifacts view; plannotator only until it lands
 
-- Status: accepted · 2026-10-22 (revised the same day: owner intent — "a custom implementation for artifacts", Artifacts as an Argo page; revised after panel pass 1: dat-2 / sim-5, sim-1 — the ledger is the only SoR for threads, `rv` folds into the factory CLI)
+- Status: accepted · 2026-10-22 (revised the same day: owner intent — "a custom implementation for artifacts", Artifacts as an Argo page; revised after panel pass 1: dat-2 / sim-5, sim-1 — the ledger is the only SoR for threads, `rv` folds into the factory CLI; after pass 2: int-8, int-14 — owner comment and resolve events are the ledger fact the ladder reads, wording aligned with the directory contract)
 - Evidence: `spikes/05-artifact-review/REPORT.md` (plannotator 24/24, human-review 15/15, `rv` 14/14, `rv-pn` 6/6), `research/2026-10-21-review-tools.md`, `findings-2026-10-22.md` §Artifact review, the owner's prompt
 
 ## Context and problem statement
@@ -14,7 +14,7 @@ learns from plannotator, with Artifacts as a page in Argo and basalt-ui maturing
 
 Markdown and HTML; one inbox, grouped by project; durable anchored comments agents read back;
 non-blocking (timeout plus default); **Artifacts as an Argo view built from basalt-ui**; **storage per
-repo** (the directory contract, ADR-010); phone over the tailnet; one system of record (ADR-011).
+repo** (the directory contract, `design/model.md` §6.1); phone over the tailnet; one system of record (ADR-011).
 
 ## Considered options
 
@@ -27,8 +27,8 @@ repo** (the directory contract, ADR-010); phone over the tailnet; one system of 
 **Chosen: B as the target, A as the interim backend.**
 - **Contract:** agents call only `warden artifact submit | wait | status | comment` (agent-CLI contract, ADR-004; spike 5's `rv` verbs, unchanged, now a module of the factory CLI and API — no separate service, sim-1). `wait` returns `feedback | closed | superseded | timeout`; on `timeout` the agent proceeds with its stated default.
 - **Target (W7):** one system of record per part, no third store:
-  - **Threads:** the ledger only — Artifact entities plus comment events carrying the anchor triple (quote + prefix + suffix, human-review's) and resolve. `threads.jsonl` is dropped; a thread is rebuilt from events alone.
-  - **Versions:** git, as `path@sha` under `docs/artifacts/<slug>/`, committed by the **submitting agent** through the normal Change path. The artifact module never commits, so a comment from the phone writes 0 commits on any branch, and IuRoot's linked paths receive nothing from it.
+  - **Threads:** the ledger only — Artifact entities plus comment events carrying the anchor triple (quote + prefix + suffix, human-review's) and resolve. `threads.jsonl` is dropped; a thread is rebuilt from events alone. Every comment and resolve is an event with its actor: one with actor `owner` on a plan Artifact is the ledger fact ADR-012 reads as "traces to the owner" for product-class Changes (int-8). It is evidence for the ladder, never a gate.
+  - **Versions:** git, as `path@sha` (`vN.md|html`) under `docs/artifacts/<slug>/` (directory contract, `design/model.md` §6.1), committed by the **submitting agent** through the normal Change path. The artifact module never commits, so a comment from the phone writes 0 commits on any branch, and IuRoot's linked paths receive nothing from it.
   - **Semantics and UI:** plannotator's semantics copied — `supersedes`, wait-for-reply, a global sequence for read-back. The UI is **Argo's Artifacts view** (project-grouped inbox, the rendered artifact, threads in the margin, phone layout), built from basalt-ui components; the **comment thread is a new basalt-ui export**, in its own PR.
 - **Interim (until W7):** plannotator's Inbox behind the same contract (`spikes/05-artifact-review/rv/rv-pn.ts`), pinned, reached through our own Caddy door (its tailnet path refuses tagged devices).
 - **Rejected:** C (closes an unopened review after 60–120 s and tells the agent to stop; a 38 px document column on a 390 px phone).
@@ -44,6 +44,7 @@ storage is an owner requirement.
 ### Confirmation
 
 The spike's `rv` contract suite runs against both backends in CI; W7's gate is a review round trip
-from phone and desktop on `warden artifact`, plus the drop-and-rebuild test (delete every thread
-projection, rebuild from ledger events, byte-identical) and a phone comment on an artifact in a
-PR-required repo and in an IuRoot repo leaving `git status` clean in both; then plannotator is removed.
+from phone and desktop on `warden artifact` (the phone comment lands as an event with actor
+`owner`), plus the drop-and-rebuild test (delete every thread projection, rebuild from ledger
+events, byte-identical) and a phone comment on an artifact in a PR-required repo and in an IuRoot
+repo leaving `git status` clean in both; then plannotator is removed.

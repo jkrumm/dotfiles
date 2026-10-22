@@ -5,8 +5,8 @@
 | Moment | Today (evidence) | After the rewrite |
 |-|-|-|
 | Morning | a Slack briefing you read and then ask your agents about anyway (37 asks in classes it covers) | Argo Home: one status line; if quiet, *Since you left* and *Fixed alone* — nothing to do |
-| An outage | up to 18 pages for a 7.9-minute reboot (10-17), each anchored on the wrong time | 0 pages when it recovers; one incident card if it does not, with cause, suspects and what automation is doing |
-| A parked agent | you type `continue` — 50 times in 45 days, 26 of them after an API error | Witness resumes it at the quota reset or after a backoff; you see it only if resuming failed |
+| An outage | up to 18 pages for a 7.9-minute reboot (10-17), each anchored on the wrong time | 0 pages when it recovers; one incident card if automation cannot close it within its budget, with cause, suspects and what automation did |
+| A parked agent | you type `continue` — 50 times in 45 days, 26 of them after an API error | Witness resumes it at the quota reset or after a backoff — MacBook agents too, while the laptop is awake; a scheduled resume is one count on line 1, and you see an agent only if resuming failed |
 | "Where are we? Is it done and live?" | ask a session; 48 s and 5 tool calls to rebuild the answer | Project page and delivery view, answered in ≤ 10 s on the phone |
 | A decision | 32 % of new items reach you, 4 of the latest 20 genuinely yours | a card only for product direction, spend, irreversible data loss or other people — with a default that applies on expiry |
 | A plan or report to review | read files in the terminal; comments die with the session | Argo's Artifacts view: comment in place, the agent reads it back durably |
@@ -15,19 +15,20 @@
 
 ## During the rewrite
 
-Rewrite and cutover, no co-running: the old loop stops when W1 starts, so days 1–5 are worse than
+Rewrite and cutover, no co-running: the old loop stops when W1a starts, so days 1–5 are worse than
 today's post-Phase-0 state. Days are working days of wave time from the `waves.md` Calendar (≈ 23 on
-the warden spine).
+the warden spine), re-planned from W1a's measured rate.
 
 | Capability | From day 1 until it returns | Returns |
 |-|-|-|
 | Alerts | raw Kuma alerts, and HyperDX re-pointed at the Slack webhook, in your existing Slack channel; no folding | W3 (day 5): Conditions from primary sources, one incident per cause |
+| Job and log failures | unwatched: the heartbeat's jobs component still shows failed jobs as a WARN, but nothing pages or fixes; Hermes log errors have no reader, because the file poller that read them stops with the old warden | W3 (day 5): jobrun runs enter as `job.ran` events, and the mini's logs (launchd, Hermes, agent-gateway) reach the VPS ClickStack for the log adapter |
 | Healing | none; the manual herdr lane (`c`, `rd wave`) is the fix path | W3 (day 5): the *restart* recipe; W4 (day 8): investigation and fixes through workers |
-| Parked agents | you nudge them, as today | W4 (day 8): Witness resumes them |
-| Ship | merges and deploys as today, by hand or from your sessions | W5 (day 11): verified shipping — incident-to-ship autonomy |
-| Argo cockpit | the old `/agents` and `/warden` pages frozen (stale, no writes) | W6 (day 16): read models, Home, write verbs |
+| Parked agents | you nudge them, as today | W4 (day 8): Witness resumes them, MacBook agents through an actuator while the laptop is awake |
+| Ship | merges and deploys as today, by hand or from your sessions | W5 (day 11): restarts and producer-backed config ship automatically; fleet code fixes once their holdouts bind (≈ day 18) — until then they are propose-only: opened and verified, not merged |
+| Argo cockpit | the old `/agents` and `/warden` pages frozen (stale, no writes) | W3 (day 5): `warden status --json` and one stub page — open incidents, decisions, freshness; no push before W6. W6 (day 16): read models, Home, push, write verbs |
 | Hermes | briefings without `warden.db` reads | W11 (day 19): the door, briefings from the event log |
-| Improve and infra healing | none | W10 (day 23): infra runbooks per host, improve jobs — full autonomous operation |
+| Improve and infra healing | none | W10 (day 23): infra runbooks per host, improve jobs and attack blocking — full autonomous operation once its gate passes: gameday rows 3, 4, 5, 14, 15 and 16, one shipped item per improve class, and the first reading of the standing SLOs |
 
 ## What you stop doing
 
@@ -38,6 +39,6 @@ the warden spine).
 ## What you still see and do
 
 - Argo: Home, Needs you, Projects, Incidents, Fleet, Artifacts, Health, Usage, Traffic — and seven write verbs (submit, steer, pause, decide, comment, re-verify, stop).
-- Phone pushes only for business decisions, a production SLO burning while automation is stuck (heads-up), or the mini going dark (dead-man).
-- One batched weekly ask when a credential needs your fingerprint.
+- Phone pushes only for business decisions, a production SLO burning while automation is stuck (heads-up), a host fault only hands can fix (`needs_hands`, information only), or the mini going dark (dead-man).
+- One ask per credential expiry when it needs your fingerprint, scheduled from the 7-day lead and coalesced across credentials — at most 2 a month. That is physical presence, not a decision, and it is counted outside the decision SLO.
 - herdr, Claude Code and `rd` exactly as now — the build lane never breaks.
