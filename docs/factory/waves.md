@@ -38,6 +38,19 @@ touches separately. One active wave per repo; three lanes.
 - New CLIs and services follow the agent-CLI contract (ADR-004) from their first commit.
 - Every invariant a wave adds is enforced (test, CI check, generated file) or labelled `target` (postmortem rule).
 
+## How to start
+
+The first three waves are runnable now; their plans are copies of the sections below (this file wins on any difference):
+
+| Wave | Plan | Launch from the orchestrator tab |
+|-|-|-|
+| W1a | `warden/docs/waves/PLAN.md`, Wave 9 (active) | `RD_ORCHESTRATED=1 rd wave warden 'Read docs/waves/PLAN.md. Execute the active wave (Wave 9). Follow the /wave skill, but do NOT spawn the next wave.'` |
+| W2a | `dotfiles/docs/waves/PLAN.md`, Wave 1 (active) — Round 5 archived to `docs/waves/archive/2026-10-round-5-PLAN.md` | `RD_ORCHESTRATED=1 rd wave dotfiles 'Read docs/waves/PLAN.md. Execute the active wave (Wave 1). Follow the /wave skill, but do NOT spawn the next wave.'` |
+| W1b | `warden/docs/waves/PLAN.md`, Wave 10 — flips to active when W1a closes | same command with `(Wave 10)` |
+
+W1a and W2a run in parallel (disjoint repos). Each later wave is copied into its repo's plan the
+same way when its predecessor closes.
+
 ## What stops when
 
 | Old component | Stops | Replaced by |
