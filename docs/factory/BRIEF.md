@@ -5,6 +5,9 @@ cwd `~/SourceRoot`. Written 2026-10-22 by session `94025058` from the owner's pr
 that day. Output folder: `~/SourceRoot/dotfiles/docs/factory/`. **dotfiles is a public
 repo:** no hostnames, IPs, tokens or IuRoot content beyond repo names; `~` paths only.
 
+**Read the *Owner-intent addendum* at the end first — it overrides the sections above where
+they differ.**
+
 ## The ask
 
 Design the next generation of my autonomous solo-dev factory from evidence, prove it,
@@ -303,3 +306,111 @@ three waves fully specified and ready to run.
 - If context runs short, checkpoint `STATUS.md` and continue in a fresh tab through
   `/wave`. Never hand a plan back to the owner when the work was asked for.
 - Write for the owner: dense, sharp, technical, no filler.
+
+## Owner-intent addendum (2026-10-22, mid-run)
+
+Re-reading the owner's prompt against the drafts at 09:45 UTC found where this brief
+under-specified it. "Read first" item 2 was wrong: the first user message of `94025058` is a
+local `/effort` caveat, not the prompt. The prompt, verbatim, is in
+`~/.local/share/factory/private/owner-prompt-2026-10-22.md` (private, never in git). Read it in full.
+Each item below overrides the matching default above; log each in `STATUS.md` as it lands.
+
+1. **Artifacts are ours and live in Argo.** He asked for "a custom implementation for
+   artifacts", learning from plannotator, with Artifacts as an Argo page, and basalt-ui maturing
+   alongside Argo. ADR-005's own build tripwires (Argo embed, per-repo storage) are already met:
+   plannotator denies framing, and per-repo storage is an owner requirement (item 3). Revise
+   ADR-005:
+   - keep the `rv submit|wait|status` contract;
+   - target: option B, our review service, whose UI is Argo's Artifacts view with anchored
+     threads built from basalt-ui components; the comment thread is a new basalt-ui export,
+     in its own PR;
+   - plannotator's Inbox stays as the interim backend behind `rv` until that wave lands;
+   - copy its semantics (supersedes, `wait_for_reply`, global sequence) and human-review's
+     anchor triple;
+   - add the wave(s) to `waves.md`.
+2. **Argo is the control plane, not only a cockpit.** Step 5 above derives Argo from questions
+   alone, which yields only the read half. He asked for "Argo as a full control plane".
+   - Design the write half as a small set of intent verbs. Each writes an entity to the ledger
+     through the factory API and is executed by a reconciler or the spawner, never by an
+     imperative call into a service.
+   - Minimum verbs:
+     - submit a brief or task to a project;
+     - message or steer a running agent;
+     - pause or resume automation, per project and globally (the breaker's manual switch);
+     - decide or override a Decision;
+     - comment on an artifact;
+     - re-verify or retry;
+     - stop or reap an agent.
+   - Per verb, name the entity it writes, its executor, its audit event and its phone affordance.
+   - Write this into `design/argo.md`, ADR-009 (or a new ADR) and W10.
+3. **A hard per-repo structure, not only a manifest.** He wants every repo to have the same
+   structure, committed in SourceRoot and gitignored in IuRoot, so repo-specific things have a
+   fixed home.
+   - Define the directory contract next to `project.yaml`, saying where each of these lives:
+     plans and waves, artifacts and their threads, ADRs, changelog, holdouts, attempt hooks
+     (`.factory/attempt.md` already appears in W6) and notes.
+   - Say what is committed and what is ignored. IuRoot uses ADR-010's exclude mechanism.
+   - Write it into `design/model.md` §6 and ADR-010, and add it to the drift check.
+4. **The UX references he named.**
+   - Blume.codes is cited nowhere. Research it and two or three open-source equivalents
+     (`/research`), and extract concrete patterns.
+   - Design "smart renderings adjusting to the situation":
+     - project pages composed from the manifest's capabilities, so a deployed service, a
+       library, an infra host and a fleet project render different widgets;
+     - a Home that changes shape with the situation (quiet, incident, many in flight).
+   - Traffic keeps its own page because he named it. Evidence may order the pages, not delete
+     them.
+   - Map his drawing `~/SourceRoot/brain/Areas/Engineering/Excalidraw/26-10-21-aligned-dev-setup.excalidraw.md`
+     (read the text elements; agw `read_drawing` fails on it) against the design: what is
+     kept, changed or dropped, and why. This becomes a report section.
+5. **Decision models.** He asked for "a strong durable agent loop with OpenCode and decision
+   models", but `waves.md` drops the decide lane. Either back that with `decision_shadow`
+   (177 rows: agreement against the actual outcomes) and say where model judgment stays in
+   the loop and on which engine (unmatched conditions, recipe choice, borderline
+   auto-ship), or keep a decision-model step where the numbers favour it.
+6. **Not yet dispositioned:**
+   - The changelog cron that posts to Slack: likely hermes-agent's `project-narratives.py`,
+     but locate it. Move it to a per-project brain changelog (`changelog.target: brain`), with
+     a wave bullet and the Slack exit.
+   - Hermes beyond the capability cut ("the entire dotfiles repo will need careful improvement
+     and wiring. Same goes for Hermes"): what Hermes becomes (door, briefing, read models).
+   - dotfiles' rewiring (generated routing, skills, launchers), as named waves.
+7. **Autonomy target.** His number is "sub 1 %". The SLO is < 1 % of items reaching him and
+   the stretch goal is ≤ 0.1 %, unless `evidence/golden/PREREGISTRATION.md` already argues
+   for 0.1 % as the bar.
+8. **Panel: add an eleventh role, the owner-intent advocate.** It holds the verbatim prompt
+   and checks every ADR, view and wave against it. Each mismatch is honoured or argued as an
+   explicit tradeoff in the report. It runs in both passes.
+9. **He reviews the strategy change through the factory's own flow.**
+   - Submit `report.html` through `rv` (plannotator for now) so he can comment in place, and
+     pick up his comments in a follow-up pass.
+   - Add three sections:
+     - **What changes for you:** his daily loop before and after, what he stops doing, what
+       he still sees.
+     - **Decision map:** each ADR with its evidence, confidence and reversal trigger.
+     - **Reading order:** verdict → what changes for you → decisions → proof, readable in
+       20 minutes, with the depth behind links.
+10. **No strangler migration: rewrite, don't co-run.** The owner said this mid-run: everything
+    running today (warden and the rest of the factory layer) may be stopped and dropped during
+    the migration, and a full rewrite needs no legacy path running alongside it. This replaces
+    "a strangler migration" in *The ask* and the run-in-shadow-beside-the-old rule in `waves.md`.
+    - **Cutover.** Old components stop when their rewrite starts, or earlier if that is
+      simpler. There is no dual running and no 7-day shadow against the old path. A rewrite
+      goes live when it passes its own proof gate: the held-out golden-set backtest,
+      gamedays, holdouts, the timed Argo test.
+    - **Shadow.** It remains only as a proof method, replaying recorded history.
+    - **What stays up.** Three things, as the construction crane, not as legacy:
+      - the build lane: herdr, Claude Code, `rd`, `/check`, `/review`, git, CI runners,
+        deploy;
+      - the owner's apps and their data;
+      - every historical store, archived read-only. They are the input for the golden set
+        and the known-error store.
+    - **Sequencing.** Replace each piece of the build lane in one cutover, never leaving it
+      broken. Everything else may be dropped freely.
+    - **Schema.** ADR-011's "evolved in place" no longer binds. A fresh schema with a one-time
+      import of history is allowed.
+    - **Re-plan.** Rewrite `waves.md` as a rewrite in dependency order, with proof-gated exits
+      and a calendar in days, not shadow windows in weeks. In the report, "strangler
+      migration" becomes "rewrite and cutover".
+    - **Warden W8.** Phase 0's W8 loses its rationale, which assumed the old warden keeps
+      running. Close it at its current step and start no further old-warden work.
