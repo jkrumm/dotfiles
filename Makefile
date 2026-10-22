@@ -775,7 +775,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2420,6 +2420,10 @@ herdr-events-teardown:
 herdr-events-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-events" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
 	ls -l "$(HOME)/.local/share/herdr-events/" 2>/dev/null | tail -3
+
+.PHONY: herdr-reap-test
+herdr-reap-test: ## Hermetic suite for herdr-reap.py (fake herdr/claude, real throwaway git repos)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/herdr-reap.test.py
 
 # The herdr janitor (`rd reap`), every 30 min under jobrun. Dev host only. Teardown removes the
 # jobrun state file too, or jobs-grade would grade the retired label `unloaded` forever.

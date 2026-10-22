@@ -21,6 +21,7 @@ transcript cannot be found has an unknown age and is never closed.
 
 import argparse
 import calendar
+import fcntl
 import glob
 import json
 import os
@@ -36,6 +37,7 @@ MESSAGE_EVERY_S = 24 * 3600
 BG_MAX_AGE_S = 24 * 3600
 ACTIVE_RE = re.compile(r"<!--\s*status:\s*active\b")
 FINISHED = {"done", "idle"}
+BG_STOPPABLE = {"blocked", "idle", "done"}
 
 
 def sh(*cmd: str, cwd: str | None = None) -> tuple[int, str]:
@@ -134,8 +136,10 @@ def load_messaged() -> dict:
 
 def save_messaged(m: dict) -> None:
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    with open(STATE, "w") as f:
+    tmp = f"{STATE}.{os.getpid()}"
+    with open(tmp, "w") as f:
         json.dump(m, f)
+    os.replace(tmp, STATE)
 
 
 def reap_tabs(idle_h: float, j: Journal) -> None:
@@ -145,7 +149,10 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
     own = os.environ.get("HERDR_PANE_ID", "")
     # A checkout another live agent is working in is not this tab's to clean up: its dirty files are
     # that agent's, and nudging an idle sibling to commit them would be wrong.
-    busy_cwds = {a.get("cwd") for a in agents.values() if a["agent_status"] in ("working", "blocked")}
+    busy_checkouts = set()
+    for a in agents.values():
+        if a["agent_status"] in ("working", "blocked") and (r := repo_roots(a.get("cwd") or "")):
+            busy_checkouts.add(r[0])
     messaged = load_messaged()
     now = time.time()
 
@@ -180,7 +187,7 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
             continue
 
         cwds = {a.get("cwd") or "" for a in members}
-        if cwds & busy_cwds:
+        if any((r := repo_roots(c)) and r[0] in busy_checkouts for c in cwds):
             kept.append(f"{name}: checkout shared with a working agent")
             continue
         roots = [repo_roots(c) for c in cwds]
@@ -200,12 +207,17 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
                 key = a["pane_id"]
                 if now - messaged.get(key, 0) < MESSAGE_EVERY_S:
                     continue
+                if j.dry:
+                    j.line("message", tab=tab, pane=key, repo=repo, reason=f'"{detail}"')
+                    continue
+                rc, out = sh("herdr", "agent", "prompt", key,
+                             f"herdr-reap: this tab has been {a['agent_status']} for {age:.0f}h but its checkout has "
+                             f"{detail}. Commit and push, or leave a note why not; the tab stays open until it is clean and pushed.")
+                if rc != 0 or '"error"' in out:  # herdr reports a rejected prompt in the body with exit 0
+                    j.line("message-failed", tab=tab, pane=key, repo=repo, out=json.dumps(out.strip()[:160]))
+                    continue
                 j.line("message", tab=tab, pane=key, repo=repo, reason=f'"{detail}"')
-                if not j.dry:
-                    sh("herdr", "agent", "prompt", key,
-                       f"herdr-reap: this tab has been {a['agent_status']} for {age:.0f}h but its checkout has "
-                       f"{detail}. Commit and push, or leave a note why not; the tab stays open until it is clean and pushed.")
-                    messaged[key] = now
+                messaged[key] = now
             continue
 
         j.line("close", tab=tab, panes=",".join(p["pane_id"] for p in tpanes), repo=repo,
@@ -230,7 +242,8 @@ def reap_bg(j: Journal) -> None:
     now = time.time() * 1000
     seen = load_messaged()
     for a in json.loads(out):
-        if a.get("kind") != "background" or a.get("state") == "working":
+        # Only a state known to be finished is stopped; an unknown or missing one is left alone.
+        if a.get("kind") != "background" or (a.get("state") or a.get("status")) not in BG_STOPPABLE:
             continue
         if now - a["startedAt"] < BG_MAX_AGE_S * 1000:
             continue
@@ -256,6 +269,13 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="print the plan, change nothing")
     args = ap.parse_args()
     idle_h = float(os.environ.get("REAP_IDLE_H", "12"))
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    lock = open(STATE + ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("another herdr-reap run holds the lock; exiting")
+        return
     j = Journal(args.dry_run)
     print(f"herdr-reap {'DRY RUN ' if args.dry_run else ''}idle>{idle_h:g}h")
     reap_tabs(idle_h, j)

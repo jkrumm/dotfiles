@@ -55,3 +55,21 @@ test("records events, then a gap line after a server restart", async () => {
   expect(lines.every((l) => typeof l.ts === "string")).toBe(true)
   expect(lines[2].why).toBe("closed")
 })
+
+test("a rejected subscription is recorded and reconnected, not left deaf", async () => {
+  const dir = tmp()
+  const sock = join(tmp(), "s.sock")
+  const server = Bun.listen({
+    unix: sock,
+    socket: { open(s) { s.write('{"id":"rec","error":{"code":"invalid_request","message":"nope"}}\n') }, data() {} },
+  })
+  const ac = new AbortController()
+  const done = run({ sock, dir, listPanes: async () => [], eventTypes: async () => ["tab.closed"], backoffMs: [20, 40], signal: ac.signal })
+  await Bun.sleep(400)
+  ac.abort()
+  server.stop(true)
+  await Promise.race([done, Bun.sleep(1500)])
+  const lines = readFileSync(join(dir, readdirSync(dir)[0]), "utf8").trim().split("\n").map((l) => JSON.parse(l))
+  expect(lines.filter((l) => l.event === "recorder.subscribe_failed").length).toBeGreaterThan(1) // it retried
+  expect(lines[0].error.message).toBe("nope")
+})

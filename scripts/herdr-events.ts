@@ -67,9 +67,10 @@ export interface Deps {
 }
 
 /** Open a subscription connection; resolves when it closes. `onEvent` gets each parsed envelope. */
-function subscribe(sock: string, subs: Json[], onEvent: (e: Json) => void, onOpen?: (c: Conn) => void): Promise<string> {
+function subscribe(sock: string, dir: string, subs: Json[], onEvent: (e: Json) => void, onOpen?: (c: Conn) => void): Promise<string> {
   return new Promise((resolve) => {
     let buf = ""
+    const decoder = new TextDecoder() // streaming: a multi-byte character split across chunks must not become U+FFFD
     let done = false
     const finish = (why: string) => { if (!done) { done = true; resolve(why) } }
     Bun.connect({
@@ -79,9 +80,19 @@ function subscribe(sock: string, subs: Json[], onEvent: (e: Json) => void, onOpe
           s.write(JSON.stringify({ id: "rec", method: "events.subscribe", params: { subscriptions: subs } }) + "\n")
           onOpen?.({ write: (x) => s.write(x), end: () => s.end() })
         },
-        data(_s, d) {
-          buf = splitLines(buf + d.toString(), (l) => {
-            try { onEvent(JSON.parse(l)) } catch { record(process.env.HERDR_EVENTS_DIR || EVENTS_DIR, { event: "recorder.unparsed", raw: l.slice(0, 2000) }) }
+        data(s, d) {
+          buf = splitLines(buf + decoder.decode(d, { stream: true }), (l) => {
+            let e: Json
+            try { e = JSON.parse(l) } catch { record(dir, { event: "recorder.unparsed", raw: l.slice(0, 2000) }); return }
+            // A rejected subscription would leave this connection open and deaf: record it and drop the
+            // connection so the reconnect + gap path runs.
+            if (e.error) {
+              record(dir, { event: "recorder.subscribe_failed", error: e.error, subscriptions: subs.map((x) => x.type) })
+              finish("subscribe error")
+              s.end()
+              return
+            }
+            onEvent(e)
           })
         },
         close() { finish("closed") },
@@ -110,7 +121,7 @@ export async function run(deps: Deps): Promise<void> {
     const rec = (e: Json) => {
       // The ack of events.subscribe is a response, not an event: it carries "result", never "event".
       // The main connection's first ack proves the server is really there: close the gap, reset backoff.
-      if (e.result || e.error) {
+      if (e.result) {
         if ((e.result as Json | undefined)?.type === "subscription_started" && !ack) {
           ack = true
           record(dir, {
@@ -131,7 +142,7 @@ export async function run(deps: Deps): Promise<void> {
     }
     const watchPane = (id: string, attempt = 0) => {
       if (!mainOpen || paneConns.has(id)) return
-      void subscribe(sock, [{ type: PER_PANE, pane_id: id }], rec, (c) => paneConns.set(id, c)).then(async (why) => {
+      void subscribe(sock, dir, [{ type: PER_PANE, pane_id: id }], rec, (c) => paneConns.set(id, c)).then(async (why) => {
         paneConns.delete(id)
         // A pane that is still live and whose main stream is up lost only its own stream: retry a few times.
         if (live.has(id) && mainOpen && attempt < 5) { await sleep(2000); watchPane(id, attempt + 1) }
@@ -139,9 +150,10 @@ export async function run(deps: Deps): Promise<void> {
       })
     }
 
-    const mainDone = subscribe(sock, types.map((type) => ({ type })), rec, () => {
+    const mainDone = subscribe(sock, dir, types.map((type) => ({ type })), rec, () => {
       mainOpen = true
-      void deps.listPanes().then((ids) => { for (const id of ids) { live.add(id); watchPane(id) } }).catch(() => {})
+      void deps.listPanes().then((ids) => { for (const id of ids) { live.add(id); watchPane(id) } })
+        .catch((e) => record(dir, { event: "recorder.pane_list_failed", error: String(e) }))
     })
 
     lostWhy = await mainDone
@@ -155,19 +167,18 @@ export async function run(deps: Deps): Promise<void> {
 }
 
 async function liveTypes(): Promise<string[]> {
-  const p = Bun.spawn(["herdr", "api", "schema", "--json"], { stdout: "pipe", stderr: "ignore" })
-  const out = await new Response(p.stdout).text()
   try {
-    const t = typesFromSchema(JSON.parse(out))
+    const p = Bun.spawn(["herdr", "api", "schema", "--json"], { stdout: "pipe", stderr: "ignore" })
+    const t = typesFromSchema(JSON.parse(await new Response(p.stdout).text()))
     if (t.length) return t
   } catch {}
   return FALLBACK_TYPES
 }
 
+/** Throws on failure; the caller records `recorder.pane_list_failed`. */
 async function livePanes(): Promise<string[]> {
   const p = Bun.spawn(["herdr", "pane", "list"], { stdout: "pipe", stderr: "ignore" })
-  const out = await new Response(p.stdout).text()
-  try { return (JSON.parse(out).result.panes as Json[]).map((x) => x.pane_id as string) } catch { return [] }
+  return (JSON.parse(await new Response(p.stdout).text()).result.panes as Json[]).map((x) => x.pane_id as string)
 }
 
 if (import.meta.main) {
