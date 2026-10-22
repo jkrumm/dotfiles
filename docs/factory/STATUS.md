@@ -104,4 +104,5 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
 3. **Start the rewrite:** `waves.md` §How to start — W1a (warden Wave 9) and W2a (dotfiles Wave 1) are active and gate-green.
 4. **Open decisions D1–D5:** `report/10-open-decisions.md`; defaults apply on expiry.
 - 12:24Z `/prose` (agw, IU: Opus writer, DeepSeek reviewer; $0.43 total) on the reading-order sections — verdict, what changes for you, FAQ: all three rewrites kept, every number and link preserved (checked by script); report rebuilt, check clean. The owner's Inbox copy was submitted before this polish; the next `rv` resubmission supersedes it.
+- 12:24Z Final report resubmitted to the same Inbox thread (thread msg_01M5HRYJ6ZHFHBH96GXVA6ZC63, new message msg_01M5HS3RF27AVYEQR6A51NSY4Q); the resume command above reads that thread.
 
