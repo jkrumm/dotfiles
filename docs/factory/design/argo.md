@@ -1,4 +1,4 @@
-# Argo — draft 1 (Phase 5)
+# Argo — draft 2 (Phase 5)
 
 Built from `evidence/questions/` (1,111 owner messages, 27 canonical questions) and the
 Argo/basalt-ui inventory. Report section 6 is built from this file.
@@ -13,8 +13,16 @@ Argo/basalt-ui inventory. Report section 6 is built from this file.
   the factory must auto-resume (loops §5). Argo shows the exception when it fails.
 - The morning briefing already covers five classes he asked about 37 times anyway: a push
   he does not trust or cannot act on does not replace a place to look.
-- Traffic and dependency state are named in his prompts but never asked in 60 days: they go
-  behind the exception line, not on a page of their own.
+- Traffic and dependency state are named in his prompts but never asked in 60 days. Evidence orders
+  the pages; it does not delete them: Traffic keeps its own page, after the exception-first ones.
+- **What the cockpits he named actually do** (`research/2026-10-22-cockpit-ux-patterns.md`): Blume is a
+  narrow desktop sidecar (a rail of Deliveries, Projects, Agents, Usage; five session states; count
+  badges; no mobile). Worth copying: Vibe Kanban's row-level state with a grouped/flat toggle and a
+  raised-hand *needs attention* state; Conductor's ambient status matrix instead of banners and one key
+  that jumps to the next thing needing attention; cmux's layered attention (a notification body carries
+  no context, so the inbox must); agent-deck's two-axis grouping (by project, by lineage) and an
+  escalation-only phone bridge. Nobody publishes situation-adaptive layouts; the shared pattern is one
+  shell that never changes shape, with ambient status, one attention queue and detail on selection.
 
 ## 2. Questions → read model → view
 
@@ -47,9 +55,38 @@ manifests (model invariant 8); "answer budget" is the timed-test target.
 | 22 | Is project X healthy — cost, traffic, deps? (brief) | — | project scorecard from conditions | Project page header | 5 s |
 | 23 | What burns quota? (brief) | — | usage by agent / session / project, 7 d | Usage | 5 s |
 
+## 2b. The write half — intent verbs (ADR-015)
+
+Seven verbs, each writing an intent to the ledger through the factory API and executed by a
+reconciler or `rd`: **submit** a brief or task to a project · **message / steer** a running agent ·
+**pause / resume** automation per project or globally · **decide / override** a Decision ·
+**comment** on an artifact · **re-verify / retry** · **stop / reap** an agent. Each shows *requested →
+applied* on the lifecycle strip, writes an audit event, and has a phone affordance (ADR-015 table).
+
 ## 3. Information architecture
 
-Exception-first: when nothing is wrong, each surface says so in one line and stops.
+Exception-first: when nothing is wrong, each surface says so in one line and stops. **The shell never
+changes shape** (rail, ambient status, one attention queue, detail on selection); **the content does.**
+
+**Home adapts to the situation**, decided by a pure function of the read models:
+| Situation | Trigger | Home shows, in this order |
+|-|-|-|
+| quiet | no open incident, no decision, nothing parked or stuck | the status line, *Since you left*, *Fixed alone* — nothing else |
+| incident | an open incident affecting a production project | the incident card (cause, suspects, what automation is doing, ETA), then the status line |
+| decision | a business Decision is open | the card with options, default and expiry, above everything else |
+| many in flight | more than 5 agents working | the fleet matrix (ambient status per agent) replaces *In flight* rows |
+| degraded factory | breaker open, quota guard tripped, mini unreachable | one banner naming the degraded part and what still runs |
+
+**Project pages are composed from the manifest's capabilities**, not from one template:
+| Capability (manifest) | Widgets |
+|-|-|
+| `runtime` with a deployed service | health and SLO burn, deploys and their verification, traffic, error rate, cost |
+| `spec.type: library` | release line, consumers (basalt-ui → argo, rb), dependency state, open upstream components |
+| `spec.type: infra` (host projects) | containers, disk, certs, backups, security signals |
+| `class: fleet` | mother and leads, plan progress, ready queue, attempts in flight |
+| any | links row, needs attention, tasks, todos (TickTick), artifacts, changelog, git state |
+
+Pages:
 
 - **Home (cockpit).** Line 1, one sentence: `0 need you · 4 working · 0 parked · all up · Max 46 % (resets Wed 16:00) · €3.20 IU today`.
   Then, only if non-empty: *Needs you* (≤ 5 cards, each one decision with options, default and
@@ -65,7 +102,7 @@ Exception-first: when nothing is wrong, each surface says so in one line and sto
 - **Artifacts** — the review inbox, grouped by project (ADR-005).
 - **Health / infra** — hosts, containers, certs, backups, secrets cache, collectors.
 - **Usage / cost** — Max quota, IU spend, by project and engine.
-- Traffic is a project-page widget, not a page (never asked in 60 days).
+- **Traffic** — per-project request volume and anomalies, after the exception-first pages (he named it; it was never asked in 60 days, so it sits last).
 - The life pages (Garmin, strength, body, reading, walking pad, astro) stay as they are, in
   their own nav group.
 

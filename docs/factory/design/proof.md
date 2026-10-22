@@ -33,7 +33,20 @@ present human is physically required), and closes on an observation.
 | 13 | Mini outage (dead-man) | stop the mini's heartbeat push for 20 min | VPS dead-man pushes to the phone; Argo shows "unreachable since" | push ≤ 15 min | n/a |
 | 14 | Silent collector death (usage-tracker blind since 10-14) | point a collector at a moved store in scratch | staleness condition within one cadence | detected ≤ 1 cadence | n/a |
 
-Baseline run against today's system (row 1): ⟨`evidence/gameday/2026-10-22-glance.out.md`⟩.
+**Baseline run against today's system (row 1)** — `evidence/gameday/2026-10-22-glance.out.md`, fault
+2026-10-22 09:13:44Z, `docker stop glance` on the homelab (warden W8's Phase 0 changes live):
+
+| Step | Today | Under the design |
+|-|-|-|
+| detection | Kuma webhook event at **+6.8 min** (monitor interval and retries) | Docker `stop`/`die` event from the host recorder within seconds (W3); Kuma as the second source |
+| item / incident | one item at **+10.5 min**; the Slack Down copy folded as a duplicate (Phase 0 fold works) | one incident |
+| remediation | **none** — no dispatch, no operation; the item sat `new` | known-error recipe *restart*, rate-limited (ADR-012) |
+| recovery | **not healed**; restored by the gameday script at +30 min | health green and the condition resolved on observation |
+| closure | item closed `quiet` 10.5 min after the restore (poll cycle); Slack Up ignored | on the next reconcile after health is green |
+| owner | 0 pages, 0 touches — but the service stayed down until a human-equivalent restored it | 0 pages, 0 touches |
+
+MTTR today: unbounded without a human. Row 1's ≤ 5 min target holds only with the Docker event
+recorder; the Kuma path alone spends ≈ 7 min on detection.
 
 ## 3. Factory KPIs and SLOs — read-only scripts, nothing in the loop can edit them
 

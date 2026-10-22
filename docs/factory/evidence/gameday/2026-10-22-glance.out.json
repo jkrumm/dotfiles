@@ -1,0 +1,148 @@
+{
+ "run": "2026-10-22-glance",
+ "fault": "docker stop glance on homelab",
+ "t0": "2026-10-22T09:13:44Z",
+ "heal_wait_min": 30.0,
+ "close_wait_min": 15.0,
+ "healed_by_factory_at": null,
+ "restored_by_script_at": "2026-10-22T09:43:50Z",
+ "seconds_to_first": {
+  "events": 413.153547,
+  "items": 627.687908,
+  "transitions": 627.687908
+ },
+ "final_container_state": "running",
+ "ledger": {
+  "events": [
+   [
+    1762,
+    "uk",
+    "Glance - Docker",
+    "2026-10-22T09:20:29.446369+00:00",
+    "2026-10-22T09:45:09.444364+00:00"
+   ],
+   [
+    522,
+    "slack_alert",
+    "[Glance - Docker] [:white_check_mark: Up] Container has not reported health and is currently running. As it is running, it is considered UP. Consider adding a health check for better service visibility <!channel>",
+    "2026-10-22T09:45:37.182480+00:00",
+    null
+   ],
+   [
+    1763,
+    "slack_alert",
+    "[Glance - Docker] [:red_circle: Down] Container State is exited",
+    "2026-10-22T09:45:37.182480+00:00",
+    null
+   ]
+  ],
+  "items": [
+   [
+    522,
+    "closed",
+    null,
+    "ignored",
+    "2026-10-22T09:54:20.546085+00:00",
+    "2026-10-22T09:54:20.546085+00:00",
+    null,
+    "matched the policy ignore list"
+   ],
+   [
+    1762,
+    "quiet",
+    null,
+    null,
+    "2026-10-22T09:24:06.247445+00:00",
+    "2026-10-22T09:54:20.546085+00:00",
+    null,
+    null
+   ],
+   [
+    1763,
+    "closed",
+    null,
+    "duplicate",
+    "2026-10-22T09:54:20.546085+00:00",
+    "2026-10-22T09:54:20.546085+00:00",
+    1762,
+    "co-fired with #1762: Kuma relay of the monitor the uk webhook already reported, within 15 min"
+   ]
+  ],
+  "transitions": [
+   [
+    1762,
+    null,
+    "new",
+    "2026-10-22T09:24:06.247445+00:00",
+    "created"
+   ],
+   [
+    522,
+    null,
+    "new",
+    "2026-10-22T09:54:20.546085+00:00",
+    "created"
+   ],
+   [
+    522,
+    "new",
+    "closed",
+    "2026-10-22T09:54:20.546085+00:00",
+    "matched the policy ignore list"
+   ],
+   [
+    1762,
+    "new",
+    "quiet",
+    "2026-10-22T09:54:20.546085+00:00",
+    null
+   ],
+   [
+    1763,
+    null,
+    "new",
+    "2026-10-22T09:54:20.546085+00:00",
+    "created"
+   ],
+   [
+    1763,
+    "new",
+    "closed",
+    "2026-10-22T09:54:20.546085+00:00",
+    "co-fired with #1762: Kuma relay of the monitor the uk webhook already reported, within 15 min"
+   ]
+  ],
+  "dispatches": [],
+  "operations": []
+ },
+ "owner_facing": {
+  "needs_decision_entries": 0,
+  "items_opened": 3
+ },
+ "timeline": [
+  {
+   "t": "2026-10-22T09:13:44Z",
+   "what": "fault injected: docker stop",
+   "rc": 0
+  },
+  {
+   "t": "2026-10-22T09:20:37Z",
+   "what": "first event seen",
+   "n": 1
+  },
+  {
+   "t": "2026-10-22T09:24:12Z",
+   "what": "first item seen",
+   "n": 1
+  },
+  {
+   "t": "2026-10-22T09:24:12Z",
+   "what": "first transition seen",
+   "n": 1
+  },
+  {
+   "t": "2026-10-22T09:43:50Z",
+   "what": "not healed: restored by the gameday script (docker start)"
+  }
+ ]
+}
