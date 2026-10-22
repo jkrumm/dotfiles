@@ -2,8 +2,8 @@
 # hl — HomeLab files over S3 (VersityGW, tailnet-only), for agents and scripts.
 #
 #   hl <rclone args…>          rclone with an env-defined `homelab:` remote
-#                              hl lsd homelab:fuji
-#                              hl copy ./x homelab:inbox/2026-10/
+#                              hl lsd homelab:hdd/fuji
+#                              hl copy ./x homelab:hdd/inbox/2026-10/
 #   hl presign <bucket>/<key> [ttl]
 #                              time-limited GET URL (ttl: 3600 default, or
 #                              30m / 12h / 7d; 7d is the SigV4 maximum)
@@ -15,7 +15,7 @@
 # MacBook, the age-encrypted offline cache on the mini) and handed to rclone/aws
 # as environment only — never argv, never printed:
 #
-#   op://homelab/s3-agent   mini (backend=cache)   read all buckets, write inbox, no delete
+#   op://homelab/s3-agent   mini (backend=cache)   read + write ssd/hdd, no delete
 #   op://homelab/s3-admin   MacBook (backend=op)   full access — never in the mini's cache
 #
 # A `user`-role key's ListBuckets is empty: address buckets by name. Buckets and

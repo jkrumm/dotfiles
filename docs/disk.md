@@ -61,20 +61,12 @@ because the `docker-makefile` hook blocks raw docker in this repo.
 
 ## What lives on the HomeLab
 
-Bucket `mini-archive` (HomeLab `/mnt/hdd/mini-archive`, backed up nightly to B2 with restic).
-The mini's `s3-agent` key can read and write it but cannot delete. Every copy was verified
-byte for byte with `hl check --download` before the local copy was deleted.
-
-| Was | Now |
-|-|-|
-| `~/Movies/Squid Game`, `~/Movies/YT Saver` | `homelab:mini-archive/mac-mini/Movies/…` |
-| `~/Downloads/mindsera_memos` | `homelab:mini-archive/mac-mini/Downloads/mindsera_memos` |
-| `~/SY` (yacht photos) | `homelab:mini-archive/mac-mini/SY` |
-
-Restore: `hl copy homelab:mini-archive/mac-mini/<path> ~/<path>`. A single file:
-`hl presign mini-archive/mac-mini/<key>`. weatherorb's archive goes to the bucket
-`weatherorb-archive` (key `op://homelab/s3-weatherorb/*`, put-only with If-None-Match); its
-runbook is weatherorb's ADR 0009 and `~/SourceRoot/homelab/docs/s3.md`.
+The 2026-10 sweep moved `~/Movies/{Squid Game,YT Saver}`, `~/Downloads/mindsera_memos` and `~/SY`
+to the HomeLab. On 2026-10-22 only the memos were kept, at `homelab:ssd/Dokumente/mindsera_memos`
+(restic-backed); the rest was deleted (SY photos are in the image CDN). Restore:
+`hl copy homelab:ssd/Dokumente/mindsera_memos ~/Downloads/mindsera_memos`. weatherorb's archive
+goes to the bucket `weatherorb-archive` (key `op://homelab/s3-weatherorb/*`); its runbook is
+weatherorb's ADR 0009 and `~/SourceRoot/homelab/docs/s3.md`.
 
 ## Reinstall pointers
 
