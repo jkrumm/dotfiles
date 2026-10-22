@@ -7,7 +7,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { isMetered, isPremium, mainModel, modelFromArgv, resolveAlias } from "./iu-model-guard";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isMetered, isPremium, mainModel, modelFromArgv, resolveAlias, transcriptModel } from "./iu-model-guard";
 
 const IU = { ANTHROPIC_BASE_URL: "https://gateway.example.com/anthropic" };
 
@@ -30,6 +33,10 @@ describe("modelFromArgv", () => {
   test("space and equals forms", () => {
     expect(modelFromArgv("claude -p --model opus --no-session-persistence")).toBe("opus");
     expect(modelFromArgv("claude --model=claude-sonnet-5[1m]")).toBe("claude-sonnet-5[1m]");
+  });
+
+  test("first --model wins over one inside a later positional prompt", () => {
+    expect(modelFromArgv("claude -p --model sonnet why did --model opus cost so much")).toBe("sonnet");
   });
 
   test("no flag", () => {
@@ -71,5 +78,21 @@ describe("mainModel + isPremium — the block decision", () => {
     expect(isPremium(mainModel({ env: IU, argv: "claude --model DeepSeek-V4-Flash" }))).toBe(false);
     expect(isPremium(mainModel({ env: IU, argv: "claude --model claude-sonnet-5[1m]" }))).toBe(false);
     expect(isPremium(mainModel({ env: IU, argv: "claude -p" }))).toBe(false);
+  });
+});
+
+describe("transcriptModel — the mid-session /model signal", () => {
+  test("last assistant turn wins", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "iu-guard-"));
+    const path = join(dir, "t.jsonl");
+    const turn = (model: string) => JSON.stringify({ type: "assistant", message: { model } });
+    await writeFile(path, [turn("claude-sonnet-5"), JSON.stringify({ type: "user" }), turn("claude-opus-5-5")].join("\n"));
+    expect(transcriptModel(path)).toBe("claude-opus-5-5");
+    await rm(dir, { recursive: true });
+  });
+
+  test("missing transcript is unresolved, not a throw", () => {
+    expect(transcriptModel("/nonexistent/t.jsonl")).toBeUndefined();
+    expect(transcriptModel(undefined)).toBeUndefined();
   });
 });

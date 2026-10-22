@@ -19,7 +19,14 @@
  * (`CLAUDE_PID`) → `ANTHROPIC_MODEL` → `~/.claude/settings.json` `model`. An alias
  * (`opus`, `fable`, `sonnet`, `haiku`) resolves through `ANTHROPIC_DEFAULT_<TIER>_MODEL`
  * when set — which is why `ca`, pinning every tier to its own model, stays usable
- * under `/model opus`. Unresolvable → allowed (the API-key default is not Opus).
+ * under `/model opus`. A mid-session `/model` switch changes none of those, so the
+ * last assistant turn's `message.model` in the transcript is checked as well (the
+ * same signal `model-discipline.ts` reads). Unresolvable → allowed (the API-key
+ * default is not Opus); a hook error also allows — this is a spend guard, and a bug
+ * here must not wedge every metered session.
+ *
+ * Argv carries no quoting, so a positional prompt containing `--model …` could
+ * shadow the real flag only if it precedes it; the first match wins.
  */
 
 import { readFileSync } from "node:fs";
@@ -32,6 +39,7 @@ interface HookInput {
   hook_event_name?: string;
   tool_name?: string;
   tool_input?: { model?: string; [key: string]: unknown };
+  transcript_path?: string;
 }
 
 const TIERS = ["opus", "fable", "sonnet", "haiku"] as const;
@@ -67,6 +75,26 @@ function processArgv(pid: string | undefined): string {
   return r.success ? r.stdout.toString().trim() : "";
 }
 
+function transcriptModel(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  try {
+    const lines = readFileSync(path, "utf8").split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]?.trim();
+      if (!line?.includes('"assistant"')) continue;
+      try {
+        const rec = JSON.parse(line);
+        if (rec?.type === "assistant" && typeof rec.message?.model === "string") return rec.message.model;
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // no transcript yet (first prompt, or --no-session-persistence)
+  }
+  return undefined;
+}
+
 function settingsModel(): string | undefined {
   try {
     const s = JSON.parse(readFileSync(join(homedir(), ".claude", "settings.json"), "utf8"));
@@ -97,10 +125,14 @@ if (import.meta.main) {
   } catch {
     process.exit(0);
   }
+  if (typeof input !== "object" || input === null) process.exit(0);
 
   if (input.hook_event_name === "UserPromptSubmit") {
-    const model = mainModel({ env, argv: processArgv(env.CLAUDE_PID), fromSettings: settingsModel() });
-    if (isPremium(model)) {
+    const argv = processArgv(env.CLAUDE_PID ?? String(process.ppid));
+    const model = [mainModel({ env, argv, fromSettings: settingsModel() }), transcriptModel(input.transcript_path)].find(
+      isPremium
+    );
+    if (model) {
       process.stdout.write(
         JSON.stringify({ decision: "block", reason: `${model} on a metered endpoint is blocked.\n\n${POLICY}` })
       );
@@ -124,4 +156,4 @@ if (import.meta.main) {
   }
 }
 
-export { isMetered, isPremium, mainModel, modelFromArgv, resolveAlias };
+export { isMetered, isPremium, mainModel, modelFromArgv, resolveAlias, transcriptModel };
