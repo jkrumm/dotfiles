@@ -1,7 +1,7 @@
-# Loops — draft 1 (Phase 3)
+# Loops — draft 2 (Phase 3)
 
-Status: structure written before Phase 1 returned; every `⟨n⟩` is filled from `evidence/`
-in draft 2. Report section 4 is built from this file.
+Numbers from `evidence/`; correlation parameters from the backtest (`evidence/golden/backtest.out.md`).
+Report section 4 is built from this file.
 
 ## 0. The shape in one picture
 
@@ -44,7 +44,14 @@ Running it twice gives the same result; it holds no memory between runs.
 | infra (host projects) | disk floor, certs, backups age, container restarts, DB/ClickHouse health | `infra.disk`, `infra.cert`, `infra.backup`, `infra.restart_loop` … |
 | security | CrowdSec decisions, auth anomalies | `security.anomaly` |
 
-The 2026-10-17 outage under this loop: ⟨reconstruction from `evidence/incidents/`⟩.
+**The 2026-10-17 outage under this loop.** A clean VPS kernel-update reboot took every vps service
+down from 20:49 to 20:56 UTC (7.9 min, confirmed from `last -x`). Today: the Slack relay delivered
+the Kuma Downs 16–28 min late, briefs anchored on the poll time ("since 21:22"), and warden sent 18
+owner pages, while the webhook copies of the same alerts auto-quieted (`evidence/incidents/incidents.md`).
+Under the reconcile loop: Kuma webhooks carry source time 20:49 → `health.down` Conditions open on
+each vps-hosted project → the correlator folds them under host `vps` into one candidate → every
+monitor reports Up by 20:57 → the Conditions resolve on observation → the candidate expires as a
+recovered blip. Owner pages: 0. Recorded: one candidate with its timeline.
 
 ## 2. Correlate — one cause, one incident
 
@@ -77,7 +84,7 @@ No rung is an owner gate.
 | restart | condition open; recipe or investigate names a restart; post: health green within 5 min and the condition resolves | none needed; 2 failed restarts → escalate to code fix / infra | ≤ 2 per service per hour, ≤ 5 per host per hour |
 | config | `make check`; tool validation (compose config, caddy validate, plutil); review without blocking findings; post-deploy `make verify` + health | revert commit + redeploy | one config change in flight per service |
 | dependency | CI green; release age ≥ 14 d; not 0.x for automerge; holdouts pass (fleet); post-deploy verify | revert PR | Renovate grouping; one per repo per run |
-| code fix | `make check` + CI green on the merge SHA; review without blocking findings; holdouts pass (fleet); post-deploy verify; the incident's own condition resolves in its window | revert through the merge train | one change in flight per repo; ≤ ⟨n⟩ merges per repo per day |
+| code fix | `make check` + CI green on the merge SHA; review without blocking findings; holdouts pass (fleet); post-deploy verify; the incident's own condition resolves in its window | revert through the merge train | one change in flight per repo; ≤ 6 automatic merges per repo per day |
 | migration | backup taken and test-restored; dry run on a copy; down-migration or written forward fix; checks green | restore / down-migration | one per project per day; never during an open incident on that project |
 | infra | runbook from the known-error store with dry-run output; pre/post health | per runbook | one infra action per host at a time |
 
@@ -89,7 +96,7 @@ quiet.
 
 ## 4. Durable execution
 
-⟨ADR-002 after spike 2⟩. Constraints the answer must meet: an OpenCode restart kills its
+**The ledger with explicit statecharts, no engine** (ADR-002; spike 2: both the ledger and DBOS-on-SQLite survived ~200 kills with 0 duplicates, so the tie-breakers decided — one system of record, no version-strand hazard, no dependency). Constraints it meets: an OpenCode restart kills its
 episodes; herdr crashes; the mini reboots (power events). Requirements: idempotency keys on
 every side effect (PR per attempt, deploy per change+target, restart per condition+window),
 leases with heartbeats for attempts and merge-train slots, durable timers (retry, expiry,
@@ -136,7 +143,11 @@ spawn → verify like any outage.
 
 ## 7. Quota and cost are control inputs
 
-⟨numbers from `evidence/kpi/quota.*` and `cost.*`⟩. The scheduler orders the ready queue by
-urgency, then cost class: production incidents always run; non-urgent work runs when Max
-7-day < ⟨x⟩ % and 5-hour < ⟨y⟩ %, else on the IU engine within a daily IU budget. Engine
-policy (Round 5's open question): ⟨ADR-008 with numbers⟩.
+Max's 7-day window sat at p50 46 % / p90 96 % over 44 days and peaked ≥ 90 % on 12 of 45 days;
+one percent of it costs ≈ $32 at list price. agent-gateway's OpenCode workload costs $52/week on
+IU and would add ≈ 24 % of the weekly window on Max (p90 → 120 %). So (ADR-008): herdr always,
+engine by class — routine fixes and investigate on OpenCode/IU, features, waves and hard fixes on
+Claude Code/Max — and a quota guard in the spawner: non-urgent Max spawns flip to IU at ≥ 80 % of
+the 7-day window, ≥ 70 % of the 5-hour window, or a forecast that exhausts the window before the
+reset; 15 % of the 7-day window stays reserved for the owner's own sessions; parked agents resume
+at the reset by timer; production incidents run on whichever engine has headroom.

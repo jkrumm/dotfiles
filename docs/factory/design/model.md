@@ -1,7 +1,6 @@
-# Model — draft 1 (Phase 2)
+# Model — draft 2 (Phase 2)
 
-Status: draft, written before Phase 1 evidence returned; revised against it in draft 2.
-Report section 3 is built from this file.
+Revised against Phase 1 evidence and spikes 1, 2, 6. Report section 3 is built from this file.
 
 ## 1. Twelve nouns
 
@@ -14,7 +13,7 @@ else that shows the noun is a projection with a named projector, rebuilt from th
 | 2 | **Signal** | one external observation, immutable (alert fired/recovered, deploy notice, CI result, issue, request, herdr event) | event log | ingest adapters, one per source | `sig_<ulid>` + `fingerprint` |
 | 3 | **Condition** | level state "observed ≠ desired" for one `(project, type, subject)` | ledger | that project's reconciler, only | `cond_<ulid>`; unique open key `(project, type, subject)` |
 | 4 | **Incident** | signals and conditions with one cause; carries root cause and fix recipe. Closed incidents with a recipe **are** the known-error store | ledger | correlator | `inc_<ulid>` + fingerprint set |
-| 5 | **Task** | a unit of work with a done-definition and dependencies | ledger, or beads (ADR-001) | planner (create), spawner (claim) | `task_<ulid>` / bead id |
+| 5 | **Task** | a unit of work with a done-definition and dependencies | ledger (ADR-001: beads' verbs, not its runtime) | planner (create), spawner (claim) | `task_<ulid>` |
 | 6 | **Attempt** | one agent execution of a task inside a *hook* (worktree + branch + base sha) | ledger | spawner; status by the herdr observer | `att_<ulid>` |
 | 7 | **Change** | commits proposed to or merged into a default branch (a PR, or a direct push) | git / GitHub; the ledger mirrors refs | ship loop (merge train) | `chg_<repo>_<pr|sha>` |
 | 8 | **Deployment** | a version running on a target | ledger | deployer (`make deploy` wrapper; Watchtower/RollHook adapters) | `dep_<ulid>` |
@@ -97,7 +96,7 @@ events(
   entity      TEXT NOT NULL,      -- id of the entity that changed
   project     TEXT,               -- manifest name
   actor       TEXT NOT NULL,      -- loop:<name> | agent:<id> | owner | source:<adapter>
-  trace_id    TEXT, span_id TEXT, -- W3C; trace_id derived from the root incident/task id
+  trace_id    TEXT, span_id TEXT, -- W3C; trace_id = sha256("<noun>:" + root id)[:32] (ADR-006)
   causation   TEXT,               -- event that caused this one
   correlation TEXT,               -- root incident or task id
   idem        TEXT UNIQUE,        -- idempotency key of a side effect
@@ -173,4 +172,23 @@ projection headers. Drift check (`factory manifest check`, in CI and `make docto
 valid; every integration key resolves (Kuma monitor, herdr workspace, brain note, OTel
 service seen in the last 7 days); generated files in sync.
 
-Repo mapping and the fleet/session classification: draft 2, from `evidence/`.
+## 7. Repo mapping
+
+Classified by a rule fixed before the data was read (`evidence/projects/classify.py`): **fleet ⇔
+≥ 10 planned units closed in 90 days (done waves, or fleet-phase merges) and ≥ 25 commits/week.**
+Incident load is shown, not decisive — incidents reach warden for every class.
+
+| Project | Class | Commits 90 d | Planned units 90 d | Items 30 d |
+|-|-|-|-|-|
+| basalt-ui | fleet | 1,884 | 49 | 0 |
+| argo | fleet | 1,140 | 53 | 1 |
+| weatherorb | fleet | 984 | 63 | 96 |
+| shutterflow | fleet | 818 | 286 (fleet/ handoff phases) | 1 |
+| dotfiles | fleet | 558 | 45 | 15 |
+| warden | fleet | 528 | 12 | 55 |
+| brain, hermes-agent, research-gateway, agent-gateway, vps, homelab, … (27 more) | session | 2–493 | 0–17 | 0–33 |
+| IuRoot repos (20, names only) | session | ≤ 140 | ≤ 8 | — |
+
+The owner's guess named prometheus-scripts as a fleet candidate; the rule says session (92 commits
+in 90 days, no waves). hermes-agent has incident load (33 items in 30 days) but little planned work:
+session, with warden handling its incidents.
