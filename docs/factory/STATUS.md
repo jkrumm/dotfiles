@@ -8,11 +8,11 @@ effort. Started 2026-10-22 07:40 UTC.
 
 | Phase | State | Artifacts |
 |-|-|-|
-| 0 — stop the bleeding | launched | see *Phase 0* below |
-| 1 — evidence | in progress | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
+| 0 — stop the bleeding | running: agent-gateway-w12, warden-w8, dotfiles-w3 (08:2x UTC) | see *Phase 0* below |
+| 1 — evidence | 8 workers running: kpi (warden), kpi (delivery/DORA/quota/herdr), postmortem, incidents, interventions, golden sampling, toil, signals | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
 | 2 — model | pending | |
 | 3 — loops | pending | |
-| 4 — spikes → ADRs | pending | `spikes/`, `adr/` |
+| 4 — spikes → ADRs | spikes 1 (beads), 4 (CLI vs MCP), 5 (artifact review), 6 (telemetry) running; 2 (durable) waits on research, 3 (correlation) on the golden set | `spikes/`, `adr/` |
 | 5 — Argo | pending | |
 | 6 — proof | pending | |
 | 7 — panel ×2 | pending | |
@@ -50,3 +50,6 @@ this session commits only `docs/factory/**` with explicit paths.
 ## Log
 
 - 07:51 snapshots frozen; evidence conventions and definitions written.
+- 08:20 Phase 0 waves launched (orchestrated). 08:25 Phase 1 workers ×8 launched (background subagents, sonnet).
+- 08:35 research jobs (local research-gateway, `job` table): 19fe9e52 known-error store + regression detection (deep), 9235cd92 durable await semantics + SQLite-capable engines (deep), 382ddeb9 small-host healing/attack detection (standard). Export each to `research/` when done.
+- 08:40 spikes 1, 4, 5, 6 launched.
