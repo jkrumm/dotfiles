@@ -17,15 +17,15 @@ incidents.
 6. **Tasks live in the ledger** with a blocker-aware ready queue; mothers (six fleet projects) and sessions (everything else) work them through one spawner, `rd`.
 7. **Every agent runs in herdr**; engine by class (routine on OpenCode/IU, judgment on Claude Code/Max); quota is a scheduler input; Witness resumes parked agents.
 8. **A verification ladder per action class** authorises auto-ship; squash merges make automatic revert possible; a breaker stops runaway loops without paging anyone.
-9. **The owner decides four things only** — product direction, spend, irreversible data loss, other people — each as a card with a default and an expiry.
+9. **The owner decides four things only** — product direction, spend, irreversible data loss, other people — each as a card with a default and an expiry; SLO: under 1 % of items reach him, stretch 0.1 %.
 10. **Argo answers his 23 recurring questions** from live read models on the mini; the VPS keeps the life pages and the off-site dead-man's switch.
 
 ## The numbers
 
 | Metric | Baseline (evidence) | Target |
 |-|-|-|
-| Items with no owner touch, 14 d | **64.3 %** (`kpi/baseline`) | ≥ 99.9 % |
-| New items that reached the owner, 14 d | **32.2 %** (74 / 230) | ≤ 0.1 %, business only |
+| Items with no owner touch, 14 d | **64.3 %** (`kpi/baseline`) | SLO ≥ 99 %, stretch 99.9 % |
+| New items that reached the owner, 14 d | **32.2 %** (74 / 230) | SLO < 1 %, stretch ≤ 0.1 % — business only |
 | Owner-facing notifications, all time | **577** — today's KPI sees 140 (`incidents/`) | ≤ 2 per week |
 | Owner `continue` nudges to parked agents | **50** in 45 days (`questions/`) | 0 |
 | Pages for the ten costliest incidents | **180** → ≈ 8 under the ideal path (`incidents/`) | — |
@@ -45,8 +45,8 @@ incidents.
 | 001 | Tasks live in the ledger with bd's verbs; beads' runtime is not adopted (cross-repo deps inert, 5-min fixed lease, work repos touched) |
 | 002 | Durable execution = the ledger with explicit statecharts; no engine (DBOS strands flows on redeploy) |
 | 003 | ⟨correlation, spike 3⟩ |
-| 004 | Gateways by job length and definition size: agw deferred MCP + `--json` CLI, research and email inline MCP; routing block generated with a drift check |
-| 005 | Artifact review = plannotator's Inbox behind our own `rv submit/wait/status`; never a gate |
+| 004 | CLI-first: every tool a CLI on one agent contract, commands defined once in code, docs and routing generated; MCP only for research-gateway and chrome-devtools |
+| 005 | Artifacts are ours: an `rv` service with Argo's Artifacts view and a basalt-ui comment thread; plannotator only until W7; never a gate |
 | 006 | One trace per item: derived trace id, `traceparent` where it travels, a resource attribute where it cannot |
 | 007 | Mothers for six fleet projects, sessions elsewhere, one spawner, the hook owns the work, Witness resumes |
 | 008 | herdr always, engine by class, quota guard — Round 5's open question, decided with numbers |
@@ -56,6 +56,7 @@ incidents.
 | 012 | A verification ladder per action class replaces approval; squash merges; breaker without pages |
 | 013 | Signals from their primary sources; Slack intake retires |
 | 014 | The owner decides business questions only; every decision has a default and an expiry |
+| 015 | Argo writes intents — submit, steer, pause, decide, comment, re-verify, stop — executed by reconcilers, never imperative calls |
 
 ## Open owner decisions
 

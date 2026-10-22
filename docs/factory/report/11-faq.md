@@ -7,8 +7,10 @@ strands flows on a redeploy and adds a second system of record (spike 2). Keep: 
 backtest. What each does well is copied: bd's verbs and ready semantics, durable primitives, Keep's
 candidate gate.
 
-**Is this a rewrite of warden?** No. The ledger evolves in place, new flows run in shadow beside the
-old ones, and each old stage retires only after its replacement beats it on a Phase 6 metric (W9).
+**Is this a rewrite of warden?** Yes — rewrite and cutover, no co-running. The old loop stops when
+W1 starts and its database is archived read-only; history enters a fresh ledger by one import. Each
+rewritten piece goes live when it passes its own proof gate (backtest, gamedays, holdouts, the timed
+Argo test). Only the build lane, your apps and their data, and the archived stores stay up throughout.
 
 **Why mothers at all, and why only six?** A mother pays for itself where planned work arrives
 continuously; the rule (≥ 10 planned units and ≥ 25 commits a week over 90 days) picks basalt-ui,
@@ -21,7 +23,7 @@ flips non-urgent spawns to IU at 80 %, and 15 % stays reserved for you.
 
 **What still needs me?** Product direction, spend, irreversible data loss, other people — as a card
 with options, a default and an expiry. Today 6 of 156 decision-relevant events in the golden set
-were genuinely yours; the target is ≤ 0.1 % of items.
+were genuinely yours; the SLO is under 1 % of items, the stretch 0.1 %.
 
 **What happens when the mini is down?** Argo's VPS half says "mini unreachable since hh:mm"; the
 VPS dead-man's switch pushes to the phone after 15 minutes. Kuma cannot do it — it shares the mini's
@@ -38,11 +40,12 @@ every wave, and `rd wave` keeps working after each one.
 **Does Slack go away?** As an intake, yes — each source switches to its direct path after 7 days of
 shadow without a miss. As a human channel it stays until Argo's notification stream replaces it (W10).
 
-**MCP or CLIs?** Both, per gateway (spike 4, 141 sessions). Inline MCP for small servers (research, email: ≈ 2k tokens), deferred MCP for agent-gateway (17.9k inline), CLIs with `--json` for OpenCode, Codex and cron. Jobs longer than the 120 s shell cap stay on MCP's `job_wait` — headless CLI polling spiralled to 95k tokens. The routing block is generated from the CLIs' `--help` and fails CI on drift.
+**MCP or CLIs?** CLIs, on one agent contract (ADR-004). Spike 4's only systematic CLI failure — headless polling on a long job, 95k tokens — was fixed by one policy sentence (2 calls, 38.9k tokens). Commands are defined once in code; help, docs, skill references and the AGENTS.md routing block are generated and drift-checked. MCP stays only for research-gateway (Claude Desktop) and chrome-devtools until a browser CLI exists.
 
 **How do we know the design works before building it?** A golden set of 959 labelled events
 with pre-registered thresholds, a backtest that never tuned on its held-out half, a baseline gameday
 against today's system, and KPI scripts the loop cannot edit (section 7).
 
-**How long does the migration take?** Fourteen waves. W1–W3 are fully specified and can start now;
-W1 and W2 run in parallel. The factory ships at every step.
+**How long does the rewrite take?** Fourteen waves in three lanes, about 17 working days of wave
+time; W1–W3 are fully specified and can start now (W1 and W2 in parallel). Full autonomous operation
+returns with W5 (day 11); until then raw alerts reach your existing Slack channel as they do today.

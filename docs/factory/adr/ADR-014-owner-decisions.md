@@ -6,7 +6,8 @@
 ## Context and problem statement
 
 The fixed rule: the owner decides product direction, spend, irreversible data loss and other
-people — target ≤ 0.1 % of items — and strong verification replaces human gates. Today a third of
+people — his own number is "sub 1 %" of items: SLO < 1 %, stretch ≤ 0.1 % (the pre-registration's
+long-run target) — and strong verification replaces human gates. Today a third of
 new items reach him, most of them obstacle reports and choices an agent could make.
 
 ## Decision outcome
@@ -35,6 +36,6 @@ new items reach him, most of them obstacle reports and choices an agent could ma
 
 ### Confirmation
 
-KPIs: owner-touch share ≤ 0.1 % of items (baseline 35.7 % touched, 14 d), genuine share of escalations
+KPIs: owner-touch share < 1 % of items as the SLO, ≤ 0.1 % as the stretch (baseline 35.7 % touched, 14 d), genuine share of escalations
 ≥ 90 % (golden set), `owner_pages` per week, decisions defaulted on expiry, repeated escalation of a
 retired class (→ 0).

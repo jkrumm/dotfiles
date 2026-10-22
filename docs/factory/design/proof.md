@@ -42,7 +42,7 @@ the ledger or its snapshot read-only. Error budgets are per 28 days.
 
 | SLI | Baseline (14 d unless noted) | Target | Error budget |
 |-|-|-|-|
-| Autonomy: items with no owner touch | 64.3 % | ≥ 99.9 % | 0.1 % of items |
+| Autonomy: items with no owner touch | 64.3 % | SLO ≥ 99 % (stretch 99.9 %) | 1 % of items |
 | Genuine share of escalations | ⟨golden set⟩ | ≥ 90 % | — |
 | Owner pages (all owner-facing notifications) per week | ⟨from `owner_pages`⟩ | ≤ 2 | — |
 | Time to resolve, median / p90 | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h | p90 breach ≤ 2 per 28 d |

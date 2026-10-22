@@ -12,10 +12,12 @@ does every view stay consistent?
 
 ## Decision outcome
 
-1. **The ledger is `warden.db`**, evolved in place (strangler): new entity tables beside the old
-   ones — conditions, incidents, tasks, task_deps, attempts, changes, deployments, verifications,
-   decisions, agents, artifacts, operations, timers, leases — so dual-writes during migration are
-   one transaction.
+1. **A fresh ledger, `~/.warden/ledger.db`**, with the model's schema: one table per noun
+   (conditions, incidents, tasks, task_deps, attempts, changes, deployments, verifications,
+   decisions, agents, artifacts) plus `events`, `operations`, `timers`, `leases`. The old
+   `warden.db` stops with the old loop and is archived read-only; history enters the new ledger
+   by **one import** (signals, closed incidents with recipes, decisions, tasks), never by dual-writes.
+   *Amended 2026-10-22 (owner: rewrite, not co-run) — "evolved in place" no longer binds.*
 2. **One append-only `events` table** (schema in `design/model.md` §4) written by one `emit()`
    inside the transaction that changes the entity (transactional outbox). Signals are
    `signal.received` events. Every event carries `trace_id` (derived from the root incident or
@@ -30,11 +32,12 @@ does every view stay consistent?
 
 ### Consequences
 
-- Good: statecharts become explicit; every owner page is an event, so `owner_pages` is a query; Argo needs no snapshots.
-- Bad: a migration with dual-writes until each old column is retired; the ledger becomes the single most important file on the mini (backup, integrity check in the heartbeat).
+- Good: statecharts become explicit; every owner page is an event, so `owner_pages` is a query; Argo needs no snapshots; no legacy column survives into the new schema.
+- Bad: an import to write and reconcile once; the ledger becomes the single most important file on the mini (backup, integrity check in the heartbeat).
 
 ### Confirmation
 
 CI: the one-writer check; a projection-rebuild test (drop a read model, rebuild from events,
-compare); `PRAGMA integrity_check` in the heartbeat; KPI scripts in `evidence/` read only the
-ledger and its snapshots.
+compare); `PRAGMA integrity_check` in the heartbeat; an import reconciliation that accounts for
+every archived event, item and transition; KPI scripts in `evidence/` reproduce the baseline from the
+imported events.

@@ -21,15 +21,19 @@ nothing can join them.
    `maintenance` (deps, docs, analyze, holdouts location), `autonomy` (per action class),
    `integrations` (beads-compatible task prefix, TickTick list, brain note, herdr workspace and
    group, OTel services, Kuma monitors, usage project, changelog target). Schema in `design/model.md` §6.
-2. **Location.** SourceRoot: committed. IuRoot: the source lives in `dotfiles-private/projects/`,
-   is linked to `<repo>/project.yaml` and excluded through `.git/info/exclude` — nothing tracked
-   changes in a work repo.
+2. **Location and the directory contract.** SourceRoot: committed. IuRoot: the sources live in
+   `dotfiles-private/projects/<repo>/`, are linked into the work repo and excluded through
+   `.git/info/exclude` — nothing tracked changes in a work repo. Every repo has the same structure
+   beside `project.yaml` (`design/model.md` §6.1): plans in `docs/waves/`, ADRs in `docs/adr/`,
+   artifacts and their threads in `docs/artifacts/`, notes in `docs/notes/`, the changelog where
+   `changelog.target` says (brain by default), attempt hooks and caches in an ignored `.factory/`,
+   holdouts never in the repo. *Added 2026-10-22 (owner intent: "a hard structure for each repo").*
 3. **Generated, never hand-edited:** the AGENTS.md routing block between markers, herdr
    `groups.json`, Argo's project registry, reconciler policies, OTel resource attributes
    (`project.name`), usage-tracker's project map, the projection headers of the brain note.
 4. **Drift check** (`factory manifest check`; CI and the daily reconciler): schema valid; every
    integration key resolves (Kuma monitor exists, herdr workspace exists, brain note exists, OTel
-   service seen in 7 days); generated files in sync; topology covers every running container,
+   service seen in 7 days); generated files in sync; the directory contract holds; topology covers every running container,
    launchd job and Kuma monitor (today: 19 of 36 vps services have no monitor).
 
 ### Consequences

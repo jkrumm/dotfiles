@@ -165,6 +165,28 @@ spec:
     changelog: {target: brain}
 ```
 
+### 6.1 The directory contract
+
+Every repo has the same structure, so repo-specific things have one fixed home. The drift check
+(`factory manifest check`) enforces it.
+
+| Path | Holds | SourceRoot | IuRoot |
+|-|-|-|-|
+| `project.yaml` | identity, class, runtime, health, maintenance, autonomy, integrations | committed | linked from `dotfiles-private/projects/<repo>/`, excluded |
+| `docs/waves/PLAN.md`, `docs/waves/archive/` | the active plan in wave format; closed plans | committed | linked, excluded |
+| `docs/adr/NNNN-title.md` | architecture decisions (MADR) | committed | linked, excluded |
+| `docs/artifacts/<slug>/` | artifact versions (`v1.md`, `v2.html`) and `threads.jsonl` — written by the `rv` service (ADR-005) | committed | linked, excluded |
+| `docs/notes/` | repo-specific notes for agents and the owner | committed | linked, excluded |
+| `CHANGELOG.md` | only when `changelog.target` includes `repo` (libraries with release notes); otherwise the changelog lives in the brain note | committed, generated | — |
+| `.factory/` | attempt hooks (`.factory/attempt.md` inside attempt worktrees), caches | ignored | ignored |
+| holdouts | **never in the repo**: `maintenance.holdouts` names the private location the verifier reads | — | — |
+
+IuRoot: the sources of every row marked *linked* live in `dotfiles-private/projects/<repo>/`; the
+work repo gets symlinks listed in `.git/info/exclude`, so nothing tracked changes there. Drift
+check: required paths exist (`project.yaml`; `docs/waves/` when the project has plans), forbidden
+ones do not (holdouts, hand edits inside generated files), `.factory/` is ignored, IuRoot links
+resolve and are excluded.
+
 Generated from the manifests, never hand-edited: the AGENTS.md routing block (between
 markers), herdr `groups.json`, Argo's project registry, reconciler policies, OTel resource
 attributes (`project.name`), usage-tracker's project map, the Beads/TickTick/brain
