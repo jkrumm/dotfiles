@@ -1,0 +1,62 @@
+{
+ "server": "research",
+ "server_info": {
+  "name": "research-gateway",
+  "version": "0.1.0"
+ },
+ "protocol": "2025-06-18",
+ "instructions_chars": 0,
+ "tool_count": 4,
+ "tool_names": [
+  "research",
+  "job_wait",
+  "job_status",
+  "job_cancel"
+ ],
+ "tools_list_bytes": 29619,
+ "definition_tokens_count_tokens": 2017,
+ "preamble_tokens": 955,
+ "per_tool": [
+  {
+   "name": "research",
+   "description_chars": 740,
+   "input_schema_bytes": 897,
+   "output_schema_bytes": 769,
+   "annotations": {},
+   "total_bytes": 2529
+  },
+  {
+   "name": "job_wait",
+   "description_chars": 958,
+   "input_schema_bytes": 379,
+   "output_schema_bytes": 7921,
+   "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": false
+   },
+   "total_bytes": 9436
+  },
+  {
+   "name": "job_status",
+   "description_chars": 628,
+   "input_schema_bytes": 185,
+   "output_schema_bytes": 7921,
+   "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": true
+   },
+   "total_bytes": 8907
+  },
+  {
+   "name": "job_cancel",
+   "description_chars": 471,
+   "input_schema_bytes": 185,
+   "output_schema_bytes": 7921,
+   "annotations": {
+    "destructiveHint": true,
+    "idempotentHint": true
+   },
+   "total_bytes": 8742
+  }
+ ]
+}

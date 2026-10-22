@@ -1,0 +1,31 @@
+
+$ render_routing.py --write routing-block.md
+wrote 15-line block to routing-block.md
+
+$ render_routing.py --check routing-block.md   # CLIs unchanged
+no drift: routing-block.md matches the CLIs' --help (15 lines)
+exit=0
+
+$ PATH=<shim>:$PATH render_routing.py --check routing-block.md   # agw renamed --scope to --range
+
+drift: re-run `render_routing.py --write` and commit the result
+--- committed
++++ rendered
+@@ -2,7 +2,7 @@
+ Gateways are CLIs on PATH: call them through Bash, never their HTTP APIs. Long jobs: `--no-wait` prints a jobId, `wait <jobId>` resumes.
+ `agw` — plain HTTP client for the agent-gateway job server (exit 0 job done · 1 job failed/interrupted/cancelled · 2 usage error or policy refusal · 3 server unreachable)
+   agw check [--repo R] [--commands "a,b"]   run validation in a repo
+-  agw review [--repo R] [--scope S | --pr N | --branch B]   multi-angle review
++  agw review [--repo R] [--range S | --pr N | --branch B]   multi-angle review
+   agw status|wait <jobId>   one-shot job state; block until a job reaches a terminal state
+ `research` — command-line client for the research-gateway REST door (exit 0 done · 1 job error or cancelled · 2 usage/auth/refused · 3 unreachable)
+   research "<query>" [--depth quick|standard|deep] [--context <text>|@file] [--key <idempotencyKey>] [--json] [--no-wait]
+exit=1
+
+$ render_routing.py --check empty.md   # a file without markers
+drift-check: no gateway-routing block in empty.md
+exit=2
+
+$ render_routing.py --check routing-block.md   # shim gone, back in sync
+no drift: routing-block.md matches the CLIs' --help (15 lines)
+exit=0

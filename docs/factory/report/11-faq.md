@@ -38,7 +38,7 @@ every wave, and `rd wave` keeps working after each one.
 **Does Slack go away?** As an intake, yes — each source switches to its direct path after 7 days of
 shadow without a miss. As a human channel it stays until Argo's notification stream replaces it (W10).
 
-**MCP or CLIs?** ⟨spike 4⟩
+**MCP or CLIs?** Both, per gateway (spike 4, 141 sessions). Inline MCP for small servers (research, email: ≈ 2k tokens), deferred MCP for agent-gateway (17.9k inline), CLIs with `--json` for OpenCode, Codex and cron. Jobs longer than the 120 s shell cap stay on MCP's `job_wait` — headless CLI polling spiralled to 95k tokens. The routing block is generated from the CLIs' `--help` and fails CI on drift.
 
 **How do we know the design works before building it?** A golden set of 959 labelled events
 with pre-registered thresholds, a backtest that never tuned on its held-out half, a baseline gameday

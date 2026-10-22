@@ -1,0 +1,154 @@
+{
+ "model_source": "ca default (config/zsh/claude.zsh)",
+ "rows": [
+  {
+   "label": "lab/baseline/no-tools",
+   "turn1_input_tokens": [
+    4891,
+    4891
+   ],
+   "tools_in_init": 0,
+   "mcp_connected": []
+  },
+  {
+   "label": "lab/baseline/bash",
+   "turn1_input_tokens": [
+    9694,
+    9694
+   ],
+   "tools_in_init": 1,
+   "mcp_connected": []
+  },
+  {
+   "label": "lab/cli/bash+routing-block",
+   "turn1_input_tokens": [
+    10344,
+    10344
+   ],
+   "tools_in_init": 1,
+   "mcp_connected": []
+  },
+  {
+   "label": "lab/mcp/agw",
+   "turn1_input_tokens": [
+    22823,
+    22823
+   ],
+   "tools_in_init": 17,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "lab/mcp_deferred/agw",
+   "turn1_input_tokens": [
+    6233,
+    6233
+   ],
+   "tools_in_init": 18,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "lab/mcp/research",
+   "turn1_input_tokens": [
+    6948,
+    6948
+   ],
+   "tools_in_init": 4,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "lab/mcp_deferred/research",
+   "turn1_input_tokens": [
+    6030,
+    6030
+   ],
+   "tools_in_init": 5,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "lab/mcp/email",
+   "turn1_input_tokens": [
+    6789,
+    6789
+   ],
+   "tools_in_init": 7,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "lab/mcp_deferred/email",
+   "turn1_input_tokens": [
+    6078,
+    6078
+   ],
+   "tools_in_init": 8,
+   "mcp_connected": [
+    "connected"
+   ]
+  },
+  {
+   "label": "ambient/no-mcp",
+   "turn1_input_tokens": [
+    38619,
+    38619
+   ]
+  },
+  {
+   "label": "ambient/agw/default",
+   "turn1_input_tokens": [
+    38879,
+    38879
+   ]
+  },
+  {
+   "label": "ambient/agw/tool-search-off",
+   "turn1_input_tokens": [
+    70913,
+    70913
+   ]
+  },
+  {
+   "label": "ambient/research/default",
+   "turn1_input_tokens": [
+    38676,
+    38676
+   ]
+  },
+  {
+   "label": "ambient/research/tool-search-off",
+   "turn1_input_tokens": [
+    55038,
+    55038
+   ]
+  },
+  {
+   "label": "ambient/email/default",
+   "turn1_input_tokens": [
+    38724,
+    38724
+   ]
+  },
+  {
+   "label": "ambient/email/tool-search-off",
+   "turn1_input_tokens": [
+    54879,
+    54879
+   ]
+  },
+  {
+   "label": "ambient/no-mcp/tool-search-off",
+   "turn1_input_tokens": [
+    53335,
+    53335
+   ]
+  }
+ ]
+}

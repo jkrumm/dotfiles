@@ -1,0 +1,31 @@
+{
+ "claude_version": "2.1.308 (Claude Code)",
+ "flags_in_help": {
+  "--print": true,
+  "--output-format": true,
+  "--verbose": true,
+  "--dangerously-skip-permissions": true,
+  "--setting-sources": true,
+  "--disable-slash-commands": true,
+  "--strict-mcp-config": true,
+  "--mcp-config": true,
+  "--tools": true,
+  "--model": true,
+  "--effort": true,
+  "--append-system-prompt": true,
+  "--no-session-persistence": true,
+  "--bare": true,
+  "--safe-mode": true
+ },
+ "env_in_binary": {
+  "ENABLE_TOOL_SEARCH": true,
+  "CLAUDE_CODE_DISABLE_CLAUDE_MDS": true,
+  "CLAUDE_CODE_DISABLE_AUTO_MEMORY": true,
+  "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": true
+ },
+ "rejected": [
+  "--bare",
+  "--safe-mode",
+  "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"
+ ]
+}

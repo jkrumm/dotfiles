@@ -1,0 +1,11 @@
+{
+ "seeded_messages": 59,
+ "needs_action_count": 7,
+ "newest_needs_action_subject": "Contract renewal: signature needed by Friday",
+ "newest_needs_action_key": "fx-act-1",
+ "invoice_key": "fx-inv-acme",
+ "invoice_category": "invoice",
+ "invoice_amount": "1,284.50",
+ "invoice_due": "2026-11-07",
+ "unread_gmail_total": 10
+}

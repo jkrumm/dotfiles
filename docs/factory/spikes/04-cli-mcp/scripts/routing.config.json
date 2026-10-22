@@ -1,0 +1,9 @@
+{
+  "max_lines": 15,
+  "intro": "Gateways are CLIs on PATH: call them through Bash, never their HTTP APIs. Long jobs: `--no-wait` prints a jobId, `wait <jobId>` resumes.",
+  "clis": [
+    { "bin": "agw", "expose": ["check", "review", "status", "wait"] },
+    { "bin": "research", "expose": ["\"<query>\"", "wait"] },
+    { "bin": "mailgw", "expose": ["needs-action", "search", "read", "list"] }
+  ]
+}

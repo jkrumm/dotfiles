@@ -1,0 +1,255 @@
+{
+ "server": "agw",
+ "server_info": {
+  "name": "agent-gateway",
+  "version": "0.1.0"
+ },
+ "protocol": "2025-06-18",
+ "instructions_chars": 0,
+ "tool_count": 17,
+ "tool_names": [
+  "check",
+  "decide",
+  "dispatch",
+  "excalidraw_diagram",
+  "job_cancel",
+  "job_status",
+  "job_steer",
+  "job_wait",
+  "narrative",
+  "otel",
+  "overview",
+  "prose",
+  "read_drawing",
+  "read_image",
+  "review",
+  "triage",
+  "update_pr"
+ ],
+ "tools_list_bytes": 72176,
+ "definition_tokens_count_tokens": 19042,
+ "preamble_tokens": 1557,
+ "per_tool": [
+  {
+   "name": "check",
+   "description_chars": 1605,
+   "input_schema_bytes": 1414,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 3855
+  },
+  {
+   "name": "decide",
+   "description_chars": 1712,
+   "input_schema_bytes": 812,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 3372
+  },
+  {
+   "name": "dispatch",
+   "description_chars": 7578,
+   "input_schema_bytes": 5164,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
+   },
+   "total_bytes": 13675
+  },
+  {
+   "name": "excalidraw_diagram",
+   "description_chars": 993,
+   "input_schema_bytes": 1048,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 2878
+  },
+  {
+   "name": "job_cancel",
+   "description_chars": 1155,
+   "input_schema_bytes": 196,
+   "output_schema_bytes": 2706,
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "total_bytes": 4324
+  },
+  {
+   "name": "job_status",
+   "description_chars": 813,
+   "input_schema_bytes": 184,
+   "output_schema_bytes": 2179,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "total_bytes": 3441
+  },
+  {
+   "name": "job_steer",
+   "description_chars": 798,
+   "input_schema_bytes": 335,
+   "output_schema_bytes": 468,
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 1865
+  },
+  {
+   "name": "job_wait",
+   "description_chars": 1004,
+   "input_schema_bytes": 416,
+   "output_schema_bytes": 2179,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 3866
+  },
+  {
+   "name": "narrative",
+   "description_chars": 2238,
+   "input_schema_bytes": 1458,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 4566
+  },
+  {
+   "name": "otel",
+   "description_chars": 749,
+   "input_schema_bytes": 580,
+   "output_schema_bytes": 1423,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+   },
+   "total_bytes": 3006
+  },
+  {
+   "name": "overview",
+   "description_chars": 1357,
+   "input_schema_bytes": 743,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 2951
+  },
+  {
+   "name": "prose",
+   "description_chars": 4128,
+   "input_schema_bytes": 1858,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 6886
+  },
+  {
+   "name": "read_drawing",
+   "description_chars": 591,
+   "input_schema_bytes": 314,
+   "output_schema_bytes": 2986,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "total_bytes": 4155
+  },
+  {
+   "name": "read_image",
+   "description_chars": 662,
+   "input_schema_bytes": 432,
+   "output_schema_bytes": 1786,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "total_bytes": 3133
+  },
+  {
+   "name": "review",
+   "description_chars": 1681,
+   "input_schema_bytes": 1845,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+   },
+   "total_bytes": 4357
+  },
+  {
+   "name": "triage",
+   "description_chars": 1355,
+   "input_schema_bytes": 931,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+   },
+   "total_bytes": 3140
+  },
+  {
+   "name": "update_pr",
+   "description_chars": 1383,
+   "input_schema_bytes": 475,
+   "output_schema_bytes": 564,
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
+   },
+   "total_bytes": 2688
+  }
+ ]
+}

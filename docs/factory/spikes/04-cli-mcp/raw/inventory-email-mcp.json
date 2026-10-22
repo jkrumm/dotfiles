@@ -1,0 +1,80 @@
+{
+ "server": "email",
+ "server_info": {
+  "name": "email-gateway",
+  "version": "1.0.0"
+ },
+ "protocol": "2025-06-18",
+ "instructions_chars": 0,
+ "tool_count": 7,
+ "tool_names": [
+  "search_mail",
+  "read_message",
+  "summarize_thread",
+  "needs_action",
+  "draft_reply",
+  "send_template",
+  "job_status"
+ ],
+ "tools_list_bytes": 5056,
+ "definition_tokens_count_tokens": 1828,
+ "preamble_tokens": 558,
+ "per_tool": [
+  {
+   "name": "search_mail",
+   "description_chars": 166,
+   "input_schema_bytes": 297,
+   "output_schema_bytes": 217,
+   "annotations": {},
+   "total_bytes": 777
+  },
+  {
+   "name": "read_message",
+   "description_chars": 170,
+   "input_schema_bytes": 199,
+   "output_schema_bytes": 116,
+   "annotations": {},
+   "total_bytes": 579
+  },
+  {
+   "name": "summarize_thread",
+   "description_chars": 112,
+   "input_schema_bytes": 178,
+   "output_schema_bytes": 297,
+   "annotations": {},
+   "total_bytes": 689
+  },
+  {
+   "name": "needs_action",
+   "description_chars": 137,
+   "input_schema_bytes": 308,
+   "output_schema_bytes": 226,
+   "annotations": {},
+   "total_bytes": 765
+  },
+  {
+   "name": "draft_reply",
+   "description_chars": 144,
+   "input_schema_bytes": 269,
+   "output_schema_bytes": 199,
+   "annotations": {},
+   "total_bytes": 709
+  },
+  {
+   "name": "send_template",
+   "description_chars": 122,
+   "input_schema_bytes": 614,
+   "output_schema_bytes": 261,
+   "annotations": {},
+   "total_bytes": 1098
+  },
+  {
+   "name": "job_status",
+   "description_chars": 89,
+   "input_schema_bytes": 136,
+   "output_schema_bytes": 116,
+   "annotations": {},
+   "total_bytes": 431
+  }
+ ]
+}

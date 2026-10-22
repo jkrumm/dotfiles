@@ -45,7 +45,7 @@ incidents.
 | 001 | Tasks live in the ledger with bd's verbs; beads' runtime is not adopted (cross-repo deps inert, 5-min fixed lease, work repos touched) |
 | 002 | Durable execution = the ledger with explicit statecharts; no engine (DBOS strands flows on redeploy) |
 | 003 | ⟨correlation, spike 3⟩ |
-| 004 | ⟨gateway access, spike 4⟩ |
+| 004 | Gateways by job length and definition size: agw deferred MCP + `--json` CLI, research and email inline MCP; routing block generated with a drift check |
 | 005 | Artifact review = plannotator's Inbox behind our own `rv submit/wait/status`; never a gate |
 | 006 | One trace per item: derived trace id, `traceparent` where it travels, a resource attribute where it cannot |
 | 007 | Mothers for six fleet projects, sessions elsewhere, one spawner, the hook owns the work, Witness resumes |

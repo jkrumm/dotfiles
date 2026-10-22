@@ -1,0 +1,104 @@
+{
+ "clis": {
+  "agw": {
+   "commands": [
+    "dispatch",
+    "check",
+    "review",
+    "update-pr",
+    "triage",
+    "decide",
+    "prose",
+    "jobs",
+    "status",
+    "wait",
+    "cancel",
+    "steer",
+    "routing",
+    "policy",
+    "health"
+   ],
+   "command_count": 15,
+   "help_bytes": 1908,
+   "help_tokens": 705,
+   "subcommand_help": {
+    "dispatch": {
+     "bytes": 1264
+    },
+    "check": {
+     "bytes": 138
+    },
+    "review": {
+     "bytes": 199
+    },
+    "update-pr": {
+     "bytes": 307
+    },
+    "triage": {
+     "bytes": 355
+    },
+    "decide": {
+     "bytes": 697
+    },
+    "prose": {
+     "bytes": 1231
+    }
+   },
+   "subcommands_with_own_help": 7,
+   "has_exit_codes": true
+  },
+  "research": {
+   "commands": [
+    "\"<query>\"",
+    "wait",
+    "status",
+    "cancel",
+    "batch",
+    "wait-all"
+   ],
+   "command_count": 6,
+   "help_bytes": 1932,
+   "help_tokens": 709,
+   "subcommand_help": {},
+   "subcommands_with_own_help": 0,
+   "has_exit_codes": true
+  },
+  "mailgw": {
+   "commands": [
+    "needs-action",
+    "search",
+    "read",
+    "list"
+   ],
+   "command_count": 4,
+   "help_bytes": 646,
+   "help_tokens": 260,
+   "subcommand_help": {},
+   "subcommands_with_own_help": 0,
+   "has_exit_codes": true
+  }
+ },
+ "routing_block": {
+  "lines": 15,
+  "chars": 1607,
+  "tokens": 653,
+  "exposes": {
+   "agw": [
+    "check",
+    "review",
+    "status",
+    "wait"
+   ],
+   "research": [
+    "\"<query>\"",
+    "wait"
+   ],
+   "mailgw": [
+    "needs-action",
+    "search",
+    "read",
+    "list"
+   ]
+  }
+ }
+}
