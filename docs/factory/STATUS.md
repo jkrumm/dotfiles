@@ -103,4 +103,5 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
 2. **Review door** is interim and unsupervised: the Inbox (spike 5 binary, data in `~/.local/share/factory/review/`) and `~/.local/share/factory/tools/review-door.py` on :7790 behind Caddy's `plannotator.test` block. If the door answers 502: `nohup python3 -I ~/.local/share/factory/tools/review-door.py >> ~/Library/Logs/factory-review-door.log 2>&1 &`. W7 replaces both.
 3. **Start the rewrite:** `waves.md` §How to start — W1a (warden Wave 9) and W2a (dotfiles Wave 1) are active and gate-green.
 4. **Open decisions D1–D5:** `report/10-open-decisions.md`; defaults apply on expiry.
+- 12:24Z `/prose` (agw, IU: Opus writer, DeepSeek reviewer; $0.43 total) on the reading-order sections — verdict, what changes for you, FAQ: all three rewrites kept, every number and link preserved (checked by script); report rebuilt, check clean. The owner's Inbox copy was submitted before this polish; the next `rv` resubmission supersedes it.
 

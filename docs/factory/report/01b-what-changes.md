@@ -1,5 +1,7 @@
 # 1b. What changes for you
 
+The rewrite ends most of your manual loop. The cost is the cutover: there is no co-running, so the old loop stops when W1a starts, and **days 1–8 are worse than today's post-Phase-0 state**. The first table shows the end state. The second shows what you get each day until then. The last two sections list what you stop doing and what you keep.
+
 ## Your day, before and after
 
 | Moment | Today (evidence) | After the rewrite |
@@ -15,9 +17,7 @@
 
 ## During the rewrite
 
-Rewrite and cutover, no co-running: the old loop stops when W1a starts, so days 1–8 are worse than
-today's post-Phase-0 state. Days are working days of wave time from the `waves.md` Calendar (≈ 26 on
-the warden spine), re-planned from W1a's measured rate.
+Days are working days of wave time from the `waves.md` Calendar (≈ 26 on the warden spine). They get re-planned from W1a's measured rate.
 
 | Capability | From day 1 until it returns | Returns |
 |-|-|-|
@@ -38,7 +38,11 @@ the warden spine), re-planned from W1a's measured rate.
 
 ## What you still see and do
 
-- Argo: Home, Needs you, Projects, Incidents, Fleet, Artifacts, Health, Usage, Traffic — and seven write verbs (submit, steer, pause, decide, comment, re-verify, stop).
-- Phone pushes only for business decisions, a production SLO burning while automation is stuck (heads-up), a host fault only hands can fix (`needs_hands`, information only), or the mini going dark (dead-man).
-- One ask per credential expiry when it needs your fingerprint, scheduled from the 7-day lead and coalesced across credentials — at most 2 a month. That is physical presence, not a decision, and it is counted outside the decision SLO.
-- herdr, Claude Code and `rd` exactly as now — the build lane never breaks.
+- **Argo:** Home, Needs you, Projects, Incidents, Fleet, Artifacts, Health, Usage, Traffic. Seven write verbs: submit, steer, pause, decide, comment, re-verify, stop.
+- **Phone pushes**, only for:
+  - business decisions
+  - a production SLO burning while automation is stuck (heads-up)
+  - a host fault only hands can fix (`needs_hands`, information only)
+  - the mini going dark (dead-man)
+- **Credential expiry:** one ask per expiry that needs your fingerprint, at most 2 a month. Asks are scheduled from the 7-day lead and coalesced across credentials. This is physical presence, not a decision, so it does not count toward the decision SLO.
+- **herdr, Claude Code and `rd`:** exactly as now — the build lane never breaks.

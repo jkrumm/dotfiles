@@ -7,18 +7,27 @@ and their designs are copied instead.** The factory's real cost today is owner a
 owner-facing notifications and 50 "continue" nudges, against $2.60 of agent spend on the ten worst
 incidents.
 
-## The target in ten lines
+## The target in ten points
 
-1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`, replicated continuously to the homelab bucket) with an append-only event log; eleven nouns, one writer each.
-2. **One `project.yaml` per repo**; the per-repo AGENTS.md block, herdr groups, Argo's registry and reconciler policies are generated from it, and tool routing renders once into a global rules file.
-3. **Signals from their primary sources** with source time; Slack intake stops at W1a and the adapters replace it from W3a.
-4. **Per-project reconcilers** open and close Conditions; a webhook only schedules a reconcile.
-5. **A correlator** folds conditions by fingerprint, topology and time window into one incident per cause; closed incidents with a recipe are the known-error store.
-6. **Tasks live in the ledger** with a blocker-aware ready queue; mothers (six fleet projects) and sessions (everything else) work them through one spawner, `rd`.
-7. **Every agent runs in herdr**; engine by class — your own sessions and waves on Claude Code/Max, routine work and factory judgment (mother wakes) on OpenCode/IU, with Max used for factory work only where its capacity would lapse; the quota guard is a scheduler input; Witness resumes parked agents.
-8. **A verification ladder per action class** authorises auto-ship; absent evidence fails closed to propose-only; rollback redeploys the last held Deployment and squash merges keep the git revert mechanical; a breaker counted per lineage stops runaway loops without paging anyone.
-9. **The owner decides four things only** — product direction, spend, irreversible data loss, other people — each as a card with a default and an expiry; SLO: under 1 % of items reach him, stretch 0.1 %.
-10. **Argo answers his 27 canonical questions, the brief's 3 and one about his own requests** from live read models on the mini; the VPS keeps the life pages and the off-site dead-man's switch.
+1. **One fresh ledger**, `ledger.db`, with an append-only event log: eleven nouns, one writer each. History is imported once from the archived `warden.db`, and the ledger replicates continuously to the homelab bucket.
+2. **One `project.yaml` per repo.** The per-repo AGENTS.md block, herdr groups, Argo's registry and reconciler policies are generated from it. Tool routing renders once into a global rules file.
+3. **Signals come from their primary sources**, with source time. Slack intake stops at W1a, and the adapters replace it from W3a.
+4. **Per-project reconcilers** open and close Conditions. A webhook only schedules a reconcile.
+5. **A correlator** folds conditions by fingerprint, topology and time window into one incident per cause. Closed incidents with a recipe form the known-error store.
+6. **Tasks live in the ledger**, with a blocker-aware ready queue. Mothers (six fleet projects) and sessions (everything else) work them through one spawner, `rd`.
+7. **Every agent runs in herdr**, with the engine chosen by class:
+   - **Your own sessions and waves:** Claude Code/Max.
+   - **Routine work and factory judgment**, meaning mother wakes: OpenCode/IU.
+   - **Factory work on Max:** only where its capacity would lapse.
+
+   The quota guard is a scheduler input. Witness resumes parked agents.
+8. **A verification ladder per action class authorises auto-ship.**
+   - **No evidence:** the action fails closed to propose-only.
+   - **Rollback:** redeploys the last held Deployment.
+   - **Squash merges:** keep the git revert mechanical.
+   - **Breaker:** counted per lineage, it stops runaway loops without paging anyone.
+9. **The owner decides four things only:** product direction, spend, irreversible data loss, other people. Each reaches him as a card with a default and an expiry. SLO: under 1 % of items reach him, stretch 0.1 %.
+10. **Argo answers his 27 canonical questions, the brief's 3 and one about his own requests** from live read models on the mini. The VPS keeps the life pages and the off-site dead-man's switch.
 
 ## The numbers
 
@@ -64,10 +73,10 @@ incidents.
 
 ## Open owner decisions
 
-Five, all business, each with a default that applies if nobody answers — section 10.
+Five, all business. Each has a default that applies if nobody answers — section 10.
 
-1. **IU cash for factory-originated work** — default: A, 3 mother wakes per mother per day (≈ $294/week with the ≈ $28 base); the forecast's rate, 8 per mother per day, is ≈ $735/week.
-2. **Claude subscription tier** — default: keep it; the spillover of owner-started work to IU (≈ $19–94 a week across the forecast range) is priced against the next tier's price, which you read from your account.
+1. **IU cash for factory-originated work** — default: A, 3 mother wakes per mother per day, ≈ $294/week with the ≈ $28 base. The forecast's rate, 8 per mother per day, is ≈ $735/week.
+2. **Claude subscription tier** — default: keep it. The spillover of owner-started work to IU, ≈ $19–94 a week across the forecast range, is priced against the next tier's price, which you read from your account.
 3. **Autonomy in work repos** — default: read, investigate and open PRs; never merge or deploy.
-4. **Who defines "it works" for each product** — default: the project's mother drafts holdout scenarios from W5; a set binds on measurement, never on a timer, and you can edit it at any time.
-5. **Retention of agent transcripts and dead sessions** — default: archive to the homelab and keep the local copies; deleting them (after 90 days) is never defaulted and waits for your yes.
+4. **Who defines "it works" for each product** — default: the project's mother drafts holdout scenarios from W5. A set binds on measurement, never on a timer, and you can edit it at any time.
+5. **Retention of agent transcripts and dead sessions** — default: archive to the homelab and keep the local copies. Deleting them (after 90 days) is never defaulted and waits for your yes.
