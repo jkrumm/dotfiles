@@ -1,0 +1,309 @@
+{
+ "option": "a",
+ "test": "b_nokey",
+ "idx": 4,
+ "fast": false,
+ "marks": {
+  "load1_start": 16.5,
+  "t_alert_b_nokey-4": 1792658967.946267,
+  "t_decide_b_nokey-4": 1792659034.051328,
+  "footprint_loop": {
+   "rss_mb": 26.0,
+   "threads": 3
+  },
+  "t_kill": 1792659161.5177112,
+  "kill_why": "after prs committed at the stub, before the flow recorded it",
+  "t_restart": 1792659166.283572,
+  "load1_end": 13.2
+ },
+ "loops": [
+  {
+   "pid": 1085,
+   "t_spawn": 1792658967.696713,
+   "ready_s": 0.12,
+   "label": "start"
+  },
+  {
+   "pid": 12657,
+   "t_spawn": 1792659166.283572,
+   "ready_s": 0.05,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 37,
+   "flows": {
+    "b_nokey-4": {
+     "state": "opening_pr",
+     "since_s": 1.4,
+     "decision_expires_in_s": null,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": "approve",
+     "decided_by": "human",
+     "pr": null,
+     "holds_slot": true,
+     "ops_in_doubt": 1,
+     "transitions": 5
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 46,
+   "flows": {
+    "b_nokey-4": {
+     "state": "fixed",
+     "since_s": 0.2,
+     "decision_expires_in_s": null,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": "approve",
+     "decided_by": "human",
+     "pr": 2,
+     "holds_slot": false,
+     "ops_in_doubt": 0,
+     "transitions": 8
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "b_nokey-4": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 2,
+   "deploys": 1,
+   "replayed_calls": 0,
+   "deploy_503": 2,
+   "duplicates": 1,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [
+    0.05
+   ],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.71
+    }
+   ],
+   "decision_after_restart_s": null,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659212.875168,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.72,
+     0.29
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 224.4
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 5,
+  "rows": {
+   "flows": 1,
+   "operations": 2,
+   "decisions": 1,
+   "transitions": 8
+  },
+  "bytes_incl_wal": 279976
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": false,
+  "no_missing_side_effects": true,
+  "decision_consistent": true
+ },
+ "pass": null,
+ "control": true,
+ "harness_s": 225.0,
+ "t0_epoch": 1792658967.814235,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 1085,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 1.16,
+   "pid": 1085,
+   "kind": "live",
+   "flow": "b_nokey-4",
+   "where": "new"
+  },
+  {
+   "ts": 2.31,
+   "pid": 1085,
+   "kind": "episode.launch",
+   "flow": "b_nokey-4",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 65.06,
+   "pid": 1085,
+   "kind": "step.done",
+   "flow": "b_nokey-4",
+   "step": "investigate"
+  },
+  {
+   "ts": 65.06,
+   "pid": 1085,
+   "kind": "decision.wait_start",
+   "flow": "b_nokey-4",
+   "deadline": 1792659212.875168
+  },
+  {
+   "ts": 67.35,
+   "pid": 1085,
+   "kind": "decision.taken",
+   "flow": "b_nokey-4",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.71,
+   "human_late": false
+  },
+  {
+   "ts": 68.56,
+   "pid": 1085,
+   "kind": "episode.launch",
+   "flow": "b_nokey-4",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 191.19,
+   "pid": 1085,
+   "kind": "step.done",
+   "flow": "b_nokey-4",
+   "step": "implement"
+  },
+  {
+   "ts": 198.52,
+   "pid": 12657,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 198.52,
+   "pid": 12657,
+   "kind": "live",
+   "flow": "b_nokey-4",
+   "where": "opening_pr"
+  },
+  {
+   "ts": 202.66,
+   "pid": 12657,
+   "kind": "step.done",
+   "flow": "b_nokey-4",
+   "step": "open_pr"
+  },
+  {
+   "ts": 203.8,
+   "pid": 12657,
+   "kind": "timer.set",
+   "flow": "b_nokey-4",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792659176.613641
+  },
+  {
+   "ts": 209.52,
+   "pid": 12657,
+   "kind": "timer.fired",
+   "flow": "b_nokey-4",
+   "state": "deploying",
+   "late_s": 0.72
+  },
+  {
+   "ts": 209.52,
+   "pid": 12657,
+   "kind": "timer.set",
+   "flow": "b_nokey-4",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792659187.336027
+  },
+  {
+   "ts": 219.81,
+   "pid": 12657,
+   "kind": "timer.fired",
+   "flow": "b_nokey-4",
+   "state": "deploying",
+   "late_s": 0.29
+  },
+  {
+   "ts": 219.83,
+   "pid": 12657,
+   "kind": "step.done",
+   "flow": "b_nokey-4",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   193.52,
+   "/pr",
+   "b_nokey-4",
+   null,
+   "created"
+  ],
+  [
+   198.53,
+   "/pr",
+   "b_nokey-4",
+   null,
+   "created"
+  ],
+  [
+   203.8,
+   "/deploy",
+   "b_nokey-4",
+   null,
+   "rejected_503"
+  ],
+  [
+   209.52,
+   "/deploy",
+   "b_nokey-4",
+   null,
+   "rejected_503"
+  ],
+  [
+   219.83,
+   "/deploy",
+   "b_nokey-4",
+   null,
+   "created"
+  ]
+ ]
+}

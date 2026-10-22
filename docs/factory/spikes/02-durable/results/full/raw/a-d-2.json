@@ -1,0 +1,279 @@
+{
+ "option": "a",
+ "test": "d",
+ "idx": 2,
+ "fast": false,
+ "marks": {
+  "load1_start": 21.0,
+  "t_alert_d-2": 1792659064.550966,
+  "lost_partial_unit_s": 3.4,
+  "t_kill_episode": 1792659106.010166,
+  "units_at_episode_kill": 7,
+  "t_decide_d-2": 1792659148.483756,
+  "load1_end": 12.5
+ },
+ "loops": [
+  {
+   "pid": 6155,
+   "t_spawn": 1792659064.298635,
+   "ready_s": 0.04,
+   "label": "start"
+  }
+ ],
+ "snapshots": {
+  "final": {
+   "ok": true,
+   "ms": 41,
+   "flows": {
+    "d-2": {
+     "state": "fixed",
+     "since_s": 0.1,
+     "decision_expires_in_s": null,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": "approve",
+     "decided_by": "human",
+     "pr": 1,
+     "holds_slot": false,
+     "ops_in_doubt": 0,
+     "transitions": 8
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "d-2": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 1,
+   "deploys": 1,
+   "replayed_calls": 0,
+   "deploy_503": 2,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 2,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 1
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.7
+    }
+   ],
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659327.3262331,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.66,
+     0.29
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 196.6
+  }
+ },
+ "kill_kind": "investigate",
+ "redrive_detect_s": 15.17,
+ "completed": true,
+ "db": {
+  "tables": 5,
+  "rows": {
+   "flows": 1,
+   "operations": 2,
+   "decisions": 1,
+   "transitions": 8
+  },
+  "bytes_incl_wal": 275856
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true,
+  "redriven_once": true,
+  "resumed_not_restarted": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 197.2,
+ "t0_epoch": 1792659064.3412118,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 6155,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 1.14,
+   "pid": 6155,
+   "kind": "live",
+   "flow": "d-2",
+   "where": "new"
+  },
+  {
+   "ts": 2.28,
+   "pid": 6155,
+   "kind": "episode.launch",
+   "flow": "d-2",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 56.84,
+   "pid": 6155,
+   "kind": "episode.redrive",
+   "flow": "d-2",
+   "ep": "investigate",
+   "attempt": 2,
+   "idle_s": 15.2
+  },
+  {
+   "ts": 56.87,
+   "pid": 6155,
+   "kind": "episode.launch",
+   "flow": "d-2",
+   "ep": "investigate",
+   "attempt": 2
+  },
+  {
+   "ts": 82.99,
+   "pid": 6155,
+   "kind": "step.done",
+   "flow": "d-2",
+   "step": "investigate"
+  },
+  {
+   "ts": 82.99,
+   "pid": 6155,
+   "kind": "decision.wait_start",
+   "flow": "d-2",
+   "deadline": 1792659327.3262331
+  },
+  {
+   "ts": 85.29,
+   "pid": 6155,
+   "kind": "decision.taken",
+   "flow": "d-2",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.7,
+   "human_late": false
+  },
+  {
+   "ts": 86.43,
+   "pid": 6155,
+   "kind": "episode.launch",
+   "flow": "d-2",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 172.77,
+   "pid": 6155,
+   "kind": "step.done",
+   "flow": "d-2",
+   "step": "implement"
+  },
+  {
+   "ts": 175.07,
+   "pid": 6155,
+   "kind": "step.done",
+   "flow": "d-2",
+   "step": "open_pr"
+  },
+  {
+   "ts": 176.18,
+   "pid": 6155,
+   "kind": "timer.set",
+   "flow": "d-2",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792659245.518456
+  },
+  {
+   "ts": 181.83,
+   "pid": 6155,
+   "kind": "timer.fired",
+   "flow": "d-2",
+   "state": "deploying",
+   "late_s": 0.66
+  },
+  {
+   "ts": 181.91,
+   "pid": 6155,
+   "kind": "timer.set",
+   "flow": "d-2",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792659256.248818
+  },
+  {
+   "ts": 192.2,
+   "pid": 6155,
+   "kind": "timer.fired",
+   "flow": "d-2",
+   "state": "deploying",
+   "late_s": 0.29
+  },
+  {
+   "ts": 192.23,
+   "pid": 6155,
+   "kind": "step.done",
+   "flow": "d-2",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   175.07,
+   "/pr",
+   "d-2",
+   "d-2:open_pr",
+   "created"
+  ],
+  [
+   176.18,
+   "/deploy",
+   "d-2",
+   "d-2:deploy",
+   "rejected_503"
+  ],
+  [
+   181.91,
+   "/deploy",
+   "d-2",
+   "d-2:deploy",
+   "rejected_503"
+  ],
+  [
+   192.23,
+   "/deploy",
+   "d-2",
+   "d-2:deploy",
+   "created"
+  ]
+ ]
+}

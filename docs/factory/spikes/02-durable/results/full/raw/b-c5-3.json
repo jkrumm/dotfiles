@@ -1,0 +1,209 @@
+{
+ "option": "b",
+ "test": "c5",
+ "idx": 3,
+ "fast": false,
+ "marks": {
+  "load1_start": 18.9,
+  "t_alert_c5-3": 1792658647.134207,
+  "footprint_loop": {
+   "rss_mb": 32.4,
+   "threads": 10
+  },
+  "t_kill": 1792658725.15331,
+  "kill_why": "decision wait (c5)",
+  "t_decide_c5-3": 1792658896.22502,
+  "t_restart": 1792658901.225607,
+  "load1_end": 11.6
+ },
+ "loops": [
+  {
+   "pid": 72140,
+   "t_spawn": 1792658645.400842,
+   "ready_s": 1.63,
+   "label": "start"
+  },
+  {
+   "pid": 96610,
+   "t_spawn": 1792658901.225607,
+   "ready_s": 0.39,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 107,
+   "flows": {
+    "c5-3": {
+     "status": "PENDING",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 1,
+     "state": "awaiting_decision",
+     "current_step": "DBOS.sleep",
+     "steps": 6,
+     "decision_deadline_in_s": null,
+     "timers_pending": [
+      165.8
+     ],
+     "merge_child": null,
+     "opaque_outputs": 3
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 84,
+   "flows": {
+    "c5-3": {
+     "status": "SUCCESS",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 2,
+     "state": "rejected",
+     "current_step": "finish",
+     "steps": 10,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": null,
+     "opaque_outputs": 6
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "c5-3": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1,
+    "decided_by": "default",
+    "decision": "approve"
+   },
+   "final_state": "rejected",
+   "decision": "reject",
+   "decided_by": "human",
+   "prs": 0,
+   "deploys": 0,
+   "replayed_calls": 0,
+   "deploy_503": 0,
+   "duplicates": 0,
+   "missing": 2,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 0,
+     "units_finished": 0,
+     "units_unique": 0,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [
+    1.58
+   ],
+   "decision_taken": [
+    {
+     "decision": "reject",
+     "by": "human",
+     "late_s": 11.76
+    }
+   ],
+   "decision_after_restart_s": 1.61,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792658891.0797281,
+   "timers": {
+    "set": 0,
+    "fired": 0,
+    "late_s": [],
+    "early_calls": 0
+   },
+   "wall_s": 255.7
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 12,
+  "rows": {
+   "dbos_migrations": 1,
+   "workflow_status": 1,
+   "notifications": 1,
+   "workflow_events": 1,
+   "workflow_events_history": 3,
+   "application_versions": 1,
+   "queues": 2,
+   "workflow_input": 1,
+   "workflow_output": 1,
+   "operation_outputs": 10
+  },
+  "bytes_incl_wal": 402328
+ },
+ "checks": {
+  "completed": true,
+  "final_state": false,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": false,
+  "decision_consistent": true,
+  "decision_source": false,
+  "decided_at_recovery": true
+ },
+ "pass": false,
+ "control": false,
+ "harness_s": 258.0,
+ "t0_epoch": 1792658647.032543,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 72140,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 2.33,
+   "pid": 72140,
+   "kind": "live",
+   "flow": "c5-3",
+   "where": "flow"
+  },
+  {
+   "ts": 2.34,
+   "pid": 72140,
+   "kind": "episode.launch",
+   "flow": "c5-3",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 64.05,
+   "pid": 72140,
+   "kind": "decision.wait_start",
+   "flow": "c5-3",
+   "deadline": 1792658891.0797281
+  },
+  {
+   "ts": 254.58,
+   "pid": 96610,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 255.77,
+   "pid": 96610,
+   "kind": "live",
+   "flow": "c5-3",
+   "where": "flow"
+  },
+  {
+   "ts": 255.81,
+   "pid": 96610,
+   "kind": "decision.taken",
+   "flow": "c5-3",
+   "decision": "reject",
+   "by": "human",
+   "late_s": 11.76
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": []
+}

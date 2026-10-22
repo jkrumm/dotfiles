@@ -1,0 +1,225 @@
+{
+ "option": "b",
+ "test": "g_break",
+ "idx": 3,
+ "fast": false,
+ "marks": {
+  "load1_start": 12.0,
+  "t_alert_g_break-3": 1792659266.2047858,
+  "t_decide_g_break-3": 1792659332.17439,
+  "footprint_loop": {
+   "rss_mb": 37.2,
+   "threads": 10
+  },
+  "t_kill": 1792659358.815517,
+  "kill_why": "implement episode, before an incompatible redeploy",
+  "t_restart": 1792659365.183147,
+  "load1_end": 16.9
+ },
+ "loops": [
+  {
+   "pid": 20178,
+   "t_spawn": 1792659265.449909,
+   "ready_s": 0.58,
+   "label": "start"
+  },
+  {
+   "pid": 24019,
+   "t_spawn": 1792659365.183147,
+   "ready_s": 0.28,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 31,
+   "flows": {
+    "g_break-3": {
+     "status": "PENDING",
+     "app_version": "pinned-v1",
+     "recovery_attempts": 1,
+     "state": "implementing",
+     "current_step": "start_episode",
+     "steps": 10,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": null,
+     "opaque_outputs": 6
+    }
+   }
+  },
+  "after_incompatible_redeploy": {
+   "ok": true,
+   "ms": 34,
+   "flows": {
+    "g_break-3": {
+     "status": "ERROR",
+     "app_version": "pinned-v1",
+     "recovery_attempts": 2,
+     "state": "implementing",
+     "current_step": "start_episode",
+     "steps": 10,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": null,
+     "opaque_outputs": 6
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 30,
+   "flows": {
+    "g_break-3": {
+     "status": "ERROR",
+     "app_version": "pinned-v1",
+     "recovery_attempts": 2,
+     "state": "implementing",
+     "current_step": "start_episode",
+     "steps": 10,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": null,
+     "opaque_outputs": 6
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "g_break-3": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": null,
+   "decision": null,
+   "decided_by": null,
+   "prs": 0,
+   "deploys": 0,
+   "replayed_calls": 0,
+   "deploy_503": 0,
+   "duplicates": 0,
+   "missing": 2,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [
+    null
+   ],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.89
+    }
+   ],
+   "decision_after_restart_s": null,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659510.796847,
+   "timers": {
+    "set": 0,
+    "fired": 0,
+    "late_s": [],
+    "early_calls": 0
+   },
+   "wall_s": null
+  }
+ },
+ "dbos_status": "ERROR",
+ "dbos_error": "dbos._error.DBOSUnexpectedStepError: DBOS Error 11: During execution of workflow g_break-3 step 1, function DBOS.setEvent was recorded when audit_step was expected. Check that your workflow is deterministic.",
+ "completed": false,
+ "db": {
+  "tables": 12,
+  "rows": {
+   "dbos_migrations": 1,
+   "workflow_status": 1,
+   "notifications": 1,
+   "workflow_events": 1,
+   "workflow_events_history": 3,
+   "application_versions": 1,
+   "queues": 2,
+   "workflow_input": 1,
+   "workflow_output": 1,
+   "operation_outputs": 10
+  },
+  "bytes_incl_wal": 324048
+ },
+ "checks": {
+  "completed": false,
+  "final_state": false,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": false,
+  "decision_consistent": true,
+  "recovered_after_redeploy": false
+ },
+ "pass": false,
+ "control": false,
+ "harness_s": 190.7,
+ "t0_epoch": 1792659266.027544,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 20178,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 2.3,
+   "pid": 20178,
+   "kind": "live",
+   "flow": "g_break-3",
+   "where": "flow"
+  },
+  {
+   "ts": 2.31,
+   "pid": 20178,
+   "kind": "episode.launch",
+   "flow": "g_break-3",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 64.77,
+   "pid": 20178,
+   "kind": "decision.wait_start",
+   "flow": "g_break-3",
+   "deadline": 1792659510.796847
+  },
+  {
+   "ts": 66.88,
+   "pid": 20178,
+   "kind": "decision.taken",
+   "flow": "g_break-3",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.89
+  },
+  {
+   "ts": 66.88,
+   "pid": 20178,
+   "kind": "episode.launch",
+   "flow": "g_break-3",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 99.44,
+   "pid": 24019,
+   "kind": "loop.ready"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": []
+}

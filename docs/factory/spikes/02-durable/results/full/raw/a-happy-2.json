@@ -1,0 +1,255 @@
+{
+ "option": "a",
+ "test": "happy",
+ "idx": 2,
+ "fast": false,
+ "marks": {
+  "load1_start": 14.6,
+  "t_alert_happy-2": 1792658811.90063,
+  "t_decide_happy-2": 1792658877.664672,
+  "load1_end": 25.1
+ },
+ "loops": [
+  {
+   "pid": 85916,
+   "t_spawn": 1792658811.688687,
+   "ready_s": 0.06,
+   "label": "start"
+  }
+ ],
+ "snapshots": {
+  "final": {
+   "ok": true,
+   "ms": 29,
+   "flows": {
+    "happy-2": {
+     "state": "fixed",
+     "since_s": 0.2,
+     "decision_expires_in_s": null,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": "approve",
+     "decided_by": "human",
+     "pr": 1,
+     "holds_slot": false,
+     "ops_in_doubt": 0,
+     "transitions": 8
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "happy-2": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 1,
+   "deploys": 1,
+   "replayed_calls": 0,
+   "deploy_503": 2,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.71
+    }
+   ],
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659056.4079099,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.7,
+     0.35
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 179.1
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 5,
+  "rows": {
+   "flows": 1,
+   "operations": 2,
+   "decisions": 1,
+   "transitions": 8
+  },
+  "bytes_incl_wal": 275856
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 179.7,
+ "t0_epoch": 1792658811.746378,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 85916,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 1.15,
+   "pid": 85916,
+   "kind": "live",
+   "flow": "happy-2",
+   "where": "new"
+  },
+  {
+   "ts": 2.27,
+   "pid": 85916,
+   "kind": "episode.launch",
+   "flow": "happy-2",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 64.66,
+   "pid": 85916,
+   "kind": "step.done",
+   "flow": "happy-2",
+   "step": "investigate"
+  },
+  {
+   "ts": 64.66,
+   "pid": 85916,
+   "kind": "decision.wait_start",
+   "flow": "happy-2",
+   "deadline": 1792659056.4079099
+  },
+  {
+   "ts": 66.96,
+   "pid": 85916,
+   "kind": "decision.taken",
+   "flow": "happy-2",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.71,
+   "human_late": false
+  },
+  {
+   "ts": 68.13,
+   "pid": 85916,
+   "kind": "episode.launch",
+   "flow": "happy-2",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 154.66,
+   "pid": 85916,
+   "kind": "step.done",
+   "flow": "happy-2",
+   "step": "implement"
+  },
+  {
+   "ts": 157.36,
+   "pid": 85916,
+   "kind": "step.done",
+   "flow": "happy-2",
+   "step": "open_pr"
+  },
+  {
+   "ts": 158.51,
+   "pid": 85916,
+   "kind": "timer.set",
+   "flow": "happy-2",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792658975.254955
+  },
+  {
+   "ts": 164.2,
+   "pid": 85916,
+   "kind": "timer.fired",
+   "flow": "happy-2",
+   "state": "deploying",
+   "late_s": 0.7
+  },
+  {
+   "ts": 164.23,
+   "pid": 85916,
+   "kind": "timer.set",
+   "flow": "happy-2",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792658985.9811358
+  },
+  {
+   "ts": 174.58,
+   "pid": 85916,
+   "kind": "timer.fired",
+   "flow": "happy-2",
+   "state": "deploying",
+   "late_s": 0.35
+  },
+  {
+   "ts": 174.59,
+   "pid": 85916,
+   "kind": "step.done",
+   "flow": "happy-2",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   157.36,
+   "/pr",
+   "happy-2",
+   "happy-2:open_pr",
+   "created"
+  ],
+  [
+   158.51,
+   "/deploy",
+   "happy-2",
+   "happy-2:deploy",
+   "rejected_503"
+  ],
+  [
+   164.23,
+   "/deploy",
+   "happy-2",
+   "happy-2:deploy",
+   "rejected_503"
+  ],
+  [
+   174.59,
+   "/deploy",
+   "happy-2",
+   "happy-2:deploy",
+   "created"
+  ]
+ ]
+}

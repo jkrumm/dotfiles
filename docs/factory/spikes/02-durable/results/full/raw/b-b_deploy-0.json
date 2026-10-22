@@ -1,0 +1,297 @@
+{
+ "option": "b",
+ "test": "b_deploy",
+ "idx": 0,
+ "fast": false,
+ "marks": {
+  "load1_start": 25.1,
+  "t_alert_b_deploy-0": 1792658989.7206452,
+  "t_decide_b_deploy-0": 1792659115.700473,
+  "footprint_loop": {
+   "rss_mb": 44.9,
+   "threads": 12
+  },
+  "t_kill": 1792659207.373613,
+  "kill_why": "after deployments committed at the stub, before the flow recorded it",
+  "t_restart": 1792659214.197811,
+  "load1_end": 14.5
+ },
+ "loops": [
+  {
+   "pid": 1817,
+   "t_spawn": 1792658989.24271,
+   "ready_s": 0.48,
+   "label": "start"
+  },
+  {
+   "pid": 16064,
+   "t_spawn": 1792659214.197811,
+   "ready_s": 0.44,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 38,
+   "flows": {
+    "b_deploy-0": {
+     "status": "PENDING",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 1,
+     "state": "deploying",
+     "current_step": "merge_section",
+     "steps": 13,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": "PENDING",
+     "opaque_outputs": 7
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 51,
+   "flows": {
+    "b_deploy-0": {
+     "status": "SUCCESS",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 2,
+     "state": "fixed",
+     "current_step": "finish",
+     "steps": 16,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": "SUCCESS",
+     "opaque_outputs": 9
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "b_deploy-0": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 1,
+   "deploys": 1,
+   "replayed_calls": 1,
+   "deploy_503": 2,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [
+    1.59
+   ],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.57
+    }
+   ],
+   "decision_after_restart_s": null,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659294.446368,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.12,
+     0.15
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 229.6
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 12,
+  "rows": {
+   "dbos_migrations": 1,
+   "workflow_status": 2,
+   "notifications": 1,
+   "workflow_events": 2,
+   "workflow_events_history": 8,
+   "application_versions": 1,
+   "queues": 2,
+   "workflow_input": 2,
+   "workflow_output": 2,
+   "operation_outputs": 32
+  },
+  "bytes_incl_wal": 534168
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true,
+  "key_replayed_the_in_doubt_call": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 230.5,
+ "t0_epoch": 1792658989.717941,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 1817,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 2.27,
+   "pid": 1817,
+   "kind": "live",
+   "flow": "b_deploy-0",
+   "where": "flow"
+  },
+  {
+   "ts": 2.27,
+   "pid": 1817,
+   "kind": "episode.launch",
+   "flow": "b_deploy-0",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 124.73,
+   "pid": 1817,
+   "kind": "decision.wait_start",
+   "flow": "b_deploy-0",
+   "deadline": 1792659294.446368
+  },
+  {
+   "ts": 127.16,
+   "pid": 1817,
+   "kind": "decision.taken",
+   "flow": "b_deploy-0",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.57
+  },
+  {
+   "ts": 127.17,
+   "pid": 1817,
+   "kind": "episode.launch",
+   "flow": "b_deploy-0",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 202.13,
+   "pid": 1817,
+   "kind": "step.done",
+   "flow": "b_deploy-0",
+   "step": "open_pr"
+  },
+  {
+   "ts": 202.15,
+   "pid": 1817,
+   "kind": "timer.set",
+   "flow": "b_deploy-0",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792659196.863945
+  },
+  {
+   "ts": 207.27,
+   "pid": 1817,
+   "kind": "timer.fired",
+   "flow": "b_deploy-0",
+   "late_s": 0.12
+  },
+  {
+   "ts": 207.29,
+   "pid": 1817,
+   "kind": "timer.set",
+   "flow": "b_deploy-0",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792659207.0052722
+  },
+  {
+   "ts": 217.44,
+   "pid": 1817,
+   "kind": "timer.fired",
+   "flow": "b_deploy-0",
+   "late_s": 0.15
+  },
+  {
+   "ts": 224.92,
+   "pid": 16064,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 226.07,
+   "pid": 16064,
+   "kind": "live",
+   "flow": "b_deploy-0",
+   "where": "merge_section"
+  },
+  {
+   "ts": 226.14,
+   "pid": 16064,
+   "kind": "step.done",
+   "flow": "b_deploy-0",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   202.12,
+   "/pr",
+   "b_deploy-0",
+   "b_deploy-0:open_pr",
+   "created"
+  ],
+  [
+   202.14,
+   "/deploy",
+   "b_deploy-0",
+   "b_deploy-0:deploy",
+   "rejected_503"
+  ],
+  [
+   207.28,
+   "/deploy",
+   "b_deploy-0",
+   "b_deploy-0:deploy",
+   "rejected_503"
+  ],
+  [
+   217.45,
+   "/deploy",
+   "b_deploy-0",
+   "b_deploy-0:deploy",
+   "created"
+  ],
+  [
+   226.14,
+   "/deploy",
+   "b_deploy-0",
+   "b_deploy-0:deploy",
+   "replayed"
+  ]
+ ]
+}

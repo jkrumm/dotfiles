@@ -1,0 +1,243 @@
+{
+ "option": "b",
+ "test": "happy",
+ "idx": 3,
+ "fast": false,
+ "marks": {
+  "load1_start": 14.6,
+  "t_alert_happy-3": 1792658812.184324,
+  "t_decide_happy-3": 1792658878.082776,
+  "load1_end": 15.5
+ },
+ "loops": [
+  {
+   "pid": 85918,
+   "t_spawn": 1792658811.693374,
+   "ready_s": 0.39,
+   "label": "start"
+  }
+ ],
+ "snapshots": {
+  "final": {
+   "ok": true,
+   "ms": 50,
+   "flows": {
+    "happy-3": {
+     "status": "SUCCESS",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 1,
+     "state": "fixed",
+     "current_step": "finish",
+     "steps": 16,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": "SUCCESS",
+     "opaque_outputs": 9
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "happy-3": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 1,
+   "deploys": 1,
+   "replayed_calls": 0,
+   "deploy_503": 2,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.8
+    }
+   ],
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659056.839863,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.15,
+     0.1
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 151.2
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 12,
+  "rows": {
+   "dbos_migrations": 1,
+   "workflow_status": 2,
+   "notifications": 1,
+   "workflow_events": 2,
+   "workflow_events_history": 8,
+   "application_versions": 1,
+   "queues": 2,
+   "workflow_input": 2,
+   "workflow_output": 2,
+   "operation_outputs": 32
+  },
+  "bytes_incl_wal": 1182256
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 152.2,
+ "t0_epoch": 1792658812.08433,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 85918,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 2.26,
+   "pid": 85918,
+   "kind": "live",
+   "flow": "happy-3",
+   "where": "flow"
+  },
+  {
+   "ts": 2.27,
+   "pid": 85918,
+   "kind": "episode.launch",
+   "flow": "happy-3",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 64.76,
+   "pid": 85918,
+   "kind": "decision.wait_start",
+   "flow": "happy-3",
+   "deadline": 1792659056.839863
+  },
+  {
+   "ts": 66.96,
+   "pid": 85918,
+   "kind": "decision.taken",
+   "flow": "happy-3",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.8
+  },
+  {
+   "ts": 67.01,
+   "pid": 85918,
+   "kind": "episode.launch",
+   "flow": "happy-3",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 130.63,
+   "pid": 85918,
+   "kind": "step.done",
+   "flow": "happy-3",
+   "step": "open_pr"
+  },
+  {
+   "ts": 130.64,
+   "pid": 85918,
+   "kind": "timer.set",
+   "flow": "happy-3",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792658947.723936
+  },
+  {
+   "ts": 135.79,
+   "pid": 85918,
+   "kind": "timer.fired",
+   "flow": "happy-3",
+   "late_s": 0.15
+  },
+  {
+   "ts": 135.8,
+   "pid": 85918,
+   "kind": "timer.set",
+   "flow": "happy-3",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792658957.879719
+  },
+  {
+   "ts": 145.9,
+   "pid": 85918,
+   "kind": "timer.fired",
+   "flow": "happy-3",
+   "late_s": 0.1
+  },
+  {
+   "ts": 145.96,
+   "pid": 85918,
+   "kind": "step.done",
+   "flow": "happy-3",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   130.63,
+   "/pr",
+   "happy-3",
+   "happy-3:open_pr",
+   "created"
+  ],
+  [
+   130.64,
+   "/deploy",
+   "happy-3",
+   "happy-3:deploy",
+   "rejected_503"
+  ],
+  [
+   135.79,
+   "/deploy",
+   "happy-3",
+   "happy-3:deploy",
+   "rejected_503"
+  ],
+  [
+   145.95,
+   "/deploy",
+   "happy-3",
+   "happy-3:deploy",
+   "created"
+  ]
+ ]
+}

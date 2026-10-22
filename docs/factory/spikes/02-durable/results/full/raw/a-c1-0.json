@@ -1,0 +1,209 @@
+{
+ "option": "a",
+ "test": "c1",
+ "idx": 0,
+ "fast": false,
+ "marks": {
+  "load1_start": 12.0,
+  "t_alert_c1-0": 1792658551.813209,
+  "footprint_loop": {
+   "rss_mb": 12.3,
+   "threads": 1
+  },
+  "t_kill": 1792658695.50557,
+  "kill_why": "decision wait (c1)",
+  "t_decide_c1-0": 1792658702.207548,
+  "t_restart": 1792658709.976915,
+  "load1_end": 20.9
+ },
+ "loops": [
+  {
+   "pid": 64612,
+   "t_spawn": 1792658551.575567,
+   "ready_s": 0.12,
+   "label": "start"
+  },
+  {
+   "pid": 78160,
+   "t_spawn": 1792658709.976915,
+   "ready_s": 0.06,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 37,
+   "flows": {
+    "c1-0": {
+     "state": "awaiting_decision",
+     "since_s": 19.9,
+     "decision_expires_in_s": 160.1,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": null,
+     "decided_by": null,
+     "pr": null,
+     "holds_slot": false,
+     "ops_in_doubt": 0,
+     "transitions": 2
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 44,
+   "flows": {
+    "c1-0": {
+     "state": "rejected",
+     "since_s": 0.2,
+     "decision_expires_in_s": null,
+     "timer_due_in_s": null,
+     "backoff_attempts": 0,
+     "decision": "reject",
+     "decided_by": "human",
+     "pr": null,
+     "holds_slot": false,
+     "ops_in_doubt": 0,
+     "transitions": 3
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "c1-0": {
+   "expect": {
+    "state": "rejected",
+    "prs": 0,
+    "deploys": 0,
+    "decided_by": "human",
+    "decision": "reject"
+   },
+   "final_state": "rejected",
+   "decision": "reject",
+   "decided_by": "human",
+   "prs": 0,
+   "deploys": 0,
+   "replayed_calls": 0,
+   "deploy_503": 0,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 0,
+     "units_finished": 0,
+     "units_unique": 0,
+     "redrive_events": 0
+    }
+   },
+   "recovery_s": [
+    0.06
+   ],
+   "decision_taken": [
+    {
+     "decision": "reject",
+     "by": "human",
+     "late_s": -145.57
+    }
+   ],
+   "decision_after_restart_s": 0.06,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792658855.6009312,
+   "timers": {
+    "set": 0,
+    "fired": 0,
+    "late_s": [],
+    "early_calls": 0
+   },
+   "wall_s": 158.2
+  }
+ },
+ "completed": true,
+ "db": {
+  "tables": 5,
+  "rows": {
+   "flows": 1,
+   "decisions": 1,
+   "transitions": 3
+  },
+  "bytes_incl_wal": 82000
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true,
+  "decision_source": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 159.2,
+ "t0_epoch": 1792658551.6956968,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 64612,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 1.14,
+   "pid": 64612,
+   "kind": "live",
+   "flow": "c1-0",
+   "where": "new"
+  },
+  {
+   "ts": 2.3,
+   "pid": 64612,
+   "kind": "episode.launch",
+   "flow": "c1-0",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 123.96,
+   "pid": 64612,
+   "kind": "step.done",
+   "flow": "c1-0",
+   "step": "investigate"
+  },
+  {
+   "ts": 123.96,
+   "pid": 64612,
+   "kind": "decision.wait_start",
+   "flow": "c1-0",
+   "deadline": 1792658855.6009312
+  },
+  {
+   "ts": 158.34,
+   "pid": 78160,
+   "kind": "loop.start"
+  },
+  {
+   "ts": 158.34,
+   "pid": 78160,
+   "kind": "live",
+   "flow": "c1-0",
+   "where": "awaiting_decision"
+  },
+  {
+   "ts": 158.34,
+   "pid": 78160,
+   "kind": "decision.taken",
+   "flow": "c1-0",
+   "decision": "reject",
+   "by": "human",
+   "late_s": -145.57,
+   "human_late": false
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": []
+}

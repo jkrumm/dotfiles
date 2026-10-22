@@ -1,0 +1,29 @@
+{
+ "expected_when_completed": {
+  "state": "fixed",
+  "prs": 1,
+  "deploys": 1
+ },
+ "drills": [
+  {
+   "option": "a",
+   "kills": 6,
+   "recovery_limit_b": null,
+   "completed_without_operator": true,
+   "prs": 1,
+   "deploys": 1
+  },
+  {
+   "option": "b",
+   "kills": 6,
+   "recovery_limit_b": 3,
+   "completed_without_operator": false,
+   "engine_status": "MAX_RECOVERY_ATTEMPTS_EXCEEDED",
+   "recovery_attempts": 5,
+   "completed_after_resume_workflow": true,
+   "resume_to_done_s": 17.3,
+   "prs": 1,
+   "deploys": 1
+  }
+ ]
+}

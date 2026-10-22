@@ -1,0 +1,362 @@
+{
+ "option": "b",
+ "test": "h",
+ "idx": 8,
+ "fast": false,
+ "marks": {
+  "load1_start": 11.6,
+  "t_alert_h-8": 1792658862.148538,
+  "footprint_loop": {
+   "rss_mb": 38.6,
+   "threads": 10
+  },
+  "t_kill": 1792658989.948752,
+  "kill_why": "chaos",
+  "t_restart": 1792658995.872611,
+  "t_decide_h-8": 1792658939.628433,
+  "lost_partial_unit_s": [
+   1.8
+  ],
+  "load1_end": 17.9
+ },
+ "loops": [
+  {
+   "pid": 92042,
+   "t_spawn": 1792658860.6585548,
+   "ready_s": 1.44,
+   "label": "start"
+  },
+  {
+   "pid": 95993,
+   "t_spawn": 1792658894.780304,
+   "ready_s": 0.34,
+   "label": "restart"
+  },
+  {
+   "pid": 1103,
+   "t_spawn": 1792658967.992165,
+   "ready_s": 0.95,
+   "label": "restart"
+  },
+  {
+   "pid": 2435,
+   "t_spawn": 1792658995.872611,
+   "ready_s": 0.44,
+   "label": "restart"
+  }
+ ],
+ "snapshots": {
+  "at_kill": {
+   "ok": true,
+   "ms": 42,
+   "flows": {
+    "h-8": {
+     "status": "PENDING",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 3,
+     "state": "implementing",
+     "current_step": "start_episode",
+     "steps": 12,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": null,
+     "opaque_outputs": 8
+    }
+   }
+  },
+  "final": {
+   "ok": true,
+   "ms": 88,
+   "flows": {
+    "h-8": {
+     "status": "SUCCESS",
+     "app_version": "968864f8d4f513648801d719a0a160eb",
+     "recovery_attempts": 4,
+     "state": "fixed",
+     "current_step": "finish",
+     "steps": 18,
+     "decision_deadline_in_s": null,
+     "timers_pending": [],
+     "merge_child": "SUCCESS",
+     "opaque_outputs": 11
+    }
+   }
+  }
+ },
+ "notes": [],
+ "flows": {
+  "h-8": {
+   "expect": {
+    "state": "fixed",
+    "prs": 1,
+    "deploys": 1
+   },
+   "final_state": "fixed",
+   "decision": "approve",
+   "decided_by": "human",
+   "prs": 1,
+   "deploys": 1,
+   "replayed_calls": 0,
+   "deploy_503": 2,
+   "duplicates": 0,
+   "missing": 0,
+   "episodes": {
+    "investigate": {
+     "attempts": 1,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 0
+    },
+    "implement": {
+     "attempts": 2,
+     "units_finished": 12,
+     "units_unique": 12,
+     "redrive_events": 1
+    }
+   },
+   "recovery_s": [
+    1.45,
+    2.0,
+    1.57
+   ],
+   "decision_taken": [
+    {
+     "decision": "approve",
+     "by": "human",
+     "late_s": -177.67
+    }
+   ],
+   "decision_after_restart_s": 45.85,
+   "redrive_after_kill_s": null,
+   "decision_deadline": 1792659118.290984,
+   "timers": {
+    "set": 2,
+    "fired": 2,
+    "late_s": [
+     0.12,
+     0.15
+    ],
+    "early_calls": 0
+   },
+   "wall_s": 226.2
+  }
+ },
+ "kills": [
+  {
+   "t": 29.0,
+   "scope": "loop"
+  },
+  {
+   "t": 98.8,
+   "scope": "machine"
+  },
+  {
+   "t": 127.9,
+   "scope": "loop"
+  }
+ ],
+ "completed": true,
+ "db": {
+  "tables": 12,
+  "rows": {
+   "dbos_migrations": 1,
+   "workflow_status": 2,
+   "notifications": 1,
+   "workflow_events": 2,
+   "workflow_events_history": 8,
+   "application_versions": 1,
+   "queues": 2,
+   "workflow_input": 2,
+   "workflow_output": 2,
+   "operation_outputs": 34
+  },
+  "bytes_incl_wal": 839048
+ },
+ "checks": {
+  "completed": true,
+  "final_state": true,
+  "no_duplicate_side_effects": true,
+  "no_missing_side_effects": true,
+  "decision_consistent": true,
+  "episodes_resumed_not_restarted": true
+ },
+ "pass": true,
+ "control": false,
+ "harness_s": 228.2,
+ "t0_epoch": 1792658862.102695,
+ "events": [
+  {
+   "ts": 0.0,
+   "pid": 92042,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 2.32,
+   "pid": 92042,
+   "kind": "live",
+   "flow": "h-8",
+   "where": "flow"
+  },
+  {
+   "ts": 2.38,
+   "pid": 92042,
+   "kind": "episode.launch",
+   "flow": "h-8",
+   "ep": "investigate",
+   "attempt": 1
+  },
+  {
+   "ts": 33.02,
+   "pid": 95993,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 34.12,
+   "pid": 95993,
+   "kind": "live",
+   "flow": "h-8",
+   "where": "flow"
+  },
+  {
+   "ts": 76.19,
+   "pid": 95993,
+   "kind": "decision.wait_start",
+   "flow": "h-8",
+   "deadline": 1792659118.290984
+  },
+  {
+   "ts": 78.52,
+   "pid": 95993,
+   "kind": "decision.taken",
+   "flow": "h-8",
+   "decision": "approve",
+   "by": "human",
+   "late_s": -177.67
+  },
+  {
+   "ts": 78.53,
+   "pid": 95993,
+   "kind": "episode.launch",
+   "flow": "h-8",
+   "ep": "implement",
+   "attempt": 1
+  },
+  {
+   "ts": 106.84,
+   "pid": 1103,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 107.89,
+   "pid": 1103,
+   "kind": "live",
+   "flow": "h-8",
+   "where": "flow"
+  },
+  {
+   "ts": 113.73,
+   "pid": 1103,
+   "kind": "episode.redrive",
+   "flow": "h-8",
+   "ep": "implement",
+   "attempt": 2,
+   "idle_s": 15.8
+  },
+  {
+   "ts": 113.81,
+   "pid": 1103,
+   "kind": "episode.launch",
+   "flow": "h-8",
+   "ep": "implement",
+   "attempt": 2
+  },
+  {
+   "ts": 134.21,
+   "pid": 2435,
+   "kind": "loop.ready"
+  },
+  {
+   "ts": 135.34,
+   "pid": 2435,
+   "kind": "live",
+   "flow": "h-8",
+   "where": "flow"
+  },
+  {
+   "ts": 205.84,
+   "pid": 2435,
+   "kind": "step.done",
+   "flow": "h-8",
+   "step": "open_pr"
+  },
+  {
+   "ts": 205.85,
+   "pid": 2435,
+   "kind": "timer.set",
+   "flow": "h-8",
+   "why": "deploy -> 503",
+   "delay_s": 5,
+   "due": 1792659072.948813
+  },
+  {
+   "ts": 210.97,
+   "pid": 2435,
+   "kind": "timer.fired",
+   "flow": "h-8",
+   "late_s": 0.12
+  },
+  {
+   "ts": 211.0,
+   "pid": 2435,
+   "kind": "timer.set",
+   "flow": "h-8",
+   "why": "deploy -> 503",
+   "delay_s": 10,
+   "due": 1792659083.102355
+  },
+  {
+   "ts": 221.15,
+   "pid": 2435,
+   "kind": "timer.fired",
+   "flow": "h-8",
+   "late_s": 0.15
+  },
+  {
+   "ts": 221.17,
+   "pid": 2435,
+   "kind": "step.done",
+   "flow": "h-8",
+   "step": "deploy"
+  }
+ ],
+ "stub_calls_ts_path_flow_key_outcome": [
+  [
+   205.84,
+   "/pr",
+   "h-8",
+   "h-8:open_pr",
+   "created"
+  ],
+  [
+   205.84,
+   "/deploy",
+   "h-8",
+   "h-8:deploy",
+   "rejected_503"
+  ],
+  [
+   210.98,
+   "/deploy",
+   "h-8",
+   "h-8:deploy",
+   "rejected_503"
+  ],
+  [
+   221.17,
+   "/deploy",
+   "h-8",
+   "h-8:deploy",
+   "created"
+  ]
+ ]
+}
