@@ -1,0 +1,99 @@
+{
+ "role": "intent",
+ "verdict": "Pass 1's honoured items are now consistent: mothers and leads are built and gamedayed in W4, the decision models became the investigate worker everywhere, and Mastra, TickTick and the rewrite gap are each argued. But five things he asked for are still asserted rather than proven: the product-direction guarantee, self-improvement and attack prevention, unified telemetry, regression/known-fix reuse and a real sub-1 % owner load. W10 still declares 'full autonomous operation' without any of them being gated.",
+ "pass1_status": [
+  {
+   "id": "int-1",
+   "status": "resolved",
+   "why": "W4 now builds one on-demand mother identity per fleet project, with leads, hook rotation and a kill-and-rotate gameday (waves.md:132,136; ADR-007:23-30,77-83), and the sim-7 tradeoff is argued explicitly."
+  },
+  {
+   "id": "int-2",
+   "status": "partially",
+   "why": "W10 now lists every loops §6 job and the per-host infra runbooks. Its gate covers only infra gameday rows 3/4/5/14/15, the improve jobs and security.anomaly have no gate, and W9 still has a heading and a rollback but no bullets or gate (waves.md:170-172,176-187)."
+  },
+  {
+   "id": "int-3",
+   "status": "resolved",
+   "why": "'Residue' is gone everywhere except ADR-003:60-61, which now rules it out. W3, 04b:24 and the FAQ carry the same answer: no single-shot model, judgment in the investigate worker, backed by the 92 %/60 % numbers."
+  },
+  {
+   "id": "int-4",
+   "status": "partially",
+   "why": "Product direction moved to product_surfaces[] in ADR-012/014, but the rule leans on an undefined 'reviewed plan Artifact' and an agent-drafted, unenforced surface list (new objection int-8)."
+  },
+  {
+   "id": "int-5",
+   "status": "resolved",
+   "why": "`beads:` became `tasks: {prefix}`, and the integrations reconciler ensures a TickTick list per project, titles only (model.md:197-199; waves.md:96)."
+  },
+  {
+   "id": "int-6",
+   "status": "resolved",
+   "why": "ADR-002:28 and FAQ §11 now give Mastra a cited reason: TS-only, semantics unverifiable, a second system of record."
+  },
+  {
+   "id": "int-7",
+   "status": "resolved",
+   "why": "§1b now has a *During the rewrite* table giving the return day for each capability (01b:16-30)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "int-8",
+   "severity": "major",
+   "claim": "Product direction is the one business class he plainly owns, and the 'structural' guarantee for it still collapses into agent judgment. (1) 'Reviewed plan Artifact' is defined nowhere. If an agent's review counts, any lead-written plan launders a product change; if only an owner review counts, that is an approval gate, which contradicts ADR-005's 'never a gate'. (2) product_surfaces[] is drafted by agents in W2, and the drift check does not require it. ADR-014 itself admits the class only fires if the list is declared, so an empty list silently disables it. (3) Holdouts count as a product surface, so D4's lead-drafted holdouts become product-class Decisions. ADR-014 expires those after 48 h, while D4 promises 7 days.",
+   "evidence": "adr/ADR-014-owner-decisions.md:21-24,25,51; adr/ADR-012-verification-ladder.md:51-54; adr/ADR-010-project-manifest.md:32; design/model.md:239-242 (drift check lists slo but not product_surfaces); waves.md:99,101; report/01-verdict.md:53 ('never a gate'); report/10-open-decisions.md:35-42",
+   "test": "At W2's gate, count production fleet manifests with an empty or missing product_surfaces. In W5, inject a Change that edits a declared public route, traced only to a plan Artifact reviewed by a verifier agent, and check whether it becomes a Decision. Then compare the expiry on a D4 holdout Decision with D4's stated 7 days.",
+   "proposal": "Define 'traces to the owner' as a ledger fact: the lineage contains an event with actor owner (a submitted brief, or a comment or resolve on the plan Artifact). Without one, the Change becomes a Decision with a reversible default. That is not a gate, because the default applies on expiry. Make the drift check require non-empty product_surfaces, or an explicit `product_surfaces: none`, for every production runtime, mirroring `slo: none`. Give holdout Decisions D4's 7-day expiry inside ADR-014's per-class expiry."
+  },
+  {
+   "id": "int-9",
+   "severity": "major",
+   "claim": "He asked for autonomous self-improvement (deps, docs, bloat, basalt-ui dogfooding, big files, duplication, issues, perf, bugs, OTel) and for attacks to be found and prevented without him. W10 lists all of it, but its gate exercises only infra rows. No improve job has to ship a single item through the ladder, and attack detection has no gameday row at all (the catalogue ends at row 15). W10 and §1b still declare 'full autonomous operation' at day 23.",
+   "evidence": "waves.md:176-187 (gate = rows 3, 4, 5, 14, 15 only); design/proof.md:30-45 (no security row); design/loops.md §6 (security.anomaly via CrowdSec); report/01b-what-changes.md:30; report/11-faq.md:73",
+   "test": "For each loops §6 job, look for a W10 gate clause that requires one real Condition to become a merged, verified Change or a filed Task, with 0 owner touches. Then replay a recorded scan or brute-force against a public vps host and look for a CrowdSec ban plus a security.anomaly incident closed without the owner.",
+   "proposal": "Extend W10's gate: one item per improve class shipped end to end through the ladder, with its Verification records, plus a new gameday row 16 (an attack replay that ends in an automatic ban and a closed incident). Until those pass, §1b and the FAQ should claim 'infra healing', not 'full autonomous operation'."
+  },
+  {
+   "id": "int-10",
+   "severity": "major",
+   "claim": "He floated unified telemetry: mini logs, metrics and traces in the VPS HyperDX/ClickHouse, plus continued OTel work. ADR-006 decides this (one always-on ClickHouse), but nothing builds it. W9 has no bullets and no gate. ADR-006 still schedules its rollout under 'migration W11', which is now Hermes, and it covers agent traces only, not the mini's launchd logs or host metrics. W10's perf.regression job and per-item cost both depend on this data.",
+   "evidence": "waves.md:170-172 (W9: heading and rollback only); adr/ADR-006-telemetry.md:42-47 (decision 4, 'Order (migration W11)'), :49 (settings fix); design/loops.md §6 perf row; report/01-verdict.md:54",
+   "test": "Read W9 for bullets and a proof gate. Run ADR-006's own confirmation, one gameday item traced from signal to gateway call in a single VPS ClickHouse query, and check that a mini LaunchAgent log line and a host metric for the same window are in that store.",
+   "proposal": "Specify W9 like W1–W3: ADR-006 steps 1-6 renumbered to W9, the mini's ~/Library/Logs jobs and host metrics shipped to the VPS ClickStack, and the telemetry-off settings fix. Gate: the confirmation trace, plus per-service p95/error baselines in place before W10's perf.regression job starts. Fix the stale 'W11' in ADR-006."
+  },
+  {
+   "id": "int-11",
+   "severity": "major",
+   "claim": "He stressed that one issue rarely comes alone and that warden must recognise regressions and reuse past fixes. Known-error matching failed the backtest (0.479 against ≥ 0.50), and the design now parks it as a 'standing SLO' with no target date, no error budget, no wave that owns the fix, and no consequence if it stays red. The cross-source fix ADR-003 names is not a W3 bullet. The verdict promises 'all 8 on a fresh sample after W3', while waves.md says known-error and escalation are explicitly not W3 gates. So the owner's core warden ask can stay failed while W10 declares full autonomy.",
+   "evidence": "adr/ADR-003-correlation.md:21,72,81; waves.md:113 (no cross-source bullet), :121, :142; report/01-verdict.md:43; report/05-decisions.md:10 ('low for escalation and known errors')",
+   "test": "Check whether any wave's exit is blocked by known-error match < 0.50 or by escalation recall on the fresh blind sample. Then check whether the cross-source known-error change appears as a wave bullet with an owner.",
+   "proposal": "Add the cross-source known-error fix to W3 as a bullet. Put known-error match ≥ 0.50 and escalation recall on the fresh sample into W10's gate, with a named follow-up wave if they fail. Correct 01-verdict.md:43 to the real measurement point (after W5)."
+  },
+  {
+   "id": "int-12",
+   "severity": "major",
+   "claim": "His bar is that only sub-1 % business decisions reach him. The design schedules a recurring non-business touch: 'one batched weekly ask' for a biometric credential renewal. DEFINITIONS does not exclude it, so it counts as an owner touch. At about 115 new items a week (230 per 14 d), one weekly ask is about 0.9 % of items: nearly the whole SLO budget and about 9× the 0.1 % stretch, spent on a class ADR-014 says never reaches him. The report does not argue this as a tradeoff.",
+   "evidence": "report/01b-what-changes.md:42; design/proof.md:36 (row 5 pass: '≤ 1 batched owner action per week'); evidence/DEFINITIONS.md:36-37 (no exclusion); report/01-verdict.md:31 (230 items per 14 d); adr/ADR-014-owner-decisions.md:18-20",
+   "test": "Compute the ledger SLO over a simulated 4-week window with the weekly renewal as its only owner touch. Report its share of the < 1 % budget and of the 0.1 % stretch.",
+   "proposal": "Make renewal expiry-driven rather than weekly: one ask per credential expiry, scheduled from the 7-day lead time and coalesced across credentials, which cuts it to about monthly. State it in ADR-014 as a named non-business exception with its measured budget share. Either count it in the SLO, or define a separate `needs_hands`-style KPI for it, and pick one in both DEFINITIONS and §1b."
+  },
+  {
+   "id": "int-13",
+   "severity": "minor",
+   "claim": "§1b and W5 promise 'verified shipping — incident-to-ship autonomy' at day 11. But fleet code fixes need binding holdouts, and the ladder fails closed without them. Those holdouts are drafted in W5 under D4, whose default starts 'from W8' and binds 7 days after submission. Fleet code_fix will therefore be propose-only on day 11, which is not the ship-everything outcome the report promises.",
+   "evidence": "waves.md:141-142; report/10-open-decisions.md:41-42 (D4 default 'from W8'); adr/ADR-012-verification-ladder.md:24-27; report/01b-what-changes.md:27",
+   "test": "At W5's gate, compute effective autonomy for each (fleet project, code_fix) pair and count propose-only pairs.",
+   "proposal": "Start D4's default at W5. In §1b, state the day fleet code_fix becomes auto (W5 plus the 7-day binding), and say which action classes ship automatically at day 11 (restart, config, dependency)."
+  },
+  {
+   "id": "int-14",
+   "severity": "minor",
+   "claim": "The directory contract he asked for still contradicts the revised ADRs, and the drift check enforces the contract text. model.md §6.1 still puts a `threads.jsonl` written by 'the rv service' in each repo, but ADR-005 dropped threads.jsonl and the artifact module never commits. The verdict still calls it 'an rv service' and says Slack intake retires 'source by source', while W1 stops it at once.",
+   "evidence": "design/model.md:224; adr/ADR-005-artifact-review.md:28-30; report/01-verdict.md:14,53; waves.md:43",
+   "test": "Grep 'threads.jsonl' and 'rv service' across design/, report/ and adr/. Any hit outside a 'dropped' sentence fails.",
+   "proposal": "Change the §6.1 row to 'artifact versions (`vN.md|html`) committed by the submitting agent; threads live in the ledger'. Fix verdict lines 14 and 53 to say 'Slack intake stops at W1' and 'the `warden artifact` module'."
+  }
+ ]
+}

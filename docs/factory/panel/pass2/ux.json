@@ -1,0 +1,96 @@
+{
+ "role": "ux",
+ "verdict": "The revision fixed most of the pass-1 read-model gaps (all 27 questions now have a read model, staleness shows per source, pause is no longer a card), but four problems remain: the owner's #1 action now happens on MacBook agents that the factory can observe but cannot act on; Home's situation function is undefined for common states and is never quiet while agents wait for a quota reset; the owner has no surface at all from day 5 to day 16 while autonomy is already running; and the pause and steer verbs still lack a clear end state or a producer for their result.",
+ "pass1_status": [
+  {
+   "id": "ux-1",
+   "status": "partially",
+   "why": "The MacBook recorder now makes shutterflow's agents visible, with a host_asleep state (ADR-007:65-68, ADR-009:32-34), but Witness, `rd say` and `rd close` still act only on the mini, so these agents are observed but cannot be resumed, steered or stopped (see the new ux-1)."
+  },
+  {
+   "id": "ux-2",
+   "status": "resolved",
+   "why": "All 27 canonical questions now have a read model, a view and a budget, and argo.md §2, argo.md §6 and proof.md §5 use one numbering (argo.md:32-66, proof.md:105-109)."
+  },
+  {
+   "id": "ux-3",
+   "status": "resolved",
+   "why": "Every read model returns as_of and its cadence, a stale value is replaced by a stale term, 'all up' needs every health source fresh, and proof §5 adds a stale fixture per read model (argo.md:84-86, proof.md:107)."
+  },
+  {
+   "id": "ux-4",
+   "status": "partially",
+   "why": "Every intent now ends in applied, rejected or expired with a budget per verb, but pause has no budget ('every reconciler acknowledged'), an expired intent opens no condition, pause during a mini outage is still unhandled, and agent.replied has no producer (ADR-015:19-30)."
+  },
+  {
+   "id": "ux-5",
+   "status": "resolved",
+   "why": "Pause is a field of the project runtime record, never a Decision, never a card and never an owner touch, and invariant 5 says so (model.md:86-88,99; ADR-014:32-33). A new inconsistency is raised as ux-4."
+  },
+  {
+   "id": "ux-6",
+   "status": "partially",
+   "why": "The one-slot precedence rule and the Fixed-alone count landed (argo.md:88-91), but the degraded-factory banner is still there (argo.md:100), against the 'shell never changes shape' rule (argo.md:25,82), and the Since-you-left cursor still advances on 'last visit' (argo.md:47), not on an explicit 'seen'."
+  },
+  {
+   "id": "ux-7",
+   "status": "partially",
+   "why": "One channel is now named (a PWA with web push from the VPS, self-contained bodies; ADR-009:50-52, ADR-014:39-41), but there are still no 'push delivered' or 'card opened' events, so a default taken on a card the owner never saw cannot be counted (ADR-014:25-27,55-57)."
+  },
+  {
+   "id": "ux-8",
+   "status": "partially",
+   "why": "idle.parked{reason, resume_at} now has Witness as its only writer and the agent.parked/agent.resumed events exist (model.md:23,76-77), but the proposed lineage CI check (every read-model field traces to an event with one writer) was not added to proof.md, and it would already fail on agent.replied (ux-3)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "ux-1",
+   "severity": "blocker",
+   "claim": "MacBook agents can now be seen in Argo but nothing can act on them. Shutterflow's fleet 'stays on the MacBook and is observed, not moved', yet three things only reach the mini's herdr: Witness auto-resume, the steer verb (`rd say`) and the stop verb (`rd close`). Those agents produced 38 of the 50 nudges. Argo will now show the owner the parked shutterflow agent and give him no button that works, and ADR-007's KPI 'continue nudges → 0, MacBook included' has no actuator behind it. The same gap leaves another case undefined: a MacBook that is awake but whose recorder or push is dead looks exactly like 'host_asleep', so it renders as asleep instead of stale.",
+   "evidence": "adr/ADR-007-agent-topology.md:49-56 (Witness acts through rd on the mini's herdr record), :65-68 (MacBook observed, not moved), :87,92-93 (nudges → 0 'MacBook included'); adr/ADR-015-argo-write-verbs.md:25,30 (steer = rd say, stop = rd close); adr/ADR-009-argo-hosting.md:32-34; evidence/questions/questions.md:50 (cc macbook 41, shutterflow 38)",
+   "test": "Run gameday 9 (an injected API-error stop) in a shutterflow pane on the MacBook while it is awake, and separately press steer and stop on that agent from the phone. Expected today: Witness classifies the agent as parked but cannot continue it, and the intents end in expired. Then kill only the MacBook recorder while the lid is open and check whether Argo shows 'host_asleep' or 'stale'.",
+   "proposal": "Pick one of two paths and write it into ADR-007. (a) Move shutterflow's fleet under `rd` on the mini, so the MacBook herdr becomes a manual, unobserved lane that Argo labels as such. (b) Add a small actuator on the MacBook that pulls resume, steer and stop intents from the mini when online and applies them to its local herdr. Its ack is what moves those intents to applied, and while it is offline they show 'queued, host asleep'. In either case, report host_asleep only from an explicit sleep event (sleepwatcher already hooks wake), and treat silence without that event as stale."
+  },
+  {
+   "id": "ux-2",
+   "severity": "major",
+   "claim": "Home's situation function is not total, and its 'quiet' state is unreachable in normal operation. (1) Quiet requires 'no open incident' anywhere, but the incident situation fires only for production projects. An incident on an experimental project therefore matches neither, and Home's content is undefined. (2) Situations can coincide (a decision during an incident during a degraded factory) and no precedence is given for them, unlike the slot rule. (3) Quiet requires 'nothing parked', yet parking with a resume timer is the design's normal path: every quota trip parks agents until the reset (gameday 8). So Home leaves quiet on every quota cycle for something the factory is already handling, and Q1's stated target ('empty because auto-resume works') contradicts loops §5.",
+   "evidence": "design/argo.md:93-100 (situation table; quiet = 'nothing parked or stuck'; incident = 'affecting a production project'), :88-91 (precedence exists only for slots), :40 (Q1 target state empty); design/proof.md:39 (row 8: parked agents get a resume timer by design); adr/ADR-007-agent-topology.md:50-51",
+   "test": "Write a property test over the situation function: generate every combination of {incident on a production project, incident on a non-production project, open decision, parked with resume_at, parked with resume failed or budget spent, >5 working, breaker open, stale source}. Assert exactly one deterministic layout per combination, and assert quiet holds when the only non-empty set is 'parked with a future resume_at'.",
+   "proposal": "Split parked into two states. 'Parked, resume scheduled' becomes an ambient count on line 1 ('3 waiting for reset 16:00'). 'Parked, resume failed or budget spent' is the exception that fills the Parked/stuck slot. Order situations with one precedence (decision > incident on production > degraded > incident elsewhere > many in flight > quiet), the same way as slots, and render a non-production incident as an In-flight row, not a situation."
+  },
+  {
+   "id": "ux-3",
+   "severity": "major",
+   "claim": "From day 5 to day 16 the factory acts on its own and the owner has nowhere to see it. Slack carries raw alerts only until W3 (day 5). W3 opens Conditions and runs restarts, W4 (day 8) runs investigations and fixes through workers, and W5 (day 11) ships changes autonomously. Product-class Decisions and heads-up or needs_hands outcomes can occur from W5. But the read API, Home, the push channel and the decide verb all arrive in W6 (day 16), and the old Argo pages are frozen. For about 11 working days, decisions can default without ever being shown, and breaker trips and failed rollbacks go unseen. The rewrite plan's 'what you see on days 1–11' says when Argo returns, but not where alerts and decisions go in between.",
+   "evidence": "report/01b-what-changes.md:24-28 (alerts back 'W3 (day 5): Conditions…' but Argo cockpit only 'W6 (day 16)'); waves.md:43-44 (Slack raw alerts days 1–5; Argo frozen W1 → W6), :145-150 (read API, verbs and dead-man arrive in W6); adr/ADR-014-owner-decisions.md:25-27 (48 h default)",
+   "test": "Replay day 9 from the plan's fixtures: one incident with a failed restart recipe, one product-class Decision opened by a W5 change, one needs_hands outcome. For each, name the channel by which the owner learns of it before W6. Any 'none' fails.",
+   "proposal": "Move a minimal read slice into W3 (incidents_open, decisions_open, freshness as `warden status --json`, rendered into one Argo stub page), or keep the Slack webhook as an effector for the decision and heads-up tiers until W6, writing through deliveries so it is removed cleanly. Also block any Decision from defaulting until the push channel exists: extend its deadline as if the API were down."
+  },
+  {
+   "id": "ux-4",
+   "severity": "major",
+   "claim": "Pause is defined three different ways, and its feedback loop is still open. ADR-015 says 'no expiry, no default'. model.md says 'paused{until}', and argo's own line-1 example reads 'paused until Thu 18:00'. Nothing says whether pause stops observing (then Conditions stop opening and Home can turn quiet with a broken project under it) or only acting. 'Applied when every reconciler has acknowledged' has no budget, so a dead reconciler leaves the intent at 'requested' forever, which is exactly what the three end states were meant to prevent. A pause pressed while the mini is down, when the manual breaker matters most, still has no defined behaviour.",
+   "evidence": "adr/ADR-015-argo-write-verbs.md:19-20 (three end states, budget per verb), :26 ('no expiry, no default'; applied = all acknowledged, no budget); design/model.md:86-88 ('paused{until}'); pass-1 resolutions ux-5 ('argo paused until Thu 18:00'); design/argo.md:96 (quiet trigger ignores pause)",
+   "test": "On fixtures: pause a project with an open Condition and assert Home is not 'quiet' and line 1 names the pause. Kill one reconciler and press pause: the intent must end in expired(budget) within a stated time. Stop the mini and press the global pause from the phone: the strip must show a defined state, either 'queued, mini unreachable' or 'rejected(unreachable)'.",
+   "proposal": "Pause stops actions only; observation and Conditions keep running. Allow an optional until, shown on line 1, and when there is no until, show the pause age ('paused 3 d'). Give pause a budget of ≤ 60 s for all reconcilers to acknowledge, otherwise expired, which opens a condition on the factory. A paused project with open Conditions blocks the quiet state. Choose explicitly between 'rejected(unreachable)' and a VPS-side durable pause inbox, and write the choice into ADR-015."
+  },
+  {
+   "id": "ux-5",
+   "severity": "major",
+   "claim": "The steer verb's promised result, 'reply ≤ 2 min, shown on the agent row', has no producer. agent.replied appears in the audit column, but the model's Agent writers are the spawner (spec), the herdr observer (status) and Witness (the parked substate). None of them is said to tell a reply apart from ordinary pane output. The herdr record cannot even attribute authorship today: `rd say` text lands as owner-typed in 61 % of cases. In the same way, 'message_delivered' still means the keystrokes reached the pane, not that the agent took them in. A busy agent mid-tool-call will show 'delivered' and then expire on reply, which teaches the owner to fall back to the pane.",
+   "evidence": "adr/ADR-015-argo-write-verbs.md:25; design/model.md:23 (Agent writers and field sets), :74-81 (no message or reply states); report/02-baseline.md:124 (rd say recorded as owner-typed, 61 % of 'owner' entries agent-authored)",
+   "test": "Run the lineage check from pass-1 ux-8 (add it to proof §6): agent.replied must resolve to exactly one writer module and a detection rule. Then a gameday: steer an agent that is mid-tool-call with expects-reply, and assert the strip reads delivered → acknowledged-by-agent → replied with the reply text on the row, or expired, never a silent 'delivered'.",
+   "proposal": "Deliver messages through the agent's hook or inbox instead of keystrokes: the agent reads them at its next turn boundary and answers with `warden agent reply --idempotency-key …` (the agent-CLI contract, ADR-004). That CLI call is the single writer of agent.replied, and 'acknowledged' means the agent read the message, not that the keystrokes landed. Keep `rd say` only as a fallback for agents outside the contract, and label such a reply 'unverified'."
+  },
+  {
+   "id": "ux-6",
+   "severity": "minor",
+   "claim": "No read model answers 'what did I ask for, and what happened to it?'. Every intent's strip lives on its target entity. A submit from the phone composer, a steer, or a retry that later ends in rejected or expired surfaces nowhere global. It is not in Needs you (decisions only), not in Since you left (shipped, fixed, opened, decided), and no Home slot exists for it. A rejected submit therefore disappears unless the owner reopens the project page, which brings back the 'left Argo to check' behaviour for the owner's own actions.",
+   "evidence": "design/argo.md:47 (digest = shipped, fixed alone, opened, decided), :113-117 (Home slots); adr/ADR-015-argo-write-verbs.md:19-30 (end states live on the strip only)",
+   "test": "Add a timed-test row: 'Did my last three requests land?' must be answered from Home in ≤ 5 s, including one fixture that ended in rejected and one that ended in expired.",
+   "proposal": "Add an `intents_recent` read model with the owner's intents of the last 7 days and their end states. Show non-applied end states once in Since you left, as 'your submit to weatherorb was rejected: <reason>', and give the full list a drill-down on Home."
+  }
+ ]
+}

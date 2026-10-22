@@ -1,0 +1,104 @@
+{
+ "role": "dx",
+ "verdict": "The revision fixes the contract's core: the IR is pinned, TS CLIs are generated from the HTTP contract, the wait behaviour moves into the CLI, commands are verbs, and routing renders once. But the runnable plan still describes the pass-1 design, the cross-repo renders have no pinned input or owner for the follow-up commit, and the 'zero facts' onboarding only defers the hand-typed facts to the production promotion, where product_surfaces defaults to open.",
+ "pass1_status": [
+  {
+   "id": "dx-1",
+   "status": "partially",
+   "why": "`warden project new` and the integrations reconciler now exist (ADR-010:52-57, waves.md:96), but some things still block a green check: the drift check fails any service whose OTel was not seen in 7 days (ADR-010:59-60, model.md:241-242); nothing creates the GitHub repo, branch protection (github-config.sh) or the self-hosted CI workflow; and a template's `commands` must pass `make -n` while the directory contract 'creates nothing empty' (model.md:214-215), so no step writes a Makefile."
+  },
+  {
+   "id": "dx-2",
+   "status": "partially",
+   "why": "pr-required-repos.json, the architecture.md tables, the Caddyfile blocks and the runner list are now rendered (ADR-010:45-51), but scripts/architecture-check.sh is not folded into `warden manifest check`, so two topology checkers still assert launchd coverage (ADR-010:62-63 versus the AGENTS.md 'make doctor exits 1' rule)."
+  },
+  {
+   "id": "dx-3",
+   "status": "partially",
+   "why": "Routing now renders once into a global rules file (ADR-004:45), but the IuRoot per-repo block still has no home: model.md §6.1's table has no AGENTS.md row and the repos track CLAUDE.md or AGENTS.md. The tracked `docs/waves` collision with the linked path is also unaddressed (model.md:222)."
+  },
+  {
+   "id": "dx-4",
+   "status": "resolved",
+   "why": "`schema --all` snapshots by repo@sha with stamped headers, and no help-text parsing (ADR-004:44)."
+  },
+  {
+   "id": "dx-5",
+   "status": "resolved",
+   "why": "Commands are generated from Elysia route schemas, with 'every exposed route has input and output schemas' as W8's entry gate (ADR-004:49, waves.md:163)."
+  },
+  {
+   "id": "dx-6",
+   "status": "partially",
+   "why": "The behaviour moved into the CLI (ADR-004:38), but waves.md:167 still gates W8 on 'the long-job policy sentence in every routing block', and the budget value is unspecified. With Claude Code's 120 s foreground default it cannot meet the ≤ 2-call target (see dx-4 below)."
+  },
+  {
+   "id": "dx-7",
+   "status": "resolved",
+   "why": "`spec.commands` is validated with `make -n` and rendered, recipes read `spec.commands.restart`, and a missing restart becomes a filed task (ADR-010:29, waves.md:98, :114)."
+  },
+  {
+   "id": "dx-8",
+   "status": "partially",
+   "why": "Contract scope widened and `rd` joins in W4 (ADR-004:24-28), but neither the SKILL.md/AGENTS.md flag lint nor the GNU-toolchain fix for the 530 measured failures was adopted (grep finds GNU only in 02-baseline.md:76 and STATUS.md:74), and W12's 'flags generated' still covers only references/cli.md (waves.md:199)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "dx-1",
+   "severity": "major",
+   "claim": "The pass-1 revisions never reached the documents agents execute and readers trust. The runnable plan and the model still put routing in the per-repo AGENTS.md block and still require the policy sentence that ADR-004 just removed, so W8 will build and gate on the rejected design.",
+   "evidence": "waves.md:165 ('the AGENTS.md routing block') and waves.md:167 (gate: 'the long-job policy sentence in every routing block') against ADR-004:38 ('the routing block carries no long-job policy sentence') and ADR-004:45 ('renders once, into a global generated rules file'). design/model.md:236 still lists 'the AGENTS.md routing block' as a generated output. report/11-faq.md:49 and :64 and report/05-decisions.md:11 are mixed. waves.md:1-5 says the runnable copy becomes docs/waves/PLAN.md, so the stale text is what a /wave chain executes. The doc-contradiction lint that would catch this is scheduled for W12 (waves.md:199), after W8.",
+   "test": "Grep docs/factory for 'AGENTS.md routing block' and 'policy sentence' outside panel/, evidence/ and spikes/. Every hit must agree with ADR-004:38 and :45. Today waves.md:165 and :167 and model.md:236 fail.",
+   "proposal": "Fix waves.md W8 (routing goes to the global rules file; the gate is the long-job probe passing without the sentence) and model.md:236. Move a minimal doc-contradiction lint, ADR-statement vs plan/model grep pairs, into W2 and run it over docs/factory itself, so later ADR revisions cannot silently diverge from PLAN.md."
+  },
+  {
+   "id": "dx-2",
+   "severity": "major",
+   "claim": "The CLI renders are pinned by repo@sha, but the manifest renders are not. dotfiles commits the Caddyfile blocks, pr-required-repos.json, the architecture.md tables, groups.json and the runner list from 33 other repos' default-branch manifests, and nothing says which manifest blobs a render used, who makes the follow-up dotfiles commit after a manifest merges elsewhere, or how the MacBook re-renders without those repos cloned. Any manifest merge anywhere turns dotfiles `make check` red until someone hand-commits a re-render.",
+   "evidence": "ADR-010:45-51 (rendered registries live in dotfiles); model.md:131-132 (reconcilers read default-branch manifests only); waves.md:101 and :200 ('byte-equal to a re-render', 'make check green on both machines'); the dotfiles AGENTS.md says the MacBook is a thin client with a few repos, and agent-gateway lives only on the mini. ADR-004:44 defines a stamp and lockfile discipline for CLIs only.",
+   "test": "Merge a `doors[]` change in one repo. Measure (a) whether dotfiles `make check` turns red on both machines before any dotfiles commit, (b) whether the MacBook can run the check offline, and (c) which actor produces the re-render commit and when. Pass: the check stays deterministic per dotfiles commit, and the re-render lands without a human or an ad-hoc agent.",
+   "proposal": "Commit `config/factory/manifests.lock` (repo → default-branch blob sha) with every render, and render only from those blobs (fetched with `git cat-file` from a bare mirror or the GitHub API). `make check` then verifies outputs = render(lock), which is deterministic and offline. The integrations reconciler is the one actor that advances the lock: on a manifest blob change it commits lock plus outputs to dotfiles as a registry effect with a natural key `render:<lock-hash>`. Staleness becomes a Condition, not a red `make check`."
+  },
+  {
+   "id": "dx-3",
+   "severity": "major",
+   "claim": "'Zero facts beyond name and type' holds only for an experimental stub. The facts that matter are typed by hand at promotion to production, with no command and no derivation: runtime containers, the version endpoint, health probes, slo, data.backups and product_surfaces. Several duplicate a definition that lives elsewhere (container names in vps compose files, Kuma monitor names), so a rename leaves stale manifest entries that no check catches. The topology check only asserts that every running thing is covered, not that every declared thing exists.",
+   "evidence": "model.md:172-189 (runtime.containers, version, health.probes and slo as literal strings); ADR-010:58-63 (the drift check resolves integration keys and topology coverage, but `runtime[].containers` and `version` are not in the resolve list); waves.md:99 (drafts come from what exists, once, in migration only). No `promote` or re-draft verb exists in ADR-010 §4 or waves.md W2.",
+   "test": "Take a project from `warden project new --type service` to a deployed production service on vps. Count every manifest value typed by hand. Then rename one compose service and check whether `warden manifest check` fails.",
+   "proposal": "Make `warden manifest draft` a standing reconcile mode, not a migration tool. It observes compose labels (`factory.project=<name>` set by the per-type compose template), the deployed image revision label, Kuma and Caddy, and proposes runtime, version and probe fields as a Change. Check runtime entries in both directions (declared ⇒ exists, exists ⇒ declared). A lifecycle change to production fails the check until the observed fields exist."
+  },
+  {
+   "id": "dx-4",
+   "severity": "major",
+   "claim": "The `--wait` budget is unspecified, and at Claude Code's default foreground cap it cannot meet ADR-004's own ≤ 2-call target. A budget under 120 s turns a median check (372 s) into about 4 calls and a median review (258 s) into about 3. Claude Code's Bash tool also lets the agent pass its own per-call `timeout`, so one env var set at session start does not describe the cap the CLI actually runs under.",
+   "evidence": "ADR-004:15 (review median 258 s, check median 372 s); ADR-004:38 (budget from an env var the harness sets, value unstated); ADR-004:60-63 (confirmation: ≤ 2 calls in each harness); the Claude Code Bash tool's 120 s default and 600 s maximum; spikes/04-cli-mcp/REPORT.md:41-45.",
+   "test": "The conformance long-job probe uses real p50 and p90 check and review durations, not a 30 s toy, in headless Claude Code with default settings, OpenCode and cron. Count calls to a result. Pass: ≤ 2 at p90.",
+   "proposal": "Fix the numbers in the ADR. The settings template raises Claude Code's Bash default and maximum timeouts (verify the env names via /research), the session hook exports a budget a fixed margin below that default, and OpenCode's plugin does the same for its bash timeout. The `pending` resume command itself blocks for a full budget. The conformance suite asserts that budget < harness cap for each harness, read from the live config rather than assumed."
+  },
+  {
+   "id": "dx-5",
+   "severity": "major",
+   "claim": "Generated CLIs are pinned to their source sha but not to the deployed server they call. The TS CLI is built from route schemas at one sha and installed on the mini, while the gateway is deployed separately, so routing, `schema` (offline) and the conformance suite can all be green while the live server rejects or ignores a flag.",
+   "evidence": "ADR-004:37 (`schema` is offline), ADR-004:44 (IR by repo@sha in the CLI's repo) and ADR-004:49 (CLI generated from the HTTP contract); there is no version handshake in the eight contract items (ADR-004:33-40); the gateways deploy independently of `make setup` on the mini.",
+   "test": "Deploy gateway sha B while the installed CLI is built from sha A with one renamed input field. Run the conformance suite and one real call. Pass: the call fails with a typed error naming both shas and the upgrade command, instead of a generic 400 or a silently ignored field.",
+   "proposal": "Add contract item 9: every request carries the contract sha, and the server answers a mismatch with a fixed domain error kind `contract_mismatch` that has `hint` = the exact reinstall command. Each gateway exposes `GET /contract` (sha plus schema hash). The conformance suite runs one leg against the deployed server, and the routing render records the deployed sha beside the source sha."
+  },
+  {
+   "id": "dx-6",
+   "severity": "major",
+   "claim": "product_surfaces is the one manifest field that decides whether a change is product-class, and it is hand-typed and fails open. `warden project new` with only name and type writes it empty, so every change to a new project's public routes, pricing or store listing passes the ladder as non-product. Generation can never notice, because there is nothing to compare against.",
+   "evidence": "ADR-010:32 (a Change touching a product surface becomes a Decision); model.md:189 (literal list); ADR-010:52-57 and waves.md:101 (zero facts beyond name and type). No drift rule relates `doors[]` or route files to product_surfaces (ADR-010:58-63).",
+   "test": "Create a service with a public door via `warden project new`. Add a new public route and a pricing change through a worker. Check whether either becomes product-class.",
+   "proposal": "Derive product_surfaces per type: route trees for the framework, store-metadata dirs, pricing files and public `doors[]`, with the manifest field only adding or excluding. Make the check fail closed: a project with a public door and an empty derived-plus-declared surface set fails `warden manifest check`, and effective autonomy for code_fix drops until it passes, computed the same way as the existing effective-autonomy rule."
+  },
+  {
+   "id": "dx-7",
+   "severity": "minor",
+   "claim": "'Every factory binary on PATH (~/.local/bin)' is not an enumerable scope. That directory holds third-party and protocol-bound binaries that must not or cannot meet the contract, so the suite either stays red or grows an exclusion list, which is opt-in by memory inverted. Two named members are deliberate drop-in shims whose CLI shape belongs to someone else.",
+   "evidence": "ADR-004:24-28. `ls ~/.local/bin` on the mini: claude, opencode, opencode-safe, poetry, python3.11, hermes, hermes-acp, hermes-agent, beszel-agent, fallow, ocr, astra, keyprobe and git-credential-secrets-cache (git's credential protocol). The dotfiles AGENTS.md calls `secrets-run` 'a drop-in op shim' and says `hl` is rclone with a remote.",
+   "test": "Run the suite's enumerator on the mini today and count binaries that fail the contract and are not factory tools. Then try to put `secrets-run` on the contract without breaking `.env.tpl` callers that use op's syntax.",
+   "proposal": "Derive scope from manifests: `spec.provides.clis[{name, contract: agent|passthrough}]`. The suite enumerates that declared set and fails on any `~/.local/bin` entry symlinked from a SourceRoot repo that no manifest declares. Passthrough shims (secrets-run, hl, git-credential-secrets-cache) are tested for compatibility with the tool they shadow, not for format or envelope."
+  }
+ ]
+}

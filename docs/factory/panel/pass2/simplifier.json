@@ -1,0 +1,96 @@
+{
+ "role": "simplifier",
+ "verdict": "The revision made real cuts: Attempt, `threads.jsonl`, the decision-model step, resident mothers, agw's loop tools, a separate `rv`/`factory` CLI, Slack intake, four pushes and the action queue are gone, and about 25 named services are now phases of one warden process. But the owner still cannot draw the system from memory: both embedded diagrams still show 12 nouns and Attempt; the new inventory caps are asserted but unmeasured, and by my count the design already exceeds them on stores (≥ 10 against ≤ 6) and CLIs (13–18 in scope against ≤ 12), and has three more candidate mini daemons against a cap of 1; the Lead role, the spawn throttles and the `factory-self` machinery add mechanisms with no requirement of their own.",
+ "pass1_status": [
+  {
+   "id": "sim-1",
+   "status": "partially",
+   "why": "Loops now run as phases of one warden process and `factory` and `rv` fold into `warden` (ADR-011:50-54, ADR-004), but the caps in proof.md:118 have no generated inventory behind them, the design breaks them as written, and the loops.md §0 picture (`report/assets/architecture.svg`) was not redrawn."
+  },
+  {
+   "id": "sim-2",
+   "status": "partially",
+   "why": "Plumbing is named, pause is a runtime-record field, and messages and comments are events (model.md:26-37). But ADR-011:16-18 creates `task_deps` and a project-runtime-record table that are neither a noun nor named plumbing, so the design's own concept-budget check (proof.md:118) fails on them."
+  },
+  {
+   "id": "sim-3",
+   "status": "partially",
+   "why": "Attempt is gone from model.md §1-2 and the ADRs, but `report/assets/statecharts.svg:288,320` still draws 'Task + Attempt' and `architecture.svg:473-480` still draws 'Attempts in herdr'; both are embedded in model.md §2 and loops.md §0."
+  },
+  {
+   "id": "sim-4",
+   "status": "resolved",
+   "why": "ADR-003, loops.md:104-106, waves.md:113 and the Round 5 disposition (waves.md:221) remove the single-shot decision model, and the report no longer mentions an 'ambiguous residue'."
+  },
+  {
+   "id": "sim-5",
+   "status": "partially",
+   "why": "ADR-005:29-31 and W7 make the ledger the only home for threads, but model.md:224 still says `threads.jsonl` is 'written by the `rv` service', and ADR-015:28 and report/01-verdict.md:53 still name an `rv` service."
+  },
+  {
+   "id": "sim-6",
+   "status": "resolved",
+   "why": "ADR-007 §9 and W8's first bullet (waves.md:162) delete decide, triage, narrative and investigate, and state agw's role in one line."
+  },
+  {
+   "id": "sim-7",
+   "status": "partially",
+   "why": "Mothers are on-demand with no resident context (ADR-007:34-40), but the Lead still 'spawns workers' and 'sequences tasks' (ADR-007:42-45, waves.md:132), duplicating the ready queue and the spawner exactly as pass 1 said."
+  },
+  {
+   "id": "sim-8",
+   "status": "resolved",
+   "why": "There is one digest projection with three renderings (waves.md:193, 205), and the directory contract creates nothing empty (model.md:214-217, 233)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "sim-1",
+   "severity": "major",
+   "claim": "The revision re-patched the ADRs but left the pictures and the design files saying the opposite. This is the drift failure the postmortem measured (prose claims held 1 of 11; lane text copied into 19 files), reproduced inside the design itself before a line of code. The two diagrams the owner would draw from are wrong.",
+   "evidence": "report/assets/architecture.svg:458 '12 nouns' and :480 'Attempts in herdr'; statecharts.svg:288 'Task + Attempt'. loops.md:161 'Mothers rotate daily' vs ADR-007 §7 'no daily restart'. loops.md:191-193 '80 %' flip and '15 %' reserve vs ADR-008:60-63 'no fixed 80 %', 'not a fixed 15 %'. model.md:224 and ADR-015:28 still have the `rv` service and threads.jsonl vs ADR-005:30. waves.md:167 gate 'the long-job policy sentence in every routing block' vs ADR-004:38 'the routing block carries no long-job policy sentence'. waves.md:165 and report/11-faq.md:64 put routing in the AGENTS.md block vs ADR-004 'routing renders once' into a global rules file. The owner reserve has three different values: pass1-resolutions cos-2 '≈ 30–35 %', ADR-008:62 'p90 66 %', report/05-decisions.md:15 'p90 57.6 %'.",
+   "test": "Run the grep over docs/factory for `rotate daily|15 %|threads.jsonl|rv. service|policy sentence|12 nouns|Attempt` outside the 'Not nouns' line, plus one canonical reserve figure. It must return 0 hits. Regenerate both SVGs from model.md §1-2 and diff them against the committed files.",
+   "proposal": "State each fact once, in model.md or loops.md; ADRs and report sections link to it rather than restate numbers. Generate the architecture and statechart assets from model.md's tables. Run the doc-contradiction lint (proof §6) on docs/factory now, not in W12, because the report goes to the owner in this state."
+  },
+  {
+   "id": "sim-2",
+   "severity": "major",
+   "claim": "The inventory caps added for pass-1 sim-1 are unmeasured, and the design as written already breaks all three. The terms are also undefined ('agent-facing CLI', 'store the factory reads'), so the check cannot run.",
+   "evidence": "Caps are in proof.md:118: 1 daemon, ≤ 12 CLIs, ≤ 6 stores. Stores the design reads: ledger.db, project.yaml in git plus dotfiles-private/projects, the holdouts repo, usage.db, herdr-events JSONL (ADR-007 §5), ClickHouse (log adapter, perf.regression), the TickTick lists it ensures, the brain vault it writes (W13), rd's spool JSONL (waves.md:130), jobrun records (argo.md Q26) and the archives: ≥ 10. CLIs: the contract scope is 'every factory binary on PATH' (ADR-004), and ~/.local/bin today holds 15 (agw, ask-human, astra, hl, imgcli, jobrun, jobs-grade, keyprobe, rd, research, secrets-run, warden, git-credential-secrets-cache, ocr, opencode-safe), plus email, audio and image CLIs = 18; the named in-scope list alone is 13. Daemons: ADR-011 §5 does not place the factory read API inside warden (ADR-009 calls it 'new code on the mini'), ADR-012:30 adds an 'independent watchdog', and the herdr recorder runs too. Tables: `task_deps` and the project runtime record (ADR-011:16-18) map to no noun and no plumbing.",
+   "test": "Commit `evidence/inventory.py`, which enumerates processes per host, binaries in contract scope and every store path or URL any phase opens, and run the proof §6 caps check against its output today and against the design's W14 end state.",
+   "proposal": "Define the two terms. Measure first, then set caps as today's count minus the cuts the design claims. State in ADR-011 §5 that ingest, the read API and the write verbs run in the warden process. Name `task_deps` (Task's) and `project_runtime` (Project's) as noun-owned tables in the check. Either drop the cap or narrow the conformance scope so the two agree."
+  },
+  {
+   "id": "sim-3",
+   "severity": "major",
+   "claim": "The Lead has no duty left that code does not already own, and keeping 'spawns workers' creates a second path for claiming fleet Tasks. It is a role with no requirement behind it beyond a word in the owner's drawing.",
+   "evidence": "ADR-007:42-45 gives the Lead sequencing, spawning workers, rebases and train returns, and review against the done-definition. Sequencing is task_deps plus the ready queue (ADR-001; model.md:55). Spawning is the spawner plus the admission queue (ADR-007 §3). Rebases and train returns are Change `revising` → 'next worker Agent on the same branch' (model.md:62), a merge-train transition. Review is the verification ladder (ADR-012). model.md:18 lists 'spawner (claim)' as the only claim writer, so a Lead spawning a worker either bypasses the claim or duplicates it.",
+   "test": "Run W4's mother-rotation gameday with Leads disabled. If the same Tasks complete in the same order with 0 lost or duplicated claims, the role carries nothing.",
+   "proposal": "Make the Lead a mother wake scoped to one plan: the same identity and hook mechanism, woken only for plan re-sequencing or a conflict a worker returned unresolved. Workers are always claimed off the ready queue by the spawner. The owner's mother → lead → worker vocabulary stays in Argo; one mechanism replaces two."
+  },
+  {
+   "id": "sim-4",
+   "severity": "major",
+   "claim": "Six independent throttles sit on the one spawn path, overlapping and partly contradicting each other: an engine flip, two kinds of budget, rate limits, a breaker and a waves-level quota rule. Nobody can predict from memory whether a given spawn runs.",
+   "evidence": "There is an admission queue with class order and a forecast token rate (ADR-007 §3); a level-triggered quota guard flipping engines and parking agents (ADR-008, waves.md:134); per-mother token budgets enforced by the spawner (waves.md:132); per-Task and per-lineage budgets in attempts, IU dollars and Max percent (loops.md:131-134); per-action-class rate limits (loops.md:117-122); the runaway breaker (loops.md:124-129); and waves.md:24 'at ≥ 80 % only lane A runs', which ADR-008:60 says no longer exists.",
+   "test": "List every code site that can refuse, defer or re-engine a spawn or resume. The target is one function, admit(task, class, lineage) → run on engine X | defer until T | reject(budget), plus the breaker, which gates shipping rather than spawning.",
+   "proposal": "Fold the quota guard, the per-mother and per-lineage budgets and the admission order into one admission module in the spawner. The breaker and per-action-class rate limits stay on the ship side. Delete waves.md:24's fixed rule in favour of the same forecast."
+  },
+  {
+   "id": "sim-5",
+   "severity": "minor",
+   "claim": "`factory-self` adds three mechanisms where the generic rollback plus a pinned CI job would meet the stated requirement ('No Change can raise its own gate'): N-1 verifying N, two installed releases, and an independent watchdog daemon restoring a pinned last-known-good release.",
+   "evidence": "ADR-012:28-31 and :71 ('N-1 verification keeps two factory releases'); proof.md:100-101. ADR-012 §4 already makes rollback a Deployment operation for any runtime, warden included. The 'Autonomy only lowers' CI check (proof §6) already blocks raising gates. The watchdog is a second factory daemon against the 1-daemon cap.",
+   "test": "Gameday: merge a factory-self Change that weakens the verifier. The CI job pinned to the previous release tag must reject it. Separately, break the deployed warden: the existing heartbeat component plus `make deploy` of the last verified tag must restore it, with no watchdog process.",
+   "proposal": "Implement N-1 as a CI job that runs the previous release tag's verifier and holdout suite against the Change, with no second installed release. Fold LKG restore into the existing devhost heartbeat as a component action, with no new daemon."
+  },
+  {
+   "id": "sim-6",
+   "severity": "minor",
+   "claim": "Two effectors in the model have no requirement or no definition. Slack is still an effector although every Slack path retires. 'Argo thread' is an effector and Hermes' briefing delivery channel, but Argo defines no thread read model or view: either a hidden twelfth noun or a dead word.",
+   "evidence": "model.md:131 and ADR-011:47 list 'push, Argo thread, vault write, Slack'. W11 says 'Slack posting exits' and 'delivered as Argo threads with audio' (waves.md:193); W13 says 'no Slack changelog left'. design/argo.md §2-3 lists no thread view; Artifacts own the only threads.",
+   "test": "Every effector named in model.md §4 maps to a wave that builds it and a view or channel that renders it. Grep for 'Argo thread' must resolve to a read model in argo.md §2.",
+   "proposal": "Delete Slack from the effector list. Deliver briefings as the Home digest plus one push with an audio link, the audio file as a briefing rendering. If Hermes conversation in Argo is a requirement, name it in argo.md as a view over Agent message events, not a new thread concept."
+  }
+ ]
+}

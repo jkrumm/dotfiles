@@ -1,0 +1,112 @@
+{
+ "role": "cost",
+ "verdict": "The revision built the forecast I asked for, and the forecast shows the chosen design cannot keep its promises: owner-started work alone needs about 120 % (109–144) of the Max window per week. The guard, reserve and inverse rule were written on top of that number without being backtested against it. As a result the guard is tripped in practice every cycle, the inverse rule never fires, D1's $300 cap meters the wrong base, and the superseded 80 %/15 %/timer guard still lives in loops, waves and the W4 gameday.",
+ "pass1_status": [
+  {
+   "id": "cos-1",
+   "status": "partially",
+   "why": "forecast.py and the capacity table exist (forecast.out.md:7-17, ADR-008:26-29), but the rewrite program's own Max load is missing, and the W4 per-mother budget is the forecast's assumption copied into a limit (waves.md:132) rather than a measured cap."
+  },
+  {
+   "id": "cos-2",
+   "status": "partially",
+   "why": "The reserve is now derived from data (ADR-008:62-63), but interactive p90 66 % plus steered waves (74 % median) is more than 100 %, so the reserve cannot be honoured, and loops.md:193 still says 15 %."
+  },
+  {
+   "id": "cos-3",
+   "status": "partially",
+   "why": "ADR-008:64-66 makes the guard level-triggered over all Max consumers, but the class table (ADR-008:41-47) still has no row for agw review, the forecast keeps agw_tools 'unclassified in ADR-008' (forecast.out.md:10), and waves are listed both as owner-started and as parkable."
+  },
+  {
+   "id": "cos-4",
+   "status": "partially",
+   "why": "The admission queue is written into ADR-007:43-45 and ADR-008:67-68, but the 'token rate' has no number or test, and Witness and gameday 8 still specify timer resume at the reset (waves.md:133, proof.md:39)."
+  },
+  {
+   "id": "cos-5",
+   "status": "partially",
+   "why": "D1 now names the factory-originated scope (report/10-open-decisions.md:6-9), but option A's $300 is 'twice today's IU' computed on all IU ($147), not on the factory-originated baseline (≈ $27/week of warden), and it does not say where agw review spend moved off Max is metered."
+  },
+  {
+   "id": "cos-6",
+   "status": "partially",
+   "why": "The KPI is now per class × engine (ADR-008:77-79), but the post-10-15 Max baseline is $0 (proof.md:83), so 3 × p90 gives a zero Max ceiling, and the new classes (mother wakes, herdr OpenCode tabs) have no baseline and therefore no ceiling."
+  },
+  {
+   "id": "cos-7",
+   "status": "not",
+   "why": "The inverse rule is written (ADR-008:69-70), but its threshold of 100 % − reserve − margin is at or below zero with the data-derived reserve, and no cycle peaked below 55 %, so the rule can never fire, and the target 'lapsed p90 ≤ 5 % through the inverse rule' (ADR-008:89) has no mechanism."
+  },
+  {
+   "id": "cos-8",
+   "status": "partially",
+   "why": "ADR-008:59-61 and :71 drop the fixed trips and state ranges, but loops.md:189-193 still states 80 %/70 %/'p90 → 120 %' and waves.md:24 brings a fixed 80 % rule back."
+  }
+ ],
+ "objections": [
+  {
+   "id": "cos-9",
+   "severity": "blocker",
+   "claim": "Under the chosen design, factory work is already off Max, so the only Max load the guard can park is the owner's own steered waves. Owner-started work needs 120 % (109–144) of the window per week and was over 100 % in most cycles. ADR-008 classes waves the owner starts or steers as owner-started Max work, yet the guard parks 'non-urgent Max agents, waves, fan tabs and workers included'. So either the guard rations the owner's own waves (a product/spend choice made silently by code), or it parks nothing material and 'owner sessions blocked → 0' is unreachable. Neither outcome is stated, and the trip rule was never replayed on the data.",
+   "evidence": "forecast.out.md:11,14,16 (fleet_waves 74 %, owner_interactive 32 %, total 120 % today); forecast.out.md:46 (no_mothers_or_leads = 120 %, i.e. the chosen design's Max load); forecast.out.md:29-35 (peaks 96–100 % in 4 of 7 cycles before any factory); ADR-008:44 (waves he starts or steers → Max), :64-65 (waves park at the trip), :88 (owner sessions blocked → 0); report/10-open-decisions.md:20 (owner's heavy weeks still hit the limit)",
+   "test": "Add a guard backtest to forecast.py: replay the 45 days of quota.out.json samples with per-class burn from usage.db and the ADR-008 trip rule. Output per cycle: trip time, hours parked per class (owner-interactive, owner-attended wave, unattended owner wave, fleet), and owner-interactive minutes blocked at 100 %.",
+   "proposal": "Write the victim order inside owner-started work into ADR-008: owner interactive > waves the owner is attending > unattended or background owner waves > fleet > improve. At the trip, unattended owner waves continue on OpenCode/IU with a Claude-class model instead of parking. Price that spillover as its own line in D2 (keep the tier and pay the spillover vs raise the tier), and narrow the KPI to 'owner interactive sessions blocked → 0'."
+  },
+  {
+   "id": "cos-10",
+   "severity": "major",
+   "claim": "The data-derived reserve makes the forecast trip permanent and the inverse rule inert. A static p90 reserve (66 % interactive, plus steered waves) is a worst-case constant, not a forecast. Added to any factory projection, it reaches 100 % from day 0 of every cycle, and 100 % − reserve − margin is negative. Lapsed capacity today is p50 4 %, p90 31 %, and the lapse happens in the last days before the reset. That is the only time remaining owner demand is bounded enough for a rule to spend it.",
+   "evidence": "ADR-008:62-63 (reserve = p90 66 % + steered waves), :59-60 (trip = factory + owner projection reaches 100 %), :69-70 (inverse rule), :89 (target lapsed p90 ≤ 5 %); forecast.out.md:37-38 (owner share p90 66 % per 7 d; lapsed p50 4 %, p90 30.6 %); forecast.out.md:29-35 (minimum cycle peak 55 %)",
+   "test": "Backtest both rules on the 7 complete cycles: in how many cycles and hours does the trip fire, does the inverse rule fire at all, and how much lapsed % it recovers when the reserve is the remaining-hours projection of owner burn instead of the static p90.",
+   "proposal": "Replace the static reserve with an in-cycle projection: owner burn rate × hours to reset, using a p90 rate, which shrinks as the reset nears. Run the inverse rule only inside the last 24–48 h, when it can act. Set the lapsed target from the backtest instead of asserting ≤ 5 %."
+  },
+  {
+   "id": "cos-11",
+   "severity": "major",
+   "claim": "The quota guard exists in four contradictory versions, and the W4 gate tests the superseded one. ADR-008 says a forecast trip, no fixed thresholds, park running agents and resume through the admission queue. loops §7 says 80 %/70 %/15 % reserve and resume by timer. waves.md says only lane A runs at ≥ 80 %. Gameday 8 feeds a 95 % reading, expects spawns to flip and resume timers to be set, and passes on 'resume ≤ 5 min after reset', which is exactly the burst cos-4 removed. This is the drift pattern the postmortem names: prose claims held 1 of 11.",
+   "evidence": "ADR-008:56-70; design/loops.md:185-194; waves.md:24, :133 ('resume at the quota reset'); design/proof.md:39 (gameday row 8); waves.md:136 (W4 gate runs gameday rows 6-9); report/02-baseline.md:107",
+   "test": "Grep the factory docs for '80 %', '15 %', '70 % of the 5-hour', 'by timer' and 'resume ≤ 5 min after reset'; any hit outside ADR-008's history fails. Rewrite gameday 8 so it asserts that running non-urgent Max agents park, that owner-interactive spawns are still admitted, and that post-reset admission stays at or below the forecast token rate with no burst.",
+   "proposal": "Make ADR-008 the only copy and replace loops §7 with a pointer. Encode the guard parameters once, in the spawner's config, with a generated doc block. Turn the wave calendar's quota rule into 'lanes follow the ADR-008 class table'."
+  },
+  {
+   "id": "cos-12",
+   "severity": "major",
+   "claim": "The rewrite program's own Max load is not forecast. Lane A, the warden spine of W1, W3–W7 and W10, runs on Claude Code/Max for about 23 days, and waves.md lets it keep running at any 7-day reading because only lanes B and C stop at ≥ 80 %. That places factory build work on Max, as owner-started class, on a baseline already at about 120 %, with no row in forecast.out.md and no place in the guard's victim order. Fleet-repo wave spend runs $350–760 a week per active repo, so this is plausibly another 10–25 % of the window during the rewrite.",
+   "evidence": "waves.md:22-24, :76, :106, :128, :140, :146, :154, :175 (lane A, days 1–23, Max); forecast.out.md:7-17 (no rewrite class), :56-59 (per-repo wave $/week); ADR-008:41-47 (no class for the factory's own build)",
+   "test": "Add a 'rewrite' class to forecast.py: lane-A wave-days × the measured cost per wave-day of recent warden and dotfiles waves, giving Max % per week during days 1–23 and the guard backtest (cos-9) re-run with it.",
+   "proposal": "Classify the rewrite as factory work under ADR-008, not as owner-started work. It should take Max only under the forecast and otherwise run on IU with a Claude-class model. Count its spend under D1 or state it as a one-off line, and derive the calendar's quota-available days from the forecast instead of the 80 % rule."
+  },
+  {
+   "id": "cos-13",
+   "severity": "major",
+   "claim": "D1 option A is priced on the wrong base and says nothing about agw review. $300 is twice all IU ($147, mostly agw review and research), while the metered scope is factory-originated IU, about $27 a week today. With the guard level-triggered over all Max consumers and Max over 100 % in most cycles, 'review stays on Max while the forecast allows' means review moves to IU nearly every cycle, adding up to $469 a week. If that counts against D1, the cap is spent before one mother wakes. If it does not, $469 a week of cash sits outside any cap. Either way, nobody has stated how many wakes the cap buys.",
+   "evidence": "report/10-open-decisions.md:9-11 ($147 all IU, $300 = 'twice today's IU', review +$469, $707 wakes); ADR-008:65-66, :73-75; forecast.out.md:10, :45 (agw_tools_all_to_iu: IU $178 + Max list → IU); waves.md:132 (per-mother cap 'follows D1's default')",
+   "test": "Compute, under the forecast with the cos-9 backtest: factory-originated IU $/week, owner-spillover IU $/week (review and parked owner waves) and wakes/week bought by $300. With review excluded that is about (300 − 27) / 2.11 ≈ 129 wakes/week vs the 336 assumed; with review included it is ≤ 0.",
+   "proposal": "Use two meters with two numbers. D1 covers factory-originated IU only, based on ≈ $27/week, and is stated in wakes per mother per day. The spillover of owner-started work to IU (agw review, unattended waves at the trip) is a separate line, decided together with D2. Allocate the per-mother weekly cap explicitly from D1."
+  },
+  {
+   "id": "cos-14",
+   "severity": "major",
+   "claim": "The cost of a mother wake is assumed and then used as its own budget, so the budget cannot catch an overrun. The $2.11 per wake is 0.25 × the median Max wave session at the blended $0.44/M rate. That rate comes from long, cache-warm Max sessions, while a wake is cold by design: no resident context and a hook reload every time. It also runs on the IU Anthropic route, where cache writes dominate a cold start. W4 then enforces 'one wake ≤ 4.8M tokens', the same assumption, which is a very large ceiling for a session that 'never edits code'. D1's whole range ($300–1,320) and the 142 %→164 % sensitivity depend on this number.",
+   "evidence": "forecast.out.md:19-23 (wake = 0.25 × median, $2.11, 'assumption, not measurement'); forecast.py constants WAKE_SIZE_FRACTION, MOTHER_WAKES_PER_DAY; ADR-007:24-29, :88 (no resident context, hook-reload cost every wake); waves.md:132 (budget = 4.8M tokens/wake); report/10-open-decisions.md:14",
+   "test": "Before W4 closes, run a spike of about 10 representative mother wakes (no-recipe condition, brief breakdown, re-sequence) on the IU Anthropic route with a Claude-class model. Record tokens split into input, cache-write, cache-read and output, plus IU $ per wake (p50/p90), and re-run forecast.py and D1 with the measured values.",
+   "proposal": "Set the W4 per-wake budget to the measured p90 × 1.5, not the assumption. Replace the wake-rate constant with the planner's measured trigger rate after 2 weeks, and re-issue D1's numbers from both."
+  },
+  {
+   "id": "cos-15",
+   "severity": "minor",
+   "claim": "Per-Task and per-lineage budgets in 'Max percent' cannot be metered. The Max reading is one integer, account-wide and shared with the owner's sessions, so a Task's Max % exists only after the fact as usage.db list $ ÷ a $/1 % calibration that varies by ±15 % and is recalibrated weekly. Combined with a post-10-15 Max baseline of $0, the '3 × p90' ceiling is zero on Max, and the classes with no baseline have no ceiling at all.",
+   "evidence": "ADR-012:62-64; design/loops.md:131-133; ADR-008:18, :77-79; proof.md:83 (Max $0 post-10-15); engine_policy.out.json per-cycle $/1 % 26.86–35.29",
+   "test": "For one W4 gameday Task on Max, show the budget check firing from live data within one tool turn of the cap. If it can only be computed from the next usage.db collection, the budget is not enforceable online.",
+   "proposal": "Budget in engine-tagged tokens, counted per session from the harness's usage output, and show Max % and $ only for display. For classes without a baseline, start from the cos-14 spike's p90 and tighten after 8 weeks."
+  },
+  {
+   "id": "cos-16",
+   "severity": "minor",
+   "claim": "The case for spend decision D2 rests on a misread number and an unpriced option. '204 % over the last 7 days' is quoted as window load in the verdict, D1, D2 and ADR-008, but the forecast itself says this calendar week spans two resets and is a burn-rate signal, not a window reading. D2's option B is 'raise the tier (if a higher one exists)', which has neither a price nor a confirmed tier. Nor does D2 compare it with the obvious alternative: paying IU for the owner-started overflow (cycle overflow up to about 36 % of the window, about $1,150 list-eq).",
+   "evidence": "report/01-verdict.md:38; report/10-open-decisions.md:8, :19-23; ADR-008:26; forecast.out.md:17, :75 (204 % is not a window reading), :29 (overflow 35.9 %)",
+   "test": "Use /research to find the current Max tiers and prices, and price the overflow from the cos-9 backtest at IU Claude-class rates per month.",
+   "proposal": "Drop 204 % from the headline numbers, or label it 'burn rate across two resets'. Restate D2 as a priced choice: the next tier at $X/month vs IU spillover at $Y/month (p50/p90 from the backtest)."
+  }
+ ]
+}

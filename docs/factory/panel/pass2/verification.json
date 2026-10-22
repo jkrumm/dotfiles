@@ -1,0 +1,104 @@
+{
+ "role": "verification",
+ "verdict": "The revision adopted all eight pass-1 fixes in ADR-012, but none of the eight is fully carried through: loops.md §3 and waves.md W3–W5 still describe the old git-revert ladder, `verified` is set before the hold that actually confirms a fix, the evidence producers that raise autonomy can be edited by agents, and three autonomous paths (Renovate automerge, restart masking, the 24 h-quiet breaker close) still get past the breaker.",
+ "pass1_status": [
+  {
+   "id": "ver-1",
+   "status": "partially",
+   "why": "Fail-closed is now a rule (ADR-012:24-27, proof.md:95-98), but a producer only has to exist, nobody checks that it is meaningful (see ver-2 below), and subjects where a producer can never exist have no way out of propose-only except a human (see ver-3 below)."
+  },
+  {
+   "id": "ver-2",
+   "status": "partially",
+   "why": "ADR-012:28-31 defines factory-self with N-1 verification and a watchdog, but no wave builds either one (waves.md has no factory-self or watchdog item; line 46 is Hermes'). At W5 there is no N-1 release yet, and the evidence-producer fields of the manifest are outside the factory-self scope."
+  },
+  {
+   "id": "ver-3",
+   "status": "partially",
+   "why": "ADR-012:32-36 makes rollback a Deployment operation, but loops.md:118-120 still says 'revert commit / revert PR / revert through the merge train', W5 (waves.md:141-142) builds 'automatic revert' with a 'revert success 100 %' gate, no wave records per-runtime rollback targets, and the rollback target 'last verified' is set before the hold (see ver-1 below)."
+  },
+  {
+   "id": "ver-4",
+   "status": "partially",
+   "why": "Lineage keying, the 7-day window, counting restarts and the known-bad marker were adopted (loops.md:124-128), but the breaker still closes on '24 h quiet' (loops.md:129), and its own pause produces that quiet. Renovate merges and restarts that resolve each time are not counted (ver-4 and ver-5 below)."
+  },
+  {
+   "id": "ver-5",
+   "status": "partially",
+   "why": "Task and lineage budgets are defined (ADR-012:62-65), but W4 ships Witness auto-continue and re-drive with only a per-mother token budget (waves.md:132-136). The Task/lineage counter has no wave until the W5 ship work, which is exactly the gap pass 1 named."
+  },
+  {
+   "id": "ver-6",
+   "status": "partially",
+   "why": "ADR-012:41-43 allows only expand/contract on the auto rung, but loops.md:121 still lists 'restore / down-migration' as the migration rollback. Instead of archive-then-drop (which keeps the contract step reversible and inside autonomy), every contract step was routed to an owner Decision."
+  },
+  {
+   "id": "ver-7",
+   "status": "partially",
+   "why": "The update path exists (ADR-012:37-40), but two parts of the proposal were dropped: recording the holdout version that gated each deploy, and the churn and fail→update metrics. A holdout weakened by an agent therefore leaves no trail in the Verification records."
+  },
+  {
+   "id": "ver-8",
+   "status": "partially",
+   "why": "The per-type hold and promotion-after-hold were adopted (ADR-003:74, ADR-012:48-50), but automatic demotion when a `regression_of` points at a promoted recipe was not, so a recipe confirmed once keeps being reused after it regresses."
+  }
+ ],
+ "objections": [
+  {
+   "id": "ver-1",
+   "severity": "blocker",
+   "claim": "The rollback target 'the last verified Deployment' can be a bad version. A Deployment becomes `verified` at post-deploy verify, which takes minutes, and has no transition out of it. The evidence that actually confirms a code fix is the post-deploy hold of 24 h or more, and up to 6 further auto-merges per repo per day deploy on top while it runs. When a hold fails, the 'last verified' Deployment usually contains the failing change, and the known-bad marker goes on whichever version was rolled back rather than on the culprit.",
+   "evidence": "model.md:64-65 (deploying → deployed → verifying → verified; only verifying can fail); loops.md:120 (hold ≥ 2× median gap, ≥ 24 h for crash/OOM/flap, next to '≤ 6 automatic merges per repo per day' and 'one change in flight' meaning the train slot, not the hold); ADR-012:32-34 (redeploy the last `verified` Deployment); proof.md:41 (gameday row 10 injects only an immediate post-deploy failure, never a failure during the hold).",
+   "test": "Gameday: auto-ship code fix A (crash type, 24 h hold), then let B and C auto-merge on the same repo. At hour 20, re-inject A's crash. Check which Deployment is redeployed, which sha gets the known-bad marker, and whether A is re-proposed by the next worker.",
+   "proposal": "Split the state into `verified` (post-deploy checks passed) and `held` (the hold confirmed it); the rollback target is the last `held` Deployment. A hold failure rolls back to that target and attributes the failure across the Deployments since then: candidates are bisected by redeploying digests, and the known-bad marker is written only on the attributed change. Extend gameday row 10 with a failure that arrives during the hold."
+  },
+  {
+   "id": "ver-2",
+   "severity": "blocker",
+   "claim": "Effective autonomy flips back to auto as soon as an evidence producer exists, and producers are manifest fields that agents can change through an ordinary config Change: health.probes, Kuma monitors, spec.commands.verify. factory-self covers only `autonomy`, rate limits and holdout locations. An agent can add a probe that is always green (a static 200, or `true` as the verify command) and so raise its own rung, a back door around 'Autonomy only lowers'.",
+   "evidence": "ADR-012:24-31 (flips back 'when the producer exists'; factory-self scope lists autonomy, rate limits and holdout locations only); proof.md:95-98, 119 (the CI check fails only on raising `autonomy`, rate limits or holdout locations); model.md:14 (manifest edited by 'the owner or an agent, through a Change'); loops.md:118 (a config Change auto-ships on make check + validation + review).",
+   "test": "In a scratch project with no probe (propose-only for code_fix), have a worker open a config Change adding `health.probes: [GET /robots.txt]`. Check whether it auto-ships on the config rung and whether `factory manifest check` then reports code_fix as auto.",
+   "proposal": "A producer counts only after the verifier has watched it fail: it stops the target (or breaks the verify path) in a scratch or canary window and the probe goes red, recorded as a Verification. Changes that add, remove or weaken an evidence producer (probes, monitors, verify commands, the runtime rollback target) join the factory-self class, verified by N-1."
+  },
+  {
+   "id": "ver-3",
+   "severity": "major",
+   "claim": "Propose-only has no end state except a human. A gap Task that can never be satisfied leaves its PRs open indefinitely, and the owner merging them is an owner gate in disguise. For half the fleet the producer named in proof.md cannot exist by construction: basalt-ui is a published library, dotfiles goes live by symlink when merged, and warden is the factory itself. None has a 'deployed app' to run holdouts against, so dependency and code_fix on these three stay propose-only for good.",
+   "evidence": "proof.md:87-90 (holdouts run 'against the deployed app' for basalt-ui, dotfiles and warden); proof.md:95-98 and ADR-012:24-27 ('opened and verified, not merged … flips back when the producer exists'); dotfiles AGENTS.md §Deploy ('a merged commit is live once symlinked'); dora.out.md:27 (basalt-ui deploys are Actions publishes, so rollback means publishing a new version, not redeploying a digest).",
+   "test": "Run `factory manifest check` on the six fleet manifests as W2 will draft them. List every (project, class) that comes out propose-only, check whether its gap Task names a producer that could be built, and count open propose-only PRs after 14 days of W5.",
+   "proposal": "Define a substitute producer per runtime kind in the ladder table. Library: consumer-build holdouts (build and test argo and weatherorb against the candidate version). Symlinked config repo: post-apply `make check` + `make doctor` + symlink health, rolled back by checking out the previous sha. warden: factory-self N-1. Give propose-only PRs a TTL after which the PR is closed and the Task parks as `blocked_on_evidence` in Argo's Fleet view, never in Needs you."
+  },
+  {
+   "id": "ver-4",
+   "severity": "major",
+   "claim": "Renovate automerge is a second autonomous shipper outside the ladder. Patch and minor bumps merge on CI alone: no pre-merge holdouts, no train entry, no known-bad check, and the breaker does not count them, because it counts the factory's own automatic changes. The dependency rung's evidence ('holdouts pass (fleet)') is never consulted for most dependency ships.",
+   "evidence": "model.md:191 (`deps: {renovate: true, automerge: [patch, minor], minimumReleaseAge: 14d}` as the manifest default); loops.md:174 ('patch/minor automerge behind CI'); loops.md:119 (the rung requires holdouts and post-deploy verify); ADR-013:27,46 (actor `renovate` merges are only mirrored as `change.merged`; the ship loop owns only train state); ADR-012:34-35 ('every agent-originated push lands as one train entry', which Renovate is not).",
+   "test": "Gameday row 11 variant without the fork: a Renovate patch bump that passes CI but breaks one holdout story, on a fleet repo with automerge on. Check whether it merges, whether the rollback writes the version into Renovate's `ignoreVersions`, and whether Renovate re-proposes the same version after the rollback.",
+   "proposal": "Turn Renovate automerge off fleet-wide. Renovate only opens PRs, and the train merges them through the dependency rung (holdouts, known-bad check, rate limit). Count actor-renovate merges as automatic changes in their lineage, and write the known-bad marker into the repo's Renovate config as part of the rollback."
+  },
+  {
+   "id": "ver-5",
+   "severity": "major",
+   "claim": "A crash that a restart clears every time never trips the breaker. The breaker counts automatic changes 'without resolution', and each restart resolves the condition on observation. The restart recipe is seeded as a known error, so promotion-after-hold never applies to it. `regression_of` fires only after a fixing Change has deployed, which a restart is not. A daily OOM is restarted daily for good, the incident closes clean each time, and no code-fix Task is ever filed.",
+   "evidence": "loops.md:117 (restart post-condition: health green within 5 min and the condition resolves); loops.md:125-127 ('> 3 automatic changes without resolution'); waves.md:114 (the W3 restart recipe is a pre-existing known error); loops.md:107-109 (regression = recurrence after a fixing change was deployed); ADR-012:48-50 (24 h hold for crash/OOM types, but that governs promotion and Change closure, not restarts).",
+   "test": "Gameday: a container that OOMs every 20 h. Run it for 7 days under the W3/W5 loop and count restarts, breaker trips, code-fix Tasks filed and incidents closed `resolved`.",
+   "proposal": "For crash, OOM and flap types, a restart counts as resolution only if the condition stays resolved for the type's hold (≥ 24 h). Any lineage with ≥ 3 restarts in 7 days files a code-fix or infra Task automatically and holds further restarts to the cap, whether or not each restart resolved."
+  },
+  {
+   "id": "ver-6",
+   "severity": "major",
+   "claim": "The safety mechanisms ADR-012 adds have no wave, and the waves that do exist build the pre-revision ladder. Restarts go live in W3, before the breaker and budgets exist. Witness auto-continue and re-drive go live in W4 with only a per-mother token cap. W5 builds 'squash merges and automatic revert' and gates on revert success. No wave contains effective-autonomy computation, factory-self N-1, the watchdog, per-runtime rollback targets, known-bad markers or the two-observation restart guard. Doc-contradiction lint would also flag loops.md §3 against ADR-012.",
+   "evidence": "waves.md:114 (W3 restart recipe) vs waves.md:141 (breaker in W5); waves.md:132-136 (W4: Witness plus a per-mother budget only); waves.md:141-142 (W5 'automatic revert', gate 'revert success 100 %'); loops.md:118-121 ('revert commit + redeploy', 'revert PR', 'revert through the merge train', 'restore / down-migration') vs ADR-012:32-43; grep of waves.md for factory-self, watchdog, known-bad, effective autonomy, propose-only: no matches.",
+   "test": "Diff every numbered rule in ADR-012 against waves.md items and gates, and against the loops.md §3 table. Every rule without a building wave and a gate line is unbuilt. Every table cell that contradicts the ADR is a lint failure.",
+   "proposal": "Add the Task/lineage budget counter and the restart-lineage counter to W3/W4 next to the components they bound. Put effective autonomy, per-runtime rollback targets, known-bad markers, factory-self and the watchdog into W5 with gates: gameday row 10 run through Deployment rollback, a propose-only scenario, and an N-1 verify of a deliberately broken verifier (W5 ships with a pinned N-1 = the W5 release candidate's predecessor tag). Regenerate the loops.md §3 rollback column from ADR-012."
+  },
+  {
+   "id": "ver-7",
+   "severity": "minor",
+   "claim": "Two quiet escape hatches let a loop run without a counter. First, the breaker closes after '24 h quiet', which its own stop produces while the condition is still open, so a non-resolving lineage ships one more change per day indefinitely. Second, worker failures during an open `infra.egress` are not counted at all, so a mis-detected or long egress condition (the history has a 7-hour outage) lets Witness re-drive with backoff and no ceiling.",
+   "evidence": "loops.md:129 ('closes on a verified fix or 24 h quiet'); loops.md:133-134 (egress failures 'classed infra and do not count'); loops.md:182 (7-hour outbound outage).",
+   "test": "Replay a lineage whose condition never resolves for 7 days and count automatic changes after the first trip. Hold `infra.egress` open for 8 h with an IU endpoint returning 5xx and count re-drives and IU spend.",
+   "proposal": "Close the breaker only on a verified fix that holds, or on the lineage's conditions resolving, never on silence. Count egress-classed failures against a separate infra budget per lineage that, once exhausted, parks the Task until `infra.egress` resolves."
+  }
+ ]
+}

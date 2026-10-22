@@ -1,0 +1,112 @@
+{
+ "role": "durable",
+ "verdict": "The revision fixes most of what pass 1 found on paper (effect registry, generation keys, epochs, deliveries, FULL sync, adopt-mode restore, deterministic import), but three of the new mechanisms do not reach the effects they claim to cover: epochs do not fence the shared worktree or the agent's own git and gh calls, `rd`'s fail-open spool spawns agents with no lease at all, and the deploy probe cannot tell a deploy that has not run from one still running. Until those are closed, W4 and W5 can still produce duplicate work, duplicate deploys and lost owner pushes.",
+ "pass1_status": [
+  {
+   "id": "dur-1",
+   "status": "partially",
+   "why": "The registry and the real-shaped adapter gate landed (ADR-002:39,46-51; waves.md:88), but the strategy table covers only PR, merge, revert, deploy, restart and push; the agent-plane effects pass 1 named have no strategy: spawn, `rd say` steer, Witness resume and continue, `rd close`, the integrations reconciler's Kuma, TickTick and herdr creates, and `hl` copies (ADR-015:25 still says 'once, acknowledged' with no mechanism)."
+  },
+  {
+   "id": "dur-2",
+   "status": "partially",
+   "why": "Epochs now fence ledger CLI calls, but a successor is granted when the predecessor is 'confirmed dead OR its lease fenced' (ADR-002:56, ADR-007:60) and it resumes in the same hook worktree, and `rd`'s ledger writes fail open (waves.md:130), so a revived zombie still writes the successor's checkout and pushes directly; see dur-1 and dur-2 below."
+  },
+  {
+   "id": "dur-3",
+   "status": "partially",
+   "why": "Generation keys are adopted, but `restart:<condition>:<flap#>` dropped the per-flap counter, so the second restart that ADR-012 allows collides; the divergent list survives at design/loops.md:140-141 ('restart per condition+window')."
+  },
+  {
+   "id": "dur-4",
+   "status": "partially",
+   "why": "Read models and effectors are split, but `deliveries` holds no rows for the 577 imported notifications, so the claim that 'replaying imported events never re-sends' (ADR-011:48-49) has no mechanism behind it; and recording before sending turns a crash into a lost push."
+  },
+  {
+   "id": "dur-5",
+   "status": "partially",
+   "why": "Pure-function import, deterministic ids and an adoption pass landed (ADR-011:24-32), but adoption probes only PRs, deploys and operations; imported decision deadlines are still unanchored; the archive is still `chmod 444` with no quiesce check (waves.md:79)."
+  },
+  {
+   "id": "dur-6",
+   "status": "resolved",
+   "why": "`synchronous=FULL` (ADR-011:19), restore as adopt mode, and a restore test against a world that already ran the effects are all in W1's gate (waves.md:87-88); its strength now rests on the probes, which dur-3 below questions."
+  },
+  {
+   "id": "dur-7",
+   "status": "resolved",
+   "why": "Server-receipt `decided_at`, late answer as an override intent with its own keys, deadline extended by API downtime, and pause no longer a Decision (ADR-014:27-33, ADR-015:26-27); the remaining gap, push-path failure, is raised as dur-4."
+  },
+  {
+   "id": "dur-8",
+   "status": "resolved",
+   "why": "`--idempotency-key` is required on agent-called mutating commands, with Hermes and Argo key sources defined and conformance-tested (ADR-004:36,50)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "dur-1",
+   "severity": "blocker",
+   "claim": "`rd`'s fail-open spool lets the spawner create worker Agents with no lease, no epoch and no `operations` row, and W4's gate requires it. This contradicts invariant 6, the effect registry, and restore's adopt mode, which is supposed to refuse effects. Replaying the JSONL spool has no idempotency key, so a crash mid-replay writes duplicate Agent records. While the ledger is unreadable, Witness, which reads the same ledger, cannot see the spooled agents, so it can spawn a second worker for the same Task when the ledger returns.",
+   "evidence": "waves.md:130 ('Its ledger writes fail open (spool to JSONL, replay)'), :136 (gate: '`rd wave` still spawns with `ledger.db` unreadable'), :137; design/model.md:100-101 (invariant 6); adr/ADR-002-durable-execution.md:53-57; adr/ADR-011-ledger-and-event-log.md:31-32 (adopt mode refuses effects)",
+   "test": "Make `ledger.db` unreadable. Have the spawner, a lead and the owner each call `rd` for the same ready Task, restore the ledger, and kill the replay halfway, twice. Pass = at most one live worker per Task, every spooled agent carries a valid epoch after replay, and a second replay adds 0 rows. Repeat in adopt mode: pass = 0 spawns.",
+   "proposal": "Fail closed for every spawn that carries a `task_id`, and for every spawn while in adopt mode. Keep the spool only for the owner's manual `rd wave` session agents with no task. Each spool line carries a client-minted uuid used as the idempotency key, and replay records an observed Agent (adopt), never a spawn. Change W4's gate line to match."
+  },
+  {
+   "id": "dur-2",
+   "severity": "blocker",
+   "claim": "Epoch fencing covers only calls into warden. It does not fence the filesystem or the agent's own `git commit`, `git push` and `gh pr create`. The successor is granted when the predecessor is dead OR merely lease-fenced, and it resumes in the same worktree and branch. A pane frozen by a TCC dialog or revived by herdr's `claude --resume` therefore keeps editing and committing in the successor's checkout. `push --force-with-lease=<ledger sha>` fences only pushes that go through warden; agents run a plain fast-forward `git push`, which succeeds.",
+   "evidence": "adr/ADR-002-durable-execution.md:54-57 ('confirmed dead or its lease fenced'); adr/ADR-007-agent-topology.md:46-48 (successor resumes from the hook: same worktree and branch), :57-61; design/model.md:62 ('next worker Agent on the same branch'), :81; waves.md:133, :136 ('0 of its commits land' is asserted with no mechanism that stops a local commit)",
+   "test": "W4 gameday, extended: SIGSTOP a worker past its TTL, re-drive, SIGCONT, and have the zombie run raw `git commit -am x && git push && gh pr create` from inside its pane. Pass = the successor's tree never contains the zombie's edits, the push is rejected, no PR from the zombie survives, and the train never merges a head sha not recorded under the current epoch.",
+   "proposal": "Grant the same hook only when the predecessor is confirmed dead: kill its pane process tree, then verify through herdr and `ps`. Otherwise the successor gets a fresh worktree on a new branch cut from the ledger-recorded sha. Install a per-worktree pre-push hook (`extensions.worktreeConfig`) that calls `warden lease check --epoch` and rejects a stale epoch. Make the merge train accept only head shas that an epoch-checked push recorded."
+  },
+  {
+   "id": "dur-3",
+   "severity": "major",
+   "claim": "'Probe before retry: read the deployed version' cannot tell 'not deployed' from 'deploy still running'. A `make deploy` that is mid-build when the warden process dies (the child is killed, or it orphans and keeps going) probes as the old version, so the retry starts a second, concurrent deploy to the same target. Some targets have no version probe: `version` is optional in the manifest, and launchd units, dotfiles' `make deploy` = `make setup`, and `deploy: ci` targets have nothing to read. An in-doubt deploy on such a target can never be resolved, so adopt mode either blocks for good or guesses.",
+   "evidence": "adr/ADR-002-durable-execution.md:50; design/model.md:172-180 (`version` per runtime, not required; `deploy: ci`), :184 (`commands.deploy`); adr/ADR-011-ledger-and-event-log.md:39-42 (Deployment is written only from deploy Signals, so a missing Signal is in-doubt); waves.md:87 (adopt mode)",
+   "test": "Real-shaped counting fake for a deploy that takes 90 s: kill warden at 10 s, 45 s and 85 s, then restart. Pass = exactly one deploy per key and never two overlapping. Repeat for a launchd target and a `deploy: ci` target; pass = each in-doubt operation resolves without a blind retry.",
+   "proposal": "Run each deploy detached under `jobrun`, holding a per-target lock file with a start record (pid, key, sha). The probe order is: lock held → wait; lock free with an exit record → done or failed; only then read the version. Make the `warden manifest check` drift check require a version probe for every runtime that has a deploy command. For `deploy: ci`, the effect is the merge, and the probe is the workflow run for the merge sha."
+  },
+  {
+   "id": "dur-4",
+   "severity": "major",
+   "claim": "Decision-tier pushes are at-most-once, sent across a hop that is known to fail. `deliveries` is recorded before sending, and the push leaves from the VPS half, so a crash or a mini egress outage between the record and the VPS accepting it loses the push silently. The owner never sees the card, and the reversible default fires at 48 h. The deadline is extended only for factory-API downtime, not for a push that was never delivered. Separately, imported historic notifications have no `deliveries` rows, so an effector that starts at cursor 0 re-sends them.",
+   "evidence": "adr/ADR-002-durable-execution.md:51; design/model.md:103-105, :130-131; adr/ADR-009-argo-hosting.md:50-52 (push sent from the VPS half); adr/ADR-014-owner-decisions.md:25-31; design/loops.md:182 and evidence incident #1 (7 h egress outage); waves.md:84 (notifications become historical events); adr/ADR-011-ledger-and-event-log.md:48-49",
+   "test": "Create a Decision during an injected egress blackhole (gameday row 15), and separately kill the effector between the `deliveries` insert and the VPS POST, 20 times. Pass = every Decision's push is accepted by the push service exactly once (deduplicated on the device), and no default fires before 48 h after that acceptance. After the import, start every effector from cursor 0: pass = 0 sends.",
+   "proposal": "Make the decision and heads-up tiers at-least-once: delivery state goes pending → accepted, retried until the push service returns 201, with the event id as the Web Push `Topic` and the notification `tag`, so the device collapses duplicates. Start the expiry clock at `accepted`, not at creation. Give every effector a go-live cursor, and skip `actor=import` events by rule rather than relying on `deliveries`."
+  },
+  {
+   "id": "dur-5",
+   "severity": "major",
+   "claim": "The import and adoption pass misses in-flight work that keeps running after warden stops. agw `dispatch` keeps running until W4, so implement jobs the old warden started finish after the adoption pass and open PRs on non-`factory/` branches, while the same work item is imported as a ready Task and gets a new worker. Live herdr tabs and the frozen Argo action queue's pending owner actions have no adoption rule either. Imported Decisions have no deadline anchor: 48 h from their original creation has already expired at W6's first tick. Left-behind lines have no old id to hash, and W4's one-time PLAN.md projection creates Tasks from the same checklists, which duplicates them. The archive is still taken by `chmod 444` with no check that nothing is writing.",
+   "evidence": "waves.md:15 and :41 (agw dispatch runs until W4), :44 (action queue frozen), :79 (archive by `chmod 444`), :84 (Left-behind lines and decisions imported), :85 (adoption scope: PRs, deploys, operations), :129 and adr/ADR-001-task-system-of-record.md:37 (W4 projects the checklists into Tasks); :147 (imported decisions drained in W6)",
+   "test": "Seed a snapshot holding a live agw implement job for item X, an Argo queue entry, an open `needs_decision` item 3 days old, and a plan with Left-behind lines. Run W1's import and then W4's projection twice. Pass = the agw job's eventual PR is adopted as X's Change with 0 extra workers, the queue entry is applied or rejected with an event, the imported Decision's deadline is go-live plus 48 h, Task counts are identical across runs with no checklist line imported twice, and the archive's checksum matches a `sqlite3 .backup` taken after `launchctl bootout`.",
+   "proposal": "Widen adoption to agw jobs in flight (adopt each job's result when it lands, keyed by the old item id), live herdr tabs, and the action queue. Set each imported Decision's deadline to go-live plus its class expiry. Derive Task ids for plan lines from (repo, plan path, normalised line), and let one step own them: W4's projection, with W1 skipping plan lines. Take the archive with `sqlite3 .backup` after bootout plus an `lsof` check confirms no writer."
+  },
+  {
+   "id": "dur-6",
+   "severity": "major",
+   "claim": "Several keys still collide on legitimate repeats. `restart:<condition>:<flap#>` gives the second restart in one flap the same key; ADR-012 allows two (the second failure escalates), and the start-time probe then marks the second as done because the first restart already moved StartedAt. A deploy retried after `failed` on the same sha reuses `dep:<change>:<target>:<sha>`. The revert key carries `<n>` but its natural key, the branch `revert/<change>`, does not. design/loops.md still lists the old scheme.",
+   "evidence": "adr/ADR-002-durable-execution.md:40, :49-50; design/loops.md:117 ('2 failed restarts → escalate'), :140-141 ('restart per condition+window'); design/model.md:65-66 (`deploying ─fail→ failed`, retry path)",
+   "test": "In the harness, drive every statechart path that repeats an effect: two restarts in one flap, a deploy retried after failure, a second revert of the same change. Pass = every effect gets a distinct key and runs on the target, and only the rate limit stops a third restart.",
+   "proposal": "Append a per-entity attempt counter, taken from the `operations` table in the same transaction, to every kind (`restart:<cond>:<flap#>:<n>`, `dep:<change>:<target>:<sha>:<n>`), and use `revert/<change>-<n>` as the branch. Generate a key-uniqueness test from the statecharts, and delete the list at design/loops.md:140-141."
+  },
+  {
+   "id": "dur-7",
+   "severity": "major",
+   "claim": "The PR natural key contradicts the Change statechart. ADR-002 keys PRs by head branch `factory/<task>/<agent>`, while the model sends the next worker 'on the same branch' and resumes successors from the hook's branch. Either the successor's PR lookup lands on the predecessor's PR under the wrong agent, or a new branch leaves the predecessor's PR open, giving two open PRs for one Task. The merge train's 'one change in flight per repo' then has no rule for which PR is current.",
+   "evidence": "adr/ADR-002-durable-execution.md:49; design/model.md:61-63 ('revising (next worker Agent on the same branch)'); adr/ADR-007-agent-topology.md:46-48; design/loops.md:120 (one change in flight per repo)",
+   "test": "Fail a Change at review, re-drive a worker, and kill it between the push and PR creation. Pass = exactly one open PR per Task at all times, owned by the current epoch, and the train never queues a superseded PR.",
+   "proposal": "Key the branch and PR by Task (`factory/<task>`, or `factory/<task>-<k>` when dur-2 forces a fresh branch). Record the owning agent and epoch as a commit trailer and on the Change row, not in the branch name. A superseding branch closes the old PR in the same registry operation."
+  },
+  {
+   "id": "dur-8",
+   "severity": "major",
+   "claim": "Witness timers drive non-idempotent pane effects. A resume at the quota reset, an auto-continue after an API error, a nudge with the next plan step and a steer through `rd say` all type into a pane, with no message id and no probe. If warden crashes after typing but before it clears `retry_at`, the timer fires again on restart and types a second 'continue' or steer into a pane that may be mid-turn. The admission queue can also replay a resume that was already admitted. This is the owner's #1 action (50 nudges), automated with no key.",
+   "evidence": "adr/ADR-007-agent-topology.md:49-56; adr/ADR-015-argo-write-verbs.md:25 ('`rd say` once, acknowledged', with no mechanism); adr/ADR-002-durable-execution.md:41 (timers in `retry_at`), :46-51 (registry table has no pane effects); waves.md:133-134",
+   "test": "Kill warden between `rd say` and the timer-clear commit, 20 times, across resume, continue, nudge and steer. Pass = each message appears exactly once in the pane transcript, and a resume admitted before the crash is not admitted again.",
+   "proposal": "Register pane effects as probe-before-retry: `rd say` embeds a message id (`[m:<op-id>]`) and the probe reads the herdr pane record for it before resending. A timer row is cleared in the same transaction that writes its `operations` row, so on restart the open operation is probed, never re-fired. Spawn's probe is a herdr tab whose metadata carries `agent=<id>`."
+  }
+ ]
+}

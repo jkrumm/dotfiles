@@ -1,0 +1,99 @@
+{
+ "role": "correlation",
+ "verdict": "The revision fixed the claims in the documents: scope is narrowed, the join reading is pre-registered and grouping acceptance moves to a fresh blind sample. But it also changed the correlator, and nothing has scored the new version. One change is mis-mapped: the 12 h dedup was the stateless rule in the scored code, and the revision moves it to stateful sources and gives stateless ones 30 min. The fresh sample still takes its sampling unit and its cross-burst joins from entity groups, which the system under test will produce after cutover, so the step meant to make W3 honest is circular as written.",
+ "pass1_status": [
+  {
+   "id": "cor-1",
+   "status": "partially",
+   "why": "ADR-003:27-29 now claims recall only inside one burst, but the cross-burst gold it plans joins only adjacent chunks and only along entity.peers (ADR-003:90-91, waves.md:117), so any split that the grouping system itself made stays invisible (new cor-6)."
+  },
+  {
+   "id": "cor-2",
+   "status": "partially",
+   "why": "Windows are now set per source kind, but the mapping inverts the scored rule (new cor-2), the pair-level false-merge measurement at gaps over 30 min was not run, and dedup 'while its condition or incident is open' (loops.md:78) overrides the stateless windows anyway (new cor-3)."
+  },
+  {
+   "id": "cor-3",
+   "status": "partially",
+   "why": "Close-by-member and split were adopted (loops.md:92-93), but the hidden-incident rate and non-noise B-cubed were not added as metrics, the split trigger is circular, and signals that have no Condition get no protection (new cor-4)."
+  },
+  {
+   "id": "cor-4",
+   "status": "partially",
+   "why": "The host fold now needs host-level evidence (loops.md:81-83), but the concurrency-injection test was not run and the evidence arrives after the child signals, with no merge operation to fold them later (new cor-5)."
+  },
+  {
+   "id": "cor-5",
+   "status": "resolved",
+   "why": "PREREGISTRATION.md:48-63 adds the join reading for future samples, and ADR-003:30-31 limits the current pass to the detach reading."
+  },
+  {
+   "id": "cor-6",
+   "status": "partially",
+   "why": "Blind packets were adopted, but the cross-burst join is built from entity.peers, which is warden's dup chain (LABELS.md:40), so the strongest grouping hint returns through the gold."
+  },
+  {
+   "id": "cor-7",
+   "status": "partially",
+   "why": "Grouping acceptance moved to the fresh sample as asked, but gate (a) asks the held-out numbers to reproduce exactly on live code that now implements different rules (new cor-1)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "cor-1",
+   "severity": "blocker",
+   "claim": "Nothing has scored the revised correlator, and the W3 regression gate cannot be met. Live code with per-source-kind windows, an evidence-gated host fold, close-by-member and cross-source fingerprint normalisation cannot reproduce backtest.py's held-out numbers byte for byte. Either the old rules ship or gate (a) fails. Meanwhile loops.md and ADR-003 still quote P 0.937, R 0.846 as if they described the revised design.",
+   "evidence": "waves.md:116 (gate (a): 'reproduce exactly on the live code'); ADR-003:44-52 and 70-73 (new rules); backtest.py:680-689 and 750-800 (scored rules: k_host count fold, w_dedup applied to stateless families); loops.md:89-91 (held-out result attached to the revised rules); backtest.py last changed in 7ad6e47, before the revision.",
+   "test": "Implement the revised rules as backtest.py v2 behind a flag. Run v2 on the development chunks only and report the P/R/F1 change against v1, labelled dev-only. Then check whether v1's held-out numbers can come out of the live correlator at all.",
+   "proposal": "Redefine gate (a) as 'live correlator output equals backtest.py v2's frozen output on all 959 events', a fixture regression test with no thresholds. Publish v2's dev-only scores in ADR-003 next to v1's held-out scores, and stop attributing v1's numbers to the revised design."
+  },
+  {
+   "id": "cor-2",
+   "severity": "major",
+   "claim": "The revision mis-mapped the windows. In the scored code the 12 h dedup (w_dedup 720) is the stateless fingerprint rule (R2). Stateful sources dedup through subject state with w_open 360. The revision gives stateful sources '12 h dedup', a rule the code never ran, and sets stateless dedup to 30 min, a grid value that the development fit rejected. Window splits are already the largest held-out split class, so recall will probably drop. The size of the drop is unknown.",
+   "evidence": "backtest.py:681 ('w_dedup … same refined fingerprint, stateless families'), :750-755 (R2 applies w_dedup only when not s.stateful), :730-737 (stateful uses w_open); backtest.out.md:48; ADR-003:44-47 and loops.md:84-88 (12 h assigned to stateful, ≤ 30 min to stateless); backtest.out.md split table (c01-g11 and c21-g01: window splits are the top mass).",
+   "test": "On the development chunks, re-score with w_dedup = 30 for stateless families and the stateful rule unchanged. Report P, R and F1, plus the change in the fp-class merge and window-class split masses.",
+   "proposal": "Write the per-kind rule in terms of the code's actual parameters: stateful = subject state with w_open and w_reopen, recovery-closed; stateless = w_dedup. Pick the stateless value from the dev re-score, not by assertion. If recall on dev falls below 0.80, keep 720 for the stateless families whose dev merge rate is zero, and use 30 min only for chat and log families."
+  },
+  {
+   "id": "cor-3",
+   "severity": "major",
+   "claim": "The live system has a merge site the backtest never modelled: the Condition's unique open key (project, type, subject). Two different causes that hit one subject while its condition is open become one Condition, and so one incident member. Examples: a flaky test and then a real regression while ci.red is open, or a crash and then an OOM inside one health.down. In addition, loops §2.2 dedups on 'same fingerprint while its condition or incident is open', and an incident stays open until a verification pass, which can take days. That makes the ≤ 30 min and ≤ 60 min stateless windows inert.",
+   "evidence": "model.md:16 (unique open key (project, type, subject)); model.md:51 and :97 (an incident resolves only after its members resolve and a verification passes); loops.md:78 vs :86-88 (open-state dedup vs windows); backtest.py scores Signals only, so condition-level coalescing is outside the replay.",
+   "test": "Replay the 959 events through a condition layer keyed (project, type, subject), with conditions opened and closed from the replayed signals. Score B-cubed with Conditions as the grouping unit, and count the gold pairs from different groups that share one Condition.",
+   "proposal": "Pick one rule for dedup: window-bounded for stateless sources even while an incident is open, with occurrences after the window starting a new candidate that links to the open incident through a regression or suspect edge. Let a Condition carry a cause-epoch, so that a new fingerprint on an open subject opens a new epoch, which is a separate member that close-by-member and split can act on."
+  },
+  {
+   "id": "cor-4",
+   "severity": "major",
+   "claim": "Close-by-member does not protect the sources that produced the largest merge errors. Chat, human requests, issues and log lines have no condition type in the reconcile table, so they have no 'own Condition' that could hold an incident open. The split trigger is also circular: a member 'whose condition outlives the group' cannot exist when the group closes only after every member has resolved.",
+   "evidence": "backtest.out.md §8 held-out merges: top four by mass are fp on chat, hermes_log, human and chat; loops.md:48-57 (condition types: none for chat, human, log lines or requests); loops.md:92-93 and ADR-003:51-52 (close-by-member and split wording).",
+   "test": "On v2, for each held-out merge error, mark whether every absorbed gold group has at least one Condition member. Report the merge mass that has no Condition.",
+   "proposal": "Define the split trigger concretely: when every other member has resolved and one member is still open after its type's hold, split it into a new incident and carry its timeline over. For condition-less signals, cap the group's life at the stateless window, or require an explicit link edge: a known-error match, an investigator edge, or a shared deploy suspect."
+  },
+  {
+   "id": "cor-5",
+   "severity": "major",
+   "claim": "The host fold now waits for host-level evidence, which usually arrives after the child signals: a boot record exists only once the host is back up, and the Docker daemon cannot report while the host is down. The model has a split operation but no merge operation, and the candidate gate is N = 1, so a child is promoted on its first signal. Child signals during a reboot therefore become separate service- or project-level incidents first. The claim of one incident and zero pages on 10-17 has not been replayed under the new rule.",
+   "evidence": "loops.md:63-68 (10-17 narrative: fold 'on host-level evidence (the boot record)'); loops.md:81-83; backtest.out.md:56 (gate T/N 30/1, so promotion is immediate); ADR-003:51-52 (only split defined); model.md:49 (candidate to open on the promote rule).",
+   "test": "Replay 10-17 in event order with v2's evidence-gated fold, using the times at which the boot record, Beszel host-down and docker events actually became observable. Count incidents and recipe holds. Then run the pass-1 concurrency injection (an unrelated container crash at 0-45 min offsets) and measure the merge rate.",
+   "proposal": "Add a 'merge' operation that is logged and reversible, so late host evidence folds the open child incidents under the host incident. Or treat 'children on one host failing within 2 min' as provisional host evidence that holds child promotion for a short window until confirmation or timeout. Either way, define the ≥ 50 % rule over a minimum count of monitored subjects, so that a host with 2-3 monitored subjects does not fall back to the old k_host = 2."
+  },
+  {
+   "id": "cor-6",
+   "severity": "blocker",
+   "claim": "The fresh-sample design depends on warden's entities in two places. The sampling unit is an entity, a warden item plus its duplicate children, and the inverse-probability weights are computed per entity. Cross-burst gold joins chunks along entity.peers. After cutover warden does not exist, so these groupings would come from the new correlator: both the B-cubed weights and the cross-burst gold would be defined by the system under test. Even before cutover, joining only along peers can only recover cross-burst links that the grouping already made, which is exactly the slow-burn split error the join was meant to measure. Joins are also limited to adjacent chunks.",
+   "evidence": "LABELS.md:22-23 (entity-centric sampling), :40 (peers = warden's own group members), :114; sample.py:568-609; ADR-003:88-91 and waves.md:117 (join 'using entity.peers'); PREREGISTRATION.md:20-22 (weights 'by the sampling design').",
+   "test": "Before the fresh sample is drawn, simulate the planned frame on the current 959 events. Draw the sample by uniform signal or time-window sampling instead of by entity, build cross-burst gold by labeller search (same subject or topology ancestor within 7 d, no peers shown), and compare B-cubed recall with the peers-joined gold.",
+   "proposal": "Choose a sampling unit independent of any correlator: stratified signals or time windows per source and host, with weights from that design. Build cross-burst gold by a blind labeller searching a ±7 d window for the same subject, the same topology ancestor or the same fingerprint, not along entity.peers and not only across adjacent chunks."
+  },
+  {
+   "id": "cor-7",
+   "severity": "major",
+   "claim": "Only the join reading is pre-registered for the fresh sample. Nothing in PREREGISTRATION fixes the frame, sampling unit, size, duration, blind-packet content, cross-burst rule, hidden-incident metric or treatment of noise groups before data exists. At the current scale (about 200 sampled elements, held-out precision CI [0.893, 0.970]) and with the AND rule over three readings, a correlator whose true precision is 0.92 fails often by chance. That invites post-hoc reframing, which is exactly what pre-registration is meant to prevent.",
+   "evidence": "PREREGISTRATION.md:48-63 (the amendment covers the join reading only); backtest.out.md:378 (precision 'not settled by the sample'); backtest.out.md:79-80; waves.md:117 (sample described in prose, with no size).",
+   "test": "Use the held-out per-element distribution to compute the number of sampled elements needed for a 95 % CI half-width of at most 0.03 on B-cubed precision, and the probability that a true P = 0.92 / R = 0.84 system passes all three readings at that size.",
+   "proposal": "Add a dated PREREGISTRATION amendment before any post-cutover label exists. It fixes: frame and sampling unit (per cor-6); minimum sampled elements from the power calculation; blind-packet field list; cross-burst join rule; B-cubed over non-noise gold groups and a hidden-incident rate of at most 2 % as reported metrics; and a decision rule for a CI that straddles a threshold (extend the sample once, then decide)."
+  }
+ ]
+}

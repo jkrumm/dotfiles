@@ -1,0 +1,85 @@
+{
+ "role": "sre",
+ "verdict": "Not untouched yet. Of the ten incidents plus the baseline gameday, the revised design heals #5 and #10 cleanly. It heals the glance gameday and #6 only if host reachability and Kuma group monitors get defined. It heals #2, #3 and #4 at a cost of wasted restarts or a group monitor left red, and #1 only if the guessed DNS runbook matches a cause nobody has found. It does not heal #7 or #8: from W1 there is no live path for Hermes logs, and hermes-agent fixes fall to propose-only. #9 now sends its one legitimate needs_hands heads-up, but its 20+ children still run restart, fail and escalate to code-fix Tasks.",
+ "pass1_status": [
+  {
+   "id": "sre-1",
+   "status": "partially",
+   "why": "ADR-014 §6 now has needs_hands on the heads-up tier and ADR-010 requires `slo` or `slo: none`, but no observer for 'device absent' is named and proof row 3 still injects only an unmount, never a detached device (design/proof.md:34)."
+  },
+  {
+   "id": "sre-2",
+   "status": "partially",
+   "why": "The log adapter exists on paper (ADR-013:26), but it reads ClickStack alert rules while Hermes logs reach warden today only through the file poller W1 deletes (warden/scripts/watchdog-poll.py:108). W3's gate (waves.md:125) is a replay, with no live source behind it."
+  },
+  {
+   "id": "sre-3",
+   "status": "resolved",
+   "why": "infra.egress, a network-independent runbook, an egress probe in the heartbeat and attempt failures classed as infra all landed (loops.md:182, ADR-009:44-49, proof row 15). What remains is that the runbook is a guess at a cause nobody recorded."
+  },
+  {
+   "id": "sre-4",
+   "status": "partially",
+   "why": "The two-observation rule and probe.disagrees landed (ADR-012 §7). But 'independent' is undefined: in #2 a Kuma docker monitor and docker inspect both read the same broken HEALTHCHECK. The action to revert a suspect for changes the factory did not ship was not added."
+  },
+  {
+   "id": "sre-5",
+   "status": "partially",
+   "why": "Per-incident action with a host hold landed (ADR-003 §2), but the candidate gate is still N 1 (ADR-003:41), declared-reboot intent was not adopted, and nothing opens a host condition before the boot record arrives (see sre-3 below)."
+  },
+  {
+   "id": "sre-6",
+   "status": "partially",
+   "why": "Deploy intent, level reads of `docker ps` and spec.commands.restart landed (loops.md:39-43, waves.md:112). The drift check still only checks that declared commands parse (model.md:240), not that every runtime declares a restart, and Watchtower keeps stopping vps containers without recording intent (see sre-6 below)."
+  },
+  {
+   "id": "sre-7",
+   "status": "resolved",
+   "why": "`availability: intermittent` with output-age infra.backup and no investigation while the host is asleep is in ADR-010:25,35 and loops.md:44-46."
+  }
+ ],
+ "objections": [
+  {
+   "id": "sre-1",
+   "severity": "blocker",
+   "claim": "#7, #8 and #10 (and #1's log trace) have no live intake from W1 on. The log adapter reads HyperDX/ClickStack alert rules, but Hermes and agw logs never reach ClickStack. Today warden tails Hermes log files on the mini, and that poller stops at W1. ADR-006 adds only trace and resource attributes for Hermes, and only in W11 (days 17-19). Log-sourced Conditions also have no resolution rule: a log fingerprint has no 'Up', so 'closes on observation' and the post-deploy hold ('zero lock errors for an hour') have nothing to evaluate. During #1 the mini cannot ship logs to the VPS ClickStack at all, so ADR-013's 'the egress outage must produce a Condition' can pass in replay but never live.",
+   "evidence": "warden/scripts/watchdog-poll.py:101,108 (HERMES_LOG_FILES, today's only Hermes log path); adr/ADR-006-telemetry.md:30-37 (Hermes plugin last, attributes only, W11); adr/ADR-013-signal-intake.md:26,56-59; waves.md:110,125 (gate (e) is a replay of recorded rows); design/loops.md:86-87 (stateless windows define dedup and open, never close); evidence/incidents/incidents.md:196-204, 221-223, 272-274",
+   "test": "After W3, live and not replayed: emit one ERROR record from hermes-agent's tools.checkpoint_manager logger on the mini and one WARNING record carrying 'ERROR' in its JSON body. Pass: exactly 1 Condition within 5 min for the first and 0 for the second. The Condition closes after its declared quiet period with no further occurrence. Repeat with the mini's resolver blackholed: the Condition still opens, from a local spool."
+  },
+  {
+   "id": "sre-2",
+   "severity": "major",
+   "claim": "Fixes for the factory's own runtime land propose-only, which is #8's 30-hour park under a new name. #7's lock fix and #8's log-level change belong to hermes-agent, a session-class project deployed as a patched upstream checkout plus a gateway restart. It has no deploy record, no Deployment-level probe and no holdouts. ADR-012 rule 2 therefore opens the Change verified but unmerged and files a gap Task. Nobody merges it, by design. The same holds for agent-gateway, whose push monitor is the chronic 26-lifecycle item.",
+   "evidence": "adr/ADR-012-verification-ladder.md:24-27 (propose-only, 'nobody approves it'); design/model.md:258-263 (hermes-agent is session class, 33 items in 30 d, 'warden handling its incidents'); evidence/incidents/incidents.md:224-233 (fix needs the pinned checkout and a restart; 30 h park, 23 re-runs), :298 (Agent Gateway push, 26 lifecycles)",
+   "test": "Run `warden manifest check` on hermes-agent and agent-gateway at the W2 gate and print effective autonomy per action class. Then replay #8 (10-04 15:36 onward) with the ship loop in dry run. Pass: the log-level Change reaches a recorded Deployment and its hold within 6 h, with 0 open propose-only Changes."
+  },
+  {
+   "id": "sre-3",
+   "severity": "major",
+   "claim": "Two gaps in the host hold of ADR-003 §2 (which pauses child recipes while a host-level condition is open) send restarts at hosts that are down or missing their storage. (a) For #6, nothing opens a host condition before the boot record. The first Down is at 20:52:02, the boot at 20:56:42. In between, Kuma and a failing direct probe are two agreeing observations, so the restart recipe fires at an unreachable host. Two failures escalate to code fix. (b) For #9, the topology host → container → service → project has no mount node, so infra.mount is never an ancestor of the 20+ containers on the missing drive. Once the boot hold ends, each container runs restart, fails twice and escalates to a code-fix Task on its own project, tripping a breaker per project. Pages stay at 1, but about 20 needless worker spawns and breakers remain.",
+   "evidence": "design/loops.md:65 (the 10-17 walk relies on the boot record), :80-83 (fold evidence), :94-96, :117 (restart: two observations; 2 failures → code fix), :56 (infra conditions: no host reachability, no mount); evidence/incidents/incidents.md:153-161 (boot 20:56:42 after Downs from 20:52:02), :250-252 (drive disconnected; 20+ container and HTTP monitors down)",
+   "test": "Replay the 10-17 and 10-21 streams through W3 with the executor and planner in dry run and ssh to the host failing during its down window. Pass: 0 restarts planned against an unreachable host, 0 restarts of containers whose mount is absent, 0 code-fix Tasks, 0 breakers, exactly 1 needs_hands for 10-21."
+  },
+  {
+   "id": "sre-4",
+   "severity": "major",
+   "claim": "Kuma group monitors are not modelled, yet #4's two parent group monitors and #4's separate `Local` group-monitor incident were red for 54-59 h. The W2 gate requires the topology to cover every Kuma monitor, so 'VPS', 'Services' and 'Local' get a subject. Map one to a host and any child Down opens a health condition on that host, which can hold every sibling's restart recipe. If glance sits in such a group, gameday row 1 fails. Map it to a project and it stays open as long as any child is red. Either way it is a second, derived copy of the child.",
+   "evidence": "evidence/incidents/incidents.md:110-125 (group monitors, 59 h; 'derived state: never a page'), :122; waves.md:101 (topology covers every Kuma monitor); design/loops.md:94-96 (hold on an open ancestor host condition); no mention of group monitors in design/ or adr/",
+   "test": "W3 gate addition: rerun gameday row 1 with glance inside a Kuma group monitor, and replay #4's stream. Pass: glance healed ≤ 5 min; group-type monitors produce 0 Conditions and 0 holds; #4 ends with exactly 1 open Condition, on the keyword child."
+  },
+  {
+   "id": "sre-5",
+   "severity": "major",
+   "claim": "The two-observation rule does not stop #2. A Kuma docker-type monitor and `docker inspect` health both report the result of the same container HEALTHCHECK, the one that read the database file's mtime and missed the WAL. The two agree, so garmin-sync gets 2 restarts mid-sync, which count toward the breaker, before escalation reaches the real fix. 'Evidence of recent work', the only observation that would have contradicted them, is just one of several alternatives, never required.",
+   "evidence": "adr/ADR-012-verification-ladder.md:44-47; design/loops.md:117; evidence/incidents/incidents.md:71-83 (unhealthy for 124 h while syncing)",
+   "test": "Replay #2 (e3, 04-30 07:33 onward) with container logs showing successful syncs. Pass: 0 restarts planned; probe.disagrees opened on the healthcheck; first action is a config Change to the healthcheck."
+  },
+  {
+   "id": "sre-6",
+   "severity": "minor",
+   "claim": "Watchtower still updates the vps's non-RollHook containers at 04:00. W3 retires only its notifications, so those stops record no intent, while desired state subtracts only RollHook, WUD and `make deploy` intent. The health reconciler therefore sees an exited container plus a failing probe, two agreeing observations, and restarts it mid-update, or opens a nightly Condition.",
+   "evidence": "evidence/signals/signals.md:82 (vps: 'Watchtower 04:00 for the rest'); waves.md:108 ('Watchtower notifications retire'); design/loops.md:39-43",
+   "test": "Trigger a Watchtower run against one canary vps container after W3. Pass: 0 restarts, 0 Conditions, and the update recorded as a Deployment."
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "role": "data",
+ "verdict": "The revision fixes the headline breaches from pass 1: task state, threads, Deployment writer, the owner-touch definition and manifest_sha. But it adds owner-visible state that has no system of record (intents, breaker and lineage, known-bad markers). It also writes ledger state into git with no writer named, and its rebuild guarantee still rests on one manifest_sha column and on read models that have no event source.",
+ "pass1_status": [
+  {
+   "id": "dat-1",
+   "status": "partially",
+   "why": "The ledger is now the only home of task state (ADR-001:36-41, model.md:18). But the regenerated PLAN.md checklist block is a ledger projection written into a git-tracked file, and no committer or commit path is named for it (model.md:56, :222; see dat-10)."
+  },
+  {
+   "id": "dat-2",
+   "status": "partially",
+   "why": "ADR-005:29-31 makes the ledger the only thread store and drops threads.jsonl. model.md:22 still names a 'review store' as SoR, model.md:224 still says 'threads.jsonl — written by the rv service', and ADR-015:28 still names 'the rv service' and `rv wait` as the executor. So the directory-contract drift check would enforce the dropped path."
+  },
+  {
+   "id": "dat-3",
+   "status": "partially",
+   "why": "The ref adapter exists (ADR-013:27). But model.md:19 still lists the ship loop as the sole Change writer, an ingest adapter now emits a noun event (change.merged) outside the Change write module, and invariant 7 (model.md:102) is still false for direct pushes and Renovate automerges, which merge without a ladder."
+  },
+  {
+   "id": "dat-4",
+   "status": "partially",
+   "why": "The deploy reconciler is the one writer and runtime[].version is declared (model.md:20, :177). But the signal kinds (ADR-013:19) have no deploy-started kind, the wrapper still 'records intent before stopping anything' (loops.md:40, waves.md:112) outside that writer, and rollback has no artifact identity (see dat-14)."
+  },
+  {
+   "id": "dat-5",
+   "status": "partially",
+   "why": "Adapters for quota, usage, owner messages and herdr are added (ADR-013:32-45). But ADR-009:29-30 still serves read models straight from 'herdr's live state and usage.db', and several of Argo's read models have no event source at all (see dat-13)."
+  },
+  {
+   "id": "dat-6",
+   "status": "partially",
+   "why": "Item and owner_touch are now defined over events and pause is exempt (ADR-014:15-17, DEFINITIONS.md:35-37). But origin is keyed on the task.created actor, which lets decomposition inflate the denominator, and 'on an item' never says whether that means entity or correlation (see dat-11)."
+  },
+  {
+   "id": "dat-7",
+   "status": "partially",
+   "why": "manifest_sha and metadata.uid are added (model.md:121, :160). But events.project is still 'manifest name' (model.md:116), chg_ ids embed the repo name (model.md:19), the IuRoot source path is keyed on <repo> (model.md:221), and a single sha column cannot pin an evaluation that read several manifests (see dat-12)."
+  },
+  {
+   "id": "dat-8",
+   "status": "partially",
+   "why": "runtime host, containers, launchd and version, dependsOn, data, doors, commands, slo and policy.prRequired are added (model.md:170-189). But spec.lifecycle still lacks 'archived' (model.md:167 vs the statechart at :85), ADR-014's retired-class policy file still has no home (ADR-014:35, model.md:31), and the Traffic page and B2 have no traffic integration key (argo.md:68, :128)."
+  }
+ ],
+ "objections": [
+  {
+   "id": "dat-9",
+   "severity": "blocker",
+   "claim": "Four kinds of state the owner can see, each with its own lifecycle, have no noun, no SoR and no writer: (1) Argo's write intents, with lifecycle requested → applied | rejected | expired and a per-verb budget; (2) the runaway breaker per lineage, with open/closed state, a 7-day counter and a 24 h quiet close; (3) per-Task and per-lineage budgets in attempts, IU dollars and Max percent; (4) known-bad version markers that block re-shipping. waves.md even calls the first an 'intent entity'. The concept-budget CI check then either fails, or these get stuffed into `operations`, which is defined as effect bookkeeping.",
+   "evidence": "waves.md:148 ('each writing an intent entity executed by a reconciler or rd'); ADR-015:14-20 (three end states, budgets, 'recorded in the ledger'); ADR-012:57-65 and loops.md:124-134 (breaker per lineage, budgets, known-bad marker; no writer named); proof.md:41 (known-bad marker written on rollback); proof.md:118 (concept budget fails when 'a ledger table maps to neither a noun nor named plumbing (events, operations, timers, leases, deliveries)'); model.md:26-37 (none of these is listed as a noun, a not-noun or plumbing); argo.md:100 ('breaker open' drives Home's degraded situation).",
+   "test": "List the ledger DDL that W1 and W5 would create, then run the concept-budget check over it. Then, for each of intent, breaker, budget and known-bad marker, name its table, its one write module and its events. Next, drop every read model and rebuild Home's 'degraded factory' trigger and the lifecycle strip from events alone. Any item with no table, two writers, or a rebuild that needs an unlogged counter fails.",
+   "proposal": "Fit each into the existing model instead of adding nouns. Breaker becomes a Condition `lineage.breaker`, with subject = lineage id, opened and closed by a factory-self reconciler folding change, rollback and budget events; it closes on observation, so invariant 3 holds. Known-bad becomes a fail Verification on subject (target, artifact digest), and the ship loop checks it before deploying. Budget becomes charge events (`budget.charged{task, lineage, attempts, iu_usd, max_pct}`) emitted by the spawner and Witness, with remaining budget as a pure fold. Intent becomes declared plumbing (`intents`, owned by the factory API module, events intent.requested/applied/rejected/expired) and is added to the plumbing list in model.md §1 and proof.md:118. Define lineage id as a deterministic hash stamped on events, never a stored row."
+  },
+  {
+   "id": "dat-10",
+   "severity": "major",
+   "claim": "PLAN.md's checklist is a projection of fast-changing ledger state written into a git-tracked file, and nothing names who writes and commits it. Every task transition makes the file out of sync. On PR-required repos each tick would need a Change through the train, which is train load and commit churn. If it is written to the working tree uncommitted, it dirties live agents' checkouts and the 'generated files in sync' drift check flaps. On IuRoot it writes into dotfiles-private. This is the same second-git-writer problem that dat-2 removed from rv, reintroduced through a projector.",
+   "evidence": "model.md:56 ('`warden task done`; PLAN.md regenerated'); model.md:222 ('its checklist a marker block generated from the ledger'); model.md:236-242 (drift check: 'generated files in sync'); ADR-001:37-38; ADR-005:31 (the artifact module never commits, so it writes 0 commits on any branch, the principle this projector breaks); ADR-011:46-49 (a vault write is an effector with deliveries, but a git write is listed nowhere); model.md:19 (Change writer = ship loop only).",
+   "test": "Run a fleet wave of 10 tasks in a PR-required repo. Count commits, PRs and train slots consumed by PLAN.md regeneration, and the drift-check failures between transitions. Then repeat in an IuRoot repo and check `git status` in dotfiles-private.",
+   "proposal": "Never materialise ledger state in git. After the one-time projection, PLAN.md holds task ids only: static, written once through a normal Change by the projecting agent. Status renders in Argo (plan_progress) and `warden task list --plan <path>`. Files generated from manifests (AGENTS.md block, groups.json, pr-required-repos.json, Caddyfile blocks) are rendered by the author inside the same Change that edits project.yaml, and CI verifies re-render equality. So the writer is always the Change path, and no projector touches git."
+  },
+  {
+   "id": "dat-11",
+   "severity": "major",
+   "claim": "The autonomy SLO's denominator and numerator are underspecified in ways that move it by orders of magnitude. Denominator: 'a Task the owner did not originate' is judged by the actor on task.created. When the planner decomposes one owner brief into N tasks, it creates N items; wave close-out Left-behind tasks become items; and an Incident plus the fix Task spawned for it count twice. Numerator: 'an event … on an item' is ambiguous. Read as event.entity, owner decide, steer, stop and re-verify never count, because those events sit on dec_, agt_ and ver_. Read as correlation, it depends on the planner and spawner propagating correlation, and no invariant requires that.",
+   "evidence": "DEFINITIONS.md:35-37; ADR-014:15-17; model.md:18 (planner and wave close-out create Tasks); model.md:115-120 (entity vs correlation 'root incident or task id'); ADR-015:25-30 (the steer, decide, re-verify and stop events land on Agent, Decision and Verification entities); ADR-013:34 (owner.message from transcripts, with no entity or correlation specified).",
+   "test": "Build a synthetic week: one owner brief decomposed by the planner into 20 tasks; 5 incidents, each with a planner fix Task; the owner decides 1 incident Decision and steers 1 incident worker. Compute the KPI under both readings. Today it comes out at 30 items, with 0 or 2 touches depending on reading. The intended answer is 5 items with 2 touches, or the design must say otherwise.",
+   "proposal": "Define item by lineage root. Every event carries correlation = the root id (an Incident, or the originating Task), enforced by emit() as an invariant, and planner, spawner and decide inherit it. Item = a distinct correlation root that is an Incident, or a Task whose root task.created actor is not owner. Owner_touch = an owner-actor event whose correlation is that root, excluding *.created and pause. owner.message joins through the agent's correlation. Ship it as the named query in factory-kpi, with the synthetic week as its test."
+  },
+  {
+   "id": "dat-12",
+   "severity": "major",
+   "claim": "The rebuild guarantee pins only one manifest blob per event, but the evaluations it must reproduce read many inputs. A topology fold reads the service manifest, its host infra project's manifest and dependsOn. The ladder reads effective autonomy derived from which evidence producers exist. Spawn and engine choice read the forecast calibration, recalibrated weekly. Decider class reads the policy file. Correlation reads fingerprint rules and frozen windows. None of these is stamped, so 'rebuilt from the event log plus the manifests at each event's manifest_sha' cannot reproduce correlator groupings, ladder verdicts or budget burn once any of them changes.",
+   "evidence": "model.md:103-105 (invariant 8) and :121 (a single `manifest_sha TEXT`); model.md:173 (host is an infra project ref, so a second manifest); loops.md:75-91 (fingerprint rules, windows); proof.md:95-98 (effective autonomy computed by manifest check from evidence producers); ADR-008:56-71 (forecast and weekly $/1 % calibration drive the guard); ADR-012:62-65 (budgets in Max percent depend on that calibration); ADR-014:34-36 (policy file decides class).",
+   "test": "Rebuild the 10-17 incident grouping and one week of spawn engine choices after (a) editing the vps host manifest's containers list, (b) changing one fingerprint refinement rule, and (c) recalibrating $/1 %. Any grouping, engine choice or budget figure that differs from the original run means invariant 8 is false.",
+   "proposal": "Stop asking read models to re-evaluate policy. Every loop decision becomes an event carrying its outcome and reason: incident.member_added{rule, ancestor}, agent.spawn_decided{engine, guard_verdict, forecast}, budget.charged{max_pct, calibration}, change.ladder_evaluated{rungs, effective_autonomy}. Read models are then pure folds. Replace manifest_sha with `inputs`, a content-addressed id of the config bundle actually read (every manifest touched, policy file, fingerprint rules, calibration). It stays for audit and replay-diffing only, and invariant 8 is restated to match."
+  },
+  {
+   "id": "dat-13",
+   "severity": "major",
+   "claim": "Several of Argo's read models have no event source, which contradicts argo.md:34's claim that every read model is a projection of the log plus manifests. They are: host metrics (#12), 'last trace through the project' (#20), pending brew, OS and image updates and restart-needed flags (#22), engine routing and CLI or gateway versions (#23), scheduled job runs from jobrun/jobs-grade (#26), the Traffic page and B2's traffic, and the project page's git state. ADR-009 also still has the read API serve from herdr's live socket and usage.db, the exact dependencies dat-5's adapters were added to remove.",
+   "evidence": "argo.md:34-35, :51, :59, :61-62, :65, :68, :109, :120, :128; ADR-013:22-37 (no adapter for jobrun, updates, config or versions, traffic, Beszel metrics as opposed to alerts, OTel traces, or git state beyond merges); ADR-009:29-30 ('straight from the ledger (read-only), herdr's live state and usage.db'); ADR-013:43-45 (adapters exist 'never from usage.db, the herdr socket or transcripts directly').",
+   "test": "Take a ledger snapshot. Block the read API from every store except ledger.db and the manifests at their pinned versions, then run the Argo timed test (proof.md §5). Every question that renders an error or a stale term although its data was current at snapshot time is a read model that is not computable from the log.",
+   "proposal": "For each one, choose explicitly. Add an adapter (jobrun emits job.ran signals; a daily updates poll emits update.available; agw routing and CLI versions emit config.observed on change; traffic and host metrics as sampled signals at the declared cadence). Or declare a named 'live read' class: listed in argo.md, exempt from invariant 8, rendering only with as_of and never feeding a KPI or control input. Rewrite ADR-009:30 to read herdr and usage through the ledger only, and add `integrations.traffic` to factory/v1 for the pages that need it."
+  },
+  {
+   "id": "dat-14",
+   "severity": "major",
+   "claim": "Rollback and the deploy reconciler need data that neither the manifest nor the Deployment record carries. Rollback 'redeploys the last verified Deployment by image digest, compose revision or previous launchd bundle', but runtime[] declares only how to observe a sha, and a Deployment is keyed change + target with no immutable artifact reference. Deploys that have no Change (an image pulled by RollHook or WUD for an upstream image, a base-image rebuild) cannot be keyed at all. And with no started kind in the signal envelope, the `deploying` state and 'desired minus in-flight Deployments' cannot be derived, so the wrapper's 'record intent' becomes a second writer by necessity.",
+   "evidence": "proof.md:41 (rollback by image digest, compose revision, launchd bundle; known-bad marker); proof.md:77 (rollback-success SLO 100 %); model.md:20 ('keyed change + target'), :65-66 (pending → deploying), :172-179 (runtime: host, kind, containers, launchd, version, availability, deploy — no image or bundle ref); ADR-013:19 (kind: firing | recovered | deployed | failed | opened | closed | requested); loops.md:39-41 and waves.md:112 ('RollHook, WUD and make deploy record intent before stopping anything').",
+   "test": "From events and manifests alone, compute the exact command for rolling back weatherorb-api to its previous verified version, and for a vps container updated by WUD with no repo Change. Then replay a `make deploy` that stops containers for 90 s and check that no health.down Condition opens and the Deployment passes through deploying.",
+   "proposal": "Add runtime[].artifact {image: <registry/repo>, compose: <file>, launchd: <plist label>} to factory/v1. Deployment data then carries the immutable reference (digest, compose file sha, bundle sha), and its key becomes target + artifact digest, with change optional. Add `started` to the signal kinds. The wrapper, RollHook and WUD emit only started/deployed/failed signals, and the deploy reconciler alone turns them into Deployment transitions, including the in-flight window the health reconciler subtracts."
+  }
+ ]
+}
