@@ -36,7 +36,7 @@ invalidate. Each runs as an orchestrated `rd wave` tab from its repo's own plan.
 |-|-|-|-|
 | agw Wave 12 | agent-gateway `docs/waves/PLAN.md` | host read verbs in `agw-readonly`; host-access gap as a structured verdict field; `_common.md` policy lines | whatever runs investigate must read the host; the policy lines encode the fixed owner-decision rule |
 | warden Wave 8 | warden `docs/waves/PLAN.md` | brief tells the truth; recovered `slack_alert`/Kuma auto-close; co-firing fold (15 min window); terminal non-questions closed; features kept open on the ledger; drain `needs_decision` | level-triggered recovery, folding and "never drop a feature" are properties of every candidate design; the drain empties a queue that no redesign keeps |
-| Round 5 Wave 3 (cut) | dotfiles `docs/waves/PLAN.md` | herdr event recorder (raw JSONL, no consumers) + `rd reap` janitor | raw agent-lifecycle material is lost daily; reaping finished tabs is needed under any agent topology |
+| Round 5 Wave 3 (cut) | dotfiles `docs/factory/phase0/docs/waves/PLAN.md` (own plan: the gate needs a `done` predecessor and Round 5 W1–W2 are pending) | herdr event recorder (raw JSONL, no consumers) + `rd reap` janitor | raw agent-lifecycle material is lost daily; reaping finished tabs is needed under any agent topology |
 
 Deliberately **not** launched (an open decision here owns them): timeout default
 (durable await-decision design), improve loop job (Phase 3 improve), shadow promotion

@@ -178,22 +178,21 @@ co-firing fold, terminal non-questions, features kept, drain), each in its repo'
 - [ ] **Drain the queue:** re-run every `awaiting_owner` item through the new policy; only class a stays.
 - [ ] Exit: 72 h of live loop after deploy; escalation share of new items in that window recorded; `awaiting_owner` = genuine only.
 
-## Wave 3 — Execution layer: herdr as a clean, observable factory floor            <!-- status: active -->
+## Wave 3 — Execution layer: herdr as a clean, observable factory floor            <!-- status: pending -->
 Repo: dotfiles.
 
-**Factory Phase 0 scope (2026-10-22).** The factory design session (`docs/factory/BRIEF.md`
-§Phase 0, progress in `docs/factory/STATUS.md`) runs only the two pieces no open design
-decision can invalidate: the raw event record and the janitor. Deferred to the factory
-plan, do **not** do them here: POST fan-out to agw/warden/Argo, removing the polling loops,
-tab metadata, one launcher, overview truth, Obsidian (1706), basalt-ui Wave 42.
-**Shared checkout:** the factory session writes `docs/factory/**` in this checkout at the
-same time. Never stage, stash, clean, reset or commit those paths; stage with explicit
-paths only (`git add <file>…`, never `-A`/`.`); `git pull --rebase` before every push.
+**Factory Phase 0 (2026-10-22):** the event recorder and the janitor run as their own
+wave from `docs/factory/phase0/docs/waves/PLAN.md`. The rest is dispositioned in
+`docs/factory/waves.md`.
 
-- [ ] **Event recorder** `com.jkrumm.herdr-events` (LaunchAgent, mini): subscribe to herdr `events.subscribe` for every event type `herdr api schema` offers (at least `pane.agent_status_changed`, `tab.closed`, `pane.exited`) and append each event, with a receive timestamp, to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, not a log: never rotated or truncated; no retention policy yet). Reconnect with backoff when the herdr server restarts; write a `recorder.started` / `recorder.gap` line so gaps are visible in the record. No consumers: no POST fan-out, polling loops stay. Listed in `docs/architecture.md`; `make doctor` grades it.
-- [ ] **Janitor `rd reap`** (+ `com.jkrumm.herdr-reap`, every 30 min): close a tab only when its agent is `done` or `idle` for longer than `REAP_IDLE_H` (start 12), its checkout is clean and pushed, and no `active` wave in that repo's plan owns it. Message (never close) dirty or unpushed ones and print them. Never touch a `working`/`blocked` agent, a mother/lead tab whose plan has an `active` wave, or a tab whose cwd is not a git repo (the `~/SourceRoot` design tabs). Kill finished `claude --bg` leftovers older than 24 h. `--dry-run` prints the plan; every live action is one line in `~/Library/Logs/herdr-reap.log`.
-- [ ] Clean today's backlog through `rd reap` (dry run reviewed first, then live), not by hand; report what stayed and why.
-- [ ] Exit: recorder live with ≥ 1 h of events (the 24 h log is measured by the factory session); one `rd reap --dry-run` and one live run in the log; `make check` green; `/review` on the diff; `make deploy` on the mini.
+- [ ] **Event daemon** `com.jkrumm.herdr-events`: `events.subscribe` → `~/Library/Logs/herdr-events.jsonl` + POST to agw (overview), warden (stuck/finished) and, after W6, Argo. `wave-watch.sh --events` reads it. Remove the polling loops it replaces. Listed in `architecture.md`.
+- [ ] **Tab metadata:** every spawn (`rd wave|fan|work`, warden, Hermes) sets role, lane, origin (owner / warden item / Hermes), plan path and created time via `workspace.report_metadata` or the label; the overview groups by it.
+- [ ] **Janitor `rd reap`**, every 30 min: close idle tabs that are clean, pushed and older than N h with no `active` plan wave; message (not close) dirty or unpushed ones and list them in the overview; kill `claude --bg` leftovers. Mother/lead tabs close when their plan is `done`. Kuma WARN on finished-but-open > 24 h.
+- [ ] **One launcher:** `rd` is the only spawner. Hermes' herdr skill calls `rd wave|work`; `remote-dev.sh` reads models from `agw routing`, no ids in the script. Ensure every repo with a runtime has a workspace (`rd repos --ensure`), groups re-applied.
+- [ ] **Overview truth:** show herdr vs claude-side state disagreements explicitly; LLM recommendation pass on a schedule; MacBook snapshot (`machine: iumac`) pushed through the same producer.
+- [ ] Settle Obsidian on the mini (warden 1706): pick by the documented framework (`make obsidian-autostart` + watchdog vs KeepAlive), update AGENTS.md accordingly.
+- [ ] Clean today's backlog: close the finished-but-open tabs listed in *Established facts* (clean + pushed only; report others), resume or close basalt-ui Wave 42 via its mother.
+- [ ] Exit: event daemon live with a 24 h log; zero finished-but-open tabs > 24 h; `make check` green.
 
 ## Wave 4 — Implementation moves into herdr            <!-- status: blocked: owner engine decision -->
 Repos: warden, agent-gateway, dotfiles. Needs W2, W3.
