@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 568" width="900" height="568" role="img" aria-labelledby="rework-share-for-the-top-12-repos-with-a-t rework-share-for-the-top-12-repos-with-a-d">
 <title id="rework-share-for-the-top-12-repos-with-a-t">Rework share for the top 12 repos with at least 25 commits</title>
-<desc id="rework-share-for-the-top-12-repos-with-a-d">Horizontal bars of rework share (commits that rework recent work, within 7 days) over a 90-day window: argo 51.8 % of 1140 commits; research-gateway 39.4 % of 269 commits; audio-gateway 36.6 % of 82 commits; agent-gateway 34.9 % of 258 commits; homelab-private 34.6 % of 107 commits; basalt-ui 30.3 % of 1884 commits; rb 29.6 % of 125 commits; warden 28.6 % of 528 commits; tinycast-extensions 28.0 % of 25 commits; epos.student-enrolment 27.9 % of 140 commits; homelab 27.7 % of 94 commits; vps 25.7 % of 179 commits.</desc>
+<desc id="rework-share-for-the-top-12-repos-with-a-d">Horizontal bars of rework share (commits that rework recent work, within 7 days) over a 90-day window: argo 51.8 % of 1140 commits; research-gateway 39.4 % of 269 commits; audio-gateway 36.6 % of 82 commits; agent-gateway 34.9 % of 258 commits; homelab-private 34.6 % of 107 commits; basalt-ui 30.3 % of 1884 commits; rb 29.6 % of 125 commits; warden 28.6 % of 528 commits; tinycast-extensions 28.0 % of 25 commits; an IuRoot repo 27.9 % of 140 commits; homelab 27.7 % of 94 commits; vps 25.7 % of 179 commits.</desc>
 <style>
 :root{--bg:#f2f2f5;--t1:#18181b;--t2:#4c4c55;--tm:#62626b;--grid:#dcdce2;--axis:#b0b0ba;
 --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100}
@@ -63,8 +63,8 @@ text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--t1)}
 <text x="210.0" y="362.0" class="lbl" text-anchor="end" >tinycast-extensions</text>
 <g><title>tinycast-extensions: rework share 28.0 % of 25 commits</title><path d="M220.0 348.0H482.0a4.0 4.0 0 0 1 4.0 4.0V364.0a4.0 4.0 0 0 1 -4.0 4.0H220.0Z" class="f1"/></g>
 <text x="494.0" y="362.0" class="val" text-anchor="start" >28.0 %  ·  25 commits</text>
-<text x="210.0" y="392.0" class="lbl" text-anchor="end" >epos.student-enrolment</text>
-<g><title>epos.student-enrolment: rework share 27.9 % of 140 commits</title><path d="M220.0 378.0H480.7a4.0 4.0 0 0 1 4.0 4.0V394.0a4.0 4.0 0 0 1 -4.0 4.0H220.0Z" class="f1"/></g>
+<text x="210.0" y="392.0" class="lbl" text-anchor="end" >an IuRoot repo</text>
+<g><title>an IuRoot repo: rework share 27.9 % of 140 commits</title><path d="M220.0 378.0H480.7a4.0 4.0 0 0 1 4.0 4.0V394.0a4.0 4.0 0 0 1 -4.0 4.0H220.0Z" class="f1"/></g>
 <text x="492.7" y="392.0" class="val" text-anchor="start" >27.9 %  ·  140 commits</text>
 <text x="210.0" y="422.0" class="lbl" text-anchor="end" >homelab</text>
 <g><title>homelab: rework share 27.7 % of 94 commits</title><path d="M220.0 408.0H478.8a4.0 4.0 0 0 1 4.0 4.0V424.0a4.0 4.0 0 0 1 -4.0 4.0H220.0Z" class="f1"/></g>

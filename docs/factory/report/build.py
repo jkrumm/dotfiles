@@ -99,7 +99,9 @@ class Renderer:
             if name not in self.missing_assets:
                 self.missing_assets.append(name)
             return f'<div class="missing">Missing asset: report/assets/{esc(name)}.svg</div>'
-        return f'<figure class="asset">{svg}</figure>'
+        vb = re.search(r'viewBox="[-\d.]+[ ,]+[-\d.]+[ ,]+([\d.]+)', svg)
+        width = f' style="--vbw:{float(vb.group(1)):.0f}px"' if vb else ""
+        return f'<figure class="asset"{width}>{svg}</figure>'
 
     def code_html(self, raw, linkify):
         inner = f"<code>{mark_placeholders(esc(raw))}</code>"
@@ -262,6 +264,12 @@ class Renderer:
         return "\n".join(out)
 
     def heading(self, level, text, top):
+        status = None
+        m = re.search(r"\s*<!--\s*status:\s*([\w-]+)\s*-->\s*$", text)
+        if m:
+            status, text = m.group(1), text[: m.start()]
+        text = re.sub(r"\s*<!--.*?-->", "", text).strip()
+        chip = f'<span class="chip">{esc(status)}</span>' if status else ""
         if top and level == 1 and self.title is None:
             self.title = text
             return f'<h1 id="{self.sec}" class="sec-title">%%BADGE%%{self.inline(text)}</h1>'
@@ -270,7 +278,7 @@ class Renderer:
         hid = self.heading_id(text)
         if level == 2:
             self.h2.append((hid, text))
-        return f'<h{level} id="{hid}">{self.inline(text)}<a class="anchor" href="#{hid}" aria-label="Link to this heading">#</a></h{level}>'
+        return f'<h{level} id="{hid}">{self.inline(text)}{chip}<a class="anchor" href="#{hid}" aria-label="Link to this heading">#</a></h{level}>'
 
     def split_row(self, row):
         row = row.strip()
@@ -410,6 +418,9 @@ th{background:var(--surface);position:sticky;top:0}
 tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface) 55%,transparent)}
 figure.asset{margin:14px 0;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow-x:auto}
 figure.asset svg{max-width:100%;height:auto;display:block;margin:0 auto}
+:not(pre)>code{overflow-wrap:anywhere}
+.chip{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:8px;vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
+@media (max-width:600px){figure.asset svg{max-width:none;width:var(--vbw,760px)}}
 mark.ph{background:var(--amber-bg);color:var(--amber-fg);border:1px solid var(--amber-bd);border-radius:3px;padding:0 3px;font-weight:600}
 mark.ph code{background:none;color:inherit}
 .missing{border:2px dashed var(--amber-bd);background:var(--amber-bg);color:var(--amber-fg);padding:10px 14px;border-radius:6px;margin:12px 0;font-weight:600}
@@ -521,7 +532,7 @@ def build():
 <header class="top">
 <div>
 <h1>Factory design — 2026-10-22</h1>
-<div class="meta">Generated <b>{now}</b> · dotfiles <b>{esc(git_sha())}</b> · <span class="ph-count">{ph_total} open placeholders ⟨…⟩</span></div>
+<div class="meta">Generated <b>{now}</b> · dotfiles <b>{esc(git_sha())}</b> · <span class="ph-count">{ph_total} open placeholders</span></div>
 <div class="meta">Comments go through <code>rv</code>.</div>
 </div>
 <button class="btn" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>

@@ -359,7 +359,7 @@ rect.c-bg-rect { fill: var(--bg); }
           <path data-composition-edge-from="relay" data-composition-edge-to="warden" data-composition-points="467.5,334;618.75,334" d="M 467.5 334 L 618.75 334" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <g>
           <rect x="500.725" y="314" width="84.8" height="16" rx="3" class="c-mask"/>
-          <text x="543.125" y="324" class="t-security" font-size="9" text-anchor="middle">16–28 min late</text>
+          <text x="543.125" y="324" class="t-security" font-size="9" text-anchor="middle">22–30 min late</text>
         </g>
         <text x="479.5" y="352" class="t-dim" font-size="7">Briefs say "since 21:22": poll time.</text>
         </g>
@@ -376,7 +376,7 @@ rect.c-bg-rect { fill: var(--bg); }
           <path data-composition-edge-from="kuma" data-composition-edge-to="ingest" data-composition-points="302.25,478;784,478" d="M 302.25 478 L 784 478" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <g>
           <rect x="466.925" y="458" width="152.4" height="16" rx="3" class="c-mask"/>
-          <text x="543.125" y="468" class="t-backend" font-size="9" text-anchor="middle">webhook · source time 20:49</text>
+          <text x="543.125" y="468" class="t-backend" font-size="9" text-anchor="middle">webhook · source time 20:52</text>
         </g>
         </g>
 
