@@ -1,0 +1,1555 @@
+{
+  "as_of": "2026-10-22T08:00:00Z",
+  "script": "drift.py",
+  "cause_class": "author-assigned: enforced (code or a tool runs the claim), prose (a doc or prompt asserts it), cross_repo (a contract two repos hold halves of), changed_on_purpose (the owner or the same round reversed it)",
+  "mechanism_tags": "author-assigned label for the pattern a claim illustrates; every other field is computed",
+  "repo_revs_at_as_of": {
+    "agent-gateway": "54506a9b0",
+    "argo": "a669e617e",
+    "audio-gateway": "7bfd0b726",
+    "basalt-expr-trial": "2b150b59a",
+    "basalt-expr-trial-v1": "dc7012677",
+    "basalt-ui": "cd266bdeb",
+    "basalt-ui-obsidian": "f2d9cc94d",
+    "brain": "f94edb0a3",
+    "dispatch-scratch": "5ca64237c",
+    "dotfiles": "0416d41fc",
+    "dotfiles-private": "54de881bf",
+    "email-gateway": "5953ccf11",
+    "free-planning-poker": "5e195f337",
+    "hermes-agent": "e45b366dd",
+    "homelab": "4948d9702",
+    "homelab-private": "f68bb719e",
+    "image-gateway": "3efdf8a8a",
+    "jkrumm.com": "f802e212c",
+    "king-smith-walkingpad-mac": "527434478",
+    "kobo-mods": "bfa20a973",
+    "linewatch": "8c975c82c",
+    "modelpick": "080a109cf",
+    "rb": "31e5b75ac",
+    "research-gateway": "be76f301b",
+    "rollhook": "17f5cc361",
+    "rollhook-action": "b7b236507",
+    "shutterflow": "70bd6040a",
+    "sy-serendipity": "185aea7dd",
+    "tinycast-extensions": "6d5bd6aaf",
+    "usage-tracker": "bbddd67ac",
+    "vps": "daa8e2c6e",
+    "warden": "fb8761f6d",
+    "weatherorb": "4428cbbbe"
+  },
+  "models": [
+    {
+      "id": "estate-2026-09",
+      "name": "Estate round 2 (warden is the control plane; three lanes; enforcement not prose)",
+      "lock": {
+        "repo": "brain",
+        "sha": "e7cde13",
+        "date": "2026-09-10T14:46:13Z",
+        "subject": "docs(engineering): Warden gets its own page, three others get \"superseded\" banners"
+      },
+      "plan": {
+        "repo": "dotfiles",
+        "sha": "9526827",
+        "date": "2026-09-10T13:19:53Z",
+        "subject": "docs(waves): plan for acting on the Round 2 estate findings"
+      },
+      "closed": {
+        "repo": "dotfiles",
+        "sha": "7ae6d38",
+        "date": "2026-09-11T02:45:15Z",
+        "subject": "docs(waves): Wave 8 done — the docs describe the estate that exists, the field-review handover is written; Wave 9 active"
+      },
+      "claims": [
+        {
+          "id": "estate.control-plane-one-owner",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "Warden is 'the control plane' (one owner of the noun)",
+          "asserted_in": [
+            "brain:wiki/engineering/warden-control-plane.md",
+            "dotfiles:docs/architecture.md warden row"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/architecture.md",
+              "docs/waves/PLAN.md"
+            ]
+          },
+          "mechanism": "supersession-without-propagation",
+          "holds_at_lock": true,
+          "lock_evidence": "architecture.md names warden the control plane (1 line(s)); the dotfiles plan names Argo (0 line(s))",
+          "flips": 1,
+          "claim_first_seen": "2026-08-31T20:53:21Z",
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "238fccf",
+            "date": "2026-10-21T11:03:02Z",
+            "subject": "docs(waves): round 5 plan — the dark factory (escalation cut, herdr as the only code lane, Argo as control plane)"
+          },
+          "days_to_drift": 40.85,
+          "days_from_lock": 40.85,
+          "contradiction_evidence": "architecture.md names warden the control plane (1 line(s)); the dotfiles plan names Argo (2 line(s))",
+          "holds_at_as_of": false,
+          "as_of_evidence": "architecture.md names warden the control plane (1 line(s)); the dotfiles plan names Argo (2 line(s))",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-21T11:03:02Z",
+              "from_sha": "238fccf",
+              "to": null,
+              "to_sha": null,
+              "days": 0.87,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 0.87,
+          "contradicted_in": {
+            "window": "round-5-2026-10",
+            "relation": "later_round"
+          }
+        },
+        {
+          "id": "estate.dispatch-lanes",
+          "cause_class": "changed_on_purpose",
+          "kind": "replay",
+          "text": "The delegation roster includes the agent-dispatch subprocess lane and the `rd bg` colleague lane",
+          "asserted_in": [
+            "brain:wiki/engineering/agent-estate-model.md delegation roster"
+          ],
+          "scope": {
+            "dotfiles": [
+              "scripts/agent-dispatch.sh",
+              "scripts/remote-dev.sh"
+            ]
+          },
+          "mechanism": "supersession-by-next-round",
+          "holds_at_lock": true,
+          "lock_evidence": "scripts/agent-dispatch.sh present = True; rd bg handler present = True",
+          "flips": 2,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "1d73c79",
+            "date": "2026-10-04T15:17:11Z",
+            "subject": "feat(agents): four lanes — drop agent-dispatch and rd bg, put rd/ask-human/warden on PATH, add check/deploy/verify/logs"
+          },
+          "days_to_drift": 24.02,
+          "days_from_lock": 24.02,
+          "contradiction_evidence": "scripts/agent-dispatch.sh present = False; rd bg handler present = False",
+          "holds_at_as_of": false,
+          "as_of_evidence": "scripts/agent-dispatch.sh present = False; rd bg handler present = False",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-04T15:17:11Z",
+              "from_sha": "1d73c79",
+              "to": null,
+              "to_sha": null,
+              "days": 17.7,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 17.7,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "later_round"
+          }
+        },
+        {
+          "id": "estate.self-modification-pinned",
+          "cause_class": "changed_on_purpose",
+          "kind": "replay",
+          "text": "The executor and the loop cannot implement on themselves: sideclaw and warden are pinned to investigate, un-overridable",
+          "asserted_in": [
+            "agent-gateway:server/lib/dispatch-policy.ts PINNED_RULES",
+            "agent-gateway:docs/dispatch-security.md"
+          ],
+          "scope": {
+            "agent-gateway": [
+              "server/lib/dispatch-policy.ts"
+            ]
+          },
+          "mechanism": "owner-override-of-a-code-invariant",
+          "holds_at_lock": true,
+          "lock_evidence": "dispatch-policy.ts keeps an un-overridable investigate pin on sideclaw/warden",
+          "flips": 1,
+          "claim_first_seen": "2026-09-09T11:45:21Z",
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "agent-gateway",
+            "sha": "673cb24",
+            "date": "2026-09-15T07:04:32Z",
+            "subject": "feat(dispatch): drop the diff size ceiling and the sideclaw/warden/dotfiles investigate pin"
+          },
+          "days_to_drift": 4.68,
+          "days_from_lock": 4.68,
+          "contradiction_evidence": "no PINNED_RULES: the loop's own repos are implement-reachable",
+          "holds_at_as_of": false,
+          "as_of_evidence": "no PINNED_RULES: the loop's own repos are implement-reachable",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-09-15T07:04:32Z",
+              "from_sha": "673cb24",
+              "to": null,
+              "to_sha": null,
+              "days": 37.04,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 37.04,
+          "contradicted_in": {
+            "window": null,
+            "relation": "between_rounds"
+          }
+        },
+        {
+          "id": "estate.hermes-no-read-path",
+          "cause_class": "changed_on_purpose",
+          "kind": "replay",
+          "text": "Hermes has no read path back into warden's ledger",
+          "asserted_in": [
+            "brain:wiki/engineering/warden-control-plane.md 'what is still partial'"
+          ],
+          "scope": {
+            "hermes-agent": [
+              "skills/warden/SKILL.md"
+            ]
+          },
+          "mechanism": "snapshot-of-a-transition",
+          "holds_at_lock": true,
+          "lock_evidence": "no skills/warden/SKILL.md in hermes-agent",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "hermes-agent",
+            "sha": "11bb095",
+            "date": "2026-09-10T22:42:23Z",
+            "subject": "docs(warden): Hermes is the door, Warden decides — `run` in claude-dispatch, a read-only `warden` skill, the briefing re"
+          },
+          "days_to_drift": 0.33,
+          "days_from_lock": 0.33,
+          "contradiction_evidence": "hermes-agent has skills/warden/SKILL.md (a read path into warden)",
+          "holds_at_as_of": false,
+          "as_of_evidence": "hermes-agent has skills/warden/SKILL.md (a read path into warden)",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-09-10T22:42:23Z",
+              "from_sha": "11bb095",
+              "to": null,
+              "to_sha": null,
+              "days": 41.39,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 41.39,
+          "contradicted_in": {
+            "window": "estate-2026-09",
+            "relation": "own_round"
+          }
+        },
+        {
+          "id": "estate.host-fixes-need-a-human",
+          "cause_class": "changed_on_purpose",
+          "kind": "introduced",
+          "text": "No autonomous host-level fix path: host actions go to needs_human on purpose",
+          "asserted_in": [
+            "warden:DESIGN.md §Boundaries",
+            "warden:docs/history/state-log.md §58"
+          ],
+          "scope": {
+            "warden": [
+              "scripts"
+            ]
+          },
+          "mechanism": "field-override-within-a-day",
+          "holds_at_lock": true,
+          "flips": null,
+          "lock_evidence": "",
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "first_contradiction": {
+            "repo": "warden",
+            "sha": "5641339",
+            "date": "2026-09-11T12:20:16Z",
+            "subject": "feat(triage): a fifth closed allowlist runs confident host fixes itself; the board is live; api on 7735 — §59"
+          },
+          "days_to_drift": 0.9,
+          "days_from_lock": 0.9,
+          "contradiction_evidence": "needle /HOST_VERB_ALLOWLIST/ first present",
+          "holds_at_as_of": false,
+          "as_of_evidence": "",
+          "days_held_to_as_of": null,
+          "days_false_to_as_of": 40.82,
+          "contradicted_in": {
+            "window": null,
+            "relation": "between_rounds"
+          }
+        },
+        {
+          "id": "estate.model-discipline-is-a-hook",
+          "cause_class": "enforced",
+          "kind": "replay",
+          "text": "Model discipline is enforced by a PreToolUse hook (hooks/model-discipline.ts), not prose",
+          "asserted_in": [
+            "brain:wiki/engineering/agent-estate-model.md 'Model discipline'"
+          ],
+          "scope": {
+            "dotfiles": [
+              "hooks/model-discipline.ts",
+              "hooks/model-discipline.test.ts",
+              "config/settings.template.json"
+            ]
+          },
+          "mechanism": "enforced-by-code",
+          "holds_at_lock": true,
+          "lock_evidence": "hook + test present = True; wired in settings template = True",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "hook + test present = True; wired in settings template = True",
+          "days_held_to_as_of": 41.72,
+          "false_intervals": [],
+          "days_false_to_as_of": null,
+          "contradicted_in": null
+        },
+        {
+          "id": "estate.wave-gate-is-mechanical",
+          "cause_class": "enforced",
+          "kind": "replay",
+          "text": "The /wave green gate is mechanical: scripts/wave-gate.py runs inside rd wave",
+          "asserted_in": [
+            "brain:wiki/engineering/agent-estate-model.md '/wave'"
+          ],
+          "scope": {
+            "dotfiles": [
+              "scripts/wave-gate.py",
+              "scripts/remote-dev.sh"
+            ]
+          },
+          "mechanism": "enforced-by-code",
+          "holds_at_lock": true,
+          "lock_evidence": "scripts/wave-gate.py present and invoked by rd wave = True",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-09-10T14:46:13Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "scripts/wave-gate.py present and invoked by rd wave = True",
+          "days_held_to_as_of": 41.72,
+          "false_intervals": [],
+          "days_false_to_as_of": null,
+          "contradicted_in": null
+        }
+      ]
+    },
+    {
+      "id": "agent-platform-2026-10",
+      "name": "Agent platform (one core, four lanes, one repo contract; roles with never-lists)",
+      "lock": {
+        "repo": "dotfiles",
+        "sha": "bc77d3f",
+        "date": "2026-10-02T13:01:12Z",
+        "subject": "docs(waves): plan the agent-platform simplification"
+      },
+      "plan": {
+        "repo": "dotfiles",
+        "sha": "bc77d3f",
+        "date": "2026-10-02T13:01:12Z",
+        "subject": "docs(waves): plan the agent-platform simplification"
+      },
+      "closed": {
+        "repo": "warden",
+        "sha": "3c13d8d",
+        "date": "2026-10-05T22:00:33Z",
+        "subject": "docs(waves): wave 7 close-out — failed work re-driven"
+      },
+      "claims": [
+        {
+          "id": "platform.four-lanes",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "'Four lanes — the only ways to start agent work' lists four lanes",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md §Four lanes"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/agent-platform.md"
+            ]
+          },
+          "mechanism": "append-without-restructure",
+          "holds_at_lock": true,
+          "lock_evidence": "heading 'Four lanes', table rows = 4",
+          "flips": 1,
+          "claim_first_seen": "2026-10-02T13:01:12Z",
+          "born_false": false,
+          "t0": "2026-10-02T13:01:12Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "04fb7c3",
+            "date": "2026-10-10T09:41:36Z",
+            "subject": "docs(config): narrow dispatch lane, add fan-out lane, ask-rule rule, model ids out of prose"
+          },
+          "days_to_drift": 7.86,
+          "days_from_lock": 7.86,
+          "contradiction_evidence": "heading 'Four lanes', table rows = 5",
+          "holds_at_as_of": false,
+          "as_of_evidence": "heading 'Four lanes', table rows = 5",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-10T09:41:36Z",
+              "from_sha": "04fb7c3",
+              "to": null,
+              "to_sha": null,
+              "days": 11.93,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 11.93,
+          "contradicted_in": {
+            "window": "setup-round-4-2026-10",
+            "relation": "later_round"
+          }
+        },
+        {
+          "id": "platform.no-model-ids-in-prose",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "'Never a model id in prose' (model ids live only in agw routing)",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md §Sideclaw — the engine"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/agent-platform.md"
+            ]
+          },
+          "mechanism": "self-contradiction",
+          "holds_at_lock": false,
+          "lock_evidence": "rule 'never a model id in prose' + 3 distinct ids in the same page: DeepSeek-V4-Pro, deepseek-v4.1-flash, gpt-6.1-sol",
+          "flips": 2,
+          "claim_first_seen": "2026-10-02T13:01:12Z",
+          "born_false": true,
+          "never_held_before_lock": true,
+          "t0": "2026-10-02T13:01:12Z",
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "bc77d3f",
+            "date": "2026-10-02T13:01:12Z",
+            "subject": "docs(waves): plan the agent-platform simplification"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "rule 'never a model id in prose' + 3 distinct ids in the same page: DeepSeek-V4-Pro, deepseek-v4.1-flash, gpt-6.1-sol",
+          "false_since": {
+            "repo": "dotfiles",
+            "sha": "bc77d3f",
+            "date": "2026-10-02T13:01:12Z",
+            "subject": "docs(waves): plan the agent-platform simplification"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "rule 'never a model id in prose' + 3 distinct ids in the same page: DeepSeek-V4-Pro, Haiku 4.5, Haiku 5.5",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-02T13:01:12Z",
+              "from_sha": "bc77d3f",
+              "to": "2026-10-10T09:41:36Z",
+              "to_sha": "04fb7c3",
+              "days": 7.86,
+              "open": false
+            },
+            {
+              "from": "2026-10-15T09:33:59Z",
+              "from_sha": "2170e19",
+              "to": null,
+              "to_sha": null,
+              "days": 6.93,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 19.79,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 0.0
+          }
+        },
+        {
+          "id": "platform.herdr-never-unattended",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "herdr + rd 'never run unattended work (that is warden)'",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md §Roles"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/agent-platform.md"
+            ]
+          },
+          "mechanism": "self-contradiction",
+          "holds_at_lock": false,
+          "lock_evidence": "never-list '| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave' vs same page: '(each wave spawns the next) and **orchestrated** (the orches'",
+          "flips": 0,
+          "claim_first_seen": "2026-10-02T13:01:12Z",
+          "born_false": true,
+          "never_held_before_lock": true,
+          "t0": "2026-10-02T13:01:12Z",
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "bc77d3f",
+            "date": "2026-10-02T13:01:12Z",
+            "subject": "docs(waves): plan the agent-platform simplification"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "never-list '| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave' vs same page: '(each wave spawns the next) and **orchestrated** (the orches'",
+          "false_since": {
+            "repo": "dotfiles",
+            "sha": "bc77d3f",
+            "date": "2026-10-02T13:01:12Z",
+            "subject": "docs(waves): plan the agent-platform simplification"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "never-list '| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave' vs same page: '(each wave spawns the next) and **orchestrated** (the orches'",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-02T13:01:12Z",
+              "from_sha": "bc77d3f",
+              "to": null,
+              "to_sha": null,
+              "days": 19.79,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 19.79,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 0.0
+          }
+        },
+        {
+          "id": "platform.hermes-never-codes",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "Hermes never changes code (SOUL.md) while its toolsets grant file, terminal and code_execution",
+          "asserted_in": [
+            "hermes-agent:SOUL.md",
+            "dotfiles:docs/agent-platform.md §Roles (Hermes never lands PRs)"
+          ],
+          "scope": {
+            "hermes-agent": [
+              "SOUL.md",
+              "config.yaml"
+            ]
+          },
+          "mechanism": "prose-never-without-capability-limit",
+          "holds_at_lock": null,
+          "lock_evidence": "",
+          "flips": 0,
+          "claim_first_seen": "2026-10-04T15:15:10Z",
+          "born_false": true,
+          "t0": "2026-10-04T15:15:10Z",
+          "claim_introduced_after_lock": true,
+          "first_contradiction": {
+            "repo": "hermes-agent",
+            "sha": "d888f9c",
+            "date": "2026-10-04T15:15:10Z",
+            "subject": "feat(hermes): one quiet role — narrate, answer, route; skill creation off, #agents mention-only"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 2.09,
+          "contradiction_evidence": "SOUL: '- **Fix what you find** when the fix is a reversible ops ste'; platform_toolsets include code_execution, file, terminal",
+          "holds_at_as_of": false,
+          "as_of_evidence": "SOUL: '- **Fix what you find** when the fix is a reversible ops ste'; platform_toolsets include code_execution, file, terminal",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-04T15:15:10Z",
+              "from_sha": "d888f9c",
+              "to": null,
+              "to_sha": null,
+              "days": 17.7,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 17.7,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "own_round"
+          }
+        },
+        {
+          "id": "platform.no-model-ids-in-code",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "No model id literal in scripts/remote-dev.sh (ids live only in agw routing)",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md §Sideclaw — the engine"
+          ],
+          "scope": {
+            "dotfiles": [
+              "scripts/remote-dev.sh"
+            ]
+          },
+          "mechanism": "rule-without-lint",
+          "holds_at_lock": true,
+          "lock_evidence": "model id literals in scripts/remote-dev.sh: none",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-10-02T13:01:12Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "3f37840",
+            "date": "2026-10-04T15:31:53Z",
+            "subject": "feat(rd): --kind opencode, rd close, caller-tab-aware busy guard"
+          },
+          "days_to_drift": 2.1,
+          "days_from_lock": 2.1,
+          "contradiction_evidence": "model id literals in scripts/remote-dev.sh: iu/deepseek-v4.1-flash",
+          "holds_at_as_of": false,
+          "as_of_evidence": "model id literals in scripts/remote-dev.sh: iu/deepseek-v4.1-flash",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-04T15:31:53Z",
+              "from_sha": "3f37840",
+              "to": null,
+              "to_sha": null,
+              "days": 17.69,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 17.69,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "own_round"
+          }
+        },
+        {
+          "id": "platform.argo-verbs-mirror-warden",
+          "cause_class": "cross_repo",
+          "kind": "replay",
+          "text": "Argo's action-verb list equals warden's (two hand-mirrored copies, per Argo's own comment)",
+          "asserted_in": [
+            "argo:apps/api/src/routes/warden.ts",
+            "warden:scripts/loop/notify.py"
+          ],
+          "scope": {
+            "argo": [
+              "apps/api/src/routes/warden.ts"
+            ],
+            "warden": [
+              "scripts/loop/notify.py",
+              "scripts/triage.py"
+            ]
+          },
+          "mechanism": "hand-mirrored-contract",
+          "holds_at_lock": true,
+          "lock_evidence": "warden verbs minus argo verbs = []; argo minus warden = []",
+          "flips": 3,
+          "claim_first_seen": "2026-09-15T09:56:52Z",
+          "born_false": false,
+          "t0": "2026-10-02T13:01:12Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "argo",
+            "sha": "d3b72d9",
+            "date": "2026-10-05T20:05:19Z",
+            "subject": "feat(warden): retry action and failure class on failed items"
+          },
+          "days_to_drift": 3.29,
+          "days_from_lock": 3.29,
+          "contradiction_evidence": "warden verbs minus argo verbs = []; argo minus warden = ['retry']",
+          "holds_at_as_of": false,
+          "as_of_evidence": "warden verbs minus argo verbs = ['adopt']; argo minus warden = []",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-05T20:05:19Z",
+              "from_sha": "d3b72d9",
+              "to": "2026-10-05T21:00:34Z",
+              "to_sha": "736a262",
+              "days": 0.04,
+              "open": false
+            },
+            {
+              "from": "2026-10-11T11:48:01Z",
+              "from_sha": "512c8be",
+              "to": null,
+              "to_sha": null,
+              "days": 10.84,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 16.5,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "own_round"
+          }
+        },
+        {
+          "id": "platform.deleted-lanes-stay-deleted",
+          "cause_class": "enforced",
+          "kind": "replay",
+          "text": "agent-dispatch and `rd bg` are deleted and stay deleted",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md 'Deleted: agent-dispatch, rd bg'"
+          ],
+          "scope": {
+            "dotfiles": [
+              "scripts/agent-dispatch.sh",
+              "scripts/remote-dev.sh"
+            ]
+          },
+          "mechanism": "enforced-by-removal",
+          "measured_from": {
+            "basis": "the commit that landed the claim",
+            "repo": "dotfiles",
+            "sha": "1d73c79",
+            "date": "2026-10-04T15:17:11Z",
+            "subject": "feat(agents): four lanes — drop agent-dispatch and rd bg, put rd/ask-human/warden on PATH, add check/deploy/verify/logs"
+          },
+          "holds_at_lock": true,
+          "lock_evidence": "scripts/agent-dispatch.sh present = False; rd bg handler present = False",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-10-04T15:17:11Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "scripts/agent-dispatch.sh present = False; rd bg handler present = False",
+          "days_held_to_as_of": 17.7,
+          "false_intervals": [],
+          "days_false_to_as_of": null,
+          "contradicted_in": null
+        },
+        {
+          "id": "platform.repo-contract",
+          "cause_class": "enforced",
+          "kind": "snapshot",
+          "text": "Every repo with a runtime ships make check/deploy/verify/logs and the four AGENTS.md sections",
+          "asserted_in": [
+            "dotfiles:docs/agent-platform.md §Repo contract",
+            "dotfiles:docs/agents-md.md"
+          ],
+          "scope": {
+            "all repos": [
+              "AGENTS.md"
+            ]
+          },
+          "mechanism": "consumed-contract (warden runs make deploy/verify)",
+          "holds_at_lock": true,
+          "lock_evidence": "23 of 26 repos with a Makefile carry the four make targets and the four AGENTS.md sections",
+          "flips": null,
+          "born_false": false,
+          "t0": "2026-10-05T10:12:12Z",
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "24 of 26 repos with a Makefile carry the four make targets and the four AGENTS.md sections",
+          "days_held_to_as_of": 16.91,
+          "days_false_to_as_of": null,
+          "converged_after_declared_done": null,
+          "measured_at": {
+            "basis": "end of the model's own rollout",
+            "repo": "dotfiles",
+            "sha": "4e01db2",
+            "date": "2026-10-05T10:12:12Z",
+            "subject": "docs(waves): wave 5 — close-out"
+          },
+          "contradicted_in": null
+        }
+      ]
+    },
+    {
+      "id": "setup-round-4-2026-10",
+      "name": "Setup round 4 (agent-gateway rename, fan-out lane, one /wave skill, AGENTS.md only)",
+      "lock": {
+        "repo": "dotfiles",
+        "sha": "9f20473",
+        "date": "2026-10-10T10:01:06Z",
+        "subject": "docs(platform): diagram and status current, alias for the old brain name"
+      },
+      "plan": {
+        "repo": "dotfiles",
+        "sha": "318489d",
+        "date": "2026-10-09T13:05:54Z",
+        "subject": "docs(waves): park setup round 4 plan (agent-gateway rename, warden, fleet waves)"
+      },
+      "closed": {
+        "repo": "dotfiles",
+        "sha": "18f2eb5",
+        "date": "2026-10-10T13:30:32Z",
+        "subject": "docs(waves): wave 13 done — review verdicts name their escalation"
+      },
+      "claims": [
+        {
+          "id": "round4.wave-shapes-one-vocabulary",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "agent-platform.md and the /wave skill describe the same shapes (sequential, fan-out, fleet)",
+          "asserted_in": [
+            "dotfiles:skills/wave/SKILL.md shape table",
+            "dotfiles:docs/agent-platform.md §herdr"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/agent-platform.md",
+              "skills/wave/SKILL.md"
+            ]
+          },
+          "mechanism": "sibling-divergence",
+          "holds_at_lock": false,
+          "lock_evidence": "/wave skill shapes ['fan-out', 'fleet', 'sequential']; herdr section of agent-platform.md lacks ['fan-out', 'fleet', 'sequential']",
+          "flips": 0,
+          "claim_first_seen": "2026-10-10T09:09:58Z",
+          "born_false": true,
+          "never_held_before_lock": true,
+          "t0": "2026-10-10T10:01:06Z",
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "8b5ff37",
+            "date": "2026-10-10T09:09:58Z",
+            "subject": "feat(wave): shape picker, fleet roles, rd fan/merge, wave-numbered agents, one watcher"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "/wave skill shapes ['fan-out', 'fleet', 'sequential']; herdr section of agent-platform.md lacks ['fan-out', 'fleet', 'sequential']",
+          "false_since": {
+            "repo": "dotfiles",
+            "sha": "8b5ff37",
+            "date": "2026-10-10T09:09:58Z",
+            "subject": "feat(wave): shape picker, fleet roles, rd fan/merge, wave-numbered agents, one watcher"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "/wave skill shapes ['fan-out', 'fleet', 'sequential']; herdr section of agent-platform.md lacks ['fan-out', 'fleet', 'sequential']",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-10T09:09:58Z",
+              "from_sha": "8b5ff37",
+              "to": null,
+              "to_sha": null,
+              "days": 11.95,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 11.95,
+          "contradicted_in": {
+            "window": "setup-round-4-2026-10",
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 0.04
+          }
+        },
+        {
+          "id": "round4.model-ids-out-of-global-config",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "No model ids in the lean global files (global CLAUDE.md, global-reference.md): they live in agw routing",
+          "asserted_in": [
+            "dotfiles:docs/waves/archive/2026-10-platform-PLAN.md Wave 8"
+          ],
+          "scope": {
+            "dotfiles": [
+              "config/global.CLAUDE.md",
+              "docs/global-reference.md"
+            ]
+          },
+          "mechanism": "short-routing-file-held",
+          "holds_at_lock": true,
+          "lock_evidence": "model ids in neither lean global file",
+          "flips": 3,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-10-10T10:01:06Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "model ids in neither lean global file",
+          "days_held_to_as_of": 11.92,
+          "false_intervals": [],
+          "days_false_to_as_of": null,
+          "contradicted_in": null
+        },
+        {
+          "id": "round4.agents-md-only",
+          "cause_class": "enforced",
+          "kind": "snapshot",
+          "text": "AGENTS.md only: no CLAUDE.md in any repo (a CLAUDE.md suppresses AGENTS.md)",
+          "asserted_in": [
+            "dotfiles:docs/agents-md.md"
+          ],
+          "scope": {
+            "all repos": [
+              "CLAUDE.md"
+            ]
+          },
+          "mechanism": "tool-enforced",
+          "holds_at_lock": false,
+          "lock_evidence": "16 tracked CLAUDE.md outside fixtures: rb:CLAUDE.md, rollhook-action:CLAUDE.md, shutterflow:CLAUDE.md",
+          "flips": null,
+          "born_false": true,
+          "t0": "2026-10-10T11:31:34Z",
+          "first_contradiction": null,
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "16 tracked CLAUDE.md outside fixtures: rb:CLAUDE.md, rollhook-action:CLAUDE.md, shutterflow:CLAUDE.md",
+          "holds_at_as_of": true,
+          "as_of_evidence": "0 tracked CLAUDE.md outside fixtures",
+          "days_held_to_as_of": 11.85,
+          "days_false_to_as_of": null,
+          "converged_after_declared_done": {
+            "by": "2026-10-14T11:31:34Z",
+            "days_after_lock": 4,
+            "evidence": "0 tracked CLAUDE.md outside fixtures"
+          },
+          "measured_at": {
+            "basis": "end of the model's own rollout",
+            "repo": "dotfiles",
+            "sha": "2c13e1a",
+            "date": "2026-10-10T11:31:34Z",
+            "subject": "docs(waves): close out wave 11"
+          },
+          "contradicted_in": null
+        },
+        {
+          "id": "round4.no-ask-rules",
+          "cause_class": "enforced",
+          "kind": "snapshot",
+          "text": "No `ask` rule in any checked-in .claude/settings.json (it stalls unattended agents)",
+          "asserted_in": [
+            "dotfiles:config/global.CLAUDE.md §Config hierarchy"
+          ],
+          "scope": {
+            "all repos": [
+              ".claude/settings.json"
+            ]
+          },
+          "mechanism": "tool-enforced",
+          "holds_at_lock": true,
+          "lock_evidence": "0 repos with an `ask` rule in checked-in .claude/settings.json",
+          "flips": null,
+          "born_false": false,
+          "t0": "2026-10-10T10:01:06Z",
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "0 repos with an `ask` rule in checked-in .claude/settings.json",
+          "days_held_to_as_of": 11.92,
+          "days_false_to_as_of": null,
+          "converged_after_declared_done": null,
+          "contradicted_in": null
+        }
+      ]
+    },
+    {
+      "id": "opencode-v2-2026-10",
+      "name": "OpenCode v2 (agw-owned server; read-only permission profile; Haiku routes)",
+      "lock": {
+        "repo": "agent-gateway",
+        "sha": "87c7d94",
+        "date": "2026-10-14T11:38:15Z",
+        "subject": "docs(waves): plan the OpenCode v2 server migration, archive the worker-engine plan"
+      },
+      "plan": {
+        "repo": "agent-gateway",
+        "sha": "87c7d94",
+        "date": "2026-10-14T11:38:15Z",
+        "subject": "docs(waves): plan the OpenCode v2 server migration, archive the worker-engine plan"
+      },
+      "closed": {
+        "repo": "agent-gateway",
+        "sha": "deade43",
+        "date": "2026-10-15T17:14:47Z",
+        "subject": "docs(waves): Wave 11 done; plan archived to docs/waves/archive/2026-10-opencode-v2.md"
+      },
+      "claims": [
+        {
+          "id": "opencode.brief-promise-vs-allowlist",
+          "cause_class": "cross_repo",
+          "kind": "replay",
+          "text": "Warden's alert brief promises an investigate episode `make logs`; agw-readonly allows it",
+          "asserted_in": [
+            "warden:scripts/loop/work.py LIVE_STATE_INSTRUCTION",
+            "agent-gateway:server/mcp/opencode-server.ts"
+          ],
+          "scope": {
+            "warden": [
+              "scripts/loop/work.py"
+            ],
+            "agent-gateway": [
+              "server/mcp/opencode-server.ts"
+            ]
+          },
+          "mechanism": "cross-repo-promise",
+          "holds_at_lock": null,
+          "lock_evidence": "",
+          "flips": 0,
+          "claim_first_seen": "2026-10-14T13:05:24Z",
+          "born_false": true,
+          "t0": "2026-10-14T13:05:24Z",
+          "claim_introduced_after_lock": true,
+          "first_contradiction": {
+            "repo": "agent-gateway",
+            "sha": "af81c7a",
+            "date": "2026-10-14T13:05:24Z",
+            "subject": "feat(opencode): run episodes against an agw-owned OpenCode v2 server"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.06,
+          "contradiction_evidence": "warden brief promises `make logs`; agw-readonly allows only: cat, curl, git, head, jq, ls, rg, tail, wc",
+          "holds_at_as_of": false,
+          "as_of_evidence": "warden brief promises `make logs`; agw-readonly allows only: cat, curl, git, head, jq, ls, rg, tail, wc",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-14T13:05:24Z",
+              "from_sha": "af81c7a",
+              "to": null,
+              "to_sha": null,
+              "days": 7.79,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 7.79,
+          "contradicted_in": {
+            "window": "opencode-v2-2026-10",
+            "relation": "own_round"
+          }
+        }
+      ]
+    },
+    {
+      "id": "background-jobs-2026-10",
+      "name": "Background jobs (warden is THE loop; no investigate-only ceiling; direct webhooks)",
+      "lock": {
+        "repo": "dotfiles",
+        "sha": "afec081",
+        "date": "2026-10-16T09:51:35Z",
+        "subject": "docs: background jobs wave plan and owner decisions"
+      },
+      "plan": {
+        "repo": "dotfiles",
+        "sha": "afec081",
+        "date": "2026-10-16T09:51:35Z",
+        "subject": "docs: background jobs wave plan and owner decisions"
+      },
+      "closed": {
+        "repo": "dotfiles",
+        "sha": "8e293ec",
+        "date": "2026-10-16T23:48:05Z",
+        "subject": "docs(waves): Wave 18 close-out — plan archived, recurring review lives in warden's improve loop"
+      },
+      "claims": [
+        {
+          "id": "jobs.kuma-and-hyperdx-reach-warden-directly",
+          "cause_class": "enforced",
+          "kind": "replay",
+          "text": "Kuma and HyperDX reach warden by webhook; their #alerts lines are no longer polled",
+          "asserted_in": [
+            "dotfiles:docs/ops-signals.md §Owner decisions 3"
+          ],
+          "scope": {
+            "warden": [
+              "scripts/watchdog-poll.py",
+              "scripts/loop/intake.py"
+            ]
+          },
+          "mechanism": "enforced-by-code",
+          "measured_from": {
+            "basis": "the commit that landed the claim",
+            "repo": "dotfiles",
+            "sha": "8e293ec",
+            "date": "2026-10-16T23:48:05Z",
+            "subject": "docs(waves): Wave 18 close-out — plan archived, recurring review lives in warden's improve loop"
+          },
+          "holds_at_lock": true,
+          "lock_evidence": "#alerts webhook-fed lines skipped = True; Kuma snapshot poll still present = False",
+          "flips": 1,
+          "claim_first_seen": "2026-09-09T11:21:58Z",
+          "born_false": false,
+          "t0": "2026-10-16T23:48:05Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": null,
+          "days_to_drift": null,
+          "days_from_lock": null,
+          "contradiction_evidence": "",
+          "holds_at_as_of": true,
+          "as_of_evidence": "#alerts webhook-fed lines skipped = True; Kuma snapshot poll still present = False",
+          "days_held_to_as_of": 5.34,
+          "false_intervals": [],
+          "days_false_to_as_of": null,
+          "contradicted_in": null
+        },
+        {
+          "id": "jobs.no-investigate-ceiling",
+          "cause_class": "changed_on_purpose",
+          "kind": "replay",
+          "text": "'There is no investigate-only ceiling: warden implements from day one in every owned repo'",
+          "asserted_in": [
+            "dotfiles:docs/ops-signals.md §Owner decisions 2"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/ops-signals.md",
+              "docs/waves/PLAN.md"
+            ]
+          },
+          "mechanism": "supersession-without-propagation",
+          "holds_at_lock": true,
+          "lock_evidence": "ops-signals.md: '2. **There is no investigate-only ceiling.** warden implemen'; the dotfiles plan: ''",
+          "flips": 1,
+          "claim_first_seen": "2026-10-16T09:51:35Z",
+          "born_false": false,
+          "t0": "2026-10-16T09:51:35Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "238fccf",
+            "date": "2026-10-21T11:03:02Z",
+            "subject": "docs(waves): round 5 plan — the dark factory (escalation cut, herdr as the only code lane, Argo as control plane)"
+          },
+          "days_to_drift": 5.05,
+          "days_from_lock": 5.05,
+          "contradiction_evidence": "ops-signals.md: '2. **There is no investigate-only ceiling.** warden implemen'; the dotfiles plan: '- [ ] agent-gateway: default dispatch ceiling `investigate` for every '",
+          "holds_at_as_of": false,
+          "as_of_evidence": "ops-signals.md: '2. **There is no investigate-only ceiling.** warden implemen'; the dotfiles plan: '- [ ] agent-gateway: default dispatch ceiling `investigate` for every '",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-21T11:03:02Z",
+              "from_sha": "238fccf",
+              "to": null,
+              "to_sha": null,
+              "days": 0.87,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 0.87,
+          "contradicted_in": {
+            "window": "round-5-2026-10",
+            "relation": "later_round"
+          }
+        }
+      ]
+    },
+    {
+      "id": "round-5-2026-10",
+      "name": "Round 5 (the dark factory: layers with never-lists; herdr the only code lane)",
+      "lock": {
+        "repo": "dotfiles",
+        "sha": "238fccf",
+        "date": "2026-10-21T11:03:02Z",
+        "subject": "docs(waves): round 5 plan — the dark factory (escalation cut, herdr as the only code lane, Argo as control plane)"
+      },
+      "plan": {
+        "repo": "dotfiles",
+        "sha": "238fccf",
+        "date": "2026-10-21T11:03:02Z",
+        "subject": "docs(waves): round 5 plan — the dark factory (escalation cut, herdr as the only code lane, Argo as control plane)"
+      },
+      "closed": null,
+      "claims": [
+        {
+          "id": "round5.agw-never-writes-code",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "agent-gateway never writes feature or fix code; herdr is the only place code is written",
+          "asserted_in": [
+            "dotfiles:docs/waves/PLAN.md §The model — locked (L0, L1)"
+          ],
+          "scope": {
+            "agent-gateway": [
+              "AGENTS.md",
+              "CLAUDE.md"
+            ]
+          },
+          "mechanism": "aspiration-as-fact",
+          "holds_at_lock": false,
+          "lock_evidence": "agent-gateway AGENTS.md: every repo but the sensitive ones and brain is `implement`-reachable by default",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": true,
+          "never_held_before_lock": false,
+          "t0": "2026-10-21T11:03:02Z",
+          "first_contradiction": {
+            "repo": "agent-gateway",
+            "sha": "673cb24",
+            "date": "2026-09-15T07:04:32Z",
+            "subject": "feat(dispatch): drop the diff size ceiling and the sideclaw/warden/dotfiles investigate pin"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "agent-gateway AGENTS.md: every repo but the sensitive ones and brain is `implement`-reachable by default",
+          "false_since": {
+            "repo": "agent-gateway",
+            "sha": "673cb24",
+            "date": "2026-09-15T07:04:32Z",
+            "subject": "feat(dispatch): drop the diff size ceiling and the sideclaw/warden/dotfiles investigate pin"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "agent-gateway AGENTS.md: every repo but the sensitive ones and brain is `implement`-reachable by default",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-09-15T07:04:32Z",
+              "from_sha": "673cb24",
+              "to": null,
+              "to_sha": null,
+              "days": 37.04,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 37.04,
+          "contradicted_in": {
+            "window": null,
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 36.17
+          }
+        },
+        {
+          "id": "round5.hermes-never-codes",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "Hermes never implements, commits or patches repos",
+          "asserted_in": [
+            "dotfiles:docs/waves/PLAN.md §The model — locked (L3)"
+          ],
+          "scope": {
+            "hermes-agent": [
+              "SOUL.md",
+              "config.yaml"
+            ]
+          },
+          "mechanism": "prose-never-without-capability-limit",
+          "holds_at_lock": false,
+          "lock_evidence": "SOUL: '- **Fix what you find** when the fix is a reversible ops ste'; platform_toolsets include code_execution, file, terminal",
+          "flips": 0,
+          "claim_first_seen": "2026-10-04T15:15:10Z",
+          "born_false": true,
+          "never_held_before_lock": true,
+          "t0": "2026-10-21T11:03:02Z",
+          "first_contradiction": {
+            "repo": "hermes-agent",
+            "sha": "d888f9c",
+            "date": "2026-10-04T15:15:10Z",
+            "subject": "feat(hermes): one quiet role — narrate, answer, route; skill creation off, #agents mention-only"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "SOUL: '- **Fix what you find** when the fix is a reversible ops ste'; platform_toolsets include code_execution, file, terminal",
+          "false_since": {
+            "repo": "hermes-agent",
+            "sha": "d888f9c",
+            "date": "2026-10-04T15:15:10Z",
+            "subject": "feat(hermes): one quiet role — narrate, answer, route; skill creation off, #agents mention-only"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "SOUL: '- **Fix what you find** when the fix is a reversible ops ste'; platform_toolsets include code_execution, file, terminal",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-04T15:15:10Z",
+              "from_sha": "d888f9c",
+              "to": null,
+              "to_sha": null,
+              "days": 17.7,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 17.7,
+          "contradicted_in": {
+            "window": "agent-platform-2026-10",
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 16.82
+          }
+        },
+        {
+          "id": "round5.warden-never-writes-code",
+          "cause_class": "prose",
+          "kind": "replay",
+          "text": "Warden never writes code itself",
+          "asserted_in": [
+            "dotfiles:docs/waves/PLAN.md §The model — locked (L2)"
+          ],
+          "scope": {
+            "warden": [
+              "docs/improve/LOOP.md"
+            ]
+          },
+          "mechanism": "aspiration-as-fact",
+          "holds_at_lock": false,
+          "lock_evidence": "improve-loop brief: 'a git worktree of the affected repo, a minimal fix, make check, /review, fast-forward, make deploy'",
+          "flips": 0,
+          "claim_first_seen": "2026-10-06T09:28:49Z",
+          "born_false": true,
+          "never_held_before_lock": true,
+          "t0": "2026-10-21T11:03:02Z",
+          "first_contradiction": {
+            "repo": "warden",
+            "sha": "5ddb2c9",
+            "date": "2026-10-06T09:28:49Z",
+            "subject": "docs(improve): continuous improvement loop brief and journal"
+          },
+          "days_to_drift": 0.0,
+          "days_from_lock": 0.0,
+          "contradiction_evidence": "improve-loop brief: 'a git worktree of the affected repo, a minimal fix, make check, /review, fast-forward, make deploy'",
+          "false_since": {
+            "repo": "warden",
+            "sha": "5ddb2c9",
+            "date": "2026-10-06T09:28:49Z",
+            "subject": "docs(improve): continuous improvement loop brief and journal"
+          },
+          "holds_at_as_of": false,
+          "as_of_evidence": "improve-loop brief: 'a git worktree of the affected repo, a minimal fix, make check, /review, fast-forward, make deploy'",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-06T09:28:49Z",
+              "from_sha": "5ddb2c9",
+              "to": null,
+              "to_sha": null,
+              "days": 15.94,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 15.94,
+          "contradicted_in": {
+            "window": null,
+            "relation": "false_at_lock",
+            "false_for_days_before_lock": 15.07
+          }
+        },
+        {
+          "id": "round5.locked-binds-the-next-session",
+          "cause_class": "changed_on_purpose",
+          "kind": "replay",
+          "text": "The locked model is the baseline the next design session works from",
+          "asserted_in": [
+            "dotfiles:docs/waves/PLAN.md §The model — locked"
+          ],
+          "scope": {
+            "dotfiles": [
+              "docs/factory/BRIEF.md"
+            ]
+          },
+          "mechanism": "owner-restart",
+          "holds_at_lock": true,
+          "lock_evidence": "no factory brief yet",
+          "flips": 1,
+          "claim_first_seen": null,
+          "born_false": false,
+          "t0": "2026-10-21T11:03:02Z",
+          "claim_introduced_after_lock": false,
+          "first_contradiction": {
+            "repo": "dotfiles",
+            "sha": "83a8b7b",
+            "date": "2026-10-22T07:46:49Z",
+            "subject": "docs(factory): design brief, initial findings and cited prior-art research for the factory rebuild"
+          },
+          "days_to_drift": 0.86,
+          "days_from_lock": 0.86,
+          "contradiction_evidence": "MCP. Round 5's locked model is the baseline, not a constraint.",
+          "holds_at_as_of": false,
+          "as_of_evidence": "MCP. Round 5's locked model is the baseline, not a constraint.",
+          "days_held_to_as_of": null,
+          "false_intervals": [
+            {
+              "from": "2026-10-22T07:46:49Z",
+              "from_sha": "83a8b7b",
+              "to": null,
+              "to_sha": null,
+              "days": 0.01,
+              "open": true
+            }
+          ],
+          "days_false_to_as_of": 0.01,
+          "contradicted_in": {
+            "window": "round-5-2026-10",
+            "relation": "own_round"
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "claims": 26,
+    "born_false": 9,
+    "born_false_ids": [
+      "platform.no-model-ids-in-prose",
+      "platform.herdr-never-unattended",
+      "platform.hermes-never-codes",
+      "round4.wave-shapes-one-vocabulary",
+      "round4.agents-md-only",
+      "opencode.brief-promise-vs-allowlist",
+      "round5.agw-never-writes-code",
+      "round5.hermes-never-codes",
+      "round5.warden-never-writes-code"
+    ],
+    "contradicted_after_lock": 10,
+    "within_1_day": 10,
+    "within_7_days": 15,
+    "within_14_days": 16,
+    "median_days_from_lock_to_first_contradiction": 0.88,
+    "held_at_as_of": 8,
+    "held_ids": [
+      "estate.model-discipline-is-a-hook",
+      "estate.wave-gate-is-mechanical",
+      "platform.deleted-lanes-stay-deleted",
+      "platform.repo-contract",
+      "round4.model-ids-out-of-global-config",
+      "round4.agents-md-only",
+      "round4.no-ask-rules",
+      "jobs.kuma-and-hyperdx-reach-warden-directly"
+    ],
+    "false_at_as_of": 18,
+    "by_cause_class": {
+      "changed_on_purpose": {
+        "claims": 6,
+        "held_at_as_of": 0,
+        "false_at_as_of": 6,
+        "born_false": 0
+      },
+      "cross_repo": {
+        "claims": 2,
+        "held_at_as_of": 0,
+        "false_at_as_of": 2,
+        "born_false": 1
+      },
+      "enforced": {
+        "claims": 7,
+        "held_at_as_of": 7,
+        "false_at_as_of": 0,
+        "born_false": 1
+      },
+      "prose": {
+        "claims": 11,
+        "held_at_as_of": 1,
+        "false_at_as_of": 10,
+        "born_false": 7
+      }
+    },
+    "first_contradiction_authored_in": {
+      "between_rounds": 2,
+      "false_at_lock": 6,
+      "later_round": 4,
+      "own_round": 6
+    }
+  },
+  "lane_model_restatement": [
+    {
+      "instant": "estate-2026-09",
+      "date": "2026-09-10T14:46:13Z",
+      "files": 1,
+      "repos": 1,
+      "paths": null
+    },
+    {
+      "instant": "agent-platform-2026-10",
+      "date": "2026-10-02T13:01:12Z",
+      "files": 7,
+      "repos": 2,
+      "paths": null
+    },
+    {
+      "instant": "setup-round-4-2026-10",
+      "date": "2026-10-10T10:01:06Z",
+      "files": 20,
+      "repos": 7,
+      "paths": null
+    },
+    {
+      "instant": "opencode-v2-2026-10",
+      "date": "2026-10-14T11:38:15Z",
+      "files": 18,
+      "repos": 6,
+      "paths": null
+    },
+    {
+      "instant": "background-jobs-2026-10",
+      "date": "2026-10-16T09:51:35Z",
+      "files": 19,
+      "repos": 6,
+      "paths": null
+    },
+    {
+      "instant": "round-5-2026-10",
+      "date": "2026-10-21T11:03:02Z",
+      "files": 19,
+      "repos": 6,
+      "paths": null
+    },
+    {
+      "instant": "as_of",
+      "date": "2026-10-22T08:00:00Z",
+      "files": 19,
+      "repos": 6,
+      "paths": [
+        "agent-gateway:AGENTS.md",
+        "agent-gateway:docs/opencode-v2.md",
+        "brain:Areas/Engineering/daily-workflow.md",
+        "brain:Areas/Engineering/remote-dev.md",
+        "brain:wiki/engineering/agent-platform-history.md",
+        "brain:wiki/engineering/remote-dev-orchestration.md",
+        "dotfiles:AGENTS.md",
+        "dotfiles:config/global.CLAUDE.md",
+        "dotfiles:docs/agent-platform.md",
+        "dotfiles:docs/architecture.md",
+        "dotfiles:docs/remote-dev.md",
+        "dotfiles:scripts/remote-dev.sh",
+        "dotfiles:skills/remote-dev/SKILL.md",
+        "dotfiles:skills/wave/SKILL.md",
+        "hermes-agent:AGENTS.md",
+        "hermes-agent:skills/herdr/SKILL.md",
+        "jkrumm.com:public/diagrams/agent-platform.html",
+        "jkrumm.com:src/content/guide/agent-infrastructure.mdx",
+        "modelpick:docs/decisions/execution-modes.md"
+      ]
+    }
+  ]
+}
