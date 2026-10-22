@@ -44,6 +44,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.dont_write_bytecode = True  # evidence scripts write only their own outputs, never a __pycache__
 sys.path.insert(0, str(HERE.parent / "lib"))
 from redact import redact  # noqa: E402
 
@@ -167,11 +168,21 @@ def main() -> int:
     measured = dt.datetime.now(UTC)
     now_ts = measured.timestamp()
 
-    ws = herdr_json("workspace", "list")["workspaces"]
-    tabs: list[dict] = []
-    for w in ws:
-        tabs += herdr_json("tab", "list", "--workspace", w["workspace_id"])["tabs"]
-    agents = herdr_json("agent", "list")["agents"]
+    try:
+        ws = herdr_json("workspace", "list")["workspaces"]
+        tabs: list[dict] = []
+        for w in ws:
+            tabs += herdr_json("tab", "list", "--workspace", w["workspace_id"])["tabs"]
+        agents = herdr_json("agent", "list")["agents"]
+    except (RuntimeError, OSError, ValueError, KeyError) as e:
+        # Not on the dev host (or herdr is down): write an honest empty result instead of failing the pipeline.
+        out = {"script": "herdr_hygiene.py", "definition_keys": ["herdr_hygiene"], "as_of": AS_OF_STR,
+               "measured_at": measured.strftime("%Y-%m-%dT%H:%M:%SZ"), "error": redact(str(e)),
+               "reading": "herdr unreachable from this host; no measurement"}
+        (HERE / "herdr_hygiene.out.json").write_text(json.dumps(out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (HERE / "herdr_hygiene.out.md").write_text(f"# herdr_hygiene\n\nMeasured at `{out['measured_at']}`: herdr unreachable ({out['error']}). No numbers.\n", encoding="utf-8")
+        print(f"herdr_hygiene: herdr unreachable: {out['error']}", file=sys.stderr)
+        return 0
     code, rd_text = run("rd", "agents")
     rd_rows = parse_rd_agents(re.sub(r"\x1b\[[0-9;]*m", "", rd_text)) if code == 0 else []
     ccode, cj = run("claude", "agents", "--json")
@@ -266,8 +277,8 @@ def main() -> int:
         "workspaces": {
             "total": len(ws), "separators": sum(1 for w in ws if sep(w)), "repo_workspaces": len(repo_ws),
             "by_agent_status": dict(sorted(Counter(w["agent_status"] for w in repo_ws).items())),
-            "duplicate_labels": {k: v for k, v in sorted(label_counts.items()) if v > 1},
-            "by_group": {g: dict(sorted(c.items())) for g, c in sorted(by_group.items())},
+            "duplicate_labels": {redact(k): v for k, v in sorted(label_counts.items()) if v > 1},
+            "by_group": {redact(g): dict(sorted(c.items())) for g, c in sorted(by_group.items())},
         },
         "tabs": {
             "total": len(tab_rows), "panes": sum(w["pane_count"] for w in ws),

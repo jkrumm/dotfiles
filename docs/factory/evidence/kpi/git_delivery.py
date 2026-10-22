@@ -17,7 +17,8 @@ Definition keys (evidence/DEFINITIONS.md)
 Choices the definitions leave open (stated, not hidden)
     * Repos: every directory directly under ~/SourceRoot and ~/IuRoot whose `.git` is a
       directory. Linked worktrees (`.git` is a file) share their parent's history and are listed
-      as skipped, never counted twice.
+      as skipped, never counted twice. The set of checkouts is live: a repo cloned after AS_OF is
+      still analysed and flagged in `inventory.checkouts_created_after_as_of`.
     * History: the default branch only (origin/HEAD, else origin/main|master, else the local
       branch). The remote-tracking ref wins over the local branch because the local one can lag
       (the divergence is recorded per repo). No fetch is run; staleness is recorded as the tip
@@ -56,6 +57,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.dont_write_bytecode = True  # evidence scripts write only their own outputs, never a __pycache__
 sys.path.insert(0, str(HERE.parent / "lib"))
 from redact import redact  # noqa: E402
 
@@ -222,13 +224,23 @@ def annotate(hist: list[dict]) -> None:
 
 def analyse_repo(name: str, root: str, path: Path, ledger: dict[str, set[str]]) -> dict:
     ref, how, divergence = resolve_ref(path)
-    rec: dict = {"repo": name, "root": root, "ref": ref, "ref_found_by": how, **divergence}
+    rec: dict = {"repo": name, "root": root, "ref": ref, "ref_found_by": how}
     if not ref:
         rec["error"] = "no default branch ref"
         return rec
+    # `live` holds what is true of the checkout at run time and moves after AS_OF (so re-runs differ only here).
+    live: dict = dict(divergence)
     fh = path / ".git" / "FETCH_HEAD"
-    rec["last_fetch_date"] = day(int(fh.stat().st_mtime)) if fh.exists() else None
-    c, o = git(path, "log", "-1", "--format=%ct", ref)
+    live["last_fetch_date"] = day(int(fh.stat().st_mtime)) if fh.exists() else None
+    try:
+        born = int((path / ".git").stat().st_birthtime)
+        live["checkout_created_date"] = day(born)
+        live["checkout_created_after_as_of"] = born >= AS_OF_TS  # history is still valid for AS_OF; the clone is just newer
+    except (OSError, AttributeError):
+        live["checkout_created_date"] = None
+    rec["live"] = live
+    # Last commit on the ref at or before AS_OF: shows how stale an un-fetched remote-tracking ref was.
+    c, o = git(path, "log", "-1", "--format=%ct", f"--before={AS_OF_STR}", ref)
     rec["tip_date"] = day(int(o.strip())) if c == 0 and o.strip() else None
 
     hist = read_history(path, ref)
@@ -316,10 +328,10 @@ def analyse_repo(name: str, root: str, path: Path, ledger: dict[str, set[str]]) 
         "rewritten_committer_date": sum(1 for c in plain if abs(c["ct"] - c["at"]) > REWRITTEN_GAP_S),
         "committer_name_differs_from_author": sum(1 for c in plain if c["cn"] != c["an"]),
         "merge_commit_branch_names": dict(branch_hits),
-        "agent_named_branches_total": len(agent_names),
-        "agent_named_branches_merged_into_default": sum(1 for r in agent_names if r in merged_names),
-        "branches_total": len(names),
     }
+    live.update({"agent_named_branches_total": len(agent_names),
+                 "agent_named_branches_merged_into_default": sum(1 for r in agent_names if r in merged_names),
+                 "branches_total": len(names)})
     rec["_trailer_days"] = sorted({day(c["ct"]) for c in plain if c["trailer"]})
     rec["_plain"] = [(c["ct"], c["trailer"], c["cls"]) for c in plain]
     return rec
@@ -422,7 +434,7 @@ def pooled(recs: list[dict]) -> dict:
 
 
 def agent_share(recs: list[dict]) -> dict:
-    """Overall agent attribution. Only SourceRoot repos: the trailer exists there, IuRoot is counts-only elsewhere."""
+    """Overall agent attribution, pooled over SourceRoot repos only (IuRoot stays per-repo counts)."""
     src = [r for r in recs if r["root"] == "SourceRoot"]
     total = sum(r["commits"] for r in src)
     tr = sum(r["agent_signals"]["claude_session_trailer"] for r in src)
@@ -451,7 +463,7 @@ def agent_share(recs: list[dict]) -> dict:
         in_period = {"first_day": days[0], "last_day": days[-1], "commits_in_period": n_in,
                      "with_trailer": tr, "share": ratio(tr, n_in)}
     return {
-        "scope": "SourceRoot repos (the IuRoot repos carry no such trailer data in this output)",
+        "scope": "SourceRoot repos pooled (IuRoot trailer counts stay per repo in repos[].agent_signals)",
         "commits": total,
         "detected_certain": {
             "claude_session_trailer": tr, "claude_session_trailer_share_of_90d": ratio(tr, total),
@@ -461,7 +473,7 @@ def agent_share(recs: list[dict]) -> dict:
         "trailer_first_to_last_day": in_period,
         "trailer_saturated_weeks": {"weeks": saturated, "commits": sat_commits, "with_trailer": sat_trailer,
                                     "share": ratio(sat_trailer, sat_commits),
-                                    "rule": "weeks with >= 100 commits where >= 50% carry the trailer (the weeks the harness emitted it for every commit)"},
+                                    "rule": "weeks with >= 100 commits where >= 50% carry the trailer; its value is a claude.ai/code session URL, so a Claude Code session wrote the commit"},
         "trailer_peak_week": {"week": peak[0], "share": peak[1]} if peak else None,
         "trailer_weekly": series,
         "landed_through_a_branch": {
@@ -573,7 +585,8 @@ def write_md(out: dict, path: Path) -> None:
     inv = out["inventory"]
     L.append(f"Repos analysed: {inv['analysed']} ({inv['SourceRoot']} SourceRoot, {inv['IuRoot']} IuRoot). "
              f"Linked worktrees skipped as duplicates of their parent: {', '.join(f'{w['dir']} (of {w['worktree_of']})' for w in out['skipped_worktrees']) or 'none'}. "
-             f"Non-git directories: {', '.join(f'{x['root']}/{x['dir']}' for x in out['non_git_dirs']) or 'none'}.")
+             f"Non-git directories: {', '.join(f'{x['root']}/{x['dir']}' for x in out['non_git_dirs']) or 'none'}. "
+             f"Checkouts created after AS_OF (history still counted): {', '.join(inv['checkouts_created_after_as_of']) or 'none'}.")
     L.append("")
     L.append("## Notes")
     L.append("")
@@ -636,7 +649,8 @@ def main() -> int:
         "weekly_pooled": weekly_pooled,
         "inventory": {"analysed": len(ok), "SourceRoot": sum(1 for r in ok if r["root"] == "SourceRoot"),
                       "IuRoot": sum(1 for r in ok if r["root"] == "IuRoot"),
-                      "worktrees_skipped": len(worktrees), "non_git_dirs": len(non_git)},
+                      "worktrees_skipped": len(worktrees), "non_git_dirs": len(non_git),
+                      "checkouts_created_after_as_of": sorted(r["repo"] for r in ok if r["live"].get("checkout_created_after_as_of"))},
         "skipped_worktrees": worktrees,
         "non_git_dirs": non_git,
         "pooled": {"all": pooled(ok), "SourceRoot": pooled([r for r in ok if r["root"] == "SourceRoot"]),
@@ -647,14 +661,18 @@ def main() -> int:
         "repos": sorted(recs, key=lambda r: (r["root"], r["repo"])),
         "notes": [redact(x) for x in [
             "commits excludes merge commits (reported as merge_commits); the findings' fix-proxy numbers excluded them too.",
-            "ref is the remote-tracking default branch when present; local_ahead_of_remote / local_behind_remote show where the local branch differs "
-            "(a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date and last_fetch_date show how fresh each ref is.",
+            "ref is the remote-tracking default branch when present; live.local_ahead_of_remote / live.local_behind_remote show where the local branch differs "
+            "(a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date (last commit on the ref at or before AS_OF) shows how fresh each ref is. "
+            "Everything under `live` is true of the checkout at run time, not at AS_OF, and is the only part of this file that changes between re-runs.",
             "rework_share uses committer dates; history is read from AS_OF - 100 d so a fix in the first week of the window still sees its 7-day past. "
             "share_excl_bot_commits drops bot-authored commits both as the fix and as the 'other commit' (release bumps touch package.json/CHANGELOG).",
             "Agent attribution cannot come from identity: agents commit as the owner by design (agent-gateway dispatch-git.ts: 'there is no bot author here'). "
             "The Claude-Session trailer is the only direct marker and exists only for part of the window; detection methods are listed in agent_share.",
             "A merge-commit's branch name is parsed from the subject; branches deleted after a rebase-merge leave no trace in git, so branch-name detection undercounts.",
+            "Not done here: after W39 no marker survives in git. Joining the Claude Code transcripts (a `git commit` tool result per commit, matched on author time and subject) would close the gap "
+            "but means streaming ~15 GB of transcripts for the window, which is not a re-runnable stdlib step.",
             "IuRoot repos are reduced to counts: no subjects, paths, branch names, identities or SHAs are written for them.",
+            "The set of checkouts is live, not frozen: a repo cloned after AS_OF is still analysed (its history predates AS_OF) and is flagged checkout_created_after_as_of.",
         ]],
     }
     (HERE / "git_delivery.out.json").write_text(json.dumps(out, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")

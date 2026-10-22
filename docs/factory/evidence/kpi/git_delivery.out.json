@@ -15,7 +15,7 @@
       "rewritten_committer_date": 3534,
       "share": 0.4098
     },
-    "scope": "SourceRoot repos (the IuRoot repos carry no such trailer data in this output)",
+    "scope": "SourceRoot repos pooled (IuRoot trailer counts stay per repo in repos[].agent_signals)",
     "trailer_first_to_last_day": {
       "commits_in_period": 2585,
       "first_day": "2026-08-01",
@@ -29,7 +29,7 @@
     },
     "trailer_saturated_weeks": {
       "commits": 896,
-      "rule": "weeks with >= 100 commits where >= 50% carry the trailer (the weeks the harness emitted it for every commit)",
+      "rule": "weeks with >= 100 commits where >= 50% carry the trailer; its value is a claude.ai/code session URL, so a Claude Code session wrote the commit",
       "share": 0.8806,
       "weeks": [
         "2026-W36",
@@ -120,6 +120,9 @@
     "IuRoot": 20,
     "SourceRoot": 33,
     "analysed": 53,
+    "checkouts_created_after_as_of": [
+      "prometheus-epx"
+    ],
     "non_git_dirs": 6,
     "worktrees_skipped": 2
   },
@@ -151,11 +154,13 @@
   ],
   "notes": [
     "commits excludes merge commits (reported as merge_commits); the findings' fix-proxy numbers excluded them too.",
-    "ref is the remote-tracking default branch when present; local_ahead_of_remote / local_behind_remote show where the local branch differs (a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date and last_fetch_date show how fresh each ref is.",
+    "ref is the remote-tracking default branch when present; live.local_ahead_of_remote / live.local_behind_remote show where the local branch differs (a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date (last commit on the ref at or before AS_OF) shows how fresh each ref is. Everything under `live` is true of the checkout at run time, not at AS_OF, and is the only part of this file that changes between re-runs.",
     "rework_share uses committer dates; history is read from AS_OF - 100 d so a fix in the first week of the window still sees its 7-day past. share_excl_bot_commits drops bot-authored commits both as the fix and as the 'other commit' (release bumps touch package.json/CHANGELOG).",
     "Agent attribution cannot come from identity: agents commit as the owner by design (agent-gateway dispatch-git.ts: 'there is no bot author here'). The Claude-Session trailer is the only direct marker and exists only for part of the window; detection methods are listed in agent_share.",
     "A merge-commit's branch name is parsed from the subject; branches deleted after a rebase-merge leave no trace in git, so branch-name detection undercounts.",
-    "IuRoot repos are reduced to counts: no subjects, paths, branch names, identities or SHAs are written for them."
+    "Not done here: after W39 no marker survives in git. Joining the Claude Code transcripts (a `git commit` tool result per commit, matched on author time and subject) would close the gap but means streaming ~15 GB of transcripts for the window, which is not a re-runnable stdlib step.",
+    "IuRoot repos are reduced to counts: no subjects, paths, branch names, identities or SHAs are written for them.",
+    "The set of checkouts is live, not frozen: a repo cloned after AS_OF is still analysed (its history predates AS_OF) and is flagged checkout_created_after_as_of."
   ],
   "pooled": {
     "IuRoot": {
@@ -637,10 +642,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 35,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -665,9 +667,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 8,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 35,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-30",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 8
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/master",
@@ -698,10 +707,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 2,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -726,9 +732,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-09",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 2,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-14",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -801,10 +814,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 11,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {
@@ -831,9 +841,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-13",
-      "last_fetch_date": "2026-10-20",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 10,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 11,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-06-10",
+        "last_fetch_date": "2026-10-20",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 10
+      },
       "merge_commits": 1,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -874,10 +891,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 22,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 8,
         "merge_commit_branch_names": {},
@@ -902,9 +916,16 @@
         "share": 0.1343
       },
       "last_commit_in_window": "2026-10-13",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 22,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-14",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -1028,10 +1049,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 52,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -1056,9 +1074,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 33,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 52,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2023-01-26",
+        "last_fetch_date": "2026-07-26",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 33
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -1089,10 +1114,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 17,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -1117,9 +1139,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 17,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2023-01-26",
+        "last_fetch_date": "2026-07-26",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -1150,10 +1179,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 78,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 16,
         "merge_commit_branch_names": {
@@ -1180,9 +1206,16 @@
         "share": 0.3333
       },
       "last_commit_in_window": "2026-08-26",
-      "last_fetch_date": "2026-08-28",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 2339,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 78,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2024-03-07",
+        "last_fetch_date": "2026-08-28",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 2339
+      },
       "merge_commits": 21,
       "owner_share": 0.0,
       "ref": "origin/master",
@@ -1261,10 +1294,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 22,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {
@@ -1291,9 +1321,16 @@
         "share": 0.4
       },
       "last_commit_in_window": "2026-10-13",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 32,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 22,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2025-03-07",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 32
+      },
       "merge_commits": 12,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -1365,10 +1402,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 18,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -1393,9 +1427,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 18,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2024-05-06",
+        "last_fetch_date": "2026-07-26",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -1426,10 +1467,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 1,
         "bot_author": 0,
-        "branches_total": 190,
         "claude_session_trailer": 13,
         "committer_name_differs_from_author": 1,
         "merge_commit_branch_names": {},
@@ -1454,9 +1492,16 @@
         "share": 0.4643
       },
       "last_commit_in_window": "2026-10-21",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 21,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 1,
+        "branches_total": 190,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2023-01-26",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 21
+      },
       "merge_commits": 0,
       "owner_share": 0.6143,
       "ref": "origin/main",
@@ -1589,10 +1634,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 207,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 15,
         "merge_commit_branch_names": {
@@ -1619,9 +1661,16 @@
         "share": 0.3077
       },
       "last_commit_in_window": "2026-09-08",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 207,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2024-01-05",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 17,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -1715,10 +1764,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 1,
-        "branches_total": 38,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 4,
         "merge_commit_branch_names": {},
@@ -1743,9 +1789,16 @@
         "share": 0.2581
       },
       "last_commit_in_window": "2026-10-06",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 38,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2025-02-10",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -1837,10 +1890,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 52,
         "claude_session_trailer": 3,
         "committer_name_differs_from_author": 27,
         "merge_commit_branch_names": {},
@@ -1865,9 +1915,16 @@
         "share": 0.2857
       },
       "last_commit_in_window": "2026-09-21",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 2,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 52,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2024-05-24",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 2
+      },
       "merge_commits": 0,
       "owner_share": 0.0714,
       "ref": "origin/main",
@@ -1949,10 +2006,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 3,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -1977,9 +2031,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-09-09",
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 4,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 3,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-18",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 4
+      },
       "merge_commits": 0,
       "owner_share": 0.0,
       "ref": "origin/main",
@@ -2021,10 +2082,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 17,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2049,9 +2107,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-10-14",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 17,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2024-05-24",
+        "last_fetch_date": "2026-10-14",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -2082,10 +2147,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 25,
         "claude_session_trailer": 10,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2110,9 +2172,16 @@
         "share": 0.1848
       },
       "last_commit_in_window": "2026-10-20",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 24,
+        "checkout_created_after_as_of": true,
+        "checkout_created_date": "2026-10-22",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": 0.9674,
       "ref": "origin/main",
@@ -2216,10 +2285,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2244,9 +2310,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 1,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-17",
+        "last_fetch_date": "2026-07-26",
+        "local_ahead_of_remote": 1,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -2277,10 +2350,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 38,
         "claude_session_trailer": 10,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2305,9 +2375,16 @@
         "share": 0.1848
       },
       "last_commit_in_window": "2026-10-20",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 3,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 38,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2023-01-26",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 2
+      },
       "merge_commits": 0,
       "owner_share": 0.9674,
       "ref": "origin/main",
@@ -2411,10 +2488,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 24,
         "claude_session_trailer": 10,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2439,7 +2513,14 @@
         "share": 0.1538
       },
       "last_commit_in_window": "2026-10-15",
-      "last_fetch_date": "2026-10-15",
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 24,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-14",
+        "last_fetch_date": "2026-10-15"
+      },
       "merge_commits": 0,
       "owner_share": 0.9423,
       "ref": "origin/main",
@@ -2533,10 +2614,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 12,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -2561,9 +2639,16 @@
         "share": null
       },
       "last_commit_in_window": null,
-      "last_fetch_date": "2026-07-26",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 12,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-14",
+        "last_fetch_date": "2026-07-26",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "owner_share": null,
       "ref": "origin/main",
@@ -2594,10 +2679,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 1,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 9,
         "bot_author": 0,
-        "branches_total": 10,
         "claude_session_trailer": 40,
         "committer_name_differs_from_author": 32,
         "merge_commit_branch_names": {
@@ -2624,9 +2706,16 @@
         "share": 0.3721
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 9,
+        "branches_total": 10,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 1,
       "non_owner_identities": [
         "Hermes"
@@ -2762,10 +2851,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 11,
         "bot_author": 0,
-        "branches_total": 16,
         "claude_session_trailer": 41,
         "committer_name_differs_from_author": 762,
         "merge_commit_branch_names": {},
@@ -2790,9 +2876,16 @@
         "share": 0.5246
       },
       "last_commit_in_window": "2026-10-21",
-      "last_fetch_date": "2026-10-21",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 11,
+        "branches_total": 16,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-10",
+        "last_fetch_date": "2026-10-21",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -2944,10 +3037,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 39,
         "committer_name_differs_from_author": 8,
         "merge_commit_branch_names": {},
@@ -2972,9 +3062,16 @@
         "share": 0.3902
       },
       "last_commit_in_window": "2026-10-19",
-      "last_fetch_date": "2026-10-19",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-06-17",
+        "last_fetch_date": "2026-10-19",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3086,10 +3183,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 0,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -3114,7 +3208,14 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-18",
-      "last_fetch_date": "2026-10-19",
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 0,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-18",
+        "last_fetch_date": "2026-10-19"
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3158,10 +3259,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 0,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -3186,7 +3284,14 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-18",
-      "last_fetch_date": "2026-10-19",
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 0,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-18",
+        "last_fetch_date": "2026-10-19"
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3230,10 +3335,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 2,
-        "agent_named_branches_total": 12,
         "bot_author": 100,
-        "branches_total": 25,
         "claude_session_trailer": 108,
         "committer_name_differs_from_author": 1784,
         "merge_commit_branch_names": {},
@@ -3258,9 +3360,16 @@
         "share": 0.3073
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 2,
+        "agent_named_branches_total": 13,
+        "branches_total": 26,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [
         "semantic-release-bot"
@@ -3391,10 +3500,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 5,
         "committer_name_differs_from_author": 2,
         "merge_commit_branch_names": {},
@@ -3419,9 +3525,16 @@
         "share": 0.1094
       },
       "last_commit_in_window": "2026-10-15",
-      "last_fetch_date": "2026-10-16",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-08-08",
+        "last_fetch_date": "2026-10-16",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3518,10 +3631,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 2,
         "claude_session_trailer": 74,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -3546,9 +3656,16 @@
         "share": 0.0162
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 2,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-05",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3687,10 +3804,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 6,
         "merge_commit_branch_names": {},
@@ -3715,9 +3829,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-08-03",
-      "last_fetch_date": "2026-10-15",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-08-02",
+        "last_fetch_date": "2026-10-15",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3769,10 +3890,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 12,
         "bot_author": 0,
-        "branches_total": 13,
         "claude_session_trailer": 117,
         "committer_name_differs_from_author": 13,
         "merge_commit_branch_names": {},
@@ -3797,9 +3915,16 @@
         "share": 0.2384
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 2,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 12,
+        "branches_total": 13,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3938,10 +4063,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 23,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -3966,9 +4088,16 @@
         "share": 0.0455
       },
       "last_commit_in_window": "2026-10-20",
-      "last_fetch_date": "2026-10-19",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-15",
+        "last_fetch_date": "2026-10-19",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -3992,7 +4121,7 @@
         "share_of_fix_or_revert": 0.5
       },
       "root": "SourceRoot",
-      "tip_date": "2026-10-22",
+      "tip_date": "2026-10-20",
       "typed_share": 0.9432,
       "types": {
         "chore": 4,
@@ -4100,10 +4229,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 1,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -4128,9 +4254,16 @@
         "share": 0.1667
       },
       "last_commit_in_window": "2026-10-14",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-08",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -4220,10 +4353,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 5,
         "claude_session_trailer": 3,
         "committer_name_differs_from_author": 16,
         "merge_commit_branch_names": {},
@@ -4248,9 +4378,16 @@
         "share": 0.0625
       },
       "last_commit_in_window": "2026-10-11",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 5,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -4319,10 +4456,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 4,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 9,
         "bot_author": 0,
-        "branches_total": 12,
         "claude_session_trailer": 79,
         "committer_name_differs_from_author": 1,
         "merge_commit_branch_names": {},
@@ -4347,9 +4481,16 @@
         "share": 0.1928
       },
       "last_commit_in_window": "2026-10-21",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 9,
+        "branches_total": 12,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-04",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [
         "Hermes",
@@ -4492,10 +4633,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 6,
         "bot_author": 0,
-        "branches_total": 9,
         "claude_session_trailer": 14,
         "committer_name_differs_from_author": 12,
         "merge_commit_branch_names": {},
@@ -4520,9 +4658,16 @@
         "share": 0.3511
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 6,
+        "branches_total": 9,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -4661,10 +4806,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 2,
         "claude_session_trailer": 53,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -4689,9 +4831,16 @@
         "share": 0.3925
       },
       "last_commit_in_window": "2026-10-19",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 2,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -4816,10 +4965,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 9,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -4844,9 +4990,16 @@
         "share": 0.1556
       },
       "last_commit_in_window": "2026-10-13",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-16",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -4942,10 +5095,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -4970,9 +5120,16 @@
         "share": 0.087
       },
       "last_commit_in_window": "2026-10-15",
-      "last_fetch_date": "2026-10-15",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-05",
+        "last_fetch_date": "2026-10-15",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5056,10 +5213,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 2,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -5084,9 +5238,16 @@
         "share": 0.1111
       },
       "last_commit_in_window": "2026-10-10",
-      "last_fetch_date": "2026-10-11",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-17",
+        "last_fetch_date": "2026-10-11",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5159,10 +5320,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -5187,9 +5345,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-10",
-      "last_fetch_date": "2026-10-11",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-06-17",
+        "last_fetch_date": "2026-10-11",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5240,10 +5405,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 8,
         "claude_session_trailer": 14,
         "committer_name_differs_from_author": 2,
         "merge_commit_branch_names": {
@@ -5271,9 +5433,16 @@
         "share": 0.2411
       },
       "last_commit_in_window": "2026-10-15",
-      "last_fetch_date": "2026-10-16",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 8,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-30",
+        "last_fetch_date": "2026-10-16",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 3,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5384,10 +5553,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 2,
         "claude_session_trailer": 18,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -5412,9 +5578,16 @@
         "share": 0.1416
       },
       "last_commit_in_window": "2026-10-21",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 2,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-24",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5537,10 +5710,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 2,
         "claude_session_trailer": 6,
         "committer_name_differs_from_author": 8,
         "merge_commit_branch_names": {},
@@ -5565,9 +5735,16 @@
         "share": 0.392
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 2,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-07-16",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5679,10 +5856,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 17,
         "bot_author": 0,
-        "branches_total": 27,
         "claude_session_trailer": 20,
         "committer_name_differs_from_author": 60,
         "merge_commit_branch_names": {},
@@ -5707,9 +5881,16 @@
         "share": 0.4238
       },
       "last_commit_in_window": "2026-10-16",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 17,
+        "branches_total": 27,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-06-17",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5837,10 +6018,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 2,
         "bot_author": 0,
-        "branches_total": 13,
         "claude_session_trailer": 3,
         "committer_name_differs_from_author": 50,
         "merge_commit_branch_names": {},
@@ -5865,9 +6043,16 @@
         "share": 0.1667
       },
       "last_commit_in_window": "2026-10-15",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 2,
+        "branches_total": 13,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -5963,10 +6148,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 1,
         "bot_author": 0,
-        "branches_total": 4,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 9,
         "merge_commit_branch_names": {},
@@ -5991,9 +6173,16 @@
         "share": 0.0
       },
       "last_commit_in_window": "2026-10-13",
-      "last_fetch_date": "2026-10-13",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 1,
+        "branches_total": 4,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-13",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6060,10 +6249,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -6088,9 +6274,16 @@
         "share": 0.1002
       },
       "last_commit_in_window": "2026-10-18",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 274,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-14",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 274
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6183,10 +6376,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 3,
         "claude_session_trailer": 18,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {
@@ -6214,9 +6404,16 @@
         "share": 0.0714
       },
       "last_commit_in_window": "2026-10-14",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 3,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-09-10",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 2,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6294,10 +6491,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 4,
         "bot_author": 0,
-        "branches_total": 5,
         "claude_session_trailer": 0,
         "committer_name_differs_from_author": 0,
         "merge_commit_branch_names": {},
@@ -6322,9 +6516,16 @@
         "share": 0.28
       },
       "last_commit_in_window": "2026-10-16",
-      "last_fetch_date": "2026-10-16",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 4,
+        "branches_total": 5,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-10-16",
+        "last_fetch_date": "2026-10-16",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6384,10 +6585,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 1,
         "claude_session_trailer": 14,
         "committer_name_differs_from_author": 7,
         "merge_commit_branch_names": {},
@@ -6412,9 +6610,16 @@
         "share": 0.3958
       },
       "last_commit_in_window": "2026-10-19",
-      "last_fetch_date": "2026-10-19",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 1,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-05-21",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6533,10 +6738,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 0,
         "bot_author": 0,
-        "branches_total": 5,
         "claude_session_trailer": 37,
         "committer_name_differs_from_author": 4,
         "merge_commit_branch_names": {},
@@ -6561,9 +6763,16 @@
         "share": 0.2905
       },
       "last_commit_in_window": "2026-10-18",
-      "last_fetch_date": "2026-10-18",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 0,
+        "branches_total": 5,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-04-13",
+        "last_fetch_date": "2026-10-18",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 0,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6698,10 +6907,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 16,
         "bot_author": 0,
-        "branches_total": 17,
         "claude_session_trailer": 88,
         "committer_name_differs_from_author": 53,
         "merge_commit_branch_names": {
@@ -6728,9 +6934,16 @@
         "share": 0.286
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 16,
+        "branches_total": 17,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-09-09",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 1,
       "non_owner_identities": [],
       "owner_share": 1.0,
@@ -6820,10 +7033,7 @@
     {
       "agent_signals": {
         "agent_identity_author": 0,
-        "agent_named_branches_merged_into_default": 0,
-        "agent_named_branches_total": 35,
         "bot_author": 0,
-        "branches_total": 38,
         "claude_session_trailer": 48,
         "committer_name_differs_from_author": 99,
         "merge_commit_branch_names": {
@@ -6850,9 +7060,16 @@
         "share": 0.2409
       },
       "last_commit_in_window": "2026-10-22",
-      "last_fetch_date": "2026-10-22",
-      "local_ahead_of_remote": 0,
-      "local_behind_remote": 0,
+      "live": {
+        "agent_named_branches_merged_into_default": 0,
+        "agent_named_branches_total": 35,
+        "branches_total": 38,
+        "checkout_created_after_as_of": false,
+        "checkout_created_date": "2026-08-20",
+        "last_fetch_date": "2026-10-22",
+        "local_ahead_of_remote": 0,
+        "local_behind_remote": 0
+      },
       "merge_commits": 1,
       "non_owner_identities": [],
       "owner_share": 1.0,

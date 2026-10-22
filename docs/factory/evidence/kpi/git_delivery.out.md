@@ -80,7 +80,7 @@ Items in window (not duplicates): 556; merged by warden (`merged_sha`): 39; with
 
 ## Agent share of commits
 
-Scope: SourceRoot repos (the IuRoot repos carry no such trailer data in this output). Commits: 8624.
+Scope: SourceRoot repos pooled (IuRoot trailer counts stay per repo in repos[].agent_signals). Commits: 8624.
 
 |signal|commits|share of 90 d|
 |-|-|-|
@@ -133,7 +133,7 @@ The trailer appears from 2026-08-01 to 2026-09-23 only (874 of 2585 commits in t
 |homelab|SourceRoot|origin/master|94|7.31|94|0|0|0|35.1%|26|27.7%|1|14|19|2026-10-22|
 |prometheus-epx|IuRoot|origin/main|92|7.16|89|0|0|3|18.5%|15|16.3%|0|10|5|2026-10-20|
 |prometheus-scripts|IuRoot|origin/main|92|7.16|89|0|0|3|18.5%|15|16.3%|0|10|5|2026-10-20|
-|dotfiles-private|SourceRoot|origin/master|88|6.84|88|0|0|0|4.5%|2|2.3%|0|23|12|2026-10-22|
+|dotfiles-private|SourceRoot|origin/master|88|6.84|88|0|0|0|4.5%|2|2.3%|0|23|12|2026-10-20|
 |audio-gateway|SourceRoot|origin/master|82|6.38|82|0|0|0|39.0%|30|36.6%|0|39|14|2026-10-19|
 |epos-orchestrator-frontend|IuRoot|origin/main|67|5.21|0|0|0|67|13.4%|4|6.0%|0|0|47|2026-10-13|
 |basalt-ui-obsidian|SourceRoot|origin/master|64|4.98|64|0|0|0|10.9%|5|7.8%|0|5|3|2026-10-15|
@@ -169,13 +169,15 @@ The trailer appears from 2026-08-01 to 2026-09-23 only (874 of 2585 commits in t
 
 ## Repo inventory
 
-Repos analysed: 53 (33 SourceRoot, 20 IuRoot). Linked worktrees skipped as duplicates of their parent: homelab-w7 (of homelab), warden-w8 (of warden). Non-git directories: SourceRoot/_ext, SourceRoot/brain-sources, SourceRoot/sy-serendipity-compare, IuRoot/crm-bridge-retry-tool, IuRoot/epos.student-enrolment.struct-cache, IuRoot/worktrees.
+Repos analysed: 53 (33 SourceRoot, 20 IuRoot). Linked worktrees skipped as duplicates of their parent: homelab-w7 (of homelab), warden-w8 (of warden). Non-git directories: SourceRoot/_ext, SourceRoot/brain-sources, SourceRoot/sy-serendipity-compare, IuRoot/crm-bridge-retry-tool, IuRoot/epos.student-enrolment.struct-cache, IuRoot/worktrees. Checkouts created after AS_OF (history still counted): prometheus-epx.
 
 ## Notes
 
 - commits excludes merge commits (reported as merge_commits); the findings' fix-proxy numbers excluded them too.
-- ref is the remote-tracking default branch when present; local_ahead_of_remote / local_behind_remote show where the local branch differs (a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date and last_fetch_date show how fresh each ref is.
+- ref is the remote-tracking default branch when present; live.local_ahead_of_remote / live.local_behind_remote show where the local branch differs (a local branch behind the remote is why older counts, e.g. shutterflow, are lower). No fetch is run: tip_date (last commit on the ref at or before AS_OF) shows how fresh each ref is. Everything under `live` is true of the checkout at run time, not at AS_OF, and is the only part of this file that changes between re-runs.
 - rework_share uses committer dates; history is read from AS_OF - 100 d so a fix in the first week of the window still sees its 7-day past. share_excl_bot_commits drops bot-authored commits both as the fix and as the 'other commit' (release bumps touch package.json/CHANGELOG).
 - Agent attribution cannot come from identity: agents commit as the owner by design (agent-gateway dispatch-git.ts: 'there is no bot author here'). The Claude-Session trailer is the only direct marker and exists only for part of the window; detection methods are listed in agent_share.
 - A merge-commit's branch name is parsed from the subject; branches deleted after a rebase-merge leave no trace in git, so branch-name detection undercounts.
+- Not done here: after W39 no marker survives in git. Joining the Claude Code transcripts (a `git commit` tool result per commit, matched on author time and subject) would close the gap but means streaming ~15 GB of transcripts for the window, which is not a re-runnable stdlib step.
 - IuRoot repos are reduced to counts: no subjects, paths, branch names, identities or SHAs are written for them.
+- The set of checkouts is live, not frozen: a repo cloned after AS_OF is still analysed (its history predates AS_OF) and is flagged checkout_created_after_as_of.

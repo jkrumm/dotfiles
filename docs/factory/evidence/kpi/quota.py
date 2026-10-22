@@ -48,6 +48,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.dont_write_bytecode = True  # evidence scripts write only their own outputs, never a __pycache__
 sys.path.insert(0, str(HERE.parent / "lib"))
 from redact import redact  # noqa: E402
 
@@ -572,12 +573,31 @@ def main() -> int:
         })
     complete = [c for c in cycles if not c["partial"]]
 
+    s7_, f5_ = distribution(seven, cadence), distribution(five, cadence)
+    corroboration = max_activity(flat_segments)
+    for fs, c in zip(flat_segments, corroboration):
+        stalled = c["inside_vs_before"] is not None and c["inside_vs_before"] < 0.2
+        fs["reading"] = (f"readings did not move although a weekly reset falls inside the span, and Max usage in usage.db fell to {c['inside_vs_before']} of the prior week's rate "
+                         f"while {fs['heartbeat_lines_naming_failing_max_routes']} heartbeat lines name failing Max routes: Max was effectively unavailable for these days "
+                         "(a limit the heartbeat does not record, or a stale reading, or both); the 7-day value inside the span is not trustworthy"
+                         if stalled else "readings did not move for the whole span: either no Max usage at all or a stale cache")
     sched = [r for r in resets if r["scheduled"]]
     deltas = sorted({(r["residual_vs_wed_1600_min"]) for r in sched})
     out = {
         "script": "quota.py",
         "definition_keys": ["max_headroom"],
         "as_of": AS_OF_STR,
+        "headline": {
+            "seven_day_p50_p90_p99_max": [s7_["p50"], s7_["p90"], s7_["p99"], s7_["max"]],
+            "seven_day_share_of_samples_ge_90": s7_["share_ge"]["90"],
+            "days_with_peak_ge_90": [len(ge90_days), len(day_rows)],
+            "days_with_peak_ge_90_excluding_frozen_span": len(ge90_days_clean),
+            "last_at_100_end": last_100["end"] if last_100 else None,
+            "five_hour_p50_p90_p99_max": [f5_["p50"], f5_["p90"], f5_["p99"], f5_["max"]],
+            "five_hour_ever_at_100": False if (five_max is not None and five_max < 100) else True,
+            "weekly_reset": "Wednesday 16:00:00 UTC; plus unscheduled full resets on " + ", ".join(r["time"][:10] for r in resets if not r["scheduled"]),
+            "complete_weekly_cycles_peak_values": [c["peak_7d"] for c in complete],
+        },
         "best_history": {
             "choice": "~/Library/Logs/devhost-health.log (heartbeat, one `quota 5h N% · 7d N%` per run)",
             "why": "the only source that spans weeks; ~/.claude/logs fetch_usage has real timestamps but 3-day retention; "
@@ -626,8 +646,9 @@ def main() -> int:
         "resets": [{k: v for k, v in r.items() if k != "run"} | {"run": r["run"]} for r in resets],
         "reset_schedule": {
             "scheduled": "Wednesday 16:00:00 UTC (18:00 CEST / 17:00 CET)",
-            "evidence": "5 of 8 detected 7-day drops land within minutes of it on the reboot-only axis; live cache says "
-                        "the next reset is on the same weekday and time; fetch_usage saw the last one between 15:58 and 16:04 UTC",
+            "evidence": f"{len(sched)} of {len(resets)} detected 7-day drops land within {max((abs(x) for x in deltas), default=0):.0f} minutes of Wednesday 16:00 UTC on the "
+                        "reboot-only axis (residuals in `resets`); the live cache names the same weekday and time for the next reset; "
+                        "fetch_usage saw the last one between 15:58 and 16:04 UTC. The other drops are unscheduled full resets",
             "scheduled_resets_seen": len(sched), "unscheduled_resets_seen": len(resets) - len(sched),
             "live": live_cache(),
         },
@@ -638,7 +659,7 @@ def main() -> int:
             "median_peak_7d": statistics.median([c["peak_7d"] for c in complete]) if complete else None,
         },
         "suspect_flat_segments": flat_segments,
-        "suspect_flat_segments_max_usage_corroboration": max_activity(flat_segments),
+        "suspect_flat_segments_max_usage_corroboration": corroboration,
         "at_as_of": last_reading(runs_k, times_k),
         "daily": day_rows,
         "full_days": len(full_days),
@@ -668,7 +689,7 @@ def write_md(o: dict, path: Path) -> None:
     cov = o["coverage"]
     L += [f"AS_OF `{o['as_of']}`. Definition key `max_headroom`. Script `quota.py`.", "",
           "## Source and coverage", "",
-          f"Best history: {o['best_history']['choice']}. {o['best_history']['why']}.", "",
+          f"Best history: {o['best_history']['choice']}. {o['best_history']['why'][:1].upper() + o['best_history']['why'][1:]}.", "",
           f"Coverage: {cov['first_run']} to {cov['last_run']} ({cov['span_days']} days, {cov['runs']} runs, {cov['readings_7d']} usable readings, "
           f"{cov['unavailable_runs']} runs with `quota unavailable`).", ""]
     ta = o["time_axis"]
@@ -718,8 +739,8 @@ def write_md(o: dict, path: Path) -> None:
     if o["suspect_flat_segments"]:
         L += ["## Suspect flat span", ""]
         for f in o["suspect_flat_segments"]:
-            L.append(f"- {f['start']} to {f['end']} ({f['hours']} h, {f['runs']} runs): 5 h {f['five_hour_pct']} %, 7 d {f['seven_day_pct']} % unchanged; "
-                     f"{f['heartbeat_lines_naming_failing_max_routes']} heartbeat lines name failing Max routes. {f['reading']}.")
+            L.append(f"- {f['start']} to {f['end']} ({f['hours']} h, {f['runs']} runs): 5 h {f['five_hour_pct']} %, 7 d {f['seven_day_pct']} % unchanged. "
+                     f"{f['reading'][:1].upper() + f['reading'][1:]}.")
         L.append("")
         for c in o["suspect_flat_segments_max_usage_corroboration"]:
             L.append(f"- Max usage in usage.db over the same days: {c['mean_records_per_day_inside']} records/day inside vs "

@@ -4,7 +4,7 @@ AS_OF `2026-10-22T08:00:00Z`. Definition key `max_headroom`. Script `quota.py`.
 
 ## Source and coverage
 
-Best history: ~/Library/Logs/devhost-health.log (heartbeat, one `quota 5h N% · 7d N%` per run). the only source that spans weeks; ~/.claude/logs fetch_usage has real timestamps but 3-day retention; usage.db has no utilisation columns; agent-gateway logs carry request metadata only.
+Best history: ~/Library/Logs/devhost-health.log (heartbeat, one `quota 5h N% · 7d N%` per run). The only source that spans weeks; ~/.claude/logs fetch_usage has real timestamps but 3-day retention; usage.db has no utilisation columns; agent-gateway logs carry request metadata only.
 
 Coverage: 2026-09-08T17:50:01Z to 2026-10-22T07:59:21Z (43.6 days, 12441 runs, 12082 usable readings, 358 runs with `quota unavailable`).
 
@@ -38,7 +38,7 @@ The 7-day window last sat at 100 % from 2026-09-29T16:14:45Z to 2026-09-30T15:57
 
 ## Weekly resets
 
-Schedule: Wednesday 16:00:00 UTC (18:00 CEST / 17:00 CET). 5 of 8 detected 7-day drops land within minutes of it on the reboot-only axis; live cache says the next reset is on the same weekday and time; fetch_usage saw the last one between 15:58 and 16:04 UTC.
+Schedule: Wednesday 16:00:00 UTC (18:00 CEST / 17:00 CET). 6 of 8 detected 7-day drops land within 63 minutes of Wednesday 16:00 UTC on the reboot-only axis (residuals in `resets`); the live cache names the same weekday and time for the next reset; fetch_usage saw the last one between 15:58 and 16:04 UTC. The other drops are unscheduled full resets.
 
 Live cache at run time: next weekly reset 2026-10-28T16:00:00Z (Wed 16:00 UTC).
 
@@ -73,7 +73,7 @@ Complete cycles: 7, peaks [96, 55, 100, 79, 79, 98, 98], 4 peaked at >= 90 %, me
 
 ## Suspect flat span
 
-- 2026-09-16T09:31:49Z to 2026-09-20T06:33:06Z (93.0 h, 1111 runs): 5 h 0 %, 7 d 96 % unchanged; 739 heartbeat lines name failing Max routes. readings did not move for the whole span: either no Max usage at all or a stale cache; the weekly reset on the Wednesday inside the span is not visible, which favours a stale cache.
+- 2026-09-16T09:31:49Z to 2026-09-20T06:33:06Z (93.0 h, 1111 runs): 5 h 0 %, 7 d 96 % unchanged. Readings did not move although a weekly reset falls inside the span, and Max usage in usage.db fell to 0.0341 of the prior week's rate while 739 heartbeat lines name failing Max routes: Max was effectively unavailable for these days (a limit the heartbeat does not record, or a stale reading, or both); the 7-day value inside the span is not trustworthy.
 
 - Max usage in usage.db over the same days: 183.7 records/day inside vs 5379.1 in the 7 days before (ratio 0.0341): per day 54, 487, 10.
 

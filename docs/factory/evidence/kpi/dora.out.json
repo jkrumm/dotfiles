@@ -32,7 +32,7 @@
     },
     "items_without_repo_dropped": 117,
     "median_deployments_per_day_in_window": 12,
-    "reading": "The literal rule flags EVERY deploy of the preceding 24 h, so with 20+ deploys a day one revert flags 20+ deploys. sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it and is the better estimate of deploy-caused failures.",
+    "reading": "The literal rule flags EVERY deploy of the repo in the 24 h before an item or revert, so at the observed rate (median_deployments_per_day_in_window, pooled over repos) one signal flags a whole day of deploys. sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it and is the better estimate of deploy-caused failures; the definition in DEFINITIONS.md should say which one is meant.",
     "sensitivity_alert_items_only": {
       "deployments": 1190,
       "flagged": 96,
@@ -537,7 +537,7 @@
     "lower_bound_confirmed": {
       "deployments": 21,
       "rate": 0.0152,
-      "reading": "ships a warden merge that came from an alert item, or is the first success within 24 h after a failed deployment of its stream"
+      "reading": "ships a warden merge that came from an alert item (origin alert or an [alert] issue), or is the first success within 24 h after a failed deployment of its stream"
     },
     "upper_bound_plus_any_rework_commit": {
       "deployments": 658,
@@ -1207,7 +1207,7 @@
     },
     "deployment_frequency": {
       "confidence": "high for repos with an Actions deploy workflow, medium for relay-only repos, absent for the rest",
-      "coverage": "18 repos with records; 0.8444 of 90 d commits live in them",
+      "coverage": "18 repos with records; 84.4% of 90 d commits live in them",
       "headline": "1418 deployments in 90 d (110.3/week) across 18 repos; 63 of 91 calendar days had one",
       "source": "actions + rollhook + warden_op + poller, de-duplicated by (repo, commit)",
       "value_90d": {
@@ -1511,12 +1511,18 @@
     },
     "rejected": {
       "github_go_events": "GitHub issues/alerts that start warden work, not deployments",
-      "make_deploy_text_mentions": "free text in warden-cli.log and agent-gateway.jsonl (1 + 2 hits), not records"
+      "make_deploy_text_mentions": "free text in warden-cli.log (1 hit), agent-gateway.jsonl (2) and sideclaw.jsonl (1): a close note and review prose, not records"
     },
     "rollhook": {
       "cannot_see": "anything warden's Slack relay dropped or folded; capture ratio vs Actions in relay_capture",
       "covers": "VPS services behind RollHook",
       "deployments_90d": 419,
+      "notice_stream_collapse": {
+        "first_week_below_0_25_notices_per_run": "2026-W41",
+        "median_ratio_in_earlier_weeks": 1.18,
+        "ratio_that_week": 0.1556,
+        "weeks_considered": "weeks with >= 20 Actions success runs in repos that have both sources"
+      },
       "notices_with_unplaced_repeats": 16,
       "slack_update_not_a_deploy_notice": 42,
       "success_notices_90d": 539,

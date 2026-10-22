@@ -6,7 +6,7 @@ AS_OF `2026-10-22T08:00:00Z`, window 90 d. Definition keys `dora.*`. Script `dor
 
 |metric|value|source|coverage|confidence|
 |-|-|-|-|-|
-|deployment_frequency|1418 deployments in 90 d (110.3/week) across 18 repos; 63 of 91 calendar days had one|actions + rollhook + warden_op + poller, de-duplicated by (repo, commit)|18 repos with records; 0.8444 of 90 d commits live in them|high for repos with an Actions deploy workflow, medium for relay-only repos, absent for the rest|
+|deployment_frequency|1418 deployments in 90 d (110.3/week) across 18 repos; 63 of 91 calendar days had one|actions + rollhook + warden_op + poller, de-duplicated by (repo, commit)|18 repos with records; 84.4% of 90 d commits live in them|high for repos with an Actions deploy workflow, medium for relay-only repos, absent for the rest|
 |lead_time_for_changes|median 0.53 h, p90 16.02 h per commit (4915 commits, 1277 deployments from complete sources); oldest commit per deployment median 0.26 h|git author times joined to deployment shas|deployments whose sha resolves in the local default branch|medium: author time is when a commit was written, not pushed; batches of commits wait for one deploy|
 |change_failure_rate|literal rule 18.4% (219/1190); item charged to the latest deploy only 2.0%|warden triage items + git reverts vs deployments|deployments from 2026-08-28T06:00:56Z (first triage item) to 2026-10-21T08:00:00Z|low: alert items are mostly infrastructure noise, so this is an upper bound|
 |failed_deployment_recovery_time|44 failed deployments, 44 recovered (median 0.27 h, p90 51.63 h), 0 unrecovered; recovery = pipeline green again, not user-facing downtime|failure records of every source|failures any source recorded|low-medium: small n, recovery = next success of the same stream|
@@ -69,7 +69,7 @@ Window 2026-08-28T06:00:56Z to 2026-10-21T08:00:00Z. deployment flagged when a f
 |sensitivity_reverts_only|1190|165|13.9%|
 |sensitivity_item_charged_to_latest_deploy_only|1190|24|2.0%|
 
-The literal rule flags EVERY deploy of the preceding 24 h, so with 20+ deploys a day one revert flags 20+ deploys. sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it and is the better estimate of deploy-caused failures. Median deployments per day in the window: 12.
+The literal rule flags EVERY deploy of the repo in the 24 h before an item or revert, so at the observed rate (median_deployments_per_day_in_window, pooled over repos) one signal flags a whole day of deploys. sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it and is the better estimate of deploy-caused failures; the definition in DEFINITIONS.md should say which one is meant. Median deployments per day in the window: 12.
 
 ## Failed deployments and recovery
 
@@ -79,7 +79,7 @@ Failed deployments in 90 d: 44 {'actions': 28, 'rollhook': 9, 'warden_op': 7}; r
 
 |reading|deployments|rate|
 |-|-|-|
-|lower_bound_confirmed: ships a warden merge that came from an alert item, or is the first success within 24 h after a failed deployment of its stream|21 of 1385|1.5%|
+|lower_bound_confirmed: ships a warden merge that came from an alert item (origin alert or an [alert] issue), or is the first success within 24 h after a failed deployment of its stream|21 of 1385|1.5%|
 |best_estimate_plus_fix_only: adds deployments whose whole changeset is fix/revert commits|258 of 1385|18.6%|
 |upper_bound_plus_any_rework_commit: adds deployments containing any fix/revert commit that touched a file changed in the preceding 7 days (rework_share's commit flag)|658 of 1385|47.5%|
 

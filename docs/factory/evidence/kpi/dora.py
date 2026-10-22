@@ -363,7 +363,6 @@ def assemble(records: list[dict], repos: dict, graphs: dict, prefixes: dict) -> 
 def lead_times(deployments: list[dict], graphs: dict) -> tuple[dict, dict, list[dict]]:
     """Per-deployment changesets via DFS over parents; returns commit-level samples and per-deploy rows."""
     per_repo_samples: dict[str, list[tuple[float, float, bool]]] = defaultdict(list)
-    deploy_rows = []
     by_repo: dict[str, list[dict]] = defaultdict(list)
     for d in deployments:
         by_repo[d["repo"]].append(d)
@@ -568,22 +567,25 @@ def main() -> int:
         "items_without_repo_dropped": no_repo, "first_triage_item": iso(item_first) if item_first else None,
         "definition": "deployment flagged when a failure-signal warden item (origin alert, or [alert] GitHub issue) or a Revert commit on the same repo "
                       "appears within 24 h after it; alert items are mostly infrastructure signals, so this is an upper bound on deploy-caused failures",
-        "reading": "The literal rule flags EVERY deploy of the preceding 24 h, so with 20+ deploys a day one revert flags 20+ deploys. "
-                   "sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it and is the better estimate of deploy-caused failures.",
+        "reading": "The literal rule flags EVERY deploy of the repo in the 24 h before an item or revert, so at the observed rate (median_deployments_per_day_in_window, "
+                   "pooled over repos) one signal flags a whole day of deploys. sensitivity_item_charged_to_latest_deploy_only charges each item/revert to the deploy before it "
+                   "and is the better estimate of deploy-caused failures; the definition in DEFINITIONS.md should say which one is meant.",
         "median_deployments_per_day_in_window": statistics.median(Counter(dt.datetime.fromtimestamp(d["ts"], UTC).date() for d in cfr_deploys).values()) if cfr_deploys else None,
     }
 
     # ── deployment rework rate ──
     ledger_alert = set()
     for r, receipt in con.execute("SELECT o.repo, o.receipt_json FROM operations o JOIN triage_items t ON t.event_id = o.event_id "
-                                  "WHERE o.kind='merge' AND o.outcome='done' AND t.origin='alert'"):
+                                  "JOIN events e ON e.id = t.event_id WHERE o.kind='merge' AND o.outcome='done' "
+                                  "AND (t.origin='alert' OR (t.origin='github_issue' AND e.title LIKE '[alert]%'))"):
         try:
             sha = json.loads(receipt or "{}").get("mergeCommit")
         except json.JSONDecodeError:
             sha = None
         if sha:
             ledger_alert.add(sha)
-    for (sha,) in con.execute("SELECT merged_sha FROM triage_items WHERE merged_sha IS NOT NULL AND origin='alert'"):
+    for (sha,) in con.execute("SELECT t.merged_sha FROM triage_items t JOIN events e ON e.id = t.event_id WHERE t.merged_sha IS NOT NULL "
+                              "AND (t.origin='alert' OR (t.origin='github_issue' AND e.title LIKE '[alert]%'))"):
         ledger_alert.add(sha)
     hist_flags = {}
     for repo in {d["repo"] for d in dep90}:
@@ -613,7 +615,7 @@ def main() -> int:
     rework = {
         "deployments_measured": measured,
         "lower_bound_confirmed": {"deployments": confirmed, "rate": ratio(confirmed, measured),
-                                  "reading": "ships a warden merge that came from an alert item, or is the first success within 24 h after a failed deployment of its stream"},
+                                  "reading": "ships a warden merge that came from an alert item (origin alert or an [alert] issue), or is the first success within 24 h after a failed deployment of its stream"},
         "best_estimate_plus_fix_only": {"deployments": fix_only, "rate": ratio(fix_only, measured),
                                         "reading": "adds deployments whose whole changeset is fix/revert commits"},
         "upper_bound_plus_any_rework_commit": {"deployments": any_rework, "rate": ratio(any_rework, measured),
@@ -654,19 +656,25 @@ def main() -> int:
                 wk_rh[iso_week(r["ts"])] += 1
     weekly_capture = {w: {"actions_success_runs": wk_act[w], "rollhook_success_notices": wk_rh[w], "notices_per_run": ratio(wk_rh[w], wk_act[w])}
                       for w in sorted(set(wk_act) | set(wk_rh))}
+    busy = [(w, v) for w, v in weekly_capture.items() if v["actions_success_runs"] >= 20 and v["notices_per_run"] is not None]
+    collapse = next(((w, v["notices_per_run"]) for w, v in busy if v["notices_per_run"] < 0.25), None)
+    healthy = [v["notices_per_run"] for w, v in busy if collapse is None or w < collapse[0]]
+    notice_collapse = ({"first_week_below_0_25_notices_per_run": collapse[0], "ratio_that_week": collapse[1],
+                        "median_ratio_in_earlier_weeks": round(statistics.median(healthy), 2) if healthy else None,
+                        "weeks_considered": "weeks with >= 20 Actions success runs in repos that have both sources"} if collapse else None)
     rh_ok = sum(1 for r in rh if r["ok"] and in_win(r["ts"], 90))
     rh_weeks = Counter(iso_week(r["ts"]) for r in rh if r["ok"] and in_win(r["ts"], 90))
     sources = {
         "actions": {**act_info, "deployments_90d": by_src.get("actions", 0), "covers": "repos with a deploy workflow; push + completion time, sha, conclusion",
                     "cannot_see": "deploys not run by a workflow (make deploy on the mini, launchd), RollHook-side failures after a green workflow"},
-        "rollhook": {**rh_info, "success_notices_90d": rh_ok, "deployments_90d": by_src.get("rollhook", 0), "weekly_success_notices_90d": dict(sorted(rh_weeks.items())),
+        "rollhook": {**rh_info, "notice_stream_collapse": notice_collapse, "success_notices_90d": rh_ok, "deployments_90d": by_src.get("rollhook", 0), "weekly_success_notices_90d": dict(sorted(rh_weeks.items())),
                      "covers": "VPS services behind RollHook", "cannot_see": "anything warden's Slack relay dropped or folded; capture ratio vs Actions in relay_capture"},
         "warden_op": {"deployments_90d": by_src.get("warden_op", 0), "ops_total": sum(1 for r in ops), "covers": "deploys run by warden's verify lane since 2026-09-29",
                       "cannot_see": "every deploy the owner or a wave ran by hand"},
         "poller": {**poll_info, "deployments_90d": by_src.get("poller", 0), "covers": "research-gateway on the mini since 2026-09-23 (CI-gated)",
                    "cannot_see": "research-gateway deploys before the poller (RollHook notices cover them until 2026-09-26)"},
         "rejected": {"github_go_events": "GitHub issues/alerts that start warden work, not deployments",
-                     "make_deploy_text_mentions": "free text in warden-cli.log and agent-gateway.jsonl (1 + 2 hits), not records"},
+                     "make_deploy_text_mentions": "free text in warden-cli.log (1 hit), agent-gateway.jsonl (2) and sideclaw.jsonl (1): a close note and review prose, not records"},
     }
     cov = {
         "repos_with_deploy_records_90d": sorted(repo_src),
@@ -674,12 +682,12 @@ def main() -> int:
         "commit_share_in_repos_with_deploy_records": ratio(sum(commits90[r] for r in covered), sum(commits90.values())),
         "iuroot": "out of scope: deploys run through GitLab CI, which is not queried (counts-only rule)",
         "sources_per_repo_90d": {r: dict(sorted(c.items())) for r, c in sorted(repo_src.items())},
-        "service_to_repo_unmapped": {k.split(":", 1)[1]: v for k, v in rh_info.items() if k.startswith("unmapped:")},
+        "service_to_repo_unmapped": {redact(k.split(":", 1)[1]): v for k, v in rh_info.items() if k.startswith("unmapped:")},
     }
     metrics = {
         "deployment_frequency": {"value_90d": {"deployments": df["90d"]["deployments"], "per_week": df["90d"]["per_week"], "repos": df["90d"]["repos_with_deployments"]},
                                  "source": "actions + rollhook + warden_op + poller, de-duplicated by (repo, commit)",
-                                 "coverage": f"{len(covered)} repos with records; {cov['commit_share_in_repos_with_deploy_records']} of 90 d commits live in them",
+                                 "coverage": f"{len(covered)} repos with records; {pc(cov['commit_share_in_repos_with_deploy_records'])} of 90 d commits live in them",
                                  "confidence": "high for repos with an Actions deploy workflow, medium for relay-only repos, absent for the rest"},
         "lead_time_for_changes": {"value_90d": {"per_commit_median_h": lead["per_commit_author_time"]["median_h"], "per_commit_p90_h": lead["per_commit_author_time"]["p90_h"],
                                                 "first_commit_per_deployment_median_h": lead["per_deployment_first_commit_author_time"]["median_h"],
