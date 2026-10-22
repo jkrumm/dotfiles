@@ -31,13 +31,28 @@ items, GitHub issues and Left-behind lists, and much of it dies there.
 
 The ledger gets `tasks`, `task_deps`, task events in the event log (ADR-011), the ready CTE, and
 claim / heartbeat / reclaim as conditional updates; a thin `warden task …` CLI keeps bd's verbs and
-JSON field names, so agents written against bd lose nothing and a later swap stays cheap. Plan files
-remain plans (Artifacts); a projector turns their checklists into Tasks, and every Left-behind line
-of a wave close-out becomes a Task with an owner (the postmortem's 55 % orphan rate).
+JSON field names, so agents written against bd lose nothing and a later swap stays cheap.
+
+**The ledger is the only home of task state.** Plan files remain plans (Artifacts). A one-time
+projection turns each existing checklist into Tasks; from then on the PLAN.md checklist is a
+marker block generated from the ledger and drift-checked like the AGENTS.md routing block.
+Hand-ticking a box or a status marker is banned by the doc lint; `/wave` closes a task with
+`warden task done`, and every Left-behind line of a wave close-out becomes a Task with an owner
+(the postmortem's 55 % orphan rate) through `warden task add`.
+
+| Task write | Command source | Write module |
+|-|-|-|
+| create | planner, owner submit, wave close-out (`warden task add`) | `tasks` |
+| claim, heartbeat, release | spawner; the worker Agent with its epoch (`warden task heartbeat`) | `tasks` |
+| done | the worker Agent or `/wave` (`warden task done`) | `tasks` |
+| ready again, blocked, cancelled | Witness (re-drive), decide step, planner (supersede) | `tasks` |
+
+A Task has no Attempt record: its attempts are its worker Agents, each carrying an optional
+`task_id` and its hook (`design/model.md` §1).
 
 ### Consequences
 
-- Good: tasks join with incidents, attempts and changes in one store; one backup; IuRoot fits (the ledger sits outside every repo).
+- Good: tasks join with incidents, worker Agents and changes in one store; PLAN.md can no longer disagree with the ledger; one backup; IuRoot fits (the ledger sits outside every repo).
 - Bad: about 300–400 lines to build (history, labels, comments, export); one SQLite file is one disk — add a nightly off-box copy (Litestream or the existing snapshot job) in the same wave.
 
 ### Confirmation and flip conditions

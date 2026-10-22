@@ -21,7 +21,7 @@ dropped — with the evidence that decided it.
 | mother and lead run the strong model at medium effort; hard waves on the strongest, easy ones on the mid tier, OpenCode when quota is low; modelpick suggests, the lead decides | engine by class and a quota guard in the spawner (ADR-008); a lead may raise the model with a stated reason; model ids live only in `agw routing` | **changed** | Max's 7-day window sits at p90 96 %; moving agw's workload onto it would add ≈ 24 %, so the guard is code, not judgment |
 | the cheap tier for exploration and lookups | Explore subagents and investigate workers on the cheap tier | **kept** | — |
 | agent-, research-, image-gateway as supporting systems and CLIs | CLI-first on one agent contract; MCP only for research-gateway and chrome-devtools (ADR-004) | **kept, sharpened** | — |
-| "maybe a decision model can help here again" | a decision model only for the correlator's ambiguous residue (ADR-003) | **changed** | it agreed 92 % with LLM triage but 60 % with the truth |
+| "maybe a decision model can help here again" | no single-shot decision model anywhere in the loop; the decision models become the investigate worker on OpenCode/IU, making the judgment calls — recipe choice and `decision_class` (ADR-003, W3) | **changed** | `decision_shadow` agreed 92 % with LLM triage but 60 % with the truth (`kpi/decision_shadow`) |
 | Herdr | where code gets written; its event record feeds Witness | **kept** | — |
 | GPUI (a native herdr GUI) | not part of the design; Argo's Fleet view and `herdr --remote` cover it | **dropped** | nothing on the owner's question list needs a second cockpit |
 | Slack | out of intake (W1), out of briefings and changelogs (W11, W13); a human channel until Argo replaces it | **dropped** | — |

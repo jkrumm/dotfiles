@@ -1,6 +1,6 @@
-# ADR-005 — Artifacts are ours: an `rv` review service with Argo's Artifacts view; plannotator only until it lands
+# ADR-005 — Artifacts are ours: ledger threads behind `warden artifact`, Argo's Artifacts view; plannotator only until it lands
 
-- Status: accepted · 2026-10-22 (revised the same day: owner intent — "a custom implementation for artifacts", Artifacts as an Argo page)
+- Status: accepted · 2026-10-22 (revised the same day: owner intent — "a custom implementation for artifacts", Artifacts as an Argo page; revised after panel pass 1: dat-2 / sim-5, sim-1 — the ledger is the only SoR for threads, `rv` folds into the factory CLI)
 - Evidence: `spikes/05-artifact-review/REPORT.md` (plannotator 24/24, human-review 15/15, `rv` 14/14, `rv-pn` 6/6), `research/2026-10-21-review-tools.md`, `findings-2026-10-22.md` §Artifact review, the owner's prompt
 
 ## Context and problem statement
@@ -19,15 +19,18 @@ repo** (the directory contract, ADR-010); phone over the tailnet; one system of 
 ## Considered options
 
 - **A — plannotator 0.28.26** on the mini (its Inbox: project-grouped, threads, `wait_for_reply`, `supersedes`, JSONL with a global sequence).
-- **B — our review service** behind `rv submit | wait | status | comment`, Argo as its UI.
+- **B — our own artifact module** behind `submit | wait | status | comment`, Argo as its UI.
 - **C — `petergyang/human-review` v0.8.2.**
 
 ## Decision outcome
 
 **Chosen: B as the target, A as the interim backend.**
-- **Contract:** agents call only `rv submit | wait | status | comment` (agent-CLI contract, ADR-004). `rv wait` returns `feedback | closed | superseded | timeout`; on `timeout` the agent proceeds with its stated default.
-- **Target (W7):** Artifact entities in the ledger; versions stored per repo in `docs/artifacts/<slug>/`; comments as anchored threads (quote + prefix + suffix, human-review's anchor triple) with resolve; plannotator's semantics copied — `supersedes`, wait-for-reply, a global sequence for read-back. The UI is **Argo's Artifacts view** (project-grouped inbox, the rendered artifact, threads in the margin, phone layout), built from basalt-ui components; the **comment thread is a new basalt-ui export**, in its own PR.
-- **Interim (until W7):** plannotator's Inbox behind the same `rv` contract (`spikes/05-artifact-review/rv/rv-pn.ts`), pinned, reached through our own Caddy door (its tailnet path refuses tagged devices).
+- **Contract:** agents call only `warden artifact submit | wait | status | comment` (agent-CLI contract, ADR-004; spike 5's `rv` verbs, unchanged, now a module of the factory CLI and API — no separate service, sim-1). `wait` returns `feedback | closed | superseded | timeout`; on `timeout` the agent proceeds with its stated default.
+- **Target (W7):** one system of record per part, no third store:
+  - **Threads:** the ledger only — Artifact entities plus comment events carrying the anchor triple (quote + prefix + suffix, human-review's) and resolve. `threads.jsonl` is dropped; a thread is rebuilt from events alone.
+  - **Versions:** git, as `path@sha` under `docs/artifacts/<slug>/`, committed by the **submitting agent** through the normal Change path. The artifact module never commits, so a comment from the phone writes 0 commits on any branch, and IuRoot's linked paths receive nothing from it.
+  - **Semantics and UI:** plannotator's semantics copied — `supersedes`, wait-for-reply, a global sequence for read-back. The UI is **Argo's Artifacts view** (project-grouped inbox, the rendered artifact, threads in the margin, phone layout), built from basalt-ui components; the **comment thread is a new basalt-ui export**, in its own PR.
+- **Interim (until W7):** plannotator's Inbox behind the same contract (`spikes/05-artifact-review/rv/rv-pn.ts`), pinned, reached through our own Caddy door (its tailnet path refuses tagged devices).
 - **Rejected:** C (closes an unopened review after 60–120 s and tells the agent to stop; a 38 px document column on a 390 px phone).
 
 ADR-005's own build tripwires are met: plannotator denies framing (no Argo embed) and per-repo
@@ -35,10 +38,12 @@ storage is an owner requirement.
 
 ### Consequences
 
-- Good: one system of record for artifacts and their threads; the owner reviews in the place he already looks; basalt-ui gains a reusable comment thread.
-- Bad: ≈ 2.2–2.8k lines to build (spike 5's estimate, about 3 waves of work compressed into W7); plannotator stays a dependency until then — pinned, upgraded only through `/upgrade-deps`.
+- Good: one system of record each for threads (ledger) and versions (git), one writer of git (the Change path); no review service to run; the owner reviews in the place he already looks; basalt-ui gains a reusable comment thread.
+- Bad: ≈ 2.2–2.8k lines to build (spike 5's estimate for a standalone service, about 3 waves of work compressed into W7; folding it into warden drops the service, LaunchAgent and backup from its ops column; smaller than the spike's standalone estimate, by an amount W7 measures); plannotator stays a dependency until then — pinned, upgraded only through `/upgrade-deps`.
 
 ### Confirmation
 
 The spike's `rv` contract suite runs against both backends in CI; W7's gate is a review round trip
-from phone and desktop on the new service, then plannotator is removed.
+from phone and desktop on `warden artifact`, plus the drop-and-rebuild test (delete every thread
+projection, rebuild from ledger events, byte-identical) and a phone comment on an artifact in a
+PR-required repo and in an IuRoot repo leaving `git status` clean in both; then plannotator is removed.

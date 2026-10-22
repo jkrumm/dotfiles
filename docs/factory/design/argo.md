@@ -29,21 +29,24 @@ Argo/basalt-ui inventory. Report section 6 is built from this file.
 {{asset:chart-questions}}
 
 
-`n` = classified asks (last 14 d). Every read model is a projection of the event log plus the
-manifests (model invariant 8); "answer budget" is the timed-test target.
+`n` = classified asks (last 14 d); `#` is `questions.md`'s number, so the table and the "left Argo"
+metric (§6) share one numbering. All 27 canonical questions stay (none replaced); B1–B3 are the
+brief's extra questions. Every read model is a projection of the event log plus the manifests (model
+invariant 8) and returns `as_of` and its expected cadence (§3); "answer budget" is the timed-test
+target.
 
 | # | Question | n | Read model | View | Budget |
 |-|-|-|-|-|-|
-| 1 | Which parked agent must I nudge? | 50 (24) | `agents_live`: status, idle since, stop reason (quota / API error / turn end / waiting), open plan items, auto-resume ETA | Home line 1 counts *parked*; Fleet "Parked" lane; target state: empty because auto-resume works | 3 s |
-| 2 | Where are we on this effort? | 28 (18) | `plan_progress`: tasks done / ready / blocked per plan, last event, active attempt | Project header + Home "In flight" row per plan | 5 s |
-| 3 | Is it done, merged, deployed and live? | 19 (11) | `delivery`: task → attempt → change → deployment → verification chain | Delivery view: one lifecycle strip per task | 5 s |
+| 1 | Which parked agent must I nudge? | 50 (24) | `agents_live`: status with the `idle.parked{reason, resume_at}` substate (reason: quota / api_error / turn_end / waiting; written only by Witness, `agent.parked`/`agent.resumed` events), idle since, open plan items, last output from the herdr record | Home line 1 counts *parked*; Fleet "Parked" lane; target state: empty because auto-resume works | 3 s |
+| 2 | Where are we on this effort? | 28 (18) | `plan_progress`: tasks done / ready / blocked per plan, last event, active worker Agent | Project header + Home "In flight" row per plan | 5 s |
+| 3 | Is it done, merged, deployed and live? | 19 (11) | `delivery`: task → worker Agent → change → deployment → verification chain | Delivery view: one lifecycle strip per task | 5 s |
 | 4 | Where is my quota and when does it reset? | 12 (10) | `quota`: Max 5 h / 7 d %, reset time, burn rate, forecast; IU spend today | Home line 1 + Usage | 2 s |
-| 5 | Is anything broken right now? | 11 (7) | `incidents_open` + `conditions_open` by severity | Home line 1 (one sentence when quiet) + Incidents | 2 s |
+| 5 | Is anything broken right now? | 11 (7) | `incidents_open` + `conditions_open` by severity, each health source with `as_of` | Home line 1 (one sentence when quiet; "all up" only when every health source is fresh) + Incidents | 2 s |
 | 6 | Why does X not work? | 11 (6) | `incident_detail`: signals, conditions, topology path, suspect deployments, known-error match, investigation | Incident view | 10 s |
 | 7 | Which approvals could the agent take itself? | 15 (5) | `decisions_open` with decider and class | Needs you — expected empty; any non-business card is a defect counted on the KPI page | 3 s |
 | 8 | What happened while I was away? | 8 (5) | `digest(since = last visit)`: shipped, fixed alone, opened, decided | Home "Since you left" | 5 s |
 | 9 | Which tabs can close? | 9 (4) | `agents_live` finished-but-open, reaper log | Fleet: reaped automatically; shows only what the janitor would not touch and why | 3 s |
-| 10 | Is that agent running, stuck or done? | 10 (5) | `agents_live` + heartbeat age + last output | Fleet row: status chip, heartbeat age, last line, link into the pane | 3 s |
+| 10 | Is that agent running, stuck or done? | 10 (5) | `agents_live` + heartbeat age + last output (herdr record) + parked reason and `resume_at` | Fleet row: status chip, heartbeat age, last line, link into the pane | 3 s |
 | 11 | Broken connection or login? | 9 (4) | `conditions_open` of type auth / connectivity (secret-cache age, Claude auth, tailnet, GitHub credential) | Health / infra | 5 s |
 | 12 | Disk or CPU pressure? | 6 (5) | host metrics + `infra.*` conditions | Health / infra | 5 s |
 | 13 | How are all my agents doing? | 7 (4) | `agents_live` grouped by project and role | Fleet | 3 s |
@@ -52,11 +55,18 @@ manifests (model invariant 8); "answer budget" is the timed-test target.
 | 16 | Where is the report, PR or dashboard? | 6 (3) | `artifacts` + manifest links | Artifacts; Project links row | 3 s |
 | 17 | What is still pending in the plan? | 4 (3) | `plan_progress` | Project → Tasks | 5 s |
 | 18 | What is waiting for me? | 5 (4) | `decisions_open` + `artifacts_awaiting` | Needs you | 2 s |
-| 19 | Did self-healing work? | 5 (1) | incidents closed without an owner touch, with their verification | Home "Fixed alone" + Incidents filter | 5 s |
+| 19 | Did self-healing work? | 5 (1) | `fixed_alone`: incidents closed without an owner touch, with their verification | Home *Fixed alone* count → drill-down; Incidents filter | 5 s |
 | 20 | Is X wired end to end? | 3 (3) | manifest drift check per integration key + last trace through the project | Project → Wiring | 10 s |
-| 21 | What shipped since yesterday, and did it stick? (brief) | — | deployments + post-deploy verification + regressions | Home digest; Project → Changelog | 5 s |
-| 22 | Is project X healthy — cost, traffic, deps? (brief) | — | project scorecard from conditions | Project page header | 5 s |
-| 23 | What burns quota? (brief) | — | usage by agent / session / project, 7 d | Usage | 5 s |
+| 21 | Which version runs where — is the latest on stage and prod? | 3 (2) | `deployments_by_env`: per runtime target, deployed sha / image digest, its Deployment state, default-branch head | Project → Deploys; Health / infra per host | 5 s |
+| 22 | Are machines, tools and dependencies up to date — what needs an update or restart? | 4 (2) | `updates`: pending dependency, image, brew and OS updates per host and project, restart-needed flags | Health / infra; Project → Maintenance | 5 s |
+| 23 | Which model, tool or version is configured — do we have the new one? | 4 (1) | `config_state`: engine routing, CLI and gateway versions, manifest-declared tool versions | Usage → Engines; Project → Wiring | 5 s |
+| 24 | What did the loop handle alone — why did this reach me? | 3 (2) | `fixed_alone` + on every card its decider class and the policy that did not cover it | Home *Fixed alone* count → drill-down; a "why this reached you" line on each Needs-you card | 5 s |
+| 25 | Is the data, report or page fresh — how old is it? | 2 (1) | `freshness`: `as_of` and cadence per read model and source | every widget's `as_of`; a stale source renders as a stale term in place of its value | 2 s |
+| 26 | Did the nightly or scheduled job run, and did it succeed? | 2 (1) | `job_runs`: last run, grade and next run per scheduled job (jobrun / jobs-grade) | Health / infra → Jobs | 5 s |
+| 27 | Why does this keep coming back — is the recurring issue resolved? | 3 (0) | `regressions`: `Incident.regression_of` chains per lineage + known-error history | Incident view → Lineage; Incidents filter | 10 s |
+| B1 | What shipped since yesterday, and did it stick? (brief) | — | deployments + post-deploy verification + `regressions` | Home digest; Project → Changelog | 5 s |
+| B2 | Is project X healthy — cost, traffic, deps? (brief) | — | project scorecard from conditions | Project page header | 5 s |
+| B3 | What burns quota? (brief) | — | usage by agent / session / project, 7 d | Usage | 5 s |
 
 ## 2b. The write half — intent verbs (ADR-015)
 
@@ -71,10 +81,19 @@ applied* on the lifecycle strip, writes an audit event, and has a phone affordan
 Exception-first: when nothing is wrong, each surface says so in one line and stops. **The shell never
 changes shape** (rail, ambient status, one attention queue, detail on selection); **the content does.**
 
+**Freshness.** Every read model returns `as_of` and its expected cadence. A source older than its
+cadence renders as a stale term in place of its value (`quota stale since hh:mm`, not a frozen
+`Max 46 %`); "all up" needs every health source fresh, so a dead collector can never produce it.
+
+**One slot per entity.** Each entity renders in exactly one Home slot, picked by precedence
+**decision > broken > parked > in flight**: a stuck agent whose `agent.stuck` condition sits in an open
+incident shows under *Broken*, not again under *Parked/stuck*. *Fixed alone* is a count with a
+drill-down, never a list on Home.
+
 **Home adapts to the situation**, decided by a pure function of the read models:
 | Situation | Trigger | Home shows, in this order |
 |-|-|-|
-| quiet | no open incident, no decision, nothing parked or stuck | the status line, *Since you left*, *Fixed alone* — nothing else |
+| quiet | no open incident, no decision, nothing parked or stuck, every health source fresh | the status line, *Since you left*, the *Fixed alone* count — nothing else |
 | incident | an open incident affecting a production project | the incident card (cause, suspects, what automation is doing, ETA), then the status line |
 | decision | a business Decision is open | the card with options, default and expiry, above everything else |
 | many in flight | more than 5 agents working | the fleet matrix (ambient status per agent) replaces *In flight* rows |
@@ -86,15 +105,16 @@ changes shape** (rail, ambient status, one attention queue, detail on selection)
 | `runtime` with a deployed service | health and SLO burn, deploys and their verification, traffic, error rate, cost |
 | `spec.type: library` | release line, consumers (basalt-ui → argo, rb), dependency state, open upstream components |
 | `spec.type: infra` (host projects) | containers, disk, certs, backups, security signals |
-| `class: fleet` | mother and leads, plan progress, ready queue, attempts in flight |
+| `class: fleet` | mother and leads, plan progress, ready queue, worker Agents in flight |
 | any | links row, needs attention, tasks, todos (TickTick), artifacts, changelog, git state |
 
 Pages:
 
 - **Home (cockpit).** Line 1, one sentence: `0 need you · 4 working · 0 parked · all up · Max 46 % (resets Wed 16:00) · €3.20 IU today`.
-  Then, only if non-empty: *Needs you* (≤ 5 cards, each one decision with options, default and
-  expiry), *Broken* (open incidents), *Parked/stuck*, *In flight* (one row per plan or
-  incident being worked), *Since you left* (digest), *Fixed alone* (count + list).
+  Then, only if non-empty and in slot precedence: *Needs you* (≤ 5 cards, each one decision with options,
+  default and expiry), *Broken* (open incidents), *Parked/stuck* (reason and `resume_at` per agent),
+  *In flight* (one row per plan or incident being worked), *Since you left* (digest), *Fixed alone*
+  (count with drill-down).
 - **Project** (from the owner's wireframe): name, links (herdr workspace, app, repo, brain
   note), key stats (health, SLO burn, deploys 7 d, cost 7 d), needs attention, tasks, artifacts,
   health, changelog, cost, git state, maintenance (deps, docs, code health); traffic as a
@@ -143,6 +163,6 @@ the improve loop's `ui.upstream` condition counts components duplicated in consu
 
 - Timed test: each question in §2 answered from Argo alone within its budget, on phone and
   desktop, scripted with the browser driver against fixtures plus one live run.
-- "Left Argo to find out" is measured, not asked: the weekly count of status-class owner
-  messages in Claude Code and Hermes (`evidence/questions/questions.py` classes 2–23). Baseline:
-  211 in 60 days ≈ 25 per week. Target: ≤ 5 per week.
+- "Left Argo to find out" is measured, not asked: the weekly count of owner messages in Claude Code
+  and Hermes that fall in any of the 27 classes (`evidence/questions/questions.py`, the numbering of
+  §2). Baseline: 211 in 60 days ≈ 25 per week. Target: ≤ 5 per week.

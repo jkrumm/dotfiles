@@ -9,16 +9,16 @@ incidents.
 
 ## The target in ten lines
 
-1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`) with an append-only event log; twelve nouns, one writer each.
+1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`) with an append-only event log; eleven nouns, one writer each.
 2. **One `project.yaml` per repo**; AGENTS.md routing, herdr groups, Argo's registry and reconciler policies are generated from it.
 3. **Signals from their primary sources** with source time; Slack intake retires source by source.
 4. **Per-project reconcilers** open and close Conditions; a webhook only schedules a reconcile.
 5. **A correlator** folds conditions by fingerprint, topology and time window into one incident per cause; closed incidents with a recipe are the known-error store.
 6. **Tasks live in the ledger** with a blocker-aware ready queue; mothers (six fleet projects) and sessions (everything else) work them through one spawner, `rd`.
 7. **Every agent runs in herdr**; engine by class (routine on OpenCode/IU, judgment on Claude Code/Max); quota is a scheduler input; Witness resumes parked agents.
-8. **A verification ladder per action class** authorises auto-ship; squash merges make automatic revert possible; a breaker stops runaway loops without paging anyone.
+8. **A verification ladder per action class** authorises auto-ship; absent evidence fails closed to propose-only; rollback redeploys the last verified Deployment and squash merges keep the git revert mechanical; a breaker counted per lineage stops runaway loops without paging anyone.
 9. **The owner decides four things only** — product direction, spend, irreversible data loss, other people — each as a card with a default and an expiry; SLO: under 1 % of items reach him, stretch 0.1 %.
-10. **Argo answers his 23 recurring questions** from live read models on the mini; the VPS keeps the life pages and the off-site dead-man's switch.
+10. **Argo answers his 27 canonical questions and the brief's 3** from live read models on the mini; the VPS keeps the life pages and the off-site dead-man's switch.
 
 ## The numbers
 
@@ -35,7 +35,8 @@ incidents.
 | Time to resolve, median / p90, 14 d | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h |
 | Reopen / regression rate | 10.4 % / 10.4 % | ≤ 5 % each |
 | Automatic revert when post-deploy verify fails | **0 of 52** merges (rebase merges) | 100 % |
-| Days with Max 7-day window ≥ 90 % | **12 of 45** (`kpi/quota`) | ≤ 2 per month |
+| Max load per week (30 d / last 7 d) | **120 % / 204 %** of a weekly window — owner-started work alone fills it (`kpi/forecast`) | factory work off Max unless capacity would lapse; owner sessions blocked per cycle → 0 (measured from W4) |
+| Max lapsed at the reset | p50 **4 %**, p90 30.6 % (`kpi/forecast`); 3 of 7 cycles peaked at 55–79 % (`kpi/quota`) | spent by the inverse rule (ADR-008) |
 | Status questions asked outside Argo | ≈ 25 per week (`questions/`) | ≤ 5 per week |
 | Signals arriving through Slack relays | **63.7 %** (`signals/`) | 0 % |
 | Locked-model claims that held | 8 of 26 — enforced 7/7, prose 1/11 (`postmortem/`) | every invariant enforced or labelled `target` |
@@ -65,7 +66,7 @@ incidents.
 
 Five, all business, each with a default that applies if nobody answers — section 10.
 
-1. **IU budget for non-urgent factory work** — default: $30/day.
+1. **IU cash for factory-originated work** — default: ≈ $300/week (A); the full design at the forecast's wake rate is ≈ $1,320/week.
 2. **Claude subscription tier** — default: keep it; the quota guard routes non-urgent work to IU.
 3. **Autonomy in work repos** — default: read, investigate and open PRs; never merge or deploy.
 4. **Who defines "it works" for each product** — default: leads draft holdout scenarios; binding after 7 days unless edited.

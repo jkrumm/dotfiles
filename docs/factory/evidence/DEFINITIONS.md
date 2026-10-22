@@ -23,3 +23,15 @@ censored, never dropped silently.
 | `cost_per_resolved_item` | Cost of every agent job attributable to an item (agw jobs via `dispatches.job_id` and the job store, plus usage-tracker rows carrying the job or session id) / resolved items, per window. States the attribution coverage. | agw-jobs.db, usage.db |
 | `max_headroom` | Distribution of the Max 7-day and 5-hour utilisation over the observable history; days at ≥ 90 % (7-day); when the window last hit 100 %. | best available quota log (state it) |
 | `herdr_hygiene` | Point in time (AS_OF, plus live at measurement): workspaces, tabs, agents by status, finished-but-open (`done`/`idle`) tabs older than 24 h, `claude --bg` leftovers. No history exists (herdr events are not recorded). | herdr API / `rd agents` |
+
+## Amendment 2026-10-22 — the new ledger (panel pass 1, dat-6)
+
+The rows above stay the baseline definitions over `warden.db` and keep reproducing today's
+numbers. From the new ledger (ADR-011) onward, `item` and `owner_touch` are defined over the event
+log alone, so the autonomy KPI is one query with no type list or entity set left undefined:
+
+| Key | Definition | Source |
+|-|-|-|
+| `item` (ledger) | An Incident, or a Task the owner did not originate (its `task.created` event has an actor other than `owner`). Owner-submitted Tasks are work, not items. | `events` |
+| `owner_touch` (ledger) | An event with actor `owner` on an item the owner did not originate, excluding `*.created`. Pause (an override in the project runtime record) is excluded: it is never a Decision and never a touch. | `events` |
+| `autonomy_rate` (ledger) | `1 − items with ≥ 1 owner_touch / items`; SLO and stretch as above. | derived |

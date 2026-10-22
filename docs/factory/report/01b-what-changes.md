@@ -13,6 +13,22 @@
 | Finished tabs | close them by hand (20 open, 2 older than a day) | reaped automatically; Fleet shows only what the janitor would not touch |
 | Starting work | `c`, `rd wave`, Hermes typing into panes | submit a brief to a project (Argo, Hermes or `rd`) — or open a herdr tab and work, exactly as today |
 
+## During the rewrite
+
+Rewrite and cutover, no co-running: the old loop stops when W1 starts, so days 1–5 are worse than
+today's post-Phase-0 state. Days are working days of wave time from the `waves.md` Calendar (≈ 23 on
+the warden spine).
+
+| Capability | From day 1 until it returns | Returns |
+|-|-|-|
+| Alerts | raw Kuma alerts, and HyperDX re-pointed at the Slack webhook, in your existing Slack channel; no folding | W3 (day 5): Conditions from primary sources, one incident per cause |
+| Healing | none; the manual herdr lane (`c`, `rd wave`) is the fix path | W3 (day 5): the *restart* recipe; W4 (day 8): investigation and fixes through workers |
+| Parked agents | you nudge them, as today | W4 (day 8): Witness resumes them |
+| Ship | merges and deploys as today, by hand or from your sessions | W5 (day 11): verified shipping — incident-to-ship autonomy |
+| Argo cockpit | the old `/agents` and `/warden` pages frozen (stale, no writes) | W6 (day 16): read models, Home, write verbs |
+| Hermes | briefings without `warden.db` reads | W11 (day 19): the door, briefings from the event log |
+| Improve and infra healing | none | W10 (day 23): infra runbooks per host, improve jobs — full autonomous operation |
+
 ## What you stop doing
 
 - Nudging agents, closing tabs, re-asking status, approving choices an agent can make.

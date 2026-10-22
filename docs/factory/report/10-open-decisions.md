@@ -3,23 +3,25 @@
 Five. Each has a default that applies on its expiry date if nobody answers, so none of them
 blocks a wave. Everything else in this report is decided.
 
-## D1 — How much IU spend may the factory use for non-urgent work? (spend)
+## D1 — How much IU cash may factory-originated work use? (spend)
 
-- **Context:** the factory's IU spend today is ≈ $34/day (agw direct calls $23, agw OpenCode $7, research $4; `kpi/cost`, usage-tracker since 10-14). Moving implementation into herdr (W7) keeps routine fixes on IU; the improve and heal jobs (W12) add more.
-- **A — $30/day cap** on non-urgent IU work: today's level; improve jobs queue behind incidents.
-- **B — $60/day cap:** the improve loop runs daily without waiting; ≈ $900/month more at the ceiling.
-- **Tradeoff:** speed of non-urgent improvement vs ≈ $900/month at the ceiling. Incidents are never capped either way.
-- **Recommendation:** A, revisit with 8 weeks of cost-per-resolved-item data.
-- **Default:** A from W7; expires 2026-12-31 (then the measured spend decides).
+- **Why it is a decision now:** owner-started work alone fills the Max window — fleet waves 74 % plus interactive sessions 32 % of a weekly window per week, 120 % in total over 30 days, 204 % over the last 7 (`kpi/forecast`). Factory judgment (mother and lead wakes, attempt ≥ 3 escalations) therefore runs on IU with a Claude-class model unless Max would otherwise lapse (ADR-008).
+- **Measured:** all IU today $147/week (agw tools $91, agw OpenCode $28, research $18, Hermes $4; `kpi/forecast`); warden-owned items cost ≈ $3.90/day (`kpi/cost`).
+- **Projected at the forecast's assumption** (336 wakes a week at ≈ $2.11 — an assumption, not a measurement): mothers and leads add ≈ $707/week; moving agw review off Max adds up to ≈ $469/week. Full design on IU: ≈ $1,320/week.
+- **A — cap factory IU at ≈ $300/week** (twice today's IU): mothers wake for briefs and unmatched conditions within a per-mother budget; non-urgent judgment queues; review stays on Max while the forecast allows.
+- **B — ≈ $1,320/week:** mothers and leads wake at the forecast rate; review moves to IU.
+- **Tradeoff:** ≈ $4,000 a month at the upper bound vs speed of autonomous judgment work; incidents are never capped either way.
+- **Recommendation:** A, then re-decide with 8 weeks of measured wakes and cost per action class × engine — the wake rate is the weak number (doubling it moves the Max-only projection from 142 % to 164 %).
+- **Default:** A from W4; expires 2026-12-31.
 
 ## D2 — Raise the Claude subscription tier? (spend)
 
-- **Context:** the 7-day window sat at p90 96 % and ≥ 90 % on 12 of 45 days; the owner's own sessions share it (`kpi/quota`).
-- **A — keep the tier;** the quota guard routes non-urgent work to IU and reserves 15 % for the owner.
-- **B — raise the tier** (if a higher one exists): more judgment-heavy work on Claude, fewer reroutes.
-- **Tradeoff:** subscription cost vs quality on work the guard sends to IU models.
-- **Recommendation:** A; switch to B if the owner's own sessions are blocked by the quota on ≥ 1 day in a month after W7.
-- **Default:** A; expires 2026-12-31.
+- **Context:** Max ran at 120 % of a weekly window per week over 30 days and 204 % over the last 7; it fitted only because 2 of 8 resets were unscheduled and Max was down Sep 16–20 (`kpi/forecast`, `kpi/quota`). Owner-started work alone exceeds the window on heavy weeks, so his own sessions are at risk whatever the factory does.
+- **A — keep the tier:** the factory stays off Max except to use capacity that would lapse; the owner's heavy weeks still hit the limit.
+- **B — raise the tier** (if a higher one exists): absorbs owner-started load, lets factory judgment use Max, and shrinks D1's IU spend.
+- **Tradeoff:** a higher subscription vs IU cash for factory judgment and owner sessions blocked on heavy weeks.
+- **Recommendation:** B is worth pricing now: the measured load is the owner's own, not the factory's.
+- **Default:** A; re-decide when the owner's sessions are blocked by the quota on ≥ 1 day in a month (KPI from W4); expires 2026-12-31.
 
 ## D3 — May the factory merge and deploy in work repos? (other people)
 

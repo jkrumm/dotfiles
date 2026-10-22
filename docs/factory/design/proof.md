@@ -23,7 +23,9 @@ writing rules (disclosed in the artefact); held-out packets were not read for de
 
 Pass criteria for every row: the failure arrives through its primary source with source time,
 becomes one incident, heals or is routed without an owner touch (except where the row says a
-present human is physically required), and closes on an observation.
+present human is physically required), and closes on an observation. A fix closes only after the
+post-deploy hold of its condition type (≥ 2 × the fingerprint's median inter-occurrence gap, ≥ 24 h for
+crash, OOM and flap types); a recipe is promoted to automatic reuse only after its hold confirms it.
 
 | # | Failure mode (history) | Injection | Expected path | Pass | MTTR target |
 |-|-|-|-|-|-|
@@ -32,15 +34,16 @@ present human is physically required), and closes on an observation.
 | 3 | Power event leaves a disk unmounted (homelab 10-21, e267) | in a scratch VM or on a spare mount: unmount a non-critical volume | `infra.mount` condition → runbook (mount, verify, restart dependents) | 0 owner touches | ≤ 15 min |
 | 4 | Disk floor during builds (mini, 365 GiB freed by hand) | `mkfile` a large file in scratch until the floor trips; delete after | `infra.disk` → disk-sweep runbook → floor restored | 0 owner touches | ≤ 30 min |
 | 5 | Credential expiry (secrets cache, Claude auth, GitHub token) | point a non-critical consumer at an expired test credential | `auth.expired` condition 7 days ahead; biometric renewal batched into one weekly ask | ≤ 1 batched owner action per week | lead time ≥ 7 d |
-| 6 | OpenCode server restart kills episodes | restart agw's OpenCode server during a non-critical investigate | attempt stalled → Witness re-drives from the session/hook | 0 owner touches, 0 duplicate PRs | ≤ 10 min |
+| 6 | OpenCode server restart kills episodes | restart agw's OpenCode server during a non-critical investigate | worker Agent stalled → Witness re-drives from the session/hook (lease epoch fenced, counted against the Task budget) | 0 owner touches, 0 duplicate PRs | ≤ 10 min |
 | 7 | herdr crash | crash a dedicated `herdr --session gameday` with two test agents | panes restored, agents resumed by session id, shells re-driven | 0 owner nudges | ≤ 10 min |
 | 8 | Quota exhaustion | feed the quota guard a recorded 95 % reading | non-urgent spawns flip to IU; parked agents get a resume timer at the reset | 0 owner nudges | resume ≤ 5 min after reset |
-| 9 | Agent parked by a transient API error (26 owner `continue`s) | inject an API-error stop in a test pane | Witness auto-continues after backoff | 0 owner nudges | ≤ 5 min |
-| 10 | Failed deploy | merge a deliberately failing change to a canary project | post-deploy verify red → automatic revert (squash) → redeploy → green | 0 owner touches | ≤ 15 min |
+| 9 | Agent parked by a transient API error (26 owner `continue`s) | inject an API-error stop in a test pane | `idle.parked{reason: api_error}` → Witness auto-continues after backoff, counted against the Task budget | 0 owner nudges | ≤ 5 min |
+| 10 | Failed deploy | merge a deliberately failing change to a canary project | post-deploy verify red → rollback as a Deployment operation: redeploy the last `verified` Deployment by image digest, compose revision or previous launchd bundle → green; known-bad marker written; the git revert follows as an ordinary Change | previous verified version serving, 0 owner touches, the bad version not re-shipped | ≤ 15 min |
 | 11 | Broken dependency | Renovate-style bump to a known-bad version in a fork | CI or holdouts red → never merged → Task filed | not merged, 0 owner touches | n/a |
 | 12 | Flaky CI | a test failing 50 % of runs | one rerun on the same SHA; second red → revision | 0 owner touches | ≤ 1 rerun |
 | 13 | Mini outage (dead-man) | stop the mini's heartbeat push for 20 min | VPS dead-man pushes to the phone; Argo shows "unreachable since" | push ≤ 15 min | n/a |
 | 14 | Silent collector death (usage-tracker blind since 10-14) | point a collector at a moved store in scratch | staleness condition within one cadence | detected ≤ 1 cadence | n/a |
+| 15 | Resolver blackhole on the factory host (the mini's recurring DNS/egress failure on ≥ 15 days, 05-06 to 08-29, `incidents/` e52) | point the mini's resolver at a non-answering address | heartbeat's egress probe fails → VPS receiver reads "mini alive, egress dead" → `infra.egress` → network-independent runbook (flush the DNS cache, restart mDNSResponder, fail over to a secondary resolver); worker failures while the condition is open are classed infra | 0 owner touches unless the runbook fails (then heads-up); 0 breaker trips on tasks | ≤ 10 min |
 
 **Baseline run against today's system (row 1)** — `evidence/gameday/2026-10-22-glance.out.md`, fault
 2026-10-22 09:13:44Z, `docker stop glance` on the homelab (warden W8's Phase 0 changes live):
@@ -71,12 +74,13 @@ the ledger or its snapshot read-only. Error budgets are per 28 days.
 | Reopen rate | 10.4 % | ≤ 5 % | — |
 | Regression rate (fix recurs ≤ 30 d) | 10.4 % (5 / 48) | ≤ 5 % | — |
 | Change failure rate (attributed) | 2.0 % | ≤ 5 % | — |
-| Revert success when post-deploy verify fails | 0 % (structural) | 100 % | 0 misses |
+| Rollback success when post-deploy verify fails (previous verified Deployment serving) | 0 % (structural) | 100 % | 0 misses |
 | Owner `continue` nudges | 50 in 45 d | 0 | — |
 | Finished-but-open tabs > 24 h | 2 (+2 dead `--bg`) | 0 | — |
-| Max 7-day window ≥ 90 % | 12 of 45 days | ≤ 2 days per month | — |
+| Owner sessions blocked by the Max quota per cycle | not recorded today — measured from W4 (quota guard log) | 0 | — |
+| Max lapsed % per cycle (100 − the 7-day peak at the reset) | p50 4 %, p90 30.6 % (`kpi/forecast`); 3 of 7 complete cycles peaked at 55–79 % (`kpi/quota`) | tracked; the inverse rule (ADR-008) spends it on non-urgent work | — |
 | Status questions asked outside Argo | ≈ 25 per week | ≤ 5 per week | — |
-| Cost per resolved item | IU $0.36 + Max-equivalent $1.08 | tracked, no target until 8 weeks of data | — |
+| Cost per resolved item, per action class × engine, attributed through Agent records | IU $0.12 per resolved item, Max $0 in the post-10-15 regime (W43, `kpi/cost`); per class × engine from W4 (`cost.py` re-cut from the post-10-15 regime); all classes, W43: IU $0.12, Max $0 (`kpi/cost`); the 14 d mixed-regime $0.36 IU + $1.08 Max-eq is not a baseline | interim ceiling 3 × baseline p90 per class, fed to the lineage budget; the 8-week revisit tightens it | — |
 
 ## 4. Holdout scenarios
 
@@ -86,11 +90,23 @@ checkout; the verifier runs them against the deployed app after every deploy and
 behaviour (HTTP responses, rendered pages, CLI outputs). Workers see only pass/fail and the failing
 story's title, never the scenario text. CI check: no worker transcript contains a holdout path.
 
+- **Update path:** a holdout changes only through a Change to the holdouts repo, authored by a
+  verifier-role agent that sees the approved plan Artifact, never the product diff.
+- **Absent evidence fails closed:** `factory manifest check` computes effective autonomy per
+  (project, action class); a rung whose evidence has no producer (no probe, no deployed app, no
+  holdouts) drops to propose-only and files the gap as a factory Task; it flips back when the
+  producer exists.
+- **`factory-self`:** changes to the ship path, verifier, holdout runner, breaker and rollback are
+  verified by the previously released factory (N-1 verifies N); a pinned last-known-good release is
+  restored by an independent watchdog.
+
 ## 5. Argo test
 
-Every question of `design/argo.md` §2 answered from Argo alone within its budget (≤ 10 s), on
-phone and desktop, scripted against fixtures and once live. "Left Argo to find out" is the weekly
-count of status-class owner messages outside Argo (`evidence/questions/questions.py`).
+Every question of `design/argo.md` §2 — all 27 canonical questions plus B1–B3 — answered from Argo
+alone within its budget (≤ 10 s), on phone and desktop, scripted against fixtures and once live, with
+one fixture per read model whose source is stale (the stale term must render, never the old value).
+"Left Argo to find out" is the weekly count of owner messages outside Argo in any of the 27 classes
+(`evidence/questions/questions.py`, same numbering as `design/argo.md` §2).
 
 ## 6. CI structural checks
 
@@ -99,6 +115,9 @@ count of status-class owner messages outside Argo (`evidence/questions/questions
 | One system of record per entity | a write to an entity table outside its owning module |
 | Generated docs have zero drift | a generated block (AGENTS.md routing, groups.json, project registry) differs from its re-render |
 | Doc-contradiction lint | a banned claim or noun appears outside its home: "control plane" for anything but Argo, model ids in prose, lane lists outside the generated block, a "never" line without a capability test or a `target` label |
-| Concept budget | the glossary exceeds twelve nouns, or a ledger table maps to no noun |
+| Concept budget | the glossary exceeds eleven nouns; a ledger table maps to neither a noun nor named plumbing (events, operations, timers, leases, deliveries); or the generated inventory — processes per host, CLIs, stores — exceeds its cap (1 factory daemon on the mini, ≤ 12 agent-facing CLIs, ≤ 6 stores the factory reads). Target shape: one factory CLI (`warden manifest …`, `warden artifact …`), every loop a phase of one warden process |
+| Autonomy only lowers | a Change raises a manifest's `autonomy`, rate limits or holdout locations, or a `factory-self` Change is verified by anything but the previous release |
+| Expand/contract only on the auto rung | an auto-rung migration's expand step fails the previous release's tests against the migrated schema |
+| Holdout edits | a holdouts-repo Change is authored outside the verifier role or links no approved plan Artifact |
 | Contract tests in the producer's CI | a cross-repo promise (verb set, verdict fields, Argo action verbs) breaks in the repo that produces it |
 | Manifest drift | an integration key does not resolve |

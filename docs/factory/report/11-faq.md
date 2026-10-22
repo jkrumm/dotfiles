@@ -8,6 +8,16 @@ fields plus attribute rules, no topology — scored F1 0.737 on the held-out gol
 leaving every event alone (0.740), against 0.889 for the proposed correlator (spike 3). What each does
 well is copied: bd's verbs and ready semantics, durable primitives, Keep's candidate gate.
 
+**Why not Mastra?** It was not run, and ADR-002 records why: it is TypeScript-only, the research
+could not verify its durability, suspend/resume and timeout semantics, and it would add a TS runtime
+and a second system of record beside a Python loop.
+
+**What happened to the decision models?** There is no single-shot decision model in the loop. Yours
+become the investigate worker on OpenCode/IU, making the judgment calls — which recipe, which
+`decision_class` (ADR-003). Measured as a single shot, the decision model agreed 92 % with warden's
+LLM triage but only 60 % with the true grouping (`kpi/decision_shadow`); deterministic rules group,
+the worker judges.
+
 **Is this a rewrite of warden?** Yes — rewrite and cutover, no co-running. The old loop stops when
 W1 starts and its database is archived read-only; history enters a fresh ledger by one import. Each
 rewritten piece goes live when it passes its own proof gate (backtest, gamedays, holdouts, the timed
@@ -18,9 +28,12 @@ continuously; the rule (≥ 10 planned units and ≥ 25 commits a week over 90 d
 argo, weatherorb, shutterflow, dotfiles and warden. Everywhere else a session per task is cheaper
 and enough. Scheduling stays in code; mothers spend tokens only on judgment.
 
-**Will the factory eat my Max quota?** Not by design. Moving today's agent-gateway workload onto Max
-would add ≈ 24 % of the weekly window (p90 96 % → 120 %), so routine work stays on IU, the guard
-flips non-urgent spawns to IU at 80 %, and 15 % stays reserved for you.
+**Will the factory eat my Max quota?** Not by design, and it will not waste it either. Routine work
+stays on IU; the guard parks non-urgent Max work when the forecast for factory plus you reaches 100 %
+at the reset, with your reserve derived from your own p90 share (ADR-008). The inverse rule spends
+capacity that would lapse: 3 of 7 cycles peaked at 55–79 %, and when the forecast sits below 100 % −
+reserve − margin, non-urgent IU-class work spawns on Max. Measured as owner sessions blocked per cycle
+(target 0) and Max lapsed % (today p50 4 %, p90 30.6 %, `kpi/forecast`).
 
 **What still needs me?** Product direction, spend, irreversible data loss, other people — as a card
 with options, a default and an expiry. Today 6 of 156 decision-relevant events in the golden set
@@ -54,6 +67,7 @@ retires into per-project changelogs in the brain (W11, W13).
 with pre-registered thresholds, a backtest that never tuned on its held-out half, a baseline gameday
 against today's system, and KPI scripts the loop cannot edit (section 7).
 
-**How long does the rewrite take?** Fourteen waves in three lanes, about 17 working days of wave
-time; W1–W3 are fully specified and can start now (W1 and W2 in parallel). Full autonomous operation
-returns with W5 (day 11); until then raw alerts reach your existing Slack channel as they do today.
+**How long does the rewrite take?** Fourteen waves in three lanes on a serial warden spine, ≈ 23
+working days of wave time (`waves.md` Calendar); W1–W3 are fully specified and can start now (W1 and W2
+in parallel). Raw alerts reach your Slack channel on days 1–5; verified shipping returns with W5
+(day 11), full autonomous operation with W10 (day 23) — section 1b, *During the rewrite*.
