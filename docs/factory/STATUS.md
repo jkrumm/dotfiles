@@ -10,14 +10,14 @@ effort. Started 2026-10-22 07:40 UTC.
 |-|-|-|
 | 0 — stop the bleeding | done: agw W12 (69deb89), dotfiles W3 (6e8a45c..16f3373), usage-tracker W1 (a5fbd23), warden W8 closed early at the owner's steer (c633ef7..e0301c9) | see *Phase 0* below |
 | 1 — evidence | 8 workers running: kpi (warden), kpi (delivery/DORA/quota/herdr), postmortem, incidents, interventions, golden sampling, toil, signals | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
-| 2 — model | pending | |
-| 3 — loops | pending | |
+| 2 — model | done | `design/model.md` (eleven nouns), ADR-010, ADR-011 |
+| 3 — loops | done | `design/loops.md`, ADR-002, ADR-003, ADR-007, ADR-008, ADR-012 |
 | 4 — spikes → ADRs | done: spikes 1–6, ADR-001…015 | `spikes/`, `adr/` |
-| 5 — Argo | pending | |
-| 6 — proof | pending | |
-| 7 — panel ×2 | both passes done (pass 1: 85 objections; pass 2: 76 new + 85 re-checked); resolutions in `panel/pass{1,2}-resolutions.md`; revision 2 running as a Max workflow (wf_5d617259-581); then `/review` | `panel/`, `report/08-panel.md` |
+| 5 — Argo | done | `design/argo.md`, ADR-009, ADR-015 |
+| 6 — proof | done: backtest (5 of 8 pre-registered thresholds pass), baseline gameday, SLOs, CI checks | `design/proof.md`, `evidence/golden/backtest.*`, `evidence/gameday/` |
+| 7 — panel ×2 | done: pass 1 (85), pass 2 (76 new + re-check), cross-lab `/review` (17 blocking) — all resolved | `panel/`, `report/08-panel.md` |
 | 8 — rewrite plan | done: `waves.md` (W1a…W14, rollbacks, calendar); runnable now — W1a = warden Wave 9 (active), W2a = dotfiles Wave 1 (active), W1b = warden Wave 10; both gates pass; Round 5 archived | `waves.md` §How to start |
-| report | pending | `report.html` |
+| report | done: `report.html` (built by `report/build.py`, check clean), submitted to the owner through `rv` | `report.html` |
 
 ## Fixed inputs
 
@@ -95,4 +95,12 @@ Times are UTC. Entries before 09:50Z were written without reading the clock; on 
 - 11:24Z Runnable copies written: warden `docs/waves/PLAN.md` Waves 9–11 (W1a active, W1b, W3; commit 3b267de) and dotfiles `docs/waves/PLAN.md` Waves 1–2 (W2a active, W2b; Round 5 archived to `docs/waves/archive/2026-10-round-5-PLAN.md`; commit 772a8fd); `wave-gate.py --orchestrated` passes for both. Launch commands in `waves.md` §How to start. `/review`: the first three path-scoped jobs reviewed empty diffs (path scope = uncommitted changes) — re-run on a throwaway worktree holding the decision documents as one diff (job 30ffdffb). Diagram re-render running (Max).
 - 11:31Z Cross-lab `/review` (agw job 30ffdffb, Haiku angles + GPT adversary on IU, over the decision documents as one diff): actionable — 17 blocking, 5 improvements, 3 test gaps; all resolved in `panel/review-resolutions.md` (split W3 and W4, legacy rollback only before the first new effect, continuous WAL replication, level-triggered webhook recovery, holdout binding by measurement, schema-stamped watchdog rollback, signal-rooted correlation). Fixes being applied by Max workflow wf_9e691ea8-2f3 (4 sonnet agents).
 - 11:59Z Review fixes applied (Max workflow wf_9e691ea8-2f3) and committed (c9974d9; warden lane plan 2847cad): W3→W3a/W3b, W4→W4a/W4b, legacy rollback horizon, WAL replication, measured holdout binding, admission in warden; runnable copies regenerated; both gates pass. Remaining: diagram re-render (running, told about the final calendar), final `report.html` build, `rv` submission to the owner's Inbox, final commit and message.
+- 12:21Z **Done.** Final `report.html` built (check clean, 0 placeholders, no external resources, redaction clean) and submitted to the owner's review Inbox through `rv` (`spikes/05-artifact-review/rv/rv-pn.ts`, project `dotfiles`, message msg_01M5HRYJ6ZHFHBH96GXVA6ZC63, default "proceed as designed: start W1a and W2a; D1–D5 take their defaults"). Memory note `factory-design` updated.
+
+## Resume here (a fresh context)
+
+1. **Owner comments:** `cd ~/SourceRoot/dotfiles/docs/factory/spikes/05-artifact-review/rv && PLANNOTATOR_BIN=~/.local/share/factory/tools/pn-review PLANNOTATOR_DATA_DIR=~/.local/share/factory/review/home/.plannotator RV_SESSION=factory-design bun rv-pn.ts wait msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 ~/SourceRoot/dotfiles --timeout 60 --default proceed` — fold any feedback into the ADRs and `waves.md`, rebuild with `report/build.py`, resubmit (supersedes).
+2. **Review door** is interim and unsupervised: the Inbox (spike 5 binary, data in `~/.local/share/factory/review/`) and `~/.local/share/factory/tools/review-door.py` on :7790 behind Caddy's `plannotator.test` block. If the door answers 502: `nohup python3 -I ~/.local/share/factory/tools/review-door.py >> ~/Library/Logs/factory-review-door.log 2>&1 &`. W7 replaces both.
+3. **Start the rewrite:** `waves.md` §How to start — W1a (warden Wave 9) and W2a (dotfiles Wave 1) are active and gate-green.
+4. **Open decisions D1–D5:** `report/10-open-decisions.md`; defaults apply on expiry.
 
