@@ -62,8 +62,10 @@ recovered blip. Owner pages: 0. Recorded: one candidate with its timeline.
 3. **Topology**: the manifests give `host → container/job → service → project`. Signals
    whose subjects share an ancestor inside the window fold under the ancestor's incident;
    deployments of that subtree inside the look-back window attach as suspects.
-4. **Time window**: ⟨window from the golden-set dev split⟩, never the only key (a pure
-   time window merges unrelated incidents — research `ops-correlation` §5).
+4. **Time windows** (frozen on the golden set's development half, ADR-003): topology fold 45 min,
+   dedup 12 h, open incident 6 h, recurrence 7 d, similarity fallback θ 0.2 within 4 h — never the
+   only key (a pure time window merges unrelated incidents — research `ops-correlation` §5). Held-out
+   result: B-cubed P 0.937, R 0.846, F1 0.889 vs today's 0.744.
 5. **Candidate gate** (Keep's promotion): a candidate becomes an incident when it persists
    ≥ T, or reaches N signals, or matches a known error, or its severity is critical;
    otherwise it expires as noise, recorded and scored.

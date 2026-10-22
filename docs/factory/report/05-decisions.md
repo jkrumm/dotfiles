@@ -7,7 +7,7 @@ Each ADR with the evidence that decided it, how sure it is, and what would rever
 |-|-|-|-|-|
 | 001 | Tasks in the ledger with bd's verbs | spike 1: `external:` inert 0/9, 305 s fixed lease vs 30 s, work repos touched; 65-line baseline passes the oracle | 80 % | a stable beads enforces cross-repo deps and ships two minors without schema migration; a second writer host |
 | 002 | Durable execution = ledger + statecharts, no engine | spike 2: both options 0 duplicates over ~200 kills; DBOS strands flows on redeploy (0/5), honours late answers | 75 % | ≥ 6 flow types with fan-out past ~150 lines; ledger moves to Postgres; 2 duplicate/lost-work incidents in a quarter |
-| 003 | Correlation: deterministic grouping, decision model for the residue | ⟨spike 3 backtest⟩; `kpi/decision_shadow`: model 60.1 % vs truth, LLM triage 61.8 % | ⟨⟩ | ⟨⟩ |
+| 003 | Deterministic correlation; judgment in the investigating agent; escalation by typed class + capability limits; Keep not adopted | backtest held-out: F1 0.889 vs 0.744, owner touch 0.62 %; Keep-style 0.737 = singletons; decision model 60 % vs truth | 80 % grouping, low for escalation and known errors | the fresh-sample re-test after W3 fails grouping; known-error match stays < 0.50 after the cross-source fix |
 | 004 | CLI-first, one agent contract, generated routing; MCP only for research-gateway and chrome-devtools | owner decision; spike 4: one policy sentence fixes the long-job spiral (2 calls, 38.9k tokens) | high | a non-shell client becomes primary for a gateway |
 | 005 | Artifacts are ours: `rv` service + Argo view; plannotator interim | owner intent; spike 5: plannotator denies framing, `rv` prototype 14/14 | 70 % | the build exceeds 3 waves of work; the owner prefers plannotator's UI |
 | 006 | One trace per item; derived id; `traceparent` + resource attribute | spike 6: 25-span trace joined; interactive panes ignore TRACEPARENT | high | Claude Code accepts inbound context in interactive sessions (simplify to one carrier) |
@@ -27,7 +27,7 @@ Each ADR with the evidence that decided it, how sure it is, and what would rever
 |-|-|-|
 | 1 | beads as the Task system of record | no — extend the ledger (`spikes/01-beads/REPORT.md`) |
 | 2 | durable engine, killed mid-step | ledger + statecharts; DBOS equal on crashes, worse on redeploys (`spikes/02-durable/`) |
-| 3 | correlation over the golden set vs Keep's model | ⟨`spikes/03-correlation/`⟩ |
+| 3 | correlation over the golden set vs Keep's model | proposed passes grouping (F1 0.889) and owner touch (0.62 %); fails escalation (underpowered: 1 genuine decision held out) and known-error match (0.479); Keep-style no better than singletons (`spikes/03-correlation/`, `evidence/golden/backtest.out.md`) |
 | 4 | CLI vs MCP on three gateways | measured both; owner chose CLI-first; one policy sentence closes the CLI's only gap (`spikes/04-cli-mcp/`) |
 | 5 | artifact review | plannotator's semantics, our service (`spikes/05-artifact-review/`) |
 | 6 | one trace end to end | joins for headless workers; attribute join for herdr panes (`spikes/06-telemetry/`) |

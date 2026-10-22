@@ -3,9 +3,10 @@
 **Why not just adopt beads, a workflow engine, or Keep?** Each was measured on our data. beads
 v1.3.1 leaves cross-repo dependencies unenforced (0 of 9), fixes its lease at 5 minutes, and
 touches work repos even in contributor mode (spike 1). DBOS on SQLite survived every kill but
-strands flows on a redeploy and adds a second system of record (spike 2). Keep: section 7's
-backtest. What each does well is copied: bd's verbs and ready semantics, durable primitives, Keep's
-candidate gate.
+strands flows on a redeploy and adds a second system of record (spike 2). Keep's model — fingerprint
+fields plus attribute rules, no topology — scored F1 0.737 on the held-out golden set, no better than
+leaving every event alone (0.740), against 0.889 for the proposed correlator (spike 3). What each does
+well is copied: bd's verbs and ready semantics, durable primitives, Keep's candidate gate.
 
 **Is this a rewrite of warden?** Yes — rewrite and cutover, no co-running. The old loop stops when
 W1 starts and its database is archived read-only; history enters a fresh ledger by one import. Each

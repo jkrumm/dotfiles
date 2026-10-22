@@ -1,14 +1,23 @@
 # Proof — draft 1 (Phase 6)
 
 Evidence that is neither the owner's opinion nor the designer's. Report section 7 is built from
-this file. Numbers marked ⟨…⟩ fill from the backtest and the gameday run.
+this file.
 
 ## 1. Backtest on the golden set
 
 Pre-registered before any label existed (`evidence/golden/PREREGISTRATION.md`, committed first):
 grouping B-cubed P ≥ 0.90 and R ≥ 0.80 and F1 above today's warden; escalation recall 1.00 on
 genuine owner decisions, precision ≥ 0.80; owner-touch share ≤ 1 %; known-error match ≥ 0.50 with
-≤ 0.05 false matches. Rules fitted on even chunks, scored once on odd chunks. Result: ⟨spike 3⟩.
+≤ 0.05 false matches. Rules fitted on even chunks, scored once on odd chunks.
+
+**Result (`evidence/golden/backtest.out.md`, ADR-003):** 5 of 8 thresholds pass — B-cubed P 0.937 /
+0.902 (uncertain flipped), R 0.846 / 0.881, F1 0.889 vs warden 0.744 (+0.145, CI +0.098…+0.194), owner touch
+0.62 % (warden 14.09 %), known-error false match 0.007. Fail: escalation recall and precision (one
+genuine decision in the held-out half — the test is underpowered, and the keyword policy overfit the
+development half) and known-error match 0.479. Design response in ADR-003: typed decision class,
+capability limits for three of four classes, cross-source known errors; re-test on a fresh labelled
+sample after W3. Hygiene: the spike listed the positive events' ids and notes in both halves before
+writing rules (disclosed in the artefact); held-out packets were not read for design.
 
 ## 2. Gameday catalogue — failure modes from this estate's own history
 
@@ -56,8 +65,8 @@ the ledger or its snapshot read-only. Error budgets are per 28 days.
 | SLI | Baseline (14 d unless noted) | Target | Error budget |
 |-|-|-|-|
 | Autonomy: items with no owner touch | 64.3 % | SLO ≥ 99 % (stretch 99.9 %) | 1 % of items |
-| Genuine share of escalations | ⟨golden set⟩ | ≥ 90 % | — |
-| Owner pages (all owner-facing notifications) per week | ⟨from `owner_pages`⟩ | ≤ 2 | — |
+| Genuine share of escalations | 3.8 % (4 of 105 escalated items in the golden set, `kpi/owner_pages`) | ≥ 90 % | — |
+| Owner pages (all owner-facing notifications) per week | ≈ 62 (28 d: 140 decision entries + 71 posts + ≥ 38 reminders, `kpi/owner_pages`) | ≤ 2 | — |
 | Time to resolve, median / p90 | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h | p90 breach ≤ 2 per 28 d |
 | Reopen rate | 10.4 % | ≤ 5 % | — |
 | Regression rate (fix recurs ≤ 30 d) | 10.4 % (5 / 48) | ≤ 5 % | — |

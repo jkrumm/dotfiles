@@ -2,8 +2,8 @@
 
 **Rebuild warden as level-triggered reconcilers over one ledger, describe every repo in one
 manifest, take signals from their sources, and let verification — not the owner — gate every
-ship. Adopt no heavy runtime: beads and a workflow engine each lost a measured spike, and their
-designs are copied instead; Keep's model is scored in the backtest ⟨spike 3, pending⟩.** The factory's real cost today is owner attention, not tokens: 577
+ship. Adopt no heavy runtime: beads, a workflow engine and Keep's model each lost a measured spike,
+and their designs are copied instead.** The factory's real cost today is owner attention, not tokens: 577
 owner-facing notifications and 50 "continue" nudges, against $2.60 of agent spend on the ten worst
 incidents.
 
@@ -25,8 +25,8 @@ incidents.
 | Metric | Baseline (evidence) | Target |
 |-|-|-|
 | Items with no owner touch, 14 d | **64.3 %** (`kpi/baseline`) | SLO ≥ 99 %, stretch 99.9 % |
-| New items that reached the owner, 14 d | **32.2 %** (74 / 230) | SLO < 1 %, stretch ≤ 0.1 % — business only |
-| Owner-facing notifications, all time | **577** — today's KPI sees 140 (`incidents/`) | ≤ 2 per week |
+| New items that reached the owner, 14 d | **32.2 %** (74 / 230); only 3.8 % of escalations genuinely his (golden set) | SLO < 1 %, stretch ≤ 0.1 % — business only |
+| Owner-facing notifications | **≈ 62 per week** over 28 days; 577 all time, of which today's KPI sees 140 (`kpi/owner_pages`, `incidents/`) | ≤ 2 per week |
 | Owner `continue` nudges to parked agents | **50** in 45 days (`questions/`) | 0 |
 | Pages for the ten costliest incidents | **180** → ≈ 8 under the ideal path (`incidents/`) | — |
 | Time to resolve, median / p90, 14 d | 0.7 h / 14.9 h | ≤ 0.5 h / ≤ 4 h |
@@ -36,7 +36,7 @@ incidents.
 | Status questions asked outside Argo | ≈ 25 per week (`questions/`) | ≤ 5 per week |
 | Signals arriving through Slack relays | **63.7 %** (`signals/`) | 0 % |
 | Locked-model claims that held | 8 of 26 — enforced 7/7, prose 1/11 (`postmortem/`) | every invariant enforced or labelled `target` |
-| Backtest, held-out, against pre-registered thresholds | ⟨spike 3⟩ | pass |
+| Backtest, held-out, pre-registered thresholds | grouping F1 **0.889** vs warden 0.744; 5 of 8 pass — escalation and known-error matching fail (`golden/backtest`) | all 8 on a fresh sample after W3 |
 
 ## Decisions taken
 
@@ -44,7 +44,7 @@ incidents.
 |-|-|
 | 001 | Tasks live in the ledger with bd's verbs; beads' runtime is not adopted (cross-repo deps inert, 5-min fixed lease, work repos touched) |
 | 002 | Durable execution = the ledger with explicit statecharts; no engine (DBOS strands flows on redeploy) |
-| 003 | ⟨correlation, spike 3⟩ |
+| 003 | Correlation is deterministic (fingerprint, topology, window); judgment stays with the investigating agent; three escalation classes are guaranteed by capability limits; Keep not adopted |
 | 004 | CLI-first: every tool a CLI on one agent contract, commands defined once in code, docs and routing generated; MCP only for research-gateway and chrome-devtools |
 | 005 | Artifacts are ours: an `rv` service with Argo's Artifacts view and a basalt-ui comment thread; plannotator only until W7; never a gate |
 | 006 | One trace per item: derived trace id, `traceparent` where it travels, a resource attribute where it cannot |
