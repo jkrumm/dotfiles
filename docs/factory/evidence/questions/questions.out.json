@@ -1,0 +1,3215 @@
+{
+ "as_of": "2026-10-22T08:00:00Z",
+ "windows": {
+  "claude_days": 45,
+  "hermes_days": 60,
+  "half_life_days": 14.0
+ },
+ "totals": {
+  "owner_messages": 1111,
+  "classified_messages": 211,
+  "classified_question_form": 119,
+  "by_channel_group": {
+   "hermes": 12,
+   "claude_code": 199
+  },
+  "by_channel": {
+   "claude_macbook": 352,
+   "claude_mini": 682,
+   "hermes_argo": 2,
+   "hermes_desktop": 16,
+   "hermes_slack": 44,
+   "hermes_tui": 15
+  },
+  "classified_by_channel": {
+   "claude_macbook": 94,
+   "claude_mini": 105,
+   "hermes_argo": 1,
+   "hermes_desktop": 1,
+   "hermes_slack": 9,
+   "hermes_tui": 1
+  },
+  "classified_in_pushed_classes": 37,
+  "path_top": [
+   [
+    "git read (log/status/diff/branch)",
+    38
+   ],
+   [
+    "curl (HTTP probe)",
+    18
+   ],
+   [
+    "herdr agent",
+    16
+   ],
+   [
+    "host probe (ps/df/launchctl)",
+    15
+   ],
+   [
+    "ssh",
+    14
+   ],
+   [
+    "subagent (Explore/worker)",
+    13
+   ],
+   [
+    "rd agents",
+    11
+   ],
+   [
+    "herdr pane",
+    7
+   ]
+  ],
+  "answer_s_median": 47.5,
+  "tool_calls_median": 5.0,
+  "no_tool_share": 0.07,
+  "turns_measured": 80
+ },
+ "funnel": {
+  "rows": [
+   [
+    "transcript files in window, mini",
+    5620
+   ],
+   [
+    "human-origin entries in window, mini",
+    2703
+   ],
+   [
+    "  of which agent-fed briefs / wrappers removed",
+    1985
+   ],
+   [
+    "owner messages, mini",
+    682
+   ],
+   [
+    "MacBook leg",
+    "ssh unavailable (remote rc=255: ssh: connect to host iumac port 2222: Operati); rows from an earlier raw dump of the same window, no turn metrics"
+   ],
+   [
+    "human-origin entries in window, MacBook",
+    3066
+   ],
+   [
+    "  of which agent-fed briefs / wrappers removed",
+    2714
+   ],
+   [
+    "owner messages, MacBook",
+    352
+   ],
+   [
+    "Hermes user messages scanned (60 d)",
+    1677
+   ],
+   [
+    "Hermes owner messages (slack, desktop, tui, cli)",
+    77
+   ],
+   [
+    "Hermes agent-authored probes",
+    47
+   ],
+   [
+    "owner messages, all channels",
+    1111
+   ],
+   [
+    "classified into a canonical question",
+    211
+   ],
+   [
+    "  of which in question form",
+    119
+   ],
+   [
+    "question-form, no class (residue)",
+    80
+   ]
+  ]
+ },
+ "questions": [
+  {
+   "id": "nudge_continue",
+   "area": "Fleet",
+   "question": "(implied) Which parked agent must I nudge to continue -- quota reset, laptop closed, crash?",
+   "paraphrase": "'continue' / 'go' / 'limit resets in 5 min' typed at an agent that stopped and waited for him.",
+   "kind": "statement",
+   "count": 50,
+   "count_question_form": 0,
+   "count_last_14d": 24,
+   "count_prior_31d": 26,
+   "rank_score": 27.401,
+   "first_seen": "2026-09-20",
+   "last_seen": "2026-10-21",
+   "days_active": 25,
+   "channels": {
+    "claude_macbook": 41,
+    "claude_mini": 9
+   },
+   "top_projects": {
+    "shutterflow": 38,
+    "weatherorb": 3,
+    "tinycast-extensions": 2,
+    "research-gateway": 2,
+    "basalt-ui": 2,
+    "dotfiles": 1
+   },
+   "workspaces": {
+    "SourceRoot": 50
+   },
+   "entities_needed": [
+    "Agent",
+    "Quota window",
+    "Infra host (MacBook power/lid)"
+   ],
+   "entity_mentions": {
+    "Agent": 4,
+    "Cost/quota": 3,
+    "Task/plan": 2,
+    "Deployment": 1,
+    "Infra host": 1
+   },
+   "repeat_days": [
+    "2026-09-20",
+    "2026-09-24",
+    "2026-09-27",
+    "2026-10-02",
+    "2026-10-03",
+    "2026-10-06",
+    "2026-10-11",
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-21"
+   ],
+   "max_per_day": 6,
+   "sessions_with_repeat": 9,
+   "fast_repeats_2h": 8,
+   "repeated_within_day": true,
+   "turn_n": 9,
+   "answered_n": 8,
+   "answer_s_median": 80.4,
+   "answer_s_p90": 223.9,
+   "first_text_s_median": 25.0,
+   "tool_calls_median": 8.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.78
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.33
+    ],
+    [
+     "rd agents",
+     0.33
+    ],
+    [
+     "herdr agent",
+     0.33
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.22
+    ],
+    [
+     "rd wave",
+     0.22
+    ]
+   ],
+   "path_generic": {
+    "Read file": 0.11,
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.67,
+    "script run (python/node/bun)": 0.67
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 15873.0,
+   "assistant_entries_median": 14.5,
+   "rank": 1
+  },
+  {
+   "id": "where_are_we",
+   "area": "Orientation",
+   "question": "Where are we on this effort -- how is it going?",
+   "paraphrase": "Where are we at with the thing you are working on, how is it going?",
+   "kind": "question",
+   "count": 28,
+   "count_question_form": 26,
+   "count_last_14d": 18,
+   "count_prior_31d": 10,
+   "rank_score": 17.162,
+   "first_seen": "2026-09-13",
+   "last_seen": "2026-10-21",
+   "days_active": 19,
+   "channels": {
+    "claude_macbook": 10,
+    "claude_mini": 15,
+    "hermes_slack": 3
+   },
+   "top_projects": {
+    "tinycast-extensions": 6,
+    "prometheus-scripts": 4,
+    "(hermes)": 3,
+    "weatherorb": 3,
+    "shutterflow": 3,
+    "email-gateway": 2
+   },
+   "workspaces": {
+    "IuRoot": 5,
+    "SourceRoot": 20,
+    "hermes": 3
+   },
+   "entities_needed": [
+    "Agent",
+    "Task (wave/plan)",
+    "Project",
+    "Change",
+    "Attempt"
+   ],
+   "entity_mentions": {
+    "Agent": 3,
+    "Infra host": 2,
+    "Project": 1,
+    "Incident/alert": 1,
+    "Task/plan": 1,
+    "Deployment": 1,
+    "Cost/quota": 1
+   },
+   "repeat_days": [
+    "2026-10-07",
+    "2026-10-09",
+    "2026-10-10",
+    "2026-10-16",
+    "2026-10-18",
+    "2026-10-20",
+    "2026-10-21"
+   ],
+   "max_per_day": 3,
+   "sessions_with_repeat": 7,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 15,
+   "answered_n": 14,
+   "answer_s_median": 37.9,
+   "answer_s_p90": 255.9,
+   "first_text_s_median": 54.2,
+   "tool_calls_median": 4.5,
+   "no_tool_share": 0.07,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.53
+    ],
+    [
+     "herdr agent",
+     0.33
+    ],
+    [
+     "rd agents",
+     0.33
+    ],
+    [
+     "curl (HTTP probe)",
+     0.27
+    ],
+    [
+     "herdr pane",
+     0.2
+    ],
+    [
+     "glab mr",
+     0.2
+    ]
+   ],
+   "path_generic": {
+    "edit/write files": 0.07,
+    "fs read (cat/ls/grep)": 0.93,
+    "git write (add/commit/push/pull)": 0.2,
+    "script run (python/node/bun)": 0.6
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 42680.0,
+   "assistant_entries_median": 9.5,
+   "rank": 2
+  },
+  {
+   "id": "done_shipped_live",
+   "area": "Delivery",
+   "question": "Is it done, merged, deployed and verified live? Can I close the thread?",
+   "paraphrase": "Is everything merged and shipped, is it live, can we close this?",
+   "kind": "question",
+   "count": 19,
+   "count_question_form": 19,
+   "count_last_14d": 11,
+   "count_prior_31d": 8,
+   "rank_score": 10.401,
+   "first_seen": "2026-09-23",
+   "last_seen": "2026-10-19",
+   "days_active": 11,
+   "channels": {
+    "claude_macbook": 3,
+    "claude_mini": 16
+   },
+   "top_projects": {
+    "dotfiles": 3,
+    "prometheus-scripts": 3,
+    "modelpick": 2,
+    "shutterflow": 2,
+    "audio-gateway": 2,
+    "warden": 1
+   },
+   "workspaces": {
+    "IuRoot": 4,
+    "SourceRoot": 15
+   },
+   "entities_needed": [
+    "Change",
+    "Deployment",
+    "Verification",
+    "Task",
+    "Project"
+   ],
+   "entity_mentions": {
+    "Deployment": 6,
+    "Change/PR": 4,
+    "Agent": 3,
+    "Project": 2,
+    "Infra host": 2,
+    "Task/plan": 1
+   },
+   "repeat_days": [
+    "2026-09-23",
+    "2026-10-15",
+    "2026-10-19"
+   ],
+   "max_per_day": 5,
+   "sessions_with_repeat": 2,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 15,
+   "answered_n": 15,
+   "answer_s_median": 46.2,
+   "answer_s_p90": 143.7,
+   "first_text_s_median": 11.4,
+   "tool_calls_median": 4.0,
+   "no_tool_share": 0.07,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.73
+    ],
+    [
+     "curl (HTTP probe)",
+     0.33
+    ],
+    [
+     "gh run",
+     0.2
+    ],
+    [
+     "ssh",
+     0.2
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.2
+    ],
+    [
+     "glab api",
+     0.2
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.87,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.27
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 41595.0,
+   "assistant_entries_median": 10.0,
+   "rank": 3
+  },
+  {
+   "id": "quota_now",
+   "area": "Cost",
+   "question": "Where is my Claude quota (5 h / 7 d) and when does it reset?",
+   "paraphrase": "What is my Claude usage, when does the limit reset, can we keep spending tokens?",
+   "kind": "question",
+   "count": 12,
+   "count_question_form": 2,
+   "count_last_14d": 10,
+   "count_prior_31d": 2,
+   "rank_score": 9.365,
+   "first_seen": "2026-09-23",
+   "last_seen": "2026-10-21",
+   "days_active": 7,
+   "channels": {
+    "claude_macbook": 7,
+    "claude_mini": 4,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "shutterflow": 5,
+    "tinycast-extensions": 2,
+    "basalt-ui": 2,
+    "weatherorb": 2,
+    "(hermes)": 1
+   },
+   "workspaces": {
+    "SourceRoot": 11,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Quota window",
+    "Agent (consumer)",
+    "Cost"
+   ],
+   "entity_mentions": {
+    "Cost/quota": 12,
+    "Agent": 4,
+    "Task/plan": 3,
+    "Project": 1
+   },
+   "repeat_days": [
+    "2026-10-20",
+    "2026-10-21"
+   ],
+   "max_per_day": 4,
+   "sessions_with_repeat": 3,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 5,
+   "answered_n": 4,
+   "answer_s_median": 34.0,
+   "answer_s_p90": 83.9,
+   "first_text_s_median": 26.9,
+   "tool_calls_median": 3.5,
+   "no_tool_share": 0.25,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.6
+    ],
+    [
+     "curl (HTTP probe)",
+     0.2
+    ],
+    [
+     "TaskStop",
+     0.2
+    ],
+    [
+     "rd agents",
+     0.2
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.2
+    ],
+    [
+     "herdr agent",
+     0.2
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.6,
+    "git write (add/commit/push/pull)": 0.4,
+    "script run (python/node/bun)": 0.6
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 84671.0,
+   "assistant_entries_median": 8.5,
+   "rank": 4
+  },
+  {
+   "id": "anything_broken",
+   "area": "Health",
+   "question": "Is everything healthy -- is anything broken right now?",
+   "paraphrase": "Are all systems healthy, is it all good, why so many alerts at once?",
+   "kind": "question",
+   "count": 11,
+   "count_question_form": 11,
+   "count_last_14d": 7,
+   "count_prior_31d": 4,
+   "rank_score": 6.304,
+   "first_seen": "2026-08-27",
+   "last_seen": "2026-10-21",
+   "days_active": 9,
+   "channels": {
+    "claude_macbook": 5,
+    "claude_mini": 4,
+    "hermes_slack": 1,
+    "hermes_tui": 1
+   },
+   "top_projects": {
+    "tinycast-extensions": 3,
+    "(hermes)": 2,
+    "shutterflow": 2,
+    "modelpick": 1,
+    "email-gateway": 1,
+    "vps": 1
+   },
+   "workspaces": {
+    "IuRoot": 1,
+    "SourceRoot": 8,
+    "hermes": 2
+   },
+   "entities_needed": [
+    "Incident",
+    "Condition",
+    "Project",
+    "Infra host"
+   ],
+   "entity_mentions": {
+    "Infra host": 3,
+    "Agent": 2,
+    "Incident/alert": 2,
+    "Project": 1
+   },
+   "repeat_days": [
+    "2026-10-05",
+    "2026-10-16"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 6,
+   "answered_n": 6,
+   "answer_s_median": 47.0,
+   "answer_s_p90": 172.6,
+   "first_text_s_median": 19.3,
+   "tool_calls_median": 10.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "curl (HTTP probe)",
+     0.5
+    ],
+    [
+     "ssh",
+     0.33
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.33
+    ],
+    [
+     "skill argo-api",
+     0.33
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.33
+    ],
+    [
+     "hermes gateway",
+     0.17
+    ]
+   ],
+   "path_generic": {
+    "Read file": 0.17,
+    "fs read (cat/ls/grep)": 1.0,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "yes",
+   "push_note": "Kuma, Docker, watchdog, 24 h warnings, warden counts",
+   "gap_s_median_same_session": 76029.0,
+   "assistant_entries_median": 8.0,
+   "rank": 5
+  },
+  {
+   "id": "why_failing",
+   "area": "Health",
+   "question": "Why does X not work / fail / show the wrong thing?",
+   "paraphrase": "Why is this not working, why does the page still show the old thing?",
+   "kind": "question",
+   "count": 11,
+   "count_question_form": 11,
+   "count_last_14d": 6,
+   "count_prior_31d": 5,
+   "rank_score": 5.954,
+   "first_seen": "2026-09-21",
+   "last_seen": "2026-10-21",
+   "days_active": 10,
+   "channels": {
+    "claude_macbook": 5,
+    "claude_mini": 6
+   },
+   "top_projects": {
+    "tinycast-extensions": 4,
+    "warden": 1,
+    "dotfiles": 1,
+    "jkrumm.com": 1,
+    "research-gateway": 1,
+    "modelpick": 1
+   },
+   "workspaces": {
+    "IuRoot": 1,
+    "SourceRoot": 10
+   },
+   "entities_needed": [
+    "Incident",
+    "Project",
+    "Deployment",
+    "Signal"
+   ],
+   "entity_mentions": {
+    "Incident/alert": 2,
+    "Project": 1,
+    "Agent": 1,
+    "Task/plan": 1,
+    "Cost/quota": 1,
+    "Infra host": 1
+   },
+   "repeat_days": [
+    "2026-10-09"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 6,
+   "answered_n": 6,
+   "answer_s_median": 24.0,
+   "answer_s_p90": 200.2,
+   "first_text_s_median": 17.1,
+   "tool_calls_median": 2.5,
+   "no_tool_share": 0.33,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.33
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.17
+    ],
+    [
+     "MCP research-gateway job_wait",
+     0.17
+    ],
+    [
+     "MCP research-gateway research",
+     0.17
+    ],
+    [
+     "make check",
+     0.17
+    ],
+    [
+     "hermes",
+     0.17
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.5,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.17
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 4.5,
+   "rank": 6
+  },
+  {
+   "id": "delegate_decision",
+   "area": "Autonomy",
+   "question": "(implied) Which approvals am I still giving that the agent could decide itself?",
+   "paraphrase": "You can approve and merge that yourself -- permission handed over, case by case.",
+   "kind": "statement",
+   "count": 15,
+   "count_question_form": 4,
+   "count_last_14d": 5,
+   "count_prior_31d": 10,
+   "rank_score": 5.539,
+   "first_seen": "2026-09-15",
+   "last_seen": "2026-10-16",
+   "days_active": 9,
+   "channels": {
+    "claude_mini": 15
+   },
+   "top_projects": {
+    "jkrumm.com": 3,
+    "weatherorb": 2,
+    "epos.student-enrolment": 2,
+    "prometheus-scripts": 2,
+    "bun-email-api": 1,
+    "warden": 1
+   },
+   "workspaces": {
+    "IuRoot": 4,
+    "SourceRoot": 11
+   },
+   "entities_needed": [
+    "Decision",
+    "Change",
+    "Verification"
+   ],
+   "entity_mentions": {
+    "Change/PR": 5,
+    "Deployment": 5,
+    "Project": 2,
+    "Agent": 2
+   },
+   "repeat_days": [
+    "2026-09-23",
+    "2026-10-01",
+    "2026-10-09"
+   ],
+   "max_per_day": 4,
+   "sessions_with_repeat": 2,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 13,
+   "answered_n": 12,
+   "answer_s_median": 113.5,
+   "answer_s_p90": 303.6,
+   "first_text_s_median": 18.9,
+   "tool_calls_median": 9.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.77
+    ],
+    [
+     "curl (HTTP probe)",
+     0.31
+    ],
+    [
+     "herdr agent",
+     0.31
+    ],
+    [
+     "ssh",
+     0.23
+    ],
+    [
+     "gh run",
+     0.15
+    ],
+    [
+     "rd agents",
+     0.15
+    ]
+   ],
+   "path_generic": {
+    "Read file": 0.23,
+    "edit/write files": 0.31,
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.62,
+    "script run (python/node/bun)": 0.62
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 8923.0,
+   "assistant_entries_median": 15.0,
+   "rank": 7
+  },
+  {
+   "id": "since_away",
+   "area": "Orientation",
+   "question": "What happened while I was away (overnight, vacation, laptop closed)?",
+   "paraphrase": "I am back / good morning -- what got built or changed since I left?",
+   "kind": "question",
+   "count": 8,
+   "count_question_form": 4,
+   "count_last_14d": 5,
+   "count_prior_31d": 3,
+   "rank_score": 5.079,
+   "first_seen": "2026-10-05",
+   "last_seen": "2026-10-20",
+   "days_active": 7,
+   "channels": {
+    "claude_macbook": 4,
+    "claude_mini": 3,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "tinycast-extensions": 2,
+    "prometheus-scripts": 2,
+    "shutterflow": 2,
+    "(hermes)": 1
+   },
+   "workspaces": {
+    "IuRoot": 2,
+    "SourceRoot": 5,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Change",
+    "Deployment",
+    "Agent",
+    "Incident",
+    "Task"
+   ],
+   "entity_mentions": {
+    "Project": 2,
+    "Agent": 2,
+    "Infra host": 2,
+    "Incident/alert": 1,
+    "Task/plan": 1,
+    "Deployment": 1
+   },
+   "repeat_days": [
+    "2026-10-10"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 53.8,
+   "answer_s_p90": 72.4,
+   "first_text_s_median": 24.2,
+   "tool_calls_median": 13.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     1.0
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.67
+    ],
+    [
+     "herdr agent",
+     0.67
+    ],
+    [
+     "docker",
+     0.33
+    ],
+    [
+     "make help",
+     0.33
+    ],
+    [
+     "MCP datadog get_pipeline_runs",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "partial",
+   "push_note": "per-project changelog lines, 24 h warnings; no per-agent record",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 17.0,
+   "rank": 8
+  },
+  {
+   "id": "tab_cleanup",
+   "area": "Fleet",
+   "question": "Which herdr tabs / agents are finished and can be closed? Why are so many open?",
+   "paraphrase": "Why are there still so many tabs open; which are needed; close the finished ones.",
+   "kind": "statement",
+   "count": 9,
+   "count_question_form": 4,
+   "count_last_14d": 4,
+   "count_prior_31d": 5,
+   "rank_score": 4.783,
+   "first_seen": "2026-09-27",
+   "last_seen": "2026-10-16",
+   "days_active": 7,
+   "channels": {
+    "claude_macbook": 3,
+    "claude_mini": 5,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "shutterflow": 2,
+    "(hermes)": 1,
+    "dotfiles": 1,
+    "agent-gateway": 1,
+    "basalt-ui": 1,
+    "email-gateway": 1
+   },
+   "workspaces": {
+    "SourceRoot": 8,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Agent",
+    "Project (herdr workspace)",
+    "Attempt"
+   ],
+   "entity_mentions": {
+    "Agent": 9,
+    "Project": 2,
+    "Change/PR": 1,
+    "Cost/quota": 1
+   },
+   "repeat_days": [
+    "2026-10-07",
+    "2026-10-15"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 4,
+   "answered_n": 4,
+   "answer_s_median": 60.1,
+   "answer_s_p90": 268.9,
+   "first_text_s_median": 7.3,
+   "tool_calls_median": 8.5,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "herdr agent",
+     0.75
+    ],
+    [
+     "herdr tab",
+     0.75
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.75
+    ],
+    [
+     "herdr workspace",
+     0.5
+    ],
+    [
+     "herdr pane",
+     0.5
+    ],
+    [
+     "curl (HTTP probe)",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "script run (python/node/bun)": 0.75
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 15.0,
+   "rank": 9
+  },
+  {
+   "id": "agent_alive",
+   "area": "Fleet",
+   "question": "Is that agent still running, stuck, or done -- does it need something?",
+   "paraphrase": "Are you still going? Why are you stuck? Is it done, what does it say, does it need anything?",
+   "kind": "question",
+   "count": 10,
+   "count_question_form": 7,
+   "count_last_14d": 5,
+   "count_prior_31d": 5,
+   "rank_score": 4.683,
+   "first_seen": "2026-09-13",
+   "last_seen": "2026-10-19",
+   "days_active": 10,
+   "channels": {
+    "claude_macbook": 2,
+    "claude_mini": 7,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "shutterflow": 2,
+    "(hermes)": 1,
+    "modelpick": 1,
+    "jkrumm.com": 1,
+    "email-gateway": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 9,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Agent",
+    "Attempt",
+    "Task"
+   ],
+   "entity_mentions": {
+    "Agent": 5,
+    "Incident/alert": 5,
+    "Task/plan": 2,
+    "Change/PR": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 8,
+   "answered_n": 8,
+   "answer_s_median": 116.9,
+   "answer_s_p90": 363.4,
+   "first_text_s_median": 12.1,
+   "tool_calls_median": 9.5,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "herdr agent",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.5
+    ],
+    [
+     "herdr pane",
+     0.25
+    ],
+    [
+     "sqlite3 (db read)",
+     0.25
+    ],
+    [
+     "ssh",
+     0.12
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.25,
+    "script run (python/node/bun)": 0.38
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 24.5,
+   "rank": 10
+  },
+  {
+   "id": "connectivity_auth",
+   "area": "Infra",
+   "question": "Is a connection or credential broken -- do I need to log in / unlock something?",
+   "paraphrase": "Why does it say unauthorized; are the agents losing connection; do I need to re-auth; the keychain prompt again.",
+   "kind": "question",
+   "count": 9,
+   "count_question_form": 8,
+   "count_last_14d": 4,
+   "count_prior_31d": 5,
+   "rank_score": 4.625,
+   "first_seen": "2026-09-08",
+   "last_seen": "2026-10-21",
+   "days_active": 9,
+   "channels": {
+    "claude_macbook": 4,
+    "claude_mini": 4,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "dotfiles": 2,
+    "(hermes)": 1,
+    "shutterflow": 1,
+    "warden": 1,
+    "research-gateway": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 8,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Condition (credential/connection)",
+    "Infra host",
+    "Agent"
+   ],
+   "entity_mentions": {
+    "Agent": 5,
+    "Infra host": 4,
+    "Project": 3,
+    "Cost/quota": 3,
+    "Task/plan": 2,
+    "Incident/alert": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 5,
+   "answered_n": 5,
+   "answer_s_median": 20.6,
+   "answer_s_p90": 178.4,
+   "first_text_s_median": 10.9,
+   "tool_calls_median": 8.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "host probe (ps/df/launchctl)",
+     0.4
+    ],
+    [
+     "sqlite3 (db read)",
+     0.4
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.4
+    ],
+    [
+     "skill hyperdx",
+     0.2
+    ],
+    [
+     "skill agents",
+     0.2
+    ],
+    [
+     "tailscale status",
+     0.2
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "script run (python/node/bun)": 0.2
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 10.0,
+   "rank": 11
+  },
+  {
+   "id": "infra_resources",
+   "area": "Infra",
+   "question": "Is a host low on disk / CPU / memory -- what is eating it?",
+   "paraphrase": "The disk is nearly full, CPU is at 100% all the time -- is it us?",
+   "kind": "statement",
+   "count": 6,
+   "count_question_form": 0,
+   "count_last_14d": 5,
+   "count_prior_31d": 1,
+   "rank_score": 4.012,
+   "first_seen": "2026-10-06",
+   "last_seen": "2026-10-19",
+   "days_active": 4,
+   "channels": {
+    "claude_macbook": 3,
+    "claude_mini": 3
+   },
+   "top_projects": {
+    "shutterflow": 2,
+    "weatherorb": 2
+   },
+   "workspaces": {
+    "SourceRoot": 5,
+    "home": 1
+   },
+   "entities_needed": [
+    "Infra host",
+    "Condition",
+    "Project (consumer)"
+   ],
+   "entity_mentions": {
+    "Infra host": 6,
+    "Agent": 2,
+    "Project": 1
+   },
+   "repeat_days": [
+    "2026-10-15"
+   ],
+   "max_per_day": 3,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 2,
+   "answered_n": 2,
+   "answer_s_median": 191.2,
+   "answer_s_p90": 304.9,
+   "first_text_s_median": 8.6,
+   "tool_calls_median": 9.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "herdr agent",
+     1.0
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     1.0
+    ],
+    [
+     "Skill herdr",
+     0.5
+    ],
+    [
+     "docker",
+     0.5
+    ],
+    [
+     "herdr workspace",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "partial",
+   "push_note": "Dev Host heartbeat warnings; no disk or CPU series",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 19.5,
+   "rank": 12
+  },
+  {
+   "id": "all_agents",
+   "area": "Fleet",
+   "question": "How are all my agents / tabs / waves doing, across projects and hosts?",
+   "paraphrase": "Show me every running agent and wave: working, idle, done, stuck -- on the mini and on the MacBook.",
+   "kind": "question",
+   "count": 7,
+   "count_question_form": 6,
+   "count_last_14d": 4,
+   "count_prior_31d": 3,
+   "rank_score": 3.927,
+   "first_seen": "2026-09-12",
+   "last_seen": "2026-10-19",
+   "days_active": 6,
+   "channels": {
+    "claude_macbook": 1,
+    "claude_mini": 3,
+    "hermes_slack": 3
+   },
+   "top_projects": {
+    "(hermes)": 3,
+    "modelpick": 1,
+    "shutterflow": 1,
+    "basalt-ui": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 4,
+    "hermes": 3
+   },
+   "entities_needed": [
+    "Agent",
+    "Project",
+    "Task (wave/plan)",
+    "Infra host"
+   ],
+   "entity_mentions": {
+    "Agent": 6,
+    "Task/plan": 2,
+    "Project": 1,
+    "Incident/alert": 1,
+    "Deployment": 1,
+    "Cost/quota": 1
+   },
+   "repeat_days": [
+    "2026-10-19"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 6,
+   "answered_n": 6,
+   "answer_s_median": 29.0,
+   "answer_s_p90": 215.1,
+   "first_text_s_median": 16.2,
+   "tool_calls_median": 3.0,
+   "no_tool_share": 0.17,
+   "path_top": [
+    [
+     "herdr agent",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ],
+    [
+     "curl (HTTP probe)",
+     0.33
+    ],
+    [
+     "herdr workspace",
+     0.33
+    ],
+    [
+     "skill herdr",
+     0.33
+    ],
+    [
+     "sqlite3 (db read)",
+     0.17
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.83,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "partial",
+   "push_note": "agent overview section (unavailable on 2026-10-22); counts, not per agent",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 8.5,
+   "rank": 13
+  },
+  {
+   "id": "spend",
+   "area": "Cost",
+   "question": "What does it cost -- is cost / usage tracking wired and right?",
+   "paraphrase": "What does this cost, which model is cheaper, is usage tracking wired end to end?",
+   "kind": "question",
+   "count": 7,
+   "count_question_form": 5,
+   "count_last_14d": 4,
+   "count_prior_31d": 3,
+   "rank_score": 3.744,
+   "first_seen": "2026-09-24",
+   "last_seen": "2026-10-19",
+   "days_active": 7,
+   "channels": {
+    "claude_macbook": 2,
+    "claude_mini": 5
+   },
+   "top_projects": {
+    "modelpick": 2,
+    "sideclaw": 1,
+    "shutterflow": 1,
+    "tinycast-extensions": 1,
+    "image-gateway": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 7
+   },
+   "entities_needed": [
+    "Cost",
+    "Usage record",
+    "Project"
+   ],
+   "entity_mentions": {
+    "Cost/quota": 5,
+    "Project": 2,
+    "Agent": 1,
+    "Task/plan": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 10.3,
+   "answer_s_p90": 22.7,
+   "first_text_s_median": 4.9,
+   "tool_calls_median": 1.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "ssh",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 3.0,
+   "rank": 14
+  },
+  {
+   "id": "docs_current",
+   "area": "Setup",
+   "question": "Are the docs / AGENTS.md / skills current and consistent?",
+   "paraphrase": "Is the documentation up to date everywhere, not stale or confusing?",
+   "kind": "question",
+   "count": 6,
+   "count_question_form": 5,
+   "count_last_14d": 5,
+   "count_prior_31d": 1,
+   "rank_score": 3.628,
+   "first_seen": "2026-10-05",
+   "last_seen": "2026-10-16",
+   "days_active": 6,
+   "channels": {
+    "claude_macbook": 1,
+    "claude_mini": 5
+   },
+   "top_projects": {
+    "shutterflow": 1,
+    "image-gateway": 1,
+    "dotfiles": 1,
+    "prometheus-scripts": 1
+   },
+   "workspaces": {
+    "IuRoot": 1,
+    "SourceRoot": 5
+   },
+   "entities_needed": [
+    "Project (docs)",
+    "Artifact"
+   ],
+   "entity_mentions": {
+    "Agent": 2,
+    "Project": 1,
+    "Change/PR": 1,
+    "Deployment": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 4,
+   "answered_n": 4,
+   "answer_s_median": 58.3,
+   "answer_s_p90": 127.7,
+   "first_text_s_median": 5.2,
+   "tool_calls_median": 7.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "herdr agent",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ],
+    [
+     "rd agents",
+     0.5
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.25
+    ],
+    [
+     "herdr tab",
+     0.25
+    ],
+    [
+     "rd close",
+     0.25
+    ]
+   ],
+   "path_generic": {
+    "edit/write files": 0.25,
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.75,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 18.0,
+   "rank": 15
+  },
+  {
+   "id": "where_to_see",
+   "area": "Delivery",
+   "question": "Where do I see the report / PR / dashboard / result?",
+   "paraphrase": "Where can I look at it -- I do not see a link, a PR, or a verdict; reports land in random folders.",
+   "kind": "question",
+   "count": 6,
+   "count_question_form": 3,
+   "count_last_14d": 3,
+   "count_prior_31d": 3,
+   "rank_score": 3.247,
+   "first_seen": "2026-09-10",
+   "last_seen": "2026-10-19",
+   "days_active": 5,
+   "channels": {
+    "claude_macbook": 2,
+    "claude_mini": 4
+   },
+   "top_projects": {
+    "prometheus-scripts": 2,
+    "homelab-private": 1,
+    "shutterflow": 1,
+    "email-gateway": 1,
+    "ShutterflowOps": 1
+   },
+   "workspaces": {
+    "IuRoot": 2,
+    "SourceRoot": 4
+   },
+   "entities_needed": [
+    "Artifact",
+    "Change",
+    "Project (links)"
+   ],
+   "entity_mentions": {
+    "Task/plan": 2,
+    "Project": 1,
+    "Change/PR": 1,
+    "Infra host": 1
+   },
+   "repeat_days": [
+    "2026-10-14"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 4,
+   "answered_n": 4,
+   "answer_s_median": 38.5,
+   "answer_s_p90": 7509.2,
+   "first_text_s_median": 20.7,
+   "tool_calls_median": 5.5,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "ssh",
+     0.5
+    ],
+    [
+     "docker",
+     0.25
+    ],
+    [
+     "Skill research",
+     0.25
+    ],
+    [
+     "MCP research-gateway research",
+     0.25
+    ],
+    [
+     "MCP research-gateway job_wait",
+     0.25
+    ],
+    [
+     "host probe (ps/df/launchctl)",
+     0.25
+    ]
+   ],
+   "path_generic": {
+    "Read file": 0.25,
+    "edit/write files": 0.25,
+    "fs read (cat/ls/grep)": 0.75,
+    "git write (add/commit/push/pull)": 0.25,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 11.0,
+   "rank": 16
+  },
+  {
+   "id": "what_pending",
+   "area": "Orientation",
+   "question": "What is still pending / missing / open in the plan?",
+   "paraphrase": "How much of the plan is still open, what did you achieve, what is left?",
+   "kind": "question",
+   "count": 4,
+   "count_question_form": 4,
+   "count_last_14d": 3,
+   "count_prior_31d": 1,
+   "rank_score": 2.913,
+   "first_seen": "2026-09-20",
+   "last_seen": "2026-10-21",
+   "days_active": 3,
+   "channels": {
+    "claude_mini": 4
+   },
+   "top_projects": {
+    "weatherorb": 2,
+    "basalt-ui": 2
+   },
+   "workspaces": {
+    "SourceRoot": 4
+   },
+   "entities_needed": [
+    "Task (wave/plan)",
+    "Change",
+    "Project"
+   ],
+   "entity_mentions": {
+    "Task/plan": 3,
+    "Agent": 2,
+    "Project": 1
+   },
+   "repeat_days": [
+    "2026-10-19"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 37.0,
+   "answer_s_p90": 66.0,
+   "first_text_s_median": 29.0,
+   "tool_calls_median": 3.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.33
+    ],
+    [
+     "gh issue",
+     0.33
+    ],
+    [
+     "rd say",
+     0.33
+    ],
+    [
+     "rd agents",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.67,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 7.0,
+   "rank": 17
+  },
+  {
+   "id": "needs_me",
+   "area": "Fleet",
+   "question": "What is waiting for me? Which agent or item needs my input?",
+   "paraphrase": "What needs me right now, and what happens if I ignore it?",
+   "kind": "question",
+   "count": 5,
+   "count_question_form": 3,
+   "count_last_14d": 4,
+   "count_prior_31d": 1,
+   "rank_score": 2.702,
+   "first_seen": "2026-09-23",
+   "last_seen": "2026-10-15",
+   "days_active": 5,
+   "channels": {
+    "claude_macbook": 2,
+    "claude_mini": 2,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "shutterflow": 2,
+    "warden": 1,
+    "(hermes)": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 4,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Decision",
+    "Agent",
+    "Incident",
+    "Artifact"
+   ],
+   "entity_mentions": {
+    "Agent": 1,
+    "Task/plan": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 2,
+   "answered_n": 2,
+   "answer_s_median": 330.6,
+   "answer_s_p90": 538.2,
+   "first_text_s_median": 11.6,
+   "tool_calls_median": 13.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     1.0
+    ],
+    [
+     "gh api",
+     0.5
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.5
+    ],
+    [
+     "gh run",
+     0.5
+    ],
+    [
+     "gh pr",
+     0.5
+    ],
+    [
+     "rd say",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.5,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "partial",
+   "push_note": "warden needs_decision count and items that ask a question",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 18.5,
+   "rank": 18
+  },
+  {
+   "id": "healing_worked",
+   "area": "Autonomy",
+   "question": "Did the automatic recovery / self-healing work -- or did I have to intervene?",
+   "paraphrase": "Was the recovery optimal; why did the watchdog not recover it; I had to restart and reconnect manually.",
+   "kind": "question",
+   "count": 5,
+   "count_question_form": 4,
+   "count_last_14d": 1,
+   "count_prior_31d": 4,
+   "rank_score": 2.517,
+   "first_seen": "2026-10-06",
+   "last_seen": "2026-10-14",
+   "days_active": 3,
+   "channels": {
+    "claude_macbook": 4,
+    "claude_mini": 1
+   },
+   "top_projects": {
+    "tinycast-extensions": 4,
+    "homelab-private": 1
+   },
+   "workspaces": {
+    "SourceRoot": 5
+   },
+   "entities_needed": [
+    "Condition",
+    "Attempt (heal)",
+    "Verification",
+    "Incident"
+   ],
+   "entity_mentions": {},
+   "repeat_days": [
+    "2026-10-06"
+   ],
+   "max_per_day": 3,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 1,
+   "answered_n": 1,
+   "answer_s_median": 68.5,
+   "answer_s_p90": 68.5,
+   "first_text_s_median": 68.5,
+   "tool_calls_median": 4.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "subagent (Explore/worker)",
+     1.0
+    ],
+    [
+     "ssh",
+     1.0
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 1.0
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 6615.5,
+   "assistant_entries_median": 10.0,
+   "rank": 19
+  },
+  {
+   "id": "is_wired",
+   "area": "Setup",
+   "question": "Is X wired end to end -- observability, cost tracking, Hermes access?",
+   "paraphrase": "Is monitoring/cost/usage wired up everywhere; are all gateways reachable from Hermes?",
+   "kind": "question",
+   "count": 3,
+   "count_question_form": 2,
+   "count_last_14d": 3,
+   "count_prior_31d": 0,
+   "rank_score": 2.246,
+   "first_seen": "2026-10-13",
+   "last_seen": "2026-10-21",
+   "days_active": 2,
+   "channels": {
+    "claude_mini": 2,
+    "hermes_desktop": 1
+   },
+   "top_projects": {
+    "image-gateway": 2,
+    "(hermes)": 1
+   },
+   "workspaces": {
+    "SourceRoot": 2,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Project (integrations)",
+    "Cost",
+    "Signal (telemetry)"
+   ],
+   "entity_mentions": {
+    "Project": 2,
+    "Agent": 1,
+    "Cost/quota": 1
+   },
+   "repeat_days": [
+    "2026-10-13"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 34.1,
+   "answer_s_p90": 70.3,
+   "first_text_s_median": 4.5,
+   "tool_calls_median": 4.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "ssh",
+     0.33
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.33
+    ],
+    [
+     "execute_code",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.67,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 118.0,
+   "assistant_entries_median": 7.0,
+   "rank": 20
+  },
+  {
+   "id": "version_per_env",
+   "area": "Delivery",
+   "question": "Which version runs where -- is the latest code on stage and prod?",
+   "paraphrase": "Is the most recent code deployed to both stage and prod?",
+   "kind": "question",
+   "count": 3,
+   "count_question_form": 3,
+   "count_last_14d": 2,
+   "count_prior_31d": 1,
+   "rank_score": 1.911,
+   "first_seen": "2026-10-07",
+   "last_seen": "2026-10-15",
+   "days_active": 2,
+   "channels": {
+    "claude_mini": 3
+   },
+   "top_projects": {
+    "prometheus-scripts": 3
+   },
+   "workspaces": {
+    "IuRoot": 3
+   },
+   "entities_needed": [
+    "Deployment",
+    "Change",
+    "Project (environment)"
+   ],
+   "entity_mentions": {
+    "Deployment": 3,
+    "Project": 1,
+    "Change/PR": 1
+   },
+   "repeat_days": [
+    "2026-10-15"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 163.8,
+   "answer_s_p90": 386.1,
+   "first_text_s_median": 6.8,
+   "tool_calls_median": 5.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "glab api",
+     1.0
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     1.0
+    ],
+    [
+     "glab mr",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "edit/write files": 0.33,
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 0.33,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 211.0,
+   "assistant_entries_median": 11.0,
+   "rank": 21
+  },
+  {
+   "id": "update_state",
+   "area": "Infra",
+   "question": "Are my machines / tools / dependencies up to date -- what still needs an update or restart?",
+   "paraphrase": "Is the herdr setup on the mini and here up to date; ready for all the restarts; do the macOS update.",
+   "kind": "question",
+   "count": 4,
+   "count_question_form": 4,
+   "count_last_14d": 2,
+   "count_prior_31d": 2,
+   "rank_score": 1.826,
+   "first_seen": "2026-10-01",
+   "last_seen": "2026-10-11",
+   "days_active": 3,
+   "channels": {
+    "claude_macbook": 3,
+    "claude_mini": 1
+   },
+   "top_projects": {
+    "dotfiles": 4
+   },
+   "workspaces": {
+    "SourceRoot": 4
+   },
+   "entities_needed": [
+    "Project (dependencies)",
+    "Infra host",
+    "Condition (drift)"
+   ],
+   "entity_mentions": {
+    "Project": 1,
+    "Agent": 1,
+    "Infra host": 1
+   },
+   "repeat_days": [
+    "2026-10-01"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 1,
+   "fast_repeats_2h": 1,
+   "repeated_within_day": true,
+   "turn_n": 0,
+   "answered_n": 0,
+   "answer_s_median": null,
+   "answer_s_p90": null,
+   "first_text_s_median": null,
+   "tool_calls_median": null,
+   "no_tool_share": null,
+   "path_top": [],
+   "path_generic": {},
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": 1815.0,
+   "assistant_entries_median": null,
+   "rank": 22
+  },
+  {
+   "id": "config_state",
+   "area": "Setup",
+   "question": "Which model / tool / version is configured -- do we have access to the new one?",
+   "paraphrase": "Do we already have the new model, which model does X use, is that integration available?",
+   "kind": "question",
+   "count": 4,
+   "count_question_form": 4,
+   "count_last_14d": 1,
+   "count_prior_31d": 3,
+   "rank_score": 1.799,
+   "first_seen": "2026-08-25",
+   "last_seen": "2026-10-19",
+   "days_active": 3,
+   "channels": {
+    "claude_mini": 3,
+    "hermes_argo": 1
+   },
+   "top_projects": {
+    "modelpick": 2,
+    "(hermes)": 1,
+    "email-gateway": 1
+   },
+   "workspaces": {
+    "SourceRoot": 3,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Project (config)",
+    "Agent (engine)",
+    "Cost"
+   ],
+   "entity_mentions": {
+    "Project": 1,
+    "Deployment": 1
+   },
+   "repeat_days": [
+    "2026-10-05"
+   ],
+   "max_per_day": 2,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": true,
+   "turn_n": 4,
+   "answered_n": 4,
+   "answer_s_median": 41.9,
+   "answer_s_p90": 45.3,
+   "first_text_s_median": 11.2,
+   "tool_calls_median": 6.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "secrets",
+     0.75
+    ],
+    [
+     "skill argo-api",
+     0.25
+    ],
+    [
+     "curl (HTTP probe)",
+     0.25
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.25
+    ],
+    [
+     "web",
+     0.25
+    ]
+   ],
+   "path_generic": {
+    "Read file": 0.25,
+    "fs read (cat/ls/grep)": 0.75,
+    "script run (python/node/bun)": 0.25
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 11.5,
+   "rank": 23
+  },
+  {
+   "id": "warden_handled",
+   "area": "Autonomy",
+   "question": "What did warden / the loop handle alone -- why did this reach me?",
+   "paraphrase": "Should this not have gone through automatically; are the policies too strict; why is the agent so cautious?",
+   "kind": "statement",
+   "count": 3,
+   "count_question_form": 3,
+   "count_last_14d": 2,
+   "count_prior_31d": 1,
+   "rank_score": 1.702,
+   "first_seen": "2026-10-06",
+   "last_seen": "2026-10-16",
+   "days_active": 3,
+   "channels": {
+    "claude_macbook": 1,
+    "claude_mini": 2
+   },
+   "top_projects": {
+    "warden": 1,
+    "shutterflow": 1,
+    "prometheus-scripts": 1
+   },
+   "workspaces": {
+    "IuRoot": 1,
+    "SourceRoot": 2
+   },
+   "entities_needed": [
+    "Decision",
+    "Incident",
+    "Verification",
+    "Project (policy)"
+   ],
+   "entity_mentions": {
+    "Change/PR": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 2,
+   "answered_n": 2,
+   "answer_s_median": 197.1,
+   "answer_s_p90": 235.9,
+   "first_text_s_median": 12.1,
+   "tool_calls_median": 9.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     1.0
+    ],
+    [
+     "make check",
+     0.5
+    ],
+    [
+     "warden close",
+     0.5
+    ],
+    [
+     "warden run",
+     0.5
+    ],
+    [
+     "glab mr",
+     0.5
+    ],
+    [
+     "rd agents",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "edit/write files": 0.5,
+    "fs read (cat/ls/grep)": 1.0,
+    "git write (add/commit/push/pull)": 1.0,
+    "script run (python/node/bun)": 1.0
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 20.5,
+   "rank": 24
+  },
+  {
+   "id": "fresh_data",
+   "area": "Health",
+   "question": "Is the data / report / page fresh -- how old is it?",
+   "paraphrase": "How old is this data, is the report current?",
+   "kind": "question",
+   "count": 2,
+   "count_question_form": 2,
+   "count_last_14d": 1,
+   "count_prior_31d": 1,
+   "rank_score": 1.002,
+   "first_seen": "2026-09-11",
+   "last_seen": "2026-10-19",
+   "days_active": 2,
+   "channels": {
+    "claude_mini": 2
+   },
+   "top_projects": {
+    "homelab-private": 1,
+    "weatherorb": 1
+   },
+   "workspaces": {
+    "SourceRoot": 2
+   },
+   "entities_needed": [
+    "Signal (freshness)",
+    "Project",
+    "Deployment"
+   ],
+   "entity_mentions": {
+    "Task/plan": 2,
+    "Project": 1,
+    "Agent": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 2,
+   "answered_n": 2,
+   "answer_s_median": 216.1,
+   "answer_s_p90": 238.1,
+   "first_text_s_median": 118.6,
+   "tool_calls_median": 15.5,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "ssh",
+     1.0
+    ],
+    [
+     "SendUserFile",
+     0.5
+    ],
+    [
+     "subagent (Explore/worker)",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ],
+    [
+     "gh issue",
+     0.5
+    ],
+    [
+     "curl (HTTP probe)",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "edit/write files": 0.5,
+    "fs read (cat/ls/grep)": 0.5,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 32.5,
+   "rank": 25
+  },
+  {
+   "id": "scheduled_ran",
+   "area": "Delivery",
+   "question": "Did the nightly / scheduled / auto-update job run, and did it succeed?",
+   "paraphrase": "Did last night's run happen, what did the auto-update do, check the log tomorrow morning.",
+   "kind": "question",
+   "count": 2,
+   "count_question_form": 2,
+   "count_last_14d": 1,
+   "count_prior_31d": 1,
+   "rank_score": 0.912,
+   "first_seen": "2026-09-23",
+   "last_seen": "2026-10-14",
+   "days_active": 2,
+   "channels": {
+    "claude_mini": 2
+   },
+   "top_projects": {
+    "dotfiles": 1,
+    "homelab-private": 1
+   },
+   "workspaces": {
+    "SourceRoot": 2
+   },
+   "entities_needed": [
+    "Deployment (job run)",
+    "Verification",
+    "Infra host"
+   ],
+   "entity_mentions": {
+    "Deployment": 2,
+    "Task/plan": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 2,
+   "answered_n": 2,
+   "answer_s_median": 347.4,
+   "answer_s_p90": 414.8,
+   "first_text_s_median": 14.1,
+   "tool_calls_median": 19.5,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "ssh",
+     1.0
+    ],
+    [
+     "make image-share-deploy",
+     0.5
+    ],
+    [
+     "gh run",
+     0.5
+    ],
+    [
+     "git read (log/status/diff/branch)",
+     0.5
+    ],
+    [
+     "Skill otel",
+     0.5
+    ],
+    [
+     "make deploy",
+     0.5
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.5,
+    "git write (add/commit/push/pull)": 0.5,
+    "script run (python/node/bun)": 0.5
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 44.5,
+   "rank": 26
+  },
+  {
+   "id": "why_recurring",
+   "area": "Health",
+   "question": "Why does this keep coming back -- is the recurring issue resolved?",
+   "paraphrase": "Why does this alert/issue keep happening; is it resolved or do I have to help manually?",
+   "kind": "question",
+   "count": 3,
+   "count_question_form": 3,
+   "count_last_14d": 0,
+   "count_prior_31d": 3,
+   "rank_score": 0.674,
+   "first_seen": "2026-09-01",
+   "last_seen": "2026-10-01",
+   "days_active": 3,
+   "channels": {
+    "claude_mini": 2,
+    "hermes_slack": 1
+   },
+   "top_projects": {
+    "warden": 2,
+    "(hermes)": 1
+   },
+   "workspaces": {
+    "SourceRoot": 2,
+    "hermes": 1
+   },
+   "entities_needed": [
+    "Incident",
+    "Signal (fingerprint)",
+    "Known error",
+    "Project"
+   ],
+   "entity_mentions": {
+    "Incident/alert": 2,
+    "Task/plan": 2,
+    "Agent": 1
+   },
+   "repeat_days": [],
+   "max_per_day": 1,
+   "sessions_with_repeat": 0,
+   "fast_repeats_2h": 0,
+   "repeated_within_day": false,
+   "turn_n": 3,
+   "answered_n": 3,
+   "answer_s_median": 63.1,
+   "answer_s_p90": 89.4,
+   "first_text_s_median": 15.7,
+   "tool_calls_median": 10.0,
+   "no_tool_share": 0.0,
+   "path_top": [
+    [
+     "git read (log/status/diff/branch)",
+     0.67
+    ],
+    [
+     "sqlite3 (db read)",
+     0.67
+    ],
+    [
+     "search_files",
+     0.33
+    ],
+    [
+     "read_file",
+     0.33
+    ],
+    [
+     "todo",
+     0.33
+    ],
+    [
+     "skill github-issues",
+     0.33
+    ]
+   ],
+   "path_generic": {
+    "fs read (cat/ls/grep)": 0.67,
+    "script run (python/node/bun)": 0.33
+   },
+   "push_level": "no",
+   "push_note": "",
+   "gap_s_median_same_session": null,
+   "assistant_entries_median": 12.0,
+   "rank": 27
+  }
+ ],
+ "entity_demand": [
+  [
+   "Agent",
+   42
+  ],
+  [
+   "Project",
+   23
+  ],
+  [
+   "Task/plan",
+   20
+  ],
+  [
+   "Infra host",
+   19
+  ],
+  [
+   "Cost/quota",
+   19
+  ],
+  [
+   "Deployment",
+   18
+  ],
+  [
+   "Incident/alert",
+   12
+  ],
+  [
+   "Change/PR",
+   12
+  ]
+ ],
+ "stated_wants": [
+  {
+   "prompt": "A",
+   "want": "Argo shows the state of fleets, agents, warden and projects",
+   "maps_to": [
+    "all_agents",
+    "agent_alive",
+    "needs_me",
+    "where_are_we"
+   ],
+   "class_asks": 49,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project page: links (herdr mother, app, git), key stats",
+   "maps_to": [
+    "where_are_we"
+   ],
+   "class_asks": 28,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: needs attention",
+   "maps_to": [
+    "needs_me"
+   ],
+   "class_asks": 5,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: tasks and todos (Beads, TickTick)",
+   "maps_to": [
+    "what_pending"
+   ],
+   "class_asks": 4,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: artifacts (plans, reports to comment on)",
+   "maps_to": [
+    "where_to_see"
+   ],
+   "class_asks": 6,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: health",
+   "maps_to": [
+    "anything_broken"
+   ],
+   "class_asks": 11,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: changelog (today a Slack cron)",
+   "maps_to": [
+    "since_away"
+   ],
+   "class_asks": 8,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: cost stats / usage tracking",
+   "maps_to": [
+    "quota_now",
+    "spend"
+   ],
+   "class_asks": 19,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: traffic",
+   "maps_to": [],
+   "class_asks": null,
+   "asked": 2,
+   "mentioned": 9
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: git status",
+   "maps_to": [
+    "where_are_we"
+   ],
+   "class_asks": 28,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Per-project: dependency state",
+   "maps_to": [],
+   "class_asks": null,
+   "asked": 0,
+   "mentioned": 7
+  },
+  {
+   "prompt": "A",
+   "want": "Pages for health, usage-tracking, traffic, needs attention, artifacts",
+   "maps_to": [
+    "anything_broken",
+    "quota_now",
+    "needs_me"
+   ],
+   "class_asks": 28,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Infra of mini, homelab, vps monitored and self-healed; anomalies and attacks",
+   "maps_to": [
+    "anything_broken",
+    "infra_resources"
+   ],
+   "class_asks": 17,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "Herdr cleanup: close finished tabs, truncate or compact old agents",
+   "maps_to": [
+    "tab_cleanup"
+   ],
+   "class_asks": 9,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "A",
+   "want": "A human business decision in < 1 % of cases",
+   "maps_to": [
+    "needs_me",
+    "delegate_decision"
+   ],
+   "class_asks": 20,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Where things are, where the agents are",
+   "maps_to": [
+    "all_agents"
+   ],
+   "class_asks": 7,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Show what is important, what to do, where to look, what happened",
+   "maps_to": [
+    "needs_me",
+    "since_away",
+    "anything_broken"
+   ],
+   "class_asks": 24,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Morning and evening briefings, Hermes chat, Slack alerts inside Argo",
+   "maps_to": [
+    "since_away",
+    "anything_broken"
+   ],
+   "class_asks": 19,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Things I must still look at; things that are finished, close them",
+   "maps_to": [
+    "needs_me",
+    "tab_cleanup"
+   ],
+   "class_asks": 14,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Requests I must allow that the agent could decide alone",
+   "maps_to": [
+    "warden_handled",
+    "delegate_decision"
+   ],
+   "class_asks": 17,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "How warden really ran",
+   "maps_to": [
+    "warden_handled"
+   ],
+   "class_asks": 3,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Mini remote-dev status and the MacBook's local herdr (Shutterflow)",
+   "maps_to": [
+    "all_agents"
+   ],
+   "class_asks": 7,
+   "asked": null,
+   "mentioned": null
+  },
+  {
+   "prompt": "B",
+   "want": "Metrics, monitoring and cross-tracking, all in one place",
+   "maps_to": [
+    "is_wired",
+    "spend"
+   ],
+   "class_asks": 9,
+   "asked": null,
+   "mentioned": null
+  }
+ ],
+ "areas": [
+  {
+   "area": "Fleet",
+   "asks": 80,
+   "classes": [
+    "all_agents",
+    "needs_me",
+    "agent_alive",
+    "nudge_continue",
+    "tab_cleanup"
+   ],
+   "entities": [
+    "Agent",
+    "Project",
+    "Task",
+    "Infra host",
+    "Decision",
+    "Incident",
+    "Artifact",
+    "Attempt",
+    "Quota window"
+   ]
+  },
+  {
+   "area": "Orientation",
+   "asks": 38,
+   "classes": [
+    "where_are_we",
+    "since_away",
+    "what_pending"
+   ],
+   "entities": [
+    "Agent",
+    "Task",
+    "Project",
+    "Change",
+    "Attempt",
+    "Deployment",
+    "Incident"
+   ]
+  },
+  {
+   "area": "Delivery",
+   "asks": 28,
+   "classes": [
+    "done_shipped_live",
+    "version_per_env",
+    "scheduled_ran",
+    "where_to_see"
+   ],
+   "entities": [
+    "Change",
+    "Deployment",
+    "Verification",
+    "Task",
+    "Project",
+    "Infra host",
+    "Artifact"
+   ]
+  },
+  {
+   "area": "Health",
+   "asks": 27,
+   "classes": [
+    "anything_broken",
+    "why_recurring",
+    "why_failing",
+    "fresh_data"
+   ],
+   "entities": [
+    "Incident",
+    "Condition",
+    "Project",
+    "Infra host",
+    "Signal",
+    "Known error",
+    "Deployment"
+   ]
+  },
+  {
+   "area": "Autonomy",
+   "asks": 22,
+   "classes": [
+    "healing_worked",
+    "warden_handled",
+    "delegate_decision"
+   ],
+   "entities": [
+    "Condition",
+    "Attempt",
+    "Verification",
+    "Incident",
+    "Decision",
+    "Project",
+    "Change"
+   ]
+  },
+  {
+   "area": "Infra",
+   "asks": 19,
+   "classes": [
+    "infra_resources",
+    "connectivity_auth",
+    "update_state"
+   ],
+   "entities": [
+    "Infra host",
+    "Condition",
+    "Project",
+    "Agent"
+   ]
+  },
+  {
+   "area": "Cost",
+   "asks": 19,
+   "classes": [
+    "quota_now",
+    "spend"
+   ],
+   "entities": [
+    "Quota window",
+    "Agent",
+    "Cost",
+    "Usage record",
+    "Project"
+   ]
+  },
+  {
+   "area": "Setup",
+   "asks": 12,
+   "classes": [
+    "config_state",
+    "docs_current",
+    "is_wired"
+   ],
+   "entities": [
+    "Project",
+    "Agent",
+    "Cost",
+    "Artifact",
+    "Signal"
+   ]
+  }
+ ],
+ "hermes": {
+  "owner_rows": 77,
+  "probe_count": 47,
+  "probe_status_like": 6,
+  "cron": [
+   [
+    "Morning briefing",
+    44
+   ],
+   [
+    "Evening report",
+    35
+   ],
+   [
+    "Brain drift audit",
+    7
+   ],
+   [
+    "homelab-pr6-hardening-followup",
+    2
+   ],
+   [
+    "weatherorb-dwd_icon-stall-recheck",
+    1
+   ],
+   [
+    "warden-rg-consistency-round5",
+    1
+   ]
+  ],
+  "sessions_by_source": {
+   "api_server": 26,
+   "cli": 13,
+   "cron": 91,
+   "desktop": 5,
+   "oneshot": 7,
+   "slack": 888,
+   "smoke": 4,
+   "tui": 1
+  },
+  "user_msgs_by_source": {
+   "api_server": 29,
+   "cli": 13,
+   "cron": 91,
+   "desktop": 36,
+   "oneshot": 7,
+   "slack": 1570,
+   "smoke": 4,
+   "tui": 22
+  }
+ },
+ "hand_check": {
+  "note": "Seeded sample (seed 20261022): up to 8 classified messages per class (`python3 -I questions.py --sample` prints them), read and judged: does the message really ask this question (or state it as a need) of the estate? Verdicts live in `labels.json`; 158 verdicts over 27 classes.",
+  "rows": [
+   {
+    "id": "where_are_we",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "since_away",
+    "sampled": 8,
+    "correct": 6,
+    "precision": "75%"
+   },
+   {
+    "id": "all_agents",
+    "sampled": 7,
+    "correct": 7,
+    "precision": "100%"
+   },
+   {
+    "id": "needs_me",
+    "sampled": 5,
+    "correct": 3,
+    "precision": "60%"
+   },
+   {
+    "id": "what_pending",
+    "sampled": 4,
+    "correct": 4,
+    "precision": "100%"
+   },
+   {
+    "id": "agent_alive",
+    "sampled": 8,
+    "correct": 7,
+    "precision": "88%"
+   },
+   {
+    "id": "nudge_continue",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "tab_cleanup",
+    "sampled": 8,
+    "correct": 7,
+    "precision": "88%"
+   },
+   {
+    "id": "done_shipped_live",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "version_per_env",
+    "sampled": 3,
+    "correct": 3,
+    "precision": "100%"
+   },
+   {
+    "id": "scheduled_ran",
+    "sampled": 2,
+    "correct": 2,
+    "precision": "100%"
+   },
+   {
+    "id": "where_to_see",
+    "sampled": 6,
+    "correct": 3,
+    "precision": "50%"
+   },
+   {
+    "id": "anything_broken",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "why_recurring",
+    "sampled": 3,
+    "correct": 3,
+    "precision": "100%"
+   },
+   {
+    "id": "why_failing",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "fresh_data",
+    "sampled": 2,
+    "correct": 2,
+    "precision": "100%"
+   },
+   {
+    "id": "infra_resources",
+    "sampled": 6,
+    "correct": 6,
+    "precision": "100%"
+   },
+   {
+    "id": "connectivity_auth",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "quota_now",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "spend",
+    "sampled": 7,
+    "correct": 6,
+    "precision": "86%"
+   },
+   {
+    "id": "config_state",
+    "sampled": 4,
+    "correct": 4,
+    "precision": "100%"
+   },
+   {
+    "id": "healing_worked",
+    "sampled": 5,
+    "correct": 5,
+    "precision": "100%"
+   },
+   {
+    "id": "warden_handled",
+    "sampled": 3,
+    "correct": 3,
+    "precision": "100%"
+   },
+   {
+    "id": "delegate_decision",
+    "sampled": 8,
+    "correct": 8,
+    "precision": "100%"
+   },
+   {
+    "id": "update_state",
+    "sampled": 4,
+    "correct": 3,
+    "precision": "75%"
+   },
+   {
+    "id": "docs_current",
+    "sampled": 6,
+    "correct": 6,
+    "precision": "100%"
+   },
+   {
+    "id": "is_wired",
+    "sampled": 3,
+    "correct": 3,
+    "precision": "100%"
+   }
+  ],
+  "sampled": 158,
+  "correct": 147,
+  "precision": "93%"
+ },
+ "residue": {
+  "count": 80,
+  "top_cues": [
+   [
+    "can",
+    16
+   ],
+   [
+    "?",
+    10
+   ],
+   [
+    "is",
+    8
+   ],
+   [
+    "are",
+    7
+   ],
+   [
+    "do",
+    6
+   ],
+   [
+    "how",
+    5
+   ],
+   [
+    "was",
+    5
+   ],
+   [
+    "wie",
+    3
+   ],
+   [
+    "should",
+    3
+   ],
+   [
+    "why",
+    3
+   ],
+   [
+    "could",
+    3
+   ],
+   [
+    "does",
+    2
+   ],
+   [
+    "check",
+    2
+   ],
+   [
+    "still",
+    2
+   ],
+   [
+    "what",
+    2
+   ]
+  ],
+  "by_repo": {
+   "shutterflow": 15,
+   "(hermes)": 13,
+   "dotfiles": 9,
+   "brain": 4,
+   "prometheus-scripts": 4,
+   "weatherorb": 4,
+   "tinycast-extensions": 4,
+   "sideclaw": 3,
+   "epos.student-enrolment": 3,
+   "email-gateway": 3
+  }
+ },
+ "claude_stats": {
+  "mini": {
+   "files": 5620,
+   "human": 2703,
+   "agent_fed_or_wrapper": 1985,
+   "owner": 682,
+   "dup_uuid": 36,
+   "rows": 682
+  },
+  "macbook": {
+   "human": 3066,
+   "agent_fed_or_wrapper": 2714,
+   "owner": 352,
+   "rows": 352,
+   "fallback": "ssh unavailable (remote rc=255: ssh: connect to host iumac port 2222: Operati); rows from an earlier raw dump of the same window, no turn metrics"
+  }
+ }
+}
