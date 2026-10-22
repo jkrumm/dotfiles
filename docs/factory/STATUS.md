@@ -12,7 +12,7 @@ effort. Started 2026-10-22 07:40 UTC.
 | 1 — evidence | 8 workers running: kpi (warden), kpi (delivery/DORA/quota/herdr), postmortem, incidents, interventions, golden sampling, toil, signals | `evidence/` (conventions `evidence/README.md`, metric definitions `evidence/DEFINITIONS.md`) |
 | 2 — model | pending | |
 | 3 — loops | pending | |
-| 4 — spikes → ADRs | spikes 1 (beads), 4 (CLI vs MCP), 5 (artifact review), 6 (telemetry) running; 2 (durable) waits on research, 3 (correlation) on the golden set | `spikes/`, `adr/` |
+| 4 — spikes → ADRs | spikes 1 (beads), 2 (durable: ledger vs DBOS-Python-on-SQLite), 4 (CLI vs MCP), 5 (artifact review), 6 (telemetry) running; 3 (correlation) waits on the golden set | `spikes/`, `adr/` |
 | 5 — Argo | pending | |
 | 6 — proof | pending | |
 | 7 — panel ×2 | pending | |
@@ -53,3 +53,4 @@ this session commits only `docs/factory/**` with explicit paths.
 - 08:20 Phase 0 waves launched (orchestrated). 08:25 Phase 1 workers ×8 launched (background subagents, sonnet).
 - 08:35 research jobs (local research-gateway, `job` table): 19fe9e52 known-error store + regression detection (deep), 9235cd92 durable await semantics + SQLite-capable engines (deep), 382ddeb9 small-host healing/attack detection (standard). Export each to `research/` when done.
 - 08:40 spikes 1, 4, 5, 6 launched.
+- 09:05 research exported: `research/2026-10-22-known-error-regression.md`, `research/2026-10-22-durable-await-sqlite.md`, `research/2026-10-22-small-host-healing.md`. Spike 2 launched. Phase 1 adds: owner-question inventory (`evidence/questions/`), Argo/basalt-ui inventory (Explore).
