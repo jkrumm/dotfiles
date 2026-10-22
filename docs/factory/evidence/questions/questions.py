@@ -1261,7 +1261,14 @@ def run(argv):
         residue=dict(count=len(resid), top_cues=cue_c.most_common(15), by_repo=dict(resid_by_repo.most_common(10))),
         claude_stats=dict(mini=mini_stats, macbook=mac_stats),
     )
-    for name, obj in (("candidates.out.json", dict(as_of=AS_OF, funnel=doc["funnel"], definitions="see questions.py docstring", candidates=cands, residue_by_repo=dict(resid_by_repo.most_common()))),
+    full = dict(as_of=AS_OF, funnel=doc["funnel"], definitions="see questions.py docstring", candidates=cands, residue_by_repo=dict(resid_by_repo.most_common()))
+    private_dir = os.path.expanduser("~/.local/share/factory/private")
+    os.makedirs(private_dir, exist_ok=True)
+    with open(os.path.join(private_dir, "questions.candidates.json"), "w") as fh:  # owner-message text stays private
+        json.dump(full, fh, indent=1, sort_keys=False, ensure_ascii=False)
+        fh.write("\n")
+    public = dict(full, candidates=[{k: v for k, v in c.items() if k != "excerpt"} for c in cands])
+    for name, obj in (("candidates.out.json", public),
                       ("questions.out.json", doc)):
         with open(os.path.join(HERE, name), "w") as fh:
             json.dump(obj, fh, indent=1, sort_keys=False, ensure_ascii=False)

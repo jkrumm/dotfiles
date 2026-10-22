@@ -80,9 +80,6 @@
    "question_form": [
     "config_state"
    ],
-   "excerpt": {
-    "config_state": "Hey how well is the Argo to Hermes integration working??"
-   },
    "turn": {
     "answered": true,
     "answer_s": 40.9,
@@ -110,9 +107,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": "Sind jetzt alle Systeme healthy?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 103.7,
@@ -146,9 +140,6 @@
    "question_form": [
     "why_recurring"
    ],
-   "excerpt": {
-    "why_recurring": "Warum passiert dieser alert immer wieder? Vielleicht sollten wir das mal bisschen entschärfen oder besser handlen und auf self healing warten oder? Glaube ist …"
-   },
    "turn": {
     "answered": true,
     "answer_s": 96.0,
@@ -184,10 +175,6 @@
     "anything_broken",
     "connectivity_auth"
    ],
-   "excerpt": {
-    "anything_broken": "Was even passiert soviel alerts etc auf einmal limewatch Connection drop von mini oder so? Laufen die Agenten weiter?",
-    "connectivity_auth": "Was even passiert soviel alerts etc auf einmal limewatch Connection drop von mini oder so? Laufen die Agenten weiter?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 241.5,
@@ -221,9 +208,6 @@
    "question_form": [
     "where_to_see"
    ],
-   "excerpt": {
-    "where_to_see": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 10703.2,
@@ -257,9 +241,6 @@
    "question_form": [
     "fresh_data"
    ],
-   "excerpt": {
-    "fresh_data": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 188.7,
@@ -288,9 +269,6 @@
    "question_form": [
     "all_agents"
    ],
-   "excerpt": {
-    "all_agents": "Ahh du hast net richtig gestartet über HERDR du hast über warden gemacht ge?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 6.5,
@@ -317,10 +295,6 @@
     "agent_alive",
     "where_are_we"
    ],
-   "excerpt": {
-    "agent_alive": "Wie läuft seine Session?",
-    "where_are_we": "Wie läuft seine Session?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 3.9,
@@ -349,9 +323,6 @@
    "question_form": [
     "delegate_decision"
    ],
-   "excerpt": {
-    "delegate_decision": "Do it all ship it"
-   },
    "turn": {
     "answered": true,
     "answer_s": 308.3,
@@ -383,9 +354,6 @@
     "agent_alive"
    ],
    "question_form": [],
-   "excerpt": {
-    "agent_alive": "I think you were stuck at some point"
-   },
    "turn": {
     "answered": true,
     "answer_s": 512.2,
@@ -417,9 +385,6 @@
    "question_form": [
     "what_pending"
    ],
-   "excerpt": {
-    "what_pending": "and yeah i think then i i'm not quite sure um What is still missing?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -442,9 +407,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -467,9 +429,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "you can do that obviously all of that but yeah, nothing is decided."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -492,9 +451,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "go"
-   },
    "turn": {
     "answered": true,
     "answer_s": 176.5,
@@ -526,9 +482,6 @@
     "connectivity_auth"
    ],
    "question_form": [],
-   "excerpt": {
-    "connectivity_auth": "<user>@<host>: Permission denied (publickey)."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -553,9 +506,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "Yeah, but why is it then so slow and is being repetitively stuck and weird behaving?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 186.4,
@@ -583,10 +533,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "you can do all of those things.",
-    "nudge_continue": "go for it."
-   },
    "turn": {
     "answered": true,
     "answer_s": 211.2,
@@ -619,9 +565,6 @@
    "question_form": [
     "needs_me"
    ],
-   "excerpt": {
-    "needs_me": "Is there anything a human needs to look into?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 590.1,
@@ -655,9 +598,6 @@
    "question_form": [
     "delegate_decision"
    ],
-   "excerpt": {
-    "delegate_decision": "I think you can do all of them right?!"
-   },
    "turn": {
     "answered": true,
     "answer_s": 365.7,
@@ -689,9 +629,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "But yeah, you can do all of this in a new pane."
-   },
    "turn": {
     "answered": true,
     "answer_s": 88.4,
@@ -725,9 +662,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Ok where are we at then?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 295.4,
@@ -761,9 +695,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "ok also applied where needed?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 31.4,
@@ -793,9 +724,6 @@
    "question_form": [
     "scheduled_ran"
    ],
-   "excerpt": {
-    "scheduled_ran": "verify the auto-deploys and run the pending ones"
-   },
    "turn": {
     "answered": true,
     "answer_s": 431.6,
@@ -827,9 +755,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "\" you have to dispatch from a shell \" I am sure you can do that extend and ship research-gateway or so where needed for us to properly advance here"
-   },
    "turn": {
     "answered": true,
     "answer_s": 119.5,
@@ -860,9 +785,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Okay I'm back at the Macbook so you can now prompt one password and do stuff in the Macbook if you need to. Alright, I think we're almost wrapped up, right?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 61.5,
@@ -889,9 +811,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Where we had this everything delivered and deployed."
-   },
    "turn": {
     "answered": true,
     "answer_s": 52.8,
@@ -919,9 +838,6 @@
     "agent_alive"
    ],
    "question_form": [],
-   "excerpt": {
-    "agent_alive": "I think the previous agent was stuck and you continue with it."
-   },
    "turn": {
     "answered": true,
     "answer_s": 87.8,
@@ -949,9 +865,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "not only change that but also apply it, restart our services and ship it all to master"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -976,9 +889,6 @@
    "question_form": [
     "why_recurring"
    ],
-   "excerpt": {
-    "why_recurring": "Still there are many reoccurring continuous issues which are super annoying alerts."
-   },
    "turn": {
     "answered": true,
     "answer_s": 63.1,
@@ -1005,9 +915,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "Keep working, but soon our weekly limit is finished, but that's no problem, just continue."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1034,10 +941,6 @@
     "all_agents",
     "done_shipped_live"
    ],
-   "excerpt": {
-    "all_agents": "Not sure if all your lunar agents are fully finished, deployed, delivered.",
-    "done_shipped_live": "Not sure if all your lunar agents are fully finished, deployed, delivered."
-   },
    "turn": {
     "answered": true,
     "answer_s": 38.5,
@@ -1069,9 +972,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "keep going"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1094,9 +994,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "keep going"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1119,9 +1016,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "keep going"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1144,9 +1038,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "keep going"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1169,9 +1060,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1194,9 +1082,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1221,9 +1106,6 @@
    "question_form": [
     "agent_alive"
    ],
-   "excerpt": {
-    "agent_alive": "I have enabled the auto mode on on all the other tabs. Oops, did it maybe resolve it now?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1248,9 +1130,6 @@
    "question_form": [
     "spend"
    ],
-   "excerpt": {
-    "spend": "Is all of that updated in Argo as well, the data for usage tracking?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1273,9 +1152,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1300,9 +1176,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "I think I need to wait until you are really thinking that the desktop app is ready and we do it from there on, right?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1325,9 +1198,6 @@
     "agent_alive"
    ],
    "question_form": [],
-   "excerpt": {
-    "agent_alive": "I think the other Herder tab is crashed in some ways."
-   },
    "turn": {
     "answered": true,
     "answer_s": 299.6,
@@ -1360,9 +1230,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Where are we at?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 11.3,
@@ -1392,9 +1259,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "So why wouldn't that be working here?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1417,9 +1281,6 @@
     "tab_cleanup"
    ],
    "question_form": [],
-   "excerpt": {
-    "tab_cleanup": "You can also close in all the other Herda tabs and basically really start with kind of a fresh setup up here in my Herder with a new mother agent and new lead …"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1444,9 +1305,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Where are we at i think you were especially missing out on connecting the mac itself to the router tried entering the pin and some error came needed to enter t…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1469,9 +1327,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1494,9 +1349,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1519,9 +1371,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "Ok i adjusted vercel like you said ship it all"
-   },
    "turn": {
     "answered": true,
     "answer_s": 27.5,
@@ -1549,9 +1398,6 @@
    "question_form": [
     "connectivity_auth"
    ],
-   "excerpt": {
-    "connectivity_auth": "is right now asking me again that it wants to save stuff to the keychain, I don't know if you could work around this or what, and especially if that would be a…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1578,10 +1424,6 @@
     "quota_now",
     "where_are_we"
    ],
-   "excerpt": {
-    "quota_now": "Wo stehen wir? Was ist mein Claude usage?",
-    "where_are_we": "Wo stehen wir? Was ist mein Claude usage?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1609,9 +1451,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1636,9 +1475,6 @@
    "question_form": [
     "spend"
    ],
-   "excerpt": {
-    "spend": "Ok hmm you could outsure work to dispatch with sideclaw implement with DeepSeek v4.1 Flash over OpenCode or so or use new Sonnet 5.5 its very efficient and che…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1661,9 +1497,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1687,10 +1520,6 @@
     "tab_cleanup"
    ],
    "question_form": [],
-   "excerpt": {
-    "all_agents": "I am a bit confused by the Herdr setup and what is active or not haha and where we are ... new ClaudeCode usage limits are here you can continue or tell me whe…",
-    "tab_cleanup": "I am a bit confused by the Herdr setup and what is active or not haha and where we are ... new ClaudeCode usage limits are here you can continue or tell me whe…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 356.9,
@@ -1722,9 +1551,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1751,10 +1577,6 @@
     "done_shipped_live",
     "update_state"
    ],
-   "excerpt": {
-    "done_shipped_live": "Ready now for all the restarts etc.?",
-    "update_state": "Ready now for all the restarts etc.?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1779,9 +1601,6 @@
    "question_form": [
     "update_state"
    ],
-   "excerpt": {
-    "update_state": "Ok yeah than do the 26 mac osx update right?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1808,10 +1627,6 @@
     "connectivity_auth",
     "why_recurring"
    ],
-   "excerpt": {
-    "connectivity_auth": null,
-    "why_recurring": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 20.6,
@@ -1839,9 +1654,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 261.0,
@@ -1875,9 +1687,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "Häh i still see the normal page??"
-   },
    "turn": {
     "answered": true,
     "answer_s": 3.8,
@@ -1902,9 +1711,6 @@
    "question_form": [
     "delegate_decision"
    ],
-   "excerpt": {
-    "delegate_decision": "THAN SHIP IT OMG ?!!!!!"
-   },
    "turn": {
     "answered": true,
     "answer_s": 107.6,
@@ -1933,9 +1739,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1960,9 +1763,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Ok sounds good continue should I test already not sure if the app is build and ready to get more feebdack from me. Manual order hmm usually by shooting timesta…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -1985,9 +1785,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2010,9 +1807,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2035,9 +1829,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2060,9 +1851,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2085,9 +1873,6 @@
     "where_to_see"
    ],
    "question_form": [],
-   "excerpt": {
-    "where_to_see": "I dont see any pictures even though library folder is: ~/ShutterflowLab/library-tour"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2110,9 +1895,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2137,9 +1919,6 @@
    "question_form": [
     "since_away"
    ],
-   "excerpt": {
-    "since_away": "Can you wake up the script here on your own in like like 4 hours to check on it how it went until then."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2164,9 +1943,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "Oh I think there was just a blip what happened?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2191,9 +1967,6 @@
    "question_form": [
     "config_state"
    ],
-   "excerpt": {
-    "config_state": "when using OpenRouter and which API _KEY etc."
-   },
    "turn": {
     "answered": true,
     "answer_s": 46.3,
@@ -2221,9 +1994,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2248,9 +2018,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "how did it work until now further improvements?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2277,10 +2044,6 @@
     "docs_current",
     "tab_cleanup"
    ],
-   "excerpt": {
-    "docs_current": "Nice you celanup their herdr spaces etc.? All documentations and readmeas etc. EVERYWHERE are throughly updated and concisenly written to prevent confusion and…",
-    "tab_cleanup": "Nice you celanup their herdr spaces etc.? All documentations and readmeas etc. EVERYWHERE are throughly updated and concisenly written to prevent confusion and…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 37.3,
@@ -2313,10 +2076,6 @@
     "anything_broken",
     "config_state"
    ],
-   "excerpt": {
-    "anything_broken": "ArtificialAnalysis is deprecating their legacy API are we on the recent version and all good?",
-    "config_state": "ArtificialAnalysis is deprecating their legacy API are we on the recent version and all good?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 42.9,
@@ -2346,9 +2105,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": "Everything optimally configured until now?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2373,9 +2129,6 @@
    "question_form": [
     "spend"
    ],
-   "excerpt": {
-    "spend": "Ok but we do not use OpenRouter as validation of models only IU right? I dont want to spend my own real money"
-   },
    "turn": {
     "answered": true,
     "answer_s": 7.7,
@@ -2404,10 +2157,6 @@
     "healing_worked",
     "where_are_we"
    ],
-   "excerpt": {
-    "healing_worked": "How going until now? I think it went empty over night I plugged it in now and works again. The Watchdog interpretated that the same?",
-    "where_are_we": "How going until now? I think it went empty over night I plugged it in now and works again. The Watchdog interpretated that the same?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2430,9 +2179,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2455,9 +2201,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "CPU 100% all the time and fans even loud"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2484,10 +2227,6 @@
     "connectivity_auth",
     "why_failing"
    ],
-   "excerpt": {
-    "connectivity_auth": "Why isnt this not working? [Image #1] 1PW API_KEY from research-gateway from vps vault",
-    "why_failing": "Why isnt this not working? [Image #1] 1PW API_KEY from research-gateway from vps vault"
-   },
    "turn": {
     "answered": true,
     "answer_s": 8.6,
@@ -2514,9 +2253,6 @@
    "question_form": [
     "since_away"
    ],
-   "excerpt": {
-    "since_away": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 53.8,
@@ -2548,9 +2284,6 @@
    "question_form": [
     "warden_handled"
    ],
-   "excerpt": {
-    "warden_handled": "Ok yeah I would say we can do all those changes right? Not sure if most of them shouldn't have gone through on their own automatically"
-   },
    "turn": {
     "answered": true,
     "answer_s": 245.6,
@@ -2581,9 +2314,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2608,9 +2338,6 @@
    "question_form": [
     "healing_worked"
    ],
-   "excerpt": {
-    "healing_worked": "Was the current recovery optimal?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2635,9 +2362,6 @@
    "question_form": [
     "healing_worked"
    ],
-   "excerpt": {
-    "healing_worked": "Why the current recovery didnt run optimal? I needed to manually do restart and reconnect"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2660,9 +2384,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2687,9 +2408,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Whats going on right now? We are at a spot with good connection where i was always but still nto reconnecting"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2712,9 +2430,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2737,9 +2452,6 @@
     "healing_worked"
    ],
    "question_form": [],
-   "excerpt": {
-    "healing_worked": "Yeah, I needed to manually restart. Even reconnect didn't work, I think."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2764,9 +2476,6 @@
    "question_form": [
     "tab_cleanup"
    ],
-   "excerpt": {
-    "tab_cleanup": "Hmm no Ghosty is closed. Can I close and reopen Herdr GPUI and my processs in shutterflow just continue?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2789,9 +2498,6 @@
     "tab_cleanup"
    ],
    "question_form": [],
-   "excerpt": {
-    "tab_cleanup": "There are so many Herta tabs open here."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2817,10 +2523,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": null,
-    "where_to_see": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 56.4,
@@ -2856,11 +2558,6 @@
     "version_per_env",
     "where_are_we"
    ],
-   "excerpt": {
-    "done_shipped_live": null,
-    "version_per_env": null,
-    "where_are_we": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 163.8,
@@ -2890,9 +2587,6 @@
     "since_away"
    ],
    "question_form": [],
-   "excerpt": {
-    "since_away": "Good morning we are back I am happy to run and test the app"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2917,9 +2611,6 @@
    "question_form": [
     "docs_current"
    ],
-   "excerpt": {
-    "docs_current": "Okay, is the cutover document up to date?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2944,9 +2635,6 @@
    "question_form": [
     "warden_handled"
    ],
-   "excerpt": {
-    "warden_handled": "Why are you being so annoying?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2969,9 +2657,6 @@
     "needs_me"
    ],
    "question_form": [],
-   "excerpt": {
-    "needs_me": "I'm not still sure how you go about the migration, but I think it needs me logging into the application and creating my user and so on right but not sure"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -2994,9 +2679,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "GO"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3023,9 +2705,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Yeah nice, where are we at?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3050,9 +2729,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "Hey, why does it still use the old Haiku model?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 214.0,
@@ -3085,9 +2761,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 34.0,
@@ -3113,9 +2786,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": null
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3142,9 +2812,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue."
-   },
    "turn": {
     "answered": true,
     "answer_s": 56.3,
@@ -3174,9 +2841,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 38.6,
@@ -3206,9 +2870,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 48.7,
@@ -3239,9 +2900,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "And yeah, I'm especially interested in the weekly limit because with the Max Pro 20X, the five hour limit isn't much of a problem anymore, to be honest and yea…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3267,10 +2925,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "spend": "but that's probably not a problem here, but for the usage tracker also maybe you could investigate there and really improve on all all of our token tracking.",
-    "why_failing": "Why is the SpendUnknown, the lane unknown so big?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3293,9 +2947,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 8.7,
@@ -3322,9 +2973,6 @@
    "question_form": [
     "update_state"
    ],
-   "excerpt": {
-    "update_state": "But yeah, how do you can't restart?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3349,9 +2997,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "How is it going after some longer time?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3375,10 +3020,6 @@
     "where_are_we"
    ],
    "question_form": [],
-   "excerpt": {
-    "since_away": "Okok sry I am back where are we at with the software",
-    "where_are_we": "Okok sry I am back where are we at with the software"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3407,11 +3048,6 @@
     "since_away",
     "why_failing"
    ],
-   "excerpt": {
-    "agent_alive": "And yeah, of course, then also your final round of full validation of the implementations of the codes of the wiring and everything like we have planned So I'm…",
-    "since_away": "Hello good morning so see there is still some many waves that are being planned and so on. And yeah, of course, then also your final round of full validation o…",
-    "why_failing": "And yeah, of course, then also your final round of full validation of the implementations of the codes of the wiring and everything like we have planned So I'm…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 39.4,
@@ -3443,9 +3079,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "Oh my disk is very full, only 12 gigabytes left."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3470,9 +3103,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": "All good until now next morning?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3501,11 +3131,6 @@
     "done_shipped_live",
     "tab_cleanup"
    ],
-   "excerpt": {
-    "docs_current": "yeah check everything make sure everything is ready all the the Herder tabs are nice and clean and committed and pushed everything throughout all the documenta…",
-    "done_shipped_live": "yeah check everything make sure everything is ready all the the Herder tabs are nice and clean and committed and pushed everything throughout all the documenta…",
-    "tab_cleanup": "yeah check everything make sure everything is ready all the the Herder tabs are nice and clean and committed and pushed everything throughout all the documenta…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3528,9 +3153,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "you can continue we are all updated"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3555,9 +3177,6 @@
    "question_form": [
     "update_state"
    ],
-   "excerpt": {
-    "update_state": "fix brew-dump and the tinycast check etc. also what about the herdr setup on mini and here now all up to date?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3580,9 +3199,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "You can continue herdr should be updated"
-   },
    "turn": {
     "answered": true,
     "answer_s": 253.6,
@@ -3616,9 +3232,6 @@
    "question_form": [
     "needs_me"
    ],
-   "excerpt": {
-    "needs_me": "What is waiting for me with what?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -3643,9 +3256,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "I did send the text into the case, can you load the case and check where we are?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 28.3,
@@ -3672,9 +3282,6 @@
    "question_form": [
     "agent_alive"
    ],
-   "excerpt": {
-    "agent_alive": "Okay, so what is now the issue?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 146.0,
@@ -3703,10 +3310,6 @@
     "spend"
    ],
    "question_form": [],
-   "excerpt": {
-    "is_wired": "awesome so monitoring observability and cost usage tracking all wired up well E2E",
-    "spend": "awesome so monitoring observability and cost usage tracking all wired up well E2E"
-   },
    "turn": {
     "answered": true,
     "answer_s": 25.8,
@@ -3736,10 +3339,6 @@
     "docs_current",
     "is_wired"
    ],
-   "excerpt": {
-    "docs_current": "Nice and my local setup with Claude code in dotfiles etc. has good skills and CLI understanding wired etc. concise up to date and effectively useful with optim…",
-    "is_wired": "Nice and my local setup with Claude code in dotfiles etc. has good skills and CLI understanding wired etc. concise up to date and effectively useful with optim…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 79.3,
@@ -3769,9 +3368,6 @@
    "question_form": [
     "connectivity_auth"
    ],
-   "excerpt": {
-    "connectivity_auth": "Okok well it can open the <work-stack> <work-stack> token login screen i am on the screen sharing You maybe again check there are no seideclaw references remai…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 83.8,
@@ -3803,9 +3399,6 @@
     "delegate_decision"
    ],
    "question_form": [],
-   "excerpt": {
-    "delegate_decision": "Change the permissions and go ahead or yeah create PR and review and self approve and merge or whatever"
-   },
    "turn": {
     "answered": true,
     "answer_s": 97.7,
@@ -3837,9 +3430,6 @@
    "question_form": [
     "all_agents"
    ],
-   "excerpt": {
-    "all_agents": "How are my herdr agents doing?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 16.3,
@@ -3869,9 +3459,6 @@
    "question_form": [
     "needs_me"
    ],
-   "excerpt": {
-    "needs_me": "Ok nice so nothing todo? Wondering about that email gateway state not there on the machine now but I feel like there is still plenty to improve and wire even w…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 71.2,
@@ -3905,9 +3492,6 @@
    "question_form": [
     "scheduled_ran"
    ],
-   "excerpt": {
-    "scheduled_ran": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 263.1,
@@ -3937,10 +3521,6 @@
     "connectivity_auth",
     "spend"
    ],
-   "excerpt": {
-    "connectivity_auth": "Logged in again should be fine right? GitHub Actions billing i am looking in with another agent",
-    "spend": "Logged in again should be fine right? GitHub Actions billing i am looking in with another agent"
-   },
    "turn": {
     "answered": true,
     "answer_s": 10.3,
@@ -3967,9 +3547,6 @@
    "question_form": [
     "healing_worked"
    ],
-   "excerpt": {
-    "healing_worked": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 68.5,
@@ -3996,9 +3573,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "unlocked, push again"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4025,10 +3599,6 @@
     "anything_broken",
     "where_to_see"
    ],
-   "excerpt": {
-    "anything_broken": "Ok where do I see the Dashboard and is everything smooth and validated?",
-    "where_to_see": "Ok where do I see the Dashboard and is everything smooth and validated?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 20.7,
@@ -4055,9 +3625,6 @@
     "where_to_see"
    ],
    "question_form": [],
-   "excerpt": {
-    "where_to_see": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 20.3,
@@ -4085,9 +3652,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "How is it going"
-   },
    "turn": {
     "answered": true,
     "answer_s": 26.9,
@@ -4120,10 +3684,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Okay, that sounds like there is still some stuff for you to wrap this fully up and review everything update the documentation and everything, I think you're no…",
-    "tab_cleanup": "But yeah, generally once you're done, you can please also clean up the herda stuff you've opened and push everything and apply everything so that we are fully …"
-   },
    "turn": {
     "answered": true,
     "answer_s": 56.6,
@@ -4154,9 +3714,6 @@
     "tab_cleanup"
    ],
    "question_form": [],
-   "excerpt": {
-    "tab_cleanup": "Also at some point towards the end you have opened so many There are many herda types and agents everywhere and probably all sorts of migrations are happening."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4179,9 +3736,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "Seeingly our storage is pretty full again on MacBook or mini haha you please check and coordinate to mini weatherorb, basalt-ui or whatever causing that to the…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 333.3,
@@ -4213,9 +3767,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4242,10 +3793,6 @@
     "done_shipped_live",
     "version_per_env"
    ],
-   "excerpt": {
-    "done_shipped_live": null,
-    "version_per_env": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 26.1,
@@ -4274,9 +3821,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "How is it going?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 41.8,
@@ -4308,9 +3852,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "Nah the MacBook is full you can proceed"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4335,9 +3876,6 @@
    "question_form": [
     "version_per_env"
    ],
-   "excerpt": {
-    "version_per_env": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 441.7,
@@ -4369,10 +3907,6 @@
     "docs_current",
     "done_shipped_live"
    ],
-   "excerpt": {
-    "docs_current": "Ok so we are still not fully finished here also wondering about further improvements after verifications and runs and all documentation etc. being up to date",
-    "done_shipped_live": "Ok so we are still not fully finished here also wondering about further improvements after verifications and runs and all documentation etc. being up to date"
-   },
    "turn": {
     "answered": true,
     "answer_s": 25.7,
@@ -4402,9 +3936,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Seemingly new Whisper Model has been released not sure if we have it in our replciate connection and we should switch and if modelpicker etc. knows about it"
-   },
    "turn": {
     "answered": true,
     "answer_s": 417.7,
@@ -4438,10 +3969,6 @@
     "anything_broken",
     "done_shipped_live"
    ],
-   "excerpt": {
-    "anything_broken": "Ok until now we are all good with gh runners on vps and I can close this thread?",
-    "done_shipped_live": "Ok until now we are all good with gh runners on vps and I can close this thread?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 11.4,
@@ -4470,9 +3997,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4495,9 +4019,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue orchestrating MacBook is connected to electricity and network good and stable lets go"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4520,9 +4041,6 @@
     "needs_me"
    ],
    "question_form": [],
-   "excerpt": {
-    "needs_me": "Seeming you the ministry was at one hundred all the time, I have the suspicion that you that you have something to do that with. If you figure out it's Basaltu…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4545,9 +4063,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "CPU at 100% all the time Figure out if it is you causing that, or assail your eye, and then you orchestrate or communicate to their orchestration, or hear how …"
-   },
    "turn": {
     "answered": true,
     "answer_s": 49.2,
@@ -4576,9 +4091,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "cpntinue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4601,9 +4113,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4628,9 +4137,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 70.4,
@@ -4664,9 +4170,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Okay, sounds like some good improvements here and there are pending, right? But otherwise, thank you for that. So soon we are finally fully done here, and yeah…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 46.2,
@@ -4694,9 +4197,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": "Like, why is it offline?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4721,9 +4221,6 @@
    "question_form": [
     "tab_cleanup"
    ],
-   "excerpt": {
-    "tab_cleanup": "Why are there still sooo many herdr tabs open here in email-gateway? Review where they are whats really still neded and how we can round up here"
-   },
    "turn": {
     "answered": true,
     "answer_s": 63.6,
@@ -4760,11 +4257,6 @@
     "delegate_decision",
     "warden_handled"
    ],
-   "excerpt": {
-    "delegate_decision": null,
-    "docs_current": null,
-    "warden_handled": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 148.5,
@@ -4796,9 +4288,6 @@
     "where_are_we"
    ],
    "question_form": [],
-   "excerpt": {
-    "where_are_we": "Status"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4823,9 +4312,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": "Okay, is it all good and fine? And are we happy with all of the things here? And yeah, also the dot file stuff on the mini is running fine, right? So I can clo…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4852,10 +4338,6 @@
     "agent_alive",
     "anything_broken"
    ],
-   "excerpt": {
-    "agent_alive": "your running right everything good?",
-    "anything_broken": "your running right everything good?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4880,9 +4362,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 3.4,
@@ -4905,9 +4384,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -4930,9 +4406,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue"
-   },
    "turn": {
     "answered": true,
     "answer_s": 46.7,
@@ -4964,9 +4437,6 @@
    "question_form": [
     "agent_alive"
    ],
-   "excerpt": {
-    "agent_alive": "Ok you are still going right?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 23.4,
@@ -4995,9 +4465,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "How did it go until now? Here unfortunatly my Netgear connection is too bad and I am with phone right now"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5020,9 +4487,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "go on"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5045,9 +4509,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "Limit reset is in no worries about weekly limit"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5072,9 +4533,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": "It sais \"Sync: the last run did not finish\" at the very end not sure if all good haha"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5097,9 +4555,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5124,9 +4579,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "is soo much improvements to be done e.g."
-   },
    "turn": {
     "answered": true,
     "answer_s": 113.6,
@@ -5161,10 +4613,6 @@
     "since_away",
     "where_are_we"
    ],
-   "excerpt": {
-    "since_away": "Was wurde alles gebaut Shutterflow und alle Mini herdr Agenten über die Nacht wo stehen wir ausführliche Recherche",
-    "where_are_we": "Was wurde alles gebaut Shutterflow und alle Mini herdr Agenten über die Nacht wo stehen wir ausführliche Recherche"
-   },
    "turn": {
     "answered": true,
     "answer_s": 77.1,
@@ -5196,9 +4644,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5223,9 +4668,6 @@
    "question_form": [
     "all_agents"
    ],
-   "excerpt": {
-    "all_agents": "Check all the other threads and so on because of that intermediate notify hook error. If all of them are running nicely and properly."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5248,9 +4690,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5273,9 +4712,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5300,9 +4736,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "continue where are we at?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5325,9 +4758,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5354,10 +4784,6 @@
     "all_agents",
     "what_pending"
    ],
-   "excerpt": {
-    "all_agents": "How much is still pending in your fleet or wave implementation plan what did you achieve whats pending?",
-    "what_pending": "How much is still pending in your fleet or wave implementation plan what did you achieve whats pending?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 19.5,
@@ -5387,10 +4813,6 @@
     "all_agents",
     "what_pending"
    ],
-   "excerpt": {
-    "all_agents": "How much is still pending in your fleet or wave implementation plan what did you achieve whats pending?",
-    "what_pending": "How much is still pending in your fleet or wave implementation plan what did you achieve whats pending?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 73.3,
@@ -5421,9 +4843,6 @@
    "question_form": [
     "where_to_see"
    ],
-   "excerpt": {
-    "where_to_see": "Interesting I thinnk I dont see your running import in the Shutterflow app right now so probably also an integration issue or the two or so?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5446,9 +4865,6 @@
     "since_away"
    ],
    "question_form": [],
-   "excerpt": {
-    "since_away": "Okay, I'm back on the router's Wi-Fi. I'm not sure about these fan sampler notifications and stuff, and also I think there are some tinycast updates we could i…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5471,9 +4887,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "I dont want to stop now! But at some point we maybe need to take a pause on basalt-ui maybe after phase1 or so not sure and then not only new mother and cleanu…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 5.5,
@@ -5498,9 +4911,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": "Are we fully done here includign validations etc.?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 41.4,
@@ -5534,9 +4944,6 @@
    "question_form": [
     "config_state"
    ],
-   "excerpt": {
-    "config_state": "DeepSeek V4.1 Flash 1017 got released do we have access to it already are we having the new version automatically?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 29.8,
@@ -5562,9 +4969,6 @@
     "infra_resources"
    ],
    "question_form": [],
-   "excerpt": {
-    "infra_resources": "Finally, really optimize the disk space on the mini and drop unnecessary stuff."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5589,9 +4993,6 @@
    "question_form": [
     "spend"
    ],
-   "excerpt": {
-    "spend": "I think that DeepSeek is a very capable model and it's cheaper, right?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5616,9 +5017,6 @@
    "question_form": [
     "agent_alive"
    ],
-   "excerpt": {
-    "agent_alive": "How is the new review still working?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 165.4,
@@ -5649,9 +5047,6 @@
    "question_form": [
     "fresh_data"
    ],
-   "excerpt": {
-    "fresh_data": "Ok soudns good but I dont feel like the current page doesnt really work: https://weatherorb.com/map?v=wave_height&m=weatherorb_blend&pal=wave&t=<num>T12%3A00Z#…"
-   },
    "turn": {
     "answered": true,
     "answer_s": 243.6,
@@ -5684,9 +5079,6 @@
    "question_form": [
     "done_shipped_live"
    ],
-   "excerpt": {
-    "done_shipped_live": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 4.7,
@@ -5711,9 +5103,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "So what's going on?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5736,9 +5125,6 @@
     "since_away"
    ],
    "question_form": [],
-   "excerpt": {
-    "since_away": null
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5763,9 +5149,6 @@
    "question_form": [
     "why_failing"
    ],
-   "excerpt": {
-    "why_failing": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 2.7,
@@ -5788,9 +5171,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "you can continue"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5813,9 +5193,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "My limit will be fine until tomorrow, but yeah, we can be a bit careful."
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5840,9 +5217,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "What's what's happening here?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5865,9 +5239,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "Ok again we maybe need to be a bit careful with token spend and really only do necessary things and postpone the rest of the future to once my Limit resets tom…"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5890,9 +5261,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "quota_now": "Ok well the other agent will fix it. We please for now chill our token spend. Our limit will reset tomorrow and we can continue with what else may be pending"
-   },
    "turn": {
     "answered": true,
     "answer_s": 32.2,
@@ -5921,10 +5289,6 @@
     "connectivity_auth",
     "where_are_we"
    ],
-   "excerpt": {
-    "connectivity_auth": "Check on the connection, and then you can please resolve the issue the agent has and can actually also communicate with the agent in the Prometheus scripts fol…",
-    "where_are_we": "What is going on here?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5953,11 +5317,6 @@
     "quota_now",
     "why_failing"
    ],
-   "excerpt": {
-    "connectivity_auth": "Why is CU menu bar saying unauthroized and not showing weekly usage?",
-    "quota_now": "Why is CU menu bar saying unauthroized and not showing weekly usage?",
-    "why_failing": "Why is CU menu bar saying unauthroized and not showing weekly usage?"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -5982,9 +5341,6 @@
    "question_form": [
     "is_wired"
    ],
-   "excerpt": {
-    "is_wired": "Hmm ok und sind Gateway jetzt alle wirde in Hermes?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 34.1,
@@ -6011,9 +5367,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "how is it going?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 30.1,
@@ -6039,10 +5392,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue limit reset in 5min",
-    "quota_now": "Continue limit reset in 5min"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -6066,10 +5415,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue now orchestrating the waves limit reset in 5min",
-    "quota_now": "Continue now orchestrating the waves limit reset in 5min"
-   },
    "turn": {
     "answered": true,
     "answer_s": 35.7,
@@ -6099,10 +5444,6 @@
     "quota_now"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Continue now orchestrating the waves limit reset in 5min",
-    "quota_now": "Continue now orchestrating the waves limit reset in 5min"
-   },
    "turn": {
     "answered": true,
     "answer_s": 104.6,
@@ -6134,9 +5475,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "go now"
-   },
    "turn": {
     "answered": false,
     "answer_s": null,
@@ -6159,9 +5497,6 @@
     "nudge_continue"
    ],
    "question_form": [],
-   "excerpt": {
-    "nudge_continue": "Go now"
-   },
    "turn": {
     "answered": true,
     "answer_s": 31.2,
@@ -6191,9 +5526,6 @@
    "question_form": [
     "anything_broken"
    ],
-   "excerpt": {
-    "anything_broken": null
-   },
    "turn": {
     "answered": true,
     "answer_s": 51.2,
@@ -6222,9 +5554,6 @@
    "question_form": [
     "what_pending"
    ],
-   "excerpt": {
-    "what_pending": "Whats left otherwise?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 37.0,
@@ -6253,9 +5582,6 @@
    "question_form": [
     "where_are_we"
    ],
-   "excerpt": {
-    "where_are_we": "Where are we now?"
-   },
    "turn": {
     "answered": true,
     "answer_s": 423.0,
