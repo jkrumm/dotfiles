@@ -1,4 +1,4 @@
-# Argo — draft 2 (Phase 5)
+# Argo
 
 Built from `evidence/questions/` (1,111 owner messages, 27 canonical questions) and the
 Argo/basalt-ui inventory. Revised against panel pass 1 and pass 2 (`panel/pass1-resolutions.md`,

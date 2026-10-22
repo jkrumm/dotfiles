@@ -1,4 +1,4 @@
-# Proof — draft 1 (Phase 6)
+# Proof
 
 Evidence that is neither the owner's opinion nor the designer's. Revised against panel pass 1 and
 pass 2 (`panel/pass1-resolutions.md`, `panel/pass2-resolutions.md`) and the cross-lab review

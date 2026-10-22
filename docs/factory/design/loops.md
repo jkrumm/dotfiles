@@ -1,4 +1,4 @@
-# Loops — draft 3 (Phase 3, panel pass 2)
+# Loops
 
 Numbers from `evidence/`; correlation parameters from the backtest (`evidence/golden/backtest.out.md`).
 Report section 4 is built from this file. Each fact has one home and is linked from everywhere else:

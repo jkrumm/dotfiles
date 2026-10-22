@@ -1,4 +1,4 @@
-# Model — draft 2 (Phase 2)
+# Model
 
 Revised against Phase 1 evidence, spikes 1, 2, 6, panel passes 1 and 2 (`panel/pass1-resolutions.md`,
 `panel/pass2-resolutions.md`) and the cross-lab review (`panel/review-resolutions.md`). Each fact is
