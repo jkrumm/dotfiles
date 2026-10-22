@@ -1,0 +1,27 @@
+{
+  "status": "feedback",
+  "pages": [
+    {
+      "kind": "file",
+      "file": "~/.local/share/factory/spikes/05-review/artifacts/BRIEF-ui.md",
+      "markdown": true,
+      "edits_saved": false,
+      "comments": [
+        {
+          "id": "c_ef870a33bea6",
+          "kind": "element",
+          "quote": "Fixed — do not debate · li 6",
+          "anchor": {
+            "selector": "body > main > ul:nth-of-type(2) > li:nth-of-type(6)",
+            "label": "Fixed — do not debate · li 6"
+          },
+          "feedback": "Name the lane explicitly: manual Claude Code plus herdr"
+        }
+      ],
+      "edits": []
+    }
+  ],
+  "overall_note": "",
+  "sent_at": "2026-10-22T08:38:56.728Z",
+  "next_step": "Apply this feedback. Each entry in `pages` names the reviewed file or localhost URL. Items under `edits` are changes the human already made: `after` is their exact new wording, so carry it across verbatim, and never revert it. When an edit carries `after_html`, the human changed formatting (bold, italic, links) — use the HTML version, translated into the source's own syntax. Markdown pages were reviewed rendered, so quotes and `after` wording use the rendered text — apply the change to the Markdown source, keeping its formatting syntax. When every page is updated, run the same poll command again with --ack to clear this batch and wait for more."
+}

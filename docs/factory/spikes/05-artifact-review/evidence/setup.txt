@@ -1,0 +1,6 @@
+plannotator: plannotator 0.28.26   binary 143M
+  sha256 installed: ba7aa08bbcd8b1c20d0c8432ada26959910bf8e8528cbbc461b0bdffb4aef1bb
+  sha256 release sidecar: ba7aa08bbcd8b1c20d0c8432ada26959910bf8e8528cbbc461b0bdffb4aef1bb
+human-review: 0.8.2   installed size 844K
+  dependencies: {"marked":"^18.0.7"}   lifecycle scripts: {}
+  node_modules: human-review marked 

@@ -1,0 +1,17 @@
+Real browser run (DevTools protocol, desktop 1280x800): selected the phrase in the attached BRIEF.md, Comment, typed the text,
+typed a reply, Send. What the agent receives from wait_for_reply (status: replied):
+
+Otherwise fine, proceed.
+
+# Feedback on the attached files
+
+The following feedback is on the files you attached, one section per file and version.
+
+## ~/.local/share/factory/spikes/05-review/artifacts/BRIEF.md
+
+I've reviewed this document and have 1 piece of feedback:
+
+### 1. (lines 79–80) Feedback on: "Never break the lane used to fix things"
+> Name the lane explicitly: manual Claude Code plus herdr
+
+---

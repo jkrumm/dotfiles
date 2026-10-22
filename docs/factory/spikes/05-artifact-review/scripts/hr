@@ -1,0 +1,7 @@
+#!/bin/bash
+# Run the scratch human-review CLI isolated: state dir in the scratch tree, fixed loopback port, `open` shimmed so no browser starts.
+S="${HOME_SPIKE:-$HOME/.local/share/factory/spikes/05-review}"; NODE="$(command -v node)"
+mkdir -p "$S/shim" "$S/out"
+printf '#!/bin/bash\necho "$(date -u +%%FT%%TZ) open $*" >> "%s/out/open-calls.log"\n' "$S" > "$S/shim/open"; chmod +x "$S/shim/open"
+exec env -i HOME="$S/home" PATH="$S/shim:/usr/bin:/bin" HUMAN_REVIEW_STATE_DIR="$S/home/.human-review" \
+  HUMAN_REVIEW_PORT="${HR_PORT:-39211}" ${HR_EXTRA_ENV:-} "$NODE" "$S/human-review/node_modules/human-review/src/cli.js" "$@"

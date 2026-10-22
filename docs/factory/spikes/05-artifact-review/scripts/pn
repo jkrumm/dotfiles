@@ -1,0 +1,8 @@
+#!/bin/bash
+# Run the scratch plannotator binary isolated: HOME and data dir inside the scratch tree, no browser, no update check,
+# no agent auto-connect, no share portal, no tailnet publication, local (loopback) mode forced.
+S="${HOME_SPIKE:-$HOME/.local/share/factory/spikes/05-review}"
+exec env -i HOME="$S/home" PATH="/usr/bin:/bin:/usr/sbin:/sbin" PLANNOTATOR_DATA_DIR="$S/home/.plannotator" \
+  PLANNOTATOR_REMOTE=0 PLANNOTATOR_BROWSER=none PLANNOTATOR_UPDATE_CHECK=0 PLANNOTATOR_AUTO_UPDATE=0 \
+  PLANNOTATOR_INBOX_CONNECT=0 PLANNOTATOR_INBOX_TAILSCALE=0 PLANNOTATOR_SHARE=disabled PLANNOTATOR_AI=disabled \
+  PLANNOTATOR_JINA=0 PLANNOTATOR_GIT_REMOTE_CHECK=0 ${PN_EXTRA_ENV:-} "$S/bin/plannotator" "$@"

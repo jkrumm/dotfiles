@@ -1,0 +1,19 @@
+checks per evidence log (PASS / FAIL):
+  plannotator-exercise        24 PASS  0 FAIL
+  human-review-exercise       15 PASS  0 FAIL
+  rv-demo                     14 PASS  0 FAIL
+  rv-pn-demo                   6 PASS  0 FAIL
+processes still running from the scratch tree: 0
+real-home footprint (must stay 0 or absent):
+  0 plannotator mentions in ~/.claude/settings.json
+  0 plannotator mentions in ~/.claude.json
+  0 plannotator mentions in ~/.codex/config.toml
+  0 plannotator mentions in ~/.codex/AGENTS.md
+  0 plannotator mentions in ~/.config/opencode/opencode.json
+  0 plannotator mentions in ~/.config/herdr/config.toml
+  absent:  ~/.plannotator
+  absent:  ~/.human-review
+  absent:  ~/.claude/rules/plannotator-inbox.md
+  absent:  ~/.local/bin/plannotator
+tailnet serve upstream ports (all pre-existing services): 4050 8082 5173 8787 
+serve mappings pointing at a scratch port (must be none): none

@@ -1,0 +1,1 @@
+{"tools": 7, "bytes": 23069, "approx_tokens": 5767, "per_tool": {"send_message": 10424, "read_thread": 2732, "search": 1274, "resolve_message": 743, "wait_for_reply": 1545, "get_guide_brief": 667, "submit_guide": 5670}}
