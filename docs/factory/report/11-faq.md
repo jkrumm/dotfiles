@@ -37,8 +37,15 @@ generated AGENTS.md block make drift fail CI instead of failing silently.
 **Can I still open a herdr tab and just work?** Yes. The manual Claude Code + herdr lane is a rule of
 every wave, and `rd wave` keeps working after each one.
 
-**Does Slack go away?** As an intake, yes — each source switches to its direct path after 7 days of
-shadow without a miss. As a human channel it stays until Argo's notification stream replaces it (W10).
+**Does Slack go away?** As an intake, at once — it stops with the old warden (W1) and the primary-source
+adapters replace it (W3). As a human channel it stays until Argo's notifications (W6), Hermes'
+briefings (W11) and the per-project changelogs (W13) replace what is posted there.
+
+**What does Hermes become?** The conversational door: it answers from the factory's read models,
+files briefs as Tasks, steers agents and asks `rd` for sessions — through the same verbs as Argo. It
+loses every code tool (a capability limit with a test), its briefings are generated from the event log
+and delivered as Argo threads with audio, and the daily "Project narratives" cron that posts to Slack
+retires into per-project changelogs in the brain (W11, W13).
 
 **MCP or CLIs?** CLIs, on one agent contract (ADR-004). Spike 4's only systematic CLI failure — headless polling on a long job, 95k tokens — was fixed by one policy sentence (2 calls, 38.9k tokens). Commands are defined once in code; help, docs, skill references and the AGENTS.md routing block are generated and drift-checked. MCP stays only for research-gateway (Claude Desktop) and chrome-devtools until a browser CLI exists.
 

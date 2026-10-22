@@ -19,13 +19,13 @@ present human is physically required), and closes on an observation.
 | # | Failure mode (history) | Injection | Expected path | Pass | MTTR target |
 |-|-|-|-|-|-|
 | 1 | Crashed, stays-down container (glance baseline run) | `docker stop` a non-critical container | Kuma webhook → `health.down` → known-error recipe *restart* → health green → condition resolved | 0 owner touches, 1 incident, 0 pages | ≤ 5 min |
-| 2 | Clean VPS reboot (10-17: 7.9 min, 18 pages) | replay the 10-17 event stream into the new intake in shadow | topology fold under host `vps` → one candidate → recovered inside the window → dismissed or closed quiet | 0 pages | n/a (self-recovers) |
+| 2 | Clean VPS reboot (10-17: 7.9 min, 18 pages) | replay the recorded 10-17 event stream through the new intake | topology fold under host `vps` → one candidate → recovered inside the window → dismissed or closed quiet | 0 pages | n/a (self-recovers) |
 | 3 | Power event leaves a disk unmounted (homelab 10-21, e267) | in a scratch VM or on a spare mount: unmount a non-critical volume | `infra.mount` condition → runbook (mount, verify, restart dependents) | 0 owner touches | ≤ 15 min |
 | 4 | Disk floor during builds (mini, 365 GiB freed by hand) | `mkfile` a large file in scratch until the floor trips; delete after | `infra.disk` → disk-sweep runbook → floor restored | 0 owner touches | ≤ 30 min |
 | 5 | Credential expiry (secrets cache, Claude auth, GitHub token) | point a non-critical consumer at an expired test credential | `auth.expired` condition 7 days ahead; biometric renewal batched into one weekly ask | ≤ 1 batched owner action per week | lead time ≥ 7 d |
 | 6 | OpenCode server restart kills episodes | restart agw's OpenCode server during a non-critical investigate | attempt stalled → Witness re-drives from the session/hook | 0 owner touches, 0 duplicate PRs | ≤ 10 min |
 | 7 | herdr crash | crash a dedicated `herdr --session gameday` with two test agents | panes restored, agents resumed by session id, shells re-driven | 0 owner nudges | ≤ 10 min |
-| 8 | Quota exhaustion | feed the quota guard 95 % in shadow | non-urgent spawns flip to IU; parked agents get a resume timer at the reset | 0 owner nudges | resume ≤ 5 min after reset |
+| 8 | Quota exhaustion | feed the quota guard a recorded 95 % reading | non-urgent spawns flip to IU; parked agents get a resume timer at the reset | 0 owner nudges | resume ≤ 5 min after reset |
 | 9 | Agent parked by a transient API error (26 owner `continue`s) | inject an API-error stop in a test pane | Witness auto-continues after backoff | 0 owner nudges | ≤ 5 min |
 | 10 | Failed deploy | merge a deliberately failing change to a canary project | post-deploy verify red → automatic revert (squash) → redeploy → green | 0 owner touches | ≤ 15 min |
 | 11 | Broken dependency | Renovate-style bump to a known-bad version in a fork | CI or holdouts red → never merged → Task filed | not merged, 0 owner touches | n/a |

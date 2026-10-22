@@ -9,7 +9,7 @@ incidents.
 
 ## The target in ten lines
 
-1. **One ledger** (`warden.db`, evolved in place) with an append-only event log; twelve nouns, one writer each.
+1. **One fresh ledger** (`ledger.db`, history imported once from the archived `warden.db`) with an append-only event log; twelve nouns, one writer each.
 2. **One `project.yaml` per repo**; AGENTS.md routing, herdr groups, Argo's registry and reconciler policies are generated from it.
 3. **Signals from their primary sources** with source time; Slack intake retires source by source.
 4. **Per-project reconcilers** open and close Conditions; a webhook only schedules a reconcile.

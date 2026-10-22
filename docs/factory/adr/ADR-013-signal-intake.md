@@ -31,9 +31,10 @@ failed | opened | closed | requested), `severity`, `fingerprint` (default + refi
 | Owner and Hermes requests | `warden run` / Hermes → Task (not a Signal) |
 | Watchtower | archived upstream (last release 2023-11): replace with RollHook or WUD notifications |
 
-Slack intake switches off per source once its adapter has run 7 days in shadow with no missed
-event against the Slack copy; the Slack mirror stays human-only until Argo's notification stream
-replaces it (migration).
+Slack intake stops with the old warden at the start of the rewrite (no co-running, owner 2026-10-22);
+each adapter proves itself before going live by replaying the recorded Slack history (every recorded
+alert must reach the same Condition through its primary path). The Slack channel stays human-only
+until Argo's notification stream replaces it.
 
 ### Consequences
 
@@ -42,6 +43,6 @@ replaces it (migration).
 
 ### Confirmation
 
-Shadow comparison per source (missed and duplicate events), then the gameday catalogue
+History replay per source (missed and duplicate events against the recorded Slack copies), then the gameday catalogue
 (`design/proof.md`): every injected failure arrives through its primary source with `occurred_at`
 within 60 s of the fault.
