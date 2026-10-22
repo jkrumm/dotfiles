@@ -274,6 +274,17 @@ git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 \
 pull_rc=0
 pull_out="$("${NET[@]}" git pull --rebase --autostash 2>&1)" || pull_rc=$?
 
+# A torn FETCH_HEAD ("Kann Rebase nicht auf mehrere Branches ausfuehren") clears
+# within seconds, so one retry absorbs it before the streak counter sees a failure.
+# Only when no rebase is in progress and no path is unmerged: a real conflict is
+# never retried, it goes straight to the handling below.
+if [ "$pull_rc" -ne 0 ] && [ -z "$(git ls-files --unmerged)" ] \
+  && [ ! -d "$GIT_DIR/rebase-merge" ] && [ ! -d "$GIT_DIR/rebase-apply" ]; then
+  sleep 3
+  pull_rc=0
+  pull_out="$("${NET[@]}" git pull --rebase --autostash 2>&1)" || pull_rc=$?
+fi
+
 # THE trap in this script. `git pull --rebase --autostash` exits ZERO when the
 # rebase succeeds but re-applying the autostash conflicts — git reports it as a
 # warning, not a failure. Trusting the exit code alone means the mirror walks
