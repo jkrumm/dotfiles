@@ -1,0 +1,15 @@
+{
+ "traceId": "c1800a6ba3c5467f27450aab536071b5",
+ "spanCount": 25,
+ "totalDurationMs": 33855.206,
+ "logsCount": 40,
+ "rootSpan": {
+  "serviceName": "warden-spike",
+  "spanName": "warden.item"
+ },
+ "services": [
+  "claude-code",
+  "gateway-stub-spike",
+  "warden-spike"
+ ]
+}

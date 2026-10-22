@@ -1,0 +1,3 @@
+env only (user settings.json env says 0)                   claude-code spans: 0
+env + --settings {env: ENABLE_TELEMETRY=1}                 claude-code spans: 2
+env + --setting-sources project (agent-gateway lane)       claude-code spans: 2

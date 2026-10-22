@@ -1,0 +1,563 @@
+{
+ "logs": [
+  {
+   "ServiceName": "claude-code",
+   "event": "api_request",
+   "n": 7,
+   "with_span_id": 7
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "assistant_response",
+   "n": 2,
+   "with_span_id": 2
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "hook_execution_complete",
+   "n": 3,
+   "with_span_id": 3
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "hook_execution_start",
+   "n": 3,
+   "with_span_id": 3
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "hook_registered",
+   "n": 7,
+   "with_span_id": 7
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "plugin_loaded",
+   "n": 5,
+   "with_span_id": 5
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "tool_decision",
+   "n": 5,
+   "with_span_id": 5
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "tool_result",
+   "n": 5,
+   "with_span_id": 5
+  },
+  {
+   "ServiceName": "claude-code",
+   "event": "user_prompt",
+   "n": 1,
+   "with_span_id": 1
+  }
+ ],
+ "span_summary": [
+  {
+   "attribute_keys": [
+    "gen_ai.conversation.id",
+    "gen_ai.operation.name",
+    "gen_ai.provider.name",
+    "interaction.duration_ms",
+    "interaction.sequence",
+    "parent.source",
+    "queued_sends",
+    "session.id",
+    "span.type",
+    "terminal.type",
+    "user.id",
+    "user_prompt",
+    "user_prompt_length",
+    "warden.item.id",
+    "warden.spike"
+   ],
+   "count": 1,
+   "service": "claude-code",
+   "span": "claude_code.interaction"
+  },
+  {
+   "attribute_keys": [
+    "attempt",
+    "cache_creation_tokens",
+    "cache_read_tokens",
+    "duration_ms",
+    "effort",
+    "first_content_ms",
+    "gen_ai.conversation.id",
+    "gen_ai.provider.name",
+    "gen_ai.request.model",
+    "gen_ai.response.finish_reasons",
+    "gen_ai.response.id",
+    "gen_ai.system",
+    "input_tokens",
+    "llm_request.context",
+    "model",
+    "output_tokens",
+    "query_source_safe",
+    "request_id",
+    "session.id",
+    "span.type",
+    "speed",
+    "stop_reason",
+    "success",
+    "terminal.type",
+    "ttft_ms",
+    "user.id",
+    "warden.item.id",
+    "warden.spike"
+   ],
+   "count": 7,
+   "service": "claude-code",
+   "span": "claude_code.llm_request"
+  },
+  {
+   "attribute_keys": [
+    "anthropic.mcp.server.name",
+    "bash_argv0",
+    "bash_command_class",
+    "duration_ms",
+    "full_command",
+    "gen_ai.conversation.id",
+    "gen_ai.operation.name",
+    "gen_ai.provider.name",
+    "gen_ai.tool.call.id",
+    "gen_ai.tool.name",
+    "session.id",
+    "span.type",
+    "terminal.type",
+    "tool_name",
+    "tool_name_safe",
+    "tool_use_id",
+    "user.id",
+    "warden.item.id",
+    "warden.spike"
+   ],
+   "count": 5,
+   "service": "claude-code",
+   "span": "claude_code.tool"
+  },
+  {
+   "attribute_keys": [
+    "decision",
+    "duration_ms",
+    "gen_ai.conversation.id",
+    "gen_ai.provider.name",
+    "session.id",
+    "source",
+    "span.type",
+    "terminal.type",
+    "user.id",
+    "warden.item.id",
+    "warden.spike"
+   ],
+   "count": 5,
+   "service": "claude-code",
+   "span": "claude_code.tool.blocked_on_user"
+  },
+  {
+   "attribute_keys": [
+    "duration_ms",
+    "gen_ai.conversation.id",
+    "gen_ai.provider.name",
+    "gen_ai.tool.call.id",
+    "session.id",
+    "span.type",
+    "success",
+    "terminal.type",
+    "tool_use_id",
+    "user.id",
+    "warden.item.id",
+    "warden.spike"
+   ],
+   "count": 5,
+   "service": "claude-code",
+   "span": "claude_code.tool.execution"
+  },
+  {
+   "attribute_keys": [
+    "http.request.method",
+    "http.response.status_code",
+    "traceparent.present",
+    "url.path"
+   ],
+   "count": 1,
+   "service": "gateway-stub-spike",
+   "span": "GET /health"
+  },
+  {
+   "attribute_keys": [
+    "http.request.method",
+    "http.response.status_code",
+    "rpc.method",
+    "traceparent.present",
+    "url.path"
+   ],
+   "count": 1,
+   "service": "gateway-stub-spike",
+   "span": "mcp tools/call"
+  }
+ ],
+ "spans": [
+  {
+   "Duration": 35950165916,
+   "ParentSpanId": "",
+   "ServiceName": "claude-code",
+   "SpanId": "5736277f1c257721",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.interaction",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:35.680000000"
+  },
+  {
+   "Duration": 3033890333,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "e58d27485787767c",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:35.801000000"
+  },
+  {
+   "Duration": 7763223875,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "567805cf0307c2ab",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:36.243000000"
+  },
+  {
+   "Duration": 4950583,
+   "ParentSpanId": "e6928f3bf815ab26",
+   "ServiceName": "claude-code",
+   "SpanId": "708e8a4f03e62d9d",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.blocked_on_user",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:44.082000000"
+  },
+  {
+   "Duration": 432177084,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "e6928f3bf815ab26",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:44.082000000"
+  },
+  {
+   "Duration": 426987084,
+   "ParentSpanId": "e6928f3bf815ab26",
+   "ServiceName": "claude-code",
+   "SpanId": "33a86a7b8b937182",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.execution",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:44.087000000"
+  },
+  {
+   "Duration": 5973017042,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "6e61470b242eeada",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:44.559000000"
+  },
+  {
+   "Duration": 6215834,
+   "ParentSpanId": "eb2dfdd8c356063c",
+   "ServiceName": "claude-code",
+   "SpanId": "e49333f93baa9d1f",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.blocked_on_user",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:50.567000000"
+  },
+  {
+   "Duration": 99793000,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "eb2dfdd8c356063c",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:50.567000000"
+  },
+  {
+   "Duration": 93345167,
+   "ParentSpanId": "eb2dfdd8c356063c",
+   "ServiceName": "claude-code",
+   "SpanId": "c6680f235ba63b8c",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.execution",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:50.574000000"
+  },
+  {
+   "Duration": 5347876959,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "f1d177092f25fce9",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:50.688000000"
+  },
+  {
+   "Duration": 138847292,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "534e1e84f5b13531",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:56.088000000"
+  },
+  {
+   "Duration": 4654125,
+   "ParentSpanId": "534e1e84f5b13531",
+   "ServiceName": "claude-code",
+   "SpanId": "67133541d77d6354",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.blocked_on_user",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:56.088000000"
+  },
+  {
+   "Duration": 133868625,
+   "ParentSpanId": "534e1e84f5b13531",
+   "ServiceName": "claude-code",
+   "SpanId": "89c900d2aebb4a5b",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.execution",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:56.093000000"
+  },
+  {
+   "Duration": 1840000,
+   "ParentSpanId": "89c900d2aebb4a5b",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "b087079a016da412",
+   "SpanKind": "Server",
+   "SpanName": "GET /health",
+   "StatusCode": "Ok",
+   "ts": "2026-10-22 08:20:56.208480000"
+  },
+  {
+   "Duration": 5205614667,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "7f246a566886edfd",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:20:56.269000000"
+  },
+  {
+   "Duration": 6998583,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "92570ac36746a59f",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:01.431000000"
+  },
+  {
+   "Duration": 2748500,
+   "ParentSpanId": "92570ac36746a59f",
+   "ServiceName": "claude-code",
+   "SpanId": "82a6a7914b2a9c85",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.blocked_on_user",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:01.432000000"
+  },
+  {
+   "Duration": 2570375,
+   "ParentSpanId": "92570ac36746a59f",
+   "ServiceName": "claude-code",
+   "SpanId": "eb597c23e6c74c20",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.execution",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:01.435000000"
+  },
+  {
+   "Duration": 4934607667,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "2a3fc1d7fb410715",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:01.551000000"
+  },
+  {
+   "Duration": 55287000,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "330956fd222ab08c",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:06.460000000"
+  },
+  {
+   "Duration": 3351792,
+   "ParentSpanId": "330956fd222ab08c",
+   "ServiceName": "claude-code",
+   "SpanId": "6b9ac9a69bf64e86",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.blocked_on_user",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:06.460000000"
+  },
+  {
+   "Duration": 51722083,
+   "ParentSpanId": "330956fd222ab08c",
+   "ServiceName": "claude-code",
+   "SpanId": "c2ab776596a79e9a",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.tool.execution",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:06.463000000"
+  },
+  {
+   "Duration": 588000,
+   "ParentSpanId": "c2ab776596a79e9a",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "58ac7277bb05a7f2",
+   "SpanKind": "Server",
+   "SpanName": "mcp tools/call",
+   "StatusCode": "Ok",
+   "ts": "2026-10-22 08:21:06.510570000"
+  },
+  {
+   "Duration": 5014929916,
+   "ParentSpanId": "5736277f1c257721",
+   "ServiceName": "claude-code",
+   "SpanId": "430620ed04800a19",
+   "SpanKind": "Internal",
+   "SpanName": "claude_code.llm_request",
+   "StatusCode": "Unset",
+   "ts": "2026-10-22 08:21:06.545000000"
+  }
+ ],
+ "unjoined": [
+  {
+   "ParentSpanId": "",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "226ccb1baee64a67",
+   "SpanKind": "Server",
+   "SpanName": "mcp server/discover",
+   "StatusCode": "Ok",
+   "TraceId": "6c1d1090846fefa0b152e50b9785b567",
+   "trace8": "6c1d1090",
+   "ts": "2026-10-22 08:20:35.435732000",
+   "why": "gateway-stub request without a joined traceparent"
+  },
+  {
+   "ParentSpanId": "",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "c8c9201d18cc0cee",
+   "SpanKind": "Server",
+   "SpanName": "mcp initialize",
+   "StatusCode": "Ok",
+   "TraceId": "e4a1dc9cb3185be268b920a327183115",
+   "trace8": "e4a1dc9c",
+   "ts": "2026-10-22 08:20:35.531679000",
+   "why": "gateway-stub request without a joined traceparent"
+  },
+  {
+   "ParentSpanId": "",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "c3019a54a197ea55",
+   "SpanKind": "Server",
+   "SpanName": "mcp notifications/initialized",
+   "StatusCode": "Ok",
+   "TraceId": "f625b3ae718a62b4771e314d955caf8b",
+   "trace8": "f625b3ae",
+   "ts": "2026-10-22 08:20:35.557651000",
+   "why": "gateway-stub request without a joined traceparent"
+  },
+  {
+   "ParentSpanId": "",
+   "ServiceName": "gateway-stub-spike",
+   "SpanId": "a0d4b47856d21da7",
+   "SpanKind": "Server",
+   "SpanName": "mcp tools/list",
+   "StatusCode": "Ok",
+   "TraceId": "b81db48393dd291df7e9b9e9d8a92199",
+   "trace8": "b81db483",
+   "ts": "2026-10-22 08:20:35.600327000",
+   "why": "gateway-stub request without a joined traceparent"
+  }
+ ],
+ "verdict": {
+  "gateway_spans_in_other_traces": [
+   {
+    "parent": "-",
+    "service": "gateway-stub-spike",
+    "span": "mcp server/discover",
+    "trace8": "6c1d1090",
+    "why": "gateway-stub request without a joined traceparent"
+   },
+   {
+    "parent": "-",
+    "service": "gateway-stub-spike",
+    "span": "mcp initialize",
+    "trace8": "e4a1dc9c",
+    "why": "gateway-stub request without a joined traceparent"
+   },
+   {
+    "parent": "-",
+    "service": "gateway-stub-spike",
+    "span": "mcp notifications/initialized",
+    "trace8": "f625b3ae",
+    "why": "gateway-stub request without a joined traceparent"
+   },
+   {
+    "parent": "-",
+    "service": "gateway-stub-spike",
+    "span": "mcp tools/list",
+    "trace8": "b81db483",
+    "why": "gateway-stub request without a joined traceparent"
+   }
+  ],
+  "item_id": "spike6-I-20261022T082033Z",
+  "log_records_with_trace_id": 38,
+  "orphan_parents_inside_trace": [],
+  "resource_attribute_join": [
+   {
+    "ServiceName": "claude-code",
+    "n": 43,
+    "signal": "logs"
+   },
+   {
+    "ServiceName": "claude-code",
+    "n": 44,
+    "signal": "metrics_sum"
+   },
+   {
+    "ServiceName": "claude-code",
+    "n": 24,
+    "signal": "traces"
+   }
+  ],
+  "spans_by_service": {
+   "claude-code": 23,
+   "gateway-stub-spike": 2
+  },
+  "spans_in_trace": 25,
+  "trace_id": "05d468195deee87ca69bbb3e14698410"
+ }
+}

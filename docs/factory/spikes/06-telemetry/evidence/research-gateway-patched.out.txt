@@ -1,0 +1,9 @@
+# research-gateway with patches/research-gateway-traceparent.patch applied to a scratch copy
+# POST /research sent with traceparent 00-adc08b346a299a0e29ae5190baa9863a-08d8152056c6eb4e-01; the job fails fast (unreachable LLM endpoint on purpose)
+# supplied trace id adc08b346a299a0e29ae5190baa9863a, supplied parent span id 08d8152056c6eb4e
+{'ServiceName': 'research-gateway', 'SpanName': 'research.job', 'SpanKind': 'Server', 'span8': '206aae10', 'parent8': '08d81520', 'StatusCode': 'Error', 'job_id_attr': 'dac237e4-7f46-48b6-81cd-460dd3bb9b61'}
+{'ServiceName': 'research-gateway', 'SpanName': 'research.round', 'SpanKind': 'Internal', 'span8': '3305f465', 'parent8': '206aae10', 'StatusCode': 'Ok', 'job_id_attr': ''}
+{'ServiceName': 'research-gateway', 'SpanName': 'research.worker', 'SpanKind': 'Internal', 'span8': '2677f347', 'parent8': '3305f465', 'StatusCode': 'Error', 'job_id_attr': ''}
+{'ServiceName': 'research-gateway', 'SpanName': 'research.round', 'SpanKind': 'Internal', 'span8': 'd60c306b', 'parent8': '206aae10', 'StatusCode': 'Ok', 'job_id_attr': ''}
+{'ServiceName': 'research-gateway', 'SpanName': 'research.worker', 'SpanKind': 'Internal', 'span8': '8049e3c8', 'parent8': 'd60c306b', 'StatusCode': 'Error', 'job_id_attr': ''}
+# expected parent of research.job: 08d81520

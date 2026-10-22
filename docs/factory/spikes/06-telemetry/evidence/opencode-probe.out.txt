@@ -1,0 +1,44 @@
+# scripts/opencode_probe.sh <trace> <parent> --session  (throwaway opencode 2.0.32 server, scratch roots, one prompt through the IU chat route)
+# supplied trace id: 2a8b0929528fac02dc21af4749e7ebb3
+GET /api/info (basic auth)    : 200
+GET /api/session (basic auth) : 200
+GET /api/session/active       : 200
+GET /api/session (no auth,401): 401
+session: created
+prompt: 200
+wait: 204
+messages: 200
+server log tail:
+server listening on http://[::1]:17900
+
+== spans in the supplied trace (parent should be the supplied span id)
+  {'SpanName': 'http.server GET', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/info', 'status': '200'}
+  {'SpanName': 'http.server GET', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/session', 'status': '200'}
+  {'SpanName': 'http.server GET', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/session/active', 'status': '200'}
+  {'SpanName': 'http.server GET', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '', 'status': '401'}
+  {'SpanName': 'http.server POST', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/session', 'status': '200'}
+  {'SpanName': 'http.server POST', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/session/:sessionID/prompt', 'status': '200'}
+  {'SpanName': 'http.server POST', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/experimental/session/:sessionID/wait', 'status': '204'}
+  {'SpanName': 'http.server GET', 'SpanKind': 'Server', 'parent8': 'f881b2a0', 'route': '/api/session/:sessionID/message', 'status': '200'}
+
+== where did the session RUN spans go? (largest opencode traces from the last 10 minutes)
+  {'trace8': '404a7b4a', 'spans': 601, 'roots': 1, 'root_span': 'ServerProcess.start'}
+  {'trace8': '2a8b0929', 'spans': 8, 'roots': 0, 'root_span': ''}
+  {'trace8': '7d1a0f45', 'spans': 1, 'roots': 1, 'root_span': 'http.server GET'}
+
+== the LLM call span: attribute keys that identify the session (values not printed)
+  {'session_keys': ['http.request.header.x-opencode-session', 'http.request.header.x-opencode-session-id', 'http.request.header.x-session-affinity', 'http.request.header.x-session-id']}
+
+== span names in the run (top 12 by count)
+  {'SpanName': 'FileSystem.resolve', 'n': 153}
+  {'SpanName': 'Plugin.load', 'n': 88}
+  {'SpanName': 'FileSystem.readFileStringSafe', 'n': 52}
+  {'SpanName': 'FileSystem.isDir', 'n': 24}
+  {'SpanName': 'State.notify', 'n': 21}
+  {'SpanName': 'Provider.snapshot', 'n': 16}
+  {'SpanName': 'Credential.all', 'n': 16}
+  {'SpanName': 'Integration.list', 'n': 16}
+  {'SpanName': 'Model.snapshot', 'n': 13}
+  {'SpanName': 'Project.activate', 'n': 11}
+  {'SpanName': 'Model.available', 'n': 8}
+  {'SpanName': 'http.server GET', 'n': 7}

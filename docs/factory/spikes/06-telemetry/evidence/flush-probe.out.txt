@@ -1,0 +1,7 @@
+# scripts/flush_probe.sh — one headless single-turn run, export intervals left at their defaults
+# (traces 5 s, logs 5 s, metrics 60 s); output as printed by the script.
+worker wall time: 6 s (includes the warden export)
+trace id: a026d57a802d30111cc24cff024c8a47
+claude-code spans in the warden trace : 2
+claude-code log records in the trace  : 7
+claude-code metric points (item attr) : 7

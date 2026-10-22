@@ -40,7 +40,7 @@ W1 and W2 can run in parallel (disjoint repos) from per-repo plan copies; W3 nee
 Repo: warden. ADR-011. Additive only.
 
 - [ ] `events` table exactly as `design/model.md` §4, one `emit()` in `scripts/ledger.py` used inside the same transaction as every state change. Migration with a snapshot (existing pattern).
-- [ ] Dual-write: every `item_transitions` row, `operations` row, `dispatches` status change, card post, reminder and Argo action emits its event (`item.transitioned`, `operation.started|finished`, `dispatch.*`, `notification.sent` with tier, `owner.action`). `trace_id` = first 32 hex of sha256(root item id).
+- [ ] Dual-write: every `item_transitions` row, `operations` row, `dispatches` status change, card post, reminder and Argo action emits its event (`item.transitioned`, `operation.started|finished`, `dispatch.*`, `notification.sent` with tier, `owner.action`). `trace_id` = `sha256("warden-item:" + root item id)[:32]` (ADR-006).
 - [ ] Owner pages become a query: `scripts/kpi/` gains read-only scripts for `escalated`, `owner_touch`, `owner_pages`, `autonomy_rate` reading `events` (definitions from `docs/factory/evidence/DEFINITIONS.md`).
 - [ ] One-writer check in `make check`: entity writes only from their owning module (a test that greps the SQL write sites).
 - [ ] Projection-rebuild test: drop and rebuild a read model from `events`, compare.

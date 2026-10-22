@@ -1,0 +1,115 @@
+--- a/src/lib/otel.ts
++++ b/src/lib/otel.ts
+@@ -125,6 +125,29 @@
+ export function traceIdFromJobId(jobId: string): string {
+   const hex = jobId.replace(/-/g, '').toLowerCase()
+   return /^[0-9a-f]{32}$/.test(hex) ? hex : toHex(crypto.getRandomValues(new Uint8Array(16)))
++}
++
++// ── Inbound W3C trace context ────────────────────────────────────────────────
++// A caller (warden, agent-gateway, Claude Code's Bash/MCP subprocess) may send `traceparent`.
++// In-memory carrier keyed by job id: enough for a spike; a real change persists it with the job
++// so an adopted-after-restart job keeps its parent.
++const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/
++
++export function parseTraceparent(header: string | null | undefined): { traceId: string; spanId: string } | undefined {
++  const m = header ? TRACEPARENT_RE.exec(header.trim().toLowerCase()) : null
++  if (!m || /^0+$/.test(m[1]!) || /^0+$/.test(m[2]!)) return undefined
++  return { traceId: m[1]!, spanId: m[2]! }
++}
++
++const inboundTrace = new Map<string, { traceId: string; spanId: string }>()
++
++export function rememberInboundTrace(jobId: string, header: string | null | undefined): void {
++  const ctx = parseTraceparent(header)
++  if (ctx) inboundTrace.set(jobId, ctx)
++}
++
++export function inboundTraceFor(jobId: string): { traceId: string; spanId: string } | undefined {
++  return inboundTrace.get(jobId)
+ }
+ 
+ function newTraceId(): string {
+@@ -196,12 +219,13 @@
+   kind: SpanKind,
+   attrs?: SpanAttributes,
+   explicitTraceId?: string,
++  explicitParentSpanId?: string,
+ ): InternalSpanData {
+   const parent = currentSpan.getStore()
+   return {
+     traceId: explicitTraceId ?? parent?.traceId ?? newTraceId(),
+     spanId: newSpanId(),
+-    parentSpanId: parent?.spanId,
++    parentSpanId: parent?.spanId ?? explicitParentSpanId,
+     name,
+     kind,
+     startTimeUnixNano: nowNanos(),
+@@ -293,10 +317,10 @@
+  * enriches the span it is in via `getActiveSpan().setAttributes(...)` as facts become known.
+  */
+ export function withRootSpan<T>(
+-  params: { traceId: string; name: string; attrs?: SpanAttributes; kind?: SpanKind },
++  params: { traceId: string; parentSpanId?: string | undefined; name: string; attrs?: SpanAttributes; kind?: SpanKind },
+   fn: (span: Span) => Promise<T>,
+ ): Promise<T> {
+-  const data = createSpanData(params.name, params.kind ?? 'server', params.attrs, params.traceId)
++  const data = createSpanData(params.name, params.kind ?? 'server', params.attrs, params.traceId, params.parentSpanId)
+   return runInSpan(data, fn)
+ }
+ 
+--- a/src/routes/research.ts
++++ b/src/routes/research.ts
+@@ -6,6 +6,7 @@
+ import { inputWarnings } from '../lib/input-lint.js'
+ import { log } from '../lib/log.js'
+ import { env } from '../env.js'
++import { rememberInboundTrace } from '../lib/otel.js'
+ 
+ // The engine's input schema (agent/schema.ts) plus the submit dedupe key, which is a job-store
+ // concern rather than an engine one. Extending it here — rather than in schema.ts — keeps the
+@@ -24,7 +25,7 @@
+ export const researchRoutes = new Elysia({ prefix: '/research' })
+   .post(
+     '/',
+-    ({ body, status, set }) => {
++    ({ body, status, set, request }) => {
+       const depth = body.depth ?? 'standard'
+ 
+       // Dedupe BEFORE admission: a retried submit carrying a key whose job already exists must
+@@ -51,6 +52,7 @@
+         context: body.context,
+         idempotencyKey: body.idempotencyKey,
+       })
++      rememberInboundTrace(job.jobId, request.headers.get('traceparent'))
+       log('job.created', { jobId: job.jobId, depth, withContext: body.context !== undefined })
+ 
+       // Fire-and-forget: run the agent in the background without blocking the response.
+--- a/src/agent/run.ts
++++ b/src/agent/run.ts
+@@ -18,7 +18,7 @@
+ import { env } from '../env.js'
+ import { clearJobOutcomes, readJobOutcomes } from './job-outcomes.js'
+ import { HUMAN_OUTCOMES } from './human-outcome.js'
+-import { traceIdFromJobId, withRootSpan, withSpan } from '../lib/otel.js'
++import { inboundTraceFor, traceIdFromJobId, withRootSpan, withSpan } from '../lib/otel.js'
+ import { describeFailures, collectRoundOutcome, type RoundResult, type WorkerOutcome } from './round.js'
+ import { runRounds } from './rounds.js'
+ import { FencedError } from './fenced-error.js'
+@@ -148,12 +148,14 @@
+ 
+   // The whole job is one trace, and its id is derived from the jobId — so a job id from the
+   // REST/MCP surface is enough to find the trace, with no lookup table in between.
++  const inbound = inboundTraceFor(jobId)
+   return withRootSpan(
+     {
+-      traceId: traceIdFromJobId(jobId),
++      traceId: inbound?.traceId ?? traceIdFromJobId(jobId),
++      parentSpanId: inbound?.spanId,
+       name: 'research.job',
+       kind: 'server',
+-      attrs: { 'research.depth': depth, 'research.query': input.query.slice(0, 200) },
++      attrs: { 'research.depth': depth, 'research.job_id': jobId, 'research.query': input.query.slice(0, 200) },
+     },
+     async (span) => {
+       const profile = profiles[depth]

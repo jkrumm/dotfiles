@@ -1,0 +1,83 @@
+{
+ "as_of_utc": "2026-10-22T08:28Z",
+ "elapsed_s": 28.0,
+ "files_scanned": 2044,
+ "mean_sessions_per_full_day": 82.5,
+ "mean_spans_per_full_day": 47581.0,
+ "per_day": [
+  {
+   "day": "2026-10-15",
+   "interactions": 763,
+   "llm_requests": 10392,
+   "sessions_active": 360,
+   "spans": 43585,
+   "tool_calls": 10810
+  },
+  {
+   "day": "2026-10-16",
+   "interactions": 516,
+   "llm_requests": 12978,
+   "sessions_active": 92,
+   "spans": 55131,
+   "tool_calls": 13879
+  },
+  {
+   "day": "2026-10-17",
+   "interactions": 648,
+   "llm_requests": 13588,
+   "sessions_active": 101,
+   "spans": 60310,
+   "tool_calls": 15358
+  },
+  {
+   "day": "2026-10-18",
+   "interactions": 759,
+   "llm_requests": 20451,
+   "sessions_active": 173,
+   "spans": 92799,
+   "tool_calls": 23863
+  },
+  {
+   "day": "2026-10-19",
+   "interactions": 509,
+   "llm_requests": 9470,
+   "sessions_active": 74,
+   "spans": 44071,
+   "tool_calls": 11364
+  },
+  {
+   "day": "2026-10-20",
+   "interactions": 81,
+   "llm_requests": 1550,
+   "sessions_active": 16,
+   "spans": 6506,
+   "tool_calls": 1625
+  },
+  {
+   "day": "2026-10-21",
+   "interactions": 166,
+   "llm_requests": 5519,
+   "sessions_active": 39,
+   "spans": 26667,
+   "tool_calls": 6994
+  },
+  {
+   "day": "2026-10-22",
+   "interactions": 135,
+   "llm_requests": 3917,
+   "sessions_active": 88,
+   "spans": 17045,
+   "tool_calls": 4331
+  }
+ ],
+ "sessions_with_model_calls": 868,
+ "spans_per_session": {
+  "max": 7266,
+  "mean": 398.7,
+  "median": 133.5,
+  "p90": 1030,
+  "p99": 4155
+ },
+ "spans_total": 346101,
+ "window_days": 7
+}

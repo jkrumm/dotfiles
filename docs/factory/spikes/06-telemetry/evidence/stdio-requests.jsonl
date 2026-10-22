@@ -1,0 +1,2 @@
+{"event": "spawned", "env_names_of_interest": ["CLAUDE_CODE_PROPAGATE_TRACEPARENT", "TRACEPARENT"], "traceparent_in_env": "00-d8c0c6bbb45fffc3f324595a31ebe955-7c38076c4e46b967-01"}
+{"event": "tools/call", "meta": {"claudecode/toolUseId": "toolu_01HdKbffc8SGHUvX4UAVSH7F", "progressToken": "<present>"}}
