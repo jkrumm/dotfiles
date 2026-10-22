@@ -109,6 +109,8 @@ setup:
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
+	@$(MAKE) --no-print-directory herdr-events-setup
+	@$(MAKE) --no-print-directory herdr-reap-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -2399,6 +2401,43 @@ jobrun-canary-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.jobrun-canary.json"; \
 	echo "  ✓ jobrun-canary torn down (unloaded, plist and jobrun state removed)"
 
+# The herdr event record (factory Phase 0): every event the server emits, appended raw to
+# ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where
+# the herdr server runs. Records only; no consumer.
+.PHONY: herdr-events-setup herdr-events-teardown herdr-events-status
+herdr-events-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-events skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/herdr-events.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/share/herdr-events"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-events" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ KeepAlive → ~/.local/share/herdr-events/YYYY-MM-DD.jsonl; log: ~/Library/Logs/herdr-events.log"
+herdr-events-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-events.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
+	echo "  ✓ herdr-events torn down (unloaded; the recorded data is kept)"
+herdr-events-status:
+	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-events" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
+	ls -l "$(HOME)/.local/share/herdr-events/" 2>/dev/null | tail -3
+
+# The herdr janitor (`rd reap`), every 30 min under jobrun. Dev host only. Teardown removes the
+# jobrun state file too, or jobs-grade would grade the retired label `unloaded` forever.
+.PHONY: herdr-reap-setup herdr-reap-teardown
+herdr-reap-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-reap skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/herdr-reap.py"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-reap" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ every 30 min → rd reap; actions: ~/Library/Logs/herdr-reap.log"
+herdr-reap-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-reap.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-reap.json"; \
+	echo "  ✓ herdr-reap torn down (unloaded, plist and jobrun state removed)"
+
 # Order caddy's boot behind the tailnet address it binds. NEEDS SUDO — caddy is
 # a SYSTEM LaunchDaemon in /Library, so this cannot run unattended on the mini
 # (the root password is deliberately MacBook-only). Drive it from the MacBook:
@@ -3443,6 +3482,8 @@ help:
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
+	@echo "  make herdr-events-setup         Dev-host only: load the herdr event recorder (-status / -teardown)"
+	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min herdr janitor (-teardown); run once: rd reap [--dry-run]"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
 	@echo "  make drift-check-setup          Dev-host only: load the daily 09:40 upstream-drift agent → Uptime Kuma"

@@ -45,7 +45,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · Claude.ai usage-% fetcher (uv script) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
-| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|fan\|merge\|close\|agents\|read\|say` (see Machines) |
+| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
 | `~/SourceRoot/warden/scripts/warden` | `~/.local/bin/warden` | Linked from the warden repo, not from here — `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>` |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
@@ -174,7 +174,9 @@ substitutes for another.**
 | Want | Command |
 |-|-|
 | A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
-| Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
+| Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/herdr-reap.py`, also `com.jkrumm.herdr-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/herdr-reap.log` |
+| The raw record | `com.jkrumm.herdr-events` (`scripts/herdr-events.ts`) appends every herdr event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make herdr-events-status` |
 | What every agent is doing | `make agent-overview` — herdr workspace `overview` watching agent-gateway `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.

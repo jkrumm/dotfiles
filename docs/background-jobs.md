@@ -48,6 +48,8 @@ Levels are as of 2026-10-17 (Wave 17). A `jobrun`-wrapped job is level 4 by cons
 | `disk-sweep` | 04:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 if any step failed (steps self-skip when their tool is missing); `make disk-sweep-run` runs it once |
 | `drift-check` | 09:40 | 2 (on `jobrun`; graded) | 2 | Exits 1 while a drift is open, so it grades `failing` until cleared. 2 drifts open. Findings become warden items (dotfiles owns the pins); Kuma `Drift` retires |
 | `jobrun-canary` | 300s | 4 | 4 | The chain probe, see §Canary. **Proven live 2026-10-16:** committed `healthy:false` → warden fixed, merged, deployed and closed it with no page |
+| `herdr-reap` | 1800s | 2 (on `jobrun`; graded) | 2 | The janitor, `rd reap [--dry-run]`; exits non-zero only if herdr itself is unreachable |
+| `herdr-events` | KeepAlive | 2 (doctor grades a down KeepAlive job) | 2 | Event recorder, not a job: `make herdr-events-status` |
 | `devhost-health` | 300s | 2 | 2 | A detector, so it stays dumb. 279/288 green over 24h |
 | `lock-at-boot`, `obsidian-autostart` | RunAtLoad | 2 | 2 | — |
 | `agent-gateway`, `-opencode` | KeepAlive | 3 | 3 | warden's own dependency, so Kuma is its backstop, not warden |

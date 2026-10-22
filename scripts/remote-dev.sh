@@ -980,6 +980,21 @@ cmd_say() {
   host_run "herdr agent prompt '$pane' '$esc'"
 }
 
+# The janitor: closes finished, clean, pushed tabs; messages dirty ones. All logic lives in
+# herdr-reap.py (also what com.jkrumm.herdr-reap runs); this is the routing hop.
+cmd_reap() {
+  require_server
+  local args="" a
+  for a in "$@"; do
+    case $a in
+      --dry-run|-n) args+=" --dry-run" ;;
+      *) die "usage: reap [--dry-run]   (REAP_IDLE_H=<hours> overrides the 12 h idle threshold)" ;;
+    esac
+  done
+  # shellcheck disable=SC2016  # $HOME expands on the host
+  host_run "REAP_IDLE_H='${REAP_IDLE_H:-12}' python3 \"\$HOME/SourceRoot/dotfiles/scripts/herdr-reap.py\"$args"
+}
+
 usage() {
   cat <<'EOF'
 
@@ -993,6 +1008,7 @@ usage() {
                               (fan --clean <repo> reclaims merged worktrees)
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          close a finished wave's tab (clean + pushed only)
+    rd reap [--dry-run]       janitor: close finished clean+pushed tabs, message dirty ones (REAP_IDLE_H, default 12)
     rd agents                 every agent on the host, both lanes
     rd read <agent> [src]     read an agent's output without attaching
     rd say <agent> <text…>    send a prompt to a running agent
@@ -1027,6 +1043,7 @@ case "${1:-}" in
   merge)  shift; cmd_merge "$@" ;;
   close)  shift; cmd_close "$@" ;;
   agents) shift; cmd_agents "$@" ;;
+  reap)   shift; cmd_reap "$@" ;;
   read)   shift; cmd_read "$@" ;;
   say)    shift; cmd_say "$@" ;;
   ""|-h|--help|help) usage ;;
