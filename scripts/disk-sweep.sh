@@ -197,7 +197,8 @@ step_pkg-caches() {
   before=$(free_kb "$HOME")
 
   if command -v uv >/dev/null 2>&1; then
-    if with_timeout "$TOOL_TIMEOUT" uv cache prune >/dev/null 2>&1; then parts+="uv pruned, "; else parts+="uv prune FAILED, "; rc=1; fi
+    local uvout
+    if uvout=$(with_timeout "$TOOL_TIMEOUT" uv cache prune 2>&1); then parts+="uv pruned, "; else parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1; fi
   fi
 
   if command -v brew >/dev/null 2>&1; then
