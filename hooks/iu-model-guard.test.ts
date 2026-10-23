@@ -70,6 +70,10 @@ describe("mainModel + isPremium — the block decision", () => {
     expect(mainModel({ env, argv: "claude --model sonnet", fromSettings: "fable" })).toBe("sonnet");
   });
 
+  test("a blanked ANTHROPIC_MODEL falls through to settings", () => {
+    expect(mainModel({ env: { ...IU, ANTHROPIC_MODEL: "" }, argv: "claude -p", fromSettings: "fable" })).toBe("fable");
+  });
+
   test("settings default fable with no flag is caught", () => {
     expect(isPremium(mainModel({ env: IU, argv: "claude -p", fromSettings: "fable" }))).toBe(true);
   });

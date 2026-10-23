@@ -105,7 +105,7 @@ function settingsModel(): string | undefined {
 }
 
 function mainModel({ env, argv, fromSettings }: { env: Env; argv: string; fromSettings?: string }): string | undefined {
-  const raw = modelFromArgv(argv) ?? env.ANTHROPIC_MODEL ?? fromSettings;
+  const raw = modelFromArgv(argv) || env.ANTHROPIC_MODEL?.trim() || fromSettings;
   return raw ? resolveAlias(raw, env) : undefined;
 }
 
