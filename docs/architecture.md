@@ -223,6 +223,7 @@ the weatherorb session workflow.
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
+| `com.iu.teamchat-mirrors` | IuRoot (chat) | 900s — refreshes the teamchat code mirrors (into ~/.local/share/teamchat/mirrors and the teamchat Colima `repos` volume); installed by `make -C chat mirrors-install` |
 
 Five of the seven IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
 `artefact-daily`, `stack-dashboard`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
