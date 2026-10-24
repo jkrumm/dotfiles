@@ -3,7 +3,7 @@
 //
 //   claude-account pick --lane <lane>      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled accounts whose cache is stale
+//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
@@ -70,9 +70,15 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
 
 const seed = (reg: Registry) => (c: Cache) => readClaudeJson(reg, c)
 
-/** Refresh `ids` (already claimed by the caller); without ids, claim whatever is due first. */
-function refresh(reg: Registry, ids?: string[], timeoutS = REFRESH_TIMEOUT_S): void {
-  const todo = ids ?? claimRefresh(updateCache, reg, Object.keys(reg.accounts), Date.now(), seed(reg))
+/**
+ * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
+ * atomic claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
+ */
+function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[] } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
+  const enabled = (id: string) => !!reg.accounts[id]?.enabled
+  const todo = o.claimed
+    ? o.claimed.filter(enabled)
+    : claimRefresh(updateCache, reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), seed(reg))
   runRefresh({
     reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
     readSample: (id) => readSample(reg, id), update: updateCache, now: Date.now, log: (m) => console.error(m),
@@ -118,12 +124,16 @@ function main(argv: string[]): number {
       const now = Date.now()
       // Never block while a usable sample exists: stale accounts refresh in the background (budgeted),
       // only an account with no sample at all is refreshed synchronously first.
-      refreshBeforePick({
-        reg, lane, now, cache: readClaudeJson(reg, loadCache()),
-        claim: (ids) => tryClaim(reg, ids, now),
-        runSync: (ids) => refresh(reg, ids),
-        detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--ids", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
-      })
+      try {
+        refreshBeforePick({
+          reg, lane, now, cache: readClaudeJson(reg, loadCache()),
+          claim: (ids) => tryClaim(reg, ids, now),
+          runSync: (ids) => refresh(reg, { claimed: ids }),
+          detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
+        })
+      } catch (e) {
+        console.error(`claude-account: refresh skipped: ${(e as Error).message}`) // a pick must always answer; go on with the current cache
+      }
       const cache = readClaudeJson(reg, loadCache())
       const p = pick(reg, cache, lane, now)
       try {
@@ -140,8 +150,7 @@ function main(argv: string[]): number {
       usage(reg, rest.includes("--json"))
       return 0
     case "refresh": {
-      const ids = flag(rest, "--ids")?.split(",").filter((id) => reg.accounts[id])
-      refresh(reg, ids)
+      refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(",") })
       return 0
     }
     case "record": {
@@ -151,8 +160,9 @@ function main(argv: string[]): number {
       return 0
     }
     case "account": {
-      const id = accountFromConfigDir(reg, process.env.CLAUDE_CONFIG_DIR)
-      if (!rest.includes("--badge")) console.log(id)
+      const id = accountFromConfigDir(reg, process.env.CLAUDE_CONFIG_DIR) // null: set to a dir no account owns
+      if (!rest.includes("--badge")) console.log(id ?? "?")
+      else if (id === null) console.log("?")
       else if (Object.values(reg.accounts).filter((a) => a.enabled).length > 1) console.log(id.toUpperCase())
       return 0
     }

@@ -1,6 +1,6 @@
 // Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs"
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
@@ -73,12 +73,15 @@ export function claudeJsonPath(a: Account): string {
   return d === null ? join(homedir(), ".claude.json") : join(d, ".claude.json")
 }
 
-/** Registry id for a CLAUDE_CONFIG_DIR value; unset or empty -> the default account. */
-export function accountFromConfigDir(reg: Registry, configDir: string | undefined): string {
+/**
+ * Registry id for a CLAUDE_CONFIG_DIR value. Unset or empty -> the default account; a set dir that no account
+ * owns -> null (an unknown identity must not be attributed to the default account).
+ */
+export function accountFromConfigDir(reg: Registry, configDir: string | undefined): string | null {
   if (!configDir) return defaultAccountId(reg)
   const want = resolve(expandHome(configDir))
   for (const [id, a] of Object.entries(reg.accounts)) if (accountDir(a) === want) return id
-  return defaultAccountId(reg)
+  return null
 }
 export const defaultAccountId = (reg: Registry) => Object.entries(reg.accounts).find(([, a]) => a.dir === null)?.[0] ?? DEFAULT_ACCOUNT_ID
 
@@ -136,7 +139,14 @@ export function sampleFromClaudeJson(json: unknown, src = "usage"): Sample | nul
   return { s: pct(f), w: pct(d), s_reset: toEpochS(f?.resets_at), w_reset: toEpochS(d?.resets_at), ts: c.fetchedAtMs, src }
 }
 
-export const isHome = (a: Account, lane: string) => a.homeLanes.some((h) => h === lane || (h.endsWith(":*") && lane.startsWith(h.slice(0, -1))))
+const matchesLane = (pattern: string, lane: string) => pattern === lane || (pattern.endsWith(":*") && lane.startsWith(pattern.slice(0, -1)))
+
+/** Accounts whose home lanes claim `lane`: exact matches win outright, wildcards only count when nobody matches exactly. */
+export function homeIds(reg: Registry, lane: string): string[] {
+  const ids = Object.keys(reg.accounts)
+  const exact = ids.filter((id) => reg.accounts[id].homeLanes.includes(lane))
+  return exact.length ? exact : ids.filter((id) => reg.accounts[id].homeLanes.some((h) => matchesLane(h, lane)))
+}
 
 /** Last known sample still usable after a skipped or failed refresh: older than FRESH_MS, younger than STALE_OK_MS. */
 export const isStaleOk = (cache: Cache, id: string, nowMs: number) => {
@@ -178,7 +188,8 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
   }
-  const home = ids.find((id) => ok.includes(id) && isHome(reg.accounts[id], lane))
+  const homes = homeIds(reg, lane)
+  const home = ids.find((id) => ok.includes(id) && homes.includes(id))
   if (home) return { picked: home, reason: "home" }
   const other = ok[0]
   if (other) return { picked: other, reason: "spill" }
@@ -262,24 +273,57 @@ export const REFRESH_TIMEOUT_S = 75
 const LOCK_WAIT_MS = 3000
 const LOCK_STALE_MS = 30_000
 const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+const ownerOf = (lock: string): string | null => {
+  try {
+    return readFileSync(join(lock, "owner"), "utf8")
+  } catch {
+    return null
+  }
+}
 
 /**
- * The only way to change the quota cache: take a mkdir lock (atomic), re-read the file, apply `fn` to the fresh
- * content, write atomically, release. A lock older than LOCK_STALE_MS belongs to a dead process and is broken.
- * Throws when the lock cannot be taken within LOCK_WAIT_MS; callers that are best-effort catch it.
+ * Break a lock observed as stale: rename it to a unique name first (atomic, so of N racing breakers exactly one
+ * wins), then check what we got. If it is not the lock we observed (the owner token changed: someone released and
+ * re-took it in between) it is live, so put it back instead of deleting it.
+ */
+function breakStale(lock: string, observedOwner: string | null): void {
+  const grave = `${lock}.stale.${process.pid}.${Math.random().toString(36).slice(2)}`
+  try {
+    renameSync(lock, grave)
+  } catch {
+    return // another breaker (or the owner's release) got there first
+  }
+  if (ownerOf(grave) !== observedOwner) {
+    try {
+      renameSync(grave, lock)
+      return
+    } catch {
+      // a new lock already exists; the stolen one is gone, its owner's release sees a token mismatch and leaves things alone
+    }
+  }
+  rmSync(grave, { recursive: true, force: true })
+}
+
+/**
+ * The only way to change the quota cache: take a mkdir lock (atomic) carrying an owner token, re-read the file,
+ * apply `fn` to the fresh content, write atomically, release only if the token is still ours. A lock older than
+ * LOCK_STALE_MS belongs to a dead process and is broken (see breakStale). Throws when the lock cannot be taken
+ * within LOCK_WAIT_MS; callers that are best-effort catch it.
  */
 export function updateCache(fn: (c: Cache) => Cache, path = cachePath()): void {
   const lock = `${path}.lock`
+  const token = `${process.pid}.${Math.random().toString(36).slice(2)}`
   mkdirSync(dirname(path), { recursive: true })
   const deadline = Date.now() + LOCK_WAIT_MS
   for (;;) {
     try {
       mkdirSync(lock)
+      writeFileSync(join(lock, "owner"), token)
       break
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
       try {
-        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true })
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) breakStale(lock, ownerOf(lock))
       } catch {
         // released by its owner between our checks
       }
@@ -292,7 +336,7 @@ export function updateCache(fn: (c: Cache) => Cache, path = cachePath()): void {
     const next = fn(cur)
     if (next !== cur) writeAtomic(path, JSON.stringify(next))
   } finally {
-    rmSync(lock, { recursive: true, force: true })
+    if (ownerOf(lock) === token) rmSync(lock, { recursive: true, force: true })
   }
 }
 
@@ -378,15 +422,16 @@ export interface BeforePick {
 }
 
 /**
- * Refresh policy of `pick`: never block while a usable sample exists, and never block the interactive lane.
- * Only a non-interactive pick on an account with no sample (or one past STALE_OK_MS) refreshes synchronously;
- * every other due account is refreshed in the background. Ids are claimed atomically first.
+ * Refresh policy of `pick`: the interactive lane returns before any claim or lock. Other lanes never block while
+ * a usable sample exists; only an account with no sample (or one past STALE_OK_MS) refreshes synchronously, every
+ * other due account in the background. Ids are claimed atomically first.
  */
 export function refreshBeforePick(b: BeforePick): { sync: string[]; background: string[] } {
+  if (b.lane === "interactive") return { sync: [], background: [] } // no claim, no lock: an interactive pick touches nothing
   const due = needsRefresh(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
   const noSample = (id: string) => !b.cache.samples[id] || b.now - b.cache.samples[id].ts >= STALE_OK_MS
-  const sync = b.lane === "interactive" ? [] : claimed.filter(noSample)
+  const sync = claimed.filter(noSample)
   const background = claimed.filter((id) => !sync.includes(id))
   if (background.length) b.detach(background)
   if (sync.length) b.runSync(sync)
