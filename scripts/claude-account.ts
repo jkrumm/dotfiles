@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane>      (refreshes stale accounts first, 20s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
+//   claude-account pick --lane <lane>      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh                 `claude -p /usage` for enabled accounts whose cache is stale
+//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled accounts whose cache is stale
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
@@ -16,7 +16,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
   type Cache, type Registry, type Sample, type Spawner, cachePath, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
-  needsRefresh, pick, pickLine, picksPath, recordSample, runRefresh, sampleFromClaudeJson, shellLine, writeAtomic,
+  REFRESH_TIMEOUT_S, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, writeAtomic,
 } from "./lib/claude-accounts.ts"
 
 const IU_EXIT = 3
@@ -67,9 +67,9 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
 }
 
-function refresh(reg: Registry, timeoutS = 60): void {
+function refresh(reg: Registry, ids?: string[], timeoutS = REFRESH_TIMEOUT_S): void {
   runRefresh({
-    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS,
+    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids,
     readSample: (id) => readSample(reg, id), load: () => loadCache(), write: (c) => writeAtomic(cachePath(), JSON.stringify(c)),
     now: Date.now, log: (m) => console.error(m),
   })
@@ -103,8 +103,14 @@ function main(argv: string[]): number {
       const lane = flag(rest, "--lane")
       if (!lane) throw new Error("usage: claude-account pick --lane <lane>")
       const now = Date.now()
-      // A stale account is refreshed first (budgeted: >10 min old, last try >5 min ago), then re-read.
-      if (needsRefresh(reg, readClaudeJson(reg, loadCache()), now).length) refresh(reg, 20)
+      // Never block while a usable sample exists: stale accounts refresh in the background (budgeted),
+      // only an account with no sample at all is refreshed synchronously first.
+      refreshBeforePick({
+        reg, now, cache: readClaudeJson(reg, loadCache()),
+        runSync: (ids) => refresh(reg, ids),
+        detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--ids", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
+        write: (c) => writeAtomic(cachePath(), JSON.stringify(c)),
+      })
       const cache = readClaudeJson(reg, loadCache())
       const p = pick(reg, cache, lane, now)
       try {
@@ -120,9 +126,11 @@ function main(argv: string[]): number {
     case "usage":
       usage(reg, rest.includes("--json"))
       return 0
-    case "refresh":
-      refresh(reg)
+    case "refresh": {
+      const ids = flag(rest, "--ids")?.split(",").filter((id) => reg.accounts[id])
+      refresh(reg, ids)
       return 0
+    }
     case "record": {
       const id = account(reg, rest)
       const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }

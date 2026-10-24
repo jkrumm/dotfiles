@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   type Cache, type Registry, type SpawnResult, type Spawner, accountFromConfigDir, emptyCache, markExhausted, mergeSample, needsRefresh, pick, pickLine,
-  recordSample, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine,
+  recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -194,5 +194,40 @@ describe("runRefresh", () => {
     })
     expect(stored.samples.a).toMatchObject({ s: 77 }) // newer than the refreshed sample (ts NOW-1000 vs NOW-5000)
     expect(stored.refreshed.a).toBe(NOW)
+  })
+})
+
+describe("refreshBeforePick", () => {
+  function run(cache: Cache, enabledB = false) {
+    const calls = { sync: [] as string[][], detach: [] as string[][], writes: [] as Cache[] }
+    const r = refreshBeforePick({
+      reg: reg(enabledB), cache, now: NOW,
+      runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids), write: (c) => calls.writes.push(c),
+    })
+    return { r, calls }
+  }
+  test("stale sample: no blocking refresh, detached background refresh, budget stamped first", () => {
+    const { r, calls } = run(cacheOf(sample(10, 10, { age: 11 * 60_000 })))
+    expect(r).toEqual({ sync: [], background: ["a"] })
+    expect(calls.sync).toEqual([])
+    expect(calls.detach).toEqual([["a"]])
+    expect(calls.writes[0].refreshed.a).toBe(NOW)
+  })
+  test("stale sample inside the 5-min budget schedules nothing", () => {
+    const { r, calls } = run({ ...cacheOf(sample(10, 10, { age: 11 * 60_000 })), refreshed: { a: NOW - 60_000 } })
+    expect(r).toEqual({ sync: [], background: [] })
+    expect(calls.detach).toEqual([])
+  })
+  test("fresh sample schedules nothing", () => {
+    expect(run(cacheOf(sample(10, 10))).r).toEqual({ sync: [], background: [] })
+  })
+  test("no sample at all refreshes synchronously, a stale neighbour in the background", () => {
+    const { r, calls } = run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), true)
+    expect(r).toEqual({ sync: ["a"], background: ["b"] })
+    expect(calls.sync).toEqual([["a"]])
+    expect(calls.detach).toEqual([["b"]])
+  })
+  test("a sample older than 6 h counts as no sample", () => {
+    expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["a"], background: [] })
   })
 })
