@@ -11,7 +11,7 @@ statusline.sh consumes this file as its pre-first-response fallback (docs/status
 The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
 we keep the existing cache rather than blanking it.
 
-W0 of docs/claude-accounts.md: a fresh (<5 min) account-a sample in the quota cache
+W0 of docs/claude-accounts.md: a fresh (<5 min) default-account (iu) sample in the quota cache
 (read through `claude-account usage --json`, the single owner of the cache schema and freshness)
 is preferred; the API path below runs only when that sample is stale (retired in W2).
 All accounts are also written to /tmp/claude_sl/usage_accounts.json.

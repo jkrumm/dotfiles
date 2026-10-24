@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane>      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
+//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
 //   claude-account usage [--json]          both accounts, from the quota cache
 //   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
+//   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // We never read a token and make no call to api.anthropic.com/api/oauth/usage ourselves: the official
@@ -17,7 +18,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
   type Cache, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
-  mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine,
+  mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
 const IU_EXIT = 3
@@ -144,6 +145,7 @@ function main(argv: string[]): number {
       }
       const line = shellLine(reg, p)
       console.log(line ?? "iu")
+      if (rest.includes("--why")) console.log(`# picked=${p.picked === SPILL ? "iu-spill" : p.picked} reason=${p.reason} stale=${p.stale}`)
       return line === null ? IU_EXIT : 0
     }
     case "usage":
@@ -166,6 +168,13 @@ function main(argv: string[]): number {
       else if (Object.values(reg.accounts).filter((a) => a.enabled).length > 1) console.log(id.toUpperCase())
       return 0
     }
+    case "env": {
+      const id = rest[0]
+      const a = id ? reg.accounts[id] : undefined
+      if (!a?.enabled) throw new Error(`env: '${id ?? ""}' is not an enabled account (${Object.keys(reg.accounts).filter((k) => reg.accounts[k].enabled).join(", ")})`)
+      console.log(shellLine(reg, { picked: id, reason: "forced", stale: false }))
+      return 0
+    }
     case "exhausted": {
       const id = account(reg, rest)
       const until = num(rest, "--until")
@@ -174,7 +183,7 @@ function main(argv: string[]): number {
       return 0
     }
     default:
-      console.error("usage: claude-account pick|usage|refresh|record|account|exhausted ...")
+      console.error("usage: claude-account pick|usage|refresh|record|account|env|exhausted ...")
       return 2
   }
 }

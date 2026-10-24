@@ -52,8 +52,8 @@ response on. Every render that has them also POSTs them to agent-gateway's
 fire-and-forget) — that is what keeps agent-gateway's quota view and the devhost
 heartbeat's quota component fed. The same throttled render also records a
 per-account sample (`claude-account record`, account = registry id resolved from
-`CLAUDE_CONFIG_DIR`, unset → `a`) into `~/.cache/claude-accounts/<id>.sample.json`
-(`docs/claude-accounts.md`). An `A`/`B` badge after the auth mode shows only when
+`CLAUDE_CONFIG_DIR`, unset → `iu`) into `~/.cache/claude-accounts/<id>.sample.json`
+(`docs/claude-accounts.md`). An `IU`/`ME` badge after the auth mode shows only when
 more than one account is enabled.
 
 **Fallback until then: `fetch_usage.py`** — `https://api.anthropic.com/api/oauth/usage`
@@ -61,7 +61,7 @@ with the Claude Code OAuth token from the macOS Keychain (`Claude Code-credentia
 plus `anthropic-beta: oauth-2025-04-20`. Run via `uv run`, cache
 `/tmp/claude_sl/usage_api.json`, 5-min TTL, background refresh via `disown`; it
 also POSTs to agent-gateway. Never spawned on the IU lane. Since claude-accounts W0
-it first serves a **fresh (<5 min) account-a sample from the quota cache** (same
+it first serves a **fresh (<5 min) default-account (`iu`) sample from the quota cache** (same
 `usage_api.json` shape, `source: claude-accounts`, no `limits`/`extra_usage`) and
 calls the API only when that sample is stale; it also writes
 `/tmp/claude_sl/usage_accounts.json` (all accounts). The API path retires in W2.
