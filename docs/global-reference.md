@@ -101,7 +101,7 @@ Workflow facts per repo:
 | `warden` | The control plane; `DESIGN.md` is authoritative, `STATE.md` the build state. Hermes narrates, it does not dispatch. |
 | `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
 | `brain` | `wiki/` = agentic knowledge (strict lint); PARA `Projects`/`Areas` = human surface; use `/brain`. |
-| `modelpick` | Source of truth for model-choice rationale; backs `cap`. |
+| `modelpick` | Source of truth for model-choice rationale. |
 
 **`~/IuRoot/`** — 1Password `careerpartner`, GitLab, `EP-XX` ticket prefixes on
 branches and commits, all repos require PRs against `main` (exceptions are

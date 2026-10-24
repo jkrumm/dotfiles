@@ -3,8 +3,8 @@
 Status: **W1 built, W2a verify suite built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled. Shipped in W1: ids renamed from
 `a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
-`CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (IU spill switches that spawn to
-opencode), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
+`CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (no room pauses the spawn, never
+IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
 dead = FAIL and `me` dead = WARN. Still open: agent-gateway workers (other repo), usage-tracker
 `account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the daily login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
@@ -131,7 +131,7 @@ pick(lane):
   5. eligible(other) → other
   6. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
-                   (rd wave --kind opencode, agw's existing IU fallback)
+                   (`rd` pauses — Herdr work never spills to IU; agw keeps its IU path for gateway workers)
 ```
 
 Why the pace step (v1.1): on 2026-10-24 `c` picked `iu` at 89 % weekly with about
@@ -165,7 +165,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 | Spawner | Today | Change |
 |-|-|-|
 | `c` / `cs` / `cf` (`claude.zsh:46-102`) | default dir | `eval "$(claude-account pick --lane interactive)"`; `--account iu\|me` override (strips the flag, runs in a subshell; a failing pick answers `iu`) |
-| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept) instead of typing `export` into the pane. On `iu` it switches that spawn to `--kind opencode` |
+| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept) instead of typing `export` into the pane. When no account has room `rd` pauses the spawn (no IU spill) |
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
 | `claude-auth.zsh` fallback (mini) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
@@ -191,7 +191,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 |-|-|-|
 | `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
 | `quota/<id>`, `statusline/<id>` | newest `cachedUsageUtilization` still has `five_hour`/`seven_day` `utilization` + `resets_at`; the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
-| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `ca cap claude_iu` never touch `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
@@ -208,7 +208,7 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 
 | Break | Expected |
 |-|-|
-| exhausted mark on `me` | `wave` picks `iu` (reason `spill`); removing the mark restores `me` (`home`) |
+| exhausted mark on `me` | `wave` picks `iu` (reason `spill`; `rd` then pauses only if iu has no room either); removing the mark restores `me` (`home`) |
 | `CLAUDE_CONFIG_DIR` at an unregistered dir | `claude-account account` -> `?`, the session-env hook logs `account: null` |
 | registry unreadable | `pick` exits 4 and answers `unset CLAUDE_CONFIG_DIR` |
 | `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |

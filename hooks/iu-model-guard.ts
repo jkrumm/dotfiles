@@ -110,9 +110,8 @@ function mainModel({ env, argv, fromSettings }: { env: Env; argv: string; fromSe
 }
 
 const POLICY = [
-  "Metered (IU) Claude Code runs cheap models only: DeepSeek V4.1 Flash first",
-  "(`cdf`, or `ca DeepSeek-V4-Flash`), Sonnet as the Claude ceiling (`ca`, or",
-  "`claude_iu --model sonnet`). Opus and Fable belong on the Max subscription (`c`).",
+  "Metered (IU) Claude Code runs cheap models only: Sonnet as the Claude ceiling",
+  "(`claude_iu --model sonnet`). Opus and Fable belong on the Max subscription (`c`).",
 ].join("\n");
 
 if (import.meta.main) {

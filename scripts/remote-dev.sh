@@ -262,7 +262,7 @@ cmd_repos() {
     done' | if [[ -n $filter ]]; then grep -i -- "$filter"; else cat; fi
 }
 
-# `--kind claude|opencode` for `work` and `wave`: sets AGENT_KIND and leaves the
+# `--kind claude` (opencode is rejected) for `work` and `wave`: sets AGENT_KIND and leaves the
 # remaining words in REST. Flags are consumed only in the two slots the usage
 # lines allow — before the repo and right after it. The first word after that
 # starts the prompt, so a prompt that itself contains `--kind` stays intact.
@@ -273,7 +273,7 @@ parse_kind_flags() {
   FLAGS_USED=0
   while (( $# )); do
     case $1 in
-      --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude|opencode)"; AGENT_KIND=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
+      --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude)"; AGENT_KIND=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
       --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       *)        break ;;
     esac
@@ -290,15 +290,15 @@ parse_kind() {
     (( $# )) && REST+=("$@")
   fi
   case $AGENT_KIND in
-    claude|opencode) ;;
-    *) die "unknown --kind '$AGENT_KIND' — claude or opencode" ;;
+    claude) ;;
+    opencode) die "--kind opencode is gone: Herdr agents run on the Max subscriptions only, never IU API tokens" ;;
+    *) die "unknown --kind '$AGENT_KIND' — only claude" ;;
   esac
 }
 
 # Account for a bulk spawn (docs/claude-accounts.md): `claude-account pick --lane <lane>` on the host.
 # Sets PICK_ENV (extra `herdr … create` args that put CLAUDE_CONFIG_DIR into the pane at creation —
-# empty for the default account), PICK_SPILL (1 = no Claude account has room: the caller switches the
-# spawn to opencode/IU) and PICK_NOTE (the pick reason, for the output line). A failing picker means
+# empty for the default account), PICK_SPILL (1 = no Claude account has room: the caller pauses — never IU) and PICK_NOTE (the pick reason, for the output line). A failing picker means
 # "default account", never a failed spawn.
 pick_account() {
   local lane=$1 out line why
@@ -310,7 +310,7 @@ pick_account() {
   (( rc == 4 )) && why="# picked=iu reason=registry-error"
   case $line in
     spill)
-      PICK_SPILL=1; PICK_NOTE="no Claude account has room (spill) -> IU (${why#\# })" ;;
+      PICK_SPILL=1; PICK_NOTE="no Claude account has room (${why#\# })" ;;
     "export CLAUDE_CONFIG_DIR="*)
       local dir=${line#export CLAUDE_CONFIG_DIR=}; dir=${dir#\'}; dir=${dir%\'}
       PICK_ENV="--env CLAUDE_CONFIG_DIR='$dir'"; PICK_NOTE="${why#\# }" ;;
@@ -319,35 +319,12 @@ pick_account() {
   esac
 }
 
-# Pane-side setup for a kind. `herdr agent start`
-# types the agent's own binary into the pane shell, so anything the binary needs
-# must already be in that shell: claude takes the lane tag; opencode takes the IU
-# credentials (`_oc_env` in config/zsh/claude.zsh — the same resolution `oc` does,
-# evaluated INSIDE the pane so the key never rides argv or ssh).
-# $1 kind  $2 pane  $3 usage lane (claude's USAGE_LANE tag; opencode ignores it)
+# Pane-side setup: the claude agent takes the lane tag. `herdr agent start` types the binary
+# into the pane shell, so the tag must already be exported there.
+# $1 kind  $2 pane  $3 usage lane
 agent_pane_setup() {
-  local kind=$1 pane=$2 lane=${3:?agent_pane_setup needs a usage lane}
-  if [[ $kind == opencode ]]; then
-    host_run "herdr pane run '$pane' 'eval \"\$(_oc_env)\"'" >/dev/null 2>&1
-  else
-    host_run "herdr pane run '$pane' export USAGE_LANE='$lane'" >/dev/null 2>&1
-  fi
-}
-
-# The pane evals `_oc_env` blind (its output must never ride argv or ssh), so a
-# failed resolution would start an opencode agent with no credentials and no
-# message. Resolve once on the host first — the output is captured THERE and
-# never printed or sent back; only the verdict and the error text survive — and
-# abort before anything is created. `_oc_env` exits 0 yet omits the
-# RESEARCH_GATEWAY_AUTH line when the research-gateway bearer is unresolvable
-# (the gateway would then 401 every call), so a missing line is a failure too.
-require_oc_env() {
-  [[ $AGENT_KIND == opencode ]] || return 0
-  local err rc=0
-  err=$(host_run "zsh -ic 'o=\$(_oc_env) || exit 1; [[ \$o == *RESEARCH_GATEWAY_AUTH=* ]] || exit 3' 2>&1") || rc=$?
-  [[ $rc -eq 0 ]] && return 0
-  [[ $rc -eq 3 ]] && die "opencode needs the research-gateway bearer and _oc_env resolved none on $HOST — run 'make setup' in dotfiles (see scripts/mcp-research-headers.sh)"
-  die "opencode needs the IU credentials and _oc_env failed on $HOST — run 'make setup' in dotfiles:"$'\n'"$err"
+  local pane=$2 lane=${3:?agent_pane_setup needs a usage lane}
+  host_run "herdr pane run '$pane' export USAGE_LANE='$lane'" >/dev/null 2>&1
 }
 
 # `work` is idempotent on purpose. Two Claude agents in one checkout race each
@@ -357,7 +334,7 @@ require_oc_env() {
 cmd_work() {
   parse_kind "$@"
   local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: work <repo> [--kind claude|opencode]   (see 'repos')"
+  [[ -n $name ]] || die "usage: work <repo> [--kind claude]   (see 'repos')"
   require_server
 
   local path
@@ -377,7 +354,6 @@ cmd_work() {
   local agent
   agent=$(agent_name "$name")
   [[ -n $agent ]] || die "'$name' has no usable herdr agent name — rename the repo or start it by hand"
-  require_oc_env
 
   local pane
   pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus" \
@@ -393,7 +369,6 @@ cmd_work() {
   local out="" i=0
   while (( i < 10 )); do
     sleep 1; i=$((i+1))
-    (( i == 1 )) && [[ $AGENT_KIND == opencode ]] && agent_pane_setup opencode "$pane" work
     out=$(host_run "herdr agent start '$agent' --kind $AGENT_KIND --pane '$pane'")
     echo "$out" | grep -q 'agent_pane_busy' || break
   done
@@ -457,7 +432,7 @@ cmd_wave() {
   parse_kind "$@"
   local name="${REST[0]:-}"
   local prompt="${REST[*]:1}"
-  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude|opencode] <prompt…>"
+  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] <prompt…>"
   require_server
 
   local path
@@ -574,12 +549,11 @@ for a in agents:
   agent="$(agent_name "$name")"
   agent="${agent:0:$((32 - ${#suffix}))}${suffix}"
 
-  # The account is chosen here, once, for this spawn's whole life (invariant 1). IU spill flips the
-  # kind; an explicit --kind opencode never touches Claude, so it needs no pick.
+  # The account is picked once per spawn; no room means pause, never IU.
   PICK_ENV=""; PICK_NOTE=""
   if [[ $AGENT_KIND == claude ]]; then
     pick_account wave
-    if (( PICK_SPILL )); then AGENT_KIND=opencode; fi
+    (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; waves never spill to IU API tokens"
   fi
 
   # Everything above can be wrong before anything gets created — RD_DRY_RUN
@@ -595,7 +569,6 @@ for a in agents:
     return 0
   fi
 
-  require_oc_env
 
   local created json pane tab
   if [[ -n $ws ]]; then
@@ -623,22 +596,16 @@ for a in agents:
 
   # Same `agent_pane_busy` race `work` retries around — the pane exists before
   # its shell does.
-  # Unattended work defaults to Sonnet (claude) or the `oc` default (opencode):
+  # Unattended work defaults to Sonnet (claude):
   # the settings.json model is whatever `/model` last left the interactive
   # session on (Fable today), and that is the wrong default exactly where no one
   # is watching. A chain that wants another model says so per chain
-  # (`RD_WAVE_MODEL`). The pane setup (lane tag / IU credentials) runs in the
+  # (`RD_WAVE_MODEL`). The pane setup (lane tag) runs in the
   # pane's shell first — `herdr agent start` types the agent command into that
-  # same shell, so the agent inherits it. opencode needs no permission flag:
-  # `permission: "allow"` is the global default (docs/opencode.md).
+  # same shell, so the agent inherits it.
   local model start_cmd
-  if [[ $AGENT_KIND == opencode ]]; then
-    model="${RD_WAVE_MODEL:-iu/deepseek-v4.1-flash}"
-    start_cmd="herdr agent start '$agent' --kind opencode --pane '$pane' -- -m '$model'"
-  else
-    model="${RD_WAVE_MODEL:-sonnet}"
-    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
-  fi
+  model="${RD_WAVE_MODEL:-sonnet}"
+  start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
   agent_pane_setup "$AGENT_KIND" "$pane" wave
 
   local out="" i=0
@@ -714,16 +681,15 @@ for w in workspaces:
     done
     return 0
   fi
-  require_oc_env
 
   local wt out base sha pane tab json tabname agent prompt rc
   for b in "${briefs[@]}"; do
     # One pick per spawn: each fan agent is a fresh context, so each is a re-pick point (invariant 1
-    # only forbids switching a live session). IU spill turns that one spawn into opencode.
+    # only forbids switching a live session). No room pauses the spawn.
     AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""
     if [[ $AGENT_KIND == claude ]]; then
       pick_account fan
-      if (( PICK_SPILL )); then AGENT_KIND=opencode; require_oc_env; fi
+      (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; fan never spills to IU API tokens"
     fi
     branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
     out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
@@ -746,13 +712,8 @@ for w in workspaces:
     agent="$(agent_name "$name")"
     agent="${agent:0:$plen}-${leaf}"
     local model start_cmd i=0 started=""
-    if [[ $AGENT_KIND == opencode ]]; then
-      model="${RD_WAVE_MODEL:-iu/deepseek-v4.1-flash}"
-      start_cmd="herdr agent start '$agent' --kind opencode --pane '$pane' -- -m '$model'"
-    else
-      model="${RD_WAVE_MODEL:-sonnet}"
-      start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
-    fi
+    model="${RD_WAVE_MODEL:-sonnet}"
+    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
     agent_pane_setup "$AGENT_KIND" "$pane" fan
     while (( i < 10 )); do
       sleep 1; i=$((i+1))
@@ -1081,9 +1042,9 @@ usage() {
   rd — drive the mini's workspaces and agents from anywhere
 
     rd repos [filter]         repos on the dev host, with branch + dirty count
-    rd work <repo> [--kind K]   herdr workspace + claude (or opencode) for that repo (idempotent)
+    rd work <repo> [--kind K]   herdr workspace + claude for that repo (idempotent)
     rd wave <repo> [--kind K] <prompt…>
-                              fresh tab + solo agent + prompt — claude (default) or opencode
+                              fresh tab + solo agent + prompt — claude
     rd fan <repo> <brief…>    worktree + tab + Claude per brief file (fan-out)
                               (fan --clean <repo> reclaims merged worktrees)
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
