@@ -1,6 +1,6 @@
 # Two Claude Max accounts — concept
 
-Status: **W1 built, W2a verify suite built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
+Status: **W2 done** (2026-10-24); W3 = tune from picks.jsonl and `quota_sample` after 2 weeks, and decide a 20x upgrade for `me` if its weekly stays > 80 %. Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled. Shipped in W1: ids renamed from
 `a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
 `CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (no room pauses the spawn, never

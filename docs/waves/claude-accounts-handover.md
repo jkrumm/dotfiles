@@ -37,12 +37,9 @@ E2E proof 2026-10-24 ~17:30–20:45Z: verifier PASS on every path (launchers, re
 subagent inherits, rd wave/fan → me, agent-gateway otel worker → me incl. its session row, 0 Max rows
 without account since rollout, displays). `claude-accounts-e2e.sh` all pass after #12.
 
-## Open — land these first
+## Open
 
-| repo | PR | tab | state |
-|-|-|-|-|
-| argo | #202 feat/usage-payer | `argo-usage-payer` | payer split `iu-sub`/`me-sub`/`iu-api`/`me-api`(=billing openrouter), colours me blue / iu gold-orange, UTC buckets, **migration 0024 changes prod data** (deletes 24,803 NULL-machine duplicate rows = $3,081 double count; sets account=iu on 7,165 old Max rows) with every touched row archived + restore SQL in docs/usage-reconciliation.md. Deep review job `bd87b289-5c51-46d2-9d61-1f5fe76a7e5c` (job_wait it). Its 48 h reconciliation: everything matches except 21 iu-api rows the VPS gateways post directly (expected). After deploy: screenshot the usage page (`make design-shot` in argo, or `@verifier`) — not yet seen rendered. Note: the tab showed an autocompact prompt; dismiss with Esc before `rd say`. |
-| dotfiles | #31 feat/resume-pins-account | `dotfiles-claude-accounts-pace` (wR:p1V) | `c --resume` pins to the session's account via `claude-account session <id>`; owner-driven, mid-review in that tab — let it finish, then verify and close the tab |
+Nothing to land. argo #202 (payer split, migration 0024) merged and deployed 2026-10-24T19:13Z after a deep review (5 improvements taken: stricter twin match, Max-scoped cutoff, one PAYER_EXPR, real timezone test, payer ids derived from the registry). Post-deploy: archive `argo.usage_record_dedupe_0024` holds 24,803 `duplicate_null_machine` + 7,165 `account_backfill` rows (matches the doc), Max rows 631,145 iu / 973 me / 0 account-less, 48 h reconciliation clean except gateway-posted iu-api rows, page rendered dark+light. dotfiles #31 merged 18:58Z. Worker tabs closed.
 
 ## Final verification checklist (the owner's ask: "fully verify it all, then round it up")
 
@@ -77,3 +74,10 @@ the mini: MacBook rows with account `me` appear after a MacBook `me` session + t
 - Argo upsert: `COALESCE(excluded.account, usage_record.account)` — null never clears.
 - Picks before 2026-10-24T16:25Z were W1 test fixtures and were removed (backup `picks.jsonl.bak-2026-10-24`).
 - Briefs of all workers: `~/.local/share/claude-accounts-w1/`, `~/.local/share/claude-accounts-w2/`.
+
+## Final status (2026-10-24 ~21:30)
+
+- Checklist 2, 3, 4, 5, 6, 7 done. 1: one FAIL (account-less session_env lines, ages out 2026-10-25 17:30Z) -> then `make claude-accounts-stamp`. 9: stale agent-gateway MCP children age out.
+- MacBook: dotfiles pulled (owner's uncommitted theme edits kept via autostash), `claude-account`, `~/.claude-me` links + settings, MCP for both accounts, verify machine-aware (usage-db row WARNs where usage-tracker is absent). iu path proven end to end (MacBook `billing=max account=iu` rows arrive via the mirror). **Open: `me` login on the MacBook** is interactive: `CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude` -> `/login` in the personal browser profile. Until then MacBook spawns pick `iu`.
+- Tinycast already reads both accounts from Argo `/agents/overview` (primary), local `fetch_usage.py` as fallback.
+- Owner questions: pin `~/IuRoot` spawns to `iu`? Drop `argo.usage_record_dedupe_0024` (a typed "drop the archive table now" was seen in the argo worker's input box; not executed, it is the only restore path)?

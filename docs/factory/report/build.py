@@ -16,9 +16,30 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent  # docs/factory
 OUT = BASE / "report.html"
 ASSETS = BASE / "report" / "assets"
+TITLE = ""
 
 # (id, label, path, title if the file has no usable h1)
+# TDD v2 (2026-10-24). v1 (2026-10-22) is SECTIONS_V1; `--v1` builds it to report-v1.html.
 SECTIONS = [
+    ("t0", "", "tdd/00-reading-order.md"),
+    ("t1", "", "tdd/01-verdict.md"),
+    ("t2", "", "tdd/02-what-changes.md"),
+    ("t3", "3", "tdd/03-principles.md"),
+    ("t4", "4", "tdd/04-loop.md"),
+    ("t5", "5", "tdd/05-capacity.md"),
+    ("t6", "6", "tdd/06-data.md"),
+    ("t7", "7", "tdd/07-projects.md"),
+    ("t8", "8", "tdd/08-dedup.md"),
+    ("t9", "9", "tdd/09-jobs.md"),
+    ("t10", "10", "tdd/10-surfaces.md"),
+    ("t11", "11", "tdd/11-landscape.md"),
+    ("t12", "12", "tdd/12-proof.md"),
+    ("t13", "13", "tdd/13-plan.md"),
+    ("t14", "14", "tdd/14-decisions.md"),
+    ("t15", "15", "tdd/15-feedback.md"),
+    ("t16", "", "tdd/16-faq.md"),
+]
+SECTIONS_V1 = [
     ("s0", "", "report/00-reading-order.md"),
     ("s1", "", "report/01-verdict.md"),
     ("s1b", "", "report/01b-what-changes.md"),
@@ -37,7 +58,7 @@ SECTIONS = [
 DEFAULT_TITLES = {"s8": "Panel review"}
 
 PATH_RE = re.compile(
-    r"^((?:evidence|adr|spikes|research|design|report|phase0)/[\w./-]*|waves\.md|BRIEF\.md|STATUS\.md)"
+    r"^((?:evidence|adr|spikes|research|design|report|phase0|tdd|feedback)/[\w./-]*|waves\.md|BRIEF\.md|STATUS\.md)"
     r"(?::\d+(?:-\d+)?)?$"
 )
 PH_RE = re.compile(r"⟨[^⟩]*⟩")
@@ -47,6 +68,20 @@ FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})\s*([\w+-]*)\s*$")
 HR_RE = re.compile(r"^\s{0,3}([-*_])(\s*\1){2,}\s*$")
 HEAD_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 ASSET_RE = re.compile(r"\{\{asset:([\w.-]+)\}\}")
+
+
+PELE = Path(__file__).resolve().parent / "pele" / "render.ts"
+
+
+def render_mermaid(source):
+    """Mermaid source → inline SVG via pele (report/pele, `bun install` once)."""
+    r = subprocess.run(["bun", str(PELE)], input=source, capture_output=True, text=True)
+    if r.returncode != 0 or "<svg" not in r.stdout:
+        return f'<div class="missing">Diagram failed to render: {esc(r.stderr.strip()[:300])}</div>'
+    svg = r.stdout.strip()
+    vb = re.search(r'viewBox="[-\d.]+[ ,]+[-\d.]+[ ,]+([\d.]+)', svg)
+    width = f' style="--vbw:{float(vb.group(1)):.0f}px"' if vb else ""
+    return f'<figure class="asset diagram"{width}>{svg}</figure>'
 
 
 def esc(s):
@@ -193,6 +228,9 @@ class Renderer:
                     body.append(lines[i])
                     i += 1
                 i += 1
+                if lang == "mermaid":
+                    out.append(render_mermaid(chr(10).join(body)))
+                    continue
                 cls = f' class="lang-{html.escape(lang, quote=True)}"' if lang else ""
                 out.append(f"<pre><code{cls}>{mark_placeholders(esc(chr(10).join(body)))}</code></pre>")
                 continue
@@ -418,6 +456,7 @@ th{background:var(--surface);position:sticky;top:0}
 tbody tr:nth-child(even){background:color-mix(in srgb,var(--surface) 55%,transparent)}
 figure.asset{margin:14px 0;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow-x:auto}
 figure.asset svg{max-width:100%;height:auto;display:block;margin:0 auto}
+.pele{--pele-bg:var(--surface);--pele-fg:var(--text);--pele-muted:var(--muted);--pele-line:var(--muted);--pele-surface:var(--bg);--pele-surface-alt:var(--code);--pele-border:var(--border);--pele-accent:var(--accent)}
 :not(pre)>code{overflow-wrap:anywhere}
 .chip{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 6px;margin-left:8px;vertical-align:middle;text-transform:uppercase;letter-spacing:.03em}
 @media (max-width:600px){figure.asset svg{max-width:none;width:var(--vbw,760px)}}
@@ -478,11 +517,11 @@ def git_sha():
         return "unknown"
 
 
-def build():
+def build(sections):
     missing_files, missing_paths, missing_assets = [], [], []
     toc, bodies = [], []
     ph_total = 0
-    for sid, label, rel in SECTIONS:
+    for sid, label, rel in sections:
         src = BASE / rel
         r = Renderer(sid, src)
         if not src.is_file():
@@ -524,16 +563,16 @@ def build():
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Factory design — 2026-10-22</title>
+<title>{TITLE}</title>
 <script>{HEAD_JS}</script>
 <style>{CSS}</style>
 </head>
 <body>
 <header class="top">
 <div>
-<h1>Factory design — 2026-10-22</h1>
+<h1>{TITLE}</h1>
 <div class="meta">Generated <b>{now}</b> · dotfiles <b>{esc(git_sha())}</b> · <span class="ph-count">{ph_total} open placeholders</span></div>
-<div class="meta">Comments go through <code>rv</code>.</div>
+<div class="meta">Comment in the review Inbox (plannotator), project <code>dotfiles</code>.</div>
 </div>
 <button class="btn" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
 </header>
@@ -554,8 +593,12 @@ def build():
 
 
 def main():
+    global TITLE
     check = "--check" in sys.argv[1:]
-    doc, mf, mp, ma, ph = build()
+    v1 = "--v1" in sys.argv[1:]
+    TITLE = "Factory design — 2026-10-22 (v1, superseded)" if v1 else "Factory — technical design v2, 2026-10-24"
+    out = OUT.with_name("report-v1.html") if v1 else OUT
+    doc, mf, mp, ma, ph = build(SECTIONS_V1 if v1 else SECTIONS)
     problems = False
     if mf:
         problems = True
@@ -576,8 +619,8 @@ def main():
         if not problems:
             print(f"OK — all sections, paths and assets resolve ({ph} open placeholders).")
         sys.exit(1 if problems else 0)
-    OUT.write_text(doc, encoding="utf-8")
-    print(f"wrote {OUT} ({len(doc.encode('utf-8'))} bytes, {ph} placeholders)")
+    out.write_text(doc, encoding="utf-8")
+    print(f"wrote {out} ({len(doc.encode('utf-8'))} bytes, {ph} placeholders)")
 
 
 if __name__ == "__main__":

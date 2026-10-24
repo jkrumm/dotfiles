@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "factory-report-pele",
+      "dependencies": {
+        "pele": "1.8.0",
+      },
+    },
+  },
+  "packages": {
+    "pele": ["pele@1.8.0", "", {}, "sha512-AYmHttE70cwNJVXdfPMCANGivFlmc3bGGpMG0GqH5S5vE3RgtEuLlkqbhRfe94Csv/ZEd1TUbv2dMUHpw4p1Bg=="],
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "factory-report-pele",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pele": "1.8.0"
+  }
+}
