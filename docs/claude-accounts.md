@@ -115,8 +115,9 @@ compatibility, plus `usage_accounts.json` (all accounts).
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
-              (sample > 10 min old: `pick` first runs the budgeted `claude -p /usage` refresh, 20 s,
-               and re-reads; if skipped or failed the last sample is used, reason "stale-ok")
+              (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; `claude -p /usage`
+               takes 27-40 s, limit 75 s. Only an account with no sample is refreshed synchronously.
+               The pick log carries `stale: true`)
 home(lane)  = a  for interactive, agent-gateway:review, headless
               b  for wave, fan, agent-gateway:* (other tools)
 pick(lane):

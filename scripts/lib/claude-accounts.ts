@@ -260,6 +260,8 @@ export interface RefreshDeps {
   write: (c: Cache) => void
   now: () => number
   timeoutS: number
+  /** Refresh exactly these accounts, bypassing the due check (the pick path already stamped the budget). */
+  ids?: string[]
   log?: (msg: string) => void
 }
 
@@ -274,7 +276,7 @@ export function runRefresh(d: RefreshDeps): void {
     return s ? mergeSample(c, id, s) : c
   }, start)
   const results: { id: string; stamp: boolean; sample: Sample | null; authFailed: boolean | null }[] = []
-  for (const id of needsRefresh(d.reg, seeded, d.now())) {
+  for (const id of d.ids ?? needsRefresh(d.reg, seeded, d.now())) {
     const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], {
       env: refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])),
       timeoutMs: d.timeoutS * 1000,
@@ -296,4 +298,34 @@ export function runRefresh(d: RefreshDeps): void {
     if (r.sample) out = mergeSample(out, r.id, r.sample)
   }
   d.write(out)
+}
+
+export const REFRESH_TIMEOUT_S = 75
+
+export interface BeforePick {
+  reg: Registry
+  cache: Cache
+  now: number
+  /** Blocking refresh of these accounts (no sample at all). */
+  runSync: (ids: string[]) => void
+  /** Detached, fire-and-forget refresh of these accounts (a usable stale sample exists). */
+  detach: (ids: string[]) => void
+  write: (c: Cache) => void
+}
+
+/**
+ * Refresh policy of `pick`: never block while a usable sample exists. Accounts with no sample at all are
+ * refreshed synchronously; stale-but-usable ones are stamped against the 5-min budget (so concurrent picks
+ * don't pile up spawns) and refreshed in the background. Returns the ids handled each way.
+ */
+export function refreshBeforePick(b: BeforePick): { sync: string[]; background: string[] } {
+  const due = needsRefresh(b.reg, b.cache, b.now)
+  const sync = due.filter((id) => !b.cache.samples[id] || b.now - b.cache.samples[id].ts >= STALE_OK_MS)
+  const background = due.filter((id) => !sync.includes(id))
+  if (background.length) {
+    b.write({ ...b.cache, refreshed: { ...b.cache.refreshed, ...Object.fromEntries(background.map((id) => [id, b.now])) } })
+    b.detach(background)
+  }
+  if (sync.length) b.runSync(sync)
+  return { sync, background }
 }
