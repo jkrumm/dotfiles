@@ -53,12 +53,12 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 | repo | branch | tab | state |
 |-|-|-|-|
 | argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
-| dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (pre-#32 account-less session_env lines, age out by 2026-10-25 16:20Z) → then `make claude-accounts-stamp` |
+| dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (account-less session_env lines; newest is the 17:29:36Z otel probe via a stale MCP child — ages out 2026-10-25 17:30Z) → then `make claude-accounts-stamp` |
 | usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
 | argo (W2c) | #201 | — | **merged + live** f0053a4; quota + picks syncing (verified `/usage/quota`) |
 | tinycast fix | #2 | — | **merged** (brief had the wrong Argo envelope). **deployed on the MacBook** 77866aa (ssh iumac `make deploy`); queued ask-human request retired |
 | usage-tracker fix | #12 | — | **merged + deployed**: line account → session_env → iu; NULL→iu repair one-off (user_version 2); conditional sync mark. Live: agent-gateway otel session row → me. e2e re-run all pass |
-| dotfiles pace guard | feat/claude-accounts-pace | `dotfiles-claude-accounts-pace` | owner: `c` picked iu at 89 % weekly; over-pace home yields to under-pace other (reason `pace`) |
+| dotfiles pace guard | 6da5ed5..4fb37c9 | — | **merged (owner drove the tab)**: pace guard + session balance; #30 Herdr work Max-only (ca/cap/cdf/cdp removed, rd pauses instead of IU spill). Verify: interactive/headless/review → me (pace) |
 | argo W2d | feat/usage-payer | `argo-usage-payer` | owner: payer split iu-sub/me-sub/iu-api/me-api, me blue / iu yellow, 48 h usage-tracker↔Argo reconciliation report |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
 | agent-gateway | #33 | — | **merged + deployed** b1c9c98; /api/usage accounts + overview header live |
