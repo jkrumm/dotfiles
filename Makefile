@@ -88,7 +88,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-skills
 	@$(MAKE) --no-print-directory _setup-imgcli
 	@$(MAKE) --no-print-directory _setup-settings
-	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory _setup-gitignore
 	@$(MAKE) --no-print-directory _setup-ghostty
 	@$(MAKE) --no-print-directory _setup-tools
@@ -107,6 +106,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
+	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup

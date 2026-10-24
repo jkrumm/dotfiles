@@ -35,4 +35,10 @@ describe("session_env account", () => {
   test("CLAUDE_CONFIG_DIR at account b's dir -> b", () => {
     expect(run({ CLAUDE_CONFIG_DIR: join(home, ".claude-b") }).data.account).toBe("b")
   })
+  test("a broken registry still emits the line, with account null", () => {
+    const e = run({ CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
+    expect(e.event).toBe("session_env")
+    expect(e.data.account).toBeNull()
+    expect(e.data.session).toBe("s1")
+  })
 })

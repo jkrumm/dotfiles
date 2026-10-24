@@ -41,7 +41,12 @@ export interface Cache {
   /** Accounts whose last refresh found no usable login. */
   auth_failed: Record<string, boolean>
 }
-export type Pick = { picked: string; reason: string } | { picked: "iu"; reason: string }
+/** `stale`: the picked account was chosen on a sample older than FRESH_MS (reason keeps the routing rule). */
+export interface Pick {
+  picked: string
+  reason: string
+  stale: boolean
+}
 
 export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, refreshed: {}, auth_failed: {} })
 
@@ -153,10 +158,10 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
 /** Rule v1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick {
   const r = pickRaw(reg, cache, lane, nowMs)
-  return r.picked !== "iu" && r.reason !== "interactive-fallback" && isStaleOk(cache, r.picked, nowMs) ? { picked: r.picked, reason: "stale-ok" } : r
+  return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== "iu" && isStaleOk(cache, r.picked, nowMs) }
 }
 
-function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick {
+function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit<Pick, "stale"> {
   const ids = Object.keys(reg.accounts)
   const ok = ids.filter((id) => eligible(reg, cache, id, nowMs))
   const bulk = lane !== "interactive"
@@ -165,7 +170,8 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick
     const expiring = ok
       .filter((id) => {
         const x = cache.samples[id]
-        return x.w_reset !== null && x.w_reset * 1000 - nowMs < EXPIRING_S * 1000 && (x.w ?? 0) < EXPIRING_WEEKLY_MAX
+        const msLeft = x.w_reset === null ? null : x.w_reset * 1000 - nowMs
+        return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000 && (x.w ?? 0) < EXPIRING_WEEKLY_MAX
       })
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
@@ -186,20 +192,23 @@ export interface PickLine {
   lane: string
   picked: string
   reason: string
+  stale: boolean
   a: { s: number | null; w: number | null }
   b: { s: number | null; w: number | null }
 }
 
 export function pickLine(cache: Cache, lane: string, p: Pick, nowMs: number): PickLine {
   const v = (id: string) => ({ s: cache.samples[id]?.s ?? null, w: cache.samples[id]?.w ?? null })
-  return { ts: new Date(nowMs).toISOString(), lane, picked: p.picked, reason: p.reason, a: v("a"), b: v("b") }
+  return { ts: new Date(nowMs).toISOString(), lane, picked: p.picked, reason: p.reason, stale: p.stale, a: v("a"), b: v("b") }
 }
+
+const shQuote = (v: string) => `'${v.replaceAll("'", `'\\''`)}'`
 
 /** Shell fragment for a pick; null for the IU spill signal. */
 export function shellLine(reg: Registry, p: Pick): string | null {
   if (p.picked === "iu") return null
   const dir = accountDir(reg.accounts[p.picked])
-  return dir === null ? "unset CLAUDE_CONFIG_DIR" : `export CLAUDE_CONFIG_DIR=${dir}`
+  return dir === null ? "unset CLAUDE_CONFIG_DIR" : `export CLAUDE_CONFIG_DIR=${shQuote(dir)}`
 }
 
 /** Accounts due a `claude -p /usage`: enabled, newest sample >10 min old, last attempt >5 min ago. */
@@ -212,3 +221,79 @@ export function needsRefresh(reg: Registry, cache: Cache, nowMs: number): string
   })
 }
 
+
+/** Statusline feed: omitted fields keep the previous sample's values; ts is always now. */
+export function recordSample(cache: Cache, id: string, part: Partial<Pick<Sample, "s" | "w" | "s_reset" | "w_reset">>, nowMs: number): Cache {
+  const prev = cache.samples[id]
+  const keep = <K extends "s" | "w" | "s_reset" | "w_reset">(k: K): Sample[K] => (part[k] ?? prev?.[k] ?? null) as Sample[K]
+  return mergeSample(cache, id, { s: keep("s"), w: keep("w"), s_reset: keep("s_reset"), w_reset: keep("w_reset"), ts: nowMs, src: "statusline" })
+}
+
+export interface SpawnResult {
+  status: number | null
+  stdout: string
+  stderr: string
+  /** Set when the process could not start (ENOENT) or was killed by the timeout. */
+  error?: { code?: string; message: string }
+}
+export type Spawner = (cmd: string, args: string[], opts: { env: Record<string, string>; timeoutMs: number }) => SpawnResult
+
+/** Credentials that would make the spawned binary bill API credits or bypass the account's own login. */
+const STRIPPED_ENV = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
+
+export function refreshEnv(base: Record<string, string | undefined>, dir: string | null): Record<string, string> {
+  const env = { ...base } as Record<string, string>
+  for (const k of STRIPPED_ENV) delete env[k]
+  env.ANTHROPIC_BASE_URL = ""
+  if (dir === null) delete env.CLAUDE_CONFIG_DIR
+  else env.CLAUDE_CONFIG_DIR = dir
+  return env
+}
+
+export interface RefreshDeps {
+  reg: Registry
+  spawn: Spawner
+  claudeBin: string
+  baseEnv: Record<string, string | undefined>
+  readSample: (id: string) => Sample | null
+  load: () => Cache
+  write: (c: Cache) => void
+  now: () => number
+  timeoutS: number
+  log?: (msg: string) => void
+}
+
+/**
+ * `claude -p /usage` for every due account. The cache is re-read right before the final write and only the
+ * refreshed / auth_failed / refreshed-sample entries are merged in, so a concurrent statusline record survives.
+ */
+export function runRefresh(d: RefreshDeps): void {
+  const start = d.load()
+  const seeded = Object.keys(d.reg.accounts).reduce((c, id) => {
+    const s = d.reg.accounts[id].enabled ? d.readSample(id) : null
+    return s ? mergeSample(c, id, s) : c
+  }, start)
+  const results: { id: string; stamp: boolean; sample: Sample | null; authFailed: boolean | null }[] = []
+  for (const id of needsRefresh(d.reg, seeded, d.now())) {
+    const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], {
+      env: refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])),
+      timeoutMs: d.timeoutS * 1000,
+    })
+    if (r.error?.code === "ENOENT") {
+      d.log?.(`refresh ${id}: cannot start claude (${r.error.message})`)
+      continue // not an attempt: no budget stamp, no auth verdict
+    }
+    const sample = r.status === 0 && !r.error ? d.readSample(id) : null
+    const authFailed = sample ? false : /login|auth|credential/i.test(`${r.stdout}${r.stderr}`) ? true : null // null: unknown, keep the old verdict
+    if (!sample) d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
+    results.push({ id, stamp: true, sample, authFailed })
+  }
+  let out = d.load()
+  for (const [id, s] of Object.entries(seeded.samples)) out = mergeSample(out, id, s)
+  for (const r of results) {
+    out = { ...out, refreshed: { ...out.refreshed, [r.id]: d.now() } }
+    if (r.authFailed !== null) out = { ...out, auth_failed: { ...out.auth_failed, [r.id]: r.authFailed } }
+    if (r.sample) out = mergeSample(out, r.id, r.sample)
+  }
+  d.write(out)
+}
