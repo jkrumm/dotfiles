@@ -16,7 +16,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine,
 } from "./lib/claude-accounts.ts"
 
@@ -92,11 +92,13 @@ function usage(reg: Registry, json: boolean): void {
     return {
       id, plan: a.plan, enabled: a.enabled,
       five_hour: x?.s ?? null, seven_day: x?.w ?? null, five_hour_resets_at: x?.s_reset ?? null, seven_day_resets_at: x?.w_reset ?? null,
-      age_s: x ? Math.round(newestAge(x, now) / 1000) : null, source: x?.src ?? null,
+      age_s: x ? Math.round(newestAge(x, now) / 1000) : null,
+      five_hour_age_s: x && x.s !== null && x.s_ts !== null ? Math.round((now - x.s_ts) / 1000) : null,
+      seven_day_age_s: x && x.w !== null && x.w_ts !== null ? Math.round((now - x.w_ts) / 1000) : null, source: x?.src ?? null,
       auth_ok: !cache.auth_failed[id], exhausted_until: until && until * 1000 > now ? until : null,
     }
   })
-  if (json) return void console.log(JSON.stringify({ accounts: rows }, null, 2))
+  if (json) return void console.log(JSON.stringify({ default_account: defaultAccountId(reg), accounts: rows }, null, 2))
   const reset = (e: number | null) => (e ? new Date(e * 1000).toISOString().slice(5, 16).replace("T", " ") : "-")
   for (const r of rows) {
     console.log(`${r.id} ${r.plan}${r.enabled ? "" : " (disabled)"}  5h ${r.five_hour ?? "-"}% ↺${reset(r.five_hour_resets_at)}  7d ${r.seven_day ?? "-"}% ↺${reset(r.seven_day_resets_at)}  age ${r.age_s ?? "-"}s  auth ${r.auth_ok ? "ok" : "FAILED"}${r.exhausted_until ? "  EXHAUSTED" : ""}`)

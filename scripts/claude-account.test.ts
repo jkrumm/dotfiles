@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
+  mergeSample, newestAge, pick, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -343,8 +343,9 @@ describe("CLI (isolated HOME)", () => {
     seed(60_000)
     const j = JSON.parse(cli(["usage", "--json"]).out)
     expect(Object.keys(j.accounts[0]).sort()).toEqual(
-      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_resets_at", "source"].sort(),
+      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
     )
+    expect(j.default_account).toBe("a")
     expect(j.accounts[0]).toMatchObject({ id: "a", five_hour: 5, seven_day: 5, auth_ok: true })
   })
   test("account / --badge: unregistered dir prints ?, unset prints the id", () => {
@@ -374,5 +375,41 @@ describe("CLI (isolated HOME)", () => {
     expect(existsSync(marker)).toBe(true)
     expect(existsSync(join(dir, "a.refresh.claim"))).toBe(true)
     rmSync(home, { recursive: true, force: true })
+  })
+})
+
+describe("type guards", () => {
+  const dir = tmp()
+  const regFile = (accounts: unknown) => {
+    const p = join(dir, `reg-${Math.random().toString(36).slice(2)}.json`)
+    writeFileSync(p, JSON.stringify({ accounts }))
+    return p
+  }
+  const good = { dir: null, plan: "p", units: { session: 1, weekly: 1 }, homeLanes: ["x"], enabled: true }
+  test("loadRegistry accepts a good registry and rejects malformed accounts", () => {
+    expect(Object.keys(loadRegistry(regFile({ a: good })).accounts)).toEqual(["a"])
+    expect(() => loadRegistry(regFile({ a: { ...good, enabled: "yes" } }))).toThrow(/malformed/)
+    expect(() => loadRegistry(regFile({ a: { ...good, homeLanes: "wave" } }))).toThrow(/malformed/)
+    expect(() => loadRegistry(regFile({ a: { ...good, units: {} } }))).toThrow(/malformed/)
+    expect(() => loadRegistry(regFile({ "a/b": good }))).toThrow(/bad account id/)
+    expect(() => loadRegistry(regFile({ b: { ...good, dir: "~/.claude-b" } }))).toThrow(/default/)
+    expect(() => loadRegistry(regFile(null))).toThrow()
+  })
+  test("loadCache drops malformed sample files", () => {
+    const d = tmp()
+    saveSample("a", sample(1, 2), d)
+    writeFileSync(join(d, "b.sample.json"), JSON.stringify({ s: "lots" }))
+    writeFileSync(join(d, "c.sample.json"), "not json")
+    expect(Object.keys(loadCache(d).samples)).toEqual(["a"])
+    expect(isSample({ ...sample(1, 2), s_ts: "x" })).toBe(false)
+    rmSync(d, { recursive: true })
+  })
+  test("claimRefresh: an unreadable claim is a lost race, other ids still proceed", () => {
+    const d = tmp()
+    mkdirSync(join(d, "a.refresh.claim")) // EEXIST, and readFileSync on a directory throws
+    const r = reg()
+    const stale2 = cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 }))
+    expect(claimRefresh(r, ["a", "b"], NOW, stale2, d)).toEqual(["b"])
+    rmSync(d, { recursive: true })
   })
 })
