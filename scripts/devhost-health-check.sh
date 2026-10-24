@@ -1264,7 +1264,7 @@ check_claude_auth() {
   while IFS=$'\t' read -r id dir; do
     [[ -n "$id" ]] || continue
     dir="${dir/#\~/$HOME}"
-    out=$(CLAUDE_CONFIG_DIR="$dir" USER="${USER:-$(/usr/bin/id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null) || out=""
+    out=$(env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR="$dir" USER="${USER:-$(/usr/bin/id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null) || out=""
     if [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$out" 2>/dev/null)" == "true" ]]; then ok+=" $id"; else dead+=" $id"; fi
   done <<<"$accts"
   msg="$iu_msg"

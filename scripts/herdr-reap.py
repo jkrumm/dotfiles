@@ -250,6 +250,8 @@ def account_envs() -> list[dict]:
         env = dict(os.environ)
         env.pop("CLAUDE_CONFIG_DIR", None)
         if d is not None:
+            for k in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"):
+                env.pop(k, None)  # credentials for the default account must not follow another account's dir
             env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(d)
         envs.append(env)
     return envs

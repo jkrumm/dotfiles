@@ -133,12 +133,23 @@ describe("helpers", () => {
     const m = mergeSample(sample(50, 50), { ...sample(1, 1), s_ts: NOW - 120_000, w_ts: NOW - 120_000 })
     expect(m).toMatchObject({ s: 50, w: 50 })
   })
-  test("an auth-failed account is neither due nor refreshed until a record clears the mark", () => {
-    const c = { ...cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), auth_failed: { me: true } }
-    expect(dueIds(reg(), c, NOW)).toEqual(["iu"])
-    const calls: string[][] = []
-    refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => calls.push(ids), detach: (ids) => calls.push(ids) })
-    expect(calls.flat()).not.toContain("me")
+  test("an auth-failed account is retried after the cooldown, in the background only; --ids bypasses it", () => {
+    const stale = (at: number) => ({ ...cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), auth_failed: { me: true }, auth_failed_at: { me: at } })
+    expect(dueIds(reg(), stale(NOW - 60_000), NOW)).toEqual(["iu"]) // marked a minute ago: cooling down
+    expect(dueIds(reg(), stale(NOW - 31 * 60_000), NOW)).toEqual(["iu", "me"]) // cooldown over: due again
+    expect(dueIds(reg(), stale(NOW - 60_000), NOW, true)).toEqual(["iu", "me"]) // manual retry
+    const calls = { sync: [] as string[][], detach: [] as string[][] }
+    const run = (c: Cache) => refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids) })
+    expect(run(stale(NOW - 31 * 60_000))).toEqual({ sync: [], background: ["iu", "me"] }) // a retry never blocks a pick
+    expect(run(stale(NOW - 60_000))).toEqual({ sync: [], background: ["iu"] })
+  })
+  test("a failed refresh restarts the cooldown; a successful one clears the mark", () => {
+    const dir = tmp()
+    setAuthFailed("me", true, NOW, dir)
+    setAuthFailed("me", true, NOW + 10 * 60_000, dir)
+    expect(loadCache(dir).auth_failed_at.me).toBe(NOW + 10 * 60_000)
+    setAuthFailed("me", false, NOW + 11 * 60_000, dir)
+    expect(loadCache(dir).auth_failed.me).toBeUndefined()
   })
   test("newestAge / dueIds", () => {
     expect(newestAge({ ...sample(1, 1), w_ts: NOW - 1000 }, NOW)).toBe(1000)
@@ -380,6 +391,21 @@ describe("CLI (isolated HOME)", () => {
     const c = loadCache(dir)
     expect(c.samples.iu).toMatchObject({ s: 33, w: 5 })
     expect(c.exhausted.iu).toBe(1800000999)
+  })
+  test("refresh --ids retries an auth-failed account inside the cooldown; a plain refresh does not", () => {
+    seed(20 * 60_000)
+    setAuthFailed("iu", true, Date.now(), dir)
+    expect(cli(["refresh"]).rc).toBe(0)
+    expect(existsSync(marker)).toBe(false)
+    expect(cli(["refresh", "--ids", "iu"]).rc).toBe(0)
+    expect(existsSync(marker)).toBe(true)
+  })
+  test("--account / env reject prototype keys", () => {
+    for (const id of ["constructor", "__proto__", "toString"]) {
+      expect(cli(["record", "--account", id, "--s", "1"]).rc).toBe(2)
+      expect(cli(["exhausted", "--account", id, "--until", "1800000999"]).rc).toBe(2)
+      expect(cli(["env", id]).rc).toBe(2)
+    }
   })
   test("refresh --ids applies the due filter; --claimed bypasses the claim", () => {
     seed(60_000)

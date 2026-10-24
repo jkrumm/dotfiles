@@ -3,7 +3,7 @@
 //
 //   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically)
+//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --ids also retries an auth-failed account before its 30 min cooldown
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
@@ -40,7 +40,7 @@ function num(argv: string[], name: string): number | null {
 }
 function account(reg: Registry, argv: string[]): string {
   const id = flag(argv, "--account")
-  if (!id || !reg.accounts[id]) throw new Error(`--account must be one of ${Object.keys(reg.accounts).join(", ")}`)
+  if (!id || !Object.hasOwn(reg.accounts, id)) throw new Error(`--account must be one of ${Object.keys(reg.accounts).join(", ")}`)
   return id
 }
 
@@ -75,10 +75,10 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
  * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
 function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[] } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
-  const enabled = (id: string) => !!reg.accounts[id]?.enabled
+  const enabled = (id: string) => Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
-    : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()))
+    : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
   runRefresh({
     reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
     readSample: (id) => readSample(reg, id), now: Date.now, log: (m) => console.error(m),
@@ -172,7 +172,7 @@ function main(argv: string[]): number {
     }
     case "env": {
       const id = rest[0]
-      const a = id ? reg.accounts[id] : undefined
+      const a = id && Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined
       if (!a?.enabled) throw new Error(`env: '${id ?? ""}' is not an enabled account (${Object.keys(reg.accounts).filter((k) => reg.accounts[k].enabled).join(", ")})`)
       console.log(shellLine(reg, { picked: id, reason: "forced", stale: false }))
       return 0

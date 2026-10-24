@@ -1376,7 +1376,7 @@ _render-settings:
 # dir. User-scope MCP servers live in each account's own .claude.json, so a registration runs once per
 # account: wrap it as `$(CLAUDE_EACH_ACCOUNT) <cmds>; $(CLAUDE_EACH_END)`.
 CLAUDE_ACCOUNT_DIRS = $(shell jq -r '.accounts[] | select(.enabled) | (.dir // "-")' "$(DOTFILES_DIR)/config/claude-accounts.json" 2>/dev/null || echo -)
-CLAUDE_EACH_ACCOUNT = for d in $(CLAUDE_ACCOUNT_DIRS); do ( if [ "$$d" = "-" ]; then unset CLAUDE_CONFIG_DIR; else CLAUDE_CONFIG_DIR=$$(printf %s "$$d" | sed "s|^~|$$HOME|"); export CLAUDE_CONFIG_DIR; fi;
+CLAUDE_EACH_ACCOUNT = for d in $(CLAUDE_ACCOUNT_DIRS); do ( if [ "$$d" = "-" ]; then unset CLAUDE_CONFIG_DIR; else CLAUDE_CONFIG_DIR=$$(printf %s "$$d" | sed "s|^~|$$HOME|"); export CLAUDE_CONFIG_DIR; mkdir -p "$$CLAUDE_CONFIG_DIR"; fi;
 CLAUDE_EACH_END = ) || exit 1; done
 # doctor: is MCP server $(1) registered in every enabled account?
 CLAUDE_MCP_CHECK = $(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "$(1)"; then echo "    ✓ $(1) MCP registered ($$a)"; else echo "    ✗ $(1) MCP [not registered for $$a — run make setup]"; fi; $(CLAUDE_EACH_END)
