@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -45,6 +45,20 @@ describe("pick rule v1.1 pace guard", () => {
   })
   test("expiring capacity still wins for bulk lanes", () => {
     expect(pick(reg(), cacheOf(iuOver, sample(10, 2, { wReset: NOW / 1000 + 5 * H })), "wave", NOW)).toMatchObject({ picked: "me", reason: "expiring-capacity" })
+  })
+})
+
+describe("sessionAccount", () => {
+  const line = (session: string, account: string | null) => JSON.stringify({ event: "session_env", data: { session, account } })
+  test("newest session_env line for the session wins; unknown and malformed ids give null", () => {
+    const d = tmp()
+    writeFileSync(join(d, "2026-10-23.jsonl"), `${line("abc-1", "iu")}\n`)
+    writeFileSync(join(d, "2026-10-24.jsonl"), `${line("abc-1", "me")}\nnot json\n${line("zzz-9", "iu")}\n`)
+    expect(sessionAccount("abc-1", d)).toBe("me")
+    expect(sessionAccount("zzz-9", d)).toBe("iu")
+    expect(sessionAccount("nope-0", d)).toBeNull()
+    expect(sessionAccount("../x", d)).toBeNull()
+    expect(sessionAccount("abc-1", join(d, "missing"))).toBeNull()
   })
 })
 

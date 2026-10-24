@@ -71,14 +71,22 @@ _claude_launch() {
   _claude_theme_auto
 
   local -a args=() plugin_args=()
-  local account="" git_root pdir
+  local account="" resume_id="" git_root pdir
   while (( $# )); do
     case $1 in
       --account) (( $# >= 2 )) || { print -u2 "c: --account needs iu|me"; return 1 }; account=$2; shift 2 ;;
       --account=*) account=${1#--account=}; shift ;;
+      --resume|-r) args+=("$1"); shift; [[ ${1:-} == [A-Za-z0-9]*-* ]] && resume_id=$1 ;;
+      --resume=*) args+=("$1"); resume_id=${1#--resume=}; shift ;;
       *) args+=("$1"); shift ;;
     esac
   done
+
+  # A resumed session stays on the account it ran on: the other account would re-send the whole
+  # context cold. An explicit --account wins; an unknown session falls through to the pick.
+  if [[ -z $account && -n $resume_id ]]; then
+    account=$(claude-account session "$resume_id" 2>/dev/null) || account=""
+  fi
 
   git_root=$(git rev-parse --show-toplevel 2>/dev/null)
   if [[ -n "$git_root" ]]; then
