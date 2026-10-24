@@ -5,7 +5,9 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 /** Account whose config dir is the default ~/.claude (CLAUDE_CONFIG_DIR unset). */
-export const DEFAULT_ACCOUNT_ID = "a"
+export const DEFAULT_ACCOUNT_ID = "iu"
+/** pick() result when no account is usable: the caller spills to its IU path (not an account id). */
+export const SPILL = "spill"
 export const SESSION_MAX = 85
 export const WEEKLY_MAX = 90
 export const FRESH_MS = 10 * 60_000
@@ -290,7 +292,7 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
 /** Rule v1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
   const r = pickRaw(reg, cache, lane, nowMs)
-  return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== "iu" && isStaleOk(cache, r.picked, nowMs) }
+  return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
 }
 
 function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit<PickResult, "stale"> {
@@ -314,7 +316,7 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
   const other = ok[0]
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
-  return { picked: "iu", reason: "no-eligible-account" }
+  return { picked: SPILL, reason: "no-eligible-account" }
 }
 
 export interface PickLine {
@@ -336,7 +338,7 @@ const shQuote = (v: string) => `'${v.replaceAll("'", `'\\''`)}'`
 
 /** Shell fragment for a pick; null for the IU spill signal. */
 export function shellLine(reg: Registry, p: PickResult): string | null {
-  if (p.picked === "iu") return null
+  if (p.picked === SPILL) return null
   const dir = accountDir(reg.accounts[p.picked])
   return dir === null ? "unset CLAUDE_CONFIG_DIR" : `export CLAUDE_CONFIG_DIR=${shQuote(dir)}`
 }

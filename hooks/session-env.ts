@@ -50,7 +50,7 @@ function cleanupOldLogs(keepDays = 3): void {
   }
 }
 
-/** Registry id of the account this session runs on (CLAUDE_CONFIG_DIR unset -> "a"); null if the registry is unreadable. */
+/** Registry id of the account this session runs on (CLAUDE_CONFIG_DIR unset -> "iu"); null if the registry is unreadable. */
 async function currentAccount(): Promise<string | null> {
   try {
     const { accountFromConfigDir, loadRegistry } = await import("../scripts/lib/claude-accounts.ts");

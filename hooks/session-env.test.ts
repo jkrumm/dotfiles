@@ -26,14 +26,14 @@ function run(env: Record<string, string>) {
 }
 
 describe("session_env account", () => {
-  test("CLAUDE_CONFIG_DIR unset -> a", () => {
-    expect(run({}).data).toMatchObject({ session: "s1", account: "a" })
+  test("CLAUDE_CONFIG_DIR unset -> iu", () => {
+    expect(run({}).data).toMatchObject({ session: "s1", account: "iu" })
   })
-  test("a set but unregistered dir is account null, not a", () => {
-    expect(run({ CLAUDE_CONFIG_DIR: join(homedir(), ".claude-b-unknown") }).data.account).toBeNull()
+  test("a set but unregistered dir is account null, not iu", () => {
+    expect(run({ CLAUDE_CONFIG_DIR: join(homedir(), ".claude-me-unknown") }).data.account).toBeNull()
   })
-  test("CLAUDE_CONFIG_DIR at account b's dir -> b", () => {
-    expect(run({ CLAUDE_CONFIG_DIR: join(home, ".claude-b") }).data.account).toBe("b")
+  test("CLAUDE_CONFIG_DIR at account me's dir -> me", () => {
+    expect(run({ CLAUDE_CONFIG_DIR: join(home, ".claude-me") }).data.account).toBe("me")
   })
   test("a broken registry still emits the line, with account null", () => {
     const e = run({ CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })

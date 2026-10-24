@@ -1,19 +1,19 @@
 {
   "_note": "Single source for the Claude account picker (docs/claude-accounts.md). dir null = the default ~/.claude with CLAUDE_CONFIG_DIR unset; never set it to ~/.claude (changes the Keychain service)..",
   "accounts": {
-    "a": {
+    "iu": {
       "dir": null,
       "plan": "max20x",
       "units": { "session": 4, "weekly": 2 },
       "homeLanes": ["interactive", "agent-gateway:review", "headless"],
       "enabled": true
     },
-    "b": {
-      "dir": "~/.claude-b",
+    "me": {
+      "dir": "~/.claude-me",
       "plan": "max5x",
       "units": { "session": 1, "weekly": 1 },
       "homeLanes": ["wave", "fan", "agent-gateway:*"],
-      "enabled": false
+      "enabled": true
     }
   }
 }

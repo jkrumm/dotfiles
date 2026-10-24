@@ -48,7 +48,7 @@ IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
 # usage throttle below). The badge is empty unless more than one account is enabled.
 _CA_PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 _ca_key="${CLAUDE_CONFIG_DIR:-default}"
-_ca_file="/tmp/claude_sl/account_${_ca_key//\//_}"
+_ca_file="/tmp/claude_sl/account_v2_${_ca_key//\//_}"
 account_id=""
 account_badge=""
 [ -s "$_ca_file" ] && IFS=' ' read -r account_id account_badge < "$_ca_file"

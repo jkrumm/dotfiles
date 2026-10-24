@@ -1,15 +1,16 @@
 # Two Claude Max accounts — concept
 
-Status: **W0 built** (2026-10-24), B disabled, no behaviour change. Shipped:
-`config/claude-accounts.json`, `scripts/claude-account.ts` (+ `scripts/lib/claude-accounts.ts`,
-tests), `make claude-accounts-setup`, statusline sample feed + `A`/`B` badge,
-`account` in the `session_env` line, `fetch_usage.py` as a cache reader. Not yet
-built from the W0 row: usage-tracker `account` column + backfill (other repo).
-Pick log lives at `~/.local/share/claude-accounts/picks.jsonl`; the exhausted-mark
-hook (`claude-account exhausted`) exists but nothing calls it until W1.
-Original status: concept (2026-10-24). Account B (Max 5x) is being
-bought; account A is the existing Max 20x. Decision record and the numbers
-behind it: `~/Reports/ai-subscription-2026-10/index.html`.
+Status: **W1 built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
+`me` (personal Max 5x at `~/.claude-me`, jkrumm@pm.me), both enabled. Shipped in W1: ids renamed from
+`a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
+`CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (IU spill switches that spawn to
+opencode), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
+MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
+dead = FAIL and `me` dead = WARN. Still open: agent-gateway workers (other repo), usage-tracker
+`account` column (other repo), W2 displays. W0 shipped the registry, `claude-account`, the quota
+cache, the statusline badge and `account` in `session_env`. Pick log:
+`~/.local/share/claude-accounts/picks.jsonl`; `claude-account exhausted` exists but nothing calls it yet.
+Decision record and the numbers behind it: `~/Reports/ai-subscription-2026-10/index.html`.
 
 ## Goal
 
@@ -31,26 +32,26 @@ paid for it.
    intermediation are what enforcement targets.
 3. **Split by responsibility, not by project.** The account follows the lane
    (`USAGE_LANE`), so it doesn't matter which repo or machine the work starts from.
-4. **Account A stays at the default path.** `CLAUDE_CONFIG_DIR` is *unset* for
-   A. Setting it to `~/.claude` explicitly changes the Keychain service to
-   `Claude Code-credentials-<hash>` and A would look logged out.
+4. **Account `iu` stays at the default path.** `CLAUDE_CONFIG_DIR` is *unset* for
+   `iu`. Setting it to `~/.claude` explicitly changes the Keychain service to
+   `Claude Code-credentials-<hash>` and `iu` would look logged out.
 
 ## Accounts and on-disk layout
 
 | Id | Plan | Config dir | Keychain service | Capacity units (session / weekly) |
 |-|-|-|-|-|
-| `a` | Max 20x | `~/.claude` (env unset) | `Claude Code-credentials` | 4 / 2 |
-| `b` | Max 5x | `~/.claude-b` | `Claude Code-credentials-<sha256("~/.claude-b" abs)[:8]>` | 1 / 1 |
+| `iu` | Max 20x | `~/.claude` (env unset) | `Claude Code-credentials` | 4 / 2 |
+| `me` | Max 5x | `~/.claude-me` | `Claude Code-credentials-<sha256("~/.claude-me" abs)[:8]>` (`-7253dcbc`) | 1 / 1 |
 
 The Keychain naming is verified in the 2.1.310 binary (`Jj()`: suffix =
 first 8 hex of sha256 of the config dir). The capacity units come from measured
 ratios: 20x/5x ≈ 3.7× per session and ≈ 2.0× per week (mulletiq regression).
 
 Registry: `config/claude-accounts.json` is the single source (id, dir,
-units, home lanes, enabled flag). `b.enabled=false` until the login exists, so
-everything below can ship before B does, with no behaviour change.
+units, home lanes, enabled flag). `enabled` stays false until an account's login
+exists, so a new account ships dark.
 
-`~/.claude-b` is created by `make claude-accounts-setup` (idempotent):
+`~/.claude-me` is created by `make claude-accounts-setup` (idempotent):
 
 - **Symlinked to `~/.claude`:** `skills agents hooks rules output-styles commands
   plugins CLAUDE.md projects logs`.
@@ -60,7 +61,7 @@ everything below can ship before B does, with no behaviour change.
 - **`settings.json` is rendered, not linked.** Claude Code rewrites it by
   temp-file-and-rename, which silently replaces a symlink with a real file
   (agswt trap). `make setup` already merges the template into
-  `~/.claude/settings.json`; it runs the same merge into `~/.claude-b/`.
+  `~/.claude/settings.json`; it runs the same merge into `~/.claude-me/`.
   Identical `cleanupPeriodDays` in both keeps the shared `projects/` sweep safe.
 - **Per account (never link):** `.claude.json` (oauthAccount,
   `cachedUsageUtilization`, trust, **user-scope MCP**), credentials,
@@ -108,7 +109,7 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    `fetch_usage.py` poll gets retired.
 
 `fetch_usage.py` becomes a reader of this cache. It still writes
-`/tmp/claude_sl/usage_api.json` (account A, the old shape) for backward
+`/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
 **Rule v1:**
@@ -118,22 +119,22 @@ eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly
               (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; `claude -p /usage`
                takes 27-40 s, limit 75 s. Only an account with no sample is refreshed synchronously.
                The pick log carries `stale: true`)
-home(lane)  = a  for interactive, agent-gateway:review, headless
-              b  for wave, fan, agent-gateway:* (other tools)
+home(lane)  = iu for interactive, agent-gateway:review, headless
+              me for wave, fan, agent-gateway:* (other tools)
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first
   2. eligible(home) → home
   3. eligible(other) → other
-  4. interactive → a (Claude Code shows the limit itself)
+  4. interactive → iu (Claude Code shows the limit itself)
      bulk        → "iu": the caller spills to its IU path
                    (rd wave --kind opencode, agw's existing IU fallback)
 ```
 
 Why these homes: the waves are steady, unattended and start a fresh context
 per wave, so each wave is a free re-pick point. Together they are 63% of Max
-spend, which fits B's small session window better than bursty interactive work
-does. B cannot hold all of it (its weekly is about half of A's); rule 3 spills
-the rest to A, which gains headroom because the waves left it.
+spend, which fits `me`'s small session window better than bursty interactive work
+does. `me` cannot hold all of it (its weekly is about half of `iu`'s); rule 3 spills
+the rest to `iu`, which gains headroom because the waves left it.
 
 Every decision is appended as JSONL (`ts, lane, picked, reason, a{s,w}, b{s,w}`)
 to `~/.claude/logs/`. That pick log is the dataset for v2 tuning.
@@ -141,28 +142,28 @@ to `~/.claude/logs/`. That pick log is the dataset for v2 tuning.
 **v2 (later, from data):** replace the fixed thresholds with pace.
 `projected_w(x) = weekly% + burn_rate(lane mix) × hours_to_reset`. Pick the
 account with the most slack left at its own reset, which spends capacity before
-it expires. Upgrade B to 20x if its weekly stays > 80% two weeks running.
+it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
 ## Spawn integration
 
 | Spawner | Today | Change |
 |-|-|-|
-| `c` / `cs` / `cf` (`claude.zsh:46-102`) | default dir | `eval "$(claude-account pick --lane interactive)"`; `--account a\|b` override |
+| `c` / `cs` / `cf` (`claude.zsh:46-102`) | default dir | `eval "$(claude-account pick --lane interactive)"`; `--account iu\|me` override (strips the flag, runs in a subshell; a failing pick answers `iu`) |
 | `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept) instead of typing `export` into the pane. On `iu` it switches that spawn to `--kind opencode` |
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
-| `claude-auth.zsh` fallback (mini) | one token `op://mini/claude/oauth-token` | per account: `op://mini/claude/oauth-token` (a), `op://mini/claude-b/oauth-token` (b). Each is used only when *that* dir's `claude auth status` fails. Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
+| `claude-auth.zsh` fallback (mini) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 | warden | spawns no `claude` | none; it goes through agent-gateway |
 
 Known gaps:
 
 - **herdr restart:** panes come back via `claude --resume <id>`. If the pane
-  `--env` isn't restored, a B session resumes on A: it works because `projects/`
+  `--env` isn't restored, a `me` session resumes on `iu`: it works because `projects/`
   is shared, but the cache is cold. Verify whether herdr persists `--env`;
   accepted for v1 if not.
 - **`claude --bg` / `claude agents`:** the background supervisor is a long-lived
   daemon bound to one identity. caam defaults `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`
-  for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on A
+  for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on `iu`
   only; `herdr-reap` queries `claude agents` once per account.
 
 ## Borrowed from open source (2026-10 survey)
@@ -185,8 +186,8 @@ concurrency and cache. So we build a thin picker and take the parts:
 | pin a session to one account for its lifetime; re-pin only on 401/quota | hbinhng/ccm `--sticky` | invariant 1 |
 | auto-re-prompt agents after a limit wall resets | rcosteira79/herdr-autocontinue | W2: interactive panes that hit the wall resume at `resets_at` |
 | never symlink `settings.json`; locked keychain looks logged out | fujibee/agswt | layout rules, heartbeat |
-| `CLAUDE_CODE_DISABLE_AGENT_VIEW` for non-default identities | caam | `--bg` stays on A |
-| profile badge + chained statusline env | diranged/claude-profile | statusline `A`/`B` badge |
+| `CLAUDE_CODE_DISABLE_AGENT_VIEW` for non-default identities | caam | `--bg` stays on `iu` |
+| profile badge + chained statusline env | diranged/claude-profile | statusline `IU`/`ME` badge |
 
 Avoid: relay class (claude-relay-service, CCR pools, OmniRoute, `ccs cliproxy`,
 doxaras/claude-rotate, 2solarmax/maxpool, tuxevil-rotator). Also any tool that
@@ -198,11 +199,11 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 ## Attribution (usage-tracker → Argo)
 
 - `hooks/session-env.ts` adds `account` to its line: the registry id resolved
-  from `CLAUDE_CONFIG_DIR` (unset → `a`). agent-gateway's `writeSessionEnv` does
+  from `CLAUDE_CONFIG_DIR` (unset → `iu`). agent-gateway's `writeSessionEnv` does
   the same.
 - usage-tracker gets a new `account` column on `session_env` and `usage_record`.
   `billing` keeps its meaning (`max` = sunk, `iu` = metered); account is a
-  separate dimension. Backfill: all historical `max` rows → `a`. `billing-audit`
+  separate dimension. Backfill: all historical `max` rows → `iu`. `billing-audit`
   learns the account.
 - The claude-code collector needs no new root: `projects/` and `logs/` are shared.
 - Argo: an account filter and split on the usage page (`apps/api/src/routes/usage.ts`,
@@ -212,36 +213,35 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 
 | Surface | Change |
 |-|-|
-| Claude Code statusline | Native `rate_limits` already comes from the session's own account, so the numbers are correct for free. Add an `A`/`B` badge (from `CLAUDE_CONFIG_DIR`); the fallback fetch reads the right account's entry |
+| Claude Code statusline | Native `rate_limits` already comes from the session's own account, so the numbers are correct for free. Add an `IU`/`ME` badge (from `CLAUDE_CONFIG_DIR`); the fallback fetch reads the right account's entry |
 | agent-gateway `/api/usage` (`routes/usage.ts`) | from one `current` object to `{accounts: {a, b}}`; POSTs carry `account` |
-| herdr overview pane (`/api/overview.txt`) | a two-line quota header (A and B: 5h/7d/reset) plus an account column per agent |
+| herdr overview pane (`/api/overview.txt`) | a two-line quota header (`iu` and `me`: 5h/7d/reset) plus an account column per agent |
 | Tinycast (MacBook, `extension/src/usage/quota.ts`) | read `https://agent-gateway.mini.jkrumm.com/api/usage` (the tailnet door exists via the Caddyfile vhost), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
-| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, A dead = FAIL; B dead = WARN, because the picker routes around it |
+| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it |
 | Hermes digests | inherit from the heartbeat; no change |
 
 ## Login logistics
 
 - **Where to log in:** on the mini, inside a herdr pane (the login Keychain is
   only reachable from the GUI session; never `ssh mini 'claude …'`). Run
-  `CLAUDE_CONFIG_DIR=~/.claude-b claude`, then `/login`, then press `c` to copy
+  `CLAUDE_CONFIG_DIR=~/.claude-me claude`, then `/login`, then press `c` to copy
   the URL.
 - **Browser:** paste the URL into a second browser profile on the MacBook that
-  stays signed in to account B; the first profile keeps account A and work. If
+  stays signed in to `me`; the first profile keeps `iu` and work. If
   the callback can't reach the mini, paste the code back into the pane.
 - **How often:** the login refreshes itself; expect re-login only after a revoke
   or a long idle.
-- **1Password:** an item for B's login email, plus `op://mini/claude-b/oauth-token`
-  from `claude setup-token` (one-year token, fallback only) added to
-  `dotfiles-private/headless.refs` and resealed with `make secrets-seed`.
-- **MacBook:** no B login needed. Tinycast reads the mini.
-- **Hygiene:** real identity, own card, no VPN hopping. Use B at normal intensity
+- **1Password:** an item for `me`'s login email. No token fallback for `me`: a dead
+  login is a WARN and a `/login`.
+- **MacBook:** no `me` login needed. Tinycast reads the mini.
+- **Hygiene:** real identity, own card, no VPN hopping. Use `me` at normal intensity
   on day one; ban reports cluster right after a purchase or upgrade.
 
 ## Rollout
 
 | Wave | When | Contents | Done when |
 |-|-|-|-|
-| W0 | now, B absent | registry (`b.enabled=false`), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (A only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `a`; no behaviour change; no `api/oauth/usage` calls from our code |
-| W1 | after B's login | enable B; `rd wave`/`fan` + agw workers pick; MCP registration for B; per-account claude-auth fallback | a wave lands on B, its rows say `account=b`, cache-read share on B > 90% |
+| W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change; no `api/oauth/usage` calls from our code |
+| W1 | after the `me` login | enable `me`; `rd wave`/`fan` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a wave lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
 | W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
-| W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for B | written decision |
+| W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for `me` | written decision |
