@@ -52,12 +52,11 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 
 | repo | branch | tab | state |
 |-|-|-|-|
-| argo | feat/usage-account (#200) | `argo-usage-account` | review 0d30946e: blocker (empty-string account overwrites) → round 3 sent |
-| dotfiles (W2a) PR | #28 | | review `c0e90ac2-386a-497c-9605-3d8827078448` running |
-| usage-tracker (W2c) | feat/quota-history | `usage-tracker-quota-history` | fanned 2026-10-24 (owner ask: quota history) |
-| argo (W2c) | feat/quota-history | — | brief `argo-quota.md`; fan after #200 merges (same files) |
+| argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
+| dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (pre-#32 account-less session_env lines, age out by 2026-10-25 16:20Z) → then `make claude-accounts-stamp` |
+| usage-tracker (W2c) | #11 | `usage-tracker-quota-history` | review `8b7b4095-b3cc-45cd-aff1-8757fdfce89c`; legacy a/b→iu/me pick mapping requested |
+| argo (W2c) | feat/quota-history | `argo-quota-history` | fanned 2026-10-24 |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
-| dotfiles (W2a) | feat/claude-accounts-verify | `dotfiles-claude-accounts-veri` | fanned 2026-10-24 (landed on `me`, reason=home) |
 | agent-gateway | feat/claude-accounts-usage | `agent-gatew-claude-accounts-usag` | fanned 2026-10-24 (on `me`) |
 
 Decisions taken during W2:
