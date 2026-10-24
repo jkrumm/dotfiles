@@ -11,6 +11,11 @@ statusline.sh consumes this file as its pre-first-response fallback (docs/status
 The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
 we keep the existing cache rather than blanking it.
 
+W0 of docs/claude-accounts.md: a fresh (<5 min) account-a sample in the quota cache
+(~/.cache/claude-accounts/usage.json — statusline and `claude-account refresh` feed it)
+is preferred; the API path below runs only when that sample is stale (retired in W2).
+All accounts are also written to /tmp/claude_sl/usage_accounts.json.
+
 Run via: uv run ~/.claude/fetch_usage.py
 """
 
@@ -32,6 +37,11 @@ USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 AGENT_GATEWAY_URL = "http://localhost:7705/api/usage"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 ANTHROPIC_BETA = "oauth-2025-04-20"
+
+ACCOUNTS_CACHE = Path.home() / ".cache" / "claude-accounts" / "usage.json"
+ACCOUNTS_FILE = CACHE_DIR / "usage_accounts.json"
+ACCOUNT_A = "a"
+CACHE_FRESH_S = 300
 
 
 def log_event(src: str, event: str, level: str, data: dict) -> None:
@@ -100,9 +110,72 @@ def _http_post_json(url: str, payload: dict, timeout: int = 1) -> None:
         pass
 
 
+def _write_json(path: Path, payload: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload))
+    tmp.rename(path)
+
+
+def _push_gateway(five_pct, mins_left, seven_pct) -> None:
+    # Push to agent-gateway UI (localhost:7705) — fail silently if not running
+    try:
+        _http_post_json(AGENT_GATEWAY_URL, {
+            "five_hour_pct": round(five_pct or 0),
+            "five_hour_mins_left": mins_left,
+            "seven_day_pct": round(seven_pct) if seven_pct is not None else None,
+        })
+    except Exception:
+        pass
+
+
+def from_account_cache() -> bool:
+    """Write usage_accounts.json from the quota cache; write usage_api.json from a fresh account-a sample.
+
+    Returns True when usage_api.json was served from the cache (no API call needed)."""
+    try:
+        cache = json.loads(ACCOUNTS_CACHE.read_text())
+    except Exception:
+        return False
+    samples = cache.get("samples") or {}
+    now = time.time()
+    _write_json(ACCOUNTS_FILE, {
+        "accounts": {
+            acct: {
+                "five_hour": {"utilization": x.get("s"), "resets_at_epoch": x.get("s_reset")},
+                "seven_day": {"utilization": x.get("w"), "resets_at_epoch": x.get("w_reset")},
+                "sampled_at": int(x.get("ts", 0) / 1000),
+                "source": x.get("src"),
+                "auth_ok": not (cache.get("auth_failed") or {}).get(acct),
+                "exhausted_until": (cache.get("exhausted") or {}).get(acct),
+            }
+            for acct, x in samples.items()
+        },
+        "fetched_at": int(now),
+    })
+    a = samples.get(ACCOUNT_A)
+    if not a or now - a.get("ts", 0) / 1000 >= CACHE_FRESH_S or a.get("s") is None:
+        return False
+    five_reset = a.get("s_reset")
+    _write_json(CACHE_FILE, {
+        "five_hour": {"utilization": a.get("s"), "resets_at_epoch": five_reset},
+        "seven_day": {"utilization": a.get("w"), "resets_at_epoch": a.get("w_reset")},
+        "seven_day_sonnet": {"utilization": None, "resets_at_epoch": None},
+        "limits": [],
+        "extra_usage": None,
+        "fetched_at": int(now),
+        "source": "claude-accounts",
+    })
+    mins = round((five_reset - now) / 60) if five_reset and five_reset > now else None
+    _push_gateway(a.get("s"), mins, a.get("w"))
+    log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": a.get("s"), "seven_day_pct": a.get("w")})
+    return True
+
+
 def fetch() -> None:
     CACHE_DIR.mkdir(exist_ok=True)
     cleanup_old_logs()
+    if from_account_cache():
+        return
 
     token = _oauth_token()
     log_event("fetch_usage", "token_ok", "info", {"prefix": token[:8]})
@@ -173,20 +246,12 @@ def fetch() -> None:
     # Unmodified response, for checking what the endpoint returns today.
     RAW_FILE.write_text(json.dumps(data, indent=2))
 
-    # Push to agent-gateway UI (localhost:7705) — fail silently if not running
-    try:
-        five_h = result["five_hour"]
-        seven_d = result["seven_day"]
-        now_ts = result["fetched_at"]
-        reset_epoch = five_h.get("resets_at_epoch")
-        mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
-        _http_post_json(AGENT_GATEWAY_URL, {
-            "five_hour_pct": round(five_h.get("utilization") or 0),
-            "five_hour_mins_left": mins_left,
-            "seven_day_pct": round(seven_d.get("utilization")) if seven_d.get("utilization") is not None else None,
-        })
-    except Exception:
-        pass
+    five_h = result["five_hour"]
+    seven_d = result["seven_day"]
+    now_ts = result["fetched_at"]
+    reset_epoch = five_h.get("resets_at_epoch")
+    mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
+    _push_gateway(five_h.get("utilization"), mins_left, seven_d.get("utilization"))
 
 
 if __name__ == "__main__":
