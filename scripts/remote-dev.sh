@@ -885,6 +885,8 @@ out = []
 for d in dirs:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
     if d is not None:
+        for k in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"):
+            env.pop(k, None)  # credentials for the default account must not follow another account dir
         env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(d)
     label = d or "default account"
     try:
@@ -1001,6 +1003,9 @@ for a in agents:
     if a.get('id') == t or (a.get('sessionId') or '').startswith(t):
         print(a['sessionId']); break
 " 2>/dev/null)
+
+  # $sid is interpolated into a remote shell command below: only a bare session uuid may pass.
+  [[ -z $sid || $sid =~ ^[0-9a-f-]{36}$ ]] || die "refusing malformed session id from 'claude agents': '${sid:0:60}'"
 
   if [[ -n $sid ]]; then
     # shellcheck disable=SC2016  # $HOME expands on the dev host, not here

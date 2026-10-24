@@ -12,6 +12,8 @@ export const SESSION_MAX = 85
 export const WEEKLY_MAX = 90
 export const FRESH_MS = 10 * 60_000
 export const STALE_OK_MS = 6 * 3600_000
+/** a dead login is re-probed (in the background) at most this often */
+export const AUTH_RETRY_MS = 30 * 60_000
 export const REFRESH_MIN_MS = 5 * 60_000
 export const EXPIRING_S = 24 * 3600
 export const EXPIRING_WEEKLY_MAX = 70
@@ -48,6 +50,8 @@ export interface Cache {
   exhausted: Record<string, number>
   /** Accounts whose last refresh found no usable login. */
   auth_failed: Record<string, boolean>
+  /** epoch ms of the last auth failure per id (the retry cooldown starts there) */
+  auth_failed_at: Record<string, number>
 }
 /** `stale`: the picked account was chosen on a sample older than FRESH_MS (reason keeps the routing rule). */
 export interface PickResult {
@@ -56,7 +60,7 @@ export interface PickResult {
   stale: boolean
 }
 
-export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, auth_failed: {} })
+export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, auth_failed: {}, auth_failed_at: {} })
 
 export const registryPath = () => process.env.CLAUDE_ACCOUNTS_REGISTRY ?? join(import.meta.dir, "..", "..", "config", "claude-accounts.json")
 export const cacheDir = () => process.env.CLAUDE_ACCOUNTS_CACHE_DIR ?? join(homedir(), ".cache", "claude-accounts")
@@ -160,7 +164,10 @@ export function loadCache(dir = cacheDir()): Cache {
       if (isSample(j)) c.samples[id] = j // a malformed file is dropped, the next feed rewrites it
     }
     else if (kind === "exhausted" && isNum(j.until)) c.exhausted[id] = j.until
-    else if (kind === "auth" && j.failed === true) c.auth_failed[id] = true
+    else if (kind === "auth" && j.failed === true) {
+      c.auth_failed[id] = true
+      if (isNum(j.ts)) c.auth_failed_at[id] = j.ts
+    }
   }
   return c
 }
@@ -203,7 +210,7 @@ export function markExhausted(id: string, untilS: number, dir = cacheDir()): voi
 export function setAuthFailed(id: string, failed: boolean, nowMs: number, dir = cacheDir()): void {
   const path = file(dir, id, "auth.json")
   const cur = (readJson(path) as { failed?: boolean } | null)?.failed === true
-  if (cur === failed) return
+  if (!failed && !cur) return // a repeated failure still rewrites the mark: its ts restarts the retry cooldown
   writeAtomic(path, JSON.stringify({ failed, ts: nowMs }))
 }
 
@@ -278,7 +285,7 @@ export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cac
 
 /** Enabled, logged in, not exhausted, and every window young enough to judge (< 6 h) is below its threshold. Each window is judged by its own timestamp. */
 export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
-  const a = reg.accounts[id]
+  const a = Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined
   if (!a?.enabled || cache.auth_failed[id]) return false
   const x = cache.samples[id]
   if (!x || !usable(x, nowMs)) return false
@@ -344,9 +351,11 @@ export function shellLine(reg: Registry, p: PickResult): string | null {
 }
 
 /** Enabled accounts whose sample is missing or has a window older than 10 min (the budget is checked at claim time). */
-export function dueIds(reg: Registry, cache: Cache, nowMs: number): string[] {
-  // An auth-failed account is not retried (a dead login would be hammered every pick); the next statusline record clears the mark.
-  return Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled && !cache.auth_failed[id] && sampleAge(cache.samples[id], nowMs) > FRESH_MS)
+export function dueIds(reg: Registry, cache: Cache, nowMs: number, ignoreAuthMark = false): string[] {
+  // An auth-failed account is re-probed only after AUTH_RETRY_MS (a dead login must not be hammered every pick);
+  // a successful refresh or a statusline record clears the mark. `refresh --ids` bypasses it (manual retry).
+  const authBlocked = (id: string) => !ignoreAuthMark && cache.auth_failed[id] && nowMs - (cache.auth_failed_at[id] ?? 0) <= AUTH_RETRY_MS
+  return Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled && !authBlocked(id) && sampleAge(cache.samples[id], nowMs) > FRESH_MS)
 }
 
 /**
@@ -354,7 +363,7 @@ export function dueIds(reg: Registry, cache: Cache, nowMs: number): string[] {
  * REFRESH_MIN_MS is the 5-min budget; an older one is stale and replaced. Racing replacers may both win: one
  * duplicate refresh at worst.
  */
-export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache: Cache, dir = cacheDir()): string[] {
+export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache: Cache, dir = cacheDir(), ignoreAuthMark = false): string[] {
   mkdirSync(dir, { recursive: true })
   // Exclusive create WITH content: write a private temp file, then hard-link it into place (fails with EEXIST if
   // the claim exists), so a concurrent reader never sees a claim without its timestamp.
@@ -367,7 +376,7 @@ export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache:
       unlinkSync(tmp)
     }
   }
-  return dueIds(reg, cache, nowMs).filter((id) => {
+  return dueIds(reg, cache, nowMs, ignoreAuthMark).filter((id) => {
     if (!ids.includes(id)) return false
     const path = file(dir, id, "refresh.claim")
     try {
@@ -486,8 +495,9 @@ export function refreshBeforePick(b: BeforePick): { sync: string[]; background: 
   if (b.lane === "interactive") return { sync: [], background: [] } // no claim: an interactive pick touches nothing
   const due = dueIds(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
+  // a due auth-failed account is a retry: never block a pick on it
   const sync = claimed.filter((id) => !b.cache.auth_failed[id] && !usable(b.cache.samples[id], b.now))
-  const background = claimed.filter((id) => !sync.includes(id) && !b.cache.auth_failed[id])
+  const background = claimed.filter((id) => !sync.includes(id))
   if (background.length) b.detach(background)
   if (sync.length) b.runSync(sync)
   return { sync, background }
