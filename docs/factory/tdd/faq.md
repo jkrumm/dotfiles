@@ -9,14 +9,14 @@ runbooks still run; they need no model. Code waits for the first reset. No IU fa
 **Why does review run on IU API tokens if IU must not write code?** Review reads code and changes
 nothing. A reviewer with a DeepSeek adversary is a second pair of eyes from another model family.
 
-**Why not DBOS, if v1 used it wrong?** Because the factory re-reads the world before every action
-anyway, and a reconcile loop does exactly that without replaying recorded results (§6).
+**Why DBOS after all?** v1's spike used it wrong, and Node is fine. With short workflows and waiting in
+tables, it gives queues, schedules and a run history for free without its replay pitfalls (§6).
 
 **What do I lose during the rewrite?** Warden's triage, for the two days W1 takes. Raw alerts keep
 reaching Slack until each source's adapter lands.
 
-**What does it cost?** No new subscription. IU API spend grows by ≈ $10–40 a week, mostly review. The
-rewrite itself costs ≈ 20–40 % of one `iu` week.
+**What does it cost?** No new subscription. Cheap models are used freely within your €500; review is the
+line to watch, and depth gating keeps it in bounds. The rewrite costs ≈ 20–40 % of one `iu` week.
 
 **How do I steer something in flight?** Argo intents (steer, pause, stop), a comment on its plan in
 *Artifacts*, Hermes, or `factory issue|task` from any shell.

@@ -17,8 +17,12 @@ Orchestrator: herdr tab `factory-v2` (SourceRoot workspace), session 07a74a7d, O
   verified); v1 runnable plans parked in dotfiles and warden `docs/waves/PLAN.md`; ADR files carry
   their v2 status.
 - **Podcast:** source `podcast/2026-10-24-factory-v2-source.md`; first job 16751644 failed at TTS (ElevenLabs v3 now rejects `previous_text`, fixed in audio-gateway b63087e); job 27202c81 published "Factory v2 — fünf Entscheidungen, offene Lücken" (19:50, $4.31) to Audiobookshelf.
-- **Next:** W1 per `tdd/12-plan.md` — default start Wed 2026-10-28 after the `iu` weekly reset, or earlier
-  on `me` at the owner's go. Owner comments arrive in the plannotator Inbox thread
+- **v2.1 (same day, after the owner's voice reply to the podcast, `feedback/2026-10-24-owner-podcast-reply.md`):**
+  DBOS adopted on Node with short workflows (waiting lives in tables); cheap models used freely for
+  everything except implementation (€500 company budget; review is the line to watch); a two-account
+  balance goal with a weekly tuning job; §4 recentred on what a Claude Code session gets, edge cases
+  moved to appendix D; Argo fully on the phone; Hermes restructured in W6; W1 starts on `me` Mon 26 Oct.
+- **Next:** W1 per `tdd/12-plan.md` — default start on the `me` account Mon 2026-10-26. Owner comments arrive in the plannotator Inbox thread
   msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 (resume command in the v1 section below).
 
 ---

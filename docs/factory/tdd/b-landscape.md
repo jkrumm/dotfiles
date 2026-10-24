@@ -10,7 +10,7 @@ Sources: `research/2026-10-24-*.md` and v1's `research/`.
 | **oh-my-hermes** | an operating layer around Hermes Agent | the claim ladder — planned, reported done, verified (§3 "done means observed") | its workflows; Hermes stays thin |
 | **pstack** (Lauren Tan) | Cursor playbooks behind a very high PR rate | the brief re-sent on every spawn; checks keyed to a commit, voided by a new one; one writer per branch; a reviewer from another model family (§4) | the plugin |
 | **Gas Town / Beads** | a multi-agent town on a git-backed tracker | the ready queue with blockers; Witness; a merge lane (§4) | beads' runtime: inert cross-repo deps, fixed 5-minute lease, writes into work repos |
-| **DBOS Transact** | durable workflows as a Postgres-backed library | evaluated in depth (§6); its fork/rewind idea survives as Argo's re-verify intent | the engine |
+| **DBOS Transact** | durable workflows as a Postgres-backed library | durable steps, queues, schedules and run history for the factory service (§6) | long-lived workflows — ours stay short |
 | **oRPC + trpc-cli** | typed RPC with OpenAPI; a CLI from the same router | the factory's API and CLI (§10) | — |
 | **cyclopts**, **incur** | code-derived CLIs (Python; TypeScript 0.7) | the standard to meet | Python for a TypeScript consumer; incur too young |
 | **pele** (obsidianmd) | Mermaid syntax rendered to themeable SVG, zero dependencies | this document's diagrams; the dataviz skill and Argo next (§10). Pinned: three weeks old | — |

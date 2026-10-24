@@ -9,8 +9,8 @@ Each is decided and the plan runs on it; each is cheap to flip before its wave.
 
 | Choice | Decided | Alternative | Why this way |
 |-|-|-|-|
-| Durable state | reconcile loop over Postgres, in Bun | DBOS on Postgres, on Node | every step re-reads the world anyway; no replay hazards; stays on Bun (§6) |
-| Language | TypeScript on Bun; oRPC + trpc-cli | Python with cyclopts | one language and one database with Argo; trpc-cli gives the code-derived CLI you liked in cyclopts |
+| Durable state | DBOS on Postgres, short workflows, on Node | a hand-written loop in Bun (v1's spike design) | queues, schedules and run history come for free; short workflows avoid DBOS' pitfalls (§6) |
+| Language | TypeScript (Node for the factory service, Bun elsewhere); oRPC + trpc-cli | Python with cyclopts | one language and one database with Argo; trpc-cli gives the code-derived CLI you liked in cyclopts |
 | Mothers | fleet mothers own multi-wave plans; everything else gets a fresh worker | a mother wakes for every Task in her project | most wakes would be cold after an hour anyway; workers with a good brief cost less |
 | CLI name | `factory`, with `wave`, `task`, `issue` under it | `wave` at the top | the CLI covers issues, jobs, projects and decisions too |
 | Push | Argo web push | ntfy | one app fewer; ntfy if iOS web push proves unreliable |

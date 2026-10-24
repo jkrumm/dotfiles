@@ -26,16 +26,16 @@ shortened, the full text is in `feedback/2026-10-23-owner-comments-raw.md`.
 | 17 | Not Renovate; upgrades need changelogs and real adoption | the deps job opens planned upgrade waves (§9) |
 | 18 | Only AGENTS.md | measured on AGENTS.md (§3, §9) |
 | 19 | Dogfooding includes missing pieces upstream | the basalt-ui upstream job covers both (§9) |
-| 20 | Be token-efficient, take Swamp's deterministic pieces | jobs are code, zero tokens when green (§9) |
+| 20 | Be token-efficient, take Swamp's deterministic pieces | jobs are code; a cheap model writes up findings; a clean run costs nothing (§9) |
 | 21 | Drop the Beads name | dropped |
 | 22 | Slack only for Hermes? ntfy? | Slack = Hermes, the adapter and the dead-man alert; push from Argo (§10, §13) |
 | 23 | Too much goes to herdr | herdr = code only (§5) |
 | 24 | A proper factory CLI, take the good parts of bd | ready queue and dependencies, our names (§4, appendix B) |
-| 25 | Not sure about durable execution and DBOS | evaluated again; a reconcile loop wins for a control plane (§6) |
+| 25 | Not sure about durable execution and DBOS | DBOS on Postgres with short workflows (§6) |
 | 26 | No "interim" | no shim; plannotator stays the review surface until *Artifacts* lands in W5 |
 | 27 | Don't push waves to IU; let non-urgent work wait | no spill; normal and upkeep classes wait (§5) |
 | 28 | The split adds friction; the mini is always on | all on the mini |
-| 29 | Maybe DBOS was used wrong | it was; see §6 for why v2 still does not adopt it |
+| 29 | Maybe DBOS was used wrong | it was; adopted, on Node (§6) |
 | 30 | CLI over MCP, generated from the code | one router → CLI, API, docs (§10) |
 | 31 | Use more of Umami | traffic job once events and goals are wired in (§9) |
 | 32 | "B. All on the mini" | adopted |
@@ -63,3 +63,19 @@ shortened, the full text is in `feedback/2026-10-23-owner-comments-raw.md`.
 | Clean up herdr tabs | six finished tabs closed (SourceRoot 1, 2, factory; dotfiles 1–3); the two-accounts workers were closed by their orchestrator, whose final tab stays open for you |
 | New report and a podcast | this document; the episode "Factory v2 — fünf Entscheidungen, offene Lücken" (19:50, Audiobookshelf → Podcasts) |
 | Spend less than the last run | five research jobs on IU API ($1.25), digests on Haiku, panel and implementer on Sonnet |
+
+## Your reply to the podcast (2026-10-24)
+
+Verbatim in `feedback/2026-10-24-owner-podcast-reply.md`.
+
+| You said | Now |
+|-|-|
+| The DBOS blocker is unclear — use Node if that is it | DBOS adopted on Node with short workflows; the pitfalls the review found vanish with that rule (§6) |
+| IU API tokens are avoided too aggressively; €500 is fine, just not for implementing | cheap models do dedup, root causes, linking, JSON, wave planning, naming, every message and the briefing (§5) |
+| Watch that both subscriptions fill up balanced, switching rarely but smartly | balance goal and measures, weekly tuning from the picker's own data (§5) |
+| Too many odd worries; classify, order, then let Claude Code work | §4 centres on what a session gets; edge-case handling moved to appendix D |
+| Slack barely needed; briefing structured in Argo | Slack keeps Hermes' chat and Slack-only sources; briefing on *Now* (§10) |
+| Why less on the phone? | nothing is less: push notifies of two things, Argo shows everything on the phone (§2, §10) |
+| Hermes needs restructuring | W6: chat front over the factory API, crons become jobs (§10) |
+| We can build on `me` | W1 starts on `me` on Mon 26 Oct (§12) |
+| The report could be more precise | v2.1 is shorter; detail moved to appendices |

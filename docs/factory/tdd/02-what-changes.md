@@ -8,8 +8,10 @@
   `factory issue new weatherorb "…"`. It is planned, queued, built in herdr, verified and shipped; you
   read about it in the morning briefing.
 - **You look at one place:** Argo on the mini — *Now* (anything that needs you; usually nothing),
-  *Projects*, *Factory* (what runs, what waits for capacity and until when), *Usage*, *Artifacts*.
-- **You get pinged for two things:** a decision card that is genuinely yours, and the 07:00 briefing.
+  *Projects*, *Factory* (what runs, what waits for capacity and until when), *Usage*, *Artifacts* —
+  all of it on the phone as on the computer, with mobile layouts.
+- **Push notifies you of two things:** a decision card that is genuinely yours, and the 07:00 briefing.
+  Everything else is in Argo when you look.
   No evening briefing. Slack stops being an alert inbox; the one alert left there is "the mini or the
   factory is down".
 - **Every text the factory writes to you is three lines:** what happened, what it did, what you decide

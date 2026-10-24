@@ -38,6 +38,7 @@ SECTIONS = [
     ("ta", "A", "tdd/a-review-log.md"),
     ("tb", "B", "tdd/b-landscape.md"),
     ("tc", "C", "tdd/c-from-v1.md"),
+    ("td", "D", "tdd/d-edge-cases.md"),
     ("tf", "", "tdd/faq.md"),
 ]
 SECTIONS_V1 = [

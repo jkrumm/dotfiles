@@ -1,7 +1,7 @@
 # 9. Upkeep jobs
 
-A job is a small TypeScript module, not an agent. Code does the looking; a model is called only when
-the code found something worth a sentence. Swamp's ideas, without its runtime: typed steps in code,
+A job is a small TypeScript module, not an agent. Code does the looking; a cheap model writes up and
+groups what it found. Swamp's ideas, without its runtime: typed steps in code,
 assertions as first-class steps, nothing spent when everything is fine.
 
 ```ts
@@ -30,7 +30,7 @@ A job never edits a repo. Code changes become Tasks and go through the loop.
 | **docs and agent setup** | W6 | generated AGENTS.md blocks vs a fresh render; AGENTS.md size, skill count, resident tool tokens | upkeep when drifted or over budget |
 | **code health** | W6 | `make quality` over the week's changes | one batched upkeep Issue per project |
 | **infra** | W1: backups and the restore drill; W6: the rest | disks, certs, backup age and a weekly restore test, containers, databases, ClickHouse, the mini's memory and swap | an incident with its runbook |
-| **briefing** | W5, with *Now* | the night's closed, stuck and waiting Issues, decisions, capacity | the 07:00 Argo briefing and push — a template, no model; audio through audio-gateway if enabled |
+| **briefing** | W5, with *Now* | the night's closed, stuck and waiting Issues, decisions, capacity | the 07:00 Argo briefing and push, written by a cheap model under the three-line rule; audio through audio-gateway if enabled |
 
 The *changelog* is not a job of its own: the brain page section is written from conventional commits
 on each merge (§7).

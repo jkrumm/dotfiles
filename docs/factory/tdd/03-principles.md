@@ -2,9 +2,9 @@
 
 Eight rules. A design choice that breaks one is wrong.
 
-1. **Deterministic before cheap before expensive.** If a script can decide it, a script decides it.
-   If it needs judgment but no code change, a cheap model decides it. Only writing code earns a Max
-   session.
+1. **Code, cheap models, Claude Code — in that order.** What a script can decide, a script decides.
+   Everything else that needs judgment or words goes to a cheap model, freely. Implementation goes to
+   Claude Code.
 2. **Max writes code, IU API tokens think.** Claude Code on the `iu` and `me` Max accounts is the only
    thing that changes a repo, and it runs in herdr, where you can watch it. IU API tokens pay for
    gateways, OpenCode, Hermes, research and review. A full Max pool means waiting, never spilling.

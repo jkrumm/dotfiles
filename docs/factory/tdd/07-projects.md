@@ -74,7 +74,7 @@ Promoting a project is one line in its manifest.
 - **TickTick** stays your personal list. A project's manifest names its list; Argo shows the open items
   on the project page, and an item tagged `#factory` becomes a request.
 - **The brain** keeps one page per project (`brain/Projects/<project>.md`). The factory writes only its
-  *Changelog* section, grouped from conventional commits — no model involved.
+  *Changelog* section, written by a cheap model from the merged commits.
 
 ## Work repos
 

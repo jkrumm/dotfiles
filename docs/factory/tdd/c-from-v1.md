@@ -4,7 +4,7 @@
 
 | v1 decision | Your answer | Now |
 |-|-|-|
-| D1 IU API budget for mother wakes (≈ $294/week) | cheap models judge; Max mothers implement | gone; IU add-on ≈ $10–40/week, mostly review (§5) |
+| D1 IU API budget for mother wakes (≈ $294/week) | cheap models judge; Max mothers implement | gone; cheap models are used freely within your €500, review is the line to watch (§5) |
 | D2 Claude tier | you added a second subscription | done; a third is yours whenever (§13) |
 | D3 autonomy in work repos | some IuRoot paths auto-merge; not monitored | §7 |
 | D4 who writes holdout scenarios | "don't understand" | not a question (§4) |
@@ -15,7 +15,7 @@
 | ADR | v1 | v2 |
 |-|-|-|
 | 001 task system | ledger tasks with bd's verbs | revised: `factory task`, our names, Postgres |
-| 002 durable execution | ledger + statecharts, no engine | kept in substance, on Postgres; DBOS re-evaluated and declined for a different reason (§6) |
+| 002 durable execution | ledger + statecharts, no engine | superseded: DBOS on Postgres with short workflows; the ledger design is the fallback (§6) |
 | 003 correlation | deterministic only | revised: + decision-model score, investigator merge/split, labels |
 | 004 CLI vs MCP | CLI-first | kept: generated from one router |
 | 005 artifact review | own service, plannotator behind `rv` | revised: *Artifacts* in Argo at W5, no `rv` |

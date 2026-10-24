@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TB
   subgraph mini[Mac mini — always on]
-    F[factory<br/>Bun · reconcile loop]
+    F[factory<br/>Node · DBOS]
     PG[(Postgres 18<br/>factory · argo)]
     A[Argo<br/>cockpit]
     AGW[agent-gateway<br/>+ OpenCode server]
@@ -48,7 +48,8 @@ the homelab Kuma, which alerts through its own channel if the heartbeat stops.
 
 Argo moves from the VPS to the mini at W5 and reads the factory's Postgres directly: views for reads,
 `LISTEN/NOTIFY` for live updates. Its life pages and their data move with it. Each page answers named
-questions (v1's question catalogue, `design/argo.md` §2), and every number shows its age.
+questions (v1's question catalogue, `design/argo.md` §2), and every number shows its age. All of it
+works on the phone as on the computer — it is a PWA behind the tailnet, with mobile layouts.
 
 | Page | Answers |
 |-|-|
@@ -65,8 +66,9 @@ basalt-ui first.
 
 ## Notifications
 
-Push comes from Argo (web push to the installed app) for exactly two things: a decision card and the
-morning briefing. Slack keeps Hermes' chat, the Slack adapter's channels and the dead-man alert.
+Argo's web push notifies for two things — a decision card and the morning briefing — and opens the
+matching page. Slack is nearly gone: it keeps Hermes' chat and the channels of the few sources that
+can only post to Slack. The dead-man alert comes from Kuma, through whichever channel Kuma uses.
 
 ## The `factory` CLI
 
@@ -93,8 +95,9 @@ json|md`, exits non-zero on failure and never prompts an agent.
   that use it call the `agw` CLI.
 - **`rd`** keeps working; its spawn, fan, merge and say verbs move under `factory` in W6 and `rd`
   becomes an alias.
-- **Hermes** is a thin chat: status from the factory API, "do X" becomes `factory issue new`. It never
-  implements.
+- **Hermes is restructured in W6** as the factory's chat front: status and requests through the factory
+  API ("do X" becomes `factory issue new`), its crons become factory jobs, its narration becomes the
+  briefing. It never implements.
 - **Diagrams** are written as Mermaid and rendered by pele, here and in the dataviz skill and Argo's
   artifact view (W6).
 

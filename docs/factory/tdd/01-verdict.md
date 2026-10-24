@@ -3,7 +3,7 @@
 **Build one loop that takes every piece of work — an outage, a bug, a stale dependency, a feature you
 asked for — through the same path: deterministic code does everything it can, cheap models judge,
 Claude Code on your two Max accounts writes every line of code in herdr, and verification gates every
-ship. It runs as one new `factory` service on the mini — a reconcile loop over Postgres, in Bun — with
+ship. It runs as one new `factory` service on the mini — DBOS workflows over Postgres, on Node — with
 Argo as the cockpit on the same box. Warden is switched off, not migrated.**
 
 The scarce resources are your attention and the Max windows, not money. 32 % of new items reached
@@ -29,15 +29,16 @@ flowchart TB
 
 1. **One loop for all work.** Incidents, bugs, hygiene findings, upgrades and your requests are Issues;
    a wave plan is a set of Tasks. Nothing has a side door.
-2. **Three engines, one job each.** Deterministic code spends nothing. Cheap models on IU API tokens
-   (Haiku 5.5, DeepSeek V4.1 Flash, agent-gateway's decision model) triage, investigate, plan and
-   review. Claude Code on Max writes code — only there, and only in herdr.
+2. **Claude Code implements; cheap models do the rest.** Claude Code on Max, in herdr, does all
+   implementation. Cheap models on IU API tokens (DeepSeek V4.1 Flash, Haiku 5.5, the decision model)
+   do everything else that needs a model — dedup, root causes, planning, wording, review. Plain code
+   does what needs no model.
 3. **Two Max accounts, one pool.** The account is picked at spawn and kept while its cache is warm.
    Urgent work takes any headroom, normal work respects pace, upkeep uses capacity that would lapse.
    Nothing spills to IU API tokens; work waits for the reset.
-4. **A reconcile loop, not a workflow engine.** Every few seconds each open Issue and Task is
-   re-observed, its state derived from facts, and at most one next action taken. A crash, a redeploy
-   or a reboot costs one tick.
+4. **Short durable workflows.** DBOS runs each stage — investigate, verify and merge, deploy — as a
+   workflow of a few minutes; anything that waits lives in a table. A crash or a redeploy repeats at
+   most one short stage.
 5. **Every repo describes itself** in `project.yaml` and implements one make contract that CI, agents,
    review and the ship step all call.
 6. **Dedup is deterministic first and learns.** Rules group signals (F1 0.889 on the held-out set);
@@ -48,7 +49,8 @@ flowchart TB
 8. **Verification gates shipping, and the candidate cannot weaken it.** Checks run on the merge result
    with the base branch's own Makefile and tests; a failed post-deploy check rolls back to the last
    deploy that held.
-9. **Upkeep is cheap code.** Jobs are small scripts that spend zero tokens when nothing is wrong.
+9. **Upkeep is cheap.** Jobs are small scripts; a cheap model writes up what they find, and a clean run
+   costs nothing.
 10. **You decide business only** — product direction, spend, irreversible data loss, other people —
     as a three-line card with a default and an expiry. SLO: under 1 % of items reach you.
 
