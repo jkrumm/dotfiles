@@ -21,7 +21,7 @@ fi
 # empty field and shift every later one.
 IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
   session_id transcript_path duration_ms \
-  rl_5h rl_5h_reset rl_wk cache_requests cache_hit cache_warm < <(
+  rl_5h rl_5h_reset rl_wk cache_requests cache_hit cache_warm rl_wk_reset < <(
   echo "$input" | jq -r '[
     .model.display_name // "Unknown",
     .effort.level // "auto",
@@ -37,9 +37,28 @@ IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
     (.rate_limits.seven_day.used_percentage // "" | if . == "" then . else round end),
     .prompt_cache.requests // 0,
     .prompt_cache.hit_ratio // "",
-    (.prompt_cache.warm | tostring)
+    (.prompt_cache.warm | tostring),
+    .rate_limits.seven_day.resets_at // ""
   ] | map(tostring) | join("\u001f")'
 )
+
+# ── Claude account (docs/claude-accounts.md) ───────────────────────────────────
+# Registry id for this session (CLAUDE_CONFIG_DIR unset -> the default-dir account) and
+# how many accounts are enabled; the badge only shows with more than one.
+_self="${BASH_SOURCE[0]}"
+[ -L "$_self" ] && _self=$(readlink "$_self")
+_ACCOUNTS_REG="$(cd "$(dirname "$_self")" && pwd)/../config/claude-accounts.json"
+account_id="a"
+account_badge=""
+if [ -f "$_ACCOUNTS_REG" ]; then
+  IFS=' ' read -r account_id _accounts_enabled < <(jq -r --arg d "${CLAUDE_CONFIG_DIR:-}" --arg h "$HOME" '
+    .accounts | to_entries as $e
+    | ((($e | map(select(.value.dir != null and ($h + (.value.dir | ltrimstr("~"))) == $d)) | .[0].key)
+        // ($e | map(select(.value.dir == null)) | .[0].key) // "a") + " " + ($e | map(select(.value.enabled)) | length | tostring))
+  ' "$_ACCOUNTS_REG" 2>/dev/null)
+  : "${account_id:=a}"
+  [ "${_accounts_enabled:-1}" -gt 1 ] && account_badge=$(printf '%s' "$account_id" | tr '[:lower:]' '[:upper:]')
+fi
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Effort comes from stdin: it is per-model since 2.1.251, so settings.json's
@@ -187,6 +206,13 @@ if [ -n "$rl_5h" ]; then
         -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}}" \
         http://localhost:7705/api/usage >/dev/null 2>&1 ) &
     disown 2>/dev/null
+    # Same throttle feeds the per-account quota cache (claude-account record, atomic).
+    _rec=(claude-account record --account "$account_id" --s "$rl_5h")
+    [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
+    [ -n "$rl_wk" ] && _rec+=(--w "$rl_wk")
+    [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && _rec+=(--w-reset "$rl_wk_reset")
+    ( PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
+    disown 2>/dev/null
   fi
 fi
 
@@ -248,7 +274,7 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ── Output ─────────────────────────────────────────────────────────────────────
-line1="${auth_mode} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
+line1="${auth_mode}${account_badge:+ $account_badge} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
 [ -n "$tokens_fmt" ] && line1="${line1} | Σ${tokens_fmt}"
 [ -n "$cache_part" ] && line1="${line1} | ${cache_part}"
 line1="${line1} | ${duration}"
