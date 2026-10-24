@@ -1,125 +1,79 @@
-# Claude accounts — orchestrator handover (2026-10-24 ~18:30)
+# Claude accounts — orchestrator handover (2026-10-24 ~21:00)
 
-Spec and rules: `docs/claude-accounts.md` (read fully). You are the orchestrator for
-the rest of this project: merge W1, deploy, then run W2 to completion. Workers are
-`rd fan` tabs; you review (`mcp__agent-gateway__review`), send fixes with `rd say`,
-merge with `rd merge`, deploy, verify. Never edit worker-owned files yourself.
+Spec: `docs/claude-accounts.md` (read fully). You are the **final orchestrator** for this project:
+land the last open PRs, verify the whole concept end to end on the mini AND the MacBook, monitor it,
+and close the project out. Workers are `rd fan` tabs; review with `mcp__agent-gateway__review`
+(submit → `job_wait`), fixes via `rd say`, land with `rd merge`, deploy, verify. One tab per open
+change at most — the owner asked to keep the tab count small; `rd close` / `rd fan --clean` as soon
+as something lands.
 
-## Accounts (live)
+## Accounts
 
-| id | plan | dir | state |
+| id | plan | dir | notes |
 |-|-|-|-|
-| `iu` | IU-paid Max 20x | `~/.claude` (CLAUDE_CONFIG_DIR **unset**) | ~88% weekly, resets Tue 17:00 |
-| `me` | personal Max 5x | `~/.claude-me` (keychain `Claude Code-credentials-7253dcbc`) | logged in 2026-10-24, 0% |
+| `iu` | IU-paid Max 20x | `~/.claude` (CLAUDE_CONFIG_DIR **unset**) | weekly ~89 %, resets Wed 2026-10-28 17:00 |
+| `me` | personal Max 5x | `~/.claude-me` (keychain `Claude Code-credentials-7253dcbc`) | mini only so far; MacBook has no `me` login |
 
-`~/.claude-me` symlinks skills/agents/hooks/rules/output-styles/plugins/CLAUDE.md/projects/logs
-to `~/.claude`; `settings.json` is rendered. `~/.claude-b` is gone (renamed).
+## Owner rules (non-negotiable)
 
-## Merged and live (W0)
+- Account chosen **at spawn, never mid-session**; `--resume` stays on the session's account (PR #31).
+- **Development runs on the Max subscriptions only** (global CLAUDE.md, #30): `ca`/`cap`/`cdf`/`cdp`
+  are gone, `rd` pauses instead of spilling to IU. IU tokens are for gateways/OpenCode/Hermes only.
+- Split by lane, route automatically. Picker rule v1.1: expiring capacity → **pace** (an over-pace
+  home yields to an under-pace other) → **session balance** (emptier fresh 5h window) → home → other.
+  Today interactive/headless/review → `me` (pace) because iu is far over pace.
 
-- dotfiles #26: registry, `claude-account` picker (`~/.local/bin`), per-account quota cache
-  (`~/.cache/claude-accounts/<id>.*`), statusline feed, session-env `account`, fetch_usage reader.
-  Registry on master still says ids `a`/`b` with `~/.claude-b` until W1 merges.
-- usage-tracker #9: `account` column; all historical Max rows = `a`. Argo receives but drops `account`.
+## Live (merged + deployed + verified)
 
-## Open PRs (W1) — finish these first
+| repo | what |
+|-|-|
+| dotfiles | registry `iu`/`me`, `claude-account` picker (pace + session balance), `c`/`cs`/`cf` pick, `rd wave/fan` pick (no IU spill), per-account MCP registration, per-account claude-auth fallback, `make claude-accounts-verify` (in doctor) / `-stamp`, `scripts/claude-accounts-e2e.sh`, keepalive LaunchAgent (06:30 `refresh --all`), heartbeat quota line both accounts, statusline POST per account |
+| agent-gateway | workers pick per spawn (`agent-gateway:<tool>`), wall → other account → iu, session pins, `session_env.account`, sessions-log `account` (b8f2d0c); `/api/usage` `{data, accounts}` from the cache (SWR), overview header + account column, `quota` in the overview pushed to Argo |
+| usage-tracker | `account` column (iu/me), `quota_sample` + `account_pick` tables synced to Argo, agent-gateway-sessions rows attributed from the line `account`, NULL→iu repair one-off (user_version 2), conditional sync mark |
+| argo | `account` on usage_record (COALESCE upsert, normalised ingest), account filter/groupBy, quota history (`/usage/quota`, `/usage/account-picks/summary`) + "Claude accounts" section |
+| tinycast-extensions | both accounts from Argo `GET /agents/overview` → `latest.snapshot.quota` (agent-gateway stays loopback-only), local fallback; deployed on the MacBook 77866aa |
 
-| repo | PR | branch | worker tab (agent name) | state at handover |
-|-|-|-|-|-|
-| dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | **merged + deployed** 2026-10-24 (round 4 fixed auth_failed re-probe); MCP registered for both accounts |
-| usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | **merged + deployed** 2026-10-24; DB `iu|max|623576`, user_version 1 |
-| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | **merged + deployed** aa601ac 2026-10-24, verify OK |
+E2E proof 2026-10-24 ~17:30–20:45Z: verifier PASS on every path (launchers, real Haiku runs iu/me,
+subagent inherits, rd wave/fan → me, agent-gateway otel worker → me incl. its session row, 0 Max rows
+without account since rollout, displays). `claude-accounts-e2e.sh` all pass after #12.
 
-**Merge order (ids switch together):** usage-tracker #10 and dotfiles #27 back to back, then
-agent-gateway #32. Before `rd merge`: `gh pr ready <n>`. Gate:
-- dotfiles: `rd merge dotfiles --check 'make hooks-test jobs-test secrets-lint && bun test scripts/claude-account.test.ts' feat/claude-accounts-w1`
-  (full `make check` fails ONLY on 8 pre-existing unmapped `com.iu.teamchat-*` LaunchAgents in
-  architecture-check — not ours; tell the owner, don't fix).
-- usage-tracker / agent-gateway: default `rd merge <repo> <branch>`.
+## Open — land these first
 
-**Deploy after merge:**
-- dotfiles: `git pull`, `make claude-accounts-setup`, then the per-account MCP registration
-  (`make setup` runs it; at minimum the MCP loop so `me` has chrome-devtools + research-gateway +
-  agent-gateway), `source ~/.zshrc` note for the owner's open shells.
-- usage-tracker: `make deploy` (a launchctl "Bootstrap failed: 5" means retry once), then verify
-  `sqlite3 ~/.local/share/usage-tracker/usage.db "select account,billing,count(*) from usage_record group by 1,2"` → `iu|max|…`, NULL for iu billing.
-- agent-gateway: its own `make deploy` / reload per its AGENTS.md; verify `/api/health`.
-- `rd fan --clean <repo>` for each repo afterwards.
-
-## W2 state (live log)
-
-Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast-extensions}.md`.
-
-| repo | branch | tab | state |
+| repo | PR | tab | state |
 |-|-|-|-|
-| argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
-| dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (account-less session_env lines; newest is the 17:29:36Z otel probe via a stale MCP child — ages out 2026-10-25 17:30Z) → then `make claude-accounts-stamp` |
-| usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
-| argo (W2c) | #201 | — | **merged + live** f0053a4; quota + picks syncing (verified `/usage/quota`) |
-| tinycast fix | #2 | — | **merged** (brief had the wrong Argo envelope). **deployed on the MacBook** 77866aa (ssh iumac `make deploy`); queued ask-human request retired |
-| usage-tracker fix | #12 | — | **merged + deployed**: line account → session_env → iu; NULL→iu repair one-off (user_version 2); conditional sync mark. Live: agent-gateway otel session row → me. e2e re-run all pass |
-| dotfiles pace guard | 6da5ed5..4fb37c9 | — | **merged (owner drove the tab)**: pace guard + session balance; #30 Herdr work Max-only (ca/cap/cdf/cdp removed, rd pauses instead of IU spill). Verify: interactive/headless/review → me (pace) |
-| argo W2d | feat/usage-payer | `argo-usage-payer` | owner: payer split iu-sub/me-sub/iu-api/me-api, me blue / iu yellow, 48 h usage-tracker↔Argo reconciliation report |
-| tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
-| agent-gateway | #33 | — | **merged + deployed** b1c9c98; /api/usage accounts + overview header live |
+| argo | #202 feat/usage-payer | `argo-usage-payer` | payer split `iu-sub`/`me-sub`/`iu-api`/`me-api`(=billing openrouter), colours me blue / iu gold-orange, UTC buckets, **migration 0024 changes prod data** (deletes 24,803 NULL-machine duplicate rows = $3,081 double count; sets account=iu on 7,165 old Max rows) with every touched row archived + restore SQL in docs/usage-reconciliation.md. Deep review job `bd87b289-5c51-46d2-9d61-1f5fe76a7e5c` (job_wait it). Its 48 h reconciliation: everything matches except 21 iu-api rows the VPS gateways post directly (expected). After deploy: screenshot the usage page (`make design-shot` in argo, or `@verifier`) — not yet seen rendered. Note: the tab showed an autocompact prompt; dismiss with Esc before `rd say`. |
+| dotfiles | #31 feat/resume-pins-account | `dotfiles-claude-accounts-pace` (wR:p1V) | `c --resume` pins to the session's account via `claude-account session <id>`; owner-driven, mid-review in that tab — let it finish, then verify and close the tab |
 
-Decisions taken during W2:
-- **W2c added (owner, 2026-10-24):** track both accounts' 5h/7d quota historically + picker decisions
-  (usage-tracker `quota_sample`/`account_pick` → Argo `/usage/quota-samples`, `/usage/account-picks` →
-  usage-page "Claude accounts" section). Part of W2 done-ness.
-- **Tinycast reads quota via Argo, not the tailnet door.** agent-gateway is loopback-only by design
-  (`exclude agent-gateway` in `~/.config/caddy-tailnet.ports`, index.ts bind comment); the spec's door
-  never existed (404). agent-gateway adds `quota` to `/api/overview`, which it already pushes to Argo
-  (≤10 min); Argo stores it verbatim; Tinycast reads `GET /agents/overview`.
-- `/api/usage` GET builds from `claude-account usage --json` (cache-only); POSTs gain optional
-  `account` (fixes a live bug: a `me` statusline POST overwrites iu's numbers). Merge order:
-  agent-gateway W2b before dotfiles W2a (W2a's producers send `account`).
-- Argo upsert: `account = COALESCE(excluded.account, usage_record.account)` — null means unknown, never clears a backfilled value.
-- statusline POST throttle is per account now (dotfiles fix commit): a global stamp let `me` workers starve iu's POST (`/api/usage` `data` stayed null).
-- Heartbeat quota line moved into W2a (same file it already owns), read locally from `claude-account usage --json`.
+## Final verification checklist (the owner's ask: "fully verify it all, then round it up")
 
-## W2 (original plan)
+1. `make claude-accounts-verify` 0 FAIL (the one FAIL today is account-less session_env lines; newest is a 17:29:36Z probe via a stale MCP child, ages out 2026-10-25 17:30Z) → `make claude-accounts-stamp`.
+2. `scripts/claude-accounts-e2e.sh --subagent` all pass.
+3. Picks behave: `tail ~/.local/share/claude-accounts/picks.jsonl` — reasons pace/session/home plausible against `claude-account usage`.
+4. No running session ever switched account: for every session id in the last 24 h `session_env`, one account only (a resumed session keeps it — #31).
+5. Attribution: `sqlite3 ~/.local/share/usage-tracker/usage.db` — no billing=max row with NULL account; per machine × account counts plausible (MacBook rows appear as `MacBook Pro (M2 Max)`).
+6. Argo: payer split renders, reconciliation re-run after 0024 (docs/usage-reconciliation.md), quota history chart shows both accounts.
+7. Displays: `/api/usage`, overview header, Tinycast (MacBook menu bar shows `iu x/y · me x/y`), heartbeat quota line.
+8. MacBook (below) done and verified.
+9. Stale agent-gateway MCP children: sessions started before agent-gateway #32 pick nothing (run on iu) until restarted — `make deploy RESTART_MCP=1` in agent-gateway when no long session depends on its MCP, or let them age out.
+10. Monitor for a day: picks.jsonl distribution, `quota_sample` series in Argo, heartbeat. Then write the closing note (docs/claude-accounts.md status → W2 done; W3 = tune from picks after 2 weeks; 20x upgrade decision for `me` if its weekly stays > 80 %).
 
-- **W2a — verify, E2E, keepalive (dotfiles):** brief ready at
-  `~/.local/share/claude-accounts-w1/w2-dotfiles.md` → `rd fan dotfiles ~/.local/share/claude-accounts-w1/w2-dotfiles.md`.
-  Covers `make claude-accounts-verify` (in `make doctor`), `scripts/claude-accounts-e2e.sh` with
-  real Haiku spawns per account + break tests, Claude-Code-update detection, daily
-  `claude -p "/usage"` login keepalive LaunchAgent (no inference, no window priming), Operate docs.
-- **W2b — displays (write briefs yourself, one per repo, disjoint):**
-  agent-gateway `/api/usage` → `{accounts:{iu,me}}` + herdr overview pane shows both quotas and the
-  account per agent; argo stores/filters `account` then run `bun run src/cli.ts resync-account` in
-  usage-tracker once; tinycast-extensions `extension/src/usage/quota.ts` reads
-  `https://agent-gateway.mini.jkrumm.com/api/usage` (tailnet door), shows both accounts, local
-  fallback; heartbeat quota line both accounts.
-- **E2E proof you run yourself at the end** (delegate to `@verifier` if it drags context): every
-  launcher `c`/`cs`/`cf` (pick interactive → iu), `ca`/`cap`/`claude_iu` (IU endpoint, untouched),
-  `rd wave` + `rd fan` (→ me unless me walled), an agent-gateway worker job (→ me for non-review
-  tools), and confirm `session_env.account` + usage-tracker rows per path. Subagents inherit the
-  parent's account (same process) — confirm once.
+## MacBook
 
-## E2E proof (2026-10-24 ~17:30Z, @verifier + orchestrator)
+The MacBook (ssh `iumac`, user `johannes.krumm`) is behind: dotfiles at 254a23d with an uncommitted
+`docs/macbook.md` edit, no `claude-account`, no `~/.claude-me`. Its Claude Code usage reaches the mini's
+usage-tracker through the rsync mirror (`~/.claude/projects` + `~/.claude/logs`, src/remote.ts), today
+all `iu`. The owner starts a MacBook agent with `~/claude-accounts-macbook-handover.md` (copied there;
+source `~/.local/share/claude-accounts-final/macbook-handover.md` on the mini). Verify its result from
+the mini: MacBook rows with account `me` appear after a MacBook `me` session + the next ingest.
 
-All paths PASS: c/cs/cf → iu (dry + static), ca/cap/claude_iu untouched, real Haiku runs iu/me attributed
-(usage_record + session_env), subagent inherits me, rd wave/fan → me (picks + `MAX ME` statusline),
-agent-gateway otel worker → me (fresh MCP child: pick `agent-gateway:otel → me/home`, session_env account me,
-claude-code rows me), 0 Max rows without account since rollout, displays (/api/usage, overview header,
-Argo quota series) show both. Break tests all pass. Fixture picks from W1 testing removed from picks.jsonl
-(backup `picks.jsonl.bak-2026-10-24`) and account_pick before sync.
-- **Stale MCP children:** `make deploy` leaves per-session agent-gateway MCP children alive; sessions started
-  before #32 keep picking nothing (run on iu) until restarted (or `make deploy RESTART_MCP=1`).
+## Known gaps / decisions
 
-## Known gaps / decisions already made
-
-- **agent-gateway pre-existing test failure (not ours, owner to decide):** `tests/dispatch-worktree.test.ts:1121`
-  `GIT_DENY_CREDENTIALS_ENV` fails on master because the CommandLineTools system gitconfig
-  (`/Library/Developer/CommandLineTools/usr/share/git-core/gitconfig`) sets `credential.helper osxkeychain`
-  and the overlay doesn't set `GIT_CONFIG_NOSYSTEM=1` — worker git can reach the keychain helper. Merges used
-  `rd merge agent-gateway --check 'GIT_CONFIG_NOSYSTEM=1 make check' …`.
-
-- Spill sentinel is stdout `spill` + exit 3; registry unreadable = exit 4 + `unset` (iu safe default).
-- `claude-auth.zsh` token fallback applies to iu only (live bug fixed in #27).
-- herdr restart may resume a `me` session on iu (cold cache) — accepted for now; check whether
-  herdr persists pane `--env`.
-- No `op://mini/claude-me/oauth-token`; `me` has keychain login only.
-- Owner said: name accounts `iu` / `me`; split by responsibility (lane), not project; route
-  automatically; iterate on thresholds from `~/.local/share/claude-accounts/picks.jsonl` (W3).
+- agent-gateway pre-existing test failure: `tests/dispatch-worktree.test.ts:1121` fails because the
+  CommandLineTools system gitconfig sets `credential.helper osxkeychain` and the worker git overlay does
+  not set `GIT_CONFIG_NOSYSTEM=1` (worker git can reach the keychain helper). Merges use
+  `rd merge agent-gateway --check 'GIT_CONFIG_NOSYSTEM=1 make check' …`. Owner decision; not fixed.
+- dotfiles full `make check` fails only on 8 pre-existing unmapped `com.iu.teamchat-*` LaunchAgents.
+- herdr restart may resume a `me` pane on iu if herdr does not persist pane `--env` (unverified).
+- Argo upsert: `COALESCE(excluded.account, usage_record.account)` — null never clears.
+- Picks before 2026-10-24T16:25Z were W1 test fixtures and were removed (backup `picks.jsonl.bak-2026-10-24`).
+- Briefs of all workers: `~/.local/share/claude-accounts-w1/`, `~/.local/share/claude-accounts-w2/`.
