@@ -418,8 +418,8 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 `docs/{design,runbook,security-review}.md`. Ops via **`/secrets`**.
 
 **Keychain-cached by `make setup`:** `CLAUDE_SDK_API_KEY` + `CLAUDE_SDK_BASE_URL`
-(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `ca`,
-`cap` and `claude_iu`. `ANTHROPIC_API_KEY` is intentionally
+(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `claude_iu`
+and `oc`. `ANTHROPIC_API_KEY` is intentionally
 **never exported**: Claude Code falls back to the Max subscription when the key is
 absent, and exporting it bills API credits instead.
 
@@ -447,8 +447,6 @@ startup — `source ~/.zshrc` after editing.
 |-|-|-|
 | `c` | Max subscription | whatever `/model` last left it on |
 | `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
-| `ca [model]` | IU unified endpoint, native Anthropic route | default set in `config/zsh/claude.zsh`; served ids per `agw routing`, any as the first arg |
-| `cap` | picks a model from measured data (`modelpick`), then execs `ca` | `cap --list` prints the table; `cap -- <ca args>` passes through |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
 | `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
@@ -456,25 +454,7 @@ startup — `source ~/.zshrc` after editing.
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
-All share `~/.claude`, so skills, hooks, subagents and CLAUDE.md are identical;
-only auth and model change. `ca` talks to the endpoint's `/anthropic` route
-directly, so WebSearch/WebFetch and prompt caching both work. Its two tiers behave
-differently on purpose:
-
-- **`claude-*`** → `[1m]` is appended to the id and to every `ANTHROPIC_DEFAULT_*`
-  tier (not Haiku 4.5 — it really is a 200k model). All Claude models on this
-  route land on Bedrock `eu-west-1`; the `-eu` aliases add nothing and break
-  `count_tokens`.
-- **anything else** (gateway ids) → every `ANTHROPIC_DEFAULT_*` tier is pinned to
-  that same id (leave one on a `claude-*` default and subagents 400 against a model
-  the gateway doesn't serve), and the window comes from `_ca_ctx` (shared table:
-  `config/zsh/iu-models.sh`) + `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, never `[1m]` — a
-  `claude-*` name would make usage-tracker misbill it as Max quota. `_ca_ctx` is
-  deliberately conservative (200k unless measured): it is a *client-side budget*,
-  so setting it above the real window trades a clean auto-compact for a hard
-  mid-session rejection. The same file's `_ca_thinking` sets `MAX_THINKING_TOKENS`
-  for non-Claude gateway ids (DeepSeek, kimi, minimax) — the only reasoning-effort
-  control that reaches the gateway's Anthropic leg.
+`ca`, `cap`, `cdf` and `cdp` were removed 2026-10-24: development never runs on IU API tokens.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart

@@ -116,7 +116,7 @@ done <<<"$ACCOUNTS"
 # ── c. launcher matrix (static) ────────────────────────────────────────────────
 # An interactive zsh loads the whole user config: bound it (perl alarm survives exec), a hang is a FAIL row.
 fn_rc=0
-FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line ca cap claude_iu' 2>/dev/null) || fn_rc=$?
+FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line claude_iu' 2>/dev/null) || fn_rc=$?
 fn_body() { # <name> — body of one zsh function from the dump
   awk -v n="$1" '$0 ~ "^" n " \\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' <<<"$FN"
 }
@@ -137,14 +137,12 @@ else
   else
     row FAIL "launcher/picker" "_claude_launch no longer reaches 'claude-account pick --lane interactive'"
   fi
-  for f in ca cap claude_iu; do
+  for f in claude_iu; do
     body=$(fn_body "$f")
     if [[ -z "$body" ]]; then
       row FAIL "launcher/$f" "function not found"
     elif grep -q 'CLAUDE_CONFIG_DIR' <<<"$body"; then
       row FAIL "launcher/$f" "touches CLAUDE_CONFIG_DIR — IU-endpoint launchers must stay account-agnostic"
-    elif [[ "$f" == cap ]]; then # cap only picks a model, then hands over to ca
-      if grep -qE '^[[:space:]]*ca ' <<<"$body"; then row PASS "launcher/cap" "delegates to ca, never sets CLAUDE_CONFIG_DIR"; else row FAIL "launcher/cap" "no longer delegates to ca"; fi
     elif ! grep -q 'ANTHROPIC_BASE_URL' <<<"$body"; then
       row FAIL "launcher/$f" "no longer sets the IU ANTHROPIC_BASE_URL"
     else

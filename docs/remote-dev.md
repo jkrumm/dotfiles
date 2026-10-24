@@ -190,8 +190,8 @@ login there just prints a `/login` hint.
 **Accounts on spawn** (`docs/claude-accounts.md`): `rd wave` and `rd fan` run
 `claude-account pick --lane wave|fan` on the host before creating the tab and pass the
 result as herdr `--env CLAUDE_CONFIG_DIR=…` at tab/workspace creation; the output line
-carries the pick reason. No Claude account with room switches that spawn to
-`--kind opencode`. `rd agents` / `rd read` merge `claude agents --json` across every
+carries the pick reason. No Claude account with room pauses the spawn (`rd` refuses to spill to IU;
+`--kind opencode` is rejected). `rd agents` / `rd read` merge `claude agents --json` across every
 enabled account.
 
 ## Dev-server doors

@@ -86,10 +86,11 @@ inline.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
-- **IU-billed runs are cheap-model only:** DeepSeek V4.1 Flash first (`cdf`),
-  Sonnet the Claude ceiling (`ca`, `claude_iu --model sonnet`); never Opus/Fable
-  on IU (`hooks/iu-model-guard.ts` blocks both); use the launchers, never
-  hand-rolled Keychain creds.
+- **Development runs on the Max subscriptions only** — Herdr sessions, `rd work|wave|fan`,
+  every implementation session. Near the limit: the picker switches account, else pause
+  (`rd` refuses to spill); never IU API tokens. IU tokens are for gateways, OpenCode,
+  Hermes and subprocess `claude_iu --model sonnet` (cheap-model only; `hooks/iu-model-guard.ts`
+  blocks Opus/Fable); use the launchers, never hand-rolled Keychain creds.
 - Don't switch the orchestrator's model mid-session (cache invalidation).
   Worktree isolation only when asked, up front.
 - Grep before reading; never re-read a file; never read 10 files to find one thing
@@ -143,7 +144,7 @@ Commit format and the amend rule: `rules/commit-conventions.md`.
 - **Never start dev servers** — Johannes validates running apps manually.
 - Node manager is **fnm**. `gback` = `git reset --soft HEAD~1`. Worktrees are
   Claude Code's native feature. Docker via Makefile targets only (a hook enforces it).
-- Launchers (`c`, `cs`/`cf`, `ca`, `cdf`/`cdp`, `cap`, `claude_iu`, `oc`, and the
+- Launchers (`c`, `cs`/`cf`, `claude_iu`, `oc`, and the
   Codex lane `cx`/`cxa`/`astra`): `AGENTS.md` §Claude Code launchers.
 
 ## Config hierarchy
