@@ -51,8 +51,7 @@ stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
 a repo that wants one ships it in its own `.claude/rules/`.
 
-**Waves on OpenCode:** `rd wave|work <repo> --kind opencode` starts it in a herdr
-tab; the pane evals `_oc_env` (claude.zsh) first so `IU_*` and the gateway bearer
+**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old pane setup evaluated `_oc_env` (claude.zsh) first so `IU_*` and the gateway bearer
 are in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
@@ -72,7 +71,7 @@ agw's own server (`docs/opencode-v2.md` in agent-gateway).
 lagged the npm releases and a `brew upgrade` once broke every dispatch). `~/.local/bin/opencode`
 is agent-gateway's shim (`make install-cli` there), which execs the pinned npm build under
 `~/.local/share/agent-gateway/opencode-bin/current` — the same binary agw's server runs. `oc`,
-`rd wave|work|fan --kind opencode`, herdr agent panes and the shared per-user service
+herdr agent panes and the shared per-user service
 (`opencode service restart` after a pin bump) therefore all run one version. A pin bump:
 `make install-cli install-opencode-agent` in agent-gateway (`docs/opencode-v2.md` § Version pin).
 The first start on a new version shows a one-time release-notes dialog that swallows the pane's

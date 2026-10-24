@@ -19,8 +19,8 @@ a path:
 
 ```bash
 repos [filter]                    # what's on the dev host, with branch + dirty count
-work <repo> [--kind opencode]     # herdr workspace + claude for that repo (idempotent)
-rd wave <repo> [--kind opencode] '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
+work <repo>                       # herdr workspace + claude for that repo (idempotent)
+rd wave <repo> '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
 rd close <agent>                  # close a finished wave tab (clean + pushed only)
 rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + Claude tab per brief file
 rd fan --clean <repo>             # reclaim clean, merged fan worktrees + their tabs
@@ -30,8 +30,9 @@ rd read <agent>                   # read its output without attaching
 rd say <agent> "…"                # send it a prompt
 ```
 
-`--kind opencode` starts OpenCode on the IU endpoint (default model `iu/…` from
-`oc`; `RD_WAVE_MODEL` overrides) instead of Claude Code (`sonnet`).
+Herdr agents run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL`
+overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
+instead of spilling to IU.
 
 Four lanes start agent work: `@implementer`, `agw dispatch` (one bounded
 unattended change), `rd wave` (a tab you watch; `rd fan` for N independent

@@ -116,7 +116,7 @@ done <<<"$ACCOUNTS"
 # ── c. launcher matrix (static) ────────────────────────────────────────────────
 # An interactive zsh loads the whole user config: bound it (perl alarm survives exec), a hang is a FAIL row.
 fn_rc=0
-FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line claude_iu' 2>/dev/null) || fn_rc=$?
+FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line ca cap cdf cdp claude_iu' 2>/dev/null) || fn_rc=$?
 fn_body() { # <name> — body of one zsh function from the dump
   awk -v n="$1" '$0 ~ "^" n " \\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' <<<"$FN"
 }
@@ -137,6 +137,9 @@ else
   else
     row FAIL "launcher/picker" "_claude_launch no longer reaches 'claude-account pick --lane interactive'"
   fi
+  for f in ca cap cdf cdp; do
+    if [[ -n "$(fn_body "$f")" ]]; then row FAIL "launcher/$f" "retired IU-billed launcher is back: Herdr development is Max-only"; fi
+  done
   for f in claude_iu; do
     body=$(fn_body "$f")
     if [[ -z "$body" ]]; then

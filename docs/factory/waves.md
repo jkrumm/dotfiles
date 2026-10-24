@@ -27,7 +27,7 @@ test). Shadow survives only as a proof method: replaying recorded history. Every
 touches separately. One active wave per repo; three lanes.
 - **warden is the serial spine** (lane A): one warden wave at a time. Parallel warden work (W1b, W2a's `warden manifest` module, W2b's `warden project new`, W9, W13) runs only in a separate worktree with a declared merge order, stated in its wave and in the Calendar.
 - **Active owner waves:** W1a's inventory lists them. A rewrite wave that lands in a repo with one (*Active waves* in `evidence/projects/classify.out.md`: basalt-ui, weatherorb, agent-gateway, dotfiles and warden at `AS_OF`, 2026-10-22T08:00:00Z per `evidence/README.md`) works in a worktree with a declared merge order — the rule warden already follows.
-- **Every spawn names an engine `rd wave` can start.** `rd` knows two kinds, `claude` and `opencode`; it has no `ca` kind.
+- **Every spawn names an engine `rd wave` can start.** `rd` knows one kind, `claude` (Max subscriptions only; `--kind opencode` and IU spill were removed 2026-10-24 — a plan that still names them must be amended before its spawn).
   - Lane A: Claude Code on Max (the default kind, `RD_WAVE_MODEL` default).
   - Lanes B and C: OpenCode on IU (`rd wave --kind opencode`).
   - W1b, and any lane that needs a Claude-class model on IU: `--kind opencode` with `RD_WAVE_MODEL` set to a Claude-class id from `agw routing`.
