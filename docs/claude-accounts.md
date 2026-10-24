@@ -88,7 +88,7 @@ claude-account env <id>             # force an account (c --account b)
 ```
 
 **Quota sources: we never read a token.** Three feeds, freshest wins, all
-written into `~/.cache/claude-accounts/usage.json` keyed by account:
+written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
 
 1. **Statusline (live, free):** every render gets native `rate_limits` for the
    session's own account. `statusline.sh` writes `{account, five_hour,

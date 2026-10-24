@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  type Cache, type Registry, type SpawnResult, type Spawner, accountFromConfigDir, emptyCache, markExhausted, mergeSample, needsRefresh, pick, pickLine,
-  claimRefresh, homeIds, recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
+  type Cache, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
+  mergeSample, newestAge, pick, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -15,34 +15,33 @@ const reg = (bEnabled = true): Registry => ({
     b: { dir: "/home/x/.claude-b", plan: "max5x", units: { session: 1, weekly: 1 }, homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: bEnabled },
   },
 })
-const sample = (s: number, w: number, o: { age?: number; wReset?: number } = {}) => ({
-  s, w, s_reset: NOW / 1000 + 3 * H, w_reset: o.wReset ?? NOW / 1000 + 100 * H, ts: NOW - (o.age ?? 60_000), src: "t",
+const sample = (s: number, w: number, o: { age?: number; wReset?: number } = {}): Sample => ({
+  s, w, s_reset: NOW / 1000 + 3 * H, w_reset: o.wReset ?? NOW / 1000 + 100 * H, s_ts: NOW - (o.age ?? 60_000), w_ts: NOW - (o.age ?? 60_000), src: "t",
 })
-const cacheOf = (a?: ReturnType<typeof sample>, b?: ReturnType<typeof sample>): Cache => {
-  let c = emptyCache()
-  if (a) c = mergeSample(c, "a", a)
-  if (b) c = mergeSample(c, "b", b)
-  return c
-}
+const cacheOf = (a?: Sample, b?: Sample): Cache => ({ ...emptyCache(), samples: { ...(a ? { a } : {}), ...(b ? { b } : {}) } })
+const tmp = () => mkdtempSync(join(tmpdir(), "ca-"))
+const staleA = () => cacheOf(sample(10, 10, { age: 11 * 60_000 }))
 
 describe("pick rule v1", () => {
   test("home eligible", () => {
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "b", reason: "home" })
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "a", reason: "home" })
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(10, 10)), "agent-gateway:review", NOW).picked).toBe("a")
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(10, 10)), "agent-gateway:dispatch", NOW).picked).toBe("b")
+    const c = cacheOf(sample(10, 10), sample(10, 10))
+    expect(pick(reg(), c, "wave", NOW)).toEqual({ picked: "b", reason: "home", stale: false })
+    expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "a", reason: "home" })
+    expect(pick(reg(), c, "agent-gateway:review", NOW).picked).toBe("a")
+    expect(pick(reg(), c, "agent-gateway:dispatch", NOW).picked).toBe("b")
   })
   test("expiring capacity beats home for bulk lanes only", () => {
     const a = sample(10, 40, { wReset: NOW / 1000 + 5 * H })
     expect(pick(reg(), cacheOf(a, sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "a", reason: "expiring-capacity" })
     expect(pick(reg(), cacheOf(a, sample(10, 10)), "interactive", NOW).reason).toBe("home")
   })
-  test("expiring capacity needs weekly < 70", () => {
-    const a = sample(10, 75, { wReset: NOW / 1000 + 5 * H })
-    expect(pick(reg(), cacheOf(a, sample(10, 10)), "wave", NOW).picked).toBe("b")
+  test("expiring capacity needs weekly < 70, and a reset still ahead", () => {
+    expect(pick(reg(), cacheOf(sample(10, 75, { wReset: NOW / 1000 + 5 * H }), sample(10, 10)), "wave", NOW).picked).toBe("b")
+    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 - 60 }), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "b", reason: "home" })
+    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 + 60 }), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "a", reason: "expiring-capacity" })
   })
   test("spill to the other account when home is over a threshold", () => {
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(90, 10)), "wave", NOW)).toMatchObject({ picked: "a", reason: "spill", stale: false })
+    expect(pick(reg(), cacheOf(sample(10, 10), sample(90, 10)), "wave", NOW)).toMatchObject({ picked: "a", reason: "spill" })
     expect(pick(reg(), cacheOf(sample(10, 95), sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "b", reason: "spill" })
   })
   test("interactive falls back to a, bulk goes to iu", () => {
@@ -51,257 +50,244 @@ describe("pick rule v1", () => {
     expect(pick(reg(), c, "wave", NOW)).toMatchObject({ picked: "iu", reason: "no-eligible-account" })
   })
   test("disabled b is never picked", () => {
-    expect(pick(reg(false), cacheOf(sample(10, 10), sample(0, 0)), "wave", NOW)).toMatchObject({ picked: "a", reason: "spill", stale: false })
+    expect(pick(reg(false), cacheOf(sample(10, 10), sample(0, 0)), "wave", NOW)).toMatchObject({ picked: "a", reason: "spill" })
   })
-  test("stale sample (10 min - 6 h) is used as stale-ok, never sends bulk to iu", () => {
+  test("a stale sample (10 min - 6 h) is used with stale: true, never sends bulk to iu", () => {
     const c = cacheOf(sample(10, 10, { age: 11 * 60_000 }), sample(10, 10))
     expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "a", reason: "home", stale: true })
     expect(pick(reg(false), c, "wave", NOW)).toMatchObject({ picked: "a", reason: "spill", stale: true })
     expect(pick(reg(), cacheOf(sample(10, 10, { age: 5 * H * 1000 }), sample(10, 10, { age: 5 * H * 1000 })), "wave", NOW)).toMatchObject({ picked: "b", reason: "home", stale: true })
   })
-  test("stale sample over a threshold is ineligible", () => {
-    const c = cacheOf(sample(95, 10, { age: 60 * 60_000 }))
-    expect(pick(reg(false), c, "wave", NOW)).toMatchObject({ picked: "iu", reason: "no-eligible-account" })
-  })
-  test("sample older than 6 h is ineligible", () => {
+  test("stale sample over a threshold, or older than 6 h, is ineligible", () => {
+    expect(pick(reg(false), cacheOf(sample(95, 10, { age: 60 * 60_000 })), "wave", NOW).picked).toBe("iu")
     expect(pick(reg(false), cacheOf(sample(10, 10, { age: 7 * H * 1000 })), "wave", NOW).picked).toBe("iu")
   })
   test("never-sampled account is ineligible", () => {
     expect(pick(reg(), cacheOf(undefined, sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "b", reason: "spill" })
-    expect(pick(reg(), cacheOf(), "wave", NOW)).toMatchObject({ picked: "iu", reason: "no-eligible-account" })
-    expect(pick(reg(), cacheOf(), "interactive", NOW)).toMatchObject({ picked: "a", reason: "interactive-fallback" })
-  })
-  test("refresh-then-pick: a stale account becomes fresh and is picked as home", () => {
-    const stale = cacheOf(sample(10, 10, { age: 11 * 60_000 }), sample(10, 10, { age: 11 * 60_000 }))
-    expect(needsRefresh(reg(), stale, NOW)).toEqual(["a", "b"])
-    expect(pick(reg(), stale, "wave", NOW)).toMatchObject({ reason: "home", stale: true })
-    const refreshed = mergeSample(mergeSample(stale, "a", sample(10, 10)), "b", sample(10, 10))
-    expect(pick(reg(), refreshed, "wave", NOW)).toMatchObject({ picked: "b", reason: "home", stale: false })
-  })
-  test("refresh skipped by the 5-min budget falls back to stale-ok", () => {
-    const stale = { ...cacheOf(sample(10, 10, { age: 11 * 60_000 })), refreshed: { a: NOW - 60_000 } }
-    expect(needsRefresh(reg(false), stale, NOW)).toEqual([])
-    expect(pick(reg(false), stale, "wave", NOW)).toMatchObject({ picked: "a", reason: "spill", stale: true })
+    expect(pick(reg(), cacheOf(), "wave", NOW).picked).toBe("iu")
+    expect(pick(reg(), cacheOf(), "interactive", NOW)).toMatchObject({ picked: "a", reason: "interactive-fallback", stale: false })
   })
   test("exhausted mark holds until resets_at", () => {
-    const c = markExhausted(cacheOf(sample(10, 10), sample(10, 10)), "b", NOW / 1000 + 600)
-    expect(pick(reg(), c, "wave", NOW)).toMatchObject({ picked: "a", reason: "spill", stale: false })
-    expect(pick(reg(), c, "wave", NOW + 601_000)).toMatchObject({ picked: "b", reason: "home", stale: true }) // mark expired; samples now stale-ok
+    const c = { ...cacheOf(sample(10, 10), sample(10, 10)), exhausted: { b: NOW / 1000 + 600 } }
+    expect(pick(reg(), c, "wave", NOW)).toMatchObject({ picked: "a", reason: "spill" })
+    expect(pick(reg(), c, "wave", NOW + 601_000)).toMatchObject({ picked: "b", reason: "home", stale: true })
   })
   test("auth_failed account is skipped", () => {
-    const c = { ...cacheOf(sample(10, 10), sample(10, 10)), auth_failed: { b: true } }
-    expect(pick(reg(), c, "wave", NOW).picked).toBe("a")
+    expect(pick(reg(), { ...cacheOf(sample(10, 10), sample(10, 10)), auth_failed: { b: true } }, "wave", NOW).picked).toBe("a")
+  })
+  test("each window is judged by its own timestamp", () => {
+    // s is 7 h old (ignored: unknown), w is fresh and under the threshold -> eligible, stale
+    const x: Sample = { ...sample(99, 10), s_ts: NOW - 7 * H * 1000 }
+    expect(pick(reg(false), cacheOf(x), "wave", NOW)).toMatchObject({ picked: "a", stale: true })
+    // w is 7 h old, s fresh and over the threshold -> ineligible
+    expect(pick(reg(false), cacheOf({ ...sample(95, 10), w_ts: NOW - 7 * H * 1000 }), "wave", NOW).picked).toBe("iu")
+    // a fresh s next to a 1 h old w: the sample is only as fresh as its stalest window
+    expect(pick(reg(false), cacheOf({ ...sample(10, 10), w_ts: NOW - 3_600_000 }), "wave", NOW).stale).toBe(true)
+  })
+  test("home lanes: exact match beats a wildcard; review spills to b rather than counting it home", () => {
+    expect(homeIds(reg(), "agent-gateway:review")).toEqual(["a"])
+    expect(homeIds(reg(), "agent-gateway:dispatch")).toEqual(["b"])
+    expect(homeIds(reg(), "nope")).toEqual([])
+    expect(pick(reg(), cacheOf(sample(99, 10), sample(10, 10)), "agent-gateway:review", NOW)).toMatchObject({ picked: "b", reason: "spill" })
   })
 })
 
-describe("cache + helpers", () => {
-  test("freshest sample wins", () => {
-    const c = mergeSample(cacheOf(sample(50, 50)), "a", { ...sample(1, 1), ts: NOW - 120_000 })
-    expect(c.samples.a.s).toBe(50)
-  })
-  test("shellLine", () => {
-    expect(shellLine(reg(), { picked: "a", reason: "", stale: false })).toBe("unset CLAUDE_CONFIG_DIR")
-    expect(shellLine(reg(), { picked: "b", reason: "", stale: false })).toBe("export CLAUDE_CONFIG_DIR='/home/x/.claude-b'")
-    expect(shellLine(reg(), { picked: "iu", reason: "", stale: false })).toBeNull()
-  })
-  test("accountFromConfigDir: unset -> a", () => {
-    expect(accountFromConfigDir(reg(), undefined)).toBe("a")
-    expect(accountFromConfigDir(reg(), "")).toBe("a")
-    expect(accountFromConfigDir(reg(), "/home/x/.claude-b")).toBe("b")
-    expect(accountFromConfigDir(reg(), "/somewhere/else")).toBeNull() // set but unregistered: unknown, not "a"
-  })
-  test("sampleFromClaudeJson", () => {
-    const s = sampleFromClaudeJson({
-      cachedUsageUtilization: { fetchedAtMs: NOW, accountUuid: "u", utilization: { five_hour: { utilization: 11, resets_at: "2026-10-24T13:50:00+00:00" }, seven_day: { utilization: 85, resets_at: "2026-10-28T16:00:00+00:00" } } },
-    })
-    expect(s).toMatchObject({ s: 11, w: 85, ts: NOW, s_reset: Date.parse("2026-10-24T13:50:00Z") / 1000 })
-    expect(sampleFromClaudeJson({})).toBeNull()
-  })
-  test("needsRefresh: stale + not recently tried, enabled only", () => {
-    const stale = cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 }))
-    expect(needsRefresh(reg(false), stale, NOW)).toEqual(["a"])
-    expect(needsRefresh(reg(), cacheOf(sample(1, 1)), NOW)).toEqual(["b"])
-    expect(needsRefresh(reg(false), { ...stale, refreshed: { a: NOW - 60_000 } }, NOW)).toEqual([])
-  })
-  test("pickLine shape", () => {
-    const l = pickLine(reg(), cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "spill", stale: true }, NOW)
-    expect(l).toMatchObject({ lane: "wave", picked: "a", reason: "spill", stale: true, a: { s: 1, w: 2 }, b: { s: null, w: null } })
-  })
-})
-
-describe("review fixes", () => {
-  test("expiring capacity: a past reset does not qualify, a future one does", () => {
-    const past = sample(10, 40, { wReset: NOW / 1000 - 60 })
-    expect(pick(reg(), cacheOf(past, sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "b", reason: "home" })
-    const future = sample(10, 40, { wReset: NOW / 1000 + 60 })
-    expect(pick(reg(), cacheOf(future, sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "a", reason: "expiring-capacity" })
-  })
-  test("partial record keeps the previous non-null fields", () => {
-    const c = recordSample(cacheOf(sample(10, 40, { wReset: NOW / 1000 + 9 })), "a", { s: 20 }, NOW)
-    expect(c.samples.a).toMatchObject({ s: 20, w: 40, w_reset: NOW / 1000 + 9, src: "statusline" })
-    expect(c.samples.a.ts).toBe(NOW - 60_000) // a retained field keeps the old ts: not presented as fresh
-    expect(recordSample(emptyCache(), "a", { s: 5 }, NOW).samples.a).toMatchObject({ s: 5, w: null, s_reset: null, ts: NOW })
-    const full = recordSample(cacheOf(sample(10, 40)), "a", { s: 1, w: 2, s_reset: 3, w_reset: 4 }, NOW)
-    expect(full.samples.a.ts).toBe(NOW)
-  })
-  test("shellLine quotes spaces and quotes", () => {
+describe("helpers", () => {
+  test("shellLine quotes the path", () => {
     const r = reg()
+    expect(shellLine(r, { picked: "a", reason: "", stale: false })).toBe("unset CLAUDE_CONFIG_DIR")
+    expect(shellLine(r, { picked: "b", reason: "", stale: false })).toBe("export CLAUDE_CONFIG_DIR='/home/x/.claude-b'")
+    expect(shellLine(r, { picked: "iu", reason: "", stale: false })).toBeNull()
     r.accounts.b.dir = "/home/x/my dir/it's"
     expect(shellLine(r, { picked: "b", reason: "", stale: false })).toBe(`export CLAUDE_CONFIG_DIR='/home/x/my dir/it'\\''s'`)
   })
+  test("accountFromConfigDir", () => {
+    expect(accountFromConfigDir(reg(), undefined)).toBe("a")
+    expect(accountFromConfigDir(reg(), "")).toBe("a")
+    expect(accountFromConfigDir(reg(), "/home/x/.claude-b")).toBe("b")
+    expect(accountFromConfigDir(reg(), "/somewhere/else")).toBeNull()
+  })
   test("refresh env strips credentials and blanks the base url", () => {
-    const e = refreshEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t", CLAUDE_CODE_OAUTH_TOKEN: "o", CLAUDE_CONFIG_DIR: "/x", PATH: "/bin" }, null)
-    expect(e).toEqual({ ANTHROPIC_BASE_URL: "", PATH: "/bin" })
+    expect(refreshEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t", CLAUDE_CODE_OAUTH_TOKEN: "o", CLAUDE_CONFIG_DIR: "/x", PATH: "/bin" }, null)).toEqual({ ANTHROPIC_BASE_URL: "", PATH: "/bin" })
     expect(refreshEnv({}, "/d").CLAUDE_CONFIG_DIR).toBe("/d")
   })
-})
-
-
-describe("recordSample auth", () => {
-  test("clears auth_failed for that account only", () => {
-    const c = recordSample({ ...emptyCache(), auth_failed: { a: true, b: true } }, "a", { s: 1 }, NOW)
-    expect(c.auth_failed).toEqual({ a: false, b: true })
-  })
-})
-
-describe("pickLine", () => {
-  test("accounts come from the registry", () => {
+  test("pickLine accounts come from the registry", () => {
     const r = reg()
     r.accounts.c = { ...r.accounts.b }
-    const l = pickLine(r, cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "home", stale: false }, NOW)
+    const l = pickLine(r, cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "home", stale: true }, NOW)
     expect(Object.keys(l).filter((k) => !["ts", "lane", "picked", "reason", "stale"].includes(k))).toEqual(["a", "b", "c"])
+    expect(l).toMatchObject({ stale: true, a: { s: 1, w: 2 }, b: { s: null, w: null } })
+  })
+  test("sampleFromClaudeJson, and a payload that omits a window keeps what we know", () => {
+    const blob = (utilization: object) => ({ cachedUsageUtilization: { fetchedAtMs: NOW, accountUuid: "u", utilization } })
+    const full = sampleFromClaudeJson(blob({ five_hour: { utilization: 11, resets_at: "2026-10-24T13:50:00+00:00" }, seven_day: { utilization: 85, resets_at: "2026-10-28T16:00:00+00:00" } }))!
+    expect(full).toMatchObject({ s: 11, w: 85, s_ts: NOW, w_ts: NOW, s_reset: Date.parse("2026-10-24T13:50:00Z") / 1000 })
+    expect(sampleFromClaudeJson({})).toBeNull()
+    expect(sampleFromClaudeJson(blob({ five_hour: null, seven_day: null }))).toBeNull()
+    const onlyS = sampleFromClaudeJson(blob({ five_hour: { utilization: 20, resets_at: "2026-10-24T14:00:00+00:00" }, seven_day: null }))!
+    expect(onlyS).toMatchObject({ s: 20, w: null, w_ts: null })
+    const merged = mergeSample({ ...full, s_ts: NOW - 5000, w_ts: NOW - 5000 }, onlyS)
+    expect(merged).toMatchObject({ s: 20, s_ts: NOW, w: 85, w_ts: NOW - 5000 })
+  })
+  test("mergeSample: an older window never overwrites a newer one", () => {
+    const m = mergeSample(sample(50, 50), { ...sample(1, 1), s_ts: NOW - 120_000, w_ts: NOW - 120_000 })
+    expect(m).toMatchObject({ s: 50, w: 50 })
+  })
+  test("newestAge / dueIds", () => {
+    expect(newestAge({ ...sample(1, 1), w_ts: NOW - 1000 }, NOW)).toBe(1000)
+    expect(dueIds(reg(false), staleA(), NOW)).toEqual(["a"])
+    expect(dueIds(reg(), cacheOf(sample(1, 1)), NOW)).toEqual(["b"])
+    expect(dueIds(reg(), cacheOf(sample(1, 1), sample(1, 1)), NOW)).toEqual([])
   })
 })
 
-const mem = (init: Cache) => {
-  let c = init
-  return { update: (fn: (c: Cache) => Cache) => { c = fn(c) }, get cache() { return c } }
-}
-const staleA = () => cacheOf(sample(10, 10, { age: 11 * 60_000 }))
-const ok: SpawnResult = { status: 0, stdout: "{}", stderr: "" }
-
-describe("claimRefresh", () => {
-  test("stamps the due ids; a second claim gets nothing (at most one refresh)", () => {
-    const m = mem(staleA())
-    expect(claimRefresh(m.update, reg(false), ["a"], NOW)).toEqual(["a"])
-    expect(m.cache.refreshed.a).toBe(NOW)
-    expect(claimRefresh(m.update, reg(false), ["a"], NOW + 1000)).toEqual([])
+describe("per-account files", () => {
+  test("saveSample merges field-wise per window on disk", () => {
+    const dir = tmp()
+    saveSample("a", sample(10, 20), dir)
+    saveSample("a", { s: null, w: 30, s_reset: null, w_reset: 1, s_ts: null, w_ts: NOW, src: "x" }, dir)
+    expect(loadCache(dir).samples.a).toMatchObject({ s: 10, w: 30, s_ts: NOW - 60_000, w_ts: NOW })
+    rmSync(dir, { recursive: true })
   })
-  test("only claims the ids asked for, and only enabled ones", () => {
-    const m = mem(cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })))
-    expect(claimRefresh(m.update, reg(false), ["a", "b"], NOW)).toEqual(["a"])
+  test("partial record keeps the other window and its timestamp; a full one refreshes both", () => {
+    const dir = tmp()
+    saveSample("a", sample(10, 40, { wReset: NOW / 1000 + 9 }), dir)
+    recordSample("a", { s: 20, s_reset: 5 }, NOW, dir)
+    const x = loadCache(dir).samples.a
+    expect(x).toMatchObject({ s: 20, s_ts: NOW, w: 40, w_ts: NOW - 60_000, w_reset: NOW / 1000 + 9, src: "statusline" })
+    recordSample("a", { s: 1, w: 2, s_reset: 3, w_reset: 4 }, NOW + 1000, dir)
+    expect(loadCache(dir).samples.a).toMatchObject({ s: 1, w: 2, w_ts: NOW + 1000 })
+    rmSync(dir, { recursive: true })
   })
-  test("nothing claimed leaves the cache object untouched", () => {
-    const m = mem(cacheOf(sample(1, 1)))
-    const before = m.cache
-    expect(claimRefresh(m.update, reg(), ["a"], NOW, (c) => mergeSample(c, "b", sample(2, 2)))).toEqual([])
-    expect(m.cache).toBe(before)
+  test("record clears auth_failed for that account only; exhausted keeps the max", () => {
+    const dir = tmp()
+    setAuthFailed("a", true, NOW, dir)
+    setAuthFailed("b", true, NOW, dir)
+    recordSample("a", { s: 1 }, NOW, dir)
+    expect(loadCache(dir).auth_failed).toEqual({ b: true })
+    markExhausted("a", 100, dir)
+    markExhausted("a", 50, dir)
+    expect(loadCache(dir).exhausted.a).toBe(100)
+    rmSync(dir, { recursive: true })
   })
-})
-
-describe("updateCache (locked)", () => {
-  const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
-  const dir = mkdtempSync(join(tmpdir(), "ca-lock-"))
-  const path = join(dir, "usage.json")
-  const run = (code: string) =>
-    Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE: path }, stdout: "pipe", stderr: "pipe" })
-
-  test("concurrent processes lose no update", async () => {
-    const ps = Array.from({ length: 8 }, (_, i) => run(`L.updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, k${i}: ${i + 1} } }))`))
+  test("concurrent writers to different accounts and kinds lose nothing", async () => {
+    const dir = tmp()
+    const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
+    const run = (code: string) => Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE_DIR: dir }, stdout: "pipe", stderr: "pipe" })
+    const ps = ["a", "b", "c", "d"].flatMap((id) => [run(`L.recordSample(${JSON.stringify(id)}, { s: 5, w: 6 }, Date.now())`), run(`L.markExhausted(${JSON.stringify(id)}, 99)`)])
     for (const p of ps) expect(await p.exited).toBe(0)
-    const refreshed = JSON.parse(readFileSync(path, "utf8")).refreshed
-    expect(Object.keys(refreshed).sort()).toEqual(Array.from({ length: 8 }, (_, i) => `k${i}`).sort())
+    const c = loadCache(dir)
+    expect(Object.keys(c.samples).sort()).toEqual(["a", "b", "c", "d"])
+    expect(Object.keys(c.exhausted).sort()).toEqual(["a", "b", "c", "d"])
+    expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([])
+    rmSync(dir, { recursive: true })
   })
-  test("two concurrent claimers: exactly one wins the refresh", async () => {
-    const code = `const reg = { accounts: { a: { dir: null, plan: "x", units: { session: 1, weekly: 1 }, homeLanes: [], enabled: true } } }; console.log(JSON.stringify(L.claimRefresh(L.updateCache, reg, ["a"], Date.now())))`
-    updateCache((c) => ({ ...c, samples: { a: { ...sample(1, 1), ts: Date.now() - 20 * 60_000 } }, refreshed: {} }), path)
-    const ps = Array.from({ length: 6 }, () => run(code))
+})
+
+describe("claimRefresh (O_EXCL claim file)", () => {
+  test("the first claim wins, a second inside the 5-min budget gets nothing", () => {
+    const dir = tmp()
+    expect(claimRefresh(reg(false), ["a"], NOW, staleA(), dir)).toEqual(["a"])
+    expect(claimRefresh(reg(false), ["a"], NOW + 1000, staleA(), dir)).toEqual([])
+    rmSync(dir, { recursive: true })
+  })
+  test("a claim older than 5 min is stale and replaced; releasing gives it back", () => {
+    const dir = tmp()
+    claimRefresh(reg(false), ["a"], NOW, staleA(), dir)
+    expect(claimRefresh(reg(false), ["a"], NOW + 6 * 60_000, staleA(), dir)).toEqual(["a"])
+    releaseClaim("a", dir)
+    expect(claimRefresh(reg(false), ["a"], NOW + 6 * 60_000 + 1, staleA(), dir)).toEqual(["a"])
+    rmSync(dir, { recursive: true })
+  })
+  test("only due, enabled, requested ids are claimed", () => {
+    const dir = tmp()
+    const stale2 = cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 }))
+    expect(claimRefresh(reg(false), ["a", "b"], NOW, stale2, dir)).toEqual(["a"])
+    expect(claimRefresh(reg(), ["a"], NOW, cacheOf(sample(1, 1)), dir)).toEqual([])
+    rmSync(dir, { recursive: true })
+  })
+  test("two concurrent claimers: exactly one wins", async () => {
+    const dir = tmp()
+    const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
+    const code = `const reg = { accounts: { a: { dir: null, plan: "x", units: { session: 1, weekly: 1 }, homeLanes: [], enabled: true } } }; console.log(JSON.stringify(L.claimRefresh(reg, ["a"], Date.now(), L.emptyCache())))`
+    const ps = Array.from({ length: 6 }, () => Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE_DIR: dir }, stdout: "pipe", stderr: "pipe" }))
     const outs = await Promise.all(ps.map(async (p) => (await p.exited, (await new Response(p.stdout).text()).trim())))
     expect(outs.filter((o) => o === '["a"]').length).toBe(1)
     expect(outs.filter((o) => o === "[]").length).toBe(5)
-  })
-  test("a stale lock from a dead process is broken", () => {
-    const lock = `${path}.lock`
-    mkdirSync(lock)
-    const old = new Date(Date.now() - 120_000)
-    utimesSync(lock, old, old)
-    updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, after: 1 } }), path)
-    expect(JSON.parse(readFileSync(path, "utf8")).refreshed.after).toBe(1)
-    rmSync(dir, { recursive: true, force: true })
+    rmSync(dir, { recursive: true })
   })
 })
 
+const ok: SpawnResult = { status: 0, stdout: "{}", stderr: "" }
+
 describe("runRefresh", () => {
-  function harness(spawn: Spawner, o: { cache?: Cache; read?: () => ReturnType<typeof sample> | null; during?: (m: ReturnType<typeof mem>) => void } = {}) {
-    const m = mem(o.cache ?? { ...staleA(), refreshed: { a: NOW } }) // pre-claimed
+  function harness(spawn: Spawner, read: () => Sample | null = () => null) {
+    const dir = tmp()
+    claimRefresh(reg(false), ["a"], NOW, staleA(), dir) // pre-claimed by the caller
     const spawned: string[] = []
     runRefresh({
-      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["a"],
-      spawn: (c, a, e) => { spawned.push(e.env.CLAUDE_CONFIG_DIR ?? "unset"); o.during?.(m); return spawn(c, a, e) },
-      readSample: () => o.read?.() ?? null, update: m.update,
+      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["a"], dir,
+      spawn: (c, a, e) => { spawned.push(e.env.CLAUDE_CONFIG_DIR ?? "unset"); return spawn(c, a, e) }, readSample: read,
     })
-    return { m, spawned }
+    const claimed = !claimRefresh(reg(false), ["a"], NOW + 1000, staleA(), dir).length
+    const cache = loadCache(dir)
+    rmSync(dir, { recursive: true })
+    return { cache, spawned, claimHeld: claimed }
   }
-  test("success merges the new sample and clears the auth verdict", () => {
-    const { m, spawned } = harness(() => ok, { read: () => sample(33, 44), cache: { ...staleA(), refreshed: { a: NOW }, auth_failed: { a: true } } })
-    expect(spawned).toEqual(["unset"])
-    expect(m.cache.samples.a).toMatchObject({ s: 33, w: 44 })
-    expect(m.cache.auth_failed.a).toBe(false)
-    expect(m.cache.refreshed.a).toBe(NOW)
+  test("success saves the sample, keeps the claim as the budget", () => {
+    const h = harness(() => ok, () => sample(33, 44))
+    expect(h.spawned).toEqual(["unset"])
+    expect(h.cache.samples.a).toMatchObject({ s: 33, w: 44 })
+    expect(h.claimHeld).toBe(true)
   })
-  test("missing binary rolls the budget stamp back and sets no auth verdict", () => {
-    const { m } = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))
-    expect(m.cache.refreshed.a).toBeUndefined()
-    expect(m.cache.auth_failed.a).toBeUndefined()
+  test("missing binary releases the claim and sets no auth verdict", () => {
+    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))
+    expect(h.claimHeld).toBe(false)
+    expect(h.cache.auth_failed.a).toBeUndefined()
   })
-  test("auth failure marks auth_failed and keeps the stamp", () => {
-    const { m } = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
-    expect(m.cache.auth_failed.a).toBe(true)
-    expect(m.cache.refreshed.a).toBe(NOW)
+  test("auth failure marks auth_failed and keeps the claim", () => {
+    const h = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
+    expect(h.cache.auth_failed.a).toBe(true)
+    expect(h.claimHeld).toBe(true)
   })
-  test("timeout keeps the stamp and the previous auth verdict", () => {
-    const { m } = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }), { cache: { ...staleA(), refreshed: { a: NOW }, auth_failed: { a: true } } })
-    expect(m.cache.refreshed.a).toBe(NOW)
-    expect(m.cache.auth_failed.a).toBe(true)
-  })
-  test("a statusline record written during the spawn is not lost", () => {
-    const { m } = harness(() => ok, {
-      read: () => sample(33, 44, { age: 5000 }),
-      during: (mm) => mm.update((c) => recordSample(c, "a", { s: 77, w: 78, s_reset: 1, w_reset: 2 }, NOW - 1000)),
-    })
-    expect(m.cache.samples.a).toMatchObject({ s: 77 })
+  test("timeout keeps the claim and records no auth verdict", () => {
+    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }))
+    expect(h.claimHeld).toBe(true)
+    expect(h.cache.auth_failed.a).toBeUndefined()
   })
 })
 
 describe("refreshBeforePick", () => {
   function run(cache: Cache, lane = "wave", enabledB = false) {
-    const m = mem(cache)
+    const dir = tmp()
     const calls = { sync: [] as string[][], detach: [] as string[][] }
     const r = refreshBeforePick({
       reg: reg(enabledB), lane, now: NOW, cache,
-      claim: (ids) => claimRefresh(m.update, reg(enabledB), ids, NOW),
+      claim: (ids) => claimRefresh(reg(enabledB), ids, NOW, cache, dir),
       runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids),
     })
-    return { r, calls, m }
+    const files = readdirSync(dir)
+    rmSync(dir, { recursive: true })
+    return { r, calls, files }
   }
   test("stale sample: no blocking refresh, claimed and detached", () => {
-    const { r, calls, m } = run(staleA())
+    const { r, calls, files } = run(staleA())
     expect(r).toEqual({ sync: [], background: ["a"] })
     expect(calls).toEqual({ sync: [], detach: [["a"]] })
-    expect(m.cache.refreshed.a).toBe(NOW)
-  })
-  test("budget already spent schedules nothing", () => {
-    expect(run({ ...staleA(), refreshed: { a: NOW - 60_000 } }).r).toEqual({ sync: [], background: [] })
+    expect(files).toEqual(["a.refresh.claim"])
   })
   test("fresh sample schedules nothing", () => {
     expect(run(cacheOf(sample(10, 10))).r).toEqual({ sync: [], background: [] })
   })
-  test("no sample on a bulk lane: synchronous; stale neighbour in the background", () => {
+  test("no usable sample on a bulk lane: synchronous; a stale neighbour in the background", () => {
     const { r, calls } = run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "wave", true)
     expect(r).toEqual({ sync: ["a"], background: ["b"] })
     expect(calls).toEqual({ sync: [["a"]], detach: [["b"]] })
   })
-  test("interactive returns before any claim: no lock, no write, no refresh", () => {
+  test("a sample older than 6 h counts as no sample", () => {
+    expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["a"], background: [] })
+  })
+  test("interactive returns before any claim: nothing is written", () => {
     let claimed = false
     const r = refreshBeforePick({
       reg: reg(), lane: "interactive", now: NOW, cache: emptyCache(),
@@ -310,107 +296,83 @@ describe("refreshBeforePick", () => {
     expect(r).toEqual({ sync: [], background: [] })
     expect(claimed).toBe(false)
   })
-  test("a sample older than 6 h counts as no sample", () => {
-    expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["a"], background: [] })
-  })
-})
-
-describe("home lanes", () => {
-  test("exact lane match beats a wildcard", () => {
-    expect(homeIds(reg(), "agent-gateway:review")).toEqual(["a"])
-    expect(homeIds(reg(), "agent-gateway:dispatch")).toEqual(["b"])
-    expect(homeIds(reg(), "wave")).toEqual(["b"])
-    expect(homeIds(reg(), "nope")).toEqual([])
-  })
-  test("review lane with a ineligible spills to b, not home", () => {
-    const c = cacheOf(sample(99, 10), sample(10, 10))
-    expect(pick(reg(), c, "agent-gateway:review", NOW)).toMatchObject({ picked: "b", reason: "spill" })
-  })
-})
-
-describe("lock owner token", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ca-tok-"))
-  const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
-  const path = join(dir, "usage.json")
-  const run = (code: string) =>
-    Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE: path }, stdout: "pipe", stderr: "pipe" })
-
-  test("release leaves a lock whose token is no longer ours", () => {
-    updateCache((c) => { writeFileSync(join(`${path}.lock`, "owner"), "someone-else"); return c }, path)
-    expect(existsSync(`${path}.lock`)).toBe(true)
-    rmSync(`${path}.lock`, { recursive: true })
-  })
-  test("racing stale-lock breakers: every update lands, no lock or grave left", async () => {
-    mkdirSync(`${path}.lock`)
-    writeFileSync(join(`${path}.lock`, "owner"), "dead.1")
-    const old = new Date(Date.now() - 120_000)
-    utimesSync(`${path}.lock`, old, old)
-    const ps = Array.from({ length: 8 }, (_, i) => run(`L.updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, r${i}: 1 } }))`))
-    for (const p of ps) expect(await p.exited).toBe(0)
-    expect(Object.keys(JSON.parse(readFileSync(path, "utf8")).refreshed).length).toBe(8)
-    expect(readdirSync(dir).filter((f) => f.includes("lock"))).toEqual([])
-    rmSync(dir, { recursive: true, force: true })
-  })
 })
 
 describe("CLI (isolated HOME)", () => {
   const CLI = join(import.meta.dir, "claude-account.ts")
-  const home = mkdtempSync(join(tmpdir(), "ca-cli-"))
+  const home = tmp()
   const bin = join(home, "bin")
   const marker = join(home, "claude-ran")
+  const dir = join(home, "cache")
   mkdirSync(bin)
   writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch ${marker}\nexit 0\n`)
   chmodSync(join(bin, "claude"), 0o755)
-  const cache = join(home, "usage.json")
-  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_CACHE: cache, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), PATH: `${bin}:${process.env.PATH}` }
+  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_CACHE_DIR: dir, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), PATH: `${bin}:${process.env.PATH}` }
   delete (base as Record<string, string | undefined>).CLAUDE_CONFIG_DIR
   const cli = (args: string[], env: Record<string, string> = {}) => {
     const t = Date.now()
     const r = Bun.spawnSync(["bun", CLI, ...args], { env: { ...base, ...env }, stdout: "pipe", stderr: "pipe" })
     return { rc: r.exitCode, out: r.stdout.toString().trim(), err: r.stderr.toString(), ms: Date.now() - t }
   }
-  const seedCache = (ageMs: number) => {
+  const seed = (ageMs: number) => {
     rmSync(marker, { force: true })
-    rmSync(`${cache}.lock`, { recursive: true, force: true })
-    writeFileSync(cache, JSON.stringify({ ...emptyCache(), samples: { a: { s: 5, w: 5, s_reset: null, w_reset: null, ts: Date.now() - ageMs, src: "t" } } }))
+    rmSync(dir, { recursive: true, force: true })
+    const ts = Date.now() - ageMs
+    saveSample("a", { s: 5, w: 5, s_reset: null, w_reset: null, s_ts: ts, w_ts: ts, src: "t" }, dir)
   }
-  const holdLock = () => { mkdirSync(`${cache}.lock`); writeFileSync(join(`${cache}.lock`, "owner"), "held") }
 
-  test("interactive pick with a held lock answers at once and does not touch the cache", () => {
-    seedCache(20 * 60_000)
-    holdLock()
-    const r = cli(["pick", "--lane", "interactive"])
-    expect(r).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
-    expect(r.ms).toBeLessThan(2500)
+  test("pick prints the line; interactive and wave both give unset", () => {
+    seed(60_000)
+    expect(cli(["pick", "--lane", "wave"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(cli(["pick", "--lane", "interactive"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
   })
-  test("a pick on a busy lock (> 3 s) still prints a line", () => {
-    seedCache(20 * 60_000)
-    holdLock()
-    const r = cli(["pick", "--lane", "wave"])
-    expect(r.rc).toBe(0)
-    expect(r.out).toBe("unset CLAUDE_CONFIG_DIR")
-    expect(r.ms).toBeGreaterThan(2500)
-  }, 20_000)
+  test("pick with an unreadable registry still answers, and says why on stderr", () => {
+    const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
+    expect(r).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(r.err).toContain("registry unreadable")
+  })
+  test("a pick with an unwritable cache dir still prints a line", () => {
+    seed(20 * 60_000)
+    writeFileSync(join(home, "notadir"), "")
+    const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_CACHE_DIR: join(home, "notadir") })
+    expect(r.out).toBe("iu") // nothing readable -> the bulk spill signal, never silence
+    expect(r.rc).toBe(3)
+    expect(r.err).toContain("refresh skipped")
+  })
+  test("usage --json keeps its shape", () => {
+    seed(60_000)
+    const j = JSON.parse(cli(["usage", "--json"]).out)
+    expect(Object.keys(j.accounts[0]).sort()).toEqual(
+      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_resets_at", "source"].sort(),
+    )
+    expect(j.accounts[0]).toMatchObject({ id: "a", five_hour: 5, seven_day: 5, auth_ok: true })
+  })
   test("account / --badge: unregistered dir prints ?, unset prints the id", () => {
     expect(cli(["account"]).out).toBe("a")
-    expect(cli(["account", "--badge"]).out).toBe("") // one enabled account: no badge
+    expect(cli(["account", "--badge"]).out).toBe("")
     expect(cli(["account"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
     expect(cli(["account", "--badge"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
   })
+  test("record and exhausted write their own files", () => {
+    seed(60_000)
+    expect(cli(["record", "--account", "a", "--s", "33", "--s-reset", "1800000000"]).rc).toBe(0)
+    expect(cli(["exhausted", "--account", "a", "--until", "1800000999"]).rc).toBe(0)
+    const c = loadCache(dir)
+    expect(c.samples.a).toMatchObject({ s: 33, w: 5 })
+    expect(c.exhausted.a).toBe(1800000999)
+  })
   test("refresh --ids applies the due filter; --claimed bypasses the claim", () => {
-    seedCache(60_000) // fresh sample: not due
+    seed(60_000)
     expect(cli(["refresh", "--ids", "a"]).rc).toBe(0)
-    expect(existsSync(marker)).toBe(false)
-    expect(cli(["refresh", "--ids", "b"]).rc).toBe(0) // disabled
     expect(existsSync(marker)).toBe(false)
     expect(cli(["refresh", "--claimed", "b"]).rc).toBe(0) // disabled, even when claimed
     expect(existsSync(marker)).toBe(false)
     expect(cli(["refresh", "--claimed", "a"]).rc).toBe(0)
     expect(existsSync(marker)).toBe(true)
-    seedCache(20 * 60_000) // stale: due -> claimed, stamped, spawned
+    seed(20 * 60_000)
     expect(cli(["refresh", "--ids", "a"]).rc).toBe(0)
     expect(existsSync(marker)).toBe(true)
-    expect(JSON.parse(readFileSync(cache, "utf8")).refreshed.a).toBeGreaterThan(0)
+    expect(existsSync(join(dir, "a.refresh.claim"))).toBe(true)
     rmSync(home, { recursive: true, force: true })
   })
 })
