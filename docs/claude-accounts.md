@@ -1,13 +1,13 @@
 # Two Claude Max accounts — concept
 
-Status: **W1 built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
+Status: **W1 built, W2a verify suite built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled. Shipped in W1: ids renamed from
 `a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
 `CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (IU spill switches that spawn to
 opencode), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
 dead = FAIL and `me` dead = WARN. Still open: agent-gateway workers (other repo), usage-tracker
-`account` column (other repo), W2 displays. W0 shipped the registry, `claude-account`, the quota
+`account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the daily login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
 cache, the statusline badge and `account` in `session_env`. Pick log:
 `~/.local/share/claude-accounts/picks.jsonl`; `claude-account exhausted` exists but nothing calls it yet.
 Decision record and the numbers behind it: `~/Reports/ai-subscription-2026-10/index.html`.
@@ -165,6 +165,74 @@ Known gaps:
   daemon bound to one identity. caam defaults `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`
   for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on `iu`
   only; `herdr-reap` queries `claude agents` once per account.
+
+## Operate
+
+**Verify (read-only, no tokens).** `make claude-accounts-verify` prints one `PASS|WARN|FAIL` line per check and
+exits 1 on any FAIL; `make doctor` runs it on the mini.
+
+| Check | What it proves | FAIL means |
+|-|-|-|
+| `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
+| `quota/<id>`, `statusline/<id>` | newest `cachedUsageUtilization` still has `five_hour`/`seven_day` `utilization` + `resets_at`; the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `ca cap claude_iu` never touch `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
+| `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
+| `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
+| `version` | records `claude --version` in `~/.local/state/claude-accounts/verified-version` when the run has no FAIL | (never FAIL) |
+
+The heartbeat (`check_claude_version`) WARNs `unverified Claude Code version` whenever the running version differs from the
+recorded one, until verify passes again. Subagents run inside the parent process and inherit its account (and its
+`CLAUDE_CONFIG_DIR`) automatically; nothing picks for them.
+
+**E2E (manual, a few Haiku tokens).** `make claude-accounts-e2e` (`ARGS=--subagent` adds one Haiku run that spawns a
+subagent). Per enabled account it builds the launcher env, runs `claude -p "reply ok" --model haiku`, ingests with
+usage-tracker, and asserts the session's `usage_record` rows say `billing=max` + the expected account and `session_env`
+has the account (with `--subagent`: every row of the subagent session carries the parent's account). Break tests need
+no tokens and run against a throw-away copy of the cache, pick log and registry (the real ones are never written):
+
+| Break | Expected |
+|-|-|
+| exhausted mark on `me` | `wave` picks `iu` (reason `spill`); removing the mark restores `me` (`home`) |
+| `CLAUDE_CONFIG_DIR` at an unregistered dir | `claude-account account` -> `?`, the session-env hook logs `account: null` |
+| registry unreadable | `pick` exits 4 and answers `unset CLAUDE_CONFIG_DIR` |
+| `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |
+
+**Login keepalive.** `com.jkrumm.claude-accounts-keepalive` (06:30, under jobrun) runs `claude-account refresh --all`:
+`claude -p "/usage"` per enabled account, 0 tokens, no window priming. An idle account's OAuth refresh token never
+ages out and the quota cache gets a sample. `--all` ignores the 10-minute freshness and the auth cooldown but not the
+5-minute claim. `claude -p /usage` exits 0 even with a dead login (and leaves the old cached numbers), so the refresh
+accepts only a sample fetched during that run and otherwise asks `claude auth status`; a logged-out answer marks the
+account auth-failed. Log: `~/Library/Logs/claude-accounts-keepalive.log`; installed by `make claude-accounts-keepalive-setup`
+(part of `make setup`, dev host only).
+
+**After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify`:
+
+1. All PASS -> the version is recorded, the WARN clears on the next heartbeat.
+2. `auth/*` FAIL -> the credential naming or config-dir resolution changed. Re-derive the keychain suffix from the new
+   binary, fix `scripts/claude-accounts-verify.sh` and the table above, and check `claude-auth.zsh` still agrees.
+3. `quota/*` FAIL -> the `cachedUsageUtilization` shape changed; fix `sampleFromClaudeJson` in
+   `scripts/lib/claude-accounts.ts` (until then the picker routes on the statusline feed only).
+4. Optional: `make claude-accounts-e2e` for the real attribution round trip.
+
+**Re-login for `me`** (dead login, revoked session): on the mini, in a herdr pane (the login Keychain is only
+reachable from the GUI session; never `ssh mini 'claude …'`):
+
+1. `CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude`
+2. `/login`, press `c` to copy the URL.
+3. Open the URL in the personal browser profile (signed in to `me`), approve, paste the code back into the pane.
+4. `claude-account refresh --ids me`, then `make claude-accounts-verify`.
+
+**Troubleshooting**
+
+| Symptom | Likely cause | Fix |
+|-|-|-|
+| `auth/me` WARN, heartbeat `account me NOT logged in` | login revoked or aged out | re-login steps above |
+| `launcher/agent-gateway` FAIL | session-runner lost its `claude-account pick` call (or agent-gateway not deployed with it) | check agent-gateway `master`, redeploy |
+| `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
+| `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
+| `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
+| a `me` session shows `IU` quota | session started with `CLAUDE_CONFIG_DIR` unset (herdr restart, `--env` not restored) | known gap; restart the session through `c --account me` |
+| `quota/<id>` WARN "no cachedUsageUtilization" | account never refreshed | `claude-account refresh --ids <id>` |
 
 ## Borrowed from open source (2026-10 survey)
 
