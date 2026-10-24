@@ -1,5 +1,7 @@
 # ADR-005 — Artifacts are ours: ledger threads behind `warden artifact`, Argo's Artifacts view; plannotator only until it lands
 
+> **v2 status (2026-10-24):** revised — Artifacts in Argo at W5; no `rv` (TDD v2 §10). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 (revised the same day: owner intent — "a custom implementation for artifacts", Artifacts as an Argo page; revised after panel pass 1: dat-2 / sim-5, sim-1 — the ledger is the only SoR for threads, `rv` folds into the factory CLI; after pass 2: int-8, int-14 — owner comment and resolve events are the ledger fact the ladder reads, wording aligned with the directory contract)
 - Evidence: `spikes/05-artifact-review/REPORT.md` (plannotator 24/24, human-review 15/15, `rv` 14/14, `rv-pn` 6/6), `research/2026-10-21-review-tools.md`, `findings-2026-10-22.md` §Artifact review, the owner's prompt
 

@@ -1,10 +1,12 @@
 # Factory rewrite — dotfiles lane (manifests and the rest of lane B/C in this repo)
 
+> **Superseded 2026-10-24.** The factory design v2 (`~/SourceRoot/dotfiles/docs/factory/tdd/`, §13) replaces this rewrite plan. Every v1 rewrite wave below is parked as `pending`; no wave in this file is to be run. The v2 plan moves to the new `factory` repo at its W0.
+
 Runnable copy of the factory rewrite plan (`~/SourceRoot/dotfiles/docs/factory/waves.md` is the design record and wins on any
 difference). Generated 2026-10-22 by the factory design session; the letters in each title are the plan's wave ids.
 Round 5 is archived at `docs/waves/archive/2026-10-round-5-PLAN.md` and dispositioned in `docs/factory/waves.md`.
 
-## Wave 1 — (W2a) Projects that run something describe themselves            <!-- status: active -->
+## Wave 1 — (W2a) Projects that run something describe themselves            <!-- status: pending -->
 Repo: dotfiles (the schema), one `docs:` commit per repo (PR-required repos by PR; homelab-private's manifest inside homelab-private) and a warden worktree for the `warden manifest` module, merged after W1a's close-out. ADR-010. Days 1–2, parallel with W1a, lane B. The only prerequisite W3a and W3b take from this lane.
 
 - [ ] `config/factory/project.schema.json` — the `factory/v1` schema of `design/model.md` §6 — and the `warden manifest draft|check|gen` module on the agent-CLI contract. `draft` is a standing reconcile mode that proposes manifest Changes from what it observes (compose labels, launchd labels, Kuma monitors), not a one-off; `product_surfaces[]` is derived per type (route trees, store-metadata directories, pricing files, public `doors[]`) and the manifest field only adds or excludes (ADR-010).

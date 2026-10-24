@@ -1,5 +1,7 @@
 # ADR-003 — Correlation is deterministic; judgment stays with the investigating agent; Keep is not adopted
 
+> **v2 status (2026-10-24):** revised — + decision-model score, investigator merge/split, labels (TDD v2 §8). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 and pass 2 (cor-1…cor-7, mig-1, int-11, sre-3, sre-5, ver-8)
 - Evidence: `evidence/golden/backtest.out.md` (held-out, scored once; `backtest.py --verify` reproduces every result field. Since two amendments were appended to `PREREGISTRATION.md`, with thresholds unchanged and scoped to future samples, it exits 1 on that file's hash alone. The pre-amendment text still hashes to `3f142e52…`), `spikes/03-correlation/REPORT.md`, `evidence/golden/PREREGISTRATION.md`, `evidence/kpi/decision_shadow.out.md`, `research/2026-10-22-ops-correlation-catalog-eval.md`, `research/2026-10-22-known-error-regression.md`, `evidence/incidents/incidents.md` #6 (the 10-17 timeline)
 

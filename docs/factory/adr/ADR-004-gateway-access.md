@@ -1,5 +1,7 @@
 # ADR-004 — CLI-first: every tool is a CLI on one agent contract; MCP only where a non-shell client needs it
 
+> **v2 status (2026-10-24):** kept — CLI and docs generated from one oRPC router (TDD v2 §10). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 (revised the same day: owner decision — "move away from MCP"; the first version chose a mix per gateway; revised again after panel pass 1: dx-3…dx-6, dx-8, dur-8, sim-1; after pass 2: dx-1, dx-4…dx-8, sim-2, mig-5)
 - Evidence: `spikes/04-cli-mcp/REPORT.md` (141 headless sessions on our gateways), `spikes/04-cli-mcp/raw/agw-job-durations.json` (review and check durations, p50 and p90), `research/2026-10-22-ts-cli-introspection.md`, `research/2026-10-22-agents-durable-mcp-otel.md` §6, `evidence/toil/toil.md` (C18: BSD-vs-GNU failures), the owner's prompt ("great CLIs and super concise routing … AGENTS.md built dynamically from those CLIs")
 

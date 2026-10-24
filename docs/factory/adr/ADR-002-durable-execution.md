@@ -1,5 +1,7 @@
 # ADR-002 — Durable execution: the ledger with explicit statecharts, no engine
 
+> **v2 status (2026-10-24):** kept in substance on Postgres; DBOS re-evaluated and declined for a different reason (TDD v2 §6). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dur-1…dur-8, int-6) and the cross-lab review (`panel/review-resolutions.md`: R10, R14, R16, I3, T1)
 - Evidence: `spikes/02-durable/REPORT.md` (175 scripted kill runs), `research/2026-10-22-durable-await-sqlite.md`, `research/2026-10-22-agents-durable-mcp-otel.md` §5
 

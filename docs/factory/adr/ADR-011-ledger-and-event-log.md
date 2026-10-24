@@ -1,5 +1,7 @@
 # ADR-011 — One ledger, one event log, one writer per entity
 
+> **v2 status (2026-10-24):** revised — Postgres, facts + derived state, no import (TDD v2 §6). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dat-3, dat-4, dat-9, dat-12, dat-13, dur-4…dur-6, sim-2, sim-6) and the cross-lab review (`panel/review-resolutions.md`: R8–R11, R14–R17, T1, T3)
 - Evidence: `findings-2026-10-22.md` (65-column `triage_items`, 44 transition pairs, `working → working` 768), `evidence/kpi/baseline.out.md` §data quality (`fixed_by_pr`, `revert_pr`, `reverting_sha` never populated; signatures unique per row), `evidence/incidents/incidents.md` (577 owner-facing notifications, only 140 visible to the KPI), `evidence/signals/signals.md` (`slack_update` never ingested), `research/2026-10-22-durable-await-sqlite.md` §1.8 (Litestream: replication interval, restore, its own table), Round 5 *Established facts* (Hermes reads `warden.db` directly), `design/model.md`
 

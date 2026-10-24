@@ -1,39 +1,26 @@
 # 0. Reading order
 
-This is the factory's technical design, version 2. It replaces the 2026-10-22 report (v1, still
-buildable with `python3 -I report/build.py --v1` → `report-v1.html`). v2 folds in your 33 review
-comments, the global reply and the brief of 2026-10-24. Every comment and where it landed is in §15.
+The factory's technical design, version 2 — the source of truth for the rewrite and, later, for the
+public guide on jkrumm.com. It replaces the report of 2026-10-22 (v1, still in `report-v1.html`).
 
-**If you read three things:** §1 (verdict), §2 (what changes for you), §13 (the plan).
+**Three sections carry the decision:** §1 verdict, §2 what changes for you, §12 the plan.
+The design is §3–§11. §13 lists what you may want to override — nothing is waiting on you.
+Appendix A maps each of your 33 review comments, the global reply and the brief of 2026-10-24 to
+where it landed; B says what was taken from which project; C says what happened to v1.
 
-**If you read for the design:** §3 principles → §4 the loop → §5 capacity → §6 data → §7 projects →
-§8 dedup → §9 jobs → §10 surfaces. §11 says what we took from which project, §12 how we know it
-works, §14 every decision and what you may want to override.
+## v1 → v2 in one table
 
-## What changed since v1
-
-| Topic | v1 (2026-10-22) | v2 (2026-10-24) | Why |
-|-|-|-|-|
-| Home of the loop | warden, rebuilt | a new `factory` repo and CLI; warden is switched off and its data archived, not imported | your comments 9, 13, global reply |
-| Scope of the loop | incidents and hygiene | **all work**: incidents, bugs, hygiene, upgrades and feature requests take the same path | global reply |
-| Who writes code | Claude Code/Max for your work, OpenCode/IU for routine mother wakes | **Claude Code on the two Max subscriptions only**, always in herdr; IU never writes code | comments 5, 27, brief |
-| Factory judgment | inside herdr mothers | cheap models (Haiku 5.5, DeepSeek V4.1 Flash) in agent-gateway's OpenCode server — not herdr | comments 2, 23 |
-| Quota | forecast guard, unattended waves spill to IU | two-account scheduler; non-urgent work waits for the reset; no spill | comment 27, brief |
-| State | SQLite ledger + hand-written statecharts, no engine | **Postgres 18 on the mini + DBOS**, gated by a re-run of the spike that DBOS lost | comments 25, 29, global reply |
-| Argo | split: API on the mini, SPA on the VPS | **all on the mini**, reading the same Postgres | comments 4, 28, 32 |
-| Task system | ledger tasks with bd's verbs | `factory task`: beads' good ideas, our names | comments 3, 21, 24 |
-| Dedup | deterministic only | deterministic gate + similarity over past issues + cheap judge for the residue + learning from every merge and split | comment 15 |
-| Upgrades | Renovate | agentic upgrade waves from a deterministic scan | comment 17 |
-| Recurring jobs | reconcilers | deterministic pipelines that spend zero tokens when nothing is found | comment 20 |
-| Project contract | `project.yaml` | `project.yaml` + **one make contract** (`check`, `test`, `quality`, `deploy`, `verify`, `logs`, `status`) + autonomy per path | global reply, comments 6, 12 |
-| Diagrams | hand-made SVG | Mermaid source rendered by pele | global reply |
-| The plan | 14 waves, strangler-free but import-first | 11 waves, walking skeleton first, the factory builds itself from W2 | §13 |
-| Owner decisions | five | one (a third subscription), with a measured trigger | §14 |
-
-## What v2 keeps from v1
-
-The evidence base (`evidence/`, frozen at 2026-10-22T08:00Z), the golden set and backtest, the
-gameday catalogue, the KPI definitions, Argo's question-first method (`design/argo.md` §2), the
-verification ladder (ADR-012), one trace per item (ADR-006), CLI-first (ADR-004), business-only owner
-decisions (ADR-014) and Argo's intent verbs (ADR-015). v1's design files stay in `design/` and
-`adr/` as history; §14 gives each ADR its v2 status.
+| Topic | v1 | v2 |
+|-|-|-|
+| Home | warden, rebuilt | new `factory` repo and CLI; warden switched off and deleted |
+| Scope | incidents and hygiene | all work, feature requests included, on one path |
+| Who writes code | Claude Code on Max, plus OpenCode on IU API for routine wakes | Claude Code on the two Max accounts only, in herdr |
+| Judgment | inside herdr sessions | cheap models through agent-gateway (OpenCode sessions, single calls) |
+| Quota | forecast guard, spill to IU API | three admission classes on the picker; wait, never spill |
+| State | SQLite ledger + statecharts | Postgres on the mini + a reconcile loop in Bun (DBOS evaluated, §6) |
+| Argo | split mini / VPS | all on the mini |
+| Dedup | rules only | rules + a decision-model judge + investigator merge/split + labels |
+| Jobs | reconcilers, Renovate | small TypeScript jobs, zero tokens when green; agentic upgrade waves |
+| Projects | `project.yaml` | `project.yaml` + one make contract + deploy mode + per-path autonomy |
+| Plan | 14 waves, import first | 6 waves, safety floor first, the factory builds itself from W3 |
+| Owner decisions | five | none open |

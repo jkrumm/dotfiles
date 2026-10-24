@@ -1,11 +1,11 @@
-# 10. Surfaces: Argo, the CLI, Hermes, notifications
+# 10. Surfaces
 
 ## Where everything runs
 
 ```mermaid
 flowchart TB
   subgraph mini[Mac mini — always on]
-    F[factory service<br/>Node 24 · DBOS]
+    F[factory<br/>Bun · reconcile loop]
     PG[(Postgres 18<br/>factory · argo)]
     A[Argo<br/>cockpit]
     AGW[agent-gateway<br/>+ OpenCode server]
@@ -17,103 +17,95 @@ flowchart TB
   end
   subgraph vps[VPS]
     APPS[public apps]
-    HDX[HyperDX / ClickStack]
-    K[Uptime Kuma<br/>dead-man probe]
+    HDX[ClickStack / HyperDX]
   end
   subgraph homelab[Homelab]
-    B[(backups:<br/>pg_dump · WAL · archives)]
+    K[Uptime Kuma]
+    B[(backups)]
   end
-  APPS -- signals --> F
-  HDX -- alerts --> F
-  K -- heartbeat probe --> F
-  PG -- nightly --> B
+  F -- polls --> K
+  F -- polls --> HDX
+  F -- heartbeat push --> K
+  F -- traces --> HDX
+  PG -- nightly dump --> B
   YOU((you)) --> A
 ```
 
+## Intake
+
+The mini can reach the homelab and the VPS; they cannot reach the mini. So the factory **polls** —
+Kuma's monitor states, Beszel, Docker on the three hosts, HyperDX alerts and ClickHouse error clusters,
+GitHub issues and checks, RollHook deploys, failed launchd jobs, CrowdSec decisions, TickTick. Polling
+the current state also means a missed recovery is caught on the next read. The few sources that can
+only notify Slack arrive through a **Slack adapter**. Nothing listens on a public address.
+
+Each source is repointed when its adapter lands: its Slack notifications are removed and Kuma's
+retries raised, so transient blips heal before they become signals. The one alert that stays outside
+the factory is the dead-man: the factory pushes a heartbeat (loop lag, last tick, a database write) to
+the homelab Kuma, which alerts through its own channel if the heartbeat stops.
+
 ## Argo, on the mini
 
-Argo moves from the VPS to the mini at W6 and reads the factory's Postgres directly — views for read
-models, `LISTEN/NOTIFY` → server-sent events for live updates. No push sync, no snapshot endpoint.
-The life pages and their data move with it (your call: "B. All on the mini"). v1's method stays: each
-page answers named questions (`design/argo.md` §2, 27 canonical questions + 4), and every number shows
-how old it is.
+Argo moves from the VPS to the mini at W5 and reads the factory's Postgres directly: views for reads,
+`LISTEN/NOTIFY` for live updates. Its life pages and their data move with it. Each page answers named
+questions (v1's question catalogue, `design/argo.md` §2), and every number shows its age.
 
-| Page | Answers | Built from |
-|-|-|-|
-| **Now** (home) | Does anything need me? Is the factory healthy? | open decisions, `stuck` Issues, factory health, the dead-man state |
-| **Projects** | How is each project doing? (your wireframe, `26-10-21-argo-projects-wireframe`) | per project: health, open Issues, Tasks, last deploys, sessions, usage, traffic, changelog |
-| **Factory** | What runs, what waits, why? | Issues by stage, the queue with "waiting for capacity until …", live sessions with account, DBOS workflow steps |
-| **Health** | Are the hosts and services fine? | infra job signals, containers, databases, backups, certs |
-| **Usage** | How much of each window is used, by what? | quota samples of `iu` and `me`, pace, picker decisions, IU spend by source |
-| **Traffic** | Who uses the apps? | Umami per app (custom events and goals added per app in W8) |
-| **Artifacts** | What is waiting for my comments? | plans and reports with threads; a comment reaches the authoring agent |
-| **Briefing** | What happened overnight? | the morning briefing, with audio |
+| Page | Answers |
+|-|-|
+| **Now** (home) | Does anything need me? Is the factory healthy? The morning briefing lives here. |
+| **Projects** | How is each project doing — open Issues, Tasks, deploys, sessions, cost, TickTick, changelog? (your wireframe) |
+| **Factory** | What runs, what waits and until when, which account each session uses? |
+| **Usage** | How much of each Max window is used and by what; IU API spend by source? |
+| **Artifacts** | Which plans and reports wait for my comments? A comment reaches the agent that wrote it. |
 
-Writes are intents (ADR-015, kept): submit, steer, pause, decide, comment, re-verify, stop — each a
-call to the factory API, executed by the loop, visible as an event.
-
-The UI is basalt-ui. What Argo needs and basalt-ui lacks is built in basalt-ui first (v1
-`design/argo.md` §5); the *basalt-ui upstream* job (§9) keeps the direction honest.
+Health and traffic link out to Beszel, Kuma and Umami at first; they get pages when a question needs
+one. Writes are intents — submit, steer, pause, decide, comment, re-verify, stop — calls to the factory
+API, executed by the loop. The UI is basalt-ui; what Argo needs and basalt-ui lacks is built in
+basalt-ui first.
 
 ## Notifications
 
-- **Push** comes from Argo (web push to the installed PWA) for exactly two things: a decision card,
-  and the morning briefing.
-- **The mini going dark** cannot be announced by the mini. Uptime Kuma on the VPS probes the factory's
-  heartbeat and alerts through its own channel (Slack today). That is the only alert that bypasses
-  Argo.
-- **Slack** stays as Hermes' chat and as an intake adapter for the few sources that can only post to
-  Slack. It stops being the factory's relay: sources with an API or a webhook connect directly.
-- **Public webhooks** for sources outside the tailnet (GitHub, SaaS alerting) arrive through one
-  Tailscale Funnel path, `/ingest/<source>`, with a per-source signature check. Polling is the
-  default where a source allows it (GitHub every 10 minutes).
+Push comes from Argo (web push to the installed app) for exactly two things: a decision card and the
+morning briefing. Slack keeps Hermes' chat, the Slack adapter's channels and the dead-man alert.
 
 ## The `factory` CLI
 
-One oRPC router defines every operation with Zod input and output. From it:
-
-- **the HTTP API** Argo and Hermes call (oRPC 1.x, typed client, OpenAPI 3.2 for anything else);
-- **the CLI** agents and you use (`trpc-cli`, which reads oRPC routers);
-- **the docs**: `factory --help --format json` renders the routing block in every repo's AGENTS.md and
-  the CLI reference — generated, never hand-edited.
+One oRPC router defines every operation with Zod input and output. From it come the HTTP API Argo and
+Hermes call, the CLI (`trpc-cli` reads oRPC routers) and the docs. The generated AGENTS.md block lists
+only what agents need, to keep resident tokens small:
 
 ```
-factory status                                  # one screen: stages, queue, sessions, capacity
-factory issue  new|list|show|merge|split|close
-factory task   list|ready|claim|done|blocked|note
-factory wave   run|status <plan>
-factory session list|resume|stop
-factory decide list|answer
-factory job    list|run|dry-run
-factory project list|show|check|new|pause
-factory artifact submit|comments|resolve
+factory status
+factory issue new|show|merge|split
+factory task done|blocked|note
+factory decide answer
+factory project check
 ```
 
-Agent contract on every command (clig.dev, `gh`): data on stdout, messages on stderr, `--format
-json|md`, non-zero exit on failure, no prompts unless a TTY and no agent detected.
-
-**Why oRPC + trpc-cli and not cyclopts:** cyclopts is the cleanest code-derived CLI there is, but it is
-Python, and the factory's main consumer is Argo — TypeScript, TanStack Query, same box, same database.
-One TypeScript router gives Argo typed calls (`@orpc/tanstack-query`) and agents a CLI from the same
-definition. `incur` would add MCP from the same tree but is at 0.7; MCP is not needed (ADR-004).
+The rest (`wave`, `job`, `session`, `artifact`, …) exists for you and for Argo and is documented once,
+not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
+json|md`, exits non-zero on failure and never prompts an agent.
 
 ## Tools around it
 
-- **Gateways stay CLI-first** (ADR-004): `agw`, `research`, and the audio, email and image CLIs; MCP only
-  for research-gateway and chrome-devtools. agent-gateway's MCP registration is removed in W10, which
-  also takes its tool definitions out of every session's resident context.
-- **`rd`** keeps working; its spawn, fan, merge and say verbs move under `factory` in W10, and `rd`
+- **Gateways stay CLI-first:** `agw`, `research`, the audio, email and image CLIs. MCP remains only for
+  research-gateway and chrome-devtools; agent-gateway's MCP registration goes in W6, once the skills
+  that use it call the `agw` CLI.
+- **`rd`** keeps working; its spawn, fan, merge and say verbs move under `factory` in W6 and `rd`
   becomes an alias.
-- **Hermes** is a thin chat: it answers status from the factory API, turns "do X" into
-  `factory issue new`, and reads the briefing. It never implements.
+- **Hermes** is a thin chat: status from the factory API, "do X" becomes `factory issue new`. It never
+  implements.
+- **Diagrams** are written as Mermaid and rendered by pele, here and in the dataviz skill and Argo's
+  artifact view (W6).
 
-## What is switched off
+## What is switched off, and when
 
 | Thing | When |
 |-|-|
-| warden (loop, poll, sweep, API, backup) | W0 — data archived read-only |
-| Slack → warden relay, Hermes "Project narratives" | W0 |
-| agent-gateway implement on IU | Phase 0, done 2026-10-24 |
-| Argo on the VPS | W6 |
-| plannotator Inbox + its review door | W7 |
-| agent-gateway MCP registration | W10 |
+| agent-gateway implement on IU API tokens | Phase 0, done 2026-10-24 |
+| warden, its Slack relay, Hermes' project narratives | W1 (warden deleted) |
+| agent-gateway's headless implement lane | W1 stops its only caller (warden); W6 removes the lane |
+| raw Slack alerts from each source | as its adapter lands (W1 Kuma, W4 the rest) |
+| Argo on the VPS | W5 |
+| plannotator and its review door | W5 |
+| agent-gateway MCP registration | W6 |

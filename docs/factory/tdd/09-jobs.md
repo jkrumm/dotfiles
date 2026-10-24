@@ -1,61 +1,57 @@
-# 9. Recurring jobs — self-improving at zero tokens when green
+# 9. Upkeep jobs
 
-A job is a small pipeline, not an agent. Code does the looking; a model is called only when the code
-found something worth a sentence. The idea is Swamp's: typed steps in code, definitions as data,
-`assert` as a first-class step (`research/2026-10-24-factories-landscape.md` §a).
+A job is a small TypeScript module, not an agent. Code does the looking; a model is called only when
+the code found something worth a sentence. Swamp's ideas, without its runtime: typed steps in code,
+assertions as first-class steps, nothing spent when everything is fine.
 
-## Shape
-
-```yaml
-# factory/jobs/deps.yaml
-name: deps
-schedule: "0 6 * * 1"            # Monday 06:00
-for_each: projects(jobs contains deps)
-steps:
-  - probe: outdated               # bun outdated / npm-check-updates --jsonUpgraded → JSON, per repo
-  - probe: release-notes          # changelog + migration guide URLs for each candidate, fetched, cached
-  - assert: "candidates.filter(c => c.ageDays >= 14).length > 0"
-  - summarize:                    # only if the assert found something; Haiku 5.5, one call
-      prompt: group-upgrades      # which packages move together, which majors wait, what is worth adopting
-  - open: { kind: upgrade, priority: P3 }
+```ts
+// factory/jobs/deps.ts
+export default job({
+  schedule: "0 6 * * 1",
+  projects: (p) => p.jobs.includes("deps"),
+  async run({ project, probe, summarize, open }) {
+    const outdated = await probe.outdated(project);            // bun outdated --json, release ages
+    const due = outdated.filter((d) => d.ageDays >= (d.major ? 14 : 3));
+    if (due.length === 0) return;                               // green: zero tokens
+    const notes = await probe.releaseNotes(due);                // changelogs + migration guides, cached
+    const plan = await summarize("group-upgrades", { due, notes }); // one Haiku call
+    await open({ kind: "upkeep", class: "upkeep", title: plan.title, plan });
+  },
+});
 ```
 
-Step kinds: `probe` (deterministic, JSON out), `assert` (an expression over probe output; a false
-assert ends the run green), `summarize` (one cheap call, structured output), `open` (Signal → the
-loop), `act` (a deterministic action, for runbook-style jobs). A job never edits a repo itself; code
-changes become Tasks and go through §4.
+A job never edits a repo. Code changes become Tasks and go through the loop.
 
-## Catalogue
+## First jobs
 
-| Job | Cadence | Probe | Opens | Green cost |
-|-|-|-|-|-|
-| **deps** | weekly | outdated packages, release age, changelogs and migration guides | one upgrade Issue per coherent group; majors wait for maturity (≥ 14 days, ecosystem adoption) and come with what to adopt, not just a bump | 0 |
-| **docs drift** | daily | generated AGENTS.md blocks vs a fresh render; links; docs older than the code they describe | `hygiene` | 0 |
-| **code health** | weekly | `make quality` over the week's changes: oversized files, duplication, dead code | one batched `hygiene` per project | 0 |
-| **agent setup** | weekly | AGENTS.md size, skills count, resident tool-definition tokens per repo and globally | `hygiene` when over budget | 0 |
-| **basalt-ui upstream** | weekly | components duplicated across consumers, and pieces consumers built that basalt-ui lacks | an Issue on basalt-ui per candidate | 0 |
-| **bug sweep** | weekly | new OTel error clusters per service; agent-gateway review over the week's merged diffs (light depth) | `bug` | ≈ $2–5 / week |
-| **perf** | daily | p95 and error rate per service vs its 14-day baseline | `bug` on regression | 0 |
-| **traffic** | daily | Umami `/stats` and `/events/series` per app vs a rolling baseline (Umami has no anomaly endpoint) | `incident` on a drop | 0 |
-| **infra** | 5 min – daily | disks, certs, backups (age and restore test), containers, databases, ClickHouse, the mini's memory and swap | `incident` with a runbook | 0 |
-| **security** | daily / quarterly | CrowdSec decisions and auth anomalies daily; Cloudflare's security-audit skill, `quick` profile, per fleet repo quarterly | `incident` / `hygiene` | quarterly audit on lapsing Max capacity only (P3) |
-| **GitHub** | 10 min | open issues and failed checks on owned repos | Signals | 0 |
-| **herdr hygiene** | hourly | tabs done or idle > 24 h, mothers past their context budget | closes finished tabs, compacts or rotates mothers; never touches a tab you are in | 0 |
-| **changelog** | daily | `git log` since the last run per project | one dated entry in the *Changelog* section of the project's brain page (`brain/Projects/<project>.md`), shown in Argo | ≈ $0.01 / project-day |
-| **morning briefing** | 07:00 | the night's closed, stuck and waiting Issues, decisions, capacity | the briefing page + push + optional audio | ≈ $0.05 |
+| Job | Lands | Probe | Opens |
+|-|-|-|-|
+| **deps** | W6 | outdated packages, release age, changelogs and migration guides | one upgrade Issue per group of packages that move together; majors wait ≥ 14 days and come with what to adopt, not just a bump |
+| **docs and agent setup** | W6 | generated AGENTS.md blocks vs a fresh render; AGENTS.md size, skill count, resident tool tokens | upkeep when drifted or over budget |
+| **code health** | W6 | `make quality` over the week's changes | one batched upkeep Issue per project |
+| **infra** | W1: backups and the restore drill; W6: the rest | disks, certs, backup age and a weekly restore test, containers, databases, ClickHouse, the mini's memory and swap | an incident with its runbook |
+| **briefing** | W5, with *Now* | the night's closed, stuck and waiting Issues, decisions, capacity | the 07:00 Argo briefing and push — a template, no model; audio through audio-gateway if enabled |
 
-Hermes' "Project narratives" cron (daily 06:30 → Slack) is replaced by *changelog* and the briefing.
+The *changelog* is not a job of its own: the brain page section is written from conventional commits
+on each merge (§7).
 
-## Upgrades, specifically
+## Next, each when it has a consumer
 
-You upgrade in a full Claude session every few weeks because upgrades are rarely a version bump:
-packages move together, majors need their migration guide, and the point is to use what is new.
-The job therefore does the deterministic part (what is outdated, how old, which notes) and one cheap
-grouping call; the Issue goes to the project's mother as a planned upgrade wave — research, migrate,
-adopt, verify — at P3, so it runs on capacity that would otherwise lapse. Renovate is not adopted.
+| Job | Trigger to build it |
+|-|-|
+| basalt-ui upstream: duplicates across consumers, and pieces consumers built that basalt-ui lacks | the first consumer-built component that another app needs |
+| perf: p95 and error rate per service against a 14-day baseline | a regression that reached you |
+| traffic: Umami `/stats` and `/events/series` against a rolling baseline (Umami has no anomaly endpoint) | Umami events and goals wired into the apps |
+| security audit: Cloudflare's security-audit skill, `quick` profile | per fleet repo once its changes since the last audit pass ~2,000 lines, on upkeep capacity |
+| herdr hygiene: compact or rotate idle mothers (W2 already closes finished workers' tabs) | the first mother idle past a day |
 
-## Writing a new job
+**Security** also has a runbook class from W4: CrowdSec decisions arrive as signals, and the runbooks
+block an address, stop an exposed container or mark a leaked secret for rotation; one gameday proves it.
 
-A job is a YAML file plus, if needed, a probe in TypeScript. An agent can write the YAML from a
-one-line request; the factory validates it against the step schema and dry-runs it once before
-scheduling it. A job that spends tokens on a green run is a defect the job catalogue check flags.
+## Upgrades
+
+You upgrade in a full Claude session every few weeks because an upgrade is rarely a version bump:
+packages move together, majors need their migration guide, and the point is to use what is new. The
+job does the deterministic part and one grouping call; the Issue becomes a planned upgrade wave —
+research, migrate, adopt, verify — that a worker or the project's mother ships on upkeep capacity.
+Renovate is not used.

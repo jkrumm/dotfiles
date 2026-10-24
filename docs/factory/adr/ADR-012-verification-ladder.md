@@ -1,5 +1,7 @@
 # ADR-012 — Verification replaces approval: a ladder per action class, no owner gates
 
+> **v2 status (2026-10-24):** revised — base-branch checks on the merge result, hold window, no auto-ship without evidence (TDD v2 §4). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 (ver-1…ver-8, sre-4, int-4, cos-6), pass 2 (ver-1…ver-7, sim-4, sim-5, sre-5, int-8, dat-9, dat-12, cos-15) and the cross-lab review (R7, R16, T3). In the body, `p2` marks a pass-2 id; `R` and `T` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/kpi/baseline.out.md` (warden revert 0 of 52 merges: all rebase merges, 3 failed verifications "cannot auto-revert"; reopen 10.4 %; regression 10.4 %, 5 of 48 evaluable fixes), `evidence/kpi/dora.out.md` (CFR 2.0 % attributed, recovery median 0.27 h; 1418 deploys in 90 d, mostly Actions-on-push), `evidence/signals/signals.md` (19 of 36 vps services without a Kuma monitor or push), `evidence/incidents/incidents.md` #2–#4 (the observer was wrong, not the service), `evidence/interventions/interventions.md` (4 of 20 genuine), `research/2026-10-21-dark-factory-landscape.md` §3 (agent review is a signal, deterministic checks gate), `research/2026-10-22-agents-durable-mcp-otel.md` §3 (StrongDM holdouts)
 

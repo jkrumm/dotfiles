@@ -1,5 +1,7 @@
 # ADR-009 — Argo runs split: the factory read API on the mini, the SPA and life data on the VPS
 
+> **v2 status (2026-10-24):** superseded — Argo all on the mini (TDD v2 §10). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 (ux-1, ux-3, ux-7, sre-3), pass 2 (ux-1, dur-4, dat-13, ver-7; carry-through of pass-1 dat-5) and the cross-lab review (R13, I4, T2). In the body, `p2` marks a pass-2 id; `R`, `I` and `T` ids are rows of `panel/review-resolutions.md`.
 - Evidence: Argo/basalt-ui inventory (Explore, 2026-10-22; `design/argo.md` §4), `evidence/questions/questions.md` (Q1: 41 of 50 nudges from the MacBook), `last reboot` on the mini (2 reboots since 2026-08-29), `evidence/signals/signals.md` (Kuma is one instance, on the homelab), `evidence/incidents/incidents.md` #1 (the mini's recurring DNS/egress failure: 7 h night, 31 alerts)
 

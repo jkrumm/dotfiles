@@ -1,5 +1,7 @@
 # ADR-010 — One project manifest per repo; everything about a project is generated from it
 
+> **v2 status (2026-10-24):** revised — + make contract, deploy mode, migrations, per-path autonomy (TDD v2 §7). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 (revised after panel pass 1: dx-1, dx-2, dx-3, dx-7, dat-2, dat-8, sre-1, sre-7, int-4, int-5, mig-8, sim-1; after pass 2: dx-1, dx-2, dx-3, dx-6, dx-7, dat-7, dat-14, ver-2, int-8, dur-1, mig-4)
 - Evidence: `findings-2026-10-22.md` §Project identity has no system of record, `evidence/postmortem/postmortem.md` (lane text hand-copied into 19 files; prose claims held 1 of 11), `evidence/signals/topology.out.json` (117 runtime units, blind spots), `evidence/projects/classify.out.md`, `research/2026-10-22-ops-correlation-catalog-eval.md` §4, `panel/pass1/dx.json` dx-3 (IuRoot measured: 1 repo tracks AGENTS.md, 6 track CLAUDE.md, 1 tracks `docs/waves`)
 

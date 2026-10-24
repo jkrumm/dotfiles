@@ -1,5 +1,7 @@
 # ADR-015 — Argo's write half: intent verbs, executed by reconcilers, never imperative calls
 
+> **v2 status (2026-10-24):** kept (TDD v2 §10). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 (owner intent: "Argo as a full control plane") · revised after panel pass 1 (ux-4, ux-5, dur-7, dat-6, sim-3) and pass 2 (ux-1, ux-4, ux-5, ux-6, dur-8, dat-9; carry-through of pass-1 dat-2, dur-1 and sim-5). In the body, `p2` marks a pass-2 id.
 - Evidence: the owner's prompt; `evidence/questions/questions.md` (50 `continue` nudges, 15 needless approvals, 9 "which tabs can close"); `evidence/interventions/interventions.md`; Argo inventory (today's verbs: implement, merge, dismiss, reinvestigate, retry, note — pulled by warden from a queue); ADR-009, ADR-011, ADR-014
 

@@ -1,5 +1,7 @@
 # ADR-007 — Agent topology and lifecycle: on-demand mothers for fleets, sessions for the rest, one spawner
 
+> **v2 status (2026-10-24):** revised — herdr = Claude Code on Max; fleet mothers own plans; workers by default (TDD v2 §4, §5). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 (int-1, sim-3, sim-6, sim-7, ux-1, cos-4, ver-5, dur-2), pass 2 (sim-3, sim-4, dur-1, dur-2, dur-8, ux-1, cos-9) and the cross-lab review (R2, R6). In the body, `p2` marks a pass-2 id; `R<n>` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/projects/classify.out.md` (fleet/session rule), `evidence/questions/questions.md` (50 `continue` nudges, #1 owner action; 41 of 50 from Claude Code on the MacBook, 38 in shutterflow), `evidence/interventions/interventions.md` (26 API-error stalls, median 1.2 h), `evidence/kpi/herdr_hygiene.out.md` (20 finished-but-open tabs), `research/2026-10-22-agents-durable-mcp-otel.md` §2 (Gas Town), Round 5 *Established facts* (326 implement episodes outside herdr in 12 days; Hermes typing `c`/`cf` into panes)
 

@@ -1,5 +1,7 @@
 # ADR-014 — The owner decides business questions only; every decision has a default and an expiry
 
+> **v2 status (2026-10-24):** kept — plus the three-line writing rule (TDD v2 §3). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 (dat-6, sre-1, int-4, ux-5, ux-7, dur-7), pass 2 (dat-11, dat-12, dur-4, int-8, int-12, ux-4, sim-6) and the cross-lab review (R13, R17, I4, T2). In the body, `p2` marks a pass-2 id; `R`, `I` and `T` ids are rows of `panel/review-resolutions.md`.
 - Evidence: `evidence/kpi/baseline.out.md` (escalated 32.2 % of new items, 14 d; autonomy 64.3 %), `evidence/interventions/interventions.md` (4 of the latest 20 genuine), `evidence/incidents/incidents.md` (577 owner-facing notifications vs 140 decision entries; #9, the disconnected drive, is the one legitimate page), `evidence/DEFINITIONS.md` (item, owner touch), `evidence/golden/` (genuine share on the labelled set), `BRIEF.md` §Fixed
 

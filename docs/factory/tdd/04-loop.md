@@ -1,127 +1,142 @@
 # 4. The loop
 
-One path for every piece of work. Each stage has one engine and writes facts; status is derived.
+One path for every piece of work. Each stage has one engine and records facts; state is derived.
 
-| Stage | Engine | In → out | Cost |
-|-|-|-|-|
-| **Intake** | deterministic adapters | source event → Signal (with source time and fingerprint) | 0 |
-| **Dedup** | rules, then similarity, then a cheap judge for the residue (§8) | Signal → new or existing Issue | ≈ 0; judge ≈ $0.001 a call |
-| **Settle** | durable timer | Issue waits its grace window; a recovery closes it as *self-healed* | 0 |
-| **Known fix** | deterministic runbook from `project.yaml` (restart, rerun backup, roll back) | Issue → action + re-check | 0 |
-| **Investigate + plan** | cheap model in an OpenCode session through agent-gateway, read-only CLIs | Issue → root cause, plan Artifact, Tasks, risk class, optional business question | ≈ $0.55 (agw dispatch, last 7 d: $4.31 / 8 jobs) |
-| **Decide** | policy; you only for business | question → outcome (default on expiry) | 0 |
-| **Schedule** | capacity scheduler (§5) | Task → admitted on an account, or waiting | 0 |
-| **Implement** | Claude Code on Max in herdr: the project's mother, or a worker it spawns | Task → commits on `factory/<task-id>` | Max window |
-| **Verify** | make targets, agent-gateway review (cheap angles + a DeepSeek adversary from another model family), holdout scenarios | commit → Checks keyed to the head SHA | 0 + ≈ $2.40 per full review ($136 / 56 last week) |
-| **Ship** | deterministic: squash merge, `make deploy`, `make verify` | Change → Deploy → post-deploy Check; fail → rollback | 0 |
-| **Learn** | deterministic + cheap summary | closed Issue → root cause, fix recipe, labels | ≈ 0 |
+| Stage | Engine | In → out |
+|-|-|-|
+| **Intake** | adapters that poll each source's current state, plus your requests | → Signal |
+| **Dedup** | rules; a decision-model score for the ambiguous rest (§8) | Signal → new or existing Issue |
+| **Settle** | a timer | the Issue waits its grace window; if the source reports healthy, it closes as *self-healed* |
+| **Known fix** | a runbook from `project.yaml` (restart, rerun a backup, roll back) | action, then a fresh look |
+| **Investigate + plan** | cheap model in an agent-gateway OpenCode session, read-only tools | root cause, plan, Tasks, acceptance checks, optional business question |
+| **Decide** | policy; you only for business | answer, or the default on expiry |
+| **Admit** | the picker, by class (§5) | a Task gets an account now, or a time to wait until |
+| **Implement** | Claude Code on Max in herdr | commits on `factory/<task-id>` |
+| **Verify** | the base branch's make targets on the merge result; agent-gateway review | checks keyed to (head SHA, base SHA) |
+| **Ship** | deterministic merge, `make deploy`, `make verify`, hold window | a deploy that holds, or a rollback |
+| **Learn** | deterministic; a cheap summary only for investigated Issues | root cause, fix recipe, grouping labels |
 
 ## Three ways in
 
-- **Signals** from sources and jobs go through dedup and become Issues of kind `incident`, `bug`,
-  `hygiene` or `upgrade`.
-- **Requests** from you (Argo, Hermes, `factory issue new`) skip dedup and settle, and start at
-  *Investigate + plan* as kind `request`. A request that already carries a plan starts at *Schedule*.
+- **Signals** from sources and jobs pass dedup and become Issues: `incident`, `bug`, `upkeep`.
+- **Requests** — Argo, Hermes, a TickTick item tagged `#factory`, `factory issue new` — skip dedup and
+  settle and start at *Investigate + plan*. A request that already has a plan starts at *Admit*.
 - **Wave plans** (`/wave`, or a plan an investigation produced) are Tasks with dependencies. The plan
   file keeps the prose and the task ids; the factory keeps the state.
 
-## Issue lifecycle
+## What you see of an Issue
 
 ```mermaid
 stateDiagram-v2
-  [*] --> open
-  open --> settling: grace window
-  settling --> closed: recovered (self-healed)
-  settling --> fixing: known fix exists
-  fixing --> closed: runbook + re-check pass
-  fixing --> investigating: runbook failed twice
-  settling --> investigating: still failing
-  investigating --> waiting_decision: business question
-  waiting_decision --> planned: answer or default
-  investigating --> planned
-  planned --> working: tasks admitted
-  working --> verifying: all tasks done
-  verifying --> closed: resolved on the running system
-  verifying --> investigating: not resolved (attempt + 1)
-  investigating --> stuck: breaker (3 attempts or budget)
-  stuck --> investigating: new signal or your nudge
-  closed --> open: regression (same fingerprint within 30 d)
+  [*] --> waiting: settle, known fix, or capacity
+  waiting --> working: a session is building
+  waiting --> closed: healed or fixed by a runbook
+  working --> verifying
+  verifying --> closed: holds on the running system
+  verifying --> working: next attempt
+  working --> needs_you: business question
+  needs_you --> working: answer or default
+  working --> stuck: three attempts failed
+  stuck --> working: next window, new approach
+  stuck --> closed: gave up, with a note
+  closed --> waiting: same fault again within 30 days
 ```
 
-`stuck` is not a page. It shows in *Now* and in the briefing with one line on why; a new signal or a
-steer re-opens it.
+Six states in Argo; the reconciler keeps finer steps internally. **Stuck has an exit that does not
+need you:** after three failed attempts the Issue waits for the next capacity window, gets one more
+attempt with a fresh investigation that is told why the earlier ones failed, and then closes as
+*gave up* with a line in the briefing. A new signal re-opens it.
 
-## The workflow, as code
+## The reconcile loop
 
-Each Issue is one DBOS workflow; each Task is a child workflow on the `implement` queue. A crash, a
-redeploy or a reboot resumes at the last finished step. The shape (TypeScript, DBOS 5):
+The `factory` service is one Bun process. It holds a Postgres advisory lock, so a second copy exits
+at start. Every five seconds, and immediately on a `NOTIFY` from new facts, it picks up every Issue and
+Task whose `wake_at` has passed or whose facts changed, and for each:
 
-```ts
-const handleIssue = DBOS.registerWorkflow(async (issueId: string) => {
-  const issue = await DBOS.runStep(() => issues.load(issueId), { name: "load" });
+1. reads its facts and the current state of the world it depends on (the container, the PR, the
+   session's pane, the deploy);
+2. derives its state;
+3. takes at most one next action through the effect registry, keyed by
+   `(entity, generation, step)` — an effect that already happened is observed, never repeated;
+4. records the outcome as a fact and sets the next `wake_at`.
 
-  // Settle: transient failures recover inside the grace window.
-  const recovered = await DBOS.recv<"recovered">("recovered", { timeoutSeconds: issue.graceSeconds });
-  if (recovered) return DBOS.runStep(() => issues.close(issueId, "self-healed"), { name: "close" });
+Long work is started, then observed: spawning a session, starting an investigation or a deploy is
+one action; its progress arrives as facts on later ticks. Nothing waits in memory, so a crash, a
+redeploy of the factory itself or a reboot loses at most one tick. Re-opening an Issue or un-sticking
+it bumps its `generation`, so effects from an earlier generation can never land twice.
 
-  // Known fix: a deterministic runbook, then a re-check.
-  if (issue.runbook && (await DBOS.runStep(() => runbooks.apply(issueId), { name: "runbook" })).ok) {
-    return DBOS.runStep(() => issues.close(issueId, "runbook"), { name: "close" });
-  }
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const plan = await DBOS.runStep(() => cognition.investigate(issueId, attempt), { name: `investigate-${attempt}` });
-    if (plan.question) await decisions.await(plan.question); // recv with expiry → default
-    const tasks = await DBOS.runStep(() => work.createTasks(issueId, plan), { name: `tasks-${attempt}` });
-    await Promise.all(tasks.map((t) => DBOS.startWorkflow(runTask, { queueName: "implement" })(t.id).then((h) => h.getResult())));
-    if (await DBOS.runStep(() => issues.isResolved(issueId), { name: `resolved-${attempt}` })) {
-      return DBOS.runStep(() => issues.close(issueId, "fixed"), { name: "close" });
-    }
-  }
-  await DBOS.runStep(() => issues.markStuck(issueId, "three attempts"), { name: "stuck" });
-}, { name: "handleIssue" });
-```
-
-`runTask` admits the task (§5), spawns or wakes the session in herdr, then waits on `recv` for
-Witness' `done`, `blocked` or `dead` message — no timeout on the work itself, only the idle watchdog.
-It then runs the checks, ships, and on a failed post-deploy check rolls back and opens a follow-up
-Task. Every external effect is a step with an idempotency key `(task id, step)`; a step re-run after
-a crash first observes whether the effect already happened (the PR exists, the deploy is live).
+After downtime, every open deadline is shifted by the time the factory was down, so a decision you
+could not answer while Argo was dark does not take its default the second the mini comes back.
 
 ## The brief every session gets
 
-Taken from pstack, sent on every spawn and every resume, generated from the Task:
+Sent on every spawn and every resume, generated from the Task. The standing-orders part is identical
+across spawns, so it stays in the prompt cache; the task part comes last.
 
-- **Goal and done-definition** — the checks that must pass on the final commit.
-- **Scope** — the repo, the files the plan names, and what is out of bounds.
-- **Context** — the Issue, the investigation, similar past issues and their fixes.
-- **Branch** — `factory/<task-id>`; one writer per branch; never rebase another branch, never merge.
-- **Report** — `factory task done|blocked|note`, with the head SHA. The factory, not the agent, decides
-  that the task is done.
+- **Goal and done-definition** — the acceptance checks, as commands.
+- **Scope** — repo, files, what is out of bounds.
+- **Context** — the Issue, the investigation, similar past Issues and how they were fixed.
+- **Branch** — `factory/<task-id>`. Never rebase another branch, never merge, never touch the
+  Makefile, CI or test configuration unless the Task says so.
+- **Report** — `factory task done|blocked|note`. The factory, not the agent, decides when a Task is done.
 
 ## Witness
 
-Witness observes herdr and keeps facts about sessions: started, output seen, idle, blocked, exited.
-It sends the task workflow `done` after `factory task done` plus a five-minute settlement window,
-`blocked` when herdr reports a question, `dead` when the pane is gone. A session parked by a quota
-wall is resumed by the scheduler when its account has room — on the same account, so the cache
-holds. A stuck session gets one interrupt at most every three minutes (agent-orchestrator's rule),
-never a `continue` from you.
+Witness is part of the factory process. It watches herdr and records facts per session: spawned
+(with an epoch number), output seen, idle, blocked on a question, hit a usage wall (and its reset
+time), exited, and the account actually in effect. The Task reconciler reads those facts — there are
+no messages to lose. Rules:
 
-## Mothers and workers
+- **Done** needs the agent's `factory task done`, no new commit for five minutes and an idle pane.
+  The pane is then stopped before verification starts, so nothing lands after the checks.
+- **A usage wall is not idleness.** The idle watchdog is suspended until the reset; the Task re-enters
+  admission (§5).
+- **A dead pane** is respawned from the branch. Three deaths in ten minutes without a new commit mark
+  the Task blocked and send it back to planning.
+- **Stuck sessions** get at most one interrupt every three minutes, never a `continue` from you.
+- **Finished workers' tabs are closed** when their Task closes.
 
-- **Fleet projects** (basalt-ui, argo, weatherorb, shutterflow, factory) have a mother: a Claude Code
-  session per project that the scheduler wakes with a Task. It may split the Task across workers in
-  herdr (`rd fan` today, `factory spawn` later) on disjoint files, and it integrates their branches.
-- **Session projects** (everything else, including dotfiles) get a fresh worker per Task.
-- **Cache affinity:** a project's next Task goes to its live mother while her cache is warm (one hour);
-  after that a fresh wake starts from the project's notes and the Issue history.
-- **Rotation:** the herdr hygiene job (§9) compacts or closes mothers idle for more than a day, and
-  closes finished worker tabs.
+## Workers and mothers
 
-## Ship and roll back
+- **Every Task gets a fresh worker by default** — a Claude Code session in herdr with the brief.
+- **Fleet projects keep a mother** (basalt-ui, argo, weatherorb, shutterflow, factory): the session that
+  owns that project's multi-wave plans, as basalt-ui's does today. Tasks from her plan go to her, and
+  she may fan out workers on disjoint files. Incident fixes and small requests do not wake her.
+- **A follow-up goes where the cache is warm:** within the hour, to the session that did the work.
+- **Idle mothers** are compacted or closed by the herdr hygiene job once the first one idles past a
+  day (§9); finished workers' tabs close with their Task from W2.
 
-Squash merges keep every Change one revert away. The deploy is the project's `make deploy`; its
-wrapper records a Deploy with the artifact digest. Post-deploy `make verify` passes or the previous
-good Deploy is redeployed and the digest is marked bad; the ship step refuses a bad digest. A
-project whose deploy is not automatic (§7) stops after the merge and records "merged, not deployed".
+## Verification the candidate cannot weaken
+
+- Required checks run in a factory-owned checkout of the merge result (the branch rebased onto the
+  current tip), using **the base branch's** Makefile, CI and test configuration.
+- A change that touches the verification surface — Makefile, CI, test config, `project.yaml`, verify
+  scripts — gets a full review whose adversary is asked one question: does this weaken verification?
+  Test and check counts may not drop. If either fails, the Task goes back to planning; it does not
+  stop at you.
+- **No evidence, no auto-ship.** A project without `make test` or `make verify` cannot auto-ship code;
+  the factory first opens a Task to add the missing target.
+- **Acceptance checks are written from the plan, not the diff:** a separate fresh session reads the
+  plan and turns its acceptance checks into smoke steps in `make verify`.
+
+## Merge, deploy, hold, roll back
+
+1. **Merge**, one at a time per repo: rebase onto the current tip, re-run the changeset checks on the
+   result, then fast-forward the default branch to exactly that commit (or merge the PR with its head
+   SHA pinned, in the PR-required repos). A moved tip means rebase and check again.
+2. **Deploy** by the project's `deploy.mode` (§7): automatic on push, `make deploy`, or an *agentic*
+   deploy — a Max Task whose done-definition is `make verify` passing on the target.
+3. **Hold.** `make verify` must pass, then the deploy must stay free of new signals for its hold window
+   (30 minutes by default) before it counts as *held*.
+4. **Roll back** to the last held deploy if verify or the hold window fails, and mark the failed
+   artifact bad so it is never shipped again. If the rollback itself fails, the project is paused and
+   you get one card.
+5. **Migrations** are declared in `project.yaml`. Additive (expand/contract) migrations ship like code;
+   a migration that drops data is a business decision whose default on expiry is *do not proceed*.
+
+## The factory ships itself differently
+
+The factory cannot deploy itself from inside its own loop. Its `make deploy` is a small script
+outside the loop: build a release, swap it in, wait for health and one synthetic Issue to round-trip,
+and swap back to the last held release if either fails. The loop only calls it and observes the
+result.

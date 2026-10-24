@@ -1,101 +1,90 @@
 # 7. Projects
 
-Every repo is a project with the same shape, so the factory, CI, agent-gateway and you all run the
-same commands everywhere. v1's manifest schema (`design/model.md` §6) and directory contract (§6.1)
-carry over; v2 adds the make contract and per-path autonomy.
+Every repo is a project with the same shape, so the factory, CI, agent-gateway and you run the same
+commands everywhere.
 
 ## `project.yaml`
 
 ```yaml
 apiVersion: factory/v2
 name: weatherorb
-class: fleet            # fleet → a mother; session → a fresh worker per task
-owner: personal         # personal | work (IuRoot: never monitored)
+class: fleet               # fleet: has a mother for multi-wave plans · session: workers only
 deploy:
-  mode: auto            # auto: a push deploys (RollHook / CI) · make: the factory runs `make deploy`
-                        # agentic: deploying needs an agent (migrations, manual steps) · none: library
+  mode: auto               # auto: a push deploys · make: the factory runs `make deploy`
+                           # agentic: deploying needs an agent · none: nothing to deploy
   targets: [{ name: prod, host: vps, verify: https://weatherorb.example.com/health }]
-ship:                   # autonomy, first match wins
-  - { paths: ["**"], mode: auto }          # auto: merge + deploy when the ladder passes
-  # - { paths: ["src/domain/**"], mode: pr }   # pr: open the PR, stop
-  # - { paths: ["**"], mode: propose }         # propose: plan only
+  hold: 30m
+  migrations: [apps/api/drizzle/]   # additive ships like code; dropping data is a decision
+ship:                      # first match wins
+  - { paths: ["**"], mode: auto }          # auto: merge + deploy when verification passes
 signals:
   kuma: [weatherorb-web, weatherorb-api]
   hyperdx: { service: weatherorb-api }
   umami: { website: weatherorb }
 heal:
   - { when: kuma.down, grace: 5m, runbook: make restart, max: 2 }
-jobs: [deps, docs, code-health, upstream-basalt, security]
+jobs: [deps, docs, code-health]
+ticktick: { list: WeatherOrb }
 ```
 
-The drift check runs in CI and in the factory: schema valid, every integration key resolves, every
-make target the contract requires exists (`make -n`), every runbook command parses. A repo without a
-valid manifest gets an Issue, not a silent skip.
+A drift check runs in CI and in the factory: valid schema, every integration key resolves, every
+make target and runbook parses. A broken manifest becomes an upkeep Issue, never a silent skip.
 
 ## The make contract
 
-Every repo implements the targets that apply to it. CI calls them, the factory calls them,
-agent-gateway's `check` and `review` call them — one definition of "it works" per repo.
-
-| Target | Means | Changeset-aware |
+| Target | Means | When it lands |
 |-|-|-|
-| `make check` | format check, lint, type check | yes: `BASE=<ref>` limits to files changed since `BASE` (default: merge-base with the default branch) |
-| `make test` | unit and integration tests | yes where the runner supports it (`vitest --changed`, `bun test` on changed packages); full on `BASE=` empty |
-| `make quality` | static analysis: duplication, dead code, size, complexity (fallow) | yes |
-| `make deploy` | deploy the current commit to `TARGET` (default prod); records a Deploy with the artifact digest | — |
-| `make verify` | post-deploy smoke against the running target: health, version matches the deployed digest | — |
-| `make logs` | recent logs of the running target | — |
-| `make status` | running or not, which version | — |
-| `make restart` | restart the running target (runbook target) | — |
+| `make check` | format, lint, types | W2 for the factory and the first repos it ships to; W4 for every repo with signals or Tasks |
+| `make test` | tests | same |
+| `make deploy` | deploy the current commit to `TARGET`; records the deploy | same, deployable repos |
+| `make verify` | post-deploy smoke: health, the deployed version, the acceptance checks | same, deployable repos |
+| `make restart` | restart the running target — the first runbook | W1 for the homelab; W4 for the rest |
+| `make quality` | duplication, dead code, size (fallow) | W6, with the code-health job |
+| `make logs` / `make status` | recent logs; running or not, which version | when a runbook or Argo needs them |
 
-`check`, `test` and `verify` exit non-zero on failure and print a one-line summary last, so agents and
-the ship step read the verdict without parsing tool output. A repo that has no deployable target
-omits `deploy`, `verify`, `logs`, `status` and `restart` and says `deploy.mode: none`.
-
-Today several repos already follow most of this (Argo: `check`, `deploy`, `verify`, `logs`). W4
-fills the gaps from per-type templates (`factory project new <name> --type bun-service|vite-app|
-library|infra|vault`).
+`check`, `test` and `quality` accept `BASE=<ref>` to limit work to the changeset (default: the
+merge-base with the default branch); full runs on `BASE=` empty. Every target ends with a one-line
+verdict, so agents and the ship step read the result without parsing tool output. The contract is
+built in the order it is used: a repo is onboarded when it first has signals or Tasks, with the
+targets that path needs.
 
 ## Directory contract
 
 ```
-project.yaml          the manifest
-AGENTS.md             hand-written prose + a generated block (routing, make targets, links)
-docs/waves/           wave plans (prose + task ids; state lives in the factory)
-docs/adr/             decisions
-docs/artifacts/       reports and plans submitted for review
-docs/notes/           the mother's durable notes for a fresh wake
-.factory/             local cache, git-ignored
+project.yaml     the manifest
+AGENTS.md        prose + a generated block (routing, make targets)
+docs/waves/      wave plans: prose and task ids; state lives in the factory
+docs/notes/      fleet only: the mother's notes for a fresh wake
 ```
 
-No CLAUDE.md anywhere. Holdout scenarios never live in the repo they judge.
+No CLAUDE.md anywhere.
 
 ## Fleet and session
 
-| Class | Projects | How work runs |
-|-|-|-|
-| fleet | basalt-ui, argo, weatherorb, shutterflow, factory | a mother per project, woken per Task, may fan out workers |
-| session | dotfiles, agent-gateway, research-gateway, audio-gateway, email-gateway, image-gateway, hermes-agent, usage-tracker, brain, homelab, homelab-private, vps, jkrumm.com, rollhook, free-planning-poker, linewatch, rb, sy-serendipity, … | a fresh worker per Task |
-| work (IuRoot) | prometheus-scripts, StudentEnrolment, prometheus-epx, … | only what you start; not monitored |
+| Class | Projects |
+|-|-|
+| fleet | basalt-ui, argo, weatherorb, shutterflow, factory |
+| session | dotfiles and every other SourceRoot repo |
+| work | IuRoot — not monitored, never touched by the factory |
 
-v1's rule (≥ 10 planned units in 90 days and ≥ 25 commits a week) still decides fleet; warden's slot
-goes to `factory`, and dotfiles moves to session at your call. Promoting a project is one line in its
-manifest.
+Promoting a project is one line in its manifest.
+
+## TickTick and the brain
+
+- **TickTick** stays your personal list. A project's manifest names its list; Argo shows the open items
+  on the project page, and an item tagged `#factory` becomes a request.
+- **The brain** keeps one page per project (`brain/Projects/<project>.md`). The factory writes only its
+  *Changelog* section, grouped from conventional commits — no model involved.
 
 ## Work repos
 
-`project.yaml` for IuRoot repos lives in `dotfiles-private/projects/<repo>/`, linked in and excluded
-from git there, so nothing factory-specific lands in a work repo. Autonomy by your rule:
+IuRoot manifests live in `dotfiles-private/projects/<repo>/`, linked in and git-excluded, so nothing
+factory-specific lands in a work repo. The factory never reads their signals or starts work there.
+Your own sessions follow a path-scoped rule in dotfiles (W4), not a file in the work repo: in
+prometheus-scripts and in StudentEnrolment's data-analysis paths, merge your own merge request once
+`make check` and `make test` pass; in domain code, open the merge request and stop.
 
-| Repo / paths | Mode |
-|-|-|
-| prometheus-scripts | auto-merge when checks pass |
-| StudentEnrolment data-analysis paths | auto-merge when checks pass |
-| domain code everywhere else | `pr`: open the PR, stop |
+## homelab-private
 
-The factory never ingests signals from work repos and never starts work there on its own.
-
-## Homelab-private
-
-Stays self-contained: its manifest lives inside homelab-private, its signals reach the factory under
-its own project name, and nothing about its services appears in any other repo's generated files.
+A session project that stays self-contained: its manifest lives inside homelab-private, and nothing
+about its services appears in any other repo's generated files.

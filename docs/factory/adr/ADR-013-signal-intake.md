@@ -1,5 +1,7 @@
 # ADR-013 — Signals come from their primary sources; Slack intake retires
 
+> **v2 status (2026-10-24):** revised — polling + a Slack adapter, no public endpoint (TDD v2 §10). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel pass 1 and pass 2 (dat-3, dat-4, dat-5, dat-12, dat-13, sre-1, sre-2, sre-4, sre-6) and the cross-lab review (`panel/review-resolutions.md`: R12)
 - Evidence: `evidence/signals/signals.md` and `topology.out.json`, `evidence/incidents/incidents.md` (10-17: a 7.9-min reboot → 18 pages, briefs anchored on poll time), `research/2026-10-22-small-host-healing.md` (Watchtower archived; Kuma webhook carries `heartbeat.status`)
 

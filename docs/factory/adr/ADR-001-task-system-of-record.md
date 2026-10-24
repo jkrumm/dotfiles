@@ -1,5 +1,7 @@
 # ADR-001 — Tasks live in the ledger; beads' design is borrowed, not its runtime
 
+> **v2 status (2026-10-24):** revised — `factory task`, our names, on Postgres (TDD v2 §4, §6). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 · revised after panel passes 1 and 2 (dat-1, dat-10, sim-3)
 - Evidence: `spikes/01-beads/REPORT.md` (210 real tasks, 17 scripts, crash and race tests), `research/2026-10-22-agents-durable-mcp-otel.md` §1, `evidence/postmortem/postmortem.md` (55 % of 293 open Left-behind items name no owner)
 

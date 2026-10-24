@@ -2,80 +2,80 @@
 
 ## Who pays for what
 
-| Engine | Runs | Paid by | Used for |
-|-|-|-|-|
-| Deterministic | factory service, jobs, runbooks, make targets | nothing | intake, dedup rules, settle, known fixes, ship, rollback, green job runs |
-| Cheap models | agent-gateway → OpenCode v2 server sessions and single-shot calls | IU API | triage residue, investigation, planning, review, briefings, upgrade grouping, job summaries |
-| Claude Code | herdr panes, `claude` with the picked account | Max `iu` (20x) and `me` (5x) | all code, in fleet mothers, workers and your sessions |
+| Engine | Paid by | Used for |
+|-|-|-|
+| Deterministic code | nothing | intake, dedup rules, settle, runbooks, merge, deploy, rollback, green jobs |
+| Cheap models through agent-gateway | IU API tokens | triage scores, investigations, plans, review, job summaries |
+| Claude Code in herdr | the `iu` Max account (20x) and the `me` Max account (5x) | all code: workers, mothers, your sessions |
 
-**IU never writes code.** Since 2026-10-24: `rd` refuses `--kind opencode` and pauses instead of
-spilling (dotfiles 691ae1b); the `ca`/`cap`/`cdf`/`cdp` launchers are gone; agent-gateway's
-`implement` lane and its escalation run on Max with no IU fallback (§13, Phase 0). IU stays the
-right engine for gateways, OpenCode cognition, Hermes and research — that is what it is cheap for.
+**IU API tokens never write code.** Enforced since 2026-10-24: `rd` pauses instead of spilling and the
+IU launchers (`ca`, `cap`, `cdf`, `cdp`) are gone; agent-gateway's `implement` lane runs on Max with no
+IU fallback (Phase 0, §12). That lane is headless and only warden calls it; W1 removes its only caller
+and W6 removes the lane.
 
-**The factory never holds a model key.** It calls agent-gateway for every model call, so routing,
-model choice and spend stay in one place (`GET /api/routing`).
+**The factory never holds a model key.** Every model call goes through agent-gateway, so routing,
+model choice and spend stay in one place.
 
 ## The pool
 
-| Account | Plan | Session units | Weekly units | Home lanes |
-|-|-|-|-|-|
-| `iu` | Max 20x | 4 | 2 | your interactive sessions, agent-gateway review, headless |
-| `me` | Max 5x | 1 | 1 | waves, fan-outs, factory mothers and workers |
+| Account | Plan | Share of the pool, weekly | Home |
+|-|-|-|-|
+| `iu` | Max 20x | ⅔ | your interactive sessions, headless runs |
+| `me` | Max 5x | ⅓ | waves, fan-outs, factory workers and mothers |
 
-Units are the measured 20x/5x ratios (`docs/claude-accounts.md`). v1 measured a load of 120 % of one
-`iu` weekly window over 30 days; against the combined pool of 3 weekly units that is ≈ 80 %, leaving
-≈ 20 % for factory work before any capacity lapses. The picker (`claude-account pick`, rule v1.2)
-already does the per-spawn part: eligibility, pace guard, 5-hour balance, expiring capacity first.
+Over the last 30 days your own work used 120 % of one `iu` week (v1 `kpi/forecast`). Against today's
+pool that is ≈ 80 %, so the factory's own code work fits into ≈ 20 % plus whatever would otherwise
+lapse at a reset. The picker (`claude-account pick`) already decides per spawn: eligibility, a pace
+guard, 5-hour balancing, and expiring capacity first.
 
-## Admission
+## Admission: three classes
 
-The scheduler decides *when* a Task may spawn; the picker decides *where*. Four priority classes:
+The factory asks the picker with a class and gets back an account or a time to wait until. One rule
+set, in the picker; the factory only waits.
 
-| Class | Examples | Admitted when |
+| Class | Examples | Gets an account when |
 |-|-|-|
-| P0 | an owner app is down, data at risk | any account is eligible |
-| P1 | a bug in a used feature, a failed deploy follow-up | the picked account is under its weekly pace and its 5-hour window is under 85 % |
-| P2 | your requests, planned waves | as P1, and your own interactive lane keeps ≥ 15 % of `iu`'s 5-hour window free |
-| P3 | hygiene, upgrades, improvement jobs | only on capacity that would otherwise lapse: an account resets within 24 h with ≥ 30 % of its week unused, or both accounts sit ≥ 15 points under pace |
+| **urgent** | an owner app is down, data at risk | any account is eligible; bypasses the limit on parallel sessions |
+| **normal** | bugs, your requests, planned waves | the picker finds an account under its weekly pace and below 85 % of its 5-hour window, and your `iu` window keeps ≥ 15 % free |
+| **upkeep** | upgrades, docs, code health, security | the picker's expiring-capacity rule holds (an account resets within 24 h with room to spare) — and every fleet project still gets one upkeep Task a week at the *normal* bar, so upkeep cannot starve |
 
-Otherwise the Task waits — a durable sleep until the next reset or the next quota sample that changes
-the answer. Waiting is visible in Argo (*Factory → waiting for capacity*, with the reset time). At
-P0, if both accounts are walled, the deterministic parts still run: rollback, restart, runbooks. Code
-waits for the reset.
+Waiting Tasks are rows, not running work: they hold no slot, and an urgent Task never queues behind
+them. When your own `iu` 5-hour window passes 85 %, normal and upkeep sessions running on `iu` are parked at
+their next idle point and resumed later.
 
-Per repo, one writer per branch and one merge at a time (the merge step is a DBOS queue partitioned
-by repo).
+**Both accounts walled, production down:** the deterministic parts still run — settle, restart,
+rollback, runbooks. Code waits for the first reset.
 
 ## The prompt cache
 
-Two Max accounts are two organisations; a cache never crosses them. Rules, all already enforced or
-landing with the scheduler:
+Two Max accounts are two organisations; a cache never crosses them.
 
-- **The account is fixed at spawn.** No switch mid-session; `c --resume` stays on the session's account
-  (dotfiles 3dc2d82); Witness resumes a parked session on the same account.
-- **Follow-ups go where the cache is warm.** A project's next Task goes to its live mother inside the
-  one-hour cache lifetime; the scheduler prefers that over a fresh worker on the other account.
-- **Briefs are stable.** The standing-orders part of a brief is byte-identical across spawns, so it
-  caches; the task part comes last.
+- **The account is fixed at spawn** and kept on resume while the cache is warm (under an hour since the
+  last turn) or the wall lifts within the hour. After a longer wall the cache is cold anyway, and the
+  Task goes back through the picker instead of waiting days for one account.
+- **Witness records the account actually in effect**, so a session that a herdr restart moved to the
+  other account is accounted correctly.
+- **Briefs are stable** at the front, so the standing orders are cache hits on every spawn.
 
 ## What it costs
 
-| Line | Now (last 7 d) | With the factory |
+| Line | Measured | Source |
 |-|-|-|
-| IU, review (OCR, adversary, angles) | $136 (56 reviews, ≈ $2.40 each) | + $35–70 / week: one review per shipped Task, 2–4 a day; less once agent-gateway's review-depth gating (logged since 2026-10-23, off) gives small diffs a light review |
-| IU, research-gateway | $32 | unchanged |
-| IU, agent-gateway dispatch | $4.31 (8 jobs, ≈ $0.55 each) | + $10–20 / week: 3–5 investigations a day after dedup, settle and known fixes |
-| IU, dedup judge, briefings, job summaries | — | < $5 / week (single calls on DeepSeek V4.1 Flash / Haiku 5.5) |
-| Max | 120 % of one weekly window (v1, 30 d) | the same work plus factory Tasks inside ≈ 85 % of the pool; P3 runs on lapsing capacity only |
+| Review | $0.10 a job over 30 days to 2026-10-22; **$2.43 a job** last week, after OCR and the DeepSeek adversary joined ($136 / 56) | `evidence/kpi/cost.out.md`, `evidence/kpi/iu-2026-10-24.md` |
+| Investigation | $0.02 a job over 30 days (340 jobs) | `cost.out.md` |
+| Decision-model score | $0.0001 a call | `cost.out.md` |
+| All personal IU API work | $183 last week | `iu-2026-10-24.md` |
 
-v1's open decision D1 (≈ $294/week of IU for mother wakes) is gone: mothers run on Max, and judgment
-costs ≈ $50–95 / week in total, most of it review. Review depth gating is the lever, not the judgment model.
+The factory adds 2–6 investigations and 2–4 shipped Tasks a day (estimate; measured from W2).
+Investigations are noise in cost. Review is not: at last week's price a full review on every Task is
+$35–70 a week. So agent-gateway's review-depth gating — logged since 2026-10-23, off — is switched on
+in W2: no LLM review before the make targets pass; none for lockfile, docs or generated-only diffs;
+light by default; full for urgent Tasks and for deploy, auth, migration and verification-surface
+changes; after a fix-up, only the new delta. Expected IU add-on: **≈ $10–40 a week.**
 
 ## Measured from W2
 
-- **Throughput per window:** Tasks verified and shipped per 1 % of weekly capacity, per account.
-- **Waiting:** hours Tasks spent waiting for capacity, per class. Drives the one open decision (§14).
-- **Cache:** cache-read share per account and per mother; a fresh wake that could have been a warm
-  follow-up is counted.
-- **Owner blocked:** minutes your interactive session waited on a wall. Target 0.
+- **Shipped per window:** Tasks verified and held, per 1 % of weekly capacity, per account.
+- **Waiting:** hours Tasks waited for capacity, per class, upkeep included.
+- **Cache:** cache-read share per account; a cold wake that could have been a warm follow-up is counted.
+- **You blocked:** minutes your interactive session waited on a wall. Target 0.

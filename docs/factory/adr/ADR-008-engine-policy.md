@@ -1,5 +1,7 @@
 # ADR-008 — Engine policy: herdr always, engine by class, quota as a control input
 
+> **v2 status (2026-10-24):** superseded — three admission classes; wait, never spill (TDD v2 §5). The text below is v1 history.
+
 - Status: accepted · 2026-10-22 (decides Round 5's one open question) · revised after panel pass 1 (cos-1…cos-8) and pass 2 (cos-7, cos-9…cos-16, dat-12). In the body, `p2` marks a pass-2 id.
 - Evidence: `evidence/kpi/engine_policy.out.md` (+ `.out.json` per-cycle calibration), `evidence/kpi/quota.out.md`, `evidence/kpi/cost.out.md`, `evidence/kpi/forecast.out.md` (cos-1), Round 5 `docs/waves/PLAN.md` §Open
 

@@ -1,5 +1,7 @@
 # ADR-006 — Telemetry: one trace per item, two join keys, one ClickHouse
 
+> **v2 status (2026-10-24):** kept — OpenTelemetry to ClickStack (TDD v2 §6). The text below is v1 history.
+
 - Status: accepted · 2026-10-22
 - Evidence: `spikes/06-telemetry/REPORT.md` (headline trace `c1800a6ba3c5467f27450aab536071b5`: 25 spans, 3 services, 40 correlated logs), `research/2026-10-22-agents-durable-mcp-otel.md` §7, Round 5 *Established facts* (Observability)
 

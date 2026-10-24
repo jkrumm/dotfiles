@@ -1,5 +1,31 @@
 # Factory design — status
 
+## v2 (2026-10-24) — current
+
+**Read `tdd/` (built into `report.html`) first; everything below the v1 line is history.**
+Orchestrator: herdr tab `factory-v2` (SourceRoot workspace), session 07a74a7d, Opus xhigh.
+
+- **Inputs:** the owner's 33 Inbox comments + global reply (`feedback/2026-10-23-owner-comments-raw.md`),
+  the brief of 2026-10-24, digests of the v1 sessions (factory 48de6bca, orchestrator 94025058).
+- **Research (IU API, $1.25):** `research/2026-10-24-{dbos-postgres,factories-landscape,cli-codegen,learned-correlation,pele-secaudit-umami}.md`;
+  DBOS TS source read directly (pinned version + `DBOS.patch` fix the spike's redeploy loss).
+- **Panel (Sonnet):** owner-intent advocate, SRE, simplicity critic; then a Haiku consistency pass. All
+  blockers folded in: no public ingress; verification on the merge result with base-branch targets;
+  the factory deploys itself outside its loop; DBOS declined for a reconcile loop on Postgres in Bun;
+  waves cut from 11 to 6; review-depth gating on at W2; jobs as TypeScript modules.
+- **Phase 0 shipped:** agent-gateway 93a8d91 (implement + escalation Max-only, reloaded, `/api/routing`
+  verified); v1 runnable plans parked in dotfiles and warden `docs/waves/PLAN.md`; ADR files carry
+  their v2 status.
+- **Podcast:** source `podcast/2026-10-24-factory-v2-source.md`, audio-gateway job 16751644.
+- **Next:** W1 per `tdd/12-plan.md` — default start Wed 2026-10-28 after the `iu` weekly reset, or earlier
+  on `me` at the owner's go. Owner comments arrive in the plannotator Inbox thread
+  msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 (resume command in the v1 section below).
+
+---
+
+## v1 (2026-10-22) — history
+
+
 Checkpoint for a fresh context. Read `BRIEF.md` first, then this file, then the newest
 artifacts it names. Orchestrator: herdr tab `factory` (SourceRoot workspace), Opus, max
 effort. Started 2026-10-22 07:40 UTC.
