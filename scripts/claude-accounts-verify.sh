@@ -213,7 +213,9 @@ else
     row PASS "attribution/session_env" "all $total Claude session_env lines carry a registered account"
   fi
 fi
-if [[ ! -r "$USAGE_DB" ]] || ! command -v sqlite3 >/dev/null 2>&1; then
+if [[ -z "${USAGE_TRACKER_DB:-}" && ! -d "$HOME/SourceRoot/usage-tracker" ]]; then
+  row WARN "attribution/usage-db" "usage-tracker not on this machine (the mini ingests; its mirror reads this machine's logs)"
+elif [[ ! -r "$USAGE_DB" ]] || ! command -v sqlite3 >/dev/null 2>&1; then
   row WARN "attribution/usage-db" "usage-tracker DB or sqlite3 not available"
 else
   cutoff=$(date -u -r $((now_s - 86400)) +%Y-%m-%dT%H:%M:%S)
