@@ -52,12 +52,18 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 
 | repo | branch | tab | state |
 |-|-|-|-|
-| argo | feat/usage-account (#200) | `argo-usage-account` | review aa8d052a: no blockers; fixes sent (COALESCE upsert, scoped test cleanup, permissive ingest, headline filter) |
+| argo | feat/usage-account (#200) | `argo-usage-account` | review 0d30946e: blocker (empty-string account overwrites) → round 3 sent |
+| dotfiles (W2a) PR | #28 | | review `c0e90ac2-386a-497c-9605-3d8827078448` running |
+| usage-tracker (W2c) | feat/quota-history | `usage-tracker-quota-history` | fanned 2026-10-24 (owner ask: quota history) |
+| argo (W2c) | feat/quota-history | — | brief `argo-quota.md`; fan after #200 merges (same files) |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
 | dotfiles (W2a) | feat/claude-accounts-verify | `dotfiles-claude-accounts-veri` | fanned 2026-10-24 (landed on `me`, reason=home) |
 | agent-gateway | feat/claude-accounts-usage | `agent-gatew-claude-accounts-usag` | fanned 2026-10-24 (on `me`) |
 
 Decisions taken during W2:
+- **W2c added (owner, 2026-10-24):** track both accounts' 5h/7d quota historically + picker decisions
+  (usage-tracker `quota_sample`/`account_pick` → Argo `/usage/quota-samples`, `/usage/account-picks` →
+  usage-page "Claude accounts" section). Part of W2 done-ness.
 - **Tinycast reads quota via Argo, not the tailnet door.** agent-gateway is loopback-only by design
   (`exclude agent-gateway` in `~/.config/caddy-tailnet.ports`, index.ts bind comment); the spec's door
   never existed (404). agent-gateway adds `quota` to `/api/overview`, which it already pushes to Argo
