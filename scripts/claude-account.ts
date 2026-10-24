@@ -16,8 +16,8 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, type Spawner, accountFromConfigDir, claimRefresh, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
-  REFRESH_TIMEOUT_S, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
+  type Cache, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine,
 } from "./lib/claude-accounts.ts"
 
 const IU_EXIT = 3
@@ -55,7 +55,7 @@ function readClaudeJson(reg: Registry, cache: Cache): Cache {
   for (const [id, a] of Object.entries(reg.accounts)) {
     if (!a.enabled) continue
     const s = readSample(reg, id)
-    if (s) cache = mergeSample(cache, id, s)
+    if (s) cache = { ...cache, samples: { ...cache.samples, [id]: mergeSample(cache.samples[id] ?? null, s) } }
   }
   return cache
 }
@@ -68,30 +68,19 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
 }
 
-const seed = (reg: Registry) => (c: Cache) => readClaudeJson(reg, c)
-
 /**
  * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
- * atomic claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
+ * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
 function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[] } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
   const enabled = (id: string) => !!reg.accounts[id]?.enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
-    : claimRefresh(updateCache, reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), seed(reg))
+    : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()))
   runRefresh({
     reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
-    readSample: (id) => readSample(reg, id), update: updateCache, now: Date.now, log: (m) => console.error(m),
+    readSample: (id) => readSample(reg, id), now: Date.now, log: (m) => console.error(m),
   })
-}
-
-/** Best-effort claim: a busy lock means someone else is mid-update, so skip refreshing rather than block a pick. */
-function tryClaim(reg: Registry, ids: string[], now: number): string[] {
-  try {
-    return claimRefresh(updateCache, reg, ids, now, seed(reg))
-  } catch {
-    return []
-  }
 }
 
 function usage(reg: Registry, json: boolean): void {
@@ -103,7 +92,7 @@ function usage(reg: Registry, json: boolean): void {
     return {
       id, plan: a.plan, enabled: a.enabled,
       five_hour: x?.s ?? null, seven_day: x?.w ?? null, five_hour_resets_at: x?.s_reset ?? null, seven_day_resets_at: x?.w_reset ?? null,
-      age_s: x ? Math.round((now - x.ts) / 1000) : null, source: x?.src ?? null,
+      age_s: x ? Math.round(newestAge(x, now) / 1000) : null, source: x?.src ?? null,
       auth_ok: !cache.auth_failed[id], exhausted_until: until && until * 1000 > now ? until : null,
     }
   })
@@ -116,7 +105,15 @@ function usage(reg: Registry, json: boolean): void {
 
 function main(argv: string[]): number {
   const [cmd, ...rest] = argv
-  const reg = loadRegistry()
+  let reg: Registry
+  try {
+    reg = loadRegistry()
+  } catch (e) {
+    if (cmd !== "pick") throw e
+    console.error(`claude-account: registry unreadable: ${(e as Error).message}`)
+    console.log("unset CLAUDE_CONFIG_DIR") // a pick must always answer: fall back to the default account
+    return 0
+  }
   switch (cmd) {
     case "pick": {
       const lane = flag(rest, "--lane")
@@ -125,9 +122,10 @@ function main(argv: string[]): number {
       // Never block while a usable sample exists: stale accounts refresh in the background (budgeted),
       // only an account with no sample at all is refreshed synchronously first.
       try {
+        const cache0 = readClaudeJson(reg, loadCache())
         refreshBeforePick({
-          reg, lane, now, cache: readClaudeJson(reg, loadCache()),
-          claim: (ids) => tryClaim(reg, ids, now),
+          reg, lane, now, cache: cache0,
+          claim: (ids) => claimRefresh(reg, ids, now, cache0),
           runSync: (ids) => refresh(reg, { claimed: ids }),
           detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
         })
@@ -156,7 +154,7 @@ function main(argv: string[]): number {
     case "record": {
       const id = account(reg, rest)
       const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }
-      updateCache((c) => recordSample(c, id, part, Date.now()))
+      recordSample(id, part, Date.now())
       return 0
     }
     case "account": {
@@ -170,7 +168,7 @@ function main(argv: string[]): number {
       const id = account(reg, rest)
       const until = num(rest, "--until")
       if (until === null) throw new Error("--until <epoch seconds> is required")
-      updateCache((c) => markExhausted(c, id, until))
+      markExhausted(id, until)
       return 0
     }
     default:

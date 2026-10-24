@@ -1378,15 +1378,17 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" \
 		DST="$(HOME)/.local/bin/claude-account"
-	@for dir in $$(jq -r '.accounts[] | select(.dir != null) | .dir' "$(DOTFILES_DIR)/config/claude-accounts.json"); do \
+	@dirs=$$(jq -r '.accounts[] | select(.dir != null) | .dir' "$(DOTFILES_DIR)/config/claude-accounts.json") || exit 1; \
+	[ -n "$$dirs" ] || { echo "    ✗ no account dirs in config/claude-accounts.json"; exit 1; }; \
+	for dir in $$dirs; do \
 		dir=$$(echo "$$dir" | sed "s|^~|$(HOME)|"); \
-		mkdir -p "$$dir"; \
+		mkdir -p "$$dir" || exit 1; \
 		for item in skills agents hooks rules output-styles commands plugins CLAUDE.md projects logs; do \
 			if [ -e "$(CLAUDE_DIR)/$$item" ]; then \
-				$(MAKE) --no-print-directory _link SRC="$(CLAUDE_DIR)/$$item" DST="$$dir/$$item"; \
+				$(MAKE) --no-print-directory _link SRC="$(CLAUDE_DIR)/$$item" DST="$$dir/$$item" || exit 1; \
 			fi; \
 		done; \
-		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir"; \
+		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir" || exit 1; \
 	done
 
 .PHONY: _setup-gitignore

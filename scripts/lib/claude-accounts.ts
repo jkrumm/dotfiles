@@ -1,6 +1,6 @@
 // Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs"
+import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
@@ -25,21 +25,25 @@ export interface Registry {
   accounts: Record<string, Account>
 }
 
-/** One quota sample. Percent 0-100, resets as epoch seconds, ts as epoch ms. */
+/**
+ * One account's quota sample. Percent 0-100, resets epoch seconds. Each window carries its own timestamp (epoch ms):
+ * s/s_reset belong to the 5h window (s_ts), w/w_reset to the weekly one (w_ts), so a carried-over window is never
+ * judged fresher than it is.
+ */
 export interface Sample {
   s: number | null
   w: number | null
   s_reset: number | null
   w_reset: number | null
-  ts: number
+  s_ts: number | null
+  w_ts: number | null
   src: string
 }
+/** In-memory view assembled from the per-account files under cacheDir(). */
 export interface Cache {
   samples: Record<string, Sample>
   /** Exhausted marks: account id -> epoch seconds until which it is out. */
   exhausted: Record<string, number>
-  /** Last `claude -p /usage` attempt per account, epoch ms. */
-  refreshed: Record<string, number>
   /** Accounts whose last refresh found no usable login. */
   auth_failed: Record<string, boolean>
 }
@@ -50,10 +54,10 @@ export interface PickResult {
   stale: boolean
 }
 
-export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, refreshed: {}, auth_failed: {} })
+export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, auth_failed: {} })
 
 export const registryPath = () => process.env.CLAUDE_ACCOUNTS_REGISTRY ?? join(import.meta.dir, "..", "..", "config", "claude-accounts.json")
-export const cachePath = () => process.env.CLAUDE_ACCOUNTS_CACHE ?? join(homedir(), ".cache", "claude-accounts", "usage.json")
+export const cacheDir = () => process.env.CLAUDE_ACCOUNTS_CACHE_DIR ?? join(homedir(), ".cache", "claude-accounts")
 export const picksPath = () => process.env.CLAUDE_ACCOUNTS_PICKS ?? join(homedir(), ".local", "share", "claude-accounts", "picks.jsonl")
 
 export const expandHome = (p: string) => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p)
@@ -85,14 +89,6 @@ export function accountFromConfigDir(reg: Registry, configDir: string | undefine
 }
 export const defaultAccountId = (reg: Registry) => Object.entries(reg.accounts).find(([, a]) => a.dir === null)?.[0] ?? DEFAULT_ACCOUNT_ID
 
-export function loadCache(path = cachePath()): Cache {
-  try {
-    return { ...emptyCache(), ...JSON.parse(readFileSync(path, "utf8")) }
-  } catch {
-    return emptyCache()
-  }
-}
-
 export function writeAtomic(path: string, data: string): void {
   mkdirSync(dirname(path), { recursive: true })
   const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
@@ -106,15 +102,94 @@ export function writeAtomic(path: string, data: string): void {
   renameSync(tmp, path)
 }
 
-/** Merge a sample in: the freshest timestamp wins, an older feed never overwrites a newer one. */
-export function mergeSample(cache: Cache, id: string, s: Sample): Cache {
-  const cur = cache.samples[id]
-  if (cur && cur.ts > s.ts) return cache
-  return { ...cache, samples: { ...cache.samples, [id]: s } }
+// ── Per-account cache files ────────────────────────────────────────────────────────────────────────────────────
+// <id>.sample.json · <id>.exhausted.json · <id>.auth.json · <id>.refresh.claim. Every writer replaces only its own
+// small file atomically, so there is no lock: two accounts or two kinds never contend, and a lost update on one
+// file only costs freshness (the next feed rewrites it).
+
+const ID = /^[A-Za-z0-9_-]+$/
+const file = (dir: string, id: string, kind: string) => {
+  if (!ID.test(id)) throw new Error(`bad account id '${id}'`)
+  return join(dir, `${id}.${kind}`)
+}
+const readJson = (path: string): unknown => {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"))
+  } catch {
+    return null
+  }
 }
 
-export function markExhausted(cache: Cache, id: string, untilS: number): Cache {
-  return { ...cache, exhausted: { ...cache.exhausted, [id]: Math.max(untilS, cache.exhausted[id] ?? 0) } }
+export function loadCache(dir = cacheDir()): Cache {
+  const c = emptyCache()
+  let names: string[] = []
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return c
+  }
+  for (const name of names) {
+    const m = /^([A-Za-z0-9_-]+)\.(sample|exhausted|auth)\.json$/.exec(name)
+    if (!m) continue
+    const [, id, kind] = m
+    const j = readJson(join(dir, name)) as Record<string, unknown> | null
+    if (!j) continue
+    if (kind === "sample") c.samples[id] = j as unknown as Sample
+    else if (kind === "exhausted" && typeof j.until === "number") c.exhausted[id] = j.until
+    else if (kind === "auth" && j.failed === true) c.auth_failed[id] = true
+  }
+  return c
+}
+
+const hasS = (x: Sample) => x.s !== null
+const hasW = (x: Sample) => x.w !== null
+
+/**
+ * Field-wise merge, per window: an incoming window that is absent (null) keeps what we know; a present one wins
+ * unless the stored one has a newer timestamp.
+ */
+export function mergeSample(prev: Sample | null, inc: Sample): Sample {
+  if (!prev) return inc
+  const takeS = hasS(inc) && !(hasS(prev) && (prev.s_ts ?? 0) > (inc.s_ts ?? 0))
+  const takeW = hasW(inc) && !(hasW(prev) && (prev.w_ts ?? 0) > (inc.w_ts ?? 0))
+  return {
+    s: takeS ? inc.s : prev.s, s_reset: takeS ? inc.s_reset : prev.s_reset, s_ts: takeS ? inc.s_ts : prev.s_ts,
+    w: takeW ? inc.w : prev.w, w_reset: takeW ? inc.w_reset : prev.w_reset, w_ts: takeW ? inc.w_ts : prev.w_ts,
+    src: takeS || takeW ? inc.src : prev.src,
+  }
+}
+
+export function saveSample(id: string, inc: Sample, dir = cacheDir()): void {
+  const path = file(dir, id, "sample.json")
+  writeAtomic(path, JSON.stringify(mergeSample(readJson(path) as Sample | null, inc)))
+}
+
+export function markExhausted(id: string, untilS: number, dir = cacheDir()): void {
+  const path = file(dir, id, "exhausted.json")
+  const cur = (readJson(path) as { until?: number } | null)?.until ?? 0
+  writeAtomic(path, JSON.stringify({ until: Math.max(untilS, cur) }))
+}
+
+/** Records the auth verdict; a no-op when it already says the same. */
+export function setAuthFailed(id: string, failed: boolean, nowMs: number, dir = cacheDir()): void {
+  const path = file(dir, id, "auth.json")
+  const cur = (readJson(path) as { failed?: boolean } | null)?.failed === true
+  if (cur === failed) return
+  writeAtomic(path, JSON.stringify({ failed, ts: nowMs }))
+}
+
+/**
+ * Statusline feed: a window the payload omits keeps its previous value and timestamp (so it is never presented as
+ * fresh). A live statusline proves the login works, so it also clears a recorded auth failure.
+ */
+export function recordSample(id: string, part: { s?: number | null; w?: number | null; s_reset?: number | null; w_reset?: number | null }, nowMs: number, dir = cacheDir()): void {
+  const has = (v: number | null | undefined): v is number => typeof v === "number"
+  saveSample(id, {
+    s: part.s ?? null, s_reset: has(part.s) ? (part.s_reset ?? null) : null, s_ts: has(part.s) ? nowMs : null,
+    w: part.w ?? null, w_reset: has(part.w) ? (part.w_reset ?? null) : null, w_ts: has(part.w) ? nowMs : null,
+    src: "statusline",
+  }, dir)
+  setAuthFailed(id, false, nowMs, dir)
 }
 
 /** ISO string or epoch (s or ms) -> epoch seconds. */
@@ -128,16 +203,37 @@ export function toEpochS(v: unknown): number | null {
   return null
 }
 
-/** Parse `cachedUsageUtilization` out of a `.claude.json` blob. */
+type Window = { utilization?: number; resets_at?: unknown } | null | undefined
+
+/** Parse `cachedUsageUtilization` out of a `.claude.json` blob; a window the payload omits stays null (merge keeps what we know). */
 export function sampleFromClaudeJson(json: unknown, src = "usage"): Sample | null {
-  const c = (json as { cachedUsageUtilization?: { fetchedAtMs?: number; utilization?: Record<string, { utilization?: number; resets_at?: unknown } | null> } })?.cachedUsageUtilization
+  const c = (json as { cachedUsageUtilization?: { fetchedAtMs?: number; utilization?: Record<string, Window> } })?.cachedUsageUtilization
   if (!c || typeof c.fetchedAtMs !== "number" || !c.utilization) return null
+  const pct = (x: Window) => (typeof x?.utilization === "number" ? x.utilization : null)
   const f = c.utilization.five_hour
   const d = c.utilization.seven_day
-  if (!f && !d) return null
-  const pct = (x: { utilization?: number } | null | undefined) => (typeof x?.utilization === "number" ? x.utilization : null)
-  return { s: pct(f), w: pct(d), s_reset: toEpochS(f?.resets_at), w_reset: toEpochS(d?.resets_at), ts: c.fetchedAtMs, src }
+  const s = pct(f)
+  const w = pct(d)
+  if (s === null && w === null) return null
+  return {
+    s, s_reset: s === null ? null : toEpochS(f?.resets_at), s_ts: s === null ? null : c.fetchedAtMs,
+    w, w_reset: w === null ? null : toEpochS(d?.resets_at), w_ts: w === null ? null : c.fetchedAtMs,
+    src,
+  }
 }
+
+/** Age (ms) of each window the sample actually has; a window without a timestamp counts as infinitely old. */
+const windowAges = (x: Sample | undefined, nowMs: number): number[] => {
+  if (!x) return []
+  const age = (ts: number | null) => (ts === null ? Infinity : nowMs - ts)
+  return [...(hasS(x) ? [age(x.s_ts)] : []), ...(hasW(x) ? [age(x.w_ts)] : [])]
+}
+/** Oldest window (the sample is only as fresh as its stalest window); Infinity when there is none. */
+export const sampleAge = (x: Sample | undefined, nowMs: number) => (windowAges(x, nowMs).length ? Math.max(...windowAges(x, nowMs)) : Infinity)
+/** Newest window, for display. */
+export const newestAge = (x: Sample | undefined, nowMs: number) => (windowAges(x, nowMs).length ? Math.min(...windowAges(x, nowMs)) : Infinity)
+/** True when at least one window is young enough to judge by. */
+const usable = (x: Sample | undefined, nowMs: number) => windowAges(x, nowMs).some((a) => a < STALE_OK_MS)
 
 const matchesLane = (pattern: string, lane: string) => pattern === lane || (pattern.endsWith(":*") && lane.startsWith(pattern.slice(0, -1)))
 
@@ -148,20 +244,17 @@ export function homeIds(reg: Registry, lane: string): string[] {
   return exact.length ? exact : ids.filter((id) => reg.accounts[id].homeLanes.some((h) => matchesLane(h, lane)))
 }
 
-/** Last known sample still usable after a skipped or failed refresh: older than FRESH_MS, younger than STALE_OK_MS. */
-export const isStaleOk = (cache: Cache, id: string, nowMs: number) => {
-  const x = cache.samples[id]
-  return !!x && nowMs - x.ts >= FRESH_MS && nowMs - x.ts < STALE_OK_MS
-}
+/** The pick rests on a sample with a window older than FRESH_MS. */
+export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cache.samples[id], nowMs) && sampleAge(cache.samples[id], nowMs) >= FRESH_MS
 
-/** Enabled, logged in, not exhausted, has a sample (fresh or stale-ok) below both thresholds. */
+/** Enabled, logged in, not exhausted, and every window young enough to judge (< 6 h) is below its threshold. Each window is judged by its own timestamp. */
 export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
   const a = reg.accounts[id]
   if (!a?.enabled || cache.auth_failed[id]) return false
   const x = cache.samples[id]
-  if (!x || nowMs - x.ts >= STALE_OK_MS) return false
-  if (x.s !== null && x.s >= SESSION_MAX) return false
-  if (x.w !== null && x.w >= WEEKLY_MAX) return false
+  if (!x || !usable(x, nowMs)) return false
+  if (hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS && x.s! >= SESSION_MAX) return false
+  if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= WEEKLY_MAX) return false
   const until = cache.exhausted[id]
   if (until && until * 1000 > nowMs) return false
   return true
@@ -182,7 +275,7 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
     const expiring = ok
       .filter((id) => {
         const x = cache.samples[id]
-        const msLeft = x.w_reset === null ? null : x.w_reset * 1000 - nowMs
+        const msLeft = x.w_reset === null || !hasW(x) ? null : x.w_reset * 1000 - nowMs
         return msLeft !== null && msLeft > 0 && msLeft < EXPIRING_S * 1000 && (x.w ?? 0) < EXPIRING_WEEKLY_MAX
       })
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
@@ -193,10 +286,7 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
   if (home) return { picked: home, reason: "home" }
   const other = ok[0]
   if (other) return { picked: other, reason: "spill" }
-  if (!bulk) {
-    const dflt = defaultAccountId(reg)
-    return { picked: dflt, reason: "interactive-fallback" }
-  }
+  if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
   return { picked: "iu", reason: "no-eligible-account" }
 }
 
@@ -224,27 +314,56 @@ export function shellLine(reg: Registry, p: PickResult): string | null {
   return dir === null ? "unset CLAUDE_CONFIG_DIR" : `export CLAUDE_CONFIG_DIR=${shQuote(dir)}`
 }
 
-/** Accounts due a `claude -p /usage`: enabled, newest sample >10 min old, last attempt >5 min ago. */
-export function needsRefresh(reg: Registry, cache: Cache, nowMs: number): string[] {
-  return Object.keys(reg.accounts).filter((id) => {
-    if (!reg.accounts[id].enabled) return false
-    const x = cache.samples[id]
-    if (x && nowMs - x.ts <= FRESH_MS) return false
-    return nowMs - (cache.refreshed[id] ?? 0) > REFRESH_MIN_MS
+/** Enabled accounts whose sample is missing or has a window older than 10 min (the budget is checked at claim time). */
+export function dueIds(reg: Registry, cache: Cache, nowMs: number): string[] {
+  return Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled && sampleAge(cache.samples[id], nowMs) > FRESH_MS)
+}
+
+/**
+ * Claim the per-account refresh: exclusive create of <id>.refresh.claim (content = claim time). A claim younger than
+ * REFRESH_MIN_MS is the 5-min budget; an older one is stale and replaced. Racing replacers may both win: one
+ * duplicate refresh at worst.
+ */
+export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache: Cache, dir = cacheDir()): string[] {
+  mkdirSync(dir, { recursive: true })
+  // Exclusive create WITH content: write a private temp file, then hard-link it into place (fails with EEXIST if
+  // the claim exists), so a concurrent reader never sees a claim without its timestamp.
+  const create = (path: string) => {
+    const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
+    writeFileSync(tmp, String(nowMs))
+    try {
+      linkSync(tmp, path)
+    } finally {
+      unlinkSync(tmp)
+    }
+  }
+  return dueIds(reg, cache, nowMs).filter((id) => {
+    if (!ids.includes(id)) return false
+    const path = file(dir, id, "refresh.claim")
+    try {
+      create(path)
+      return true
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
+    }
+    const at = Number(readFileSync(path, "utf8").trim())
+    if (Number.isFinite(at) && nowMs - at <= REFRESH_MIN_MS) return false
+    try {
+      unlinkSync(path)
+      create(path)
+      return true
+    } catch {
+      return false // lost the replacement race
+    }
   })
 }
 
-
-/**
- * Statusline feed: omitted fields keep the previous sample's values. When any value is retained the old ts is
- * kept too, so a carried-over field is never presented as fresh. A live statusline proves the login works.
- */
-export function recordSample(cache: Cache, id: string, part: Partial<Pick<Sample, "s" | "w" | "s_reset" | "w_reset">>, nowMs: number): Cache {
-  const prev = cache.samples[id]
-  const keep = <K extends "s" | "w" | "s_reset" | "w_reset">(k: K): Sample[K] => (part[k] ?? prev?.[k] ?? null) as Sample[K]
-  const retained = (["s", "w", "s_reset", "w_reset"] as const).some((k) => part[k] == null && prev?.[k] != null)
-  const next: Sample = { s: keep("s"), w: keep("w"), s_reset: keep("s_reset"), w_reset: keep("w_reset"), ts: retained ? prev.ts : nowMs, src: "statusline" }
-  return { ...mergeSample(cache, id, next), auth_failed: { ...cache.auth_failed, [id]: false } }
+export function releaseClaim(id: string, dir = cacheDir()): void {
+  try {
+    unlinkSync(file(dir, id, "refresh.claim"))
+  } catch {
+    // already gone
+  }
 }
 
 export interface SpawnResult {
@@ -270,101 +389,13 @@ export function refreshEnv(base: Record<string, string | undefined>, dir: string
 
 export const REFRESH_TIMEOUT_S = 75
 
-const LOCK_WAIT_MS = 3000
-const LOCK_STALE_MS = 30_000
-const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-const ownerOf = (lock: string): string | null => {
-  try {
-    return readFileSync(join(lock, "owner"), "utf8")
-  } catch {
-    return null
-  }
-}
-
-/**
- * Break a lock observed as stale: rename it to a unique name first (atomic, so of N racing breakers exactly one
- * wins), then check what we got. If it is not the lock we observed (the owner token changed: someone released and
- * re-took it in between) it is live, so put it back instead of deleting it.
- */
-function breakStale(lock: string, observedOwner: string | null): void {
-  const grave = `${lock}.stale.${process.pid}.${Math.random().toString(36).slice(2)}`
-  try {
-    renameSync(lock, grave)
-  } catch {
-    return // another breaker (or the owner's release) got there first
-  }
-  if (ownerOf(grave) !== observedOwner) {
-    try {
-      renameSync(grave, lock)
-      return
-    } catch {
-      // a new lock already exists; the stolen one is gone, its owner's release sees a token mismatch and leaves things alone
-    }
-  }
-  rmSync(grave, { recursive: true, force: true })
-}
-
-/**
- * The only way to change the quota cache: take a mkdir lock (atomic) carrying an owner token, re-read the file,
- * apply `fn` to the fresh content, write atomically, release only if the token is still ours. A lock older than
- * LOCK_STALE_MS belongs to a dead process and is broken (see breakStale). Throws when the lock cannot be taken
- * within LOCK_WAIT_MS; callers that are best-effort catch it.
- */
-export function updateCache(fn: (c: Cache) => Cache, path = cachePath()): void {
-  const lock = `${path}.lock`
-  const token = `${process.pid}.${Math.random().toString(36).slice(2)}`
-  mkdirSync(dirname(path), { recursive: true })
-  const deadline = Date.now() + LOCK_WAIT_MS
-  for (;;) {
-    try {
-      mkdirSync(lock)
-      writeFileSync(join(lock, "owner"), token)
-      break
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
-      try {
-        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) breakStale(lock, ownerOf(lock))
-      } catch {
-        // released by its owner between our checks
-      }
-      if (Date.now() > deadline) throw new Error(`quota cache lock busy: ${lock}`)
-      sleepMs(15)
-    }
-  }
-  try {
-    const cur = loadCache(path)
-    const next = fn(cur)
-    if (next !== cur) writeAtomic(path, JSON.stringify(next))
-  } finally {
-    if (ownerOf(lock) === token) rmSync(lock, { recursive: true, force: true })
-  }
-}
-
-export type CacheUpdater = (fn: (c: Cache) => Cache) => void
-
-/**
- * Atomically claim the per-account refresh: inside the lock, on the fresh cache (plus `seed`, e.g. the account's own
- * .claude.json sample), keep only ids that are still due and stamp them against the 5-min budget. Two concurrent
- * callers can never both claim the same account.
- */
-export function claimRefresh(update: CacheUpdater, reg: Registry, ids: string[], nowMs: number, seed: (c: Cache) => Cache = (c) => c): string[] {
-  let claimed: string[] = []
-  update((c) => {
-    const view = seed(c)
-    claimed = needsRefresh(reg, view, nowMs).filter((id) => ids.includes(id))
-    if (!claimed.length) return c
-    return { ...view, refreshed: { ...view.refreshed, ...Object.fromEntries(claimed.map((id) => [id, nowMs])) } }
-  })
-  return claimed
-}
-
 export interface RefreshDeps {
   reg: Registry
   spawn: Spawner
   claudeBin: string
   baseEnv: Record<string, string | undefined>
   readSample: (id: string) => Sample | null
-  update: CacheUpdater
+  dir?: string
   now: () => number
   timeoutS: number
   /** Accounts to refresh. They are already claimed (budget stamped) by the caller. */
@@ -373,11 +404,10 @@ export interface RefreshDeps {
 }
 
 /**
- * `claude -p /usage` for already-claimed accounts, then one locked update: only the refreshed sample, auth verdict
- * and (when the binary could not start) the budget rollback are applied, so concurrent statusline records survive.
+ * `claude -p /usage` for already-claimed accounts. Each result touches only that account's own files. A binary that
+ * could not start gives the claim back (it was not an attempt); a timeout keeps it and leaves the auth verdict alone.
  */
 export function runRefresh(d: RefreshDeps): void {
-  const results: { id: string; started: boolean; sample: Sample | null; authFailed: boolean | null }[] = []
   for (const id of d.ids) {
     const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], {
       env: refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])),
@@ -385,53 +415,43 @@ export function runRefresh(d: RefreshDeps): void {
     })
     if (r.error?.code === "ENOENT") {
       d.log?.(`refresh ${id}: cannot start claude (${r.error.message})`)
-      results.push({ id, started: false, sample: null, authFailed: null })
+      releaseClaim(id, d.dir)
       continue
     }
     const sample = r.status === 0 && !r.error ? d.readSample(id) : null
-    const authFailed = sample ? false : /login|auth|credential/i.test(`${r.stdout}${r.stderr}`) ? true : null // null: unknown, keep the old verdict
-    if (!sample) d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
-    results.push({ id, started: true, sample, authFailed })
-  }
-  d.update((c) => {
-    let out = c
-    for (const r of results) {
-      if (!r.started) {
-        const { [r.id]: _undone, ...refreshed } = out.refreshed // not an attempt: give the budget back
-        out = { ...out, refreshed }
-        continue
-      }
-      if (r.authFailed !== null) out = { ...out, auth_failed: { ...out.auth_failed, [r.id]: r.authFailed } }
-      if (r.sample) out = mergeSample(out, r.id, r.sample)
+    if (sample) {
+      saveSample(id, sample, d.dir)
+      setAuthFailed(id, false, d.now(), d.dir)
+      continue
     }
-    return out
-  })
+    d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
+    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`)) setAuthFailed(id, true, d.now(), d.dir)
+  }
 }
 
 export interface BeforePick {
   reg: Registry
   lane: string
   now: number
+  cache: Cache
   /** Claims the due ids atomically (budget stamped); returns the ones this caller won. */
   claim: (ids: string[]) => string[]
-  /** Blocking refresh of already-claimed ids (account has no sample at all). */
+  /** Blocking refresh of already-claimed ids (account has no usable sample). */
   runSync: (ids: string[]) => void
   /** Detached, fire-and-forget refresh of already-claimed ids. */
   detach: (ids: string[]) => void
-  cache: Cache
 }
 
 /**
- * Refresh policy of `pick`: the interactive lane returns before any claim or lock. Other lanes never block while
- * a usable sample exists; only an account with no sample (or one past STALE_OK_MS) refreshes synchronously, every
- * other due account in the background. Ids are claimed atomically first.
+ * Refresh policy of `pick`: the interactive lane returns before any claim. Other lanes never block while a usable
+ * sample exists; only an account with no usable sample refreshes synchronously, every other due account in the
+ * background. Ids are claimed first.
  */
 export function refreshBeforePick(b: BeforePick): { sync: string[]; background: string[] } {
-  if (b.lane === "interactive") return { sync: [], background: [] } // no claim, no lock: an interactive pick touches nothing
-  const due = needsRefresh(b.reg, b.cache, b.now)
+  if (b.lane === "interactive") return { sync: [], background: [] } // no claim: an interactive pick touches nothing
+  const due = dueIds(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
-  const noSample = (id: string) => !b.cache.samples[id] || b.now - b.cache.samples[id].ts >= STALE_OK_MS
-  const sync = claimed.filter(noSample)
+  const sync = claimed.filter((id) => !usable(b.cache.samples[id], b.now))
   const background = claimed.filter((id) => !sync.includes(id))
   if (background.length) b.detach(background)
   if (sync.length) b.runSync(sync)

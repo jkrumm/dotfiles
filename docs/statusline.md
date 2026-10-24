@@ -52,7 +52,7 @@ response on. Every render that has them also POSTs them to agent-gateway's
 fire-and-forget) — that is what keeps agent-gateway's quota view and the devhost
 heartbeat's quota component fed. The same throttled render also records a
 per-account sample (`claude-account record`, account = registry id resolved from
-`CLAUDE_CONFIG_DIR`, unset → `a`) into `~/.cache/claude-accounts/usage.json`
+`CLAUDE_CONFIG_DIR`, unset → `a`) into `~/.cache/claude-accounts/<id>.sample.json`
 (`docs/claude-accounts.md`). An `A`/`B` badge after the auth mode shows only when
 more than one account is enabled.
 
