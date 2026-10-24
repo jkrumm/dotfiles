@@ -220,8 +220,13 @@ if [ -n "$rl_5h" ]; then
     mkdir -p /tmp/claude_sl && echo "$_now_s" > "$_push_stamp"
     _mins=null
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _mins=$(( (rl_5h_reset - _now_s) / 60 ))
+    # Account: the badge's resolution (claude-account account); unset CLAUDE_CONFIG_DIR is iu, an unregistered dir ("?") sends none.
+    _acct_json=
+    _acct="${account_id:-}"
+    [ -z "$_acct" ] && [ -z "${CLAUDE_CONFIG_DIR:-}" ] && _acct=iu
+    [ -n "$_acct" ] && [ "$_acct" != "?" ] && _acct_json=",\"account\":\"${_acct}\""
     ( curl -s -m 1 -X POST -H 'Content-Type: application/json' \
-        -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}}" \
+        -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}${_acct_json}}" \
         http://localhost:7705/api/usage >/dev/null 2>&1 ) &
     disown 2>/dev/null
     # Same throttle: resolve the account and feed its quota sample (claude-account record, atomic).
