@@ -88,6 +88,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-skills
 	@$(MAKE) --no-print-directory _setup-imgcli
 	@$(MAKE) --no-print-directory _setup-settings
+	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory _setup-gitignore
 	@$(MAKE) --no-print-directory _setup-ghostty
 	@$(MAKE) --no-print-directory _setup-tools
@@ -1347,18 +1348,46 @@ _setup-imgcli:
 .PHONY: _setup-settings
 _setup-settings:
 	@echo "  Claude Code settings..."
-	@if [ ! -f "$(CLAUDE_DIR)/settings.json" ]; then \
+	@$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$(CLAUDE_DIR)"
+
+# Template -> <SETTINGS_DIR>/settings.json. Shared by ~/.claude and every extra
+# account dir (claude-accounts-setup); settings.json is rendered, never symlinked.
+.PHONY: _render-settings
+_render-settings:
+	@if [ ! -f "$(SETTINGS_DIR)/settings.json" ]; then \
 		jq 'del(._NOTE)' "$(DOTFILES_DIR)/config/settings.template.json" \
-			> "$(CLAUDE_DIR)/settings.json"; \
-		echo "    ✓ settings.json created from template"; \
+			> "$(SETTINGS_DIR)/settings.json"; \
+		echo "    ✓ $(SETTINGS_DIR)/settings.json created from template"; \
 	else \
-		jq --slurpfile existing "$(CLAUDE_DIR)/settings.json" \
+		jq --slurpfile existing "$(SETTINGS_DIR)/settings.json" \
 			'del(._NOTE) * {permissions: (($$existing[0].permissions // .permissions) * {deny: .permissions.deny, defaultMode: .permissions.defaultMode})} * ($$existing[0] | {model, effortLevel, alwaysThinkingEnabled} | with_entries(select(.value != null)))' \
 			"$(DOTFILES_DIR)/config/settings.template.json" \
 			> /tmp/claude-settings-merged.json \
-		&& mv /tmp/claude-settings-merged.json "$(CLAUDE_DIR)/settings.json"; \
-		echo "    ✓ settings.json merged (template applied, allow + model/effort preserved, deny + defaultMode from template)"; \
+		&& mv /tmp/claude-settings-merged.json "$(SETTINGS_DIR)/settings.json"; \
+		echo "    ✓ $(SETTINGS_DIR)/settings.json merged (template applied, allow + model/effort preserved, deny + defaultMode from template)"; \
 	fi
+
+# One dir per registry account that has one (config/claude-accounts.json): shared
+# pieces symlinked to ~/.claude, settings.json rendered. Credentials and
+# .claude.json are never touched. Idempotent.
+.PHONY: claude-accounts-setup
+claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to ~/.claude + rendered settings.json)
+	@echo "  Claude accounts..."
+	@chmod +x $(DOTFILES_DIR)/scripts/claude-account.ts
+	@mkdir -p "$(HOME)/.local/bin"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" \
+		DST="$(HOME)/.local/bin/claude-account"
+	@for dir in $$(jq -r '.accounts[] | select(.dir != null) | .dir' "$(DOTFILES_DIR)/config/claude-accounts.json"); do \
+		dir=$$(echo "$$dir" | sed "s|^~|$(HOME)|"); \
+		mkdir -p "$$dir"; \
+		for item in skills agents hooks rules output-styles commands plugins CLAUDE.md projects logs; do \
+			if [ -e "$(CLAUDE_DIR)/$$item" ]; then \
+				$(MAKE) --no-print-directory _link SRC="$(CLAUDE_DIR)/$$item" DST="$$dir/$$item"; \
+			fi; \
+		done; \
+		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir"; \
+	done
 
 .PHONY: _setup-gitignore
 _setup-gitignore:
