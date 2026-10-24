@@ -55,8 +55,9 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 | argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
 | dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (pre-#32 account-less session_env lines, age out by 2026-10-25 16:20Z) → then `make claude-accounts-stamp` |
 | usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
-| argo (W2c) | #201 | — | **merged** f0053a4, CI deploying |
-| tinycast fix | fix/quota-argo-shape | `tinycast-extens-quota-argo-shape` | my brief had the wrong Argo envelope (`latest.snapshot.quota`, `latest.receivedAt`); fix fanned, then MacBook deploy |
+| argo (W2c) | #201 | — | **merged + live** f0053a4; quota + picks syncing (verified `/usage/quota`) |
+| tinycast fix | #2 | — | **merged** (brief had the wrong Argo envelope). MacBook offline → deploy queued via ask-human `20261024T192906-24061` |
+| usage-tracker fix | fix/sessions-account | `usage-tracker-sessions-account` | agent-gateway-sessions Max rows default to iu (no session_env join) + db.ts NULL→iu repair runs every open; fanned |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
 | agent-gateway | #33 | — | **merged + deployed** b1c9c98; /api/usage accounts + overview header live |
 
@@ -93,6 +94,17 @@ Decisions taken during W2:
   `rd wave` + `rd fan` (→ me unless me walled), an agent-gateway worker job (→ me for non-review
   tools), and confirm `session_env.account` + usage-tracker rows per path. Subagents inherit the
   parent's account (same process) — confirm once.
+
+## E2E proof (2026-10-24 ~17:30Z, @verifier + orchestrator)
+
+All paths PASS: c/cs/cf → iu (dry + static), ca/cap/claude_iu untouched, real Haiku runs iu/me attributed
+(usage_record + session_env), subagent inherits me, rd wave/fan → me (picks + `MAX ME` statusline),
+agent-gateway otel worker → me (fresh MCP child: pick `agent-gateway:otel → me/home`, session_env account me,
+claude-code rows me), 0 Max rows without account since rollout, displays (/api/usage, overview header,
+Argo quota series) show both. Break tests all pass. Fixture picks from W1 testing removed from picks.jsonl
+(backup `picks.jsonl.bak-2026-10-24`) and account_pick before sync.
+- **Stale MCP children:** `make deploy` leaves per-session agent-gateway MCP children alive; sessions started
+  before #32 keep picking nothing (run on iu) until restarted (or `make deploy RESTART_MCP=1`).
 
 ## Known gaps / decisions already made
 
