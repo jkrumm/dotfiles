@@ -129,7 +129,7 @@ export function writeAtomic(path: string, data: string): void {
 }
 
 // ── Per-account cache files ────────────────────────────────────────────────────────────────────────────────────
-// <id>.sample.json · <id>.exhausted.json · <id>.auth.json · <id>.refresh.claim. Every writer replaces only its own
+// <id>.sample.json · <id>.exhausted.json · <id>.auth.json · <id>.statusline.json (last statusline feed) · <id>.refresh.claim. Every writer replaces only its own
 // small file atomically, so there is no lock: two accounts or two kinds never contend, and a lost update on one
 // file only costs freshness (the next feed rewrites it).
 
@@ -226,6 +226,8 @@ export function recordSample(id: string, part: { s?: number | null; w?: number |
     src: "statusline",
   }, dir)
   setAuthFailed(id, false, nowMs, dir)
+  // The sample's `src` flips to "usage" when a refresh lands later, so the verify suite reads this stamp for "a statusline fed it".
+  writeAtomic(file(dir, id, "statusline.json"), JSON.stringify({ ts: nowMs }))
 }
 
 /** ISO string or epoch (s or ms) -> epoch seconds. */
@@ -363,7 +365,7 @@ export function dueIds(reg: Registry, cache: Cache, nowMs: number, ignoreAuthMar
  * REFRESH_MIN_MS is the 5-min budget; an older one is stale and replaced. Racing replacers may both win: one
  * duplicate refresh at worst.
  */
-export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache: Cache, dir = cacheDir(), ignoreAuthMark = false): string[] {
+export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache: Cache, dir = cacheDir(), ignoreAuthMark = false, all = false): string[] {
   mkdirSync(dir, { recursive: true })
   // Exclusive create WITH content: write a private temp file, then hard-link it into place (fails with EEXIST if
   // the claim exists), so a concurrent reader never sees a claim without its timestamp.
@@ -376,7 +378,9 @@ export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache:
       unlinkSync(tmp)
     }
   }
-  return dueIds(reg, cache, nowMs, ignoreAuthMark).filter((id) => {
+  // `all` (the daily login keepalive): every enabled account, whatever its sample age; the claim budget still applies.
+  const candidates = all ? Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled) : dueIds(reg, cache, nowMs, ignoreAuthMark)
+  return candidates.filter((id) => {
     if (!ids.includes(id)) return false
     const path = file(dir, id, "refresh.claim")
     try {
@@ -453,23 +457,36 @@ export interface RefreshDeps {
  */
 export function runRefresh(d: RefreshDeps): void {
   for (const id of d.ids) {
-    const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], {
-      env: refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])),
-      timeoutMs: d.timeoutS * 1000,
-    })
+    const env = refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id]))
+    const startedAt = d.now()
+    const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], { env, timeoutMs: d.timeoutS * 1000 })
     if (r.error?.code === "ENOENT") {
       d.log?.(`refresh ${id}: cannot start claude (${r.error.message})`)
       releaseClaim(id, d.dir)
       continue
     }
     const sample = r.status === 0 && !r.error ? d.readSample(id) : null
-    if (sample) {
+    // `claude -p /usage` exits 0 with no fetch when the login is dead, leaving the previous cachedUsageUtilization in
+    // place: only a sample fetched during this run proves the login works.
+    if (sample && Math.max(sample.s_ts ?? 0, sample.w_ts ?? 0) >= startedAt) {
       saveSample(id, sample, d.dir)
       setAuthFailed(id, false, d.now(), d.dir)
       continue
     }
+    if (sample) saveSample(id, sample, d.dir)
     d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
-    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`)) setAuthFailed(id, true, d.now(), d.dir)
+    if (r.error?.code === "ETIMEDOUT" || r.error?.message?.includes("timed out")) continue // a timeout says nothing about the login
+    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`) || loggedOut(d, id, env)) setAuthFailed(id, true, d.now(), d.dir)
+  }
+}
+
+/** `claude auth status` (0 tokens): true only when the binary says loggedIn is false. */
+function loggedOut(d: RefreshDeps, id: string, env: Record<string, string>): boolean {
+  const r = d.spawn(d.claudeBin, ["auth", "status"], { env, timeoutMs: 30_000 })
+  try {
+    return (JSON.parse(r.stdout) as { loggedIn?: unknown }).loggedIn === false
+  } catch {
+    return false
   }
 }
 

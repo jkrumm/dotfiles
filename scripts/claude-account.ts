@@ -3,7 +3,8 @@
 //
 //   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --ids also retries an auth-failed account before its 30 min cooldown
+//   claude-account refresh [--ids a,b] [--all]   `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
+//   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
@@ -74,11 +75,11 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
  * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
  * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
-function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[] } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
+function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
   const enabled = (id: string) => Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
-    : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
+    : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids || !!o.all, !!o.all) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
   runRefresh({
     reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
     readSample: (id) => readSample(reg, id), now: Date.now, log: (m) => console.error(m),
@@ -126,9 +127,10 @@ function main(argv: string[]): number {
       const now = Date.now()
       // Never block while a usable sample exists: stale accounts refresh in the background (budgeted),
       // only an account with no sample at all is refreshed synchronously first.
+      const dry = rest.includes("--dry")
       try {
         const cache0 = readClaudeJson(reg, loadCache())
-        refreshBeforePick({
+        if (!dry) refreshBeforePick({
           reg, lane, now, cache: cache0,
           claim: (ids) => claimRefresh(reg, ids, now, cache0),
           runSync: (ids) => refresh(reg, { claimed: ids }),
@@ -139,11 +141,13 @@ function main(argv: string[]): number {
       }
       const cache = readClaudeJson(reg, loadCache())
       const p = pick(reg, cache, lane, now)
-      try {
-        mkdirSync(dirname(picksPath()), { recursive: true })
-        appendFileSync(picksPath(), JSON.stringify(pickLine(reg, cache, lane, p, now)) + "\n")
-      } catch {
-        // the pick log is a dataset, never a gate
+      if (!dry) {
+        try {
+          mkdirSync(dirname(picksPath()), { recursive: true })
+          appendFileSync(picksPath(), JSON.stringify(pickLine(reg, cache, lane, p, now)) + "\n")
+        } catch {
+          // the pick log is a dataset, never a gate
+        }
       }
       const line = shellLine(reg, p)
       console.log(line ?? SPILL)
@@ -154,7 +158,7 @@ function main(argv: string[]): number {
       usage(reg, rest.includes("--json"))
       return 0
     case "refresh": {
-      refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(",") })
+      refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(","), all: rest.includes("--all") })
       return 0
     }
     case "record": {
