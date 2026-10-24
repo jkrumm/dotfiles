@@ -185,6 +185,7 @@ fi
 # usage), cached 5 min, refreshed in the background — so it only ever spawns at
 # session start, and never on the IU lane, which has no subscription windows.
 _USAGE_CACHE="/tmp/claude_sl/usage_api.json"
+_USAGE_ACCOUNTS="/tmp/claude_sl/usage_accounts.json"   # every account, written by the same fetch_usage.py run
 _FETCH_SCRIPT="$HOME/.claude/fetch_usage.py"
 _now_s=$(date +%s)
 
@@ -202,6 +203,14 @@ if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
   fi
   if [ -f "$_USAGE_CACHE" ] && jq -e '.error != null' "$_USAGE_CACHE" >/dev/null 2>&1; then
     usage_parts="\033[33m⚠ claude.ai login${reset}"
+  elif [ -n "$account_id" ] && [ "$account_id" != "?" ] && [ -f "$_USAGE_ACCOUNTS" ] \
+    && [ "$(jq -r '.default_account // ""' "$_USAGE_ACCOUNTS" 2>/dev/null)" != "$account_id" ]; then
+    # usage_api.json only ever holds the default account: a non-default session reads its own row or shows nothing.
+    IFS=$'\x1f' read -r _5h_pct _5h_reset _wk_pct < <(jq -r --arg a "$account_id" '.accounts[$a] // {} | [
+      (.five_hour.utilization // "" | if . == "" then . else round end),
+      .five_hour.resets_at_epoch // "",
+      (.seven_day.utilization // "" | if . == "" then . else round end)
+    ] | map(tostring) | join("\u001f")' "$_USAGE_ACCOUNTS" 2>/dev/null)
   elif [ -f "$_USAGE_CACHE" ]; then
     IFS=$'\x1f' read -r _5h_pct _5h_reset _wk_pct < <(jq -r '[
       (.five_hour.utilization // "" | if . == "" then . else round end),
