@@ -16,7 +16,7 @@ Orchestrator: herdr tab `factory-v2` (SourceRoot workspace), session 07a74a7d, O
 - **Phase 0 shipped:** agent-gateway 93a8d91 (implement + escalation Max-only, reloaded, `/api/routing`
   verified); v1 runnable plans parked in dotfiles and warden `docs/waves/PLAN.md`; ADR files carry
   their v2 status.
-- **Podcast:** source `podcast/2026-10-24-factory-v2-source.md`, audio-gateway job 16751644.
+- **Podcast:** source `podcast/2026-10-24-factory-v2-source.md`; first job 16751644 failed at TTS (ElevenLabs v3 now rejects `previous_text`, fixed in audio-gateway b63087e); job 27202c81 published "Factory v2 — fünf Entscheidungen, offene Lücken" (19:50, $4.31) to Audiobookshelf.
 - **Next:** W1 per `tdd/12-plan.md` — default start Wed 2026-10-28 after the `iu` weekly reset, or earlier
   on `me` at the owner's go. Owner comments arrive in the plannotator Inbox thread
   msg_01M5HRYJ6ZHFHBH96GXVA6ZC63 (resume command in the v1 section below).

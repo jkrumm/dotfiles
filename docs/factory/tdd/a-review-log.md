@@ -60,6 +60,6 @@ shortened, the full text is in `feedback/2026-10-23-owner-comments-raw.md`.
 | Both subscriptions balanced, caching kept | picker classes and cache rules (§5) |
 | Herdr and all development on subscriptions only, never IU API tokens | enforced in dotfiles and agent-gateway (Phase 0) |
 | Drop tooling that breaks this | IU launchers removed; agent-gateway implement on Max |
-| Clean up herdr tabs | six finished tabs closed; the two-accounts tabs closed by their own orchestrator |
-| New report and a podcast | this document; the episode "Factory v2" in Audiobookshelf |
+| Clean up herdr tabs | six finished tabs closed (SourceRoot 1, 2, factory; dotfiles 1–3); the two-accounts workers were closed by their orchestrator, whose final tab stays open for you |
+| New report and a podcast | this document; the episode "Factory v2 — fünf Entscheidungen, offene Lücken" (19:50, Audiobookshelf → Podcasts) |
 | Spend less than the last run | five research jobs on IU API ($1.25), digests on Haiku, panel and implementer on Sonnet |
