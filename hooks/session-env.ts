@@ -4,7 +4,7 @@
  * SessionStart logger.
  *
  * Writes one `session_env` entry per session start (ANTHROPIC_BASE_URL +
- * USAGE_LANE) to the structured JSONL debug log at
+ * USAGE_LANE + the Claude account id) to the structured JSONL debug log at
  * ~/.claude/logs/YYYY-MM-DD.jsonl — usage-tracker bills each launcher from it.
  * Prunes log files older than 3 days on every run. Never blocks Claude: any
  * failure exits 0.
@@ -16,6 +16,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { accountFromConfigDir, loadRegistry } from "../scripts/lib/claude-accounts.ts";
 
 const LOG_DIR = join(homedir(), ".claude", "logs");
 
@@ -50,6 +51,15 @@ function cleanupOldLogs(keepDays = 3): void {
   }
 }
 
+/** Registry id of the account this session runs on; CLAUDE_CONFIG_DIR unset -> "a". */
+function currentAccount(): string {
+  try {
+    return accountFromConfigDir(loadRegistry(), process.env.CLAUDE_CONFIG_DIR);
+  } catch {
+    return "a";
+  }
+}
+
 async function main() {
   try {
     const input: { session_id?: string; hook_event_name?: string } = JSON.parse(
@@ -62,6 +72,7 @@ async function main() {
       session: input.session_id,
       base_url: process.env.ANTHROPIC_BASE_URL || null,
       lane: process.env.USAGE_LANE || null,
+      account: currentAccount(),
     });
   } catch (error) {
     console.error("session-env hook error:", error);
