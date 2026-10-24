@@ -60,6 +60,8 @@ _claude_account_line() {
     line=$(claude-account env "$1") || return 1
   else
     line=$(claude-account pick --lane interactive 2>/dev/null)
+    # exit 4: the registry was unreadable; the pick still answered `unset` (iu), but never silently
+    (( $? == 4 )) && print -u2 "c: claude-account registry unreadable — launching on the default account (iu)"
   fi
   case $line in
     "unset CLAUDE_CONFIG_DIR" | "export CLAUDE_CONFIG_DIR="*) print -r -- $line ;;
@@ -96,6 +98,8 @@ _claude_launch() {
   line=$(_claude_account_line "$account") || return 1
   (
     eval "$line"
+    # A non-default account must not inherit credentials meant for the default one.
+    [[ $line == "unset CLAUDE_CONFIG_DIR" ]] || unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
     ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
   )
 }

@@ -1,7 +1,7 @@
 # Two Claude Max accounts — concept
 
 Status: **W1 built** (2026-10-24). Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
-`me` (personal Max 5x at `~/.claude-me`, jkrumm@pm.me), both enabled. Shipped in W1: ids renamed from
+`me` (personal account, Max 5x at `~/.claude-me`), both enabled. Shipped in W1: ids renamed from
 `a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
 `CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (IU spill switches that spawn to
 opencode), the token fallback in `claude-auth.zsh` applies to the default account only, per-account

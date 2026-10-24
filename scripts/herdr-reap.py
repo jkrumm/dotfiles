@@ -242,8 +242,9 @@ def account_envs() -> list[dict]:
     try:
         with open(registry) as f:
             dirs = [a.get("dir") for a in json.load(f)["accounts"].values() if a.get("enabled")]
-    except Exception:
-        dirs = [None]  # unreadable registry: the default account, as before
+    except Exception as e:
+        print(f"claude-accounts registry unreadable ({e}); bg leftovers checked for the default account only")
+        dirs = [None]
     envs = []
     for d in dirs:
         env = dict(os.environ)
@@ -262,7 +263,7 @@ def reap_bg(j: Journal) -> None:
 def reap_bg_account(j: Journal, env: dict) -> None:
     rc, out = sh("claude", "agents", "--json", env=env)
     if rc != 0:
-        print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}); skipping bg leftovers")
+        print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}): {out.strip()[:160]!r}; skipping its bg leftovers")
         return
     now = time.time() * 1000
     seen = load_messaged()

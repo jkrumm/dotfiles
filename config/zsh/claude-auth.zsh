@@ -96,19 +96,25 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
   # "probe again", not "run unauthenticated".
 
   claude() {
-    # An explicit token in the environment always wins — never second-guess a
-    # caller that already decided.
-    if [[ -n $CLAUDE_CODE_OAUTH_TOKEN ]]; then
-      command claude "$@"
+    # Any non-default account (CLAUDE_CONFIG_DIR set, docs/claude-accounts.md) is
+    # NEVER given the IU token: it is a different login, and injecting it ran the
+    # session on the wrong account. This branch comes BEFORE the explicit-token
+    # one, so an inherited CLAUDE_CODE_OAUTH_TOKEN cannot override that login either.
+    # A dead login is only reported, and then runs WITHOUT any API credential
+    # (ANTHROPIC_API_KEY / AUTH_TOKEN stripped): it must not fall back to API billing.
+    if [[ -n ${CLAUDE_CONFIG_DIR-} ]]; then
+      if command env -u CLAUDE_CODE_OAUTH_TOKEN claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+        command env -u CLAUDE_CODE_OAUTH_TOKEN claude "$@"
+      else
+        print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a herdr pane (no token fallback for this account)"
+        command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude "$@"
+      fi
       return
     fi
 
-    # Any non-default account (CLAUDE_CONFIG_DIR set, docs/claude-accounts.md) is
-    # NEVER given the IU token: it is a different login, and injecting it ran the
-    # session on the wrong account. A dead login is only reported.
-    if [[ -n ${CLAUDE_CONFIG_DIR-} ]]; then
-      command claude auth status 2>/dev/null | grep -q '"loggedIn": *true' \
-        || print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a herdr pane (no token fallback for this account)"
+    # An explicit token in the environment always wins — never second-guess a
+    # caller that already decided.
+    if [[ -n $CLAUDE_CODE_OAUTH_TOKEN ]]; then
       command claude "$@"
       return
     fi

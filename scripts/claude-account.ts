@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom)
+//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
 //   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
@@ -21,7 +21,8 @@ import {
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
-const IU_EXIT = 3
+const SPILL_EXIT = 3
+const REGISTRY_EXIT = 4 // pick answered `unset CLAUDE_CONFIG_DIR` (iu) because the registry was unreadable
 
 function flag(argv: string[], name: string): string | null {
   const i = argv.indexOf(name)
@@ -114,8 +115,9 @@ function main(argv: string[]): number {
   } catch (e) {
     if (cmd !== "pick") throw e
     console.error(`claude-account: registry unreadable: ${(e as Error).message}`)
-    console.log("unset CLAUDE_CONFIG_DIR") // a pick must always answer: fall back to the default account
-    return 0
+    console.log("unset CLAUDE_CONFIG_DIR") // a pick must always answer: fall back to the default account...
+    if (rest.includes("--why")) console.log("# picked=iu reason=registry-error stale=false")
+    return REGISTRY_EXIT // ...but never silently: callers warn on 4
   }
   switch (cmd) {
     case "pick": {
@@ -146,7 +148,7 @@ function main(argv: string[]): number {
       const line = shellLine(reg, p)
       console.log(line ?? SPILL)
       if (rest.includes("--why")) console.log(`# picked=${p.picked} reason=${p.reason} stale=${p.stale}`)
-      return line === null ? IU_EXIT : 0
+      return line === null ? SPILL_EXIT : 0
     }
     case "usage":
       usage(reg, rest.includes("--json"))

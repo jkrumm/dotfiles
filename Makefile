@@ -1375,9 +1375,11 @@ _render-settings:
 # Enabled registry accounts, one word each: "-" = the default ~/.claude (CLAUDE_CONFIG_DIR unset), else the
 # dir. User-scope MCP servers live in each account's own .claude.json, so a registration runs once per
 # account: wrap it as `$(CLAUDE_EACH_ACCOUNT) <cmds>; $(CLAUDE_EACH_END)`.
-CLAUDE_ACCOUNT_DIRS := $(shell jq -r '.accounts[] | select(.enabled) | (.dir // "-")' "$(DOTFILES_DIR)/config/claude-accounts.json" 2>/dev/null || echo -)
+CLAUDE_ACCOUNT_DIRS = $(shell jq -r '.accounts[] | select(.enabled) | (.dir // "-")' "$(DOTFILES_DIR)/config/claude-accounts.json" 2>/dev/null || echo -)
 CLAUDE_EACH_ACCOUNT = for d in $(CLAUDE_ACCOUNT_DIRS); do ( if [ "$$d" = "-" ]; then unset CLAUDE_CONFIG_DIR; else CLAUDE_CONFIG_DIR=$$(printf %s "$$d" | sed "s|^~|$$HOME|"); export CLAUDE_CONFIG_DIR; fi;
 CLAUDE_EACH_END = ) || exit 1; done
+# doctor: is MCP server $(1) registered in every enabled account?
+CLAUDE_MCP_CHECK = $(CLAUDE_EACH_ACCOUNT) a="$${CLAUDE_CONFIG_DIR:-default account}"; if claude mcp list 2>/dev/null | grep -q "$(1)"; then echo "    ✓ $(1) MCP registered ($$a)"; else echo "    ✗ $(1) MCP [not registered for $$a — run make setup]"; fi; $(CLAUDE_EACH_END)
 
 .PHONY: claude-accounts-setup
 claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to ~/.claude + rendered settings.json)
@@ -1758,11 +1760,7 @@ status:
 		echo "    ✗ pnpm [not installed — run make setup]"; \
 	fi
 	@echo "  Browser debugging"
-	@if claude mcp list 2>/dev/null | grep -q "chrome-devtools"; then \
-		echo "    ✓ chrome-devtools MCP (deferred loading)"; \
-	else \
-		echo "    ✗ chrome-devtools MCP [not registered — run make setup]"; \
-	fi
+	@$(call CLAUDE_MCP_CHECK,chrome-devtools)
 	@echo "  Colima (Docker runtime)"
 	@for tool in colima docker lazydocker; do \
 		command -v $$tool >/dev/null 2>&1 \
@@ -1781,17 +1779,11 @@ status:
 	@echo "  agent-gateway MCP"
 	@if [ ! -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
 		echo "    · agent-gateway not cloned — skipping"; \
-	elif claude mcp list 2>/dev/null | grep -q "agent-gateway"; then \
-		echo "    ✓ agent-gateway MCP registered"; \
 	else \
-		echo "    ✗ agent-gateway MCP [not registered — run make setup]"; \
+		$(call CLAUDE_MCP_CHECK,agent-gateway); \
 	fi
 	@echo "  research-gateway MCP"
-	@if claude mcp list 2>/dev/null | grep -q "research-gateway"; then \
-		echo "    ✓ research-gateway MCP registered"; \
-	else \
-		echo "    ✗ research-gateway MCP [not registered — run make setup]"; \
-	fi
+	@$(call CLAUDE_MCP_CHECK,research-gateway)
 	@echo "  usage-tracker"
 	@if [ ! -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
 		echo "    · usage-tracker not cloned — skipping"; \

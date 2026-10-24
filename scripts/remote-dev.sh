@@ -303,8 +303,11 @@ parse_kind() {
 pick_account() {
   local lane=$1 out line why
   PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="account iu (picker unavailable)"
-  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null)
+  local rc=0
+  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null) || rc=$?
   line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
+  # exit 4: registry unreadable. The pick still answered iu, but the line says why.
+  (( rc == 4 )) && why="# picked=iu reason=registry-error"
   case $line in
     spill)
       PICK_SPILL=1; PICK_NOTE="no Claude account has room (spill) -> IU (${why#\# })" ;;
@@ -871,24 +874,29 @@ except Exception:
 # Runs on the dev host (the registry and the claude binary live there).
 claude_agents_json() {
   host_run 'python3 - <<"PY"
-import json, os, subprocess
+import json, os, subprocess, sys
 reg = os.path.expanduser("~/SourceRoot/dotfiles/config/claude-accounts.json")
 try:
     dirs = [a.get("dir") for a in json.load(open(reg))["accounts"].values() if a.get("enabled")]
-except Exception:
+except Exception as e:
+    print(f"rd: claude-accounts registry unreadable ({e}); listing the default account only", file=sys.stderr)
     dirs = [None]
 out = []
 for d in dirs:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
     if d is not None:
         env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(d)
+    label = d or "default account"
     try:
         r = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, env=env)
-        out += json.loads(r.stdout) if r.returncode == 0 else []
-    except Exception:
-        pass
+        if r.returncode != 0:
+            print(f"rd: claude agents --json failed for {label}: {(r.stderr or r.stdout).strip()[:160]}", file=sys.stderr)
+            continue
+        out += json.loads(r.stdout)
+    except Exception as e:
+        print(f"rd: claude agents --json failed for {label}: {e}", file=sys.stderr)
 print(json.dumps(out))
-PY' 2>/dev/null
+PY'
 }
 
 # One view over both lanes, because "is my work still running" should not depend

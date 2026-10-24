@@ -1247,16 +1247,21 @@ check_claude_auth_iu() {
 # iu dead = FAIL (as before). Any other enabled account dead = WARN: the picker routes around it, and
 # its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a herdr pane.
 check_claude_auth() {
-  local iu_msg iu_rc=0 line id dir out dead="" ok=""
+  local iu_msg iu_rc=0 accts id dir out dead="" ok=""
   iu_msg=$(check_claude_auth_iu) || iu_rc=$?
   (( iu_rc == 0 )) || { echo "$iu_msg"; return "$iu_rc"; }
-  [[ -x "$CLAUDE_BIN" && -r "$CLAUDE_ACCOUNTS_REGISTRY" ]] || { echo "$iu_msg"; return 0; }
+  [[ -x "$CLAUDE_BIN" ]] || { echo "$iu_msg"; return 0; }   # no CLI: check_claude_auth_iu already skipped
+  # An unreadable registry means the other accounts went unchecked: say so, never a silent green.
+  [[ -r "$CLAUDE_ACCOUNTS_REGISTRY" ]] \
+    || { echo "$iu_msg; account registry unreadable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; return 2; }
+  accts=$("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.enabled and .value.dir != null) | "\(.key)\t\(.value.dir)"' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null) \
+    || { echo "$iu_msg; account registry unparsable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; return 2; }
   while IFS=$'\t' read -r id dir; do
     [[ -n "$id" ]] || continue
     dir="${dir/#\~/$HOME}"
     out=$(CLAUDE_CONFIG_DIR="$dir" USER="${USER:-$(/usr/bin/id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null) || out=""
     if [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$out" 2>/dev/null)" == "true" ]]; then ok+=" $id"; else dead+=" $id"; fi
-  done < <("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.enabled and .value.dir != null) | "\(.key)\t\(.value.dir)"' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null)
+  done <<<"$accts"
   if [[ -n "$dead" ]]; then
     echo "$iu_msg; account${dead} NOT logged in — picker routes around it (fix: /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
     return 2
