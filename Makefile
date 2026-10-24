@@ -1372,6 +1372,13 @@ _render-settings:
 # One dir per registry account that has one (config/claude-accounts.json): shared
 # pieces symlinked to ~/.claude, settings.json rendered. Credentials and
 # .claude.json are never touched. Idempotent.
+# Enabled registry accounts, one word each: "-" = the default ~/.claude (CLAUDE_CONFIG_DIR unset), else the
+# dir. User-scope MCP servers live in each account's own .claude.json, so a registration runs once per
+# account: wrap it as `$(CLAUDE_EACH_ACCOUNT) <cmds>; $(CLAUDE_EACH_END)`.
+CLAUDE_ACCOUNT_DIRS := $(shell jq -r '.accounts[] | select(.enabled) | (.dir // "-")' "$(DOTFILES_DIR)/config/claude-accounts.json" 2>/dev/null || echo -)
+CLAUDE_EACH_ACCOUNT = for d in $(CLAUDE_ACCOUNT_DIRS); do ( if [ "$$d" = "-" ]; then unset CLAUDE_CONFIG_DIR; else CLAUDE_CONFIG_DIR=$$(printf %s "$$d" | sed "s|^~|$$HOME|"); export CLAUDE_CONFIG_DIR; fi;
+CLAUDE_EACH_END = ) || exit 1; done
+
 .PHONY: claude-accounts-setup
 claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to ~/.claude + rendered settings.json)
 	@echo "  Claude accounts..."
@@ -1446,8 +1453,8 @@ _setup-ghostty:
 .PHONY: _setup-browser
 _setup-browser:
 	@echo "  Chrome DevTools MCP (deferred loading — ~400 tokens overhead)..."
-	@claude mcp remove chrome-devtools --scope user 2>/dev/null || true
-	@claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false
+	@$(CLAUDE_EACH_ACCOUNT) claude mcp remove chrome-devtools --scope user 2>/dev/null || true; \
+		claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false; $(CLAUDE_EACH_END)
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
 # timeout: 1800000 (30 min) on the mcpServers.agent-gateway entry, not the plain
@@ -1460,8 +1467,8 @@ _setup-browser:
 _setup-agent-gateway:
 	@echo "  agent-gateway MCP..."
 	@if [ -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
-		claude mcp remove agent-gateway --scope user 2>/dev/null || true; \
-		claude mcp add-json agent-gateway --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/agent-gateway/server/mcp.ts"],"timeout":1800000}'; \
+		$(CLAUDE_EACH_ACCOUNT) claude mcp remove agent-gateway --scope user 2>/dev/null || true; \
+			claude mcp add-json agent-gateway --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/agent-gateway/server/mcp.ts"],"timeout":1800000}'; $(CLAUDE_EACH_END); \
 		echo "    ✓ agent-gateway MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
 		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-gateway" install-cli; \
 	else \
@@ -1491,8 +1498,8 @@ _setup-research-gateway-mcp:
 			echo "    · could not read op://vps/research-gateway/API_SECRET — the helper will fall back to secrets-run"; \
 		fi; \
 	fi
-	@claude mcp remove research-gateway --scope user >/dev/null 2>&1 || true
-	@claude mcp add-json research-gateway --scope user '{"type":"http","url":"https://research.mini.jkrumm.com/mcp","headersHelper":"$(DOTFILES_DIR)/scripts/mcp-research-headers.sh","timeout":7200000}' >/dev/null
+	@$(CLAUDE_EACH_ACCOUNT) claude mcp remove research-gateway --scope user >/dev/null 2>&1 || true; \
+		claude mcp add-json research-gateway --scope user '{"type":"http","url":"https://research.mini.jkrumm.com/mcp","headersHelper":"$(DOTFILES_DIR)/scripts/mcp-research-headers.sh","timeout":7200000}' >/dev/null; $(CLAUDE_EACH_END)
 	@echo "    ✓ research-gateway MCP registered (no token in ~/.claude.json)"
 
 .PHONY: _setup-colima
