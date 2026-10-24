@@ -42,6 +42,7 @@ KEYCHAIN_SERVICE = "Claude Code-credentials"
 ANTHROPIC_BETA = "oauth-2025-04-20"
 
 CLAUDE_ACCOUNT_BIN = "claude-account"
+DEFAULT_ACCOUNT = "iu"  # registry id of the default ~/.claude login (CLAUDE_CONFIG_DIR unset)
 ACCOUNTS_FILE = CACHE_DIR / "usage_accounts.json"
 CACHE_FRESH_S = 300
 
@@ -124,13 +125,15 @@ def _write_json(path: Path, payload: dict, indent: int | None = None) -> None:
         raise
 
 
-def _push_gateway(five_pct, mins_left, seven_pct) -> None:
-    # Push to agent-gateway UI (localhost:7705) — fail silently if not running
+def _push_gateway(five_pct, mins_left, seven_pct, account: str = DEFAULT_ACCOUNT) -> None:
+    # Push to agent-gateway UI (localhost:7705) — fail silently if not running.
+    # Both feeds here read the default account (the cache's default_account, or the default keychain login).
     try:
         _http_post_json(AGENT_GATEWAY_URL, {
             "five_hour_pct": round(five_pct or 0),
             "five_hour_mins_left": mins_left,
             "seven_day_pct": round(seven_pct) if seven_pct is not None else None,
+            "account": account,
         })
     except Exception:
         pass
@@ -198,7 +201,7 @@ def from_account_cache() -> bool:
         })
         reset = five["resets_at_epoch"]
         mins = round((reset - now) / 60) if reset and reset > now else None
-        _push_gateway(five["utilization"], mins, seven["utilization"])
+        _push_gateway(five["utilization"], mins, seven["utilization"], data.get("default_account") or DEFAULT_ACCOUNT)
         log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": five["utilization"], "seven_day_pct": seven["utilization"]})
         return True
     except Exception as e:
