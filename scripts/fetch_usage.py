@@ -192,7 +192,8 @@ def from_account_cache() -> bool:
             "seven_day_sonnet": {"utilization": None, "resets_at_epoch": None},
             "limits": [],
             "extra_usage": None,
-            "fetched_at": sampled_at,
+            "fetched_at": int(now),  # write time: statusline.sh gates its respawn on it
+            "sampled_at": sampled_at,  # age of the data
             "source": "claude-accounts",
         })
         reset = five["resets_at_epoch"]

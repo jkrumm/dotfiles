@@ -55,19 +55,27 @@ account_badge=""
 
 # Resolve id + badge into $_ca_file; with "record" also feeds the quota cache (args: the rate_limits flags).
 _ca_resolve() {
-  local id badge
-  id=$(PATH="$_CA_PATH" claude-account account 2>/dev/null) || return 0
+  local id badge tmp
+  id=$(PATH="$_CA_PATH" claude-account account 2>/dev/null)
+  if [ -z "$id" ]; then
+    rm -f "$_ca_file"   # drop the placeholder so the next render retries
+    return 0
+  fi
   badge=$(PATH="$_CA_PATH" claude-account account --badge 2>/dev/null)
-  printf '%s %s\n' "$id" "$badge" > "${_ca_file}.$$" && mv "${_ca_file}.$$" "$_ca_file"
-  if [ "$1" = "record" ] && [ -n "$id" ] && [ "$id" != "?" ]; then
+  tmp=$(mktemp "${_ca_file}.XXXXXX") || return 0
+  printf '%s %s\n' "$id" "$badge" > "$tmp" && mv "$tmp" "$_ca_file" || rm -f "$tmp"
+  if [ "$1" = "record" ] && [ "$id" != "?" ]; then
     shift
     PATH="$_CA_PATH" claude-account record --account "$id" "$@" >/dev/null 2>&1
   fi
 }
 if [ ! -e "$_ca_file" ]; then
-  mkdir -p /tmp/claude_sl && : > "$_ca_file"   # placeholder: later renders don't respawn while the first resolve runs
-  ( _ca_resolve ) >/dev/null 2>&1 &
-  disown 2>/dev/null
+  mkdir -p /tmp/claude_sl
+  # noclobber: only the render that wins the create resolves; the placeholder stops later renders respawning
+  if ( set -o noclobber; : > "$_ca_file" ) 2>/dev/null; then
+    ( _ca_resolve ) >/dev/null 2>&1 &
+    disown 2>/dev/null
+  fi
 fi
 
 # ── Model ──────────────────────────────────────────────────────────────────────
