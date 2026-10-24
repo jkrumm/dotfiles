@@ -22,6 +22,32 @@ const cacheOf = (a?: Sample, b?: Sample): Cache => ({ ...emptyCache(), samples: 
 const tmp = () => mkdtempSync(join(tmpdir(), "ca-"))
 const staleA = () => cacheOf(sample(10, 10, { age: 11 * 60_000 }))
 
+describe("pick rule v1.1 pace guard", () => {
+  const D = 24 * H
+  const iuOver = sample(10, 88, { wReset: NOW / 1000 + 3.9 * D }) // pace 44
+  const meCalm = sample(10, 2, { wReset: NOW / 1000 + 6.5 * D }) // pace 7
+  test("over-pace home yields to an under-pace other, every lane", () => {
+    expect(pick(reg(), cacheOf(iuOver, meCalm), "interactive", NOW)).toMatchObject({ picked: "me", reason: "pace" })
+    expect(pick(reg(), cacheOf(iuOver, meCalm), "agent-gateway:review", NOW)).toMatchObject({ picked: "me", reason: "pace" })
+  })
+  test("both over pace -> home", () => {
+    const meOver = sample(10, 60, { wReset: NOW / 1000 + 6.5 * D })
+    expect(pick(reg(), cacheOf(iuOver, meOver), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+  test("other ineligible -> home", () => {
+    expect(pick(reg(), cacheOf(iuOver, sample(95, 2, { wReset: NOW / 1000 + 6.5 * D })), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+  test("home without a weekly reset is never over pace", () => {
+    expect(pick(reg(), cacheOf({ ...sample(10, 88), w_reset: null }, meCalm), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+  test("bulk lane already on me is unaffected", () => {
+    expect(pick(reg(), cacheOf(iuOver, meCalm), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" })
+  })
+  test("expiring capacity still wins for bulk lanes", () => {
+    expect(pick(reg(), cacheOf(iuOver, sample(10, 2, { wReset: NOW / 1000 + 5 * H })), "wave", NOW)).toMatchObject({ picked: "me", reason: "expiring-capacity" })
+  })
+})
+
 describe("pick rule v1", () => {
   test("home eligible", () => {
     const c = cacheOf(sample(10, 10), sample(10, 10))

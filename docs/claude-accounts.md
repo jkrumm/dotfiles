@@ -112,23 +112,32 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1:**
+**Rule v1.1:**
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
               (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; `claude -p /usage`
                takes 27-40 s, limit 75 s. Only an account with no sample is refreshed synchronously.
                The pick log carries `stale: true`)
+pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
+overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
 home(lane)  = iu for interactive, agent-gateway:review, headless
               me for wave, fan, agent-gateway:* (other tools)
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first
-  2. eligible(home) → home
-  3. eligible(other) → other
-  4. interactive → iu (Claude Code shows the limit itself)
+  2. eligible(home) ∧ overPace(home) ∧ eligible(other) ∧ ¬overPace(other) → other   # pace guard, every lane
+  3. eligible(home) → home
+  4. eligible(other) → other
+  5. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
                    (rd wave --kind opencode, agw's existing IU fallback)
 ```
+
+Why the pace step (v1.1): on 2026-10-24 `c` picked `iu` at 89 % weekly with about
+four days to its reset while `me` sat at 2 %. v1 only leaves home at weekly ≥ 90 %,
+so interactive work burned iu's last 11 % while `me` idled. An over-pace home now
+yields to an under-pace account (iu 88 % at pace 44 → `me`, reason `pace`). Picks
+are per spawn, so no hysteresis. Expiring capacity (rule 1) still wins for bulk lanes.
 
 Why these homes: the waves are steady, unattended and start a fresh context
 per wave, so each wave is a free re-pick point. Together they are 63% of Max

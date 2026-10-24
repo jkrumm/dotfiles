@@ -16,6 +16,9 @@ export const STALE_OK_MS = 6 * 3600_000
 export const AUTH_RETRY_MS = 30 * 60_000
 export const REFRESH_MIN_MS = 5 * 60_000
 export const EXPIRING_S = 24 * 3600
+/** Weekly% may run this many points ahead of the elapsed share of the 7-day window before an account counts as over pace. */
+export const PACE_MARGIN = 15
+const WEEK_S = 7 * 24 * 3600
 export const EXPIRING_WEEKLY_MAX = 70
 
 export interface Account {
@@ -298,7 +301,21 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
   return true
 }
 
-/** Rule v1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
+/** Percent of x's 7-day window already elapsed (0..100); null without a weekly reset to measure against. */
+export function pace(x: Sample | undefined, nowMs: number): number | null {
+  if (!x || !hasW(x) || x.w_reset === null) return null
+  return 100 * Math.min(1, Math.max(0, 1 - (x.w_reset * 1000 - nowMs) / (WEEK_S * 1000)))
+}
+
+/** Eligible and burning weekly capacity faster than the window elapses (by more than PACE_MARGIN). */
+export function overPace(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
+  if (!eligible(reg, cache, id, nowMs)) return false
+  const x = cache.samples[id]
+  const p = pace(x, nowMs)
+  return p !== null && x.w! > p + PACE_MARGIN
+}
+
+/** Rule v1.1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
   const r = pickRaw(reg, cache, lane, nowMs)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
@@ -321,6 +338,10 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
   }
   const homes = homeIds(reg, lane)
   const home = ids.find((id) => ok.includes(id) && homes.includes(id))
+  if (home && overPace(reg, cache, home, nowMs)) {
+    const calm = ok.find((id) => id !== home && !overPace(reg, cache, id, nowMs))
+    if (calm) return { picked: calm, reason: "pace" }
+  }
   if (home) return { picked: home, reason: "home" }
   const other = ok[0]
   if (other) return { picked: other, reason: "spill" }
