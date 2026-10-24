@@ -57,7 +57,7 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 | usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
 | argo (W2c) | #201 | — | **merged + live** f0053a4; quota + picks syncing (verified `/usage/quota`) |
 | tinycast fix | #2 | — | **merged** (brief had the wrong Argo envelope). **deployed on the MacBook** 77866aa (ssh iumac `make deploy`); queued ask-human request retired |
-| usage-tracker fix | #12 | `usage-tracker-sessions-account` | Max session rows defaulted to iu + db.ts NULL→iu repair every open; review `0d863f58-d7bf-492f-946f-e425a0b1ad57`. agent-gateway now writes `account` on the sessions line (b8f2d0c, deployed) |
+| usage-tracker fix | #12 | — | **merged + deployed**: line account → session_env → iu; NULL→iu repair one-off (user_version 2); conditional sync mark. Live: agent-gateway otel session row → me. e2e re-run all pass |
 | dotfiles pace guard | feat/claude-accounts-pace | `dotfiles-claude-accounts-pace` | owner: `c` picked iu at 89 % weekly; over-pace home yields to under-pace other (reason `pace`) |
 | argo W2d | feat/usage-payer | `argo-usage-payer` | owner: payer split iu-sub/me-sub/iu-api/me-api, me blue / iu yellow, 48 h usage-tracker↔Argo reconciliation report |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
