@@ -561,3 +561,32 @@ export function refreshBeforePick(b: BeforePick): { sync: string[]; background: 
   if (sync.length) b.runSync(sync)
   return { sync, background }
 }
+
+/** Account a session ran on, from the newest `session_env` line for it in the hook logs (newest file first). */
+export function sessionAccount(sessionId: string, logDir: string): string | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) return null
+  let files: string[]
+  try {
+    files = readdirSync(logDir).filter((f) => f.endsWith(".jsonl")).sort().reverse()
+  } catch {
+    return null
+  }
+  for (const f of files) {
+    let lines: string[]
+    try {
+      lines = readFileSync(join(logDir, f), "utf8").split("\n")
+    } catch {
+      continue
+    }
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].includes(sessionId) || !lines[i].includes("session_env")) continue
+      try {
+        const e = JSON.parse(lines[i])
+        if (e.event === "session_env" && e.data?.session === sessionId && typeof e.data.account === "string") return e.data.account
+      } catch {
+        // a torn line is skipped
+      }
+    }
+  }
+  return null
+}

@@ -171,6 +171,12 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 | warden | spawns no `claude` | none; it goes through agent-gateway |
 
+Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
+`session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
+cache stays warm and the work never changes provider. `--account` overrides; an unknown session
+falls through to the normal pick. agent-gateway pins its own resumed workers the same way.
+A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn and subagents inherit it.
+
 Known gaps:
 
 - **herdr restart:** panes come back via `claude --resume <id>`. If the pane

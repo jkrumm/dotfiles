@@ -9,6 +9,7 @@
 //                                          statusline feed (native rate_limits)
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
 //   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
+//   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // We never read a token and make no call to api.anthropic.com/api/oauth/usage ourselves: the official
@@ -19,7 +20,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
   type Cache, type RefreshResult, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
-  mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, SPILL,
+  mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
 const SPILL_EXIT = 3
@@ -188,6 +189,12 @@ function main(argv: string[]): number {
       console.log(shellLine(reg, { picked: id, reason: "forced", stale: false }))
       return 0
     }
+    case "session": {
+      const id = rest[0] ? sessionAccount(rest[0], join(homedir(), ".claude", "logs")) : null
+      if (!id || !Object.hasOwn(reg.accounts, id) || !reg.accounts[id].enabled) return 1
+      console.log(id)
+      return 0
+    }
     case "exhausted": {
       const id = account(reg, rest)
       const until = num(rest, "--until")
@@ -196,7 +203,7 @@ function main(argv: string[]): number {
       return 0
     }
     default:
-      console.error("usage: claude-account pick|usage|refresh|record|account|env|exhausted ...")
+      console.error("usage: claude-account pick|usage|refresh|record|account|env|session|exhausted ...")
       return 2
   }
 }
