@@ -28,7 +28,7 @@ to `~/.claude`; `settings.json` is rendered. `~/.claude-b` is gone (renamed).
 |-|-|-|-|-|
 | dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | **merged + deployed** 2026-10-24 (round 4 fixed auth_failed re-probe); MCP registered for both accounts |
 | usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | **merged + deployed** 2026-10-24; DB `iu|max|623576`, user_version 1 |
-| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | round 3 done; re-review job `37beae06-3d77-4de6-9fd0-3cd10123fb62` |
+| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | review 37beae06 actionable (quota regex too broad, second wall skips iu) → round 4 sent |
 
 **Merge order (ids switch together):** usage-tracker #10 and dotfiles #27 back to back, then
 agent-gateway #32. Before `rd merge`: `gh pr ready <n>`. Gate:
@@ -52,8 +52,8 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 
 | repo | branch | tab | state |
 |-|-|-|-|
-| argo | feat/usage-account | `argo-usage-account` | fanned 2026-10-24 |
-| tinycast-extensions | feat/quota-two-accounts | `tinycast-exte-quota-two-accounts` | fanned 2026-10-24 |
+| argo | feat/usage-account (#200) | `argo-usage-account` | review aa8d052a: no blockers; fixes sent (COALESCE upsert, scoped test cleanup, permissive ingest, headline filter) |
+| tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
 | dotfiles (W2a) | feat/claude-accounts-verify | `dotfiles-claude-accounts-veri` | fanned 2026-10-24 (landed on `me`, reason=home) |
 | agent-gateway | feat/claude-accounts-usage | — | waits for #32 merge |
 
@@ -65,6 +65,7 @@ Decisions taken during W2:
 - `/api/usage` GET builds from `claude-account usage --json` (cache-only); POSTs gain optional
   `account` (fixes a live bug: a `me` statusline POST overwrites iu's numbers). Merge order:
   agent-gateway W2b before dotfiles W2a (W2a's producers send `account`).
+- Argo upsert: `account = COALESCE(excluded.account, usage_record.account)` — null means unknown, never clears a backfilled value.
 - Heartbeat quota line moved into W2a (same file it already owns), read locally from `claude-account usage --json`.
 
 ## W2 (original plan)
