@@ -199,7 +199,7 @@ if [ -n "$rl_5h" ]; then
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
     [ -n "$rl_wk" ] && _rec+=(--w "$rl_wk")
     [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && _rec+=(--w-reset "$rl_wk_reset")
-    [ -n "$account_id" ] && ( PATH="$_CA_PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
+    [ -n "$account_id" ] && [ "$account_id" != "?" ] && ( PATH="$_CA_PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
     disown 2>/dev/null
   fi
 fi

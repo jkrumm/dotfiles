@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type Registry, type SpawnResult, type Spawner, accountFromConfigDir, emptyCache, markExhausted, mergeSample, needsRefresh, pick, pickLine,
-  claimRefresh, recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
+  claimRefresh, homeIds, recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -108,6 +108,7 @@ describe("cache + helpers", () => {
     expect(accountFromConfigDir(reg(), undefined)).toBe("a")
     expect(accountFromConfigDir(reg(), "")).toBe("a")
     expect(accountFromConfigDir(reg(), "/home/x/.claude-b")).toBe("b")
+    expect(accountFromConfigDir(reg(), "/somewhere/else")).toBeNull() // set but unregistered: unknown, not "a"
   })
   test("sampleFromClaudeJson", () => {
     const s = sampleFromClaudeJson({
@@ -300,12 +301,116 @@ describe("refreshBeforePick", () => {
     expect(r).toEqual({ sync: ["a"], background: ["b"] })
     expect(calls).toEqual({ sync: [["a"]], detach: [["b"]] })
   })
-  test("interactive never blocks, even with no sample at all", () => {
-    const { r, calls } = run(emptyCache(), "interactive")
-    expect(r).toEqual({ sync: [], background: ["a"] })
-    expect(calls.sync).toEqual([])
+  test("interactive returns before any claim: no lock, no write, no refresh", () => {
+    let claimed = false
+    const r = refreshBeforePick({
+      reg: reg(), lane: "interactive", now: NOW, cache: emptyCache(),
+      claim: () => { claimed = true; return ["a"] }, runSync: () => { throw new Error("sync") }, detach: () => { throw new Error("detach") },
+    })
+    expect(r).toEqual({ sync: [], background: [] })
+    expect(claimed).toBe(false)
   })
   test("a sample older than 6 h counts as no sample", () => {
     expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["a"], background: [] })
+  })
+})
+
+describe("home lanes", () => {
+  test("exact lane match beats a wildcard", () => {
+    expect(homeIds(reg(), "agent-gateway:review")).toEqual(["a"])
+    expect(homeIds(reg(), "agent-gateway:dispatch")).toEqual(["b"])
+    expect(homeIds(reg(), "wave")).toEqual(["b"])
+    expect(homeIds(reg(), "nope")).toEqual([])
+  })
+  test("review lane with a ineligible spills to b, not home", () => {
+    const c = cacheOf(sample(99, 10), sample(10, 10))
+    expect(pick(reg(), c, "agent-gateway:review", NOW)).toMatchObject({ picked: "b", reason: "spill" })
+  })
+})
+
+describe("lock owner token", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ca-tok-"))
+  const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
+  const path = join(dir, "usage.json")
+  const run = (code: string) =>
+    Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE: path }, stdout: "pipe", stderr: "pipe" })
+
+  test("release leaves a lock whose token is no longer ours", () => {
+    updateCache((c) => { writeFileSync(join(`${path}.lock`, "owner"), "someone-else"); return c }, path)
+    expect(existsSync(`${path}.lock`)).toBe(true)
+    rmSync(`${path}.lock`, { recursive: true })
+  })
+  test("racing stale-lock breakers: every update lands, no lock or grave left", async () => {
+    mkdirSync(`${path}.lock`)
+    writeFileSync(join(`${path}.lock`, "owner"), "dead.1")
+    const old = new Date(Date.now() - 120_000)
+    utimesSync(`${path}.lock`, old, old)
+    const ps = Array.from({ length: 8 }, (_, i) => run(`L.updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, r${i}: 1 } }))`))
+    for (const p of ps) expect(await p.exited).toBe(0)
+    expect(Object.keys(JSON.parse(readFileSync(path, "utf8")).refreshed).length).toBe(8)
+    expect(readdirSync(dir).filter((f) => f.includes("lock"))).toEqual([])
+    rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe("CLI (isolated HOME)", () => {
+  const CLI = join(import.meta.dir, "claude-account.ts")
+  const home = mkdtempSync(join(tmpdir(), "ca-cli-"))
+  const bin = join(home, "bin")
+  const marker = join(home, "claude-ran")
+  mkdirSync(bin)
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch ${marker}\nexit 0\n`)
+  chmodSync(join(bin, "claude"), 0o755)
+  const cache = join(home, "usage.json")
+  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_CACHE: cache, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), PATH: `${bin}:${process.env.PATH}` }
+  delete (base as Record<string, string | undefined>).CLAUDE_CONFIG_DIR
+  const cli = (args: string[], env: Record<string, string> = {}) => {
+    const t = Date.now()
+    const r = Bun.spawnSync(["bun", CLI, ...args], { env: { ...base, ...env }, stdout: "pipe", stderr: "pipe" })
+    return { rc: r.exitCode, out: r.stdout.toString().trim(), err: r.stderr.toString(), ms: Date.now() - t }
+  }
+  const seedCache = (ageMs: number) => {
+    rmSync(marker, { force: true })
+    rmSync(`${cache}.lock`, { recursive: true, force: true })
+    writeFileSync(cache, JSON.stringify({ ...emptyCache(), samples: { a: { s: 5, w: 5, s_reset: null, w_reset: null, ts: Date.now() - ageMs, src: "t" } } }))
+  }
+  const holdLock = () => { mkdirSync(`${cache}.lock`); writeFileSync(join(`${cache}.lock`, "owner"), "held") }
+
+  test("interactive pick with a held lock answers at once and does not touch the cache", () => {
+    seedCache(20 * 60_000)
+    holdLock()
+    const r = cli(["pick", "--lane", "interactive"])
+    expect(r).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(r.ms).toBeLessThan(2500)
+  })
+  test("a pick on a busy lock (> 3 s) still prints a line", () => {
+    seedCache(20 * 60_000)
+    holdLock()
+    const r = cli(["pick", "--lane", "wave"])
+    expect(r.rc).toBe(0)
+    expect(r.out).toBe("unset CLAUDE_CONFIG_DIR")
+    expect(r.ms).toBeGreaterThan(2500)
+  }, 20_000)
+  test("account / --badge: unregistered dir prints ?, unset prints the id", () => {
+    expect(cli(["account"]).out).toBe("a")
+    expect(cli(["account", "--badge"]).out).toBe("") // one enabled account: no badge
+    expect(cli(["account"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
+    expect(cli(["account", "--badge"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
+  })
+  test("refresh --ids applies the due filter; --claimed bypasses the claim", () => {
+    seedCache(60_000) // fresh sample: not due
+    expect(cli(["refresh", "--ids", "a"]).rc).toBe(0)
+    expect(existsSync(marker)).toBe(false)
+    expect(cli(["refresh", "--ids", "b"]).rc).toBe(0) // disabled
+    expect(existsSync(marker)).toBe(false)
+    expect(cli(["refresh", "--claimed", "b"]).rc).toBe(0) // disabled, even when claimed
+    expect(existsSync(marker)).toBe(false)
+    expect(cli(["refresh", "--claimed", "a"]).rc).toBe(0)
+    expect(existsSync(marker)).toBe(true)
+    seedCache(20 * 60_000) // stale: due -> claimed, stamped, spawned
+    expect(cli(["refresh", "--ids", "a"]).rc).toBe(0)
+    expect(existsSync(marker)).toBe(true)
+    expect(JSON.parse(readFileSync(cache, "utf8")).refreshed.a).toBeGreaterThan(0)
+    rmSync(home, { recursive: true, force: true })
   })
 })
