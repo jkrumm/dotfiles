@@ -346,9 +346,10 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
   }
   if (home) {
     const hs = cache.samples[home]
+    const freshS = (x: Sample) => hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS
     const emptier = ok.find((id) => {
       const x = cache.samples[id]
-      return id !== home && hasS(x) && hasS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
+      return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
     })
     if (emptier) return { picked: emptier, reason: "session" }
     return { picked: home, reason: "home" }
