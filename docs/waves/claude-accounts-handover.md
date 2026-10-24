@@ -26,9 +26,9 @@ to `~/.claude`; `settings.json` is rendered. `~/.claude-b` is gone (renamed).
 
 | repo | PR | branch | worker tab (agent name) | state at handover |
 |-|-|-|-|-|
-| dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | review 5c1a3f95 actionable (auth_failed never re-probed) → round 4 sent 2026-10-24 ~19:00 (+ env scrub, sid validation, mkdir -p, hasOwn); re-review after it reports |
-| usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | review clean + follow-ups done (BEGIN IMMEDIATE, user_version gate) — ready |
-| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | round-3 fixes sent (quota regex, token strip, fail-closed exclude, pin sweep/validation, exit-3 only for pick, epoch clamp, runSessionAttempt test) — re-review after it reports |
+| dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | **merged + deployed** 2026-10-24 (round 4 fixed auth_failed re-probe); MCP registered for both accounts |
+| usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | **merged + deployed** 2026-10-24; DB `iu|max|623576`, user_version 1 |
+| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | round 3 done; re-review job `37beae06-3d77-4de6-9fd0-3cd10123fb62` |
 
 **Merge order (ids switch together):** usage-tracker #10 and dotfiles #27 back to back, then
 agent-gateway #32. Before `rd merge`: `gh pr ready <n>`. Gate:
@@ -54,7 +54,7 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 |-|-|-|-|
 | argo | feat/usage-account | `argo-usage-account` | fanned 2026-10-24 |
 | tinycast-extensions | feat/quota-two-accounts | `tinycast-exte-quota-two-accounts` | fanned 2026-10-24 |
-| dotfiles (W2a) | feat/claude-accounts-verify | — | waits for #27 merge |
+| dotfiles (W2a) | feat/claude-accounts-verify | `dotfiles-claude-accounts-veri` | fanned 2026-10-24 (landed on `me`, reason=home) |
 | agent-gateway | feat/claude-accounts-usage | — | waits for #32 merge |
 
 Decisions taken during W2:
