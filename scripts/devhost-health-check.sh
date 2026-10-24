@@ -1133,8 +1133,9 @@ check_overview_pane() {
 # graded: a spent window is a scheduling fact, not a broken machine. The one
 # exception is a WARN at QUOTA_5H_WARN_PCT — still never a FAIL.
 check_quota() {
-  # Both Claude accounts from the picker's cache (docs/claude-accounts.md), "iu 5h 7% · 7d 88% | me …".
-  # WARN only when EVERY enabled account's 5h window is nearly spent: the picker routes around one.
+  # Both Claude accounts from the picker's cache (docs/claude-accounts.md), read locally from `claude-account usage --json`:
+  # "iu 5h 8% · 7d 88% | me 5h 3% · 7d 12%". WARN (never FAIL) at QUOTA_5H_WARN_PCT on the account interactive
+  # sessions land on (the default one) only: the picker routes bulk lanes around a spent window.
   # Falls back to agent-gateway's single-account view when the picker is not installed or unreadable.
   local body five seven text usage
   if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
@@ -1144,8 +1145,8 @@ check_quota() {
       "\(.id) 5h \(.five_hour | floor)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
       ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
     if [[ -n "$text" ]]; then
-      if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '[.accounts[] | select(.enabled and .five_hour != null)] | all(.five_hour >= $t)' <<<"$usage" 2>/dev/null)" == "true" ]]; then
-        echo "quota $text — 5h window nearly spent on every account"
+      if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '.default_account as $d | [.accounts[] | select(.id == $d and .enabled and .five_hour != null and .five_hour >= $t)] | length > 0' <<<"$usage" 2>/dev/null)" == "true" ]]; then
+        echo "quota $text — 5h window nearly spent on the interactive account"
         return 2
       fi
       if [[ "$text" == *"(stale "* ]]; then
@@ -1276,6 +1277,22 @@ check_claude_auth() {
   fi
   echo "$msg"
   return "$worst"
+}
+
+# Claude Code auto-updates can rename the keychain service, the quota field or the config-dir resolution that the
+# account routing relies on. `make claude-accounts-verify` records the version it passed on; any other running version
+# is unverified until it passes again. WARN only: the routing may well still work.
+check_claude_version() {
+  [[ -x "$CLAUDE_BIN" ]] || { echo "claude cli not installed (skipped)"; return 0; }
+  local ver verified
+  ver=$("$CLAUDE_BIN" --version 2>/dev/null | /usr/bin/awk '{print $1}') || ver=""
+  [[ -n "$ver" ]] || { echo "claude --version printed nothing"; return 2; }
+  verified=$(/bin/cat "${CLAUDE_ACCOUNTS_STATE_DIR:-$HOME/.local/state/claude-accounts}/verified-version" 2>/dev/null) || verified=""
+  if [[ "$verified" != "$ver" ]]; then
+    echo "unverified Claude Code version $ver (last verified: ${verified:-never}) — run make claude-accounts-verify"
+    return 2
+  fi
+  echo "claude $ver verified for account routing"
 }
 
 check_obsidian() {
@@ -1414,7 +1431,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
-                 check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_agents_md_flag \
+                 check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
                  check_obsidian check_disk check_runaways check_agent_gateway_jobs check_overview_pane \
                  check_jobs check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
