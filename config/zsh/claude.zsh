@@ -1,6 +1,6 @@
 # Claude Code launcher
 #
-# Usage: c  [claude-args...]   — Max subscription (default)
+# Usage: c  [--account iu|me] [claude-args...]   — Max subscription; account from `claude-account pick`
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
 #        cf [claude-args...]   — Max subscription, defaults to Fable model
 #        ca [model] [claude-args...]
@@ -36,70 +36,85 @@
 # running Claude Code session, so the old unconditional rewrite-per-launch
 # could clobber a concurrent update; and the temp file is a sibling, because
 # mv across filesystems is not atomic.
+_CLAUDE_ACCOUNTS_REGISTRY=${${(%):-%x}:A:h:h}/claude-accounts.json
+
+# Every registry account has its own .claude.json (iu: ~/.claude.json, others: <dir>/.claude.json).
 _claude_theme_auto() {
-  [[ -f ~/.claude.json ]] || return 0
-  [[ "$(jq -r '.theme // ""' ~/.claude.json 2>/dev/null)" == "auto" ]] && return 0
-  jq '.theme = "auto"' ~/.claude.json > ~/.claude.json.tmp \
-    && mv ~/.claude.json.tmp ~/.claude.json
+  local dir cj
+  for dir in $(jq -r '.accounts[] | (.dir // "~")' "$_CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null || print '~'); do
+    dir=${dir/#\~/$HOME}
+    cj=$dir/.claude.json
+    [[ $dir == $HOME ]] && cj=$HOME/.claude.json
+    [[ -f $cj ]] || continue
+    [[ "$(jq -r '.theme // ""' "$cj" 2>/dev/null)" == "auto" ]] && continue
+    jq '.theme = "auto"' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
+  done
 }
 
-c() {
+# Account for an interactive launch (docs/claude-accounts.md): the picker's shell line, or the forced
+# account with `--account iu|me`. Prints a line that is safe to eval; any pick failure answers
+# `unset CLAUDE_CONFIG_DIR` (account iu), an explicit override that fails answers nothing (rc 1).
+_claude_account_line() {
+  local line
+  if [[ -n $1 ]]; then
+    line=$(claude-account env "$1") || return 1
+  else
+    line=$(claude-account pick --lane interactive 2>/dev/null)
+  fi
+  case $line in
+    "unset CLAUDE_CONFIG_DIR" | "export CLAUDE_CONFIG_DIR="*) print -r -- $line ;;
+    *) print -r -- "unset CLAUDE_CONFIG_DIR" ;;
+  esac
+}
+
+# Launch claude on the right account: $1 = model default ("" for none), rest = user args.
+# The account is chosen once here and never changes for the session's life; the subshell keeps
+# the pick out of the interactive shell's environment.
+_claude_launch() {
+  local model=$1; shift
   _claude_theme_auto
 
-  # Local Claude Code plugin dev: load any plugins this repo ships under
-  # plugins/*/.claude-plugin live from disk, so SKILL.md edits apply without
-  # publishing. No-op outside such repos. (/N) = dirs-only + nullglob.
-  local -a plugin_args=()
-  local git_root pdir
+  local -a args=() plugin_args=()
+  local account="" git_root pdir
+  while (( $# )); do
+    case $1 in
+      --account) (( $# >= 2 )) || { print -u2 "c: --account needs iu|me"; return 1 }; account=$2; shift 2 ;;
+      --account=*) account=${1#--account=}; shift ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+
   git_root=$(git rev-parse --show-toplevel 2>/dev/null)
   if [[ -n "$git_root" ]]; then
     for pdir in "$git_root"/plugins/*/.claude-plugin(/N); do
       plugin_args+=(--plugin-dir "${pdir:h}")
     done
   fi
+  [[ -n $model && " ${args[*]} " != *" --model "* ]] && args=(--model $model "${args[@]}")
 
-  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "$@"
+  local line
+  line=$(_claude_account_line "$account") || return 1
+  (
+    eval "$line"
+    ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
+  )
+}
+
+c() {
+  _claude_launch "" "$@"
 }
 
 # Same as `c` (Max subscription, same config dir) but starts on Fable instead
 # of whatever /model last left the session on.
 cf() {
-  _claude_theme_auto
-
-  local -a plugin_args=()
-  local git_root pdir
-  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
-  if [[ -n "$git_root" ]]; then
-    for pdir in "$git_root"/plugins/*/.claude-plugin(/N); do
-      plugin_args+=(--plugin-dir "${pdir:h}")
-    done
-  fi
-
-  local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model fable "${args[@]}")
-
-  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
+  _claude_launch "fable" "$@"
 }
 
 # Same as `c` (Max subscription, same config dir) but starts on Sonnet instead
 # of whatever /model last left the session on — for when Opus is the default
 # and this particular chat doesn't need it. `cs --model opus` overrides back.
 cs() {
-  _claude_theme_auto
-
-  local -a plugin_args=()
-  local git_root pdir
-  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
-  if [[ -n "$git_root" ]]; then
-    for pdir in "$git_root"/plugins/*/.claude-plugin(/N); do
-      plugin_args+=(--plugin-dir "${pdir:h}")
-    done
-  fi
-
-  local -a args=("$@")
-  [[ " $* " == *" --model "* ]] || args=(--model sonnet "${args[@]}")
-
-  ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
+  _claude_launch "sonnet" "$@"
 }
 
 # Same launcher as `c` — same skills/agents/hooks/CLAUDE.md, since it's the same

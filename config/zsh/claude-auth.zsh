@@ -34,6 +34,8 @@
 # limit, stated plainly: it does not reach a bash script or a LaunchAgent that
 # execs the binary directly. Those must export the variable themselves.
 #
+# TOKEN FALLBACK = DEFAULT ACCOUNT ONLY (CLAUDE_CONFIG_DIR unset, account iu).
+#
 # WHAT IT DELIBERATELY DOES NOT TOUCH. `ca` and `claude_iu` (claude.zsh) launch
 # through `env`, which resolves the binary from PATH and
 # bypasses shell functions entirely. Their off-Max `ANTHROPIC_AUTH_TOKEN` flow
@@ -97,6 +99,16 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
     # An explicit token in the environment always wins — never second-guess a
     # caller that already decided.
     if [[ -n $CLAUDE_CODE_OAUTH_TOKEN ]]; then
+      command claude "$@"
+      return
+    fi
+
+    # Any non-default account (CLAUDE_CONFIG_DIR set, docs/claude-accounts.md) is
+    # NEVER given the IU token: it is a different login, and injecting it ran the
+    # session on the wrong account. A dead login is only reported.
+    if [[ -n ${CLAUDE_CONFIG_DIR-} ]]; then
+      command claude auth status 2>/dev/null | grep -q '"loggedIn": *true' \
+        || print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a herdr pane (no token fallback for this account)"
       command claude "$@"
       return
     fi
