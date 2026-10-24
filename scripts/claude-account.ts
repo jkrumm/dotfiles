@@ -15,8 +15,8 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, accountDir, cachePath, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
-  needsRefresh, pick, pickLine, picksPath, sampleFromClaudeJson, shellLine, writeAtomic,
+  type Cache, type Registry, type Sample, type Spawner, cachePath, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
+  needsRefresh, pick, pickLine, picksPath, recordSample, runRefresh, sampleFromClaudeJson, shellLine, writeAtomic,
 } from "./lib/claude-accounts.ts"
 
 const IU_EXIT = 3
@@ -61,25 +61,18 @@ function readClaudeJson(reg: Registry, cache: Cache): Cache {
 
 const claudeBin = () => Bun.which("claude") ?? join(homedir(), ".local", "bin", "claude")
 
+const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
+  const r = spawnSync(cmd, args, { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs })
+  const err = r.error as (Error & { code?: string }) | undefined
+  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
+}
+
 function refresh(reg: Registry, timeoutS = 60): void {
-  let cache = readClaudeJson(reg, loadCache())
-  for (const id of needsRefresh(reg, cache, Date.now())) {
-    const env: Record<string, string> = { ...(process.env as Record<string, string>), ANTHROPIC_BASE_URL: "" }
-    const dir = accountDir(reg.accounts[id])
-    if (dir === null) delete env.CLAUDE_CONFIG_DIR
-    else env.CLAUDE_CONFIG_DIR = dir
-    const r = spawnSync("timeout", [String(timeoutS), claudeBin(), "-p", "/usage", "--output-format", "json"], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
-    cache = { ...cache, refreshed: { ...cache.refreshed, [id]: Date.now() } }
-    const s = readSample(reg, id)
-    if (r.status === 0 && s) {
-      cache = mergeSample(cache, id, s)
-      cache = { ...cache, auth_failed: { ...cache.auth_failed, [id]: false } }
-    } else {
-      cache = { ...cache, auth_failed: { ...cache.auth_failed, [id]: /login|auth|credential/i.test(`${r.stdout}${r.stderr}`) } }
-      console.error(`refresh ${id}: rc=${r.status} ${(r.stderr || r.stdout || "").trim().slice(0, 200)}`)
-    }
-  }
-  writeAtomic(cachePath(), JSON.stringify(cache))
+  runRefresh({
+    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS,
+    readSample: (id) => readSample(reg, id), load: () => loadCache(), write: (c) => writeAtomic(cachePath(), JSON.stringify(c)),
+    now: Date.now, log: (m) => console.error(m),
+  })
 }
 
 function usage(reg: Registry, json: boolean): void {
@@ -132,8 +125,8 @@ function main(argv: string[]): number {
       return 0
     case "record": {
       const id = account(reg, rest)
-      const s: Sample = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset"), ts: Date.now(), src: "statusline" }
-      writeAtomic(cachePath(), JSON.stringify(mergeSample(loadCache(), id, s)))
+      const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }
+      writeAtomic(cachePath(), JSON.stringify(recordSample(loadCache(), id, part, Date.now())))
       return 0
     }
     case "exhausted": {

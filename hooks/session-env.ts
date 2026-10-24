@@ -16,7 +16,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { accountFromConfigDir, loadRegistry } from "../scripts/lib/claude-accounts.ts";
 
 const LOG_DIR = join(homedir(), ".claude", "logs");
 
@@ -51,12 +50,13 @@ function cleanupOldLogs(keepDays = 3): void {
   }
 }
 
-/** Registry id of the account this session runs on; CLAUDE_CONFIG_DIR unset -> "a". */
-function currentAccount(): string {
+/** Registry id of the account this session runs on (CLAUDE_CONFIG_DIR unset -> "a"); null if the registry is unreadable. */
+async function currentAccount(): Promise<string | null> {
   try {
+    const { accountFromConfigDir, loadRegistry } = await import("../scripts/lib/claude-accounts.ts");
     return accountFromConfigDir(loadRegistry(), process.env.CLAUDE_CONFIG_DIR);
   } catch {
-    return "a";
+    return null;
   }
 }
 
@@ -72,7 +72,7 @@ async function main() {
       session: input.session_id,
       base_url: process.env.ANTHROPIC_BASE_URL || null,
       lane: process.env.USAGE_LANE || null,
-      account: currentAccount(),
+      account: await currentAccount(),
     });
   } catch (error) {
     console.error("session-env hook error:", error);
