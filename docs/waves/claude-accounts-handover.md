@@ -26,7 +26,7 @@ to `~/.claude`; `settings.json` is rendered. `~/.claude-b` is gone (renamed).
 
 | repo | PR | branch | worker tab (agent name) | state at handover |
 |-|-|-|-|-|
-| dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | 3 fix rounds done; light review job `5c1a3f95-585c-4264-a0fd-6cd936dde654` pending (`job_wait` it) |
+| dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | review 5c1a3f95 actionable (auth_failed never re-probed) → round 4 sent 2026-10-24 ~19:00 (+ env scrub, sid validation, mkdir -p, hasOwn); re-review after it reports |
 | usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | review clean + follow-ups done (BEGIN IMMEDIATE, user_version gate) — ready |
 | agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | round-3 fixes sent (quota regex, token strip, fail-closed exclude, pin sweep/validation, exit-3 only for pick, epoch clamp, runSessionAttempt test) — re-review after it reports |
 
@@ -46,7 +46,28 @@ agent-gateway #32. Before `rd merge`: `gh pr ready <n>`. Gate:
 - agent-gateway: its own `make deploy` / reload per its AGENTS.md; verify `/api/health`.
 - `rd fan --clean <repo>` for each repo afterwards.
 
-## W2 (after W1 is live)
+## W2 state (live log)
+
+Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast-extensions}.md`.
+
+| repo | branch | tab | state |
+|-|-|-|-|
+| argo | feat/usage-account | `argo-usage-account` | fanned 2026-10-24 |
+| tinycast-extensions | feat/quota-two-accounts | `tinycast-exte-quota-two-accounts` | fanned 2026-10-24 |
+| dotfiles (W2a) | feat/claude-accounts-verify | — | waits for #27 merge |
+| agent-gateway | feat/claude-accounts-usage | — | waits for #32 merge |
+
+Decisions taken during W2:
+- **Tinycast reads quota via Argo, not the tailnet door.** agent-gateway is loopback-only by design
+  (`exclude agent-gateway` in `~/.config/caddy-tailnet.ports`, index.ts bind comment); the spec's door
+  never existed (404). agent-gateway adds `quota` to `/api/overview`, which it already pushes to Argo
+  (≤10 min); Argo stores it verbatim; Tinycast reads `GET /agents/overview`.
+- `/api/usage` GET builds from `claude-account usage --json` (cache-only); POSTs gain optional
+  `account` (fixes a live bug: a `me` statusline POST overwrites iu's numbers). Merge order:
+  agent-gateway W2b before dotfiles W2a (W2a's producers send `account`).
+- Heartbeat quota line moved into W2a (same file it already owns), read locally from `claude-account usage --json`.
+
+## W2 (original plan)
 
 - **W2a — verify, E2E, keepalive (dotfiles):** brief ready at
   `~/.local/share/claude-accounts-w1/w2-dotfiles.md` → `rd fan dotfiles ~/.local/share/claude-accounts-w1/w2-dotfiles.md`.
