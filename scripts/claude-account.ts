@@ -6,6 +6,7 @@
 //   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled accounts whose cache is stale
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
+//   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // We never read a token and make no call to api.anthropic.com/api/oauth/usage ourselves: the official
@@ -15,8 +16,8 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, type Spawner, cachePath, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
-  REFRESH_TIMEOUT_S, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, writeAtomic,
+  type Cache, type Registry, type Sample, type Spawner, accountFromConfigDir, claimRefresh, claudeJsonPath, loadCache, loadRegistry, markExhausted, mergeSample,
+  REFRESH_TIMEOUT_S, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
 } from "./lib/claude-accounts.ts"
 
 const IU_EXIT = 3
@@ -67,12 +68,24 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
 }
 
+const seed = (reg: Registry) => (c: Cache) => readClaudeJson(reg, c)
+
+/** Refresh `ids` (already claimed by the caller); without ids, claim whatever is due first. */
 function refresh(reg: Registry, ids?: string[], timeoutS = REFRESH_TIMEOUT_S): void {
+  const todo = ids ?? claimRefresh(updateCache, reg, Object.keys(reg.accounts), Date.now(), seed(reg))
   runRefresh({
-    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids,
-    readSample: (id) => readSample(reg, id), load: () => loadCache(), write: (c) => writeAtomic(cachePath(), JSON.stringify(c)),
-    now: Date.now, log: (m) => console.error(m),
+    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
+    readSample: (id) => readSample(reg, id), update: updateCache, now: Date.now, log: (m) => console.error(m),
   })
+}
+
+/** Best-effort claim: a busy lock means someone else is mid-update, so skip refreshing rather than block a pick. */
+function tryClaim(reg: Registry, ids: string[], now: number): string[] {
+  try {
+    return claimRefresh(updateCache, reg, ids, now, seed(reg))
+  } catch {
+    return []
+  }
 }
 
 function usage(reg: Registry, json: boolean): void {
@@ -106,16 +119,16 @@ function main(argv: string[]): number {
       // Never block while a usable sample exists: stale accounts refresh in the background (budgeted),
       // only an account with no sample at all is refreshed synchronously first.
       refreshBeforePick({
-        reg, now, cache: readClaudeJson(reg, loadCache()),
+        reg, lane, now, cache: readClaudeJson(reg, loadCache()),
+        claim: (ids) => tryClaim(reg, ids, now),
         runSync: (ids) => refresh(reg, ids),
         detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--ids", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
-        write: (c) => writeAtomic(cachePath(), JSON.stringify(c)),
       })
       const cache = readClaudeJson(reg, loadCache())
       const p = pick(reg, cache, lane, now)
       try {
         mkdirSync(dirname(picksPath()), { recursive: true })
-        appendFileSync(picksPath(), JSON.stringify(pickLine(cache, lane, p, now)) + "\n")
+        appendFileSync(picksPath(), JSON.stringify(pickLine(reg, cache, lane, p, now)) + "\n")
       } catch {
         // the pick log is a dataset, never a gate
       }
@@ -134,18 +147,24 @@ function main(argv: string[]): number {
     case "record": {
       const id = account(reg, rest)
       const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }
-      writeAtomic(cachePath(), JSON.stringify(recordSample(loadCache(), id, part, Date.now())))
+      updateCache((c) => recordSample(c, id, part, Date.now()))
+      return 0
+    }
+    case "account": {
+      const id = accountFromConfigDir(reg, process.env.CLAUDE_CONFIG_DIR)
+      if (!rest.includes("--badge")) console.log(id)
+      else if (Object.values(reg.accounts).filter((a) => a.enabled).length > 1) console.log(id.toUpperCase())
       return 0
     }
     case "exhausted": {
       const id = account(reg, rest)
       const until = num(rest, "--until")
       if (until === null) throw new Error("--until <epoch seconds> is required")
-      writeAtomic(cachePath(), JSON.stringify(markExhausted(loadCache(), id, until)))
+      updateCache((c) => markExhausted(c, id, until))
       return 0
     }
     default:
-      console.error("usage: claude-account pick|usage|refresh|record|exhausted ...")
+      console.error("usage: claude-account pick|usage|refresh|record|account|exhausted ...")
       return 2
   }
 }

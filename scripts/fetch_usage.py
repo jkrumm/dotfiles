@@ -20,7 +20,9 @@ Run via: uv run ~/.claude/fetch_usage.py
 """
 
 import json
+import os
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.error
@@ -110,10 +112,16 @@ def _http_post_json(url: str, payload: dict, timeout: int = 1) -> None:
         pass
 
 
-def _write_json(path: Path, payload: dict) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload))
-    tmp.rename(path)
+def _write_json(path: Path, payload: dict, indent: int | None = None) -> None:
+    """Atomic write via a unique temp file in the same directory (concurrent callers never share one)."""
+    fd = tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False)
+    try:
+        with fd:
+            json.dump(payload, fd, indent=indent)
+        os.replace(fd.name, path)
+    except BaseException:
+        Path(fd.name).unlink(missing_ok=True)
+        raise
 
 
 def _push_gateway(five_pct, mins_left, seven_pct) -> None:
@@ -240,11 +248,9 @@ def fetch() -> None:
         "latency_ms": latency_ms,
     })
 
-    tmp = CACHE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(result))
-    tmp.rename(CACHE_FILE)
+    _write_json(CACHE_FILE, result)
     # Unmodified response, for checking what the endpoint returns today.
-    RAW_FILE.write_text(json.dumps(data, indent=2))
+    _write_json(RAW_FILE, data, indent=2)
 
     five_h = result["five_hour"]
     seven_d = result["seven_day"]
@@ -269,7 +275,7 @@ if __name__ == "__main__":
             "http_status": e.code,
         })
         CACHE_DIR.mkdir(exist_ok=True)
-        CACHE_FILE.write_text(json.dumps({"error": str(e), "fetched_at": 0}))
+        _write_json(CACHE_FILE, {"error": str(e), "fetched_at": 0})
         sys.exit(1)
     except Exception as e:
         log_event("fetch_usage", "fetch_error", "error", {
@@ -277,5 +283,5 @@ if __name__ == "__main__":
             "type": type(e).__name__,
         })
         CACHE_DIR.mkdir(exist_ok=True)
-        CACHE_FILE.write_text(json.dumps({"error": str(e), "fetched_at": 0}))
+        _write_json(CACHE_FILE, {"error": str(e), "fetched_at": 0})
         sys.exit(1)
