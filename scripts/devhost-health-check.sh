@@ -1139,12 +1139,17 @@ check_quota() {
   local body five seven text usage
   if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
     usage=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" usage --json 2>/dev/null) || usage=""
-    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled) |
-      "\(.id) 5h \(if .five_hour == null then "?" else (.five_hour | floor | tostring) end)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%"
+    # Only accounts with a five_hour sample count; none = unavailable, fall through to the gateway view.
+    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled and .five_hour != null) |
+      "\(.id) 5h \(.five_hour | floor)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
       ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
     if [[ -n "$text" ]]; then
-      if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '[.accounts[] | select(.enabled)] | length > 0 and all(.five_hour != null and .five_hour >= $t)' <<<"$usage" 2>/dev/null)" == "true" ]]; then
+      if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '[.accounts[] | select(.enabled and .five_hour != null)] | all(.five_hour >= $t)' <<<"$usage" 2>/dev/null)" == "true" ]]; then
         echo "quota $text — 5h window nearly spent on every account"
+        return 2
+      fi
+      if [[ "$text" == *"(stale "* ]]; then
+        echo "quota $text — sample older than 6h"
         return 2
       fi
       echo "quota $text"
@@ -1247,26 +1252,30 @@ check_claude_auth_iu() {
 # iu dead = FAIL (as before). Any other enabled account dead = WARN: the picker routes around it, and
 # its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a herdr pane.
 check_claude_auth() {
-  local iu_msg iu_rc=0 accts id dir out dead="" ok=""
+  local iu_msg iu_rc=0 accts id dir out dead="" ok="" worst msg
   iu_msg=$(check_claude_auth_iu) || iu_rc=$?
-  (( iu_rc == 0 )) || { echo "$iu_msg"; return "$iu_rc"; }
-  [[ -x "$CLAUDE_BIN" ]] || { echo "$iu_msg"; return 0; }   # no CLI: check_claude_auth_iu already skipped
+  worst=$iu_rc   # the other accounts are checked whatever iu's grade: the worst grade wins (1 FAIL > 2 WARN > 0)
+  [[ -x "$CLAUDE_BIN" ]] || { echo "$iu_msg"; return "$iu_rc"; }   # no CLI: check_claude_auth_iu already skipped
   # An unreadable registry means the other accounts went unchecked: say so, never a silent green.
   [[ -r "$CLAUDE_ACCOUNTS_REGISTRY" ]] \
-    || { echo "$iu_msg; account registry unreadable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; return 2; }
+    || { echo "$iu_msg; account registry unreadable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; (( iu_rc == 1 )) && return 1; return 2; }
   accts=$("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.enabled and .value.dir != null) | "\(.key)\t\(.value.dir)"' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null) \
-    || { echo "$iu_msg; account registry unparsable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; return 2; }
+    || { echo "$iu_msg; account registry unparsable ($CLAUDE_ACCOUNTS_REGISTRY) — other accounts unchecked"; (( iu_rc == 1 )) && return 1; return 2; }
   while IFS=$'\t' read -r id dir; do
     [[ -n "$id" ]] || continue
     dir="${dir/#\~/$HOME}"
     out=$(CLAUDE_CONFIG_DIR="$dir" USER="${USER:-$(/usr/bin/id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null) || out=""
     if [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$out" 2>/dev/null)" == "true" ]]; then ok+=" $id"; else dead+=" $id"; fi
   done <<<"$accts"
+  msg="$iu_msg"
   if [[ -n "$dead" ]]; then
-    echo "$iu_msg; account${dead} NOT logged in — picker routes around it (fix: /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
-    return 2
+    msg="$msg; account${dead} NOT logged in — picker routes around it (fix: /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
+    (( worst == 0 )) && worst=2
+  elif [[ -n "$ok" ]]; then
+    msg="$msg; also${ok}"
   fi
-  echo "$iu_msg${ok:+; also${ok}}"
+  echo "$msg"
+  return "$worst"
 }
 
 check_obsidian() {

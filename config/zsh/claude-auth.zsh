@@ -103,8 +103,8 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
     # A dead login is only reported, and then runs WITHOUT any API credential
     # (ANTHROPIC_API_KEY / AUTH_TOKEN stripped): it must not fall back to API billing.
     if [[ -n ${CLAUDE_CONFIG_DIR-} ]]; then
-      if command env -u CLAUDE_CODE_OAUTH_TOKEN claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
-        command env -u CLAUDE_CODE_OAUTH_TOKEN claude "$@"
+      if command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+        command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude "$@"
       else
         print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a herdr pane (no token fallback for this account)"
         command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude "$@"

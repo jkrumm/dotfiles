@@ -133,6 +133,13 @@ describe("helpers", () => {
     const m = mergeSample(sample(50, 50), { ...sample(1, 1), s_ts: NOW - 120_000, w_ts: NOW - 120_000 })
     expect(m).toMatchObject({ s: 50, w: 50 })
   })
+  test("an auth-failed account is neither due nor refreshed until a record clears the mark", () => {
+    const c = { ...cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), auth_failed: { me: true } }
+    expect(dueIds(reg(), c, NOW)).toEqual(["iu"])
+    const calls: string[][] = []
+    refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => calls.push(ids), detach: (ids) => calls.push(ids) })
+    expect(calls.flat()).not.toContain("me")
+  })
   test("newestAge / dueIds", () => {
     expect(newestAge({ ...sample(1, 1), w_ts: NOW - 1000 }, NOW)).toBe(1000)
     expect(dueIds(reg(false), staleA(), NOW)).toEqual(["iu"])
@@ -356,6 +363,15 @@ describe("CLI (isolated HOME)", () => {
     expect(cli(["account", "--badge"]).out).toBe("")
     expect(cli(["account"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
     expect(cli(["account", "--badge"], { CLAUDE_CONFIG_DIR: "/nowhere" }).out).toBe("?")
+  })
+  test("env: valid account, unknown id, disabled account", () => {
+    expect(cli(["env", "iu"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(cli(["env", "nope"]).rc).toBe(2)
+    expect(cli(["env"]).rc).toBe(2)
+    const both = join(home, "both.json")
+    writeFileSync(both, JSON.stringify(reg(true)))
+    expect(cli(["env", "me"], { CLAUDE_ACCOUNTS_REGISTRY: both })).toMatchObject({ rc: 0, out: "export CLAUDE_CONFIG_DIR='/home/x/.claude-me'" })
+    expect(cli(["env", "me"]).rc).toBe(2) // disabled in the default fixture
   })
   test("record and exhausted write their own files", () => {
     seed(60_000)

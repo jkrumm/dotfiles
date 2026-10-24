@@ -261,10 +261,12 @@ def reap_bg(j: Journal) -> None:
 
 
 def reap_bg_account(j: Journal, env: dict) -> None:
-    rc, out = sh("claude", "agents", "--json", env=env)
-    if rc != 0:
-        print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}): {out.strip()[:160]!r}; skipping its bg leftovers")
+    r = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}, rc={r.returncode}): "
+              f"{(r.stderr or r.stdout).strip()[:160]!r}; skipping its bg leftovers")
         return
+    out = r.stdout
     now = time.time() * 1000
     seen = load_messaged()
     for a in json.loads(out):
