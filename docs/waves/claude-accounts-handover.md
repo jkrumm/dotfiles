@@ -54,10 +54,10 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 |-|-|-|-|
 | argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
 | dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (pre-#32 account-less session_env lines, age out by 2026-10-25 16:20Z) → then `make claude-accounts-stamp` |
-| usage-tracker (W2c) | #11 | `usage-tracker-quota-history` | review `8b7b4095-b3cc-45cd-aff1-8757fdfce89c`; legacy a/b→iu/me pick mapping requested |
-| argo (W2c) | feat/quota-history | `argo-quota-history` | fanned 2026-10-24 |
+| usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
+| argo (W2c) | #201 | `argo-quota-history` | review `79537dcd-4406-4b09-a9fa-cba3691c97db` running |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
-| agent-gateway | feat/claude-accounts-usage | `agent-gatew-claude-accounts-usag` | fanned 2026-10-24 (on `me`) |
+| agent-gateway | #33 | `agent-gatew-claude-accounts-usag` | review 36bb3ac9: blocker (null mins-left wipes reset) + SWR/IO fixes sent |
 
 Decisions taken during W2:
 - **W2c added (owner, 2026-10-24):** track both accounts' 5h/7d quota historically + picker decisions
