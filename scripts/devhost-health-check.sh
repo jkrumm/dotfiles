@@ -172,6 +172,8 @@ DIAGNOSTIC_REPORTS_DIR="${DEVHOST_DIAGNOSTIC_REPORTS_DIR:-/Library/Logs/Diagnost
 # 5-hour window is nearly spent, which is the one reading that changes what an
 # agent should do next.
 QUOTA_5H_WARN_PCT="${DEVHOST_QUOTA_5H_WARN_PCT:-90}"
+CLAUDE_ACCOUNT_BIN="${DEVHOST_CLAUDE_ACCOUNT_BIN:-$HOME/.local/bin/claude-account}"
+CLAUDE_ACCOUNTS_REGISTRY="${DEVHOST_CLAUDE_ACCOUNTS_REGISTRY:-$HOME/SourceRoot/dotfiles/config/claude-accounts.json}"
 SECRETS_CACHE_FILE="${SECRETS_CACHE_FILE:-$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json}"
 # Restart detection is a DELTA, so it needs somewhere to remember the last
 # reading. ~/.local/state, not /tmp: /tmp is world-writable and this file
@@ -1131,7 +1133,24 @@ check_overview_pane() {
 # graded: a spent window is a scheduling fact, not a broken machine. The one
 # exception is a WARN at QUOTA_5H_WARN_PCT — still never a FAIL.
 check_quota() {
-  local body five seven text
+  # Both Claude accounts from the picker's cache (docs/claude-accounts.md), "iu 5h 7% · 7d 88% | me …".
+  # WARN only when EVERY enabled account's 5h window is nearly spent: the picker routes around one.
+  # Falls back to agent-gateway's single-account view when the picker is not installed or unreadable.
+  local body five seven text usage
+  if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
+    usage=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" usage --json 2>/dev/null) || usage=""
+    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled) |
+      "\(.id) 5h \(if .five_hour == null then "?" else (.five_hour | floor | tostring) end)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%"
+      ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
+    if [[ -n "$text" ]]; then
+      if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '[.accounts[] | select(.enabled)] | length > 0 and all(.five_hour != null and .five_hour >= $t)' <<<"$usage" 2>/dev/null)" == "true" ]]; then
+        echo "quota $text — 5h window nearly spent on every account"
+        return 2
+      fi
+      echo "quota $text"
+      return 0
+    fi
+  fi
   body=$("$CURL_BIN" -s --max-time 4 "$AGENT_GATEWAY_URL/api/usage" 2>/dev/null) || body=""
   five=$("$JQ_BIN" -r '.data.five_hour_pct // empty' <<<"$body" 2>/dev/null) || five=""
   seven=$("$JQ_BIN" -r '.data.seven_day_pct // empty' <<<"$body" 2>/dev/null) || seven=""
@@ -1155,7 +1174,9 @@ claude_token_works() {
   [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$tout" 2>/dev/null)" == "true" ]]
 }
 
-check_claude_auth() {
+# The default account (iu, CLAUDE_CONFIG_DIR unset): dead = FAIL. Every other enabled account is
+# graded by check_claude_auth below.
+check_claude_auth_iu() {
   # The silent-API-billing failure, made visible. An expired OAuth token does
   # not stop anything: `claude --bg` daemons keep starting, `claude agents`
   # keeps listing them healthy, and every one of them quietly bills API credits
@@ -1221,6 +1242,26 @@ check_claude_auth() {
   [[ "$sub" == "max" ]] \
     || { echo "claude auth is '${sub:-unknown}', not max — agents are off the subscription"; return 1; }
   echo "claude auth ok (max)"
+}
+
+# iu dead = FAIL (as before). Any other enabled account dead = WARN: the picker routes around it, and
+# its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a herdr pane.
+check_claude_auth() {
+  local iu_msg iu_rc=0 line id dir out dead="" ok=""
+  iu_msg=$(check_claude_auth_iu) || iu_rc=$?
+  (( iu_rc == 0 )) || { echo "$iu_msg"; return "$iu_rc"; }
+  [[ -x "$CLAUDE_BIN" && -r "$CLAUDE_ACCOUNTS_REGISTRY" ]] || { echo "$iu_msg"; return 0; }
+  while IFS=$'\t' read -r id dir; do
+    [[ -n "$id" ]] || continue
+    dir="${dir/#\~/$HOME}"
+    out=$(CLAUDE_CONFIG_DIR="$dir" USER="${USER:-$(/usr/bin/id -un)}" "$CLAUDE_BIN" auth status 2>/dev/null) || out=""
+    if [[ "$("$JQ_BIN" -r '.loggedIn // false' <<<"$out" 2>/dev/null)" == "true" ]]; then ok+=" $id"; else dead+=" $id"; fi
+  done < <("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.enabled and .value.dir != null) | "\(.key)\t\(.value.dir)"' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null)
+  if [[ -n "$dead" ]]; then
+    echo "$iu_msg; account${dead} NOT logged in — picker routes around it (fix: /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
+    return 2
+  fi
+  echo "$iu_msg${ok:+; also${ok}}"
 }
 
 check_obsidian() {
