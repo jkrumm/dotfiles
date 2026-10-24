@@ -55,9 +55,10 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 | argo | #200 | — | **merged + live** 2026-10-24; `resync-account` run (623978 rows re-queued, syncing via launchd) |
 | dotfiles (W2a) | #28 | — | **merged + live** 2026-10-24; keepalive loaded; verify 1 FAIL (pre-#32 account-less session_env lines, age out by 2026-10-25 16:20Z) → then `make claude-accounts-stamp` |
 | usage-tracker (W2c) | #11 | — | **merged + deployed** 2026-10-24; account push tolerates 404 until argo #201 |
-| argo (W2c) | #201 | `argo-quota-history` | review `79537dcd-4406-4b09-a9fa-cba3691c97db` running |
+| argo (W2c) | #201 | — | **merged** f0053a4, CI deploying |
+| tinycast fix | fix/quota-argo-shape | `tinycast-extens-quota-argo-shape` | my brief had the wrong Argo envelope (`latest.snapshot.quota`, `latest.receivedAt`); fix fanned, then MacBook deploy |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
-| agent-gateway | #33 | `agent-gatew-claude-accounts-usag` | review 36bb3ac9: blocker (null mins-left wipes reset) + SWR/IO fixes sent |
+| agent-gateway | #33 | — | **merged + deployed** b1c9c98; /api/usage accounts + overview header live |
 
 Decisions taken during W2:
 - **W2c added (owner, 2026-10-24):** track both accounts' 5h/7d quota historically + picker decisions
@@ -71,6 +72,7 @@ Decisions taken during W2:
   `account` (fixes a live bug: a `me` statusline POST overwrites iu's numbers). Merge order:
   agent-gateway W2b before dotfiles W2a (W2a's producers send `account`).
 - Argo upsert: `account = COALESCE(excluded.account, usage_record.account)` — null means unknown, never clears a backfilled value.
+- statusline POST throttle is per account now (dotfiles fix commit): a global stamp let `me` workers starve iu's POST (`/api/usage` `data` stayed null).
 - Heartbeat quota line moved into W2a (same file it already owns), read locally from `claude-account usage --json`.
 
 ## W2 (original plan)
