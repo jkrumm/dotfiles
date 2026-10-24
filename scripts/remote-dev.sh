@@ -306,8 +306,8 @@ pick_account() {
   out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null)
   line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
   case $line in
-    iu)
-      PICK_SPILL=1; PICK_NOTE="no Claude account has room -> IU (${why#\# })" ;;
+    spill)
+      PICK_SPILL=1; PICK_NOTE="no Claude account has room (spill) -> IU (${why#\# })" ;;
     "export CLAUDE_CONFIG_DIR="*)
       local dir=${line#export CLAUDE_CONFIG_DIR=}; dir=${dir#\'}; dir=${dir%\'}
       PICK_ENV="--env CLAUDE_CONFIG_DIR='$dir'"; PICK_NOTE="${why#\# }" ;;
