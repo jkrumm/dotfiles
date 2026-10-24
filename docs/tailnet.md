@@ -21,8 +21,9 @@ by design.
 - Rows: `:7730` (rb) and `:8788` (Collie), tailnet-only; **`:8443` — Funnel,
   public internet**, the IU dashboard, gated by `tag:iu-dashboard-funnel`, an
   *additive single-device* tag because Funnel is a whole-device capability and
-  `tag:mac` would expose the work MacBook. **That one port is the machine's entire
-  public surface** — don't "clean up" the tag.
+  `tag:mac` would expose the work MacBook; **`:10000` — Funnel, public internet**,
+  Athena Teamchat (token-gated chat-api, same tag and grant). **Those two ports are
+  the machine's entire public surface** — don't "clean up" the tag.
 - **Tagging a device is console-only** and independent of pushing a grant — both
   are silently inert without the other. Verify the live filter with no API key
   from the mini: `tailscale debug netmap`, parsing `PacketFilter`.

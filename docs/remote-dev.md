@@ -660,8 +660,9 @@ where the human is.
 - **Current rows**: `:7730` (rb, tailnet-only), `:8788` (Collie, tailnet-only,
   never funneled), `:8443` — **Funnel, public internet**, the IU dashboard, gated
   by `tag:iu-dashboard-funnel`, an *additive single-device* tag because Funnel is
-  a whole-device capability and `tag:mac` would expose the work MacBook. That one
-  port is the machine's entire public surface.
+  a whole-device capability and `tag:mac` would expose the work MacBook; `:10000` —
+  **Funnel, public internet**, Athena Teamchat, same tag and grant. Those two ports
+  are the machine's entire public surface.
 - **Tagging a device is console-only** and independent of pushing a grant — both
   are silently inert without the other (`tag:devhost`, `tag:tablet` likewise).
 - **Verify the live filter with no API key**, from the mini itself:

@@ -275,7 +275,7 @@ non-Caddy doors.
 | `tcp:22` → mini | OpenSSH, key-only | tailnet `tag:mac → tag:mac` |
 | `tcp:5900` → mini | macOS Screen Sharing (VNC) | tailnet `tag:mac → tag:mac`, MacBook → mini only |
 | `tcp:8642` → mini | Hermes's OpenAI-compatible API, for Argo's chat route | tailnet `tag:vps → tag:mac`, grant only — the API server is currently off, port closed |
-| `:8443` (IU dashboard) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
+| `:8443` (IU dashboard), `:10000` (Athena Teamchat) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
 | `tcp:2222` → iumac | userland sshd behind `tailscale serve --tcp` | tailnet `tag:mac → tag:mac` |
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |
 | `tcp:445` (SMB `~/Shuttle`) | macOS smbd | tailnet `tag:mac → tag:mac` |
