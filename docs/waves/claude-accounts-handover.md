@@ -28,7 +28,7 @@ to `~/.claude`; `settings.json` is rendered. `~/.claude-b` is gone (renamed).
 |-|-|-|-|-|
 | dotfiles | #27 | feat/claude-accounts-w1 | `dotfiles-claude-accounts-w1` | **merged + deployed** 2026-10-24 (round 4 fixed auth_failed re-probe); MCP registered for both accounts |
 | usage-tracker | #10 | feat/claude-accounts-rename | `usage-track-claude-accounts-rena` | **merged + deployed** 2026-10-24; DB `iu|max|623576`, user_version 1 |
-| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | review 37beae06 actionable (quota regex too broad, second wall skips iu) → round 4 sent |
+| agent-gateway | #32 | feat/claude-account-pick | `agent-gatewa-claude-account-pick` | **merged + deployed** aa601ac 2026-10-24, verify OK |
 
 **Merge order (ids switch together):** usage-tracker #10 and dotfiles #27 back to back, then
 agent-gateway #32. Before `rd merge`: `gh pr ready <n>`. Gate:
@@ -55,7 +55,7 @@ Briefs: `~/.local/share/claude-accounts-w2/{dotfiles,agent-gateway,argo,tinycast
 | argo | feat/usage-account (#200) | `argo-usage-account` | review aa8d052a: no blockers; fixes sent (COALESCE upsert, scoped test cleanup, permissive ingest, headline filter) |
 | tinycast-extensions | #1 | — | **merged** 2026-10-24; MacBook `make deploy` after agent-gateway W2b is live |
 | dotfiles (W2a) | feat/claude-accounts-verify | `dotfiles-claude-accounts-veri` | fanned 2026-10-24 (landed on `me`, reason=home) |
-| agent-gateway | feat/claude-accounts-usage | — | waits for #32 merge |
+| agent-gateway | feat/claude-accounts-usage | `agent-gatew-claude-accounts-usag` | fanned 2026-10-24 (on `me`) |
 
 Decisions taken during W2:
 - **Tinycast reads quota via Argo, not the tailnet door.** agent-gateway is loopback-only by design
@@ -88,6 +88,12 @@ Decisions taken during W2:
   parent's account (same process) — confirm once.
 
 ## Known gaps / decisions already made
+
+- **agent-gateway pre-existing test failure (not ours, owner to decide):** `tests/dispatch-worktree.test.ts:1121`
+  `GIT_DENY_CREDENTIALS_ENV` fails on master because the CommandLineTools system gitconfig
+  (`/Library/Developer/CommandLineTools/usr/share/git-core/gitconfig`) sets `credential.helper osxkeychain`
+  and the overlay doesn't set `GIT_CONFIG_NOSYSTEM=1` — worker git can reach the keychain helper. Merges used
+  `rd merge agent-gateway --check 'GIT_CONFIG_NOSYSTEM=1 make check' …`.
 
 - Spill sentinel is stdout `spill` + exit 3; registry unreadable = exit 4 + `unset` (iu safe default).
 - `claude-auth.zsh` token fallback applies to iu only (live bug fixed in #27).
