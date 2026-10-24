@@ -201,6 +201,20 @@ section_devhost_heartbeat() {
   skip "devhost-health-check" "always pushes to Uptime Kuma (no print-only mode) — run 'make devhost-health-check' by hand, or check the Kuma dashboard"
 }
 
+# --- Claude accounts (mini) ---------------------------------------------------
+# claude-accounts-verify is the only grader (docs/claude-accounts.md §Operate): FAIL rows fail this section, WARN rows don't.
+section_claude_accounts() {
+  hdr "Claude accounts (claude-accounts-verify)"
+  local out rc=0
+  out=$(/bin/bash "$DOTFILES_DIR/scripts/claude-accounts-verify.sh" 2>&1) || rc=$?
+  printf '%s\n' "$out" | sed 's/^/    /'
+  if [ "$rc" -eq 0 ]; then
+    ok "claude accounts" "$(printf '%s\n' "$out" | tail -n 1)"
+  else
+    bad "claude accounts" "verify reported FAIL rows — see above (make claude-accounts-verify)"
+  fi
+}
+
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
 # Tailscale, ssh, ControlMaster, agent forwarding, herdr, then the GitHub
 # credential + push rights. The reverse mini->iumac leg is not probed here: it
@@ -335,6 +349,7 @@ section_worktrees
 
 if [ "$BACKEND" = "cache" ]; then
   section_drift
+  section_claude_accounts
   section_devhost_heartbeat
 elif [ "$BACKEND" = "op" ]; then
   section_remote_path
