@@ -178,10 +178,10 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `ca cap claude_iu` never touch `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
-| `version` | records `claude --version` in `~/.local/state/claude-accounts/verified-version` when the run has no FAIL | (never FAIL) |
+| `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
 
-The heartbeat (`check_claude_version`) WARNs `unverified Claude Code version` whenever the running version differs from the
-recorded one, until verify passes again. Subagents run inside the parent process and inherit its account (and its
+Verify never writes. `make claude-accounts-stamp` runs it and, only with no FAIL, records the running version in the stamp. The heartbeat (`check_claude_version`) WARNs `unverified Claude Code version` whenever the running version differs from the
+recorded one, until the stamp is renewed. Subagents run inside the parent process and inherit its account (and its
 `CLAUDE_CONFIG_DIR`) automatically; nothing picks for them.
 
 **E2E (manual, a few Haiku tokens).** `make claude-accounts-e2e` (`ARGS=--subagent` adds one Haiku run that spawns a
@@ -198,16 +198,16 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 | `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |
 
 **Login keepalive.** `com.jkrumm.claude-accounts-keepalive` (06:30, under jobrun) runs `claude-account refresh --all`:
-`claude -p "/usage"` per enabled account, 0 tokens, no window priming. An idle account's OAuth refresh token never
+`claude -p "/usage"` per enabled account, 0 tokens, no window priming; it exits 1 when an account got neither a fresh sample nor an auth verdict (jobrun grades the run). An idle account's OAuth refresh token never
 ages out and the quota cache gets a sample. `--all` ignores the 10-minute freshness and the auth cooldown but not the
 5-minute claim. `claude -p /usage` exits 0 even with a dead login (and leaves the old cached numbers), so the refresh
 accepts only a sample fetched during that run and otherwise asks `claude auth status`; a logged-out answer marks the
 account auth-failed. Log: `~/Library/Logs/claude-accounts-keepalive.log`; installed by `make claude-accounts-keepalive-setup`
 (part of `make setup`, dev host only).
 
-**After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify`:
+**After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
-1. All PASS -> the version is recorded, the WARN clears on the next heartbeat.
+1. No FAIL -> `make claude-accounts-stamp` records the version, the WARN clears on the next heartbeat.
 2. `auth/*` FAIL -> the credential naming or config-dir resolution changed. Re-derive the keychain suffix from the new
    binary, fix `scripts/claude-accounts-verify.sh` and the table above, and check `claude-auth.zsh` still agrees.
 3. `quota/*` FAIL -> the `cachedUsageUtilization` shape changed; fix `sampleFromClaudeJson` in
