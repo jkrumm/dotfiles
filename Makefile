@@ -107,6 +107,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
 	@$(MAKE) --no-print-directory claude-accounts-setup
+	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
@@ -1403,6 +1404,28 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 		done; \
 		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir" || exit 1; \
 	done
+
+# Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
+.PHONY: claude-accounts-verify claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
+claude-accounts-verify: ## Prove launchers, pickers, keychain, quota and attribution contracts for every Claude account (read-only)
+	@bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.sh
+claude-accounts-e2e: ## Real claude -p per account + usage-tracker ingest + break tests (spends a few Haiku tokens; ARGS=--subagent adds a subagent run)
+	@bash $(DOTFILES_DIR)/scripts/claude-accounts-e2e.sh $(ARGS)
+
+# Daily login keepalive (`claude-account refresh --all` under jobrun, 06:30). Dev host only; teardown removes
+# the jobrun state file too, or jobs-grade would grade the retired label `unloaded` forever.
+claude-accounts-keepalive-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — claude-accounts-keepalive skipped"; exit 0; fi; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.claude-accounts-keepalive" PLIST_DIR="$(DOTFILES_DIR)/launchd" || exit 1; \
+	echo "    ↳ daily 06:30 → claude-account refresh --all (0 tokens); log: ~/Library/Logs/claude-accounts-keepalive.log"
+claude-accounts-keepalive-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.claude-accounts-keepalive.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.claude-accounts-keepalive.json"; \
+	echo "  ✓ claude-accounts-keepalive torn down (unloaded, plist and jobrun state removed)"
 
 .PHONY: _setup-gitignore
 _setup-gitignore:
@@ -3522,6 +3545,8 @@ help:
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
+	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
+	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make herdr-events-setup         Dev-host only: load the herdr event recorder (-status / -teardown)"
