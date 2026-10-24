@@ -46,14 +46,22 @@ everything below can ship before B does, with no behaviour change.
 `~/.claude-b` is created by `make claude-accounts-setup` (idempotent):
 
 - **Symlinked to `~/.claude`:** `skills agents hooks rules output-styles commands
-  plugins CLAUDE.md settings.json projects logs`.
+  plugins CLAUDE.md projects logs`.
   - **`projects/`:** shared, so `--resume` works across accounts and usage-tracker
-    keeps one root. `cleanupPeriodDays` is safe because `settings.json` is shared,
-    so both dirs sweep with the same value.
+    keeps one root.
   - **`logs/`:** shared, so `session_env` lines land in one place.
-- **Per account (never link):** `.claude.json` (oauthAccount, cached usage,
-  trust, **user-scope MCP**), credentials, `history.jsonl` (symlinks rejected
-  since 2.1.278), `file-history/`, `stats-cache.json`, `ide/`.
+- **`settings.json` is rendered, not linked.** Claude Code rewrites it by
+  temp-file-and-rename, which silently replaces a symlink with a real file
+  (agswt trap). `make setup` already merges the template into
+  `~/.claude/settings.json`; it runs the same merge into `~/.claude-b/`.
+  Identical `cleanupPeriodDays` in both keeps the shared `projects/` sweep safe.
+- **Per account (never link):** `.claude.json` (oauthAccount,
+  `cachedUsageUtilization`, trust, **user-scope MCP**), credentials,
+  `history.jsonl` (symlinks rejected since 2.1.278), `file-history/`,
+  `stats-cache.json`, `ide/`.
+- **Never copy credentials between dirs.** Each dir does its own `/login`, because
+  two homes sharing one refresh-token family invalidate each other (caam,
+  ClaudeBar).
 - **User-scope MCP servers** (`agent-gateway`, `research-gateway`,
   `chrome-devtools`) live in `.claude.json`, so the `make setup` registration
   loop runs once per enabled account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`).
@@ -72,17 +80,29 @@ claude-account usage [--json]       # both accounts: 5h %, 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
 ```
 
-**Quota source:** `GET api.anthropic.com/api/oauth/usage`, one call per enabled
-account.
-- **Request:** token from that account's Keychain service, `anthropic-beta:
-  oauth-2025-04-20`, `User-Agent: claude-code/<installed version>`. Without the
-  UA the endpoint returns persistent 429s.
-- **Cache:** `~/.cache/claude-accounts/usage.json`, keyed by account, polled at
-  most once a minute per account. On a 429 it keeps the last value and marks it
-  stale.
-- **fetch_usage.py** becomes a thin caller of this, so there is one fetch path.
-  It still writes `/tmp/claude_sl/usage_api.json` (account A, the old shape)
-  for backward compatibility, plus `usage_accounts.json` (all accounts).
+**Quota sources: we never read a token.** Three feeds, freshest wins, all
+written into `~/.cache/claude-accounts/usage.json` keyed by account:
+
+1. **Statusline (live, free):** every render gets native `rate_limits` for the
+   session's own account. `statusline.sh` writes `{account, five_hour,
+   seven_day, resets_at, ts}` keyed by `CLAUDE_CONFIG_DIR`. While any session
+   runs on an account, its numbers are seconds old (the herdr-grazr pattern).
+2. **Limit events (instant):** a `StopFailure` / `rate_limit` hook marks the
+   account exhausted until `resets_at` the moment a wall is hit (the
+   agent-relay pattern). No poll needed to learn about a wall.
+3. **Idle accounts:** `CLAUDE_CONFIG_DIR=<dir> claude -p "/usage"` (verified on
+   2.1.310: 0 tokens, $0, 0 turns). The official binary does the fetch itself,
+   with its own backoff, and writes `cachedUsageUtilization` (`five_hour` /
+   `seven_day` utilization + `resets_at`, `accountUuid`, `fetchedAtMs`) into that
+   dir's `.claude.json`; the picker reads it from there. It runs only when an
+   account's newest sample is older than 10 minutes, at most once every 5 minutes
+   per account. The endpoint budget is about 28–30 calls/h per account, and a 429
+   can block for up to an hour (claude-swap, ClaudeBar), so the hand-rolled
+   `fetch_usage.py` poll gets retired.
+
+`fetch_usage.py` becomes a reader of this cache. It still writes
+`/tmp/claude_sl/usage_api.json` (account A, the old shape) for backward
+compatibility, plus `usage_accounts.json` (all accounts).
 
 **Rule v1:**
 
@@ -118,16 +138,52 @@ it expires. Upgrade B to 20x if its weekly stays > 80% two weeks running.
 | Spawner | Today | Change |
 |-|-|-|
 | `c` / `cs` / `cf` (`claude.zsh:46-102`) | default dir | `eval "$(claude-account pick --lane interactive)"`; `--account a\|b` override |
-| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | `agent_pane_setup` also runs `eval "$(claude-account pick --lane wave)"` in the pane before `herdr agent start`; on `iu` it switches that spawn to `--kind opencode` |
+| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept) instead of typing `export` into the pane. On `iu` it switches that spawn to `--kind opencode` |
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
 | `claude-auth.zsh` fallback (mini) | one token `op://mini/claude/oauth-token` | per account: `op://mini/claude/oauth-token` (a), `op://mini/claude-b/oauth-token` (b). Each is used only when *that* dir's `claude auth status` fails. Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 | warden | spawns no `claude` | none; it goes through agent-gateway |
 
-Known gap: on a herdr restart, panes come back via `claude --resume <id>` in a
-fresh shell, so the env is gone and a B session resumes on A (it works because
-`projects/` is shared, but the cache is cold). Accepted for v1. Fix later if herdr
-can persist pane env.
+Known gaps:
+
+- **herdr restart:** panes come back via `claude --resume <id>`. If the pane
+  `--env` isn't restored, a B session resumes on A: it works because `projects/`
+  is shared, but the cache is cold. Verify whether herdr persists `--env`;
+  accepted for v1 if not.
+- **`claude --bg` / `claude agents`:** the background supervisor is a long-lived
+  daemon bound to one identity. caam defaults `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`
+  for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on A
+  only; `herdr-reap` queries `claude agents` once per account.
+
+## Borrowed from open source (2026-10 survey)
+
+No existing tool does per-lane spawn-time selection across herdr panes and
+agent-gateway workers. The per-spawn tools (diranged/claude-profile, ccs native
+profiles, RA1NM4KER/agent-relay, CarlosTheory/claude-multi-account) are profile
+launchers that are about 30 lines here. The global-swap tools (claude-swap
+`switch`, herdr-account-switch, herdr-grazr, cc-account-switcher, caam vault
+mode) rewrite the one live credential under running sessions, which kills
+concurrency and cache. So we build a thin picker and take the parts:
+
+| Idea | From | Used as |
+|-|-|-|
+| statusline `rate_limits` as the quota feed, no polling | wazum/herdr-grazr | quota source 1 |
+| `StopFailure` hook for event-driven limit detection | RA1NM4KER/agent-relay | quota source 2 |
+| `claude -p "/usage"` → `cachedUsageUtilization`, 0 tokens | n2ns/plan-swap | quota source 3 (verified) |
+| poll budget ≥ 3 min, shared backoff, honour `Retry-After`, cache successes only | claude-swap, paddo/ccseats, ClaudeBar | idle-account refresh |
+| `consume-first` / `earliest-reset-headroom`, 10-pt hysteresis | claude-swap, caam | rule 1 + v2 pace |
+| pin a session to one account for its lifetime; re-pin only on 401/quota | hbinhng/ccm `--sticky` | invariant 1 |
+| auto-re-prompt agents after a limit wall resets | rcosteira79/herdr-autocontinue | W2: interactive panes that hit the wall resume at `resets_at` |
+| never symlink `settings.json`; locked keychain looks logged out | fujibee/agswt | layout rules, heartbeat |
+| `CLAUDE_CODE_DISABLE_AGENT_VIEW` for non-default identities | caam | `--bg` stays on A |
+| profile badge + chained statusline env | diranged/claude-profile | statusline `A`/`B` badge |
+
+Avoid: relay class (claude-relay-service, CCR pools, OmniRoute, `ccs cliproxy`,
+doxaras/claude-rotate, 2solarmax/maxpool, tuxevil-rotator). Also any tool that
+writes refreshed tokens back into Claude Code's store (ClaudeBar API mode, Raycast
+Agent Usage), which makes the tool co-owner of the login. Window priming
+(`claude -p ping` to start the 5h window early) is undocumented meter-gaming.
+Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 
 ## Attribution (usage-tracker → Argo)
 
@@ -175,7 +231,7 @@ can persist pane env.
 
 | Wave | When | Contents | Done when |
 |-|-|-|-|
-| W0 | now, B absent | registry (`b.enabled=false`), `claude-accounts-setup`, `claude-account` with tests, fetch_usage on the picker, session-env `account`, usage-tracker column + backfill, statusline badge | `make check` green; every pick returns `a`; no behaviour change |
+| W0 | now, B absent | registry (`b.enabled=false`), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (A only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `a`; no behaviour change; no `api/oauth/usage` calls from our code |
 | W1 | after B's login | enable B; `rd wave`/`fan` + agw workers pick; MCP registration for B; per-account claude-auth fallback | a wave lands on B, its rows say `account=b`, cache-read share on B > 90% |
 | W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
 | W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for B | written decision |
