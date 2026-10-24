@@ -18,6 +18,8 @@ export const REFRESH_MIN_MS = 5 * 60_000
 export const EXPIRING_S = 24 * 3600
 /** Weekly% may run this many points ahead of the elapsed share of the 7-day window before an account counts as over pace. */
 export const PACE_MARGIN = 15
+/** Session% points the home account may run ahead of the other before a spawn moves to the emptier 5h window. */
+export const SESSION_MARGIN = 20
 const WEEK_S = 7 * 24 * 3600
 export const EXPIRING_WEEKLY_MAX = 70
 
@@ -315,7 +317,7 @@ export function overPace(reg: Registry, cache: Cache, id: string, nowMs: number)
   return p !== null && x.w! > p + PACE_MARGIN
 }
 
-/** Rule v1.1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
+/** Rule v1.2 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
   const r = pickRaw(reg, cache, lane, nowMs)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
@@ -342,7 +344,15 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
     const calm = ok.find((id) => id !== home && !overPace(reg, cache, id, nowMs))
     if (calm) return { picked: calm, reason: "pace" }
   }
-  if (home) return { picked: home, reason: "home" }
+  if (home) {
+    const hs = cache.samples[home]
+    const emptier = ok.find((id) => {
+      const x = cache.samples[id]
+      return id !== home && hasS(x) && hasS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
+    })
+    if (emptier) return { picked: emptier, reason: "session" }
+    return { picked: home, reason: "home" }
+  }
   const other = ok[0]
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }

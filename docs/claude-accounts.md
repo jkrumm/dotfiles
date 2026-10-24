@@ -112,7 +112,7 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1.1:**
+**Rule v1.2:**
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
@@ -126,9 +126,10 @@ home(lane)  = iu for interactive, agent-gateway:review, headless
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first
   2. eligible(home) ∧ overPace(home) ∧ eligible(other) ∧ ¬overPace(other) → other   # pace guard, every lane
-  3. eligible(home) → home
-  4. eligible(other) → other
-  5. interactive → iu (Claude Code shows the limit itself)
+  3. eligible(home) ∧ eligible(other) ∧ ¬overPace(other) ∧ session%(home) − session%(other) > 20 → other   # balance the 5h windows
+  4. eligible(home) → home
+  5. eligible(other) → other
+  6. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
                    (rd wave --kind opencode, agw's existing IU fallback)
 ```
@@ -138,6 +139,12 @@ four days to its reset while `me` sat at 2 %. v1 only leaves home at weekly ≥ 
 so interactive work burned iu's last 11 % while `me` idled. An over-pace home now
 yields to an under-pace account (iu 88 % at pace 44 → `me`, reason `pace`). Picks
 are per spawn, so no hysteresis. Expiring capacity (rule 1) still wins for bulk lanes.
+
+Why the session step (v1.2): `me`'s 5h window is a quarter of `iu`'s and runs out
+fast, so an idle `me` window is capacity that is gone at the next reset. A spawn moves
+to the other account when its 5h is more than 20 points emptier (`SESSION_MARGIN`)
+and it is not over weekly pace; reason `session`. Within the margin home stays, so
+cache and routing remain stable.
 
 Why these homes: the waves are steady, unattended and start a fresh context
 per wave, so each wave is a free re-pick point. Together they are 63% of Max
