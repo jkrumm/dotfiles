@@ -53,6 +53,10 @@ describe("pick rule v1.2 session balance", () => {
     expect(pick(reg(), cacheOf(sample(60, 10), sample(5, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
     expect(pick(reg(), cacheOf(sample(5, 10), sample(60, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "session" })
   })
+  test("a stale 5h reading never triggers the move", () => {
+    const old = { ...sample(5, 10), s_ts: NOW - 7 * H * 1000 }
+    expect(pick(reg(), cacheOf(sample(60, 10), old), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
   test("within the margin the home account stays", () => {
     expect(pick(reg(), cacheOf(sample(30, 10), sample(15, 10)), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
   })
