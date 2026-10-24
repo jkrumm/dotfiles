@@ -62,9 +62,29 @@ export const picksPath = () => process.env.CLAUDE_ACCOUNTS_PICKS ?? join(homedir
 
 export const expandHome = (p: string) => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p)
 
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+const numOrNull = (v: unknown) => v === null || isNum(v)
+
+function validAccount(a: unknown): a is Account {
+  const x = a as Account | null
+  return (
+    !!x && typeof x === "object" &&
+    (x.dir === null || typeof x.dir === "string") &&
+    typeof x.plan === "string" &&
+    !!x.units && isNum(x.units.session) && isNum(x.units.weekly) &&
+    Array.isArray(x.homeLanes) && x.homeLanes.every((l) => typeof l === "string") &&
+    typeof x.enabled === "boolean"
+  )
+}
+
 export function loadRegistry(path = registryPath()): Registry {
   const raw = JSON.parse(readFileSync(path, "utf8"))
-  if (!raw.accounts || typeof raw.accounts !== "object") throw new Error(`${path}: missing accounts`)
+  if (!raw || typeof raw.accounts !== "object" || raw.accounts === null) throw new Error(`${path}: missing accounts`)
+  for (const [id, a] of Object.entries(raw.accounts)) {
+    if (!ID.test(id)) throw new Error(`${path}: bad account id '${id}'`)
+    if (!validAccount(a)) throw new Error(`${path}: account '${id}' is malformed`)
+  }
+  if (!Object.values(raw.accounts).some((a) => (a as Account).dir === null)) throw new Error(`${path}: no account owns the default ~/.claude (dir: null)`)
   return { accounts: raw.accounts }
 }
 
@@ -134,11 +154,18 @@ export function loadCache(dir = cacheDir()): Cache {
     const [, id, kind] = m
     const j = readJson(join(dir, name)) as Record<string, unknown> | null
     if (!j) continue
-    if (kind === "sample") c.samples[id] = j as unknown as Sample
-    else if (kind === "exhausted" && typeof j.until === "number") c.exhausted[id] = j.until
+    if (kind === "sample") {
+      if (isSample(j)) c.samples[id] = j // a malformed file is dropped, the next feed rewrites it
+    }
+    else if (kind === "exhausted" && isNum(j.until)) c.exhausted[id] = j.until
     else if (kind === "auth" && j.failed === true) c.auth_failed[id] = true
   }
   return c
+}
+
+export function isSample(v: unknown): v is Sample {
+  const x = v as Sample | null
+  return !!x && typeof x === "object" && numOrNull(x.s) && numOrNull(x.w) && numOrNull(x.s_reset) && numOrNull(x.w_reset) && numOrNull(x.s_ts) && numOrNull(x.w_ts) && typeof x.src === "string"
 }
 
 const hasS = (x: Sample) => x.s !== null
@@ -346,7 +373,12 @@ export function claimRefresh(reg: Registry, ids: string[], nowMs: number, cache:
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
     }
-    const at = Number(readFileSync(path, "utf8").trim())
+    let at: number
+    try {
+      at = Number(readFileSync(path, "utf8").trim())
+    } catch {
+      return false // the claim vanished or is unreadable: someone else is on it
+    }
     if (Number.isFinite(at) && nowMs - at <= REFRESH_MIN_MS) return false
     try {
       unlinkSync(path)

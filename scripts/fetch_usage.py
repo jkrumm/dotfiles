@@ -12,7 +12,7 @@ The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
 we keep the existing cache rather than blanking it.
 
 W0 of docs/claude-accounts.md: a fresh (<5 min) account-a sample in the quota cache
-(~/.cache/claude-accounts/<id>.sample.json — statusline and `claude-account refresh` feed it)
+(read through `claude-account usage --json`, the single owner of the cache schema and freshness)
 is preferred; the API path below runs only when that sample is stale (retired in W2).
 All accounts are also written to /tmp/claude_sl/usage_accounts.json.
 
@@ -21,6 +21,7 @@ Run via: uv run ~/.claude/fetch_usage.py
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -40,9 +41,8 @@ AGENT_GATEWAY_URL = "http://localhost:7705/api/usage"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 ANTHROPIC_BETA = "oauth-2025-04-20"
 
-ACCOUNTS_DIR = Path(os.environ.get("CLAUDE_ACCOUNTS_CACHE_DIR") or Path.home() / ".cache" / "claude-accounts")
+CLAUDE_ACCOUNT_BIN = "claude-account"
 ACCOUNTS_FILE = CACHE_DIR / "usage_accounts.json"
-ACCOUNT_A = "a"
 CACHE_FRESH_S = 300
 
 
@@ -136,65 +136,69 @@ def _push_gateway(five_pct, mins_left, seven_pct) -> None:
         pass
 
 
-def _read_json(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return None
+def _claude_account_usage() -> dict:
+    """`claude-account usage --json`: the only reader of the per-account quota cache."""
+    exe = shutil.which(CLAUDE_ACCOUNT_BIN) or str(Path.home() / ".local" / "bin" / CLAUDE_ACCOUNT_BIN)
+    result = subprocess.run([exe, "usage", "--json"], capture_output=True, text=True, check=True, timeout=30)
+    return json.loads(result.stdout)
 
 
-def _load_accounts() -> dict[str, dict]:
-    """Per-account files (<id>.sample.json / .exhausted.json / .auth.json) assembled into {id: {...}}."""
-    accounts: dict[str, dict] = {}
-    for f in sorted(ACCOUNTS_DIR.glob("*.sample.json")):
-        sample = _read_json(f)
-        if not sample:
-            continue
-        acct = f.name[: -len(".sample.json")]
-        exhausted = _read_json(ACCOUNTS_DIR / f"{acct}.exhausted.json") or {}
-        auth = _read_json(ACCOUNTS_DIR / f"{acct}.auth.json") or {}
-        accounts[acct] = {"sample": sample, "exhausted_until": exhausted.get("until"), "auth_ok": not auth.get("failed")}
-    return accounts
+def _window(row: dict, key: str, now: float) -> dict:
+    """One window, only when its own sample is fresh enough; otherwise null (never a carried-over value)."""
+    age = row.get(f"{key}_age_s")
+    fresh = row.get(key) is not None and age is not None and age < CACHE_FRESH_S
+    return {
+        "utilization": row[key] if fresh else None,
+        "resets_at_epoch": row.get(f"{key}_resets_at") if fresh else None,
+        "age_s": age,
+    }
 
 
 def from_account_cache() -> bool:
-    """Write usage_accounts.json from the per-account cache; write usage_api.json from a fresh account-a sample.
+    """Write usage_accounts.json for all accounts; write usage_api.json from the default account when its 5h window is fresh.
 
-    Returns True when usage_api.json was served from the cache (no API call needed). Any problem reading the
-    cache returns False so the caller falls through to the API path."""
+    Returns True when usage_api.json was served from the cache (no API call needed). Any problem returns False
+    so the caller falls through to the API path."""
     try:
-        accounts = _load_accounts()
+        data = _claude_account_usage()
         now = time.time()
+        rows = data["accounts"]
         _write_json(ACCOUNTS_FILE, {
+            "default_account": data.get("default_account"),
             "accounts": {
-                acct: {
-                    "five_hour": {"utilization": x["sample"].get("s"), "resets_at_epoch": x["sample"].get("s_reset")},
-                    "seven_day": {"utilization": x["sample"].get("w"), "resets_at_epoch": x["sample"].get("w_reset")},
-                    "sampled_at": int(max(x["sample"].get("s_ts") or 0, x["sample"].get("w_ts") or 0) / 1000),
-                    "source": x["sample"].get("src"),
-                    "auth_ok": x["auth_ok"],
-                    "exhausted_until": x["exhausted_until"],
+                r["id"]: {
+                    "five_hour": _window(r, "five_hour", now),
+                    "seven_day": _window(r, "seven_day", now),
+                    "sampled_at": int(now - r["age_s"]) if r.get("age_s") is not None else None,
+                    "source": r.get("source"),
+                    "enabled": r.get("enabled"),
+                    "auth_ok": r.get("auth_ok"),
+                    "exhausted_until": r.get("exhausted_until"),
                 }
-                for acct, x in accounts.items()
+                for r in rows
             },
             "fetched_at": int(now),
         })
-        a = (accounts.get(ACCOUNT_A) or {}).get("sample")
-        if not a or a.get("s") is None or now - (a.get("s_ts") or 0) / 1000 >= CACHE_FRESH_S:
+        row = next((r for r in rows if r["id"] == data.get("default_account")), None)
+        if not row:
             return False
-        five_reset = a.get("s_reset")
+        five, seven = _window(row, "five_hour", now), _window(row, "seven_day", now)
+        if five["utilization"] is None:
+            return False
+        sampled_at = int(now - min(a for a in (five["age_s"], seven["age_s"]) if a is not None))
         _write_json(CACHE_FILE, {
-            "five_hour": {"utilization": a.get("s"), "resets_at_epoch": five_reset},
-            "seven_day": {"utilization": a.get("w"), "resets_at_epoch": a.get("w_reset")},
+            "five_hour": {"utilization": five["utilization"], "resets_at_epoch": five["resets_at_epoch"]},
+            "seven_day": {"utilization": seven["utilization"], "resets_at_epoch": seven["resets_at_epoch"]},
             "seven_day_sonnet": {"utilization": None, "resets_at_epoch": None},
             "limits": [],
             "extra_usage": None,
-            "fetched_at": int(now),
+            "fetched_at": sampled_at,
             "source": "claude-accounts",
         })
-        mins = round((five_reset - now) / 60) if five_reset and five_reset > now else None
-        _push_gateway(a.get("s"), mins, a.get("w"))
-        log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": a.get("s"), "seven_day_pct": a.get("w")})
+        reset = five["resets_at_epoch"]
+        mins = round((reset - now) / 60) if reset and reset > now else None
+        _push_gateway(five["utilization"], mins, seven["utilization"])
+        log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": five["utilization"], "seven_day_pct": seven["utilization"]})
         return True
     except Exception as e:
         log_event("fetch_usage", "account_cache_error", "warning", {"error": str(e), "type": type(e).__name__})

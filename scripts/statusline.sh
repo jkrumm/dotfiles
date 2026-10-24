@@ -43,9 +43,32 @@ IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
 )
 
 # ── Claude account (docs/claude-accounts.md) ───────────────────────────────────
-# One resolver: `claude-account account`. The badge is empty unless more than one account is enabled.
+# `claude-account` is the one resolver, but it is a Bun process: a render only READS the small file it leaves
+# per CLAUDE_CONFIG_DIR ("<id> <badge>"); it is rewritten in the background (missing file, and inside the 60 s
+# usage throttle below). The badge is empty unless more than one account is enabled.
 _CA_PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
-account_badge=$(PATH="$_CA_PATH" claude-account account --badge 2>/dev/null)
+_ca_key="${CLAUDE_CONFIG_DIR:-default}"
+_ca_file="/tmp/claude_sl/account_${_ca_key//\//_}"
+account_id=""
+account_badge=""
+[ -s "$_ca_file" ] && IFS=' ' read -r account_id account_badge < "$_ca_file"
+
+# Resolve id + badge into $_ca_file; with "record" also feeds the quota cache (args: the rate_limits flags).
+_ca_resolve() {
+  local id badge
+  id=$(PATH="$_CA_PATH" claude-account account 2>/dev/null) || return 0
+  badge=$(PATH="$_CA_PATH" claude-account account --badge 2>/dev/null)
+  printf '%s %s\n' "$id" "$badge" > "${_ca_file}.$$" && mv "${_ca_file}.$$" "$_ca_file"
+  if [ "$1" = "record" ] && [ -n "$id" ] && [ "$id" != "?" ]; then
+    shift
+    PATH="$_CA_PATH" claude-account record --account "$id" "$@" >/dev/null 2>&1
+  fi
+}
+if [ ! -e "$_ca_file" ]; then
+  mkdir -p /tmp/claude_sl && : > "$_ca_file"   # placeholder: later renders don't respawn while the first resolve runs
+  ( _ca_resolve ) >/dev/null 2>&1 &
+  disown 2>/dev/null
+fi
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Effort comes from stdin: it is per-model since 2.1.251, so settings.json's
@@ -193,13 +216,12 @@ if [ -n "$rl_5h" ]; then
         -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}}" \
         http://localhost:7705/api/usage >/dev/null 2>&1 ) &
     disown 2>/dev/null
-    # Same throttle feeds the per-account quota cache (claude-account record, atomic).
-    account_id=$(PATH="$_CA_PATH" claude-account account 2>/dev/null)
-    _rec=(claude-account record --account "$account_id" --s "$rl_5h")
+    # Same throttle: resolve the account and feed its quota sample (claude-account record, atomic).
+    _rec=(--s "$rl_5h")
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
     [ -n "$rl_wk" ] && _rec+=(--w "$rl_wk")
     [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && _rec+=(--w-reset "$rl_wk_reset")
-    [ -n "$account_id" ] && [ "$account_id" != "?" ] && ( PATH="$_CA_PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
+    ( _ca_resolve record "${_rec[@]}" ) >/dev/null 2>&1 &
     disown 2>/dev/null
   fi
 fi

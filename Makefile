@@ -1354,16 +1354,18 @@ _setup-settings:
 # account dir (claude-accounts-setup); settings.json is rendered, never symlinked.
 .PHONY: _render-settings
 _render-settings:
-	@if [ ! -f "$(SETTINGS_DIR)/settings.json" ]; then \
-		jq 'del(._NOTE)' "$(DOTFILES_DIR)/config/settings.template.json" \
-			> "$(SETTINGS_DIR)/settings.json"; \
+	@tmp=$$(mktemp "$(SETTINGS_DIR)/.settings.XXXXXX") || exit 1; \
+	if [ ! -f "$(SETTINGS_DIR)/settings.json" ]; then \
+		jq 'del(._NOTE)' "$(DOTFILES_DIR)/config/settings.template.json" > "$$tmp" \
+		&& mv "$$tmp" "$(SETTINGS_DIR)/settings.json" \
+		|| { rm -f "$$tmp"; exit 1; }; \
 		echo "    ✓ $(SETTINGS_DIR)/settings.json created from template"; \
 	else \
 		jq --slurpfile existing "$(SETTINGS_DIR)/settings.json" \
 			'del(._NOTE) * {permissions: (($$existing[0].permissions // .permissions) * {deny: .permissions.deny, defaultMode: .permissions.defaultMode})} * ($$existing[0] | {model, effortLevel, alwaysThinkingEnabled} | with_entries(select(.value != null)))' \
-			"$(DOTFILES_DIR)/config/settings.template.json" \
-			> /tmp/claude-settings-merged.json \
-		&& mv /tmp/claude-settings-merged.json "$(SETTINGS_DIR)/settings.json"; \
+			"$(DOTFILES_DIR)/config/settings.template.json" > "$$tmp" \
+		&& mv "$$tmp" "$(SETTINGS_DIR)/settings.json" \
+		|| { rm -f "$$tmp"; exit 1; }; \
 		echo "    ✓ $(SETTINGS_DIR)/settings.json merged (template applied, allow + model/effort preserved, deny + defaultMode from template)"; \
 	fi
 
