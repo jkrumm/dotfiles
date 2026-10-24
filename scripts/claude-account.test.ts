@@ -330,8 +330,9 @@ describe("CLI (isolated HOME)", () => {
   })
   test("pick with an unreadable registry still answers, and says why on stderr", () => {
     const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
-    expect(r).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(r).toMatchObject({ rc: 4, out: "unset CLAUDE_CONFIG_DIR" })
     expect(r.err).toContain("registry unreadable")
+    expect(cli(["pick", "--lane", "wave", "--why"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") }).out).toContain("reason=registry-error")
   })
   test("a pick with an unwritable cache dir still prints a line", () => {
     seed(20 * 60_000)
@@ -394,6 +395,7 @@ describe("type guards", () => {
     expect(() => loadRegistry(regFile({ iu: { ...good, homeLanes: "wave" } }))).toThrow(/malformed/)
     expect(() => loadRegistry(regFile({ iu: { ...good, units: {} } }))).toThrow(/malformed/)
     expect(() => loadRegistry(regFile({ "a/b": good }))).toThrow(/bad account id/)
+    expect(() => loadRegistry(regFile({ spill: good }))).toThrow(/bad account id/) // the pick's no-headroom signal
     expect(() => loadRegistry(regFile({ me: { ...good, dir: "~/.claude-me" } }))).toThrow(/default/)
     expect(() => loadRegistry(regFile(null))).toThrow()
   })

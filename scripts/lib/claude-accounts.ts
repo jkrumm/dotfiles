@@ -83,7 +83,7 @@ export function loadRegistry(path = registryPath()): Registry {
   const raw = JSON.parse(readFileSync(path, "utf8"))
   if (!raw || typeof raw.accounts !== "object" || raw.accounts === null) throw new Error(`${path}: missing accounts`)
   for (const [id, a] of Object.entries(raw.accounts)) {
-    if (!ID.test(id)) throw new Error(`${path}: bad account id '${id}'`)
+    if (!ID.test(id) || id === SPILL) throw new Error(`${path}: bad account id '${id}'`)
     if (!validAccount(a)) throw new Error(`${path}: account '${id}' is malformed`)
   }
   if (!Object.values(raw.accounts).some((a) => (a as Account).dir === null)) throw new Error(`${path}: no account owns the default ~/.claude (dir: null)`)
