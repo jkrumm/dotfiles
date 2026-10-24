@@ -723,7 +723,7 @@ for w in workspaces:
     AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""
     if [[ $AGENT_KIND == claude ]]; then
       pick_account fan
-      if (( PICK_SPILL )); then AGENT_KIND=opencode; fi
+      if (( PICK_SPILL )); then AGENT_KIND=opencode; require_oc_env; fi
     fi
     branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
     out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
@@ -1004,7 +1004,7 @@ for a in agents:
 
   if [[ -n $sid ]]; then
     # shellcheck disable=SC2016  # $HOME expands on the dev host, not here
-    host_run "tail -n 300 \"\$HOME\"/.claude/projects/*/$sid.jsonl 2>/dev/null" | python3 -c '
+    host_run "tail -n 300 \"\$(ls -1 \"\$HOME\"/.claude*/projects/*/$sid.jsonl 2>/dev/null | head -1)\" 2>/dev/null" | python3 -c '
 import json, sys
 out = []
 for line in sys.stdin:

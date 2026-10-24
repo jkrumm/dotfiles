@@ -345,7 +345,8 @@ export function shellLine(reg: Registry, p: PickResult): string | null {
 
 /** Enabled accounts whose sample is missing or has a window older than 10 min (the budget is checked at claim time). */
 export function dueIds(reg: Registry, cache: Cache, nowMs: number): string[] {
-  return Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled && sampleAge(cache.samples[id], nowMs) > FRESH_MS)
+  // An auth-failed account is not retried (a dead login would be hammered every pick); the next statusline record clears the mark.
+  return Object.keys(reg.accounts).filter((id) => reg.accounts[id].enabled && !cache.auth_failed[id] && sampleAge(cache.samples[id], nowMs) > FRESH_MS)
 }
 
 /**
@@ -485,8 +486,8 @@ export function refreshBeforePick(b: BeforePick): { sync: string[]; background: 
   if (b.lane === "interactive") return { sync: [], background: [] } // no claim: an interactive pick touches nothing
   const due = dueIds(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
-  const sync = claimed.filter((id) => !usable(b.cache.samples[id], b.now))
-  const background = claimed.filter((id) => !sync.includes(id))
+  const sync = claimed.filter((id) => !b.cache.auth_failed[id] && !usable(b.cache.samples[id], b.now))
+  const background = claimed.filter((id) => !sync.includes(id) && !b.cache.auth_failed[id])
   if (background.length) b.detach(background)
   if (sync.length) b.runSync(sync)
   return { sync, background }
