@@ -47,15 +47,40 @@ describe("pick rule v1", () => {
   test("disabled b is never picked", () => {
     expect(pick(reg(false), cacheOf(sample(10, 10), sample(0, 0)), "wave", NOW)).toEqual({ picked: "a", reason: "spill" })
   })
-  test("stale cache makes an account ineligible", () => {
+  test("stale sample (10 min - 6 h) is used as stale-ok, never sends bulk to iu", () => {
     const c = cacheOf(sample(10, 10, { age: 11 * 60_000 }), sample(10, 10))
-    expect(pick(reg(), c, "interactive", NOW)).toEqual({ picked: "b", reason: "spill" })
-    expect(pick(reg(false), c, "wave", NOW).picked).toBe("iu")
+    expect(pick(reg(), c, "interactive", NOW)).toEqual({ picked: "a", reason: "stale-ok" })
+    expect(pick(reg(false), c, "wave", NOW)).toEqual({ picked: "a", reason: "stale-ok" })
+    expect(pick(reg(), cacheOf(sample(10, 10, { age: 5 * H * 1000 }), sample(10, 10, { age: 5 * H * 1000 })), "wave", NOW)).toEqual({ picked: "b", reason: "stale-ok" })
+  })
+  test("stale sample over a threshold is ineligible", () => {
+    const c = cacheOf(sample(95, 10, { age: 60 * 60_000 }))
+    expect(pick(reg(false), c, "wave", NOW)).toEqual({ picked: "iu", reason: "no-eligible-account" })
+  })
+  test("sample older than 6 h is ineligible", () => {
+    expect(pick(reg(false), cacheOf(sample(10, 10, { age: 7 * H * 1000 })), "wave", NOW).picked).toBe("iu")
+  })
+  test("never-sampled account is ineligible", () => {
+    expect(pick(reg(), cacheOf(undefined, sample(10, 10)), "interactive", NOW)).toEqual({ picked: "b", reason: "spill" })
+    expect(pick(reg(), cacheOf(), "wave", NOW)).toEqual({ picked: "iu", reason: "no-eligible-account" })
+    expect(pick(reg(), cacheOf(), "interactive", NOW)).toEqual({ picked: "a", reason: "interactive-fallback" })
+  })
+  test("refresh-then-pick: a stale account becomes fresh and is picked as home", () => {
+    const stale = cacheOf(sample(10, 10, { age: 11 * 60_000 }), sample(10, 10, { age: 11 * 60_000 }))
+    expect(needsRefresh(reg(), stale, NOW)).toEqual(["a", "b"])
+    expect(pick(reg(), stale, "wave", NOW).reason).toBe("stale-ok")
+    const refreshed = mergeSample(mergeSample(stale, "a", sample(10, 10)), "b", sample(10, 10))
+    expect(pick(reg(), refreshed, "wave", NOW)).toEqual({ picked: "b", reason: "home" })
+  })
+  test("refresh skipped by the 5-min budget falls back to stale-ok", () => {
+    const stale = { ...cacheOf(sample(10, 10, { age: 11 * 60_000 })), refreshed: { a: NOW - 60_000 } }
+    expect(needsRefresh(reg(false), stale, NOW)).toEqual([])
+    expect(pick(reg(false), stale, "wave", NOW)).toEqual({ picked: "a", reason: "stale-ok" })
   })
   test("exhausted mark holds until resets_at", () => {
     const c = markExhausted(cacheOf(sample(10, 10), sample(10, 10)), "b", NOW / 1000 + 600)
     expect(pick(reg(), c, "wave", NOW)).toEqual({ picked: "a", reason: "spill" })
-    expect(pick(reg(), c, "wave", NOW + 601_000).picked).not.toBe("a") // mark expired; samples now stale -> iu
+    expect(pick(reg(), c, "wave", NOW + 601_000)).toEqual({ picked: "b", reason: "stale-ok" }) // mark expired; samples now stale-ok
   })
   test("auth_failed account is skipped", () => {
     const c = { ...cacheOf(sample(10, 10), sample(10, 10)), auth_failed: { b: true } }
