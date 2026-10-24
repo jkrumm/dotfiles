@@ -307,7 +307,7 @@ pick_account() {
   out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null) || rc=$?
   line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
   # exit 4: registry unreadable. The pick still answered iu, but the line says why.
-  (( rc == 4 )) && why="# picked=iu reason=registry-error"
+  (( rc == 4 )) && why="# reason=registry-error"
   case $line in
     spill)
       PICK_SPILL=1; PICK_NOTE="no Claude account has room (${why#\# })" ;;
@@ -554,6 +554,7 @@ for a in agents:
   if [[ $AGENT_KIND == claude ]]; then
     pick_account wave
   fi
+  (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; waves never spill to IU API tokens"
 
   # Everything above can be wrong before anything gets created — RD_DRY_RUN
   # stops here for the same reason `say` stops before the send.
@@ -567,9 +568,6 @@ for a in agents:
     echo "would start agent '$agent' solo in it and prompt it"
     return 0
   fi
-  (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; waves never spill to IU API tokens"
-
-
 
   local created json pane tab
   if [[ -n $ws ]]; then
@@ -691,7 +689,7 @@ for w in workspaces:
     if [[ $AGENT_KIND == claude ]]; then
       pick_account fan
       if (( PICK_SPILL )); then
-        die "paused: no Claude subscription has room ($PICK_NOTE). Not started: $b and every brief after it. fan never spills to IU API tokens"
+        die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"
       fi
     fi
     branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
