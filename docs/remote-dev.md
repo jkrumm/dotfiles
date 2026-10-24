@@ -172,8 +172,7 @@ Four lanes start agent work (`docs/agent-platform.md`): `@implementer`,
 anything it spawns (panes, `rd wave`/`rd work`) inherits keychain access, and the mini's
 auto-login brings the keychain up unlocked at boot.
 
-**`config/zsh/claude-auth.zsh` is an armed fallback**: a `claude()` zsh function
-resolving `op://mini/claude/oauth-token` via `secrets-run` into
+**`config/zsh/claude-auth.zsh` is an armed fallback** (inside the one `claude()` zsh function, which also picks the account — `docs/claude-accounts.md`): it resolves `op://mini/claude/oauth-token` via `secrets-run` into
 `CLAUDE_CODE_OAUTH_TOKEN` — **never `ANTHROPIC_API_KEY`**, which flips billing to
 API credits. It probes the keychain credential first and **uncached** (a cached
 verdict once suppressed the fallback for an hour while `claude` ran with no

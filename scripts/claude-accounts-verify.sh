@@ -116,7 +116,7 @@ done <<<"$ACCOUNTS"
 # ── c. launcher matrix (static) ────────────────────────────────────────────────
 # An interactive zsh loads the whole user config: bound it (perl alarm survives exec), a hang is a FAIL row.
 fn_rc=0
-FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line ca cap cdf cdp claude_iu' 2>/dev/null) || fn_rc=$?
+FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf claude _claude_launch _claude_account_line _claude_enter_account ca cap cdf cdp claude_iu' 2>/dev/null) || fn_rc=$?
 fn_body() { # <name> — body of one zsh function from the dump
   awk -v n="$1" '$0 ~ "^" n " \\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' <<<"$FN"
 }
@@ -132,10 +132,22 @@ else
       row FAIL "launcher/$f" "does not call _claude_launch (the picker path)"
     fi
   done
-  if fn_body _claude_launch | grep -q '_claude_account_line' && fn_body _claude_account_line | grep -q 'claude-account pick --lane interactive'; then
-    row PASS "launcher/picker" "_claude_launch -> _claude_account_line -> claude-account pick --lane interactive"
+  if fn_body _claude_launch | grep -q '_claude_account_line' && fn_body _claude_account_line | grep -q 'claude-account pick --lane'; then
+    row PASS "launcher/picker" "_claude_launch -> _claude_account_line -> claude-account pick --lane (interactive)"
   else
-    row FAIL "launcher/picker" "_claude_launch no longer reaches 'claude-account pick --lane interactive'"
+    row FAIL "launcher/picker" "_claude_launch no longer reaches 'claude-account pick --lane'"
+  fi
+  # bare `claude` (what herdr types into a pane): one function that picks on ${USAGE_LANE:-interactive} unless
+  # CLAUDE_ACCOUNT_PICKED is set, and every chooser sets that marker.
+  if fn_body claude | grep -q '_claude_account_line' && fn_body claude | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body claude | grep -q 'USAGE_LANE'; then
+    row PASS "launcher/claude" "bare claude picks on \${USAGE_LANE:-interactive} unless CLAUDE_ACCOUNT_PICKED is set"
+  else
+    row FAIL "launcher/claude" "the claude function no longer picks (herdr agent start would land on iu) or ignores the marker"
+  fi
+  if fn_body _claude_enter_account | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body _claude_launch | grep -q '_claude_enter_account'; then
+    row PASS "launcher/marker" "c/cs/cf set CLAUDE_ACCOUNT_PICKED (no double pick)"
+  else
+    row FAIL "launcher/marker" "_claude_launch no longer sets CLAUDE_ACCOUNT_PICKED — bare claude would pick a second time"
   fi
   for f in ca cap cdf cdp; do
     if [[ -n "$(fn_body "$f")" ]]; then row FAIL "launcher/$f" "retired IU-billed launcher is back: Herdr development is Max-only"; fi
@@ -161,6 +173,11 @@ if [[ -r "$RD_SCRIPT" ]]; then
       row FAIL "launcher/rd-$lane" "remote-dev.sh no longer calls pick_account $lane"
     fi
   done
+  if grep -q "CLAUDE_ACCOUNT_PICKED=" "$RD_SCRIPT"; then
+    row PASS "launcher/rd-marker" "remote-dev.sh passes CLAUDE_ACCOUNT_PICKED to its panes (herdr --env)"
+  else
+    row FAIL "launcher/rd-marker" "remote-dev.sh no longer passes CLAUDE_ACCOUNT_PICKED — an rd pane would pick twice"
+  fi
 else
   row FAIL "launcher/rd" "$RD_SCRIPT unreadable"
 fi

@@ -1,5 +1,8 @@
 # Claude Code launcher
 #
+# A bare `claude` typed into an interactive shell also picks the account (the `claude()` function in
+# claude-auth.zsh, using the helpers below); c/cs/cf set CLAUDE_ACCOUNT_PICKED so it never picks twice.
+#
 # Usage: c  [--account iu|me] [claude-args...]   — Max subscription; account from `claude-account pick`
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
 #        cf [claude-args...]   — Max subscription, defaults to Fable model
@@ -45,22 +48,61 @@ _claude_theme_auto() {
   done
 }
 
-# Account for an interactive launch (docs/claude-accounts.md): the picker's shell line, or the forced
-# account with `--account iu|me`. Prints a line that is safe to eval; any pick failure answers
-# `unset CLAUDE_CONFIG_DIR` (account iu), an explicit override that fails answers nothing (rc 1).
+# The session id after `--resume|-r <id>` / `--resume=<id>` in the given args, or nothing.
+_claude_resume_id() {
+  while (( $# )); do
+    case $1 in
+      --resume|-r) [[ ${2:-} == [A-Za-z0-9]*-* ]] && { print -r -- $2; return } ;;
+      --resume=*) print -r -- ${1#--resume=}; return ;;
+    esac
+    shift
+  done
+}
+
+# Account for an interactive launch (docs/claude-accounts.md). $1 = forced account id ("" = pick),
+# $2 = pick lane (default interactive), $3 = session id being resumed (pins its account unless $1 is set).
+# Prints two lines: an eval-safe env line (the picker's, or the forced account's) and the account id for
+# CLAUDE_ACCOUNT_PICKED. Any pick failure answers `unset CLAUDE_CONFIG_DIR` (account iu); an explicit
+# override that fails answers nothing (rc 1).
 _claude_account_line() {
-  local line
-  if [[ -n $1 ]]; then
-    line=$(claude-account env "$1") || return 1
+  local forced=$1 lane=${2:-interactive} resume_id=${3:-} out line id rc=0
+  # A resumed session stays on the account it ran on: the other account would re-send the whole
+  # context cold. An explicit forced account wins; an unknown session falls through to the pick.
+  if [[ -z $forced && -n $resume_id ]]; then
+    forced=$(claude-account session "$resume_id" 2>/dev/null) || forced=""
+  fi
+  if [[ -n $forced ]]; then
+    line=$(claude-account env "$forced") || return 1
+    id=$forced
   else
-    line=$(claude-account pick --lane interactive 2>/dev/null)
+    out=$(claude-account pick --lane "$lane" --why 2>/dev/null) || rc=$?
+    line=${out%%$'\n'*}
+    id=${${(M)${(f)out}:#\# picked=*}#\# picked=}; id=${id%% *}
     # exit 4: the registry was unreadable; the pick still answered `unset` (iu), but never silently
-    (( $? == 4 )) && print -u2 "c: claude-account registry unreadable — launching on the default account (iu)"
+    (( rc == 4 )) && print -u2 "claude: claude-account registry unreadable — launching on the default account (iu)"
+    # missing / crashing / silent picker: still non-blocking (iu), but never silent. `spill` is a real answer.
+    case $line in
+      "unset CLAUDE_CONFIG_DIR" | "export CLAUDE_CONFIG_DIR="* | spill) ;;
+      *) print -u2 "claude: account picker failed (rc=$rc) - launching on iu" ;;
+    esac
   fi
   case $line in
-    "unset CLAUDE_CONFIG_DIR" | "export CLAUDE_CONFIG_DIR="*) print -r -- $line ;;
-    *) print -r -- "unset CLAUDE_CONFIG_DIR" ;;
+    "unset CLAUDE_CONFIG_DIR" | "export CLAUDE_CONFIG_DIR="*) ;;
+    *) line="unset CLAUDE_CONFIG_DIR"; id=iu ;;
   esac
+  [[ $id =~ ^[a-z][a-z0-9-]*$ ]] || id=iu
+  print -r -- $line
+  print -r -- $id
+}
+
+# Enter an account chosen by `_claude_account_line` (call inside a subshell: it exports). The marker says
+# "the account for this session is decided" — inherited by children, so neither `claude` nor `c` picks again;
+# `rd` sets the same variable in its panes (remote-dev.sh agent_pane_setup). $1 = env line, $2 = account id.
+_claude_enter_account() {
+  eval "$1"
+  export CLAUDE_ACCOUNT_PICKED=$2
+  # A non-default account must not inherit credentials meant for the default one.
+  [[ $1 == "unset CLAUDE_CONFIG_DIR" ]] || unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 }
 
 # Launch claude on the right account: $1 = model default ("" for none), rest = user args.
@@ -71,22 +113,14 @@ _claude_launch() {
   _claude_theme_auto
 
   local -a args=() plugin_args=()
-  local account="" resume_id="" git_root pdir
+  local account="" git_root pdir
   while (( $# )); do
     case $1 in
       --account) (( $# >= 2 )) || { print -u2 "c: --account needs iu|me"; return 1 }; account=$2; shift 2 ;;
       --account=*) account=${1#--account=}; shift ;;
-      --resume|-r) args+=("$1"); shift; [[ ${1:-} == [A-Za-z0-9]*-* ]] && resume_id=$1 ;;
-      --resume=*) args+=("$1"); resume_id=${1#--resume=}; shift ;;
       *) args+=("$1"); shift ;;
     esac
   done
-
-  # A resumed session stays on the account it ran on: the other account would re-send the whole
-  # context cold. An explicit --account wins; an unknown session falls through to the pick.
-  if [[ -z $account && -n $resume_id ]]; then
-    account=$(claude-account session "$resume_id" 2>/dev/null) || account=""
-  fi
 
   git_root=$(git rev-parse --show-toplevel 2>/dev/null)
   if [[ -n "$git_root" ]]; then
@@ -96,12 +130,11 @@ _claude_launch() {
   fi
   [[ -n $model && " ${args[*]} " != *" --model "* ]] && args=(--model $model "${args[@]}")
 
-  local line
-  line=$(_claude_account_line "$account") || return 1
+  local out line id
+  out=$(_claude_account_line "$account" interactive "$(_claude_resume_id "${args[@]}")") || return 1
+  line=${out%%$'\n'*}; id=${out##*$'\n'}
   (
-    eval "$line"
-    # A non-default account must not inherit credentials meant for the default one.
-    [[ $line == "unset CLAUDE_CONFIG_DIR" ]] || unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
+    _claude_enter_account "$line" "$id"
     ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
   )
 }

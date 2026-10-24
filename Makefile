@@ -777,7 +777,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -1404,6 +1404,8 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 		done; \
 		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir" || exit 1; \
 	done
+	@# A fresh account dir asks "trust this folder?" on first start in $$HOME and that blocks `herdr agent start`.
+	@bash $(DOTFILES_DIR)/scripts/claude-pretrust.sh "$(HOME)" || echo "    ✗ could not pre-trust $(HOME) in every account's .claude.json"
 
 # Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
 .PHONY: claude-accounts-verify claude-accounts-stamp claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
@@ -2302,6 +2304,12 @@ opbackup-seed-test:
 fan-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
+
+# Hermetic suite for the `claude` function's account marker (stubbed claude / claude-account / herdr).
+.PHONY: claude-launcher-test
+claude-launcher-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
 
 .PHONY: brew-service-test
 brew-service-test:

@@ -445,6 +445,7 @@ startup — `source ~/.zshrc` after editing.
 
 | Command | Backend | Model |
 |-|-|-|
+| `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what `herdr agent start` types into a pane; `-p`, subcommands and non-interactive shells never pick |
 | `c` | Max subscription | whatever `/model` last left it on |
 | `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
 | `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
@@ -454,14 +455,19 @@ startup — `source ~/.zshrc` after editing.
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
+`CLAUDE_ACCOUNT_PICKED=<id>` marks "account already chosen" (set by `c`/`cs`/`cf` and `rd`, inherited by children;
+iu is `unset CLAUDE_CONFIG_DIR`, so the marker, not the dir, says it was decided): one pick-log line per spawn.
+`make claude-accounts-setup` pre-trusts `$HOME` in every account's `.claude.json` (`scripts/claude-pretrust.sh`).
+Contract and tests: `docs/claude-accounts.md` §Spawn integration, `make claude-launcher-test`.
+
 `ca`, `cap`, `cdf` and `cdp` were removed 2026-10-24: development never runs on IU API tokens.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart
 hook logs `ANTHROPIC_BASE_URL`.
 
-**`config/zsh/claude-auth.zsh` is an ARMED fallback** (mini only, self-gated on
-the `cache` backend): a `claude()` function resolving `op://mini/claude/oauth-token`
+**`config/zsh/claude-auth.zsh` holds the one `claude()` function** (account pick on every machine, see above) **and
+an ARMED token fallback** (`_claude_auth_run`, mini only, self-gated on the `cache` backend) resolving `op://mini/claude/oauth-token`
 into `CLAUDE_CODE_OAUTH_TOKEN` — **never `ANTHROPIC_API_KEY`**, which flips billing
 to API credits. It probes the keychain credential first and **uncached** (a cached
 verdict once suppressed the fallback for an hour while `claude` ran with no

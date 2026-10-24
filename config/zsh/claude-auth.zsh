@@ -1,5 +1,24 @@
-# Claude Max auth for the headless dev host (WP4).
+# The `claude` shell function: account pick for interactive starts (all machines) and the
+# Claude Max token fallback for the headless dev host (mini only, WP4).
 #
+# ONE FUNCTION, TWO JOBS. `claude()` at the bottom is the only definition on any machine:
+#
+#   1. Account pick. A `claude` typed into an interactive zsh — which is exactly what
+#      `herdr agent start` does into a pane — picks its account with
+#      `claude-account pick --lane ${USAGE_LANE:-interactive}` (docs/claude-accounts.md), unless
+#      CLAUDE_ACCOUNT_PICKED is already set: every chooser that decided an account sets that
+#      variable (`c`/`cs`/`cf`, `rd wave|work|fan`), and it is inherited by children. The marker, not
+#      CLAUDE_CONFIG_DIR, carries the decision because an iu pick is `unset CLAUDE_CONFIG_DIR` — it
+#      looks identical to "nobody chose". Non-interactive shells, `claude -p`, info flags and
+#      subcommands (auth, mcp, …) never pick. `--resume <id>` keeps the session's account.
+#   2. Token fallback (below), via `_claude_auth_run`. Defined as a real fallback only on the dev host;
+#      everywhere else it is a plain `command claude`.
+#
+# The pick helpers (`_claude_account_line`, `_claude_enter_account`) live in claude.zsh, which only
+# interactive shells load; `~/.zshenv` sources THIS file alone for non-interactive ones, so the
+# pick branch is guarded by `-o interactive` and never needs them there.
+#
+# THE TOKEN FALLBACK — the failure it exists to prevent.
 # THE FAILURE THIS EXISTS TO PREVENT. Claude Code's Max credentials live in the
 # macOS **login keychain**, which is unlocked by a human typing a password at
 # login. Two things on this machine cannot reach it:
@@ -40,10 +59,12 @@
 # through `env`, which resolves the binary from PATH and
 # bypasses shell functions entirely. Their off-Max `ANTHROPIC_AUTH_TOKEN` flow
 # is therefore untouched by this file — by construction, not by a guard that
-# could rot. `c` / `cs` / `cf` use a prefix assignment, which in zsh *does*
-# resolve a function, so those pick the token up as intended.
+# could rot (they also never pick: their account is chosen by their own launcher).
+# `c` / `cs` / `cf` call `claude` as a function, so they get the token logic as
+# intended — and the marker they set makes the wrapper skip its own pick.
 #
-# DEV HOST ONLY. Gated on the `cache` secrets backend marker — the same signal
+# DEV HOST ONLY (the token fallback; the pick applies on every machine). Gated on
+# the `cache` secrets backend marker — the same signal
 # `git-headless`, `collie-setup` and `caddy-tailnet` use. On the MacBook the
 # backend is `op`, where `secrets-run` passes through to live biometric `op`:
 # wiring this there would pop a Touch ID prompt on every single `claude` launch.
@@ -95,7 +116,7 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
   # genuinely expensive, cache it then — with a mechanism whose failure mode is
   # "probe again", not "run unauthenticated".
 
-  claude() {
+  _claude_auth_run() {
     # Any non-default account (CLAUDE_CONFIG_DIR set, docs/claude-accounts.md) is
     # NEVER given the IU token: it is a different login, and injecting it ran the
     # session on the wrong account. This branch comes BEFORE the explicit-token
@@ -139,4 +160,37 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
     CLAUDE_CODE_OAUTH_TOKEN="$tok" command claude "$@"
   }
 
+else
+  _claude_auth_run() { command claude "$@"; }
 fi
+
+# True when the args start a session — the only thing worth an account pick. Info flags, print mode
+# (`claude -p` subprocesses) and subcommands never do; the list is the `claude --help` command set
+# (a subcommand added later just gets one harmless pick until it is listed here).
+_claude_starts_session() {
+  local a
+  for a in "$@"; do
+    case $a in
+      -p|--print|-v|--version|-h|--help|--bg|--background) return 1 ;;
+    esac
+  done
+  case ${1-} in
+    agents|attach|auth|auto-mode|doctor|gateway|import|install|logs|mcp|plugin|plugins|purge|respawn|rm|setup-token|stop|kill|ultrareview|update|upgrade) return 1 ;;
+  esac
+  return 0
+}
+
+claude() {
+  if [[ -o interactive && -z ${CLAUDE_ACCOUNT_PICKED-} ]] && (( $+functions[_claude_account_line] )) && _claude_starts_session "$@"; then
+    local out
+    # A failing forced/session lookup is the only rc 1; fall through to the plain run rather than block.
+    if out=$(_claude_account_line "" "${USAGE_LANE:-interactive}" "$(_claude_resume_id "$@")"); then
+      (
+        _claude_enter_account "${out%%$'\n'*}" "${out##*$'\n'}"
+        _claude_auth_run "$@"
+      )
+      return
+    fi
+  fi
+  _claude_auth_run "$@"
+}

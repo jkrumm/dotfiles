@@ -169,10 +169,11 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
 | Spawner | Today | Change |
 |-|-|-|
-| `c` / `cs` / `cf` (`claude.zsh:46-102`) | default dir | `eval "$(claude-account pick --lane interactive)"`; `--account iu\|me` override (strips the flag, runs in a subshell; a failing pick answers `iu`) |
-| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept) instead of typing `export` into the pane. When no account has room `rd` pauses the spawn (no IU spill) |
+| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what `herdr agent start` types into a pane) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` pins; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
+| `c` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account iu\|me` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
+| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept); `CLAUDE_ACCOUNT_PICKED=<id>` rides the same spawn-time `--env` (herdr's `--env` repeats; iu included, so no typed `export` can race the pane's shell); `agent_pane_setup` still types only `USAGE_LANE`. When no account has room `rd` pauses the spawn (no IU spill) |
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
-| `claude-auth.zsh` fallback (mini) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
+| `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 | warden | spawns no `claude` | none; it goes through agent-gateway |
 
@@ -181,6 +182,26 @@ Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks th
 cache stays warm and the work never changes provider. `--account` overrides; an unknown session
 falls through to the normal pick (the hook log is kept for a few days, so the pin holds for that long). agent-gateway pins its own resumed workers the same way.
 A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn and subagents inherit it.
+
+**Account marker (`CLAUDE_ACCOUNT_PICKED=<id>`).** An iu pick is `unset CLAUDE_CONFIG_DIR`, indistinguishable
+from "nobody chose", so the decision travels in this variable instead:
+
+- every chooser sets it: `c`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
+  (herdr `--env` at pane creation, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
+- bare `claude` in an interactive zsh picks only when it is unset, then sets it inside a subshell (the pane's own
+  environment stays unmarked: the next `claude` typed there is a new spawn and picks again).
+- result: exactly one `picks.jsonl` line per spawn (`scripts/claude-launcher.test.sh` counts them for `rd`,
+  `c` and bare `claude`). Never export it from a profile: a stale marker silently disables the pick.
+
+One `claude` function serves both machines (`config/zsh/claude-auth.zsh`): the pick runs everywhere, then
+`_claude_auth_run` applies the mini's token fallback (defined as a plain `command claude` off the dev host).
+`~/.zshenv` sources only that file for non-interactive mini shells, so `ssh mini 'claude …'` keeps the fallback and
+never picks. `ca`/`claude_iu` call the binary through `env`, bypassing the function by design.
+
+**Trust.** A fresh config dir asks "trust this folder?" on the first start in a path and `herdr agent start` then
+reports not-ready. `make claude-accounts-setup` runs `scripts/claude-pretrust.sh "$HOME"` (atomic jq write of
+`.projects[$HOME].hasTrustDialogAccepted` in every registered account that has a `.claude.json`; re-run after the first
+`/login`); `fan-worktree.sh` does the same for each worktree. Other project paths still prompt once per account.
 
 Known gaps:
 
@@ -202,7 +223,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 |-|-|-|
 | `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
-| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
