@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   type Cache, type Registry, type SpawnResult, type Spawner, accountFromConfigDir, emptyCache, markExhausted, mergeSample, needsRefresh, pick, pickLine,
-  recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine,
+  claimRefresh, recordSample, refreshBeforePick, refreshEnv, runRefresh, sampleFromClaudeJson, shellLine, updateCache,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -120,7 +123,7 @@ describe("cache + helpers", () => {
     expect(needsRefresh(reg(false), { ...stale, refreshed: { a: NOW - 60_000 } }, NOW)).toEqual([])
   })
   test("pickLine shape", () => {
-    const l = pickLine(cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "spill", stale: true }, NOW)
+    const l = pickLine(reg(), cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "spill", stale: true }, NOW)
     expect(l).toMatchObject({ lane: "wave", picked: "a", reason: "spill", stale: true, a: { s: 1, w: 2 }, b: { s: null, w: null } })
   })
 })
@@ -134,8 +137,11 @@ describe("review fixes", () => {
   })
   test("partial record keeps the previous non-null fields", () => {
     const c = recordSample(cacheOf(sample(10, 40, { wReset: NOW / 1000 + 9 })), "a", { s: 20 }, NOW)
-    expect(c.samples.a).toMatchObject({ s: 20, w: 40, w_reset: NOW / 1000 + 9, ts: NOW, src: "statusline" })
-    expect(recordSample(emptyCache(), "a", { s: 5 }, NOW).samples.a).toMatchObject({ s: 5, w: null, s_reset: null })
+    expect(c.samples.a).toMatchObject({ s: 20, w: 40, w_reset: NOW / 1000 + 9, src: "statusline" })
+    expect(c.samples.a.ts).toBe(NOW - 60_000) // a retained field keeps the old ts: not presented as fresh
+    expect(recordSample(emptyCache(), "a", { s: 5 }, NOW).samples.a).toMatchObject({ s: 5, w: null, s_reset: null, ts: NOW })
+    const full = recordSample(cacheOf(sample(10, 40)), "a", { s: 1, w: 2, s_reset: 3, w_reset: 4 }, NOW)
+    expect(full.samples.a.ts).toBe(NOW)
   })
   test("shellLine quotes spaces and quotes", () => {
     const r = reg()
@@ -149,83 +155,155 @@ describe("review fixes", () => {
   })
 })
 
+
+describe("recordSample auth", () => {
+  test("clears auth_failed for that account only", () => {
+    const c = recordSample({ ...emptyCache(), auth_failed: { a: true, b: true } }, "a", { s: 1 }, NOW)
+    expect(c.auth_failed).toEqual({ a: false, b: true })
+  })
+})
+
+describe("pickLine", () => {
+  test("accounts come from the registry", () => {
+    const r = reg()
+    r.accounts.c = { ...r.accounts.b }
+    const l = pickLine(r, cacheOf(sample(1, 2)), "wave", { picked: "a", reason: "home", stale: false }, NOW)
+    expect(Object.keys(l).filter((k) => !["ts", "lane", "picked", "reason", "stale"].includes(k))).toEqual(["a", "b", "c"])
+  })
+})
+
+const mem = (init: Cache) => {
+  let c = init
+  return { update: (fn: (c: Cache) => Cache) => { c = fn(c) }, get cache() { return c } }
+}
+const staleA = () => cacheOf(sample(10, 10, { age: 11 * 60_000 }))
+const ok: SpawnResult = { status: 0, stdout: "{}", stderr: "" }
+
+describe("claimRefresh", () => {
+  test("stamps the due ids; a second claim gets nothing (at most one refresh)", () => {
+    const m = mem(staleA())
+    expect(claimRefresh(m.update, reg(false), ["a"], NOW)).toEqual(["a"])
+    expect(m.cache.refreshed.a).toBe(NOW)
+    expect(claimRefresh(m.update, reg(false), ["a"], NOW + 1000)).toEqual([])
+  })
+  test("only claims the ids asked for, and only enabled ones", () => {
+    const m = mem(cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })))
+    expect(claimRefresh(m.update, reg(false), ["a", "b"], NOW)).toEqual(["a"])
+  })
+  test("nothing claimed leaves the cache object untouched", () => {
+    const m = mem(cacheOf(sample(1, 1)))
+    const before = m.cache
+    expect(claimRefresh(m.update, reg(), ["a"], NOW, (c) => mergeSample(c, "b", sample(2, 2)))).toEqual([])
+    expect(m.cache).toBe(before)
+  })
+})
+
+describe("updateCache (locked)", () => {
+  const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
+  const dir = mkdtempSync(join(tmpdir(), "ca-lock-"))
+  const path = join(dir, "usage.json")
+  const run = (code: string) =>
+    Bun.spawn(["bun", "-e", `import * as L from ${JSON.stringify(lib)}; ${code}`], { env: { ...process.env, CLAUDE_ACCOUNTS_CACHE: path }, stdout: "pipe", stderr: "pipe" })
+
+  test("concurrent processes lose no update", async () => {
+    const ps = Array.from({ length: 8 }, (_, i) => run(`L.updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, k${i}: ${i + 1} } }))`))
+    for (const p of ps) expect(await p.exited).toBe(0)
+    const refreshed = JSON.parse(readFileSync(path, "utf8")).refreshed
+    expect(Object.keys(refreshed).sort()).toEqual(Array.from({ length: 8 }, (_, i) => `k${i}`).sort())
+  })
+  test("two concurrent claimers: exactly one wins the refresh", async () => {
+    const code = `const reg = { accounts: { a: { dir: null, plan: "x", units: { session: 1, weekly: 1 }, homeLanes: [], enabled: true } } }; console.log(JSON.stringify(L.claimRefresh(L.updateCache, reg, ["a"], Date.now())))`
+    updateCache((c) => ({ ...c, samples: { a: { ...sample(1, 1), ts: Date.now() - 20 * 60_000 } }, refreshed: {} }), path)
+    const ps = Array.from({ length: 6 }, () => run(code))
+    const outs = await Promise.all(ps.map(async (p) => (await p.exited, (await new Response(p.stdout).text()).trim())))
+    expect(outs.filter((o) => o === '["a"]').length).toBe(1)
+    expect(outs.filter((o) => o === "[]").length).toBe(5)
+  })
+  test("a stale lock from a dead process is broken", () => {
+    const lock = `${path}.lock`
+    mkdirSync(lock)
+    const old = new Date(Date.now() - 120_000)
+    utimesSync(lock, old, old)
+    updateCache((c) => ({ ...c, refreshed: { ...c.refreshed, after: 1 } }), path)
+    expect(JSON.parse(readFileSync(path, "utf8")).refreshed.after).toBe(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+})
+
 describe("runRefresh", () => {
-  const stale = () => cacheOf(sample(10, 10, { age: 11 * 60_000 }))
-  function harness(spawn: Spawner, opts: { cache?: Cache; read?: (id: string) => ReturnType<typeof sample> | null; between?: () => void } = {}) {
-    let stored = opts.cache ?? stale()
+  function harness(spawn: Spawner, o: { cache?: Cache; read?: () => ReturnType<typeof sample> | null; during?: (m: ReturnType<typeof mem>) => void } = {}) {
+    const m = mem(o.cache ?? { ...staleA(), refreshed: { a: NOW } }) // pre-claimed
     const spawned: string[] = []
     runRefresh({
-      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 20, now: () => NOW,
-      spawn: (cmd, args, o) => { spawned.push(o.env.CLAUDE_CONFIG_DIR ?? "unset"); opts.between?.(); return spawn(cmd, args, o) },
-      readSample: (id) => (spawned.length ? (opts.read?.(id) ?? null) : null), load: () => stored, write: (c) => { stored = c },
+      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["a"],
+      spawn: (c, a, e) => { spawned.push(e.env.CLAUDE_CONFIG_DIR ?? "unset"); o.during?.(m); return spawn(c, a, e) },
+      readSample: () => o.read?.() ?? null, update: m.update,
     })
-    return { get cache() { return stored }, spawned }
+    return { m, spawned }
   }
-  const ok: SpawnResult = { status: 0, stdout: "{}", stderr: "" }
-
-  test("success stamps the budget and merges the new sample", () => {
-    const h = harness(() => ok, { read: () => sample(33, 44) })
-    expect(h.spawned).toEqual(["unset"])
-    expect(h.cache.refreshed.a).toBe(NOW)
-    expect(h.cache.samples.a).toMatchObject({ s: 33, w: 44 })
+  test("success merges the new sample and clears the auth verdict", () => {
+    const { m, spawned } = harness(() => ok, { read: () => sample(33, 44), cache: { ...staleA(), refreshed: { a: NOW }, auth_failed: { a: true } } })
+    expect(spawned).toEqual(["unset"])
+    expect(m.cache.samples.a).toMatchObject({ s: 33, w: 44 })
+    expect(m.cache.auth_failed.a).toBe(false)
+    expect(m.cache.refreshed.a).toBe(NOW)
   })
-  test("missing binary: no budget stamp, no auth verdict", () => {
-    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))
-    expect(h.cache.refreshed.a).toBeUndefined()
-    expect(h.cache.auth_failed.a).toBeUndefined()
+  test("missing binary rolls the budget stamp back and sets no auth verdict", () => {
+    const { m } = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))
+    expect(m.cache.refreshed.a).toBeUndefined()
+    expect(m.cache.auth_failed.a).toBeUndefined()
   })
-  test("auth failure marks auth_failed and stamps", () => {
-    const h = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
-    expect(h.cache.auth_failed.a).toBe(true)
-    expect(h.cache.refreshed.a).toBe(NOW)
+  test("auth failure marks auth_failed and keeps the stamp", () => {
+    const { m } = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
+    expect(m.cache.auth_failed.a).toBe(true)
+    expect(m.cache.refreshed.a).toBe(NOW)
   })
-  test("timeout stamps but leaves the auth verdict alone", () => {
-    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }), { cache: { ...stale(), auth_failed: { a: true } } })
-    expect(h.cache.refreshed.a).toBe(NOW)
-    expect(h.cache.auth_failed.a).toBe(true)
+  test("timeout keeps the stamp and the previous auth verdict", () => {
+    const { m } = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }), { cache: { ...staleA(), refreshed: { a: NOW }, auth_failed: { a: true } } })
+    expect(m.cache.refreshed.a).toBe(NOW)
+    expect(m.cache.auth_failed.a).toBe(true)
   })
   test("a statusline record written during the spawn is not lost", () => {
-    let stored: Cache = stale()
-    let spawnedYet = false
-    runRefresh({
-      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 20, now: () => NOW,
-      spawn: () => { spawnedYet = true; stored = recordSample(stored, "a", { s: 77, w: 78, s_reset: 1, w_reset: 2 }, NOW - 1000); return ok },
-      readSample: () => (spawnedYet ? sample(33, 44, { age: 5000 }) : null), load: () => stored, write: (c) => { stored = c },
+    const { m } = harness(() => ok, {
+      read: () => sample(33, 44, { age: 5000 }),
+      during: (mm) => mm.update((c) => recordSample(c, "a", { s: 77, w: 78, s_reset: 1, w_reset: 2 }, NOW - 1000)),
     })
-    expect(stored.samples.a).toMatchObject({ s: 77 }) // newer than the refreshed sample (ts NOW-1000 vs NOW-5000)
-    expect(stored.refreshed.a).toBe(NOW)
+    expect(m.cache.samples.a).toMatchObject({ s: 77 })
   })
 })
 
 describe("refreshBeforePick", () => {
-  function run(cache: Cache, enabledB = false) {
-    const calls = { sync: [] as string[][], detach: [] as string[][], writes: [] as Cache[] }
+  function run(cache: Cache, lane = "wave", enabledB = false) {
+    const m = mem(cache)
+    const calls = { sync: [] as string[][], detach: [] as string[][] }
     const r = refreshBeforePick({
-      reg: reg(enabledB), cache, now: NOW,
-      runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids), write: (c) => calls.writes.push(c),
+      reg: reg(enabledB), lane, now: NOW, cache,
+      claim: (ids) => claimRefresh(m.update, reg(enabledB), ids, NOW),
+      runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids),
     })
-    return { r, calls }
+    return { r, calls, m }
   }
-  test("stale sample: no blocking refresh, detached background refresh, budget stamped first", () => {
-    const { r, calls } = run(cacheOf(sample(10, 10, { age: 11 * 60_000 })))
+  test("stale sample: no blocking refresh, claimed and detached", () => {
+    const { r, calls, m } = run(staleA())
     expect(r).toEqual({ sync: [], background: ["a"] })
-    expect(calls.sync).toEqual([])
-    expect(calls.detach).toEqual([["a"]])
-    expect(calls.writes[0].refreshed.a).toBe(NOW)
+    expect(calls).toEqual({ sync: [], detach: [["a"]] })
+    expect(m.cache.refreshed.a).toBe(NOW)
   })
-  test("stale sample inside the 5-min budget schedules nothing", () => {
-    const { r, calls } = run({ ...cacheOf(sample(10, 10, { age: 11 * 60_000 })), refreshed: { a: NOW - 60_000 } })
-    expect(r).toEqual({ sync: [], background: [] })
-    expect(calls.detach).toEqual([])
+  test("budget already spent schedules nothing", () => {
+    expect(run({ ...staleA(), refreshed: { a: NOW - 60_000 } }).r).toEqual({ sync: [], background: [] })
   })
   test("fresh sample schedules nothing", () => {
     expect(run(cacheOf(sample(10, 10))).r).toEqual({ sync: [], background: [] })
   })
-  test("no sample at all refreshes synchronously, a stale neighbour in the background", () => {
-    const { r, calls } = run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), true)
+  test("no sample on a bulk lane: synchronous; stale neighbour in the background", () => {
+    const { r, calls } = run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "wave", true)
     expect(r).toEqual({ sync: ["a"], background: ["b"] })
-    expect(calls.sync).toEqual([["a"]])
-    expect(calls.detach).toEqual([["b"]])
+    expect(calls).toEqual({ sync: [["a"]], detach: [["b"]] })
+  })
+  test("interactive never blocks, even with no sample at all", () => {
+    const { r, calls } = run(emptyCache(), "interactive")
+    expect(r).toEqual({ sync: [], background: ["a"] })
+    expect(calls.sync).toEqual([])
   })
   test("a sample older than 6 h counts as no sample", () => {
     expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["a"], background: [] })

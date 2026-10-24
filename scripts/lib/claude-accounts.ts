@@ -1,9 +1,11 @@
 // Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from "node:fs"
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
+/** Account whose config dir is the default ~/.claude (CLAUDE_CONFIG_DIR unset). */
+export const DEFAULT_ACCOUNT_ID = "a"
 export const SESSION_MAX = 85
 export const WEEKLY_MAX = 90
 export const FRESH_MS = 10 * 60_000
@@ -42,7 +44,7 @@ export interface Cache {
   auth_failed: Record<string, boolean>
 }
 /** `stale`: the picked account was chosen on a sample older than FRESH_MS (reason keeps the routing rule). */
-export interface Pick {
+export interface PickResult {
   picked: string
   reason: string
   stale: boolean
@@ -71,14 +73,14 @@ export function claudeJsonPath(a: Account): string {
   return d === null ? join(homedir(), ".claude.json") : join(d, ".claude.json")
 }
 
-/** Registry id for a CLAUDE_CONFIG_DIR value; unset or empty -> "a" (the default account). */
+/** Registry id for a CLAUDE_CONFIG_DIR value; unset or empty -> the default account. */
 export function accountFromConfigDir(reg: Registry, configDir: string | undefined): string {
   if (!configDir) return defaultAccountId(reg)
   const want = resolve(expandHome(configDir))
   for (const [id, a] of Object.entries(reg.accounts)) if (accountDir(a) === want) return id
   return defaultAccountId(reg)
 }
-const defaultAccountId = (reg: Registry) => Object.entries(reg.accounts).find(([, a]) => a.dir === null)?.[0] ?? "a"
+export const defaultAccountId = (reg: Registry) => Object.entries(reg.accounts).find(([, a]) => a.dir === null)?.[0] ?? DEFAULT_ACCOUNT_ID
 
 export function loadCache(path = cachePath()): Cache {
   try {
@@ -90,7 +92,7 @@ export function loadCache(path = cachePath()): Cache {
 
 export function writeAtomic(path: string, data: string): void {
   mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.${process.pid}.tmp`
+  const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
   const fd = openSync(tmp, "w")
   try {
     writeSync(fd, data)
@@ -156,12 +158,12 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
 }
 
 /** Rule v1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
-export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick {
+export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
   const r = pickRaw(reg, cache, lane, nowMs)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== "iu" && isStaleOk(cache, r.picked, nowMs) }
 }
 
-function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit<Pick, "stale"> {
+function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
   const ok = ids.filter((id) => eligible(reg, cache, id, nowMs))
   const bulk = lane !== "interactive"
@@ -193,19 +195,19 @@ export interface PickLine {
   picked: string
   reason: string
   stale: boolean
-  a: { s: number | null; w: number | null }
-  b: { s: number | null; w: number | null }
+  [account: string]: unknown
 }
 
-export function pickLine(cache: Cache, lane: string, p: Pick, nowMs: number): PickLine {
-  const v = (id: string) => ({ s: cache.samples[id]?.s ?? null, w: cache.samples[id]?.w ?? null })
-  return { ts: new Date(nowMs).toISOString(), lane, picked: p.picked, reason: p.reason, stale: p.stale, a: v("a"), b: v("b") }
+/** One JSONL line per pick; per-account {s,w} keyed by registry id. */
+export function pickLine(reg: Registry, cache: Cache, lane: string, p: PickResult, nowMs: number): PickLine {
+  const accounts = Object.fromEntries(Object.keys(reg.accounts).map((id) => [id, { s: cache.samples[id]?.s ?? null, w: cache.samples[id]?.w ?? null }]))
+  return { ts: new Date(nowMs).toISOString(), lane, picked: p.picked, reason: p.reason, stale: p.stale, ...accounts }
 }
 
 const shQuote = (v: string) => `'${v.replaceAll("'", `'\\''`)}'`
 
 /** Shell fragment for a pick; null for the IU spill signal. */
-export function shellLine(reg: Registry, p: Pick): string | null {
+export function shellLine(reg: Registry, p: PickResult): string | null {
   if (p.picked === "iu") return null
   const dir = accountDir(reg.accounts[p.picked])
   return dir === null ? "unset CLAUDE_CONFIG_DIR" : `export CLAUDE_CONFIG_DIR=${shQuote(dir)}`
@@ -222,11 +224,16 @@ export function needsRefresh(reg: Registry, cache: Cache, nowMs: number): string
 }
 
 
-/** Statusline feed: omitted fields keep the previous sample's values; ts is always now. */
+/**
+ * Statusline feed: omitted fields keep the previous sample's values. When any value is retained the old ts is
+ * kept too, so a carried-over field is never presented as fresh. A live statusline proves the login works.
+ */
 export function recordSample(cache: Cache, id: string, part: Partial<Pick<Sample, "s" | "w" | "s_reset" | "w_reset">>, nowMs: number): Cache {
   const prev = cache.samples[id]
   const keep = <K extends "s" | "w" | "s_reset" | "w_reset">(k: K): Sample[K] => (part[k] ?? prev?.[k] ?? null) as Sample[K]
-  return mergeSample(cache, id, { s: keep("s"), w: keep("w"), s_reset: keep("s_reset"), w_reset: keep("w_reset"), ts: nowMs, src: "statusline" })
+  const retained = (["s", "w", "s_reset", "w_reset"] as const).some((k) => part[k] == null && prev?.[k] != null)
+  const next: Sample = { s: keep("s"), w: keep("w"), s_reset: keep("s_reset"), w_reset: keep("w_reset"), ts: retained ? prev.ts : nowMs, src: "statusline" }
+  return { ...mergeSample(cache, id, next), auth_failed: { ...cache.auth_failed, [id]: false } }
 }
 
 export interface SpawnResult {
@@ -250,82 +257,138 @@ export function refreshEnv(base: Record<string, string | undefined>, dir: string
   return env
 }
 
+export const REFRESH_TIMEOUT_S = 75
+
+const LOCK_WAIT_MS = 3000
+const LOCK_STALE_MS = 30_000
+const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+
+/**
+ * The only way to change the quota cache: take a mkdir lock (atomic), re-read the file, apply `fn` to the fresh
+ * content, write atomically, release. A lock older than LOCK_STALE_MS belongs to a dead process and is broken.
+ * Throws when the lock cannot be taken within LOCK_WAIT_MS; callers that are best-effort catch it.
+ */
+export function updateCache(fn: (c: Cache) => Cache, path = cachePath()): void {
+  const lock = `${path}.lock`
+  mkdirSync(dirname(path), { recursive: true })
+  const deadline = Date.now() + LOCK_WAIT_MS
+  for (;;) {
+    try {
+      mkdirSync(lock)
+      break
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { recursive: true, force: true })
+      } catch {
+        // released by its owner between our checks
+      }
+      if (Date.now() > deadline) throw new Error(`quota cache lock busy: ${lock}`)
+      sleepMs(15)
+    }
+  }
+  try {
+    const cur = loadCache(path)
+    const next = fn(cur)
+    if (next !== cur) writeAtomic(path, JSON.stringify(next))
+  } finally {
+    rmSync(lock, { recursive: true, force: true })
+  }
+}
+
+export type CacheUpdater = (fn: (c: Cache) => Cache) => void
+
+/**
+ * Atomically claim the per-account refresh: inside the lock, on the fresh cache (plus `seed`, e.g. the account's own
+ * .claude.json sample), keep only ids that are still due and stamp them against the 5-min budget. Two concurrent
+ * callers can never both claim the same account.
+ */
+export function claimRefresh(update: CacheUpdater, reg: Registry, ids: string[], nowMs: number, seed: (c: Cache) => Cache = (c) => c): string[] {
+  let claimed: string[] = []
+  update((c) => {
+    const view = seed(c)
+    claimed = needsRefresh(reg, view, nowMs).filter((id) => ids.includes(id))
+    if (!claimed.length) return c
+    return { ...view, refreshed: { ...view.refreshed, ...Object.fromEntries(claimed.map((id) => [id, nowMs])) } }
+  })
+  return claimed
+}
+
 export interface RefreshDeps {
   reg: Registry
   spawn: Spawner
   claudeBin: string
   baseEnv: Record<string, string | undefined>
   readSample: (id: string) => Sample | null
-  load: () => Cache
-  write: (c: Cache) => void
+  update: CacheUpdater
   now: () => number
   timeoutS: number
-  /** Refresh exactly these accounts, bypassing the due check (the pick path already stamped the budget). */
-  ids?: string[]
+  /** Accounts to refresh. They are already claimed (budget stamped) by the caller. */
+  ids: string[]
   log?: (msg: string) => void
 }
 
 /**
- * `claude -p /usage` for every due account. The cache is re-read right before the final write and only the
- * refreshed / auth_failed / refreshed-sample entries are merged in, so a concurrent statusline record survives.
+ * `claude -p /usage` for already-claimed accounts, then one locked update: only the refreshed sample, auth verdict
+ * and (when the binary could not start) the budget rollback are applied, so concurrent statusline records survive.
  */
 export function runRefresh(d: RefreshDeps): void {
-  const start = d.load()
-  const seeded = Object.keys(d.reg.accounts).reduce((c, id) => {
-    const s = d.reg.accounts[id].enabled ? d.readSample(id) : null
-    return s ? mergeSample(c, id, s) : c
-  }, start)
-  const results: { id: string; stamp: boolean; sample: Sample | null; authFailed: boolean | null }[] = []
-  for (const id of d.ids ?? needsRefresh(d.reg, seeded, d.now())) {
+  const results: { id: string; started: boolean; sample: Sample | null; authFailed: boolean | null }[] = []
+  for (const id of d.ids) {
     const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], {
       env: refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])),
       timeoutMs: d.timeoutS * 1000,
     })
     if (r.error?.code === "ENOENT") {
       d.log?.(`refresh ${id}: cannot start claude (${r.error.message})`)
-      continue // not an attempt: no budget stamp, no auth verdict
+      results.push({ id, started: false, sample: null, authFailed: null })
+      continue
     }
     const sample = r.status === 0 && !r.error ? d.readSample(id) : null
     const authFailed = sample ? false : /login|auth|credential/i.test(`${r.stdout}${r.stderr}`) ? true : null // null: unknown, keep the old verdict
     if (!sample) d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
-    results.push({ id, stamp: true, sample, authFailed })
+    results.push({ id, started: true, sample, authFailed })
   }
-  let out = d.load()
-  for (const [id, s] of Object.entries(seeded.samples)) out = mergeSample(out, id, s)
-  for (const r of results) {
-    out = { ...out, refreshed: { ...out.refreshed, [r.id]: d.now() } }
-    if (r.authFailed !== null) out = { ...out, auth_failed: { ...out.auth_failed, [r.id]: r.authFailed } }
-    if (r.sample) out = mergeSample(out, r.id, r.sample)
-  }
-  d.write(out)
+  d.update((c) => {
+    let out = c
+    for (const r of results) {
+      if (!r.started) {
+        const { [r.id]: _undone, ...refreshed } = out.refreshed // not an attempt: give the budget back
+        out = { ...out, refreshed }
+        continue
+      }
+      if (r.authFailed !== null) out = { ...out, auth_failed: { ...out.auth_failed, [r.id]: r.authFailed } }
+      if (r.sample) out = mergeSample(out, r.id, r.sample)
+    }
+    return out
+  })
 }
-
-export const REFRESH_TIMEOUT_S = 75
 
 export interface BeforePick {
   reg: Registry
-  cache: Cache
+  lane: string
   now: number
-  /** Blocking refresh of these accounts (no sample at all). */
+  /** Claims the due ids atomically (budget stamped); returns the ones this caller won. */
+  claim: (ids: string[]) => string[]
+  /** Blocking refresh of already-claimed ids (account has no sample at all). */
   runSync: (ids: string[]) => void
-  /** Detached, fire-and-forget refresh of these accounts (a usable stale sample exists). */
+  /** Detached, fire-and-forget refresh of already-claimed ids. */
   detach: (ids: string[]) => void
-  write: (c: Cache) => void
+  cache: Cache
 }
 
 /**
- * Refresh policy of `pick`: never block while a usable sample exists. Accounts with no sample at all are
- * refreshed synchronously; stale-but-usable ones are stamped against the 5-min budget (so concurrent picks
- * don't pile up spawns) and refreshed in the background. Returns the ids handled each way.
+ * Refresh policy of `pick`: never block while a usable sample exists, and never block the interactive lane.
+ * Only a non-interactive pick on an account with no sample (or one past STALE_OK_MS) refreshes synchronously;
+ * every other due account is refreshed in the background. Ids are claimed atomically first.
  */
 export function refreshBeforePick(b: BeforePick): { sync: string[]; background: string[] } {
   const due = needsRefresh(b.reg, b.cache, b.now)
-  const sync = due.filter((id) => !b.cache.samples[id] || b.now - b.cache.samples[id].ts >= STALE_OK_MS)
-  const background = due.filter((id) => !sync.includes(id))
-  if (background.length) {
-    b.write({ ...b.cache, refreshed: { ...b.cache.refreshed, ...Object.fromEntries(background.map((id) => [id, b.now])) } })
-    b.detach(background)
-  }
+  const claimed = due.length ? b.claim(due) : []
+  const noSample = (id: string) => !b.cache.samples[id] || b.now - b.cache.samples[id].ts >= STALE_OK_MS
+  const sync = b.lane === "interactive" ? [] : claimed.filter(noSample)
+  const background = claimed.filter((id) => !sync.includes(id))
+  if (background.length) b.detach(background)
   if (sync.length) b.runSync(sync)
   return { sync, background }
 }

@@ -43,22 +43,9 @@ IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
 )
 
 # ── Claude account (docs/claude-accounts.md) ───────────────────────────────────
-# Registry id for this session (CLAUDE_CONFIG_DIR unset -> the default-dir account) and
-# how many accounts are enabled; the badge only shows with more than one.
-_self="${BASH_SOURCE[0]}"
-[ -L "$_self" ] && _self=$(readlink "$_self")
-_ACCOUNTS_REG="$(cd "$(dirname "$_self")" && pwd)/../config/claude-accounts.json"
-account_id="a"
-account_badge=""
-if [ -f "$_ACCOUNTS_REG" ]; then
-  IFS=' ' read -r account_id _accounts_enabled < <(jq -r --arg d "${CLAUDE_CONFIG_DIR:-}" --arg h "$HOME" '
-    .accounts | to_entries as $e
-    | ((($e | map(select(.value.dir != null and ($h + (.value.dir | ltrimstr("~"))) == $d)) | .[0].key)
-        // ($e | map(select(.value.dir == null)) | .[0].key) // "a") + " " + ($e | map(select(.value.enabled)) | length | tostring))
-  ' "$_ACCOUNTS_REG" 2>/dev/null)
-  : "${account_id:=a}"
-  [ "${_accounts_enabled:-1}" -gt 1 ] && account_badge=$(printf '%s' "$account_id" | tr '[:lower:]' '[:upper:]')
-fi
+# One resolver: `claude-account account`. The badge is empty unless more than one account is enabled.
+_CA_PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+account_badge=$(PATH="$_CA_PATH" claude-account account --badge 2>/dev/null)
 
 # ── Model ──────────────────────────────────────────────────────────────────────
 # Effort comes from stdin: it is per-model since 2.1.251, so settings.json's
@@ -207,11 +194,12 @@ if [ -n "$rl_5h" ]; then
         http://localhost:7705/api/usage >/dev/null 2>&1 ) &
     disown 2>/dev/null
     # Same throttle feeds the per-account quota cache (claude-account record, atomic).
+    account_id=$(PATH="$_CA_PATH" claude-account account 2>/dev/null)
     _rec=(claude-account record --account "$account_id" --s "$rl_5h")
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
     [ -n "$rl_wk" ] && _rec+=(--w "$rl_wk")
     [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && _rec+=(--w-reset "$rl_wk_reset")
-    ( PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
+    [ -n "$account_id" ] && ( PATH="$_CA_PATH" "${_rec[@]}" >/dev/null 2>&1 ) &
     disown 2>/dev/null
   fi
 fi
