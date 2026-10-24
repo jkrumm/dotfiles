@@ -224,6 +224,15 @@ describe("claimRefresh (O_EXCL claim file)", () => {
     expect(claimRefresh(reg(), ["iu"], NOW, cacheOf(sample(1, 1)), dir)).toEqual([])
     rmSync(dir, { recursive: true })
   })
+  test("all: claims every enabled account whatever its sample age, the 5-min budget still holds", () => {
+    const dir = tmp()
+    const fresh = cacheOf(sample(1, 1), sample(1, 1))
+    expect(claimRefresh(reg(), ["iu", "me"], NOW, fresh, dir)).toEqual([]) // not due
+    expect(claimRefresh(reg(), ["iu", "me"], NOW, fresh, dir, false, true)).toEqual(["iu", "me"])
+    expect(claimRefresh(reg(), ["iu", "me"], NOW + 1000, fresh, dir, false, true)).toEqual([]) // claimed a second ago
+    expect(claimRefresh(reg(false), ["iu", "me"], NOW + 6 * 60_000, fresh, dir, false, true)).toEqual(["iu"]) // disabled stays out
+    rmSync(dir, { recursive: true })
+  })
   test("two concurrent claimers: exactly one wins", async () => {
     const dir = tmp()
     const lib = join(import.meta.dir, "lib", "claude-accounts.ts")
@@ -253,7 +262,7 @@ describe("runRefresh", () => {
     return { cache, spawned, claimHeld: claimed }
   }
   test("success saves the sample, keeps the claim as the budget", () => {
-    const h = harness(() => ok, () => sample(33, 44))
+    const h = harness(() => ok, () => sample(33, 44, { age: 0 }))
     expect(h.spawned).toEqual(["unset"])
     expect(h.cache.samples.iu).toMatchObject({ s: 33, w: 44 })
     expect(h.claimHeld).toBe(true)
@@ -267,6 +276,15 @@ describe("runRefresh", () => {
     const h = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
     expect(h.cache.auth_failed.iu).toBe(true)
     expect(h.claimHeld).toBe(true)
+  })
+  test("exit 0 without a new sample and `auth status` says loggedIn=false: marks auth_failed, keeps the old sample", () => {
+    const h = harness((_c, a) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":false}', stderr: "" } : ok), () => sample(33, 44))
+    expect(h.cache.auth_failed.iu).toBe(true)
+    expect(h.cache.samples.iu).toMatchObject({ s: 33 })
+  })
+  test("exit 0 without a new sample but still logged in: no auth verdict", () => {
+    const h = harness((_c, a) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":true}', stderr: "" } : ok), () => sample(33, 44))
+    expect(h.cache.auth_failed.iu).toBeUndefined()
   })
   test("timeout keeps the claim and records no auth verdict", () => {
     const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }))
@@ -346,6 +364,17 @@ describe("CLI (isolated HOME)", () => {
     expect(cli(["pick", "--lane", "wave"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
     expect(cli(["pick", "--lane", "interactive"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
   })
+  test("pick --dry answers like pick but writes no picks line and refreshes nothing", () => {
+    seed(20 * 60_000) // stale: a real pick would spawn a background refresh
+    const picks = join(home, "picks.jsonl")
+    rmSync(picks, { force: true })
+    expect(cli(["pick", "--lane", "wave", "--dry", "--why"])).toMatchObject({ rc: 0 })
+    expect(existsSync(picks)).toBe(false)
+    expect(existsSync(marker)).toBe(false)
+    seed(60_000) // fresh: the real pick must not leave a detached refresh behind for the next test
+    expect(cli(["pick", "--lane", "wave"]).rc).toBe(0)
+    expect(existsSync(picks)).toBe(true)
+  })
   test("pick with an unreadable registry still answers, and says why on stderr", () => {
     const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
     expect(r).toMatchObject({ rc: 4, out: "unset CLAUDE_CONFIG_DIR" })
@@ -390,6 +419,7 @@ describe("CLI (isolated HOME)", () => {
     expect(cli(["exhausted", "--account", "iu", "--until", "1800000999"]).rc).toBe(0)
     const c = loadCache(dir)
     expect(c.samples.iu).toMatchObject({ s: 33, w: 5 })
+    expect(JSON.parse(readFileSync(join(dir, "iu.statusline.json"), "utf8")).ts).toBeGreaterThan(0)
     expect(c.exhausted.iu).toBe(1800000999)
   })
   test("refresh --ids retries an auth-failed account inside the cooldown; a plain refresh does not", () => {
