@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path"
 export const SESSION_MAX = 85
 export const WEEKLY_MAX = 90
 export const FRESH_MS = 10 * 60_000
+export const STALE_OK_MS = 6 * 3600_000
 export const REFRESH_MIN_MS = 5 * 60_000
 export const EXPIRING_S = 24 * 3600
 export const EXPIRING_WEEKLY_MAX = 70
@@ -130,11 +131,18 @@ export function sampleFromClaudeJson(json: unknown, src = "usage"): Sample | nul
 
 export const isHome = (a: Account, lane: string) => a.homeLanes.some((h) => h === lane || (h.endsWith(":*") && lane.startsWith(h.slice(0, -1))))
 
+/** Last known sample still usable after a skipped or failed refresh: older than FRESH_MS, younger than STALE_OK_MS. */
+export const isStaleOk = (cache: Cache, id: string, nowMs: number) => {
+  const x = cache.samples[id]
+  return !!x && nowMs - x.ts >= FRESH_MS && nowMs - x.ts < STALE_OK_MS
+}
+
+/** Enabled, logged in, not exhausted, has a sample (fresh or stale-ok) below both thresholds. */
 export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
   const a = reg.accounts[id]
   if (!a?.enabled || cache.auth_failed[id]) return false
   const x = cache.samples[id]
-  if (!x || nowMs - x.ts >= FRESH_MS) return false
+  if (!x || nowMs - x.ts >= STALE_OK_MS) return false
   if (x.s !== null && x.s >= SESSION_MAX) return false
   if (x.w !== null && x.w >= WEEKLY_MAX) return false
   const until = cache.exhausted[id]
@@ -144,6 +152,11 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
 
 /** Rule v1 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick {
+  const r = pickRaw(reg, cache, lane, nowMs)
+  return r.picked !== "iu" && r.reason !== "interactive-fallback" && isStaleOk(cache, r.picked, nowMs) ? { picked: r.picked, reason: "stale-ok" } : r
+}
+
+function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Pick {
   const ids = Object.keys(reg.accounts)
   const ok = ids.filter((id) => eligible(reg, cache, id, nowMs))
   const bulk = lane !== "interactive"

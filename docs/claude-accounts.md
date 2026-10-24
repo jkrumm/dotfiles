@@ -114,7 +114,9 @@ compatibility, plus `usage_accounts.json` (all accounts).
 **Rule v1:**
 
 ```
-eligible(x) = enabled ∧ auth_ok ∧ session% < 85 ∧ weekly% < 90 ∧ cache age < 10 min
+eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
+              (sample > 10 min old: `pick` first runs the budgeted `claude -p /usage` refresh, 20 s,
+               and re-reads; if skipped or failed the last sample is used, reason "stale-ok")
 home(lane)  = a  for interactive, agent-gateway:review, headless
               b  for wave, fan, agent-gateway:* (other tools)
 pick(lane):

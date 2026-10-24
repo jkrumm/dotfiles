@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane>      stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
+//   claude-account pick --lane <lane>      (refreshes stale accounts first, 20s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
 //   claude-account usage [--json]          both accounts, from the quota cache
 //   claude-account refresh                 `claude -p /usage` for enabled accounts whose cache is stale
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
@@ -61,14 +61,14 @@ function readClaudeJson(reg: Registry, cache: Cache): Cache {
 
 const claudeBin = () => Bun.which("claude") ?? join(homedir(), ".local", "bin", "claude")
 
-function refresh(reg: Registry): void {
+function refresh(reg: Registry, timeoutS = 60): void {
   let cache = readClaudeJson(reg, loadCache())
   for (const id of needsRefresh(reg, cache, Date.now())) {
     const env: Record<string, string> = { ...(process.env as Record<string, string>), ANTHROPIC_BASE_URL: "" }
     const dir = accountDir(reg.accounts[id])
     if (dir === null) delete env.CLAUDE_CONFIG_DIR
     else env.CLAUDE_CONFIG_DIR = dir
-    const r = spawnSync("timeout", ["60", claudeBin(), "-p", "/usage", "--output-format", "json"], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+    const r = spawnSync("timeout", [String(timeoutS), claudeBin(), "-p", "/usage", "--output-format", "json"], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
     cache = { ...cache, refreshed: { ...cache.refreshed, [id]: Date.now() } }
     const s = readSample(reg, id)
     if (r.status === 0 && s) {
@@ -110,6 +110,8 @@ function main(argv: string[]): number {
       const lane = flag(rest, "--lane")
       if (!lane) throw new Error("usage: claude-account pick --lane <lane>")
       const now = Date.now()
+      // A stale account is refreshed first (budgeted: >10 min old, last try >5 min ago), then re-read.
+      if (needsRefresh(reg, readClaudeJson(reg, loadCache()), now).length) refresh(reg, 20)
       const cache = readClaudeJson(reg, loadCache())
       const p = pick(reg, cache, lane, now)
       try {
