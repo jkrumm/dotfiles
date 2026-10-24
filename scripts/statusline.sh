@@ -220,14 +220,15 @@ if [ -n "$rl_5h" ]; then
     mkdir -p /tmp/claude_sl && echo "$_now_s" > "$_push_stamp"
     _mins=null
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _mins=$(( (rl_5h_reset - _now_s) / 60 ))
-    # Account: the badge's resolution (claude-account account); unset CLAUDE_CONFIG_DIR is iu, an unregistered dir ("?") sends none.
-    _acct_json=
+    # Account: the badge's resolution (claude-account account). Unknown (not resolved yet, "?" for an unregistered
+    # dir, anything off-pattern) means no POST: never guess iu.
     _acct="${account_id:-}"
-    [ -z "$_acct" ] && [ -z "${CLAUDE_CONFIG_DIR:-}" ] && _acct=iu
-    [ -n "$_acct" ] && [ "$_acct" != "?" ] && _acct_json=",\"account\":\"${_acct}\""
-    ( curl -s -m 1 -X POST -H 'Content-Type: application/json' \
-        -d "{\"five_hour_pct\":${rl_5h},\"five_hour_mins_left\":${_mins},\"seven_day_pct\":${rl_wk:-null}${_acct_json}}" \
-        http://localhost:7705/api/usage >/dev/null 2>&1 ) &
+    if [[ "$_acct" =~ ^[a-z][a-z0-9-]{0,15}$ ]]; then
+      ( _body=$(jq -nc --arg f "$rl_5h" --arg m "$_mins" --arg w "${rl_wk:-}" --arg a "$_acct" \
+          '{five_hour_pct: ($f | tonumber), five_hour_mins_left: (if $m == "null" then null else ($m | tonumber) end),
+            seven_day_pct: (if $w == "" then null else ($w | tonumber) end), account: $a}' 2>/dev/null) \
+        && curl -s -m 1 -X POST -H 'Content-Type: application/json' -d "$_body" http://localhost:7705/api/usage >/dev/null 2>&1 ) &
+    fi
     disown 2>/dev/null
     # Same throttle: resolve the account and feed its quota sample (claude-account record, atomic).
     _rec=(--s "$rl_5h")
