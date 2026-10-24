@@ -3,7 +3,7 @@
 //
 //   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh [--ids a,b] [--all]   `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
+//   claude-account refresh [--ids a,b] [--all]   `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
@@ -18,7 +18,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -75,12 +75,12 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
  * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
  * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
-function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}, timeoutS = REFRESH_TIMEOUT_S): void {
+function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}, timeoutS = REFRESH_TIMEOUT_S): Record<string, RefreshResult> {
   const enabled = (id: string) => Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
     : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids || !!o.all, !!o.all) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
-  runRefresh({
+  return runRefresh({
     reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
     readSample: (id) => readSample(reg, id), now: Date.now, log: (m) => console.error(m),
   })
@@ -158,7 +158,14 @@ function main(argv: string[]): number {
       usage(reg, rest.includes("--json"))
       return 0
     case "refresh": {
-      refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(","), all: rest.includes("--all") })
+      const all = rest.includes("--all")
+      const results = refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(","), all })
+      // The keepalive's verdict: an account that got neither a fresh sample nor an auth verdict was not kept alive.
+      const unresolved = Object.entries(results).filter(([, r]) => r === "unresolved").map(([id]) => id)
+      if (all && unresolved.length) {
+        console.error(`claude-account: refresh --all: no fresh sample and no auth verdict for ${unresolved.join(", ")}`)
+        return 1
+      }
       return 0
     }
     case "record": {

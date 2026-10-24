@@ -293,6 +293,45 @@ describe("runRefresh", () => {
   })
 })
 
+describe("runRefresh classification", () => {
+  const classify = (spawn: Spawner, read: () => Sample | null = () => null) => {
+    const dir = tmp()
+    const r = runRefresh({ reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["iu"], dir, spawn, readSample: read })
+    rmSync(dir, { recursive: true })
+    return r.iu
+  }
+  const authStatus = (loggedIn: boolean): Spawner => (_c, a) => (a[0] === "auth" ? { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: "" } : ok)
+  test("a sample fetched during the run is fresh", () => {
+    expect(classify(() => ok, () => sample(1, 1, { age: 0 }))).toBe("fresh")
+  })
+  test("a login/auth/credential message is auth-failed", () => {
+    expect(classify(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))).toBe("auth-failed")
+  })
+  test("exit 0, only an old sample, `auth status` loggedIn=false is auth-failed", () => {
+    expect(classify(authStatus(false), () => sample(1, 1))).toBe("auth-failed")
+  })
+  test("exit 0, only an old sample, still logged in is unresolved", () => {
+    expect(classify(authStatus(true), () => sample(1, 1))).toBe("unresolved")
+  })
+  test("exit 0 with no sample and an unparsable `auth status` is unresolved", () => {
+    expect(classify(() => ok)).toBe("unresolved")
+  })
+  test("timeout and missing binary are unresolved", () => {
+    expect(classify(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }))).toBe("unresolved")
+    expect(classify(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))).toBe("unresolved")
+  })
+  test("each account is classified on its own", () => {
+    const dir = tmp()
+    const r = runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["iu", "me"], dir,
+      spawn: (_c, a, e) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":true}', stderr: "" } : e.env.CLAUDE_CONFIG_DIR ? { status: 1, stdout: "", stderr: "please /login" } : ok),
+      readSample: (id) => (id === "iu" ? sample(1, 1, { age: 0 }) : null),
+    })
+    rmSync(dir, { recursive: true })
+    expect(r).toEqual({ iu: "fresh", me: "auth-failed" })
+  })
+})
+
 describe("refreshBeforePick", () => {
   function run(cache: Cache, lane = "wave", enabledB = false) {
     const dir = tmp()
@@ -429,6 +468,12 @@ describe("CLI (isolated HOME)", () => {
     expect(existsSync(marker)).toBe(false)
     expect(cli(["refresh", "--ids", "iu"]).rc).toBe(0)
     expect(existsSync(marker)).toBe(true)
+  })
+  test("refresh --all exits 1 when the account got neither a fresh sample nor a verdict", () => {
+    seed(60_000)
+    const r = cli(["refresh", "--all"]) // the fake claude exits 0 and fetches nothing
+    expect(r.rc).toBe(1)
+    expect(r.err).toContain("no fresh sample and no auth verdict for iu")
   })
   test("--account / env reject prototype keys", () => {
     for (const id of ["constructor", "__proto__", "toString"]) {
