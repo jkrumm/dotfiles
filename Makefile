@@ -1406,9 +1406,13 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	done
 
 # Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
-.PHONY: claude-accounts-verify claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
+.PHONY: claude-accounts-verify claude-accounts-stamp claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
 claude-accounts-verify: ## Prove launchers, pickers, keychain, quota and attribution contracts for every Claude account (read-only)
 	@bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.sh
+claude-accounts-stamp: ## Run verify; on no FAIL record the running Claude Code version as verified (clears the heartbeat's unverified-version WARN)
+	@bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.sh || { echo "  ✗ verify has FAIL rows — version not stamped"; exit 1; }
+	@d="$${CLAUDE_ACCOUNTS_STATE_DIR:-$(HOME)/.local/state/claude-accounts}"; mkdir -p "$$d" && \
+	v=$$($(HOME)/.local/bin/claude --version | awk '{print $$1}') && [ -n "$$v" ] && printf '%s\n' "$$v" > "$$d/verified-version" && echo "  ✓ stamped Claude Code $$v"
 claude-accounts-e2e: ## Real claude -p per account + usage-tracker ingest + break tests (spends a few Haiku tokens; ARGS=--subagent adds a subagent run)
 	@bash $(DOTFILES_DIR)/scripts/claude-accounts-e2e.sh $(ARGS)
 
@@ -3546,6 +3550,7 @@ help:
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
 	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
+	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"

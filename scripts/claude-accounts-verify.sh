@@ -2,8 +2,8 @@
 # claude-accounts-verify — read-only proof that every launcher and spawner lands on the intended Claude
 # account with correct attribution (docs/claude-accounts.md §Operate). One line per check:
 #   PASS|WARN|FAIL  <check>  <detail>
-# Exit 1 on any FAIL, WARN allowed. Spends no tokens and writes nothing but the verified-version stamp
-# (only when the whole run has no FAIL). `make claude-accounts-verify`, also run by `make doctor`.
+# Exit 1 on any FAIL, WARN allowed. Spends no tokens and writes nothing: recording the verified Claude Code
+# version is `make claude-accounts-stamp`. `make claude-accounts-verify`, also run by `make doctor`.
 #
 # BASH 3.2 (no associative arrays, no mapfile): doctor.sh and the heartbeat run it under Apple's bash.
 set -u -o pipefail
@@ -114,12 +114,16 @@ while IFS=$'\t' read -r id dir; do
 done <<<"$ACCOUNTS"
 
 # ── c. launcher matrix (static) ────────────────────────────────────────────────
-FN=$(zsh -ic 'functions c cs cf _claude_launch _claude_account_line ca cap claude_iu' 2>/dev/null) || FN=""
+# An interactive zsh loads the whole user config: bound it (perl alarm survives exec), a hang is a FAIL row.
+fn_rc=0
+FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf _claude_launch _claude_account_line ca cap claude_iu' 2>/dev/null) || fn_rc=$?
 fn_body() { # <name> — body of one zsh function from the dump
   awk -v n="$1" '$0 ~ "^" n " \\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' <<<"$FN"
 }
-if [[ -z "$FN" ]]; then
-  row FAIL "launchers" "zsh -ic 'functions …' printed nothing (config/zsh not loaded?)"
+if (( fn_rc == 142 )); then
+  row FAIL "launchers" "zsh -ic 'functions …' timed out after 10 s (a hanging shell startup)"
+elif [[ -z "$FN" ]]; then
+  row FAIL "launchers" "zsh -ic 'functions …' printed nothing (rc $fn_rc; config/zsh not loaded?)"
 else
   for f in c cs cf; do
     if fn_body "$f" | grep -q '_claude_launch'; then
@@ -237,17 +241,17 @@ else
   done <<<"$IDS"
 fi
 
-# ── f. Claude Code version ─────────────────────────────────────────────────────
+# ── f. Claude Code version (read-only: `make claude-accounts-stamp` records it) ─
 ver=$("$CLAUDE_BIN" --version 2>/dev/null | awk '{print $1}') || ver=""
-stamp="$STATE_DIR/verified-version"
-prev=$(cat "$stamp" 2>/dev/null || true)
+prev=$(cat "$STATE_DIR/verified-version" 2>/dev/null || true)
 if [[ -z "$ver" ]]; then
   row FAIL "version" "claude --version printed nothing"
+elif [[ "$prev" == "$ver" ]]; then
+  row PASS "version" "$ver is the stamped version"
 elif (( fails > 0 )); then
-  row WARN "version" "$ver not recorded: this run has FAIL rows (last verified: ${prev:-never})"
+  row WARN "version" "$ver is not stamped (last stamped: ${prev:-never}); fix the FAIL rows, then make claude-accounts-stamp"
 else
-  mkdir -p "$STATE_DIR" && printf '%s\n' "$ver" > "$stamp"
-  if [[ "$prev" == "$ver" ]]; then row PASS "version" "$ver (already verified)"; else row PASS "version" "$ver verified (was ${prev:-never})"; fi
+  row WARN "version" "$ver is not stamped (last stamped: ${prev:-never}); run make claude-accounts-stamp"
 fi
 
 echo "---"
