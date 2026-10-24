@@ -66,7 +66,8 @@ if [[ -n "${HERDR_ENV:-}" ]]; then
       ssh mini 'tail -f ~/Library/Logs/herdr-upgrade.log'
 
     Or from a daemon that outlives both the link and the restart:
-      claude --bg 'run make herdr-upgrade YES=1 in dotfiles and report'
+      env -u CLAUDE_CONFIG_DIR claude --bg 'run make herdr-upgrade YES=1 in dotfiles and report'
+    (the default account only: a background daemon is bound to one identity)
 BRIEF
   exit 1
 fi
