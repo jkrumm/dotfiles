@@ -454,9 +454,14 @@ export interface RefreshDeps {
 /**
  * `claude -p /usage` for already-claimed accounts. Each result touches only that account's own files. A binary that
  * could not start gives the claim back (it was not an attempt); a timeout keeps it and leaves the auth verdict alone.
+ * Returns each account's outcome: `fresh` (sample fetched this run), `auth-failed` (verdict recorded) or `unresolved`.
  */
-export function runRefresh(d: RefreshDeps): void {
+export type RefreshResult = "fresh" | "auth-failed" | "unresolved"
+
+export function runRefresh(d: RefreshDeps): Record<string, RefreshResult> {
+  const results: Record<string, RefreshResult> = {}
   for (const id of d.ids) {
+    results[id] = "unresolved" // neither a fresh sample nor an auth verdict, until proven otherwise
     const env = refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id]))
     const startedAt = d.now()
     const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], { env, timeoutMs: d.timeoutS * 1000 })
@@ -471,13 +476,18 @@ export function runRefresh(d: RefreshDeps): void {
     if (sample && Math.max(sample.s_ts ?? 0, sample.w_ts ?? 0) >= startedAt) {
       saveSample(id, sample, d.dir)
       setAuthFailed(id, false, d.now(), d.dir)
+      results[id] = "fresh"
       continue
     }
     if (sample) saveSample(id, sample, d.dir)
     d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
     if (r.error?.code === "ETIMEDOUT" || r.error?.message?.includes("timed out")) continue // a timeout says nothing about the login
-    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`) || loggedOut(d, id, env)) setAuthFailed(id, true, d.now(), d.dir)
+    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`) || loggedOut(d, id, env)) {
+      setAuthFailed(id, true, d.now(), d.dir)
+      results[id] = "auth-failed"
+    }
   }
+  return results
 }
 
 /** `claude auth status` (0 tokens): true only when the binary says loggedIn is false. */
