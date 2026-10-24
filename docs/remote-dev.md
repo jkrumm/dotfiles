@@ -183,7 +183,16 @@ which leaks into `ps auxww`), and self-gates on the `cache` backend marker. Only
 the keychain-dead-*and*-token-dead state fails the heartbeat. **Restore the
 keychain credential with `/login` in a herdr pane on the mini** rather than
 minting a token: it is a one-year credential with no refresh and no reliable
-revocation.
+revocation. The token applies to the **default account only**
+(`CLAUDE_CONFIG_DIR` unset = `iu`); a non-default account dir never gets it, a dead
+login there just prints a `/login` hint.
+
+**Accounts on spawn** (`docs/claude-accounts.md`): `rd wave` and `rd fan` run
+`claude-account pick --lane wave|fan` on the host before creating the tab and pass the
+result as herdr `--env CLAUDE_CONFIG_DIR=…` at tab/workspace creation; the output line
+carries the pick reason. No Claude account with room switches that spawn to
+`--kind opencode`. `rd agents` / `rd read` merge `claude agents --json` across every
+enabled account.
 
 ## Dev-server doors
 

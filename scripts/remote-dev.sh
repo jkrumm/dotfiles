@@ -295,6 +295,27 @@ parse_kind() {
   esac
 }
 
+# Account for a bulk spawn (docs/claude-accounts.md): `claude-account pick --lane <lane>` on the host.
+# Sets PICK_ENV (extra `herdr … create` args that put CLAUDE_CONFIG_DIR into the pane at creation —
+# empty for the default account), PICK_SPILL (1 = no Claude account has room: the caller switches the
+# spawn to opencode/IU) and PICK_NOTE (the pick reason, for the output line). A failing picker means
+# "default account", never a failed spawn.
+pick_account() {
+  local lane=$1 out line why
+  PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="account iu (picker unavailable)"
+  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null)
+  line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
+  case $line in
+    iu)
+      PICK_SPILL=1; PICK_NOTE="no Claude account has room -> IU (${why#\# })" ;;
+    "export CLAUDE_CONFIG_DIR="*)
+      local dir=${line#export CLAUDE_CONFIG_DIR=}; dir=${dir#\'}; dir=${dir%\'}
+      PICK_ENV="--env CLAUDE_CONFIG_DIR='$dir'"; PICK_NOTE="${why#\# }" ;;
+    "unset CLAUDE_CONFIG_DIR")
+      PICK_NOTE="${why:+${why#\# }}"; PICK_NOTE=${PICK_NOTE:-picked=iu} ;;
+  esac
+}
+
 # Pane-side setup for a kind. `herdr agent start`
 # types the agent's own binary into the pane shell, so anything the binary needs
 # must already be in that shell: claude takes the lane tag; opencode takes the IU
@@ -550,9 +571,18 @@ for a in agents:
   agent="$(agent_name "$name")"
   agent="${agent:0:$((32 - ${#suffix}))}${suffix}"
 
+  # The account is chosen here, once, for this spawn's whole life (invariant 1). IU spill flips the
+  # kind; an explicit --kind opencode never touches Claude, so it needs no pick.
+  PICK_ENV=""; PICK_NOTE=""
+  if [[ $AGENT_KIND == claude ]]; then
+    pick_account wave
+    if (( PICK_SPILL )); then AGENT_KIND=opencode; fi
+  fi
+
   # Everything above can be wrong before anything gets created — RD_DRY_RUN
   # stops here for the same reason `say` stops before the send.
   if [[ -n ${RD_DRY_RUN:-} ]]; then
+    [[ -n $PICK_NOTE ]] && echo "account pick (wave): $PICK_NOTE${PICK_ENV:+ [$PICK_ENV]} -> kind $AGENT_KIND"
     if [[ -n $ws ]]; then
       echo "would add tab 'wave $wnum' to existing space $ws ($name) at $path"
     else
@@ -567,10 +597,10 @@ for a in agents:
   local created json pane tab
   if [[ -n $ws ]]; then
     created=tab
-    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus")
+    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus $PICK_ENV")
   else
     created=workspace
-    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus")
+    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $PICK_ENV")
   fi
   pane=$(printf '%s' "$json" | python3 -c \
     "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -628,7 +658,7 @@ for a in agents:
     1) note "   pane $pane never left idle after two sends — check 'rd read $agent', then 'rd say $agent …'" ;;
   esac
 
-  echo "→ wave $wnum started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)"
+  echo "→ wave $wnum started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
 }
 
@@ -672,14 +702,26 @@ for w in workspaces:
         print(w["workspace_id"]); break
 ' <<<"$(host_run 'herdr workspace list' 2>/dev/null)" 2>/dev/null)
 
+  local base_kind=$AGENT_KIND
   if [[ -n ${RD_DRY_RUN:-} ]]; then
-    for b in "${briefs[@]}"; do echo "would fan '$b' -> worktree + tab in ${ws:-<new space $name>}"; done
+    PICK_ENV=""; PICK_NOTE=""
+    [[ $base_kind == claude ]] && pick_account fan
+    for b in "${briefs[@]}"; do
+      echo "would fan '$b' -> worktree + tab in ${ws:-<new space $name>}${PICK_NOTE:+  [account pick (fan): $PICK_NOTE${PICK_ENV:+ $PICK_ENV}]}"
+    done
     return 0
   fi
   require_oc_env
 
   local wt out base sha pane tab json tabname agent prompt rc
   for b in "${briefs[@]}"; do
+    # One pick per spawn: each fan agent is a fresh context, so each is a re-pick point (invariant 1
+    # only forbids switching a live session). IU spill turns that one spawn into opencode.
+    AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""
+    if [[ $AGENT_KIND == claude ]]; then
+      pick_account fan
+      if (( PICK_SPILL )); then AGENT_KIND=opencode; fi
+    fi
     branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
     out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
       || die "worktree for '$branch' failed:"$'\n'"$out"
@@ -687,9 +729,9 @@ for w in workspaces:
 
     tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
     if [[ -n $ws ]]; then
-      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus")
+      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus $PICK_ENV")
     else
-      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus")
+      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus $PICK_ENV")
       ws=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['workspace']['workspace_id'])" 2>/dev/null)
     fi
     pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -720,7 +762,7 @@ for w in workspaces:
     prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
     deliver_prompt "$pane" "$agent" "$prompt"; rc=$?
     case $rc in
-      0) echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)" ;;
+      0) echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}" ;;
       1) echo "→ fan: '$agent' on $branch started but never left idle — 'rd read $agent'" ;;
       2) echo "→ fan: '$agent' on $branch UNPROMPTED ($DELIVER_ERR) — 'rd say $agent …'" ;;
     esac
@@ -824,12 +866,37 @@ except Exception:
   echo "→ closed $label ($tab)"
 }
 
+# `claude agents --json` across every enabled Claude account, merged into one JSON array: a background
+# daemon is bound to one identity (docs/claude-accounts.md), so one query sees one account's sessions.
+# Runs on the dev host (the registry and the claude binary live there).
+claude_agents_json() {
+  host_run 'python3 - <<"PY"
+import json, os, subprocess
+reg = os.path.expanduser("~/SourceRoot/dotfiles/config/claude-accounts.json")
+try:
+    dirs = [a.get("dir") for a in json.load(open(reg))["accounts"].values() if a.get("enabled")]
+except Exception:
+    dirs = [None]
+out = []
+for d in dirs:
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}
+    if d is not None:
+        env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(d)
+    try:
+        r = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, env=env)
+        out += json.loads(r.stdout) if r.returncode == 0 else []
+    except Exception:
+        pass
+print(json.dumps(out))
+PY' 2>/dev/null
+}
+
 # One view over both lanes, because "is my work still running" should not depend
 # on remembering which lane you started it in.
 cmd_agents() {
   local herdr_json claude_json
   herdr_json=$(host_run 'herdr agent list' 2>/dev/null)
-  claude_json=$(host_run 'claude agents --json' 2>/dev/null)
+  claude_json=$(claude_agents_json)
 
   HERDR_JSON="$herdr_json" CLAUDE_JSON="$claude_json" python3 <<'PY'
 import json, os, datetime
@@ -915,7 +982,7 @@ cmd_read() {
   # scriptable surface is the session transcript Claude Code already writes per
   # project, which is append-only and readable while the daemon runs.
   local sid
-  sid=$(host_run 'claude agents --json' | TARGET="$name" python3 -c "
+  sid=$(claude_agents_json | TARGET="$name" python3 -c "
 import json, os, sys
 t = os.environ['TARGET']
 try: agents = json.load(sys.stdin)

@@ -40,8 +40,8 @@ FINISHED = {"done", "idle"}
 BG_STOPPABLE = {"blocked", "idle", "done"}
 
 
-def sh(*cmd: str, cwd: str | None = None) -> tuple[int, str]:
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+def sh(*cmd: str, cwd: str | None = None, env: dict | None = None) -> tuple[int, str]:
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
     return r.returncode, r.stdout
 
 
@@ -235,10 +235,34 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
         print(f"  keep {k}")
 
 
+def account_envs() -> list[dict]:
+    """One process env per enabled Claude account (config/claude-accounts.json): the background daemon
+    is bound to one identity, so `claude agents` / `claude stop` run once per account."""
+    registry = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "claude-accounts.json")
+    try:
+        with open(registry) as f:
+            dirs = [a.get("dir") for a in json.load(f)["accounts"].values() if a.get("enabled")]
+    except Exception:
+        dirs = [None]  # unreadable registry: the default account, as before
+    envs = []
+    for d in dirs:
+        env = dict(os.environ)
+        env.pop("CLAUDE_CONFIG_DIR", None)
+        if d is not None:
+            env["CLAUDE_CONFIG_DIR"] = os.path.expanduser(d)
+        envs.append(env)
+    return envs
+
+
 def reap_bg(j: Journal) -> None:
-    rc, out = sh("claude", "agents", "--json")
+    for env in account_envs():
+        reap_bg_account(j, env)
+
+
+def reap_bg_account(j: Journal, env: dict) -> None:
+    rc, out = sh("claude", "agents", "--json", env=env)
     if rc != 0:
-        print("claude agents --json failed; skipping bg leftovers")
+        print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}); skipping bg leftovers")
         return
     now = time.time() * 1000
     seen = load_messaged()
@@ -256,7 +280,7 @@ def reap_bg(j: Journal) -> None:
         if j.dry:
             j.line("bg-stop", **desc)
             continue
-        rc, _ = sh("claude", "stop", a["id"])
+        rc, _ = sh("claude", "stop", a["id"], env=env)
         if rc == 0:
             j.line("bg-stop", **desc)
         else:
