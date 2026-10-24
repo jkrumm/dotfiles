@@ -83,7 +83,7 @@ exists, so a new account ships dark.
 same pattern as `jobrun`):
 
 ```
-claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"
+claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
 claude-account usage [--json]       # both accounts: 5h %, 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
 ```
@@ -126,7 +126,7 @@ pick(lane):
   2. eligible(home) → home
   3. eligible(other) → other
   4. interactive → iu (Claude Code shows the limit itself)
-     bulk        → "iu": the caller spills to its IU path
+     bulk        → "spill": the caller spills to its IU path
                    (rd wave --kind opencode, agw's existing IU fallback)
 ```
 

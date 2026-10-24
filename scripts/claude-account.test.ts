@@ -337,7 +337,7 @@ describe("CLI (isolated HOME)", () => {
     seed(20 * 60_000)
     writeFileSync(join(home, "notadir"), "")
     const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_CACHE_DIR: join(home, "notadir") })
-    expect(r.out).toBe("iu") // nothing readable -> the bulk spill signal, never silence
+    expect(r.out).toBe("spill") // nothing readable -> the bulk spill signal, never silence
     expect(r.rc).toBe(3)
     expect(r.err).toContain("refresh skipped")
   })

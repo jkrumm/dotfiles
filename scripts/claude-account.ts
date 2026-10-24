@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `iu` (exit 3)
+//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom)
 //   claude-account usage [--json]          both accounts, from the quota cache
 //   claude-account refresh [--ids a,b]     `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
@@ -144,8 +144,8 @@ function main(argv: string[]): number {
         // the pick log is a dataset, never a gate
       }
       const line = shellLine(reg, p)
-      console.log(line ?? "iu")
-      if (rest.includes("--why")) console.log(`# picked=${p.picked === SPILL ? "iu-spill" : p.picked} reason=${p.reason} stale=${p.stale}`)
+      console.log(line ?? SPILL)
+      if (rest.includes("--why")) console.log(`# picked=${p.picked} reason=${p.reason} stale=${p.stale}`)
       return line === null ? IU_EXIT : 0
     }
     case "usage":
