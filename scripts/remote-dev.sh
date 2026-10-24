@@ -302,7 +302,7 @@ parse_kind() {
 # "default account", never a failed spawn.
 pick_account() {
   local lane=$1 out line why
-  PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="account iu (picker unavailable)"
+  PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="default account (picker unavailable)"
   local rc=0
   out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null) || rc=$?
   line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
@@ -315,15 +315,15 @@ pick_account() {
       local dir=${line#export CLAUDE_CONFIG_DIR=}; dir=${dir#\'}; dir=${dir%\'}
       PICK_ENV="--env CLAUDE_CONFIG_DIR='$dir'"; PICK_NOTE="${why#\# }" ;;
     "unset CLAUDE_CONFIG_DIR")
-      PICK_NOTE="${why:+${why#\# }}"; PICK_NOTE=${PICK_NOTE:-picked=iu} ;;
+      PICK_NOTE="${why:+${why#\# }}"; PICK_NOTE=${PICK_NOTE:-default account} ;;
   esac
 }
 
 # Pane-side setup: the claude agent takes the lane tag. `herdr agent start` types the binary
 # into the pane shell, so the tag must already be exported there.
-# $1 kind  $2 pane  $3 usage lane
+# $1 pane  $2 usage lane
 agent_pane_setup() {
-  local pane=$2 lane=${3:?agent_pane_setup needs a usage lane}
+  local pane=$1 lane=${2:?agent_pane_setup needs a usage lane}
   host_run "herdr pane run '$pane' export USAGE_LANE='$lane'" >/dev/null 2>&1
 }
 
@@ -553,7 +553,6 @@ for a in agents:
   PICK_ENV=""; PICK_NOTE=""
   if [[ $AGENT_KIND == claude ]]; then
     pick_account wave
-    (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; waves never spill to IU API tokens"
   fi
 
   # Everything above can be wrong before anything gets created — RD_DRY_RUN
@@ -568,6 +567,8 @@ for a in agents:
     echo "would start agent '$agent' solo in it and prompt it"
     return 0
   fi
+  (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; waves never spill to IU API tokens"
+
 
 
   local created json pane tab
@@ -606,7 +607,7 @@ for a in agents:
   local model start_cmd
   model="${RD_WAVE_MODEL:-sonnet}"
   start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
-  agent_pane_setup "$AGENT_KIND" "$pane" wave
+  agent_pane_setup "$pane" wave
 
   local out="" i=0
   while (( i < 10 )); do
@@ -689,7 +690,9 @@ for w in workspaces:
     AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""
     if [[ $AGENT_KIND == claude ]]; then
       pick_account fan
-      (( PICK_SPILL )) && die "paused: no Claude subscription has room ($PICK_NOTE). Retry after a reset; fan never spills to IU API tokens"
+      if (( PICK_SPILL )); then
+        die "paused: no Claude subscription has room ($PICK_NOTE). Not started: $b and every brief after it. fan never spills to IU API tokens"
+      fi
     fi
     branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
     out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
@@ -714,7 +717,7 @@ for w in workspaces:
     local model start_cmd i=0 started=""
     model="${RD_WAVE_MODEL:-sonnet}"
     start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
-    agent_pane_setup "$AGENT_KIND" "$pane" fan
+    agent_pane_setup "$pane" fan
     while (( i < 10 )); do
       sleep 1; i=$((i+1))
       started=$(host_run "$start_cmd")

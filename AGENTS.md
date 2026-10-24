@@ -169,7 +169,7 @@ substitutes for another.**
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
 | `agw dispatch` | settled, bounded work → branch/PR or a verdict |
-| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (`--kind opencode` for OpenCode), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
+| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only; no room pauses, never IU), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
 | `warden run <repo> <<'BRIEF'` / `--brief-file <path>` | unattended, tracked to an outcome on warden's ledger |
 
 | Want | Command |
