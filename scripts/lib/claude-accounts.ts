@@ -582,7 +582,7 @@ export function sessionAccount(sessionId: string, logDir: string): string | null
       if (!lines[i].includes(sessionId) || !lines[i].includes("session_env")) continue
       try {
         const e = JSON.parse(lines[i])
-        if (e.event === "session_env" && e.data?.session === sessionId && typeof e.data.account === "string") return e.data.account
+        if (e.event === "session_env" && e.data?.session === sessionId) return typeof e.data.account === "string" ? e.data.account : null
       } catch {
         // a torn line is skipped
       }

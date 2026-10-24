@@ -174,7 +174,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
 cache stays warm and the work never changes provider. `--account` overrides; an unknown session
-falls through to the normal pick. agent-gateway pins its own resumed workers the same way.
+falls through to the normal pick (the hook log is kept for a few days, so the pin holds for that long). agent-gateway pins its own resumed workers the same way.
 A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn and subagents inherit it.
 
 Known gaps:
