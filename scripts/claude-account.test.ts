@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  type Cache, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, saveSample, setAuthFailed, shellLine,
+  type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -197,15 +198,15 @@ describe("helpers", () => {
     const m = mergeSample(sample(50, 50), { ...sample(1, 1), s_ts: NOW - 120_000, w_ts: NOW - 120_000 })
     expect(m).toMatchObject({ s: 50, w: 50 })
   })
-  test("an auth-failed account is retried after the cooldown, in the background only; --ids bypasses it", () => {
+  test("an auth-failed account is retried after the cooldown, in the background only; --ids bypasses it", async () => {
     const stale = (at: number) => ({ ...cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), auth_failed: { me: true }, auth_failed_at: { me: at } })
     expect(dueIds(reg(), stale(NOW - 60_000), NOW)).toEqual(["iu"]) // marked a minute ago: cooling down
     expect(dueIds(reg(), stale(NOW - 31 * 60_000), NOW)).toEqual(["iu", "me"]) // cooldown over: due again
     expect(dueIds(reg(), stale(NOW - 60_000), NOW, true)).toEqual(["iu", "me"]) // manual retry
     const calls = { sync: [] as string[][], detach: [] as string[][] }
-    const run = (c: Cache) => refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids) })
-    expect(run(stale(NOW - 31 * 60_000))).toEqual({ sync: [], background: ["iu", "me"] }) // a retry never blocks a pick
-    expect(run(stale(NOW - 60_000))).toEqual({ sync: [], background: ["iu"] })
+    const run = (c: Cache) => refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => { calls.sync.push(ids) }, detach: (ids) => { calls.detach.push(ids) } })
+    expect(await run(stale(NOW - 31 * 60_000))).toEqual({ sync: [], background: ["iu", "me"] }) // a retry never blocks a pick
+    expect(await run(stale(NOW - 60_000))).toEqual({ sync: [], background: ["iu"] })
   })
   test("a failed refresh restarts the cooldown; a successful one clears the mark", () => {
     const dir = tmp()
@@ -311,124 +312,250 @@ describe("claimRefresh (O_EXCL claim file)", () => {
 
 const ok: SpawnResult = { status: 0, stdout: "{}", stderr: "" }
 
-describe("runRefresh", () => {
-  function harness(spawn: Spawner, read: () => Sample | null = () => null) {
-    const dir = tmp()
-    claimRefresh(reg(false), ["iu"], NOW, staleA(), dir) // pre-claimed by the caller
-    const spawned: string[] = []
-    runRefresh({
-      reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["iu"], dir,
-      spawn: (c, a, e) => { spawned.push(e.env.CLAUDE_CONFIG_DIR ?? "unset"); return spawn(c, a, e) }, readSample: read,
+// Captured shape of GET /api/oauth/usage (2026-10-25, trimmed): extra keys and null windows are part of the contract.
+const OAUTH_BODY = {
+  five_hour: { utilization: 3.0, resets_at: "2026-10-24T23:49:59.964874+00:00", limit_dollars: null, used_dollars: null, remaining_dollars: null, locked_reason: null },
+  seven_day: { utilization: 89.0, resets_at: "2026-10-28T15:59:59.964894+00:00", limit_dollars: null, used_dollars: null, remaining_dollars: null, locked_reason: null },
+  seven_day_oauth_apps: null, seven_day_opus: null, seven_day_sonnet: null,
+  iguana_necktie: { utilization: 0.0, resets_at: "2026-11-05T07:59:00+00:00", limit_dollars: 250, used_dollars: 0.0, remaining_dollars: 250.0, locked_reason: null },
+}
+const TOKEN = "sk-ant-oat01-SECRET-TOKEN-VALUE"
+const CREDS = JSON.stringify({ claudeAiOauth: { accessToken: TOKEN, refreshToken: "r", expiresAt: 1 }, mcpOAuth: {} })
+
+describe("OAuth usage source", () => {
+  test("keychainService: default dir is the bare name, others the first 8 hex of sha256(abs dir)", () => {
+    expect(keychainService(null)).toBe("Claude Code-credentials")
+    const want = `Claude Code-credentials-${createHash("sha256").update("/home/x/.claude-me").digest("hex").slice(0, 8)}`
+    expect(keychainService("/home/x/.claude-me")).toBe(want)
+    expect(keychainService("/home/x/.claude-me/")).toBe(want) // resolve() drops the trailing slash
+  })
+  test("tokenFromCredentials reads claudeAiOauth.accessToken and rejects everything else", () => {
+    expect(tokenFromCredentials(CREDS)).toBe(TOKEN)
+    expect(tokenFromCredentials("not json")).toBeNull()
+    expect(tokenFromCredentials("{}")).toBeNull()
+    expect(tokenFromCredentials(JSON.stringify({ claudeAiOauth: { accessToken: "" } }))).toBeNull()
+    expect(tokenFromCredentials(JSON.stringify({ claudeAiOauth: { accessToken: 5 } }))).toBeNull()
+  })
+  test("request shape matches fetch_usage.py", () => {
+    expect(oauthUsageHeaders("T")).toEqual({ Authorization: "Bearer T", "anthropic-beta": "oauth-2025-04-20", Accept: "application/json" })
+  })
+  test("sampleFromOAuthUsage maps utilization/resets_at, stamps both windows with now", () => {
+    expect(sampleFromOAuthUsage(OAUTH_BODY, NOW)).toEqual({
+      s: 3, s_reset: Math.round(Date.parse("2026-10-24T23:49:59.964874+00:00") / 1000), s_ts: NOW,
+      w: 89, w_reset: Math.round(Date.parse("2026-10-28T15:59:59.964894+00:00") / 1000), w_ts: NOW, src: "oauth",
     })
-    const claimed = !claimRefresh(reg(false), ["iu"], NOW + 1000, staleA(), dir).length
-    const cache = loadCache(dir)
-    rmSync(dir, { recursive: true })
-    return { cache, spawned, claimHeld: claimed }
-  }
-  test("success saves the sample, keeps the claim as the budget", () => {
-    const h = harness(() => ok, () => sample(33, 44, { age: 0 }))
-    expect(h.spawned).toEqual(["unset"])
-    expect(h.cache.samples.iu).toMatchObject({ s: 33, w: 44 })
-    expect(h.claimHeld).toBe(true)
   })
-  test("missing binary releases the claim and sets no auth verdict", () => {
-    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))
-    expect(h.claimHeld).toBe(false)
-    expect(h.cache.auth_failed.iu).toBeUndefined()
-  })
-  test("auth failure marks auth_failed and keeps the claim", () => {
-    const h = harness(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))
-    expect(h.cache.auth_failed.iu).toBe(true)
-    expect(h.claimHeld).toBe(true)
-  })
-  test("exit 0 without a new sample and `auth status` says loggedIn=false: marks auth_failed, keeps the old sample", () => {
-    const h = harness((_c, a) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":false}', stderr: "" } : ok), () => sample(33, 44))
-    expect(h.cache.auth_failed.iu).toBe(true)
-    expect(h.cache.samples.iu).toMatchObject({ s: 33 })
-  })
-  test("exit 0 without a new sample but still logged in: no auth verdict", () => {
-    const h = harness((_c, a) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":true}', stderr: "" } : ok), () => sample(33, 44))
-    expect(h.cache.auth_failed.iu).toBeUndefined()
-  })
-  test("timeout keeps the claim and records no auth verdict", () => {
-    const h = harness(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }))
-    expect(h.claimHeld).toBe(true)
-    expect(h.cache.auth_failed.iu).toBeUndefined()
+  test("a window the body omits stays null; nothing usable or a non-object is no sample", () => {
+    const onlyW = sampleFromOAuthUsage({ seven_day: { utilization: 10, resets_at: "2026-10-28T16:00:00+00:00" } }, NOW)!
+    expect(onlyW).toMatchObject({ s: null, s_ts: null, s_reset: null, w: 10, w_ts: NOW })
+    expect(sampleFromOAuthUsage({ five_hour: null, seven_day: null }, NOW)).toBeNull()
+    expect(sampleFromOAuthUsage({ error: { type: "rate_limit_error" } }, NOW)).toBeNull()
+    expect(sampleFromOAuthUsage(null, NOW)).toBeNull()
+    expect(sampleFromOAuthUsage("x", NOW)).toBeNull()
+    expect(sampleFromOAuthUsage([OAUTH_BODY], NOW)).toBeNull()
+    expect(sampleFromOAuthUsage({ five_hour: "high", seven_day: [] }, NOW)).toBeNull()
+    expect(sampleFromOAuthUsage({ five_hour: { resets_at: "2026-10-24T23:49:59+00:00" }, seven_day: { utilization: "9", resets_at: "2026-10-28T16:00:00+00:00" } }, NOW)).toBeNull() // missing / non-numeric utilization
+    expect(sampleFromOAuthUsage({ five_hour: { utilization: 3, resets_at: 1800000000 } }, NOW)).toBeNull() // resets_at must be a string
+    expect(sampleFromOAuthUsage({ five_hour: { utilization: 3, resets_at: "2026-10-24T23:49:59+00:00" }, seven_day: { utilization: "9" } }, NOW)).toMatchObject({ s: 3, w: null }) // one bad window does not drop the good one
   })
 })
 
-describe("runRefresh classification", () => {
-  const classify = (spawn: Spawner, read: () => Sample | null = () => null) => {
-    const dir = tmp()
-    const r = runRefresh({ reg: reg(false), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["iu"], dir, spawn, readSample: read })
-    rmSync(dir, { recursive: true })
-    return r.iu
+describe("runRefresh", () => {
+  interface Setup {
+    keychain?: SpawnResult
+    http?: HttpGet
+    auth?: SpawnResult
+    claudeStart?: SpawnResult // overrides the `auth status` answer entirely (ENOENT, timeout)
   }
-  const authStatus = (loggedIn: boolean): Spawner => (_c, a) => (a[0] === "auth" ? { status: 0, stdout: JSON.stringify({ loggedIn }), stderr: "" } : ok)
-  test("a sample fetched during the run is fresh", () => {
-    expect(classify(() => ok, () => sample(1, 1, { age: 0 }))).toBe("fresh")
-  })
-  test("a login/auth/credential message is auth-failed", () => {
-    expect(classify(() => ({ status: 1, stdout: "", stderr: "Not logged in · Please run /login" }))).toBe("auth-failed")
-  })
-  test("exit 0, only an old sample, `auth status` loggedIn=false is auth-failed", () => {
-    expect(classify(authStatus(false), () => sample(1, 1))).toBe("auth-failed")
-  })
-  test("exit 0, only an old sample, still logged in is unresolved", () => {
-    expect(classify(authStatus(true), () => sample(1, 1))).toBe("unresolved")
-  })
-  test("exit 0 with no sample and an unparsable `auth status` is unresolved", () => {
-    expect(classify(() => ok)).toBe("unresolved")
-  })
-  test("timeout and missing binary are unresolved", () => {
-    expect(classify(() => ({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } }))).toBe("unresolved")
-    expect(classify(() => ({ status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } }))).toBe("unresolved")
-  })
-  test("each account is classified on its own", () => {
+  const kcOk: SpawnResult = { status: 0, stdout: CREDS + "\n", stderr: "" }
+  const http200: HttpGet = async () => ({ status: 200, json: OAUTH_BODY })
+  const loggedIn = (v: boolean): SpawnResult => ({ status: 0, stdout: JSON.stringify({ loggedIn: v }), stderr: "" })
+
+  async function harness(t: Setup, o: { ids?: string[]; preAuthFailed?: string[]; seed?: Sample } = {}) {
     const dir = tmp()
-    const r = runRefresh({
-      reg: reg(), claudeBin: "claude", baseEnv: {}, timeoutS: 75, now: () => NOW, ids: ["iu", "me"], dir,
-      spawn: (_c, a, e) => (a[0] === "auth" ? { status: 0, stdout: '{"loggedIn":true}', stderr: "" } : e.env.CLAUDE_CONFIG_DIR ? { status: 1, stdout: "", stderr: "please /login" } : ok),
-      readSample: (id) => (id === "iu" ? sample(1, 1, { age: 0 }) : null),
+    const ids = o.ids ?? ["iu"]
+    claimRefresh(reg(), ids, NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), dir) // pre-claimed by the caller
+    for (const id of o.preAuthFailed ?? []) setAuthFailed(id, true, NOW - 3600_000, dir)
+    if (o.seed) for (const id of ids) saveSample(id, o.seed, dir)
+    const calls: { cmd: string; args: string[]; configDir: string | undefined }[] = []
+    const urls: { url: string; headers: Record<string, string>; timeoutMs: number }[] = []
+    const logs: string[] = []
+    const results = await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: { PATH: "/bin" }, now: () => NOW, ids, dir, log: (m) => logs.push(m),
+      spawn: (cmd, args, e) => {
+        calls.push({ cmd, args, configDir: e.env.CLAUDE_CONFIG_DIR })
+        if (cmd === "/usr/bin/security") return t.keychain ?? kcOk
+        return t.claudeStart ?? t.auth ?? ok
+      },
+      httpGet: async (url, headers, timeoutMs) => {
+        urls.push({ url, headers, timeoutMs })
+        return (t.http ?? http200)(url, headers, timeoutMs)
+      },
+    })
+    const claimHeld = !claimRefresh(reg(), ["iu"], NOW + 1000, cacheOf(sample(1, 1, { age: 11 * 60_000 })), dir).length
+    const cache = loadCache(dir)
+    const files = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("\n")
+    rmSync(dir, { recursive: true })
+    return { results, cache, calls, urls, logs, claimHeld, files }
+  }
+
+  test("endpoint sample: saved, fresh, claim kept as the budget, claude never spawned", async () => {
+    const h = await harness({})
+    expect(h.results).toEqual({ iu: "fresh" })
+    expect(h.cache.samples.iu).toMatchObject({ s: 3, w: 89, s_ts: NOW, src: "oauth" })
+    expect(h.calls.map((c) => c.cmd)).toEqual(["/usr/bin/security"])
+    expect(h.calls[0].args).toEqual(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+    expect(h.urls).toEqual([{ url: "https://api.anthropic.com/api/oauth/usage", headers: oauthUsageHeaders(TOKEN), timeoutMs: 10_000 }])
+    expect(h.claimHeld).toBe(true)
+  })
+  test("a non-default account reads its own suffixed Keychain service", async () => {
+    const h = await harness({}, { ids: ["me"] })
+    expect(h.calls[0].args[2]).toBe(keychainService("/home/x/.claude-me"))
+    expect(h.results).toEqual({ me: "fresh" })
+  })
+  test("a sample clears a recorded auth failure", async () => {
+    const h = await harness({}, { preAuthFailed: ["iu"] })
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("the token never reaches the logs or the cache files", async () => {
+    const bad = await harness({ http: async () => { throw new Error(`boom ${TOKEN}`) } })
+    const ok200 = await harness({})
+    for (const h of [bad, ok200]) {
+      expect(h.logs.join("\n")).not.toContain(TOKEN)
+      expect(h.files).not.toContain(TOKEN)
+    }
+  })
+  test("no sample + `auth status` loggedIn=true clears the auth mark and answers auth-ok", async () => {
+    const h = await harness({ keychain: { status: 44, stdout: "", stderr: "The specified item could not be found" }, auth: loggedIn(true) }, { preAuthFailed: ["iu"], seed: sample(1, 1, { age: 2 * H * 1000 }) })
+    expect(h.results).toEqual({ iu: "auth-ok" })
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+    expect(h.calls.map((c) => c.args[0])).toEqual(["find-generic-password", "auth"])
+    expect(h.urls).toEqual([]) // no token, no request
+  })
+  test("no sample + loggedIn=false sets the auth mark", async () => {
+    const h = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, auth: loggedIn(false) })
+    expect(h.results).toEqual({ iu: "auth-failed" })
+    expect(h.cache.auth_failed.iu).toBe(true)
+    expect(h.claimHeld).toBe(true)
+  })
+  test("auth status runs under that account's CLAUDE_CONFIG_DIR (unset for the default)", async () => {
+    const me = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, auth: loggedIn(true) }, { ids: ["me"] })
+    expect(me.calls[1]).toMatchObject({ args: ["auth", "status"], configDir: "/home/x/.claude-me" })
+    const iu = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, auth: loggedIn(true) })
+    expect(iu.calls[1].configDir).toBeUndefined()
+  })
+  test.each([
+    ["HTTP 429", async () => ({ status: 429, json: { error: "rate" } })],
+    ["HTTP 401", async () => ({ status: 401, json: { error: "unauthorized" } })],
+    ["unparseable body", async () => ({ status: 200, json: null })],
+    ["network error", async () => { throw new Error("ECONNRESET") }],
+  ] as [string, HttpGet][])("endpoint failure (%s) leaves the auth mark alone and falls through to the verdict", async (_n, http) => {
+    const unknown = await harness({ http, auth: { status: 0, stdout: "", stderr: "" } }, { preAuthFailed: ["iu"] })
+    expect(unknown.results).toEqual({ iu: "unresolved" })
+    expect(unknown.cache.auth_failed.iu).toBe(true) // untouched: only a verdict or a sample moves it
+    expect(unknown.cache.samples.iu).toBeUndefined()
+    const ok2 = await harness({ http, auth: loggedIn(true) }, { seed: sample(1, 1, { age: 2 * H * 1000 }) })
+    expect(ok2.results).toEqual({ iu: "auth-ok" })
+    expect(ok2.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("logged in but no sample and the stored one older than 6 h (or missing) is `stale`, and the log names the account and age", async () => {
+    const down: HttpGet = async () => ({ status: 404, json: null })
+    const old = await harness({ http: down, auth: loggedIn(true) }, { seed: sample(1, 1, { age: 7 * H * 1000 }) })
+    expect(old.results).toEqual({ iu: "stale" })
+    expect(old.cache.auth_failed.iu).toBeUndefined() // the login is fine; only the feed is dying
+    expect(old.logs.join("\n")).toMatch(/refresh iu: logged in .* 7 h old/)
+    const none = await harness({ http: down, auth: loggedIn(true) })
+    expect(none.results).toEqual({ iu: "stale" })
+    expect(none.logs.join("\n")).toContain("missing")
+    const young = await harness({ http: down, auth: loggedIn(true) }, { seed: sample(1, 1, { age: 5 * H * 1000 }) })
+    expect(young.results).toEqual({ iu: "auth-ok" })
+  })
+  test("endpoint failure alone never sets the auth mark", async () => {
+    const h = await harness({ http: async () => ({ status: 401, json: null }), auth: { status: 0, stdout: "", stderr: "" } })
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("keychain denied (locked) is no sample and no auth mark", async () => {
+    const h = await harness({ keychain: { status: 36, stdout: "", stderr: "User interaction is not allowed." }, auth: { status: 0, stdout: "", stderr: "" } })
+    expect(h.results).toEqual({ iu: "unresolved" })
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+    expect(h.logs.join("\n")).toContain("User interaction is not allowed.")
+  })
+  test("missing claude binary releases the claim, no verdict", async () => {
+    const h = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, claudeStart: { status: null, stdout: "", stderr: "", error: { code: "ENOENT", message: "spawn claude ENOENT" } } })
+    expect(h.results).toEqual({ iu: "unresolved" })
+    expect(h.claimHeld).toBe(false)
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("any other spawn error releases the claim and logs its code", async () => {
+    const h = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, claudeStart: { status: null, stdout: "", stderr: "", error: { code: "EACCES", message: "spawn claude EACCES" } } })
+    expect(h.results).toEqual({ iu: "unresolved" })
+    expect(h.claimHeld).toBe(false)
+    expect(h.logs.join("\n")).toContain("EACCES")
+  })
+  test("`auth status` timeout keeps the claim, no verdict", async () => {
+    const h = await harness({ keychain: { status: 44, stdout: "", stderr: "" }, claudeStart: { status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } } })
+    expect(h.results).toEqual({ iu: "unresolved" })
+    expect(h.claimHeld).toBe(true)
+    expect(h.cache.auth_failed.iu).toBeUndefined()
+  })
+  test("each account is classified on its own", async () => {
+    const dir = tmp()
+    const r = await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW, ids: ["iu", "me"], dir,
+      spawn: (cmd, a, e) => (cmd === "/usr/bin/security" ? (a[2] === "Claude Code-credentials" ? { status: 0, stdout: CREDS, stderr: "" } : { status: 44, stdout: "", stderr: "" }) : e.env.CLAUDE_CONFIG_DIR ? loggedIn(false) : ok),
+      httpGet: async () => ({ status: 200, json: OAUTH_BODY }),
     })
     rmSync(dir, { recursive: true })
     expect(r).toEqual({ iu: "fresh", me: "auth-failed" })
   })
 })
 
+describe("statusline record proves the login", () => {
+  test("a record carrying rate_limits clears a failed mark; the mark can be set again by a verdict", () => {
+    const dir = tmp()
+    setAuthFailed("me", true, NOW, dir)
+    expect(loadCache(dir).auth_failed.me).toBe(true)
+    recordSample("me", { s: 12, w: 30, s_reset: NOW / 1000 + 100, w_reset: NOW / 1000 + 1000 }, NOW + 1000, dir)
+    expect(loadCache(dir).auth_failed.me).toBeUndefined()
+    setAuthFailed("me", true, NOW + 2000, dir)
+    expect(loadCache(dir).auth_failed.me).toBe(true)
+    rmSync(dir, { recursive: true })
+  })
+})
+
 describe("refreshBeforePick", () => {
-  function run(cache: Cache, lane = "wave", enabledB = false) {
+  async function run(cache: Cache, lane = "wave", enabledB = false) {
     const dir = tmp()
     const calls = { sync: [] as string[][], detach: [] as string[][] }
-    const r = refreshBeforePick({
+    const r = await refreshBeforePick({
       reg: reg(enabledB), lane, now: NOW, cache,
       claim: (ids) => claimRefresh(reg(enabledB), ids, NOW, cache, dir),
-      runSync: (ids) => calls.sync.push(ids), detach: (ids) => calls.detach.push(ids),
+      runSync: (ids) => { calls.sync.push(ids) }, detach: (ids) => { calls.detach.push(ids) },
     })
     const files = readdirSync(dir)
     rmSync(dir, { recursive: true })
     return { r, calls, files }
   }
-  test("stale sample: no blocking refresh, claimed and detached", () => {
-    const { r, calls, files } = run(staleA())
+  test("stale sample: no blocking refresh, claimed and detached", async () => {
+    const { r, calls, files } = await run(staleA())
     expect(r).toEqual({ sync: [], background: ["iu"] })
     expect(calls).toEqual({ sync: [], detach: [["iu"]] })
     expect(files).toEqual(["iu.refresh.claim"])
   })
-  test("fresh sample schedules nothing", () => {
-    expect(run(cacheOf(sample(10, 10))).r).toEqual({ sync: [], background: [] })
+  test("fresh sample schedules nothing", async () => {
+    expect((await run(cacheOf(sample(10, 10)))).r).toEqual({ sync: [], background: [] })
   })
-  test("no usable sample on a bulk lane: synchronous; a stale neighbour in the background", () => {
-    const { r, calls } = run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "wave", true)
+  test("no usable sample on a bulk lane: synchronous; a stale neighbour in the background", async () => {
+    const { r, calls } = await run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "wave", true)
     expect(r).toEqual({ sync: ["iu"], background: ["me"] })
     expect(calls).toEqual({ sync: [["iu"]], detach: [["me"]] })
   })
-  test("a sample older than 6 h counts as no sample", () => {
-    expect(run(cacheOf(sample(10, 10, { age: 7 * H * 1000 }))).r).toEqual({ sync: ["iu"], background: [] })
+  test("a sample older than 6 h counts as no sample", async () => {
+    expect((await run(cacheOf(sample(10, 10, { age: 7 * H * 1000 })))).r).toEqual({ sync: ["iu"], background: [] })
   })
-  test("interactive returns before any claim: nothing is written", () => {
+  test("interactive returns before any claim: nothing is written", async () => {
     let claimed = false
-    const r = refreshBeforePick({
+    const r = await refreshBeforePick({
       reg: reg(), lane: "interactive", now: NOW, cache: emptyCache(),
       claim: () => { claimed = true; return ["iu"] }, runSync: () => { throw new Error("sync") }, detach: () => { throw new Error("detach") },
     })
@@ -446,9 +573,11 @@ describe("CLI (isolated HOME)", () => {
   mkdirSync(bin)
   writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch ${marker}\nexit 0\n`)
   chmodSync(join(bin, "claude"), 0o755)
+  writeFileSync(join(bin, "security"), "#!/bin/sh\nexit 44\n") // no Keychain token: the endpoint is never called from tests
+  chmodSync(join(bin, "security"), 0o755)
   const registry = join(home, "registry.json")
   writeFileSync(registry, JSON.stringify(reg(false))) // iu only: the second account is disabled
-  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_REGISTRY: registry, CLAUDE_ACCOUNTS_CACHE_DIR: dir, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), PATH: `${bin}:${process.env.PATH}` }
+  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_REGISTRY: registry, CLAUDE_ACCOUNTS_CACHE_DIR: dir, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security"), PATH: `${bin}:${process.env.PATH}` }
   delete (base as Record<string, string | undefined>).CLAUDE_CONFIG_DIR
   const cli = (args: string[], env: Record<string, string> = {}) => {
     const t = Date.now()
@@ -538,6 +667,21 @@ describe("CLI (isolated HOME)", () => {
     const r = cli(["refresh", "--all"]) // the fake claude exits 0 and fetches nothing
     expect(r.rc).toBe(1)
     expect(r.err).toContain("no fresh sample and no auth verdict for iu")
+  })
+  test("refresh --all: logged in without an endpoint sample exits 1 when the stored sample is older than 6 h, 0 when younger", () => {
+    const loggedInBin = join(home, "bin-loggedin")
+    mkdirSync(loggedInBin, { recursive: true })
+    writeFileSync(join(loggedInBin, "claude"), `#!/bin/sh\necho '{"loggedIn":true}'\n`)
+    chmodSync(join(loggedInBin, "claude"), 0o755)
+    const env = { PATH: `${loggedInBin}:${bin}:${process.env.PATH}` }
+    seed(7 * 3600_000)
+    const old = cli(["refresh", "--all"], env)
+    expect(old.rc).toBe(1)
+    expect(old.err).toMatch(/refresh iu: logged in .* 7 h old/)
+    expect(old.err).toContain("iu logged in but still without a fresh sample")
+    seed(5 * 3600_000)
+    rmSync(join(dir, "iu.refresh.claim"), { force: true })
+    expect(cli(["refresh", "--all"], env).rc).toBe(0)
   })
   test("--account / env reject prototype keys", () => {
     for (const id of ["constructor", "__proto__", "toString"]) {

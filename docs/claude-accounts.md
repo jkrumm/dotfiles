@@ -88,7 +88,7 @@ claude-account usage [--json]       # both accounts: 5h %, 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
 ```
 
-**Quota sources: we never read a token.** Three feeds, freshest wins, all
+**Quota sources: read-only use of the account's own token for one GET.** Three feeds, freshest wins, all
 written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
 
 1. **Statusline (live, free):** every render gets native `rate_limits` for the
@@ -98,15 +98,20 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 2. **Limit events (instant):** a `StopFailure` / `rate_limit` hook marks the
    account exhausted until `resets_at` the moment a wall is hit (the
    agent-relay pattern). No poll needed to learn about a wall.
-3. **Idle accounts:** `CLAUDE_CONFIG_DIR=<dir> claude -p "/usage"` (verified on
-   2.1.310: 0 tokens, $0, 0 turns). The official binary does the fetch itself,
-   with its own backoff, and writes `cachedUsageUtilization` (`five_hour` /
-   `seven_day` utilization + `resets_at`, `accountUuid`, `fetchedAtMs`) into that
-   dir's `.claude.json`; the picker reads it from there. It runs only when an
-   account's newest sample is older than 10 minutes, at most once every 5 minutes
-   per account. The endpoint budget is about 28–30 calls/h per account, and a 429
-   can block for up to an hour (claude-swap, ClaudeBar), so the hand-rolled
-   `fetch_usage.py` poll gets retired.
+3. **Idle accounts:** `GET https://api.anthropic.com/api/oauth/usage` (headers `Authorization: Bearer`, `anthropic-beta:
+   oauth-2025-04-20`, as in `fetch_usage.py`) with that account's own Keychain token: service `Claude Code-credentials`
+   (default dir) or `Claude Code-credentials-<sha256(abs dir)[:8]>`, read with `security find-generic-password -s <svc> -w`
+   (`claudeAiOauth.accessToken`). 0 tokens, no window priming, 10 s timeout, in-process. The token is used for that one
+   request and nothing else: never copied, logged, written to the cache or written back to the Keychain (invariant 2: we
+   never become co-owner of the login). `utilization` / `resets_at` of `five_hour` / `seven_day` become the sample
+   (`src: oauth`). Any failure (Keychain locked or denied, HTTP 401/429/5xx, unparseable body) means *no sample* and
+   never an auth mark: a 401 or a locked Keychain proves nothing about the login, so the run falls through to the
+   `claude auth status` verdict (§Operate, Login keepalive). It runs only when an account's newest sample is older than
+   10 minutes, at most once every 5 minutes per account (the claim, unchanged), because the endpoint rate-limits per
+   token (a 429 can block for up to an hour: claude-swap, ClaudeBar). `claude -p "/usage"` was the source until Claude
+   Code 2.1.310; it now prints an analysis and no longer updates `cachedUsageUtilization`, so it is gone.
+   `readClaudeJson` still merges whatever `cachedUsageUtilization` the binary writes during real sessions (newest
+   timestamp wins).
 
 `fetch_usage.py` becomes a reader of this cache. It still writes
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
@@ -116,8 +121,8 @@ compatibility, plus `usage_accounts.json` (all accounts).
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
-              (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; `claude -p /usage`
-               takes 27-40 s, limit 75 s. Only an account with no sample is refreshed synchronously.
+              (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; a refresh takes
+               a couple of seconds. Only an account with no sample is refreshed synchronously.
                The pick log carries `stale: true`)
 pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
 overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
@@ -196,7 +201,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | Check | What it proves | FAIL means |
 |-|-|-|
 | `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
-| `quota/<id>`, `statusline/<id>` | newest `cachedUsageUtilization` still has `five_hour`/`seven_day` `utilization` + `resets_at`; the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
+| `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive`; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
@@ -220,11 +225,8 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 | `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |
 
 **Login keepalive.** `com.jkrumm.claude-accounts-keepalive` (06:30, under jobrun) runs `claude-account refresh --all`:
-`claude -p "/usage"` per enabled account, 0 tokens, no window priming; it exits 1 when an account got neither a fresh sample nor an auth verdict (jobrun grades the run). An idle account's OAuth refresh token never
-ages out and the quota cache gets a sample. `--all` ignores the 10-minute freshness and the auth cooldown but not the
-5-minute claim. `claude -p /usage` exits 0 even with a dead login (and leaves the old cached numbers), so the refresh
-accepts only a sample fetched during that run and otherwise asks `claude auth status`; a logged-out answer marks the
-account auth-failed. Log: `~/Library/Logs/claude-accounts-keepalive.log`; installed by `make claude-accounts-keepalive-setup`
+per enabled account: the OAuth usage endpoint first (source 3), and when that gives no sample `claude auth status` for that account's `CLAUDE_CONFIG_DIR`. The two are decoupled: the auth mark follows the verdict, never the sample. loggedIn=true clears the mark (`auth-ok`), loggedIn=false sets it (`auth-failed`), and a fresh sample or a statusline `record` also clears it (both prove the login). Both calls cost 0 tokens and prime no window. The run exits 1 when an account got neither a sample nor a verdict, and also when the account is logged in but the endpoint gave no sample and its stored sample is older than 6 h (or missing): a dying feed must turn the jobrun grade red instead of fading out quietly. An endpoint failure with a clean `auth status` and a sample younger than 6 h is exit 0. stderr names the account and the age. `claude auth status` is also what keeps an idle account's OAuth login alive. `--all` ignores the 10-minute freshness and the auth cooldown but not the
+5-minute claim. Log: `~/Library/Logs/claude-accounts-keepalive.log`; installed by `make claude-accounts-keepalive-setup`
 (part of `make setup`, dev host only).
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
@@ -233,7 +235,9 @@ account auth-failed. Log: `~/Library/Logs/claude-accounts-keepalive.log`; instal
 2. `auth/*` FAIL -> the credential naming or config-dir resolution changed. Re-derive the keychain suffix from the new
    binary, fix `scripts/claude-accounts-verify.sh` and the table above, and check `claude-auth.zsh` still agrees.
 3. `quota/*` FAIL -> the `cachedUsageUtilization` shape changed; fix `sampleFromClaudeJson` in
-   `scripts/lib/claude-accounts.ts` (until then the picker routes on the statusline feed only).
+   `scripts/lib/claude-accounts.ts` (until then the picker routes on the statusline and OAuth feeds). If refreshes stop
+   producing samples (`refresh` logs `usage endpoint gave no sample` / `no Keychain token`), check `sampleFromOAuthUsage`
+   against a live `/api/oauth/usage` body and `keychainService` against the binary.
 4. Optional: `make claude-accounts-e2e` for the real attribution round trip.
 
 **Re-login for `me`** (dead login, revoked session): on the mini, in a herdr pane (the login Keychain is only
@@ -254,7 +258,10 @@ reachable from the GUI session; never `ssh mini 'claude …'`):
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
 | `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
 | a `me` session shows `IU` quota | session started with `CLAUDE_CONFIG_DIR` unset (herdr restart, `--env` not restored) | known gap; restart the session through `c --account me` |
-| `quota/<id>` WARN "no cachedUsageUtilization" | account never refreshed | `claude-account refresh --ids <id>` |
+| `quota/<id>` WARN "no cachedUsageUtilization" | no session ever ran on that account (only sessions write it now) | informational; `claude-account refresh --ids <id>` feeds the picker's cache regardless |
+| `usage` shows `auth FAILED` right after a fresh `/login` | the mark only clears on a verdict, a sample or a statusline record | `claude-account refresh --ids <id>` (`auth status` loggedIn=true clears it) |
+| keepalive exits 1, log `no fresh sample and no auth verdict` or `logged in but still without a fresh sample` | neither the endpoint (Keychain locked / 429 / network) nor `claude auth status` answered, or only the verdict did and the stored sample is over 6 h old | `~/Library/Logs/claude-accounts-keepalive.log` says which; a locked Keychain on the mini needs the GUI session unlocked, retry `claude-account refresh --all` |
+| `usage` shows `src oauth` samples but old ages for an account | its refresh is failing quietly (429, Keychain) | run `claude-account refresh --ids <id>` and read the stderr line |
 
 ## Borrowed from open source (2026-10 survey)
 
@@ -270,7 +277,7 @@ concurrency and cache. So we build a thin picker and take the parts:
 |-|-|-|
 | statusline `rate_limits` as the quota feed, no polling | wazum/herdr-grazr | quota source 1 |
 | `StopFailure` hook for event-driven limit detection | RA1NM4KER/agent-relay | quota source 2 |
-| `claude -p "/usage"` → `cachedUsageUtilization`, 0 tokens | n2ns/plan-swap | quota source 3 (verified) |
+| `claude -p "/usage"` → `cachedUsageUtilization`, 0 tokens | n2ns/plan-swap | quota source 3 until Claude Code 2.1.310 (dead since); now the OAuth usage endpoint |
 | poll budget ≥ 3 min, shared backoff, honour `Retry-After`, cache successes only | claude-swap, paddo/ccseats, ClaudeBar | idle-account refresh |
 | `consume-first` / `earliest-reset-headroom`, 10-pt hysteresis | claude-swap, caam | rule 1 + v2 pace |
 | pin a session to one account for its lifetime; re-pin only on 401/quota | hbinhng/ccm `--sticky` | invariant 1 |
@@ -331,7 +338,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 
 | Wave | When | Contents | Done when |
 |-|-|-|-|
-| W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change; no `api/oauth/usage` calls from our code |
+| W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change (at W0 no `api/oauth/usage` calls from `claude-account`; source 3 now makes them, budgeted) |
 | W1 | after the `me` login | enable `me`; `rd wave`/`fan` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a wave lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
 | W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
 | W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for `me` | written decision |

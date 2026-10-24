@@ -129,7 +129,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → warden chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.herdr-events` | KeepAlive | raw herdr event record → `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.started` / `recorder.gap` lines mark restarts; records only, no consumer |
 | `com.jkrumm.herdr-reap` | 1800s | the herdr janitor (`rd reap`): closes tabs of finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12), messages dirty ones, stops `claude --bg` leftovers > 24 h; actions in `~/Library/Logs/herdr-reap.log` |
-| `com.jkrumm.claude-accounts-keepalive` | 06:30 daily | login keepalive: `claude-account refresh --all` (`claude -p /usage` per enabled Claude account, 0 tokens) so an idle account's OAuth refresh token never ages out; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
+| `com.jkrumm.claude-accounts-keepalive` | 06:30 daily | login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, else `claude auth status`, per enabled Claude account, 0 tokens) so an idle account's login stays verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
 | `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway MCP daemon |
 | `com.jkrumm.agent-gateway-opencode` | KeepAlive | shared OpenCode v2 server dispatch episodes attach to |

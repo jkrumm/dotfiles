@@ -1,5 +1,6 @@
 // Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
+import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -231,7 +232,7 @@ export function recordSample(id: string, part: { s?: number | null; w?: number |
     src: "statusline",
   }, dir)
   setAuthFailed(id, false, nowMs, dir)
-  // The sample's `src` flips to "usage" when a refresh lands later, so the verify suite reads this stamp for "a statusline fed it".
+  // The sample's `src` flips to "oauth" when a refresh lands later, so the verify suite reads this stamp for "a statusline fed it".
   writeAtomic(file(dir, id, "statusline.json"), JSON.stringify({ ts: nowMs }))
 }
 
@@ -263,6 +264,39 @@ export function sampleFromClaudeJson(json: unknown, src = "usage"): Sample | nul
     w, w_reset: w === null ? null : toEpochS(d?.resets_at), w_ts: w === null ? null : c.fetchedAtMs,
     src,
   }
+}
+
+/** Keychain service holding an account's Claude Code login: the default dir has the bare name, any other dir the first 8 hex of sha256(abs config dir). */
+export const keychainService = (dir: string | null): string =>
+  dir === null ? "Claude Code-credentials" : `Claude Code-credentials-${createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 8)}`
+
+/** Access token out of the Keychain item's JSON (`claudeAiOauth.accessToken`); null for anything else. Never log the result. */
+export function tokenFromCredentials(raw: string): string | null {
+  try {
+    const t = (JSON.parse(raw) as { claudeAiOauth?: { accessToken?: unknown } })?.claudeAiOauth?.accessToken
+    return typeof t === "string" && t ? t : null
+  } catch {
+    return null
+  }
+}
+
+export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+/** Same request shape as scripts/fetch_usage.py fetch(). */
+export const oauthUsageHeaders = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20", Accept: "application/json" })
+export const OAUTH_TIMEOUT_MS = 10_000
+const KEYCHAIN_TIMEOUT_MS = 15_000
+export const SECURITY_BIN = "/usr/bin/security"
+
+/** Parse the `GET /api/oauth/usage` body (`five_hour` / `seven_day` with `utilization` percent + ISO `resets_at`); a window it omits stays null. */
+export function sampleFromOAuthUsage(json: unknown, nowMs: number): Sample | null {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return null
+  const j = json as Record<string, unknown>
+  // a window counts only with a numeric utilization and a string resets_at; anything else is dropped (null)
+  const window = (v: unknown): Window => {
+    const w = v as { utilization?: unknown; resets_at?: unknown } | null
+    return w && typeof w === "object" && typeof w.utilization === "number" && typeof w.resets_at === "string" ? { utilization: w.utilization, resets_at: w.resets_at } : null
+  }
+  return sampleFromClaudeJson({ cachedUsageUtilization: { fetchedAtMs: nowMs, utilization: { five_hour: window(j.five_hour), seven_day: window(j.seven_day) } } }, "oauth")
 }
 
 /** Age (ms) of each window the sample actually has; a window without a timestamp counts as infinitely old. */
@@ -467,69 +501,107 @@ export function refreshEnv(base: Record<string, string | undefined>, dir: string
   return env
 }
 
-export const REFRESH_TIMEOUT_S = 75
+export interface HttpResponse {
+  status: number
+  json: unknown
+}
+/** GET with a hard timeout; throws on network errors. */
+export type HttpGet = (url: string, headers: Record<string, string>, timeoutMs: number) => Promise<HttpResponse>
 
 export interface RefreshDeps {
   reg: Registry
   spawn: Spawner
+  httpGet: HttpGet
+  /** Override for tests; defaults to SECURITY_BIN. */
+  securityBin?: string
   claudeBin: string
   baseEnv: Record<string, string | undefined>
-  readSample: (id: string) => Sample | null
   dir?: string
   now: () => number
-  timeoutS: number
   /** Accounts to refresh. They are already claimed (budget stamped) by the caller. */
   ids: string[]
   log?: (msg: string) => void
 }
 
 /**
- * `claude -p /usage` for already-claimed accounts. Each result touches only that account's own files. A binary that
- * could not start gives the claim back (it was not an attempt); a timeout keeps it and leaves the auth verdict alone.
- * Returns each account's outcome: `fresh` (sample fetched this run), `auth-failed` (verdict recorded) or `unresolved`.
+ * Sample from the OAuth usage endpoint with the account's own Keychain token (read-only, 0 tokens, no window
+ * priming). Every failure (locked Keychain, HTTP error incl. 429/401, bad body) is just "no sample": none of them
+ * proves anything about the login. The token is never logged or stored.
  */
-export type RefreshResult = "fresh" | "auth-failed" | "unresolved"
+async function oauthSample(d: RefreshDeps, id: string): Promise<Sample | null> {
+  const svc = keychainService(accountDir(d.reg.accounts[id]))
+  const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
+  const token = kc.status === 0 && !kc.error ? tokenFromCredentials(kc.stdout) : null
+  if (!token) {
+    d.log?.(`refresh ${id}: no Keychain token (${svc}): ${kc.error?.message ?? (kc.stderr.trim().slice(0, 200) || `rc=${kc.status}`)}`)
+    return null
+  }
+  try {
+    const r = await d.httpGet(OAUTH_USAGE_URL, oauthUsageHeaders(token), OAUTH_TIMEOUT_MS)
+    const sample = r.status === 200 ? sampleFromOAuthUsage(r.json, d.now()) : null
+    if (!sample) d.log?.(`refresh ${id}: usage endpoint gave no sample (HTTP ${r.status})`)
+    return sample
+  } catch (e) {
+    d.log?.(`refresh ${id}: usage endpoint failed: ${e instanceof Error ? e.name : typeof e}`) // name only: never echo a message that could carry request details
+    return null
+  }
+}
 
-export function runRefresh(d: RefreshDeps): Record<string, RefreshResult> {
+/** `claude auth status` (0 tokens): the login verdict, null when the binary gave no usable answer. */
+function loginVerdict(d: RefreshDeps, env: Record<string, string>): { loggedIn: boolean | null; startFailed?: string } {
+  const r = d.spawn(d.claudeBin, ["auth", "status"], { env, timeoutMs: 30_000 })
+  // any spawn error but a timeout means the binary never ran an attempt; a timeout says nothing and keeps the claim
+  if (r.error && r.error.code !== "ETIMEDOUT") return { loggedIn: null, startFailed: `${r.error.code ?? "error"}: ${r.error.message}` }
+  try {
+    const v = (JSON.parse(r.stdout) as { loggedIn?: unknown }).loggedIn
+    return { loggedIn: typeof v === "boolean" ? v : null }
+  } catch {
+    return { loggedIn: null }
+  }
+}
+
+/**
+ * Refresh of already-claimed accounts. The login verdict is decoupled from samples: the OAuth usage endpoint gives
+ * a sample (which also proves the login); without one, `claude auth status` decides. Each result touches only that
+ * account's own files. A binary that could not start gives the claim back (it was not an attempt); a timeout or an
+ * unparsable answer keeps it and leaves the auth mark alone.
+ * Outcome per account: `fresh` (sample fetched this run), `auth-ok` / `auth-failed` (verdict recorded), `stale`
+ * (logged in, but the endpoint gave no sample and the stored one is older than STALE_OK_MS: the feed is silently
+ * dying, so the keepalive must go red) or `unresolved`.
+ */
+export type RefreshResult = "fresh" | "auth-ok" | "stale" | "auth-failed" | "unresolved"
+
+export async function runRefresh(d: RefreshDeps): Promise<Record<string, RefreshResult>> {
   const results: Record<string, RefreshResult> = {}
   for (const id of d.ids) {
     results[id] = "unresolved" // neither a fresh sample nor an auth verdict, until proven otherwise
-    const env = refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id]))
-    const startedAt = d.now()
-    const r = d.spawn(d.claudeBin, ["-p", "/usage", "--output-format", "json"], { env, timeoutMs: d.timeoutS * 1000 })
-    if (r.error?.code === "ENOENT") {
-      d.log?.(`refresh ${id}: cannot start claude (${r.error.message})`)
-      releaseClaim(id, d.dir)
-      continue
-    }
-    const sample = r.status === 0 && !r.error ? d.readSample(id) : null
-    // `claude -p /usage` exits 0 with no fetch when the login is dead, leaving the previous cachedUsageUtilization in
-    // place: only a sample fetched during this run proves the login works.
-    if (sample && Math.max(sample.s_ts ?? 0, sample.w_ts ?? 0) >= startedAt) {
+    const sample = await oauthSample(d, id)
+    if (sample) {
       saveSample(id, sample, d.dir)
       setAuthFailed(id, false, d.now(), d.dir)
       results[id] = "fresh"
       continue
     }
-    if (sample) saveSample(id, sample, d.dir)
-    d.log?.(`refresh ${id}: rc=${r.status} ${r.error?.message ?? (r.stderr || r.stdout).trim().slice(0, 200)}`)
-    if (r.error?.code === "ETIMEDOUT" || r.error?.message?.includes("timed out")) continue // a timeout says nothing about the login
-    if (/login|auth|credential/i.test(`${r.stdout}${r.stderr}`) || loggedOut(d, id, env)) {
-      setAuthFailed(id, true, d.now(), d.dir)
-      results[id] = "auth-failed"
+    const v = loginVerdict(d, refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])))
+    if (v.startFailed) {
+      d.log?.(`refresh ${id}: cannot start claude (${v.startFailed})`)
+      releaseClaim(id, d.dir)
+      continue
     }
+    if (v.loggedIn === null) {
+      d.log?.(`refresh ${id}: no sample and no auth verdict`)
+      continue
+    }
+    setAuthFailed(id, !v.loggedIn, d.now(), d.dir)
+    if (!v.loggedIn) {
+      results[id] = "auth-failed"
+      continue
+    }
+    const age = newestAge(loadCache(d.dir).samples[id], d.now()) // the same "usable" test the picker applies
+    results[id] = age >= STALE_OK_MS ? "stale" : "auth-ok"
+    if (results[id] === "stale") d.log?.(`refresh ${id}: logged in but the usage endpoint gave no sample and the stored one is ${Number.isFinite(age) ? `${Math.round(age / 3600_000)} h old` : "missing"}`)
   }
   return results
-}
-
-/** `claude auth status` (0 tokens): true only when the binary says loggedIn is false. */
-function loggedOut(d: RefreshDeps, id: string, env: Record<string, string>): boolean {
-  const r = d.spawn(d.claudeBin, ["auth", "status"], { env, timeoutMs: 30_000 })
-  try {
-    return (JSON.parse(r.stdout) as { loggedIn?: unknown }).loggedIn === false
-  } catch {
-    return false
-  }
 }
 
 export interface BeforePick {
@@ -540,7 +612,7 @@ export interface BeforePick {
   /** Claims the due ids atomically (budget stamped); returns the ones this caller won. */
   claim: (ids: string[]) => string[]
   /** Blocking refresh of already-claimed ids (account has no usable sample). */
-  runSync: (ids: string[]) => void
+  runSync: (ids: string[]) => void | Promise<void>
   /** Detached, fire-and-forget refresh of already-claimed ids. */
   detach: (ids: string[]) => void
 }
@@ -550,7 +622,7 @@ export interface BeforePick {
  * sample exists; only an account with no usable sample refreshes synchronously, every other due account in the
  * background. Ids are claimed first.
  */
-export function refreshBeforePick(b: BeforePick): { sync: string[]; background: string[] } {
+export async function refreshBeforePick(b: BeforePick): Promise<{ sync: string[]; background: string[] }> {
   if (b.lane === "interactive") return { sync: [], background: [] } // no claim: an interactive pick touches nothing
   const due = dueIds(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
@@ -558,7 +630,7 @@ export function refreshBeforePick(b: BeforePick): { sync: string[]; background: 
   const sync = claimed.filter((id) => !b.cache.auth_failed[id] && !usable(b.cache.samples[id], b.now))
   const background = claimed.filter((id) => !sync.includes(id))
   if (background.length) b.detach(background)
-  if (sync.length) b.runSync(sync)
+  if (sync.length) await b.runSync(sync)
   return { sync, background }
 }
 

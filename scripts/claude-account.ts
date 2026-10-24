@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously, 75s) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
+//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
-//   claude-account refresh [--ids a,b] [--all]   `claude -p /usage` (75s limit) for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
+//   claude-account refresh [--ids a,b] [--all]   OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
@@ -12,14 +12,14 @@
 //   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
-// We never read a token and make no call to api.anthropic.com/api/oauth/usage ourselves: the official
-// binary fetches, and writes cachedUsageUtilization into the account's .claude.json.
+// Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
+// (never copied, logged or written back); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
 import { spawnSync } from "node:child_process"
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type Spawner, REFRESH_TIMEOUT_S, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -72,18 +72,28 @@ const spawner: Spawner = (cmd, args, { env, timeoutMs }) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: err ? { code: err.code, message: err.message } : undefined }
 }
 
+const httpGet: HttpGet = async (url, headers, timeoutMs) => {
+  const r = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(timeoutMs) })
+  let json: unknown = null
+  try {
+    json = JSON.parse(await r.text())
+  } catch {
+    // an unreadable body is just "no sample"
+  }
+  return { status: r.status, json }
+}
+
 /**
  * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
  * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
-function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}, timeoutS = REFRESH_TIMEOUT_S): Record<string, RefreshResult> {
+async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}): Promise<Record<string, RefreshResult>> {
   const enabled = (id: string) => Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
     : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids || !!o.all, !!o.all) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
   return runRefresh({
-    reg, spawn: spawner, claudeBin: claudeBin(), baseEnv: process.env, timeoutS, ids: todo,
-    readSample: (id) => readSample(reg, id), now: Date.now, log: (m) => console.error(m),
+    reg, spawn: spawner, httpGet, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, claudeBin: claudeBin(), baseEnv: process.env, ids: todo, now: Date.now, log: (m) => console.error(m),
   })
 }
 
@@ -109,7 +119,7 @@ function usage(reg: Registry, json: boolean): void {
   }
 }
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv
   let reg: Registry
   try {
@@ -131,10 +141,10 @@ function main(argv: string[]): number {
       const dry = rest.includes("--dry")
       try {
         const cache0 = readClaudeJson(reg, loadCache())
-        if (!dry) refreshBeforePick({
+        if (!dry) await refreshBeforePick({
           reg, lane, now, cache: cache0,
           claim: (ids) => claimRefresh(reg, ids, now, cache0),
-          runSync: (ids) => refresh(reg, { claimed: ids }),
+          runSync: async (ids) => void (await refresh(reg, { claimed: ids })),
           detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
         })
       } catch (e) {
@@ -160,13 +170,13 @@ function main(argv: string[]): number {
       return 0
     case "refresh": {
       const all = rest.includes("--all")
-      const results = refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(","), all })
+      const results = await refresh(reg, { ids: flag(rest, "--ids")?.split(","), claimed: flag(rest, "--claimed")?.split(","), all })
       // The keepalive's verdict: an account that got neither a fresh sample nor an auth verdict was not kept alive.
       const unresolved = Object.entries(results).filter(([, r]) => r === "unresolved").map(([id]) => id)
-      if (all && unresolved.length) {
-        console.error(`claude-account: refresh --all: no fresh sample and no auth verdict for ${unresolved.join(", ")}`)
-        return 1
-      }
+      const stale = Object.entries(results).filter(([, r]) => r === "stale").map(([id]) => id)
+      if (all && stale.length) console.error(`claude-account: refresh --all: ${stale.join(", ")} logged in but still without a fresh sample (stored one older than 6 h or missing, see the lines above)`)
+      if (all && unresolved.length) console.error(`claude-account: refresh --all: no fresh sample and no auth verdict for ${unresolved.join(", ")}`)
+      if (all && (unresolved.length || stale.length)) return 1
       return 0
     }
     case "record": {
@@ -210,7 +220,7 @@ function main(argv: string[]): number {
 
 if (import.meta.main) {
   try {
-    process.exit(main(process.argv.slice(2)))
+    process.exit(await main(process.argv.slice(2)))
   } catch (e) {
     console.error(`claude-account: ${(e as Error).message}`)
     process.exit(2)
