@@ -60,6 +60,12 @@ describe("sessionAccount", () => {
     expect(sessionAccount("../x", d)).toBeNull()
     expect(sessionAccount("abc-1", join(d, "missing"))).toBeNull()
   })
+  test("a newer line without an account wins over an older account (resumed on the default dir)", () => {
+    const d = tmp()
+    writeFileSync(join(d, "2026-10-23.jsonl"), `${line("abc-1", "me")}\n`)
+    writeFileSync(join(d, "2026-10-24.jsonl"), `${line("abc-1", null)}\n`)
+    expect(sessionAccount("abc-1", d)).toBeNull()
+  })
 })
 
 describe("pick rule v1.2 session balance", () => {
