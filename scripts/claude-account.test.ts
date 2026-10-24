@@ -48,6 +48,20 @@ describe("pick rule v1.1 pace guard", () => {
   })
 })
 
+describe("pick rule v1.2 session balance", () => {
+  test("home 5h much fuller than the other -> the emptier window", () => {
+    expect(pick(reg(), cacheOf(sample(60, 10), sample(5, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
+    expect(pick(reg(), cacheOf(sample(5, 10), sample(60, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "session" })
+  })
+  test("within the margin the home account stays", () => {
+    expect(pick(reg(), cacheOf(sample(30, 10), sample(15, 10)), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+  test("an over-pace other never receives the session move", () => {
+    const meOver = sample(0, 80, { wReset: NOW / 1000 + 6.5 * 24 * H })
+    expect(pick(reg(), cacheOf(sample(60, 10), meOver), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+})
+
 describe("pick rule v1", () => {
   test("home eligible", () => {
     const c = cacheOf(sample(10, 10), sample(10, 10))
