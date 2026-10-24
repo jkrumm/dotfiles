@@ -48,7 +48,7 @@ dotfiles | * master
 **Primary: stdin `.rate_limits`** (`five_hour`/`seven_day` → `used_percentage`,
 `resets_at` epoch seconds). Max sessions only, and only from the first API
 response on. Every render that has them also POSTs them to agent-gateway's
-`/api/usage` (throttled to once a minute via `/tmp/claude_sl/usage_push.stamp`,
+`/api/usage` (throttled to once a minute per account via `/tmp/claude_sl/usage_push_<dir>.stamp`,
 fire-and-forget) — that is what keeps agent-gateway's quota view and the devhost
 heartbeat's quota component fed. The same throttled render also records a
 per-account sample (`claude-account record`, account = registry id resolved from

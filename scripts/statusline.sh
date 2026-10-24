@@ -214,7 +214,7 @@ fi
 # Stdin figures also feed agent-gateway's quota view (POST /api/usage, the same body
 # fetch_usage.py sends) — throttled to once a minute, fire-and-forget.
 if [ -n "$rl_5h" ]; then
-  _push_stamp="/tmp/claude_sl/usage_push.stamp"
+  _push_stamp="/tmp/claude_sl/usage_push_${_ca_key//\//_}.stamp"   # per account: one account's sessions must not starve the other's POST
   _pushed_at=$(cat "$_push_stamp" 2>/dev/null)
   if [ $(( _now_s - ${_pushed_at:-0} )) -gt 60 ]; then
     mkdir -p /tmp/claude_sl && echo "$_now_s" > "$_push_stamp"
