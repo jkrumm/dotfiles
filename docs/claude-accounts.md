@@ -1,6 +1,13 @@
 # Two Claude Max accounts — concept
 
-Status: **concept, nothing built yet** (2026-10-24). Account B (Max 5x) is being
+Status: **W0 built** (2026-10-24), B disabled, no behaviour change. Shipped:
+`config/claude-accounts.json`, `scripts/claude-account.ts` (+ `scripts/lib/claude-accounts.ts`,
+tests), `make claude-accounts-setup`, statusline sample feed + `A`/`B` badge,
+`account` in the `session_env` line, `fetch_usage.py` as a cache reader. Not yet
+built from the W0 row: usage-tracker `account` column + backfill (other repo).
+Pick log lives at `~/.local/share/claude-accounts/picks.jsonl`; the exhausted-mark
+hook (`claude-account exhausted`) exists but nothing calls it until W1.
+Original status: concept (2026-10-24). Account B (Max 5x) is being
 bought; account A is the existing Max 20x. Decision record and the numbers
 behind it: `~/Reports/ai-subscription-2026-10/index.html`.
 
