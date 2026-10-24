@@ -52,6 +52,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/hl` | `~/.local/bin/hl` | HomeLab files over S3 — rclone with an env-defined `homelab:` remote + `presign`/`mount`; key per machine (see *HomeLab files*) |
+| `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-b` — `docs/claude-accounts.md` |
 | `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; every alert source feeds warden directly, flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload`, Colima socket heal, and (MacBook) `jobs-grade --notify` 2 min after wake, staleness judged against awake time |
 
