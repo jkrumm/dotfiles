@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -97,6 +97,45 @@ describe("latestSessionId vanished entries", () => {
     symlinkSync(join(d, "gone-target"), join(d, "dead-2.jsonl")) // listed by readdir, stat throws ENOENT
     expect(latestSessionId(projects, "/work/x")).toBe("live-1")
     rmSync(projects, { recursive: true })
+  })
+})
+
+describe("login expiry", () => {
+  const D = 86400_000
+  const item = (refresh: number | undefined, access = NOW + 5 * H * 1000) =>
+    JSON.stringify({ claudeAiOauth: { accessToken: "SECRET-A", refreshToken: "SECRET-R", expiresAt: access, ...(refresh === undefined ? {} : { refreshTokenExpiresAt: refresh }), scopes: ["x"] } })
+  const fake = (byService: Record<string, SpawnResult>): Spawner => (_cmd, a) => byService[a[2]] ?? { status: 44, stdout: "", stderr: "could not be found" }
+  const ok = (stdout: string): SpawnResult => ({ status: 0, stdout, stderr: "" })
+  const rows = (iu: SpawnResult, me?: SpawnResult) =>
+    readLoginExpiry({ reg: reg(), spawn: fake({ [keychainService(null)]: iu, ...(me ? { [keychainService("/home/x/.claude-me")]: me } : {}) }), baseEnv: {}, now: NOW })
+
+  test("expiryFromCredentials reads only the two timestamps; anything else is null", () => {
+    expect(expiryFromCredentials(item(NOW + D))).toEqual({ refreshTokenExpiresAt: NOW + D, expiresAt: NOW + 5 * H * 1000 })
+    expect(expiryFromCredentials(item(undefined))).toEqual({ refreshTokenExpiresAt: null, expiresAt: NOW + 5 * H * 1000 })
+    expect(expiryFromCredentials(JSON.stringify({ claudeAiOauth: { refreshTokenExpiresAt: "soon", expiresAt: -1 } }))).toEqual({ refreshTokenExpiresAt: null, expiresAt: null })
+    expect(expiryFromCredentials("not json")).toBeNull()
+    expect(expiryFromCredentials("{}")).toBeNull()
+  })
+  test("gradeLogin: PASS > 7 d, WARN <= 7 d, FAIL <= 2 d or past, unknown = WARN", () => {
+    expect(gradeLogin(NOW + 7 * D + 1, NOW)).toBe("PASS")
+    expect(gradeLogin(NOW + 7 * D, NOW)).toBe("WARN")
+    expect(gradeLogin(NOW + 2 * D + 1, NOW)).toBe("WARN")
+    expect(gradeLogin(NOW + 2 * D, NOW)).toBe("FAIL")
+    expect(gradeLogin(NOW - 1, NOW)).toBe("FAIL")
+    expect(gradeLogin(null, NOW)).toBe("WARN")
+  })
+  test("rows per enabled account, with days left and the expired flag", () => {
+    const r = rows(ok(item(NOW + 20 * D)), ok(item(NOW - 3 * D)))
+    expect(r.map((x) => [x.id, x.grade, x.expired, x.days_left])).toEqual([["iu", "PASS", false, 20], ["me", "FAIL", true, -3]])
+    expect(r[1].detail).toContain("expired")
+    expect(readLoginExpiry({ reg: reg(false), spawn: fake({ [keychainService(null)]: ok(item(NOW + D)) }), baseEnv: {}, now: NOW }).map((x) => x.id)).toEqual(["iu"]) // a disabled account is not graded
+  })
+  test("an unreadable or foreign item is a WARN, never a FAIL, and never echoes the item", () => {
+    const r = rows({ status: 44, stdout: "", stderr: "could not be found" }, ok(item(undefined)))
+    expect(r.map((x) => [x.id, x.grade, x.days_left, x.expired])).toEqual([["iu", "WARN", null, false], ["me", "WARN", null, false]])
+    expect(rows(ok("garbage SECRET-A"))[0].detail).not.toContain("SECRET")
+    expect(JSON.stringify(rows(ok(item(NOW + 3 * D))))).not.toContain("SECRET")
+    expect(rows({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } })[0]).toMatchObject({ grade: "WARN", refresh_expires_at: null })
   })
 })
 
@@ -733,6 +772,33 @@ describe("CLI (isolated HOME)", () => {
     saveSample("iu", { s: 5, w: 5, s_reset: null, w_reset: null, s_ts: ts, w_ts: ts, src: "t" }, dir)
   }
 
+  test("expiry and usage read the login from the account's own Keychain item (fake security, fixtures)", () => {
+    const D = 86400_000
+    const two = join(home, "registry2.json")
+    writeFileSync(two, JSON.stringify({ accounts: { ...reg().accounts, me: { ...reg().accounts.me, dir: join(home, ".claude-me") } } }))
+    const items = join(home, "kc")
+    mkdirSync(items, { recursive: true })
+    const blob = (r: number) => JSON.stringify({ claudeAiOauth: { accessToken: "SECRET-A", refreshToken: "SECRET-R", expiresAt: Date.now() + 3600_000, refreshTokenExpiresAt: r } })
+    writeFileSync(join(items, keychainService(null)), blob(Date.now() + 20 * D))
+    writeFileSync(join(items, keychainService(join(home, ".claude-me"))), blob(Date.now() + 5 * D)) // inside the 7-day window
+    const stub = join(bin, "security-fixture")
+    writeFileSync(stub, `#!/bin/sh\n[ "$1" = find-generic-password ] && [ -f "${items}/$3" ] && { cat "${items}/$3"; exit 0; }\nexit 44\n`)
+    chmodSync(stub, 0o755)
+    const env = { CLAUDE_ACCOUNTS_REGISTRY: two, CLAUDE_ACCOUNTS_SECURITY_BIN: stub }
+    const j = JSON.parse(cli(["expiry", "--json"], env).out)
+    expect(j.accounts.map((a: { id: string; grade: string; days_left: number }) => [a.id, a.grade, Math.round(a.days_left)])).toEqual([["iu", "PASS", 20], ["me", "WARN", 5]])
+    const text = cli(["expiry"], env)
+    expect(text.rc).toBe(0)
+    expect(text.out).toMatch(/^iu {2}PASS .*\nme {2}WARN /)
+    expect(text.out + text.err).not.toContain("SECRET")
+    const u = cli(["usage"], env).out
+    expect(u).toMatch(/^iu .* login 20d$/m)
+    expect(u).toMatch(/^me .* login 5d WARN$/m)
+    expect(JSON.parse(cli(["usage", "--json"], env).out).accounts[1]).toMatchObject({ id: "me", login_grade: "WARN" })
+    const dead = cli(["expiry", "--json"], { ...env, CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security") }) // exit 44 everywhere: Keychain unreadable
+    expect(JSON.parse(dead.out).accounts.map((a: { grade: string }) => a.grade)).toEqual(["WARN", "WARN"])
+  })
+
   test("latest: newest transcript of the cwd under $HOME/.claude/projects; exit 1 when there is none", () => {
     const cwd = join(home, "work", "proj")
     const pd = join(home, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"))
@@ -786,7 +852,7 @@ describe("CLI (isolated HOME)", () => {
     seed(60_000)
     const j = JSON.parse(cli(["usage", "--json"]).out)
     expect(Object.keys(j.accounts[0]).sort()).toEqual(
-      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
+      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "login_days_left", "login_expires_at", "login_grade", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
     )
     expect(j.default_account).toBe("iu")
     expect(j.accounts[0]).toMatchObject({ id: "iu", five_hour: 5, seven_day: 5, auth_ok: true })

@@ -86,7 +86,10 @@ same pattern as `jobrun`):
 claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
 claude-account usage [--json]       # both accounts: 5h %, 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
+claude-account expiry [--json]      # when each enabled login ends (refresh token), graded PASS / WARN / FAIL
 ```
+
+`usage` also shows each login's remaining life (`login 8.7d`, with the grade once it is not PASS; JSON: `login_expires_at`, `login_days_left`, `login_grade`).
 
 **Quota sources: read-only use of the account's own token for one GET.** Three feeds, freshest wins, all
 written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
@@ -258,6 +261,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | Check | What it proves | FAIL means |
 |-|-|-|
 | `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
+| `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past; an unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: a new login (§Re-login) |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
@@ -383,7 +387,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | agent-gateway `/api/usage` (`routes/usage.ts`) | from one `current` object to `{accounts: {a, b}}`; POSTs carry `account` |
 | herdr overview pane (`/api/overview.txt`) | a two-line quota header (`iu` and `me`: 5h/7d/reset) plus an account column per agent |
 | Tinycast (MacBook, `extension/src/usage/quota.ts`) | read `https://agent-gateway.mini.jkrumm.com/api/usage` (the tailnet door exists via the Caddyfile vhost), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
-| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it |
+| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry`: WARN (never pages) inside 7 days or when the Keychain item is unreadable; an already-expired `iu` login is a FAIL, any other account stays WARN |
 | Hermes digests | inherit from the heartbeat; no change |
 
 ## Login logistics
@@ -395,8 +399,9 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 - **Browser:** paste the URL into a second browser profile on the MacBook that
   stays signed in to `me`; the first profile keeps `iu` and work. If
   the callback can't reach the mini, paste the code back into the pane.
-- **How often:** the login refreshes itself; expect re-login only after a revoke
-  or a long idle.
+- **How often:** the access token (8 h) is renewed by the keepalive, but the refresh token ends 30 days after the login
+  (`refreshTokenExpiresAt`, not extended by rotation; what the server does past that date is unproven, one report says 55
+  days). Plan a re-login every ~30 days, or sooner after a revoke. `claude-account expiry` and the `login/<id>` rows say when.
 - **1Password:** an item for `me`'s login email. No token fallback for `me`: a dead
   login is a WARN and a `/login`.
 - **MacBook:** no `me` login needed. Tinycast reads the mini.

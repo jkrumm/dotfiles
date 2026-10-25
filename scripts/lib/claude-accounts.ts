@@ -283,6 +283,73 @@ export function tokenFromCredentials(raw: string): string | null {
   }
 }
 
+// ── Login expiry ────────────────────────────────────────────────────────────────────────────────────────────────
+// The Keychain item also carries `claudeAiOauth.refreshTokenExpiresAt` (grant + 30 d, epoch ms, not extended by
+// rotation) and `expiresAt` (the 8 h access token). Only these two timestamps are ever read out of it.
+
+/** WARN at or below this many ms of refresh-token life left. */
+export const LOGIN_WARN_MS = 7 * 86400_000
+/** FAIL at or below this many ms left (or when already past). */
+export const LOGIN_FAIL_MS = 2 * 86400_000
+
+export interface LoginTimestamps {
+  refreshTokenExpiresAt: number | null
+  expiresAt: number | null
+}
+
+/** The two expiry timestamps out of the Keychain item's JSON; null when it is not a credentials blob. Never touches the tokens. */
+export function expiryFromCredentials(raw: string): LoginTimestamps | null {
+  try {
+    const o = (JSON.parse(raw) as { claudeAiOauth?: Record<string, unknown> })?.claudeAiOauth
+    if (!o || typeof o !== "object") return null
+    const ms = (v: unknown) => (isNum(v) && v > 0 ? v : null)
+    return { refreshTokenExpiresAt: ms(o.refreshTokenExpiresAt), expiresAt: ms(o.expiresAt) }
+  } catch {
+    return null
+  }
+}
+
+export type LoginGrade = "PASS" | "WARN" | "FAIL"
+
+/** PASS > 7 d, WARN <= 7 d, FAIL <= 2 d or past; no timestamp (unreadable item) is a WARN, never a FAIL. */
+export function gradeLogin(refreshTokenExpiresAt: number | null, nowMs: number): LoginGrade {
+  if (refreshTokenExpiresAt === null) return "WARN"
+  const left = refreshTokenExpiresAt - nowMs
+  return left <= LOGIN_FAIL_MS ? "FAIL" : left <= LOGIN_WARN_MS ? "WARN" : "PASS"
+}
+
+export interface LoginRow {
+  id: string
+  grade: LoginGrade
+  /** epoch ms of the refresh token's end of life; null when the item could not be read */
+  refresh_expires_at: number | null
+  access_expires_at: number | null
+  days_left: number | null
+  expired: boolean
+  detail: string
+}
+
+/** Grade of every enabled account's login from its own Keychain item (read-only `security … -w`, 0 tokens, nothing logged but timestamps). */
+export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?: string; baseEnv: Record<string, string | undefined>; now: number }): LoginRow[] {
+  return Object.entries(d.reg.accounts).filter(([, a]) => a.enabled).map(([id, a]) => {
+    const svc = keychainService(accountDir(a))
+    const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
+    const unreadable = (why: string): LoginRow => ({ id, grade: "WARN", refresh_expires_at: null, access_expires_at: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
+    if (kc.error || kc.status !== 0) return unreadable(`Keychain '${svc}': ${kc.error?.message ?? (kc.stderr.trim().slice(0, 120) || `rc=${kc.status}`)}`)
+    const t = expiryFromCredentials(kc.stdout)
+    if (!t) return unreadable(`Keychain '${svc}' is not a Claude login`)
+    if (t.refreshTokenExpiresAt === null) return { ...unreadable("no refreshTokenExpiresAt in the Keychain item"), access_expires_at: t.expiresAt }
+    const left = t.refreshTokenExpiresAt - d.now
+    const days = Math.round((left / 86400_000) * 10) / 10
+    const expired = left <= 0
+    const date = new Date(t.refreshTokenExpiresAt).toISOString().slice(0, 10)
+    return {
+      id, grade: gradeLogin(t.refreshTokenExpiresAt, d.now), refresh_expires_at: t.refreshTokenExpiresAt, access_expires_at: t.expiresAt, days_left: days, expired,
+      detail: expired ? `login expired ${date} (${-days} d ago): /login needed` : `login valid until ${date} (${days} d left)`,
+    }
+  })
+}
+
 export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 /** Same request shape as scripts/fetch_usage.py fetch(). */
 export const oauthUsageHeaders = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20", Accept: "application/json" })

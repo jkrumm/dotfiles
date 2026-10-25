@@ -2308,12 +2308,13 @@ fan-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
 
-# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr) and the folder-trust sync.
+# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync and the verify suite's login/<id> grading.
 .PHONY: claude-launcher-test
 claude-launcher-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
 
 .PHONY: brew-service-test
 brew-service-test:

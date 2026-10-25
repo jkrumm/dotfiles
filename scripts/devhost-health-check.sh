@@ -1252,6 +1252,7 @@ check_claude_auth_iu() {
 
 # iu dead = FAIL (as before). Any other enabled account dead = WARN: the picker routes around it, and
 # its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a herdr pane.
+# Login expiry (the 30-day refresh token) is graded after the liveness checks, see the end of the function.
 check_claude_auth() {
   local iu_msg iu_rc=0 accts id dir out dead="" ok="" worst msg
   iu_msg=$(check_claude_auth_iu) || iu_rc=$?
@@ -1275,8 +1276,29 @@ check_claude_auth() {
   elif [[ -n "$ok" ]]; then
     msg="$msg; also${ok}"
   fi
-  echo "$msg"
+  # Login expiry: the refresh token ends 30 days after the login (claude-account expiry). WARN inside 7 days or when
+  # the Keychain item cannot be read; an already-expired iu login is a FAIL (as a dead iu login is), any other account WARN.
+  local default_id eid egrade eexpired edetail expiry_msg=""
+  default_id=$("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.dir == null) | .key' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null | head -1) || default_id=""
+  while IFS=$'\t' read -r eid egrade eexpired edetail; do
+    [[ -n "$eid" && "$egrade" != PASS ]] || continue
+    expiry_msg+="; $eid $edetail"
+    if [[ "$eexpired" == true && "$eid" == "${default_id:-iu}" ]]; then worst=1
+    else (( worst == 0 )) && worst=2
+    fi
+  done < <(claude_login_expiry)
+  echo "$msg$expiry_msg"
   return "$worst"
+}
+
+# One line per enabled account whose login is not comfortably valid: id, grade, expired, detail (tab separated).
+# claude-account expiry reads only the two timestamps of each account's Keychain item. Silent when the helper is missing
+# or its answer is not JSON: the dead-login checks above already cover a logged-out account.
+claude_login_expiry() {
+  [[ -x "$CLAUDE_ACCOUNT_BIN" ]] || return 0
+  local out
+  out=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" expiry --json 2>/dev/null) || return 0
+  "$JQ_BIN" -r '.accounts[]? | "\(.id)\t\(.grade)\t\(.expired)\t\(.detail)"' <<<"$out" 2>/dev/null || true
 }
 
 # Claude Code auto-updates can rename the keychain service, the quota field or the config-dir resolution that the
