@@ -188,10 +188,14 @@ from "nobody chose", so the decision travels in this variable instead:
 
 - every chooser sets it: `c`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
   (herdr `--env` at pane creation, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
-- bare `claude` in an interactive zsh picks only when it is unset, then sets it inside a subshell (the pane's own
+- bare `claude` in an interactive zsh picks unless the marker is set **and consistent**: the marked account's registry dir
+  must equal the current `CLAUDE_CONFIG_DIR` (iu = unset; one `jq` read, only when the marker is set). A stale marker
+  inherited from a long-lived parent (herdr server env, an old shell) fails that check and is ignored, so it cannot
+  silently skip the pick; every chooser sets marker and dir together. An unreadable registry lets the marker stand. It
+  then sets the marker inside a subshell (the pane's own
   environment stays unmarked: the next `claude` typed there is a new spawn and picks again).
 - result: exactly one `picks.jsonl` line per spawn (`scripts/claude-launcher.test.sh` counts them for `rd`,
-  `c` and bare `claude`). Never export it from a profile: a stale marker silently disables the pick.
+  `c` and bare `claude`). Never export it from a profile (it would be ignored whenever it disagrees with the dir, but a matching one still skips the pick).
 
 One `claude` function serves both machines (`config/zsh/claude-auth.zsh`): the pick runs everywhere, then
 `_claude_auth_run` applies the mini's token fallback (defined as a plain `command claude` off the dev host).

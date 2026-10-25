@@ -456,7 +456,7 @@ startup — `source ~/.zshrc` after editing.
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
 `CLAUDE_ACCOUNT_PICKED=<id>` marks "account already chosen" (set by `c`/`cs`/`cf` and `rd`, inherited by children;
-iu is `unset CLAUDE_CONFIG_DIR`, so the marker, not the dir, says it was decided): one pick-log line per spawn.
+iu is `unset CLAUDE_CONFIG_DIR`, so the marker says it was decided; it only counts while it agrees with `CLAUDE_CONFIG_DIR`): one pick-log line per spawn.
 `make claude-accounts-setup` pre-trusts `$HOME` in every account's `.claude.json` (`scripts/claude-pretrust.sh`).
 Contract and tests: `docs/claude-accounts.md` §Spawn integration, `make claude-launcher-test`.
 

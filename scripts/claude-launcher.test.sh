@@ -28,6 +28,7 @@ command -v zsh >/dev/null || { echo "✗ zsh not found"; exit 2; }
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/claude-launcher-test.XXXXXX")" || exit 2
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/home" "$TMP/xdg/secrets" "$TMP/work"
+ME="$TMP/home/.claude-me" # the registry's `me` dir, relative to the scratch HOME
 PICKS="$TMP/picks"; CALLS="$TMP/calls"
 
 cat > "$TMP/bin/claude" <<'EOF'
@@ -51,7 +52,7 @@ case ${1-} in
     (( why )) && echo "# picked=${STUB_PICK_ID:-iu} reason=test stale=false"
     exit "${STUB_PICK_RC:-0}" ;;
   session) [[ -n ${STUB_SESSION-} ]] && { echo "$STUB_SESSION"; exit 0; }; exit 1 ;;
-  env) case $2 in me) echo "export CLAUDE_CONFIG_DIR='/stub/me'" ;; iu) echo "unset CLAUDE_CONFIG_DIR" ;; *) exit 1 ;; esac ;;
+  env) case $2 in me) echo "export CLAUDE_CONFIG_DIR='$HOME/.claude-me'" ;; iu) echo "unset CLAUDE_CONFIG_DIR" ;; *) exit 1 ;; esac ;;
 esac
 EOF
 cat > "$TMP/bin/secrets-run" <<'EOF'
@@ -84,8 +85,8 @@ zrun() {
 echo "not-cache" > "$TMP/xdg/secrets/backend"
 
 echo "bare claude, marker unset"
-reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='/stub/me'" STUB_PICK_ID=me zrun interactive 'claude --dangerously-skip-permissions --model sonnet')
-assert_contains "interactive claude runs on the picked account" "cfg=/stub/me picked=me" "$out"
+reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'claude --dangerously-skip-permissions --model sonnet')
+assert_contains "interactive claude runs on the picked account" "cfg=$ME picked=me" "$out"
 assert_eq "exactly one pick" 1 "$(picks)"
 assert_eq "default lane is interactive" interactive "$(head -1 "$PICKS")"
 
@@ -97,14 +98,24 @@ echo "marker set -> no pick"
 reset; out=$(CLAUDE_ACCOUNT_PICKED=iu zrun interactive 'claude --foo')
 assert_eq "marker iu (CLAUDE_CONFIG_DIR unset): no pick" 0 "$(picks)"
 assert_contains "marker survives into the binary" "cfg=unset picked=iu" "$out"
-reset; out=$(CLAUDE_ACCOUNT_PICKED=me CLAUDE_CONFIG_DIR=/stub/me zrun interactive 'claude --foo')
+reset; out=$(CLAUDE_ACCOUNT_PICKED=me CLAUDE_CONFIG_DIR=$ME zrun interactive 'claude --foo')
 assert_eq "marker me: no pick" 0 "$(picks)"
-assert_contains "pane dir untouched" "cfg=/stub/me picked=me" "$out"
+assert_contains "pane dir untouched" "cfg=$ME picked=me" "$out"
+
+echo "stale marker (inconsistent with CLAUDE_CONFIG_DIR) is ignored"
+reset; out=$(CLAUDE_ACCOUNT_PICKED=me zrun interactive 'claude --foo')
+assert_eq "marker me + CLAUDE_CONFIG_DIR unset: picks" 1 "$(picks)"
+reset; out=$(CLAUDE_ACCOUNT_PICKED=iu CLAUDE_CONFIG_DIR=$ME zrun interactive 'claude --foo')
+assert_eq "marker iu + a me dir: picks" 1 "$(picks)"
+reset; out=$(CLAUDE_ACCOUNT_PICKED=nobody zrun interactive 'claude --foo')
+assert_eq "marker for an unregistered id: picks" 1 "$(picks)"
+reset; out=$(CLAUDE_ACCOUNT_PICKED=me CLAUDE_CONFIG_DIR=$ME/ zrun interactive 'claude --foo')
+assert_eq "marker me + trailing-slash dir: still consistent, no pick" 0 "$(picks)"
 
 echo "resume pins the session's account"
 for form in '--resume 1234-abcd' '-r 1234-abcd' '--resume=1234-abcd'; do
   reset; out=$(STUB_SESSION=me zrun interactive "claude $form")
-  assert_contains "claude $form -> session account" "cfg=/stub/me picked=me" "$out"
+  assert_contains "claude $form -> session account" "cfg=$ME picked=me" "$out"
   assert_eq "claude $form: no pick" 0 "$(picks)"
 done
 reset; out=$(zrun interactive 'claude --resume 1234-abcd')
@@ -120,9 +131,9 @@ for args in '-p "reply ok"' '--version' 'mcp list' 'auth status' '--bg'; do
 done
 
 echo "c / cs / cf set the marker, never pick twice"
-reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='/stub/me'" STUB_PICK_ID=me zrun interactive 'c --foo')
+reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'c --foo')
 assert_eq "c: exactly one pick" 1 "$(picks)"
-assert_contains "c: binary sees account and marker" "cfg=/stub/me picked=me" "$out"
+assert_contains "c: binary sees account and marker" "cfg=$ME picked=me" "$out"
 assert_eq "c: lane interactive" interactive "$(head -1 "$PICKS")"
 reset; out=$(zrun interactive 'cs')
 assert_contains "cs pins the model" "--model sonnet" "$out"
@@ -130,10 +141,10 @@ assert_contains "cs on an iu pick: marker iu" "picked=iu" "$out"
 assert_eq "cs: exactly one pick" 1 "$(picks)"
 reset; out=$(zrun interactive 'c --account me')
 assert_eq "c --account me: no pick" 0 "$(picks)"
-assert_contains "c --account me: forced account + marker" "cfg=/stub/me picked=me" "$out"
+assert_contains "c --account me: forced account + marker" "cfg=$ME picked=me" "$out"
 reset; out=$(STUB_SESSION=me zrun interactive 'c --resume 1234-abcd')
 assert_eq "c --resume pins: no pick" 0 "$(picks)"
-assert_contains "c --resume pin" "cfg=/stub/me picked=me" "$out"
+assert_contains "c --resume pin" "cfg=$ME picked=me" "$out"
 reset; out=$(STUB_PICK_RC=4 zrun interactive 'c')
 assert_contains "registry error warns" "registry unreadable" "$out"
 assert_contains "registry error still launches on iu" "cfg=unset picked=iu" "$out"
@@ -145,7 +156,7 @@ assert_contains "garbage answer from the picker: says so" "account picker failed
 assert_contains "bare claude stays non-blocking" "cfg=unset picked=iu" "$out"
 reset; out=$(STUB_PICK_LINE=spill STUB_PICK_RC=3 zrun interactive 'claude')
 case $out in *"picker failed"*) bad "spill is an answer, not a failure" "$out" ;; *) ok "spill is silent, launches on iu" ;; esac
-reset; out=$(CLAUDE_CODE_OAUTH_TOKEN=leak STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='/stub/me'" STUB_PICK_ID=me zrun interactive 'c')
+reset; out=$(CLAUDE_CODE_OAUTH_TOKEN=leak STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'c')
 case $out in *tok=set*) bad "me pick must not inherit the IU token" "$out" ;; *) ok "me pick strips CLAUDE_CODE_OAUTH_TOKEN" ;; esac
 
 echo "rd spawn: one pick-log line (pick_account + herdr --env + agent_pane_setup, then the pane's claude)"
@@ -158,7 +169,7 @@ rd_spawn() { # $1 = pick line, $2 = id; simulates cmd_wave's pick + pane setup a
       pick_account wave; eval \"herdr workspace create --cwd /tmp \$PICK_ENV\"; agent_pane_setup %1 wave" >/dev/null 2>&1
   echo "not-cache" > "$TMP/xdg/secrets/backend"
 }
-for case_ in "export CLAUDE_CONFIG_DIR='/stub/me':me" "unset CLAUDE_CONFIG_DIR:iu"; do
+for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; do
   line=${case_%:*}; id=${case_##*:}
   rd_spawn "$line" "$id"
   assert_contains "herdr gets the marker at spawn time ($id)" "CLAUDE_ACCOUNT_PICKED=$id" "$(cat "$STUB_ENVS")"
@@ -181,7 +192,7 @@ assert_contains "marker iu + dead login: token injected, still no pick" "tok=set
 assert_eq "no pick" 0 "$(picks)"
 reset; out=$(STUB_LOGGED_IN=1 zrun interactive 'claude --foo')
 assert_contains "iu + live login: no token" "tok= " "$out"
-reset; out=$(STUB_LOGGED_IN=0 STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='/stub/me'" STUB_PICK_ID=me zrun interactive 'claude --foo')
+reset; out=$(STUB_LOGGED_IN=0 STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'claude --foo')
 assert_contains "me pick + dead login: hint, never the IU token" "no token fallback for this account" "$out"
 case $out in *tok=set*) bad "me must never get the IU token" "$out" ;; *) ok "me never gets the IU token" ;; esac
 reset; out=$(STUB_LOGGED_IN=0 zrun plain 'claude --foo')

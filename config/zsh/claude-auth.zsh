@@ -180,8 +180,22 @@ _claude_starts_session() {
   return 0
 }
 
+# True when CLAUDE_ACCOUNT_PICKED still describes this environment: the marked account's registry dir is
+# the current CLAUDE_CONFIG_DIR (iu = unset). A stale marker inherited from a long-lived parent (the herdr
+# server's env, an old shell) fails this and the pick runs. Every chooser sets marker and dir together.
+# An unreadable registry cannot say otherwise, so the marker stands.
+_claude_marker_valid() {
+  [[ -n ${CLAUDE_ACCOUNT_PICKED-} ]] || return 1
+  local want
+  want=$(jq -r --arg id "$CLAUDE_ACCOUNT_PICKED" '.accounts[$id] | if . == null then "?" else (.dir // "") end' \
+    "${_CLAUDE_ACCOUNTS_REGISTRY-}" 2>/dev/null) || return 0
+  [[ $want == "?" ]] && return 1
+  want=${want/#\~/$HOME}
+  [[ ${want:A} == "${CLAUDE_CONFIG_DIR:+${CLAUDE_CONFIG_DIR:A}}" || ( -z $want && -z ${CLAUDE_CONFIG_DIR-} ) ]]
+}
+
 claude() {
-  if [[ -o interactive && -z ${CLAUDE_ACCOUNT_PICKED-} ]] && (( $+functions[_claude_account_line] )) && _claude_starts_session "$@"; then
+  if [[ -o interactive ]] && ! _claude_marker_valid && (( $+functions[_claude_account_line] )) && _claude_starts_session "$@"; then
     local out
     # A failing forced/session lookup is the only rc 1; fall through to the plain run rather than block.
     if out=$(_claude_account_line "" "${USAGE_LANE:-interactive}" "$(_claude_resume_id "$@")"); then

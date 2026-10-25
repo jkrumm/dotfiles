@@ -116,7 +116,7 @@ done <<<"$ACCOUNTS"
 # ── c. launcher matrix (static) ────────────────────────────────────────────────
 # An interactive zsh loads the whole user config: bound it (perl alarm survives exec), a hang is a FAIL row.
 fn_rc=0
-FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf claude _claude_launch _claude_account_line _claude_enter_account ca cap cdf cdp claude_iu' 2>/dev/null) || fn_rc=$?
+FN=$(perl -e 'alarm 10; exec @ARGV' zsh -ic 'functions c cs cf claude _claude_marker_valid _claude_launch _claude_account_line _claude_enter_account ca cap cdf cdp claude_iu' 2>/dev/null) || fn_rc=$?
 fn_body() { # <name> — body of one zsh function from the dump
   awk -v n="$1" '$0 ~ "^" n " \\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' <<<"$FN"
 }
@@ -139,7 +139,7 @@ else
   fi
   # bare `claude` (what herdr types into a pane): one function that picks on ${USAGE_LANE:-interactive} unless
   # CLAUDE_ACCOUNT_PICKED is set, and every chooser sets that marker.
-  if fn_body claude | grep -q '_claude_account_line' && fn_body claude | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body claude | grep -q 'USAGE_LANE'; then
+  if fn_body claude | grep -q '_claude_account_line' && fn_body claude | grep -q '_claude_marker_valid' && fn_body _claude_marker_valid | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body claude | grep -q 'USAGE_LANE'; then
     row PASS "launcher/claude" "bare claude picks on \${USAGE_LANE:-interactive} unless CLAUDE_ACCOUNT_PICKED is set"
   else
     row FAIL "launcher/claude" "the claude function no longer picks (herdr agent start would land on iu) or ignores the marker"
