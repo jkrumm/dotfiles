@@ -225,6 +225,14 @@ the weatherorb session workflow.
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
 | `com.iu.teamchat-mirrors` | IuRoot (chat) | 900s — refreshes the teamchat code mirrors (into ~/.local/share/teamchat/mirrors and the teamchat Colima `repos` volume); installed by `make -C chat mirrors-install` |
+| `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
+| `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
+| `com.iu.teamchat-backup` | IuRoot (chat) | daily 03:30 — `teamchat-backup/backup.sh` |
+| `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree |
+| `com.iu.teamchat-runtime-deploy` | IuRoot (chat) | 600s — `prometheus-deploy-gate/gate.py` for the teamchat runtime |
+| `com.iu.teamchat-atlassian-jira` | IuRoot (chat) | 900s — `teamchat-atlassian-sync/atlassian-sync.sh jira` |
+| `com.iu.teamchat-atlassian-confluence` | IuRoot (chat) | 7200s — `teamchat-atlassian-sync/atlassian-sync.sh confluence` |
+| `com.iu.teamchat-funnel-reconcile` | IuRoot (chat) | 300s — `chat/scripts/funnel.sh reconcile` in the teamchat-runtime worktree |
 
 Five of the seven IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
 `artefact-daily`, `stack-dashboard`) log to `/tmp` — a known gap, owned by `prometheus-scripts`,
