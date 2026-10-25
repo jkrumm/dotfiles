@@ -21,7 +21,7 @@ import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from "no
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -99,25 +99,44 @@ async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; a
   })
 }
 
-/** Detached background refresh of claimed ids; its stdout/stderr append to the keepalive log (a failure there used to vanish). */
-function spawnDetachedRefresh(ids: string[]): void {
+/** Run a command detached and unwaited; its stdout/stderr append to the keepalive log (a failure there used to vanish). */
+function spawnDetached(cmd: string[]): void {
   let fd: number | null = null
   try {
     mkdirSync(dirname(keepaliveLogPath()), { recursive: true })
     fd = openSync(keepaliveLogPath(), "a")
   } catch {
-    // an unwritable log must not stop the refresh: fall back to discarding its output
+    // an unwritable log must not stop the child: fall back to discarding its output
   }
   try {
     const out = fd ?? "ignore"
-    Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", out, out], detached: true }).unref()
+    Bun.spawn(cmd, { stdio: ["ignore", out, out], detached: true }).unref()
   } finally {
     if (fd !== null) closeSync(fd)
   }
 }
+const spawnDetachedRefresh = (ids: string[]) => spawnDetached([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")])
 
 const loginExpiry = (reg: Registry, now: number) =>
   readLoginExpiry({ reg, spawn: spawner, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, baseEnv: process.env, now })
+
+/**
+ * Keepalive only: a dead login, or one inside its last 7 days, asks its owner once per 24 h for a re-login through a
+ * native approval dialog (claude-relogin --ask, detached; the dialog is the human's click, nothing runs by itself).
+ */
+function askForRelogins(reg: Registry, results: Record<string, RefreshResult>): void {
+  const script = process.env.CLAUDE_ACCOUNTS_RELOGIN ?? join(import.meta.dir, "claude-relogin.sh")
+  const now = Date.now()
+  try {
+    const asked = askRelogins({
+      results, logins: loginExpiry(reg, now), now,
+      ask: (c) => spawnDetached(["bash", script, c.id, "--ask", "--reason", c.reason]),
+    })
+    for (const id of asked) console.error(`claude-account: asked for a re-login of ${id} (dialog on the MacBook, next ask in 24 h)`)
+  } catch (e) {
+    console.error(`claude-account: re-login ask skipped: ${(e as Error).message}`) // an ask is a courtesy, never a failure of the keepalive
+  }
+}
 
 function expiry(reg: Registry, json: boolean): void {
   const rows = loginExpiry(reg, Date.now())
@@ -209,6 +228,7 @@ async function main(argv: string[]): Promise<number> {
       const stale = Object.entries(results).filter(([, r]) => r === "stale").map(([id]) => id)
       if (all && stale.length) console.error(`claude-account: refresh --all: ${stale.join(", ")} logged in but still without a fresh sample (stored one older than 6 h or missing, see the lines above)`)
       if (all && unresolved.length) console.error(`claude-account: refresh --all: no fresh sample and no auth verdict for ${unresolved.join(", ")}`)
+      if (all) askForRelogins(reg, results)
       if (all && (unresolved.length || stale.length)) return 1
       return 0
     }

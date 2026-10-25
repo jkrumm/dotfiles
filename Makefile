@@ -1392,6 +1392,10 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/claude-account.ts" \
 		DST="$(HOME)/.local/bin/claude-account"
+	@chmod +x $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/scripts/claude-relogin.sh" \
+		DST="$(HOME)/.local/bin/claude-relogin"
 	@dirs=$$(jq -r '.accounts[] | select(.dir != null) | .dir' "$(DOTFILES_DIR)/config/claude-accounts.json") || exit 1; \
 	[ -n "$$dirs" ] || { echo "    ✗ no account dirs in config/claude-accounts.json"; exit 1; }; \
 	for dir in $$dirs; do \
@@ -2308,13 +2312,14 @@ fan-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
 
-# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync and the verify suite's login/<id> grading.
+# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync, the verify suite's login/<id> grading and the claude-relogin scripts.
 .PHONY: claude-launcher-test
 claude-launcher-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/claude-relogin.test.sh
 
 .PHONY: brew-service-test
 brew-service-test:

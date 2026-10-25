@@ -29,6 +29,8 @@ export interface Account {
   plan: string
   units: { session: number; weekly: number }
   homeLanes: string[]
+  /** macOS app (as `open -a` names it) signed in to this account; where `claude-relogin` opens the authorize URL. Absent = system default. */
+  loginBrowser?: string
   enabled: boolean
 }
 export interface Registry {
@@ -88,6 +90,7 @@ function validAccount(a: unknown): a is Account {
     typeof x.plan === "string" &&
     !!x.units && isNum(x.units.session) && isNum(x.units.weekly) &&
     Array.isArray(x.homeLanes) && x.homeLanes.every((l) => typeof l === "string") &&
+    (x.loginBrowser === undefined || typeof x.loginBrowser === "string") &&
     typeof x.enabled === "boolean"
   )
 }
@@ -348,6 +351,55 @@ export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?
       detail: expired ? `login expired ${date} (${-days} d ago): /login needed` : `login valid until ${date} (${days} d left)`,
     }
   })
+}
+
+// ── Re-login asks (keepalive path) ──────────────────────────────────────────────────────────────────────────────
+// A dead or soon-dead login asks its owner for a re-login through a native approval dialog (claude-relogin --ask).
+// Never more than one ask per account per 24 h on this machine, never an auto-run: the dialog is the human's click.
+
+export const RELOGIN_ASK_INTERVAL_MS = 24 * 3600_000
+
+/** True when no ask was recorded for this account in the last 24 h (state: <id>.relogin-ask.json under the cache dir). */
+export function reloginAskDue(id: string, nowMs: number, dir = cacheDir()): boolean {
+  const ts = (readJson(file(dir, id, "relogin-ask.json")) as { ts?: unknown } | null)?.ts
+  if (!isNum(ts)) return true
+  const age = nowMs - ts
+  return age < 0 || age >= RELOGIN_ASK_INTERVAL_MS // a stamp from the future (clock change) must not mute the ask for good
+}
+
+export function markReloginAsked(id: string, nowMs: number, dir = cacheDir()): void {
+  writeAtomic(file(dir, id, "relogin-ask.json"), JSON.stringify({ ts: nowMs }))
+}
+
+export interface ReloginCandidate {
+  id: string
+  reason: string
+}
+
+/**
+ * Accounts that need a human: a refresh that ended `auth-failed`, or a login whose known end of life crossed the WARN
+ * line (<= 7 d, incl. already expired). An unreadable item (no date) never asks: that proves nothing about the login.
+ */
+export function reloginCandidates(results: Record<string, RefreshResult>, logins: LoginRow[]): ReloginCandidate[] {
+  const out: ReloginCandidate[] = []
+  for (const [id, r] of Object.entries(results)) if (r === "auth-failed") out.push({ id, reason: "login is dead" })
+  for (const l of logins) {
+    if (l.grade === "PASS" || l.refresh_expires_at === null || out.some((c) => c.id === l.id)) continue
+    out.push({ id: l.id, reason: l.expired ? "login expired" : `login ends in ${l.days_left} d` })
+  }
+  return out
+}
+
+/** Asks (via `ask`) for every candidate that is due, stamping the 24 h dedupe BEFORE the call so a failing ask is never retried in a loop. Returns the ids asked. */
+export function askRelogins(d: { results: Record<string, RefreshResult>; logins: LoginRow[]; now: number; dir?: string; ask: (c: ReloginCandidate) => void }): string[] {
+  const asked: string[] = []
+  for (const c of reloginCandidates(d.results, d.logins)) {
+    if (!reloginAskDue(c.id, d.now, d.dir)) continue
+    markReloginAsked(c.id, d.now, d.dir)
+    d.ask(c)
+    asked.push(c.id)
+  }
+  return asked
 }
 
 export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"

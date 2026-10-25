@@ -42,7 +42,7 @@ QUEUE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/human-queue"
 
 # The MacBook-side ssh alias `push` targets — see `Host iumac` in
 # config/ssh_config (port 2222, IdentityAgent none, no agent forwarding).
-# Overridable for the test harness.
+# Overridable for the test harness; `local` = this IS the MacBook, run gui-run directly instead of ssh.
 MAC_HOST="${HUMAN_QUEUE_MAC_HOST:-iumac}"
 # 1 = `ask` pushes the dialog immediately (the default); 0 = enqueue only.
 # Tests set 0 so no ask ever opens a real ssh connection.
@@ -258,8 +258,14 @@ push_request() {
   # 69 and the request's state unexplained. Only the LAST line is the result — a
   # login shell on the MacBook may print before the command runs.
   local out rc=0
-  # shellcheck disable=SC2029
-  out="$(ssh "${PUSH_SSH_OPTS[@]}" "$MAC_HOST" "$remote_cmd" < "$req_file" 2>/dev/null | tail -n 1)" || rc=$?
+  if [[ "$MAC_HOST" == local ]]; then
+    # Already on the MacBook (the MacBook's own keepalive asking for a re-login): no ssh self-loop, run the same
+    # gui-run here. human-queue.sh refuses on the mini, which surfaces below as the usual "no response" (69).
+    out="$(bash "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/human-queue.sh" gui-run < "$req_file" 2>/dev/null | tail -n 1)" || rc=$?
+  else
+    # shellcheck disable=SC2029
+    out="$(ssh "${PUSH_SSH_OPTS[@]}" "$MAC_HOST" "$remote_cmd" < "$req_file" 2>/dev/null | tail -n 1)" || rc=$?
+  fi
 
   if (( rc != 0 )) || [[ -z "$out" ]]; then
     note "push $id: could not reach $MAC_HOST or got no response (ssh rc=$rc) — request stays pending, run 'make human-queue' on the MacBook"

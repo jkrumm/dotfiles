@@ -219,6 +219,21 @@ bash "$AH" push "$id" >/dev/null 2>&1
 assert_eq "push: refuses to push an id that already has a .res (rc 1)" "1" "$?"
 
 echo ""
+echo "ask-human.sh push, HUMAN_QUEUE_MAC_HOST=local — gui-run on this machine, no ssh"
+export HUMAN_QUEUE_PUSH=1
+ssh_probe="$TMP/ssh-called"
+mkdir -p "$TMP/fakebin"
+printf '#!/bin/sh\ntouch "%s"\nexit 255\n' "$ssh_probe" > "$TMP/fakebin/ssh"; chmod +x "$TMP/fakebin/ssh"
+out="$(PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Run bash "$AH" ask "local approval" --cmd "echo local-ran" 2>/dev/null)"; rc=$?
+id="$(printf '%s\n' "$out" | head -1)"
+assert_eq "local push, Run: rc 0" "0" "$rc"
+assert_eq "local push: ssh never called" "no" "$([[ -e "$ssh_probe" ]] && echo yes || echo no)"
+assert_contains "local push: result persisted as done" '"status":"done"' "$(cat "$STATE/human-queue/$id.res")"
+out="$(PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" ask "local approval" --cmd "echo nope" 2>/dev/null)"; rc=$?
+assert_eq "local push, Deny: rc 1" "1" "$rc"
+export HUMAN_QUEUE_PUSH=0
+
+echo ""
 [[ "$fail" -eq 0 ]] \
   && { echo "✓ human-queue: all $pass assertion(s) passed"; exit 0; } \
   || { echo "✗ human-queue: $fail of $((pass + fail)) assertion(s) failed"; exit 1; }

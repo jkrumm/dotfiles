@@ -48,7 +48,7 @@ first 8 hex of sha256 of the config dir). The capacity units come from measured
 ratios: 20x/5x ≈ 3.7× per session and ≈ 2.0× per week (mulletiq regression).
 
 Registry: `config/claude-accounts.json` is the single source (id, dir,
-units, home lanes, enabled flag). `enabled` stays false until an account's login
+units, home lanes, `loginBrowser`, enabled flag). `enabled` stays false until an account's login
 exists, so a new account ships dark.
 
 `~/.claude-me` is created by `make claude-accounts-setup` (idempotent):
@@ -260,8 +260,8 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 
 | Check | What it proves | FAIL means |
 |-|-|-|
-| `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL |
-| `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past; an unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: a new login (§Re-login) |
+| `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL. Fix: `claude-relogin <id>` |
+| `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past; an unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
@@ -298,7 +298,7 @@ and MacBook list). Per enabled account:
 per enabled account: the OAuth usage endpoint first (source 3), and when that gives no sample `claude auth status` for that account's `CLAUDE_CONFIG_DIR`. The two are decoupled: the auth mark follows the verdict, never the sample. loggedIn=true clears the mark (`auth-ok`), loggedIn=false sets it (`auth-failed`), and a fresh sample or a statusline `record` also clears it (both prove the login). Both calls cost 0 tokens and prime no window. The run exits 1 when an account got neither a sample nor a verdict, and also when the account is logged in but the endpoint gave no sample and its stored sample is older than 6 h (or missing): a dying feed must turn the jobrun grade red instead of fading out quietly. An endpoint failure with a clean `auth status` and a sample younger than 6 h is exit 0. stderr names the account and the age. `claude auth status` is also what keeps an idle account's OAuth login alive. `--all` ignores the 10-minute freshness and the auth cooldown but not the
 5-minute claim. The interactive and non-interactive picks run the same refresh opportunistically (detached, same
 claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/claude-accounts-keepalive.log`
-(a green run prints nothing; the detached refresh a pick spawns appends its stdout/stderr to the same file).
+(a green run prints nothing; the detached refresh a pick spawns appends its stdout/stderr to the same file). `--all` also asks for a re-login when a login is dead or inside its last 7 days (§Re-login, once per account per 24 h).
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
@@ -311,19 +311,54 @@ claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/
    against a live `/api/oauth/usage` body and `keychainService` against the binary.
 4. Optional: `make claude-accounts-e2e` for the real attribution round trip.
 
-**Re-login for `me`** (dead login, revoked session): on the mini, in a herdr pane (the login Keychain is only
-reachable from the GUI session; never `ssh mini 'claude …'`):
+**Re-login** (dead login, revoked session, or `login/<id>` WARN): `claude-relogin <id>`. Logins are per machine (the
+mini and the MacBook keep separate Keychain items), so it runs on the machine that owns the credential; `--machine
+mini|macbook` reaches the other one over ssh.
 
-1. `CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude`
-2. `/login`, press `c` to copy the URL.
-3. Open the URL in the personal browser profile (signed in to `me`), approve, paste the code back into the pane.
-4. `claude-account refresh --ids me`, then `make claude-accounts-verify`.
+```
+claude-relogin me              # open the login terminal on this machine, approve in the browser, done
+claude-relogin me --ask        # push an approval dialog to the MacBook; its one click starts the same thing
+claude-relogin me --dry-run    # print exactly what would run, run nothing
+```
+
+1. It opens a real GUI-session terminal (the login Keychain is only reachable from there; never `ssh mini 'claude …'`):
+   a herdr workspace `relogin <id>` on the mini, a Terminal window on the MacBook. There it runs
+   `CLAUDE_CONFIG_DIR=<dir> BROWSER=scripts/claude-login-browser.sh claude auth login --claudeai` (`CLAUDE_CONFIG_DIR`
+   stays unset for `iu`; token env vars are stripped).
+2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
+   helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
+   Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the
+   browser is on the MacBook: it starts `ssh -N -R <port>:localhost:<port> iumac` so the browser's localhost callback
+   lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own ssh connection and closes when
+   the login process ends, when the CLI stops listening, or after 45 minutes without a connection (an idle watchdog, not
+   a deadline).
+3. **You click approve in that browser.** Nothing drives the browser or reads mail: automating the login itself is out
+   of bounds (Anthropic's terms), a human always approves.
+4. It then runs `claude-account refresh --ids <id>` and prints the account's `usage` line and its expiry.
+
+If the forward or ssh fails, the helper prints the URL and the CLI prompt is still there: open the URL yourself and paste
+the code. **Manual fallback** (no script at all): on the machine that owns the login, in a herdr pane or Terminal,
+`CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude` (`iu`: unset it), `/login`, press `c` to copy the URL, open it in the
+right profile, approve, paste the code, then `claude-account refresh --ids <id>` and `make claude-accounts-verify`.
+
+**The ask (keepalive path).** The hourly `claude-account refresh --all` asks for a re-login by itself, never runs one:
+when a refresh ends `auth-failed` for an account on this machine, or `login/<id>` has a known end of life within 7
+days (an unreadable item never asks), it runs `claude-relogin <id> --ask --reason …` detached. That shows a native
+dialog on the MacBook (through `scripts/ask-human.sh`: from the mini over `ssh iumac`, on the MacBook directly,
+`HUMAN_QUEUE_MAC_HOST=local`) whose command is `bash "$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh" <id> --machine
+<m>`; the owner reads it and clicks Run once. At most one ask per account per 24 h per machine, stamped before the ask
+(`~/.cache/claude-accounts/<id>.relogin-ask.json`), so a failing ask never loops. An unanswered dialog falls back to the
+human queue and its Slack notification, as every `ask-human` request does.
 
 **Troubleshooting**
 
 | Symptom | Likely cause | Fix |
 |-|-|-|
-| `auth/me` WARN, heartbeat `account me NOT logged in` | login revoked or aged out | re-login steps above |
+| `auth/me` WARN, heartbeat `account me NOT logged in` | login revoked or aged out | `claude-relogin me` (§Re-login) |
+| `login/<id>` WARN or FAIL, heartbeat `<id> login valid until … (N d left)` | the 30-day refresh token is near its end | `claude-relogin <id>` on that machine; the keepalive has already asked once per 24 h |
+| `login/<id>` WARN `login expiry unreadable` | Keychain locked (headless session), or the item has no `refreshTokenExpiresAt` | unlock the GUI session and rerun; `claude-account expiry` shows the reason |
+| `claude-relogin` prints the URL and a paste hint | no loopback port in the URL, the reverse forward was refused (port taken on the MacBook, `iumac` sshd down) or `open` failed there | open the URL in the account's browser yourself and paste the code at the CLI prompt |
+| the re-login dialog never appears | MacBook asleep or unreachable | the request stays in the human queue (`make human-queue` on the MacBook) and Slack; or run `claude-relogin <id>` there |
 | `launcher/agent-gateway` FAIL | session-runner lost its `claude-account pick` call (or agent-gateway not deployed with it) | check agent-gateway `master`, redeploy |
 | `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
@@ -392,19 +427,21 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 
 ## Login logistics
 
-- **Where to log in:** on the mini, inside a herdr pane (the login Keychain is
-  only reachable from the GUI session; never `ssh mini 'claude …'`). Run
-  `CLAUDE_CONFIG_DIR=~/.claude-me claude`, then `/login`, then press `c` to copy
-  the URL.
-- **Browser:** paste the URL into a second browser profile on the MacBook that
-  stays signed in to `me`; the first profile keeps `iu` and work. If
-  the callback can't reach the mini, paste the code back into the pane.
+- **Per machine, per account:** the mini and the MacBook keep separate Keychain items, so every machine needs its own
+  login for each account it uses (a pick on the MacBook for `me` needs `me` logged in there). Never copy credentials
+  between machines or dirs. `claude-relogin <id> --machine mini|macbook` logs in on the machine that owns the credential.
+- **Where it runs:** in a GUI-session terminal on that machine (herdr workspace on the mini, Terminal on the MacBook);
+  the login Keychain is only reachable from the GUI session; never `ssh mini 'claude …'`. `claude-relogin` opens it.
+- **Browser:** the registry's `loginBrowser` names the app signed in to the account (`iu` Chrome, the work session; `me`
+  Helium, the personal one). It lives on the MacBook, so a login on the mini forwards the callback through a reverse ssh
+  tunnel (§Re-login). If the callback can't reach the CLI, paste the code at its prompt.
 - **How often:** the access token (8 h) is renewed by the keepalive, but the refresh token ends 30 days after the login
   (`refreshTokenExpiresAt`, not extended by rotation; what the server does past that date is unproven, one report says 55
-  days). Plan a re-login every ~30 days, or sooner after a revoke. `claude-account expiry` and the `login/<id>` rows say when.
+  days). Plan a re-login every ~30 days, or sooner after a revoke. `claude-account expiry` and the `login/<id>` rows say
+  when, and the keepalive asks once per 24 h from 7 days out.
 - **1Password:** an item for `me`'s login email. No token fallback for `me`: a dead
-  login is a WARN and a `/login`.
-- **MacBook:** no `me` login needed. Tinycast reads the mini.
+  login is a WARN and a re-login.
+- **Tinycast (MacBook)** reads the mini's quota; it needs no login of its own.
 - **Hygiene:** real identity, own card, no VPN hopping. Use `me` at normal intensity
   on day one; ban reports cluster right after a purchase or upgrade.
 

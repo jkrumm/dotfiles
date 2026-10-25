@@ -1271,7 +1271,7 @@ check_claude_auth() {
   done <<<"$accts"
   msg="$iu_msg"
   if [[ -n "$dead" ]]; then
-    msg="$msg; account${dead} NOT logged in — picker routes around it (fix: /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
+    msg="$msg; account${dead} NOT logged in — picker routes around it (fix: claude-relogin <id>, or /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
     (( worst == 0 )) && worst=2
   elif [[ -n "$ok" ]]; then
     msg="$msg; also${ok}"

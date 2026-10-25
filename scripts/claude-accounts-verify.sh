@@ -62,7 +62,7 @@ while IFS=$'\t' read -r id dir; do
   elif [[ "$logged" == "true" ]]; then
     row PASS "auth/$id" "loggedIn, configDirectory $want_dir, keychain '$svc' present"
   else
-    row "$bad" "auth/$id" "NOT logged in (keychain '$svc' $kc) — /login with ${dir/#-/CLAUDE_CONFIG_DIR unset} in a herdr pane"
+    row "$bad" "auth/$id" "NOT logged in (keychain '$svc' $kc) — fix: claude-relogin $id (or /login with ${dir/#-/CLAUDE_CONFIG_DIR unset} in a herdr pane)"
   fi
 done <<<"$ACCOUNTS"
 
@@ -73,7 +73,7 @@ done <<<"$ACCOUNTS"
 EXP=$("${CA[@]}" expiry --json 2>/dev/null) || EXP=""
 while IFS= read -r id; do
   [[ -n "$id" ]] || continue
-  line=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | "\(.grade)\t\(.detail)"' <<<"$EXP" 2>/dev/null) || line=""
+  line=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | "\(.grade)\t\(.detail)\(if .grade != "PASS" and .refresh_expires_at != null then " — fix: claude-relogin \($id)" else "" end)"' <<<"$EXP" 2>/dev/null) || line=""
   if [[ -z "$line" ]]; then
     row WARN "login/$id" "claude-account expiry gave no answer"
   else
