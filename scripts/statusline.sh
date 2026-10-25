@@ -2,7 +2,8 @@
 
 # Claude Code Statusline — 2 line layout
 #
-# Line 1: Auth (MAX/IU) · Model · Effort | Context (usable) | Session tokens | Cache hit | Duration | Usage (5h/wk)
+# Line 1: Auth (MAX/IU) · Model · Effort | Context (usable) | Session tokens | Cache hit | Duration | Usage (5h/wk, ↑pace)
+#         | other account · pool · routing reason (more than one account enabled; files only)
 # Line 2: CWD · Git branch & dirty flag
 
 input=$(cat)
@@ -46,9 +47,10 @@ IFS=$'\x1f' read -r model effort thinking cwd context_size used_percentage \
 # `claude-account` is the one resolver, but it is a Bun process: a render only READS the small file it leaves
 # per CLAUDE_CONFIG_DIR ("<id> <badge>"); it is rewritten in the background (missing file, and inside the 60 s
 # usage throttle below). The badge is empty unless more than one account is enabled.
+_SL_DIR="${CLAUDE_SL_DIR:-/tmp/claude_sl}"   # render caches; CLAUDE_SL_DIR is the test seam (scripts/statusline.test.sh)
 _CA_PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 _ca_key="${CLAUDE_CONFIG_DIR:-default}"
-_ca_file="/tmp/claude_sl/account_v2_${_ca_key//\//_}"
+_ca_file="$_SL_DIR/account_v2_${_ca_key//\//_}"
 account_id=""
 account_badge=""
 [ -s "$_ca_file" ] && IFS=' ' read -r account_id account_badge < "$_ca_file"
@@ -70,7 +72,7 @@ _ca_resolve() {
   fi
 }
 if [ ! -e "$_ca_file" ]; then
-  mkdir -p /tmp/claude_sl
+  mkdir -p "$_SL_DIR"
   # noclobber: only the render that wins the create resolves; the placeholder stops later renders respawning
   if ( set -o noclobber; : > "$_ca_file" ) 2>/dev/null; then
     ( _ca_resolve ) >/dev/null 2>&1 &
@@ -142,7 +144,7 @@ if [ -n "$session_id" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" 
   fi
   sig="${main_size}:${#sub_files[@]}:${sub_size}"
 
-  _tok_cache_dir="/tmp/claude_sl"
+  _tok_cache_dir="$_SL_DIR"
   _tok_cache="${_tok_cache_dir}/tokens_${session_id}.json"
   mkdir -p "$_tok_cache_dir"
 
@@ -184,8 +186,8 @@ fi
 # Fallback until then: fetch_usage.py (Keychain OAuth → api.anthropic.com/api/oauth/
 # usage), cached 5 min, refreshed in the background — so it only ever spawns at
 # session start, and never on the IU lane, which has no subscription windows.
-_USAGE_CACHE="/tmp/claude_sl/usage_api.json"
-_USAGE_ACCOUNTS="/tmp/claude_sl/usage_accounts.json"   # every account, written by the same fetch_usage.py run
+_USAGE_CACHE="$_SL_DIR/usage_api.json"
+_USAGE_ACCOUNTS="$_SL_DIR/usage_accounts.json"   # every account, written by the same fetch_usage.py run
 _FETCH_SCRIPT="$HOME/.claude/fetch_usage.py"
 _now_s=$(date +%s)
 
@@ -193,6 +195,7 @@ _5h_pct="$rl_5h"
 _5h_reset="$rl_5h_reset"
 _wk_pct="$rl_wk"
 usage_parts=""
+pace_hint=""
 
 if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
   _fetched_at=0
@@ -224,10 +227,10 @@ fi
 # Stdin figures also feed agent-gateway's quota view (POST /api/usage, the same body
 # fetch_usage.py sends) — throttled to once a minute, fire-and-forget.
 if [ -n "$rl_5h" ]; then
-  _push_stamp="/tmp/claude_sl/usage_push_${_ca_key//\//_}.stamp"   # per account: one account's sessions must not starve the other's POST
+  _push_stamp="$_SL_DIR/usage_push_${_ca_key//\//_}.stamp"   # per account: one account's sessions must not starve the other's POST
   _pushed_at=$(cat "$_push_stamp" 2>/dev/null)
   if [ $(( _now_s - ${_pushed_at:-0} )) -gt 60 ]; then
-    mkdir -p /tmp/claude_sl && echo "$_now_s" > "$_push_stamp"
+    mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_push_stamp"
     _mins=null
     [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _mins=$(( (rl_5h_reset - _now_s) / 60 ))
     # Account: the badge's resolution (claude-account account). Unknown (not resolved yet, "?" for an unregistered
@@ -267,6 +270,86 @@ if [ -n "$_5h_pct" ]; then
 
   usage_parts="${_uc}${_5h_pct}%${reset}/5h${_mins_left}"
   [ -n "$_wk_pct" ] && usage_parts="${usage_parts} · ${_wk_pct}%/wk"
+
+  # Weekly pace hint, own account: the picker's over-pace rule (claude-accounts.ts overPace) — weekly% more than
+  # PACE_MARGIN (15) points ahead of the share of the 7-day window already gone. Needs the live weekly reset.
+  if [ -n "$rl_wk" ] && [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && [ "$rl_wk_reset" -gt "$_now_s" ]; then
+    _elapsed=$(( 100 - ((rl_wk_reset - _now_s) * 100 + 604799) / 604800 ))   # floor of the elapsed share
+    [ "$_elapsed" -lt 0 ] && _elapsed=0
+    [ "$rl_wk" -gt $(( _elapsed + 15 )) ] && pace_hint=" \033[33m↑pace${reset}"
+  fi
+fi
+
+# ── Other account, pool, routing reason (files only) ───────────────────────────
+# Only with more than one account enabled (the badge is empty otherwise). Reads usage_accounts.json, which
+# fetch_usage.py writes from `claude-account usage --json` (plan + last known values with their age). Nothing
+# here spawns claude-account/bun or touches the network in the render; the file is rewritten in the background
+# at most once a minute. Missing/unreadable file = no segment, no error.
+_pct_color() {   # sets _pc from a 0-100 figure, same thresholds as the own numbers
+  if [ "$1" -lt 50 ]; then _pc="\033[32m"; elif [ "$1" -lt 75 ]; then _pc="\033[33m"; else _pc="\033[31m"; fi
+}
+others_part=""
+pool_part=""
+if [ "$auth_mode" = "MAX" ] && [ -n "$account_badge" ] && [ -n "$account_id" ] && [ "$account_id" != "?" ]; then
+  _acc_stamp="$_SL_DIR/usage_accounts.stamp"
+  _acc_at=$(cat "$_acc_stamp" 2>/dev/null)
+  if [ $(( _now_s - ${_acc_at:-0} )) -gt 60 ]; then
+    mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_acc_stamp"
+    ( /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" --accounts >/dev/null 2>&1 ) &
+    disown 2>/dev/null
+  fi
+  if [ -f "$_USAGE_ACCOUNTS" ]; then
+    # Line 1: pool weekly use (plan-weighted like Tinycast's summary.ts; every account weighs 1 when a plan multiple
+    # is unknown). Then one line per OTHER enabled account: id, 5h, wk, stale (sample > 1 h old), login failed.
+    # A window whose reset has passed counts as 0. The own weekly figure is the session's live one.
+    {
+      IFS= read -r _pool_pct
+      while IFS=$'\x1f' read -r _oid _o5 _ow _ostale _obad; do
+        [ -z "$_oid" ] && continue
+        if [ -z "$_o5$_ow" ] && [ "$_obad" != "1" ]; then continue; fi
+        _o5s="${_o5:--}"; _ows="${_ow:--}"
+        if [ "$_ostale" = "1" ] || [ "$_obad" = "1" ]; then
+          _seg="\033[90m${_oid} ${_o5s}/${_ows}"
+          [ "$_obad" = "1" ] && _seg="${_seg} ✗login"
+          _seg="${_seg}${reset}"
+        else
+          _c5="" ; _cw=""
+          [ -n "$_o5" ] && { _pct_color "$_o5"; _c5="$_pc"; }
+          [ -n "$_ow" ] && { _pct_color "$_ow"; _cw="$_pc"; }
+          _seg="${_oid} ${_c5}${_o5s}${reset}/${_cw}${_ows}${reset}"
+        fi
+        others_part="${others_part:+$others_part · }${_seg}"
+      done
+    } < <(jq -r --argjson now "$_now_s" --arg own "$account_id" --arg ownwk "$rl_wk" '
+      def live($v; $rs): if $v == null then null elif ($rs != null and $rs <= $now) then 0 else ($v | round) end;
+      [ .accounts | to_entries[] | select(.value.enabled != false) | .key as $id | .value as $v
+        | { id: $id,
+            five: live($v.five_hour.value; $v.five_hour.value_resets_at_epoch),
+            wk: (if $id == $own and $ownwk != "" then ($ownwk | tonumber)
+                 else live($v.seven_day.value; $v.seven_day.value_resets_at_epoch) end),
+            mult: ([($v.plan // "") | scan("([0-9]+)x"; "i")[0] | tonumber] | .[0]),
+            stale: (($v.sampled_at // 0) < ($now - 3600)),
+            bad: ($v.auth_ok == false) } ] as $acc
+      | if ($acc | length) < 2 then empty else
+          ($acc | all(.mult != null)) as $weighted
+          | ($acc | map(select(.wk != null) | . + {w: (if $weighted then .mult else 1 end)})) as $known
+          | (if ($known | length) == 0 then ""
+             else (($known | map(.w * .wk) | add) / ($known | map(.w) | add) | round | tostring) end),
+            ($acc[] | select(.id != $own)
+              | [.id, (.five // "" | tostring), (.wk // "" | tostring), (if .stale then "1" else "0" end), (if .bad then "1" else "0" end)]
+              | join("\u001f"))
+        end' "$_USAGE_ACCOUNTS" 2>/dev/null)
+    if [ -n "$_pool_pct" ]; then
+      _pct_color "$_pool_pct"
+      pool_part="pool ${_pc}${_pool_pct}%${reset}"
+    fi
+  fi
+fi
+
+# Routing reason this session started with (CLAUDE_ACCOUNT_REASON: the picker's reason, set by c/cs/cf, claude() and rd).
+reason_part=""
+if [[ "${CLAUDE_ACCOUNT_REASON:-}" =~ ^[a-z][a-z0-9-]{0,23}$ ]]; then
+  reason_part="\033[90m${account_badge}·${CLAUDE_ACCOUNT_REASON}${reset}"
 fi
 
 # ── Prompt cache ───────────────────────────────────────────────────────────────
@@ -308,11 +391,27 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ── Output ─────────────────────────────────────────────────────────────────────
-line1="${auth_mode}${account_badge:+ $account_badge} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
-[ -n "$tokens_fmt" ] && line1="${line1} | Σ${tokens_fmt}"
-[ -n "$cache_part" ] && line1="${line1} | ${cache_part}"
-line1="${line1} | ${duration}"
-[ -n "$usage_parts" ] && line1="${line1} | ${usage_parts}"
+# $1 = pace hint, $2 = routing reason: the two extras that are dropped first when the line gets too wide.
+_compose_line1() {
+  local l="${auth_mode}${account_badge:+ $account_badge} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
+  local extras="${others_part}"
+  [ -n "$pool_part" ] && extras="${extras:+$extras · }${pool_part}"
+  [ -n "$2" ] && extras="${extras:+$extras · }$2"
+  [ -n "$tokens_fmt" ] && l="${l} | Σ${tokens_fmt}"
+  [ -n "$cache_part" ] && l="${l} | ${cache_part}"
+  l="${l} | ${duration}"
+  [ -n "$usage_parts" ] && l="${l} | ${usage_parts}$1"
+  [ -n "$extras" ] && l="${l} | ${extras}"
+  line1="$l"
+}
+# Visible columns of an escaped string: colour codes stripped, one column per UTF-8 character.
+_visible_width() {
+  printf '%b' "$1" | sed $'s/\033\\[[0-9;]*m//g' | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '
+}
+_compose_line1 "$pace_hint" "$reason_part"
+if [ -n "$pace_hint$reason_part" ] && [ "$(_visible_width "$line1")" -gt 150 ]; then
+  _compose_line1 "" ""
+fi
 echo -e "$line1"
 echo -e "${cwd_display}${git_section}"
 exit 0

@@ -27,11 +27,29 @@ dotfiles | * master
 - Total tokens (main loop + subagents, cache reads excluded), formatted as `308k` or `1.2M`
 - Prompt cache: `⚡{hit ratio}` from stdin `.prompt_cache`, `cold` once the TTL lapsed
 - Session duration
-- Subscription usage: `26%/5h ↺23m · 14%/wk` — Max only (below)
+- Subscription usage: `26%/5h ↺23m · 14%/wk` — Max only (below). Over pace
+  (weekly % more than 15 points ahead of the elapsed share of the 7-day window,
+  the picker's rule) the own weekly figure gets `↑pace`
+- Two-account extras, only with more than one account enabled: `| me 21/19 · pool 73% · ME·pace` —
+  the other account's 5h/wk (grey when its sample is over 1 h old, `✗login` when its login
+  failed, absent without figures), the plan-weighted weekly pool (weight = plan multiple,
+  `max20x` 20 / `max5x` 5; same formula as Tinycast's `usage/summary.ts`), and the routing
+  reason from `CLAUDE_ACCOUNT_REASON` (absent when unset). If line 1 would pass ~150 visible
+  columns the reason and `↑pace` are dropped first
 
 **Line 2** — Location:
 - CWD (home-shortened, worktree-aware: `WT·SE proj/path` for student-enrolment worktrees)
 - Git branch + status: `✓` clean, `*` dirty, `!!` merge conflicts
+
+### Two-account segments (files only)
+
+The render reads `usage_accounts.json` and never spawns `claude-account`/bun or the network.
+`fetch_usage.py --accounts` rewrites it in the background, at most once a minute
+(`usage_accounts.stamp`), from `claude-account usage --json`: per account `plan`, and per
+window the fresh `utilization` plus the last known `value`/`value_resets_at_epoch` and
+`age_s`. A window whose reset has passed counts as 0; a missing or unreadable file means no
+extras, no error. `CLAUDE_SL_DIR` relocates the render caches (test seam,
+`scripts/statusline.test.sh`, run by `make claude-launcher-test`).
 
 ## Context Color Coding
 

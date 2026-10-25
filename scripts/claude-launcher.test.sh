@@ -37,7 +37,7 @@ if [[ ${1-} == auth ]]; then
   if [[ ${STUB_LOGGED_IN:-1} == 1 ]]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": false}'; fi
   exit 0
 fi
-echo "RAN cfg=${CLAUDE_CONFIG_DIR-unset} picked=${CLAUDE_ACCOUNT_PICKED-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN:+set} args=$*"
+echo "RAN cfg=${CLAUDE_CONFIG_DIR-unset} picked=${CLAUDE_ACCOUNT_PICKED-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN:+set} reason=${CLAUDE_ACCOUNT_REASON-unset} args=$*"
 EOF
 cat > "$TMP/bin/claude-account" <<'EOF'
 #!/usr/bin/env bash
@@ -49,7 +49,7 @@ case ${1-} in
     echo "$lane" >> "$STUB_PICKS"
     [[ -n ${STUB_PICK_SILENT-} ]] && exit "${STUB_PICK_RC:-1}"
     echo "${STUB_PICK_LINE:-unset CLAUDE_CONFIG_DIR}"
-    (( why )) && echo "# picked=${STUB_PICK_ID:-iu} reason=test stale=false"
+    (( why )) && echo "# picked=${STUB_PICK_ID:-iu} reason=${STUB_PICK_REASON:-test} stale=false"
     exit "${STUB_PICK_RC:-0}" ;;
   latest) [[ -n ${STUB_LATEST-} ]] && { echo "$STUB_LATEST"; exit 0; }; exit 1 ;;
   session) [[ -n ${STUB_SESSION-} ]] && { echo "$STUB_SESSION"; exit 0; }; exit 1 ;;
@@ -71,7 +71,7 @@ EOF
 chmod +x "$TMP/bin/"*
 
 # The harness may itself run inside a picked session: scrub everything the contract reads.
-unset CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT_PICKED USAGE_LANE CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
+unset CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT_PICKED CLAUDE_ACCOUNT_REASON USAGE_LANE CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 export STUB_PICKS="$PICKS" STUB_CALLS="$CALLS" STUB_PANE="$TMP/pane.rc" STUB_ENVS="$TMP/pane.env"
 
 reset() { : > "$PICKS"; : > "$CALLS"; : > "$STUB_PANE"; : > "$STUB_ENVS"; }
@@ -151,6 +151,22 @@ for args in '-p "reply ok"' '--version' 'mcp list' 'auth status' '--bg'; do
   assert_eq "interactive claude $args: no pick" 0 "$(picks)"
 done
 
+echo "routing reason (CLAUDE_ACCOUNT_REASON, read by the statusline)"
+reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STUB_PICK_REASON=pace zrun interactive 'claude --foo')
+assert_contains "bare claude exports the picker's reason" "picked=me tok= reason=pace" "$out"
+reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STUB_PICK_REASON=home zrun interactive 'c --foo')
+assert_contains "c exports the picker's reason" "picked=me tok= reason=home" "$out"
+reset; out=$(zrun interactive 'c --account me')
+assert_contains "forced account: reason forced" "reason=forced" "$out"
+reset; out=$(STUB_SESSION=me zrun interactive 'c --resume 1234-abcd')
+assert_contains "session-pinned account: reason resume" "reason=resume" "$out"
+reset; out=$(STUB_PICK_RC=4 zrun interactive 'c')
+assert_contains "registry error: the picker's reason (registry-error in production) passes through" "reason=test" "$out"
+reset; out=$(CLAUDE_ACCOUNT_REASON=stale zrun interactive 'c --account iu')
+assert_contains "a reason from a parent never leaks into a new choice" "reason=forced" "$out"
+reset; out=$(CLAUDE_ACCOUNT_PICKED=me CLAUDE_CONFIG_DIR=$ME CLAUDE_ACCOUNT_REASON=pace zrun interactive 'claude --foo')
+assert_contains "valid marker: no re-pick, reason inherited" "picked=me tok= reason=pace" "$out"
+
 echo "c / cs / cf set the marker, never pick twice"
 reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'c --foo')
 assert_eq "c: exactly one pick" 1 "$(picks)"
@@ -194,12 +210,14 @@ for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; d
   line=${case_%:*}; id=${case_##*:}
   rd_spawn "$line" "$id"
   assert_contains "herdr gets the marker at spawn time ($id)" "CLAUDE_ACCOUNT_PICKED=$id" "$(cat "$STUB_ENVS")"
+  assert_contains "herdr gets the routing reason at spawn time ($id)" "CLAUDE_ACCOUNT_REASON=test" "$(cat "$STUB_ENVS")"
   assert_eq "pane setup types only the lane tag ($id)" "export USAGE_LANE=wave" "$(cat "$STUB_PANE")"
   # the pane: herdr's spawn-time --env, then the typed setup line and the agent command
   # shellcheck disable=SC2046
   out=$(cd "$TMP/work" && env $(cat "$STUB_ENVS") HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
     zsh -fic "source '$AUTH'; source '$LAUNCH'; $(cat "$STUB_PANE"); claude --dangerously-skip-permissions --model sonnet" 2>&1)
   assert_contains "rd pane ($id): agent runs on the rd account" "picked=$id" "$out"
+  assert_contains "rd pane ($id): agent sees the reason" "reason=test" "$out"
   assert_eq "rd pane ($id): exactly ONE pick-log line (rd's), none from the wrapper" 1 "$(picks)"
   assert_eq "rd pick lane" wave "$(head -1 "$PICKS")"
 done

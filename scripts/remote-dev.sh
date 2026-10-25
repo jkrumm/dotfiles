@@ -299,19 +299,20 @@ parse_kind() {
 # Account for a bulk spawn (docs/claude-accounts.md): `claude-account pick --lane <lane>` on the host.
 # Sets PICK_ENV (extra `herdr … create` args that put CLAUDE_CONFIG_DIR and the CLAUDE_ACCOUNT_PICKED marker
 # into the pane at creation — `--env` repeats, verified live; the marker is set for every non-spill pick, iu
-# included), PICK_SPILL (1 = no Claude account has room: the caller pauses — never IU),
+# included; CLAUDE_ACCOUNT_REASON, the picker's reason for the statusline, rides along), PICK_SPILL (1 = no Claude account has room: the caller pauses — never IU),
 # PICK_NOTE (the pick reason, for the output line) and PICK_ID (the account id; the marker makes the pane's
 # `claude` wrapper skip a second pick, so one spawn = one pick-log line). A failing picker means
 # "default account", never a failed spawn.
 pick_account() {
   local lane=$1 out line why
-  PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="default account (picker unavailable)"; PICK_ID=iu
+  PICK_ENV=""; PICK_SPILL=0; PICK_NOTE="default account (picker unavailable)"; PICK_ID=iu; PICK_REASON=""
   local rc=0
   out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\" claude-account pick --lane '$lane' --why" 2>/dev/null) || rc=$?
   line=$(sed -n 1p <<<"$out"); why=$(sed -n 2p <<<"$out")
   PICK_ID=$(sed -n 's/^# picked=\([a-z][a-z0-9-]*\).*/\1/p' <<<"$why"); PICK_ID=${PICK_ID:-iu}
+  PICK_REASON=$(sed -n 's/^# picked=[a-z][a-z0-9-]* reason=\([a-z][a-z0-9-]*\).*/\1/p' <<<"$why")
   # exit 4: registry unreadable. The pick still answered iu, but the line says why.
-  (( rc == 4 )) && why="# reason=registry-error"
+  (( rc == 4 )) && { why="# reason=registry-error"; PICK_REASON=registry-error; }
   case $line in
     spill)
       PICK_SPILL=1; PICK_NOTE="no Claude account has room (${why#\# })" ;;
@@ -322,7 +323,10 @@ pick_account() {
       PICK_NOTE="${why:+${why#\# }}"; PICK_NOTE=${PICK_NOTE:-default account} ;;
   esac
   # Spawn-time, with CLAUDE_CONFIG_DIR: the pane's shell never races a typed `export`.
-  (( PICK_SPILL )) || PICK_ENV="${PICK_ENV:+$PICK_ENV }--env CLAUDE_ACCOUNT_PICKED='$PICK_ID'"
+  (( PICK_SPILL )) && return 0
+  PICK_ENV="${PICK_ENV:+$PICK_ENV }--env CLAUDE_ACCOUNT_PICKED='$PICK_ID'"
+  [[ -n $PICK_REASON ]] && PICK_ENV="$PICK_ENV --env CLAUDE_ACCOUNT_REASON='$PICK_REASON'"
+  return 0
 }
 
 # Pane-side setup: the claude agent takes the lane tag. `herdr agent start` types the binary

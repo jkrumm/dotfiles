@@ -2315,12 +2315,13 @@ fan-test:
 # Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
 .PHONY: claude-launcher-test
 claude-launcher-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh $(DOTFILES_DIR)/scripts/statusline.sh $(DOTFILES_DIR)/scripts/statusline.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-relogin.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/statusline.test.sh
 
 .PHONY: brew-service-test
 brew-service-test:

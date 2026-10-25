@@ -197,10 +197,12 @@ _claude_marker_valid() {
 claude() {
   if [[ -o interactive ]] && ! _claude_marker_valid && (( $+functions[_claude_account_line] )) && _claude_starts_session "$@"; then
     local out
+    local -a parts
     # A failing forced/session lookup is the only rc 1; fall through to the plain run rather than block.
     if out=$(_claude_account_line "" "${USAGE_LANE:-interactive}" "$(_claude_resume_id "$@")"); then
+      parts=("${(@f)out}")
       (
-        _claude_enter_account "${out%%$'\n'*}" "${out##*$'\n'}"
+        _claude_enter_account "$parts[1]" "$parts[2]" "$parts[3]"
         _claude_auth_run "$@"
       )
       return

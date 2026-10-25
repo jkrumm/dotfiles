@@ -65,23 +65,27 @@ _claude_resume_id() {
 
 # Account for an interactive launch (docs/claude-accounts.md). $1 = forced account id ("" = pick),
 # $2 = pick lane (default interactive), $3 = session id being resumed (pins its account unless $1 is set).
-# Prints two lines: an eval-safe env line (the picker's, or the forced account's) and the account id for
-# CLAUDE_ACCOUNT_PICKED. Any pick failure answers `unset CLAUDE_CONFIG_DIR` (account iu); an explicit
+# Prints three lines: an eval-safe env line (the picker's, or the forced account's), the account id for
+# CLAUDE_ACCOUNT_PICKED and the routing reason for CLAUDE_ACCOUNT_REASON (the picker's `reason=`; `forced` /
+# `resume` for an explicit or session-pinned account; empty when unknown). Any pick failure answers `unset CLAUDE_CONFIG_DIR` (account iu); an explicit
 # override that fails answers nothing (rc 1).
 _claude_account_line() {
-  local forced=$1 lane=${2:-interactive} resume_id=${3:-} out line id rc=0
+  local forced=$1 lane=${2:-interactive} resume_id=${3:-} out line id reason="" rc=0
   # A resumed session stays on the account it ran on: the other account would re-send the whole
   # context cold. An explicit forced account wins; an unknown session falls through to the pick.
   if [[ -z $forced && -n $resume_id ]]; then
     forced=$(claude-account session "$resume_id" 2>/dev/null) || forced=""
+    [[ -n $forced ]] && reason=resume
   fi
   if [[ -n $forced ]]; then
     line=$(claude-account env "$forced") || return 1
     id=$forced
+    reason=${reason:-forced}
   else
     out=$(claude-account pick --lane "$lane" --why 2>/dev/null) || rc=$?
     line=${out%%$'\n'*}
     id=${${(M)${(f)out}:#\# picked=*}#\# picked=}; id=${id%% *}
+    reason=${${(M)${(f)out}:#\# picked=*reason=*}#*reason=}; reason=${reason%% *}
     # exit 4: the registry was unreadable; the pick still answered `unset` (iu), but never silently
     (( rc == 4 )) && print -u2 "claude: claude-account registry unreadable — launching on the default account (iu)"
     # missing / crashing / silent picker: still non-blocking (iu), but never silent. `spill` is a real answer.
@@ -95,16 +99,20 @@ _claude_account_line() {
     *) line="unset CLAUDE_CONFIG_DIR"; id=iu ;;
   esac
   [[ $id =~ ^[a-z][a-z0-9-]*$ ]] || id=iu
+  [[ $reason =~ ^[a-z][a-z0-9-]*$ ]] || reason=""
   print -r -- $line
   print -r -- $id
+  print -r -- $reason
 }
 
 # Enter an account chosen by `_claude_account_line` (call inside a subshell: it exports). The marker says
 # "the account for this session is decided" — inherited by children, so neither `claude` nor `c` picks again;
-# `rd` sets the same variable in its panes (remote-dev.sh agent_pane_setup). $1 = env line, $2 = account id.
+# `rd` sets the same variable in its panes (remote-dev.sh agent_pane_setup). $1 = env line, $2 = account id,
+# $3 = routing reason (CLAUDE_ACCOUNT_REASON, read by the statusline; unset when empty, never inherited).
 _claude_enter_account() {
   eval "$1"
   export CLAUDE_ACCOUNT_PICKED=$2
+  if [[ -n ${3-} ]]; then export CLAUDE_ACCOUNT_REASON=$3; else unset CLAUDE_ACCOUNT_REASON; fi
   # A non-default account must not inherit credentials meant for the default one.
   [[ $1 == "unset CLAUDE_CONFIG_DIR" ]] || unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 }
@@ -134,11 +142,12 @@ _claude_launch() {
   fi
   [[ -n $model && " ${args[*]} " != *" --model "* ]] && args=(--model $model "${args[@]}")
 
-  local out line id
+  local out line id reason
+  local -a parts
   out=$(_claude_account_line "$account" interactive "$(_claude_resume_id "${args[@]}")") || return 1
-  line=${out%%$'\n'*}; id=${out##*$'\n'}
+  parts=("${(@f)out}"); line=$parts[1]; id=$parts[2]; reason=$parts[3]
   (
-    _claude_enter_account "$line" "$id"
+    _claude_enter_account "$line" "$id" "$reason"
     ENABLE_TOOL_SEARCH=true ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="" claude --dangerously-skip-permissions "${plugin_args[@]}" "${args[@]}"
   )
 }

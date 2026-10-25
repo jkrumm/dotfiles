@@ -14,9 +14,12 @@ we keep the existing cache rather than blanking it.
 W0 of docs/claude-accounts.md: a fresh (<5 min) default-account (iu) sample in the quota cache
 (read through `claude-account usage --json`, the single owner of the cache schema and freshness)
 is preferred; the API path below runs only when that sample is stale (retired in W2).
-All accounts are also written to /tmp/claude_sl/usage_accounts.json.
+All accounts are also written to /tmp/claude_sl/usage_accounts.json (per account: plan, and per window the
+fresh `utilization` plus the last known `value`/`value_resets_at_epoch` with its `age_s` — the statusline's
+other-account and pool segments read those). `--accounts` writes only that file: no API call, no gateway
+push (the statusline's own 60 s refresh while a session already has rate_limits).
 
-Run via: uv run ~/.claude/fetch_usage.py
+Run via: uv run ~/.claude/fetch_usage.py [--accounts]
 """
 
 import json
@@ -154,7 +157,29 @@ def _window(row: dict, key: str, now: float) -> dict:
         "utilization": row[key] if fresh else None,
         "resets_at_epoch": row.get(f"{key}_resets_at") if fresh else None,
         "age_s": age,
+        "value": row.get(key),  # last known, whatever its age: judge it by age_s
+        "value_resets_at_epoch": row.get(f"{key}_resets_at"),
     }
+
+
+def write_accounts_file(data: dict, now: float) -> None:
+    _write_json(ACCOUNTS_FILE, {
+        "default_account": data.get("default_account"),
+        "accounts": {
+            r["id"]: {
+                "plan": r.get("plan"),
+                "five_hour": _window(r, "five_hour", now),
+                "seven_day": _window(r, "seven_day", now),
+                "sampled_at": int(now - r["age_s"]) if r.get("age_s") is not None else None,
+                "source": r.get("source"),
+                "enabled": r.get("enabled"),
+                "auth_ok": r.get("auth_ok"),
+                "exhausted_until": r.get("exhausted_until"),
+            }
+            for r in data["accounts"]
+        },
+        "fetched_at": int(now),
+    })
 
 
 def from_account_cache() -> bool:
@@ -166,22 +191,7 @@ def from_account_cache() -> bool:
         data = _claude_account_usage()
         now = time.time()
         rows = data["accounts"]
-        _write_json(ACCOUNTS_FILE, {
-            "default_account": data.get("default_account"),
-            "accounts": {
-                r["id"]: {
-                    "five_hour": _window(r, "five_hour", now),
-                    "seven_day": _window(r, "seven_day", now),
-                    "sampled_at": int(now - r["age_s"]) if r.get("age_s") is not None else None,
-                    "source": r.get("source"),
-                    "enabled": r.get("enabled"),
-                    "auth_ok": r.get("auth_ok"),
-                    "exhausted_until": r.get("exhausted_until"),
-                }
-                for r in rows
-            },
-            "fetched_at": int(now),
-        })
+        write_accounts_file(data, now)
         row = next((r for r in rows if r["id"] == data.get("default_account")), None)
         if not row:
             return False
@@ -291,6 +301,14 @@ def fetch() -> None:
 
 
 if __name__ == "__main__":
+    if "--accounts" in sys.argv[1:]:
+        try:
+            CACHE_DIR.mkdir(exist_ok=True)
+            write_accounts_file(_claude_account_usage(), time.time())
+        except Exception as e:
+            log_event("fetch_usage", "accounts_file_error", "warning", {"error": str(e), "type": type(e).__name__})
+            sys.exit(1)
+        sys.exit(0)
     try:
         fetch()
     except urllib.error.HTTPError as e:
