@@ -1,6 +1,7 @@
 # 7. Projects
 
-Every repo is a project with the same shape, so the factory, CI, agent-gateway and you run the same
+Every repo under `~/SourceRoot` is a project and takes requests. A manifest adds automation, and the
+make contract gives every repo the same shape, so the factory, CI, agent-gateway and you run the same
 commands everywhere.
 
 ## `project.yaml`
@@ -16,31 +17,35 @@ deploy:
   migrations: [apps/api/drizzle/]   # additive ships like code; dropping data is a decision
   probes:                  # user journeys, pass or fail; never edited inside a fix
     - { name: forecast-loads, http: https://weatherorb.example.com/api/forecast?q=berlin, expect: 200 }
-ship:                      # first match wins
-  - { paths: ["**"], mode: auto }          # auto: the lead merges and deploys once its checks pass
+ship:                      # how the lead merges, per path; first match wins
+  - { paths: ["**"], via: push }           # push: rebase and push to the default branch
+                                           # pr: a pull request the lead reviews and merges itself
 signals:
   kuma: [weatherorb-web, weatherorb-api]
   hyperdx: { service: weatherorb-api }
-  umami: { website: weatherorb }
 heal:
   - { when: kuma.down, grace: 5m, runbook: make restart, max: 2 }
 jobs: [deps, docs, code-health]
+leads: 1                   # leads at once in this repo; 1 without a manifest
 ticktick: { list: WeatherOrb }
 ```
 
-A drift check runs in CI and in the factory: valid against the published JSON Schema, every
-integration key resolves, every make target and runbook parses. A broken manifest becomes an upkeep
+`deploy.mode` says how a merged change reaches production; `ship` says how it is merged. Both are
+the lead's to carry out, never a gate for you. W1b ships v0 of the schema (name, `deploy`, `ship`,
+`leads`, hold, probes) and W4 extends it. A drift check (`factory project check`, W4) runs in CI and
+in the factory: valid against the published JSON Schema, every integration key resolves, every make
+target and runbook parses. A broken manifest becomes an upkeep
 Issue, never a silent skip, and the factory keeps running on the last valid version (Warp's rule).
 
 ## The make contract
 
 | Target | Means | When it lands |
 |-|-|-|
-| `make check` | format, lint, types | W1 for the factory and the first repos leads ship to; W4 for every repo with signals or Issues |
+| `make check` | format, lint, types | W1b for the factory, dotfiles, jkrumm.com and weatherorb; W4 for every repo with signals; a repo without a manifest uses the targets it has |
 | `make test` | tests | same |
 | `make deploy` | deploy the current commit to `TARGET`; records the deploy | same, deployable repos |
 | `make verify` | post-deploy smoke: health, the deployed version, the project's key checks | same, deployable repos |
-| `make restart` | restart the running target — the first runbook | W1 for the homelab; W4 for the rest |
+| `make restart` | restart the running target — the first runbook | W2 for the homelab; W4 for the rest |
 | `make quality` | duplication, dead code, size (fallow) | W6, with the code-health job |
 | `make logs` / `make status` | recent logs; running or not, which version | when a runbook or Argo needs them |
 
@@ -62,36 +67,37 @@ docs/waves/      initiative plans: prose and Issue ids, the orchestrator's memor
 
 No CLAUDE.md anywhere.
 
-## Factory projects and plain repos
+## Every SourceRoot repo takes requests
 
-| Kind | Repos | What happens there |
-|-|-|-|
-| Factory project | every repo with a `project.yaml`: the homelab from W2, then each repo as it gets signals or Issues (W4) | intake, leads, initiatives, the hold, probes, learning |
-| Plain repo | the brain, your website and anything else without a manifest | nothing automatic; you work in herdr sessions, and Hermes starts one for you on request |
-| Work | IuRoot: not in W1–W6 | — |
+The factory reads and writes only `~/SourceRoot`. A repo needs no manifest to take work; the manifest
+adds automation.
 
-Adding the manifest makes a repo a factory project; the minimal one is four lines.
+| The repo has | What the factory does there |
+|-|-|
+| no `project.yaml`: the brain, your website, any repo under `~/SourceRoot` | requests only: you, Hermes or a GitHub issue file one, and a lead takes it; one lead at a time; done means the commit or the document |
+| a minimal `project.yaml`: a name and how it deploys | the same, plus deploy evidence, the hold and `make verify`; `leads` allows several at once |
+| a full `project.yaml` | signals, runbooks, probes, jobs and a TickTick list as well |
+
+A single request wakes the orchestrator only if its lead stalls (§5), so work in a repo without a
+manifest is one lead per request. The herdr sessions you start yourself stay
+outside the factory, as today; the factory never sees them.
 
 ## TickTick and the brain
 
 - **TickTick** stays your list of things only you can do. A project's manifest names its list; Argo
   shows the open items on the project page, and an item tagged `#factory` becomes a request. When an
-  Issue needs a human hand (a payment, a login, a cable), the factory adds an item to that list,
-  linked back to the Issue.
+  Issue needs a human hand (a payment, a login, a cable), the lead reports `factory issue block
+  --human "<what>"` and the factory adds an item to that list, linked back to the Issue (W2).
 - **The brain** keeps one page per project (`brain/Projects/<project>.md`). The factory writes only its
   *Changelog* section, compiled daily by a cheap model from the leads' three-line summaries (§9).
+  homelab-private gets no brain page.
 
-## Work repos
+## IuRoot stays outside
 
-IuRoot manifests live in `dotfiles-private/projects/<repo>/`, linked in and git-excluded, so nothing
-factory-specific lands in a work repo. The factory never reads their signals or starts work there.
-Your own sessions follow a path-scoped rule in dotfiles (W4), not a file in the work repo: in
-prometheus-scripts and in StudentEnrolment's data-analysis paths, merge your own merge request once
-`make check` and `make test` pass; in domain code, open the merge request and stop.
-
-Later, perhaps: the factory tracks the lifecycle of waves you start in a work repo, with no signals and
-no triage. Not before the 14 days of observation; it would add a second account world to a factory
-that has to prove itself first.
+The factory never reads IuRoot's signals, files its Issues or starts work there; IuRoot is the
+ground of your AthenaTeamchat work. Whether IuRoot needs agent instructions of its own is that work's
+question, not the factory's: a lead's standing orders travel in its brief (§4), so the factory needs
+no root-level instruction file.
 
 ## homelab-private
 

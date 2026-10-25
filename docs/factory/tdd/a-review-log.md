@@ -1,7 +1,7 @@
 # A. Review log
 
 Where each of your comments landed, version by version. Each table records what that version did
-with your words; where they differ, the later table wins, and the v2.2 table at the end is current.
+with your words; where they differ, the later table wins, and the table at the end is current.
 Numbering follows your Inbox replies; your words are shortened, the full texts are in `feedback/`.
 
 ## The 33 comments
@@ -24,7 +24,7 @@ Numbering follows your Inbox replies; your words are shortened, the full texts a
 | 14 | dotfiles is a session project | done (§7) |
 | 15 | Dedup needs cheap-model help, probabilities, learning, merging during investigation | rules + decision-model probability + investigator merge/split + labels (§8) |
 | 16 | Much heals itself — wait, raise Kuma timeouts | settle stage; Kuma retries raised when its adapter lands (§4, §10) |
-| 17 | Not Renovate; upgrades need changelogs and real adoption | the deps job opens planned upgrade waves (§9) |
+| 17 | Not Renovate; upgrades need changelogs and real adoption | the deps job opens upgrade Issues a lead plans (§9) |
 | 18 | Only AGENTS.md | measured on AGENTS.md (§3, §9) |
 | 19 | Dogfooding includes missing pieces upstream | the basalt-ui upstream job covers both (§9) |
 | 20 | Be token-efficient, take Swamp's deterministic pieces | jobs are code; a cheap model writes up findings; a clean run costs nothing (§9) |
@@ -115,7 +115,8 @@ Verbatim in `feedback/2026-10-25-owner-comments-raw.md`, with the chat message o
 ## Your voice note on v2.2 (2026-10-25, evening)
 
 Summary in `feedback/2026-10-25-owner-voice-note-v22.md`. This table supersedes rows 2, 3, 17, 19 and
-24 above.
+24 of "Your comments on v2.1", and row 2 of "The 33 comments" (no OpenCode investigations: the lead
+investigates).
 
 | You said | Now (v2.3) |
 |-|-|
@@ -128,3 +129,45 @@ Summary in `feedback/2026-10-25-owner-voice-note-v22.md`. This table supersedes 
 | The dedup part of the podcast was confusing | one judge, no contest: shadow from W2, trusted only at ≥ 0.95 merge precision over 30 cases; leads catch duplicates by cause regardless (§8) |
 | Dig into Warp's factories; learn the language and the field; solo versus company | `research/2026-10-25-warp-factories.md`; appendix E; Warp's scorers, self-improvement trigger, autonomy KPIs and manifest schema adopted (§7, §9) |
 | I want to become an expert and publish a guide | the field guide in the brain, `wiki/engineering/software-factories.md`: the twelve decisions every factory makes, converged patterns, metrics, references, vocabulary with origins |
+
+## Your reply on v2.3 (2026-10-25, night)
+
+Verbatim in `feedback/2026-10-25-owner-reply-v23.md`. This table supersedes the v2.3 rows above on
+plain repos, row 24 of "Your comments on v2.1", and the rows 6 on IuRoot in "The 33 comments" and "Your
+comments on v2.1".
+
+| You said | Now (v2.4) |
+|-|-|
+| `agw dispatch implement` may not be needed soon | retired in W6; a factory Issue does its job (§12) |
+| `otel` is token-hungry but not hard; OpenCode with DeepSeek or Haiku? | yes: off Max onto a cheap OpenCode route in W1, the model picked on ten recorded lead queries (§12) |
+| The orchestrator of orchestrators was meant for building the factory, which touches every repo | a build orchestrator over one wave orchestrator per wave until W3's gate; the running factory keeps its two layers (§12) |
+| IuRoot fully out; only SourceRoot is read | the factory reads and writes only `~/SourceRoot`; per-root agent instructions are the AthenaTeamchat work's question, since a lead's standing orders travel in its brief (§7) |
+| Revisit the Claude Code wrapping as the ecosystem matures | recorded as the revisit trigger; only the `Runner` adapter changes (§13) |
+| The decision-model dedup must be measured | its precision and recall against the leads' labels go on the scorecard, in shadow and once trusted (§9) |
+| No manifest should not mean outside the factory | every SourceRoot repo takes requests, one lead at a time, no orchestrator; the manifest adds automation and `leads` (§7) |
+| Review the plan fresh; things may no longer match | two fresh agents read the whole design, one for consistency (30 findings) and one for the design (15); all fixed in v2.4, see below |
+
+## The fresh review of v2.4 (2026-10-25, night)
+
+Two agents with no history read the whole design: one for consistency, one for the design. Their
+reports are in `research/2026-10-25-fresh-review.md`. What changed:
+
+| Finding | Now |
+|-|-|
+| Leads would work in your checkouts, beside your uncommitted work | a worktree per attempt, merged by push or the lead's own PR (§6) |
+| Hooks fire in every session and hang or lose events when the factory is down | active only in factory sessions; fail open into a spool replayed on start (§4) |
+| The Stop hook fights `rd fan`, your typing, walls and the hold | sends back only with nothing reported, no declared wait and no usage limit; `factory issue wait`; your turns never sent back (§4) |
+| Walls hit W1 but were handled in W3; "never more than five hours away" is false | wall handling in W1a; weekly resets named; reserves on both accounts; a walled lead may move after an hour (§5) |
+| W1 holds about 20 deliverables and needs a manifest no wave defines | W1a spine and W1b ship-and-watch with `project.yaml` v0 and named gate repos (§12) |
+| Machines open GitHub issues as you | the `factory` label or `/factory` starts work; `alert` issues are signals (§4, §10) |
+| Switching warden off opens gaps | a switch-off checklist in W1a, deletion in W2 (§2) |
+| W4 and W5 ran beside W3 and would change hands mid-run | W1a–W3 in sequence; W4–W6 inside the factory (§12) |
+| The evidence check tests presence, and the lead picks its bar | evidence derived from what the commits touched; deployed commit and screenshot age checked (§4) |
+| Gates and SLOs that cannot fail, or cannot pass | §11's gamedays in the gate rows; injected walls; a checklist for the orchestrator run; SLOs rewritten (§11, §12) |
+| Cards had nowhere to go before W5 | one Slack channel until W5; business cards default to "don't" (§10) |
+| Over-built for tens of Issues a week | scorers and tuning wait for 50 closed Issues; claim policies, adopt mode, action items, Monday review and two wakes cut (§5, §6, §9) |
+| Four mechanisms act on a lead's pane | the factory owns `lead-*` panes; notes only through `factory issue note`; tab closes after verify (§4) |
+| Orchestrator and queue rules undefined against each other | one precedence order; the factory raises stalls, the orchestrator alone re-tiers or splits (§4, §5) |
+| A restore could reuse running panes' Issue ids | ids move past every id in pane names and the spool (§6) |
+| Stale v2.1–v2.3 wording; verbs, hooks and tables no wave built | swept: verbs and hooks placed in waves, `wake_at` the one timer, parent links, `ship` vs `deploy` defined, one orchestrator trigger list, terms defined in §0 |
+

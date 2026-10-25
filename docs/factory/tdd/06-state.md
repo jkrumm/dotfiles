@@ -36,11 +36,11 @@ at the same place the hard way.
 |-|-|-|
 | `signal` | dedup: a repeat or regression | the source's own event id |
 | `admitted` | the admission tick | `admit:<issue>:<attempt>` |
-| `phase`, `ship`, `close`, `block`, `ask`, `drop` | the lead, via `factory issue` | `<issue>:<verb>:<call id>` |
-| `turn_ended`, `session_ended` | the lead's Stop and SessionEnd hooks | session id + turn number |
+| `phase`, `wait`, `ship`, `close`, `block`, `ask`, `drop` | the lead, via `factory issue` | `<issue>:<verb>:<call id>` |
+| `session_started`, `turn_ended`, `session_ended` | the lead's SessionStart, Stop and SessionEnd hooks, live or replayed from the spool | session id + turn number |
 | `pane_dead`, `walled` | Witness | pane id + observation time |
-| `hold_over` | a timer row | `hold:<issue>:<attempt>` |
-| `steer`, `pause`, `stop`, `answer` | you or the orchestrator | the intent's id |
+| `hold_over`, `wake` | the tick, when `issues.wake_at` passes (the one timer) | `hold:<issue>:<attempt>`, `wake:<issue>:<at>` |
+| `note`, `stop`, `answer`, `prio`, `dep`, `retier`, `park` | you or the orchestrator | the intent's id |
 
 - **One Issue at a time.** A worker takes an Issue's oldest unhandled rows under a row lock
   (`FOR UPDATE SKIP LOCKED`), so two events for one Issue never race. `LISTEN/NOTIFY` wakes it at
@@ -49,12 +49,16 @@ at the same place the hard way.
   `lead-<issue>-<attempt>`, and spawning again attaches to that pane. A prompt id
   (`issue:<id>:<phase>:<n>`) is recorded before anything is typed into a pane. A GitHub comment
   carries a marker, a card a key. A replayed tick never spawns, prompts or posts twice.
-- **Claims** (engrams' concurrency table): `repo:<name>` holds one lead per repo, plus a second claim
-  for one urgent Issue (§5). Policies: *join*
-  (the same symptom becomes a note to the running lead), *queue* (waits for the holder to finish),
-  *supersede* (a newer request replaces one not yet started).
-- **Finalize once,** from every exit path: terminal state, release the claim, promote the next
-  queued Issue.
+- **Claims** (engrams' concurrency table, without its policies): `repo:<name>` admits as many leads as
+  the repo's `leads` allows (one by default), plus one urgent (§5); everything else queues in order.
+  A repeat of the same symptom is a note to the running lead (§4), not a policy.
+- **Finalize once,** from every exit path: terminal state, release the claim, remove the worktree,
+  promote the next queued Issue.
+- **Every start reconciles.** Before any effect, each open Issue looks at the world once (herdr, its
+  worktree, GitHub, the sources), and the spool is replayed. There is no separate adopt mode.
+- **Ids survive a restore.** After a restore the Issue sequence moves past every id seen in pane names
+  and the spool, so a new Issue never attaches to a running lead's pane. A lead reporting an Issue the
+  dump lost gets that Issue rebuilt from the spool, or parked.
 - **Schedules:** croner plus a Postgres lease; `job_runs` is unique per (job, slot), and a missed slot
   runs once after downtime.
 - **Tests, from engrams without its engine:** a golden test pins each path's sequence of transitions
@@ -74,44 +78,55 @@ as the pane you look through; do not let it own the work"). Weighed against the 
 
 | Runtime | On your Max subscription | You can watch and type into it | After a crash or restart | Verdict |
 |-|-|-|-|-|
-| herdr pane, interactive `claude` | the plainest sanctioned use | yes, from the MacBook or the phone, beside your own sessions | a herdr restart kills the process; herdr re-runs `claude --resume <id>`, so the conversation is back and the turn in flight is lost | **used from W1** |
-| Claude Code background sessions (`claude --bg`, agent view) | yes, the same login | `claude attach` from any terminal, herdr included; peek and reply | Anthropic's supervisor restarts crashed sessions and survives any UI; a machine restart stops them, and so does an hour idle and unattached | research preview; spiked in W3 as the second adapter, which also measures which meter it bills to |
+| herdr pane, interactive `claude` | the plainest sanctioned use | yes, from the MacBook or the phone, beside your own sessions | a herdr restart kills the process; herdr re-runs `claude --resume <id>`, so the conversation is back and the turn in flight is lost | **used from W1a** |
+| Claude Code background sessions (`claude --bg`, agent view) | yes, the same login | `claude attach` from any terminal, herdr included; peek and reply | Anthropic's supervisor restarts crashed sessions and survives any UI; a machine restart stops them, and so does an hour idle and unattached | research preview; the second adapter once the preview label goes |
 | headless `claude -p`, stream-json | yes, but each token costs about 1.8× as much of the 5-hour window as in an interactive session ([claude-code#97074](https://github.com/anthropics/claude-code/issues/97074), open, reproduced on four accounts) | no; a message waits for the turn to end | the turn is lost; resume by id | not for leads; that alone would nearly halve their capacity |
 | Agent SDK | Anthropic's pages contradict each other on subscription use | only through a UI we would build | resume by id, which its own docs say not to rely on | not used |
 
 The factory starts and follows sessions through one port, `Runner` (start, state, note, stop,
-resume), so herdr is one adapter. Witness records herdr's server PID, so a herdr restart is an event,
+resume), so herdr is one adapter. A model or effort change applies at the next spawn. Witness records herdr's server PID, so a herdr restart is an event,
 not a silent loss: each affected lead resumes by session id with a note that a turn was cut off.
-The W3 spike runs background sessions through the same gamedays (both accounts, hooks, kill the
-supervisor, sleep and wake, an idle lead woken with a note) and reads the transcript `entrypoint` and
-the 5-hour share per token, so #97074's headless rate cannot slip in. If they pass and the preview label is
-gone, leads move there and herdr becomes only the view: about a day of adapter, not a redesign.
+When background sessions leave research preview, or #97074 closes, they get a spike through the
+same gamedays (both accounts, hooks, kill the supervisor, sleep and wake, an idle lead woken with a
+note) that also reads the transcript `entrypoint` and the 5-hour share per token, so the headless rate
+cannot slip in. If they pass, leads move there and herdr becomes only the view: about a day of adapter,
+not a redesign.
+
+**Where a lead works.** Each attempt gets its own worktree on `factory/<issue>-<attempt>`, made the way
+`rd fan` makes them, so a lead never touches your checkout or another lead's, and your uncommitted work
+stays yours. The lead merges by rebasing and pushing to the default branch, or through a pull request
+it reviews and merges itself where `ship` says `pr` (always in the PR-required repos). Finalize removes
+the worktree; pull to see the change in your own checkout.
 
 **The session id is the durable handle, not the pane:**
 
 - The lead's SessionStart hook reports its `session_id` and transcript path into the inbox, and the
   `sessions` row of that attempt keeps both.
-- At close, the factory copies each attempt's transcript, its subagents' included, into the archive.
-  Claude Code deletes its own after 30 days by default (the oldest on the mini today is from
-  28 September); `cleanupPeriodDays: 365` is the second line.
-- `factory issue resume <id>` opens an attempt in a new herdr tab with
+- At close, the factory copies each attempt's transcript, its subagents' included, into the archive
+  (W1b). Claude Code deletes its own after 30 days by default (the oldest on the mini today is from
+  28 September), so the archive is the record.
+- `factory issue resume <id>` (W6) opens an attempt in a new herdr tab with
   `claude --resume <archived transcript> --fork-session`: you can ask the lead that did the work why,
-  months later, while the archived record stays as it was.
+  months later, while the archived record stays as it was. Until W6, `claude --resume <session id>`
+  does the same within the 30 days.
+- Both accounts share one transcript store, so a session resumes on either account; that is what lets
+  a walled lead move (§5).
 - The transcript format is internal to Claude Code and changes between versions, so the factory
   stores, links and full-text searches transcripts but never parses them for decisions. What it acts
-  on comes from hooks and the lead's `factory` reports.
+  on comes from hooks and the lead's `factory` reports. The scorers, once built (§9), read transcripts
+  for labels only.
 
 ## Facts, not status
 
 | Table | Holds |
 |-|-|
-| `projects` | the synced `project.yaml`, plus pause state |
+| `projects` | every repo under `~/SourceRoot`: its synced `project.yaml` or the defaults, plus a pause flag |
 | `signals` | one observation each: source, source time, subject, fingerprint, payload |
-| `issues` + `issue_deps` | kind, class, title, the lead's root cause and fix, summary, `wake_at`; an initiative's waves are child Issues |
-| `issue_links` | Signal → Issue, Issue → Issue (merged, split, related, regression of), who, why: the grouping labels |
-| `sessions` | herdr pane, Claude session id, archived transcript, role, account in effect, model, effort, Issue, Witness observations |
+| `issues` + `issue_deps` | kind, class, title, parent (an initiative's waves are its child Issues), the lead's root cause and fix, summary, `wake_at` |
+| `issue_links` | Signal → Issue, Issue → Issue (merged, split, related, regression of), who, why, and whether it acted (the judge's shadow verdicts do not): the grouping labels |
+| `sessions` | herdr pane, worktree, Claude session id, archived transcript, role, account in effect, model, effort, Issue, Witness observations |
 | `issue_inbox` | every event for an Issue, with its idempotency key and when it was handled |
-| `claims` | key, holder, policy, queued Issues |
+| `claims` | key, holders, queued Issues |
 | `events` | phases, notes, orchestrator actions, state changes: the history Argo shows |
 | `evidence` | per Issue: kind, link or payload, at, from whom |
 | `decisions` | question, options, default, expiry, answer, who, when |
@@ -129,6 +144,6 @@ gone, leads move there and herdr becomes only the view: about a day of adapter, 
 
 ## Backups and retention
 
-A nightly `pg_dump` to the homelab bucket and a weekly restore drill, from W1. Facts stay; lead
-transcripts are archived to the homelab and the local copies kept. Warden's database is deleted at W1;
-the golden set already holds what was worth learning from it.
+A nightly `pg_dump` to the homelab bucket and a weekly restore drill, from W1a. Facts stay; lead
+transcripts are archived to the homelab and the local copies kept. Warden is switched off at W1a and
+its database deleted at W2; the golden set already holds what was worth learning from it.

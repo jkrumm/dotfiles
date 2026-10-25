@@ -20,13 +20,14 @@ model. So dedup happens twice:
 Intake only has to catch the obvious repeats: the same monitor flapping, the same error fingerprint
 in a window. Two Issues that look different but share a cause are the lead's catch. A lead running in
 a project receives *possibly related* signals as notes (§4), so a second lead never starts on the
-same cause. A merge stops the absorbed Issue's lead, if one was running, and hands its notes over.
+same cause. A merge tells the absorbed Issue's lead, if one is running, to push its work in progress
+to a branch and drop its Issue as merged; its notes go to the surviving lead.
 
 ## How a signal finds its Issue
 
 | Step | Decides | How |
 |-|-|-|
-| **Rules** | most signals | stateful sources (Kuma, Beszel, containers): one episode per subject until the source reads healthy again. Sources are polled, so a missed recovery is caught on the next read. Stateless sources (CI, logs, GitHub issues): the same refined fingerprint within a window. Topology joins a container's failure to its host's |
+| **Rules** | most signals | stateful sources (Kuma, Beszel, containers): one episode per subject until the source reads healthy again. Sources are polled, so a missed recovery is caught on the next read. Stateless sources (CI, logs, `alert` issues): the same refined fingerprint within a window. Topology joins a container's failure to its host's |
 | **Judge** | the ambiguous rest: two open Issues on related subjects within 30 minutes, or a new Issue whose fingerprint or text matches a recent one | a cheap judge returns the probability that both are the same symptom. ≥ 0.8 attaches, ≤ 0.2 keeps apart, anything between links them as *possibly related*. A failed call keeps them apart; intake never waits |
 | **Lead** | everything the cause explains | merge or split, with the reason as a label |
 
@@ -38,13 +39,13 @@ recent deploys. It returns a probability, never a cause.
 
 | Stage | From | What the judge may do | Moves on when |
 |-|-|-|-|
-| **Off** | W1 | nothing; ambiguous pairs stay apart, linked as *possibly related* | intake goes live (W2) |
-| **Shadow** | W2 | logs its verdict on every ambiguous pair and acts on none; the leads' merges and splits label the truth | merge precision ≥ 0.95 over at least 30 labelled pairs, grouping F1 still ≥ 0.889 |
+| **Off** | W1a | nothing; ambiguous pairs stay apart, linked as *possibly related* | intake goes live (W2) |
+| **Shadow** | W2 | logs its verdict on every ambiguous pair and acts on none; the truth comes from the leads: merges, splits, and the same-or-different answer each lead records on a *possibly related* note (§4) | merge precision ≥ 0.95 over at least 30 labelled pairs, grouping F1 still ≥ 0.889 |
 | **Trusted** | when earned | ≥ 0.8 attaches, ≤ 0.2 keeps apart, anything between links as *possibly related* | precision falls below 0.95 over the last 30 pairs: back to shadow |
 
 A wrong merge hides work, while a missed merge costs one note to a lead, so precision is the gate and
 recall can grow later. If the judge never earns trust, nothing is lost: the leads keep catching
-duplicates by cause, as they do from W1. Only if shadow mode shows the judge failing for lack of
+duplicates by cause, as they do from W1a. Only if shadow mode shows the judge failing for lack of
 context would a richer judge (a DeepSeek session in OpenCode that can query the logs) be tried, and
 then through the same shadow stage.
 
@@ -67,11 +68,11 @@ model) maintains four things:
 3. **Runbooks.** A fix verified twice for the same cause and subject (a restart, a cache purge, a
    rerun) becomes an upkeep Issue: "add this as a runbook". A lead adds it to the project's
    `heal:` list through review, and from then on code runs it before any lead is spawned.
-4. **Calibration.** The judge's thresholds are re-checked monthly against the labels and the frozen
-   golden set; a change is accepted only if F1 stays at or above 0.889.
+4. **Thresholds.** The judge's 0.8 and 0.2 change only through an upkeep Issue that replays the
+   labels and the frozen golden set; a change is accepted only if F1 stays at or above 0.889.
 
 **Whether it actually learns is measured, not hoped.** You are right that this is the tricky part.
-The scorecard (§9) tracks, per month:
+The scorecard (§9) tracks, per month, beside the judge's own precision and recall:
 - the missed-at-intake rate (lead merges per 100 Issues)
 - the wrong-join rate (lead splits)
 - the seen-before hit rate (a lead confirms the suggested past cause)

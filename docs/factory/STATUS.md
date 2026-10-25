@@ -1,6 +1,27 @@
 # Factory design — status
 
-## v2.3 (2026-10-25, evening) — current
+## v2.4 (2026-10-25, night) — current
+
+**Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).
+
+- **Inputs:** the owner's reply on v2.3 (`feedback/2026-10-25-owner-reply-v23.md`); a fresh, unanchored
+  review by two agents, one for consistency (30 findings) and one for the design (15), saved verbatim
+  in `research/2026-10-25-fresh-review.md`.
+- **Changes:** building the factory: a build orchestrator over one wave orchestrator per wave for
+  W1a–W3 in sequence, then W4–W6 as initiatives inside the factory; W1 split into W1a (spine) and W1b
+  (ship and watch, `project.yaml` v0, gate repos jkrumm.com and weatherorb); every SourceRoot repo
+  takes requests, the manifest adds automation and `leads`; IuRoot out entirely; `otel` off Max and
+  review-depth gating as agent-gateway side changes; `agw dispatch implement` retired in W6; leads in a
+  worktree per attempt; hooks scoped to factory sessions, failing open into a spool; Stop-hook rule
+  with `factory issue wait`; walls handled in W1a, a walled lead may move after an hour; GitHub work
+  only by the `factory` label or `/factory`, `alert` issues are signals; warden switch-off checklist;
+  evidence derived from what the commits touched, deployed commit checked; SLOs and gates rewritten;
+  cards to Slack until W5; scorers and tuning wait for 50 closed Issues; claim policies, adopt mode,
+  action items and the Monday review cut; glossary in §0.
+- **Next:** the owner's sign-off; then W1a per `tdd/12-plan.md`. No decision is open; three new
+  defaults the owner may flip are in §13 (worktrees, the GitHub label, walled leads moving).
+
+## v2.3 (2026-10-25, evening) — history
 
 **Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).
 

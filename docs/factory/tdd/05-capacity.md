@@ -13,8 +13,8 @@ result is input the lead weighs, not a verdict. Enforced in code since 2026-10-2
 instead of spilling, the IU launchers are gone, and agent-gateway's `implement` lane runs on Max only.
 
 **Budget.** Last week's personal IU spend was $183 (≈ $790 a month at that pace), $136 of it review.
-If the €500 is monthly, review-depth gating in agent-gateway (W3) brings review back under it: light
-review for small diffs, full review where it matters. The factory never holds a model key; every
+If the €500 is monthly, review-depth gating in agent-gateway (a side change, §12) brings review back
+under it: light review for small diffs, full review where it matters. The factory never holds a model key; every
 model call goes through agent-gateway.
 
 ## The pool
@@ -38,14 +38,15 @@ or a time to wait until.
 |-|-|-|
 | **urgent** | an owner app is down, data at risk | any account is eligible |
 | **normal** | bugs, your requests, initiative waves | an account is under its weekly pace |
-| **upkeep** | upgrades, docs, code health, security | capacity would otherwise lapse at the next reset; every factory project still gets one upkeep Issue a week |
+| **upkeep** | upgrades, docs, code health, security | capacity would otherwise lapse at the next reset; every repo with a manifest still gets one upkeep Issue a week |
 
-- **5-hour headroom.** A lead starts on an account only if that account's 5-hour headroom covers the
-  expected cost of its size: the p75 share of a 5-hour window, measured per size and model from
-  usage-tracker from W3 on. Otherwise it goes to the other account, otherwise it waits for the
-  earlier 5-hour reset, which is never more than five hours away.
-- **Your reserve.** On `iu`, 15 % of the 5-hour window stays free for your own sessions.
-- **Concurrency.** One lead per repo, plus one urgent; an initiative's waves run in dependency order.
+- **5-hour headroom.** A lead starts on an account only if that account's 5-hour headroom covers a
+  fixed share per model tier, set from W1a's measured cost per session; leads admitted but not yet
+  measured count against it. Otherwise it goes to the other account, otherwise it waits for the
+  earlier reset: usually a 5-hour one, the weekly one when a week is spent.
+- **Your reserve.** On both accounts, 15 % of the 5-hour window and the last 5 % of the week stay free
+  for your own sessions.
+- **Concurrency.** One lead per repo unless its manifest's `leads` allows more, plus one urgent; an initiative's waves run in dependency order.
 - **Stop the line.** While a project's production is red (a failing probe or an open urgent Issue), it
   gets only fixes; its features and upkeep wait. Cortex's DRIVE paper calls this the andon cord.
 - **Never spill.** With both accounts walled, settle and runbooks still run (they need no model), and
@@ -59,54 +60,58 @@ Classification picks the lead's model and effort from size and kind; the launche
 |-|-|-|
 | xs, mechanical: a rename, docs, a patch bump | Haiku | low |
 | s–m: most bugs and requests | Sonnet | medium |
-| l–xl, novel design, security, or a second attempt after a failed one | Opus | medium, high for a second attempt |
+| l–xl, novel design, security | Opus | medium |
 
-A lead that fails or stalls is re-spawned one tier up with its predecessor's notes. Only the
-orchestrator sets maximum effort. The lead picks its own workers' models by the same table. The weekly tuning job
-compares cost and outcome per tier and proposes new defaults.
+A second attempt goes one tier up with its predecessor's notes; a second attempt on Opus runs at high
+effort. Until W3 the factory applies this rule itself, once, then parks the Issue; from W3 the
+orchestrator decides. Only the orchestrator sets maximum effort, and its changes apply at the next
+spawn. The lead picks its own workers' models by the same table. A tuning job that proposes new
+defaults from cost and outcome per tier waits until 50 Issues have closed (§9).
 
 ## The orchestrator
 
 The layer above the leads (§4). Besides planning initiatives, it has one job: keep the whole factory
 moving without wasting either subscription.
 
-- **When:** an initiative to plan or a wave shipped (§4); 06:30 daily for exceptions only; a full
-  scorecard review on Mondays; and on events:
-  - a lead with two hours of work time and no commit, no phase change, rising tokens
-  - an Issue reopened twice
-  - a normal Issue waiting more than 24 hours for capacity
-  - an account heading for more than 10 % unused at its reset
+- **When,** one list (the factory raises these events; it never re-tiers or splits on its own after W3):
+  - an initiative to plan, or one of its waves shipped (§4)
+  - a stalled lead: two hours of work time with no commit, no phase change and no declared wait
+  - a lead that stops unreported a second time, or a pane that dies three times in ten minutes
+  - three failed production checks on one Issue, or an Issue reopened twice
   - a decision about to take its default
+  - 06:30 daily, for exceptions only
 - **Reads:** `factory status --format md`: queue, leads, capacity forecast, scorecard (§9). Never raw
-  logs. It also runs contradiction checks: monitors green while Issues are open, Issues closed while
-  a probe fails.
-- **Follows up:** each finding becomes an action item with a due date, kept in Postgres. Open items
-  and their age are on the scorecard, so the review cannot shrink into a metrics report.
-- **Does,** through `factory`: reorder the queue, change a lead's model or effort, steer a lead, split
-  or merge Issues, pause a project, put a card to you, propose a policy change (picker thresholds,
-  tier defaults) as an upkeep Issue.
+  logs. An Issue waiting more than 24 hours and an account heading for more than 10 % unused are
+  lines in its status and in your briefing, not wakes.
+- **Does,** through `factory`: reorder within a class (`issue prio`), set a dependency (`issue dep`),
+  steer a lead (`issue note`), give a stalled Issue a stronger model (`issue retier`) or split it,
+  merge Issues, park one (`issue park`, a line for you), pause a project (`project pause`), put a
+  card to you for the four business classes only, and open an upkeep Issue for a policy change
+  (picker thresholds, tier defaults). Each finding it acts on becomes one of these, so its follow-ups
+  live in the queue like any other work.
 - **Never** writes code, touches a repo, or starts work the queue does not hold.
 - **Runs** on the account with the most slack: Opus for initiatives and wave reviews, Sonnet at
   medium for everything else; a typical routine wake takes minutes.
 
-Until W3 builds it, the build's own orchestrator tab does this job for the rewrite itself (§12).
+Until W3 builds it, the build orchestrator does this job for the rewrite itself (§12).
 
 ## Balance: both windows full, few switches
 
 The goal: **both weekly windows end close to full, and work rarely changes account.**
 
-- **Switching happens only at spawn.** A lead keeps its account to the end, so its cache is never
-  thrown away mid-work.
+- **Switching happens at spawn,** with one exception: a walled lead that would wait more than an hour
+  resumes on the other account if it has headroom, counted as a switch. Its prompt cache is gone after
+  such a wait anyway, and both accounts share the transcript store (§6).
 - **The picker steers new spawns** toward the account behind its pace, spends capacity that would
   lapse first, and checks 5-hour headroom before it starts anything.
-- **Tuned from data:** the weekly tuning job has a cheap model read the picker's decisions and the
-  quota history and propose threshold changes; the orchestrator turns the ones worth trying into upkeep
-  Issues, and a lead ships each like any other change.
+- **Tuned from data, later:** once 50 Issues have closed, a tuning job has a cheap model read the
+  picker's decisions and the quota history and propose threshold changes; the orchestrator turns the
+  ones worth trying into upkeep Issues, and a lead ships each like any other change.
 
 | Measure, on *Usage* | Target |
 |-|-|
 | capacity left unused at each weekly reset, per account | < 10 % |
-| account changes of a running lead | 0 |
+| account changes of a running lead | walls only |
 | minutes your own sessions waited on a wall | 0 |
 | leads that hit a 5-hour wall mid-work | falling |
 | Issues shipped per 1 % of weekly capacity, per account and tier | rising |

@@ -5,7 +5,7 @@
 - **You keep working in herdr exactly as now.** `c`, `rd wave`, `/wave` and your own sessions stay;
   the picker balances the `iu` and `me` accounts, and nothing you start runs on IU API tokens.
 - **You ask for work in one sentence**: in Argo, to Hermes, as a TickTick item tagged `#factory`, as a
-  GitHub issue, or `factory issue new weatherorb "…"`. The factory queues it; a lead in herdr takes it
+  GitHub issue labelled `factory`, or `factory issue new weatherorb "…"`. The factory queues it; a lead in herdr takes it
   from cause to checked production change. Watch it in herdr, follow it in Argo, ask Hermes about it,
   or read its summary in the morning briefing.
 - **You look at one place:** Argo on the mini — *Now* (anything that needs you; usually nothing),
@@ -20,7 +20,7 @@
   that breaks this before you see it.
 - **You comment on plans and reports in Argo's *Artifacts*;** the comment reaches the agent that wrote
   it. Until W5 lands, plannotator stays the review surface.
-- **Work repos stay yours.** IuRoot is not monitored, and the factory starts no work there in W1–W6.
+- **IuRoot stays outside.** The factory reads and writes only `~/SourceRoot` (§7).
 
 ## What you stop doing
 
@@ -34,10 +34,15 @@
 
 ## During the rewrite
 
-- **W1 switches warden off and deletes it,** together with its Slack relay and Hermes' project
-  narratives, as you said. Kuma's raw Slack alerts stay on until its adapter lands in W2, so nothing
-  goes unwatched in between; the other sources' alerts stop as their adapters land in W4.
+- **W1a switches warden off by a checklist, and W2 deletes it,** as you said:
+  - Kuma's `Warden Loop` push monitor goes, and so do the Kuma and HyperDX webhooks into warden;
+  - `jobs-grade --notify` posts job failures to Slack until W4's launchd adapter takes them;
+  - Argo's *implement* button is disabled until Argo moves in W5;
+  - Hermes' project narratives stop, and its restart goes into W2's `restart` runbook.
+
+  Kuma's raw Slack alerts stay on until its adapter lands in W2, so nothing goes unwatched in between;
+  the other sources' alerts stop as their adapters land in W4.
 - **Argo stays on the VPS until W5**, then moves to the mini in one cutover.
-- **The rewrite runs as waves in herdr on Max,** steered by one orchestrator tab that watches both
-  accounts' windows (§12). From W3 on, the factory's orchestrator takes over and the factory builds the rest of
-  itself.
+- **The rewrite runs as waves in herdr on Max:** a build orchestrator over one wave orchestrator per
+  wave, watching both accounts' windows (§12). From W3's gate the factory's orchestrator takes over,
+  and the factory builds W4 to W6 itself.

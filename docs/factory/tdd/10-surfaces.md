@@ -39,9 +39,11 @@ GitHub issues and checks, RollHook deploys, failed launchd jobs, CrowdSec decisi
 the current state also means a missed recovery is caught on the next read. The few sources that can
 only notify Slack arrive through a **Slack adapter**. Nothing listens on a public address.
 
-**GitHub requests.** An issue you open in one of your repos is a request; so is any issue, yours or
-someone else's, where you comment `/factory`. Only your GitHub user counts. The lead's summary goes
-back as a comment, and the issue closes when the factory's Issue does.
+**GitHub requests.** An issue in one of your repos that you label `factory` is a request; so is any
+issue, yours or someone else's, where you comment `/factory`. Only your GitHub user counts, and a
+label rather than authorship starts work, because every agent on the mini acts as that user. An issue
+labelled `alert` is a signal and goes through dedup and settle. The lead's summary goes back as a
+comment, and the issue closes when the factory's Issue does.
 
 Each source is repointed when its adapter lands: its Slack notifications are removed and Kuma's
 retries raised, so transient blips heal before they become signals. The one alert that stays outside
@@ -71,7 +73,9 @@ basalt-ui first.
 ## Notifications
 
 Argo's web push notifies for two things — a decision card and the morning briefing — and opens the
-matching page. Slack is nearly gone: it keeps Hermes' chat and the channels of the few sources that
+matching page. Until W5, cards and the factory's lines for you (a parked Issue, a stall) go to one
+Slack channel, three lines each. A card in the four business classes defaults to "don't; park the
+Issue", and its expiry runs from delivery. Slack is nearly gone: it keeps Hermes' chat and the channels of the few sources that
 can only post to Slack. The dead-man alert comes from Kuma, through whichever channel Kuma uses.
 
 ## The `factory` CLI
@@ -82,14 +86,15 @@ only what agents need, to keep resident tokens small:
 
 ```
 factory status
-factory issue new|show|phase|merge|split
-factory issue ask|block|ship|close|drop
+factory issue new|show|phase|note|wait
+factory issue ask|block|ship|close|drop|merge|split
 factory project check
 ```
 
 `ship` takes the three-line summary and the evidence; `ask` puts a decision card to you with a default
-and an expiry. The rest (`issue resume`, `job`, `session`, `artifact`, `decide`, the orchestrator's verbs (`prio`, `dep`, `steer`), …) exists for
-you, the orchestrator and Argo and is documented once, not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
+and an expiry; `block --human` adds a TickTick item. The rest (the orchestrator's `issue
+prio|dep|retier|park` and `project pause`, W3; `decide` and `artifact`, W5; `issue resume`, `job` and
+`session`, W6) exists for you, the orchestrator and Argo and is documented once, not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
 json|md`, exits non-zero on failure and never prompts an agent.
 
 ## Tools around it
@@ -110,8 +115,9 @@ json|md`, exits non-zero on failure and never prompts an agent.
 | Thing | When |
 |-|-|
 | agent-gateway implement on IU API tokens | Phase 0, done 2026-10-24 |
-| warden, its Slack relay, Hermes' project narratives | W1 (warden deleted) |
-| agent-gateway's headless implement lane | W1 stops its only caller (warden); W6 removes the lane |
+| agent-gateway `otel` on Max | a side change before W1a ends (§12) |
+| warden, its Slack relay, Hermes' project narratives | W1a switched off by the checklist in §2; W2 deleted |
+| `agw dispatch implement` and its headless lane | W1a stops its last automated caller (warden); W6 removes both, since a factory Issue does their job |
 | raw Slack alerts from each source | as its adapter lands (W2 Kuma, W4 the rest) |
 | Argo on the VPS | W5 |
 | plannotator and its review door | W5 |

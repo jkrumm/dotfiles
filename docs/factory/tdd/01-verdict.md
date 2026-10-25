@@ -33,8 +33,8 @@ flowchart TB
 2. **Claude Code owns the work, end to end.** A lead finds the root cause, plans, builds (alone or
    with workers), tests, reviews, ships, checks production and reports. It decides how.
 3. **The factory owns the lifecycle, never the reasoning.** Intake, dedup by symptom, settle,
-   classify, queue, capacity, watch, learn. Every repo describes itself in `project.yaml` and one make
-   contract, so the same commands work everywhere.
+   classify, queue, capacity, watch, learn. Every repo under `~/SourceRoot` takes requests; a
+   `project.yaml` adds automation, and one make contract makes the same commands work everywhere.
 4. **The brief is the problem, not a diagnosis.** Facts, evidence and verified history; no cheap-model
    root cause or plan for the lead to unlearn.
 5. **Cheap models do the routine around it, freely:** dedup judging, classification, wording, the
@@ -47,17 +47,17 @@ flowchart TB
    never writes code.
 8. **Done means production evidence.** The lead ships only with the evidence its change needs, fixes
    forward when production disagrees. After the hold, the factory runs `make verify` and the
-   project's journey probes, which no lead writes.
+   project's journey probes, which no lead edits within its own Issue.
 9. **It learns, and turns learning into code.** Grouping decisions become labels; verified causes
    become known fixes; a fix verified twice becomes a runbook or a job check that code runs from then on.
 10. **You decide business only:** product direction, spend, irreversible data loss, other people. Each
-    decision arrives as a three-line card with a default and an expiry. SLO: under 1 % of items reach you.
+    decision arrives as a three-line card with a default and an expiry. SLO: nothing else reaches you.
 
 ## The numbers
 
-| Metric | Baseline (v1 evidence) | Target |
+| Metric | Baseline (v1 evidence) | Target (the SLOs are in §11) |
 |-|-|-|
-| New items that reached you, 14 d | **32.2 %** (74 / 230) | < 1 % |
+| New items that reached you, 14 d | **32.2 %** (74 / 230) | business decisions only |
 | Notifications to you, 28 d | **≈ 62 / week** | ≤ 2 / week + the morning briefing |
 | `continue` nudges to parked agents, 45 d | **50** | 0 |
 | Grouping F1, held-out golden set | warden 0.744 → rules **0.889** | ≥ 0.889 |

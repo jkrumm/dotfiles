@@ -31,14 +31,14 @@ flowchart TB
 
 | Step | Owner | Engine | Out |
 |-|-|-|-|
-| **Intake** | factory | a poller per source; your requests | Signal |
+| **Intake** | factory | a poller per source; requests skip to *Classify* | Signal |
 | **Dedup by symptom** | factory | rules; a cheap judge for the ambiguous rest once its shadow run earns trust (§8) | a new Issue, or a Signal attached to an open one |
 | **Settle + runbook** | factory | a grace timer; a runbook from `project.yaml` | healed and closed, or on to the queue |
-| **Classify** | factory | one cheap-model call | project, kind, urgency, size; the lead's model and effort |
+| **Classify** | factory | one cheap-model call | project, kind, class, size; the lead's model and effort |
 | **Queue + admit** | factory | the picker, by class and 5-hour headroom (§5) | an account now, or a time to wait until |
-| **Spawn** | factory | herdr | a lead with the brief |
+| **Spawn** | factory | the `Runner` (herdr), in a worktree of the lead's own (§6) | a lead with the brief |
 | **Root cause → production** | **lead** | Claude Code on Max, alone or with workers | shipped with evidence, closed, blocked or asking |
-| **Watch** | factory | hold timer, `make verify`, the project's probes and signals | holds → closed; regression → back to the lead |
+| **Watch** | factory | the hold, then `make verify` and the project's probes; its signals | holds → closed; regression → back to the lead |
 | **Learn** | factory | cheap model, from the lead's report | known fix, dedup labels, runbook candidates, changelog |
 
 **The factory never reasons about code or causes.** It sorts, waits, counts and remembers. Anything
@@ -47,14 +47,18 @@ that needs understanding a problem belongs to the lead.
 ## Three ways in
 
 - **Signals** from sources and jobs become `incident`, `bug` or `upkeep` Issues after dedup.
-- **Requests** go straight to *Classify*: Argo, Hermes, `factory issue new`, a TickTick item tagged
-  `#factory`, a GitHub issue you open in one of your repos, or any issue where you comment `/factory`.
-  The factory never triggers on its own comments, and a source it cannot parse triggers nothing.
+- **Requests** go straight to *Classify*, with no dedup or settle: Argo, Hermes, `factory issue new`,
+  a TickTick item tagged `#factory`, a GitHub issue in one of your repos labelled `factory`, or any
+  issue where you comment `/factory`. A label, not authorship, starts work, because every agent on
+  the mini acts as your GitHub user; an issue labelled `alert` (weatherorb's alerts) is a signal. The
+  factory never triggers on its own comments, and a source it cannot parse triggers nothing.
 - **Initiatives**: a request too big for one lead is classified `initiative` and wakes the
   orchestrator, which plans it into waves: child Issues with their dependencies.
 
-Repos without a `project.yaml` stay outside the factory: there you work in plain herdr sessions as
-today, and Hermes starts one for you (`rd work`) instead of filing an Issue (§7).
+Every repo under `~/SourceRoot` takes requests, with or without a `project.yaml`; the manifest adds
+signals, runbooks, the hold and probes (§7). IuRoot stays outside. So do the herdr sessions you start
+yourself: Hermes files a request when you ask it to do something, and opens a plain session (`rd work`)
+only when you ask for a session.
 
 ## The lead's job
 
@@ -65,7 +69,7 @@ today, and Hermes starts one for you (`rd work`) instead of filing an Issue (§7
 | **Build** | implements and writes the tests | `@implementer`, `rd fan` |
 | **Check** | `make check` and `make test`; a review from another model family | `/check`, `/review` |
 | **Verify locally** | sees it work: screenshots, traces, timings | `@verifier`, chrome-devtools, Lighthouse |
-| **Ship** | merges and deploys by the project's `deploy.mode` | `make deploy`, `/ship` |
+| **Ship** | merges by the project's `ship` rules and deploys by its `deploy.mode` (§7) | `make deploy`, `/ship` |
 | **Check production** | the same evidence against the running system; error rate and p95 before and after | `make verify`, `/otel`, screenshots |
 | **Report** | `factory issue ship` with a three-line summary and the evidence | `factory` |
 
@@ -75,8 +79,11 @@ dotfiles and data changes rarely revert cleanly anyway.
 
 ## Done means evidence
 
-`factory issue ship` is refused without the evidence its kind of change needs. The factory checks that
-the evidence is there; judging it is the lead's job and the review's.
+The factory derives the evidence an Issue needs from what its merged commits touched (§7's `deploy`
+and `ship`), so a lead cannot pick a lighter bar: `ship` is refused without that evidence, and
+`close` is refused when the commits touch deployable paths. The factory checks that the evidence is
+there and fresh: a screenshot newer than the deploy, a deployed version from `make verify` that
+contains the merged commit. Judging it stays with the lead and the review.
 
 | Change | Evidence |
 |-|-|
@@ -84,12 +91,12 @@ the evidence is there; judging it is the lead's job and the review's.
 | API or service | `make verify`; error rate and p95 of the changed endpoints, before and after |
 | Infra or config | the service's status and logs after the change |
 | Data or migration | the queries that show the data is right |
-| Nothing deployed (docs, analysis) | the commit or the document, via `factory issue close` |
+| Nothing deployed (docs, analysis), or a repo without a `deploy` block | the commit or the document, via `factory issue close` |
 
-**Probes are written by nobody who ships.** Each deployable project lists a few user-journey probes
-in `project.yaml`: can I log in, does the forecast load, does the upload finish. Each passes or
-fails, never averaged. The factory runs them after every hold, next to `make verify`. A lead never
-edits them as part of a fix; changing a probe is an Issue of its own. Tests a model wrote for its own
+**No lead edits a probe within the Issue it is shipping.** Each deployable project lists a few
+user-journey probes in `project.yaml`: can I log in, does the forecast load, does the upload finish.
+Each passes or fails, never averaged. The factory runs them after every hold, next to `make verify`.
+Probes change only through an Issue of their own. Tests a model wrote for its own
 change can give false confidence, and the probes are the check that does not depend on it.
 
 ## The brief: the problem, never a diagnosis
@@ -98,17 +105,17 @@ A lead reasons better from facts than from a weaker model's guess, so the brief 
 cheap-model root cause and no cheap-model plan.
 
 - **The ask:** your words, or what the signals saw: what, where, since when, how often.
-- **Evidence:** the raw signals, the commands that pull their logs and traces, the project's last
-  deploys and commits. Alert and issue text is marked as evidence, never instructions.
+- **Facts:** the raw signals, the commands that pull their logs and traces, the project's last
+  deploys and commits. Alert and issue text is marked as data, never instructions.
 - **History:** closed Issues that looked similar, with the cause and fix their lead verified, marked
   *past, may not apply*.
-- **The project:** its make contract, deploy mode, which paths ship on their own, production targets.
+- **The project:** its make contract, deploy mode, how each path ships, production targets.
 - **Done means:** the evidence table above and the `factory` verbs.
 - **Standing orders:** decide alone except the four business classes; ask through `factory issue ask`;
   no turn or time limits; workers stay on Max.
 
-Classification sets labels (project, kind, urgency, size) and routing (account, model, effort), never a
-cause; of its output, the brief shows just kind and urgency. The standing orders are identical in every brief, so they are a prompt-cache hit.
+Classification sets labels (project, kind, class, size) and routing (account, model, effort), never a
+cause; of its output, the brief shows just kind and class. The standing orders are identical in every brief, so they are a prompt-cache hit.
 
 ## Following a running lead
 
@@ -117,16 +124,31 @@ cause; of its output, the brief shows just kind and urgency. The standing orders
   turn ends from output wedges sessions. Witness reads herdr every minute as the backstop (blocked,
   walled, dead) and records the account in effect. The lead's `factory` reports are authoritative,
   and the server validates each one against its schema.
-- **A Stop hook keeps the lead honest.** If the lead stops while its Issue is still open and nothing
-  is reported, the hook sends it back with one line: report `ship`, `close`, `block` or `ask`. Claude
-  Code continues a session when a Stop hook exits with code 2, so nobody types `continue`.
+- **The hooks act only in factory sessions and never block one.** The launcher sets `FACTORY_SESSION`;
+  without it every hook exits at once, so your own sessions and the build's never see them. When the
+  factory does not answer, a hook or a `factory issue` call appends its event to a local spool, which
+  the factory replays on start; the idempotency keys make the replay safe.
+- **A Stop hook keeps the lead honest, and only then.** It sends the lead back with one line (report
+  `ship`, `close`, `block`, `ask` or `wait`) when all three hold: nothing reported since the last
+  prompt, no declared wait, and the turn did not end on a usage limit. `factory issue wait --on
+  workers|deploy|owner` is the report for a lead whose `rd fan` worktrees or deploy are still running.
+  A turn that answers a message you typed is never sent back. Claude Code continues a session
+  when a Stop hook exits with code 2, and `stop_hook_active` stops it looping. A second unreported stop
+  parks the Issue with a line for you, never a card.
 - **New facts go to the running lead.** A signal linked as *possibly related* to an Issue in work (by
-  the rules, and by the judge once trusted) reaches that lead as a note, not a second session. The lead decides whether it shares the cause.
+  the rules, and by the judge once trusted) reaches that lead as a note, not a second session. The lead
+  records whether it shares the cause; that answer is the judge's label (§8).
+- **Notes go through the factory.** The factory and the orchestrator write to a lead only with
+  `factory issue note`, which records each note under its prompt id and types it once. The factory
+  alone owns `lead-*` panes: herdr-reap skips them, and the stall rule (§5) replaces any idle watchdog.
 - **You can step in at any time:** open the lead's tab and type. The lead treats your message like a
   note, and the factory keeps following.
-- **Walls:** a walled lead waits for its window and resumes on the same account, cache intact.
+- **Walls:** Witness marks a walled lead and resumes it when its window resets. If the wait would pass
+  an hour and the other account has headroom, the lead resumes there by session id instead (§5); the
+  prompt cache is gone after such a wait either way.
 - **After ship** the lead stays open and idle through the 30-minute hold, so a regression reaches it
-  while its cache is warm. When the hold passes, Witness closes the tab.
+  while its context is warm. Once the hold has passed and `make verify` and the probes are green, the
+  factory closes the tab and removes the worktree.
 
 ## Two layers: the orchestrator and the leads
 
@@ -140,11 +162,11 @@ children" (`research/2026-10-25-warp-factories.md`).
 | **Lead** | one Issue, end to end: root cause to production evidence | spawn → end of the hold | by size and novelty (§5) |
 
 - **The factory is not a layer.** It is the conveyor: it queues, admits, spawns, follows and closes,
-  in code. The orchestrator decides and the factory executes. Queue order is the factory's rule
-  (class, dependencies, age) unless the orchestrator sets a priority or a dependency, with a reason,
-  through `factory issue prio|dep`.
+  in code. The orchestrator decides and the factory executes. Queue order, first rule first: stop the
+  line, urgent, dependencies, the orchestrator's priority within a class (`factory issue prio|dep`,
+  with a reason), age.
 - **A lead's helpers are not a layer either.** Subagents, `rd fan` worktrees or a `/wave` chain are
-  tools the lead picks; the factory never sees them.
+  tools the lead picks; the factory sees only the lead's reports, such as `wait --on workers`.
 - **No orchestrator session lives long.** Each wake starts fresh from `factory status`, the
   initiative's plan in `docs/waves/` and the event, and ends when its decision is recorded. The
   event is the boundary, so nothing compacts and a crash costs one wake.
@@ -152,8 +174,8 @@ children" (`research/2026-10-25-warp-factories.md`).
   spawning: the orchestrator writes the plan in the project's directory and opens the waves as child
   Issues; each wave is an Issue with its own lead; when a wave ships, the orchestrator reads the
   result and adjusts the waves still ahead.
-- **It reaches leads through herdr,** as you do: it reads a lead's pane and leaves it a note. It never
-  writes code, touches a repo or starts work the queue does not hold.
+- **It reaches leads through the factory:** it reads a lead's pane and leaves notes with `factory
+  issue note`. It never writes code, touches a repo or starts work the queue does not hold.
 
 ## What you see of an Issue
 
@@ -173,5 +195,6 @@ stateDiagram-v2
   closed --> queued: same fault within 30 days
 ```
 
-A lead that makes no progress does not wait for you either: the orchestrator steers it, gives it a
-stronger model, splits the Issue, or parks it with a note in the briefing (§5).
+*Parked* is `waiting` with a reason; a stopped Issue is closed as dropped; pausing is a flag on the
+project, not a state. A lead that makes no progress does not wait for you either: the orchestrator
+steers it, gives it a stronger model, splits the Issue, or parks it with a line for you (§5).

@@ -63,7 +63,7 @@ Their numbers are self-reported:
 | Where it ends | a mergeable pull request (Warp, Stripe, Ramp) | production evidence after a 30-minute hold and probes | nobody else deploys or watches production |
 | Human gate | spec approval and merge review | four business classes | a single reviewer is the bottleneck the factory exists to remove |
 | Orchestrator | an LLM foreman in every work item's path | code moves Issues; the orchestrator wakes only to decide | deterministic paths, agentic where needed (Swamp's lesson) |
-| Projects | one factory per product surface (Warp) | one factory over many unrelated repos, each with a manifest | a solo developer's portfolio is the product surface |
+| Projects | one factory per product surface (Warp) | one factory over many unrelated repos; a manifest adds automation | a solo developer's portfolio is the product surface |
 | Statistics | thousands of runs a week | tens | score every run, and read small numbers with care |
 | Governance | RBAC, budgets, audit | Postgres facts and the scorecard | one user |
 

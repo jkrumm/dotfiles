@@ -6,7 +6,7 @@
 |-|-|-|
 | D1 IU API budget for mother wakes (≈ $294/week) | cheap models judge; Max mothers implement | gone; leads on Max do the reasoning, cheap models the routine within your €500; review is the line to watch (§5) |
 | D2 Claude tier | you added a second subscription | done; a third is yours whenever (§13) |
-| D3 autonomy in work repos | some IuRoot paths auto-merge; not monitored | §7 |
+| D3 autonomy in work repos | some IuRoot paths auto-merge; not monitored | superseded on 25 October: IuRoot is outside the factory, and its merge rules belong to your AthenaTeamchat work (§7) |
 | D4 who writes holdout scenarios | "don't understand" | not a question: the lead proves its change with production evidence (§4) |
 | D5 retention | "ok" | §6 |
 
@@ -40,7 +40,7 @@ Each ADR file carries this status in its first lines.
 | escalation recall failed on 6 real decisions in 959 | escalation is four business classes the lead raises through `factory issue ask`, not keyword rules |
 | no canary, so code fixes stayed propose-only | the lead checks production itself; hold window; the factory's re-verify (§4) |
 | the `glance` gameday never healed | W2's gate |
-| pre-registration amended, `--verify` fails | a fresh pre-registration is frozen before the first rule change in W3 |
+| pre-registration amended, `--verify` fails | a fresh pre-registration is frozen before the first rule change in W2 |
 | warden and Hermes backups failing | warden deleted; the infra job checks every remaining backup's age and a restore |
 | review door hand-started | retired at W5 |
 
