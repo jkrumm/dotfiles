@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry, askRelogins, markReloginAsked, reloginAskDue, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -130,6 +130,12 @@ describe("login expiry", () => {
     expect(r[1].detail).toContain("expired")
     expect(readLoginExpiry({ reg: reg(false), spawn: fake({ [keychainService(null)]: ok(item(NOW + D)) }), baseEnv: {}, now: NOW }).map((x) => x.id)).toEqual(["iu"]) // a disabled account is not graded
   })
+  test("default and severity: a non-default account never reaches FAIL, the default keeps it", () => {
+    const r = rows(ok(item(NOW + D)), ok(item(NOW + D)))
+    expect(r.map((x) => [x.id, x.default, x.grade, x.severity])).toEqual([["iu", true, "FAIL", "FAIL"], ["me", false, "FAIL", "WARN"]])
+    const e = rows({ status: 44, stdout: "", stderr: "x" }, ok(item(NOW - D)))
+    expect(e.map((x) => [x.id, x.grade, x.severity])).toEqual([["iu", "WARN", "WARN"], ["me", "FAIL", "WARN"]])
+  })
   test("an unreadable or foreign item is a WARN, never a FAIL, and never echoes the item", () => {
     const r = rows({ status: 44, stdout: "", stderr: "could not be found" }, ok(item(undefined)))
     expect(r.map((x) => [x.id, x.grade, x.days_left, x.expired])).toEqual([["iu", "WARN", null, false], ["me", "WARN", null, false]])
@@ -142,7 +148,7 @@ describe("login expiry", () => {
 describe("re-login asks", () => {
   const D = 86400_000
   const row = (id: string, grade: LoginRow["grade"], over: Partial<LoginRow> = {}): LoginRow => ({
-    id, grade, refresh_expires_at: NOW + 20 * D, access_expires_at: NOW + H * 1000, days_left: 20, expired: false, detail: "x", ...over,
+    id, default: id === "iu", grade, severity: grade, refresh_expires_at: NOW + 20 * D, access_expires_at: NOW + H * 1000, days_left: 20, expired: false, detail: "x", ...over,
   })
   const none: Record<string, RefreshResult> = {}
 
@@ -155,35 +161,70 @@ describe("re-login asks", () => {
     expect(reloginCandidates(none, [row("me", "WARN", { refresh_expires_at: null, days_left: null })])).toEqual([]) // unreadable proves nothing
     expect(reloginCandidates(none, [row("me", "FAIL", { expired: true, days_left: -2, refresh_expires_at: NOW - 2 * D })])).toEqual([{ id: "me", reason: "login expired" }])
   })
-  test("dedupe: one ask per account per 24 h, stamped before the ask, per account", () => {
+  const warn = (id: string) => row(id, "WARN", { days_left: 3, refresh_expires_at: NOW + 3 * D })
+  const run = (dir: string, now: number, logins: LoginRow[], ask: (id: string) => void, results = none) =>
+    askRelogins({ results, logins, now, dir, ask: (c) => ask(c.id) })
+
+  test("dedupe: one ask per account per 24 h; another account has its own clock", () => {
     const dir = tmp()
     const asked: string[] = []
-    const go = (now: number, logins: LoginRow[], results = none) => askRelogins({ results, logins, now, dir, ask: (c) => { asked.push(`${c.id}@${now - NOW}`) } })
-    const warn = (id: string) => row(id, "WARN", { days_left: 3, refresh_expires_at: NOW + 3 * D })
-    expect(go(NOW, [warn("me")])).toEqual(["me"])
-    expect(go(NOW + 3600_000, [warn("me")])).toEqual([]) // an hour later: muted
-    expect(go(NOW + RELOGIN_ASK_INTERVAL_MS - 1, [warn("me")])).toEqual([])
-    expect(go(NOW + 1000, [warn("me"), warn("iu")])).toEqual(["iu"]) // another account has its own clock
-    expect(go(NOW + RELOGIN_ASK_INTERVAL_MS, [warn("me")])).toEqual(["me"]) // 24 h later: asks again
-    expect(asked).toEqual(["me@0", "iu@1000", `me@${RELOGIN_ASK_INTERVAL_MS}`])
+    const ask = (id: string) => void asked.push(id)
+    expect(run(dir, NOW, [warn("me")], ask).asked).toEqual(["me"])
+    expect(run(dir, NOW + RELOGIN_CAP_INTERVAL_MS + 1, [warn("me")], ask).asked).toEqual([]) // an hour later: muted
+    expect(run(dir, NOW + RELOGIN_ASK_INTERVAL_MS - 1, [warn("me")], ask).asked).toEqual([])
+    expect(run(dir, NOW + RELOGIN_CAP_INTERVAL_MS + 1, [warn("me"), warn("iu")], ask).asked).toEqual(["iu"])
+    expect(run(dir, NOW + RELOGIN_ASK_INTERVAL_MS, [warn("me")], ask).asked).toEqual(["me"]) // 24 h later: asks again
+    expect(asked).toEqual(["me", "iu", "me"])
     rmSync(dir, { recursive: true })
   })
-  test("the stamp is written before the ask runs (a throwing ask is never retried in a loop)", () => {
+  test("cap: one automatic dialog per machine per hour; the deferred account is not muted and is asked next hour", () => {
     const dir = tmp()
-    expect(() => askRelogins({ results: { me: "auth-failed" }, logins: [], now: NOW, dir, ask: () => { throw new Error("boom") } })).toThrow("boom")
-    expect(reloginAskDue("me", NOW + 60_000, dir)).toBe(false)
+    const asked: string[] = []
+    const o = run(dir, NOW, [warn("me"), warn("iu")], (id) => void asked.push(id))
+    expect(o).toEqual({ asked: ["me"], failed: [], capped: ["iu"] })
+    expect(run(dir, NOW + 10 * 60_000, [warn("iu")], (id) => void asked.push(id)).capped).toEqual(["iu"]) // still inside the hour
+    expect(run(dir, NOW + RELOGIN_CAP_INTERVAL_MS, [warn("iu")], (id) => void asked.push(id)).asked).toEqual(["iu"])
+    expect(asked).toEqual(["me", "iu"])
     rmSync(dir, { recursive: true })
   })
-  test("reloginAskDue: no stamp, a corrupt stamp and a stamp from the future are due", () => {
+  test("a spawn that throws mutes nothing: the next run retries, and one failure does not stop the other accounts", () => {
     const dir = tmp()
-    expect(reloginAskDue("me", NOW, dir)).toBe(true)
+    const logs: string[] = []
+    const first = askRelogins({
+      results: none, logins: [warn("me"), warn("iu")], now: NOW, dir, log: (m) => logs.push(m),
+      ask: (c) => { if (c.id === "me") throw new Error("spawn boom") },
+    })
+    expect(first).toEqual({ asked: ["iu"], failed: ["me"], capped: [] })
+    expect(logs).toEqual(["re-login ask for me failed: spawn boom"])
+    const asked: string[] = []
+    // me retries on the next run (stamp and cap were given back by the failure; iu took the cap, so wait an hour)
+    expect(run(dir, NOW + RELOGIN_CAP_INTERVAL_MS, [warn("me"), warn("iu")], (id) => void asked.push(id)).asked).toEqual(["me"])
+    expect(asked).toEqual(["me"])
+    rmSync(dir, { recursive: true })
+  })
+  test("the claim is exclusive: a concurrent keepalive run cannot ask twice (the stamp is held while the ask runs)", () => {
+    const dir = tmp()
+    const asked: string[] = []
+    const o = askRelogins({
+      results: none, logins: [warn("me")], now: NOW, dir,
+      ask: (c) => {
+        asked.push(c.id)
+        // another run starting while the ask is being started sees the claim
+        expect(askRelogins({ results: none, logins: [warn("me")], now: NOW + 1, dir, ask: (x) => void asked.push(`dup-${x.id}`) }).asked).toEqual([])
+      },
+    })
+    expect(o.asked).toEqual(["me"])
+    expect(asked).toEqual(["me"])
+    rmSync(dir, { recursive: true })
+  })
+  test("stamp and cap files are invisible to the quota cache; a corrupt or future stamp does not mute", () => {
+    const dir = tmp()
     writeFileSync(join(dir, "me.relogin-ask.json"), "garbage")
-    expect(reloginAskDue("me", NOW, dir)).toBe(true)
-    markReloginAsked("me", NOW + 5 * 24 * H * 1000, dir)
-    expect(reloginAskDue("me", NOW, dir)).toBe(true)
-    markReloginAsked("me", NOW, dir)
-    expect(reloginAskDue("me", NOW + 1, dir)).toBe(false)
-    expect(loadCache(dir).samples).toEqual({}) // the stamp file is invisible to the quota cache
+    expect(run(dir, NOW, [warn("me")], () => {}).asked).toEqual(["me"])
+    rmSync(join(dir, "relogin-ask.cap"))
+    writeFileSync(join(dir, "me.relogin-ask.json"), JSON.stringify({ ts: NOW + 5 * RELOGIN_ASK_INTERVAL_MS }))
+    expect(run(dir, NOW, [warn("me")], () => {}).asked).toEqual(["me"])
+    expect(loadCache(dir).samples).toEqual({})
     rmSync(dir, { recursive: true })
   })
 })
@@ -840,10 +881,15 @@ describe("CLI (isolated HOME)", () => {
     expect(text.rc).toBe(0)
     expect(text.out).toMatch(/^iu {2}PASS .*\nme {2}WARN /)
     expect(text.out + text.err).not.toContain("SECRET")
+    expect(j.accounts.map((a: { default: boolean; severity: string }) => [a.default, a.severity])).toEqual([[true, "PASS"], [false, "WARN"]])
+    // usage is a pure file read: no Keychain access, no login fields (the statusline calls it)
+    const probe = join(home, "security-called")
+    rmSync(probe, { force: true })
+    writeFileSync(stub, `#!/bin/sh\ntouch "${probe}"\nexit 44\n`)
     const u = cli(["usage"], env).out
-    expect(u).toMatch(/^iu .* login 20d$/m)
-    expect(u).toMatch(/^me .* login 5d WARN$/m)
-    expect(JSON.parse(cli(["usage", "--json"], env).out).accounts[1]).toMatchObject({ id: "me", login_grade: "WARN" })
+    cli(["usage", "--json"], env)
+    expect(existsSync(probe)).toBe(false)
+    expect(u).not.toContain("login")
     const dead = cli(["expiry", "--json"], { ...env, CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security") }) // exit 44 everywhere: Keychain unreadable
     expect(JSON.parse(dead.out).accounts.map((a: { grade: string }) => a.grade)).toEqual(["WARN", "WARN"])
   })
@@ -932,7 +978,7 @@ describe("CLI (isolated HOME)", () => {
     seed(60_000)
     const j = JSON.parse(cli(["usage", "--json"]).out)
     expect(Object.keys(j.accounts[0]).sort()).toEqual(
-      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "login_days_left", "login_expires_at", "login_grade", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
+      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
     )
     expect(j.default_account).toBe("iu")
     expect(j.accounts[0]).toMatchObject({ id: "iu", five_hour: 5, seven_day: 5, auth_ok: true })

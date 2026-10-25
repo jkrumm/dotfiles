@@ -68,12 +68,13 @@ done <<<"$ACCOUNTS"
 
 # ── a2. login expiry ──────────────────────────────────────────────────────────
 # The refresh token ends 30 days after the login (claude-account expiry reads only that timestamp from the account's
-# own Keychain item). PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or already past. Grading lives in
-# scripts/lib/claude-accounts.ts (gradeLogin); the heartbeat uses the same answer.
+# own Keychain item). PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or already past; like auth/<id>, a non-default
+# account is capped at WARN (the picker routes around a dead one). Grading lives in scripts/lib/claude-accounts.ts
+# (gradeLogin, `severity` of each row); the heartbeat uses the same answer.
 EXP=$("${CA[@]}" expiry --json 2>/dev/null) || EXP=""
 while IFS= read -r id; do
   [[ -n "$id" ]] || continue
-  line=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | "\(.grade)\t\(.detail)\(if .grade != "PASS" and .refresh_expires_at != null then " — fix: claude-relogin \($id)" else "" end)"' <<<"$EXP" 2>/dev/null) || line=""
+  line=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | "\(.severity // .grade)\t\(.detail)\(if (.severity // .grade) != "PASS" and .refresh_expires_at != null then " — fix: claude-relogin \($id)" else "" end)"' <<<"$EXP" 2>/dev/null) || line=""
   if [[ -z "$line" ]]; then
     row WARN "login/$id" "claude-account expiry gave no answer"
   else

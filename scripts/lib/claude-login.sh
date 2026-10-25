@@ -24,10 +24,16 @@ login_shquote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
-# macOS app (as `open -a` names it) that is signed in to the account, from the registry's `loginBrowser`; empty when
-# the account has none (the caller falls back to the system default and says so).
+# macOS app (as `open -a` names it) that is signed in to the account, from the registry's `loginBrowser`. Prints an
+# empty string (rc 0) for an account that has none: the caller falls back to the system default and says so. An
+# unusable registry must never look like that, so it fails distinctly: rc 2 = jq missing or the registry unreadable or
+# malformed, rc 3 = the registry has no such account (the reason goes to stderr).
 login_browser_for() { # <registry> <id>
-  jq -r --arg id "$2" '.accounts[$id].loginBrowser // ""' "$1" 2>/dev/null
+  local reg=$1 id=$2
+  command -v jq >/dev/null 2>&1 || { echo "claude-login: jq not found, cannot read the registry" >&2; return 2; }
+  jq -e '.accounts | type == "object"' "$reg" >/dev/null 2>&1 || { echo "claude-login: registry $reg is unreadable or malformed" >&2; return 2; }
+  jq -e --arg id "$id" '.accounts | has($id)' "$reg" >/dev/null 2>&1 || { echo "claude-login: registry $reg has no account '$id'" >&2; return 3; }
+  jq -r --arg id "$id" '.accounts[$id].loginBrowser // ""' "$reg"
 }
 
 # What the reverse-forward watchdog does on one poll. Prints `keep` or `close:<reason>`.

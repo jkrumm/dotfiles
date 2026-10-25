@@ -17,7 +17,8 @@
 # pasted code, which stays the fallback.
 #
 # Environment: CLAUDE_LOGIN_ACCOUNT (registry id), CLAUDE_LOGIN_MACHINE (mini|macbook; default: detected),
-# CLAUDE_LOGIN_OWNER_PID (the login process the tunnel lives and dies with), CLAUDE_ACCOUNTS_REGISTRY.
+# CLAUDE_LOGIN_OWNER_PID (the login process the tunnel lives and dies with), CLAUDE_LOGIN_TUNNEL_PID_FILE (where the
+# tunnel's pid is written, so the owner can kill it on any exit), CLAUDE_ACCOUNTS_REGISTRY.
 # Test seams: CLAUDE_LOGIN_OPEN, CLAUDE_LOGIN_SSH, CLAUDE_LOGIN_LSOF, CLAUDE_LOGIN_MAC_HOST, CLAUDE_LOGIN_POLL_S,
 # CLAUDE_LOGIN_FORWARD_GRACE_S, CLAUDE_LOGIN_MSG_FILE (default /dev/tty, else stderr).
 set -u
@@ -33,6 +34,7 @@ MAC_HOST="${CLAUDE_LOGIN_MAC_HOST:-iumac}"
 POLL_S="${CLAUDE_LOGIN_POLL_S:-2}"
 MAX_IDLE_S="${CLAUDE_LOGIN_TUNNEL_IDLE_S:-2700}"
 GRACE_S="${CLAUDE_LOGIN_FORWARD_GRACE_S:-3}"
+TUNNEL_PID_FILE="${CLAUDE_LOGIN_TUNNEL_PID_FILE-}"
 MSG_FILE="${CLAUDE_LOGIN_MSG_FILE:-/dev/tty}"
 
 dry=0
@@ -64,7 +66,8 @@ app=""
 if [[ -z "$account" ]]; then
   say "claude-login: no CLAUDE_LOGIN_ACCOUNT, using the system default browser"
 else
-  app=$(login_browser_for "$REGISTRY" "$account")
+  # an unusable registry is not "no loginBrowser": never guess a browser for an account that may be the wrong one
+  app=$(login_browser_for "$REGISTRY" "$account") || { fallback "cannot tell which browser belongs to '$account' (registry unusable)"; exit 1; }
   [[ -n "$app" ]] || say "claude-login: no loginBrowser for '$account' in the registry, using the system default browser"
 fi
 
@@ -83,7 +86,7 @@ remote_open="open"
 for w in "${open_args[@]}"; do remote_open="$remote_open $(login_shquote "$w")"; done
 
 # Own connection (ControlPath=none): the forward must die with this ssh process, never join a shared master.
-tunnel=("$SSH" -N -R "$port:localhost:$port" -o BatchMode=yes -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none
+tunnel=("$SSH" -N -R "127.0.0.1:$port:localhost:$port" -o BatchMode=yes -o ExitOnForwardFailure=yes -o ControlMaster=no -o ControlPath=none
         -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=8 "$MAC_HOST")
 opener=("$SSH" -o BatchMode=yes -o ConnectTimeout=8 "$MAC_HOST" "$remote_open")
 
@@ -96,6 +99,8 @@ fi
 
 "${tunnel[@]}" </dev/null >/dev/null 2>&1 &
 tunnel_pid=$!
+# the login owner (claude-relogin.sh) reads this file and kills the tunnel on exit, whatever the exit path
+[[ -z "$TUNNEL_PID_FILE" ]] || echo "$tunnel_pid" > "$TUNNEL_PID_FILE"
 # ExitOnForwardFailure ends ssh within a moment of a refused forward: a process still alive after the grace is the forward.
 for ((i = 0; i < GRACE_S; i++)); do
   sleep 1
@@ -110,21 +115,29 @@ if ! "${opener[@]}"; then
 fi
 say "claude-login: approval page opened in ${app:-the default browser} on $MAC_HOST; the callback reaches this machine through the tunnel"
 
-# Watchdog: closes the tunnel when the login is over. Detached from the CLI's stdio, which would otherwise hold it open.
+# Watchdog: closes the tunnel when the login is over (the owner also kills it on exit; this covers an owner that
+# vanished). Detached from the CLI's stdio, which would otherwise hold it open. If the tunnel dies by itself while
+# the login is still waiting, the user is told to fall back to pasting the code.
 (
   owner="${CLAUDE_LOGIN_OWNER_PID-}"
   seen=0; idle=0
-  while kill -0 "$tunnel_pid" 2>/dev/null; do
+  while :; do
     sleep "$POLL_S"
     owner_alive=1
     if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then owner_alive=0; fi
     listening=0
     "$LSOF" -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && { listening=1; seen=1; }
+    if ! kill -0 "$tunnel_pid" 2>/dev/null; then
+      if [[ "$owner_alive" == 1 && "$listening" == 1 ]]; then
+        say "claude-login: the tunnel to $MAC_HOST dropped while the login is still waiting: paste the code from the approval page at the login prompt (URL: $url)"
+      fi
+      break
+    fi
     if "$LSOF" -nP -iTCP:"$port" -sTCP:ESTABLISHED >/dev/null 2>&1; then idle=0; else idle=$((idle + POLL_S)); fi
     verdict=$(login_tunnel_verdict "$owner_alive" "$listening" "$seen" "$idle" "$MAX_IDLE_S")
     [[ "$verdict" == keep ]] && continue
     kill "$tunnel_pid" 2>/dev/null
     break
   done
-) >/dev/null 2>&1 &
+) </dev/null >/dev/null 2>&1 &
 exit 0

@@ -323,7 +323,15 @@ export function gradeLogin(refreshTokenExpiresAt: number | null, nowMs: number):
 
 export interface LoginRow {
   id: string
+  /** the account owns the default ~/.claude (CLAUDE_CONFIG_DIR unset) */
+  default: boolean
+  /** what the login's remaining life says */
   grade: LoginGrade
+  /**
+   * What the graders (verify rows, heartbeat) act on: the grade, except that a non-default account never reaches FAIL
+   * (the picker routes around a dead one, as auth/<id> already treats it). The default account keeps its grade.
+   */
+  severity: LoginGrade
   /** epoch ms of the refresh token's end of life; null when the item could not be read */
   refresh_expires_at: number | null
   access_expires_at: number | null
@@ -337,7 +345,9 @@ export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?
   return Object.entries(d.reg.accounts).filter(([, a]) => a.enabled).map(([id, a]) => {
     const svc = keychainService(accountDir(a))
     const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
-    const unreadable = (why: string): LoginRow => ({ id, grade: "WARN", refresh_expires_at: null, access_expires_at: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
+    const isDefault = a.dir === null
+    const row = (grade: LoginGrade) => ({ id, default: isDefault, grade, severity: !isDefault && grade === "FAIL" ? ("WARN" as const) : grade })
+    const unreadable = (why: string): LoginRow => ({ ...row("WARN"), refresh_expires_at: null, access_expires_at: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
     if (kc.error || kc.status !== 0) return unreadable(`Keychain '${svc}': ${kc.error?.message ?? (kc.stderr.trim().slice(0, 120) || `rc=${kc.status}`)}`)
     const t = expiryFromCredentials(kc.stdout)
     if (!t) return unreadable(`Keychain '${svc}' is not a Claude login`)
@@ -347,7 +357,7 @@ export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?
     const expired = left <= 0
     const date = new Date(t.refreshTokenExpiresAt).toISOString().slice(0, 10)
     return {
-      id, grade: gradeLogin(t.refreshTokenExpiresAt, d.now), refresh_expires_at: t.refreshTokenExpiresAt, access_expires_at: t.expiresAt, days_left: days, expired,
+      ...row(gradeLogin(t.refreshTokenExpiresAt, d.now)), refresh_expires_at: t.refreshTokenExpiresAt, access_expires_at: t.expiresAt, days_left: days, expired,
       detail: expired ? `login expired ${date} (${-days} d ago): /login needed` : `login valid until ${date} (${days} d left)`,
     }
   })
@@ -355,20 +365,49 @@ export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?
 
 // ── Re-login asks (keepalive path) ──────────────────────────────────────────────────────────────────────────────
 // A dead or soon-dead login asks its owner for a re-login through a native approval dialog (claude-relogin --ask).
-// Never more than one ask per account per 24 h on this machine, never an auto-run: the dialog is the human's click.
+// At most one ask per account per 24 h and one dialog per machine per hour, never an auto-run: the dialog is the human's click.
 
 export const RELOGIN_ASK_INTERVAL_MS = 24 * 3600_000
+export const RELOGIN_CAP_INTERVAL_MS = 3600_000
+const reloginStampPath = (dir: string, id: string) => file(dir, id, "relogin-ask.json")
+const reloginCapPath = (dir: string) => join(dir, "relogin-ask.cap")
 
-/** True when no ask was recorded for this account in the last 24 h (state: <id>.relogin-ask.json under the cache dir). */
-export function reloginAskDue(id: string, nowMs: number, dir = cacheDir()): boolean {
-  const ts = (readJson(file(dir, id, "relogin-ask.json")) as { ts?: unknown } | null)?.ts
-  if (!isNum(ts)) return true
-  const age = nowMs - ts
-  return age < 0 || age >= RELOGIN_ASK_INTERVAL_MS // a stamp from the future (clock change) must not mute the ask for good
+/**
+ * Claim a time stamp file atomically: exclusive create (private temp file hard-linked into place, so a reader never
+ * sees a stamp without its time). A stamp younger than `intervalMs` means someone already holds the slot; an older,
+ * unreadable or future one is replaced (unlink + exclusive create: of two racing replacers exactly one wins).
+ */
+function claimStamp(path: string, nowMs: number, intervalMs: number): boolean {
+  mkdirSync(dirname(path), { recursive: true })
+  const create = (): boolean => {
+    const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
+    writeFileSync(tmp, JSON.stringify({ ts: nowMs }))
+    try {
+      linkSync(tmp, path)
+      return true
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e
+      return false
+    } finally {
+      unlinkSync(tmp)
+    }
+  }
+  if (create()) return true
+  const ts = (readJson(path) as { ts?: unknown } | null)?.ts
+  if (isNum(ts) && nowMs - ts >= 0 && nowMs - ts < intervalMs) return false
+  try {
+    unlinkSync(path)
+  } catch {
+    return false // someone else replaced it first
+  }
+  return create()
 }
-
-export function markReloginAsked(id: string, nowMs: number, dir = cacheDir()): void {
-  writeAtomic(file(dir, id, "relogin-ask.json"), JSON.stringify({ ts: nowMs }))
+const releaseStamp = (path: string) => {
+  try {
+    unlinkSync(path)
+  } catch {
+    // already gone
+  }
 }
 
 export interface ReloginCandidate {
@@ -390,16 +429,52 @@ export function reloginCandidates(results: Record<string, RefreshResult>, logins
   return out
 }
 
-/** Asks (via `ask`) for every candidate that is due, stamping the 24 h dedupe BEFORE the call so a failing ask is never retried in a loop. Returns the ids asked. */
-export function askRelogins(d: { results: Record<string, RefreshResult>; logins: LoginRow[]; now: number; dir?: string; ask: (c: ReloginCandidate) => void }): string[] {
-  const asked: string[] = []
+export interface AskOutcome {
+  /** the ask process started */
+  asked: string[]
+  /** the spawn threw: nothing is stamped, the next run retries */
+  failed: string[]
+  /** due, but the one-dialog-per-hour machine cap was taken: the next run retries */
+  capped: string[]
+}
+
+/**
+ * Asks (via `ask`) for every due candidate. Both slots are claimed atomically BEFORE the ask (the 24 h stamp per
+ * account, the 1 h cap per machine), so two keepalive runs never ask twice; they are given back when the ask throws,
+ * so the 24 h mute only ever follows an ask that really started. One account's failure never stops the others.
+ */
+export function askRelogins(d: {
+  results: Record<string, RefreshResult>
+  logins: LoginRow[]
+  now: number
+  dir?: string
+  ask: (c: ReloginCandidate) => void
+  log?: (msg: string) => void
+}): AskOutcome {
+  const dir = d.dir ?? cacheDir()
+  const out: AskOutcome = { asked: [], failed: [], capped: [] }
   for (const c of reloginCandidates(d.results, d.logins)) {
-    if (!reloginAskDue(c.id, d.now, d.dir)) continue
-    markReloginAsked(c.id, d.now, d.dir)
-    d.ask(c)
-    asked.push(c.id)
+    try {
+      if (!claimStamp(reloginStampPath(dir, c.id), d.now, RELOGIN_ASK_INTERVAL_MS)) continue
+      if (!claimStamp(reloginCapPath(dir), d.now, RELOGIN_CAP_INTERVAL_MS)) {
+        releaseStamp(reloginStampPath(dir, c.id))
+        out.capped.push(c.id)
+        continue
+      }
+      try {
+        d.ask(c)
+        out.asked.push(c.id)
+      } catch (e) {
+        releaseStamp(reloginStampPath(dir, c.id))
+        releaseStamp(reloginCapPath(dir))
+        throw e
+      }
+    } catch (e) {
+      out.failed.push(c.id)
+      d.log?.(`re-login ask for ${c.id} failed: ${(e as Error).message}`)
+    }
   }
-  return asked
+  return out
 }
 
 export const OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"

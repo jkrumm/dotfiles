@@ -2,8 +2,8 @@
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
 //   claude-account pick --lane <lane> [--why]      (any lane: a due account refreshes detached in the background; a non-interactive lane waits only for an account with no usable sample) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
-//   claude-account usage [--json]          both accounts, from the quota cache, plus each login's expiry
-//   claude-account expiry [--json]         per enabled account: when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps are read out). Grade PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past
+//   claude-account usage [--json]          both accounts, from the quota cache (a pure file read: no Keychain, no network)
+//   claude-account expiry [--json]         per enabled account: when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps are read out). Rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude) and `severity` (the grade, but a non-default account never exceeds WARN) — what verify and the heartbeat act on
 //   claude-account refresh [--ids a,b] [--all]   OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
@@ -128,11 +128,13 @@ function askForRelogins(reg: Registry, results: Record<string, RefreshResult>): 
   const script = process.env.CLAUDE_ACCOUNTS_RELOGIN ?? join(import.meta.dir, "claude-relogin.sh")
   const now = Date.now()
   try {
-    const asked = askRelogins({
+    const o = askRelogins({
       results, logins: loginExpiry(reg, now), now,
       ask: (c) => spawnDetached(["bash", script, c.id, "--ask", "--reason", c.reason]),
+      log: (m) => console.error(`claude-account: ${m}`),
     })
-    for (const id of asked) console.error(`claude-account: asked for a re-login of ${id} (dialog on the MacBook, next ask in 24 h)`)
+    for (const id of o.asked) console.error(`claude-account: asked for a re-login of ${id} (dialog on the MacBook, next ask in 24 h)`)
+    if (o.capped.length) console.error(`claude-account: re-login ask for ${o.capped.join(", ")} deferred (one dialog per hour)`)
   } catch (e) {
     console.error(`claude-account: re-login ask skipped: ${(e as Error).message}`) // an ask is a courtesy, never a failure of the keepalive
   }
@@ -147,7 +149,6 @@ function expiry(reg: Registry, json: boolean): void {
 function usage(reg: Registry, json: boolean): void {
   const cache = readClaudeJson(reg, loadCache())
   const now = Date.now()
-  const logins = Object.fromEntries(loginExpiry(reg, now).map((r) => [r.id, r]))
   const rows = Object.entries(reg.accounts).map(([id, a]) => {
     const x = cache.samples[id]
     const until = cache.exhausted[id]
@@ -158,13 +159,12 @@ function usage(reg: Registry, json: boolean): void {
       five_hour_age_s: x && x.s !== null && x.s_ts !== null ? Math.round((now - x.s_ts) / 1000) : null,
       seven_day_age_s: x && x.w !== null && x.w_ts !== null ? Math.round((now - x.w_ts) / 1000) : null, source: x?.src ?? null,
       auth_ok: !cache.auth_failed[id], exhausted_until: until && until * 1000 > now ? until : null,
-      login_expires_at: logins[id]?.refresh_expires_at ?? null, login_days_left: logins[id]?.days_left ?? null, login_grade: logins[id]?.grade ?? null,
     }
   })
   if (json) return void console.log(JSON.stringify({ default_account: defaultAccountId(reg), accounts: rows }, null, 2))
   const reset = (e: number | null) => (e ? new Date(e * 1000).toISOString().slice(5, 16).replace("T", " ") : "-")
   for (const r of rows) {
-    console.log(`${r.id} ${r.plan}${r.enabled ? "" : " (disabled)"}  5h ${r.five_hour ?? "-"}% ↺${reset(r.five_hour_resets_at)}  7d ${r.seven_day ?? "-"}% ↺${reset(r.seven_day_resets_at)}  age ${r.age_s ?? "-"}s  auth ${r.auth_ok ? "ok" : "FAILED"}${r.exhausted_until ? "  EXHAUSTED" : ""}  login ${r.login_grade === null ? "-" : r.login_days_left === null ? "?" : `${r.login_days_left}d${r.login_grade === "PASS" ? "" : ` ${r.login_grade}`}`}`)
+    console.log(`${r.id} ${r.plan}${r.enabled ? "" : " (disabled)"}  5h ${r.five_hour ?? "-"}% ↺${reset(r.five_hour_resets_at)}  7d ${r.seven_day ?? "-"}% ↺${reset(r.seven_day_resets_at)}  age ${r.age_s ?? "-"}s  auth ${r.auth_ok ? "ok" : "FAILED"}${r.exhausted_until ? "  EXHAUSTED" : ""}`)
   }
 }
 

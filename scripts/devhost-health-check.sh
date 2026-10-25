@@ -1276,29 +1276,42 @@ check_claude_auth() {
   elif [[ -n "$ok" ]]; then
     msg="$msg; also${ok}"
   fi
-  # Login expiry: the refresh token ends 30 days after the login (claude-account expiry). WARN inside 7 days or when
-  # the Keychain item cannot be read; an already-expired iu login is a FAIL (as a dead iu login is), any other account WARN.
-  local default_id eid egrade eexpired edetail expiry_msg=""
-  default_id=$("$JQ_BIN" -r '.accounts | to_entries[] | select(.value.dir == null) | .key' "$CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null | head -1) || default_id=""
-  while IFS=$'\t' read -r eid egrade eexpired edetail; do
-    [[ -n "$eid" && "$egrade" != PASS ]] || continue
-    expiry_msg+="; $eid $edetail"
-    if [[ "$eexpired" == true && "$eid" == "${default_id:-iu}" ]]; then worst=1
-    else (( worst == 0 )) && worst=2
-    fi
+  # Login expiry: the refresh token ends 30 days after the login (claude-account expiry). Anything but PASS is a WARN
+  # (never pages): inside 7 days, an unreadable item, or a check that could not run. It never raises past what
+  # check_claude_auth_iu decided: an expired default login is a FAIL only where that policy fails too (keychain dead AND
+  # the cached oauth token dead); "keychain dead, cached token works" is an accepted state and stays green-ish (WARN).
+  local eid esev edetail expiry_msg=""
+  while IFS=$'\t' read -r eid esev edetail; do
+    [[ -n "$eid" && "$esev" != PASS ]] || continue
+    if [[ "$eid" == "-" ]]; then expiry_msg+="; $edetail"; else expiry_msg+="; $eid $edetail"; fi
+    (( worst == 0 )) && worst=2
   done < <(claude_login_expiry)
   echo "$msg$expiry_msg"
   return "$worst"
 }
 
-# One line per enabled account whose login is not comfortably valid: id, grade, expired, detail (tab separated).
-# claude-account expiry reads only the two timestamps of each account's Keychain item. Silent when the helper is missing
-# or its answer is not JSON: the dead-login checks above already cover a logged-out account.
+# One line per enabled account: id, severity, detail (tab separated).
+# `claude-account expiry --json` does the grading (its `severity` already applies the default-vs-other split) and reads
+# only the two timestamps of each account's Keychain item. A helper that is missing, fails or answers garbage must not
+# read as healthy: it yields one WARN row "login expiry check could not run (<reason>)" and logs the reason to stderr.
+# (The one silent case, no claude CLI at all, returns from check_claude_auth before this runs.)
 claude_login_expiry() {
-  [[ -x "$CLAUDE_ACCOUNT_BIN" ]] || return 0
-  local out
-  out=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" expiry --json 2>/dev/null) || return 0
-  "$JQ_BIN" -r '.accounts[]? | "\(.id)\t\(.grade)\t\(.expired)\t\(.detail)"' <<<"$out" 2>/dev/null || true
+  local out="" rows="" reason=""
+  if [[ ! -x "$CLAUDE_ACCOUNT_BIN" ]]; then
+    reason="$CLAUDE_ACCOUNT_BIN is not executable"
+  elif ! out=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" CLAUDE_ACCOUNTS_REGISTRY="$CLAUDE_ACCOUNTS_REGISTRY" "$CLAUDE_ACCOUNT_BIN" expiry --json 2>/dev/null); then
+    reason="claude-account expiry failed"
+  elif ! "$JQ_BIN" -e '.accounts | type == "array"' <<<"$out" >/dev/null 2>&1; then
+    reason="claude-account expiry gave no account list"
+  elif ! rows=$("$JQ_BIN" -r '.accounts[] | "\(.id)\t\(.severity // .grade)\t\(.detail)"' <<<"$out" 2>/dev/null); then
+    reason="claude-account expiry rows unreadable"
+  fi
+  if [[ -n "$reason" ]]; then
+    echo "claude_login_expiry: $reason" >&2
+    printf '%s\t%s\t%s\n' "-" WARN "login expiry check could not run ($reason)"
+    return 0
+  fi
+  [[ -z "$rows" ]] || printf '%s\n' "$rows"
 }
 
 # Claude Code auto-updates can rename the keychain service, the quota field or the config-dir resolution that the

@@ -35,15 +35,16 @@ export CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
 rec='printf "%s" "$(basename "$0")" >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"'
 mk() { printf '#!/bin/bash\n%s\n%s\n' "$rec" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 mk ssh 'case " $* " in
-  *" -N "*) echo $$ > "$TMP_DIR/tunnel.pid"; [ "${STUB_TUNNEL:-ok}" = fail ] && exit 1; exec sleep 60 ;;
+  *" -N "*) echo $$ > "$TMP_DIR/tunnel.pid"; [ "${STUB_TUNNEL:-ok}" = fail ] && exit 1
+            [ "${STUB_TUNNEL:-ok}" = dies ] && { sleep 2; exit 1; }; exec sleep 60 ;;
   *) [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
 esac'
-mk open 'exit 0'
+mk open '[ "${STUB_OPENBIN:-ok}" = fail ] && exit 1; exit 0'
 mk osascript 'exit 0'
 mk herdr 'case "$1 $2" in "workspace create") echo "{\"result\":{\"root_pane\":{\"pane_id\":\"w9:1\"}}}" ;; esac'
-mk claude 'echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
 mk claude-account 'case "$1" in usage) echo "$3 usage-line" ;; expiry) echo "$3 expiry-line" ;; esac; case "$1" in usage|expiry) echo "me max5x usage-line"; echo "iu max20x usage-line" ;; esac; exit 0'
-mk lsof 'exit 1'
+mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_RELOGIN_PANE_WAIT=0 CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
@@ -53,7 +54,7 @@ for c in ssh open herdr osascript claude claude-account; do
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
 reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/tunnel.pid"; }
-calls() { cat "$LOG"; }
+calls() { grep -v "^lsof" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
 
@@ -80,6 +81,14 @@ assert_eq "iu -> Google Chrome" "Google Chrome" "$(login_browser_for "$CLAUDE_AC
 assert_eq "me -> Helium" "Helium" "$(login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" me)"
 assert_eq "no loginBrowser -> empty" "" "$(login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nob)"
 assert_eq "unknown account -> empty" "" "$(login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nobody)"
+
+echo "browser lookup fails distinctly on an unusable registry"
+login_browser_for "$TMP/missing.json" me >/dev/null 2>&1; assert_eq "missing registry: rc 2" 2 "$?"
+echo '{"accounts":' > "$TMP/broken.json"
+login_browser_for "$TMP/broken.json" me >/dev/null 2>&1; assert_eq "malformed registry: rc 2" 2 "$?"
+login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nobody >/dev/null 2>&1; assert_eq "unknown account: rc 3" 3 "$?"
+( export PATH=/nonexistent; login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" me >/dev/null 2>&1 ); assert_eq "jq missing: rc 2" 2 "$?"
+login_browser_for "$CLAUDE_ACCOUNTS_REGISTRY" nob >/dev/null 2>&1; assert_eq "account without loginBrowser: rc 0 (empty is a real answer)" 0 "$?"
 
 echo "tunnel watchdog verdict (owner listening seen idle max)"
 assert_eq "login running, nothing to report" keep "$(login_tunnel_verdict 1 1 1 10 2700)"
@@ -110,7 +119,7 @@ owner_sh=$(sleep 3 & echo $!)   # a login process that ends shortly
 CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$owner_sh bash "$BROWSER_SH" "$URL"; rc=$?
 assert_eq "rc 0" 0 "$rc"
 tunnel_line=$(sed -n 1p "$LOG"); open_line=$(sed -n 2p "$LOG")
-assert_contains "tunnel forwards the callback port back to the mini" "[-N][-R][58876:localhost:58876]" "$tunnel_line"
+assert_contains "tunnel forwards the callback port back to the mini" "[-N][-R][127.0.0.1:58876:localhost:58876]" "$tunnel_line"
 assert_contains "tunnel: own connection, fails loudly" "[ExitOnForwardFailure=yes]" "$tunnel_line"
 assert_contains "tunnel: no shared control master" "[ControlPath=none]" "$tunnel_line"
 assert_contains "tunnel goes to the MacBook" "[iumac]" "$tunnel_line"
@@ -140,10 +149,33 @@ reset; CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" 'htt
 assert_eq "no callback port in the URL: rc 1, no ssh at all" "1/" "$rc/$(calls)"
 assert_contains "...and the URL is printed" "authorize?state=1" "$(cat "$TMP/msgs")"
 
+echo "helper: open fails on the MacBook, unusable registry, unwritable terminal"
+reset; STUB_OPENBIN=fail CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL"; rc=$?
+assert_eq "open failed: rc 1" 1 "$rc"
+assert_contains "...URL printed" "$URL" "$(cat "$TMP/msgs")"
+assert_contains "...paste hint" "paste the code" "$(cat "$TMP/msgs")"
+reset; CLAUDE_ACCOUNTS_REGISTRY="$TMP/broken.json" CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL" 2>/dev/null; rc=$?
+assert_eq "unusable registry: rc 1, no browser guessed" "1/" "$rc/$(calls)"
+assert_contains "...URL printed" "$URL" "$(cat "$TMP/msgs")"
+reset; err=$(CLAUDE_LOGIN_MSG_FILE="$TMP/no-such-dir/msgs" CLAUDE_LOGIN_ACCOUNT=nob CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL" 2>&1 >/dev/null)
+assert_contains "unwritable terminal: messages fall back to stderr" "system default browser" "$err"
+reset; err=$(STUB_OPENBIN=fail CLAUDE_LOGIN_MSG_FILE="$TMP/no-such-dir/msgs" CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook bash "$BROWSER_SH" "$URL" 2>&1 >/dev/null)
+assert_contains "unwritable terminal: the URL fallback still reaches stderr" "$URL" "$err"
+
+echo "helper: a tunnel that dies mid-login (login still waiting) tells the user to paste the code"
+reset
+STUB_TUNNEL=dies STUB_LISTEN=1 CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
+for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q "dropped" "$TMP/msgs" && break; sleep 1; done
+assert_contains "paste hint after the tunnel dropped" "paste the code" "$(cat "$TMP/msgs")"
+reset
+STUB_TUNNEL=dies CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$$ bash "$BROWSER_SH" "$URL"
+sleep 5
+assert_not_contains "no alarm when nothing was listening any more (login over)" "dropped" "$(cat "$TMP/msgs")"
+
 echo "helper --dry-run runs nothing"
 reset; out=$(CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini bash "$BROWSER_SH" --dry-run "$URL" 2>&1)
 assert_eq "no stub called" "" "$(calls)"
-assert_contains "prints the tunnel" "'-R' '58876:localhost:58876'" "$out"
+assert_contains "prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
 assert_contains "prints the quoted remote open" "'open '\\''-a'\\'' '\\''Helium'\\''" "$out"
 
 # ── relogin ─────────────────────────────────────────────────────────────────────────────────────
@@ -196,13 +228,28 @@ assert_not_contains "failed login: no refresh" "refresh" "$(calls)"
 assert_contains "failed login: manual fallback named" "Manual fallback" "$(cat "$TMP/err")"
 bash "$RELOGIN" me --machine macbook --in-pane >/dev/null 2>&1; assert_eq "--in-pane on the wrong machine is refused" 2 "$?"
 
+echo "the login owner kills the tunnel on exit"
+as mini; reset
+export STUB_URL="$URL"
+STUB_CLAUDE_BROWSER=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
+tp=$(cat "$TMP/tunnel.pid" 2>/dev/null)
+sleep 0.2   # the watchdog polls only every second: a dead tunnel this early is the trap's doing
+assert_eq "login finished: rc 0" 0 "$rc"
+[[ -n "$tp" ]] && ! kill -0 "$tp" 2>/dev/null && ok "tunnel gone as soon as the owner returned" || bad "tunnel gone as soon as the owner returned" "pid [$tp]"
+assert_eq "pid file removed" "0" "$(ls "${TMPDIR:-/tmp}"/claude-relogin-tunnel.* 2>/dev/null | wc -l | tr -d ' ')"
+reset
+STUB_CLAUDE_BROWSER=1 STUB_LOGIN_RC=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1; rc=$?
+tp=$(cat "$TMP/tunnel.pid" 2>/dev/null); sleep 0.2
+[[ -n "$tp" ]] && ! kill -0 "$tp" 2>/dev/null && ok "failed login: tunnel killed too" || bad "failed login: tunnel killed too" "pid [$tp]"
+unset STUB_URL
+
 echo "relogin --dry-run (me and iu on the mini) runs nothing"
 for a in me iu; do
   reset; out=$(bash "$RELOGIN" $a --dry-run 2>&1)
   assert_eq "$a: no stub called" "" "$(calls)"
   assert_contains "$a: prints the herdr step" "would run: 'herdr' 'workspace' 'create'" "$out"
   assert_contains "$a: prints the login command" "'claude' 'auth' 'login' '--claudeai'" "$out"
-  assert_contains "$a: prints the tunnel" "'-R' '58876:localhost:58876'" "$out"
+  assert_contains "$a: prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
 done
 assert_contains "iu dry run: config dir unset" "'-u' 'CLAUDE_CONFIG_DIR' 'USER=" "$(bash "$RELOGIN" iu --dry-run 2>&1)"
 assert_contains "me dry run: config dir set" "CLAUDE_CONFIG_DIR=$HOME/.claude-me" "$(bash "$RELOGIN" me --dry-run 2>&1)"

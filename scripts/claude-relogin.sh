@@ -61,7 +61,7 @@ jq -e --arg id "$id" '.accounts[$id].enabled == true' "$REGISTRY" >/dev/null 2>&
 here=$(login_local_machine)
 machine=${machine:-$here}
 case "$machine" in mini|macbook) ;; *) die "--machine must be mini or macbook" ;; esac
-app=$(login_browser_for "$REGISTRY" "$id")
+app=$(login_browser_for "$REGISTRY" "$id") || die "cannot read loginBrowser for '$id' from $REGISTRY"
 
 # Run a command, or (dry run) print it shell-quoted.
 step() {
@@ -96,7 +96,7 @@ login_env() {
   # unset for it (setting it changes the Keychain service)
   login_cmd=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_BASE_URL)
   [[ -z "$dir" ]] && login_cmd+=(-u CLAUDE_CONFIG_DIR)
-  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_OWNER_PID=$$")
+  login_cmd+=("USER=${USER:-$(id -un)}" "BROWSER=$HELPER" "CLAUDE_LOGIN_ACCOUNT=$id" "CLAUDE_LOGIN_MACHINE=$machine" "CLAUDE_LOGIN_OWNER_PID=$$" "CLAUDE_LOGIN_TUNNEL_PID_FILE=$tunnel_pid_file")
   [[ -n "$dir" ]] && login_cmd+=("CLAUDE_CONFIG_DIR=${dir/#\~/$HOME}")
   login_cmd+=(claude auth login --claudeai)
 }
@@ -104,6 +104,18 @@ account_cli() { if command -v claude-account >/dev/null 2>&1; then claude-accoun
 
 if (( in_pane )); then
   [[ "$machine" == "$here" ]] || die "--in-pane runs on the machine that owns the login ($machine), this is the $here"
+  # This process owns the login, and with it the reverse tunnel the helper may start (its pid lands in this file):
+  # whatever way we exit, the tunnel goes too.
+  tunnel_pid_file=$(mktemp "${TMPDIR:-/tmp}/claude-relogin-tunnel.XXXXXX") || die "mktemp failed"
+  stop_tunnel() {
+    local p
+    p=$(cat "$tunnel_pid_file" 2>/dev/null)
+    [[ -z "$p" ]] || kill "$p" 2>/dev/null
+    rm -f "$tunnel_pid_file"
+  }
+  trap stop_tunnel EXIT
+  trap 'stop_tunnel; exit 130' INT
+  trap 'stop_tunnel; exit 143' TERM
   login_env
   echo "claude-relogin: login for '$id' on the $machine, approval page in ${app:-the default browser}"
   if (( dry )); then

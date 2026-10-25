@@ -89,7 +89,7 @@ claude-account env <id>             # force an account (c --account b)
 claude-account expiry [--json]      # when each enabled login ends (refresh token), graded PASS / WARN / FAIL
 ```
 
-`usage` also shows each login's remaining life (`login 8.7d`, with the grade once it is not PASS; JSON: `login_expires_at`, `login_days_left`, `login_grade`).
+`expiry` rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (the account owns `~/.claude`) and `severity` (the grade, but a non-default account never exceeds WARN, as with `auth/<id>`); verify and the heartbeat act on `severity`. `usage` stays a pure file read (the statusline calls it): no Keychain access, no login fields; `expiry` is the only reader of the Keychain item's timestamps.
 
 **Quota sources: read-only use of the account's own token for one GET.** Three feeds, freshest wins, all
 written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
@@ -261,7 +261,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | Check | What it proves | FAIL means |
 |-|-|-|
 | `auth/<id>` | `claude auth status` is loggedIn with the expected `configDirectory`; keychain service `Claude Code-credentials` (iu) / `…-<sha256(abs dir)[:8]>` exists (`security find-generic-password -s`, never `-w`) | "Claude Code changed credential naming" or config-dir resolution; a logged-out `me` is a WARN, `iu` a FAIL. Fix: `claude-relogin <id>` |
-| `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past; an unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
+| `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past for the default account (`iu`); any other account is capped at WARN, like `auth/<id>`. An unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
@@ -328,10 +328,12 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
 2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
    helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
    Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the
-   browser is on the MacBook: it starts `ssh -N -R <port>:localhost:<port> iumac` so the browser's localhost callback
-   lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own ssh connection and closes when
-   the login process ends, when the CLI stops listening, or after 45 minutes without a connection (an idle watchdog, not
-   a deadline).
+   browser is on the MacBook: it starts `ssh -N -R 127.0.0.1:<port>:localhost:<port> iumac` (loopback only) so the browser's localhost callback
+   lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own ssh connection. The login process (`claude-relogin --in-pane`) owns it and kills it on any exit
+   (trap on EXIT/INT/TERM); a detached watchdog covers an owner that vanished, closing it when the CLI stops listening or
+   after 45 minutes without a connection (an idle watchdog, not a deadline). If the tunnel dies while the login still
+   waits, the terminal says so and asks you to paste the code. A registry that cannot be read never falls back to a
+   guessed browser: the helper prints the URL instead.
 3. **You click approve in that browser.** Nothing drives the browser or reads mail: automating the login itself is out
    of bounds (Anthropic's terms), a human always approves.
 4. It then runs `claude-account refresh --ids <id>` and prints the account's `usage` line and its expiry.
@@ -346,8 +348,11 @@ when a refresh ends `auth-failed` for an account on this machine, or `login/<id>
 days (an unreadable item never asks), it runs `claude-relogin <id> --ask --reason …` detached. That shows a native
 dialog on the MacBook (through `scripts/ask-human.sh`: from the mini over `ssh iumac`, on the MacBook directly,
 `HUMAN_QUEUE_MAC_HOST=local`) whose command is `bash "$HOME/SourceRoot/dotfiles/scripts/claude-relogin.sh" <id> --machine
-<m>`; the owner reads it and clicks Run once. At most one ask per account per 24 h per machine, stamped before the ask
-(`~/.cache/claude-accounts/<id>.relogin-ask.json`), so a failing ask never loops. An unanswered dialog falls back to the
+<m>`; the owner reads it and clicks Run once. At most one ask per account per 24 h and one dialog per machine per hour. Both slots are claimed atomically
+(exclusive create of `~/.cache/claude-accounts/<id>.relogin-ask.json` and `relogin-ask.cap`, so two keepalive runs never ask
+twice) and given back when the ask process fails to start (logged `ask failed`, retried next run), so a 24 h mute only
+follows an ask that really started. One account's failure never stops the others; a second account due in the same hour
+is deferred to the next run. An unanswered dialog falls back to the
 human queue and its Slack notification, as every `ask-human` request does.
 
 **Troubleshooting**
@@ -422,7 +427,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | agent-gateway `/api/usage` (`routes/usage.ts`) | from one `current` object to `{accounts: {a, b}}`; POSTs carry `account` |
 | herdr overview pane (`/api/overview.txt`) | a two-line quota header (`iu` and `me`: 5h/7d/reset) plus an account column per agent |
 | Tinycast (MacBook, `extension/src/usage/quota.ts`) | read `https://agent-gateway.mini.jkrumm.com/api/usage` (the tailnet door exists via the Caddyfile vhost), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
-| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry`: WARN (never pages) inside 7 days or when the Keychain item is unreadable; an already-expired `iu` login is a FAIL, any other account stays WARN |
+| Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry` (its `severity`): anything but PASS is a WARN (never pages): inside 7 days, an unreadable item, or a check that could not run (helper missing, failing or answering garbage: `login expiry check could not run (<reason>)`, reason also on stderr). Expiry never raises past the existing `iu` policy: a dead keychain login with a working cached token stays the accepted state (WARN at worst); FAIL only where `check_claude_auth_iu` fails too |
 | Hermes digests | inherit from the heartbeat; no change |
 
 ## Login logistics
