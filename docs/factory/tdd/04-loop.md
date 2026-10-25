@@ -1,88 +1,153 @@
 # 4. The loop
 
-The factory's job is to classify, order and prepare work so well that Claude Code can just do it.
-Everything around the session — intake, dedup, planning, capacity, verification, shipping — exists to
-hand Claude Code a clear task with the right context and tools, and then get out of its way.
+**The factory runs the lifecycle; Claude Code does the work.** The factory takes everything in, merges
+duplicates, heals what a runbook can heal, and queues the rest. When capacity allows, it starts a
+Claude Code session in herdr, the *lead*, with the problem and its evidence. The lead owns the Issue:
+it finds the cause, plans, builds, tests, reviews, ships, checks production and reports back. The
+factory then watches the result, closes the Issue and learns from it.
 
-| Stage | Engine | In → out |
-|-|-|-|
-| **Intake** | adapters that poll each source, plus your requests | → Signal |
-| **Dedup** | rules, then cheap models for the ambiguous rest (§8) | Signal → new or existing Issue |
-| **Settle** | a timer | transient failures heal and close as *self-healed* |
-| **Known fix** | a runbook from `project.yaml` (restart, rerun a backup, roll back) | action, then a fresh look |
-| **Investigate + plan** | cheap model in an agent-gateway OpenCode session | root cause, plan, ordered Tasks, acceptance checks |
-| **Admit** | the picker, by class (§5) | a Task gets an account now, or a time to wait until |
-| **Implement** | Claude Code on Max in herdr | fixed, tested, committed on `factory/<task-id>` |
-| **Verify + ship** | make targets, agent-gateway review, merge, deploy, hold | shipped, or rolled back and re-planned |
-| **Learn** | cheap model | root cause, fix recipe, grouping labels |
+```mermaid
+flowchart TB
+  subgraph F[Factory: code and cheap models]
+    IN[Signals · requests · jobs] --> DD{Open Issue with<br/>the same symptom?}
+    DD -- no: open --> I[Issue]
+    DD -- yes: attach --> I
+    I --> ST{Heals, or a<br/>runbook fixes it?}
+    ST -- no --> Q[Classify + queue<br/>account · model · effort]
+    W{Holds 30 min?<br/>verify + probes}
+    LE[Closed + learned]
+  end
+  subgraph L[Lead: Claude Code on Max, in herdr]
+    C[Root cause → plan → build → test<br/>→ review → ship → check production]
+  end
+  ST -- yes --> LE
+  Q --> C
+  C -- ship + evidence --> W
+  W -- yes --> LE
+  W -- regression --> C
+```
+
+## Who owns which step
+
+| Step | Owner | Engine | Out |
+|-|-|-|-|
+| **Intake** | factory | a poller per source; your requests | Signal |
+| **Dedup by symptom** | factory | rules; a cheap judge for the ambiguous rest once it passes the W4 bake-off (§8) | a new Issue, or a Signal attached to an open one |
+| **Settle + runbook** | factory | a grace timer; a runbook from `project.yaml` | healed and closed, or on to the queue |
+| **Classify** | factory | one cheap-model call | project, kind, urgency, size; the lead's model and effort |
+| **Queue + admit** | factory | the picker, by class and 5-hour headroom (§5) | an account now, or a time to wait until |
+| **Spawn** | factory | herdr | a lead with the brief |
+| **Root cause → production** | **lead** | Claude Code on Max, alone or with workers | shipped with evidence, closed, blocked or asking |
+| **Watch** | factory | hold timer, `make verify`, the project's probes and signals | holds → closed; regression → back to the lead |
+| **Learn** | factory | cheap model, from the lead's report | known fix, dedup labels, runbook candidates, changelog |
+
+**The factory never reasons about code or causes.** It sorts, waits, counts and remembers. Anything
+that needs understanding a problem belongs to the lead.
 
 ## Three ways in
 
-- **Signals** from sources and jobs pass dedup and become Issues: `incident`, `bug`, `upkeep`.
-- **Requests** — Argo, Hermes, a TickTick item tagged `#factory`, `factory issue new` — start at
-  *Investigate + plan*. A request that already has a plan starts at *Admit*.
-- **Wave plans** (`/wave`, or a plan an investigation produced) are Tasks with dependencies. The plan
-  file keeps the prose; the factory keeps the state.
+- **Signals** from sources and jobs become `incident`, `bug` or `upkeep` Issues after dedup.
+- **Requests** go straight to *Classify*: Argo, Hermes, `factory issue new`, a TickTick item tagged
+  `#factory`, a GitHub issue you open in one of your repos, or any issue where you comment `/factory`.
+- **Initiatives**: a request too big for one lead is classified `initiative`. In a fleet project it
+  goes to the project's mother; elsewhere a lead plans it. The plan's waves become child Issues with
+  their dependencies.
+
+## The lead's job
+
+| Phase | The lead | With |
+|-|-|-|
+| **Investigate** | reproduces, reads logs and traces, finds the cause; merges or splits Issues when the cause says so | `/otel`, `make logs`, chrome-devtools, `factory issue show\|merge\|split` |
+| **Plan** | picks the approach and the shape of the work: alone, subagents, `rd fan` worktrees or a `/wave` chain | `/research`, the project's docs |
+| **Build** | implements and writes the tests | `@implementer`, `rd fan` |
+| **Check** | `make check` and `make test`; a review from another model family | `/check`, `/review` |
+| **Verify locally** | sees it work: screenshots, traces, timings | `@verifier`, chrome-devtools, Lighthouse |
+| **Ship** | merges and deploys by the project's `deploy.mode` | `make deploy`, `/ship` |
+| **Check production** | the same evidence against the running system; error rate and p95 before and after | `make verify`, `/otel`, screenshots |
+| **Report** | `factory issue ship` with a three-line summary and the evidence | `factory` |
+
+**Production says no → the lead fixes forward.** It still holds the context. Reverting is its call
+when a revert is the fastest safe fix (a stateless container, say), never a factory reflex. Infra,
+dotfiles and data changes rarely revert cleanly anyway.
+
+## Done means evidence
+
+`factory issue ship` is refused without the evidence its kind of change needs. The factory checks that
+the evidence is there; judging it is the lead's job and the review's.
+
+| Change | Evidence |
+|-|-|
+| UI | a production screenshot of the changed screen, at phone width too if the page is used there |
+| API or service | `make verify`; error rate and p95 of the changed endpoints, before and after |
+| Infra or config | the service's status and logs after the change |
+| Data or migration | the queries that show the data is right |
+| Nothing deployed (docs, analysis) | the commit or the document, via `factory issue close` |
+
+**Probes are written by nobody who ships.** Each deployable project lists a few user-journey probes
+in `project.yaml`: can I log in, does the forecast load, does the upload finish. Each passes or
+fails, never averaged. The factory runs them after every hold, next to `make verify`. A lead never
+edits them as part of a fix; changing a probe is an Issue of its own. Tests a model wrote for its own
+change can give false confidence, and the probes are the check that does not depend on it.
+
+## The brief: the problem, never a diagnosis
+
+A lead reasons better from facts than from a weaker model's guess, so the brief carries no
+cheap-model root cause and no cheap-model plan.
+
+- **The ask:** your words, or what the signals saw: what, where, since when, how often.
+- **Evidence:** the raw signals, the commands that pull their logs and traces, the project's last
+  deploys and commits.
+- **History:** closed Issues that looked similar, with the cause and fix their lead verified, marked
+  *past, may not apply*.
+- **The project:** its make contract, deploy mode, which paths ship on their own, production targets.
+- **Done means:** the evidence table above and the `factory` verbs.
+- **Standing orders:** decide alone except the four business classes; ask through `factory issue ask`;
+  no turn or time limits; workers stay on Max.
+
+Classification sets labels (project, kind, urgency, size) and routing (account, model, effort), never a
+cause; of its output, the brief shows just kind and urgency. The standing orders are identical in every brief, so they are a prompt-cache hit.
+
+## Following a running lead
+
+- **Turn ends are events, not guesses.** The lead's Stop hook reports every turn end and its
+  SessionEnd hook the session's end, straight into the Issue's inbox. engrams learned that inferring
+  turn ends from output wedges sessions. Witness reads herdr every minute as the backstop (blocked,
+  walled, dead) and records the account in effect. The lead's `factory` reports are authoritative,
+  and the server validates each one against its schema.
+- **A Stop hook keeps the lead honest.** If the lead stops while its Issue is still open and nothing
+  is reported, the hook sends it back with one line: report `ship`, `close`, `block` or `ask`. Claude
+  Code continues a session when a Stop hook exits with code 2, so nobody types `continue`.
+- **New facts go to the running lead.** A signal linked as *possibly related* to an Issue in work (by
+  the rules, and by the judge once it passes) reaches that lead as a note, not a second session. The lead decides whether it shares the cause.
+- **Walls:** a walled lead waits for its window and resumes on the same account, cache intact.
+- **After ship** the lead stays open and idle through the 30-minute hold, so a regression reaches it
+  while its cache is warm. When the hold passes, Witness closes the tab.
+
+## Leads, mothers and the steward
+
+| Role | What it is | Lifetime |
+|-|-|-|
+| **Lead** | one Claude Code session per Issue, end to end | spawn → end of the hold |
+| **Mother** | the lead for a fleet project's initiatives: writes the wave plan, keeps `docs/notes/` | woken per initiative; her memory is her notes, not a long-lived context |
+| **Steward** | the orchestrator above them all (§5): one short session that looks over leads, mothers, the queue and both accounts | 06:30 daily and on events |
 
 ## What you see of an Issue
 
 ```mermaid
 stateDiagram-v2
-  [*] --> waiting: settle, known fix, or capacity
-  waiting --> working: a session is building
-  waiting --> closed: healed or fixed by a runbook
-  working --> verifying
-  verifying --> closed: holds on the running system
-  verifying --> working: next attempt
-  working --> needs_you: business question
-  needs_you --> working: answer or default
-  working --> stuck: three attempts failed
-  stuck --> working: next window, new approach
-  stuck --> closed: gave up, with a note
-  closed --> waiting: same fault again within 30 days
+  [*] --> settling: incident
+  [*] --> queued: request or bug
+  settling --> closed: healed or runbook
+  settling --> queued
+  queued --> working: a lead starts
+  working --> waiting: your decision, a wall, a dependency
+  waiting --> working
+  working --> watching: shipped with evidence
+  working --> closed: closed or dropped with a reason
+  watching --> closed: holds
+  watching --> working: regression
+  closed --> queued: same fault within 30 days
 ```
 
-**Stuck never waits for you.** After three failed attempts the Issue waits for the next capacity
-window, gets a fresh investigation that is told why the earlier attempts failed, and otherwise closes
-as *gave up* with one line in the briefing. A new signal re-opens it.
-
-## What every Claude Code session gets
-
-This is the part that matters most. A session is only as good as what it is handed.
-
-- **A brief** generated from the Task, re-sent on every spawn and resume: goal and done-definition (the
-  acceptance checks as commands), scope, the investigation, similar past Issues and how they were
-  fixed, the branch `factory/<task-id>`. Its standing-orders part is identical every time, so it is a
-  prompt-cache hit.
-- **The tools to see and act:** the repo's make contract (`check`, `test`, `deploy`, `verify`, `logs`,
-  `restart`), `agw` for OTel traces and logs, review and checks, `research` for docs, chrome-devtools for
-  UIs, `factory` for its own Task (`task done|blocked|note`, `issue show`), and the project's notes.
-- **Full autonomy inside its Task:** it investigates further, fixes, writes tests, verifies. It asks
-  only through `factory task blocked`, and the factory answers — another investigation, a decision by
-  policy, the decision model — before anything reaches you.
-- **Room to work:** no turn limits and no time limits, only the idle watchdog.
-
-## Workers and mothers
-
-- **Every Task gets a fresh worker by default** — a Claude Code session in herdr with the brief.
-- **Fleet projects keep a mother** (basalt-ui, argo, weatherorb, shutterflow, factory) for their
-  multi-wave plans, as basalt-ui does today. Tasks from her plan go to her; she may fan out workers.
-- **A follow-up goes where the cache is warm:** within the hour, to the session that did the work.
-- **Witness** watches herdr: it notices a finished, blocked, walled or dead session, resumes parked
-  sessions when their window opens, closes finished workers' tabs, and never asks you to type
-  `continue`.
-
-## Verify, ship, roll back
-
-- **Checks run on the merge result** with the base branch's own Makefile and tests, so a change cannot
-  weaken the checks that judge it. A project without `make test` or `make verify` cannot auto-ship code
-  until a Task adds them.
-- **Review** by agent-gateway — cheap angles plus a DeepSeek adversary from another model family.
-- **Merge**, one at a time per repo, onto the current tip; **deploy** by the project's `deploy.mode`
-  (§7); **hold** for 30 minutes without new signals; on failure **roll back** to the last deploy that
-  held and re-plan.
-- **Migrations that drop data** are the one ship-time decision that can reach you, with *do not proceed*
-  as the default.
-
-The edge cases behind these lines — merge races, dead panes, usage walls, restores — are handled in
-the implementation, listed in appendix D.
+A lead that makes no progress does not wait for you either: the steward steers it, gives it a stronger
+model, splits the Issue, or parks it with a note in the briefing (§5).

@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TB
   subgraph mini[Mac mini — always on]
-    F[factory<br/>Node · DBOS]
+    F[factory<br/>Bun · TypeScript]
     PG[(Postgres 18<br/>factory · argo)]
     A[Argo<br/>cockpit]
     AGW[agent-gateway<br/>+ OpenCode server]
@@ -39,6 +39,10 @@ GitHub issues and checks, RollHook deploys, failed launchd jobs, CrowdSec decisi
 the current state also means a missed recovery is caught on the next read. The few sources that can
 only notify Slack arrive through a **Slack adapter**. Nothing listens on a public address.
 
+**GitHub requests.** An issue you open in one of your repos is a request; so is any issue, yours or
+someone else's, where you comment `/factory`. Only your GitHub user counts. The lead's summary goes
+back as a comment, and the issue closes when the factory's Issue does.
+
 Each source is repointed when its adapter lands: its Slack notifications are removed and Kuma's
 retries raised, so transient blips heal before they become signals. The one alert that stays outside
 the factory is the dead-man: the factory pushes a heartbeat (loop lag, last tick, a database write) to
@@ -54,8 +58,8 @@ works on the phone as on the computer — it is a PWA behind the tailnet, with m
 | Page | Answers |
 |-|-|
 | **Now** (home) | Does anything need me? Is the factory healthy? The morning briefing lives here. |
-| **Projects** | How is each project doing — open Issues, Tasks, deploys, sessions, cost, TickTick, changelog? (your wireframe) |
-| **Factory** | What runs, what waits and until when, which account each session uses? |
+| **Projects** | How is each project doing — open Issues, leads, deploys, cost, TickTick, changelog? (your wireframe) |
+| **Factory** | What runs, what waits and until when, which account, model and effort each lead uses? What did the steward do? How does the scorecard look (§9)? |
 | **Usage** | How much of each Max window is used and by what; IU API spend by source? |
 | **Artifacts** | Which plans and reports wait for my comments? A comment reaches the agent that wrote it. |
 
@@ -78,14 +82,14 @@ only what agents need, to keep resident tokens small:
 
 ```
 factory status
-factory issue new|show|merge|split
-factory task done|blocked|note
-factory decide answer
+factory issue new|show|phase|merge|split
+factory issue ask|block|ship|close|drop
 factory project check
 ```
 
-The rest (`wave`, `job`, `session`, `artifact`, …) exists for you and for Argo and is documented once,
-not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
+`ship` takes the three-line summary and the evidence; `ask` puts a decision card to you with a default
+and an expiry. The rest (`job`, `session`, `artifact`, `decide`, the steward's verbs, …) exists for
+you, the steward and Argo and is documented once, not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
 json|md`, exits non-zero on failure and never prompts an agent.
 
 ## Tools around it
@@ -96,10 +100,10 @@ json|md`, exits non-zero on failure and never prompts an agent.
 - **`rd`** keeps working; its spawn, fan, merge and say verbs move under `factory` in W6 and `rd`
   becomes an alias.
 - **Hermes is restructured in W6** as the factory's chat front: status and requests through the factory
-  API ("do X" becomes `factory issue new`), its crons become factory jobs, its narration becomes the
-  briefing. It never implements.
-- **Diagrams** are written as Mermaid and rendered by pele, here and in the dataviz skill and Argo's
-  artifact view (W6).
+  API ("do X" becomes `factory issue new`; "how is X going" reads the Issue and its lead's phase), its
+  crons become factory jobs, its narration becomes the briefing. It never implements.
+- **Diagrams** are written as Mermaid and rendered by pele, here and in the dataviz skill, and in Argo's
+  *Artifacts* page (the page lands in W5, pele rendering in W6).
 
 ## What is switched off, and when
 
@@ -108,7 +112,7 @@ json|md`, exits non-zero on failure and never prompts an agent.
 | agent-gateway implement on IU API tokens | Phase 0, done 2026-10-24 |
 | warden, its Slack relay, Hermes' project narratives | W1 (warden deleted) |
 | agent-gateway's headless implement lane | W1 stops its only caller (warden); W6 removes the lane |
-| raw Slack alerts from each source | as its adapter lands (W1 Kuma, W4 the rest) |
+| raw Slack alerts from each source | as its adapter lands (W2 Kuma, W4 the rest) |
 | Argo on the VPS | W5 |
 | plannotator and its review door | W5 |
 | agent-gateway MCP registration | W6 |

@@ -7,29 +7,63 @@ server as database `argo` at W5, with its own role and connection limit. Postgre
 directly (views, `LISTEN/NOTIFY` for live updates, no sync job), because JSONB, full-text search and
 `SKIP LOCKED` come built in, and because you have hit SQLite locking before.
 
-## DBOS, with short workflows
+## Durable execution: your one open decision
 
-**Adopted.** DBOS Transact (TypeScript SDK, MIT, a library — no extra server) runs on Postgres and
-gives the factory durable steps, queues with concurrency and priority, scheduled jobs and a recorded
-history of every run, which Argo shows on *Factory*. Its TypeScript SDK runs on Node, not Bun, so the
-factory service runs on Node 24. Your call was right twice: v1's spike used it wrong, and Node is no
-reason to skip it.
+**My recommendation: no DBOS. Each Issue is a state machine in Postgres, driven by an inbox.** The
+reason is Cortex's engrams, an open-source software factory that runs Claude Code on DBOS on Bun.
+Its blog argues for durable workflows; its code and ADRs argue the other way for exactly our case
+(`research/2026-10-25-engrams-source.md`):
 
-**The one rule that makes it simple: workflows are short; waiting lives in tables.** Each workflow is
-one stage — investigate an Issue, run a Task's checks and merge, deploy and verify — and finishes in
-minutes. Anything that waits for hours or days (a grace window, a quota reset, a session building, a
-decision) is a row with a `wake_at` time, and a scheduled workflow picks up whatever is due every
-minute. The rule removes the concerns the design review raised about DBOS:
+| Cortex's blog | engrams' code and ADRs |
+|-|-|
+| "A software factory is just a durable workflow" | ADR 0119: "an entity lifecycle that spans days … must NOT be one long-lived run … The automation is stateful; no run is." |
+| DBOS runs the factory | three workflows, using DBOS only for step checkpoints, `send`/`recv` and idempotent workflow ids; cron (croner + a Postgres lease), concurrency claims, retries and recovery are their own code |
+| "every run resumes where it was" | DBOS ties recovery to an application version hashed from workflow source, and deploys stranded production runs (253 unread messages, 15 orphaned runs). The fix is a ≈ 2,000-line sweeper (ADR 0104); pinning the version was rejected because it forces patch bookkeeping |
 
-- **Deploys:** before the factory deploys itself, it drains — stops starting workflows and lets the
-  running ones finish, which takes minutes. No workflow survives a code change, so no version patches.
-- **Recovery:** a crash replays at most one short stage, and every step that touches the outside world
-  first checks whether it already happened (the PR exists, the deploy is live).
-- **One launcher:** only the service starts DBOS; the CLI, Argo and Hermes talk to its API.
+An Issue lives for hours or days, so engrams' own rule applies: the Issue is stateful, and no run
+is. What DBOS would add on top is checkpointing for steps that last seconds, which a deterministic
+id does as well, and the price is version gating on every deploy. On one Mac mini there is no
+multi-pod recovery to buy. v2.1's instinct (short runs, state in tables) was right; engrams arrived
+at the same place the hard way.
 
-W1 proves it before anything depends on it: kills mid-step, a deploy mid-flow, a restore from backup.
-Zero duplicate effects. If DBOS fails that gate, the hand-written loop from v1's spike (75 of 75 runs)
-is the fallback.
+## The Issue machine
+
+- **One writer.** `issues.state` changes in one module, a transition table over the states in §4.
+- **One inbox.** Everything that concerns an Issue is a row in `issue_inbox` with a mandatory,
+  unique idempotency key:
+
+| Event | Sent by | Key |
+|-|-|-|
+| `signal` | dedup: a repeat or regression | the source's own event id |
+| `admitted` | the admission tick | `admit:<issue>:<attempt>` |
+| `phase`, `ship`, `close`, `block`, `ask`, `drop` | the lead, via `factory issue` | `<issue>:<verb>:<call id>` |
+| `turn_ended`, `session_ended` | the lead's Stop and SessionEnd hooks | session id + turn number |
+| `pane_dead`, `walled` | Witness | pane id + observation time |
+| `hold_over` | a timer row | `hold:<issue>:<attempt>` |
+| `steer`, `pause`, `stop`, `answer` | you or the steward | the intent's id |
+
+- **One Issue at a time.** A worker takes an Issue's oldest unhandled rows under a row lock
+  (`FOR UPDATE SKIP LOCKED`), so two events for one Issue never race. `LISTEN/NOTIFY` wakes it at
+  once, and a tick every few seconds catches the rest.
+- **Effects are attach-or-start by deterministic id.** The lead's herdr name is
+  `lead-<issue>-<attempt>`, and spawning again attaches to that pane. A prompt id
+  (`issue:<id>:<phase>:<n>`) is recorded before anything is typed into a pane. A GitHub comment
+  carries a marker, a card a key. A replayed tick never spawns, prompts or posts twice.
+- **Claims** (engrams' concurrency table): `repo:<name>` holds one lead per repo, plus a second claim
+  for one urgent Issue (§5). Policies: *join*
+  (the same symptom becomes a note to the running lead), *queue* (waits for the holder to finish),
+  *supersede* (a newer request replaces one not yet started).
+- **Finalize once,** from every exit path: terminal state, release the claim, promote the next
+  queued Issue.
+- **Schedules:** croner plus a Postgres lease; `job_runs` is unique per (job, slot), and a missed slot
+  runs once after downtime.
+- **Tests, from engrams without its engine:** a golden test pins each path's sequence of transitions
+  and effects; a replay test crashes after every effect and replays, and must end with zero
+  duplicates.
+
+**What would change my mind:** the lifecycle module passing ≈ 500 lines, or the replay test finding a
+race the per-Issue lock cannot close. Then DBOS in engrams' short-run form, sweeper included. The
+runtime decides nothing either way: Cortex runs DBOS on Bun 1.4.3, and the factory stays on Bun.
 
 ## Facts, not status
 
@@ -37,26 +71,28 @@ is the fallback.
 |-|-|
 | `projects` | the synced `project.yaml`, plus pause state |
 | `signals` | one observation each: source, source time, subject, fingerprint, payload |
-| `issues` | kind, title, root cause, fix recipe, `wake_at` |
-| `issue_links` | signal → Issue, Issue → Issue (merged, split, regression of), who, why — the grouping labels |
-| `tasks` + `task_deps` | done-definition, class, project, plan, branch, `wake_at` |
-| `sessions` | herdr pane, account in effect, role, Task, Witness observations |
-| `checks` | (head SHA, base SHA), kind, result, evidence link |
-| `deploys` | project, target, artifact, change, held / bad |
+| `issues` + `issue_deps` | kind, class, title, the lead's root cause and fix, summary, `wake_at`; an initiative's waves are child Issues |
+| `issue_links` | Signal → Issue, Issue → Issue (merged, split, related, regression of), who, why: the grouping labels |
+| `sessions` | herdr pane, role, account in effect, model, effort, Issue, Witness observations |
+| `issue_inbox` | every event for an Issue, with its idempotency key and when it was handled |
+| `claims` | key, holder, policy, queued Issues |
+| `events` | phases, notes, steward actions, state changes: the history Argo shows |
+| `evidence` | per Issue: kind, link or payload, at, from whom |
 | `decisions` | question, options, default, expiry, answer, who, when |
+| `job_runs` | job, slot, result, tokens spent (the scorecard reads it) |
 | `artifacts` + `comments` | plan or report as path@sha, comment threads |
 
-"Working", "stuck", "ready to merge" are derived from these facts when read, never stored.
+"Working", "stuck", "waiting" are derived from these facts when read, never stored.
 
 ## Telemetry and money
 
-- **Traces (from W5):** the factory, agent-gateway and headless sessions export OpenTelemetry to the
-  VPS ClickStack over the tailnet, one trace per Issue.
-- **Usage:** usage-tracker stays the record of tokens and cost; a session's id links its usage to its
-  Task and Issue, so Argo shows cost per Issue and per project.
+- **Traces (from W5):** the factory and agent-gateway export OpenTelemetry to the VPS ClickStack over
+  the tailnet, one trace per Issue.
+- **Usage:** usage-tracker stays the record of tokens and cost. A session's id links its usage to its
+  Issue, so Argo shows cost per Issue, per project and per model tier.
 
 ## Backups and retention
 
-A nightly `pg_dump` to the homelab bucket and a weekly restore drill, from W1. Facts stay; agent
+A nightly `pg_dump` to the homelab bucket and a weekly restore drill, from W1. Facts stay; lead
 transcripts are archived to the homelab and the local copies kept. Warden's database is deleted at W1;
 the golden set already holds what was worth learning from it.

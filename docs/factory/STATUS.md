@@ -1,6 +1,24 @@
 # Factory design — status
 
-## v2 (2026-10-24) — current
+## v2.2 (2026-10-25) — current
+
+**Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).
+
+- **Inputs:** the owner's 25 Plannotator comments on v2.1 + chat message (`feedback/2026-10-25-owner-comments-raw.md`);
+  Cortex's DRIVE whitepaper (`research/2026-10-25-cortex-drive.md`); Cortex/engrams research and blog
+  (`research/2026-10-25-cortex-engrams.md`); engrams source read (`research/2026-10-25-engrams-source.md`).
+- **Changes:** one Claude Code lead per Issue does root cause → production check → report; the factory
+  runs the lifecycle and never reasons about code; the brief carries facts, never a cheap-model
+  diagnosis; forward fix, no automatic rollback; Issues only (no Tasks); two-tier dedup with a judge
+  bake-off at W4; a steward ("daddy orchestrator") with 5-hour-aware admission and model/effort per
+  lead; stop-the-line, journey probes, change failure rate (from DRIVE); durable execution: an
+  Issue state machine with an inbox in Postgres, no DBOS (engrams' source: ADR 0119 "no run spans an
+  entity's lifecycle", ADR 0104's 2k-line sweeper for DBOS-stranded runs) — **the owner's open
+  decision**; explicit turn-end events via hooks; waves re-cut (W1 = one lead end to end); start on
+  the owner's sign-off.
+- **Next:** wait for the owner's DBOS decision and sign-off; then W1 per `tdd/12-plan.md`.
+
+## v2 (2026-10-24) — history
 
 **Read `tdd/` (built into `report.html`) first; everything below the v1 line is history.**
 Orchestrator: herdr tab `factory-v2` (SourceRoot workspace), session 07a74a7d, Opus xhigh.

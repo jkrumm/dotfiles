@@ -1,58 +1,56 @@
 # 1. Verdict
 
-**Build one loop that takes every piece of work — an outage, a bug, a stale dependency, a feature you
-asked for — through the same path: deterministic code does everything it can, cheap models judge,
-Claude Code on your two Max accounts writes every line of code in herdr, and verification gates every
-ship. It runs as one new `factory` service on the mini — DBOS workflows over Postgres, on Node — with
-Argo as the cockpit on the same box. Warden is switched off, not migrated.**
+**Build a factory that runs the lifecycle of every piece of work and lets Claude Code do the work.
+The factory (plain code, with cheap models for routine judgment) takes in signals and requests,
+merges duplicates, heals what a runbook can heal, and queues the rest. It then starts a Claude Code
+session on the right Max account with the problem and its evidence. That session, the lead, owns the
+Issue from root cause to a verified production change and reports back; the factory watches the
+result, closes the Issue and learns. It runs as one new `factory` service on the mini over Postgres,
+with Argo as the cockpit on the same box. Warden is switched off, not migrated.**
 
-The scarce resources are your attention and the Max windows, not money. 32 % of new items reached
-you in v1's 14-day sample, at ≈ 62 notifications a week, and only 3.8 % of those escalations were
+The scarce resources are your attention and the Max windows, not money. In v1's 14-day sample, 32 % of
+new items reached you, at ≈ 62 notifications a week, and only 3.8 % of those escalations were
 genuinely yours. IU API spend for all personal gateway work was $183 last week, most of it review.
 
 ```mermaid
 flowchart TB
   IN[Signals · your requests · jobs] --> D{Dedup}
   D --> I[Issue]
-  I --> H{Heals itself<br/>or known fix?}
+  I --> H{Heals itself or<br/>a runbook fixes it?}
   H -- yes --> L[Closed + learned]
-  H -- no --> P[Investigate + plan<br/>cheap model]
-  P --> Q{Capacity<br/>two Max accounts}
-  Q --> C[Claude Code<br/>in herdr]
-  C --> V[Verify + ship]
-  V --> L
-  V -- fails --> R[Roll back] --> P
+  H -- no --> Q{Capacity<br/>two Max accounts}
+  Q --> C[Lead: Claude Code in herdr<br/>cause → plan → build → ship<br/>→ check production]
+  C --> W{Holds?}
+  W -- yes --> L
+  W -- regression --> C
   L -.-> D
 ```
 
 ## The target in ten points
 
-1. **One loop for all work.** Incidents, bugs, hygiene findings, upgrades and your requests are Issues;
-   a wave plan is a set of Tasks. Nothing has a side door.
-2. **Claude Code implements; cheap models do the rest.** Claude Code on Max, in herdr, does all
-   implementation. Cheap models on IU API tokens (DeepSeek V4.1 Flash, Haiku 5.5, the decision model)
-   do everything else that needs a model — dedup, root causes, planning, wording, review. Plain code
-   does what needs no model.
-3. **Two Max accounts, one pool.** The account is picked at spawn and kept while its cache is warm.
-   Urgent work takes any headroom, normal work respects pace, upkeep uses capacity that would lapse.
-   Nothing spills to IU API tokens; work waits for the reset.
-4. **Short durable workflows.** DBOS runs each stage — investigate, verify and merge, deploy — as a
-   workflow of a few minutes; anything that waits lives in a table. A crash or a redeploy repeats at
-   most one short stage.
-5. **Every repo describes itself** in `project.yaml` and implements one make contract that CI, agents,
-   review and the ship step all call.
-6. **Dedup is deterministic first and learns.** Rules group signals (F1 0.889 on the held-out set);
-   a decision model scores the ambiguous rest; the investigator merges and splits; every grouping
-   decision is kept as a label.
-7. **Self-healing starts with waiting.** A grace window lets transient failures recover; a known fix
-   runs as a deterministic runbook; only then does an agent investigate.
-8. **Verification gates shipping, and the candidate cannot weaken it.** Checks run on the merge result
-   with the base branch's own Makefile and tests; a failed post-deploy check rolls back to the last
-   deploy that held.
-9. **Upkeep is cheap.** Jobs are small scripts; a cheap model writes up what they find, and a clean run
-   costs nothing.
-10. **You decide business only** — product direction, spend, irreversible data loss, other people —
-    as a three-line card with a default and an expiry. SLO: under 1 % of items reach you.
+1. **One lifecycle for all work.** Incidents, bugs, upkeep findings and your requests are Issues; an
+   initiative is an Issue whose waves are child Issues. Nothing has a side door.
+2. **Claude Code owns the work, end to end.** A lead finds the root cause, plans, builds (alone or
+   with workers), tests, reviews, ships, checks production and reports. It decides how.
+3. **The factory owns the lifecycle, never the reasoning.** Intake, dedup by symptom, settle,
+   classify, queue, capacity, watch, learn. Every repo describes itself in `project.yaml` and one make
+   contract, so the same commands work everywhere.
+4. **The brief is the problem, not a diagnosis.** Facts, evidence and verified history; no cheap-model
+   root cause or plan for the lead to unlearn.
+5. **Cheap models do the routine around it, freely:** dedup judging, classification, wording, the
+   changelog, learning write-ups, job summaries, and the review and research tools leads call.
+6. **Two Max accounts, one pool, 5-hour aware.** Each lead gets a model and effort sized to its Issue
+   and an account with headroom for it. Urgent work takes any headroom, upkeep only what would lapse.
+   Nothing spills to IU API tokens.
+7. **A steward watches the whole.** One short Claude Code session, daily and on events, looks over all
+   leads, mothers, the queue and both accounts, and steers.
+8. **Done means production evidence.** The lead ships only with the evidence its change needs, fixes
+   forward when production disagrees. After the hold, the factory runs `make verify` and the
+   project's journey probes, which no lead writes.
+9. **It learns, and turns learning into code.** Grouping decisions become labels; verified causes
+   become known fixes; a fix verified twice becomes a runbook or a job check that code runs from then on.
+10. **You decide business only:** product direction, spend, irreversible data loss, other people. Each
+    decision arrives as a three-line card with a default and an expiry. SLO: under 1 % of items reach you.
 
 ## The numbers
 
@@ -62,5 +60,5 @@ flowchart TB
 | Notifications to you, 28 d | **≈ 62 / week** | ≤ 2 / week + the morning briefing |
 | `continue` nudges to parked agents, 45 d | **50** | 0 |
 | Grouping F1, held-out golden set | warden 0.744 → rules **0.889** | ≥ 0.889 |
-| Automatic revert on a failed post-deploy check | **0 of 52** merges | every failed check |
+| Code fixes shipped and checked in production without you | **0**: v1's code fixes stayed propose-only | the default |
 | Max load, 30 d | **120 %** of one `iu` week = **80 %** of today's two-account pool | your sessions never blocked |

@@ -1,7 +1,8 @@
 # A. Review log
 
-Where each of your comments on v1 landed. Numbering follows your Inbox reply; your words are
-shortened, the full text is in `feedback/2026-10-23-owner-comments-raw.md`.
+Where each of your comments landed, version by version. Each table records what that version did
+with your words; where they differ, the later table wins, and the v2.2 table at the end is current.
+Numbering follows your Inbox replies; your words are shortened, the full texts are in `feedback/`.
 
 ## The 33 comments
 
@@ -79,3 +80,34 @@ Verbatim in `feedback/2026-10-24-owner-podcast-reply.md`.
 | Hermes needs restructuring | W6: chat front over the factory API, crons become jobs (§10) |
 | We can build on `me` | W1 starts on `me` on Mon 26 Oct (§12) |
 | The report could be more precise | v2.1 is shorter; detail moved to appendices |
+
+## Your comments on v2.1 (2026-10-25)
+
+Verbatim in `feedback/2026-10-25-owner-comments-raw.md`, with the chat message of the same day.
+
+| # | You said | Now |
+|-|-|-|
+| 1 | Claude Code is the smart actor: root cause, plan, implement, test, verify, ship, verify again, report back | the lead owns the Issue end to end; the factory runs the lifecycle around it (§1, §4) |
+| 2 | Not sure what DBOS would do; maybe I pushed too hard | answered from engrams' source: for a lifecycle of hours or days, not much; an Issue machine with an inbox instead; your decision (§6, §13) |
+| 3 | Can a decision model dedup well, with what context, or a DeepSeek OpenCode flow? | off until a W4 bake-off of both with the same context pack; merge precision ≥ 0.95 or it stays off (§8) |
+| 4 | Rollback rarely works in practice; fix forward | the lead fixes forward; a revert is its call; no automatic rollback (§4) |
+| 5 | Queue it, then let Claude Code cook in herdr; the factory is the lifecycle around the item | §4 as a whole; you follow an Issue in herdr, Argo or Hermes (§2) |
+| 6 | IuRoot: no triage; maybe wave lifecycles later; keep it out for now | out of W1–W6; lifecycle tracking is a later option (§7) |
+| 7, 8 | Principles 1 and 2 contradicted your earlier answer | rewritten: the factory sorts and words, leads reason (§3) |
+| 9 | Make targets, review, merge, deploy: coordinated by Max in herdr | all of it is the lead's, with those tools (§4) |
+| 10 | Root cause and fix recipe afterwards feed docs, intake, dedup, known fixes | the learning loop reads the lead's verified report (§8) |
+| 11 | Investigation by a cheap model is too hard; hand it to Claude Code | no cheap-model investigation or plan; classification only routes (§4) |
+| 12 | Also my GitHub issues, or issues where I tag the factory | requests from your issues and `/factory` comments, your user only (§4, §10) |
+| 13 | "What every session gets" was outdated | replaced by the lead's job, done-means-evidence and the brief (§4) |
+| 14 | Verify, ship, roll back: all Claude Code, too hard to coordinate with dumb models | same as 9 (§4) |
+| 15 | Root cause may be needed for dedup | two tiers: symptom at intake, cause in the lead (§8) |
+| 16 | DBOS runs on Bun | confirmed: officially Node-only, but Cortex runs it on Bun 1.4.3 in production; the runtime decides nothing (§6) |
+| 17 | Not sure we use DBOS, or learn a lot from it | learn a lot, use little: engrams' patterns are in §6, its engine is not (appendix B) |
+| 18 | TickTick: things I as a human need to do | and the factory adds items there when an Issue needs your hand (§7) |
+| 19 | The decision model needs testing | the W4 bake-off (§8) |
+| 20 | Continuous learning sounds good; tricky | four learning measures on the scorecard; a stalled loop becomes an Issue (§8, §9) |
+| 21 | More from Swamp; more deterministic paths, agentic where needed | principle 7: fixes verified twice become runbooks or job checks (§3, §8, §9) |
+| 22 | Conventional commits make a poor changelog | leads write three-line summaries; a cheap model compiles them for the brain and Argo (§9) |
+| 23 | Monitor subscription picking, dedup and learning, the pipeline | the scorecard job (§9) |
+| 24 | A "daddy orchestrator" above the mothers that watches tokens, limits, routing, `me`'s 5-hour window | the steward (§5); the build orchestrator plays it during the rewrite (§12) |
+| 25 | We start after my final review, not on a fixed date | start on your sign-off (§12) |
