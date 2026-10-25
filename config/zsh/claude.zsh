@@ -48,10 +48,13 @@ _claude_theme_auto() {
   done
 }
 
-# The session id after `--resume|-r <id>` / `--resume=<id>` in the given args, or nothing.
+# The session id after `--resume|-r <id>` / `--resume=<id>` in the given args, or nothing. `--continue|-c`
+# resumes the newest session in the cwd, so it resolves to that session's id (`claude-account latest`, from the
+# shared projects/ transcripts); the first of the two flags wins.
 _claude_resume_id() {
   while (( $# )); do
     case $1 in
+      --continue|-c) claude-account latest "$PWD" 2>/dev/null; return ;;
       --resume|-r) [[ ${2:-} == [A-Za-z0-9]*-* ]] && { print -r -- $2; return } ;;
       --resume=*) print -r -- ${1#--resume=}; return ;;
     esac

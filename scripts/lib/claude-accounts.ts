@@ -1,7 +1,7 @@
 // Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
 import { createHash } from "node:crypto"
-import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
+import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
@@ -661,4 +661,25 @@ export function sessionAccount(sessionId: string, logDir: string): string | null
     }
   }
   return null
+}
+
+/**
+ * Id of the newest session transcript Claude Code keeps for a cwd: `<projectsDir>/<cwd with every non-alphanumeric
+ * as '-'>/<id>.jsonl`, newest mtime first (what `claude --continue` resumes). `projects/` is shared by every
+ * account. null when the dir or a transcript is missing.
+ */
+export function latestSessionId(projectsDir: string, cwd: string): string | null {
+  const dir = join(projectsDir, cwd.replace(/[^A-Za-z0-9]/g, "-"))
+  let best: { id: string; mtime: number } | null = null
+  try {
+    for (const f of readdirSync(dir)) {
+      const m = /^([A-Za-z0-9_-]+)\.jsonl$/.exec(f)
+      if (!m) continue
+      const mtime = statSync(join(dir, f)).mtimeMs
+      if (!best || mtime > best.mtime) best = { id: m[1], mtime }
+    }
+  } catch {
+    return null
+  }
+  return best?.id ?? null
 }

@@ -51,6 +51,7 @@ case ${1-} in
     echo "${STUB_PICK_LINE:-unset CLAUDE_CONFIG_DIR}"
     (( why )) && echo "# picked=${STUB_PICK_ID:-iu} reason=test stale=false"
     exit "${STUB_PICK_RC:-0}" ;;
+  latest) [[ -n ${STUB_LATEST-} ]] && { echo "$STUB_LATEST"; exit 0; }; exit 1 ;;
   session) [[ -n ${STUB_SESSION-} ]] && { echo "$STUB_SESSION"; exit 0; }; exit 1 ;;
   env) case $2 in me) echo "export CLAUDE_CONFIG_DIR='$HOME/.claude-me'" ;; iu) echo "unset CLAUDE_CONFIG_DIR" ;; *) exit 1 ;; esac ;;
 esac
@@ -120,6 +121,19 @@ for form in '--resume 1234-abcd' '-r 1234-abcd' '--resume=1234-abcd'; do
 done
 reset; out=$(zrun interactive 'claude --resume 1234-abcd')
 assert_eq "unknown session falls through to the pick" 1 "$(picks)"
+
+echo "--continue pins to the account of the newest session in the cwd"
+for form in '--continue' '-c'; do
+  reset; out=$(STUB_LATEST=1234-abcd STUB_SESSION=me zrun interactive "claude $form")
+  assert_contains "claude $form -> newest session's account" "cfg=$ME picked=me" "$out"
+  assert_eq "claude $form: no pick" 0 "$(picks)"
+  assert_contains "claude $form looked up the cwd's session" "/work" "$(grep '^latest' "$CALLS")"
+done
+reset; out=$(STUB_LATEST=1234-abcd STUB_SESSION=me zrun interactive 'c -c')
+assert_contains "c -c pins too" "cfg=$ME picked=me" "$out"
+assert_eq "c -c: no pick" 0 "$(picks)"
+reset; out=$(STUB_SESSION=me zrun interactive 'claude --continue')
+assert_eq "--continue without a known session falls through to the pick" 1 "$(picks)"
 
 echo "untouched invocations"
 reset; out=$(zrun plain 'claude --foo')

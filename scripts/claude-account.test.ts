@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -66,6 +66,24 @@ describe("sessionAccount", () => {
     writeFileSync(join(d, "2026-10-23.jsonl"), `${line("abc-1", "me")}\n`)
     writeFileSync(join(d, "2026-10-24.jsonl"), `${line("abc-1", null)}\n`)
     expect(sessionAccount("abc-1", d)).toBeNull()
+  })
+})
+
+describe("latestSessionId", () => {
+  test("newest transcript by mtime in the cwd's project dir; encoding, missing dir and non-transcripts", () => {
+    const projects = tmp()
+    const cwd = "/Users/x/.herdr/worktrees/my_repo.v2"
+    const d = join(projects, "-Users-x--herdr-worktrees-my-repo-v2")
+    mkdirSync(d, { recursive: true })
+    writeFileSync(join(d, "aaaa-1.jsonl"), "")
+    writeFileSync(join(d, "bbbb-2.jsonl"), "")
+    writeFileSync(join(d, "notes.txt"), "")
+    utimesSync(join(d, "aaaa-1.jsonl"), 2000, 2000)
+    utimesSync(join(d, "bbbb-2.jsonl"), 1000, 1000)
+    utimesSync(join(d, "notes.txt"), 9000, 9000)
+    expect(latestSessionId(projects, cwd)).toBe("aaaa-1")
+    expect(latestSessionId(projects, "/nowhere")).toBeNull()
+    rmSync(projects, { recursive: true })
   })
 })
 
@@ -590,6 +608,15 @@ describe("CLI (isolated HOME)", () => {
     const ts = Date.now() - ageMs
     saveSample("iu", { s: 5, w: 5, s_reset: null, w_reset: null, s_ts: ts, w_ts: ts, src: "t" }, dir)
   }
+
+  test("latest: newest transcript of the cwd under $HOME/.claude/projects; exit 1 when there is none", () => {
+    const cwd = join(home, "work", "proj")
+    const pd = join(home, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"))
+    mkdirSync(pd, { recursive: true })
+    writeFileSync(join(pd, "11111111-aaaa.jsonl"), "")
+    expect(cli(["latest", cwd]).out).toBe("11111111-aaaa")
+    expect(cli(["latest", join(home, "elsewhere")]).rc).toBe(1)
+  })
 
   test("pick prints the line; interactive and wave both give unset", () => {
     seed(60_000)

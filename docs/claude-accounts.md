@@ -169,7 +169,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
 | Spawner | Today | Change |
 |-|-|-|
-| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what `herdr agent start` types into a pane) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` pins; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
+| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what `herdr agent start` types into a pane) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
 | `c` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account iu\|me` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
 | `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept); `CLAUDE_ACCOUNT_PICKED=<id>` rides the same spawn-time `--env` (herdr's `--env` repeats; iu included, so no typed `export` can race the pane's shell); `agent_pane_setup` still types only `USAGE_LANE`. When no account has room `rd` pauses the spawn (no IU spill) |
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
@@ -179,8 +179,12 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
-cache stays warm and the work never changes provider. `--account` overrides; an unknown session
-falls through to the normal pick (the hook log is kept for a few days, so the pin holds for that long). agent-gateway pins its own resumed workers the same way.
+cache stays warm and the work never changes provider. `--continue` / `-c` pins the same way: it resumes the newest
+session of the cwd, so `claude-account latest "$PWD"` finds that session (newest `<id>.jsonl` by mtime under the shared
+`~/.claude/projects/<cwd, every non-alphanumeric as '-'>/`) and the lookup above gives its account. Both lookups fall
+through to the normal pick when they find nothing: no transcript for the cwd, or a `session_env` line older than the
+hook log's 3-day retention (a `--continue` into a session older than that re-picks, and the context is cold anyway).
+The hook line carries no cwd, which is why the transcript directory, not the log, answers "which session". `--account` overrides. agent-gateway pins its own resumed workers the same way.
 A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn and subagents inherit it.
 
 **Account marker (`CLAUDE_ACCOUNT_PICKED=<id>`).** An iu pick is `unset CLAUDE_CONFIG_DIR`, indistinguishable
@@ -194,6 +198,16 @@ from "nobody chose", so the decision travels in this variable instead:
   silently skip the pick; every chooser sets marker and dir together. An unreadable registry lets the marker stand. It
   then sets the marker inside a subshell (the pane's own
   environment stays unmarked: the next `claude` typed there is a new spawn and picks again).
+- **A consistent marker in a pane's own environment stays valid after its agent exits (decided 2026-10-25, no code
+  change).** An `rd` pane gets marker and `CLAUDE_CONFIG_DIR` from herdr's spawn-time `--env`, so they are the pane's
+  environment, not a subshell's. A second `claude` typed there after the first exited skips the pick and runs on the
+  pane's account. That is intended: the pane is one seat on one account (and one `USAGE_LANE`), the second session is the
+  same work in the same place, and it shares the account's prompt-cache organisation, which a re-pick could only
+  forfeit; the guard above exists for markers that *disagree* with the dir, and this one agrees. Costs, accepted: that
+  second spawn writes no `picks.jsonl` line, and if the account was exhausted meanwhile Claude Code shows the limit
+  itself (the statusline feed marks it). To re-route from such a pane, type `c` (always picks, then sets the marker for
+  its own `claude`) or `c --account <id>`. A bare `claude` in a *plain* pane is the other case: its marker lives in a
+  subshell, so each typed `claude` picks.
 - result: exactly one `picks.jsonl` line per spawn (`scripts/claude-launcher.test.sh` counts them for `rd`,
   `c` and bare `claude`). Never export it from a profile (it would be ignored whenever it disagrees with the dir, but a matching one still skips the pick).
 

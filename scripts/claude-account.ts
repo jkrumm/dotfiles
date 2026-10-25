@@ -10,6 +10,7 @@
 //   claude-account account [--badge]       registry id of this session (CLAUDE_CONFIG_DIR unset -> default); --badge: upper-case id, only with >1 enabled account
 //   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
 //   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
+//   claude-account latest [dir]            id of the newest session transcript for dir (default cwd) — what `c --continue` pins to; exit 1 if none
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
@@ -19,7 +20,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -205,6 +206,12 @@ async function main(argv: string[]): Promise<number> {
       console.log(id)
       return 0
     }
+    case "latest": {
+      const id = latestSessionId(join(homedir(), ".claude", "projects"), rest[0] ?? process.cwd())
+      if (!id) return 1
+      console.log(id)
+      return 0
+    }
     case "exhausted": {
       const id = account(reg, rest)
       const until = num(rest, "--until")
@@ -213,7 +220,7 @@ async function main(argv: string[]): Promise<number> {
       return 0
     }
     default:
-      console.error("usage: claude-account pick|usage|refresh|record|account|env|session|exhausted ...")
+      console.error("usage: claude-account pick|usage|refresh|record|account|env|session|latest|exhausted ...")
       return 2
   }
 }
