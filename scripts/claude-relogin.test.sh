@@ -40,14 +40,43 @@ mk ssh 'case " $* " in
   *) [ "${STUB_OPEN:-ok}" = fail ] && exit 1; exit 0 ;;
 esac'
 mk open '[ "${STUB_OPENBIN:-ok}" = fail ] && exit 1; exit 0'
-mk osascript 'exit 0'
-mk herdr 'case "$1 $2" in "workspace create") echo "{\"result\":{\"root_pane\":{\"pane_id\":\"w9:1\"}}}" ;; esac'
-mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
-mk claude-account 'case "$1" in usage) echo "$3 usage-line" ;; expiry) echo "$3 expiry-line" ;; esac; case "$1" in usage|expiry) echo "me max5x usage-line"; echo "iu max20x usage-line" ;; esac; exit 0'
+# osascript reads its script on stdin: the kind (open/exists/close/notify) is what the case asserts on. "open" can play the
+# interactive login that would run in that window (STUB_TERM_RESULT = the result file content it would write).
+cat > "$TMP/bin/osascript" <<'STUB'
+#!/bin/bash
+body=$(cat); kind=other
+case "$body" in
+  *"do script"*) kind=open; echo "${STUB_WINID:-4242}"
+    if [ -n "${STUB_TERM_RESULT:-}" ]; then f=$(printf '%s' "$2" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -n "$f" ] && echo "$STUB_TERM_RESULT" > "$f"; fi ;;
+  *"exists window"*) kind=exists; echo "${STUB_WIN_EXISTS:-true}" ;;
+  *"close (window"*) kind=close ;;
+  *"display notification"*) kind=notify ;;
+esac
+printf 'osascript:%s' "$kind" >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
+STUB
+chmod +x "$TMP/bin/osascript"
+cat > "$TMP/bin/herdr" <<'STUB'
+#!/bin/bash
+printf 'herdr' >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
+case "$1 $2" in
+  "workspace create") echo '{"result":{"root_pane":{"pane_id":"w9:1"}}}' ;;
+  "workspace list") [ "${STUB_WS_GONE:-0}" = 1 ] || echo '{"result":{"workspaces":[{"workspace_id":"w1F"},{"workspace_id":"w9"}]}}' ;;
+  "pane run") # play the login that would run in the pane: write its result file
+    if [ -n "${STUB_PANE_RESULT:-}" ]; then f=$(printf '%s' "$4" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -z "$f" ] || echo "$STUB_PANE_RESULT" > "$f"; fi ;;
+esac
+STUB
+chmod +x "$TMP/bin/herdr"
+mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude-account 'case "$1 $2" in
+  "expiry --json") echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":1798761600000},{\"id\":\"iu\",\"refresh_expires_at\":1798761600000}]}" ;;
+  usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
+esac; exit 0'
 mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_RELOGIN_PANE_WAIT=0 CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
+# workers run inline (never a stray detached process), no waits, a scratch log
+export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log"
 # Safety net: every external command the scripts reach must be one of our stubs, never the real herdr/ssh/claude.
 for c in ssh open herdr osascript claude claude-account; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
@@ -196,13 +225,13 @@ assert_contains "iu text names Chrome" "Google Chrome" "$(calls)"
 
 echo "relogin opens the login terminal"
 as mini; reset
-bash "$RELOGIN" me >/dev/null; rc=$?
+bash "$RELOGIN" me --visible >/dev/null; rc=$?
 assert_eq "rc 0" 0 "$rc"
 assert_contains "herdr workspace in HOME" "herdr[workspace][create][--cwd][$HOME][--label][relogin me][--focus]" "$(calls)"
 assert_contains "typed into that pane: the --in-pane run" "herdr[pane][run][w9:1][bash '$HERE/claude-relogin.sh' me --machine mini --in-pane]" "$(calls)"
 as macbook; reset
-bash "$RELOGIN" me >/dev/null
-assert_contains "MacBook: Terminal via osascript, command as argv" "osascript[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
+bash "$RELOGIN" me --visible >/dev/null
+assert_contains "MacBook --visible: Terminal via osascript, command as argv" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
 as mini; reset
 bash "$RELOGIN" me --machine macbook >/dev/null
 assert_contains "mini -> MacBook: one ssh hop to iumac" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][export PATH=" "$(calls)"
@@ -228,6 +257,81 @@ assert_not_contains "failed login: no refresh" "refresh" "$(calls)"
 assert_contains "failed login: manual fallback named" "Manual fallback" "$(cat "$TMP/err")"
 bash "$RELOGIN" me --machine macbook --in-pane >/dev/null 2>&1; assert_eq "--in-pane on the wrong machine is refused" 2 "$?"
 
+D=$(date -r 1798761600 +%Y-%m-%d)   # what the stubbed expiry (1798761600000 ms) renders to
+count() { grep -c -- "$1" <<<"$(calls)" || true; }
+
+echo "MacBook: the login runs behind the scenes"
+as macbook; reset; : > "$CLAUDE_RELOGIN_LOG"
+out=$(STUB_CLAUDE_OUT='signed in sk-ant-oat01-SECRETTOKEN123 accessToken: abcdefghijklmnopqrstuvwxyz0123' bash "$RELOGIN" me --machine macbook); rc=$?
+c=$(calls)
+assert_eq "rc 0" 0 "$rc"
+assert_contains "says it runs in the background" "running in the background" "$out"
+assert_contains "login ran on the me dir with the helper as BROWSER" "ENV cfg=$HOME/.claude-me browser=$HERE/claude-login-browser.sh acc=me machine=macbook" "$c"
+assert_eq "no Terminal window opened" 0 "$(count 'osascript:open')"
+assert_contains "quota cache refreshed" "claude-account[refresh][--ids][me]" "$c"
+assert_contains "success notification with the expiry date" "osascript:notify[-][Claude login me][Claude login me: renewed, valid until $D]" "$c"
+assert_eq "exactly one notification" 1 "$(count 'osascript:notify')"
+assert_contains "output is in the log" "signed in" "$(cat "$CLAUDE_RELOGIN_LOG")"
+assert_not_contains "token redacted in the log" "SECRETTOKEN" "$(cat "$CLAUDE_RELOGIN_LOG")"
+assert_not_contains "access token value redacted in the log" "abcdefghijklmnopqrstuvwxyz0123" "$(cat "$CLAUDE_RELOGIN_LOG")"
+assert_not_contains "no token in any recorded call (notification text included)" "SECRETTOKEN" "$c"
+
+echo "MacBook: a login that fails falls back to an interactive Terminal, closed again after success"
+as macbook; reset; : > "$CLAUDE_RELOGIN_LOG"
+STUB_LOGIN_RC=1 STUB_CLAUDE_OUT='sk-ant-oat01-SECRETTOKEN123' STUB_TERM_RESULT="ok 2027-01-01" STUB_WINID=777 bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+c=$(calls)
+assert_eq "rc 0" 0 "$rc"
+assert_contains "Terminal opened with the interactive login and a result file" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane --result-file '" "$c"
+assert_eq "exactly one window closed" 1 "$(count 'osascript:close')"
+assert_contains "...the one we opened, by id" "osascript:close[-][777]" "$c"
+assert_contains "success notification" "Claude login me: renewed, valid until 2027-01-01" "$c"
+assert_contains "log says why it fell back" "background login failed" "$(cat "$CLAUDE_RELOGIN_LOG")"
+assert_not_contains "no token in any recorded call" "SECRETTOKEN" "$c"
+reset; STUB_LOGIN_RC=1 STUB_TERM_RESULT="fail 1" bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+c=$(calls)
+assert_eq "fallback fails too: rc 1" 1 "$rc"
+assert_eq "...the window stays open" 0 "$(count 'osascript:close')"
+assert_contains "...failure notification with the log path" "Claude login me failed - retry with: claude-relogin me (log: $CLAUDE_RELOGIN_LOG)" "$c"
+reset; STUB_LOGIN_RC=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+assert_eq "window closed by the user before the result: rc 1, nothing closed" "1/0" "$rc/$(count 'osascript:close')"
+assert_contains "...failure notification" "osascript:notify[-][Claude login me][Claude login me failed" "$(calls)"
+reset; STUB_CLAUDE_HANG=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+assert_contains "a stuck background login (no output for the idle window) falls back to Terminal" "osascript:open" "$(calls)"
+assert_contains "...and says so in the log" "background login failed (rc 3)" "$(cat "$CLAUDE_RELOGIN_LOG")"
+reset; bash "$RELOGIN" me --machine macbook --visible >/dev/null
+assert_contains "--visible: today's Terminal window, no result file" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
+assert_eq "--visible: no notification, no close" "0/0" "$(count 'osascript:notify')/$(count 'osascript:close')"
+
+echo "mini: the workspace we created is closed after success; the outcome goes to the MacBook"
+as mini; reset
+STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null; rc=$?
+c=$(calls)
+assert_eq "rc 0" 0 "$rc"
+assert_contains "workspace created" "herdr[workspace][create][--cwd][$HOME][--label][relogin me][--focus]" "$c"
+assert_contains "pane run carries a result file" "herdr[pane][run][w9:1][bash '$HERE/claude-relogin.sh' me --machine mini --in-pane --result-file '" "$c"
+assert_eq "exactly one workspace closed" 1 "$(count 'herdr\[workspace\]\[close\]')"
+assert_contains "...the one created (w9), no other" "herdr[workspace][close][w9]" "$c"
+assert_contains "notification over ssh to the MacBook, text as quoted argv" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][osascript - 'Claude login me' 'Claude login me: renewed, valid until 2027-01-01']" "$c"
+reset; STUB_PANE_RESULT="fail 1" bash "$RELOGIN" me >/dev/null; rc=$?
+c=$(calls)
+assert_eq "failed login: rc 1, workspace stays open" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
+assert_contains "...failure notification to the MacBook" "Claude login me failed - retry with: claude-relogin me" "$c"
+reset; STUB_WS_GONE=1 bash "$RELOGIN" me >/dev/null; rc=$?
+c=$(calls)
+assert_eq "workspace closed by the user: rc 0, nothing closed, nobody notified" "0/0/0" "$rc/$(count 'herdr\[workspace\]\[close\]')/$(count 'osascript - ')"
+reset; STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me --visible >/dev/null
+c=$(calls)
+assert_eq "--visible: nothing closed, no notification" "0/0" "$(count 'herdr\[workspace\]\[close\]')/$(count 'osascript - ')"
+assert_not_contains "--visible: no result file in the pane command" "--result-file" "$c"
+
+echo "in-pane result file"
+as mini; reset; rf="$TMP/result-ok"; rm -f "$rf"
+bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null
+assert_eq "success writes ok + expiry date" "ok $D" "$(cat "$rf")"
+reset; rf="$TMP/result-fail"; rm -f "$rf"
+STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1
+assert_eq "failure writes fail" "fail 1" "$(cat "$rf")"
+
 echo "the login owner kills the tunnel on exit"
 as mini; reset
 export STUB_URL="$URL"
@@ -251,6 +355,14 @@ for a in me iu; do
   assert_contains "$a: prints the login command" "'claude' 'auth' 'login' '--claudeai'" "$out"
   assert_contains "$a: prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
 done
+as macbook; reset; out=$(bash "$RELOGIN" me --machine macbook --dry-run 2>&1)
+assert_eq "macbook dry run: no stub called" "" "$(calls)"
+assert_contains "macbook dry run: detached worker, no window" "would start detached: bash '$HERE/claude-relogin.sh' me --machine macbook --worker" "$out"
+assert_contains "macbook dry run: success notification" "'osascript' '-' 'Claude login me' 'Claude login me: renewed, valid until <date>'" "$out"
+assert_contains "macbook dry run: Terminal fallback and its close" "close of that window id" "$out"
+as mini; reset; out=$(bash "$RELOGIN" me --dry-run 2>&1)
+assert_contains "mini dry run: watcher closes the workspace" "'herdr' 'workspace' 'close'" "$out"
+assert_contains "mini dry run: notification over ssh" "osascript - " "$out"
 assert_contains "iu dry run: config dir unset" "'-u' 'CLAUDE_CONFIG_DIR' 'USER=" "$(bash "$RELOGIN" iu --dry-run 2>&1)"
 assert_contains "me dry run: config dir set" "CLAUDE_CONFIG_DIR=$HOME/.claude-me" "$(bash "$RELOGIN" me --dry-run 2>&1)"
 reset; out=$(bash "$RELOGIN" me --ask --dry-run 2>&1)

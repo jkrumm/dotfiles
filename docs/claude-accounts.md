@@ -319,27 +319,36 @@ mini and the MacBook keep separate Keychain items), so it runs on the machine th
 mini|macbook` reaches the other one over ssh.
 
 ```
-claude-relogin me              # open the login terminal on this machine, approve in the browser, done
+claude-relogin me              # log in on this machine behind the scenes, approve in the browser, get a notification
 claude-relogin me --ask        # push an approval dialog to the MacBook; its one click starts the same thing
+claude-relogin me --visible    # debugging: a Terminal window / herdr workspace that stays open, no notification
 claude-relogin me --dry-run    # print exactly what would run, run nothing
 ```
 
-1. It opens a real GUI-session terminal (the login Keychain is only reachable from there; never `ssh mini 'claude …'`):
-   a herdr workspace `relogin <id>` on the mini, a Terminal window on the MacBook. There it runs
-   `CLAUDE_CONFIG_DIR=<dir> BROWSER=scripts/claude-login-browser.sh claude auth login --claudeai` (`CLAUDE_CONFIG_DIR`
-   stays unset for `iu`; token env vars are stripped).
+1. **Where it runs.** The login Keychain is only reachable from the GUI session (never `ssh mini 'claude …'`).
+   - *MacBook:* no window. A detached worker runs `CLAUDE_CONFIG_DIR=<dir> BROWSER=scripts/claude-login-browser.sh claude
+     auth login --claudeai` (`CLAUDE_CONFIG_DIR` stays unset for `iu`; token env vars are stripped). Its output, with
+     anything token-shaped redacted, goes to `~/Library/Logs/claude-relogin.log`. If that cannot complete (the CLI fails,
+     the Keychain is locked, or there was no output for 10 minutes because the callback never arrived), it opens a
+     Terminal window with the interactive login, and closes exactly that window (by id) after success.
+   - *mini:* a herdr workspace `relogin <id>` runs the same command interactively. After success the watcher closes
+     that workspace (only the one it created) a few seconds later; a failed login leaves it open for the paste
+     fallback.
 2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
    helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
    Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the
-   browser is on the MacBook: it starts `ssh -N -R 127.0.0.1:<port>:localhost:<port> iumac` (loopback only) so the browser's localhost callback
-   lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own ssh connection. The login process (`claude-relogin --in-pane`) owns it and kills it on any exit
-   (trap on EXIT/INT/TERM); a detached watchdog covers an owner that vanished, closing it when the CLI stops listening or
-   after 45 minutes without a connection (an idle watchdog, not a deadline). If the tunnel dies while the login still
-   waits, the terminal says so and asks you to paste the code. A registry that cannot be read never falls back to a
-   guessed browser: the helper prints the URL instead.
+   browser is on the MacBook: it starts `ssh -N -R 127.0.0.1:<port>:localhost:<port> iumac` (loopback only) so the
+   browser's localhost callback lands on the mini's CLI, then `ssh iumac open -a <app> '<url>'`. The tunnel is its own
+   ssh connection. The login process (`claude-relogin --in-pane`) owns it and kills it on any exit (trap on
+   EXIT/INT/TERM); a detached watchdog covers an owner that vanished, closing it when the CLI stops listening or after 45
+   minutes without a connection (an idle watchdog, not a deadline). If the tunnel dies while the login still waits, the
+   terminal says so and asks you to paste the code. A registry that cannot be read never falls back to a guessed
+   browser: the helper prints the URL instead.
 3. **You click approve in that browser.** Nothing drives the browser or reads mail: automating the login itself is out
    of bounds (Anthropic's terms), a human always approves.
-4. It then runs `claude-account refresh --ids <id>` and prints the account's `usage` line and its expiry.
+4. It then runs `claude-account refresh --ids <id>` and sends a native notification to the MacBook (locally there, over
+   ssh from the mini): `Claude login me: renewed, valid until <date>`, or `Claude login me failed - retry with:
+   claude-relogin me (log: <path>)`. The text is built from the id, a date and the log path only, never from CLI output.
 
 If the forward or ssh fails, the helper prints the URL and the CLI prompt is still there: open the URL yourself and paste
 the code. **Manual fallback** (no script at all): on the machine that owns the login, in a herdr pane or Terminal,
@@ -366,6 +375,7 @@ human queue and its Slack notification, as every `ask-human` request does.
 | `login/<id>` WARN or FAIL, heartbeat `<id> login valid until … (N d left)` | the 30-day refresh token is near its end | `claude-relogin <id>` on that machine; the keepalive has already asked once per 24 h |
 | `login/<id>` WARN `login expiry unreadable` | Keychain locked (headless session), or the item has no `refreshTokenExpiresAt` | unlock the GUI session and rerun; `claude-account expiry` shows the reason |
 | `claude-relogin` prints the URL and a paste hint | no loopback port in the URL, the reverse forward was refused (port taken on the MacBook, `iumac` sshd down) or `open` failed there | open the URL in the account's browser yourself and paste the code at the CLI prompt |
+| no notification after a re-login, no window either | the windowless MacBook login is still waiting for your approval, or failed | `~/Library/Logs/claude-relogin.log` says which; a stuck one falls back to a Terminal window after 10 minutes without output, or run `claude-relogin <id> --visible` |
 | the re-login dialog never appears | MacBook asleep or unreachable | the request stays in the human queue (`make human-queue` on the MacBook) and Slack; or run `claude-relogin <id>` there |
 | `launcher/agent-gateway` FAIL | session-runner lost its `claude-account pick` call (or agent-gateway not deployed with it) | check agent-gateway `master`, redeploy |
 | `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
