@@ -2,8 +2,8 @@
 
 # Claude Code Statusline — 2 line layout
 #
-# Line 1: Auth (MAX/IU) · Model · Effort | Context (usable) | Session tokens | Cache hit | Duration | Usage (5h/wk, ↑pace)
-#         | other account · pool · routing reason (more than one account enabled; files only)
+# Line 1: Auth (MAX/IU) · Model · Effort | Context (usable) | Session tokens | Cache hit | Duration
+#         | accounts: <id> <5h>/<wk> per enabled account (own = bold, live), ∑<pool>% (more than one account)
 # Line 2: CWD · Git branch & dirty flag
 
 input=$(cat)
@@ -197,8 +197,7 @@ _now_s=$(date +%s)
 _5h_pct="$rl_5h"
 _5h_reset="$rl_5h_reset"
 _wk_pct="$rl_wk"
-usage_parts=""
-pace_hint=""
+login_warn=""
 
 if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
   _fetched_at=0
@@ -217,7 +216,7 @@ if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
       (.seven_day.utilization // "" | if . == "" then . else round end)
     ] | map(tostring) | join("\u001f")' "$_USAGE_ACCOUNTS" 2>/dev/null)
   elif [ -f "$_USAGE_CACHE" ] && jq -e '.error != null' "$_USAGE_CACHE" >/dev/null 2>&1; then
-    usage_parts="\033[33m⚠ claude.ai login${reset}"
+    login_warn="\033[33m⚠ claude.ai login${reset}"
   elif [ -f "$_USAGE_CACHE" ]; then
     IFS=$'\x1f' read -r _5h_pct _5h_reset _wk_pct < <(jq -r '[
       (.five_hour.utilization // "" | if . == "" then . else round end),
@@ -256,80 +255,80 @@ if [ -n "$rl_5h" ]; then
   fi
 fi
 
-if [ -n "$_5h_pct" ]; then
-  if [ "$_5h_pct" -lt 50 ]; then
-    _uc="\033[32m"
-  elif [ "$_5h_pct" -lt 75 ]; then
-    _uc="\033[33m"
-  else
-    _uc="\033[31m"
-  fi
-
-  # Minutes until the 5h window resets (epoch seconds; anything else is skipped)
-  _mins_left=""
-  if [[ "$_5h_reset" =~ ^[0-9]+$ ]] && [ "$_5h_reset" -gt "$_now_s" ]; then
-    _mins_left=" ↺$(( (_5h_reset - _now_s) / 60 ))m"
-  fi
-
-  usage_parts="${_uc}${_5h_pct}%${reset}/5h${_mins_left}"
-  [ -n "$_wk_pct" ] && usage_parts="${usage_parts} · ${_wk_pct}%/wk"
-
-  # Weekly pace hint, own account: the picker's over-pace rule (claude-accounts.ts overPace) — weekly% more than
-  # PACE_MARGIN (15) points ahead of the share of the 7-day window already gone. Needs the live weekly reset.
-  if [ -n "$rl_wk" ] && [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && [ "$rl_wk_reset" -gt "$_now_s" ]; then
-    _elapsed=$(( 100 - ((rl_wk_reset - _now_s) * 100 + 604799) / 604800 ))   # floor of the elapsed share
-    [ "$_elapsed" -lt 0 ] && _elapsed=0
-    [ "$rl_wk" -gt $(( _elapsed + 15 )) ] && pace_hint=" \033[33m↑pace${reset}"
-  fi
+# Minutes until the own 5h window resets (epoch seconds; anything else is skipped). Rendered after the own
+# entry only while the line stays within _MAX_COLS (see the output section).
+countdown=""
+if [ -n "$_5h_pct" ] && [[ "$_5h_reset" =~ ^[0-9]+$ ]] && [ "$_5h_reset" -gt "$_now_s" ]; then
+  countdown=" ↺$(( (_5h_reset - _now_s) / 60 ))m"
 fi
 
-# ── Other account, pool, routing reason (files only) ───────────────────────────
-# Only with more than one account enabled (the badge is empty otherwise). Reads usage_accounts.json, which
-# fetch_usage.py writes from `claude-account usage --json` (plan + last known values with their age). Nothing
-# here spawns claude-account/bun or touches the network in the render; the file is rewritten in the background
-# at most once a minute. Missing/unreadable file = no segment, no error.
-_pct_color() {   # sets _pc from a 0-100 figure, same thresholds as the own numbers
+# ── Accounts segment (files only) ──────────────────────────────────────────────
+# One final segment: every enabled account as `<id> <5h>/<wk>` in registry order, then `∑<pool>%` (plan-weighted
+# weekly use, the formula of Tinycast's usage/summary.ts: weight = plan multiple, all 1 when one is unknown).
+# The own account uses the session's live numbers (stdin, or the pre-first-response fallback) and is bold; the
+# others come from usage_accounts.json (fetch_usage.py, from `claude-account usage --json`), grey when the sample is
+# over 1 h old or the login failed (✗login). No pool for a single account. Nothing here spawns claude-account/bun
+# or touches the network; a missing/unreadable file leaves just the own entry, no error.
+_pct_color() {   # sets _pc from a 0-100 figure: green < 50, yellow < 75, red
   if [ "$1" -lt 50 ]; then _pc="\033[32m"; elif [ "$1" -lt 75 ]; then _pc="\033[33m"; else _pc="\033[31m"; fi
 }
-others_part=""
+_num() {         # sets _n: a coloured figure ("\033[39m" resets only the colour, so the bold of the own entry survives)
+  if [ -n "$1" ]; then _pct_color "$1"; _n="${_pc}$1\033[39m"; else _n="-"; fi
+}
+# $1 id ("" = unknown) $2 5h $3 wk $4 stale(1) $5 login failed(1) $6 own(1): sets _seg
+_account_entry() {
+  local label="${1:+$1 }" body
+  if [ "$4" = "1" ] || [ "$5" = "1" ]; then
+    body="\033[90m${label}${2:--}/${3:--}"
+    [ "$5" = "1" ] && body="${body} ✗login"
+    body="${body}\033[39m"
+  else
+    _num "$2"; local n5="$_n"; _num "$3"
+    body="${label}${n5}/${_n}"
+  fi
+  if [ "$6" = "1" ]; then _seg="\033[1m${body}@CD@${reset}"; else _seg="${body}${reset}"; fi
+}
+accounts_part=""
 pool_part=""
-if [ "$auth_mode" = "MAX" ] && [ -n "$account_badge" ] && [ -n "$account_id" ] && [ "$account_id" != "?" ]; then
-  _acc_stamp="$_SL_DIR/usage_accounts.stamp"
-  _acc_at=$(cat "$_acc_stamp" 2>/dev/null)
-  if [ $(( _now_s - ${_acc_at:-0} )) -gt 60 ]; then
-    mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_acc_stamp"
-    # Bounded (20 s) so a wedged run cannot pile up; skipped under the CLAUDE_SL_DIR test seam (no real refresher).
-    if [ -z "${CLAUDE_SL_DIR:-}" ]; then
-      _bound=(perl -e 'alarm 20; exec @ARGV')
-      command -v timeout >/dev/null 2>&1 && _bound=(timeout 20)
-      command -v gtimeout >/dev/null 2>&1 && _bound=(gtimeout 20)
-      ( "${_bound[@]}" /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" --accounts >/dev/null 2>&1 ) &
-      disown 2>/dev/null
+if [ "$auth_mode" = "MAX" ]; then
+  _own_id=""
+  [[ "$account_id" =~ ^[a-z][a-z0-9-]{0,15}$ ]] && _own_id="$account_id"
+  if [ -n "$account_badge" ] && [ -n "$_own_id" ]; then
+    _acc_stamp="$_SL_DIR/usage_accounts.stamp"
+    _acc_at=$(cat "$_acc_stamp" 2>/dev/null)
+    if [ $(( _now_s - ${_acc_at:-0} )) -gt 60 ]; then
+      mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_acc_stamp"
+      # Bounded (20 s) so a wedged run cannot pile up; skipped under the CLAUDE_SL_DIR test seam (no real refresher).
+      if [ -z "${CLAUDE_SL_DIR:-}" ]; then
+        _bound=(perl -e 'alarm 20; exec @ARGV')
+        command -v timeout >/dev/null 2>&1 && _bound=(timeout 20)
+        command -v gtimeout >/dev/null 2>&1 && _bound=(gtimeout 20)
+        ( "${_bound[@]}" /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" --accounts >/dev/null 2>&1 ) &
+        disown 2>/dev/null
+      fi
     fi
   fi
+  _own_live=0
+  [ -n "$_5h_pct$_wk_pct" ] && _own_live=1
+  _own_done=0
   if [ -f "$_USAGE_ACCOUNTS" ]; then
-    # Line 1: pool weekly use (plan-weighted like Tinycast's summary.ts; every account weighs 1 when a plan multiple
-    # is unknown). Then one line per OTHER enabled account: id, 5h, wk, stale (sample > 1 h old), login failed.
-    # A window whose reset has passed counts as 0. The own weekly figure is the session's live one.
+    # First line: the pool (empty below two enabled accounts). Then one line per enabled account:
+    # id, 5h, wk, stale (sample > 1 h old), login failed. A window whose reset has passed counts as 0.
+    # The own weekly figure in the pool is the session's live one.
     {
       IFS= read -r _pool_pct
       while IFS=$'\x1f' read -r _oid _o5 _ow _ostale _obad; do
         [[ "$_oid" =~ ^[a-z][a-z0-9-]{0,15}$ ]] || continue
-        if [ -z "$_o5$_ow" ] && [ "$_obad" != "1" ]; then continue; fi
-        _o5s="${_o5:--}"; _ows="${_ow:--}"
-        if [ "$_ostale" = "1" ] || [ "$_obad" = "1" ]; then
-          _seg="\033[90m${_oid} ${_o5s}/${_ows}"
-          [ "$_obad" = "1" ] && _seg="${_seg} ✗login"
-          _seg="${_seg}${reset}"
-        else
-          _c5="" ; _cw=""
-          [ -n "$_o5" ] && { _pct_color "$_o5"; _c5="$_pc"; }
-          [ -n "$_ow" ] && { _pct_color "$_ow"; _cw="$_pc"; }
-          _seg="${_oid} ${_c5}${_o5s}${reset}/${_cw}${_ows}${reset}"
+        _own=0
+        if [ "$_oid" = "$_own_id" ]; then
+          _own=1
+          if [ "$_own_live" = "1" ]; then _o5="$_5h_pct"; _ow="$_wk_pct"; _ostale=0; _obad=0; _own_done=1; fi
         fi
-        others_part="${others_part:+$others_part · }${_seg}"
+        if [ -z "$_o5$_ow" ] && [ "$_obad" != "1" ]; then continue; fi
+        _account_entry "$_oid" "$_o5" "$_ow" "$_ostale" "$_obad" "$_own"
+        accounts_part="${accounts_part:+$accounts_part · }${_seg}"
       done
-    } < <(jq -r --argjson now "$_now_s" --arg own "$account_id" --arg ownwk "$rl_wk" '
+    } < <(jq -r --argjson now "$_now_s" --arg own "$_own_id" --arg ownwk "$_wk_pct" '
       def live($v; $rs): if $v == null then null elif ($rs != null and $rs <= $now) then 0 else ($v | round) end;
       [ .accounts | to_entries[] | select(.value.enabled != false) | .key as $id | .value as $v
         | { id: $id,
@@ -339,26 +338,23 @@ if [ "$auth_mode" = "MAX" ] && [ -n "$account_badge" ] && [ -n "$account_id" ] &
             mult: ([($v.plan // "") | scan("([0-9]+)x"; "i")[0] | tonumber] | .[0]),
             stale: (($v.sampled_at // 0) < ($now - 3600)),
             bad: ($v.auth_ok == false) } ] as $acc
-      | if ($acc | length) < 2 then empty else
-          ($acc | all(.mult != null)) as $weighted
-          | ($acc | map(select(.wk != null) | . + {w: (if $weighted then .mult else 1 end)})) as $known
-          | (if ($known | length) == 0 then ""
-             else (($known | map(.w * .wk) | add) / ($known | map(.w) | add) | round | tostring) end),
-            ($acc[] | select(.id != $own)
-              | [.id, (.five // "" | tostring), (.wk // "" | tostring), (if .stale then "1" else "0" end), (if .bad then "1" else "0" end)]
-              | join("\u001f"))
-        end' "$_USAGE_ACCOUNTS" 2>/dev/null)
+      | ($acc | all(.mult != null)) as $weighted
+      | ($acc | map(select(.wk != null) | . + {w: (if $weighted then .mult else 1 end)})) as $known
+      | (if ($acc | length) < 2 or ($known | length) == 0 then ""
+         else (($known | map(.w * .wk) | add) / ($known | map(.w) | add) | round | tostring) end),
+        ($acc[] | [.id, (.five // "" | tostring), (.wk // "" | tostring), (if .stale then "1" else "0" end), (if .bad then "1" else "0" end)]
+          | join("\u001f"))' "$_USAGE_ACCOUNTS" 2>/dev/null)
     if [ -n "$_pool_pct" ]; then
       _pct_color "$_pool_pct"
-      pool_part="pool ${_pc}${_pool_pct}%${reset}"
+      pool_part="∑${_pc}${_pool_pct}%${reset}"
     fi
   fi
-fi
-
-# Routing reason this session started with (CLAUDE_ACCOUNT_REASON: the picker's reason, set by c/cs/cf, claude() and rd).
-reason_part=""
-if [[ "${CLAUDE_ACCOUNT_REASON:-}" =~ ^[a-z][a-z0-9-]{0,23}$ ]]; then
-  reason_part="\033[90m${account_badge}·${CLAUDE_ACCOUNT_REASON}${reset}"
+  # No file / own row absent: the own entry alone, first.
+  if [ "$_own_live" = "1" ] && [ "$_own_done" = "0" ]; then
+    _account_entry "$_own_id" "$_5h_pct" "$_wk_pct" 0 0 1
+    accounts_part="${_seg}${accounts_part:+ · $accounts_part}"
+  fi
+  [ -n "$pool_part" ] && accounts_part="${accounts_part} · ${pool_part}"
 fi
 
 # ── Prompt cache ───────────────────────────────────────────────────────────────
@@ -400,26 +396,24 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ── Output ─────────────────────────────────────────────────────────────────────
-# $1 = pace hint, $2 = routing reason: the two extras that are dropped first when the line gets too wide.
+# $1 = the own entry's 5h reset countdown (" ↺90m" or ""): kept only while line 1 fits _MAX_COLS.
+_MAX_COLS=130
 _compose_line1() {
   local l="${auth_mode}${account_badge:+ $account_badge} · ${model} · ${effort} | ${used_k}k/${usable_k}k ${pct_colored}"
-  local extras="${others_part}"
-  [ -n "$pool_part" ] && extras="${extras:+$extras · }${pool_part}"
-  [ -n "$2" ] && extras="${extras:+$extras · }$2"
   [ -n "$tokens_fmt" ] && l="${l} | Σ${tokens_fmt}"
   [ -n "$cache_part" ] && l="${l} | ${cache_part}"
   l="${l} | ${duration}"
-  [ -n "$usage_parts" ] && l="${l} | ${usage_parts}$1"
-  [ -n "$extras" ] && l="${l} | ${extras}"
+  [ -n "$login_warn" ] && l="${l} | ${login_warn}"
+  [ -n "$accounts_part" ] && l="${l} | ${accounts_part//@CD@/$1}"
   line1="$l"
 }
 # Visible columns of an escaped string: colour codes stripped, one column per UTF-8 character.
 _visible_width() {
   printf '%b' "$1" | sed $'s/\033\\[[0-9;]*m//g' | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '
 }
-_compose_line1 "$pace_hint" "$reason_part"
-if [ -n "$pace_hint$reason_part" ] && [ "$(_visible_width "$line1")" -gt 150 ]; then
-  _compose_line1 "" ""
+_compose_line1 "$countdown"
+if [ -n "$countdown" ] && [ "$(_visible_width "$line1")" -gt "$_MAX_COLS" ]; then
+  _compose_line1 ""
 fi
 echo -e "$line1"
 echo -e "${cwd_display}${git_section}"

@@ -15,7 +15,7 @@ The script receives a JSON payload on stdin with session context and prints
 ## Output Format
 
 ```
-MAX · Opus 5.5 · high | 120k/970k 12% | Σ594k | ⚡93% | 25min | 43%/5h ↺90m · 17%/wk
+MAX ME · Opus 5.5 · high | 120k/970k 12% | Σ594k | ⚡93% | 25min | iu 2/90 · me 43/17 ↺90m · ∑76%
 dotfiles | * master
 ```
 
@@ -27,23 +27,25 @@ dotfiles | * master
 - Total tokens (main loop + subagents, cache reads excluded), formatted as `308k` or `1.2M`
 - Prompt cache: `⚡{hit ratio}` from stdin `.prompt_cache`, `cold` once the TTL lapsed
 - Session duration
-- Subscription usage: `26%/5h ↺23m · 14%/wk` — Max only (below). Over pace
-  (weekly % more than 15 points ahead of the elapsed share of the 7-day window,
-  the picker's rule) the own weekly figure gets `↑pace`
-- Two-account extras, only with more than one account enabled: `| me 21/19 · pool 73% · ME·pace` —
-  the other account's 5h/wk (grey when its sample is over 1 h old, `✗login` when its login
-  failed, absent without figures), the plan-weighted weekly pool (weight = plan multiple,
-  `max20x` 20 / `max5x` 5; same formula as Tinycast's `usage/summary.ts`), and the routing
-  reason from `CLAUDE_ACCOUNT_REASON` (absent when unset). If line 1 would pass ~150 visible
-  columns the reason and `↑pace` are dropped first
+- Accounts, one final segment (Max only): `iu 2/90 · me 41/22 ↺90m · ∑76%` — every enabled
+  account as `<id> <5h%>/<wk%>` in registry order, then `∑<pool>%` (weekly use weighted by
+  plan multiple, `max20x` 20 / `max5x` 5, all 1 when one is unknown; the formula of Tinycast's
+  `usage/summary.ts`; only with more than one account). Numbers are coloured by the context
+  thresholds (green < 50, yellow < 75, red). The session's own account is **bold** and shows
+  the live `rate_limits` numbers from stdin; the others come from `usage_accounts.json` and go
+  grey when their sample is over 1 h old, plus `✗login` when their login failed (omitted
+  without figures). A single account shows `<id> 5h/wk` and no `∑`. The own 5h reset countdown
+  ` ↺90m` follows the own entry only while line 1 stays within 130 visible columns (typical
+  line: about 105 with it). `⚠ claude.ai login` (fallback fetch failed) stays as its own segment.
+  The routing reason (`CLAUDE_ACCOUNT_REASON`) and any pace hint are not rendered.
 
 **Line 2** — Location:
 - CWD (home-shortened, worktree-aware: `WT·SE proj/path` for student-enrolment worktrees)
 - Git branch + status: `✓` clean, `*` dirty, `!!` merge conflicts
 
-### Two-account segments (files only)
+### Accounts segment (files only)
 
-The render reads `usage_accounts.json` and never spawns `claude-account`/bun or the network.
+The render reads `usage_accounts.json` for the other accounts and the pool, and never spawns `claude-account`/bun or the network.
 `fetch_usage.py --accounts` rewrites it in the background, at most once a minute
 (`usage_accounts.stamp`), from `claude-account usage --json`: per account `plan`, and per
 window the fresh `utilization` plus the last known `value`/`value_resets_at_epoch` and
