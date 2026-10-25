@@ -203,9 +203,14 @@ One `claude` function serves both machines (`config/zsh/claude-auth.zsh`): the p
 never picks. `ca`/`claude_iu` call the binary through `env`, bypassing the function by design.
 
 **Trust.** A fresh config dir asks "trust this folder?" on the first start in a path and `herdr agent start` then
-reports not-ready. `make claude-accounts-setup` runs `scripts/claude-pretrust.sh "$HOME"` (atomic jq write of
-`.projects[$HOME].hasTrustDialogAccepted` in every registered account that has a `.claude.json`; re-run after the first
-`/login`); `fan-worktree.sh` does the same for each worktree. Other project paths still prompt once per account.
+reports not-ready. `make claude-accounts-setup` runs two steps (re-run both after the first `/login` of an account, since
+an account without a `.claude.json` is skipped): `scripts/claude-pretrust.sh "$HOME"` (atomic jq write of
+`.projects[$HOME].hasTrustDialogAccepted` in every registered account that has a `.claude.json`) and
+`scripts/claude-trust-sync.sh`, which copies `hasTrustDialogAccepted=true` from the default `~/.claude.json` into each
+extra account for exactly the project paths the default already trusts. It never loosens: it sets true only where the
+default says true (false or unknown paths are left alone), touches no other key, writes one atomic replace per account
+(original mode kept) and nothing at all when the account is already in sync. `fan-worktree.sh` pre-trusts each new
+worktree. A folder the default has never opened still prompts once per account.
 
 Known gaps:
 

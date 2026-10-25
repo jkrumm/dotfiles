@@ -1406,6 +1406,8 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 	done
 	@# A fresh account dir asks "trust this folder?" on first start in $$HOME and that blocks `herdr agent start`.
 	@bash $(DOTFILES_DIR)/scripts/claude-pretrust.sh "$(HOME)" || echo "    ✗ could not pre-trust $(HOME) in every account's .claude.json"
+	@# ...and so does every other folder the default account already trusts (never loosens; skips accounts not logged in yet).
+	@bash $(DOTFILES_DIR)/scripts/claude-trust-sync.sh || echo "    ✗ could not sync folder trust into every account's .claude.json"
 
 # Read-only proof that every launcher/spawner lands on the intended account (also run by `make doctor`).
 .PHONY: claude-accounts-verify claude-accounts-stamp claude-accounts-e2e claude-accounts-keepalive-setup claude-accounts-keepalive-teardown
@@ -2305,11 +2307,12 @@ fan-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
 
-# Hermetic suite for the `claude` function's account marker (stubbed claude / claude-account / herdr).
+# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr) and the folder-trust sync.
 .PHONY: claude-launcher-test
 claude-launcher-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
 
 .PHONY: brew-service-test
 brew-service-test:
