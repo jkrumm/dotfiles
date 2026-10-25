@@ -80,7 +80,7 @@ picks() { wc -l < "$PICKS" | tr -d ' '; }
 zrun() {
   local mode=$1 snippet=$2 flags=-fc
   [[ $mode == interactive ]] && flags=-fic
-  ( cd "$TMP/work" && HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
+  ( cd "${ZCWD:-$TMP/work}" && HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
       zsh $flags "source '$AUTH'; source '$LAUNCH'; $snippet" 2>&1 )
 }
 echo "not-cache" > "$TMP/xdg/secrets/backend"
@@ -134,6 +134,13 @@ assert_contains "c -c pins too" "cfg=$ME picked=me" "$out"
 assert_eq "c -c: no pick" 0 "$(picks)"
 reset; out=$(STUB_SESSION=me zrun interactive 'claude --continue')
 assert_eq "--continue without a known session falls through to the pick" 1 "$(picks)"
+
+echo "--continue looks the session up by the physical cwd, not a symlinked \$PWD"
+ln -s "$TMP/work" "$TMP/link"
+phys=$(cd -P "$TMP/work" && pwd)
+reset; out=$(ZCWD="$TMP/link" STUB_LATEST=1234-abcd STUB_SESSION=me zrun interactive 'claude --continue')
+assert_contains "symlinked cwd: still pinned to the session's account" "cfg=$ME picked=me" "$out"
+assert_eq "symlinked cwd: latest got the resolved path" "latest $phys" "$(grep '^latest' "$CALLS")"
 
 echo "untouched invocations"
 reset; out=$(zrun plain 'claude --foo')

@@ -193,7 +193,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
 cache stays warm and the work never changes provider. `--continue` / `-c` pins the same way: it resumes the newest
-session of the cwd, so `claude-account latest "$PWD"` finds that session (newest `<id>.jsonl` by mtime under the shared
+session of the cwd, so `claude-account latest "${PWD:A}"` (the physical path: Claude Code keys the transcript dir by the resolved cwd, so a symlinked `$PWD` would miss) finds that session (newest `<id>.jsonl` by mtime under the shared
 `~/.claude/projects/<cwd, every non-alphanumeric as '-'>/`) and the lookup above gives its account. Both lookups fall
 through to the normal pick when they find nothing: no transcript for the cwd, or a `session_env` line older than the
 hook log's 3-day retention (a `--continue` into a session older than that re-picks, and the context is cold anyway).
@@ -235,8 +235,8 @@ an account without a `.claude.json` is skipped): `scripts/claude-pretrust.sh "$H
 `.projects[$HOME].hasTrustDialogAccepted` in every registered account that has a `.claude.json`) and
 `scripts/claude-trust-sync.sh`, which copies `hasTrustDialogAccepted=true` from the default `~/.claude.json` into each
 extra account for exactly the project paths the default already trusts. It never loosens: it sets true only where the
-default says true (false or unknown paths are left alone), touches no other key, writes one atomic replace per account
-(original mode kept) and nothing at all when the account is already in sync. `fan-worktree.sh` pre-trusts each new
+default says true (false or unknown paths are left alone; entries that are not JSON objects are ignored on both sides), touches no other key, writes one atomic replace per account
+(original mode kept) and nothing at all when the account is already in sync. An account dir it cannot write in prints a diagnostic and makes the run exit 1. `fan-worktree.sh` pre-trusts each new
 worktree. A folder the default has never opened still prompts once per account.
 
 Known gaps:
@@ -294,7 +294,7 @@ and MacBook list). Per enabled account:
 per enabled account: the OAuth usage endpoint first (source 3), and when that gives no sample `claude auth status` for that account's `CLAUDE_CONFIG_DIR`. The two are decoupled: the auth mark follows the verdict, never the sample. loggedIn=true clears the mark (`auth-ok`), loggedIn=false sets it (`auth-failed`), and a fresh sample or a statusline `record` also clears it (both prove the login). Both calls cost 0 tokens and prime no window. The run exits 1 when an account got neither a sample nor a verdict, and also when the account is logged in but the endpoint gave no sample and its stored sample is older than 6 h (or missing): a dying feed must turn the jobrun grade red instead of fading out quietly. An endpoint failure with a clean `auth status` and a sample younger than 6 h is exit 0. stderr names the account and the age. `claude auth status` is also what keeps an idle account's OAuth login alive. `--all` ignores the 10-minute freshness and the auth cooldown but not the
 5-minute claim. The interactive and non-interactive picks run the same refresh opportunistically (detached, same
 claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/claude-accounts-keepalive.log`
-(a green run prints nothing).
+(a green run prints nothing; the detached refresh a pick spawns appends its stdout/stderr to the same file).
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 

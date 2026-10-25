@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -83,6 +83,19 @@ describe("latestSessionId", () => {
     utimesSync(join(d, "notes.txt"), 9000, 9000)
     expect(latestSessionId(projects, cwd)).toBe("aaaa-1")
     expect(latestSessionId(projects, "/nowhere")).toBeNull()
+    rmSync(projects, { recursive: true })
+  })
+})
+
+describe("latestSessionId vanished entries", () => {
+  test("a transcript that disappears between readdir and stat is skipped, the others still count", () => {
+    const projects = tmp()
+    const d = join(projects, "-work-x")
+    mkdirSync(d, { recursive: true })
+    writeFileSync(join(d, "live-1.jsonl"), "")
+    utimesSync(join(d, "live-1.jsonl"), 1000, 1000)
+    symlinkSync(join(d, "gone-target"), join(d, "dead-2.jsonl")) // listed by readdir, stat throws ENOENT
+    expect(latestSessionId(projects, "/work/x")).toBe("live-1")
     rmSync(projects, { recursive: true })
   })
 })
@@ -729,6 +742,16 @@ describe("CLI (isolated HOME)", () => {
     expect(cli(["latest", join(home, "elsewhere")]).rc).toBe(1)
   })
 
+  test("the detached refresh a pick spawns appends its stderr to the keepalive log", async () => {
+    seed(20 * 60_000) // stale sample: the pick claims iu and refreshes it in a detached child
+    const log = join(home, "Library", "Logs", "claude-accounts-keepalive.log")
+    rmSync(log, { force: true })
+    const r = cli(["pick", "--lane", "wave"])
+    expect(r.out).toBe("unset CLAUDE_CONFIG_DIR") // the child's output never reaches the pick's stdout
+    for (let i = 0; i < 100 && !(existsSync(log) && readFileSync(log, "utf8").includes("no Keychain token")); i++) await Bun.sleep(50)
+    expect(readFileSync(log, "utf8")).toContain("refresh iu: no Keychain token")
+    seed(60_000)
+  })
   test("pick prints the line; interactive and wave both give unset", () => {
     seed(60_000)
     expect(cli(["pick", "--lane", "wave"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })

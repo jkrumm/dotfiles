@@ -72,6 +72,9 @@ export const registryPath = () => process.env.CLAUDE_ACCOUNTS_REGISTRY ?? join(i
 export const cacheDir = () => process.env.CLAUDE_ACCOUNTS_CACHE_DIR ?? join(homedir(), ".cache", "claude-accounts")
 export const picksPath = () => process.env.CLAUDE_ACCOUNTS_PICKS ?? join(homedir(), ".local", "share", "claude-accounts", "picks.jsonl")
 
+/** The keepalive job's log: its stdout/stderr, and the stdio of the detached refresh a pick spawns. */
+export const keepaliveLogPath = () => join(homedir(), "Library", "Logs", "claude-accounts-keepalive.log")
+
 export const expandHome = (p: string) => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p)
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
@@ -697,7 +700,12 @@ export function latestSessionId(projectsDir: string, cwd: string): string | null
     for (const f of readdirSync(dir)) {
       const m = /^([A-Za-z0-9_-]+)\.jsonl$/.exec(f)
       if (!m) continue
-      const mtime = statSync(join(dir, f)).mtimeMs
+      let mtime: number
+      try {
+        mtime = statSync(join(dir, f)).mtimeMs
+      } catch {
+        continue // vanished between readdir and stat (a session cleaning up): skip it, keep the others
+      }
       if (!best || mtime > best.mtime) best = { id: m[1], mtime }
     }
   } catch {

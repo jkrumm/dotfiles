@@ -13,7 +13,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/trust-sync-test.XXXXXX")" || exit 2
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude-me" "$HOME/.claude-x"
 cat > "$TMP/registry.json" <<'JSON'
-{"accounts":{"iu":{"dir":null,"enabled":true},"me":{"dir":"~/.claude-me","enabled":true},"x":{"dir":"~/.claude-x","enabled":true},"gone":{"dir":"~/.claude-gone","enabled":true}}}
+{"accounts":{"iu":{"dir":null,"enabled":true},"me":{"dir":"~/.claude-me","enabled":true},"x":{"dir":"~/.claude-x","enabled":true},"w":{"dir":"~/.claude-w","enabled":true},"u":{"dir":"~/.claude-u","enabled":true},"gone":{"dir":"~/.claude-gone","enabled":true}}}
 JSON
 export CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
 run() { bash "$SYNC" 2>&1; }
@@ -58,6 +58,33 @@ assert_eq "second run: exit 0" 0 "$rc"
 assert_eq "second run: byte-identical" "$(cat "$TMP/me.before")" "$(cat "$me")"
 assert_eq "second run: no rewrite at all" "$m1" "$(stat -f %m "$me" 2>/dev/null || stat -c %Y "$me")"
 case $out in *"already in sync"*) ok "second run says in sync" ;; *) bad "second run says in sync" "$out" ;; esac
+
+echo "non-object project entries"
+# default: /s a string, /n null, /arr an array (none can be trusted); the extra has junk where records belong
+cp "$HOME/.claude.json" "$TMP/default.clean"
+jq '.projects["/s"] = "str" | .projects["/n"] = null | .projects["/arr"] = [1]' "$TMP/default.clean" > "$HOME/.claude.json"
+mkdir -p "$HOME/.claude-w"
+echo '{"projects":{"/a":"weird","/b":null,"/d":[]}}' > "$HOME/.claude-w/.claude.json"
+out=$(run); rc=$?
+w="$HOME/.claude-w/.claude.json"
+assert_eq "non-object entries: exit 0, no jq error" "0" "$rc"
+case $out in *"jq: error"*) bad "no jq error on stderr" "$out" ;; *) ok "no jq error on stderr" ;; esac
+assert_eq "extra's string entry left alone" '"weird"' "$(jq -c '.projects["/a"]' "$w")"
+assert_eq "extra's array entry left alone" '[]' "$(jq -c '.projects["/d"]' "$w")"
+assert_eq "extra's null entry becomes trusted" true "$(t "$w" /b)"
+assert_eq "default's non-object entries are never copied" '["/a","/b","/d"]' "$(jq -c '.projects | keys' "$w")"
+cp "$TMP/default.clean" "$HOME/.claude.json"
+
+echo "unwritable account dir"
+if [[ $(id -u) == 0 ]]; then ok "skipped (root can write anywhere)"; else
+  mkdir -p "$HOME/.claude-u"; echo '{"numStartups":1}' > "$HOME/.claude-u/.claude.json"; chmod 555 "$HOME/.claude-u"
+  out=$(run); rc=$?
+  assert_eq "unwritable dir: exit 1" 1 "$rc"
+  case $out in *"cannot write in $HOME/.claude-u"*) ok "diagnostic names the directory" ;; *) bad "diagnostic names the directory" "$out" ;; esac
+  assert_eq "unwritable dir: file untouched" '{"numStartups":1}' "$(cat "$HOME/.claude-u/.claude.json")"
+  assert_eq "the other accounts are still processed" true "$(t "$me" /a)"
+  chmod 755 "$HOME/.claude-u"; rm -rf "$HOME/.claude-u"
+fi
 
 echo "failure modes"
 echo 'not json' > "$HOME/.claude-x/.claude.json"

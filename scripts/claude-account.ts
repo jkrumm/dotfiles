@@ -16,11 +16,11 @@
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
 // (never copied, logged or written back; on HTTP 401 `claude auth status` renews it first, one retry); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
 import { spawnSync } from "node:child_process"
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -98,6 +98,23 @@ async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; a
   })
 }
 
+/** Detached background refresh of claimed ids; its stdout/stderr append to the keepalive log (a failure there used to vanish). */
+function spawnDetachedRefresh(ids: string[]): void {
+  let fd: number | null = null
+  try {
+    mkdirSync(dirname(keepaliveLogPath()), { recursive: true })
+    fd = openSync(keepaliveLogPath(), "a")
+  } catch {
+    // an unwritable log must not stop the refresh: fall back to discarding its output
+  }
+  try {
+    const out = fd ?? "ignore"
+    Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", out, out], detached: true }).unref()
+  } finally {
+    if (fd !== null) closeSync(fd)
+  }
+}
+
 function usage(reg: Registry, json: boolean): void {
   const cache = readClaudeJson(reg, loadCache())
   const now = Date.now()
@@ -146,7 +163,7 @@ async function main(argv: string[]): Promise<number> {
           reg, lane, now, cache: cache0,
           claim: (ids) => claimRefresh(reg, ids, now, cache0),
           runSync: async (ids) => void (await refresh(reg, { claimed: ids })),
-          detach: (ids) => Bun.spawn([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")], { stdio: ["ignore", "ignore", "ignore"], detached: true }).unref(),
+          detach: (ids) => spawnDetachedRefresh(ids),
         })
       } catch (e) {
         console.error(`claude-account: refresh skipped: ${(e as Error).message}`) // a pick must always answer; go on with the current cache
