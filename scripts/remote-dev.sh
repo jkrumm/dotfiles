@@ -725,6 +725,12 @@ for w in workspaces:
     local model start_cmd i=0 started=""
     model="${RD_WAVE_MODEL:-sonnet}"
     start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
+    # RD_WAVE_EFFORT (low|medium|high|xhigh|max) sets the wave's reasoning effort; unset = Claude's default.
+    case "${RD_WAVE_EFFORT:-}" in
+      "") ;;
+      low|medium|high|xhigh|max) start_cmd+=" --effort '$RD_WAVE_EFFORT'" ;;
+      *) die "RD_WAVE_EFFORT must be low|medium|high|xhigh|max (got '$RD_WAVE_EFFORT')" ;;
+    esac
     agent_pane_setup "$pane" fan
     while (( i < 10 )); do
       sleep 1; i=$((i+1))
