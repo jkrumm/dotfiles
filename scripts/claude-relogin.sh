@@ -28,7 +28,8 @@
 #
 # Automating the login itself (driving the browser, reading the mail) is out of bounds: a human always approves.
 # Test seams: CLAUDE_RELOGIN_ASK_HUMAN, CLAUDE_RELOGIN_PANE_WAIT, CLAUDE_RELOGIN_LOG, CLAUDE_RELOGIN_POLL_S,
-# CLAUDE_RELOGIN_CLOSE_DELAY_S, CLAUDE_RELOGIN_BG_IDLE_S, CLAUDE_RELOGIN_FOREGROUND (run the workers inline);
+# CLAUDE_RELOGIN_CLOSE_DELAY_S, CLAUDE_RELOGIN_BG_IDLE_S, CLAUDE_RELOGIN_MAX_WAIT_S, CLAUDE_RELOGIN_ABSENT_N,
+# CLAUDE_RELOGIN_TERM_GRACE_S, CLAUDE_RELOGIN_FOREGROUND (run the workers inline);
 # PATH stubs for ssh, herdr, osascript, claude, claude-account.
 set -u
 SELF="$(readlink -f "${BASH_SOURCE[0]}")" # ~/.local/bin/claude-relogin is a symlink into the checkout
@@ -45,6 +46,9 @@ POLL_S="${CLAUDE_RELOGIN_POLL_S:-2}"
 CLOSE_DELAY_S="${CLAUDE_RELOGIN_CLOSE_DELAY_S:-4}"
 BG_IDLE_S="${CLAUDE_RELOGIN_BG_IDLE_S:-600}"   # no new log output for this long = the background login is stuck
 FOREGROUND="${CLAUDE_RELOGIN_FOREGROUND:-0}"
+MAX_WAIT_S="${CLAUDE_RELOGIN_MAX_WAIT_S:-3600}"   # longest the opener waits for a login terminal to report; then it notifies and leaves it open
+ABSENT_N="${CLAUDE_RELOGIN_ABSENT_N:-3}"          # consecutive clean "it is gone" answers before a terminal counts as closed
+TERM_GRACE_S="${CLAUDE_RELOGIN_TERM_GRACE_S:-5}"  # SIGTERM, this long, then SIGKILL
 export PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" # appended: a non-login ssh shell lacks them, an existing PATH entry (or a test stub) wins
 REMOTE_PATH='export PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH"'
 # What a remote shell runs to start the relogin on its own machine ($HOME is that machine's).
@@ -121,8 +125,8 @@ login_env() { # [extra NAME=value…] — builds login_cmd
 }
 account_cli() { if command -v claude-account >/dev/null 2>&1; then claude-account "$@"; else bun "$HERE/claude-account.ts" "$@"; fi; }
 stamp() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
-# Nothing token-shaped may reach the log, whatever the CLI prints.
-redact() { sed -E 's/sk-ant-[A-Za-z0-9_-]+/[redacted]/g; s/([Tt]oken"?[=: ]+"?)[A-Za-z0-9._~+\/-]{16,}/\1[redacted]/g'; }
+# Nothing token-shaped may reach the log, whatever the CLI prints (lib/claude-login.sh).
+redact() { login_redact; }
 # End of the account's login (refresh token), YYYY-MM-DD, empty when unknown.
 expiry_date() {
   local ms
@@ -132,6 +136,8 @@ expiry_date() {
 }
 ok_text()   { echo "Claude login $id: renewed, valid until ${1:-unknown}"; }
 fail_text() { echo "Claude login $id failed - retry with: claude-relogin $id (log: $RELOGIN_LOG)"; }
+gone_text() { echo "Claude login $id: the $1 was closed before the login finished - retry with: claude-relogin $id (log: $RELOGIN_LOG)"; }
+timeout_text() { echo "Claude login $id did not finish within $((MAX_WAIT_S / 60)) min - the $1 is still open (log: $RELOGIN_LOG)"; }
 
 # Native macOS notification on the MacBook (locally there, over ssh from the mini). Text and title reach AppleScript
 # as argv, the script on stdin; the text is built from the id, a date and the log path only, never from CLI output.
@@ -154,50 +160,80 @@ notify() { # <text> — best effort
   return 0
 }
 
-# Terminal windows on the MacBook, addressed by id: the one we open is the only one we ever close.
-open_terminal() { # <command> — prints the new window's id
-  osascript - "$1" <<'OSA'
-on run argv
+# Every osascript call is bounded: a wedged WindowServer must not hang a worker (exit 142 = timed out).
+bounded() { perl -e 'alarm 20; exec @ARGV' -- "$@"; }
+# True in the logged-in GUI session. iumac's userland sshd runs inside it (measured: ssh iumac launchctl managername
+# = Aqua), so the common ssh hop stays windowless; a Background/System session cannot reach the login Keychain or
+# WindowServer and goes straight to the Terminal path. (`launchctl asuser` would need root.)
+gui_session() { [[ "$(launchctl managername 2>/dev/null)" == Aqua ]]; }
+
+# Terminal windows on the MacBook, addressed by id: the one we open is the only one we ever close. The scripts reach
+# osascript on stdin, the id as argv.
+OSA_OPEN='on run argv
   tell application "Terminal"
     activate
     do script (item 1 of argv)
     return id of front window
   end tell
-end run
-OSA
-}
-window_exists() { # <id>
-  osascript - "$1" <<'OSA' 2>/dev/null | grep -qx true
-on run argv
+end run'
+OSA_EXISTS='on run argv
   tell application "Terminal" to return (exists window id (item 1 of argv as integer))
-end run
-OSA
-}
-close_window() { # <id>
-  osascript - "$1" <<'OSA' >/dev/null 2>&1
-on run argv
+end run'
+OSA_CLOSE='on run argv
   tell application "Terminal" to close (window id (item 1 of argv as integer)) saving no
-end run
-OSA
+end run'
+open_terminal() { printf '%s\n' "$OSA_OPEN" | bounded osascript - "$1"; } # <command> — prints the new window's id
+close_window() { printf '%s\n' "$OSA_CLOSE" | bounded osascript - "$1" >/dev/null 2>&1; } # <id>
+
+# Presence probes answer 0 = present, 1 = absent (a clean answer), 2 = could not ask (osascript/herdr failed, timed
+# out, answered something unexpected). Only await_result decides "gone", after ABSENT_N clean absents in a row.
+probe_window() { # <id>
+  local out
+  out=$(printf '%s\n' "$OSA_EXISTS" | bounded osascript - "$1" 2>/dev/null) || return 2
+  case "$out" in true) return 0 ;; false) return 1 ;; *) return 2 ;; esac
 }
-workspace_exists() { # <workspace id> — a failing herdr counts as gone
-  herdr workspace list 2>/dev/null | grep -q "\"workspace_id\":\"$1\""
+probe_workspace() { # <workspace id>
+  local out
+  out=$(herdr workspace list 2>/dev/null) || return 2
+  jq -e '.result.workspaces | type == "array"' <<<"$out" >/dev/null 2>&1 || return 2
+  jq -e --arg ws "$1" '[.result.workspaces[].workspace_id] | index($ws) != null' <<<"$out" >/dev/null 2>&1
 }
-new_result_file() { mktemp -u "${TMPDIR:-/tmp}/claude-relogin-result.XXXXXX"; }
+# A private empty file (mktemp: unpredictable name, mode 600, ours). Content counts only if it is a regular file we own.
+new_result_file() { mktemp "${TMPDIR:-/tmp}/claude-relogin-result.XXXXXX"; }
+result_ready() { [[ -f "$1" && ! -L "$1" && -O "$1" && -s "$1" ]]; }
+# The log holds nothing secret (redacted) but names accounts and URLs: owner-only.
+ensure_log() { mkdir -p "$(dirname "$RELOGIN_LOG")"; ( umask 077; : >>"$RELOGIN_LOG" ); chmod 600 "$RELOGIN_LOG" 2>/dev/null; return 0; }
 # Detached worker (same script, another mode); inline when a test asks for it.
 spawn_worker() { # <args…>
   if [[ "$FOREGROUND" == 1 ]]; then bash "$SELF" "$@"; return; fi
-  mkdir -p "$(dirname "$RELOGIN_LOG")"
+  ensure_log
   nohup bash "$SELF" "$@" </dev/null >>"$RELOGIN_LOG" 2>&1 &
 }
-# Wait until <file> has content; echoes it. Stops early (rc 1) when `alive` says the terminal is gone.
-await_result() { # <file> <alive-command…>
-  local f=$1; shift
-  while [[ ! -s "$f" ]]; do
-    "$@" || { [[ -s "$f" ]] && break; return 1; }
-    sleep "$POLL_S"
+# Wait for the login terminal's result file; prints its content. `probe` is how to ask whether the terminal still
+# exists. Status: 0 result, 1 the terminal is gone (ABSENT_N clean absents in a row; a probe that could not ask never
+# counts), 3 nothing within MAX_WAIT_S. The caller notifies on 1 and 3 and leaves the terminal alone.
+await_result() { # <file> <probe-command…>
+  local f=$1 absent=0 waited=0 rc; shift
+  while ! result_ready "$f"; do
+    rc=0; "$@" || rc=$?
+    case $rc in
+      0|2) absent=0 ;;
+      *) absent=$((absent + 1)) ;;
+    esac
+    if (( absent >= ABSENT_N )); then result_ready "$f" && break; return 1; fi
+    (( waited >= MAX_WAIT_S )) && return 3
+    sleep "$POLL_S"; waited=$((waited + POLL_S))
   done
   cat "$f"
+}
+is_ok() { [[ "$1" == ok || "$1" == "ok "* ]]; }
+# Stop a process: SIGTERM, a grace period, then SIGKILL.
+kill_bounded() { # <pid>
+  local i
+  kill "$1" 2>/dev/null || return 0
+  for ((i = 0; i < TERM_GRACE_S; i++)); do sleep 1; kill -0 "$1" 2>/dev/null || return 0; done
+  kill -9 "$1" 2>/dev/null
+  return 0
 }
 
 # ── --in-pane: the login itself, in this terminal ────────────────────────────────────────────────
@@ -207,13 +243,18 @@ if (( in_pane )); then
   # whatever way we exit, the tunnel goes too. A result file (written last, atomically) tells whoever opened this
   # terminal how it ended, so it can close the window and notify.
   tunnel_pid_file=$(mktemp "${TMPDIR:-/tmp}/claude-relogin-tunnel.XXXXXX") || die "mktemp failed"
-  write_result() { [[ -n "$result_file" ]] && ! (( dry )) && printf '%s\n' "$1" > "$result_file.tmp" && mv "$result_file.tmp" "$result_file"; return 0; }
+  write_result() { # temp file next to the target (mktemp, never a predictable name), then an atomic rename
+    local t
+    [[ -n "$result_file" ]] && ! (( dry )) || return 0
+    t=$(mktemp "$result_file.XXXXXX") && printf '%s\n' "$1" > "$t" && mv "$t" "$result_file"
+    return 0
+  }
   finish() { # exit trap: tunnel down, and a result for the opener even when we were interrupted
     local p rc=$?
     p=$(cat "$tunnel_pid_file" 2>/dev/null)
     [[ -z "$p" ]] || kill "$p" 2>/dev/null
     rm -f "$tunnel_pid_file"
-    [[ -z "$result_file" || -s "$result_file" ]] || write_result "fail $rc"
+    [[ -z "$result_file" ]] || result_ready "$result_file" || write_result "fail $rc"
   }
   trap finish EXIT
   trap 'exit 130' INT
@@ -241,34 +282,41 @@ if (( in_pane )); then
 fi
 
 # ── MacBook worker: the login without any window ────────────────────────────────────────────────
-# Output (redacted) goes to the log, stdin stays open and silent so the CLI's paste prompt does not hit EOF. Exit
-# status: 0 renewed, 1 the CLI failed, 3 stuck (no output for BG_IDLE_S: the callback never arrived).
+# Output goes through the line-buffered redactor into a per-run file (the idle watchdog watches that file's growth,
+# not the shared log) and the owner-only log; stdin stays open and silent so the CLI's paste prompt does not hit EOF.
+# Exit status: 0 renewed, 1 the CLI failed, 3 stuck (no output for BG_IDLE_S: the callback never arrived).
 run_background_login() {
-  local fifo pid rc=0 last=-1 size idle=0 stuck=0
-  mkdir -p "$(dirname "$RELOGIN_LOG")"
-  fifo=$(mktemp -u "${TMPDIR:-/tmp}/claude-relogin-in.XXXXXX")
-  mkfifo "$fifo" || return 1
-  exec 3<>"$fifo"
+  local work pid rpid rc=0 last=-1 size idle=0 stuck=0 i
+  ensure_log
+  work=$(mktemp -d "${TMPDIR:-/tmp}/claude-relogin.XXXXXX") || return 1
+  mkfifo "$work/in" "$work/out" || { rm -rf "$work"; return 1; }
+  : > "$work/seen"
+  exec 3<>"$work/in"
   login_env "CLAUDE_LOGIN_MSG_FILE=$RELOGIN_LOG"
   stamp "background login for '$id' started" >>"$RELOGIN_LOG"
-  "${login_cmd[@]}" <&3 > >(redact >>"$RELOGIN_LOG") 2>&1 &
+  login_redact <"$work/out" | tee -a "$work/seen" >>"$RELOGIN_LOG" &
+  rpid=$!
+  "${login_cmd[@]}" <&3 >"$work/out" 2>&1 &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     sleep "$POLL_S"
-    size=$(wc -c <"$RELOGIN_LOG" 2>/dev/null | tr -d ' ')
+    size=$(wc -c <"$work/seen" 2>/dev/null | tr -d ' ')
     if [[ "$size" != "$last" ]]; then idle=0; last=$size; else idle=$((idle + POLL_S)); fi
-    if (( idle >= BG_IDLE_S )); then stuck=1; kill "$pid" 2>/dev/null; break; fi
+    if (( idle >= BG_IDLE_S )); then stuck=1; kill_bounded "$pid"; break; fi
   done
   wait "$pid" 2>/dev/null || rc=$?
   exec 3>&-
-  rm -f "$fifo"
-  sleep 0.2 # let the redactor flush
+  # the redactor ends when the CLI's output closes; wait for it (bounded) instead of guessing a delay
+  for ((i = 0; i < TERM_GRACE_S * 2; i++)); do kill -0 "$rpid" 2>/dev/null || break; sleep 0.5; done
+  kill -0 "$rpid" 2>/dev/null && kill "$rpid" 2>/dev/null
+  wait "$rpid" 2>/dev/null
+  rm -rf "$work"
   (( stuck )) && return 3
   return $((rc != 0))
 }
 
 worker_macbook() {
-  local rc=0 d resf winid res
+  local rc=0 d resf winid res arc=0
   if (( dry )); then
     echo "would start detached: bash $(login_shquote "$SELF") $id --machine macbook --worker"
     login_env "CLAUDE_LOGIN_MSG_FILE=$RELOGIN_LOG"
@@ -277,7 +325,7 @@ worker_macbook() {
     CLAUDE_LOGIN_ACCOUNT=$id CLAUDE_LOGIN_MACHINE=$machine bash "$HELPER" --dry-run "$SAMPLE_URL" 2>&1
     echo "on success:"; echo "  would run: claude-account refresh --ids $id"
     notify "$(ok_text "<date>")"
-    echo "if it fails or gets stuck, fall back to an interactive Terminal that is closed again after success:"
+    echo "if it fails, gets stuck, or this is not the Aqua GUI session, fall back to an interactive Terminal that is closed again after success:"
     step osascript - "bash $(login_shquote "$SELF") $id --machine macbook --in-pane --result-file <result file>"
     echo "  would run: osascript close of that window id (only it), then:"
     notify "$(ok_text "<date>")"
@@ -285,7 +333,12 @@ worker_macbook() {
     notify "$(fail_text)"
     return 0
   fi
-  run_background_login || rc=$?
+  if gui_session; then
+    run_background_login || rc=$?
+  else
+    stamp "not in the Aqua GUI session ($(launchctl managername 2>/dev/null || echo unknown)): no windowless login, using Terminal" >>"$RELOGIN_LOG"
+    rc=4
+  fi
   if (( rc == 0 )); then
     account_cli refresh --ids "$id" 2>&1 | redact >>"$RELOGIN_LOG"
     account_cli usage 2>&1 | grep "^$id " | redact >>"$RELOGIN_LOG"
@@ -295,21 +348,25 @@ worker_macbook() {
     return 0
   fi
   stamp "background login failed (rc $rc), opening an interactive Terminal" >>"$RELOGIN_LOG"
-  resf=$(new_result_file)
+  resf=$(new_result_file) || { stamp "could not create a result file" >>"$RELOGIN_LOG"; notify "$(fail_text)"; return 1; }
   winid=$(open_terminal "bash $(login_shquote "$SELF") $id --machine macbook --in-pane --result-file $(login_shquote "$resf")") || winid=""
   if ! [[ "$winid" =~ ^[0-9]+$ ]]; then
     stamp "could not open Terminal" >>"$RELOGIN_LOG"
     notify "$(fail_text)"
     return 1
   fi
-  if ! res=$(await_result "$resf" window_exists "$winid"); then
+  res=$(await_result "$resf" probe_window "$winid") || arc=$?
+  rm -f "$resf"
+  if (( arc == 1 )); then
     stamp "the login window was closed before the login finished" >>"$RELOGIN_LOG"
-    notify "$(fail_text)"
-    rm -f "$resf"
+    notify "$(gone_text "login window")"
+    return 1
+  elif (( arc != 0 )); then
+    stamp "no result within ${MAX_WAIT_S}s; the login window is left open" >>"$RELOGIN_LOG"
+    notify "$(timeout_text "login window")"
     return 1
   fi
-  rm -f "$resf"
-  if [[ "$res" == ok* ]]; then
+  if is_ok "$res"; then
     d=${res#ok}; d=${d# }
     sleep "$CLOSE_DELAY_S"   # the opened shell is idle again by then, so Terminal closes the window without asking
     close_window "$winid"
@@ -334,12 +391,19 @@ watcher_mini() { # <workspace id> <result file>
     notify "$(fail_text)"
     return 0
   fi
-  if ! res=$(await_result "$resf" workspace_exists "$ws"); then
-    stamp "workspace $ws was closed before the login finished" >>"$RELOGIN_LOG"
-    return 0
-  fi
+  local arc=0
+  res=$(await_result "$resf" probe_workspace "$ws") || arc=$?
   rm -f "$resf"
-  if [[ "$res" == ok* ]]; then
+  if (( arc == 1 )); then
+    stamp "workspace $ws was closed before the login finished" >>"$RELOGIN_LOG"
+    notify "$(gone_text "login workspace")"
+    return 1
+  elif (( arc != 0 )); then
+    stamp "no result within ${MAX_WAIT_S}s; workspace $ws is left open" >>"$RELOGIN_LOG"
+    notify "$(timeout_text "login workspace")"
+    return 1
+  fi
+  if is_ok "$res"; then
     d=${res#ok}; d=${d# }
     sleep "$CLOSE_DELAY_S"
     herdr workspace close "$ws" >/dev/null 2>&1 || stamp "could not close workspace $ws" >&2
@@ -381,7 +445,10 @@ if [[ "$machine" == macbook && "$visible" != 1 ]]; then
 fi
 
 result_arg=""
-if [[ "$visible" != 1 ]]; then result_file=$(new_result_file); result_arg=" --result-file $(login_shquote "$result_file")"; fi
+if [[ "$visible" != 1 ]]; then
+  if (( dry )); then result_file="<result file>"; else result_file=$(new_result_file) || die "mktemp failed"; fi
+  result_arg=" --result-file $(login_shquote "$result_file")"
+fi
 inner="bash $(login_shquote "$SELF") $id --machine $machine --in-pane$result_arg"
 if [[ "$machine" == mini ]]; then
   # herdr workspace in the GUI session (rd does the same); the shell needs a moment before it takes input
@@ -394,8 +461,10 @@ if [[ "$machine" == mini ]]; then
   fi
   json=$(herdr workspace create --cwd "$HOME" --label "relogin $id" --focus) || die "herdr workspace create failed"
   pane=$(printf '%s' "$json" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
-  [[ -n "$pane" ]] || die "herdr workspace create gave no pane: $json"
-  ws=${pane%%:*}   # the workspace we created, and the only one the watcher may close
+  # the workspace we created, and the only one the watcher may close: from the response (as remote-dev.sh reads it),
+  # never inferred from the pane id
+  ws=$(printf '%s' "$json" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null)
+  [[ -n "$pane" && "$ws" =~ ^[A-Za-z0-9_-]+$ ]] || die "herdr workspace create gave no pane or workspace id: $json"
   sleep "$PANE_WAIT"
   herdr pane run "$pane" "$inner" >/dev/null || die "herdr pane run failed"
   wrc=0

@@ -47,8 +47,11 @@ cat > "$TMP/bin/osascript" <<'STUB'
 body=$(cat); kind=other
 case "$body" in
   *"do script"*) kind=open; echo "${STUB_WINID:-4242}"
+    if [ -n "${STUB_TERM_SYMLINK:-}" ]; then f=$(printf '%s' "$2" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); echo "ok 2027-01-01" > "$TMP_DIR/planted"; rm -f "$f"; ln -s "$TMP_DIR/planted" "$f"; fi
     if [ -n "${STUB_TERM_RESULT:-}" ]; then f=$(printf '%s' "$2" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -n "$f" ] && echo "$STUB_TERM_RESULT" > "$f"; fi ;;
-  *"exists window"*) kind=exists; echo "${STUB_WIN_EXISTS:-true}" ;;
+  *"exists window"*) kind=exists; v="${STUB_WIN_EXISTS:-true}"
+    if [ -n "${STUB_WIN_SEQ_FILE:-}" ] && [ -s "$STUB_WIN_SEQ_FILE" ]; then v=$(head -1 "$STUB_WIN_SEQ_FILE"); sed -i '' 1d "$STUB_WIN_SEQ_FILE"; fi
+    case "$v" in error) printf 'osascript:exists-error\n' >> "$LOG"; exit 1 ;; garbage) echo "what?" ;; *) echo "$v" ;; esac ;;
   *"close (window"*) kind=close ;;
   *"display notification"*) kind=notify ;;
 esac
@@ -59,26 +62,35 @@ cat > "$TMP/bin/herdr" <<'STUB'
 #!/bin/bash
 printf 'herdr' >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
 case "$1 $2" in
-  "workspace create") echo '{"result":{"root_pane":{"pane_id":"w9:1"}}}' ;;
-  "workspace list") [ "${STUB_WS_GONE:-0}" = 1 ] || echo '{"result":{"workspaces":[{"workspace_id":"w1F"},{"workspace_id":"w9"}]}}' ;;
+  "workspace create") case "${STUB_CREATE:-ok}" in
+      noworkspace) echo '{"result":{"root_pane":{"pane_id":"w9:1"}}}' ;;
+      *) echo "{\"result\":{\"workspace\":{\"workspace_id\":\"${STUB_WS_ID:-w9}\"},\"root_pane\":{\"pane_id\":\"w9:1\"}}}" ;;
+    esac ;;
+  "workspace list") case "${STUB_WS_LIST:-ok}" in
+      fail) printf 'herdr:list-error\n' >> "$LOG"; exit 1 ;;
+      garbage) echo "not json" ;;
+      gone) echo '{"result":{"workspaces":[{"workspace_id":"w1F"}]}}' ;;
+      *) echo "{\"result\":{\"workspaces\":[{\"workspace_id\":\"w1F\"},{\"workspace_id\":\"${STUB_WS_ID:-w9}\"}]}}" ;;
+    esac ;;
   "pane run") # play the login that would run in the pane: write its result file
     if [ -n "${STUB_PANE_RESULT:-}" ]; then f=$(printf '%s' "$4" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -z "$f" ] || echo "$STUB_PANE_RESULT" > "$f"; fi ;;
 esac
 STUB
 chmod +x "$TMP/bin/herdr"
-mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 6; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
 mk claude-account 'case "$1 $2" in
   "expiry --json") echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":1798761600000},{\"id\":\"iu\",\"refresh_expires_at\":1798761600000}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
+mk launchctl 'echo "${STUB_SESSION:-Aqua}"'
 mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_RELOGIN_PANE_WAIT=0 CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
 # workers run inline (never a stray detached process), no waits, a scratch log
-export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log"
+export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
 # Safety net: every external command the scripts reach must be one of our stubs, never the real herdr/ssh/claude.
-for c in ssh open herdr osascript claude claude-account; do
+for c in ssh open herdr osascript claude claude-account launchctl; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
@@ -294,7 +306,7 @@ assert_eq "...the window stays open" 0 "$(count 'osascript:close')"
 assert_contains "...failure notification with the log path" "Claude login me failed - retry with: claude-relogin me (log: $CLAUDE_RELOGIN_LOG)" "$c"
 reset; STUB_LOGIN_RC=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
 assert_eq "window closed by the user before the result: rc 1, nothing closed" "1/0" "$rc/$(count 'osascript:close')"
-assert_contains "...failure notification" "osascript:notify[-][Claude login me][Claude login me failed" "$(calls)"
+assert_contains "...a closed window is reported, never silent" "osascript:notify[-][Claude login me][Claude login me: the login window was closed before the login finished" "$(calls)"
 reset; STUB_CLAUDE_HANG=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
 assert_contains "a stuck background login (no output for the idle window) falls back to Terminal" "osascript:open" "$(calls)"
 assert_contains "...and says so in the log" "background login failed (rc 3)" "$(cat "$CLAUDE_RELOGIN_LOG")"
@@ -316,13 +328,110 @@ reset; STUB_PANE_RESULT="fail 1" bash "$RELOGIN" me >/dev/null; rc=$?
 c=$(calls)
 assert_eq "failed login: rc 1, workspace stays open" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
 assert_contains "...failure notification to the MacBook" "Claude login me failed - retry with: claude-relogin me" "$c"
-reset; STUB_WS_GONE=1 bash "$RELOGIN" me >/dev/null; rc=$?
+reset; STUB_WS_LIST=gone bash "$RELOGIN" me >/dev/null; rc=$?
 c=$(calls)
-assert_eq "workspace closed by the user: rc 0, nothing closed, nobody notified" "0/0/0" "$rc/$(count 'herdr\[workspace\]\[close\]')/$(count 'osascript - ')"
+assert_eq "workspace closed by the user: nothing closed" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
+assert_contains "...and the owner is told, never silent" "Claude login me: the login workspace was closed before the login finished" "$c"
 reset; STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me --visible >/dev/null
 c=$(calls)
 assert_eq "--visible: nothing closed, no notification" "0/0" "$(count 'herdr\[workspace\]\[close\]')/$(count 'osascript - ')"
 assert_not_contains "--visible: no result file in the pane command" "--result-file" "$c"
+
+echo "a probe that could not ask never reads as closed"
+as macbook; reset
+STUB_LOGIN_RC=1 STUB_WIN_EXISTS=error bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+c=$(calls)
+assert_eq "osascript probe fails every time: no window closed" 0 "$(count 'osascript:close')"
+assert_not_contains "...never concluded as closed" "was closed before" "$c"
+assert_contains "...ends with the did-not-finish notification instead (window left open)" "Claude login me did not finish within 0 min - the login window is still open" "$c"
+reset; STUB_LOGIN_RC=1 STUB_WIN_EXISTS=garbage bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+assert_not_contains "an unintelligible probe answer is not 'gone' either" "was closed before" "$(calls)"
+reset; printf 'false\nerror\nfalse\nfalse\n' > "$TMP/seq"
+STUB_LOGIN_RC=1 STUB_WIN_SEQ_FILE="$TMP/seq" bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+c=$(calls)
+assert_eq "absent, could-not-ask, absent, absent: only the last two are consecutive (4 probes)" 4 "$(count 'osascript:exists')"
+assert_contains "...then it concludes closed, and says so" "was closed before the login finished" "$c"
+as mini; reset
+STUB_WS_LIST=fail bash "$RELOGIN" me >/dev/null 2>&1
+c=$(calls)
+assert_eq "herdr list fails every time: workspace not closed" 0 "$(count 'herdr\[workspace\]\[close\]')"
+assert_not_contains "...never concluded as closed" "was closed before" "$c"
+assert_contains "...did-not-finish notification, workspace left open" "the login workspace is still open" "$c"
+reset; STUB_WS_LIST=garbage bash "$RELOGIN" me >/dev/null 2>&1
+assert_not_contains "herdr answering garbage is not 'gone'" "was closed before" "$(calls)"
+reset; STUB_PANE_RESULT="" bash "$RELOGIN" me >/dev/null 2>&1
+assert_contains "no result within the maximum wait, workspace still there: notified, not closed" "the login workspace is still open" "$(calls)"
+assert_eq "...nothing closed" 0 "$(count 'herdr\[workspace\]\[close\]')"
+as macbook; reset
+STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+assert_contains "terminal present but no result within the maximum wait: notified" "the login window is still open" "$(calls)"
+assert_eq "...window not closed" 0 "$(count 'osascript:close')"
+
+echo "a planted or empty result file is never read as success"
+reset; STUB_LOGIN_RC=1 STUB_TERM_SYMLINK=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+assert_eq "result file replaced by a symlink to an 'ok' file: nothing closed" 0 "$(count 'osascript:close')"
+assert_not_contains "...no success notification" "renewed" "$(calls)"
+reset; STUB_LOGIN_RC=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+assert_eq "the empty mktemp'd file is not a result either" 0 "$(count 'osascript:close')"
+first=$(calls | sed -nE "s/.*--result-file '([^']*)'.*/\1/p" | head -1)
+reset; STUB_LOGIN_RC=1 STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+second=$(calls | sed -nE "s/.*--result-file '([^']*)'.*/\1/p" | head -1)
+[[ -n "$first" && -n "$second" && "$first" != "$second" ]] && ok "result file names are unpredictable (differ per run)" || bad "result file names are unpredictable" "[$first] [$second]"
+
+echo "GUI session"
+reset; : > "$CLAUDE_RELOGIN_LOG"
+STUB_SESSION=Background STUB_TERM_RESULT="ok 2027-01-01" bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+c=$(calls)
+assert_eq "outside Aqua: rc 0" 0 "$rc"
+assert_not_contains "...no windowless login attempted" "ENV cfg=" "$c"
+assert_contains "...Terminal via osascript instead" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane --result-file '" "$c"
+assert_contains "...closed again and notified" "osascript:close[-][4242]" "$c"
+assert_contains "...the log says why" "not in the Aqua GUI session (Background)" "$(cat "$CLAUDE_RELOGIN_LOG")"
+
+echo "mini: workspace id comes from the create response"
+as mini; reset
+STUB_WS_ID=wZ9 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
+c=$(calls)
+assert_contains "the workspace_id field is what gets closed" "herdr[workspace][close][wZ9]" "$c"
+assert_eq "...exactly one close" 1 "$(count 'herdr\[workspace\]\[close\]')"
+reset; STUB_CREATE=noworkspace bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "response without workspace_id: fails loudly (rc 2)" 2 "$rc"
+assert_contains "...says what was missing" "gave no pane or workspace id" "$(cat "$TMP/err")"
+assert_not_contains "...nothing typed into any pane" "pane][run" "$(calls)"
+
+echo "idle watchdog: per-run output, SIGKILL after the grace period"
+as macbook; reset; : > "$CLAUDE_RELOGIN_LOG"; rm -f "$TMP/claude.pid"
+STUB_CLAUDE_HANG=trap STUB_WIN_EXISTS=false bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
+cp_=$(cat "$TMP/claude.pid" 2>/dev/null)
+[[ -n "$cp_" ]] && ! kill -0 "$cp_" 2>/dev/null && ok "a login that ignores SIGTERM is SIGKILLed" || bad "a login that ignores SIGTERM is SIGKILLed" "pid [$cp_]"
+assert_contains "...and counted as stuck, falling back" "background login failed (rc 3)" "$(cat "$CLAUDE_RELOGIN_LOG")"
+
+echo "log: owner-only, widely redacted"
+rm -f "$CLAUDE_RELOGIN_LOG"; reset
+STUB_CLAUDE_OUT='open https://x/cb?code=abcdef123456&state=zz11yy22xx Bearer abcdefgh12345 "refresh_token":"abcdefgh12345678" paste the code' bash "$RELOGIN" me --machine macbook >/dev/null
+l=$(cat "$CLAUDE_RELOGIN_LOG")
+assert_eq "log created with mode 600" 600 "$(stat -f %Lp "$CLAUDE_RELOGIN_LOG")"
+for secret in abcdef123456 zz11yy22xx abcdefgh12345; do assert_not_contains "log has no $secret" "$secret" "$l"; done
+assert_contains "...but keeps the harmless words" "paste the code" "$l"
+chmod 644 "$CLAUDE_RELOGIN_LOG"; reset
+bash "$RELOGIN" me --machine macbook >/dev/null
+assert_eq "an existing log is tightened to 600" 600 "$(stat -f %Lp "$CLAUDE_RELOGIN_LOG")"
+reset; err=$(CLAUDE_LOGIN_MSG_FILE="$TMP/helper-msgs" CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=macbook STUB_OPENBIN=fail bash "$BROWSER_SH" 'https://x/a?code=abcdef123456&state=zz11yy22xx' 2>&1)
+assert_not_contains "the helper's direct writes to a file are redacted too" "abcdef123456" "$(cat "$TMP/helper-msgs")"
+
+echo "detached workers (CLAUDE_RELOGIN_FOREGROUND=0)"
+as macbook; reset; rm -f "$CLAUDE_RELOGIN_LOG"
+out=$(CLAUDE_RELOGIN_FOREGROUND=0 bash "$RELOGIN" me --machine macbook); rc=$?
+assert_eq "returns at once with rc 0" "0" "$rc"
+assert_contains "...says it runs in the background" "running in the background" "$out"
+for _ in $(seq 1 20); do grep -q "osascript:notify" "$LOG" && break; sleep 1; done
+assert_contains "the detached worker finishes on its own and notifies" "osascript:notify[-][Claude login me][Claude login me: renewed" "$(calls)"
+assert_eq "...worker output went to the owner-only log, not the caller's stdout" "1" "$(grep -c 'background login for' "$CLAUDE_RELOGIN_LOG")"
+assert_not_contains "...caller's stdout stays clean" "background login for" "$out"
+as mini; reset
+CLAUDE_RELOGIN_FOREGROUND=0 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null; rc=$?
+for _ in $(seq 1 20); do grep -q "herdr\[workspace\]\[close\]" "$LOG" && break; sleep 1; done
+assert_contains "detached watcher closes the workspace it created" "herdr[workspace][close][w9]" "$(calls)"
 
 echo "in-pane result file"
 as mini; reset; rf="$TMP/result-ok"; rm -f "$rf"

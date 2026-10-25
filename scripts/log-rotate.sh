@@ -61,12 +61,15 @@ PLIST_DIR="${LOG_ROTATE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
 #   48 hours), so they stay capped.
 # - hermes-ops.log / warden-cli.log: one audit line per invocation of the bounded
 #   dispatchers, the only record of what Hermes did unattended. Rotated, not deleted.
+# - claude-relogin.log: the windowless MacBook relogin worker's output (redacted, owner-only), written by
+#   scripts/claude-relogin.sh, no plist names it.
 # - the herdr collie plugin's own log.
 EXTRA=(
   "$HOME/.hermes/logs/gateway.error.log"
   "$HOME/.hermes/logs/gateway.log"
   hermes-ops.log
   warden-cli.log
+  claude-relogin.log
   "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
 

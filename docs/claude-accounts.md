@@ -330,10 +330,19 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
      auth login --claudeai` (`CLAUDE_CONFIG_DIR` stays unset for `iu`; token env vars are stripped). Its output, with
      anything token-shaped redacted, goes to `~/Library/Logs/claude-relogin.log`. If that cannot complete (the CLI fails,
      the Keychain is locked, or there was no output for 10 minutes because the callback never arrived), it opens a
-     Terminal window with the interactive login, and closes exactly that window (by id) after success.
+     Terminal window with the interactive login, and closes exactly that window (by id) after success. The windowless
+     worker only starts in the Aqua GUI session (`launchctl managername`; `ssh iumac` lands in it, measured); from any
+     other session it goes straight to that Terminal path via osascript (`launchctl asuser` would need root). The log is
+     owner-only (mode 600), redacted (`sk-ant-…`, `Bearer`, and the value of any `code`/`state`/`*token`/`*secret`
+     key), and rotated by `log-rotate.sh`.
    - *mini:* a herdr workspace `relogin <id>` runs the same command interactively. After success the watcher closes
      that workspace (only the one it created) a few seconds later; a failed login leaves it open for the paste
-     fallback.
+     fallback. The workspace id is read from the `herdr workspace create` response (`.result.workspace.workspace_id`).
+   - *Waiting for the terminal:* the opener polls for a result file (`mktemp`, owner-checked, never a symlink) and for
+     the terminal's existence. A probe that could not ask (osascript or herdr failing, timing out, answering garbage)
+     never counts as "closed": the terminal is gone only after 3 clean "absent" answers in a row, and that is
+     reported by notification, never silently. After 60 minutes without a result it notifies "did not finish" and
+     leaves the window/workspace open.
 2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
    helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
    Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the

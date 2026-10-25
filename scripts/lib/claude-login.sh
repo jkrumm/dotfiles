@@ -49,3 +49,13 @@ login_tunnel_verdict() { # owner_alive listening seen_listening idle_s max_idle_
   if (( idle >= max )); then echo "close:idle"; return; fi
   echo keep
 }
+
+# Removes anything token-shaped from a stream, line-buffered (nothing is held back, so a flush at exit is never
+# needed): sk-ant-… keys, Bearer values, and the value of any code / state / *token / *secret / *verifier key
+# written as key=value, key: value or "key": "value" (OAuth codes and states travel in URLs and JSON).
+login_redact() {
+  perl -pe 'BEGIN { $| = 1 }
+    s/sk-ant-[\w-]+/[redacted]/g;
+    s/\b(\w*(?:code|state|token|secret|verifier))(["\x27]?\s*[=:]\s*["\x27]?)[^\s"\x27&,}]{6,}/$1$2\[redacted]/gi;
+    s/\b(Bearer\s+)[\w.~+\/=-]{8,}/$1\[redacted]/gi;'
+}

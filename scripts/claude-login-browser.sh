@@ -43,7 +43,14 @@ url="${1-}"
 [[ -n "$url" ]] || { echo "usage: claude-login-browser.sh [--dry-run] <authorize-url>" >&2; exit 2; }
 
 # The CLI may have no stdout the human sees: talk to the terminal, else stderr.
-say() { { printf '%s\n' "$*" >>"$MSG_FILE"; } 2>/dev/null || printf '%s\n' "$*" >&2; }
+# A terminal gets the text as is (the URL must stay pasteable); any file target gets it redacted.
+say() {
+  if [[ "$MSG_FILE" == /dev/tty ]]; then
+    { printf '%s\n' "$*" >>"$MSG_FILE"; } 2>/dev/null || printf '%s\n' "$*" >&2
+  else
+    { printf '%s\n' "$*" | login_redact >>"$MSG_FILE"; } 2>/dev/null || printf '%s\n' "$*" >&2
+  fi
+}
 # Print (dry run) or run one command; every word is shell-quoted in the print so it can be pasted.
 step() {
   if (( dry )); then
