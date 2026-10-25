@@ -54,6 +54,9 @@ _ca_file="$_SL_DIR/account_v2_${_ca_key//\//_}"
 account_id=""
 account_badge=""
 [ -s "$_ca_file" ] && IFS=' ' read -r account_id account_badge < "$_ca_file"
+# Both reach `echo -e` and the jq filter: anything off-pattern is dropped, never rendered.
+[[ "$account_id" =~ ^([a-z][a-z0-9-]{0,15}|\?)$ ]] || account_id=""
+[[ "$account_badge" =~ ^[A-Z][A-Z0-9-]{0,15}$ ]] || account_badge=""
 
 # Resolve id + badge into $_ca_file; with "record" also feeds the quota cache (args: the rate_limits flags).
 _ca_resolve() {
@@ -295,8 +298,14 @@ if [ "$auth_mode" = "MAX" ] && [ -n "$account_badge" ] && [ -n "$account_id" ] &
   _acc_at=$(cat "$_acc_stamp" 2>/dev/null)
   if [ $(( _now_s - ${_acc_at:-0} )) -gt 60 ]; then
     mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_acc_stamp"
-    ( /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" --accounts >/dev/null 2>&1 ) &
-    disown 2>/dev/null
+    # Bounded (20 s) so a wedged run cannot pile up; skipped under the CLAUDE_SL_DIR test seam (no real refresher).
+    if [ -z "${CLAUDE_SL_DIR:-}" ]; then
+      _bound=(perl -e 'alarm 20; exec @ARGV')
+      command -v timeout >/dev/null 2>&1 && _bound=(timeout 20)
+      command -v gtimeout >/dev/null 2>&1 && _bound=(gtimeout 20)
+      ( "${_bound[@]}" /opt/homebrew/bin/uv run "$_FETCH_SCRIPT" --accounts >/dev/null 2>&1 ) &
+      disown 2>/dev/null
+    fi
   fi
   if [ -f "$_USAGE_ACCOUNTS" ]; then
     # Line 1: pool weekly use (plan-weighted like Tinycast's summary.ts; every account weighs 1 when a plan multiple
@@ -305,7 +314,7 @@ if [ "$auth_mode" = "MAX" ] && [ -n "$account_badge" ] && [ -n "$account_id" ] &
     {
       IFS= read -r _pool_pct
       while IFS=$'\x1f' read -r _oid _o5 _ow _ostale _obad; do
-        [ -z "$_oid" ] && continue
+        [[ "$_oid" =~ ^[a-z][a-z0-9-]{0,15}$ ]] || continue
         if [ -z "$_o5$_ow" ] && [ "$_obad" != "1" ]; then continue; fi
         _o5s="${_o5:--}"; _ows="${_ow:--}"
         if [ "$_ostale" = "1" ] || [ "$_obad" = "1" ]; then

@@ -121,6 +121,29 @@ accounts_file "$FRESH_IU" "$FRESH_ME"
 out=$(OWN='?' line1 | plain)
 assert_lacks "unresolved own account: no other account" "me 21" "$out"
 
+echo "ids from files are validated before they reach echo -e"
+accounts_file "$FRESH_IU" "$FRESH_ME"
+jq -c '.accounts["me\\033[31mZQ"] = .accounts.me | del(.accounts.me)' "$SLD/usage_accounts.json" > "$SLD/x.json" && mv "$SLD/x.json" "$SLD/usage_accounts.json"
+out=$(render 2>&1)
+assert_lacks "other-account id with escape bytes: segment dropped" "ZQ" "$(plain <<<"${out%%$'\n'*}")"
+accounts_file "$FRESH_IU" "$FRESH_ME"
+out=$(BADGE='X\033[31mY' line1 | plain)
+assert_lacks "malformed badge: not rendered" "033" "$out"
+assert_lacks "malformed badge: no other-account segment" "me 21" "$out"
+out=$(OWN='bad id' line1 | plain)
+assert_lacks "malformed own id: not rendered" "bad id" "$out"
+
+echo "CLAUDE_SL_DIR seam: no real refresher is spawned"
+accounts_file "$FRESH_IU" "$FRESH_ME"
+# the real refresher would be `uv run $HOME/.claude/fetch_usage.py --accounts`: a script there that leaves a marker proves a spawn
+mkdir -p "$TMP/home/.claude"
+printf 'import sys\nopen(sys.argv[0] + ".ran", "w").close()\n' > "$TMP/home/.claude/fetch_usage.py"
+render >/dev/null; echo 0 > "$SLD/usage_accounts.stamp"   # an expired stamp would trigger the refresh
+jq -nc --argjson now "$NOW" '{model: {display_name: "x"}, workspace: {current_dir: "/tmp"}, rate_limits: {five_hour: {used_percentage: 1, resets_at: ($now + 600)}, seven_day: {used_percentage: 1, resets_at: ($now + 600000)}}}' |
+  env -i HOME="$TMP/home" PATH="$PATH" CLAUDE_SL_DIR="$SLD" /bin/bash "$SL" >/dev/null
+sleep 3
+[[ -e "$TMP/home/.claude/fetch_usage.py.ran" ]] && bad "refresher spawned despite CLAUDE_SL_DIR" || ok "expired stamp + seam: refresher not spawned"
+
 echo "routing reason"
 out=$(line1 | plain)
 assert_lacks "reason absent: nothing shown" "IU·" "$out"
