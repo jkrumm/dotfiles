@@ -523,32 +523,10 @@ export interface RefreshDeps {
   log?: (msg: string) => void
 }
 
-/**
- * Sample from the OAuth usage endpoint with the account's own Keychain token (read-only, 0 tokens, no window
- * priming). Every failure (locked Keychain, HTTP error incl. 429/401, bad body) is just "no sample": none of them
- * proves anything about the login. The token is never logged or stored.
- */
-async function oauthSample(d: RefreshDeps, id: string): Promise<Sample | null> {
-  const svc = keychainService(accountDir(d.reg.accounts[id]))
-  const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
-  const token = kc.status === 0 && !kc.error ? tokenFromCredentials(kc.stdout) : null
-  if (!token) {
-    d.log?.(`refresh ${id}: no Keychain token (${svc}): ${kc.error?.message ?? (kc.stderr.trim().slice(0, 200) || `rc=${kc.status}`)}`)
-    return null
-  }
-  try {
-    const r = await d.httpGet(OAUTH_USAGE_URL, oauthUsageHeaders(token), OAUTH_TIMEOUT_MS)
-    const sample = r.status === 200 ? sampleFromOAuthUsage(r.json, d.now()) : null
-    if (!sample) d.log?.(`refresh ${id}: usage endpoint gave no sample (HTTP ${r.status})`)
-    return sample
-  } catch (e) {
-    d.log?.(`refresh ${id}: usage endpoint failed: ${e instanceof Error ? e.name : typeof e}`) // name only: never echo a message that could carry request details
-    return null
-  }
-}
+type LoginVerdict = { loggedIn: boolean | null; startFailed?: string }
 
 /** `claude auth status` (0 tokens): the login verdict, null when the binary gave no usable answer. */
-function loginVerdict(d: RefreshDeps, env: Record<string, string>): { loggedIn: boolean | null; startFailed?: string } {
+function loginVerdict(d: RefreshDeps, env: Record<string, string>): LoginVerdict {
   const r = d.spawn(d.claudeBin, ["auth", "status"], { env, timeoutMs: 30_000 })
   // any spawn error but a timeout means the binary never ran an attempt; a timeout says nothing and keeps the claim
   if (r.error && r.error.code !== "ETIMEDOUT") return { loggedIn: null, startFailed: `${r.error.code ?? "error"}: ${r.error.message}` }
@@ -558,6 +536,47 @@ function loginVerdict(d: RefreshDeps, env: Record<string, string>): { loggedIn: 
   } catch {
     return { loggedIn: null }
   }
+}
+
+/** Access token of the account's Keychain item; null (with the reason logged) when it cannot be read. Never log the result. */
+function keychainToken(d: RefreshDeps, id: string): string | null {
+  const svc = keychainService(accountDir(d.reg.accounts[id]))
+  const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
+  const token = kc.status === 0 && !kc.error ? tokenFromCredentials(kc.stdout) : null
+  if (!token) d.log?.(`refresh ${id}: no Keychain token (${svc}): ${kc.error?.message ?? (kc.stderr.trim().slice(0, 200) || `rc=${kc.status}`)}`)
+  return token
+}
+
+/** One GET of the usage endpoint; the status is kept so the caller can tell an expired token (401) from the rest. */
+async function fetchUsage(d: RefreshDeps, id: string, token: string): Promise<{ sample: Sample | null; status: number | null }> {
+  try {
+    const r = await d.httpGet(OAUTH_USAGE_URL, oauthUsageHeaders(token), OAUTH_TIMEOUT_MS)
+    const sample = r.status === 200 ? sampleFromOAuthUsage(r.json, d.now()) : null
+    if (!sample) d.log?.(`refresh ${id}: usage endpoint gave no sample (HTTP ${r.status})`)
+    return { sample, status: r.status }
+  } catch (e) {
+    d.log?.(`refresh ${id}: usage endpoint failed: ${e instanceof Error ? e.name : typeof e}`) // name only: never echo a message that could carry request details
+    return { sample: null, status: null }
+  }
+}
+
+/**
+ * Sample from the OAuth usage endpoint with the account's own Keychain token (read-only, 0 tokens, no window
+ * priming). Every failure (locked Keychain, HTTP error incl. 429, bad body) is just "no sample": none of them
+ * proves anything about the login. The one exception to "just fail" is HTTP 401: the access token of an idle
+ * account expires and nothing renews it, but `claude auth status` (0 tokens) makes the binary renew it in the
+ * Keychain, so a 401 runs it (`status`, shared with the caller's verdict), re-reads the token and retries the GET
+ * once. The token is never logged or stored.
+ */
+async function oauthSample(d: RefreshDeps, id: string, status: () => LoginVerdict): Promise<Sample | null> {
+  const token = keychainToken(d, id)
+  if (!token) return null
+  const first = await fetchUsage(d, id, token)
+  if (first.status !== 401) return first.sample
+  d.log?.(`refresh ${id}: usage endpoint HTTP 401, renewing the access token via \`claude auth status\``)
+  if (status().startFailed) return null
+  const renewed = keychainToken(d, id)
+  return renewed ? (await fetchUsage(d, id, renewed)).sample : null
 }
 
 /**
@@ -575,14 +594,17 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
   const results: Record<string, RefreshResult> = {}
   for (const id of d.ids) {
     results[id] = "unresolved" // neither a fresh sample nor an auth verdict, until proven otherwise
-    const sample = await oauthSample(d, id)
+    const env = refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id]))
+    let verdict: LoginVerdict | undefined
+    const status = () => (verdict ??= loginVerdict(d, env)) // at most one `auth status` per account and run
+    const sample = await oauthSample(d, id, status)
     if (sample) {
       saveSample(id, sample, d.dir)
       setAuthFailed(id, false, d.now(), d.dir)
       results[id] = "fresh"
       continue
     }
-    const v = loginVerdict(d, refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id])))
+    const v = status()
     if (v.startFailed) {
       d.log?.(`refresh ${id}: cannot start claude (${v.startFailed})`)
       releaseClaim(id, d.dir)
@@ -618,16 +640,16 @@ export interface BeforePick {
 }
 
 /**
- * Refresh policy of `pick`: the interactive lane returns before any claim. Other lanes never block while a usable
- * sample exists; only an account with no usable sample refreshes synchronously, every other due account in the
- * background. Ids are claimed first.
+ * Refresh policy of `pick`, the same on every lane except for blocking: a due account (no sample, or a window older
+ * than FRESH_MS) is claimed first (5-min budget), then refreshed detached in the background. Only a non-interactive
+ * lane waits, and only for an account with no usable sample; the interactive lane never blocks and never spends
+ * tokens (the refresh is the 0-token usage GET / `claude auth status`), so a pick stays instant.
  */
 export async function refreshBeforePick(b: BeforePick): Promise<{ sync: string[]; background: string[] }> {
-  if (b.lane === "interactive") return { sync: [], background: [] } // no claim: an interactive pick touches nothing
   const due = dueIds(b.reg, b.cache, b.now)
   const claimed = due.length ? b.claim(due) : []
   // a due auth-failed account is a retry: never block a pick on it
-  const sync = claimed.filter((id) => !b.cache.auth_failed[id] && !usable(b.cache.samples[id], b.now))
+  const sync = b.lane === "interactive" ? [] : claimed.filter((id) => !b.cache.auth_failed[id] && !usable(b.cache.samples[id], b.now))
   const background = claimed.filter((id) => !sync.includes(id))
   if (background.length) b.detach(background)
   if (sync.length) await b.runSync(sync)

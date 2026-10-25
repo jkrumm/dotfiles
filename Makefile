@@ -1420,15 +1420,16 @@ claude-accounts-stamp: ## Run verify; on no FAIL record the running Claude Code 
 claude-accounts-e2e: ## Real claude -p per account + usage-tracker ingest + break tests (spends a few Haiku tokens; ARGS=--subagent adds a subagent run)
 	@bash $(DOTFILES_DIR)/scripts/claude-accounts-e2e.sh $(ARGS)
 
-# Daily login keepalive (`claude-account refresh --all` under jobrun, 06:30). Dev host only; teardown removes
-# the jobrun state file too, or jobs-grade would grade the retired label `unloaded` forever.
+# Hourly quota + login keepalive (`claude-account refresh --all` under jobrun, every 3600 s). Both machines: an idle
+# account's sample must never age past the picker's 6 h window, wherever the pick runs (the mini and the MacBook
+# each keep their own cache). Teardown removes the jobrun state file too, or jobs-grade would grade the retired
+# label `unloaded` forever.
 claude-accounts-keepalive-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — claude-accounts-keepalive skipped"; exit 0; fi; \
+	@for b in jobrun claude-account; do \
+		[ -x "$(HOME)/.local/bin/$$b" ] || { echo "    ✗ ~/.local/bin/$$b missing — run make setup (claude-accounts-keepalive needs it)"; exit 1; }; done; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.claude-accounts-keepalive" PLIST_DIR="$(DOTFILES_DIR)/launchd" || exit 1; \
-	echo "    ↳ daily 06:30 → claude-account refresh --all (0 tokens); log: ~/Library/Logs/claude-accounts-keepalive.log"
+	echo "    ↳ hourly → claude-account refresh --all (0 tokens); log: ~/Library/Logs/claude-accounts-keepalive.log"
 claude-accounts-keepalive-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.claude-accounts-keepalive.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \

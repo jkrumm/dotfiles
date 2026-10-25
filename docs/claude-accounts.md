@@ -7,7 +7,7 @@ Status: **W2 done** (2026-10-24); W3 = tune from picks.jsonl and `quota_sample` 
 IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
 dead = FAIL and `me` dead = WARN. Still open: agent-gateway workers (other repo), usage-tracker
-`account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the daily login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
+`account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
 cache, the statusline badge and `account` in `session_env`. Pick log:
 `~/.local/share/claude-accounts/picks.jsonl`; `claude-account exhausted` exists but nothing calls it yet.
 Decision record and the numbers behind it: `~/Reports/ai-subscription-2026-10/index.html`.
@@ -105,10 +105,15 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    request and nothing else: never copied, logged, written to the cache or written back to the Keychain (invariant 2: we
    never become co-owner of the login). `utilization` / `resets_at` of `five_hour` / `seven_day` become the sample
    (`src: oauth`). Any failure (Keychain locked or denied, HTTP 401/429/5xx, unparseable body) means *no sample* and
-   never an auth mark: a 401 or a locked Keychain proves nothing about the login, so the run falls through to the
-   `claude auth status` verdict (§Operate, Login keepalive). It runs only when an account's newest sample is older than
-   10 minutes, at most once every 5 minutes per account (the claim, unchanged), because the endpoint rate-limits per
-   token (a 429 can block for up to an hour: claude-swap, ClaudeBar). `claude -p "/usage"` was the source until Claude
+   never an auth mark: a locked Keychain or a 429 proves nothing about the login, so the run falls through to the
+   `claude auth status` verdict (§Operate, Login keepalive). One failure is repaired instead: **HTTP 401**. The Keychain
+   access token of an idle account expires and nothing renews it (seen live 2026-10-25: `me` idle 01:01 to 08:27, sample
+   8.5 h old, out of routing). `claude auth status` for that account's `CLAUDE_CONFIG_DIR` (0 tokens) makes the binary
+   renew the token in the Keychain, so a 401 runs it, re-reads the token and retries the GET once; a second failure is
+   plain "no sample". That one `auth status` is also the run's login verdict (never run twice), so the auth mark logic is
+   unchanged: only a verdict, a sample or a statusline record moves it, and no token reaches a log or a file. A refresh runs
+   only when an account's newest sample is older than 10 minutes, at most once every 5 minutes per account (the claim,
+   unchanged), because the endpoint rate-limits per token (a 429 can block for up to an hour: claude-swap, ClaudeBar). `claude -p "/usage"` was the source until Claude
    Code 2.1.310; it now prints an analysis and no longer updates `cachedUsageUtilization`, so it is gone.
    `readClaudeJson` still merges whatever `cachedUsageUtilization` the binary writes during real sessions (newest
    timestamp wins).
@@ -121,8 +126,9 @@ compatibility, plus `usage_accounts.json` (all accounts).
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
-              (sample > 10 min old: `pick` uses it and refreshes in the background, budgeted; a refresh takes
-               a couple of seconds. Only an account with no sample is refreshed synchronously.
+              (sample > 10 min old: `pick` uses it and refreshes in the background on EVERY lane, interactive
+               included, detached and budgeted; a refresh takes a couple of seconds. Only a non-interactive lane
+               refreshes an account with no usable sample synchronously; the interactive pick never waits.
                The pick log carries `stale: true`)
 pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
 overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
@@ -150,6 +156,13 @@ fast, so an idle `me` window is capacity that is gone at the next reset. A spawn
 to the other account when its 5h is more than 20 points emptier (`SESSION_MARGIN`)
 and it is not over weekly pace; reason `session`. Within the margin home stays, so
 cache and routing remain stable.
+
+Why the refresh is not interactive-exempt (v1.2 text, 2026-10-25): v1.1 left the interactive lane untouched so a
+pick could never block or spend anything. That exemption starved an idle account: on a machine where only interactive
+picks run (the MacBook) nothing ever refreshed `me`. The refresh itself is cheap (one usage GET or `claude auth status`,
+0 tokens), so the lane now spawns the same detached, claimed (5-min budget) background refresh as the others and still
+never waits: the pick answers from the cache it has, the next one sees the new sample. The rule itself is unchanged.
+The periodic keepalive (§Operate) is the guarantee; the pick-time refresh is the opportunistic second path.
 
 Why these homes: the waves are steady, unattended and start a fresh context
 per wave, so each wave is a free re-pick point. Together they are 63% of Max
@@ -268,10 +281,20 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 | registry unreadable | `pick` exits 4 and answers `unset CLAUDE_CONFIG_DIR` |
 | `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |
 
-**Login keepalive.** `com.jkrumm.claude-accounts-keepalive` (06:30, under jobrun) runs `claude-account refresh --all`:
+**Quota + login keepalive.** `com.jkrumm.claude-accounts-keepalive` (**hourly, on both machines**, under jobrun with
+`--every 3600`, `RunAtLoad`) runs `claude-account refresh --all`. Decision 2026-10-25: it was daily 06:30 on the mini only, so
+an idle account's sample went past the 6 h eligibility window and silently left routing (and the MacBook, whose picks are
+all interactive, had no refresher at all). Hourly sits far under 6 h, survives a missed run or two, and costs 24 usage GETs
+a day per account (the claim keeps the 5-minute budget; the endpoint is rate-limited per token, nowhere near that).
+`make claude-accounts-keepalive-setup` (part of `make setup`) installs it everywhere; it needs `~/.local/bin/jobrun` and
+`claude-account` (both from `make setup`) and fails loudly without them. Each machine keeps its own cache, so each
+refreshes its own: the MacBook's picks route on the MacBook's samples. `jobs-grade` window for `every 3600` is 3 h (a
+sleeping laptop fires one run on wake, not a backlog); `make doctor` maps the label in `docs/architecture.md` (mini table
+and MacBook list). Per enabled account:
 per enabled account: the OAuth usage endpoint first (source 3), and when that gives no sample `claude auth status` for that account's `CLAUDE_CONFIG_DIR`. The two are decoupled: the auth mark follows the verdict, never the sample. loggedIn=true clears the mark (`auth-ok`), loggedIn=false sets it (`auth-failed`), and a fresh sample or a statusline `record` also clears it (both prove the login). Both calls cost 0 tokens and prime no window. The run exits 1 when an account got neither a sample nor a verdict, and also when the account is logged in but the endpoint gave no sample and its stored sample is older than 6 h (or missing): a dying feed must turn the jobrun grade red instead of fading out quietly. An endpoint failure with a clean `auth status` and a sample younger than 6 h is exit 0. stderr names the account and the age. `claude auth status` is also what keeps an idle account's OAuth login alive. `--all` ignores the 10-minute freshness and the auth cooldown but not the
-5-minute claim. Log: `~/Library/Logs/claude-accounts-keepalive.log`; installed by `make claude-accounts-keepalive-setup`
-(part of `make setup`, dev host only).
+5-minute claim. The interactive and non-interactive picks run the same refresh opportunistically (detached, same
+claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/claude-accounts-keepalive.log`
+(a green run prints nothing).
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
@@ -305,6 +328,8 @@ reachable from the GUI session; never `ssh mini 'claude …'`):
 | `quota/<id>` WARN "no cachedUsageUtilization" | no session ever ran on that account (only sessions write it now) | informational; `claude-account refresh --ids <id>` feeds the picker's cache regardless |
 | `usage` shows `auth FAILED` right after a fresh `/login` | the mark only clears on a verdict, a sample or a statusline record | `claude-account refresh --ids <id>` (`auth status` loggedIn=true clears it) |
 | keepalive exits 1, log `no fresh sample and no auth verdict` or `logged in but still without a fresh sample` | neither the endpoint (Keychain locked / 429 / network) nor `claude auth status` answered, or only the verdict did and the stored sample is over 6 h old | `~/Library/Logs/claude-accounts-keepalive.log` says which; a locked Keychain on the mini needs the GUI session unlocked, retry `claude-account refresh --all` |
+| log `usage endpoint HTTP 401, renewing the access token via claude auth status` | the idle account's Keychain access token expired (expected after hours idle); the run renews it and retries once | nothing, unless it repeats every hour with `no sample` after it: then the refresh token is dead, check `auth/<id>` and re-login |
+| an account's sample is hours old on the MacBook | keepalive agent not installed there (`launchctl list \| grep claude-accounts`) | `make setup` or `make claude-accounts-keepalive-setup` on that machine |
 | `usage` shows `src oauth` samples but old ages for an account | its refresh is failing quietly (429, Keychain) | run `claude-account refresh --ids <id>` and read the stderr line |
 
 ## Borrowed from open source (2026-10 survey)

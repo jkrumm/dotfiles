@@ -3,38 +3,37 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.claude-accounts-keepalive</string>
-  <!-- Daily login keepalive for the Claude Max accounts (docs/claude-accounts.md §Operate):
-       `claude-account refresh --all` runs `claude -p "/usage"` once per enabled account — 0 tokens,
-       no window priming — so an idle account's OAuth refresh token never ages out, and the quota
-       cache gets a fresh sample. A dead login is marked in the cache and shows in the heartbeat. -->
+  <!-- Hourly quota + login keepalive for the Claude Max accounts, on BOTH machines
+       (docs/claude-accounts.md §Operate): `claude-account refresh --all` takes one OAuth usage GET per
+       enabled account (on HTTP 401 it renews the expired access token via `claude auth status` and
+       retries once), else the `claude auth status` verdict. 0 tokens, no window priming. An idle
+       account would otherwise age past the picker's 6 h sample window and drop out of routing; a dead
+       login is marked in the cache and shows in the heartbeat. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/.local/bin/jobrun</string>
     <string>com.jkrumm.claude-accounts-keepalive</string>
     <string>--owner</string><string>dotfiles</string>
-    <string>--every</string><string>86400</string>
+    <string>--every</string><string>3600</string>
     <string>--timeout</string><string>900</string>
     <string>--</string>
     <string>__HOME__/.local/bin/claude-account</string>
     <string>refresh</string>
     <string>--all</string>
   </array>
-  <!-- --timeout 900: each account's `claude -p /usage` is bounded at 75 s inside claude-account and a
-       dead-login probe at 30 s, so this only catches a wedged claude-account itself. It is not an
-       agent run (no inference). -->
+  <!-- --timeout 900: per account a Keychain read (15 s), up to two usage GETs (10 s each) and one
+       `claude auth status` (30 s) bound the run; this only catches a wedged claude-account itself.
+       Not an agent run (no inference). Graded by jobs-grade: every 3600 -> overdue after 3 h. -->
   <!-- jobrun and claude-account are bun scripts and launchd hands agents a minimal PATH: bun's dir,
        ~/.local/bin (claude) and Homebrew must be on it. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
-  <!-- StartCalendarInterval: launchd coalesces fires missed while the machine slept into one run on wake. -->
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key><integer>6</integer>
-    <key>Minute</key><integer>30</integer>
-  </dict>
-  <key>RunAtLoad</key><false/>
+  <!-- StartInterval, not a calendar time: a sleeping machine fires one run on wake, and RunAtLoad covers
+       login/boot (the 5-min claim budget in claude-account keeps a burst of loads harmless). -->
+  <key>StartInterval</key><integer>3600</integer>
+  <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>__HOME__/Library/Logs/claude-accounts-keepalive.log</string>
   <key>StandardErrorPath</key><string>__HOME__/Library/Logs/claude-accounts-keepalive.log</string>
 </dict>

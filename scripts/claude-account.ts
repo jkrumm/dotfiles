@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // claude-account — Claude account registry, picker and per-account quota cache (docs/claude-accounts.md).
 //
-//   claude-account pick --lane <lane> [--why]      (stale accounts refresh in the background; unsampled ones synchronously) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
+//   claude-account pick --lane <lane> [--why]      (any lane: a due account refreshes detached in the background; a non-interactive lane waits only for an account with no usable sample) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache
 //   claude-account refresh [--ids a,b] [--all]   OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
@@ -14,7 +14,7 @@
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
-// (never copied, logged or written back); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
+// (never copied, logged or written back; on HTTP 401 `claude auth status` renews it first, one retry); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
 import { spawnSync } from "node:child_process"
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
