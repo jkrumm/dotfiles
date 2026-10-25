@@ -19,7 +19,7 @@ ASSETS = BASE / "report" / "assets"
 TITLE = ""
 
 # (id, label, path, title if the file has no usable h1)
-# TDD v2.2 (2026-10-25). v1 (2026-10-22) is SECTIONS_V1; `--v1` builds it to report-v1.html.
+# TDD v2.3 (2026-10-25). v1 (2026-10-22) is SECTIONS_V1; `--v1` builds it to report-v1.html.
 SECTIONS = [
     ("t0", "", "tdd/00-reading-order.md"),
     ("t1", "", "tdd/01-verdict.md"),
@@ -39,6 +39,7 @@ SECTIONS = [
     ("tb", "B", "tdd/b-landscape.md"),
     ("tc", "C", "tdd/c-from-v1.md"),
     ("td", "D", "tdd/d-edge-cases.md"),
+    ("te", "E", "tdd/e-field.md"),
     ("tf", "", "tdd/faq.md"),
 ]
 SECTIONS_V1 = [
@@ -598,7 +599,7 @@ def main():
     global TITLE
     check = "--check" in sys.argv[1:]
     v1 = "--v1" in sys.argv[1:]
-    TITLE = "Factory design — 2026-10-22 (v1, superseded)" if v1 else "Factory — technical design v2.2, 2026-10-25"
+    TITLE = "Factory design — 2026-10-22 (v1, superseded)" if v1 else "Factory — technical design v2.3, 2026-10-25"
     out = OUT.with_name("report-v1.html") if v1 else OUT
     doc, mf, mp, ma, ph = build(SECTIONS_V1 if v1 else SECTIONS)
     problems = False

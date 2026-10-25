@@ -59,7 +59,7 @@ works on the phone as on the computer — it is a PWA behind the tailnet, with m
 |-|-|
 | **Now** (home) | Does anything need me? Is the factory healthy? The morning briefing lives here. |
 | **Projects** | How is each project doing — open Issues, leads, deploys, cost, TickTick, changelog? (your wireframe) |
-| **Factory** | What runs, what waits and until when, which account, model and effort each lead uses? What did the steward do? How does the scorecard look (§9)? |
+| **Factory** | What runs, what waits and until when, which account, model and effort each lead uses? What did the orchestrator do? How does the scorecard look (§9)? |
 | **Usage** | How much of each Max window is used and by what; IU API spend by source? |
 | **Artifacts** | Which plans and reports wait for my comments? A comment reaches the agent that wrote it. |
 
@@ -88,8 +88,8 @@ factory project check
 ```
 
 `ship` takes the three-line summary and the evidence; `ask` puts a decision card to you with a default
-and an expiry. The rest (`job`, `session`, `artifact`, `decide`, the steward's verbs, …) exists for
-you, the steward and Argo and is documented once, not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
+and an expiry. The rest (`issue resume`, `job`, `session`, `artifact`, `decide`, the orchestrator's verbs (`prio`, `dep`, `steer`), …) exists for
+you, the orchestrator and Argo and is documented once, not in every repo. Every command writes data to stdout and messages to stderr, takes `--format
 json|md`, exits non-zero on failure and never prompts an agent.
 
 ## Tools around it

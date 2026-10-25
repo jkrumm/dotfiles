@@ -8,7 +8,6 @@ commands everywhere.
 ```yaml
 apiVersion: factory/v2
 name: weatherorb
-class: fleet               # fleet: a mother plans its initiatives · session: leads only
 deploy:
   mode: auto               # auto: a push deploys · make: the lead runs `make deploy`
                            # agentic: deploying needs an agent · none: nothing to deploy
@@ -29,8 +28,9 @@ jobs: [deps, docs, code-health]
 ticktick: { list: WeatherOrb }
 ```
 
-A drift check runs in CI and in the factory: valid schema, every integration key resolves, every
-make target and runbook parses. A broken manifest becomes an upkeep Issue, never a silent skip.
+A drift check runs in CI and in the factory: valid against the published JSON Schema, every
+integration key resolves, every make target and runbook parses. A broken manifest becomes an upkeep
+Issue, never a silent skip, and the factory keeps running on the last valid version (Warp's rule).
 
 ## The make contract
 
@@ -56,21 +56,21 @@ targets that path needs. Leads use the contract; the factory itself only runs `r
 ```
 project.yaml     the manifest
 AGENTS.md        prose + a generated block (routing, make targets)
-docs/waves/      wave plans: prose and Issue ids; state lives in the factory
-docs/notes/      fleet only: the mother's notes for a fresh wake
+docs/waves/      initiative plans: prose and Issue ids, the orchestrator's memory between wakes;
+                 state lives in the factory
 ```
 
 No CLAUDE.md anywhere.
 
-## Fleet and session
+## Factory projects and plain repos
 
-| Class | Projects |
-|-|-|
-| fleet | basalt-ui, argo, weatherorb, shutterflow, factory |
-| session | dotfiles and every other SourceRoot repo |
-| work | IuRoot: not in W1–W6 |
+| Kind | Repos | What happens there |
+|-|-|-|
+| Factory project | every repo with a `project.yaml`: the homelab from W2, then each repo as it gets signals or Issues (W4) | intake, leads, initiatives, the hold, probes, learning |
+| Plain repo | the brain, your website and anything else without a manifest | nothing automatic; you work in herdr sessions, and Hermes starts one for you on request |
+| Work | IuRoot: not in W1–W6 | — |
 
-Promoting a project is one line in its manifest.
+Adding the manifest makes a repo a factory project; the minimal one is four lines.
 
 ## TickTick and the brain
 

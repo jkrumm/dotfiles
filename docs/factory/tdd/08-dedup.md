@@ -14,7 +14,7 @@ model. So dedup happens twice:
 
 | Tier | Who | Asks | Cost |
 |-|-|-|-|
-| **Symptom**, at intake | factory: rules; from W4 a cheap judge, if it passes the bake-off | is this the same thing happening again? | free or one cheap call; never waits |
+| **Symptom**, at intake | factory: rules; a cheap judge once its shadow run earns trust | is this the same thing happening again? | free or one cheap call; never waits |
 | **Cause**, during investigation | the lead | do these Issues share a cause? | part of the lead's work; `factory issue merge\|split` with a reason |
 
 Intake only has to catch the obvious repeats: the same monitor flapping, the same error fingerprint
@@ -30,23 +30,23 @@ same cause. A merge stops the absorbed Issue's lead, if one was running, and han
 | **Judge** | the ambiguous rest: two open Issues on related subjects within 30 minutes, or a new Issue whose fingerprint or text matches a recent one | a cheap judge returns the probability that both are the same symptom. ≥ 0.8 attaches, ≤ 0.2 keeps apart, anything between links them as *possibly related*. A failed call keeps them apart; intake never waits |
 | **Lead** | everything the cause explains | merge or split, with the reason as a label |
 
-## The judge has to earn its place
+## The judge: shadow first, then trusted
 
-Until W4, the judge is off: ambiguous pairs stay apart and are linked as *possibly related*. A wrong
-merge hides work, while a missed merge costs one note to a lead, so the judge must be precise
-before it may merge anything.
+There is one candidate and no contest: agent-gateway's decision model, one call per ambiguous pair,
+with a context pack of both Issues' signals, subjects, topology neighbours, timing and the project's
+recent deploys. It returns a probability, never a cause.
 
-**The W4 bake-off**, on labelled pairs from the golden set plus every merge and split the leads have
-made by then:
+| Stage | From | What the judge may do | Moves on when |
+|-|-|-|-|
+| **Off** | W1 | nothing; ambiguous pairs stay apart, linked as *possibly related* | intake goes live (W2) |
+| **Shadow** | W2 | logs its verdict on every ambiguous pair and acts on none; the leads' merges and splits label the truth | merge precision ≥ 0.95 over at least 30 labelled pairs, grouping F1 still ≥ 0.889 |
+| **Trusted** | when earned | ≥ 0.8 attaches, ≤ 0.2 keeps apart, anything between links as *possibly related* | precision falls below 0.95 over the last 30 pairs: back to shadow |
 
-| Candidate | Context it gets |
-|-|-|
-| agent-gateway's decision model, one call | a context pack: both Issues' signals, subjects, topology neighbours, timing, the project's recent deploys |
-| a DeepSeek session in agent-gateway's OpenCode | the same pack plus read access to the factory database and the logs, to check the symptom further; it returns a probability, never a cause for a lead |
-
-It reports precision and recall on merges and the cost per pair. The winner must reach a merge
-precision ≥ 0.95 without dropping grouping F1 below 0.889; if neither does, the judge stays off and
-leads keep catching duplicates. Recall can grow later; wrong merges cannot be tolerated.
+A wrong merge hides work, while a missed merge costs one note to a lead, so precision is the gate and
+recall can grow later. If the judge never earns trust, nothing is lost: the leads keep catching
+duplicates by cause, as they do from W1. Only if shadow mode shows the judge failing for lack of
+context would a richer judge (a DeepSeek session in OpenCode that can query the logs) be tried, and
+then through the same shadow stage.
 
 ## Seen before
 
@@ -77,7 +77,7 @@ The scorecard (§9) tracks, per month:
 - the seen-before hit rate (a lead confirms the suggested past cause)
 - the runbook share (incidents closed by a runbook, without a lead)
 
-If none of the four improves over two months, the steward opens an Issue that says so.
+If none of the four improves over two months, the orchestrator opens an Issue that says so.
 
 **Not built until measured need:** embeddings and vector search. They come when full-text matching
 misses known fixes you can name, or the split rate says the rules are not enough.

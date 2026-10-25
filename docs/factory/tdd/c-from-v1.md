@@ -15,12 +15,12 @@
 | ADR | v1 | v2 |
 |-|-|-|
 | 001 task system | ledger tasks with bd's verbs | revised: one unit, the Issue (`factory issue`), in Postgres |
-| 002 durable execution | ledger + statecharts, no engine | revised: an Issue state machine with an inbox in Postgres, engrams' own conclusion; DBOS is your decision (§6) |
-| 003 correlation | deterministic only | revised: two tiers, symptom at intake and cause in the lead; a judge only after a bake-off; labels (§8) |
+| 002 durable execution | ledger + statecharts, no engine | revised: an Issue state machine with an inbox in Postgres, engrams' own conclusion; no DBOS (§6) |
+| 003 correlation | deterministic only | revised: two tiers, symptom at intake and cause in the lead; a judge only after a shadow run; labels (§8) |
 | 004 CLI vs MCP | CLI-first | kept: generated from one router |
 | 005 artifact review | own service, plannotator behind `rv` | revised: *Artifacts* in Argo at W5, no `rv` |
 | 006 telemetry | one trace per item | kept: OpenTelemetry to ClickStack |
-| 007 agent topology | six mothers, OpenCode/IU wakes in herdr | revised: one lead per Issue on Max in herdr; mothers for fleet initiatives; a steward above (§4, §5) |
+| 007 agent topology | six mothers, OpenCode/IU wakes in herdr | revised: two layers on Max in herdr, an orchestrator woken per event over one lead per Issue (§4, §5) |
 | 008 engine policy | engine by class, spill to IU | superseded: three admission classes, wait never spill |
 | 009 Argo hosting | split | superseded: all on the mini |
 | 010 project manifest | `project.yaml` | revised: + make contract, deploy mode, migrations, per-path autonomy |

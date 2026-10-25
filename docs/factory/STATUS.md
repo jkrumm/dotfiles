@@ -1,6 +1,25 @@
 # Factory design — status
 
-## v2.2 (2026-10-25) — current
+## v2.3 (2026-10-25, evening) — current
+
+**Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).
+
+- **Inputs:** the owner's voice note on v2.2 (`feedback/2026-10-25-owner-voice-note-v22.md`); Warp
+  Factories in primary sources (`research/2026-10-25-warp-factories.md`); Claude Code runtimes from
+  the docs (`research/2026-10-25-claude-code-runtimes.md`); session runtimes across 14 tools
+  (`research/2026-10-25-session-runtimes.md`); industry vocabulary, company platforms and metrics
+  (`research/2026-10-25-industry-vocabulary.md`); claude-code#97074 (headless `-p` ≈ 1.8× the 5-hour
+  window per token).
+- **Changes:** two layers, an orchestrator (mothers + steward merged; fresh session per event) over
+  the leads; DBOS closed (no; the owner left it to me); Postgres owns the work, sessions stay
+  interactive in herdr behind a `Runner` port, transcripts archived, `factory issue resume`,
+  a `claude --bg` spike in W3; dedup judge: one candidate, shadow from W2, trusted at ≥ 0.95;
+  plain repos (no `project.yaml`) stay outside the factory; from Warp: scorers, failure-count
+  self-improvement, autonomy and touches KPIs, manifest JSON Schema with last-valid; appendix E
+  (field and vocabulary); brain field guide `wiki/engineering/software-factories.md`.
+- **Next:** the owner's sign-off; then W1 per `tdd/12-plan.md`. No decision is open.
+
+## v2.2 (2026-10-25) — history
 
 **Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).
 

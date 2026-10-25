@@ -111,3 +111,20 @@ Verbatim in `feedback/2026-10-25-owner-comments-raw.md`, with the chat message o
 | 23 | Monitor subscription picking, dedup and learning, the pipeline | the scorecard job (§9) |
 | 24 | A "daddy orchestrator" above the mothers that watches tokens, limits, routing, `me`'s 5-hour window | the steward (§5); the build orchestrator plays it during the rewrite (§12) |
 | 25 | We start after my final review, not on a fixed date | start on your sign-off (§12) |
+
+## Your voice note on v2.2 (2026-10-25, evening)
+
+Summary in `feedback/2026-10-25-owner-voice-note-v22.md`. This table supersedes rows 2, 3, 17, 19 and
+24 above.
+
+| You said | Now (v2.3) |
+|-|-|
+| Mother, lead and wave agents feel like three layers; I see two | two: an orchestrator over the leads. The mothers and the steward are both the orchestrator now; a lead's subagents and worktrees are its own tools, not a layer. Warp's factories make the same split, one level deep (§4) |
+| The orchestrator should be compacted or restarted at meaningful boundaries | it is never long-lived: one fresh session per event, starting from the factory's state and the initiative's plan (§4, §5) |
+| Is herdr right, or `claude -p` or the Agent SDK in a more managed setup? | Postgres owns the work and the session id is the handle; herdr only hosts interactive sessions. `claude -p` costs ≈ 1.8× the 5-hour window per token (claude-code#97074) and cannot be steered mid-turn; the SDK's subscription use is contested. Claude Code's own background sessions, with herdr only the view, get a W3 spike (§6) |
+| I want to look back into old chats | transcripts archived at close, since Claude Code deletes its own after 30 days; `factory issue resume` reopens any attempt as a fork (§6) |
+| Plain sessions for simpler repos must stay possible | repos without a `project.yaml` stay outside the factory; Hermes starts a plain session there (§4, §7) |
+| DBOS: I don't care | decided: no DBOS (§6, §13) |
+| The dedup part of the podcast was confusing | one judge, no contest: shadow from W2, trusted only at ≥ 0.95 merge precision over 30 cases; leads catch duplicates by cause regardless (§8) |
+| Dig into Warp's factories; learn the language and the field; solo versus company | `research/2026-10-25-warp-factories.md`; appendix E; Warp's scorers, self-improvement trigger, autonomy KPIs and manifest schema adopted (§7, §9) |
+| I want to become an expert and publish a guide | the field guide in the brain, `wiki/engineering/software-factories.md`: the twelve decisions every factory makes, converged patterns, metrics, references, vocabulary with origins |

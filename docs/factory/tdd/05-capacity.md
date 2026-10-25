@@ -4,7 +4,7 @@
 
 | Engine | Paid by | Does |
 |-|-|-|
-| **Claude Code in herdr**: leads, their workers, mothers, the steward, your own sessions | the `iu` (Max 20x) and `me` (Max 5x) subscriptions | everything that needs understanding: root cause, plan, code, tests, verification, ship, the production check, the close report |
+| **Claude Code in herdr**: leads, their workers, the orchestrator, your own sessions | the `iu` (Max 20x) and `me` (Max 5x) subscriptions | everything that needs understanding: root cause, plan, code, tests, verification, ship, the production check, the close report |
 | **Cheap models** through agent-gateway: DeepSeek Flash, Haiku, the decision model (ids live in `agw routing`) | IU API tokens, company-paid | the routine around it: dedup judging, classification, card and briefing wording, the changelog, learning write-ups, job summaries; and the tools a lead calls, such as review and research; Hermes; the gateways |
 | **Plain code** | nothing | intake, rules, timers, runbooks, admission, Witness, the evidence check, re-verify |
 
@@ -38,7 +38,7 @@ or a time to wait until.
 |-|-|-|
 | **urgent** | an owner app is down, data at risk | any account is eligible |
 | **normal** | bugs, your requests, initiative waves | an account is under its weekly pace |
-| **upkeep** | upgrades, docs, code health, security | capacity would otherwise lapse at the next reset; every fleet project still gets one upkeep Issue a week |
+| **upkeep** | upgrades, docs, code health, security | capacity would otherwise lapse at the next reset; every factory project still gets one upkeep Issue a week |
 
 - **5-hour headroom.** A lead starts on an account only if that account's 5-hour headroom covers the
   expected cost of its size: the p75 share of a 5-hour window, measured per size and model from
@@ -61,16 +61,17 @@ Classification picks the lead's model and effort from size and kind; the launche
 | s–m: most bugs and requests | Sonnet | medium |
 | l–xl, novel design, security, or a second attempt after a failed one | Opus | medium, high for a second attempt |
 
-A lead that fails or stalls is re-spawned one tier up with its predecessor's notes. Only the steward
-sets maximum effort. The lead picks its own workers' models by the same table. The weekly tuning job
+A lead that fails or stalls is re-spawned one tier up with its predecessor's notes. Only the
+orchestrator sets maximum effort. The lead picks its own workers' models by the same table. The weekly tuning job
 compares cost and outcome per tier and proposes new defaults.
 
-## The steward
+## The orchestrator
 
-The orchestrator above the leads and mothers, built for one job: keep the whole factory moving
-without wasting either subscription.
+The layer above the leads (§4). Besides planning initiatives, it has one job: keep the whole factory
+moving without wasting either subscription.
 
-- **When:** 06:30 daily for exceptions only, a full scorecard review on Mondays, and on events:
+- **When:** an initiative to plan or a wave shipped (§4); 06:30 daily for exceptions only; a full
+  scorecard review on Mondays; and on events:
   - a lead with two hours of work time and no commit, no phase change, rising tokens
   - an Issue reopened twice
   - a normal Issue waiting more than 24 hours for capacity
@@ -85,9 +86,10 @@ without wasting either subscription.
   or merge Issues, pause a project, put a card to you, propose a policy change (picker thresholds,
   tier defaults) as an upkeep Issue.
 - **Never** writes code, touches a repo, or starts work the queue does not hold.
-- **Runs** on Sonnet at medium effort, on the account with the most slack; a typical run takes minutes.
+- **Runs** on the account with the most slack: Opus for initiatives and wave reviews, Sonnet at
+  medium for everything else; a typical routine wake takes minutes.
 
-Until W3 builds it, the build orchestrator does this job for the rewrite itself (§12).
+Until W3 builds it, the build's own orchestrator tab does this job for the rewrite itself (§12).
 
 ## Balance: both windows full, few switches
 
@@ -98,7 +100,7 @@ The goal: **both weekly windows end close to full, and work rarely changes accou
 - **The picker steers new spawns** toward the account behind its pace, spends capacity that would
   lapse first, and checks 5-hour headroom before it starts anything.
 - **Tuned from data:** the weekly tuning job has a cheap model read the picker's decisions and the
-  quota history and propose threshold changes; the steward turns the ones worth trying into upkeep
+  quota history and propose threshold changes; the orchestrator turns the ones worth trying into upkeep
   Issues, and a lead ships each like any other change.
 
 | Measure, on *Usage* | Target |

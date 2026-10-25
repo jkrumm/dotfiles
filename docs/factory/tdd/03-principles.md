@@ -33,5 +33,5 @@ Eight rules. A design choice that breaks one is wrong.
   cannot reach directly are polled, or arrive through the Slack adapter. On GitHub, only your user's
   issues and comments start work.
 - **No caps on a lead's work.** No turn limits, no wall-clock ceilings; the one liveness rule is the
-  idle watchdog, and the steward handles a lead that stops making progress.
+  idle watchdog, and the orchestrator handles a lead that stops making progress.
 - **AGENTS.md only.** No CLAUDE.md in any repo.

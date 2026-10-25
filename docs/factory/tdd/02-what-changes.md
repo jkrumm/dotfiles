@@ -39,5 +39,5 @@
   goes unwatched in between; the other sources' alerts stop as their adapters land in W4.
 - **Argo stays on the VPS until W5**, then moves to the mini in one cutover.
 - **The rewrite runs as waves in herdr on Max,** steered by one orchestrator tab that watches both
-  accounts' windows (§12). From W3 on, the steward takes over and the factory builds the rest of
+  accounts' windows (§12). From W3 on, the factory's orchestrator takes over and the factory builds the rest of
   itself.

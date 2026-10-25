@@ -32,7 +32,7 @@ flowchart TB
 | Step | Owner | Engine | Out |
 |-|-|-|-|
 | **Intake** | factory | a poller per source; your requests | Signal |
-| **Dedup by symptom** | factory | rules; a cheap judge for the ambiguous rest once it passes the W4 bake-off (§8) | a new Issue, or a Signal attached to an open one |
+| **Dedup by symptom** | factory | rules; a cheap judge for the ambiguous rest once its shadow run earns trust (§8) | a new Issue, or a Signal attached to an open one |
 | **Settle + runbook** | factory | a grace timer; a runbook from `project.yaml` | healed and closed, or on to the queue |
 | **Classify** | factory | one cheap-model call | project, kind, urgency, size; the lead's model and effort |
 | **Queue + admit** | factory | the picker, by class and 5-hour headroom (§5) | an account now, or a time to wait until |
@@ -49,9 +49,12 @@ that needs understanding a problem belongs to the lead.
 - **Signals** from sources and jobs become `incident`, `bug` or `upkeep` Issues after dedup.
 - **Requests** go straight to *Classify*: Argo, Hermes, `factory issue new`, a TickTick item tagged
   `#factory`, a GitHub issue you open in one of your repos, or any issue where you comment `/factory`.
-- **Initiatives**: a request too big for one lead is classified `initiative`. In a fleet project it
-  goes to the project's mother; elsewhere a lead plans it. The plan's waves become child Issues with
-  their dependencies.
+  The factory never triggers on its own comments, and a source it cannot parse triggers nothing.
+- **Initiatives**: a request too big for one lead is classified `initiative` and wakes the
+  orchestrator, which plans it into waves: child Issues with their dependencies.
+
+Repos without a `project.yaml` stay outside the factory: there you work in plain herdr sessions as
+today, and Hermes starts one for you (`rd work`) instead of filing an Issue (§7).
 
 ## The lead's job
 
@@ -96,7 +99,7 @@ cheap-model root cause and no cheap-model plan.
 
 - **The ask:** your words, or what the signals saw: what, where, since when, how often.
 - **Evidence:** the raw signals, the commands that pull their logs and traces, the project's last
-  deploys and commits.
+  deploys and commits. Alert and issue text is marked as evidence, never instructions.
 - **History:** closed Issues that looked similar, with the cause and fix their lead verified, marked
   *past, may not apply*.
 - **The project:** its make contract, deploy mode, which paths ship on their own, production targets.
@@ -118,18 +121,39 @@ cause; of its output, the brief shows just kind and urgency. The standing orders
   is reported, the hook sends it back with one line: report `ship`, `close`, `block` or `ask`. Claude
   Code continues a session when a Stop hook exits with code 2, so nobody types `continue`.
 - **New facts go to the running lead.** A signal linked as *possibly related* to an Issue in work (by
-  the rules, and by the judge once it passes) reaches that lead as a note, not a second session. The lead decides whether it shares the cause.
+  the rules, and by the judge once trusted) reaches that lead as a note, not a second session. The lead decides whether it shares the cause.
+- **You can step in at any time:** open the lead's tab and type. The lead treats your message like a
+  note, and the factory keeps following.
 - **Walls:** a walled lead waits for its window and resumes on the same account, cache intact.
 - **After ship** the lead stays open and idle through the 30-minute hold, so a regression reaches it
   while its cache is warm. When the hold passes, Witness closes the tab.
 
-## Leads, mothers and the steward
+## Two layers: the orchestrator and the leads
 
-| Role | What it is | Lifetime |
-|-|-|-|
-| **Lead** | one Claude Code session per Issue, end to end | spawn → end of the hold |
-| **Mother** | the lead for a fleet project's initiatives: writes the wave plan, keeps `docs/notes/` | woken per initiative; her memory is her notes, not a long-lived context |
-| **Steward** | the orchestrator above them all (§5): one short session that looks over leads, mothers, the queue and both accounts | 06:30 daily and on events |
+Under the factory's code run two kinds of agent. Warp's factories make the same split, a foreman over
+workers and one level deep: "A child runs its own work and reports back; it does not spawn its own
+children" (`research/2026-10-25-warp-factories.md`).
+
+| Layer | Does | Lives | Model |
+|-|-|-|-|
+| **Orchestrator** | what code cannot decide: plans an initiative into waves and reviews each before the next; steers a stuck lead (stronger model, split, park); sets a priority or a dependency when they conflict; looks over leads, queue and both accounts (§5) | one fresh session per event | Opus for initiatives and wave reviews; Sonnet at medium for the rest |
+| **Lead** | one Issue, end to end: root cause to production evidence | spawn → end of the hold | by size and novelty (§5) |
+
+- **The factory is not a layer.** It is the conveyor: it queues, admits, spawns, follows and closes,
+  in code. The orchestrator decides and the factory executes. Queue order is the factory's rule
+  (class, dependencies, age) unless the orchestrator sets a priority or a dependency, with a reason,
+  through `factory issue prio|dep`.
+- **A lead's helpers are not a layer either.** Subagents, `rd fan` worktrees or a `/wave` chain are
+  tools the lead picks; the factory never sees them.
+- **No orchestrator session lives long.** Each wake starts fresh from `factory status`, the
+  initiative's plan in `docs/waves/` and the event, and ends when its decision is recorded. The
+  event is the boundary, so nothing compacts and a crash costs one wake.
+- **An initiative is the orchestrated `/wave` mode you use today,** with the factory doing the
+  spawning: the orchestrator writes the plan in the project's directory and opens the waves as child
+  Issues; each wave is an Issue with its own lead; when a wave ships, the orchestrator reads the
+  result and adjusts the waves still ahead.
+- **It reaches leads through herdr,** as you do: it reads a lead's pane and leaves it a note. It never
+  writes code, touches a repo or starts work the queue does not hold.
 
 ## What you see of an Issue
 
@@ -149,5 +173,5 @@ stateDiagram-v2
   closed --> queued: same fault within 30 days
 ```
 
-A lead that makes no progress does not wait for you either: the steward steers it, gives it a stronger
-model, splits the Issue, or parks it with a note in the briefing (§5).
+A lead that makes no progress does not wait for you either: the orchestrator steers it, gives it a
+stronger model, splits the Issue, or parks it with a note in the briefing (§5).

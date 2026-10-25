@@ -32,9 +32,10 @@ A job never edits a repo. Anything that needs a change becomes an Issue and goes
 | **docs and agent setup** | W6 | generated AGENTS.md blocks vs a fresh render; AGENTS.md size, skill count, resident tool tokens | upkeep when drifted or over budget |
 | **code health** | W6 | `make quality` over the week's changes | one batched upkeep Issue per project |
 | **infra** | W1: backups and the restore drill; W6: the rest | disks, certs, backup age and a weekly restore test, containers, databases, ClickHouse, the mini's memory and swap | an incident with its runbook |
-| **briefing** | W5, with *Now* | the night's closed, stuck and waiting Issues, decisions, the steward's actions, capacity | the 07:00 Argo briefing and push, written by a cheap model under the three-line rule; audio through audio-gateway if enabled |
+| **briefing** | W5, with *Now* | the night's closed, stuck and waiting Issues, decisions, the orchestrator's actions, capacity | the 07:00 Argo briefing and push, written by a cheap model under the three-line rule; audio through audio-gateway if enabled |
 | **changelog** | W2: brain; W5: Argo | the day's closed Issues and their leads' three-line summaries | per project, one sharp entry per change in the brain page's *Changelog* section and on Argo's project page, compiled by a cheap model from what the leads wrote, never from commit messages |
-| **scorecard** | W3: v0; W6: in full | the factory's own facts, plus monitors, git and usage, never the leads' own reports alone | the numbers below, on *Factory* and in the steward's status; the 07:00 briefing carries its exceptions, Monday's the full review; a measure off target for two weeks opens an upkeep Issue |
+| **scorers** | W4 | each closed Issue's lead transcripts, read by a cheap model against a few pass/fail rubrics: success declared without evidence, tests that check nothing new, the brief's history ignored, a question asked that was the lead's to decide; Warp's open `skill-doctor` rubrics are the start | a label per rubric on the Issue. A rubric failing five times, or a failure unreviewed for 7 days, opens an upkeep Issue that links the runs behind it. Calibrated against your own read of the first ten; about 3 % of token cost at Warp |
+| **scorecard** | W3: v0; W6: in full | the factory's own facts, plus monitors, git and usage, never the leads' own reports alone | the numbers below, on *Factory* and in the orchestrator's status; the 07:00 briefing carries its exceptions, Monday's the full review; a measure off target for two weeks opens an upkeep Issue |
 
 ## The scorecard: the factory measuring itself
 
@@ -42,11 +43,11 @@ Outcomes first: a factory that closes many Issues while production gets worse is
 
 | Area | Measures |
 |-|-|
-| **Outcomes** | change failure rate (shipped changes followed by a regression or fix Issue within 7 days); probes failing per project; urgent Issues per week; interrupts that reached you |
+| **Outcomes** | change failure rate (shipped changes followed by a regression or fix Issue within 7 days); probes failing per project; urgent Issues per week; interrupts that reached you; autonomy (Issues closed with no touch from you) and touches per Issue |
 | **Subscriptions** | unused capacity at each reset per account; account changes of running leads; 5-hour walls mid-work; your sessions' wait on walls; picker decisions that the next hour proved wrong |
 | **Dedup and learning** | missed-at-intake rate, wrong-join rate, seen-before hit rate, runbook share (§8); golden-set F1 on every rule change |
-| **Pipeline** | time from Issue to lead, lead to ship, ship to close (p50 and p95); Issues without progress; steward action items open and their age |
-| **Cost** | Max share and IU dollars per Issue, per project, per lead tier; tokens spent by green job runs (target 0) |
+| **Pipeline** | time from Issue to lead, lead to ship, ship to close (p50 and p95); scorer failures per rubric; Issues without progress; orchestrator action items open and their age |
+| **Cost** | Max share and IU dollars per Issue, per project, per lead tier and per size band; tokens spent by green job runs (target 0) |
 
 ## Next, each when it has a consumer
 
@@ -55,7 +56,7 @@ Outcomes first: a factory that closes many Issues while production gets worse is
 | basalt-ui upstream: duplicates across consumers, and pieces consumers built that basalt-ui lacks | the first consumer-built component that another app needs |
 | perf: p95 and error rate per service against a 14-day baseline | a regression that reached you |
 | traffic: Umami `/stats` and `/events/series` against a rolling baseline (Umami has no anomaly endpoint) | Umami events and goals wired into the apps |
-| security audit: Cloudflare's security-audit skill, `quick` profile | per fleet repo once its changes since the last audit pass ~2,000 lines, on upkeep capacity |
+| security audit: Cloudflare's security-audit skill, `quick` profile | per factory project once its changes since the last audit pass ~2,000 lines, on upkeep capacity |
 | herdr hygiene: tabs left over by crashed or abandoned sessions (Witness already closes leads' tabs after the hold) | the first leftover tab a day old |
 
 **Security** also has a runbook class from W4: CrowdSec decisions arrive as signals, and the runbooks

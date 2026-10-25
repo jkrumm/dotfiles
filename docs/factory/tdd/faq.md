@@ -11,7 +11,7 @@ hours away. No IU fallback, by your rule.
 tool and weighs the findings; the review decides nothing. A reviewer from another model family sees
 what the lead's own family misses.
 
-**DBOS or not?** Your call (§6). My recommendation is no. Cortex's engrams runs a Claude Code factory
+**DBOS or not?** No (§6); you left it to me. Cortex's engrams runs a Claude Code factory
 on DBOS, and its own ADR says a lifecycle that spans days must not be one long-lived run; DBOS's
 version gating stranded their runs in production. We take engrams' patterns (an inbox per Issue,
 deterministic ids, claims, replay tests) and leave the engine.
@@ -30,6 +30,26 @@ pause, stop), a comment on its plan (in plannotator until W5, in *Artifacts* aft
 screenshot and a three-line summary, without you touching it. After W2, a container that stops comes
 back on its own, and you read one line about it in the morning instead of an alert in Slack.
 
-**Is the steward the "daddy orchestrator"?** Yes. It is short runs rather than an always-on session,
-so its context never rots and it costs minutes a day. During the rewrite, the build orchestrator
-plays the same part (§5, §12).
+**Why two layers and not three?** There are two: the orchestrator decides (initiatives into waves,
+stuck leads, priorities, the accounts) and the leads do the work end to end (§4). The factory is code,
+not an agent, and a lead's subagents or `rd fan` worktrees are its own tools. v2.2's mothers and the
+steward are both the orchestrator now. It runs as short sessions, one per event, so its context never
+rots. During the rewrite, the build tab plays its part (§12).
+
+**Why herdr, and not the Agent SDK or `claude -p`?** Every Claude Code session the factory starts is
+an ordinary interactive session in herdr: the plainest use of Max, one you and the orchestrator can
+watch and type into. herdr does not own the work: Postgres does, and the session id is the handle, so
+a herdr restart costs one turn. `claude -p` cannot be steered mid-turn and, by an open Claude Code bug
+reproduced on four accounts, costs about 1.8× the 5-hour window per token. The Agent SDK's
+subscription use is contested. Claude Code's own background sessions fit best, with herdr only the
+view, but they are a research preview: W3 spikes them as a second adapter behind the same port (§6).
+
+**Can I read an old lead's conversation?** Yes, and continue it. Each attempt keeps its session id,
+and the factory archives the transcript at close, because Claude Code deletes its own after 30 days.
+`factory issue resume <id>` opens it in a herdr tab as a fork, so you can ask the lead why it did what
+it did (§6).
+
+**Is a factory on one Mac mini a real factory?** Warp says "you can't have a local software factory
+because you can't have automations running off your laptops." The mini is not a laptop: it is always
+on, and Warp's own self-hosted workers run on customer machines too. What makes it a factory is the
+loop that measures and improves itself, not where it runs (appendix E).

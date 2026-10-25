@@ -42,8 +42,9 @@ flowchart TB
 6. **Two Max accounts, one pool, 5-hour aware.** Each lead gets a model and effort sized to its Issue
    and an account with headroom for it. Urgent work takes any headroom, upkeep only what would lapse.
    Nothing spills to IU API tokens.
-7. **A steward watches the whole.** One short Claude Code session, daily and on events, looks over all
-   leads, mothers, the queue and both accounts, and steers.
+7. **Two layers of agents: an orchestrator over the leads.** The orchestrator plans initiatives into
+   waves, steers stuck leads and watches queue and accounts, in short sessions woken per event. It
+   never writes code.
 8. **Done means production evidence.** The lead ships only with the evidence its change needs, fixes
    forward when production disagrees. After the hold, the factory runs `make verify` and the
    project's journey probes, which no lead writes.

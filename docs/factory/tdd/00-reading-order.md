@@ -1,12 +1,13 @@
 # 0. Reading order
 
-The factory's technical design, version 2.2 — the source of truth for the rewrite and, later, for the
+The factory's technical design, version 2.3 — the source of truth for the rewrite and, later, for the
 public guide on jkrumm.com. It replaces the report of 2026-10-22 (v1, still in `report-v1.html`).
 
-**Four sections carry the decision:** §1 verdict, §4 the loop, §6 the one open decision, §12 the
-plan. The design is §2–§11; §13 lists the open decision and what you may want to override.
-Appendix A maps each of your comments, replies and briefs to where it landed; B says what was taken
-from which project; C says what happened to v1; D lists the edge cases and the wave that handles each.
+**Four sections carry the decision:** §1 verdict, §4 the loop and its two layers, §6 state and where
+sessions run, §12 the plan. The design is §2–§11; §13 lists what you may want to override, and no
+decision is open. Appendix A maps each of your comments, replies and briefs to where it landed; B says
+what was taken from which project; C says what happened to v1; D lists the edge cases and the wave
+that handles each; E places this factory among the others and in the field's vocabulary.
 
 ## v1 → v2 in one table
 
@@ -46,9 +47,20 @@ from which project; C says what happened to v1; D lists the edge cases and the w
 | Cheap models must not investigate or plan; their claims confuse the smart model | the brief carries facts, never a diagnosis; cheap models only sort and word (§3, §4) |
 | Not sure DBOS is needed; look at Cortex | engrams, read in source: an Issue state machine with an inbox, not DBOS; your decision (§6) |
 | Rollback rarely works; fix forward | the lead fixes forward; no automatic rollback (§4) |
-| Dedup needs the root cause; the judge needs testing | two tiers, and a judge only after a bake-off (§8) |
+| Dedup needs the root cause; the judge needs testing | two tiers; the judge runs in shadow from W2 and acts only once it earns trust (§8) |
 | A daddy orchestrator watching tokens, limits and `me`'s 5-hour window | the steward; 5-hour-aware admission; model and effort per lead (§5) |
 | Sharp changelog, self-monitoring, more deterministic paths | leads' summaries, the scorecard, fixes verified twice become runbooks (§8, §9) |
 | GitHub issues as requests; TickTick for human tasks | §7, §10 |
 | Start after my review | §12 |
+
+## v2.3 — after your voice note of 25 October
+
+| You said | Now |
+|-|-|
+| Two layers, not three: an orchestrator and the implementers | an orchestrator over the leads; mothers and the steward merged into it; a fresh session per event (§4) |
+| herdr, or `claude -p` / the Agent SDK? Old chats retrievable | interactive sessions in herdr behind a `Runner` port, Postgres owns the work; headless costs ≈ 1.8× the 5-hour window per token; transcripts archived, `factory issue resume`; a `claude --bg` spike in W3 (§6) |
+| Plain sessions for the simple repos | repos without a manifest stay outside the factory (§7) |
+| DBOS: I don't care | no DBOS (§6) |
+| The dedup strategy was confusing | one judge, shadow then trusted (§8) |
+| Warp, the field's language, solo versus company | appendix E; scorers, autonomy KPIs, manifest schema adopted (§7, §9); the brain's field guide |
 
