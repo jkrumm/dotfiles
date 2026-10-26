@@ -26,7 +26,7 @@ roster: the default model is the `model` key in `config/opencode/opencode.json`
 (a DeepSeek id, **not** served on the Anthropic route), with the other DeepSeek,
 GLM, Gemini, Kimi and MiniMax ids declared alongside it;
 `iu-responses` holds the GPT ids (`agw routing` lists them) — context windows, prices and `reasoningEffort` variants
-come from **modelpick** (`bun run scripts/cap.ts --json --all` on the mini;
+come from **modelpick** (`STACK.md` for the picks, `make stack` in `~/SourceRoot/modelpick` to re-render it;
 `metric_snapshot` for the frontier ids), so re-check there before editing a row.
 `agents.title.model` (a cheap `iu-responses` id, set in `config/opencode/opencode.json`; v1's `small_model` still loads) is for title/summary generation. On `iu`,
 `reasoningEffort` reaches the model (`--variant max|none`, default `high`) and prompt
