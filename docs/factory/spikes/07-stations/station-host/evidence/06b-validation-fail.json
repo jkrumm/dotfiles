@@ -1,0 +1,16 @@
+{
+  "sessionId": "ses_e85b72fd2ffepDzbeyEaxFNHmK",
+  "cost": 0.0009457860000000001,
+  "tokens": {
+    "input": 959,
+    "output": 564,
+    "reasoning": 434,
+    "cacheRead": 67712,
+    "cacheWrite": 0
+  },
+  "wallMs": 8951,
+  "steps": 4,
+  "outcome": "invalid_output",
+  "overBudget": false,
+  "error": "output/code must match pattern \"^X-[0-9]{4}$\""
+}

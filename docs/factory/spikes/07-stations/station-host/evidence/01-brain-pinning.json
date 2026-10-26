@@ -1,0 +1,24 @@
+{
+  "output": {
+    "answer": "The wiki's rule (engineering/opencode.md) is: \"Pin the version, and put a probe in front of every upgrade.\" The estate runs OpenCode v2 pinned at 2.0.32. The pin exists because \"a brew upgrade broke every dispatch\": agent-gateway no longer takes OpenCode from Homebrew; it runs an npm install at OPENCODE_PINNED_VERSION, one binary serves the whole machine, Homebrew's copy is removed, and scripts/opencode-v2-probe.ts (60 checks) gates each bump. Related guidance: skip a minor until its first patch passes the probe. The server is also its own LaunchAgent so an agw reload never kills an episode. Pinning matters more than usual because OpenCode v1 (opencode-ai) and v2 (@opencode/cli) are incompatible in routes, client SDK and plugin API, and v2 ships from npm only (latest tagged GitHub release is still v1.19.4) — mixing a v1 client with a v2 server is \"the classic mistake.\" Corroborated by agent-gateway.md (\"pinned 2.0.32\") and dotfiles.md (\"one pinned build\"). One caveat the wiki draws separately, about mosh rather than OpenCode: a pin must pin its dependencies too, or it rots — a pin freezes the binary, not the dylibs under it, which is why the brew pin list is caddy alone.",
+    "notes": [
+      "engineering/opencode.md",
+      "engineering/projects/agent-gateway.md",
+      "engineering/projects/dotfiles.md",
+      "engineering/remote-terminal-transport.md"
+    ]
+  },
+  "sessionId": "ses_e85b93c5affePCuC5ZzIRddn4A",
+  "cost": 0.0044388959999999995,
+  "tokens": {
+    "input": 21160,
+    "output": 1546,
+    "reasoning": 86,
+    "cacheRead": 95232,
+    "cacheWrite": 0
+  },
+  "wallMs": 14969,
+  "steps": 6,
+  "outcome": "ok",
+  "overBudget": false
+}

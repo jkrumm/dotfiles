@@ -1,0 +1,25 @@
+{
+  "location": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/research",
+  "agent": {
+    "id": "research",
+    "mode": "primary",
+    "steps": null,
+    "system": "You are the \"research\" station: Thin research station - runs quick research jobs through the research CLI and reports sources.\nWork in the scratch directory named in the task. Run code when a computation or an artifact is needed.",
+    "permissions": 7,
+    "shellRules": []
+  },
+  "skills": [
+    {
+      "name": "OpenCode",
+      "path": "/builtin/opencode.md"
+    },
+    {
+      "name": "Report",
+      "path": "/builtin/report.md"
+    },
+    {
+      "name": "research-cli",
+      "path": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/research/.opencode/skills/research-cli/SKILL.md"
+    }
+  ]
+}

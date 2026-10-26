@@ -1,0 +1,42 @@
+{
+  "location": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/brain.focused",
+  "agent": {
+    "id": "brain",
+    "mode": "primary",
+    "steps": null,
+    "system": "You are the \"brain\" station: Answers questions from the owner's vault wiki.\nWork with the tools you have been given and nothing else. A refused command stays refused: report it, do not retry variations.",
+    "permissions": 31,
+    "shellRules": [
+      "allow rg * /Users/jkrumm/SourceRoot/brain/wiki",
+      "allow rg * /Users/jkrumm/SourceRoot/brain/wiki/*",
+      "allow cat /Users/jkrumm/SourceRoot/brain/wiki/*",
+      "deny *..*",
+      "deny *OPENCODE_SERVER_PASSWORD*",
+      "deny *IU_KEY*",
+      "deny *IU_OPENAI_BASE*",
+      "deny */api/session*",
+      "deny *:61302*",
+      "deny * /* /*",
+      "deny *$*",
+      "deny *~*",
+      "deny *--pre*",
+      "deny *--hostname-bin*",
+      "deny *--search-zip*",
+      "deny *-z*"
+    ]
+  },
+  "skills": [
+    {
+      "name": "OpenCode",
+      "path": "/builtin/opencode.md"
+    },
+    {
+      "name": "Report",
+      "path": "/builtin/report.md"
+    },
+    {
+      "name": "wiki-search",
+      "path": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/brain.focused/.opencode/skills/wiki-search/SKILL.md"
+    }
+  ]
+}

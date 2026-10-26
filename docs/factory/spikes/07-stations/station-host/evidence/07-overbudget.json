@@ -1,0 +1,25 @@
+{
+  "output": {
+    "answer": "OpenCode permissions are covered substantively in `engineering/opencode.md`: permissions are an ordered rule array of `{action, resource, effect}` where the last match wins (so put the catch-all first); `deny` removes the tool from the model's toolset and is the strongest lever for a cheap model; `edit: deny` alone does not stop `echo > f`, so deny `shell` and allowlist commands; never leave `ask` in an unattended session because it blocks; the `skill` tool is scoped per agent through the `skill` permission; subagents run under their own permissions, so deny `subagent` on read-only agents (depth defaults to 1); and `OPENCODE_PERMISSION` is the last/highest-priority source in the config chain. `engineering/agent-harness.md` adds the harness-level view: `permission` config with `allow|ask|deny` per tool and per agent plus `--auto`, where an explicit `deny` still wins, and calls OpenCode's deny-wins config a stronger primitive than Claude Code's `--disallowedTools` deny-list for enforcing a read-only tier. `engineering/agent-loops-vs-runtimes.md` mentions permissions only in defining an OpenCode runtime as a server that owns sessions, tools, skills, permissions, steering and crash recovery. Secondary mentions: `engineering/index.md` summarizes the opencode note as covering agents/permissions/skills, and `engineering/projects/agent-gateway.md` records an unresolved issue that the agw-check read-only permission profile is bypassable by `bun -e` and `uv run python -c`.",
+    "notes": [
+      "engineering/opencode.md",
+      "engineering/agent-harness.md",
+      "engineering/agent-loops-vs-runtimes.md",
+      "engineering/index.md",
+      "engineering/projects/agent-gateway.md"
+    ]
+  },
+  "sessionId": "ses_e85b6fd01ffeoYylKzTc7fMrA7",
+  "cost": 0.002762094,
+  "tokens": {
+    "input": 7413,
+    "output": 1814,
+    "reasoning": 46,
+    "cacheRead": 178048,
+    "cacheWrite": 0
+  },
+  "wallMs": 17638,
+  "steps": 9,
+  "outcome": "ok",
+  "overBudget": true
+}

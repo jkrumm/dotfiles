@@ -1,0 +1,16 @@
+{
+  "sessionId": "ses_e85b68476ffeQxEEDIlteEAH1q",
+  "cost": 0.000224136,
+  "tokens": {
+    "input": 400,
+    "output": 60,
+    "reasoning": 131,
+    "cacheRead": 16512,
+    "cacheWrite": 0
+  },
+  "wallMs": 14585,
+  "steps": 1,
+  "outcome": "cancelled",
+  "overBudget": false,
+  "error": "session ended interrupted"
+}

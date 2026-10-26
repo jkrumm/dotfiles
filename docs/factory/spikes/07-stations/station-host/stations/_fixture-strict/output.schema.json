@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "answer": { "type": "string" },
+    "code": { "type": "string", "pattern": "^X-[0-9]{4}$" }
+  },
+  "required": ["answer", "code"],
+  "additionalProperties": false
+}

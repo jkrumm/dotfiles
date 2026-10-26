@@ -1,0 +1,6 @@
+name: _fixture-strict
+description: Test fixture - a strict output schema, to force and observe validation failures.
+route: triage
+profile: yolo
+budget: { usd: 0.01, wall_s: 60 }
+output: ./output.schema.json

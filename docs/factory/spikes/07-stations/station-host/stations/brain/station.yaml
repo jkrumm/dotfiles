@@ -1,0 +1,19 @@
+name: brain
+description: Answers questions from the owner's vault wiki.
+route: triage            # key in `agw routing`; the model id is resolved at run time
+profile: yolo            # default: allow everything, never ask. `--profile focused` compiles the allowlist below
+steps: 12                # report-only: a run over this is flagged overBudget, never cut
+budget: { usd: 0.05, wall_s: 180 }   # report-only, same
+shell:                   # focused profile only: the whole toolset; everything else is denied, so removed
+  - "rg * ~/SourceRoot/brain/wiki"
+  - "rg * ~/SourceRoot/brain/wiki/*"
+  - "cat ~/SourceRoot/brain/wiki/*"
+shell_deny:              # focused profile only, after the allows (last match wins)
+  - "* /* /*"            # a second absolute path (cat <wiki>/a /etc/passwd, rg x /etc <wiki>/a)
+  - "*$*"                # variable expansion (OpenCode rejects $(...) itself; $VAR text is not in the allowlist anyway)
+  - "*~*"                # tilde expansion
+  - "*--pre*"            # rg --pre runs an arbitrary program over every file
+  - "*--hostname-bin*"
+  - "*--search-zip*"
+  - "*-z*"
+output: ./output.schema.json

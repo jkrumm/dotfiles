@@ -1,0 +1,9 @@
+{
+  "name": "agw-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node gen-openapi.ts",
+    "test": "node --test agw-poc.test.ts"
+  }
+}

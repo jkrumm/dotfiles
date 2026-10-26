@@ -1,0 +1,24 @@
+{
+  "output": {
+    "answer": "Only engineering/opencode.md mentions the probe check count, in its \"What production taught (agent-gateway, 2.0.25 → 2.0.32)\" section under Pinning: agw runs an npm install at OPENCODE_PINNED_VERSION, one binary serves the whole machine, Homebrew's copy is removed, and scripts/opencode-v2-probe.ts (60 checks) gates each bump. The number is 60. The other cited notes (engineering/projects/agent-gateway.md, engineering/projects/dotfiles.md, engineering/remote-terminal-transport.md) mention no probe and no check count — they only say \"pinned 2.0.32\", \"one pinned build\", and the mosh dependency-pin lesson — so the figure is single-sourced in the wiki.",
+    "notes": [
+      "engineering/opencode.md",
+      "engineering/projects/agent-gateway.md",
+      "engineering/projects/dotfiles.md",
+      "engineering/remote-terminal-transport.md"
+    ]
+  },
+  "sessionId": "ses_e85b93c5affePCuC5ZzIRddn4A",
+  "cost": 0.0008831519999999999,
+  "tokens": {
+    "input": 836,
+    "output": 793,
+    "reasoning": 20,
+    "cacheRead": 89984,
+    "cacheWrite": 0
+  },
+  "wallMs": 8230,
+  "steps": 4,
+  "outcome": "ok",
+  "overBudget": false
+}

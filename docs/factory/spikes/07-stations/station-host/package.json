@@ -1,0 +1,17 @@
+{
+  "name": "station-host",
+  "private": true,
+  "type": "module",
+  "description": "Spike 7: thin host that runs station packages as sessions on one private OpenCode 2.0.32 server",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

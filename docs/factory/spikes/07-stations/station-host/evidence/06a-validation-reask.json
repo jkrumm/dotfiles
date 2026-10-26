@@ -1,0 +1,19 @@
+{
+  "output": {
+    "answer": "hi",
+    "code": "X-0000"
+  },
+  "sessionId": "ses_e85b744adffe6yUy3E0lTE5gHc",
+  "cost": 0.0027836039999999994,
+  "tokens": {
+    "input": 16818,
+    "output": 65,
+    "reasoning": 286,
+    "cacheRead": 16768,
+    "cacheWrite": 0
+  },
+  "wallMs": 4902,
+  "steps": 2,
+  "outcome": "ok",
+  "overBudget": false
+}

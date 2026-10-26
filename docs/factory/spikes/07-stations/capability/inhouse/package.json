@@ -1,0 +1,16 @@
+{
+  "name": "capability-inhouse",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "cap": "node src/cli.ts",
+    "serve": "node src/server.ts",
+    "eval": "node eval/run.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.79",
+    "ai": "^7.0.154",
+    "zod": "^4.6.7"
+  }
+}

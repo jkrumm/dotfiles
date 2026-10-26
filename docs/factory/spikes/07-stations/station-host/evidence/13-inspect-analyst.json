@@ -1,0 +1,25 @@
+{
+  "location": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/analyst",
+  "agent": {
+    "id": "analyst",
+    "mode": "primary",
+    "steps": null,
+    "system": "You are the \"analyst\" station: Runs code to compute things and renders charts or diagrams as files, returned as typed artifacts.\nWork in the scratch directory named in the task. Run code when a computation or an artifact is needed.",
+    "permissions": 7,
+    "shellRules": []
+  },
+  "skills": [
+    {
+      "name": "OpenCode",
+      "path": "/builtin/opencode.md"
+    },
+    {
+      "name": "Report",
+      "path": "/builtin/report.md"
+    },
+    {
+      "name": "compute-and-render",
+      "path": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/analyst/.opencode/skills/compute-and-render/SKILL.md"
+    }
+  ]
+}

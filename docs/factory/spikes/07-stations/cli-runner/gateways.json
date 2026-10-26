@@ -1,0 +1,7 @@
+{
+  "research": {
+    "baseUrl": "http://localhost:7780",
+    "spec": "specs/research.openapi.json",
+    "auth": { "bearerEnv": "RESEARCH_GATEWAY_TOKEN", "keychainService": "research-gateway-token" }
+  }
+}

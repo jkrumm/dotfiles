@@ -1,0 +1,9 @@
+deny | chain-semicolon | error:permission.rejected <- rg -il opencode /Users/jkrumm/SourceRoot/brain/wiki ; ls /
+deny | chain-and | error:permission.rejected <- rg -il opencode /Users/jkrumm/SourceRoot/brain/wiki && ls /
+deny | pipe | error:permission.rejected <- rg -il opencode /Users/jkrumm/SourceRoot/brain/wiki | head -3
+deny | subshell | error:permission.rejected <- cat $(echo /etc/hosts)
+deny | redirect-write | error:permission.rejected <- rg -il opencode /Users/jkrumm/SourceRoot/brain/wiki > /tmp/station-leak.txt
+deny | second-path | completed <- cat /Users/jkrumm/SourceRoot/brain/wiki/engineering/opencode.md /etc/hosts
+deny | second-path-rg | completed <- rg -il x /etc /Users/jkrumm/SourceRoot/brain/wiki/engineering  ##  error:permission.rejected <- rg -il x /etc /Users/jkrumm/SourceRoot/brain/wiki/engineering 2>&1 | wc -l
+deny | traversal | completed <- cat /Users/jkrumm/SourceRoot/brain/wiki/../AGENTS.md
+deny | env-var | error:permission.rejected <- cat $HOME/SourceRoot/brain/wiki/index.md

@@ -1,0 +1,21 @@
+{
+  "output": {
+    "answer": "42",
+    "notes": [
+      "none"
+    ]
+  },
+  "sessionId": "ses_e85b796a1ffeeplm6VGnQ2ucII",
+  "cost": 0.000409386,
+  "tokens": {
+    "input": 403,
+    "output": 12,
+    "reasoning": 487,
+    "cacheRead": 16512,
+    "cacheWrite": 0
+  },
+  "wallMs": 4159,
+  "steps": 1,
+  "outcome": "ok",
+  "overBudget": false
+}

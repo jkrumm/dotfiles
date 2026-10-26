@@ -1,0 +1,9 @@
+name: research
+description: Thin research station - runs quick research jobs through the research CLI and reports sources.
+route: triage
+profile: yolo
+steps: 10                # report-only
+budget: { usd: 0.10, wall_s: 300 }   # report-only
+shell:                   # focused profile only
+  - "research *"
+output: ./output.schema.json

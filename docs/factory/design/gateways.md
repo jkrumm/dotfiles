@@ -1,325 +1,256 @@
-# Gateways, desks and one CLI
+# agent-gateway as the platform: stations, capabilities, one CLI
 
-> **Status: proposal, 2026-10-26.** Not yet part of TDD v2.4. It fills the gap the TDD leaves open:
-> specialized cheap-model agents that Claude Code, Hermes and Argo can call. It amends ADR-004 and
-> ADR-007 (§9). Inputs: the owner's brief of 2026-10-26, agent-gateway `docs/opencode-v2.md`,
-> brain `wiki/engineering/agent-loops-vs-runtimes.md`, prometheus-scripts' `epx` CLI and Athena
-> Teamchat, `research/2026-10-26-opencode-capability-map.md`, `research/2026-10-26-agent-first-cli.md`.
+**TLDR.** agent-gateway becomes the one platform the factory uses from above and Claude Code from below. Hermes and Argo call it too. It has four parts in one repo, with one dependency tree and shared routing, usage and telemetry (§2):
 
-**TLDR.** One OpenCode runtime, many desks, one CLI.
-
-- **Engines stay engines.** research-, audio-, image- and email-gateway keep their invariants in code
-  (citation ledger, writers' room, TTS). None of them gets its own agent loop or its own OpenCode.
-- **A desk is a package, not a service:** a system prompt, skills, a shell allowlist of CLI commands,
-  a route key, a step and cost budget, an output schema and an eval set. Each desk runs as a session
-  on the OpenCode server agent-gateway already supervises. The research desk, otel desk, review
-  desk and podcast producer are desks.
-- **One runtime to pin, probe, upgrade, monitor and bill:** agw's server. A new desk adds a
-  directory, not a process.
-- **One CLI, `gw`,** generated at runtime from each gateway's OpenAPI document. Commands are never
-  written by hand.
-- **CLI only.** MCP leaves the estate except chrome-devtools. That also removes the blocker that
-  stalled the research desk. OpenCode 2 can only configure MCP for the whole server.
-
-```
-callers   Claude Code (skills) · Hermes (allowlist) · Argo (HTTP) · cron / factory jobs
-            ↓  all through
-cli       gw — one binary, commands generated from OpenAPI, ADR-004 contract
-            ↓  gw desk run / gw session …
-desks     review · check · otel · research · podcast-producer · news   (packages, not services)
-            ↓  run as sessions on
-runtime   agent-gateway's OpenCode server — pinned, probed, session ledger, steer,
-          re-attach, per-turn cost, OTel per session
-            ↓  shell allowlist = gw commands only
-engines   research-gateway · audio-gateway · image-gateway · email-gateway · HyperDX
-          invariants in code, HTTP + OpenAPI, cost per job
-```
-
-## 1. Why this shape
-
-The owner wants OpenCode for research, because research is multi-turn, steerable and
-task-dependent. The wish is right about the *thread* and wrong about the *engine*:
-
-- **One big loop failed here once.** The first research-gateway was a single agent loop: 67 prod
-  jobs, 22 clean reports (33%). Plan → parallel workers → synthesis, with grounding in code, fixed it.
-  Moving the fan-out into an OpenCode session moves the loop somewhere with less control. The
-  ledger would have to be rebuilt as an OpenCode plugin, on a plugin API that changed completely
-  between 1.x and 2.x.
-- **The thread belongs above the engine.** Follow-ups, "dig deeper on section 3", the brain via the
-  Obsidian CLI, asking the human: these are what a session is good at. A research desk holds the
-  thread and calls the engine as one tool.
-- **agw already paid OpenCode's operating cost:** the version pin after a `brew upgrade` broke
-  every dispatch, the idle watchdog, re-attach after a restart, the env sanitising, and the
-  self-access deny list. A second driver anywhere else pays it again. That is the case for one
-  runtime.
-- **Athena proves the desk shape works on cheap models.** OpenCode 2.0.32 on DeepSeek V4.1 Flash,
-  read-only, skills baked in, `epx` as the only data door, credentials held by a broker outside the
-  agent, a $0.25 per-take budget. The pattern is already proven for IU work.
-
-## 2. The runtime: one OpenCode per trust domain
-
-agent-gateway's server (`com.jkrumm.agent-gateway-opencode`) becomes *the* runtime for every personal
-desk. It already has what a desk needs:
-
-| Need | Already in agw (`docs/opencode-v2.md`) | Add |
+| Part | What it is | Proven by |
 |-|-|-|
-| Pinned version, upgrade gate | `OPENCODE_PINNED_VERSION`, `scripts/opencode-v2-probe.ts` (60 checks) | each desk's eval smoke in the gate |
-| Durable handle | `session_id` on the job row, `job_sessions` ledger, re-attach by state | desk name + caller id on the row |
-| Steer, cancel | `delivery: "steer"`, interrupt | `gw session steer|cancel` |
-| Per-turn usage | `tokens` + `cost` on every assistant message, settled rollup | per-desk rollup into usage-tracker (blind since 10-14, factory Phase 0 fix) |
-| Permissions | v2 rule arrays, last match wins, `deny` removes the tool | per-desk shell allowlist generated from the desk package |
-| Env and secrets | session `PUT /environment`; server env never reaches the shell | desk-scoped gateway tokens only |
-| Telemetry | NDJSON logs only | one span per session + per turn, `traceparent` passed to OpenCode (spike 6: it honours it) |
+| **Capabilities** | typed functions (summarize, decide, adapters…) defined once, exposed as import + HTTP + CLI | spike 7 `capability/` |
+| **Stations** | specialized cheap-model agents: own AGENTS.md, skills, route, output schema, eval set; sessions on ONE OpenCode server | spike 7 `station-host/`, locations spike |
+| **Engines** | research-, audio-, image-, email-gateway: fixed pipelines, invariants in code, separate processes | production |
+| **`agw` CLI** | one binary, commands generated from every service's OpenAPI document, ADR-004 contract | spike 7 `cli-runner/` |
 
-**One per trust domain, not one per machine.** Athena keeps its own OpenCode in its Colima sandbox:
-different account (`careerpartner`), prod data, a broker, no outbound network. Merging it into the
-personal runtime would trade a real isolation boundary for one fewer process. Two runtimes, each
-pinned and probed, is the floor.
-
-**Shared-server costs, accepted:**
-- **One password, one blast radius.** Already mitigated: loopback only, sanitised session env, and
-  self-access denies.
-- **Server-wide config.** Harmless here: desks differ only in agent rules, skills and session env,
-  all set per session or per agent.
-- **One upgrade moves every desk.** That is the point of the gate: one probe plus every desk's
-  eval smoke, then the bump.
-
-## 3. Desks
-
-A desk lives in the repo that owns the capability. The research desk lives in research-gateway,
-the podcast producer in audio-gateway, review and check in agent-gateway. `project.yaml` declares
-it (`spec.provides.desks`, beside `clis`; ADR-010).
+No MCP (D2). Stations run in yolo mode by default (D4).
 
 ```
-research-gateway/desks/research/
-  desk.yaml          # contract below
-  SYSTEM.md          # the system prompt — short, task-specific
-  skills/            # progressive disclosure: name + description advertised, body on demand
-  output.schema.json # the result shape, validated in code
-  eval/golden.jsonl  # 10–30 real tasks with checkable expectations
+callers     factory (above) · Claude Code (below) · Hermes · Argo · cron
+              ↓  agw … (CLI)  or  HTTP/SDK (apps)
+agw CLI     one binary — commands from OpenAPI, pending/resume, typed errors
+              ↓
+stations    brain · research · otel · review · check · analyst · podcast-producer · news …
+              ↓  sessions on ONE OpenCode server (one location dir per station)
+capabilities  llm.summarize · llm.title · decide · modelpick · vps-postgres · usage …  (import + HTTP + CLI)
+engines     research-gateway · audio-gateway · image-gateway · email-gateway
+shared      route table (model + effort per route) · usage → usage-tracker · OTel → ClickStack
 ```
 
-```yaml
-name: research
-description: Multi-turn research desk — runs research jobs, asks follow-ups, reads the brain.
-route: desk_research          # a key in `agw routing`; model ids never appear here
-system: ./SYSTEM.md
-skills: ./skills
-shell:                         # the whole toolset; everything else is denied, so removed
-  - gw research *
-  - gw brain *
-  - gw ask-human *
-  - rg *
-edit: deny
-steps: 40                      # OpenCode's own loop cap → summarise-and-stop
-budget: { usd: 0.50, wall_s: 1800 }
-workdir: scratch               # scratch | worktree:<repo> | in-place:<repo>
-output: ./output.schema.json
-handover: re-derive            # the caller is told a cheaper model wrote this
-```
+> **Status: concept v2, 2026-10-26.** Not yet folded into the factory TDD (v2.4). v1 (same day, commit 5bb920b) was the proposal. v2 adds your decisions from that conversation and the results of spike 7 (`../spikes/07-stations/`).
+> **Read §10–§11 now:** they cover what this changes in the factory docs and where the factory stands. W1a starts on your sign-off of v2.4.
+> **Evidence:** `../research/2026-10-26-{opencode-capability-map,opencode-v2-locations-spike,agent-first-cli,agent-platforms-compared,mastra-deep-dive}.md`, agent-gateway `docs/opencode-v2.md`, brain `wiki/engineering/{agent-loops-vs-runtimes,opencode}.md`, prometheus-scripts' `epx` and Athena Teamchat.
 
-**How agw runs it.**
-- **Compile at server start.** agw compiles every declared desk into the generated server config:
-  one v2 agent per desk with `system`, `permissions` (catch-all deny, then the allowlist, then the
-  self-access denies) and `steps`, plus the desk's skills path. `buildOpencodeServerConfig` makes
-  the same move for `agw-readonly` today.
-- **A run** is `POST /api/desks/:name/runs` → create session (`agent`, `model` from the route,
-  `location.directory`) → `PUT /environment` → prompt → wait → validate the final message against
-  `output.schema.json`.
-- **Schema failure:** re-ask once with the validation error, then fail typed.
-- **Per-location `.opencode/` loading is *not* relied on.** agw strips it from worktrees for good
-  reasons, and compiled config is what the probe already covers.
+## 1. Decisions (owner, 2026-10-26)
 
-**The desks this proposal plans for:**
-
-| Desk | Owner repo | Tools (shell allowlist) | Replaces | Gate before it ships |
-|-|-|-|-|-|
-| check | agent-gateway | repo make/test, read-only | `agw-check` profile (same behaviour) | existing check probes |
-| review | agent-gateway | git, fallow, `gw research` | review angles + synthesis (the phases stay in code) | review eval on 10 past PRs, outcome still derived in code |
-| otel | agent-gateway | `hdx` (the otel skill's CLI) | `otel` on Max via `claude -p` + injected HyperDX MCP | ten recorded queries (TDD 12-plan side change) |
-| research | research-gateway | `gw research`, `gw brain`, `gw ask-human`, `rg`, `obsidian` | nothing yet; sits above the engine | A/B vs plain `gw research run` on 10 real questions: quality, follow-up rate, $, wall time |
-| podcast-producer | audio-gateway | `gw research`, `gw brain`, `gw audio episodes` | the pipeline's research front half | 3 episodes side by side |
-| news | news-gateway (future) | engine CLI + `gw brain` | — | built engine-plus-desk from day one |
-
-**The boundary that keeps this inside the factory's rules.** Desks gather, read, summarise, draft
-and review. They do not implement code, and they do not hand a lead a root cause as a decision
-(TDD `05-capacity.md`). The otel desk returns queries, data and candidate explanations labelled
-as candidates; the lead decides. Implementation stays on Max (`MAX_ONLY_IMPLEMENT`).
-
-## 4. Making cheap models strong: the desk playbook
-
-**Every rule has a measurement behind it. A desk that breaks one needs a reason in its `desk.yaml`.**
-
-1. **Code owns the pipeline, the model owns the judgment.** research-gateway went from 33% to a
-   fallback-free fan-out once phases moved into code. agw's review derives `clean|actionable|needs-human`
-   in code, not from the model.
-2. **One-call doors beat discovery.** Athena's questions took 25–45 calls until four composite
-   commands made them one (`chat/CLAUDE.md`). Design each desk's top five questions as single commands.
-3. **Remove tools, don't forbid them.** An OpenCode `deny` removes the tool from the model's toolset
-   (measured, agw probe). A cheap model can't misuse what it can't see. The shell allowlist is the
-   toolset.
-4. **Machine output is the default.** Without `--json`, `agw review` restated its verdict wrongly in
-   5 of 9 runs. With it, 0 of 3 (spike 4).
-5. **Unknown flags fail loudly.** One swallowed flag cost 6 calls and 82k tokens (spike 4).
-6. **Waiting lives in the CLI.** A long job polled by the model took 6 calls and 95k tokens. A CLI
-   that blocks to a budget and exits `pending` with the resume command does it in 2 (ADR-004 item 6).
-7. **Typed result, validated in code.** agw checks `output.schema.json`. OpenCode's own
-   `format: json_schema` (v1 `retryCount`) is an optimisation once the v2 probe confirms it.
-8. **Hard caps.** `steps` makes OpenCode summarise and stop. `budget.usd` is enforced from per-turn
-   cost, so a looping run is cut at its budget instead of at the idle watchdog.
-9. **Small context.** System prompt under ~2k tokens, skills on demand. Measured prompts already
-   run 38–64k, and Haiku costs 5× above 100k.
-10. **Settings on the model variant.** v2 ignores agent-level `temperature`, and DeepSeek ignores
-    temperature while thinking is on. The route picks the variant (`#high`), the desk doesn't.
-11. **Credentials stay outside.** The session env carries a desk-scoped gateway token, never a
-    provider key. Gateways are the broker, Athena's `epx serve` pattern.
-12. **Remote text is data.** Page text, mail bodies and log lines never become a follow-up command
-    (ADR-004 item 7).
-13. **Eval gates every change.** A prompt, skill, route or OpenCode bump runs the desk's
-    `eval/golden.jsonl` first. research-gateway's `make eval` is the template.
-14. **The caller re-derives.** Results carry `handover: re-derive`, Athena's "a cheaper model wrote
-    this" contract. Claude Code treats a desk result as evidence, not as a verdict.
-
-## 5. One CLI: `gw`
-
-**Verdict: one binary with one group per gateway. Its command table comes from each gateway's
-OpenAPI document, so the CLI is generated, not written.** (Name open, §11.)
-
-```
-gw research run "…" [--depth deep] [--wait]      # engine
-gw research follow-up <jobId> "…"
-gw audio episodes list
-gw desk run research "…" [--session <id>]         # desk → {jobId, sessionId, status, output}
-gw session show|log|steer|continue|cancel|export|cost <sessionId>
-gw review [--ref …]   gw check                    # agw tools; desks underneath
-gw schema [cmd]                                   # JSON Schema, offline, from the cached spec
-```
-
-**Why one binary.** One install and version, one `secrets-run` auth path, one implementation of
-the ADR-004 contract (formats, envelope, error line, exit table, `--commit`,
-`--idempotency-key`, `pending` + resume, spill), one conformance run, and one routing block an
-agent reads. Five CLIs would mean five drifting implementations of the same nine rules — exactly
-what the conformance suite exists to catch.
-
-**Why OpenAPI as the source.** It is the one IR every stack here already emits or can emit:
-
-| Producer | OpenAPI from |
-|-|-|
-| research-gateway, agent-gateway, audio-, image-, email-gateway (Elysia) | the route schemas: research-gateway's routes already carry Zod `body`/`response` |
-| factory API (oRPC, TDD W1a) | oRPC's OpenAPI generator |
-| Athena broker, warden (FastAPI) | native |
-
-**How the runner uses it.**
-- **`x-cli` on each operation:** command path, default format, `mutating`, `job:
-  {statusPath, resume}`.
-- **Cached snapshot** of each gateway's `GET /openapi.json`. A request carries the snapshot's sha.
-- **Drift:** a gateway on another contract answers `contract_mismatch` (ADR-004 item 9), and the
-  runner refreshes the snapshot and retries once.
-
-A new route therefore reaches agents with zero CLI release, and `gw schema` stays offline.
-
-**Self-documentation, generated:** `--help`, `gw schema [cmd]`, `REFERENCE.md`, each skill's
-`references/cli.md` and the global routing rule are rendered from the same specs (ADR-004
-"commands defined once"). The flag lint fails a SKILL.md that names a flag the spec lacks. epx
-proved the loop: `epx schema` derived from the parser, with a generated reference and a drift gate
-in `make test`.
-
-**What `gw` does not absorb.**
-- **Passthrough shims** (`secrets-run`, `hl`) keep someone else's CLI shape.
-- **Repo-local tools** with no server (`epx`, `warden` until it serves HTTP) keep their own binary
-  on the same contract.
-- **The factory CLI** ships as its own entry in W1a and mounts as `gw factory …` once its OpenAPI
-  exists. Folding it later costs a group; forcing it now would put W1a's critical path behind
-  this proposal.
-
-**Frameworks.** None of the nine TS frameworks researched generates commands from an *external*
-OpenAPI document, so the runner is ours. incur (wevm, Zod 4, `--llms`, `--schema`, OpenAPI and MCP
-from one definition) is the closest off-the-shelf design. It is CLI-first, 0.7.1 and eight months
-old: a watch item, and the reference to copy conventions from. The rest of the market has no
-manifest (`research/2026-10-26-agent-first-cli.md`). The runner itself is one module: spec →
-command tree → request → envelope. That is the "small in-house runner" ADR-004 already budgets,
-fed by OpenAPI instead of per-CLI `schema --all`. Generic OpenAPI CLIs exist outside that set
-(restish, in Go); G1 checks them against the contract with `/research` before writing code.
-
-## 6. Sessions as the cross-tool handle
-
-The owner wants to read, continue and steer any desk run from anywhere. The session id is that
-handle, and agw's ledger already maps job ↔ session.
-
-- **Claude Code** runs `gw desk run research "…" --wait`, gets `{output, sessionId}`, and continues
-  with `gw session continue <id> "…"`. Offloading to a cheap model is one command, and the context
-  cost is the typed result, not the transcript.
-- **Hermes** maps a chat thread to a session: the idempotency key comes from the message id
-  (ADR-004 item 4), and a reply in the thread becomes `gw session continue`. That works within
-  W11's "allowlist of factory CLIs, no terminal".
-- **Argo** shows sessions per desk: transcript (`/api/session/{id}/message`, paginated), cost,
-  status, steer. On the mini from W5 it reads agw directly. Starting a desk run from Argo is an
-  intent through the factory API (ADR-015), not a direct call.
-- **Export:** `gw session export` writes agw's own JSON record (messages + usage + job row).
-  OpenCode's share links are gone (always HTTP 500 since 1.19.1).
-
-## 7. Observability and cost
-
-- **One span per session** (`desk.session`) with children per assistant turn: `desk`, `route`,
-  `tokens.*`, `cost`, `tool`, `outcome`. agw emits them from the message stream it already
-  reads. OpenCode's own spans (service `opencode`, ~601 per boot + prompt) are filtered at the
-  collector (ADR-006) and joined on `x-opencode-session`.
-- **Cost is the settled session rollup** (agw always sets `title`, so rollup = message sum) and
-  goes to usage-tracker under the desk name. Argo's Usage page gets a per-desk column.
-- **Budget alerts** per desk: daily $ and p90 $ per run, against the desk's own eval baseline.
-
-## 8. Gateway by gateway
-
-| Today | Becomes |
-|-|-|
-| **research-gateway**: engine, HTTP, MCP `/mcp`, `research` CLI (896-line hand parser) | Engine unchanged. New: `follow_up(jobId, question)` reusing the job's ledger and digests. CLI → `gw research` from OpenAPI. MCP deleted after callers move. Owns the research desk. |
-| **agent-gateway**: 17 MCP tools, `agw` CLI, OpenCode server, `claude -p` lane | The runtime and desk host. MCP deleted (TDD W6). review, check and otel become desks. `decide`, `triage` and `read_image` stay single-shot tools. `dispatch implement` retires per TDD. |
-| **audio-gateway**: podcast pipeline, STT/TTS | Engine unchanged. Owns the podcast-producer desk. CLI group `gw audio`. |
-| **image-gateway**: HTTP, `imgcli` | `gw image` replaces `imgcli` once the OpenAPI covers `/generate|edit|cutout|icons`. |
-| **email-gateway**: REST + MCP (7 tools) | `gw mail` from OpenAPI. MCP deleted. Spike 4's "no email CLI" advice predates generation, and with no hand-written CLI there is no build cost left to avoid. |
-| **HyperDX**: `hdx.py` in the otel skill | Stays a skill CLI on the contract. The otel desk's only tool. |
-| **Hermes**: curl through skills, one MCP (WeatherOrb) | `gw` allowlist. Threads map to desk sessions. |
-| **Argo**: VPS, own `/ai/v1`, audio proxy | Mini at W5. Reads sessions and cost, starts desk runs as intents. |
-| **Athena** (IU) | Separate runtime, same playbook. epx is the reference implementation of the contract. |
-
-## 9. What this changes in the factory docs
-
-- **ADR-004:**
-  - (a) MCP stays only for chrome-devtools, and research-gateway's MCP goes (owner, 2026-10-26:
-    "CLI only").
-  - (b) One `gw` binary replaces the per-gateway agw/email/audio/image/research CLIs.
-  - (c) The IR for server-backed tools is the gateway's OpenAPI document with `x-cli`, not a
-    per-CLI `schema --all` snapshot.
-  - The contract items 1–9 stay as written.
-- **ADR-007** ("agw is a bounded tool server, no loop"): agw hosts *bounded loops*. A desk run is
-  a tool call from the caller's side: typed input, typed output, step and $ caps, and no repo
-  writes outside its declared workdir.
-- **TDD 05-capacity:** add desks to the cheap-model job list with the §3 boundary. The `otel` side
-  change becomes the otel desk.
-- **TDD 12-plan:** §10 below slots in beside W1a–W6 and touches nothing on W1a's critical path.
-
-## 10. Waves
-
-G0–G2 are independent of the factory's W1a and can run now. G5 *is* TDD W6 and lands with it.
-
-| Wave | Delivers | Proof gate |
+| # | Decision | Note |
 |-|-|-|
-| G0 | research-gateway: OpenAPI at `/openapi.json` with `x-cli`, `follow_up` door | spec covers every route, follow-up eval on 5 past jobs |
-| G1 | `gw` runner + the dotfiles conformance suite, with research as the first group; `/research` skill switched | spike 4 re-run: long job ≤ 2 calls with no policy sentence |
-| G2 | agw desk registry (`desk.yaml` → server config, `/api/desks/:name/runs`, session routes, per-desk usage + spans); check migrated as the first desk; a `desk` authoring skill for Claude Code (scaffold, eval, probe) | check probes unchanged, desk eval harness green |
-| G3 | otel desk on a cheap route with `hdx` | ten recorded queries vs today's Max `otel` |
-| G4 | research desk | A/B on 10 real questions: keep only if it wins |
-| G5 | Callers moved: skills → `gw`, Hermes allowlist, agw + research MCP deregistered (= TDD W6) | ADR-004's W8 gate, resident tool tokens = 0 |
-| G6 | review as a desk package, podcast-producer, `gw image|mail|audio`, news-gateway | per-desk eval, Argo per-desk usage |
+| D1 | **One unified agent-gateway and one `agw` CLI** | the factory CLI mounts as `agw factory …` once its OpenAPI exists |
+| D2 | **All-in CLI, no MCP.** Claude Code and Hermes are the only clients | research-gateway's `/mcp` and agw's MCP server are deleted when the skills switch. chrome-devtools stays until a browser CLI exists |
+| D3 | **Stations may draft** review findings and otel explanations on cheap models | otel is mostly reading data |
+| D4 | **Yolo by default.** Allow everything, never `ask`, no sandbox | `profile: focused` stays opt-in, as a quality lever, not a safety one |
+| D5 | **Budgets, steps and wall time are report-only.** They are recorded and flagged, never enforced | only an explicit `cancel` stops a run |
+| D6 | **Stations run code.** Calculations, diagrams and rendered artifacts are normal work | artifacts come back as `[{path, kind}]` |
+| D7 | **Capability layer in-house**, not Mastra | bake-off, §5 |
+| D8 | **Research engine vs OpenCode research is open** | settled by the three-way comparison, §9 |
+| — | **Name: "station"** (working). "desk" was rejected as unclear | open for a better word |
 
-## 11. Open decisions (owner)
+**Still open, not a decision:** whether `agw research run` needs `--commit` (ADR-004 item 4). Tendency: keep `--commit` only for outside side effects (send, delete, publish). Submits are retry-safe through the idempotency key.
 
-1. **Name and reach of the single CLI.** `gw` is a working name, with the factory mounted later
-   (§5). Tendency: yes.
-2. **Research MCP deleted outright.** That cuts off Claude Desktop and claude.ai, which have no
-   shell. Tendency: delete. Not checked: whether either client calls it today. G5 reads
-   research-gateway's request log first.
-3. **Desks may *draft* review findings and otel explanations on cheap routes.** They do not
-   decide. Tendency: yes, gated by each desk's eval.
-4. **OpenCode 2.1.x.** agw stays on 2.0.32 (two known fatal compaction bugs) until 2.1's first
-   patch passes the probe. Desks inherit whatever the gate admits.
+## 2. Why one platform
+
+Today every gateway reinvents the same five things: an LLM client, model choice, usage reporting, telemetry and a job contract. Changing the cheap model means editing research-gateway's `env.ts`, audio-gateway's `config.ts`, email-gateway's `.env.tpl`, agw's routing and Argo's `/ai/v1`. The platform makes each of them exist once:
+
+- **One route table** in agw: route key → model **and reasoning effort**. Today effort is set per call site, because the table has no field for it (spike 7 capability gap).
+- **One usage path.** The IU endpoint returns `usage.cost` on every response, so no price table is needed. Usage flows to usage-tracker under the capability or station name.
+- **One telemetry path:** one span per capability call and per station session, exported to ClickStack.
+- **One job contract:** submit → `pending` → resume, typed errors, idempotency keys.
+
+**Modular monolith in the repo, separate processes at runtime.** One repo, one dependency tree, shared packages. Engines keep their own processes (LaunchAgents), deploys and drains. Why not one process:
+
+- A deep research job runs 450–700 s and research-gateway drains for up to 1800 s. Every review/check deploy would wait on research.
+- A memory spike in the research fetch chain would take down review/check.
+
+email-gateway can stay on the VPS for availability and still consume the shared packages.
+
+## 3. Stations
+
+A station is a directory in the repo that owns its capability:
+
+```
+stations/brain/
+  station.yaml        # name, description, route, profile (yolo|focused), budget (report-only), output schema
+  AGENTS.md           # the station's context — its "CLAUDE.md"
+  skills/<name>/SKILL.md
+  output.schema.json  # typed result, validated by the host (one re-ask, then invalid_output)
+  eval/cases.jsonl    # regression gate for prompt, skill, route or OpenCode changes
+```
+
+**How the host runs it** (spike 7, `station.ts`, 542 lines):
+
+1. **Compile** each station into a location directory **outside any repo**. An ancestor `AGENTS.md` leaks into a location: the model quoted `dotfiles/AGENTS.md`.
+2. **Warm** the location before first use. Evict it after a change (`DELETE /api/debug/location`), because agent files are not hot-reloaded.
+3. **Per run:**
+   - create a session with `agent`, `model` from the route and the location
+   - prompt `{text}` and wait
+   - read all messages: `order=asc` for the first page, then `cursor` alone
+   - validate the output
+   - sum cost and tokens, write the span and usage record
+   - return `{output, sessionId, cost, tokens, wallMs, steps, outcome, overBudget}`
+4. **`continue`, `show` and `cancel`** work on the session id, the handle every caller shares.
+
+**What one OpenCode server isolates per location** (locations spike + station host):
+
+| Isolated | Not isolated |
+|-|-|
+| AGENTS.md, agent prompt, agents, commands, skills (with `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=true`) | in-process code. v2 doesn't load `.opencode/tools/*.ts`; plugins run inside the shared server |
+
+So a station's code is whatever it runs in its shell: CLIs, capabilities, Bun and Python scripts, renderers. Plugins stay platform-level, owned by agw (telemetry, guards).
+
+**Measured on DeepSeek V4.1 Flash, yolo:**
+
+| Run | Cost | Wall time |
+|-|-|-|
+| brain lookup | $0.0044 | 15 s |
+| follow-up | $0.0009 | 8 s |
+| research via the engine | $0.0038 | 50 s |
+| analyst with Python stats + SVG chart + CSV | $0.0047 | 15 s |
+
+Three stations ran concurrently on one server. The whole spike was 70 sessions for $0.069.
+
+**Planned stations:**
+- `check` and `review`: today's agw OpenCode profiles, repackaged
+- `otel`: HyperDX via the otel skill's `hdx` CLI, off Max
+- `brain`
+- `research`
+- `analyst`: calculations, charts, diagrams
+- `podcast-producer`: audio-gateway's research front half
+- `news`: with a future news engine
+
+## 4. Making cheap models strong
+
+Each rule has a measurement behind it. Yolo changes none of them: they are about getting results, not about restricting the agent.
+
+1. **Code owns the pipeline, the model owns the judgment.** A single research loop managed 33%. The fan-out plus a ledger in code fixed it. Review derives its verdict in code.
+2. **One-call doors.** Athena needed 25–45 calls per question until composite commands made it one.
+3. **Machine output by default.** `agw review` without `--json` got its own verdict wrong in 5 of 9 runs.
+4. **Unknown flags fail loudly.** One swallowed flag cost 6 calls and 82k tokens.
+5. **Waiting lives in the CLI.** An agent polling for itself took 6 calls and 95k tokens. A CLI that exits `pending` with the resume command takes 2 (spike 7).
+6. **Typed output, validated by the host.** The re-ask fixed a broken answer in the fixture run.
+7. **Small context.** A short AGENTS.md, skills loaded on demand. The baseline turn costs 5,099 input tokens.
+8. **Effort and sampling live on the route.** v2 ignores agent-level `temperature`.
+9. **Remote text is data,** never a follow-up command. In yolo mode this is the cheapest defence against a malicious page.
+10. **Eval gates every change** to a prompt, skill, route or OpenCode version.
+11. **The caller re-derives.** A station result is evidence for Claude Code, not a verdict.
+12. **Narrowing is a lever to test, not a default.** §9 measures whether the focused profile improves DeepSeek's results.
+
+## 5. Capabilities: the shared typed library
+
+`defineCapability({ id, description, input, output, route, run })` with a registry that exposes every capability three ways from one zod definition:
+
+- **import:** `await caps.summarize({ text })`, typed and output-validated
+- **HTTP:** `POST /cap/:id`, with `GET /openapi.json` generated from the zod schemas
+- **CLI:** `agw cap summarize --text …`, flags generated, ADR-004 errors and exit codes, offline `schema`
+
+Every call records tokens and cost (from the endpoint) and one span that accepts `traceparent`.
+
+**Bake-off, same function built twice** (spike 7 `capability/`):
+
+| | in-house | Mastra 1.79 |
+|-|-|-|
+| Code / deps | 341 lines / 25 MB, 12 packages | 140 lines / 191 MB, 152 packages |
+| Cold start Node / Bun | 1.5 s / 1.0 s | 2.2 s / 1.6 s |
+| Cost captured | yes | tokens only; DeepSeek needs a custom pricing gateway |
+| OpenAPI | 1.8 KB, typed per function | 3.2 MB, 360 paths, tool body untyped `{data:{}}` |
+| CLI | generated | none. A single tool can't become a CLI, and `mastra api` needs a running server |
+| Eval gate | 28 lines | needs a workflow wrapper |
+
+**Mastra's patterns worth copying:**
+- tools callable from code and from agents alike
+- agents and workflows exposed as tools of other agents
+- workflow steps that call agents (`.agent()`)
+- scorer + gate as a CI primitive
+- `outputValidation: strict | warn`
+
+Mastra itself becomes worth adopting only for stateful agent memory, suspend/resume workflows or LLM-judge scorers. Even then, suspended runs are not resumed after a restart (`mastra-deep-dive` §3).
+
+**First capabilities:**
+- `llm.summarize`, `llm.title`, `llm.classify`: all cheap route
+- `decide`: the decision model
+- `modelpick.*`: catalog, prices
+- `pg.vps.*`: read adapters to the VPS Postgres
+- `usage.record`
+
+Apps such as Argo, email-gateway and audio-gateway import them instead of carrying their own LLM clients.
+
+## 6. Dynamic both ways
+
+- **Station → fixed code.** A station decides the path at run time and calls capabilities and engines through `agw`.
+- **Fixed code → station.** A pipeline (the podcast pipeline, a factory job) calls `agw station run …` as one step wherever judgment is needed.
+- **Code mode, later.** A station writes one short script against the capability SDK and runs it once instead of making 15 calls. OpenCode 2 ships an `execute` tool, and Cloudflare collapsed 182 MCP tools to 2 this way. With yolo decided, it needs no sandbox decision first, only the SDK.
+
+## 7. Self-improvement at two speeds
+
+- **Fast: data the station writes itself.** Learned facts such as "geizhals.de lists offers in the HTML" or "this shop blocks at the TLS layer" go into a per-station learnings store, read back on the next run. Reversible and immediate.
+- **Slow: code, prompts and adapters, owned by the factory.** A station run emits friction signals: thin page, blocked host, schema re-ask, `overBudget`, a follow-up the user had to ask. They feed factory intake (ADR-013) as an Issue with evidence. A lead builds the fix and the station's eval gates it. The 2026-10-26 Idealo adapter took exactly this path by hand.
+- **Never in place.** A station rewriting its own prompt is how harness debt starts (`agent-platforms-compared` §9).
+
+## 8. The `agw` CLI
+
+One generic runner (spike 7 `cli-runner/`, 536 lines, no dependencies, Node + Bun) turns each service's served OpenAPI document plus an `x-cli` extension per operation into commands:
+
+```
+agw research run "…" [--depth deep]        # engine, pending/resume
+agw station run brain "…" · agw session continue|show|cancel <id>
+agw cap summarize --text …                 # capability
+agw review · agw check                     # stations underneath
+agw schema [cmd] · agw schema --exit-codes
+```
+
+- **Already proven:** exit codes 0–10 with an HTTP mapping, a typed error line, unknown flags → 2, offline `schema`, and a long job → `pending` → the exact resume command → `done` in 2 calls.
+- **Per service:** stable operationIds and `x-cli` in the route `detail`. research-gateway already serves `/openapi/json`.
+- **Still to build:** the `contract_mismatch` check (412) with spec refresh-and-retry, `jsonl` / `tsv` / `--fields` / `--out` spill, and the conformance suite.
+- **Deep jobs** (450–700 s) need the per-call wait budget raised to ≥ 350 s through Claude Code's Bash timeout. Otherwise a deep job takes 5–7 calls.
+- **Prior art:** none of restish, Fern or openapi-cli-generator implements pending/resume, so that part is ours.
+
+## 9. Proofs still open
+
+| PoC | Question | Status |
+|-|-|-|
+| One OpenCode, many isolated setups | does v2 isolate per location? | ✅ locations spike |
+| Capability layer | in-house vs Mastra, Node + Bun | ✅ in-house |
+| OpenAPI → CLI | ≤ 2 calls per long job | ✅ |
+| Station host | typed output, cost, span, continue, code + artifacts, yolo | ✅ |
+| **Research three-way** | engine vs pure OpenCode research vs station-on-engine, plus yolo vs focused, on research-gateway's 28 regex-checked golden questions: correctness, cost, wall time | next |
+| Telemetry | station span + capability span into ClickStack and usage-tracker; does OpenCode 2's own OTel survive 2.1? | next |
+| Code mode | one station run as a single script against the capability SDK vs N tool calls | later |
+
+## 10. What this changes in the factory docs
+
+Contradictions and amendments, applied when the TDD is next revised:
+
+- **ADR-004**
+  - *Today:* keeps MCP for research-gateway, plans per-gateway CLIs, requires `--commit` on every mutation, names Python cyclopts for warden (13-decisions chose TypeScript), and schedules the agw MCP removal in W8 where 12-plan says W6.
+  - *Change:* MCP is removed entirely (D2), including research-gateway's. One `agw` binary replaces the per-gateway CLIs. The IR is each service's OpenAPI document with `x-cli`, not a per-CLI `schema --all`. The `--commit` scope is open (§1). The other contract items stand; the runner proves 3, 4, 5, 6, 8 and half of 9.
+- **ADR-007**
+  - *Today:* calls agw "a bounded tool server, no loop".
+  - *Change:* agw hosts stations, which are loops. To the caller a station run is one tool call with typed input and output.
+- **TDD 05-capacity:** add stations and capabilities to the cheap-model work list. Stations draft, they don't decide (D3). Budgets are report-only (D5), which replaces the hard caps of v1 of this page.
+- **TDD 12-plan:** the `otel` side change becomes the otel station. W6 ("skills on the agw CLI, MCP removed") becomes this platform's cutover wave.
+- **All TDD documents:** none has a shared capability layer yet.
+
+## 11. Where the factory stands
+
+**How this page and v2.4 fit together.** The factory is the layer above: Issues, leads, lifecycle. This platform is the layer below: what leads, Claude Code and Hermes call. They meet in four places:
+- the otel side change (→ otel station)
+- W6's CLI/MCP cutover (→ the `agw` CLI cutover)
+- W5's Argo move (→ Argo imports capabilities)
+- ADR-013 intake (← station friction signals)
+
+The factory's cheap-model boundary holds as long as stations gather, compute, draft and review, and never implement or decide a root cause.
+
+**Your reading status.** You last read v2.1; its 25 Plannotator comments are in `feedback/2026-10-25-owner-comments-raw.md`. v2.2 got a voice note from the car, v2.3 a chat reply, and both said the report itself was still unread. v2.4 (`ca94bd1`) waits for sign-off. None of v2.2–v2.4 went through the Plannotator Inbox.
+
+**Changes since v2.1** (`2979fdb..ca94bd1`: 35 files, +3304/−558):
+
+| Area | v2.1 | v2.4 |
+|-|-|-|
+| Who reasons | factory investigated, planned, fixed | **a Claude Code lead owns each Issue end to end**; the factory only sorts, words and queues |
+| Layers | mothers, steward, leads | **two:** orchestrator over leads, a fresh session per event |
+| Engine | DBOS on Node | **no DBOS:** a Postgres Issue state machine with an inbox and mandatory idempotency keys |
+| Sessions | mixed | interactive Claude Code in herdr behind a `Runner` port; `claude -p` and the SDK rejected (≈1.8× window cost, no mid-turn steer) |
+| Rollback | automatic | fix-forward |
+| Dedup | decision model + investigator | one judge, shadow from W2, trusted at ≥ 0.95 precision |
+| Cheap models | broad | routine work only. No investigation or planning; Max writes code |
+| otel | Max | a cheap OpenCode route in W1 (owner, v2.3 reply) → the otel station here |
+| Scope | SourceRoot + IuRoot | SourceRoot only; GitHub triggers only by the `factory` label or a `/factory` comment |
+| Waves | W1 | W1a spine (2 d) → W1b ship and watch → W2 → W3 under a build orchestrator; W4–W6 built by the factory itself |
+| Warden, Argo, Hermes | — | warden switched off in W1a and deleted in W2; Argo moves to the mini in W5; Hermes becomes the chat front in W6 |
+
+**Next:** W1a "Spine": Postgres schema, Issue machine, `factory issue` CLI, herdr Runner, hooks, Witness. Its illustrative start is 2026-10-27. The real start is your sign-off, which isn't recorded yet.

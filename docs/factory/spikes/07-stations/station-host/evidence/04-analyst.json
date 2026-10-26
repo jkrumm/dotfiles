@@ -1,0 +1,36 @@
+{
+  "output": {
+    "answer": "The log holds just two station calls, both for station brain (one run phase, one continue phase), totaling $0.00532205 — mean $0.00266102 per call and a max single-call cost of $0.00443890. Because brain is the only station present, the bar chart has a single bar and no cross-station comparison is possible yet.",
+    "figures": {
+      "total_calls": 2,
+      "overall_total_cost": 0.00532205,
+      "brain_calls": 2,
+      "brain_total_cost": 0.00532205,
+      "brain_mean_cost": 0.00266102,
+      "brain_max_cost": 0.0044389
+    },
+    "artifacts": [
+      {
+        "path": "cost.svg",
+        "kind": "svg"
+      },
+      {
+        "path": "cost.csv",
+        "kind": "csv"
+      }
+    ]
+  },
+  "sessionId": "ses_e85b8a4e0ffeosX1bE28bXsUsy",
+  "cost": 0.004653396,
+  "tokens": {
+    "input": 18518,
+    "output": 2519,
+    "reasoning": 227,
+    "cacheRead": 76032,
+    "cacheWrite": 0
+  },
+  "wallMs": 15510,
+  "steps": 5,
+  "outcome": "ok",
+  "overBudget": false
+}

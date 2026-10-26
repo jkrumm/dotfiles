@@ -1,0 +1,25 @@
+{
+  "location": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/brain",
+  "agent": {
+    "id": "brain",
+    "mode": "primary",
+    "steps": null,
+    "system": "You are the \"brain\" station: Answers questions from the owner's vault wiki.\nWork in the scratch directory named in the task. Run code when a computation or an artifact is needed.",
+    "permissions": 7,
+    "shellRules": []
+  },
+  "skills": [
+    {
+      "name": "OpenCode",
+      "path": "/builtin/opencode.md"
+    },
+    {
+      "name": "Report",
+      "path": "/builtin/report.md"
+    },
+    {
+      "name": "wiki-search",
+      "path": "/Users/jkrumm/SourceRoot/dotfiles/docs/factory/spikes/07-stations/station-host/.runtime/locations/brain/.opencode/skills/wiki-search/SKILL.md"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "answer": { "type": "string", "minLength": 1 },
+    "figures": { "type": "object", "additionalProperties": { "type": "number" } },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["svg", "png", "csv", "json", "md", "txt"] }
+        },
+        "required": ["path", "kind"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["answer", "figures", "artifacts"],
+  "additionalProperties": false
+}

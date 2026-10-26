@@ -1,0 +1,22 @@
+{
+  "output": {
+    "answer": "The wiki directory that holds engineering notes is `wiki/engineering` (under `/Users/jkrumm/SourceRoot/brain/wiki`).",
+    "notes": [
+      "engineering/index.md",
+      "index.md"
+    ]
+  },
+  "sessionId": "ses_e85b6b703ffeALtPlujU7YAkfC",
+  "cost": 0.00050658,
+  "tokens": {
+    "input": 1386,
+    "output": 239,
+    "reasoning": 6,
+    "cacheRead": 50560,
+    "cacheWrite": 0
+  },
+  "wallMs": 4234,
+  "steps": 3,
+  "outcome": "ok",
+  "overBudget": false
+}

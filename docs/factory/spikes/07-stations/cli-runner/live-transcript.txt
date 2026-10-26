@@ -1,0 +1,49 @@
+=== (c) 404 jobId, (d) unknown flag, offline schema
+--- call 1 [node] X=1 agw-poc research status job-does-not-exist
+exit=4  wall=1s
+stdout: 
+stderr(last): {"error":{"kind":"not_found","message":"Job not found: job-does-not-exist. It never existed, or has passed its retention window (10080 minutes after completion). Submit a new research job.","hint":"","retryable":false,"details":{"status":404}}}
+--- call 2 [node] X=1 agw-poc research run Name the two most widely used generic OpenAPI to CLI generators and one limitation of each --depth quick --bogus
+exit=2  wall=0s
+stdout: 
+stderr(last): {"error":{"kind":"usage","message":"unknown flag --bogus","hint":"valid flags: --query --depth --context --idempotency-key --format --commit --dry-run --wait --no-wait --help","retryable":false,"details":{}}}
+--- call 3 [node] X=1 agw-poc schema --exit-codes
+exit=0  wall=0s
+stdout: {"exitCodes":{"ok":0,"general":1,"usage":2,"auth":3,"not_found":4,"conflict":5,"confirmation_required":6,"network":7,"rate_limited":8,"contract_mismatch":9,"pending":10}}
+stderr(last): 
+--- call 4 [node] X=1 agw-poc research run Name the two most widely used generic OpenAPI to CLI generators and one limitation of each --depth quick
+exit=6  wall=0s
+stdout: 
+stderr(last): {"error":{"kind":"confirmation_required","message":"research run changes state","hint":"re-run with --commit (or --dry-run to preview): agw-poc research run <query> [--depth <quick|standard|deep>] [--context <string>] [--idempotency-key <string>] [--commit|--dry-run] [--no-wait] [--format json|plain]","retryable":false,"details":{}}}
+
+=== (a) budget 5s on a quick job -> pending; (b) resume completes
+--- call 5 [node] AGW_WAIT_BUDGET_S=5 agw-poc research run Name the two most widely used generic OpenAPI to CLI generators and one limitation of each --depth quick --commit
+exit=10  wall=4s
+stdout: {"jobId":"897ca6f0-fc5c-454e-bd4a-cee11d1378ac","status":"running","depth":"quick","submittedAt":"2026-10-26T22:09:07.724Z","startedAt":"2026-10-26T22:09:07.725Z","finishedAt":null,"queuePosition":null,"progress":{"phase":"researching","round":1,"workers":{"done":0,"total":1}},"typicalDurationMs":{"p50":12000,"p90":40000}}
+stderr(last): {"error":{"kind":"pending","message":"still running after 4s (budget 5s); the job keeps running server-side","hint":"agw-poc research wait 897ca6f0-fc5c-454e-bd4a-cee11d1378ac","retryable":true,"details":{"jobId":"897ca6f0-fc5c-454e-bd4a-cee11d1378ac","status":"running","elapsedS":4,"budgetS":5}}}
+jobId=897ca6f0-fc5c-454e-bd4a-cee11d1378ac
+resume hint: agw-poc research wait 897ca6f0-fc5c-454e-bd4a-cee11d1378ac
+--- call 6 [node] X=1 agw-poc research wait 897ca6f0-fc5c-454e-bd4a-cee11d1378ac
+exit=0  wall=65s
+stdout: {"jobId":"897ca6f0-fc5c-454e-bd4a-cee11d1378ac","status":"done","depth":"quick","submittedAt":"2026-10-26T22:09:07.724Z","startedAt":"2026-10-26T22:09:07.725Z","finishedAt":"2026-10-26T22:10:15.050Z","queuePosition":null,"progress":null,"typicalDurationMs":{"p50":12000,"p90":40000},"result":{"report":"## Bottom line\n\n- **OpenAPI Generator** (most widely adopted, via its `bash` / `powershell` CLI targets driven by `openapi-generator-cli`) — limitation: its bash target is lossy, with Polymorph
+        ... (    6785 bytes total)
+stderr(last): 
+
+=== bun, default budget (110s): a quick job should finish in ONE call
+--- call 7 [bun] X=1 agw-poc research run What is restish and how does it differ from openapi-generator CLI --depth quick --commit
+exit=0  wall=37s
+stdout: {"jobId":"7b987405-7faf-4c90-b9c0-b50f3a66880f","status":"done","depth":"quick","submittedAt":"2026-10-26T22:10:16.541Z","startedAt":"2026-10-26T22:10:16.544Z","finishedAt":"2026-10-26T22:10:52.568Z","queuePosition":null,"progress":null,"typicalDurationMs":{"p50":12000,"p90":40000},"result":{"report":"## Bottom line\n\nRestish is an **API-aware HTTP CLI**: one Go binary that makes ad-hoc requests, and at `api connect` time downloads an OpenAPI description and synthesizes commands, auth handling,
+        ... (    5946 bytes total)
+stderr(last): 
+
+=== cancel on a finished job (idempotent), and wait on it again
+--- call 8 [bun] X=1 agw-poc research cancel 897ca6f0-fc5c-454e-bd4a-cee11d1378ac --commit
+exit=0  wall=0s
+stdout: {"jobId":"897ca6f0-fc5c-454e-bd4a-cee11d1378ac","status":"done"}
+stderr(last): 
+--- call 9 [bun] X=1 agw-poc research cancel 897ca6f0-fc5c-454e-bd4a-cee11d1378ac
+exit=6  wall=0s
+stdout: 
+stderr(last): {"error":{"kind":"confirmation_required","message":"research cancel changes state","hint":"re-run with --commit (or --dry-run to preview): agw-poc research cancel <jobId> [--commit|--dry-run] [--format json|plain]","retryable":false,"details":{}}}
+
+total CLI invocations: 9

@@ -1,0 +1,19 @@
+{
+  "output": {
+    "answer": "Applications\nLibrary\nSystem\nUsers\nVolumes",
+    "notes": []
+  },
+  "sessionId": "ses_e85afdf1cffeq4gAM7BIjOUHYa",
+  "cost": 0.000409758,
+  "tokens": {
+    "input": 581,
+    "output": 127,
+    "reasoning": 243,
+    "cacheRead": 33536,
+    "cacheWrite": 0
+  },
+  "wallMs": 4265,
+  "steps": 2,
+  "outcome": "ok",
+  "overBudget": false
+}

@@ -1,0 +1,7 @@
+name: analyst
+description: Runs code to compute things and renders charts or diagrams as files, returned as typed artifacts.
+route: triage
+profile: yolo
+steps: 25                # report-only
+budget: { usd: 0.10, wall_s: 300 }   # report-only
+output: ./output.schema.json
