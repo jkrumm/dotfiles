@@ -4,8 +4,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted, markRateLimited,
+  mergeSample, newestAge, parseRetryAfterS, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, RATE_LIMIT_DEFAULT_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -518,6 +518,13 @@ describe("OAuth usage source", () => {
     expect(sampleFromOAuthUsage({ five_hour: { utilization: 3, resets_at: 1800000000 } }, NOW)).toBeNull() // resets_at must be a string
     expect(sampleFromOAuthUsage({ five_hour: { utilization: 3, resets_at: "2026-10-24T23:49:59+00:00" }, seven_day: { utilization: "9" } }, NOW)).toMatchObject({ s: 3, w: null }) // one bad window does not drop the good one
   })
+  test("parseRetryAfterS reads delta-seconds and HTTP dates; absent or unparsable is null", () => {
+    expect(parseRetryAfterS("120", NOW)).toBe(120)
+    expect(parseRetryAfterS(new Date(NOW + 90_000).toUTCString(), NOW)).toBe(90)
+    expect(parseRetryAfterS(new Date(NOW - 90_000).toUTCString(), NOW)).toBe(0) // a date in the past clamps to 0, never negative
+    expect(parseRetryAfterS(null, NOW)).toBeNull()
+    expect(parseRetryAfterS("not a date", NOW)).toBeNull()
+  })
 })
 
 describe("runRefresh", () => {
@@ -765,6 +772,77 @@ describe("runRefresh: HTTP 401 renews the token via `claude auth status`", () =>
     expect(r).toEqual({ me: "unresolved" })
     expect(gets).toBe(1)
     expect(held).toBe(false)
+  })
+})
+
+describe("runRefresh: a 429 persists a cooldown and skips the GET until it lapses", () => {
+  const kc: SpawnResult = { status: 0, stdout: CREDS + "\n", stderr: "" }
+
+  test("Retry-After sets the cooldown; a later run inside it skips the GET, a run past it tries again", async () => {
+    const dir = tmp()
+    claimRefresh(reg(), ["iu"], NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 })), dir)
+    let gets = 0
+    const run1 = await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW, ids: ["iu"], dir,
+      spawn: (cmd) => (cmd === "/usr/bin/security" ? kc : ok),
+      httpGet: async () => { gets++; return { status: 429, json: null, retryAfterS: 1800 } },
+    })
+    expect(run1).toEqual({ iu: "unresolved" })
+    expect(gets).toBe(1)
+    expect(loadCache(dir).rate_limited_until.iu).toBe(NOW + 1800_000)
+
+    const logs: string[] = []
+    const run2 = await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW + 10 * 60_000, ids: ["iu"], dir, log: (m) => logs.push(m),
+      spawn: (cmd) => (cmd === "/usr/bin/security" ? kc : ok),
+      httpGet: async () => { gets++; return { status: 200, json: OAUTH_BODY } },
+    })
+    expect(run2).toEqual({ iu: "unresolved" }) // still cooling down: no sample, no new auth verdict either
+    expect(gets).toBe(1) // the GET above was never called
+    expect(logs.join("\n")).toContain("rate-limited, skipping")
+
+    const run3 = await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW + 1800_000 + 1000, ids: ["iu"], dir,
+      spawn: (cmd) => (cmd === "/usr/bin/security" ? kc : ok),
+      httpGet: async () => { gets++; return { status: 200, json: OAUTH_BODY } },
+    })
+    expect(run3).toEqual({ iu: "fresh" }) // the cooldown lapsed: the GET ran and this time it succeeded
+    expect(gets).toBe(2)
+    rmSync(dir, { recursive: true })
+  })
+
+  test("no Retry-After header falls back to the default cooldown", async () => {
+    const dir = tmp()
+    claimRefresh(reg(), ["iu"], NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 })), dir)
+    await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW, ids: ["iu"], dir,
+      spawn: (cmd) => (cmd === "/usr/bin/security" ? kc : ok),
+      httpGet: async () => ({ status: 429, json: null }),
+    })
+    expect(loadCache(dir).rate_limited_until.iu).toBe(NOW + RATE_LIMIT_DEFAULT_MS)
+    rmSync(dir, { recursive: true })
+  })
+
+  test("a 429 on the post-401 retry also persists the cooldown", async () => {
+    const dir = tmp()
+    claimRefresh(reg(), ["me"], NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), dir)
+    let gets = 0
+    await runRefresh({
+      reg: reg(), claudeBin: "claude", baseEnv: {}, now: () => NOW, ids: ["me"], dir,
+      spawn: (cmd) => (cmd === "/usr/bin/security" ? kc : { status: 0, stdout: JSON.stringify({ loggedIn: true }), stderr: "" }),
+      httpGet: async () => { gets += 1; return gets === 1 ? { status: 401, json: null } : { status: 429, json: null, retryAfterS: 60 } },
+    })
+    expect(gets).toBe(2)
+    expect(loadCache(dir).rate_limited_until.me).toBe(NOW + 60_000)
+    rmSync(dir, { recursive: true })
+  })
+
+  test("markRateLimited never shortens an already-recorded cooldown", () => {
+    const dir = tmp()
+    markRateLimited("iu", NOW + 1800_000, dir)
+    markRateLimited("iu", NOW + 60_000, dir)
+    expect(loadCache(dir).rate_limited_until.iu).toBe(NOW + 1800_000)
+    rmSync(dir, { recursive: true })
   })
 })
 
