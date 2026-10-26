@@ -65,7 +65,7 @@ FALLOW_VERSION := 3.33.1
 # GitHub-release Go binary (the npm package only wraps it behind a postinstall
 # download), checksum-verified against the release's sha256sum.txt; pinned for
 # the same reason as fallow.
-OCR_VERSION := 1.12.13
+OCR_VERSION := 1.13.3
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
