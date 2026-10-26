@@ -16,6 +16,8 @@ export const STALE_OK_MS = 6 * 3600_000
 /** a dead login is re-probed (in the background) at most this often */
 export const AUTH_RETRY_MS = 30 * 60_000
 export const REFRESH_MIN_MS = 5 * 60_000
+/** A 429 without a usable `Retry-After`: back off this long before the next attempt. */
+export const RATE_LIMIT_DEFAULT_MS = REFRESH_MIN_MS
 export const EXPIRING_S = 24 * 3600
 /** Weekly% may run this many points ahead of the elapsed share of the 7-day window before an account counts as over pace. */
 export const PACE_MARGIN = 15
@@ -60,6 +62,8 @@ export interface Cache {
   auth_failed: Record<string, boolean>
   /** epoch ms of the last auth failure per id (the retry cooldown starts there) */
   auth_failed_at: Record<string, number>
+  /** epoch ms until which the usage GET is skipped per id, set from a 429's `Retry-After` (or the default). */
+  rate_limited_until: Record<string, number>
 }
 /** `stale`: the picked account was chosen on a sample older than FRESH_MS (reason keeps the routing rule). */
 export interface PickResult {
@@ -68,7 +72,7 @@ export interface PickResult {
   stale: boolean
 }
 
-export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, auth_failed: {}, auth_failed_at: {} })
+export const emptyCache = (): Cache => ({ samples: {}, exhausted: {}, auth_failed: {}, auth_failed_at: {}, rate_limited_until: {} })
 
 export const registryPath = () => process.env.CLAUDE_ACCOUNTS_REGISTRY ?? join(import.meta.dir, "..", "..", "config", "claude-accounts.json")
 export const cacheDir = () => process.env.CLAUDE_ACCOUNTS_CACHE_DIR ?? join(homedir(), ".cache", "claude-accounts")
@@ -141,9 +145,10 @@ export function writeAtomic(path: string, data: string): void {
 }
 
 // ── Per-account cache files ────────────────────────────────────────────────────────────────────────────────────
-// <id>.sample.json · <id>.exhausted.json · <id>.auth.json · <id>.statusline.json (last statusline feed) · <id>.refresh.claim. Every writer replaces only its own
-// small file atomically, so there is no lock: two accounts or two kinds never contend, and a lost update on one
-// file only costs freshness (the next feed rewrites it).
+// <id>.sample.json · <id>.exhausted.json · <id>.auth.json · <id>.statusline.json (last statusline feed) · <id>.ratelimit.json
+// (429 cooldown) · <id>.refresh.claim. Every writer replaces only its own small file atomically, so there is no
+// lock: two accounts or two kinds never contend, and a lost update on one file only costs freshness (the next feed
+// rewrites it).
 
 const ID = /^[A-Za-z0-9_-]+$/
 const file = (dir: string, id: string, kind: string) => {
@@ -167,7 +172,7 @@ export function loadCache(dir = cacheDir()): Cache {
     return c
   }
   for (const name of names) {
-    const m = /^([A-Za-z0-9_-]+)\.(sample|exhausted|auth)\.json$/.exec(name)
+    const m = /^([A-Za-z0-9_-]+)\.(sample|exhausted|auth|ratelimit)\.json$/.exec(name)
     if (!m) continue
     const [, id, kind] = m
     const j = readJson(join(dir, name)) as Record<string, unknown> | null
@@ -176,6 +181,7 @@ export function loadCache(dir = cacheDir()): Cache {
       if (isSample(j)) c.samples[id] = j // a malformed file is dropped, the next feed rewrites it
     }
     else if (kind === "exhausted" && isNum(j.until)) c.exhausted[id] = j.until
+    else if (kind === "ratelimit" && isNum(j.until)) c.rate_limited_until[id] = j.until
     else if (kind === "auth" && j.failed === true) {
       c.auth_failed[id] = true
       if (isNum(j.ts)) c.auth_failed_at[id] = j.ts
@@ -216,6 +222,13 @@ export function markExhausted(id: string, untilS: number, dir = cacheDir()): voi
   const path = file(dir, id, "exhausted.json")
   const cur = (readJson(path) as { until?: number } | null)?.until ?? 0
   writeAtomic(path, JSON.stringify({ until: Math.max(untilS, cur) }))
+}
+
+/** Persists a 429 cooldown (epoch ms); never shortens one already recorded. */
+export function markRateLimited(id: string, untilMs: number, dir = cacheDir()): void {
+  const path = file(dir, id, "ratelimit.json")
+  const cur = (readJson(path) as { until?: number } | null)?.until ?? 0
+  writeAtomic(path, JSON.stringify({ until: Math.max(untilMs, cur) }))
 }
 
 /** Records the auth verdict; a no-op when it already says the same. */
@@ -701,6 +714,16 @@ export function refreshEnv(base: Record<string, string | undefined>, dir: string
 export interface HttpResponse {
   status: number
   json: unknown
+  /** `Retry-After` on a 429, in seconds from now; null when absent or unparsable. */
+  retryAfterS?: number | null
+}
+
+/** `Retry-After` header value (delta-seconds or an HTTP date) -> seconds from now; null when absent or unparsable. */
+export function parseRetryAfterS(raw: string | null, nowMs: number): number | null {
+  if (!raw) return null
+  if (/^\d+$/.test(raw.trim())) return Number(raw)
+  const t = Date.parse(raw)
+  return Number.isNaN(t) ? null : Math.max(0, Math.round((t - nowMs) / 1000))
 }
 /** GET with a hard timeout; throws on network errors. */
 export type HttpGet = (url: string, headers: Record<string, string>, timeoutMs: number) => Promise<HttpResponse>
@@ -745,16 +768,21 @@ function keychainToken(d: RefreshDeps, id: string): string | null {
 }
 
 /** One GET of the usage endpoint; the status is kept so the caller can tell an expired token (401) from the rest. */
-async function fetchUsage(d: RefreshDeps, id: string, token: string): Promise<{ sample: Sample | null; status: number | null }> {
+async function fetchUsage(d: RefreshDeps, id: string, token: string): Promise<{ sample: Sample | null; status: number | null; retryAfterS: number | null }> {
   try {
     const r = await d.httpGet(OAUTH_USAGE_URL, oauthUsageHeaders(token), OAUTH_TIMEOUT_MS)
     const sample = r.status === 200 ? sampleFromOAuthUsage(r.json, d.now()) : null
     if (!sample) d.log?.(`refresh ${id}: usage endpoint gave no sample (HTTP ${r.status})`)
-    return { sample, status: r.status }
+    return { sample, status: r.status, retryAfterS: r.retryAfterS ?? null }
   } catch (e) {
     d.log?.(`refresh ${id}: usage endpoint failed: ${e instanceof Error ? e.name : typeof e}`) // name only: never echo a message that could carry request details
-    return { sample: null, status: null }
+    return { sample: null, status: null, retryAfterS: null }
   }
+}
+
+/** Records a 429 as a cooldown (`Retry-After`, else the default) so the next runs skip the GET instead of hammering a blocked token. */
+function rememberRateLimit(d: RefreshDeps, id: string, retryAfterS: number | null): void {
+  markRateLimited(id, d.now() + (retryAfterS !== null ? retryAfterS * 1000 : RATE_LIMIT_DEFAULT_MS), d.dir)
 }
 
 /**
@@ -763,17 +791,27 @@ async function fetchUsage(d: RefreshDeps, id: string, token: string): Promise<{ 
  * proves anything about the login. The one exception to "just fail" is HTTP 401: the access token of an idle
  * account expires and nothing renews it, but `claude auth status` (0 tokens) makes the binary renew it in the
  * Keychain, so a 401 runs it (`status`, shared with the caller's verdict), re-reads the token and retries the GET
- * once. The token is never logged or stored.
+ * once. The token is never logged or stored. A 429 persists a cooldown (`Retry-After`, honoured across runs); while
+ * it is in effect the GET is skipped entirely instead of adding to the burst that caused it.
  */
 async function oauthSample(d: RefreshDeps, id: string, status: () => LoginVerdict): Promise<Sample | null> {
   const token = keychainToken(d, id)
   if (!token) return null
+  const until = loadCache(d.dir).rate_limited_until[id] ?? 0
+  if (d.now() < until) {
+    d.log?.(`refresh ${id}: usage endpoint rate-limited, skipping until ${new Date(until).toISOString()}`)
+    return null
+  }
   const first = await fetchUsage(d, id, token)
+  if (first.status === 429) rememberRateLimit(d, id, first.retryAfterS)
   if (first.status !== 401) return first.sample
   d.log?.(`refresh ${id}: usage endpoint HTTP 401, renewing the access token via \`claude auth status\``)
   if (status().startFailed) return null
   const renewed = keychainToken(d, id)
-  return renewed ? (await fetchUsage(d, id, renewed)).sample : null
+  if (!renewed) return null
+  const second = await fetchUsage(d, id, renewed)
+  if (second.status === 429) rememberRateLimit(d, id, second.retryAfterS)
+  return second.sample
 }
 
 /**
