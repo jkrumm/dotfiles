@@ -22,7 +22,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import {
   type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
-  mergeSample, newestAge, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
+  mergeSample, newestAge, parseRetryAfterS, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
 const SPILL_EXIT = 3
@@ -82,7 +82,7 @@ const httpGet: HttpGet = async (url, headers, timeoutMs) => {
   } catch {
     // an unreadable body is just "no sample"
   }
-  return { status: r.status, json }
+  return { status: r.status, json, retryAfterS: parseRetryAfterS(r.headers.get("retry-after"), Date.now()) }
 }
 
 /**

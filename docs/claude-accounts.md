@@ -92,7 +92,7 @@ claude-account expiry [--json]      # when each enabled login ends (refresh toke
 `expiry` rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (the account owns `~/.claude`) and `severity` (the grade, but a non-default account never exceeds WARN, as with `auth/<id>`); verify and the heartbeat act on `severity`. `usage` stays a pure file read (the statusline calls it): no Keychain access, no login fields; `expiry` is the only reader of the Keychain item's timestamps.
 
 **Quota sources: read-only use of the account's own token for one GET.** Three feeds, freshest wins, all
-written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
+written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.ratelimit.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
 
 1. **Statusline (live, free):** every render gets native `rate_limits` for the
    session's own account. `statusline.sh` writes `{account, five_hour,
@@ -116,7 +116,9 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    plain "no sample". That one `auth status` is also the run's login verdict (never run twice), so the auth mark logic is
    unchanged: only a verdict, a sample or a statusline record moves it, and no token reaches a log or a file. A refresh runs
    only when an account's newest sample is older than 10 minutes, at most once every 5 minutes per account (the claim,
-   unchanged), because the endpoint rate-limits per token (a 429 can block for up to an hour: claude-swap, ClaudeBar). `claude -p "/usage"` was the source until Claude
+   unchanged), because the endpoint rate-limits per token (a 429 can block for up to an hour: claude-swap, ClaudeBar).
+   A 429 persists a per-account cooldown (`<id>.ratelimit.json`, honouring `Retry-After`, else a 5 min default); while
+   it is in effect the GET is skipped entirely instead of adding to the burst that caused it. `claude -p "/usage"` was the source until Claude
    Code 2.1.310; it now prints an analysis and no longer updates `cachedUsageUtilization`, so it is gone.
    `readClaudeJson` still merges whatever `cachedUsageUtilization` the binary writes during real sessions (newest
    timestamp wins).
