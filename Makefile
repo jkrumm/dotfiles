@@ -1189,10 +1189,9 @@ _setup-scripts:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/keyprobe.py" \
 		DST="$(HOME)/.local/bin/keyprobe"
-	@# rd, ask-human, warden: agent-control commands as real executables on PATH
+	@# rd, ask-human: agent-control commands as real executables on PATH
 	@# (not only zsh functions), so ssh remote commands, OpenCode, Codex and
-	@# agent-gateway workers resolve them. warden's script lives in its own repo and is
-	@# linked only where that repo exists (the mini).
+	@# agent-gateway workers resolve them.
 	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/remote-dev.sh" \
@@ -1219,15 +1218,11 @@ _setup-scripts:
 		rm -f "$(HOME)/.local/bin/agent-dispatch"; \
 		echo "    ✓ removed stale agent-dispatch link"; \
 	fi
-	@# warden resolves its venv relative to $$0, so a symlink would break it — an
-	@# exec wrapper is the install shape.
-	@if [ -x "$(HOME)/SourceRoot/warden/scripts/warden" ]; then \
+	@# warden was switched off 2026-10-27; its exec wrapper is removed where this repo
+	@# once wrote it (a wrapper into SourceRoot/warden only — anything else is left alone).
+	@if [ -f "$(HOME)/.local/bin/warden" ] && grep -q 'SourceRoot/warden/scripts/warden' "$(HOME)/.local/bin/warden" 2>/dev/null; then \
 		rm -f "$(HOME)/.local/bin/warden"; \
-		printf '#!/bin/sh\nexec "%s/SourceRoot/warden/scripts/warden" "$$@"\n' "$(HOME)" > "$(HOME)/.local/bin/warden"; \
-		chmod +x "$(HOME)/.local/bin/warden"; \
-		echo "    ✓ warden"; \
-	else \
-		echo "    · warden (repo not on this machine — skipped)"; \
+		echo "    ✓ removed retired warden wrapper"; \
 	fi
 	@# astra — the one-shot Responses call at reasoning.mode="pro", the one
 	@# setting no coding harness can send. Complements `cxa`, see config/codex/.
@@ -2482,8 +2477,8 @@ disk-sweep-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/disk-sweep.sh $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/disk-sweep.test.sh
 
-# The end-to-end probe for the job -> warden chain (docs/background-jobs.md §Canary). Dev host
-# only: warden runs there. Converged by `make setup`. Teardown removes its state file too, or
+# The end-to-end probe for the job -> Slack chain (docs/background-jobs.md §Canary). Dev host
+# only. Converged by `make setup`. Teardown removes its state file too, or
 # jobs-grade would grade the retired label `unloaded` forever.
 .PHONY: jobrun-canary-setup jobrun-canary-teardown
 jobrun-canary-setup:

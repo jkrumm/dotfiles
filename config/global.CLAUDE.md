@@ -65,15 +65,14 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | One bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | `agw dispatch` (`implement` / `investigate`) |
 | N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
 | Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
-| Unattended work tracked to an outcome | `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>`, or a GitHub issue |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
 
-The four lanes — `@implementer`, `agw dispatch`, `rd wave` (incl. fan-out),
-`warden run` — are the only ways to start *another agent*
+The three lanes — `@implementer`, `agw dispatch`, `rd wave` (incl. fan-out) —
+are the only ways to start *another agent*
 (`docs/agent-platform.md`); `Explore`, `@verifier`, `/check`, `/research` and
 `/review` are in-session tools, not lanes. Brief a worker completely: exact
 paths, the change, acceptance criteria, scope limits, and any research baked in

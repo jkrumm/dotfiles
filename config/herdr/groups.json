@@ -19,7 +19,6 @@
         "dotfiles-private",
         "agent-gateway",
         "hermes-agent",
-        "warden",
         "research-gateway",
         "audio-gateway",
         "modelpick",

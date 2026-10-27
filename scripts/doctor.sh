@@ -324,7 +324,7 @@ section_kuma() {
 
 # --- Background jobs (both machines) -------------------------------------------
 # The graded table from jobs-grade — the only grading logic. Informational: a bad
-# grade is a skip-style note here, warden/the heartbeat own the reaction.
+# grade is a skip-style note here, the heartbeat relays it to Slack.
 section_jobs() {
   hdr "Background jobs (jobrun state dir)"
   local bun_dir out summary rc=0
@@ -334,7 +334,7 @@ section_jobs() {
   printf '%s\n' "$out" | sed '$d' | sed 's/^/    /'
   case "$rc" in
     0) ok "jobs" "$summary" ;;
-    2) skip "jobs" "$summary (warden owns the fix)" ;;
+    2) skip "jobs" "$summary (the heartbeat posts changes to Slack)" ;;
     *) skip "jobs" "jobs-grade failed (rc=$rc): $summary" ;;
   esac
 }

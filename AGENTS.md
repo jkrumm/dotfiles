@@ -47,14 +47,13 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
-| `~/SourceRoot/warden/scripts/warden` | `~/.local/bin/warden` | Linked from the warden repo, not from here — `warden run <repo> <<'BRIEF'` (brief on stdin) or `--brief-file <path>` |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/hl` | `~/.local/bin/hl` | HomeLab files over S3 — rclone with an env-defined `homelab:` remote + `presign`/`mount`; key per machine (see *HomeLab files*) |
 | `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-me`; `make claude-accounts-verify` (read-only, in `make doctor`) and `make claude-accounts-e2e` prove routing + attribution, the hourly keepalive agent (both machines) keeps samples fresh and logins alive; `claude-account expiry` (and the `login/<id>` verify rows) say when each login ends — `docs/claude-accounts.md` §Operate |
 | `scripts/claude-relogin.sh` (+ `claude-login-browser.sh`, the `BROWSER` target) | `~/.local/bin/claude-relogin` | One-click re-login of a Claude account on the machine that owns the credential — `claude-relogin <id> [--machine mini\|macbook] [--ask] [--visible] [--dry-run]`; runs windowless on the MacBook (log `~/Library/Logs/claude-relogin.log`, Terminal only as fallback, closed after success), in a herdr workspace that closes itself on the mini, then a native notification; the owner only approves in the account's browser (never automated) — `docs/claude-accounts.md` §Re-login |
-| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; every alert source feeds warden directly, flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
+| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; alert flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload`, Colima socket heal, and (MacBook) `jobs-grade --notify` 2 min after wake, staleness judged against awake time |
 
 **Not symlinked:** `~/.codex/config.toml` (rendered by `_setup-codex` from
@@ -171,7 +170,6 @@ substitutes for another.**
 | `@implementer` | the edit must land in this session's live tree |
 | `agw dispatch` | settled, bounded work → branch/PR or a verdict |
 | `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only; no room pauses, never IU), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
-| `warden run <repo> <<'BRIEF'` / `--brief-file <path>` | unattended, tracked to an outcome on warden's ledger |
 
 | Want | Command |
 |-|-|
@@ -191,7 +189,7 @@ Five facts to hold:
   integration version 6+ (this machine reports 8) and
   `[session].resume_agents_on_restore`, true by default. Shells, dev servers and
   `bun` loops still die, and a resumed agent still lost whatever turn was in
-  flight, so work that must not be *interrupted* belongs in `warden run`.
+  flight, so work that must not be *interrupted* is a `agw dispatch` job, not a pane.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied

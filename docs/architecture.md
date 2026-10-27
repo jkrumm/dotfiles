@@ -22,13 +22,13 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 
 - **Mac mini — the always-on dev host.** Every agent and LaunchAgent runs here. It never sleeps and has no UI of its own.
 - **MacBook and iPhone — the UI layer.** No durable state. The MacBook is `desk` (a herdr client) plus biometric 1Password; the iPhone is Collie in a browser tab. Closing the lid ends a *connection*, never the work.
-- **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` and `/warden` (the durable record and the one queue), the brain reader, Collie (the only one that can *act*).
+- **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
 - **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26), audio-gateway, image-gateway, email-gateway. Detail: brain `gateways`.
 
-**The agent platform** — one engine (agent-gateway), one autonomous loop (warden),
-one front door (Hermes), one cockpit (herdr), four lanes, one repo contract —
+**The agent platform** — one engine (agent-gateway),
+one front door (Hermes), one cockpit (herdr), three lanes, one repo contract —
 is specified in [`agent-platform.md`](agent-platform.md), which wins over any
 older doc on that topic. This map only places its parts on machines.
 
@@ -41,7 +41,7 @@ own image export, so a screenshot is never the way to share one.
 | File | The question it answers |
 |-|-|
 | `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
-| `agent-platform.html` | How the agent platform fits together: sources, front doors, warden's loop, agent-gateway, the four lanes, the repo contract. Spec: `agent-platform.md`. |
+| `agent-platform.html` | How the agent platform fits together: sources, front doors, agent-gateway, the lanes, the repo contract. Spec: `agent-platform.md`. |
 | `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a gateway reload that detaches the session, and the re-attach by state on the next boot. |
 | `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
@@ -76,8 +76,8 @@ instead — same validated geometry, without that one crossing guarantee.
 | Repo | Purpose | Notes |
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
-| `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work via `warden run` or an issue, 5-job cron layer | see [[agent-platform]] |
-| `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `agw dispatch` is a session's bounded episode, `rd wave` a human's long one |
+| `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work as a GitHub issue (nothing works it automatically), 5-job cron layer | see [[agent-platform]] |
+| `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `agw dispatch` or `rd wave` |
 | `agent-gateway` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel`, `/prose` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
@@ -127,7 +127,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, OCR sessions > 14 d, stale `$TMPDIR` entries, package caches |
-| `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → warden chain; exits 1 unless `config/jobrun-canary.json` is healthy |
+| `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → Slack chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.herdr-events` | KeepAlive | raw herdr event record → `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.started` / `recorder.gap` lines mark restarts; records only, no consumer |
 | `com.jkrumm.herdr-reap` | 1800s | the herdr janitor (`rd reap`): closes tabs of finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12), messages dirty ones, stops `claude --bg` leftovers > 24 h; actions in `~/Library/Logs/herdr-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
@@ -150,32 +150,9 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 runs an in-process cron layer — 4 live jobs (morning briefing, evening report,
 brain drift audit, project narratives; the agents-overview digest was paused
 2026-09-08) registered with `hermes cron`, invisible to launchd and to
-`architecture-check.sh` because they never leave the gateway process. The
-watchdog poll and dispatch sweep that used to run here were promoted to
-`warden-poll`/`warden-sweep` LaunchAgents above on 2026-09-09 — a control
-plane cannot depend on the process it supervises being up. Registry:
+`architecture-check.sh` because they never leave the gateway process. Registry:
 `hermes-agent/docs/scheduled-jobs.md`; model: [[agent-platform]]
 (superseded on the dispatch mechanics — see its own banner).
-
-### warden
-
-Five LaunchAgents, not four — `warden-api` is easy to miss counting because it
-has no fixed interval (`KeepAlive`, not a timer), but `GET /health` and
-`/metrics` on `127.0.0.1:7735` are the ledger's only HTTP surface, read by
-`make status` here and by Hermes through its `warden` skill (HTTP API, never the
-database). The other four were extracted from `hermes-agent`
-2026-09-09 — a control plane cannot live inside the thing it supervises — and
-are LaunchAgents rather than gateway cron on purpose: the loop that notices
-Hermes is broken cannot depend on Hermes being up, and its Slack delivery is a
-plain HTTP client, not the gateway's live connection.
-
-| Label | Schedule | What |
-|-|-|-|
-| `com.jkrumm.warden-api` | KeepAlive | The ledger's HTTP surface — `GET /health`, `/metrics`, `/board`, `/items/<id>` on `127.0.0.1:7735`, plus the bearer-token `POST /ingest/{kuma,hyperdx}` door (reached over the tailnet only through the `warden-ingest` Caddy host) |
-| `com.jkrumm.warden-loop` | 600s | The alert triage act-loop — turns deduplicated `~/.warden/warden.db` events into items and agent-gateway `investigate` episodes in the owning repo; Slack gets one line on `fixed` / `needs_decision`, Argo `/warden` is the queue. Was gateway cron, extracted from `hermes-agent` 2026-09-09. |
-| `com.jkrumm.warden-poll` | 1800s | Ingest. Was gateway cron job `4b1faabda97d`; promoted for the same reason — ingest running inside the process it supervises is how the loop kept ticking against a ledger that had stopped receiving signals. Posts its own digest and pings the `watchdog` UptimeKuma push URL on a clean poll. |
-| `com.jkrumm.warden-sweep` | 300s | Folds finished episodes onto their items, then runs the implement chain. Was gateway cron job `4dd759917dd1`. |
-| `com.jkrumm.warden-backup` | daily 03:10 | `VACUUM INTO` snapshot of the ledger, rotated, rsynced to `homelab:/mnt/hdd/backups/warden/` — inside the restic source mount, so it reaches B2 with no homelab-side change. Between `hermes-backup` (03:00) and restic (03:30). |
 
 ### modelpick
 
@@ -281,7 +258,6 @@ non-Caddy doors.
 |-|-|-|
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |
 | `https://<app>.mini.jkrumm.com` | mini Caddy wildcard block | tailnet, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on 443 |
-| `https://warden-ingest.mini.jkrumm.com/ingest/*` | mini Caddy wildcard block → warden-api `127.0.0.1:7735` (`/ingest/*` only, bearer token) | tailnet, ACL `tag:homelab/tag:vps → tag:devhost` on 443; the generator makes every *other* host answer 403 to those two tags |
 | `:7730` (`rb`) | `tailscale serve` → 127.0.0.1:4050 | tailnet only |
 | `:8081` (weatherorb tiles) | `tailscale serve` → 127.0.0.1:8081 | tailnet only |
 | `:8788` (Collie) | `tailscale serve` → 127.0.0.1:8787 | tailnet, ACL `tag:phone → tag:mac` |
@@ -330,12 +306,10 @@ Uptime Kuma.
 | `Home Line - Push` | linewatch | 4 min |
 | `Home Line - Watchdog` | linewatch watchdog latch | 10 min, 2 retries |
 | `Agent Gateway - Push` | agent-gateway job-queue health | 5 min, 1 retry |
-| `Warden Loop - Push` | warden-loop, only while loop + poll + sweep heartbeats are fresh and the poll is not Slack-blind (`/health`'s test) | 20 min, 1 retry at 10 min |
-| `Warden Backup - Push` | warden-backup | 25 h |
 | `Hermes Serve - Push` | hermes-serve-liveness | 4 h backstop, 1 retry |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
 
-Every push monitor has `maxretries: 1` with `retry_interval = min(interval, 1 h)`, so a flake does not page and time-to-DOWN stays ≈ interval. Backstops (Brain Sync, Collie, Hermes Serve) run at ≥ 2× warden's 2 h verdict budget so warden acts first; the poller's own `Hermes Watchdog - Push` was retired into `Warden Loop - Push`.
+Every push monitor has `maxretries: 1` with `retry_interval = min(interval, 1 h)`, so a flake does not page and time-to-DOWN stays ≈ interval. Backstops (Brain Sync, Collie, Hermes Serve) run at a 4 h interval.
 
 Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
 

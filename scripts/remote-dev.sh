@@ -961,7 +961,7 @@ else:
     if any(r[0] == "interactive" for r in rows):
         print()
         print("  \033[33mnote:\033[0m 'interactive' agents die with their connection.")
-        print("        Unattended work belongs in 'warden run'.")
+        print("        Unattended work belongs in 'agw dispatch'.")
 PY
 }
 
@@ -1091,11 +1091,10 @@ usage() {
 
     repos · work · agents
 
-  Four lanes for starting agent work (docs/agent-platform.md):
+  Three lanes for starting agent work (docs/agent-platform.md):
     @implementer  native subagent — the edit must land in this session's live tree
     dispatch      agent-gateway `dispatch` (MCP/CLI) — settled bounded work → branch/PR or verdict
     wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
-    warden        `warden run <repo> '<brief>'` — unattended, tracked to an outcome
 
   Getting a terminal is a different layer:
     desk   herdr --remote — local keybindings, dies on roam
