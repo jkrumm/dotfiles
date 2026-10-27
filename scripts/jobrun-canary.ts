@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-// jobrun-canary — the end-to-end probe for the job → warden chain (docs/waves/PLAN.md Wave 7).
+// jobrun-canary — the end-to-end probe for the job failure chain (docs/waves/PLAN.md Wave 7).
 // Exits 1 unless config/jobrun-canary.json has `"healthy": true`; the job com.jkrumm.jobrun-canary
 // runs it every 300 s under jobrun. Keep it healthy and committed. Flipping it is how the chain is
-// exercised: locally uncommitted to see `failing` (Wave 5), committed by the owner to make warden
-// fix it end to end (Wave 7).
+// exercised: locally uncommitted to see `failing` (Wave 5), committed by the owner to let a remediation
+// consumer fix it end to end (Wave 7).
 import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
@@ -25,7 +25,7 @@ export function readHealthy(path: string): { healthy: boolean; why: string } {
 if (import.meta.main) {
   const { healthy, why } = readHealthy(process.env.JOBRUN_CANARY_CONFIG || DEFAULT_CONFIG)
   console.log(`jobrun-canary: ${why}`)
-  // The failure names its own fix, so warden's job brief shows an implementer that this is a plain code/config
+  // The failure names its own fix, so a job brief shows an implementer that this is a plain code/config
   // fault in the owner repo (a normal implement), not a question for the owner.
   if (!healthy) console.log(CANARY_FIX)
   process.exit(healthy ? 0 : 1)

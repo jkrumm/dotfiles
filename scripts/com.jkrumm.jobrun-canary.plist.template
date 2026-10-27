@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.jobrun-canary</string>
-  <!-- The end-to-end probe for the job -> warden chain: exits 1 unless
+  <!-- The end-to-end probe for the job failure chain: exits 1 unless
        config/jobrun-canary.json says "healthy": true. Always healthy and committed;
        it is flipped only to exercise the chain (docs/background-jobs.md §Canary).
        Dev host only (jobrun-canary-setup). -->

@@ -2,11 +2,15 @@
 // jobs-grade — the ONLY grading logic for background jobs (ops-signals.md §3 T1, §5).
 // Reads the jobrun state dir plus `launchctl print` and grades every label:
 //   ok | failing | stale | flapping | unloaded
-// Called by the heartbeat (WARN), `make doctor` (table) and, later, warden's `job` source.
+// Called by the heartbeat (WARN), `make doctor` (table) and any remediation consumer.
 //
 //   jobs-grade            JSON array on stdout
 //   jobs-grade --table    human table, verdict line last (exit 0 / 2 like --summary)
 //   jobs-grade --summary  one line, exit 0 (all ok) / 2 (WARN) — what the heartbeat and doctor relay
+//   jobs-grade --slack    with --summary or --table: post to Slack #alerts when the set of not-ok jobs changes
+//                         (new failure, grade change, recovery). Best-effort: a failed post writes one stderr
+//                         line, never changes stdout or the exit code, and is retried on the next tick because
+//                         the state file is only written after a successful post.
 //   jobs-grade --notify   MacBook wake hook: like --summary, plus a macOS notification for the bad rows.
 //                         A closed lid is not a stalled job, so `stale` is judged against AWAKE time:
 //                         a row is dropped unless the machine has been awake for its whole window.
@@ -19,9 +23,12 @@
 //
 // Env: JOBRUN_STATE_DIR overrides ~/.local/state/jobs; JOBRUN_PLIST_DIR overrides ~/Library/LaunchAgents;
 // JOBRUN_HERMES_CRON overrides ~/.hermes/cron/jobs.json.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
-import { homedir } from "node:os"
-import { join } from "node:path"
+// --slack: JOBS_GRADE_SLACK_STATE (default ~/.local/state/jobs-grade/slack.json), JOBS_GRADE_SLACK_CHANNEL
+// (default the #alerts channel), JOBS_GRADE_SLACK_TOKEN (default: `secrets-run read` of the bot token),
+// JOBS_GRADE_SLACK_URL (default the Slack chat.postMessage endpoint; tests point it at a stub).
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { homedir, hostname } from "node:os"
+import { dirname, join } from "node:path"
 
 export type Grade = "ok" | "failing" | "stale" | "flapping" | "unloaded"
 
@@ -54,7 +61,7 @@ export interface Graded {
   last_ok: string | null
   last_started: string
   every: number | null
-  /** Owner repo HEAD when the last run started, the last 5 runs and the output tail: what warden's job brief quotes. Absent on a never-recorded job. */
+  /** Owner repo HEAD when the last run started, the last 5 runs and the output tail: what a job brief quotes. Absent on a never-recorded job. */
   owner_sha?: string | null
   runs?: JobState["runs"]
   tail?: string[]
@@ -114,7 +121,7 @@ export function readStates(dir: string): JobState[] {
 // Hermes cron jobs are not launchd jobs and never go through jobrun: the gateway runs them and keeps
 // the last outcome in ~/.hermes/cron/jobs.json. They are translated into the same JobState records
 // and graded by the same gradeOne, so a failing cron job becomes a `job` item for hermes-agent through
-// warden's one path. Only the LAST run is known (no history): a failed daily/weekly job is `failing`
+// the same path as every other job. Only the LAST run is known (no history): a failed daily/weekly job is `failing`
 // at once, which is the right reading for a job that runs once a day or a week.
 export const CRON_PREFIX = "hermes-cron."
 export const CRON_GATEWAY_LABEL = "ai.hermes.gateway" // the launchd job that runs every cron job
@@ -333,6 +340,78 @@ export function summarize(rows: Graded[]): { line: string; code: 0 | 2 } {
   return { line: `jobs WARN (${rows.length}): ${bad.map((r) => `${r.label}=${r.grade}`).join(", ")}`, code: 2 }
 }
 
+// --- Slack transitions ---------------------------------------------------------------------------
+const SLACK_MAX_CHARS = 1500
+const SLACK_DEFAULT_CHANNEL = "C0AS1LAUQ3C" // #alerts
+const SLACK_DEFAULT_URL = "https://slack.com/api/chat.postMessage"
+const SLACK_TOKEN_REF = "op://hermes/slack/bot-token"
+
+export const defaultSlackState = () => process.env.JOBS_GRADE_SLACK_STATE || join(homedir(), ".local/state/jobs-grade/slack.json")
+const shortHost = () => hostname().split(".")[0]
+
+const clip = (text: string) => (text.length > SLACK_MAX_CHARS ? `${text.slice(0, SLACK_MAX_CHARS - 1)}…` : text)
+
+/** What to tell Slack, given the not-ok set already announced (`prev`) and the current rows.
+ *  `text` is null when nothing changed (same labels, same grades); `next` is the set to persist once the post lands. */
+export function slackTransition(prev: Record<string, string>, rows: Graded[], host: string = shortHost()): { text: string | null; next: Record<string, string> } {
+  const bad = rows.filter((r) => r.grade !== "ok")
+  const next = Object.fromEntries(bad.map((r) => [r.label, r.grade]))
+  const same = Object.keys(next).length === Object.keys(prev).length && Object.entries(next).every(([l, g]) => prev[l] === g)
+  if (same) return { text: null, next }
+  const head = `jobs-grade[${host}]:`
+  if (bad.length === 0) {
+    const was = Object.entries(prev).map(([l, g]) => `${l}=${g}`).join(", ")
+    return { text: clip(`${head} all jobs ok again (was: ${was})`), next }
+  }
+  const list = bad.map((r) => `${r.label}=${r.grade} (${r.reason})`).join(", ")
+  return { text: clip(`${head} ${bad.length} job(s) not ok — ${list}`), next }
+}
+
+function readSlackState(path: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"))
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).filter((e): e is [string, string] => typeof e[1] === "string"))
+  } catch {
+    return {} // missing or corrupt = nothing announced yet
+  }
+}
+
+function slackToken(): string {
+  const fromEnv = process.env.JOBS_GRADE_SLACK_TOKEN
+  if (fromEnv) return fromEnv
+  // launchd's PATH is minimal; secrets-run lives in ~/.local/bin
+  const PATH = `${process.env.PATH ?? "/usr/bin:/bin"}:${join(homedir(), ".local/bin")}`
+  const r = Bun.spawnSync(["secrets-run", "read", SLACK_TOKEN_REF], { env: { ...process.env, PATH }, stdout: "pipe", stderr: "ignore", timeout: 10_000 })
+  const token = r.stdout.toString().trim()
+  if (r.exitCode !== 0 || !token) throw new Error("no slack token (secrets-run read failed)")
+  return token
+}
+
+async function postSlack(text: string): Promise<void> {
+  const res = await fetch(process.env.JOBS_GRADE_SLACK_URL || SLACK_DEFAULT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8", Authorization: `Bearer ${slackToken()}` },
+    body: JSON.stringify({ channel: process.env.JOBS_GRADE_SLACK_CHANNEL || SLACK_DEFAULT_CHANNEL, text }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+  if (res.status !== 200 || body?.ok !== true) throw new Error(`http ${res.status}${body?.error ? ` ${body.error}` : ""}`)
+}
+
+/** Best-effort: announce a change in the not-ok set, then persist it. Never throws. */
+export async function slackNotify(rows: Graded[], statePath: string = defaultSlackState()): Promise<void> {
+  try {
+    const { text, next } = slackTransition(readSlackState(statePath), rows)
+    if (text === null) return
+    await postSlack(text)
+    mkdirSync(dirname(statePath), { recursive: true })
+    writeFileSync(statePath, JSON.stringify(next))
+  } catch (e) {
+    console.error(`jobs-grade: slack post failed: ${(e as Error).message}`)
+  }
+}
+
 if (import.meta.main) {
   const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), cron: readCronStates(defaultCronJobs()) })
   if (process.argv.includes("--notify")) {
@@ -342,13 +421,16 @@ if (import.meta.main) {
     console.log(line)
     process.exit(code)
   }
+  const slack = process.argv.includes("--slack")
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
+    if (slack) await slackNotify(rows)
     console.log(line)
     process.exit(code)
   }
   if (process.argv.includes("--table")) {
     const { line, code } = summarize(rows)
+    if (slack) await slackNotify(rows)
     console.log(`${renderTable(rows)}\n${line}`) // verdict is always the last line
     process.exit(code)
   }

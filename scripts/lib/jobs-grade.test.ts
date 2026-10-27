@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { type Expected, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, summarize, windowSeconds } from "./jobs-grade.ts"
+import { type Expected, type Graded, type JobState, awakeSeconds, cronEvery, judgeAgainstAwake, gradeAll, gradeOne, parseJobrunArgs, readCronStates, readExpected, renderTable, slackNotify, slackTransition, summarize, windowSeconds } from "./jobs-grade.ts"
 
 const NOW = Date.parse("2026-10-16T12:00:00Z")
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString()
@@ -92,7 +92,7 @@ describe("jobs-grade", () => {
     expect(rows.map((r) => r.grade)).toEqual(["failing", "failing", "failing"])
     expect(() => renderTable(rows)).not.toThrow()
   })
-  test("a graded row carries owner_sha, the last runs and the output tail (warden's job brief quotes them)", () => {
+  test("a graded row carries owner_sha, the last runs and the output tail (the job brief quotes them)", () => {
     const runs = [{ run_id: "r1", started: ago(60), rc: 1, duration_ms: 5 }]
     const row = gradeOne(job({ rc: 1, consecutive_fail: 3, owner_sha: "abc123", runs, tail: ["boom"] }), { now: NOW, loaded })
     expect([row.owner_sha, row.runs, row.tail]).toEqual(["abc123", runs, ["boom"]])
@@ -251,5 +251,82 @@ describe("--notify: staleness against awake time", () => {
   test("failing is never dropped, an unreadable wake time drops nothing", () => {
     expect(judgeAgainstAwake([failing], 0)).toEqual([failing])
     expect(judgeAgainstAwake([stale], null)).toEqual([stale])
+  })
+})
+
+describe("--slack: transitions", () => {
+  const row = (label: string, g: Graded["grade"], reason = "r"): Graded => ({ ...gradeOne(job({ label }), { now: NOW, loaded }), grade: g, reason })
+  const H = "mini"
+
+  test("first failure posts the not-ok set", () => {
+    const { text, next } = slackTransition({}, [row("a", "failing", "3 consecutive failures"), row("b", "ok")], H)
+    expect(text).toBe("jobs-grade[mini]: 1 job(s) not ok — a=failing (3 consecutive failures)")
+    expect(next).toEqual({ a: "failing" })
+  })
+  test("unchanged set posts nothing", () => {
+    expect(slackTransition({ a: "failing" }, [row("a", "failing", "other reason"), row("b", "ok")], H).text).toBeNull()
+  })
+  test("a grade change posts again", () => {
+    const { text, next } = slackTransition({ a: "stale" }, [row("a", "failing")], H)
+    expect(text).toContain("a=failing")
+    expect(next).toEqual({ a: "failing" })
+  })
+  test("a new label alongside an old one posts", () => {
+    expect(slackTransition({ a: "failing" }, [row("a", "failing"), row("b", "stale")], H).text).toContain("2 job(s) not ok")
+  })
+  test("recovery posts an all-ok message naming what was bad", () => {
+    const { text, next } = slackTransition({ a: "failing", b: "stale" }, [row("a", "ok"), row("b", "ok")], H)
+    expect(text).toBe("jobs-grade[mini]: all jobs ok again (was: a=failing, b=stale)")
+    expect(next).toEqual({})
+  })
+  test("empty to empty posts nothing", () => {
+    expect(slackTransition({}, [row("a", "ok")], H).text).toBeNull()
+  })
+  test("long messages are truncated", () => {
+    const rows = Array.from({ length: 80 }, (_, i) => row(`job-${i}`, "failing", "x".repeat(40)))
+    const { text } = slackTransition({}, rows, H)
+    expect(text?.length).toBe(1500)
+    expect(text?.endsWith("…")).toBe(true)
+  })
+})
+
+describe("--slack: post step", () => {
+  const bad = [gradeOne(job({ rc: 1, consecutive_fail: 3 }), { now: NOW, loaded })]
+
+  async function withStub(reply: object, fn: (state: string, seen: { auth: string | null; body: unknown }) => Promise<void>) {
+    const seen: { auth: string | null; body: unknown } = { auth: null, body: null }
+    const server = Bun.serve({ port: 0, async fetch(req) {
+      seen.auth = req.headers.get("authorization")
+      seen.body = await req.json()
+      return Response.json(reply)
+    } })
+    const saved = { ...process.env }
+    process.env.JOBS_GRADE_SLACK_URL = `http://localhost:${server.port}/`
+    process.env.JOBS_GRADE_SLACK_TOKEN = "xoxb-test"
+    process.env.JOBS_GRADE_SLACK_CHANNEL = "CTEST"
+    try {
+      await fn(join(mkdtempSync(join(tmpdir(), "slack-")), "sub/slack.json"), seen)
+    } finally {
+      process.env = saved
+      await server.stop(true)
+    }
+  }
+
+  test("state is written after a successful post, and an unchanged set does not post again", async () => {
+    await withStub({ ok: true }, async (state, seen) => {
+      await slackNotify(bad, state)
+      expect(seen.auth).toBe("Bearer xoxb-test")
+      expect((seen.body as { channel: string }).channel).toBe("CTEST")
+      expect(JSON.parse(readFileSync(state, "utf8"))).toEqual({ "com.jkrumm.t": "failing" })
+      seen.body = null
+      await slackNotify(bad, state)
+      expect(seen.body).toBeNull()
+    })
+  })
+  test("state is NOT written when Slack answers ok:false", async () => {
+    await withStub({ ok: false, error: "channel_not_found" }, async (state) => {
+      await slackNotify(bad, state)
+      expect(existsSync(state)).toBe(false)
+    })
   })
 })
