@@ -67,6 +67,11 @@ FALLOW_VERSION := 3.33.1
 # the same reason as fallow.
 OCR_VERSION := 1.13.3
 
+# pymobiledevice3 — physical-iPhone screenshots/syslog without Xcode's GUI (`developer
+# core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
+# xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
+PYMOBILEDEVICE3_VERSION := 11.45.0
+
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
 # Existing real files are backed up to <file>.bak before being replaced.
@@ -280,6 +285,15 @@ _setup-tools:
 	@FALLOW_BIN="$$(npm prefix -g 2>/dev/null)/bin/fallow"; \
 	if [ -x "$$FALLOW_BIN" ]; then \
 		$(MAKE) --no-print-directory _link SRC="$$FALLOW_BIN" DST="$(HOME)/.local/bin/fallow"; \
+	fi
+	@# Apple toolchain (iris): xcodegen comes from the Brewfile; xcodes + pymobiledevice3 below.
+	@bash $(DOTFILES_DIR)/scripts/install-xcodes.sh || echo "    ✗ xcodes install failed — bash scripts/install-xcodes.sh"
+	@if [ "$$(uv tool list 2>/dev/null | awk '$$1=="pymobiledevice3"{print $$2}')" = "v$(PYMOBILEDEVICE3_VERSION)" ]; then \
+		echo "    · pymobiledevice3 $(PYMOBILEDEVICE3_VERSION) (ok)"; \
+	else \
+		uv tool install --force "pymobiledevice3==$(PYMOBILEDEVICE3_VERSION)" >/dev/null 2>&1 \
+			&& echo "    ✓ pymobiledevice3 $(PYMOBILEDEVICE3_VERSION) installed" \
+			|| echo "    ✗ pymobiledevice3 install failed — uv tool install pymobiledevice3==$(PYMOBILEDEVICE3_VERSION)"; \
 	fi
 	@if [ "$$(ocr version 2>/dev/null | head -1 | awk '{print $$2}')" = "v$(OCR_VERSION)" ]; then \
 		echo "    · ocr $(OCR_VERSION) (ok)"; \

@@ -135,6 +135,8 @@ brew "unbound"
 brew "uv"
 # Executes a program periodically, showing output fullscreen
 brew "watch"
+# Generate Xcode projects from a YAML spec (iris `apple/project.yml`; .xcodeproj is gitignored)
+brew "xcodegen"
 # Shell extension to navigate your filesystem faster
 brew "zoxide"
 # Incredibly fast JavaScript runtime, bundler, transpiler and package manager - all in one.
