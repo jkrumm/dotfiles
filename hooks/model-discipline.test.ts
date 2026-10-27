@@ -13,7 +13,22 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { callerModel, isFable, isFableOrOpus } from "./model-discipline";
+import { callerModel, isFable, isFableOrOpus, isUnjustifiedOpus } from "./model-discipline";
+
+describe("isUnjustifiedOpus", () => {
+  test("opus without a reason is unjustified", () => {
+    expect(isUnjustifiedOpus("opus", "Implement the parser")).toBe(true);
+    expect(isUnjustifiedOpus("claude-opus-5-5", undefined)).toBe(true);
+    expect(isUnjustifiedOpus("opus", "x [opus: ]")).toBe(true);
+  });
+  test("opus with a stated reason passes", () => {
+    expect(isUnjustifiedOpus("opus", "Parser [opus: novel recursive grammar]")).toBe(false);
+  });
+  test("non-opus never matches", () => {
+    expect(isUnjustifiedOpus("sonnet", "x")).toBe(false);
+    expect(isUnjustifiedOpus(undefined, "x")).toBe(false);
+  });
+});
 
 describe("isFable — the worker-model check", () => {
   test("bare alias", () => {

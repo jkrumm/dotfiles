@@ -20,13 +20,11 @@
  *      worker — Fable is the interactive-orchestrator model, not a worker
  *      model; the estate has zero documented legitimate use of it as a worker.
  *
- * `model: "opus"` is deliberately NOT blocked here. It is the sanctioned escape
- * valve for novel-hard logic (`implement/SKILL.md`'s Heavy tier — a worker may
- * run on Opus with a one-clause justification at the call site) and the audit
- * itself calls existing Opus worker sites "deliberate second opinion, fine" —
- * hard-blocking it here would break real, already-endorsed workflows. The
- * justification for THAT path stays a one-clause note at the call site
- * (documentation), not a machine-checkable field on the Agent tool.
+ * `model: "opus"` is the sanctioned escape valve for novel-hard logic
+ * (`implement/SKILL.md`'s Heavy tier) but is denied unless the call's
+ * `description` carries `[opus: <reason>]` — a 3-day transcript audit found ~9%
+ * of subagents on Opus with no stated reason. The marker makes each one a
+ * deliberate, grep-able choice.
  *
  * ── Determining the caller's own model ────────────────────────────────────
  *
@@ -68,6 +66,12 @@ function isFableOrOpus(model: string | undefined): boolean {
 
 function isFable(model: string | undefined): boolean {
   return !!model && model.toLowerCase().includes("fable");
+}
+
+/** Opus workers are allowed only with a grep-able reason: `[opus: <reason>]` in the call's description. */
+function isUnjustifiedOpus(model: string | undefined, description: unknown): boolean {
+  if (!model || !model.toLowerCase().includes("opus")) return false;
+  return !(typeof description === "string" && /\[opus:\s*\S[^\]]*\]/i.test(description));
 }
 
 function isAssistantModelRecord(obj: unknown): obj is { type: "assistant"; message: { model: string } } {
@@ -128,7 +132,7 @@ if (import.meta.main) {
 
   if (input.tool_name !== "Agent") process.exit(0);
 
-  const { subagent_type, model } = input.tool_input ?? {};
+  const { subagent_type, model, description } = input.tool_input ?? {};
 
   if (isFable(model)) {
     block(
@@ -137,7 +141,19 @@ if (import.meta.main) {
         "",
         "Fable is the interactive-orchestrator model, not a worker model — this estate",
         "has no legitimate use of it here. Spawn with no model override (Sonnet pin",
-        "applies) or model: opus for justified novel-hard logic.",
+        "applies) or model: opus with an [opus: reason] description for novel-hard logic.",
+      ].join("\n")
+    );
+  }
+
+  if (isUnjustifiedOpus(model, description)) {
+    block(
+      [
+        "An Opus worker needs a stated reason.",
+        "",
+        "Workers run on the Sonnet pin. Reach for Opus only for novel-hard logic and",
+        "say why in the call's description: description: \"... [opus: <one-clause reason>]\".",
+        "Otherwise drop the model override.",
       ].join("\n")
     );
   }
@@ -158,4 +174,4 @@ if (import.meta.main) {
   }
 }
 
-export { callerModel, isFable, isFableOrOpus };
+export { callerModel, isFable, isFableOrOpus, isUnjustifiedOpus };
