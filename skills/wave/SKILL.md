@@ -27,7 +27,7 @@ independent changes, or is it long multi-phase work?
 | Shape | Use when | Mechanics |
 |-|-|-|
 | **sequential** (default) | One change stream, or validation is a shared resource (one app build, an e2e lock, screenshots). | One wave at a time in the main checkout: this file's chain/orchestrated modes. |
-| **fan-out** | N independent changes with disjoint files and cheap independent validation. | Briefs from `roles/worker.md`'s template, one per change; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief in the repo's existing workspace; the orchestrator tab waits with `wave-watch.sh --agents …` and lands them with `rd merge <repo> <branches…>` (rebase, check, merge by rebase, re-rebase as main moves; GitHub only). `rd fan --clean <repo>` after. |
+| **fan-out** | N independent changes with disjoint files and cheap independent validation. | Briefs from `roles/worker.md`'s template, one per change; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief in the repo's existing workspace; the orchestrator tab waits with `wave-watch.sh --agents …` and lands them with `rd merge <repo> <branches…>` (rebase, install from the lockfile, check, ready a draft PR, merge by rebase, re-rebase as main moves; GitHub only). `rd fan --clean <repo>` after. |
 | **fleet** | Long multi-phase work that outlives any one context. | A lean **mother** (`roles/mother.md`, never reads code), a standing **lead** (`roles/lead.md`, owns review and merge), a fresh **worker** per task (`roles/worker.md`). Rotation through `docs/waves/handoff/<name>.md`. Fan-out mechanics for the workers. |
 
 Roles and the brief template are files under `roles/`; briefs reference them, they are not
@@ -105,7 +105,7 @@ line; everything else is in the file.
 ```
 
 Exactly one wave is `active`. The status comments are the machine-readable part —
-`rd wave` does not parse them (it reads `(Wave <n>)` from the prompt for the tab label and agent name `<repo>-w<n>`), but every wave agent reads them first and the human
+`rd wave` does not parse them (it reads `(Wave <n>)` from the prompt for the tab label and agent name `<repo>-w<n>`; without one it takes the next tab number whose agent name is not already live), but every wave agent reads them first and the human
 greps them.
 
 ## Running a wave

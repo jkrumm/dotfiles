@@ -748,7 +748,11 @@ pointed at a read-only token, and only the dry-run saw it.
 `fan <branch>` tab for each in the repo's existing workspace, starts Claude and delivers
 the brief with a `Base: origin/<default> @ <sha>` line prepended. Each brief names its
 branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.sh`) rebases
-each onto the current origin default, runs `make check`, pushes with lease, merges the PR
+each onto the current origin default, installs from the lockfile present (`bun.lock`/`bun.lockb`,
+`pnpm-lock.yaml`, `package-lock.json`; a failed install is a red check; `--no-check` skips it),
+runs `make check`, pushes with lease, readies a draft PR (`gh pr ready`), merges the PR
 by rebase and re-fetches before the next; GitHub only. `rd fan --clean <repo>` removes
-clean, fully merged worktrees and their tabs. Hermetic suite: `make fan-test`.
+clean, fully merged worktrees and their tabs. A `rd wave` without `(Wave <n>)` takes the next
+free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
+name is live is refused. Hermetic suites: `make fan-test`.
 Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.

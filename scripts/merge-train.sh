@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Merge train: land fan-out branches one at a time, GitHub only, rebase/fast-forward only.
 # For each branch, in order: fetch, rebase onto the CURRENT origin default, run the check,
-# push with lease, merge the PR by rebase. Main moves after every merge, so the next branch
+# push with lease, merge the PR by rebase. A fresh worktree has no node_modules, so the check
+# is preceded by an install from whichever lockfile is present; a draft PR is readied first
+# (`gh pr merge` refuses drafts). Main moves after every merge, so the next branch
 # re-fetches and re-rebases. A push that drops approvals (branch protection) falls back to
 # arming auto-merge. All git runs `git -C <worktree>` so protect-branches judges the
 # worktree, not the caller's cwd. No GitLab path: IuRoot moves to GitHub Enterprise.
@@ -31,6 +33,13 @@ wt_of() { # worktree path holding branch $1
   git -C "$repo" worktree list --porcelain | awk -v b="refs/heads/$1" '/^worktree /{p=$2} $0=="branch " b{print p}'
 }
 
+install_cmd() { # lockfile-matched dependency install for worktree $1; empty when there is none
+  if [[ -f $1/bun.lock || -f $1/bun.lockb ]]; then echo "bun install --frozen-lockfile"
+  elif [[ -f $1/pnpm-lock.yaml ]]; then echo "pnpm install --frozen-lockfile"
+  elif [[ -f $1/package-lock.json ]]; then echo "npm ci"
+  fi
+}
+
 errf=$(mktemp)
 trap 'rm -f "$errf"' EXIT
 for br in "${branches[@]}"; do
@@ -44,10 +53,22 @@ for br in "${branches[@]}"; do
     [[ -n $base ]] || die "no origin default branch in $wt"
     git -C "$wt" rebase -q "$base" || { git -C "$wt" rebase --abort 2>/dev/null || true; die "$br: rebase onto $base conflicts — back to its worker"; }
     if [[ -n $check ]]; then
+      # A fresh worktree has no node_modules: without this a Bun repo's bare `make check` dies on
+      # a missing binary. A failed install is a red check, never a silent pass.
+      inst=$(install_cmd "$wt")
+      if [[ -n $inst ]]; then
+        echo "installing deps for $br: $inst"
+        (cd "$wt" && eval "$inst") || die "$br: dependency install failed ($inst) after rebase on $base"
+      fi
       (cd "$wt" && eval "$check") || die "$br: check failed after rebase on $base"
     fi
     timeout 90 git -C "$wt" push -q --force-with-lease origin "$br" || die "$br: push failed"
     pr=$(cd "$wt" && gh pr view "$br" --json number -q .number 2>/dev/null) || die "$br: no PR — worker must open one"
+    # `gh pr merge` refuses a draft; that used to read as "main moved" and burn all three attempts.
+    if [[ $(cd "$wt" && gh pr view "$pr" --json isDraft -q .isDraft 2>/dev/null) == true ]]; then
+      (cd "$wt" && gh pr ready "$pr") || die "$br (#$pr): is a draft and 'gh pr ready' failed"
+      echo "marked $br (#$pr) ready for review (it was a draft)"
+    fi
     if (cd "$wt" && gh pr merge "$pr" --rebase 2>"$errf"); then
       echo "merged $br (#$pr) onto $base"; landed=1; break
     fi
@@ -62,7 +83,7 @@ for br in "${branches[@]}"; do
         die "$br (#$pr): auto-merge armed but not merged after 20 min — the next branch would rebase onto a stale main"
       fi
     fi
-    echo "merge of $br attempt $attempt failed ($(head -c 200 "$errf")) — main probably moved, re-rebasing" >&2
+    echo "merge of $br attempt $attempt failed: $(head -c 300 "$errf" | tr '\n' ' ') — re-fetching and re-rebasing" >&2
   done
   ((landed)) || die "$br: not merged after 3 attempts"
 done

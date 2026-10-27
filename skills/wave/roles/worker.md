@@ -11,7 +11,7 @@ Title: <PR title = commit subject, conventional-commit form>
 Owned files: <paths or globs; the only files you may change>
 Task: <what and why, acceptance criteria, research already done>
 Validation: <the exact cheap command that proves it, e.g. `bun test path`>
-Finish: commit, push the branch (`git push -u origin <branch>`), open a draft PR (GitHub). Report the PR URL and the validation output verbatim.
+Finish: commit, push the branch (`git push -u origin <branch>`), open a ready (not draft) PR (GitHub). Report the PR URL and the validation output verbatim.
 Never touch files outside "Owned files". If the task needs one, stop and say which file and why.
 ```
 
