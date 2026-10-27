@@ -33,7 +33,7 @@ Anthropic feature flags (`tengu_agents_md_mod`), so a cold `CLAUDE_CONFIG_DIR`
 at the price of one 11-byte file per directory and of nested AGENTS.md being
 suppressed by a root CLAUDE.md (so each nested dir needed its own shim).
 
-Measured 2026-10-10 on 2.1.296 (mini, `claude -p` in warden, no CLAUDE.md in
+Measured 2026-10-10 on 2.1.296 (mini, `claude -p`, no CLAUDE.md in
 the tree; IU creds via `secrets-run read op://common/anthropic/{API_KEY,BASE_URL}`):
 
 | Lane | AGENTS.md loaded |
@@ -46,7 +46,7 @@ the tree; IU creds via `secrets-run read op://common/anthropic/{API_KEY,BASE_URL
 features, so `tengu_agents_md_mod` is unset and AGENTS.md is skipped; the warm
 `~/.claude.json` has it cached `true`. The 2026-10-09 "cold loads it" reading was
 wrong. Every production lane (interactive, `rd wave`, `claude_iu`, agent-gateway
-and warden workers) runs on the warm `~/.claude`; only modelpick's bench sandbox
+workers) runs on the warm `~/.claude`; only modelpick's bench sandbox
 uses a cold dir, and its fixtures carry their own CLAUDE.md. Shims stay deleted;
 the risk is the flag flipping, which `devhost-health-check.sh`
 `check_agents_md_flag` reports as WARN. A new lane with its own config dir must
@@ -107,12 +107,12 @@ substitution keeps the host out of git. Full block: `config/opencode/opencode.js
 
 **This section is the authority** (rationale: `docs/agent-platform.md`). Every
 repo with a runtime ships four Make targets and four AGENTS.md sections, so no
-central component (warden, agent-gateway, Hermes) holds per-repo knowledge.
+central component (agent-gateway, Hermes) holds per-repo knowledge.
 
 | Make target | Contract |
 |-|-|
 | `make check` | all local validation; non-zero on failure; no side effects |
-| `make deploy` | ships the merged default branch; CI-deployed repos print `deployed by CI on push` and exit 0; self-hosting repos (warden, agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make deploy` | ships the merged default branch; CI-deployed repos print `deployed by CI on push` and exit 0; self-hosting repos (agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
 | `make verify` | probes production; exit 0 = live and healthy |
 | `make logs` | bounded tail of production logs, then exits |
 

@@ -221,7 +221,6 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 | agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
-| warden | spawns no `claude` | none; it goes through agent-gateway |
 
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the

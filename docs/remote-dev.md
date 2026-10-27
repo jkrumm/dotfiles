@@ -18,8 +18,7 @@ another.**
 | Persistence + UI | **herdr** (on the mini) | Panes stay alive; per-pane agent state | Anything about the network |
 | Service exposure | **Caddy** | Dev servers over the tailnet, real HTTPS, working WebSockets | Anything about terminals |
 
-Riding on top, independent of all three: **`warden run`** (unattended work,
-tracked to an outcome — what survives a herdr crash) and **Claude Remote Control**
+Riding on top, independent of all three: **Claude Remote Control**
 (first-party, one session at a time; the whole-herd view is Collie). Raw
 `claude --bg` is no longer a lane (`docs/agent-platform.md`).
 
@@ -98,8 +97,7 @@ client attached (`herdr workspace create …` succeeds with zero clients).
 
 **A herdr crash restores the layout and loses every process in it** — the
 workspace comes back by name with a new `terminal_id`; Claude panes are resumed
-(`claude --resume`) but shells, servers and the in-flight turn are lost. That is
-the concrete reason work that must not be interrupted goes through `warden run`.
+(`claude --resume`) but shells, servers and the in-flight turn are lost.
 
 **Config is tracked**: `config/herdr/config.toml` → `~/.config/herdr/config.toml`
 on both machines, linking the **file** and never the directory (the same dir
@@ -161,9 +159,9 @@ hazard, except across panes where you cannot see it happen. `agents` dedupes on
 the Claude session id (herdr exposes `agent_session.value`, the daemon
 `sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
 
-Four lanes start agent work (`docs/agent-platform.md`): `@implementer`,
-`agw dispatch` (one bounded change, unattended), an `rd wave` tab (also `rd fan` for N independent changes), `warden run`. `agent-dispatch` and
-`rd bg` were removed 2026-10-04 — work that must outlive a pane is `warden run`.
+Three lanes start agent work (`docs/agent-platform.md`): `@implementer`,
+`agw dispatch` (one bounded change, unattended), an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
+`rd bg` were removed 2026-10-04.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
 **login keychain**, unreachable from an ssh session, so that spelling comes up
@@ -211,7 +209,7 @@ registry; they get the clean tailnet door only, no `.test` twin.
 | Local | `https://<name>.test` | this machine only (`bind 127.0.0.1`; dnsmasq wildcards `*.test` → 127.0.0.1) |
 | Clean | `https://<name>.mini.jkrumm.com` | tailnet — one wildcard site block, Cloudflare DNS-01 cert, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on `tcp:443` |
 
-The one non-registry door is **`warden-ingest`** (`INGEST_NAME`/`INGEST_PORT` in `scripts/caddy-tailnet.sh`): it proxies `/ingest/*` to warden-api and nothing else, and the generator reads the tailnet addresses of every `tag:homelab` / `tag:vps` peer from `tailscale status` and makes the wildcard block answer `403` to them for every other host (the ACL grants them `tcp:443` on the whole mini, a portless grant cannot be narrower). A new homelab/VPS node is covered by the next `make caddy-tailnet`; the summary prints how many addresses the guard holds.
+While the ACL still grants `tag:homelab` / `tag:vps` `tcp:443` on the whole mini (a portless grant cannot be narrower; removal is pending a MacBook-side `make tailscale-acl-push`), `scripts/caddy-tailnet.sh` reads those peers' tailnet addresses from `tailscale status` and makes the wildcard block answer `403` to them for every host. Drop `GUARD_SRC_TAGS` once the grant is gone.
 
 | Command | Purpose |
 |-|-|
@@ -735,8 +733,7 @@ printf '%s\n' "$PW" | ssh mini 'read -r pw
 | `bash scripts/architecture-check.sh` | Every loaded/on-disk launchd label appears in `docs/architecture.md` |
 
 By hand after a change to this stack: start agents in herdr, close the lid,
-re-run `desk` — all still there; `warden run` a long task, stop herdr entirely,
-confirm the item is still driven.
+re-run `desk` — all still there.
 
 **The heartbeat asserts the GitHub credential resolves, not that a push
 succeeds** — the real `git push --dry-run` lives in `make doctor`, because at a

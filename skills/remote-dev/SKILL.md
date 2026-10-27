@@ -34,9 +34,9 @@ Herdr agents run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL
 overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Four lanes start agent work: `@implementer`, `agw dispatch` (one bounded
+Three lanes start agent work: `@implementer`, `agw dispatch` (one bounded
 unattended change), `rd wave` (a tab you watch; `rd fan` for N independent
-changes), `warden run` (unattended, tracked). `agent-dispatch` and
+changes). `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
 ### Wave tabs and the orchestrator
@@ -87,10 +87,9 @@ lost. `herdr attach` is **not** a command.
 
 ## Durable work
 
-Anything that must survive a herdr restart is `warden run <repo> <<'BRIEF'` (brief on stdin; or `--brief-file <path>`), not
-a bare pane: a restart restores the layout and resumes Claude panes
+A herdr restart restores the layout and resumes Claude panes
 (`claude --resume`), but shells, dev servers and loops die and a resumed agent
-lost its in-flight turn. **Never `ssh mini 'claude …'`**: the session comes up
+lost its in-flight turn. Do not leave work that must not be interrupted in a bare pane. **Never `ssh mini 'claude …'`**: the session comes up
 logged out of Max and silently bills API credits while still looking healthy —
 a pane spawned by herdr (`rd wave`/`rd work`) inherits the keychain.
 
@@ -175,7 +174,7 @@ When something is red, in order:
 | `ssh localhost` fails on the mini | By design — the mini has no key for itself. Verify inbound auth from the MacBook |
 | A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run` |
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
-| Agent died when the lid closed | It did not — the lid ends the ssh/TCP attach only. A herdr *restart* resumes Claude panes and loses shells and the in-flight turn; unattended-critical work is `warden run` |
+| Agent died when the lid closed | It did not — the lid ends the ssh/TCP attach only. A herdr *restart* resumes Claude panes and loses shells and the in-flight turn |
 | An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through a herdr pane (`rd wave`/`rd work`) — never `ssh mini 'claude …'` |
 | `rd` says "herdr server is not running" | `make herdr-restart YES=1` on the mini (kills every pane — human-timed) |
 | Workspace came back but the work is gone | herdr server restarted — layout persists, processes don't |

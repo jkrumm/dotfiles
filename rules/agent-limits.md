@@ -17,16 +17,16 @@ SDK `query()` — run **as long as the work takes**.
   minutes per turn on hard work by design.
 - **The one liveness rule is an idle watchdog:** no output for N minutes
   (agent-gateway: 5 min of no stdout on a `claude` route, of no new message on an OpenCode session) means wedged, and only then is the worker
-  killed. Ledger lifecycle deadlines (an item waiting on a human for 7 days)
+  killed. Lifecycle deadlines (a work item waiting on a human for 7 days)
   are a different fact and stay.
 - **A redeploy never discards an episode.** Drain waits for running work;
   a killed worker is resumed on the next boot from its persisted session id.
 
 **Why:** every cap ever added here turned a working episode into a failure
-(warden item 1007: killed at turn 26 of 25 after eleven minutes of real
+(a remediation-loop item: killed at turn 26 of 25 after eleven minutes of real
 progress, misreported as a model error). The owner has said so repeatedly;
 this rule exists so it is never re-introduced "for safety". Measured in
-`warden/docs/history/state-log.md` §64–§66.
+`warden/docs/history/state-log.md` §64–§66 (reference only; warden switched off 2026-10-27).
 
 **Not covered:** plain HTTP request timeouts to non-LLM APIs, git/CLI helper
 timeouts, database busy timeouts, LaunchAgent intervals, spend caps (a

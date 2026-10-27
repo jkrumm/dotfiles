@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-gateway), one autonomous loop (warden), one conversational front door (Hermes), one human cockpit (herdr), four lanes, one repo contract — the design, its status table and the loop's nine states. The page a new agent reads first.
+description: One worker engine (agent-gateway), one conversational front door (Hermes), one human cockpit (herdr), three lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
 aliases:
   - agent-estate-model
 tags:
@@ -13,59 +13,41 @@ timestamp: 2026-10-04
 
 # Agent platform
 
-**Verdict:** one worker engine (agent-gateway), one autonomous loop (warden), one
-conversational front door (Hermes), one human cockpit (herdr). Every repo
-describes itself through the same four Make targets and four AGENTS.md
-sections, so no central component holds per-repo knowledge. Trust comes from
-the infrastructure (Tailscale, the owner's GitHub account); the only gates left
-are quality gates.
+**Verdict:** one worker engine (agent-gateway), one conversational front door
+(Hermes), one human cockpit (herdr). Every repo describes itself through the same
+four Make targets and four AGENTS.md sections, so no central component holds
+per-repo knowledge. Trust comes from the infrastructure (Tailscale, the owner's
+GitHub account); the only gates left are quality gates. Alerts go to Slack and a
+human acts; there is no autonomous remediation loop.
 
 STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
-rename to agent-gateway, OpenCode as the dispatch default and warden's ship-on-every-repo
-work). This page wins over any older doc that contradicts it; open work is
-tracked in each repo's `docs/waves/PLAN.md`. Before-the-rewrite design:
-[[agent-platform-history]].
+rename to agent-gateway and OpenCode as the dispatch default). The autonomous remediation
+loop was switched off 2026-10-27 by agent-workflows P0; its design and the
+status rows that described it are in
+`docs/archive/agent-platform-2026-10-warden-era.md`. A workflow platform is designed
+in `docs/agent-workflows/concept.md` and not built. This page wins over any older
+doc that contradicts it; open work is tracked in each repo's `docs/waves/PLAN.md`.
+Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Four lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Three lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
 | agent-gateway: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa, frontend adopted (frontend in Wave 11, measured on real findings) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
-| warden: gates cut, nine states, one queue | **landed** (W1–W2) |
-| warden: intake fingerprint + triage dedup, revisions as attempts | **landed** (W3) |
-| warden: merge train, deploy + verify, automatic revert, fixed-by sweep | **landed** (W4); review is not yet delta-only (needs an agent-gateway PR delta scope) |
-| warden: docs, loop split into modules, own `check`/`deploy`/`verify`/`logs` | **landed** (W5) |
-
-## Why this rewrite
-
-Measured 2026-09-08 → 10-01 on the live ledger and logs:
-
-| Symptom | Number | Root cause |
-|-|-|-|
-| Warden items merged by its own path | ~10 of 414 dispatches | 23 trust/approval/policy gates nobody asked for |
-| Items that were duplicates or follow-ups | 30–40 % | raw log titles as identity, revisions filed as new items, no issue↔alert link |
-| Failed dispatches from one policy drift | 281 | repo/tier policy defined in warden **and** agent-gateway |
-| Hermes skills | 126 (≈105 self-authored) | upstream skill-review nudge + Hermes replying to every warden card |
-| Ways to start an agent episode | 10+ | lanes added, never removed |
-| Model ids hard-coded in docs | 6+ files, 3 different answers | no single source |
 
 ## The picture
 
 Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](diagrams/agent-platform.html).
 
 ```
- trusted sources                       front doors
- GitHub issues (owner/agents)          herdr: orchestrator tab → wave tabs   (owner drives)
- Kuma · HyperDX/OTel alerts            Hermes: Slack/Argo chat               (narrate, answer, route)
- watchdogs · `warden run`                   │
-        │                                   │ file work → `warden run` / GitHub issue
-        ▼                                   ▼
- WARDEN  intake → triage → investigate → implement → merge train → deploy → verify
-        │            │            │             │            │
-        │            └── single-shot triage     └────────────┴── agent-gateway jobs
-        ▼
- Argo /warden = the one queue · Slack = one line on "done" / "needs decision"
+ alerts                                front doors
+ Kuma · HyperDX/OTel alerts            herdr: orchestrator tab → wave tabs   (owner drives)
+ jobs-grade (job failures)             Hermes: Slack/Argo chat               (narrate, answer)
+        │                                   │
+        ▼                                   │ opens a herdr tab when asked
+ Slack #alerts → a human reads and acts     ▼
+                                       @implementer · agw dispatch · rd wave / rd fan
 
  AGENT-GATEWAY the one worker engine: triage · dispatch(investigate|implement) · review · check
            OpenCode + cheap models by default, Sonnet only where judgment gates a merge
@@ -79,13 +61,12 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 
 | Component | Does | Never does |
 |-|-|-|
-| **warden** | owns the ledger; decides and drives every unattended item to `fixed` | hold per-repo config, ask for approval, edit code itself |
 | **agent-gateway** | runs bounded jobs: triage, investigate, implement, review, check, prose (`/prose`) | decide what to work on, merge |
-| **Hermes** | answers, narrates in one line per item, files work via `warden run` or an issue, opens herdr tabs when asked | dispatch on its own, land PRs, repeat warden cards, author skills unattended |
-| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work (that is warden) |
-| **Argo** | the single status + "needs you" surface | hold state of its own |
+| **Hermes** | answers, narrates, opens herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
+| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work |
+| **Argo** | the status surface | hold state of its own |
 
-## Four lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
+## Three lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
 
 | Lane | When | Engine |
 |-|-|-|
@@ -93,7 +74,6 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | `agw dispatch` | one bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | OpenCode worker |
 | `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
 | `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
-| `warden run` / issue | unattended, tracked to `fixed` | warden → agent-gateway |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.
@@ -105,90 +85,13 @@ Every repo with a runtime ships:
 | Make target | Contract |
 |-|-|
 | `make check` | all local validation; non-zero on failure; no side effects |
-| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (warden, agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
 | `make verify` | probes production; exit 0 = live and healthy |
 | `make logs` | bounded tail of production logs, then exits |
 
 AGENTS.md carries exactly these sections, in this order, among its own:
 `## Validate` · `## Deploy` · `## Verify & Monitor` (full health URL, Kuma
 monitor name, OTel `service.name`) · `## Gotchas`.
-
-Warden reads nothing else about a repo. Routing a signal to a repo uses the
-signal's own label (Kuma tag, OTel `service.name`, GitHub repo) and falls back to
-the triage step reading the candidate repos' `## Verify & Monitor` sections.
-
-## Warden — the loop
-
-Warden is the **sole remediation loop**: every alert source (jobs via `jobrun`/`jobs-grade`, Kuma and HyperDX by webhook, Slack and log lines, GitHub, `warden run`) opens an item here, and nothing else dispatches a fix. Hermes narrates, Kuma only watches the chain itself. Source model and thresholds: `docs/ops-signals.md`.
-
-Nine states:
-
-```
-new → triaged → working → merging → verifying → fixed
-                   │          │          │
-                   └──────────┴──────────┴──→ needs_decision | failed
-quiet · closed (terminal, with a reason: duplicate | fixed_by | ignored | resolved)
-```
-
-1. **Intake.** Every source writes an event. The fingerprint is the title after
-   stripping timestamps, hex ids, paths, numbers and the log-file name — the
-   same line from two log files is one event.
-2. **Triage — single-shot, no tools** (agent-gateway `triage`, cheap single-shot model
-   per `GET /api/routing`, ~1–10 s, cents). Input: the new event, the open items of the candidate
-   repos, items fixed in the last 14 days with their PR titles. Output:
-   `attach(item) | new(repo, title) | fixed_by(item|PR) | ignore(reason)`.
-   Debounce stays one knob: alerts need ≥3 occurrences or ≥30 min open;
-   issues and `warden run` are immediate.
-3. **Investigate → implement** run as one item. The verdict returns a ≤200-char
-   `summary`, a `rootCause` key and a `nextAction`. Any confidence goes to
-   implement — review is the gate, not the investigator's self-assessment. A
-   matching `rootCause` on another open item merges the two.
-4. **Revisions are attempts, not items.** A blocked review re-dispatches on the
-   same item from the prior branch (agent-gateway cuts the worktree from it). The
-   cap counts only *stalled* rounds — a review that still finds a prior blocking
-   finding unresolved (or a red check, conflict or revert); a round whose findings
-   are all new is converging and keeps revising. Three stalled rounds land
-   `failed`; attempt 3 onward runs on the stronger implement model. A blocking
-   finding that repeats a prior one on a file the PR no longer changes is not a
-   block: the revision dropped that change, so the diff resolved it.
-5. **Merge train, one per repo, single-flight:**
-   update the PR onto the latest default branch → `make check` / CI green on that
-   SHA → review on that SHA (delta-only if a prior review confirmed) → squash
-   merge pinned to the SHA. A conflict is not hand-resolved: the item gets a new
-   attempt from the new base with the old diff as context. A CI red on the head
-   SHA while the base is green first re-runs the failed jobs once on that same
-   SHA; only a second red goes back for a revision (a flaky test is not the PR's
-   defect, and a worker sent to fix it edits code outside its brief).
-6. **Deploy + verify:** `make deploy`, then `make verify` and the item's own
-   signal quiet for its window. Failure → automatic `git revert` PR through the
-   same train, item back to `working` with the evidence. `make verify` also runs
-   once just before the merge, as a baseline: red before AND after the deploy is
-   pre-existing, not the merge's doing — it neither fails the item nor reverts
-   it, and the item is judged on its own signal (the verify twin of a CI red that
-   is also red on the base, which parks instead of revising).
-7. **Fixed-by sweep:** after every merge, triage re-checks the repo's open items
-   against the merged diff; plausible matches move to `verifying` and close when
-   their own signal stays quiet.
-8. **Retries are the default.** An infrastructure failure (503, synthesis
-   error, idle timeout) retries with backoff; three strikes → `failed`, listed
-   in Argo, never a page.
-
-**`needs_decision` is the only human exit.** The verdict must name a concrete
-question with two options (≤200 chars). Product decisions, irreversible data
-operations, spend, and anything touching another person qualify. Missing
-permissions, CI, review hiccups and "low confidence" do not.
-
-Kept gates — quality, not trust: CI/`make check` green, review confirmed on the
-merged SHA, GitHub rulesets, the debounce, quiet hours for pings.
-
-### Ingest trust model
-
-Kuma and HyperDX reach warden's ingest door (`POST` webhook, Wave 14/15) with **one shared bearer token**.
-Whoever holds it can open an item that goes to triage and, for a routable repo, to an agent. Each event is fenced
-as untrusted data in every brief (`intake._fence`), exactly like Slack and Kuma text, so the token is the control,
-not the payload. Consequences: the token is `op://mini/warden-ingest/token` (the mini's secret cache) plus the two senders' configs, and the door is loopback with an off-box forward of `/ingest/*` only; rotating it
-means re-seeding both; one compromised sender can forge the other's events. Per-sender tokens are the known
-upgrade, deliberately not built (two senders, solo owner).
 
 ## Agent-Gateway — the engine
 
@@ -214,14 +117,9 @@ caller.
 
 ## Hermes — the front door
 
-- Answers and narrates; files work through `warden run` or a GitHub issue; opens
-  a herdr tab when the owner asks for one.
-- **One reporting format:** one line per item —
-  `<icon> <repo>: <what> — <state>[ → next/who] [PR]`, max three lines, then
-  `Rest: …`. No ids, PIDs or mechanism unless asked.
-- Mentions-only in #agents; never replies to warden's own posts.
+- Answers and narrates; opens a herdr tab when the owner asks for one.
+- Mentions-only in #agents.
 - Skill creation by the background nudge is off; ~20 curated skills.
-- Reads warden only through its API, never the database.
 
 ## herdr — the cockpit
 
@@ -235,12 +133,8 @@ wave per repo; parallel waves only in different repos. A pane-less supervisor
 
 ## Notifications
 
-| Event | Where |
-|-|-|
-| item `fixed` | Slack #agents, one line |
-| `needs_decision` | Slack #agents, one line with the question + Argo link |
-| `failed` | Argo only; daily one-line count |
-| everything else | Argo `/warden` |
+Uptime Kuma and HyperDX alerts, and background-job failures (`jobs-grade --slack`), go to Slack
+`#alerts`; a human reads and acts. Source model and thresholds: `docs/ops-signals.md`.
 
 ## Open facts to verify
 

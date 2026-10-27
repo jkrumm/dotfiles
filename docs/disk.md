@@ -46,7 +46,7 @@ the Data volume.
 | bun, npm, uv, Homebrew caches | 19 GiB | package caches |
 | Docker build cache and stale images (> 14 days) | ~13 GiB in the VM | regenerable |
 | Personal media moved to the HomeLab (table below) | 7.6 GiB | copied, verified, then deleted |
-| `$TMPDIR` test leftovers, OCR sessions > 14 days | 4 GiB | 239k leaked tmp dirs (warden and agent-gateway test suites) |
+| `$TMPDIR` test leftovers, OCR sessions > 14 days | 4 GiB | 239k leaked tmp dirs (test suites) |
 
 ## Sweeps: what keeps it this way
 
