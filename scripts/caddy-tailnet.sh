@@ -96,16 +96,11 @@ FLAGS_SENTINEL="# format: registry-v2"
 # would shadow it, so the generator refuses rather than silently losing the page.
 LANDING_NAME="apps"
 
-# The warden ingest door (https://$INGEST_NAME.$DEV_DOMAIN): Kuma and HyperDX on the
-# homelab and VPS POST alerts to warden-api. Reserved like the landing name, and NOT a
-# registry app: the registry proxies a whole upstream, and warden-api's GET routes
-# (/board, /items, /metrics) must never be reachable over the tailnet. Only /ingest/*
-# is proxied; the bearer token is warden-api's own check.
-INGEST_NAME="warden-ingest"
-INGEST_PORT=7735
-# Tailnet ACL tags whose sources may reach the ingest door and NOTHING else on :443.
-# The ACL can only grant tcp:443 on the whole mini; this is the narrowing.
-INGEST_SRC_TAGS="tag:homelab tag:vps"
+# Tailnet ACL tags whose sources get 403 on every name. The ACL once granted these tags
+# tcp:443 on the whole mini for an ingest door that no longer exists (retired 2026-10-27); while that
+# grant is still declared, this guard is what keeps the homelab and VPS out of every dev app.
+# Drop it together with the grant (dotfiles-private tailscale-acl.jsonc).
+GUARD_SRC_TAGS="tag:homelab tag:vps"
 
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -214,9 +209,6 @@ app_index() {
 if idx=$(app_index "$LANDING_NAME"); then
   die "an app is named '$LANDING_NAME' (port ${APP_PORT[$idx]}) — that name is reserved for the landing page at $LANDING_NAME.\$DEV_DOMAIN. Rename the .test block in $CADDYFILE."
 fi
-if idx=$(app_index "$INGEST_NAME"); then
-  die "an app is named '$INGEST_NAME' (port ${APP_PORT[$idx]}) — that name is reserved for the warden ingest door. Rename the .test block in $CADDYFILE."
-fi
 
 # --- flags file: seed only ----------------------------------------------------
 # Opt-out, keyed by the .test label. `exclude <name>` is the only directive —
@@ -317,12 +309,12 @@ IP=$(printf '%s' "$ts_json" | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["Self"]["TailscaleIPs"][0])')
 [[ -n $HOSTN && -n $IP ]] || die "could not read this machine's tailnet identity"
 
-# Tailnet addresses (v4 + v6) of every peer carrying one of INGEST_SRC_TAGS, read live
+# Tailnet addresses (v4 + v6) of every peer carrying one of GUARD_SRC_TAGS, read live
 # so no address enters git. Generation-time, like everything here: a new homelab/VPS
 # node is covered by the next `make caddy-tailnet`.
-INGEST_SRC_IPS=$(printf '%s' "$ts_json" | INGEST_SRC_TAGS="$INGEST_SRC_TAGS" python3 -c '
+GUARD_SRC_IPS=$(printf '%s' "$ts_json" | GUARD_SRC_TAGS="$GUARD_SRC_TAGS" python3 -c '
 import json, os, sys
-tags = set(os.environ["INGEST_SRC_TAGS"].split())
+tags = set(os.environ["GUARD_SRC_TAGS"].split())
 peers = json.load(sys.stdin).get("Peer") or {}
 ips = sorted({ip for p in peers.values() if tags & set(p.get("Tags") or []) for ip in p.get("TailscaleIPs") or []})
 print(" ".join(ips))
@@ -546,31 +538,20 @@ fi
     echo "	}"
     echo ""
 
-    echo "	# --- warden ingest door --------------------------------------------------"
-    echo "	# The ACL grants the homelab and VPS tags tcp:443 on this whole host (a"
-    echo "	# portless door cannot be narrower). So sources carrying those tags get the"
-    echo "	# ingest host and nothing else: every other name answers 403 for them."
+    echo "	# --- homelab/VPS source guard --------------------------------------------"
+    echo "	# The ACL may still grant the homelab and VPS tags tcp:443 on this whole host"
+    echo "	# (a portless door cannot be narrower), so those sources get 403 on every name."
     echo "	# Addresses are read from 'tailscale status' at generation time."
-    if [[ -n $INGEST_SRC_IPS ]]; then
-      echo "	@ingest_src_other {"
-      echo "		remote_ip $INGEST_SRC_IPS"
-      echo "		not host $INGEST_NAME.$DEV_DOMAIN"
+    if [[ -n $GUARD_SRC_IPS ]]; then
+      echo "	@guard_src {"
+      echo "		remote_ip $GUARD_SRC_IPS"
       echo "	}"
-      echo "	handle @ingest_src_other {"
+      echo "	handle @guard_src {"
       echo "		respond \"forbidden\" 403"
       echo "	}"
     else
-      echo "	# (no peer carries $INGEST_SRC_TAGS right now — no source guard emitted)"
+      echo "	# (no peer carries $GUARD_SRC_TAGS right now — no source guard emitted)"
     fi
-    echo "	@ingest host $INGEST_NAME.$DEV_DOMAIN"
-    echo "	handle @ingest {"
-    echo "		handle /ingest/* {"
-    echo "			reverse_proxy localhost:$INGEST_PORT"
-    echo "		}"
-    echo "		handle {"
-    echo "			respond \"not found\" 404"
-    echo "		}"
-    echo "	}"
     echo ""
 
     for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
@@ -1095,9 +1076,8 @@ if (( wildcard_enabled )); then
   printf '\n    %-20s    https://%s\n' "index" "$DEV_DOMAIN"
   printf '    %-20s    https://%s.%s\n' "" "$LANDING_NAME" "$DEV_DOMAIN"
   printf '    %-20s    (also served at any unmatched name, with live status)\n' ""
-  printf '    %-20s %s  https://%s.%s/ingest/*  (POST only; %s source guard)\n' \
-    "$INGEST_NAME" "$INGEST_PORT" "$INGEST_NAME" "$DEV_DOMAIN" \
-    "$([[ -n $INGEST_SRC_IPS ]] && echo "$(wc -w <<<"$INGEST_SRC_IPS" | tr -d ' ') address" || echo "NO")"
+  printf '    %-20s homelab/VPS source guard: %s\n' "" \
+    "$([[ -n $GUARD_SRC_IPS ]] && echo "$(wc -w <<<"$GUARD_SRC_IPS" | tr -d ' ') address(es)" || echo "NO peers")"
   printf '\n  %d clean doors, %d excluded — registry: %s\n' \
     "$n_clean" "$n_excluded" "$CADDYFILE"
 

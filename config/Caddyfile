@@ -302,12 +302,8 @@ sy-serendipity.test {
 	import local
 	reverse_proxy localhost:7734
 }
-# 7735 — warden-api (~/SourceRoot/warden, scripts/api.py), 127.0.0.1 only, no
-# .test host: reserved here so nothing else claims it. Its only tailnet door is
-# the generated `warden-ingest` host (scripts/caddy-tailnet.sh), which proxies
-# POST /ingest/* and nothing else. It sat on
-# 7734 until 2026-09-11, where sy-serendipity's `kill-port 7734` would have
-# killed it on every `bun run dev`.
+# 7735 — free (the loopback API that held it was retired 2026-10-27). Not a .test host; sy-serendipity moved to
+# 7734 on 2026-09-11 so a `kill-port 7734` there never touched it.
 
 # Redesign worktree (2026-09-11): the same repo on PORT=7736, the v2 in progress.
 # Drop this once redesign/codex is merged into master.
