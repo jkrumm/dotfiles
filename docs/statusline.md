@@ -23,7 +23,7 @@ dotfiles | * master
 - Lane (`MAX`/`IU`) · model · effort — effort is stdin `.effort.level` (per-model
   since 2.1.251, so `settings.json`'s `effortLevel` is not what runs); `·no-think`
   when `.thinking.enabled` is false
-- Context: `{used}k/{usable}k {color-coded %}` — usable = total minus 30k autocompact buffer
+- Context: `{used}k/{usable}k {color-coded %}` — usable = the auto-compact point (`autoCompactWindow`, 600k) or, unset, total minus a 30k buffer
 - Total tokens (main loop + subagents, cache reads excluded), formatted as `308k` or `1.2M`
 - Prompt cache: `⚡{hit ratio}` from stdin `.prompt_cache`, `cold` once the TTL lapsed
 - Session duration
@@ -61,7 +61,7 @@ extras, no error. `CLAUDE_SL_DIR` relocates the render caches (test seam,
 | 50–74% | Yellow |
 | ≥ 75% | Red |
 
-"Usable" = `context_window_size - 30000` (30k reserved for autocompact buffer).
+"Usable" = `autoCompactWindow` (env `CLAUDE_CODE_AUTO_COMPACT_WINDOW` wins) when below the model window, else `context_window_size - 30000`.
 
 ## Usage Stats Implementation
 

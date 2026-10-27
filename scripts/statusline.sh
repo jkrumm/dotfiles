@@ -99,9 +99,15 @@ else
 fi
 
 # ── Context window ─────────────────────────────────────────────────────────────
-# Subtract ~30k autocompact buffer to show usable space
-autocompact_buffer=30000
-usable_size=$((context_size - autocompact_buffer))
+# Usable = where auto-compaction fires: autoCompactWindow (env wins, then settings), capped at the
+# model window; unset -> window minus the ~30k autocompact buffer.
+compact_window="${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-$(jq -r '.autoCompactWindow // empty' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" 2>/dev/null)}"
+case "$compact_window" in *[kK]) compact_window=$((${compact_window%[kK]} * 1000)) ;; *[mM]) compact_window=$((${compact_window%[mM]} * 1000000)) ;; esac
+if [[ "$compact_window" =~ ^[0-9]+$ ]] && [ "$compact_window" -gt 0 ] && [ "$compact_window" -lt "$context_size" ]; then
+  usable_size=$compact_window
+else
+  usable_size=$((context_size - 30000))
+fi
 usable_k=$((usable_size / 1000))
 used_tokens=$((used_percentage * context_size / 100))
 used_k=$((used_tokens / 1000))
