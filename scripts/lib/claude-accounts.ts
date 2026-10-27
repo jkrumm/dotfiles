@@ -903,7 +903,8 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
         d.log?.(`refresh ${id}: cannot start claude (${v.startFailed})`)
         releaseClaim(id, d.dir)
       } else if (v.loggedIn !== null) setAuthFailed(id, !v.loggedIn, d.now(), d.dir)
-      results[id] = v.loggedIn === false ? "auth-failed" : "fresh"
+      // a peer sample proves nothing about this machine's login: without a verdict the run stays unresolved (keepalive exit 1)
+      results[id] = v.loggedIn === true ? "fresh" : v.loggedIn === false ? "auth-failed" : "unresolved"
       continue
     }
     const sample = await oauthSample(d, id, status)

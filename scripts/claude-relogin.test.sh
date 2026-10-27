@@ -79,10 +79,11 @@ STUB
 chmod +x "$TMP/bin/herdr"
 mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 6; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
 # expiry --json answers STUB_EXPIRY_BEFORE until the claude stub has run since the last reset(), then STUB_EXPIRY_AFTER
-# (epoch ms; "none" = the Keychain item is unreadable: refresh_expires_at null). The default login moves forward 30 days.
+# (epoch ms; "none" = the Keychain item is unreadable: refresh_expires_at null; "fail" = the CLI itself fails). The default login moves forward 30 days.
 mk claude-account 'case "$1 $2" in
   "expiry --json") if [ -e "$TMP_DIR/claude.runs" ]; then ms=${STUB_EXPIRY_AFTER:-1798761600000}; else ms=${STUB_EXPIRY_BEFORE:-1796169600000}; fi
     [ "$ms" = none ] && ms=null
+    [ "$ms" = fail ] && exit 1
     echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":$ms},{\"id\":\"iu\",\"refresh_expires_at\":$ms}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
@@ -464,6 +465,12 @@ assert_eq "an unreadable item afterwards is no proof" "1/unchanged " "$rc/$(cat 
 reset; rf="$TMP/result-first"; rm -f "$rf"
 STUB_EXPIRY_BEFORE=none bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
 assert_eq "a first login (nothing before) counts when an expiry exists afterwards" "0/ok $D" "$rc/$(cat "$rf")"
+as mini; reset; rm -f "$rf"
+STUB_EXPIRY_BEFORE=fail STUB_EXPIRY_AFTER=$(( ($(date +%s) + 10 * 86400) * 1000 )) bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "a failed read before the login is no proof: an old-looking expiry after it is unchanged" "1" "$rc"
+as mini; reset; rm -f "$rf"
+STUB_EXPIRY_BEFORE=fail STUB_EXPIRY_AFTER=$(( ($(date +%s) + 30 * 86400) * 1000 )) bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "...but a fresh 30-day login after a failed read is renewed" "0" "$rc"
 reset; rf="$TMP/result-moved"; rm -f "$rf"
 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
 assert_eq "a moved expiry is a renewal" "0/ok $D" "$rc/$(cat "$rf")"

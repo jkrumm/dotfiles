@@ -91,14 +91,14 @@ const httpGet: HttpGet = async (url, headers, timeoutMs) => {
  * Refresh accounts. `ids` restricts what to consider but still goes through the enabled + due filters and the
  * claim; `claimed` (internal: the detached child of a pick) was already claimed by the parent.
  */
-async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean } = {}): Promise<Record<string, RefreshResult>> {
+async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; all?: boolean; peer?: boolean } = {}): Promise<Record<string, RefreshResult>> {
   const enabled = (id: string) => Object.hasOwn(reg.accounts, id) && reg.accounts[id].enabled
   const todo = o.claimed
     ? o.claimed.filter(enabled)
     : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids || !!o.all, !!o.all) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
   return runRefresh({
     reg, spawn: spawner, httpGet, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, claudeBin: claudeBin(), baseEnv: process.env, ids: todo, now: Date.now, log: (m) => console.error(m),
-    peerUsage: fetchPeerUsage,
+    peerUsage: o.peer === false ? undefined : fetchPeerUsage, // the synchronous pick-time refresh never waits on ssh
   })
 }
 
@@ -285,7 +285,7 @@ async function main(argv: string[]): Promise<number> {
         if (!dry) await refreshBeforePick({
           reg, lane, now, cache: cache0,
           claim: (ids) => claimRefresh(reg, ids, now, cache0),
-          runSync: async (ids) => void (await refresh(reg, { claimed: ids })),
+          runSync: async (ids) => void (await refresh(reg, { claimed: ids, peer: false })),
           detach: (ids) => spawnDetachedRefresh(ids),
         })
       } catch (e) {

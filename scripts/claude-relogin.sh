@@ -132,18 +132,22 @@ account_cli() { if command -v claude-account >/dev/null 2>&1; then claude-accoun
 stamp() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 # Nothing token-shaped may reach the log, whatever the CLI prints (lib/claude-login.sh).
 redact() { login_redact; }
-# End of the account's login (refresh token) as epoch ms, empty when unknown. --ids: a disabled account's first login too.
+# End of the account's login (refresh token) as epoch ms; empty when the account has no login item yet (a first login),
+# "unknown" when the read itself failed (CLI or Keychain error, unparseable answer). --ids: a disabled account too.
 expiry_ms() {
-  local ms
-  ms=$(account_cli expiry --json --ids "$id" 2>/dev/null | jq -r --arg id "$id" '.accounts[] | select(.id == $id) | .refresh_expires_at // empty' 2>/dev/null)
-  [[ "$ms" =~ ^[0-9]+$ ]] && echo "$ms"
+  local out ms
+  out=$(account_cli expiry --json --ids "$id" 2>/dev/null) || { echo unknown; return 0; }
+  ms=$(jq -er --arg id "$id" '.accounts[] | select(.id == $id) | .refresh_expires_at // ""' <<<"$out" 2>/dev/null) || { echo unknown; return 0; }
+  [[ -z "$ms" || "$ms" =~ ^[0-9]+$ ]] && echo "$ms" || echo unknown
   return 0
 }
 ms_date() { [[ "${1:-}" =~ ^[0-9]+$ ]] && date -r "$(($1 / 1000))" +%Y-%m-%d; return 0; } # <epoch ms> -> YYYY-MM-DD, empty when unknown
-# A login renewed only if the end of the refresh token moved: <after> exists and is newer than <before> (or there was none).
+# A login renewed only if the end of the refresh token moved: <after> exists and is newer than <before>, or there was no
+# login before. A failed "before" read proves nothing, so then only a fresh 30-day login counts (ends > 29 d from now).
 login_renewed() { # <before> <after>
   [[ "$2" =~ ^[0-9]+$ ]] || return 1
-  [[ "$1" =~ ^[0-9]+$ ]] || return 0
+  [[ -z "$1" ]] && return 0
+  [[ "$1" == unknown ]] && { (( $2 > ($(date +%s) + 29 * 86400) * 1000 )); return; }
   (( $2 > $1 ))
 }
 ok_text()   { echo "Claude login $id: renewed, valid until ${1:-unknown}"; }

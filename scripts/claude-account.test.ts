@@ -875,7 +875,7 @@ describe("runRefresh: peer sample import", () => {
   })
   const loggedInStub = (v: boolean): SpawnResult => ({ status: 0, stdout: JSON.stringify({ loggedIn: v }), stderr: "" })
 
-  async function run(peer: (() => unknown) | undefined, o: { ids?: string[]; registry?: Registry; seed?: [string, Sample]; auth?: boolean; keychain?: SpawnResult; http?: HttpGet } = {}) {
+  async function run(peer: (() => unknown) | undefined, o: { ids?: string[]; registry?: Registry; seed?: [string, Sample]; auth?: boolean; authResult?: SpawnResult; keychain?: SpawnResult; http?: HttpGet } = {}) {
     const dir = tmp()
     const ids = o.ids ?? ["me"]
     const registry = o.registry ?? reg()
@@ -887,7 +887,7 @@ describe("runRefresh: peer sample import", () => {
       reg: registry, claudeBin: "claude", baseEnv: { PATH: "/bin", USER: "owner" }, now: () => NOW, ids, dir, log: (m) => logs.push(m), peerUsage: peer,
       spawn: (cmd, args) => {
         calls.push(cmd === "/usr/bin/security" ? "security" : args[0])
-        return cmd === "/usr/bin/security" ? (o.keychain ?? { status: 0, stdout: CREDS, stderr: "" }) : loggedInStub(o.auth ?? true)
+        return cmd === "/usr/bin/security" ? (o.keychain ?? { status: 0, stdout: CREDS, stderr: "" }) : (o.authResult ?? loggedInStub(o.auth ?? true))
       },
       httpGet: async (url, h, t) => {
         urls.push(url)
@@ -906,6 +906,11 @@ describe("runRefresh: peer sample import", () => {
     expect(h.results).toEqual({ me: "fresh" })
     expect(h.urls).toEqual([]) // no token read, no request
     expect(h.calls).toEqual(["auth"]) // ...but the login verdict of THIS machine still runs
+  })
+  test("a fresh peer sample without a local verdict (unparseable auth status) is unresolved, never fresh", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me")] }), { authResult: { status: 0, stdout: "garbage", stderr: "" } })
+    expect(h.results).toEqual({ me: "unresolved" })
+    expect(h.urls).toEqual([])
   })
   test("peer auth state is never imported; the local verdict decides", async () => {
     const dead = await run(() => ({ accounts: [peerRow("me", { auth_ok: false })] }))
@@ -1140,7 +1145,11 @@ describe("CLI (isolated HOME)", () => {
     writeFileSync(peerJson, JSON.stringify({ default_account: "iu", accounts: [{ id: "iu", plan: "max20x", enabled: true, five_hour: 21, seven_day: 44, five_hour_resets_at: nowS + 3600, seven_day_resets_at: nowS + 86400 * 3, five_hour_age_s: 30, seven_day_age_s: 30, auth_ok: true, exhausted_until: null }] }))
     seed(60 * 60_000) // a stale local sample: without the peer this is the "neither a sample nor a verdict" exit 1
     rmSync(sshLog, { force: true })
-    const r = cli(["refresh", "--all"], { CLAUDE_ACCOUNTS_SSH: sshStub })
+    const okBin = join(home, "bin-peer-ok")
+    mkdirSync(okBin, { recursive: true })
+    writeFileSync(join(okBin, "claude"), `#!/bin/sh\necho '{"loggedIn":true}'\n`) // a peer sample counts only with this machine's own verdict
+    chmodSync(join(okBin, "claude"), 0o755)
+    const r = cli(["refresh", "--all"], { CLAUDE_ACCOUNTS_SSH: sshStub, PATH: `${okBin}:${bin}:${process.env.PATH}` })
     expect(r.rc).toBe(0)
     const args = readFileSync(sshLog, "utf8").trim().split("\n")
     expect(args.length).toBe(1)
