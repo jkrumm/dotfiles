@@ -575,16 +575,16 @@ for a in agents:
   # lead) takes the next free TAB number, and `<repo>-w<n>` can already belong to a live agent whose
   # tab was closed or renamed. Two agents on one name make `rd say/read` hit the wrong one, so the
   # counter skips numbers whose name is live; the plan's explicit number is authoritative and dies.
+  # Fail closed: an unreadable roster must not read as "no live agents" and let a duplicate name through.
   live_names=$(python3 -c '
 import json, sys
-try:
-    agents = json.load(sys.stdin)["result"]["agents"]
-except Exception:
-    agents = []
+agents = json.load(sys.stdin)["result"]["agents"]
+if not isinstance(agents, list):
+    sys.exit(1)
 for a in agents:
     if a.get("name"):
         print(a["name"])
-' <<<"$roster" 2>/dev/null)
+' <<<"$roster") || die "could not read the agent roster from $HOST — refusing to pick an agent name without it"
   wave_agent_name() { # <n>
     local s="-w$1" a
     a="$(agent_name "$name")"

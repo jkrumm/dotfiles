@@ -69,4 +69,14 @@ wave "Execute the active wave (Wave 4)"
 [ "$rc" -ne 0 ] && ok "live name: refused" || bad "live name: spawn accepted"
 has "live name: says which agent" "$out" "agent 'myrepo-w4' is already live"
 
+echo "unreadable roster"
+echo 'not json' >"$STATE/agents.json"; tabs
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "unparseable roster: refused" || bad "unparseable roster: spawn accepted"
+has "unparseable roster: says so" "$out" "could not read the agent roster"
+echo '{"result":{"agents":"nope"}}' >"$STATE/agents.json"
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "non-list agents: refused" || bad "non-list agents: spawn accepted"
+has "non-list agents: says so" "$out" "could not read the agent roster"
+
 echo; [ "$fails" -eq 0 ] && echo "remote-dev-wave: all passed" || { echo "remote-dev-wave: $fails failed"; exit 1; }

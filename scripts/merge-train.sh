@@ -58,7 +58,10 @@ for br in "${branches[@]}"; do
       inst=$(install_cmd "$wt")
       if [[ -n $inst ]]; then
         echo "installing deps for $br: $inst"
-        (cd "$wt" && eval "$inst") || die "$br: dependency install failed ($inst) after rebase on $base"
+        # A hung registry must not wedge the train forever; RD_INSTALL_TIMEOUT only exists for the tests.
+        (cd "$wt" && timeout "${RD_INSTALL_TIMEOUT:-600}" bash -c "$inst"); irc=$?
+        ((irc == 124)) && die "$br: dependency install timed out after ${RD_INSTALL_TIMEOUT:-600}s ($inst)"
+        ((irc == 0)) || die "$br: dependency install failed ($inst) after rebase on $base"
       fi
       (cd "$wt" && eval "$check") || die "$br: check failed after rebase on $base"
     fi
