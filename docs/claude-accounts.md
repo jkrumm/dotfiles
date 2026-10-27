@@ -144,10 +144,10 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1.4** (v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 90, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
+**Rule v1.4** (ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 
 ```
-eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
+eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
               (sample > 10 min old: `pick` uses it and refreshes in the background on EVERY lane, interactive
                included, detached and budgeted; a refresh takes a couple of seconds. Only a non-interactive lane
                refreshes an account with no usable sample synchronously; the interactive pick never waits.

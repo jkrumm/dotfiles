@@ -9,8 +9,8 @@ import { dirname, join, resolve } from "node:path"
 export const DEFAULT_ACCOUNT_ID = "iu"
 /** pick() result when no account is usable: the caller spills to its IU path (not an account id). */
 export const SPILL = "spill"
-export const SESSION_MAX = 85
-export const WEEKLY_MAX = 90
+export const SESSION_MAX = 90
+export const WEEKLY_MAX = 95
 /** Weekly ceiling while the window resets within EXPIRING_S: the last points are use-it-or-lose-it, so squeeze them. */
 export const WEEKLY_MAX_EXPIRING = 98
 export const FRESH_MS = 10 * 60_000

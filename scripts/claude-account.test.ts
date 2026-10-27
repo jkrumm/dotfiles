@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, SESSION_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -86,15 +86,22 @@ describe("pick rule v1.4: N accounts", () => {
     expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "agent-gateway:dispatch", NOW)).toMatchObject({ picked: "me2", reason: "home" })
   })
   test("headroom is scaled by the weekly units: a 20x account with the same percent has twice the room", () => {
-    // lane without a home -> step 5, the most headroom: iu (90-50)*2 = 80, me (90-30)*1 = 60, me2 (90-40)*1 = 50
+    // lane without a home -> step 5, the most headroom: iu (95-50)*2 = 90, me (95-30)*1 = 65, me2 (95-40)*1 = 55
     expect(pick(reg3(), cache3(sample(10, 50), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (90-70)*2 = 40
+    expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (95-70)*2 = 50
+  })
+  test("5h boundary: wave leaves a sibling at SESSION_MAX for iu and returns once a fresh sample shows the new window", () => {
+    const calm = (s: number) => cache3(sample(80, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
+    expect(pick(reg3(), calm(SESSION_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), calm(SESSION_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), calm(100), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), calm(2), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" }) // window reset: back home
   })
   test("a missing weekly window counts as full headroom", () => {
     const noWeekly: Sample = { ...sample(10, 0), w: null, w_reset: null, w_ts: null }
-    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 90 > 85
+    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 > 90
     expect(pick(reg3(), cache3(iu, sample(10, 5), noWeekly), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 90 = 90: registry order
+    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 = 95: registry order
   })
   test("pace step: the calm alternative with the most headroom", () => {
     const iuOver = sample(10, 88, { wReset: NOW / 1000 + 3.9 * D }) // pace 44
