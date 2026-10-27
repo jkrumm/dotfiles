@@ -161,6 +161,15 @@ research.test {
 	reverse_proxy localhost:7780
 }
 
+# iris — voice-memo server (Bun + Elysia), native LaunchAgent on the mini
+# (com.jkrumm.iris, :7730, bound to 127.0.0.1). `iris.mini.jkrumm.com` is how the phone and the
+# Mac reach it. /v1/events (SSE) and /v1/memos/:id/result?wait= (long poll) hold a response open
+# for minutes — reverse_proxy has no read timeout by default, so nothing here may add one.
+iris.test {
+	import local
+	reverse_proxy localhost:7730
+}
+
 # image-gateway — stateless image-generation gateway (Elysia + Bun) on :7716.
 # Local dev for the image-gateway monorepo (`bun run dev` at its root also starts the
 # Tauri app; Vite on :1420 is Tauri-internal, not proxied). VPS container reached

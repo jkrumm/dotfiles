@@ -80,6 +80,7 @@ instead — same validated geometry, without that one crossing guarantee.
 | `warden` | **The control plane.** Ingests signals, decides, drives the lifecycle to a verified outcome, and holds the only ledger (`~/.warden/warden.db`). Extracted from `hermes-agent` 2026-09-09 — a control plane cannot live inside the thing it supervises. Five LaunchAgents (`### warden` below), never gateway cron. `DESIGN.md` is authoritative, `STATE.md` is where the build actually is. Docs: `warden/DESIGN.md`, `warden/docs/api.md`. `warden run <repo> <<'BRIEF'` (brief on stdin, or `--brief-file`) is the unattended lane; `agw dispatch` is a session's bounded episode, `rd wave` a human's long one |
 | `agent-gateway` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel`, `/prose` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
+| `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `research-gateway` | Research MCP/HTTP service behind `/research` | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
@@ -217,6 +218,8 @@ the weatherorb session workflow.
 | `com.jkrumm.research-gateway` | research-gateway | KeepAlive (:7780, loopback) |
 | `com.jkrumm.research-gateway-lightpanda` | research-gateway | KeepAlive (renderer sidecar, :7781, loopback) |
 | `com.jkrumm.research-gateway-deploy` | research-gateway | 120s — deploy-on-push poller (idle-gated) |
+| `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
+| `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
 | `com.iu.prometheus-epos-token` | IuRoot (prometheus-scripts) | 300s |
 | `com.iu.prometheus-state-backup` | IuRoot | 3600s |
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
