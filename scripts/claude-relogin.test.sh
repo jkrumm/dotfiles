@@ -480,7 +480,8 @@ assert_contains "--ask --dry-run: prints the ask" "'ask' 'Claude login '\\''me'\
 
 echo "argument errors"
 bash "$RELOGIN" nobody >/dev/null 2>&1; assert_eq "unknown account" 2 "$?"
-bash "$RELOGIN" off >/dev/null 2>&1; assert_eq "disabled account" 2 "$?"
+bash "$RELOGIN" nope >/dev/null 2>&1; assert_eq "unregistered account" 2 "$?"
+bash "$RELOGIN" off --dry-run >/dev/null 2>&1; assert_eq "disabled account (first login) allowed" 0 "$?"
 bash "$RELOGIN" me --machine laptop >/dev/null 2>&1; assert_eq "bad machine" 2 "$?"
 bash "$RELOGIN" >/dev/null 2>&1; assert_eq "no id" 2 "$?"
 

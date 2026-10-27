@@ -78,8 +78,9 @@ while (( $# )); do
 done
 [[ -n "$id" ]] || die "usage: claude-relogin <id> [--machine mini|macbook] [--ask] [--visible] [--dry-run]"
 [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || die "bad account id '$id'"
-jq -e --arg id "$id" '.accounts[$id].enabled == true' "$REGISTRY" >/dev/null 2>&1 \
-  || die "'$id' is not an enabled account in $REGISTRY ($(jq -r '.accounts | to_entries | map(select(.value.enabled) | .key) | join(", ")' "$REGISTRY" 2>/dev/null))"
+# A registered but disabled account is allowed: its first login is how a new account comes out of the dark.
+jq -e --arg id "$id" '.accounts | has($id)' "$REGISTRY" >/dev/null 2>&1 \
+  || die "'$id' is not a registered account in $REGISTRY ($(jq -r '.accounts | keys_unsorted | join(", ")' "$REGISTRY" 2>/dev/null))"
 
 here=$(login_local_machine)
 machine=${machine:-$here}
