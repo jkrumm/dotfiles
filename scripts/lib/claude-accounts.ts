@@ -2,7 +2,7 @@
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
 import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
-import { homedir } from "node:os"
+import { homedir, userInfo } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 /** Account whose config dir is the default ~/.claude (CLAUDE_CONFIG_DIR unset). */
@@ -278,6 +278,14 @@ export function sampleFromClaudeJson(json: unknown, src = "usage"): Sample | nul
 export const keychainService = (dir: string | null): string =>
   dir === null ? "Claude Code-credentials" : `Claude Code-credentials-${createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 8)}`
 
+/**
+ * `security find-generic-password` args for an account's item. Claude Code files it under acct = $USER, so a process
+ * that ran without USER leaves a second item (acct "unknown") under the same service; without `-a` the lookup may
+ * return that stale twin (seen on the mini 2026-10-27: a 58 h expired copy behind every 401 and a false expiry WARN).
+ */
+export const keychainLookupArgs = (svc: string, env: Record<string, string | undefined>): string[] =>
+  ["find-generic-password", "-s", svc, "-a", env.USER || userInfo().username, "-w"]
+
 /** Access token out of the Keychain item's JSON (`claudeAiOauth.accessToken`); null for anything else. Never log the result. */
 export function tokenFromCredentials(raw: string): string | null {
   try {
@@ -346,7 +354,7 @@ export interface LoginRow {
 export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?: string; baseEnv: Record<string, string | undefined>; now: number }): LoginRow[] {
   return Object.entries(d.reg.accounts).filter(([, a]) => a.enabled).map(([id, a]) => {
     const svc = keychainService(accountDir(a))
-    const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
+    const kc = d.spawn(d.securityBin ?? SECURITY_BIN, keychainLookupArgs(svc, d.baseEnv), { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
     const isDefault = a.dir === null
     const row = (grade: LoginGrade) => ({ id, default: isDefault, grade, severity: !isDefault && grade === "FAIL" ? ("WARN" as const) : grade })
     const unreadable = (why: string): LoginRow => ({ ...row("WARN"), refresh_expires_at: null, access_expires_at: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
@@ -742,7 +750,7 @@ function loginVerdict(d: RefreshDeps, env: Record<string, string>): LoginVerdict
 /** Access token of the account's Keychain item; null (with the reason logged) when it cannot be read. Never log the result. */
 function keychainToken(d: RefreshDeps, id: string): string | null {
   const svc = keychainService(accountDir(d.reg.accounts[id]))
-  const kc = d.spawn(d.securityBin ?? SECURITY_BIN, ["find-generic-password", "-s", svc, "-w"], { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
+  const kc = d.spawn(d.securityBin ?? SECURITY_BIN, keychainLookupArgs(svc, d.baseEnv), { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
   const token = kc.status === 0 && !kc.error ? tokenFromCredentials(kc.stdout) : null
   if (!token) d.log?.(`refresh ${id}: no Keychain token (${svc}): ${kc.error?.message ?? (kc.stderr.trim().slice(0, 200) || `rc=${kc.status}`)}`)
   return token

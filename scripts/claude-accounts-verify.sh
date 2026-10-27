@@ -54,7 +54,7 @@ while IFS=$'\t' read -r id dir; do
   logged=$(jq -r '.loggedIn // false' <<<"$out" 2>/dev/null) || logged=false
   cfg=$(jq -r '.configDirectory // ""' <<<"$out" 2>/dev/null) || cfg=""
   kc=missing
-  security find-generic-password -s "$svc" >/dev/null 2>&1 && kc=present
+  security find-generic-password -s "$svc" -a "${USER:-$(id -un)}" >/dev/null 2>&1 && kc=present
   if [[ "$logged" == "true" && "$cfg" != "$want_dir" ]]; then
     row FAIL "auth/$id" "configDirectory '$cfg', expected '$want_dir' (Claude Code changed config-dir resolution)"
   elif [[ "$logged" == "true" && "$kc" == "missing" ]]; then

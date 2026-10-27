@@ -541,7 +541,7 @@ describe("runRefresh", () => {
     const urls: { url: string; headers: Record<string, string>; timeoutMs: number }[] = []
     const logs: string[] = []
     const results = await runRefresh({
-      reg: reg(), claudeBin: "claude", baseEnv: { PATH: "/bin" }, now: () => NOW, ids, dir, log: (m) => logs.push(m),
+      reg: reg(), claudeBin: "claude", baseEnv: { PATH: "/bin", USER: "owner" }, now: () => NOW, ids, dir, log: (m) => logs.push(m),
       spawn: (cmd, args, e) => {
         calls.push({ cmd, args, configDir: e.env.CLAUDE_CONFIG_DIR })
         if (cmd === "/usr/bin/security") return t.keychain ?? kcOk
@@ -564,7 +564,7 @@ describe("runRefresh", () => {
     expect(h.results).toEqual({ iu: "fresh" })
     expect(h.cache.samples.iu).toMatchObject({ s: 3, w: 89, s_ts: NOW, src: "oauth" })
     expect(h.calls.map((c) => c.cmd)).toEqual(["/usr/bin/security"])
-    expect(h.calls[0].args).toEqual(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+    expect(h.calls[0].args).toEqual(["find-generic-password", "-s", "Claude Code-credentials", "-a", "owner", "-w"]) // -a: never the stale acct "unknown" twin
     expect(h.urls).toEqual([{ url: "https://api.anthropic.com/api/oauth/usage", headers: oauthUsageHeaders(TOKEN), timeoutMs: 10_000 }])
     expect(h.claimHeld).toBe(true)
   })

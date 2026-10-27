@@ -22,6 +22,7 @@ push (the statusline's own 60 s refresh while a session already has rate_limits)
 Run via: uv run ~/.claude/fetch_usage.py [--accounts]
 """
 
+import getpass
 import json
 import os
 import shutil
@@ -80,7 +81,7 @@ def cleanup_old_logs(keep_days: int = 3) -> None:
 def _oauth_token() -> str:
     """Pull the Claude Code OAuth access token from macOS Keychain."""
     result = subprocess.run(
-        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", os.environ.get("USER") or getpass.getuser(), "-w"],
         capture_output=True,
         text=True,
         check=True,
