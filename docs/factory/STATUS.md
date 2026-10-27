@@ -1,5 +1,8 @@
 # Factory design — status
 
+> **2026-10-27: deferred.** Platform first: `../agent-workflows/concept.md` (concept v3). The factory
+> is re-planned on top of the new Claude Code setup and agent-workflows; v2.4 below is not signed off.
+
 ## v2.4 (2026-10-25, night) — current
 
 **Read `tdd/` (built into `report.html`) first.** Same orchestrator session (07a74a7d).

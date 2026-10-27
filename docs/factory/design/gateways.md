@@ -23,6 +23,7 @@ engines     research-gateway · audio-gateway · image-gateway · email-gateway
 shared      route table (model + effort per route) · usage → usage-tracker · OTel → ClickStack
 ```
 
+> **Superseded 2026-10-27 by `../../agent-workflows/concept.md` (concept v3).**
 > **Status: concept v2, 2026-10-26.** Not yet folded into the factory TDD (v2.4). v1 (same day, commit 5bb920b) was the proposal. v2 adds your decisions from that conversation and the results of spike 7 (`../spikes/07-stations/`).
 > **Read §10–§11 now:** they cover what this changes in the factory docs and where the factory stands. W1a starts on your sign-off of v2.4.
 > **Evidence:** `../research/2026-10-26-{opencode-capability-map,opencode-v2-locations-spike,agent-first-cli,agent-platforms-compared,mastra-deep-dive}.md`, agent-gateway `docs/opencode-v2.md`, brain `wiki/engineering/{agent-loops-vs-runtimes,opencode}.md`, prometheus-scripts' `epx` and Athena Teamchat.
