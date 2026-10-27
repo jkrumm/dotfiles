@@ -34,3 +34,9 @@ fi
 if [ -x "${HOME}/.local/bin/jobs-grade" ]; then
 	( /bin/sleep 120; "${HOME}/.local/bin/jobs-grade" --notify >/dev/null 2>&1 ) >/dev/null 2>&1 &
 fi
+
+# 4) Session health: grade the Claude logins on this Mac and the mini, re-push the re-login dialogs the mini could not
+#    deliver while this Mac slept, and notify once when the picture changed. Waits for the network; backgrounded.
+if [ -x "${HOME}/.local/bin/claude-account" ]; then
+	( /bin/sleep 30; "${HOME}/.local/bin/claude-account" health --wake >/dev/null 2>&1 ) >/dev/null 2>&1 &
+fi

@@ -12,16 +12,18 @@
 //   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
 //   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
 //   claude-account latest [dir]            id of the newest session transcript for dir (default cwd) — what `c --continue` pins to; exit 1 if none
+//   claude-account health [--json] [--wake]   login / quota / waiting-ask health of this machine and its peer (MacBook <-> mini over ssh); exit 1 on any fail. --wake: notify (MacBook, only when the picture changed) and re-push the peer's pending ask dialogs younger than 24 h — what sleepwatcher's wakeup.sh runs
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
 // (never copied, logged or written back; on HTTP 401 `claude auth status` renews it first, one retry); `claude -p /usage` no longer refreshes cachedUsageUtilization (2.1.310).
-import { spawnSync } from "node:child_process"
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
+import { spawn, spawnSync } from "node:child_process"
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
+import { type HealthRow, type PendingAsk, gradeMachine, healthSignature, worst } from "./lib/claude-health.ts"
 import {
-  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
+  type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
   mergeSample, newestAge, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
 } from "./lib/claude-accounts.ts"
 
@@ -168,6 +170,79 @@ function usage(reg: Registry, json: boolean): void {
   }
 }
 
+// ── health (wake check) ─────────────────────────────────────────────────────────────────────────────────────────
+const HOME_BIN = "$HOME/.local/bin/claude-account"
+const PENDING_SH = `for f in "$HOME"/.local/state/human-queue/*.req; do [ -e "$f" ] && grep -q claude-relogin "$f" || continue; b="\${f%.req}"; [ -e "$b.res" ] || echo "$(basename "$b") $(stat -f %m "$f")"; done`
+const PEER_SCRIPT = `${HOME_BIN} usage --json; echo '@@'; ${HOME_BIN} expiry --json; echo '@@'; ${PENDING_SH}`
+
+const parseJson = (t: string) => {
+  try {
+    return JSON.parse(t)
+  } catch {
+    return null
+  }
+}
+function pendingFrom(text: string, nowMs: number): PendingAsk[] {
+  return text.split("\n").flatMap((l) => {
+    const m = /^([0-9T-]+) (\d+)$/.exec(l.trim())
+    return m ? [{ id: m[1], ageMs: nowMs - Number(m[2]) * 1000 }] : []
+  })
+}
+/** One machine's `usage`, `expiry` and pending asks via a shell (local sh, or ssh to the peer); null usage = unreachable. */
+function machineSnapshot(argv: string[] | null, nowMs: number) {
+  const r = argv
+    ? spawnSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
+    : spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
+  if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] }
+  const [u = "", e = "", q = ""] = r.stdout.split("@@\n")
+  const pending = pendingFrom(q, nowMs)
+  return { usage: parseJson(u), expiry: parseJson(e), pending, pendingIds: pending }
+}
+
+async function health(argv: string[]): Promise<number> {
+  const now = Date.now()
+  const onMini = /mini/i.test(hostname())
+  const local = onMini ? "mini" : "macbook"
+  const peer = onMini ? { name: "macbook", ssh: ["iumac"] } : { name: "mini", ssh: ["mini"] }
+  const mine = machineSnapshot(null, now)
+  const theirs = machineSnapshot(peer.ssh, now)
+  const rows: HealthRow[] = [
+    ...gradeMachine(local, mine),
+    ...gradeMachine(peer.name, theirs),
+  ]
+  if (argv.includes("--json")) console.log(JSON.stringify({ state: worst(rows), rows }, null, 2))
+  else for (const r of rows) console.log(`${r.state.toUpperCase().padEnd(4)} ${r.machine}/${r.id} ${r.check}: ${r.detail}${r.fix ? `  -> ${r.fix}` : ""}`)
+  if (argv.includes("--wake")) {
+    if (!onMini) {
+      // The dialogs the mini could not deliver while this Mac slept: push them again now that it is awake.
+      for (const p of theirs.pendingIds) if (p.ageMs < 24 * 3600_000) {
+        spawnLogged("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ...peer.ssh, `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`])
+      }
+      notifyIfChanged(rows, now)
+    }
+  }
+  return worst(rows) === "fail" ? 1 : 0
+}
+function spawnLogged(cmd: string, args: string[]) {
+  const fd = openSync(keepaliveLogPath(), "a")
+  spawn(cmd, args, { detached: true, stdio: ["ignore", fd, fd] }).unref()
+  closeSync(fd)
+}
+function notifyIfChanged(rows: HealthRow[], nowMs: number) {
+  const sig = healthSignature(rows)
+  const stamp = join(cacheDir(), "health-notified.json")
+  const prev = parseJson((() => { try { return readFileSync(stamp, "utf8") } catch { return "" } })()) as { sig?: string; ts?: number } | null
+  if (!sig || (prev?.sig === sig && nowMs - (prev.ts ?? 0) < 12 * 3600_000)) return
+  const bad = rows.filter((r) => r.state !== "ok").map((r) => `${r.machine}/${r.id}: ${r.detail}`).join("; ")
+  spawnSync("osascript", ["-e", `display notification ${JSON.stringify(bad.slice(0, 200))} with title "Claude sessions" subtitle "open Tinycast > Claude usage to fix"`])
+  try {
+    mkdirSync(dirname(stamp), { recursive: true })
+    writeFileSync(stamp, JSON.stringify({ sig, ts: nowMs }))
+  } catch {
+    // dedupe is best-effort
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv
   let reg: Registry
@@ -232,6 +307,8 @@ async function main(argv: string[]): Promise<number> {
       if (all && (unresolved.length || stale.length)) return 1
       return 0
     }
+    case "health":
+      return health(rest)
     case "record": {
       const id = account(reg, rest)
       const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }

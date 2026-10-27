@@ -303,6 +303,15 @@ per enabled account: the OAuth usage endpoint first (source 3), and when that gi
 claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/claude-accounts-keepalive.log`
 (a green run prints nothing; the detached refresh a pick spawns appends its stdout/stderr to the same file). `--all` also asks for a re-login when a login is dead or inside its last 7 days (§Re-login, once per account per 24 h).
 
+**Health on wake.** `claude-account health [--json] [--wake]` grades this machine and its peer (MacBook reaches the mini over
+`ssh mini`, the mini the MacBook over `ssh iumac`; both unauthenticated reads: `usage --json`, `expiry --json`, the human-queue).
+Rows: `login` (logged out = FAIL for `iu`, WARN otherwise; login ending <= 7 d = WARN), `quota` (logged in but no sample for
+> 6 h: the usage endpoint is rejecting the token, the failure `auth status` alone cannot see), `queue` (re-login asks
+waiting for a click). `--wake`, run 30 s after wake by `scripts/wakeup.sh` (sleepwatcher, MacBook), re-pushes the mini's
+pending re-login dialogs younger than 24 h (a push that failed while this Mac slept is not retried by anything else:
+2026-10-27 the `iu` ask sat 8 h) and posts one notification, repeated only when the set of bad rows changes or after 12 h.
+Tinycast's Claude usage view reads `health --json` and offers each row's `fix`.
+
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
 1. No FAIL -> `make claude-accounts-stamp` records the version, the WARN clears on the next heartbeat.
