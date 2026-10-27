@@ -29,7 +29,8 @@ export const EXPIRING_WEEKLY_MAX = 70
 export interface Account {
   dir: string | null
   plan: string
-  units: { session: number; weekly: number }
+  /** Capacity units; optional, defaults from the plan (see accountUnits). */
+  units?: { session: number; weekly: number }
   homeLanes: string[]
   /** macOS app (as `open -a` names it) signed in to this account; where `claude-relogin` opens the authorize URL. Absent = system default. */
   loginBrowser?: string
@@ -90,7 +91,7 @@ function validAccount(a: unknown): a is Account {
     !!x && typeof x === "object" &&
     (x.dir === null || typeof x.dir === "string") &&
     typeof x.plan === "string" &&
-    !!x.units && isNum(x.units.session) && isNum(x.units.weekly) &&
+    (x.units === undefined || (!!x.units && isNum(x.units.session) && isNum(x.units.weekly))) &&
     Array.isArray(x.homeLanes) && x.homeLanes.every((l) => typeof l === "string") &&
     (x.loginBrowser === undefined || typeof x.loginBrowser === "string") &&
     typeof x.enabled === "boolean"
@@ -107,6 +108,9 @@ export function loadRegistry(path = registryPath()): Registry {
   if (!Object.values(raw.accounts).some((a) => (a as Account).dir === null)) throw new Error(`${path}: no account owns the default ~/.claude (dir: null)`)
   return { accounts: raw.accounts }
 }
+
+/** Capacity units of an account: the registry's own, else from the plan (max20x 4 / 2, anything else 1 / 1; measured ratios, docs/claude-accounts.md). */
+export const accountUnits = (a: Account): { session: number; weekly: number } => a.units ?? (a.plan === "max20x" ? { session: 4, weekly: 2 } : { session: 1, weekly: 1 })
 
 /** Absolute config dir of an account; null = default ~/.claude (env unset). */
 export const accountDir = (a: Account): string | null => (a.dir === null ? null : resolve(expandHome(a.dir)))
@@ -298,7 +302,7 @@ export function tokenFromCredentials(raw: string): string | null {
 
 // ── Login expiry ────────────────────────────────────────────────────────────────────────────────────────────────
 // The Keychain item also carries `claudeAiOauth.refreshTokenExpiresAt` (grant + 30 d, epoch ms, not extended by
-// rotation) and `expiresAt` (the 8 h access token). Only these two timestamps are ever read out of it.
+// rotation) and `expiresAt` (the 8 h access token). Only these two timestamps and the plan tier (`rateLimitTier`) are ever read out of it.
 
 /** WARN at or below this many ms of refresh-token life left. */
 export const LOGIN_WARN_MS = 7 * 86400_000
@@ -320,6 +324,25 @@ export function expiryFromCredentials(raw: string): LoginTimestamps | null {
   } catch {
     return null
   }
+}
+
+/**
+ * The Keychain item's `claudeAiOauth.rateLimitTier` (e.g. `default_claude_max_5x`): the plan marker, not a secret.
+ * Null for anything but a short string. Never touches a token field.
+ */
+export function tierFromCredentials(raw: string): string | null {
+  try {
+    const t = (JSON.parse(raw) as { claudeAiOauth?: { rateLimitTier?: unknown } })?.claudeAiOauth?.rateLimitTier
+    return typeof t === "string" && t && t.length <= 64 ? t : null
+  } catch {
+    return null
+  }
+}
+
+/** `default_claude_max_20x` -> `max20x`; null when the tier carries no Max multiple. */
+export function planFromTier(tier: string | null): string | null {
+  const m = tier ? /max_(\d+)x/.exec(tier) : null
+  return m ? `max${m[1]}x` : null
 }
 
 export type LoginGrade = "PASS" | "WARN" | "FAIL"
@@ -345,29 +368,38 @@ export interface LoginRow {
   /** epoch ms of the refresh token's end of life; null when the item could not be read */
   refresh_expires_at: number | null
   access_expires_at: number | null
+  /** the Keychain item's raw rateLimitTier, null when absent or unreadable */
+  tier: string | null
+  /** plan parsed from the tier (`max20x` / `max5x`), null when undetectable */
+  plan_detected: string | null
   days_left: number | null
   expired: boolean
   detail: string
 }
 
-/** Grade of every enabled account's login from its own Keychain item (read-only `security … -w`, 0 tokens, nothing logged but timestamps). */
-export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?: string; baseEnv: Record<string, string | undefined>; now: number }): LoginRow[] {
-  return Object.entries(d.reg.accounts).filter(([, a]) => a.enabled).map(([id, a]) => {
+/**
+ * Grade of every enabled account's login from its own Keychain item (read-only `security … -w`, 0 tokens, nothing
+ * logged but timestamps and the plan tier). `ids` selects accounts instead, disabled ones included (a first login).
+ */
+export function readLoginExpiry(d: { reg: Registry; spawn: Spawner; securityBin?: string; baseEnv: Record<string, string | undefined>; now: number; ids?: string[] }): LoginRow[] {
+  return Object.entries(d.reg.accounts).filter(([id, a]) => (d.ids ? d.ids.includes(id) : a.enabled)).map(([id, a]) => {
     const svc = keychainService(accountDir(a))
     const kc = d.spawn(d.securityBin ?? SECURITY_BIN, keychainLookupArgs(svc, d.baseEnv), { env: d.baseEnv as Record<string, string>, timeoutMs: KEYCHAIN_TIMEOUT_MS })
     const isDefault = a.dir === null
     const row = (grade: LoginGrade) => ({ id, default: isDefault, grade, severity: !isDefault && grade === "FAIL" ? ("WARN" as const) : grade })
-    const unreadable = (why: string): LoginRow => ({ ...row("WARN"), refresh_expires_at: null, access_expires_at: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
+    const unreadable = (why: string): LoginRow => ({ ...row("WARN"), refresh_expires_at: null, access_expires_at: null, tier: null, plan_detected: null, days_left: null, expired: false, detail: `login expiry unreadable (${why})` })
     if (kc.error || kc.status !== 0) return unreadable(`Keychain '${svc}': ${kc.error?.message ?? (kc.stderr.trim().slice(0, 120) || `rc=${kc.status}`)}`)
     const t = expiryFromCredentials(kc.stdout)
     if (!t) return unreadable(`Keychain '${svc}' is not a Claude login`)
-    if (t.refreshTokenExpiresAt === null) return { ...unreadable("no refreshTokenExpiresAt in the Keychain item"), access_expires_at: t.expiresAt }
+    const tier = tierFromCredentials(kc.stdout)
+    const plan = { tier, plan_detected: planFromTier(tier) }
+    if (t.refreshTokenExpiresAt === null) return { ...unreadable("no refreshTokenExpiresAt in the Keychain item"), access_expires_at: t.expiresAt, ...plan }
     const left = t.refreshTokenExpiresAt - d.now
     const days = Math.round((left / 86400_000) * 10) / 10
     const expired = left <= 0
     const date = new Date(t.refreshTokenExpiresAt).toISOString().slice(0, 10)
     return {
-      ...row(gradeLogin(t.refreshTokenExpiresAt, d.now)), refresh_expires_at: t.refreshTokenExpiresAt, access_expires_at: t.expiresAt, days_left: days, expired,
+      ...row(gradeLogin(t.refreshTokenExpiresAt, d.now)), refresh_expires_at: t.refreshTokenExpiresAt, access_expires_at: t.expiresAt, ...plan, days_left: days, expired,
       detail: expired ? `login expired ${date} (${-days} d ago): /login needed` : `login valid until ${date} (${days} d left)`,
     }
   })
@@ -560,7 +592,7 @@ export function overPace(reg: Registry, cache: Cache, id: string, nowMs: number)
   return p !== null && x.w! > p + PACE_MARGIN
 }
 
-/** Rule v1.2 (docs/claude-accounts.md §The picker). Ties and ordering follow registry order. */
+/** Rule v1.4 (docs/claude-accounts.md §The picker). Among several candidates the best one wins; ties follow registry order. */
 export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
   const r = pickRaw(reg, cache, lane, nowMs)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
@@ -581,23 +613,35 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
   }
+  // weekly points left below the account's own ceiling, scaled by its plan; a missing weekly window is open headroom
+  const headroom = (id: string) => {
+    const x = cache.samples[id]
+    return (x && hasW(x) ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX) * accountUnits(reg.accounts[id]).weekly
+  }
+  const mostHeadroom = (cands: string[]) => cands.reduce<string | undefined>((best, id) => (best === undefined || headroom(id) > headroom(best) ? id : best), undefined)
   const homes = homeIds(reg, lane)
-  const home = ids.find((id) => ok.includes(id) && homes.includes(id))
+  const home = mostHeadroom(ok.filter((id) => homes.includes(id)))
   if (home && overPace(reg, cache, home, nowMs)) {
-    const calm = ok.find((id) => id !== home && !overPace(reg, cache, id, nowMs))
+    const calm = mostHeadroom(ok.filter((id) => id !== home && !overPace(reg, cache, id, nowMs)))
     if (calm) return { picked: calm, reason: "pace" }
   }
   if (home) {
     const hs = cache.samples[home]
     const freshS = (x: Sample) => hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS
-    const emptier = ok.find((id) => {
-      const x = cache.samples[id]
-      return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
-    })
+    const emptier = ok
+      .filter((id) => {
+        const x = cache.samples[id]
+        return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
+      })
+      .reduce<string | undefined>((best, id) => {
+        if (best === undefined) return id
+        const d = cache.samples[id].s! - cache.samples[best].s!
+        return d < 0 || (d === 0 && headroom(id) > headroom(best)) ? id : best
+      }, undefined)
     if (emptier) return { picked: emptier, reason: "session" }
     return { picked: home, reason: "home" }
   }
-  const other = ok[0]
+  const other = mostHeadroom(ok)
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
   return { picked: SPILL, reason: "no-eligible-account" }
@@ -730,6 +774,8 @@ export interface RefreshDeps {
   /** Accounts to refresh. They are already claimed (budget stamped) by the caller. */
   ids: string[]
   log?: (msg: string) => void
+  /** The peer machine's `claude-account usage --json` body (parsed), fetched once per run; throws or answers null when unreachable. Absent = no import. */
+  peerUsage?: () => unknown | Promise<unknown>
 }
 
 type LoginVerdict = { loggedIn: boolean | null; startFailed?: string }
@@ -799,13 +845,67 @@ async function oauthSample(d: RefreshDeps, id: string, status: () => LoginVerdic
  */
 export type RefreshResult = "fresh" | "auth-ok" | "stale" | "auth-failed" | "unresolved"
 
+/**
+ * Quota is per account, not per machine, so the peer machine's samples are as good as ours: an idle login whose
+ * Keychain access token expired gets 401 on every usage GET (and `claude auth status` no longer renews it), while the
+ * peer, where the account is busy, has fresh numbers. Each locally registered, enabled row of the peer's `usage --json`
+ * becomes a `peer` sample (window timestamps rebuilt from the row's ages, so the original age is never laundered) and a
+ * future `exhausted_until` becomes a mark; `mergeSample` keeps whichever window is newer. Auth state is never imported:
+ * logins are per machine. Returns the ids that received a sample. A peer that is unreachable or garbled is one log line.
+ */
+async function importPeerSamples(d: RefreshDeps): Promise<Set<string>> {
+  const imported = new Set<string>()
+  if (!d.peerUsage) return imported
+  let body: unknown
+  try {
+    body = await d.peerUsage()
+  } catch (e) {
+    d.log?.(`refresh: peer usage unavailable: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`)
+    return imported
+  }
+  const rows = (body as { accounts?: unknown } | null)?.accounts
+  if (!Array.isArray(rows)) {
+    d.log?.("refresh: peer usage unreadable, no samples imported")
+    return imported
+  }
+  const now = d.now()
+  const pct = (v: unknown) => (isNum(v) ? v : null)
+  for (const r of rows as Record<string, unknown>[]) {
+    const id = r?.id
+    if (typeof id !== "string" || !Object.hasOwn(d.reg.accounts, id) || !d.reg.accounts[id].enabled) continue
+    const win = (value: unknown, reset: unknown, age: unknown) => {
+      const v = pct(value)
+      return v === null ? { v, reset: null, ts: null } : { v, reset: pct(reset), ts: isNum(age) ? now - age * 1000 : null }
+    }
+    const s = win(r.five_hour, r.five_hour_resets_at, r.five_hour_age_s)
+    const w = win(r.seven_day, r.seven_day_resets_at, r.seven_day_age_s)
+    if (s.v !== null || w.v !== null) {
+      saveSample(id, { s: s.v, s_reset: s.reset, s_ts: s.ts, w: w.v, w_reset: w.reset, w_ts: w.ts, src: "peer" }, d.dir)
+      imported.add(id)
+    }
+    if (isNum(r.exhausted_until) && r.exhausted_until * 1000 > now) markExhausted(id, r.exhausted_until, d.dir)
+  }
+  return imported
+}
+
 export async function runRefresh(d: RefreshDeps): Promise<Record<string, RefreshResult>> {
   const results: Record<string, RefreshResult> = {}
+  const imported = d.ids.length ? await importPeerSamples(d) : new Set<string>()
   for (const id of d.ids) {
     results[id] = "unresolved" // neither a fresh sample nor an auth verdict, until proven otherwise
     const env = refreshEnv(d.baseEnv, accountDir(d.reg.accounts[id]))
     let verdict: LoginVerdict | undefined
     const status = () => (verdict ??= loginVerdict(d, env)) // at most one `auth status` per account and run
+    if (imported.has(id) && sampleAge(loadCache(d.dir).samples[id], d.now()) < FRESH_MS) {
+      // A fresh peer sample replaces the endpoint GET, but says nothing about THIS machine's login: the verdict still runs.
+      const v = status()
+      if (v.startFailed) {
+        d.log?.(`refresh ${id}: cannot start claude (${v.startFailed})`)
+        releaseClaim(id, d.dir)
+      } else if (v.loggedIn !== null) setAuthFailed(id, !v.loggedIn, d.now(), d.dir)
+      results[id] = v.loggedIn === false ? "auth-failed" : "fresh"
+      continue
+    }
     const sample = await oauthSample(d, id, status)
     if (sample) {
       saveSample(id, sample, d.dir)

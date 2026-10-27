@@ -3,8 +3,8 @@
 //
 //   claude-account pick --lane <lane> [--why]      (any lane: a due account refreshes detached in the background; a non-interactive lane waits only for an account with no usable sample) stdout: `unset CLAUDE_CONFIG_DIR` | `export CLAUDE_CONFIG_DIR=<dir>` | `spill` (exit 3, no account has headroom); exit 4 = registry unreadable (still prints `unset CLAUDE_CONFIG_DIR`)
 //   claude-account usage [--json]          both accounts, from the quota cache (a pure file read: no Keychain, no network)
-//   claude-account expiry [--json]         per enabled account: when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps are read out). Rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude) and `severity` (the grade, but a non-default account never exceeds WARN) — what verify and the heartbeat act on
-//   claude-account refresh [--ids a,b] [--all]   OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
+//   claude-account expiry [--json] [--ids a,b]   per enabled account (--ids: the named accounts, disabled ones too: a first login): when its login (refresh token) ends, from its own Keychain item (read-only; only the two timestamps and the plan tier are read out; rows carry `tier` and `plan_detected`). Rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (owns ~/.claude) and `severity` (the grade, but a non-default account never exceeds WARN) — what verify and the heartbeat act on
+//   claude-account refresh [--ids a,b] [--all]   first imports the peer machine's samples (`usage --json` over ssh, once per run), then the OAuth usage endpoint sample (the account's own Keychain token, 10s HTTP timeout), else the `claude auth status` verdict, for enabled, due accounts (budget claimed atomically); --all exits 1 when an account got neither a fresh sample nor an auth verdict, or is logged in with its stored sample older than 6 h; --ids also retries an auth-failed account before its 30 min cooldown; --all ignores the 10 min freshness and the auth cooldown (login keepalive), the 5 min claim still applies
 //   claude-account pick ... --dry          answer without refreshing and without a picks.jsonl line (verify suite)
 //   claude-account record --account <id> --s <pct> [--s-reset <epoch>] [--w <pct>] [--w-reset <epoch>]
 //                                          statusline feed (native rate_limits)
@@ -98,6 +98,7 @@ async function refresh(reg: Registry, o: { ids?: string[]; claimed?: string[]; a
     : claimRefresh(reg, (o.ids ?? Object.keys(reg.accounts)).filter(enabled), Date.now(), readClaudeJson(reg, loadCache()), undefined, !!o.ids || !!o.all, !!o.all) // explicit --ids bypasses the auth-failed cooldown: the documented manual retry
   return runRefresh({
     reg, spawn: spawner, httpGet, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, claudeBin: claudeBin(), baseEnv: process.env, ids: todo, now: Date.now, log: (m) => console.error(m),
+    peerUsage: fetchPeerUsage,
   })
 }
 
@@ -119,8 +120,8 @@ function spawnDetached(cmd: string[]): void {
 }
 const spawnDetachedRefresh = (ids: string[]) => spawnDetached([process.execPath, import.meta.path, "refresh", "--claimed", ids.join(",")])
 
-const loginExpiry = (reg: Registry, now: number) =>
-  readLoginExpiry({ reg, spawn: spawner, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, baseEnv: process.env, now })
+const loginExpiry = (reg: Registry, now: number, ids?: string[]) =>
+  readLoginExpiry({ reg, spawn: spawner, securityBin: process.env.CLAUDE_ACCOUNTS_SECURITY_BIN, baseEnv: process.env, now, ids })
 
 /**
  * Keepalive only: a dead login, or one inside its last 7 days, asks its owner once per 24 h for a re-login through a
@@ -142,8 +143,10 @@ function askForRelogins(reg: Registry, results: Record<string, RefreshResult>): 
   }
 }
 
-function expiry(reg: Registry, json: boolean): void {
-  const rows = loginExpiry(reg, Date.now())
+function expiry(reg: Registry, json: boolean, ids?: string[]): void {
+  const unknown = ids?.filter((id) => !Object.hasOwn(reg.accounts, id))
+  if (unknown?.length) throw new Error(`--ids: unknown account ${unknown.join(", ")} (one of ${Object.keys(reg.accounts).join(", ")})`)
+  const rows = loginExpiry(reg, Date.now(), ids)
   if (json) return void console.log(JSON.stringify({ accounts: rows }, null, 2))
   for (const r of rows) console.log(`${r.id}  ${r.grade}  ${r.detail}`)
 }
@@ -173,6 +176,22 @@ function usage(reg: Registry, json: boolean): void {
 // ── health (wake check) ─────────────────────────────────────────────────────────────────────────────────────────
 const HOME_BIN = "$HOME/.local/bin/claude-account"
 const PENDING_SH = `for f in "$HOME"/.local/state/human-queue/*.req; do [ -e "$f" ] && grep -q claude-relogin "$f" || continue; b="\${f%.req}"; [ -e "$b.res" ] || echo "$(basename "$b") $(stat -f %m "$f")"; done`
+/** The other machine: the mini reaches the MacBook over `ssh iumac`, the MacBook the mini over `ssh mini`. */
+function peerMachine() {
+  const onMini = /mini/i.test(hostname())
+  return { onMini, local: onMini ? "mini" : "macbook", peer: onMini ? { name: "macbook", ssh: ["iumac"] } : { name: "mini", ssh: ["mini"] } }
+}
+const SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+const sshBin = () => process.env.CLAUDE_ACCOUNTS_SSH ?? "ssh" // test seam: ssh reads the real ~/.ssh/config whatever $HOME says
+const PEER_USAGE_TIMEOUT_MS = 20_000
+
+/** The peer's `claude-account usage --json` (a pure file read there: it never refreshes, so no loop). Throws when unreachable or garbled. */
+function fetchPeerUsage(): unknown {
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...peerMachine().peer.ssh, `${HOME_BIN} usage --json`], { encoding: "utf8", timeout: PEER_USAGE_TIMEOUT_MS })
+  if (r.error || r.status !== 0) throw new Error(`ssh ${peerMachine().peer.ssh.join(" ")} failed (${r.error?.message ?? `rc=${r.status}`})`)
+  return JSON.parse(r.stdout)
+}
+
 const PEER_SCRIPT = `${HOME_BIN} usage --json; echo '@@'; ${HOME_BIN} expiry --json; echo '@@'; ${PENDING_SH}`
 
 const parseJson = (t: string) => {
@@ -191,7 +210,7 @@ function pendingFrom(text: string, nowMs: number): PendingAsk[] {
 /** One machine's `usage`, `expiry` and pending asks via a shell (local sh, or ssh to the peer); null usage = unreachable. */
 function machineSnapshot(argv: string[] | null, nowMs: number) {
   const r = argv
-    ? spawnSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
+    ? spawnSync("ssh", [...SSH_OPTS, ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
     : spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
   if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] }
   const [u = "", e = "", q = ""] = r.stdout.split("@@\n")
@@ -201,9 +220,7 @@ function machineSnapshot(argv: string[] | null, nowMs: number) {
 
 async function health(argv: string[]): Promise<number> {
   const now = Date.now()
-  const onMini = /mini/i.test(hostname())
-  const local = onMini ? "mini" : "macbook"
-  const peer = onMini ? { name: "macbook", ssh: ["iumac"] } : { name: "mini", ssh: ["mini"] }
+  const { onMini, local, peer } = peerMachine()
   const mine = machineSnapshot(null, now)
   const theirs = machineSnapshot(peer.ssh, now)
   const rows: HealthRow[] = [
@@ -216,7 +233,7 @@ async function health(argv: string[]): Promise<number> {
     if (!onMini) {
       // The dialogs the mini could not deliver while this Mac slept: push them again now that it is awake.
       for (const p of theirs.pendingIds) if (p.ageMs < 24 * 3600_000) {
-        spawnLogged("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", ...peer.ssh, `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`])
+        spawnLogged("ssh", [...SSH_OPTS, ...peer.ssh, `bash "$HOME/SourceRoot/dotfiles/scripts/ask-human.sh" push ${p.id}`])
       }
       notifyIfChanged(rows, now)
     }
@@ -293,7 +310,7 @@ async function main(argv: string[]): Promise<number> {
       usage(reg, rest.includes("--json"))
       return 0
     case "expiry":
-      expiry(reg, rest.includes("--json"))
+      expiry(reg, rest.includes("--json"), flag(rest, "--ids")?.split(","))
       return 0
     case "refresh": {
       const all = rest.includes("--all")

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -46,6 +46,74 @@ describe("pick rule v1.1 pace guard", () => {
   })
   test("expiring capacity still wins for bulk lanes", () => {
     expect(pick(reg(), cacheOf(iuOver, sample(10, 2, { wReset: NOW / 1000 + 5 * H })), "wave", NOW)).toMatchObject({ picked: "me", reason: "expiring-capacity" })
+  })
+})
+
+// ── rule v1.4: N accounts. `me` and `me2` share the bulk lanes; units come from the plan (no `units` in this registry). ──
+const reg3 = (): Registry => ({
+  accounts: {
+    iu: { dir: null, plan: "max20x", homeLanes: ["interactive", "agent-gateway:review", "headless"], enabled: true },
+    me: { dir: "/home/x/.claude-me", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true },
+    me2: { dir: "/home/x/.claude-me2", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true },
+  },
+})
+const cache3 = (iu?: Sample, me?: Sample, me2?: Sample): Cache => ({ ...emptyCache(), samples: { ...(iu ? { iu } : {}), ...(me ? { me } : {}), ...(me2 ? { me2 } : {}) } })
+
+describe("pick rule v1.4: N accounts", () => {
+  const D = 24 * H
+  const iu = sample(10, 10)
+  test("units default from the plan; a present units block is still validated", () => {
+    expect(accountUnits(reg3().accounts.iu)).toEqual({ session: 4, weekly: 2 })
+    expect(accountUnits(reg3().accounts.me)).toEqual({ session: 1, weekly: 1 })
+    expect(accountUnits({ ...reg3().accounts.me, units: { session: 3, weekly: 5 } })).toEqual({ session: 3, weekly: 5 })
+    const d = tmp()
+    const file = join(d, "r.json")
+    writeFileSync(file, JSON.stringify(reg3()))
+    expect(Object.keys(loadRegistry(file).accounts)).toEqual(["iu", "me", "me2"])
+    writeFileSync(file, JSON.stringify({ accounts: { ...reg3().accounts, me: { ...reg3().accounts.me, units: { session: "4" } } } }))
+    expect(() => loadRegistry(file)).toThrow(/malformed/)
+    rmSync(d, { recursive: true })
+  })
+  test("home: of several accounts claiming the lane, the one with the most weekly headroom", () => {
+    expect(pick(reg3(), cache3(iu, sample(10, 80), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 80)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" })
+    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 10)), "fan", NOW)).toMatchObject({ picked: "me", reason: "home" }) // tie: registry order
+  })
+  test("an exhausted or ineligible home hands over to its sibling before iu", () => {
+    const c = { ...cache3(iu, sample(10, 10), sample(10, 30)), exhausted: { me: NOW / 1000 + 600 } }
+    expect(pick(reg3(), c, "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), { ...c, exhausted: { me: NOW / 1000 + 600, me2: NOW / 1000 + 600 } }, "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "agent-gateway:dispatch", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+  })
+  test("headroom is scaled by the weekly units: a 20x account with the same percent has twice the room", () => {
+    // lane without a home -> step 5, the most headroom: iu (90-50)*2 = 80, me (90-30)*1 = 60, me2 (90-40)*1 = 50
+    expect(pick(reg3(), cache3(sample(10, 50), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (90-70)*2 = 40
+  })
+  test("a missing weekly window counts as full headroom", () => {
+    const noWeekly: Sample = { ...sample(10, 0), w: null, w_reset: null, w_ts: null }
+    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 90 > 85
+    expect(pick(reg3(), cache3(iu, sample(10, 5), noWeekly), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 90 = 90: registry order
+  })
+  test("pace step: the calm alternative with the most headroom", () => {
+    const iuOver = sample(10, 88, { wReset: NOW / 1000 + 3.9 * D }) // pace 44
+    const calm = (w: number) => sample(10, w, { wReset: NOW / 1000 + 3.5 * D }) // pace 50
+    expect(pick(reg3(), cache3(iuOver, calm(40), calm(20)), "interactive", NOW)).toMatchObject({ picked: "me2", reason: "pace" })
+    expect(pick(reg3(), cache3(iuOver, calm(20), calm(40)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "pace" })
+    // an over-pace sibling is skipped even with more headroom on paper
+    const over = sample(10, 70, { wReset: NOW / 1000 + 6.5 * D }) // pace 7
+    expect(pick(reg3(), cache3(iuOver, over, calm(60)), "interactive", NOW)).toMatchObject({ picked: "me2", reason: "pace" })
+  })
+  test("session step: the alternative with the emptiest 5h, ties by headroom", () => {
+    expect(pick(reg3(), cache3(sample(60, 10), sample(30, 10), sample(5, 10)), "interactive", NOW)).toMatchObject({ picked: "me2", reason: "session" })
+    expect(pick(reg3(), cache3(sample(60, 10), sample(5, 10), sample(30, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
+    expect(pick(reg3(), cache3(sample(60, 10), sample(5, 40), sample(5, 20)), "interactive", NOW)).toMatchObject({ picked: "me2", reason: "session" }) // equal 5h -> more headroom
+    expect(pick(reg3(), cache3(sample(60, 10), sample(5, 20), sample(5, 20)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" }) // full tie -> registry order
+    expect(pick(reg3(), cache3(sample(60, 10), sample(5, 50), sample(5.5, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" }) // emptiest 5h beats headroom
+  })
+  test("a session alternative must still pass the margin test", () => {
+    expect(pick(reg3(), cache3(sample(30, 10), sample(15, 10), sample(12, 10)), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
   })
 })
 
@@ -142,6 +210,38 @@ describe("login expiry", () => {
     expect(rows(ok("garbage SECRET-A"))[0].detail).not.toContain("SECRET")
     expect(JSON.stringify(rows(ok(item(NOW + 3 * D))))).not.toContain("SECRET")
     expect(rows({ status: null, stdout: "", stderr: "", error: { code: "ETIMEDOUT", message: "timed out" } })[0]).toMatchObject({ grade: "WARN", refresh_expires_at: null })
+  })
+
+  const tiered = (tier: unknown, refresh: number | null = NOW + 20 * D) =>
+    JSON.stringify({ claudeAiOauth: { accessToken: "SECRET-A", refreshToken: "SECRET-R", expiresAt: NOW + H * 1000, ...(refresh === null ? {} : { refreshTokenExpiresAt: refresh }), rateLimitTier: tier } })
+  test("planFromTier parses the Max multiple; anything else is null", () => {
+    expect(planFromTier("default_claude_max_20x")).toBe("max20x")
+    expect(planFromTier("default_claude_max_5x")).toBe("max5x")
+    expect(planFromTier("default_claude_pro")).toBeNull()
+    expect(planFromTier("default_raven")).toBeNull()
+    expect(planFromTier(null)).toBeNull()
+    expect(tierFromCredentials(tiered("default_claude_max_5x"))).toBe("default_claude_max_5x")
+    expect(tierFromCredentials(tiered(7))).toBeNull()
+    expect(tierFromCredentials(tiered("x".repeat(65)))).toBeNull()
+    expect(tierFromCredentials("not json")).toBeNull()
+    expect(tierFromCredentials(item(NOW + D))).toBeNull() // no tier in the item
+  })
+  test("rows carry the raw tier and the detected plan, never a token field", () => {
+    const r = rows(ok(tiered("default_claude_max_20x")), ok(tiered("default_claude_max_5x")))
+    expect(r.map((x) => [x.id, x.tier, x.plan_detected])).toEqual([["iu", "default_claude_max_20x", "max20x"], ["me", "default_claude_max_5x", "max5x"]])
+    expect(JSON.stringify(r)).not.toContain("SECRET")
+    expect(rows(ok(item(NOW + 3 * D)))[0]).toMatchObject({ tier: null, plan_detected: null }) // no tier -> undetectable
+    expect(rows(ok(tiered("default_claude_pro")))[0]).toMatchObject({ tier: "default_claude_pro", plan_detected: null })
+    expect(rows(ok(tiered("default_claude_max_5x", null)))[0]).toMatchObject({ grade: "WARN", refresh_expires_at: null, plan_detected: "max5x" }) // unreadable expiry, plan still known
+    expect(rows({ status: 44, stdout: "", stderr: "x" })[0]).toMatchObject({ tier: null, plan_detected: null })
+  })
+  test("ids select accounts even when disabled (a first login), instead of the enabled set", () => {
+    const spawn = fake({ [keychainService("/home/x/.claude-me")]: ok(tiered("default_claude_max_5x")), [keychainService(null)]: ok(tiered("default_claude_max_20x")) })
+    const sel = (ids?: string[]) => readLoginExpiry({ reg: reg(false), spawn, baseEnv: {}, now: NOW, ids }).map((x) => x.id)
+    expect(sel()).toEqual(["iu"])
+    expect(sel(["me"])).toEqual(["me"])
+    expect(sel(["iu", "me"])).toEqual(["iu", "me"])
+    expect(sel([])).toEqual([])
   })
 })
 
@@ -768,6 +868,122 @@ describe("runRefresh: HTTP 401 renews the token via `claude auth status`", () =>
   })
 })
 
+describe("runRefresh: peer sample import", () => {
+  const peerRow = (id: string, o: Record<string, unknown> = {}) => ({
+    id, plan: "x", enabled: true, five_hour: 40, seven_day: 55, five_hour_resets_at: NOW / 1000 + 3 * H, seven_day_resets_at: NOW / 1000 + 100 * H,
+    age_s: 120, five_hour_age_s: 120, seven_day_age_s: 300, source: "oauth", auth_ok: true, exhausted_until: null, ...o,
+  })
+  const loggedInStub = (v: boolean): SpawnResult => ({ status: 0, stdout: JSON.stringify({ loggedIn: v }), stderr: "" })
+
+  async function run(peer: (() => unknown) | undefined, o: { ids?: string[]; registry?: Registry; seed?: [string, Sample]; auth?: boolean; keychain?: SpawnResult; http?: HttpGet } = {}) {
+    const dir = tmp()
+    const ids = o.ids ?? ["me"]
+    const registry = o.registry ?? reg()
+    if (o.seed) saveSample(o.seed[0], o.seed[1], dir)
+    const calls: string[] = []
+    const urls: string[] = []
+    const logs: string[] = []
+    const results = await runRefresh({
+      reg: registry, claudeBin: "claude", baseEnv: { PATH: "/bin", USER: "owner" }, now: () => NOW, ids, dir, log: (m) => logs.push(m), peerUsage: peer,
+      spawn: (cmd, args) => {
+        calls.push(cmd === "/usr/bin/security" ? "security" : args[0])
+        return cmd === "/usr/bin/security" ? (o.keychain ?? { status: 0, stdout: CREDS, stderr: "" }) : loggedInStub(o.auth ?? true)
+      },
+      httpGet: async (url, h, t) => {
+        urls.push(url)
+        return (o.http ?? (async () => ({ status: 200, json: OAUTH_BODY })))(url, h, t)
+      },
+    })
+    const cache = loadCache(dir)
+    const files = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("\n")
+    rmSync(dir, { recursive: true })
+    return { results, cache, calls, urls, logs, files }
+  }
+
+  test("a fresh peer sample replaces the GET: windows keep their original age, src peer, result fresh", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me")] }))
+    expect(h.cache.samples.me).toEqual({ s: 40, s_reset: NOW / 1000 + 3 * H, s_ts: NOW - 120_000, w: 55, w_reset: NOW / 1000 + 100 * H, w_ts: NOW - 300_000, src: "peer" })
+    expect(h.results).toEqual({ me: "fresh" })
+    expect(h.urls).toEqual([]) // no token read, no request
+    expect(h.calls).toEqual(["auth"]) // ...but the login verdict of THIS machine still runs
+  })
+  test("peer auth state is never imported; the local verdict decides", async () => {
+    const dead = await run(() => ({ accounts: [peerRow("me", { auth_ok: false })] }))
+    expect(dead.cache.auth_failed.me).toBeUndefined() // loggedIn=true here
+    expect(dead.results).toEqual({ me: "fresh" })
+    const out = await run(() => ({ accounts: [peerRow("me", { auth_ok: true })] }), { auth: false })
+    expect(out.cache.auth_failed.me).toBe(true) // logged out here, whatever the peer says
+    expect(out.results).toEqual({ me: "auth-failed" })
+  })
+  test("a window the peer reports without an age gets no timestamp; a row without windows imports nothing", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me", { five_hour_age_s: null, seven_day: null, seven_day_resets_at: null, seven_day_age_s: null })] }), { http: async () => ({ status: 500, json: null }) })
+    expect(h.cache.samples.me).toMatchObject({ s: 40, s_ts: null, w: null, w_ts: null, src: "peer" })
+    expect(h.urls.length).toBe(1) // an undated window is never "fresh": the GET still runs
+    const none = await run(() => ({ accounts: [peerRow("me", { five_hour: null, seven_day: null })] }), { http: async () => ({ status: 500, json: null }) })
+    expect(none.cache.samples.me).toBeUndefined()
+    expect(none.urls.length).toBe(1) // not imported -> the normal GET path
+  })
+  test("mergeSample keeps the newer window: a fresher local sample survives the import", async () => {
+    const local: Sample = { s: 12, s_reset: NOW / 1000 + 4 * H, s_ts: NOW - 5_000, w: 30, w_reset: NOW / 1000 + 90 * H, w_ts: NOW - 5 * 60_000, src: "statusline" }
+    const h = await run(() => ({ accounts: [peerRow("me")] }), { seed: ["me", local] })
+    expect(h.cache.samples.me).toMatchObject({ s: 12, s_ts: NOW - 5_000, w: 55, w_ts: NOW - 300_000 }) // s: local is newer; w: peer (5 min) is as new as local (5 min) -> the incoming wins a tie
+    expect(h.results).toEqual({ me: "fresh" })
+  })
+  test("an old peer sample is stored but the GET still runs; the endpoint's newer numbers win", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me", { five_hour_age_s: 3600, seven_day_age_s: 3600 })] }))
+    expect(h.urls.length).toBe(1)
+    expect(h.cache.samples.me).toMatchObject({ s: 3, w: 89, src: "oauth", s_ts: NOW })
+    expect(h.results).toEqual({ me: "fresh" })
+  })
+  test("an old peer sample is the fallback when the GET fails: logged in, sample under 6 h -> auth-ok", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me", { five_hour_age_s: 3600, seven_day_age_s: 3600 })] }), { http: async () => ({ status: 401, json: null }) })
+    expect(h.cache.samples.me).toMatchObject({ s: 40, src: "peer" })
+    expect(h.results).toEqual({ me: "auth-ok" })
+  })
+  test("only locally registered, enabled accounts are imported", async () => {
+    const h = await run(() => ({ accounts: [peerRow("iu"), peerRow("ghost"), peerRow("me")] }), { registry: reg(false), ids: ["iu"] })
+    expect(Object.keys(h.cache.samples)).toEqual(["iu"]) // me is disabled here, ghost is unknown
+  })
+  test("a future exhausted_until becomes a mark; a past one is ignored", async () => {
+    const future = await run(() => ({ accounts: [peerRow("me", { exhausted_until: NOW / 1000 + 600 })] }))
+    expect(future.cache.exhausted.me).toBe(NOW / 1000 + 600)
+    const past = await run(() => ({ accounts: [peerRow("me", { exhausted_until: NOW / 1000 - 600 })] }))
+    expect(past.cache.exhausted.me).toBeUndefined()
+  })
+  test("an unreachable or garbled peer is one log line and the run goes on unchanged", async () => {
+    const down = await run(() => { throw new Error("ssh mini failed (rc=255)") })
+    expect(down.logs.filter((l) => l.includes("peer"))).toEqual(["refresh: peer usage unavailable: ssh mini failed (rc=255)"])
+    expect(down.results).toEqual({ me: "fresh" })
+    expect(down.cache.samples.me).toMatchObject({ src: "oauth" })
+    for (const garbage of [null, "nope", {}, { accounts: "x" }, { accounts: [null, 7, { id: 5 }] }]) {
+      const g = await run(async () => garbage)
+      expect(g.logs.filter((l) => l.includes("peer")).length).toBeLessThanOrEqual(1)
+      expect(g.results).toEqual({ me: "fresh" })
+      expect(g.cache.samples.me).toMatchObject({ src: "oauth" })
+    }
+    expect((await run(() => ({ accounts: "x" }))).logs.filter((l) => l.includes("peer"))).toEqual(["refresh: peer usage unreadable, no samples imported"])
+  })
+  test("no peerUsage dep (or nothing to refresh) means no fetch", async () => {
+    let fetched = 0
+    const h = await run(undefined)
+    expect(h.cache.samples.me).toMatchObject({ src: "oauth" })
+    await run(() => { fetched++; return { accounts: [] } }, { ids: [] })
+    expect(fetched).toBe(0)
+  })
+  test("the import fetches the peer once per run, however many accounts", async () => {
+    let fetched = 0
+    const both = reg(true)
+    const h = await run(() => { fetched++; return { accounts: [peerRow("iu"), peerRow("me")] } }, { registry: both, ids: ["iu", "me"] })
+    expect(fetched).toBe(1)
+    expect(h.results).toEqual({ iu: "fresh", me: "fresh" })
+    expect(h.urls).toEqual([])
+  })
+  test("no token and nothing but peer-shaped data reaches the cache files", async () => {
+    const h = await run(() => ({ accounts: [peerRow("me")] }))
+    expect(h.files).not.toContain(TOKEN)
+  })
+})
+
 describe("statusline record proves the login", () => {
   test("a record carrying rate_limits clears a failed mark; the mark can be set again by a verdict", () => {
     const dir = tmp()
@@ -846,9 +1062,11 @@ describe("CLI (isolated HOME)", () => {
   chmodSync(join(bin, "claude"), 0o755)
   writeFileSync(join(bin, "security"), "#!/bin/sh\nexit 44\n") // no Keychain token: the endpoint is never called from tests
   chmodSync(join(bin, "security"), 0o755)
+  writeFileSync(join(bin, "ssh"), "#!/bin/sh\nexit 255\n") // the peer is unreachable by default (ssh reads the real ~/.ssh/config whatever $HOME says)
+  chmodSync(join(bin, "ssh"), 0o755)
   const registry = join(home, "registry.json")
   writeFileSync(registry, JSON.stringify(reg(false))) // iu only: the second account is disabled
-  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_REGISTRY: registry, CLAUDE_ACCOUNTS_CACHE_DIR: dir, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security"), PATH: `${bin}:${process.env.PATH}` }
+  const base = { ...(process.env as Record<string, string>), HOME: home, CLAUDE_ACCOUNTS_REGISTRY: registry, CLAUDE_ACCOUNTS_CACHE_DIR: dir, CLAUDE_ACCOUNTS_PICKS: join(home, "picks.jsonl"), CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security"), CLAUDE_ACCOUNTS_SSH: join(bin, "ssh"), PATH: `${bin}:${process.env.PATH}` }
   delete (base as Record<string, string | undefined>).CLAUDE_CONFIG_DIR
   const cli = (args: string[], env: Record<string, string> = {}) => {
     const t = Date.now()
@@ -892,6 +1110,48 @@ describe("CLI (isolated HOME)", () => {
     expect(u).not.toContain("login")
     const dead = cli(["expiry", "--json"], { ...env, CLAUDE_ACCOUNTS_SECURITY_BIN: join(bin, "security") }) // exit 44 everywhere: Keychain unreadable
     expect(JSON.parse(dead.out).accounts.map((a: { grade: string }) => a.grade)).toEqual(["WARN", "WARN"])
+  })
+
+  test("expiry --ids reads named accounts even when disabled and reports the detected plan; an unknown id is an error", () => {
+    const svc = keychainService("/home/x/.claude-me")
+    const item = join(home, "kc-me.json")
+    writeFileSync(item, JSON.stringify({ claudeAiOauth: { accessToken: "SECRET-A", refreshToken: "SECRET-R", expiresAt: Date.now() + 3600_000, refreshTokenExpiresAt: Date.now() + 25 * 86400_000, rateLimitTier: "default_claude_max_5x" } }))
+    const stub = join(bin, "security-ids")
+    writeFileSync(stub, `#!/bin/sh\n[ "$1" = find-generic-password ] && [ "$3" = "${svc}" ] && { cat "${item}"; exit 0; }\nexit 44\n`)
+    chmodSync(stub, 0o755)
+    const env = { CLAUDE_ACCOUNTS_SECURITY_BIN: stub }
+    const only = cli(["expiry", "--json", "--ids", "me"], env) // me is disabled in the default registry
+    expect(only.rc).toBe(0)
+    expect(JSON.parse(only.out).accounts.map((a: { id: string; plan_detected: string; tier: string; grade: string }) => [a.id, a.plan_detected, a.tier, a.grade])).toEqual([["me", "max5x", "default_claude_max_5x", "PASS"]])
+    expect(only.out + only.err).not.toContain("SECRET")
+    expect(JSON.parse(cli(["expiry", "--json"], env).out).accounts.map((a: { id: string }) => a.id)).toEqual(["iu"]) // without --ids the disabled account stays out
+    const bad = cli(["expiry", "--ids", "nope"], env)
+    expect(bad.rc).toBe(2)
+    expect(bad.err).toContain("unknown account nope")
+  })
+
+  test("refresh --all imports the peer's usage over ssh once (BatchMode), counts it as a fresh sample, and survives a dead peer", () => {
+    const peerJson = join(home, "peer-usage.json")
+    const sshLog = join(home, "ssh-args")
+    const sshStub = join(bin, "ssh-peer")
+    writeFileSync(sshStub, `#!/bin/sh\necho "$@" >> "${sshLog}"\ncat "${peerJson}"\n`)
+    chmodSync(sshStub, 0o755)
+    const nowS = Math.floor(Date.now() / 1000)
+    writeFileSync(peerJson, JSON.stringify({ default_account: "iu", accounts: [{ id: "iu", plan: "max20x", enabled: true, five_hour: 21, seven_day: 44, five_hour_resets_at: nowS + 3600, seven_day_resets_at: nowS + 86400 * 3, five_hour_age_s: 30, seven_day_age_s: 30, auth_ok: true, exhausted_until: null }] }))
+    seed(60 * 60_000) // a stale local sample: without the peer this is the "neither a sample nor a verdict" exit 1
+    rmSync(sshLog, { force: true })
+    const r = cli(["refresh", "--all"], { CLAUDE_ACCOUNTS_SSH: sshStub })
+    expect(r.rc).toBe(0)
+    const args = readFileSync(sshLog, "utf8").trim().split("\n")
+    expect(args.length).toBe(1)
+    expect(args[0]).toMatch(/BatchMode=yes .*ConnectTimeout=5 (iumac|mini) .*claude-account usage --json/)
+    expect(loadCache(dir).samples.iu).toMatchObject({ s: 21, w: 44, src: "peer" })
+    // a dead peer: one log line, and the run behaves exactly as it did before the import existed
+    seed(60 * 60_000)
+    const dead = cli(["refresh", "--all"])
+    expect(dead.rc).toBe(1)
+    expect(dead.err.split("\n").filter((l) => l.includes("peer usage"))).toHaveLength(1)
+    expect(dead.err).toContain("no fresh sample and no auth verdict for iu")
   })
 
   test("refresh --all asks for a re-login of a dead login once per 24 h (stub dialog script)", async () => {

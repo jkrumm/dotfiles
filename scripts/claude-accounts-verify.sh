@@ -82,6 +82,23 @@ while IFS= read -r id; do
   fi
 done <<<"$IDS"
 
+# ── a3. plan ──────────────────────────────────────────────────────────────────
+# The Keychain item's rateLimitTier (default_claude_max_5x -> max5x; not a secret, the same `expiry --json` answer)
+# against the registry's "plan". The picker's capacity units default from that plan, so a wrong one skews routing.
+while IFS= read -r id; do
+  [[ -n "$id" ]] || continue
+  want=$(jq -r --arg id "$id" '.accounts[$id].plan // ""' "$REGISTRY" 2>/dev/null) || want=""
+  got=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | .plan_detected // empty' <<<"$EXP" 2>/dev/null) || got=""
+  tier=$(jq -r --arg id "$id" '.accounts[] | select(.id == $id) | .tier // empty' <<<"$EXP" 2>/dev/null) || tier=""
+  if [[ -z "$got" ]]; then
+    row WARN "plan/$id" "plan not detectable from the Keychain item (registry says '$want')"
+  elif [[ "$got" == "$want" ]]; then
+    row PASS "plan/$id" "$got (Keychain tier '$tier') matches the registry"
+  else
+    row WARN "plan/$id" "Keychain tier '$tier' says $got, registry says '$want' — fix: set \"plan\" in config/claude-accounts.json"
+  fi
+done <<<"$IDS"
+
 # ── b. quota contract ──────────────────────────────────────────────────────────
 log_files() { # today's and yesterday's JSONL logs, whichever exist
   local d f

@@ -8,7 +8,11 @@
 # claude-login-browser.sh (never `ssh mini claude …`: the login Keychain is only reachable from the GUI session). The
 # helper opens the authorize URL in the browser signed in to the account (registry `loginBrowser`); the owner clicks
 # approve, no copy/paste. Afterwards `claude-account refresh --ids <id>` runs and the owner gets a native notification
-# ("Claude login me: renewed, valid until <date>", or a failure line with the log path), on the MacBook.
+# ("Claude login me: renewed, valid until <date>", or a failure line with the log path), on the MacBook. "Renewed"
+# is proven, not assumed: the Keychain item's refresh_expires_at is read before and after the login (`claude-account
+# expiry --json --ids <id>`, which also reads a disabled account's first login) and must be newer afterwards; a login
+# that finishes without changing it is a failure ("login finished but the Keychain login did not change").
+# A registered but disabled account is accepted: its first login is how it comes out of the dark.
 #
 #   MacBook   runs behind the scenes: a detached worker, no window; the CLI's output (tokens redacted) goes to
 #             ~/Library/Logs/claude-relogin.log. Only if that cannot complete (the callback never arrived within the
@@ -128,14 +132,22 @@ account_cli() { if command -v claude-account >/dev/null 2>&1; then claude-accoun
 stamp() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 # Nothing token-shaped may reach the log, whatever the CLI prints (lib/claude-login.sh).
 redact() { login_redact; }
-# End of the account's login (refresh token), YYYY-MM-DD, empty when unknown.
-expiry_date() {
+# End of the account's login (refresh token) as epoch ms, empty when unknown. --ids: a disabled account's first login too.
+expiry_ms() {
   local ms
-  ms=$(account_cli expiry --json 2>/dev/null | jq -r --arg id "$id" '.accounts[] | select(.id == $id) | .refresh_expires_at // empty' 2>/dev/null)
-  [[ "$ms" =~ ^[0-9]+$ ]] || return 0
-  date -r "$((ms / 1000))" +%Y-%m-%d
+  ms=$(account_cli expiry --json --ids "$id" 2>/dev/null | jq -r --arg id "$id" '.accounts[] | select(.id == $id) | .refresh_expires_at // empty' 2>/dev/null)
+  [[ "$ms" =~ ^[0-9]+$ ]] && echo "$ms"
+  return 0
+}
+ms_date() { [[ "${1:-}" =~ ^[0-9]+$ ]] && date -r "$(($1 / 1000))" +%Y-%m-%d; return 0; } # <epoch ms> -> YYYY-MM-DD, empty when unknown
+# A login renewed only if the end of the refresh token moved: <after> exists and is newer than <before> (or there was none).
+login_renewed() { # <before> <after>
+  [[ "$2" =~ ^[0-9]+$ ]] || return 1
+  [[ "$1" =~ ^[0-9]+$ ]] || return 0
+  (( $2 > $1 ))
 }
 ok_text()   { echo "Claude login $id: renewed, valid until ${1:-unknown}"; }
+unchanged_text() { echo "login finished but the Keychain login did not change (still valid until ${1:-unknown})"; }
 fail_text() { echo "Claude login $id failed - retry with: claude-relogin $id (log: $RELOGIN_LOG)"; }
 gone_text() { echo "Claude login $id: the $1 was closed before the login finished - retry with: claude-relogin $id (log: $RELOGIN_LOG)"; }
 timeout_text() { echo "Claude login $id did not finish within $((MAX_WAIT_S / 60)) min - the $1 is still open (log: $RELOGIN_LOG)"; }
@@ -228,6 +240,7 @@ await_result() { # <file> <probe-command…>
   cat "$f"
 }
 is_ok() { [[ "$1" == ok || "$1" == "ok "* ]]; }
+is_unchanged() { [[ "$1" == unchanged || "$1" == "unchanged "* ]]; }
 # Stop a process: SIGTERM, a grace period, then SIGKILL.
 kill_bounded() { # <pid>
   local i
@@ -266,9 +279,10 @@ if (( in_pane )); then
     step "${login_cmd[@]}"
     echo "the helper then opens the approval page (sample URL):"
     CLAUDE_LOGIN_ACCOUNT=$id CLAUDE_LOGIN_MACHINE=$machine bash "$HELPER" --dry-run "$SAMPLE_URL" 2>&1
-    echo "would run: claude-account refresh --ids $id, then claude-account usage and expiry for $id"
+    echo "would run: claude-account expiry --json --ids $id before and after the login (it must move), claude-account refresh --ids $id, then claude-account usage and expiry for $id"
     exit 0
   fi
+  before=$(expiry_ms)
   if ! "${login_cmd[@]}"; then
     echo "claude-relogin: the login did not complete. Manual fallback: run  CLAUDE_CONFIG_DIR=<dir> claude  (iu: unset it) here, type /login, open the URL in ${app:-the right browser}, paste the code." >&2
     write_result "fail 1"
@@ -277,8 +291,14 @@ if (( in_pane )); then
   echo "claude-relogin: logged in, refreshing the quota cache"
   account_cli refresh --ids "$id" || echo "claude-relogin: refresh reported a problem (see above); run  claude-account refresh --ids $id" >&2
   account_cli usage | grep "^$id " || true
-  account_cli expiry | grep "^$id " || true
-  write_result "ok $(expiry_date)"
+  account_cli expiry --ids "$id" | grep "^$id " || true
+  after=$(expiry_ms)
+  if ! login_renewed "$before" "$after"; then
+    echo "claude-relogin: $(unchanged_text "$(ms_date "$after")")" >&2
+    write_result "unchanged $(ms_date "$after")"
+    exit 1
+  fi
+  write_result "ok $(ms_date "$after")"
   exit 0
 fi
 
@@ -317,7 +337,7 @@ run_background_login() {
 }
 
 worker_macbook() {
-  local rc=0 d resf winid res arc=0
+  local rc=0 d resf winid res arc=0 before after
   if (( dry )); then
     echo "would start detached: bash $(login_shquote "$SELF") $id --machine macbook --worker"
     login_env "CLAUDE_LOGIN_MSG_FILE=$RELOGIN_LOG"
@@ -335,6 +355,7 @@ worker_macbook() {
     return 0
   fi
   if gui_session; then
+    before=$(expiry_ms)
     run_background_login || rc=$?
   else
     stamp "not in the Aqua GUI session ($(launchctl managername 2>/dev/null || echo unknown)): no windowless login, using Terminal" >>"$RELOGIN_LOG"
@@ -343,7 +364,13 @@ worker_macbook() {
   if (( rc == 0 )); then
     account_cli refresh --ids "$id" 2>&1 | redact >>"$RELOGIN_LOG"
     account_cli usage 2>&1 | grep "^$id " | redact >>"$RELOGIN_LOG"
-    d=$(expiry_date)
+    after=$(expiry_ms)
+    d=$(ms_date "$after")
+    if ! login_renewed "$before" "$after"; then
+      stamp "$(unchanged_text "$d")" >>"$RELOGIN_LOG"
+      notify "$(unchanged_text "$d")"
+      return 1
+    fi
     stamp "login '$id' renewed, valid until ${d:-unknown}" >>"$RELOGIN_LOG"
     notify "$(ok_text "$d")"
     return 0
@@ -374,6 +401,12 @@ worker_macbook() {
     stamp "login '$id' renewed via Terminal, valid until ${d:-unknown}" >>"$RELOGIN_LOG"
     notify "$(ok_text "$d")"
     return 0
+  fi
+  if is_unchanged "$res"; then
+    d=${res#unchanged}; d=${d# }
+    stamp "$(unchanged_text "$d"); the Terminal window stays open" >>"$RELOGIN_LOG"
+    notify "$(unchanged_text "$d")"
+    return 1
   fi
   stamp "interactive login failed ($res); the Terminal window stays open" >>"$RELOGIN_LOG"
   notify "$(fail_text)"
@@ -411,6 +444,12 @@ watcher_mini() { # <workspace id> <result file>
     stamp "login '$id' renewed, valid until ${d:-unknown}" >>"$RELOGIN_LOG"
     notify "$(ok_text "$d")"
     return 0
+  fi
+  if is_unchanged "$res"; then
+    d=${res#unchanged}; d=${d# }
+    stamp "$(unchanged_text "$d"); workspace $ws stays open" >>"$RELOGIN_LOG"
+    notify "$(unchanged_text "$d")"
+    return 1
   fi
   stamp "login '$id' failed ($res); workspace $ws stays open" >>"$RELOGIN_LOG"
   notify "$(fail_text)"

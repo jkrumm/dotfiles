@@ -3,7 +3,7 @@
 # A bare `claude` typed into an interactive shell also picks the account (the `claude()` function in
 # claude-auth.zsh, using the helpers below); c/cs/cf set CLAUDE_ACCOUNT_PICKED so it never picks twice.
 #
-# Usage: c  [--account iu|me] [claude-args...]   — Max subscription; account from `claude-account pick`
+# Usage: c  [--account <id>] [claude-args...]   — Max subscription; account from `claude-account pick`
 #        cs [claude-args...]   — Max subscription, defaults to Sonnet model
 #        cf [claude-args...]   — Max subscription, defaults to Fable model
 #
@@ -128,7 +128,7 @@ _claude_launch() {
   local account="" git_root pdir
   while (( $# )); do
     case $1 in
-      --account) (( $# >= 2 )) || { print -u2 "c: --account needs iu|me"; return 1 }; account=$2; shift 2 ;;
+      --account) (( $# >= 2 )) || { print -u2 "c: --account needs one of: $(jq -r '.accounts | keys_unsorted | join(", ")' "$_CLAUDE_ACCOUNTS_REGISTRY" 2>/dev/null || print '<id>')"; return 1 }; account=$2; shift 2 ;;
       --account=*) account=${1#--account=}; shift ;;
       *) args+=("$1"); shift ;;
     esac

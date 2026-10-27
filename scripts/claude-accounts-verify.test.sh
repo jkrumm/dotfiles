@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude-accounts-verify.test.sh — the login/<id> rows of claude-accounts-verify.sh, graded from fixture answers of
-# `claude-account expiry --json` (a stub script in a scratch DOTFILES_DIR). Only the login/* rows are asserted: the
+# `claude-account expiry --json` (a stub script in a scratch DOTFILES_DIR). Only the login/* and plan/* rows are asserted: the
 # rest of the suite runs against the scratch setup and may FAIL there, which is irrelevant here.
 # Usage: scripts/claude-accounts-verify.test.sh   (exit 0 = all pass)
 set -u
@@ -8,6 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 pass=0; fail=0
 ok()  { printf '  \033[32mok\033[0m   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; [[ -n "${2:-}" ]] && printf '         %s\n' "$2"; fail=$((fail + 1)); }
+assert_contains() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "[$3] does not contain [$2]" ;; esac; }
 assert_eq() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1" "expected [$2] got [$3]"; fi; }
 
 command -v bun >/dev/null && command -v jq >/dev/null || { echo "✗ bun and jq are required"; exit 2; }
@@ -16,9 +17,9 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/dot/scripts" "$TMP/dot/config" "$TMP/bin"
 cat > "$TMP/registry.json" <<JSON
 {"accounts":{
- "iu":{"dir":null,"plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
- "pass":{"dir":"$TMP/d1","plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
- "warn":{"dir":"$TMP/d2","plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
+ "iu":{"dir":null,"plan":"max20x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
+ "pass":{"dir":"$TMP/d1","plan":"max5x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
+ "warn":{"dir":"$TMP/d2","plan":"max5x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
  "fail":{"dir":"$TMP/d3","plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
  "unread":{"dir":"$TMP/d4","plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true},
  "silent":{"dir":"$TMP/d5","plan":"x","units":{"session":1,"weekly":1},"homeLanes":[],"enabled":true}}}
@@ -28,11 +29,11 @@ JSON
 cat > "$TMP/dot/scripts/claude-account.ts" <<'TS'
 if (process.argv[2] === "expiry") {
   console.log(JSON.stringify({ accounts: [
-    { id: "iu", default: true, grade: process.env.IU_SEV ?? "PASS", severity: process.env.IU_SEV ?? "PASS", detail: "login valid until 2026-11-20 (20 d left)" },
-    { id: "pass", default: false, grade: "PASS", severity: "PASS", detail: "login valid (9 d left)" },
-    { id: "warn", default: false, grade: "WARN", severity: "WARN", detail: "login valid (5 d left)" },
+    { id: "iu", default: true, grade: process.env.IU_SEV ?? "PASS", severity: process.env.IU_SEV ?? "PASS", detail: "login valid until 2026-11-20 (20 d left)", tier: "default_claude_max_20x", plan_detected: "max20x" },
+    { id: "pass", default: false, grade: "PASS", severity: "PASS", detail: "login valid (9 d left)", tier: "default_claude_max_5x", plan_detected: "max5x" },
+    { id: "warn", default: false, grade: "WARN", severity: "WARN", detail: "login valid (5 d left)", tier: "default_claude_max_20x", plan_detected: "max20x" },
     { id: "fail", default: false, grade: "FAIL", severity: "WARN", detail: "login expired" },
-    { id: "unread", default: false, grade: "WARN", severity: "WARN", detail: "login expiry unreadable (Keychain)" },
+    { id: "unread", default: false, grade: "WARN", severity: "WARN", detail: "login expiry unreadable (Keychain)", tier: null, plan_detected: null },
   ] }))
 } else process.exit(1)
 TS
@@ -53,6 +54,16 @@ assert_eq "login/silent: no answer for the account is WARN" WARN "$(row silent)"
 out_fail=$(verify IU_SEV=FAIL)
 assert_eq "login/iu: the default account keeps FAIL, like auth/iu" FAIL "$(grep -E '^(PASS|WARN|FAIL) +login/iu ' <<<"$out_fail" | awk '{print $1}')"
 assert_eq "one row per enabled account" 6 "$(grep -cE '^(PASS|WARN|FAIL) +login/' <<<"$out")"
+
+prow() { grep -E "^(PASS|WARN|FAIL) +plan/$1 " <<<"$out"; }
+assert_eq "plan/iu: detected plan equals the registry's is PASS" PASS "$(prow iu | awk '{print $1}')"
+assert_eq "plan/pass: PASS" PASS "$(prow pass | awk '{print $1}')"
+assert_eq "plan/warn: a mismatch is WARN (never FAIL)" WARN "$(prow warn | awk '{print $1}')"
+assert_contains "plan/warn: names both plans and the fix" 'says max20x, registry says '"'"'max5x'"'"' — fix: set "plan" in config/claude-accounts.json' "$(prow warn)"
+assert_eq "plan/unread: undetectable is WARN" WARN "$(prow unread | awk '{print $1}')"
+assert_contains "plan/unread: says so" "not detectable" "$(prow unread)"
+assert_eq "plan/silent: no answer for the account is WARN" WARN "$(prow silent | awk '{print $1}')"
+assert_eq "one plan row per enabled account" 6 "$(grep -cE '^(PASS|WARN|FAIL) +plan/' <<<"$out")"
 
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi

@@ -77,9 +77,13 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$TMP/bin/herdr"
-mk claude '[ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 6; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 6; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+# expiry --json answers STUB_EXPIRY_BEFORE until the claude stub has run since the last reset(), then STUB_EXPIRY_AFTER
+# (epoch ms; "none" = the Keychain item is unreadable: refresh_expires_at null). The default login moves forward 30 days.
 mk claude-account 'case "$1 $2" in
-  "expiry --json") echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":1798761600000},{\"id\":\"iu\",\"refresh_expires_at\":1798761600000}]}" ;;
+  "expiry --json") if [ -e "$TMP_DIR/claude.runs" ]; then ms=${STUB_EXPIRY_AFTER:-1798761600000}; else ms=${STUB_EXPIRY_BEFORE:-1796169600000}; fi
+    [ "$ms" = none ] && ms=null
+    echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":$ms},{\"id\":\"iu\",\"refresh_expires_at\":$ms}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
 mk launchctl 'echo "${STUB_SESSION:-Aqua}"'
@@ -94,7 +98,7 @@ for c in ssh open herdr osascript claude claude-account launchctl; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
-reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/tunnel.pid"; }
+reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/tunnel.pid" "$TMP/claude.runs"; }
 calls() { grep -v "^lsof" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
@@ -260,7 +264,9 @@ c=$(calls)
 assert_contains "claude auth login --claudeai on the me dir, BROWSER = helper" "ENV cfg=$HOME/.claude-me browser=$HERE/claude-login-browser.sh acc=me machine=mini owner=set key=unset tok=unset" "$c"
 assert_contains "refresh afterwards" "claude-account[refresh][--ids][me]" "$c"
 assert_contains "usage afterwards" "claude-account[usage]" "$c"
-assert_contains "expiry afterwards" "claude-account[expiry]" "$c"
+assert_contains "expiry afterwards" "claude-account[expiry][--ids][me]" "$c"
+assert_contains "the login end is read before and after (renewal is proven, not assumed)" "claude-account[expiry][--json][--ids][me]" "$c"
+assert_eq "...exactly twice" 2 "$(grep -c 'claude-account\[expiry\]\[--json\]\[--ids\]\[me\]' <<<"$c")"
 reset; ANTHROPIC_API_KEY=k CLAUDE_CODE_OAUTH_TOKEN=t CLAUDE_CONFIG_DIR=/elsewhere bash "$RELOGIN" iu --machine mini --in-pane >/dev/null
 assert_contains "iu: CLAUDE_CONFIG_DIR stays unset, token env stripped" "ENV cfg=unset browser=$HERE/claude-login-browser.sh acc=iu machine=mini owner=set key=unset tok=unset" "$(calls)"
 reset; STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>"$TMP/err"; rc=$?
@@ -440,6 +446,49 @@ assert_eq "success writes ok + expiry date" "ok $D" "$(cat "$rf")"
 reset; rf="$TMP/result-fail"; rm -f "$rf"
 STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1
 assert_eq "failure writes fail" "fail 1" "$(cat "$rf")"
+
+echo "renewal is proven: the login end must move"
+D0=$(date -r 1796169600 +%Y-%m-%d)   # the stubbed expiry before the login
+UNCH="login finished but the Keychain login did not change (still valid until $D0)"
+as mini; reset; rf="$TMP/result-unchanged"; rm -f "$rf"
+STUB_EXPIRY_AFTER=1796169600000 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "unchanged expiry: rc 1" 1 "$rc"
+assert_eq "...result says unchanged + the date" "unchanged $D0" "$(cat "$rf")"
+assert_contains "...and the terminal says why" "$UNCH" "$(cat "$TMP/err")"
+reset; rf="$TMP/result-older"; rm -f "$rf"
+STUB_EXPIRY_AFTER=1790000000000 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "an older expiry than before is no renewal either" "1/unchanged $(date -r 1790000000 +%Y-%m-%d)" "$rc/$(cat "$rf")"
+reset; rf="$TMP/result-null-after"; rm -f "$rf"
+STUB_EXPIRY_AFTER=none bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "an unreadable item afterwards is no proof" "1/unchanged " "$rc/$(cat "$rf")"
+reset; rf="$TMP/result-first"; rm -f "$rf"
+STUB_EXPIRY_BEFORE=none bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "a first login (nothing before) counts when an expiry exists afterwards" "0/ok $D" "$rc/$(cat "$rf")"
+reset; rf="$TMP/result-moved"; rm -f "$rf"
+bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null 2>&1; rc=$?
+assert_eq "a moved expiry is a renewal" "0/ok $D" "$rc/$(cat "$rf")"
+
+echo "MacBook: a login that changed nothing is reported as such, not as renewed"
+as macbook; reset; : > "$CLAUDE_RELOGIN_LOG"
+STUB_EXPIRY_AFTER=1796169600000 bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+c=$(calls)
+assert_eq "rc 1" 1 "$rc"
+assert_contains "notification names the unchanged Keychain login" "osascript:notify[-][Claude login me][$UNCH]" "$c"
+assert_not_contains "...never 'renewed'" "renewed" "$c"
+assert_eq "...no Terminal retry window" 0 "$(count 'osascript:open')"
+assert_contains "log carries the same text" "$UNCH" "$(cat "$CLAUDE_RELOGIN_LOG")"
+reset; STUB_LOGIN_RC=1 STUB_TERM_RESULT="unchanged $D0" STUB_WINID=555 bash "$RELOGIN" me --machine macbook >/dev/null; rc=$?
+c=$(calls)
+assert_eq "Terminal fallback that changed nothing: rc 1, window stays open" "1/0" "$rc/$(count 'osascript:close')"
+assert_contains "...with the unchanged notification" "osascript:notify[-][Claude login me][$UNCH]" "$c"
+
+echo "mini: an unchanged login keeps the workspace open and tells the MacBook"
+as mini; reset
+STUB_PANE_RESULT="unchanged $D0" bash "$RELOGIN" me >/dev/null; rc=$?
+c=$(calls)
+assert_eq "rc 1, workspace stays open" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
+assert_contains "notification over ssh to the MacBook" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][osascript - 'Claude login me' '$UNCH']" "$c"
+assert_not_contains "...never 'renewed'" "renewed" "$c"
 
 echo "the login owner kills the tunnel on exit"
 as mini; reset
