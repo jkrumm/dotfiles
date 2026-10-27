@@ -135,8 +135,10 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    number is never laundered into a fresh one, and `mergeSample` keeps the newer window. A future `exhausted_until`
    is imported as a mark. **Auth state is never imported** (logins are per machine): an account served from the peer still
    gets its own `claude auth status` verdict. An account whose merged sample is now younger than 10 min skips the
-   endpoint GET for that run and counts as `fresh` for the keepalive's exit-1 rule. An unreachable or garbled peer is
-   one log line and the run continues unchanged. It lives only in the refresh, never in `pick`, so pick latency is untouched.
+   endpoint GET for that run and counts as `fresh` only when this machine's verdict says logged in (no verdict:
+   `unresolved`, the keepalive's exit 1). An unreachable or garbled peer is one log line and the run continues
+   unchanged. It runs only in the keepalive and the *detached* pick-time refresh; the synchronous refresh a
+   non-interactive pick may wait for skips it, so no pick ever waits on ssh.
 
 `fetch_usage.py` becomes a reader of this cache. It still writes
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
@@ -283,6 +285,17 @@ Known gaps:
   daemon bound to one identity. caam defaults `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`
   for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on `iu`
   only; `herdr-reap` queries `claude agents` once per account.
+
+## Effort per model
+
+Claude Code has one global `effortLevel` and no per-model default, so every launch we control adds `--effort` from
+`config/claude-effort.json` (decided 2026-10-27): **Sonnet high, Opus medium, Fable medium**, no `--model` = `default`
+(the account's default model, Opus or Fable) = medium. It applies on every account because it rides the launch, not
+the config dir: `c`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
+`rd wave`/`rd fan` (`rd_effort_flag` in `remote-dev.sh`, `RD_WAVE_EFFORT` overrides). An explicit `--effort` always
+wins; an unlisted family (Haiku) gets no flag. `settings.json` `effortLevel` stays `high` in all three accounts on
+purpose: it is what a spawn without the flag runs at, and those are agent-gateway's Claude workers (Sonnet). Custom
+subagents pin their own (`agents/*.md` `effort: high`). A mid-session `/model` switch keeps the session's effort.
 
 ## Operate
 

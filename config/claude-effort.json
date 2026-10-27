@@ -1,0 +1,7 @@
+{
+  "_note": "Default reasoning effort per model family for every Claude Code launch we control (c/cs/cf, bare interactive claude, rd wave/fan), on every account. Claude Code itself has one global effortLevel and no per-model default, so launchers add --effort <level> unless the args already carry --effort. Matching: the first key contained in the --model value (alias or full id); no --model = 'default' (the account's default model: Opus or Fable). A family not listed gets no flag (settings effortLevel applies). settings.json effortLevel stays 'high' on purpose: it is the fallback for spawns that pass no flag (agent-gateway Claude workers, which run Sonnet). docs/claude-accounts.md §Effort.",
+  "sonnet": "high",
+  "opus": "medium",
+  "fable": "medium",
+  "default": "medium"
+}

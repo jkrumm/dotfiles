@@ -141,6 +141,7 @@ _claude_launch() {
     done
   fi
   [[ -n $model && " ${args[*]} " != *" --model "* ]] && args=(--model $model "${args[@]}")
+  args+=(${(f)"$(_claude_effort_args "${args[@]}")"})
 
   local out line id reason
   local -a parts

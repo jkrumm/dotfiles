@@ -194,7 +194,25 @@ _claude_marker_valid() {
   [[ ${want:A} == "${CLAUDE_CONFIG_DIR:+${CLAUDE_CONFIG_DIR:A}}" || ( -z $want && -z ${CLAUDE_CONFIG_DIR-} ) ]]
 }
 
+# `--effort <level>` for a session start (config/claude-effort.json: Sonnet high, Opus/Fable medium), printed one word
+# per line; nothing when the args already set an effort, the model family is unlisted or the table is unreadable.
+_CLAUDE_EFFORT_TABLE=${${(%):-%x}:A:h:h}/claude-effort.json
+_claude_effort_args() {
+  local a model="" prev="" level
+  for a in "$@"; do
+    case $a in --effort|--effort=*) return 0 ;; --model=*) model=${a#--model=} ;; esac
+    [[ $prev == --model ]] && model=$a
+    prev=$a
+  done
+  level=$(jq -r --arg m "${(L)model}" 'del(._note) | if $m == "" then .default else (to_entries | map(select(.key as $k | $k != "default" and ($m | contains($k)))) | .[0].value) end // empty' \
+    "$_CLAUDE_EFFORT_TABLE" 2>/dev/null) || return 0
+  [[ $level =~ ^(low|medium|high|xhigh|max)$ ]] && print -l -- --effort "$level"
+  return 0
+}
+
 claude() {
+  # Per-model default effort for an interactive session start (rd panes already pass --effort, so they keep theirs).
+  [[ -o interactive ]] && _claude_starts_session "$@" && set -- "$@" ${(f)"$(_claude_effort_args "$@")"}
   if [[ -o interactive ]] && ! _claude_marker_valid && (( $+functions[_claude_account_line] )) && _claude_starts_session "$@"; then
     local out
     local -a parts

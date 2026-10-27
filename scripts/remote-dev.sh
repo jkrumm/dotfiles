@@ -23,6 +23,22 @@ HOST="${REMOTE_DEV_HOST:-mini}"
 
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 note() { printf '\033[2m%s\033[0m\n' "$*"; }
+# " --effort '<level>'" for a wave/fan agent: RD_WAVE_EFFORT wins, else the per-model default from
+# config/claude-effort.json (Sonnet high, Opus/Fable medium); empty when neither applies.
+rd_effort_flag() { # <model>
+  local level
+  if [[ -n "${RD_WAVE_EFFORT:-}" ]]; then
+    level=$RD_WAVE_EFFORT
+  else
+    level=$(jq -r --arg m "$(printf %s "$1" | tr '[:upper:]' '[:lower:]')" 'del(._note) | if $m == "" then .default else (to_entries | map(select(.key as $k | $k != "default" and ($m | contains($k)))) | .[0].value) end // empty' \
+      "${CLAUDE_EFFORT_TABLE:-$HOME/SourceRoot/dotfiles/config/claude-effort.json}" 2>/dev/null) || level=""
+    [[ -z "$level" ]] && return 0
+  fi
+  case "$level" in
+    low|medium|high|xhigh|max) printf " --effort '%s'" "$level" ;;
+    *) die "RD_WAVE_EFFORT must be low|medium|high|xhigh|max (got '$level')" ;;
+  esac
+}
 
 # --- routing -----------------------------------------------------------------
 
@@ -612,9 +628,10 @@ for a in agents:
   # (`RD_WAVE_MODEL`). The pane setup (lane tag) runs in the
   # pane's shell first — `herdr agent start` types the agent command into that
   # same shell, so the agent inherits it.
-  local model start_cmd
+  local model start_cmd effort
   model="${RD_WAVE_MODEL:-sonnet}"
-  start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
+  effort=$(rd_effort_flag "$model") || exit 1 # a bad RD_WAVE_EFFORT dies in the subshell: stop here too
+  start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'$effort"
   agent_pane_setup "$pane" wave
 
   local out="" i=0
@@ -722,15 +739,10 @@ for w in workspaces:
     plen=$((31 - ${#leaf})); (( plen < 1 )) && plen=1
     agent="$(agent_name "$name")"
     agent="${agent:0:$plen}-${leaf}"
-    local model start_cmd i=0 started=""
+    local model start_cmd effort i=0 started=""
     model="${RD_WAVE_MODEL:-sonnet}"
-    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'"
-    # RD_WAVE_EFFORT (low|medium|high|xhigh|max) sets the wave's reasoning effort; unset = Claude's default.
-    case "${RD_WAVE_EFFORT:-}" in
-      "") ;;
-      low|medium|high|xhigh|max) start_cmd+=" --effort '$RD_WAVE_EFFORT'" ;;
-      *) die "RD_WAVE_EFFORT must be low|medium|high|xhigh|max (got '$RD_WAVE_EFFORT')" ;;
-    esac
+    effort=$(rd_effort_flag "$model") || exit 1
+    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'$effort"
     agent_pane_setup "$pane" fan
     while (( i < 10 )); do
       sleep 1; i=$((i+1))

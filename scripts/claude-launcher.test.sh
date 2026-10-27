@@ -22,6 +22,7 @@ ok()   { printf '  \033[32mok\033[0m   %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  \033[31mFAIL\033[0m %s\n' "$1"; [[ -n "${2:-}" ]] && printf '         %s\n' "$2"; fail=$((fail + 1)); }
 assert_eq() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1" "expected [$2] got [$3]"; fi; }
 assert_contains() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "[$3] does not contain [$2]" ;; esac; }
+assert_not_contains() { case "$3" in *"$2"*) bad "$1" "[$3] contains [$2]" ;; *) ok "$1" ;; esac; }
 
 command -v zsh >/dev/null || { echo "✗ zsh not found"; exit 2; }
 
@@ -156,6 +157,19 @@ reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STU
 assert_contains "bare claude exports the picker's reason" "picked=me tok= reason=pace" "$out"
 reset; out=$(STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me STUB_PICK_REASON=home zrun interactive 'c --foo')
 assert_contains "c exports the picker's reason" "picked=me tok= reason=home" "$out"
+echo "per-model default effort (config/claude-effort.json)"
+reset; out=$(zrun interactive 'cs')
+assert_contains "cs: Sonnet runs at high" "--effort high" "$out"
+reset; out=$(zrun interactive 'cf')
+assert_contains "cf: Fable runs at medium" "--effort medium" "$out"
+reset; out=$(zrun interactive 'c')
+assert_contains "c: the default model (Opus/Fable) runs at medium" "--effort medium" "$out"
+reset; out=$(zrun interactive 'cs --effort low')
+assert_not_contains "an explicit --effort wins" "--effort high" "$out"
+reset; out=$(zrun interactive 'claude --model sonnet')
+assert_contains "bare claude --model sonnet: high" "--effort high" "$out"
+reset; out=$(zrun interactive 'claude --model haiku')
+assert_not_contains "an unlisted family gets no flag" "--effort" "$out"
 reset; out=$(zrun interactive 'c --account me')
 assert_contains "forced account: reason forced" "reason=forced" "$out"
 reset; out=$(STUB_SESSION=me zrun interactive 'c --resume 1234-abcd')
