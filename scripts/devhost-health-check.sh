@@ -875,7 +875,8 @@ dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected
 audio-gateway|$HOME/Library/LaunchAgents/com.jkrumm.audio-gateway.plist|probe_audio_gateway
 research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist|probe_research_gateway
 brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
-walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad"
+walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad
+postgres|$HOME/Library/LaunchAgents/com.jkrumm.vps-pg-backup.plist|probe_postgres"
 
 probe_agent_gateway() {
   local code
@@ -1057,6 +1058,13 @@ probe_walkingpad() {
   local code
   code=$(http_code "$WALKINGPAD_URL/status")
   [[ "$code" == "200" ]] || { echo "walkingpad not answering on $WALKINGPAD_URL (got ${code:-000})"; return 1; }
+}
+
+probe_postgres() {
+  # The mini's maintained Postgres (vps repo, agent_workflows lives there). Gated on its
+  # backup agent: a machine that never installed the backup is not a maintained host.
+  local out
+  out=$("$HOME/SourceRoot/vps/scripts/health-pg-dev.sh" 2>&1) || { echo "${out:-postgres probe failed}"; return 1; }
 }
 
 check_services() {

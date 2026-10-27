@@ -197,6 +197,7 @@ the weatherorb session workflow.
 | `com.jkrumm.research-gateway-deploy` | research-gateway | 120s — deploy-on-push poller (idle-gated) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
+| `com.jkrumm.vps-pg-backup` | vps | 03:15 daily — mini Postgres to the HomeLab, ends with a restore drill (`vps/docs/mini-postgres.md`) |
 | `com.iu.prometheus-epos-token` | IuRoot (prometheus-scripts) | 300s |
 | `com.iu.prometheus-state-backup` | IuRoot | 3600s |
 | `com.iu.prometheus-conduktor-token` | IuRoot | 21600s |
