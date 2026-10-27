@@ -89,4 +89,14 @@ out7=$(PATH=/usr/bin:/bin DISK_SWEEP_NPM_MAX_GB=0 /bin/bash "$HERE/disk-sweep.sh
 check "pkg-caches: npm cache removed, exit 0" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/.npm/_cacache" ] && printf "%s" "$3" | grep -q "npm cache removed"' _ "$rc7" "$HOME" "$out7"
 check "pkg-caches: absent tools stay silent" sh -c '! printf "%s" "$1" | grep -qE "uv|brew|bun"' _ "$out7"
 
+# (e) uv cache lock held by another process: skipped, not failed.
+printf '#!/bin/sh\necho "error: Timeout (3s) when waiting for lock on uv cache" >&2\nexit 2\n' > "$FAKE/uv"; chmod +x "$FAKE/uv"
+out8=$(PATH="$FAKE:/usr/bin:/bin" bash "$HERE/disk-sweep.sh" pkg-caches 2>&1); rc8=$?
+check "uv lock busy: skipped, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv prune skipped (cache busy)"' _ "$rc8" "$out8"
+
+# (f) uv cache prune fails for a real reason: still reported FAILED.
+printf '#!/bin/sh\necho "error: disk is full" >&2\nexit 1\n' > "$FAKE/uv"; chmod +x "$FAKE/uv"
+out9=$(PATH="$FAKE:/usr/bin:/bin" bash "$HERE/disk-sweep.sh" pkg-caches 2>&1); rc9=$?
+check "uv real failure: step fails and says so" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "uv prune FAILED"' _ "$rc9" "$out9"
+
 exit "$fail"
