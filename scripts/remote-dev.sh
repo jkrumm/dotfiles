@@ -525,8 +525,8 @@ print(len(nums) + 1, (max(nums) + 1) if nums else 1, ",".join(map(str, nums)))
   # not the tab counter: closed tabs reset the counter, so every wave used to be `-w1`.
   # No "(Wave N)" in the prompt (an ad-hoc spawn) falls back to the counter. RD_WAVE_MAX still
   # bounds the counter (spawn depth), not the plan's numbering.
-  local wnum=$n
-  if [[ $prompt =~ \(Wave\ ([0-9]+)\) ]]; then wnum=${BASH_REMATCH[1]}; fi
+  local wnum=$n explicit=0
+  if [[ $prompt =~ \(Wave\ ([0-9]+)\) ]]; then wnum=${BASH_REMATCH[1]}; explicit=1; fi
 
   # An agent that can spawn its own successor is exactly the shape of a chain
   # with no natural end. RD_WAVE_MAX is the backstop — the failure mode this
@@ -569,11 +569,34 @@ for a in agents:
   # suffix afterwards pushes it back over, so the base gets clipped by the
   # suffix's width first. A name that overflows is rejected at `agent start`,
   # i.e. after the tab already exists.
-  local suffix agent
+  local agent live_names
   [[ ",$taken," == *",$wnum,"* ]] && die "a 'wave $wnum' tab already exists in this space — 'rd close' it (or 'rd read' it) before respawning"
-  suffix="-w${wnum}"
-  agent="$(agent_name "$name")"
-  agent="${agent:0:$((32 - ${#suffix}))}${suffix}"
+  # Tab numbers say nothing about agent names: a spawn without "(Wave N)" (the fleet's mother and
+  # lead) takes the next free TAB number, and `<repo>-w<n>` can already belong to a live agent whose
+  # tab was closed or renamed. Two agents on one name make `rd say/read` hit the wrong one, so the
+  # counter skips numbers whose name is live; the plan's explicit number is authoritative and dies.
+  live_names=$(python3 -c '
+import json, sys
+try:
+    agents = json.load(sys.stdin)["result"]["agents"]
+except Exception:
+    agents = []
+for a in agents:
+    if a.get("name"):
+        print(a["name"])
+' <<<"$roster" 2>/dev/null)
+  wave_agent_name() { # <n>
+    local s="-w$1" a
+    a="$(agent_name "$name")"
+    printf '%s' "${a:0:$((32 - ${#s}))}${s}"
+  }
+  if (( explicit )); then
+    grep -qxF "$(wave_agent_name "$wnum")" <<<"$live_names" \
+      && die "agent '$(wave_agent_name "$wnum")' is already live — 'rd read' it or 'rd close' its tab before respawning wave $wnum"
+  else
+    while grep -qxF "$(wave_agent_name "$wnum")" <<<"$live_names"; do wnum=$((wnum + 1)); done
+  fi
+  agent="$(wave_agent_name "$wnum")"
 
   # The account is picked once per spawn; no room means pause, never IU.
   PICK_ENV=""; PICK_NOTE=""
