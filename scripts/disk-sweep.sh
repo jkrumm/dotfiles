@@ -198,10 +198,17 @@ step_pkg-caches() {
 
   if command -v uv >/dev/null 2>&1; then
     local uvout
-    # uv's default cache-lock wait is 300s, which another uv process (e.g. statusline's
-    # background `uv run`) can exhaust on its own; UV_LOCK_TIMEOUT=540 leaves 60s of the
-    # TOOL_TIMEOUT bound for the prune itself once the lock clears.
-    if uvout=$(with_timeout "$TOOL_TIMEOUT" env UV_LOCK_TIMEOUT=540 uv cache prune 2>&1); then parts+="uv pruned, "; else parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1; fi
+    # uv's cache lock is machine-wide and held for as long as any `uv run`/`uv sync` process
+    # stays alive — a dev server or a test run left running overnight, not a bug in this repo.
+    # UV_LOCK_TIMEOUT=540 leaves 60s of the TOOL_TIMEOUT bound for the prune itself once the
+    # lock clears; a timeout past that is contention to skip, not a failure to report.
+    if uvout=$(with_timeout "$TOOL_TIMEOUT" env UV_LOCK_TIMEOUT=540 uv cache prune 2>&1); then
+      parts+="uv pruned, "
+    elif grep -q "waiting for lock" <<<"$uvout"; then
+      parts+="uv prune skipped (cache busy), "
+    else
+      parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1
+    fi
   fi
 
   if command -v brew >/dev/null 2>&1; then
