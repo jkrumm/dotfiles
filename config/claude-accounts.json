@@ -34,17 +34,13 @@
     "me2": {
       "dir": "~/.claude-me2",
       "plan": "max5x",
-      "units": {
-        "session": 1,
-        "weekly": 1
-      },
       "homeLanes": [
         "wave",
         "fan",
         "agent-gateway:*"
       ],
       "loginBrowser": "Safari",
-      "enabled": false
+      "enabled": true
     }
   }
 }
