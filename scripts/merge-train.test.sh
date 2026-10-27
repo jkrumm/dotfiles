@@ -44,6 +44,7 @@ STUB
 cat >"$TMP/bin/bun" <<'STUB'
 #!/usr/bin/env bash
 echo "bun $*" >>"$STATE/log"
+[ -e "$STATE/bun_hang" ] && sleep 30
 [ -e "$STATE/bun_fail" ] && { echo "lockfile had changes" >&2; exit 1; }
 exit 0
 STUB
@@ -63,7 +64,7 @@ branch() {
   echo "$n" >"$TMP/wt$n/work"
   g -C "$TMP/wt$n" add -A; g -C "$TMP/wt$n" commit -qm "work $n"
 }
-reset() { : >"$STATE/log"; : >"$STATE/merge_err"; echo false >"$STATE/isDraft"; rm -f "$STATE/bun_fail"; }
+reset() { : >"$STATE/log"; : >"$STATE/merge_err"; echo false >"$STATE/isDraft"; rm -f "$STATE/bun_fail" "$STATE/bun_hang"; }
 train() { out=$("$HERE/merge-train.sh" "$TMP/repo" "$@" 2>&1); rc=$?; }
 
 echo "install before check"
@@ -78,6 +79,11 @@ is "failed install is a red train" "$rc" "1"
 has "failed install is named" "$out" "dependency install failed"
 lacks "check not run after a failed install" "$(cat "$STATE/log")" "check"
 lacks "nothing merged after a failed install" "$(cat "$STATE/log")" "pr merge"
+
+reset; branch bun.lock; echo 1 >"$STATE/bun_hang"; RD_INSTALL_TIMEOUT=1 train --check "echo check >>$STATE/log" "$br"
+is "hung install is a red train" "$rc" "1"
+has "hung install is named" "$out" "dependency install timed out after 1s"
+lacks "check not run after a hung install" "$(cat "$STATE/log")" "check"
 
 reset; branch -; train --check "echo check >>$STATE/log" "$br"
 is "no lockfile: train succeeds" "$rc" "0"
