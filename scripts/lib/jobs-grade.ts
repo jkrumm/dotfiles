@@ -26,7 +26,7 @@
 // --slack: JOBS_GRADE_SLACK_STATE (default ~/.local/state/jobs-grade/slack.json), JOBS_GRADE_SLACK_CHANNEL
 // (default the #alerts channel), JOBS_GRADE_SLACK_TOKEN (default: `secrets-run read` of the bot token),
 // JOBS_GRADE_SLACK_URL (default the Slack chat.postMessage endpoint; tests point it at a stub).
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
 import { homedir, hostname } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -395,43 +395,58 @@ async function postSlack(text: string): Promise<void> {
     body: JSON.stringify({ channel: process.env.JOBS_GRADE_SLACK_CHANNEL || SLACK_DEFAULT_CHANNEL, text }),
     signal: AbortSignal.timeout(10_000),
   })
-  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-  if (res.status !== 200 || body?.ok !== true) throw new Error(`http ${res.status}${body?.error ? ` ${body.error}` : ""}`)
+  const body: unknown = await res.json().catch(() => null)
+  const reply = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null
+  if (res.status !== 200 || reply?.ok !== true) throw new Error(`http ${res.status}${typeof reply?.error === "string" ? ` ${reply.error}` : ""}`)
 }
 
-/** Best-effort: announce a change in the not-ok set, then persist it. Never throws. */
-export async function slackNotify(rows: Graded[], statePath: string = defaultSlackState()): Promise<void> {
+/** Best-effort: announce a change in the not-ok set, then persist it. Never throws.
+ *  Returns "failed" when the post or the state write failed (a failed write after a landed post re-posts next tick: acceptable). */
+export async function slackNotify(rows: Graded[], statePath: string = defaultSlackState()): Promise<"ok" | "unchanged" | "failed"> {
+  let next: Record<string, string>
   try {
-    const { text, next } = slackTransition(readSlackState(statePath), rows)
-    if (text === null) return
-    await postSlack(text)
-    mkdirSync(dirname(statePath), { recursive: true })
-    writeFileSync(statePath, JSON.stringify(next))
+    const transition = slackTransition(readSlackState(statePath), rows)
+    if (transition.text === null) return "unchanged"
+    next = transition.next
+    await postSlack(transition.text)
   } catch (e) {
     console.error(`jobs-grade: slack post failed: ${(e as Error).message}`)
+    return "failed"
+  }
+  try {
+    mkdirSync(dirname(statePath), { recursive: true })
+    const tmp = `${statePath}.${process.pid}.tmp`
+    writeFileSync(tmp, JSON.stringify(next))
+    renameSync(tmp, statePath)
+    return "ok"
+  } catch (e) {
+    console.error(`jobs-grade: slack state write failed: ${(e as Error).message}`)
+    return "failed"
   }
 }
+
+const readAwakeSeconds = () => awakeSeconds(Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString(), Date.now())
 
 if (import.meta.main) {
   const rows = gradeAll(defaultStateDir(), { now: Date.now(), loaded: isLoaded, expected: readExpected(defaultPlistDir()), cron: readCronStates(defaultCronJobs()) })
   if (process.argv.includes("--notify")) {
-    const wake = Bun.spawnSync(["/usr/sbin/sysctl", "-n", "kern.waketime"], { stderr: "ignore" }).stdout.toString()
-    const { line, code } = summarize(judgeAgainstAwake(rows, awakeSeconds(wake, Date.now())))
+    const { line, code } = summarize(judgeAgainstAwake(rows, readAwakeSeconds()))
     if (code !== 0) notify(line)
     console.log(line)
     process.exit(code)
   }
-  const slack = process.argv.includes("--slack")
+  const slackStatus = process.argv.includes("--slack") && (process.argv.includes("--summary") || process.argv.includes("--table"))
+    ? await slackNotify(judgeAgainstAwake(rows, readAwakeSeconds()))
+    : null
+  const failedNote = slackStatus === "failed" ? " [slack post failed]" : ""
   if (process.argv.includes("--summary")) {
     const { line, code } = summarize(rows)
-    if (slack) await slackNotify(rows)
-    console.log(line)
+    console.log(`${line}${failedNote}`)
     process.exit(code)
   }
   if (process.argv.includes("--table")) {
     const { line, code } = summarize(rows)
-    if (slack) await slackNotify(rows)
-    console.log(`${renderTable(rows)}\n${line}`) // verdict is always the last line
+    console.log(`${renderTable(rows)}\n${line}${failedNote}`) // verdict is always the last line
     process.exit(code)
   }
   console.log(JSON.stringify(rows, null, 2))

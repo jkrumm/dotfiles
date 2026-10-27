@@ -314,19 +314,30 @@ describe("--slack: post step", () => {
 
   test("state is written after a successful post, and an unchanged set does not post again", async () => {
     await withStub({ ok: true }, async (state, seen) => {
-      await slackNotify(bad, state)
+      expect(await slackNotify(bad, state)).toBe("ok")
       expect(seen.auth).toBe("Bearer xoxb-test")
       expect((seen.body as { channel: string }).channel).toBe("CTEST")
       expect(JSON.parse(readFileSync(state, "utf8"))).toEqual({ "com.jkrumm.t": "failing" })
       seen.body = null
-      await slackNotify(bad, state)
+      expect(await slackNotify(bad, state)).toBe("unchanged")
       expect(seen.body).toBeNull()
     })
   })
   test("state is NOT written when Slack answers ok:false", async () => {
     await withStub({ ok: false, error: "channel_not_found" }, async (state) => {
-      await slackNotify(bad, state)
+      expect(await slackNotify(bad, state)).toBe("failed")
       expect(existsSync(state)).toBe(false)
+    })
+  })
+  test("a stale row judged against a short awake time is not announced", async () => {
+    const stale = gradeOne(job({ label: "com.jkrumm.slept", started: ago(7200), last_ok: ago(7200), finished: ago(7199), every: 300 }), { now: NOW, loaded })
+    expect(stale.grade).toBe("stale")
+    await withStub({ ok: true }, async (state, seen) => {
+      expect(await slackNotify(judgeAgainstAwake([stale, ...bad], 60), state)).toBe("ok")
+      const text = (seen.body as { text: string }).text
+      expect(text).toContain("com.jkrumm.t=failing")
+      expect(text).not.toContain("com.jkrumm.slept")
+      expect(JSON.parse(readFileSync(state, "utf8"))).toEqual({ "com.jkrumm.t": "failing" })
     })
   })
 })
