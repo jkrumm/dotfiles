@@ -1095,3 +1095,16 @@ describe("type guards", () => {
     rmSync(d, { recursive: true })
   })
 })
+
+describe("expiring weekly ceiling", () => {
+  const meCalm = sample(10, 2, { wReset: NOW / 1000 + 6.5 * 24 * H })
+  test("93% weekly resetting within 24 h stays eligible", () => {
+    expect(pick(reg(), cacheOf(sample(1, 93, { wReset: NOW / 1000 + 20 * H }), meCalm), "interactive", NOW)).toMatchObject({ picked: "iu" })
+  })
+  test("98% weekly resetting within 24 h is out", () => {
+    expect(pick(reg(), cacheOf(sample(1, 98, { wReset: NOW / 1000 + 20 * H }), meCalm), "interactive", NOW)).toMatchObject({ picked: "me" })
+  })
+  test("93% weekly with the reset days away is out", () => {
+    expect(pick(reg(), cacheOf(sample(1, 93, { wReset: NOW / 1000 + 60 * H }), meCalm), "interactive", NOW)).toMatchObject({ picked: "me" })
+  })
+})

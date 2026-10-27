@@ -11,6 +11,8 @@ export const DEFAULT_ACCOUNT_ID = "iu"
 export const SPILL = "spill"
 export const SESSION_MAX = 85
 export const WEEKLY_MAX = 90
+/** Weekly ceiling while the window resets within EXPIRING_S: the last points are use-it-or-lose-it, so squeeze them. */
+export const WEEKLY_MAX_EXPIRING = 98
 export const FRESH_MS = 10 * 60_000
 export const STALE_OK_MS = 6 * 3600_000
 /** a dead login is re-probed (in the background) at most this often */
@@ -521,6 +523,8 @@ export function homeIds(reg: Registry, lane: string): string[] {
 /** The pick rests on a sample with a window older than FRESH_MS. */
 export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cache.samples[id], nowMs) && sampleAge(cache.samples[id], nowMs) >= FRESH_MS
 
+const weeklyMax = (x: Sample, nowMs: number) => (x.w_reset !== null && x.w_reset * 1000 - nowMs > 0 && x.w_reset * 1000 - nowMs < EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX)
+
 /** Enabled, logged in, not exhausted, and every window young enough to judge (< 6 h) is below its threshold. Each window is judged by its own timestamp. */
 export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
   const a = Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined
@@ -528,7 +532,7 @@ export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number)
   const x = cache.samples[id]
   if (!x || !usable(x, nowMs)) return false
   if (hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS && x.s! >= SESSION_MAX) return false
-  if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= WEEKLY_MAX) return false
+  if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= weeklyMax(x, nowMs)) return false
   const until = cache.exhausted[id]
   if (until && until * 1000 > nowMs) return false
   return true

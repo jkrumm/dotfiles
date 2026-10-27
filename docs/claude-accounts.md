@@ -125,10 +125,10 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1.2:**
+**Rule v1.3** (v1.2 plus `weeklyMax(x)` = 98 while x's weekly window resets within 24 h, else 90: the last points of an expiring window are use-it-or-lose-it; decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset):
 
 ```
-eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < 90 ∧ sample age < 6 h
+eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 85 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
               (sample > 10 min old: `pick` uses it and refreshes in the background on EVERY lane, interactive
                included, detached and budgeted; a refresh takes a couple of seconds. Only a non-interactive lane
                refreshes an account with no usable sample synchronously; the interactive pick never waits.
