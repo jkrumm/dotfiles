@@ -129,6 +129,7 @@ AGENT_GATEWAY_URL="${AGENT_GATEWAY_URL:-http://127.0.0.1:7705}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 AUDIO_GATEWAY_URL="${AUDIO_GATEWAY_URL:-http://127.0.0.1:7719}"
 RESEARCH_GATEWAY_URL="${RESEARCH_GATEWAY_URL:-http://127.0.0.1:7780}"
+AGENT_WORKFLOWS_URL="${AGENT_WORKFLOWS_URL:-http://127.0.0.1:7791}"
 # The gateway's deploy clone and the marker its poller (scripts/mini-deploy.sh) writes only after a
 # healthy install — the pair probe_research_gateway compares to catch a deploy that is stuck.
 RG_APP_DIR="${RG_APP_DIR:-$HOME/.research-gateway/app}"
@@ -848,6 +849,7 @@ LAUNCHD_KEEPALIVE="\
 $(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist
+com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
 com.jkrumm.research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist
 com.jkrumm.research-gateway-lightpanda|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway-lightpanda.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
@@ -868,6 +870,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
 agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist|probe_agent_gateway
+agent-workflows|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist|probe_agent_workflows
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
@@ -882,6 +885,17 @@ probe_agent_gateway() {
   local code
   code=$(http_code "$AGENT_GATEWAY_URL/health")
   [[ "$code" == "200" ]] || { echo "agent-gateway not answering on $AGENT_GATEWAY_URL (got ${code:-000})"; return 1; }
+}
+
+probe_agent_workflows() {
+  # 200 {"status":"ok"} or 503 {"status":"degraded","reason":…} — the body carries the
+  # reason, so read it rather than the code alone.
+  local body
+  body=$("$CURL_BIN" -s --max-time 8 "$AGENT_WORKFLOWS_URL/health" 2>/dev/null || true)
+  [[ "$body" == *'"status":"ok"'* ]] && return 0
+  [[ -n "$body" ]] || { echo "agent-workflows host not answering on $AGENT_WORKFLOWS_URL"; return 1; }
+  echo "agent-workflows host not ok (${body:0:160})"
+  return 1
 }
 
 probe_hermes() {
