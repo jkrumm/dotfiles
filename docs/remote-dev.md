@@ -761,8 +761,12 @@ the brief with a `Base: origin/<default> @ <sha>` line prepended. Each brief nam
 branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.sh`) rebases
 each onto the current origin default, installs from the lockfile present (`bun.lock`/`bun.lockb`,
 `pnpm-lock.yaml`, `package-lock.json`; a failed install is a red check; `--no-check` skips it),
-runs `make check`, pushes with lease, readies a draft PR (`gh pr ready`), merges the PR
-by rebase and re-fetches before the next; GitHub only. `rd fan --clean <repo>` removes
+runs `make check`, pushes with lease, readies a draft PR (`gh pr ready`), waits for the PR's
+CI on the pushed sha, merges the PR by rebase and re-fetches before the next; GitHub only.
+The CI gate trusts `gh pr checks` only once the PR head equals the pushed sha; any
+failed/cancelled check dies with its name and run URL; pending past `RD_CI_TIMEOUT` (1200 s)
+dies; no checks at all after `RD_CI_GRACE` (30 s; a push's check suite exists 0–5 s after the
+push, measured over 11 pushes) merges as before; `--no-ci` skips the gate. `rd fan --clean <repo>` removes
 clean, fully merged worktrees and their tabs. A `rd wave` without `(Wave <n>)` takes the next
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
