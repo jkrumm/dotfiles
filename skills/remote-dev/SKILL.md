@@ -27,7 +27,7 @@ rd fan --clean <repo>             # reclaim clean, merged fan worktrees + their 
 rd merge <repo> [--check cmd] <branch…>   # merge train: rebase, check, merge by rebase (GitHub only)
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
-rd say <agent> "…"                # send it a prompt
+rd say <agent> "…"                # send a prompt; verifies the agent picked it up, dismisses known modals
 ```
 
 Herdr agents run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL`

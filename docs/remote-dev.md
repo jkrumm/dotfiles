@@ -152,7 +152,14 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | `repos [filter]` | repos on the host, branch + dirty count |
 | `work <repo>` | herdr workspace + claude, **idempotent** (refocuses, never stacks) |
 | `agents` | both lanes, deduped on Claude session id |
-| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching |
+| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching; `say` verifies delivery (see below) |
+
+`say` does not trust herdr's `agent_prompted`: a Claude Code modal (the "compact earlier"
+prompt) can swallow the text. It waits for the target to enter `working`; if it does not, it
+reads the pane, dismisses a known modal (`RD_SAY_MODALS` in `scripts/remote-dev.sh`) with `esc`
+and re-sends once. Output is one of `delivered`, `delivered after dismissing <modal>`,
+`queued: agent busy` (target was already working, exit 0) or `NOT delivered: …` (exit 1, hint
+`rd read <agent>`; no blind re-send). `RD_SAY_WAIT_MS` bounds the wait (default 20 s).
 
 `work` is idempotent because two agents in one checkout is the file-ownership
 hazard, except across panes where you cannot see it happen. `agents` dedupes on

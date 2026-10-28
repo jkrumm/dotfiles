@@ -429,6 +429,19 @@ cmd_work() {
 #      automated form of "open a tab, start claude solo, paste the handover".
 #   4. It is bounded. See RD_WAVE_MAX below — a wave that can spawn its own
 #      successor is exactly the shape of a chain with no natural end.
+# Hand a prompt to `herdr agent prompt`; prints herdr's body, returns 1 when the body is an error.
+# base64 carries the text across the ssh hop and herdr's argv handling byte-identical (quotes,
+# newlines, a literal `$(...)`). `herdr agent prompt` EXITS 0 ON FAILURE and reports it in the
+# body (`{"error":{"code":"agent_not_found",…}}`), so the body is the signal.
+# $1 pane  $2 prompt.
+send_prompt() {
+  local b64 sent
+  b64=$(printf %s "$2" | base64 | tr -d '\n')
+  sent=$(host_run "herdr agent prompt '$1' \"\$(echo $b64 | base64 -d)\"" 2>&1)
+  printf '%s' "$sent"
+  ! grep -q '"error"' <<<"$sent"
+}
+
 # Submit a prompt and PROVE it landed. Measured ~1 in 6 prompts is dropped when sent right
 # after `agent start` (the pane exists, a fresh Claude sits in it, nothing ever told it what
 # to do). A delivered prompt makes the agent leave idle within seconds, so no `working`
@@ -437,15 +450,9 @@ cmd_work() {
 # $1 pane  $2 agent name  $3 prompt. Returns 0 delivered, 1 never picked up, 2 rejected
 # (the rejection body is left in the global DELIVER_ERR).
 deliver_prompt() {
-  local pane=$1 agent=$2 prompt=$3 b64 sent try
-  b64=$(printf %s "$prompt" | base64 | tr -d '\n')
+  local pane=$1 agent=$2 prompt=$3 sent try
   for try in 1 2; do
-    sent=$(host_run "herdr agent prompt '$pane' \"\$(echo $b64 | base64 -d)\"" 2>&1)
-    # `herdr agent prompt` EXITS 0 ON FAILURE and reports it in the body
-    # (`{"error":{"code":"agent_not_found",…}}`), so the body is the signal.
-    if echo "$sent" | grep -q '"error"'; then
-      DELIVER_ERR=$sent; return 2
-    fi
+    sent=$(send_prompt "$pane" "$prompt") || { DELIVER_ERR=$sent; return 2; }
     # blocked/done count as delivered too: a prompt that went straight to a question or finished
     # fast must not be re-sent (duplicate execution).
     host_run "herdr agent wait '$agent' --until working --until blocked --until done --timeout 30000" >/dev/null 2>&1 && return 0
@@ -984,7 +991,7 @@ else:
     if any(r[0] == "interactive" for r in rows):
         print()
         print("  \033[33mnote:\033[0m 'interactive' agents die with their connection.")
-        print("        Unattended work belongs in 'agw dispatch'.")
+        print("        Unattended work belongs in 'agw-legacy dispatch'.")
 PY
 }
 
@@ -1053,7 +1060,43 @@ print("\n\n".join(out[-12:]) if out else "  (no assistant output yet)")
   host_run "herdr agent read '$pane' --source ${2:-recent}"
 }
 
-# Steer a running agent without attaching.
+# Claude Code modals that swallow a typed prompt while `herdr agent prompt` still answers
+# `agent_prompted`. One "label|regex" per entry, regex matched case-insensitively against the
+# visible pane. Only a modal whose text has been seen belongs here.
+#   - compact earlier: agent-workflows Wave 2 — it swallowed four `rd say` messages; the lead
+#     recovered with `herdr pane send-keys <pane> esc`
+#     (agent-workflows docs/waves/handoff/lead.md, item 8).
+RD_SAY_MODALS=(
+  'the "compact earlier" prompt|compact earlier'
+)
+
+# Print the label of the first known modal showing in the pane; return 1 when none is.
+say_modal() {
+  local text entry
+  text=$(host_run "herdr pane read '$1' --source visible" 2>/dev/null)
+  for entry in "${RD_SAY_MODALS[@]}"; do
+    if grep -qiE -- "${entry#*|}" <<<"$text"; then
+      printf '%s' "${entry%%|*}"; return 0
+    fi
+  done
+  return 1
+}
+
+# True when the agent picked the prompt up: it enters `working` within the window.
+say_picked_up() {
+  host_run "herdr agent wait '$1' --until working --timeout ${RD_SAY_WAIT_MS:-20000}" >/dev/null 2>&1
+}
+
+say_fail() { # $1 agent  $2 reason
+  printf '\033[31mNOT delivered:\033[0m %s — check with: rd read %s\n' "$2" "$1" >&2
+  exit 1
+}
+
+# Steer a running agent without attaching. `agent_prompted` only means herdr typed the text — a
+# modal on screen can swallow it — so delivery is proven the way deliver_prompt proves it: the
+# agent must enter `working`. A busy agent is a queued message and cannot be proven; an idle one
+# that stays idle gets its pane read: a known modal is dismissed and the text re-sent once, anything
+# else fails loudly rather than re-sending blind (a duplicate prompt is worse than a visible miss).
 cmd_say() {
   local name="${1:-}"; shift || true
   local text="${*:-}"
@@ -1069,8 +1112,34 @@ cmd_say() {
   # resolver gets exercised without steering a running agent.
   [[ -n ${RD_DRY_RUN:-} ]] && { echo "$pane"; return 0; }
 
-  local esc=${text//\'/\'\\\'\'}
-  host_run "herdr agent prompt '$pane' '$esc'"
+  local status body
+  status=$(PANE="$pane" python3 -c '
+import json, os, sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a.get("pane_id") == os.environ["PANE"]:
+        print(a.get("agent_status", "")); break
+' <<<"$roster" 2>/dev/null)
+
+  body=$(send_prompt "$pane" "$text") || say_fail "$name" "herdr rejected the prompt: $body"
+
+  if [[ $status == working ]]; then
+    echo "queued: agent busy — $name was working, the message waits in its input"
+    return 0
+  fi
+  if say_picked_up "$pane"; then
+    echo "delivered"
+    return 0
+  fi
+
+  local modal
+  modal=$(say_modal "$pane") \
+    || say_fail "$name" "it never started working and no known modal is blocking it"
+  host_run "herdr pane send-keys '$pane' esc" >/dev/null 2>&1
+  sleep "${RD_SAY_SETTLE:-1}"
+  body=$(send_prompt "$pane" "$text") || say_fail "$name" "herdr rejected the re-send after dismissing $modal: $body"
+  say_picked_up "$pane" \
+    || say_fail "$name" "dismissed $modal and re-sent, but it still never started working"
+  echo "delivered after dismissing $modal"
 }
 
 # The janitor: closes finished, clean, pushed tabs; messages dirty ones. All logic lives in
