@@ -39,6 +39,17 @@ not routine reviews — it spends Max.
    the native pass surfaces a blocking bug, the merged outcome is at least
    `actionable`.
 
+## Provider-balance failure — degrade to in-session `/code-review`
+
+Trigger: the job is `status: "failed"`, or comes back degraded, with a balance error — HTTP 402, or 503 with "Insufficient Balance" / "PaymentRequired" — in `error` or in a `(review pipeline)` discussion (e.g. `adversary session failed: IU request failed (503) — Insufficient Balance (PaymentRequired) on Requesty-Global`).
+
+- **Never retry or resubmit** the gateway review.
+- Say in one line that the gateway review is degraded by provider balance, then run `/code-review high <target>` (Skill tool) over the same scope on this session's own Claude (Max).
+- Record the review step as "gateway review degraded (provider balance) → in-session /code-review".
+- **Partial** (only some angles failed on balance, the rest returned findings): keep those findings, still run `/code-review` for the missing cross-family view, and say so.
+- A balance-degraded `needs-human` is **not** an owner escalation — the in-session verdict decides the outcome.
+- With `--deep`, the native `code-review` pass already covers this; don't run it twice.
+
 ## Output
 
 Present one consolidated verdict — outcome, blocking, improvements, discussions,
