@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # Merge train: land fan-out branches one at a time, GitHub only, rebase/fast-forward only.
 # For each branch, in order: fetch, rebase onto the CURRENT origin default, run the check,
-# push with lease, wait for the PR's CI on the pushed head, merge the PR by rebase. A fresh worktree has no node_modules, so the check
-# is preceded by an install from whichever lockfile is present; a draft PR is readied first
-# (`gh pr merge` refuses drafts). Main moves after every merge, so the next branch
-# re-fetches and re-rebases. A push that drops approvals (branch protection) falls back to
-# arming auto-merge. All git runs `git -C <worktree>` so protect-branches judges the
-# worktree, not the caller's cwd. No GitLab path: IuRoot moves to GitHub Enterprise.
+# push with lease, wait for the PR's CI on the pushed head, merge the PR by rebase. A fresh
+# worktree has no node_modules, so the check is preceded by an install from whichever lockfile
+# is present; a draft PR is readied first (`gh pr merge` refuses drafts). Main moves after every
+# merge, so the next branch re-fetches and re-rebases. A push that drops approvals (branch
+# protection) falls back to arming auto-merge. All git runs `git -C <worktree>` so
+# protect-branches judges the worktree, not the caller's cwd. No GitLab path: IuRoot moves to
+# GitHub Enterprise.
 #
-# CI gate: after the push, the PR's checks are trusted only once the PR head IS the pushed sha
-# (GitHub lags a few seconds behind a push and would otherwise report the previous head's run).
-# No checks at all after RD_CI_GRACE seconds (default 30; measured: a push's check suite exists
-# 0-5 s after the push, 11 pushes) means the repo has no workflows and the PR merges. Pending
-# past RD_CI_TIMEOUT (default 1200 s) dies, so an offline self-hosted runner cannot hang the train.
+# CI gate (needs jq): one `gh pr view --json headRefOid,statusCheckRollup` per poll, so the head
+# and its checks are one snapshot, trusted only while the head IS the pushed sha (GitHub lags a
+# push by a few seconds and would report the previous head's run). A failed or cancelled check
+# dies at once. A pass is never declared before RD_CI_GRACE seconds (default 30) have passed
+# since the push, and needs at least one non-skipping check: checks register late and
+# independently, so an early all-green list can be partial. Only none/skipping-only after the
+# grace means "no CI" and merges. Measured: a push's check suite exists 0-5 s after the push
+# (11 pushes). Still pending after RD_CI_TIMEOUT (default 1200 s) dies, so an offline
+# self-hosted runner cannot hang the train. RD_CI_POLL (default 10) is the seconds between
+# polls; every gh call is bounded by RD_CI_GH_TIMEOUT (default 30).
 #
 # Usage: merge-train.sh <repo-path> [--check '<cmd>'] [--no-check] [--no-ci] <branch>...
 set -uo pipefail
@@ -29,6 +35,7 @@ while (($#)); do
   esac
 done
 ((${#branches[@]})) || die "no branches"
+((ci == 0)) || command -v jq >/dev/null || die "jq is required for the CI gate (or pass --no-ci)"
 if [[ -z ${GH_TOKEN:-} ]]; then
   GH_TOKEN=$(secrets-run read op://mini/github/token) || die "could not resolve the GitHub token (secrets-run read op://mini/github/token)"
 fi
@@ -47,33 +54,48 @@ install_cmd() { # lockfile-matched dependency install for worktree $1; empty whe
   fi
 }
 
+# Normalise statusCheckRollup (CheckRun + StatusContext entries) to {head,url,checks:[{name,link,bucket}]}
+# with bucket pass|pending|skipping|fail (cancelled and timed-out count as fail).
+CI_NORM='def b: if .__typename == "StatusContext" then
+    {name: .context, link: (.targetUrl // ""),
+     bucket: (if .state == "SUCCESS" then "pass" elif .state == "PENDING" or .state == "EXPECTED" then "pending" else "fail" end)}
+  else
+    {name: .name, link: (.detailsUrl // ""),
+     bucket: (if .status != "COMPLETED" then "pending" elif .conclusion == "SUCCESS" then "pass"
+              elif .conclusion == "NEUTRAL" or .conclusion == "SKIPPED" then "skipping" else "fail" end)}
+  end;
+  {head: .headRefOid, url: .url, checks: [(.statusCheckRollup // [])[] | b]}'
+
 ci_wait() { # <worktree> <pr> <sha> <branch>: return 0 when CI on head <sha> passed or there is none; die otherwise
-  local wt=$1 pr=$2 sha=$3 br=$4 start=$SECONDS head json failed
-  local timeout_s=${RD_CI_TIMEOUT:-1200} grace=${RD_CI_GRACE:-30} poll=${RD_CI_POLL:-10}
+  local wt=$1 pr=$2 sha=$3 br=$4 start=$SECONDS raw snap why="" bad link
+  local timeout_s=${RD_CI_TIMEOUT:-1200} grace=${RD_CI_GRACE:-30} poll=${RD_CI_POLL:-10} gh_t=${RD_CI_GH_TIMEOUT:-30}
   while :; do
-    head=$(cd "$wt" && gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null)
-    if [[ $head == "$sha" ]]; then
-      if json=$(cd "$wt" && gh pr checks "$pr" --json name,bucket,link 2>"$errf"); then
-        # GitHub moved the head while we read: the list may belong to another sha.
-        if [[ $(cd "$wt" && gh pr view "$pr" --json headRefOid -q .headRefOid 2>/dev/null) != "$sha" ]]; then
-          sleep "$poll"; continue
+    if raw=$(cd "$wt" && timeout "$gh_t" gh pr view "$pr" --json headRefOid,statusCheckRollup,url 2>"$errf") \
+        && snap=$(jq -c "$CI_NORM" <<<"$raw" 2>>"$errf"); then
+      if [[ $(jq -r .head <<<"$snap") != "$sha" ]]; then
+        why="the PR head never became the pushed sha"
+      else
+        bad=$(jq -r '[.checks[] | select(.bucket == "fail")] | map(.name) | join(", ")' <<<"$snap")
+        if [[ -n $bad ]]; then
+          link=$(jq -r '(.checks | map(select(.bucket == "fail"))[0].link) as $l | if $l == "" then .url else $l end' <<<"$snap")
+          die "$br (#$pr): CI failed: $bad $link"
         fi
-        failed=$(jq -r '[.[]|select(.bucket=="fail" or .bucket=="cancel")]|map(.name)|join(", ")' <<<"$json")
-        [[ -z $failed ]] || die "$br (#$pr): CI failed: $failed $(jq -r '[.[]|select(.bucket=="fail" or .bucket=="cancel")][0].link' <<<"$json")"
-        # skipping (e.g. an app that opted out) is neither pass nor pending.
-        if [[ $(jq '[.[]|select(.bucket=="pending")]|length' <<<"$json") == 0 && $(jq length <<<"$json") -gt 0 ]]; then
+        if [[ $(jq '[.checks[] | select(.bucket == "pending")] | length' <<<"$snap") -gt 0 ]]; then
+          why="checks pending"
+        elif ((SECONDS - start < grace)); then
+          why="settling"
+        elif [[ $(jq '[.checks[] | select(.bucket == "pass")] | length' <<<"$snap") -gt 0 ]]; then
           echo "CI passed for $br (#$pr) at ${sha:0:9}"; return 0
-        fi
-      elif grep -q 'no checks reported' "$errf"; then
-        if ((SECONDS - start >= grace)); then
+        else
           echo "no CI checks for $br (#$pr) after ${grace}s — merging without a CI gate"; return 0
         fi
-      else
-        echo "gh pr checks for #$pr failed: $(head -c 200 "$errf" | tr '\n' ' ') — retrying" >&2
       fi
+    else
+      why="gh kept failing"
+      echo "gh pr view for #$pr failed: $(head -c 200 "$errf" | tr '\n' ' ') — retrying" >&2
     fi
     if ((SECONDS - start >= timeout_s)); then
-      die "$br (#$pr): CI not finished for ${sha:0:9} after ${timeout_s}s (pending checks, or the PR head never became the pushed sha)"
+      die "$br (#$pr): CI not finished for ${sha:0:9} after ${timeout_s}s ($why)"
     fi
     sleep "$poll"
   done
