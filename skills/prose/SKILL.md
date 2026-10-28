@@ -3,13 +3,13 @@ name: prose
 description: Polish a finished human-facing draft through the agent-gateway prose tool — lint, cross-lab review, Opus rewrite, keep gate. Use after drafting articles, vault pages, docs/README, landing or UI copy, or briefings against brain/voice.md, or when the user says "prose", "polish this", "de-slop", "run it through prose". Not for chat replies, code comments, or commit messages. Mini-only: needs agent-gateway.
 ---
 
-# Prose — via `agw prose`
+# Prose — via `agw-legacy prose`
 
 One call runs a finished draft through agent-gateway's `prose` tool: mechanical lint → cross-lab review → Opus rewrite → **keep gate**. It returns the rewrite, or the **original** when the gate judged the rewrite worse. ~20-90 s, ~$0.05 per call.
 
 ## When
 
-**Mini-only** — `agw` talks to the gateway on the mini; the MacBook has no agent-gateway MCP or CLI target. Same as `/check`, `/review`, `/otel`.
+**Mini-only** — `agw-legacy` talks to the gateway on the mini; the MacBook has no agent-gateway MCP or CLI target. Same as `/check`, `/review`, `/otel`.
 
 After drafting against `~/SourceRoot/brain/voice.md`: articles, vault pages, docs/README, landing and UI copy, briefings. Not chat replies, code comments, commit messages, or anything you have not drafted yet — it polishes, it does not write from facts.
 
@@ -20,7 +20,7 @@ After drafting against `~/SourceRoot/brain/voice.md`: articles, vault pages, doc
 
 ```bash
 OUT=$(mktemp)
-agw prose "$DRAFT" --medium article --language en --out "$OUT"
+agw-legacy prose "$DRAFT" --medium article --language en --out "$OUT"
 ```
 
 | Flag | Use |

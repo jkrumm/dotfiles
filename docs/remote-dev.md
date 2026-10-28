@@ -160,7 +160,7 @@ the Claude session id (herdr exposes `agent_session.value`, the daemon
 `sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
 
 Three lanes start agent work (`docs/agent-platform.md`): `@implementer`,
-`agw dispatch` (one bounded change, unattended), an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
+`agw-legacy dispatch` (one bounded change, unattended), an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
 `rd bg` were removed 2026-10-04.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the

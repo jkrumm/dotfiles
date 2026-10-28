@@ -168,7 +168,7 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `agw dispatch` | settled, bounded work → branch/PR or a verdict |
+| `agw-legacy dispatch` | settled, bounded work → branch/PR or a verdict |
 | `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only; no room pauses, never IU), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
 
 | Want | Command |
@@ -189,7 +189,7 @@ Five facts to hold:
   integration version 6+ (this machine reports 8) and
   `[session].resume_agents_on_restore`, true by default. Shells, dev servers and
   `bun` loops still die, and a resumed agent still lost whatever turn was in
-  flight, so work that must not be *interrupted* is a `agw dispatch` job, not a pane.
+  flight, so work that must not be *interrupted* is a `agw-legacy dispatch` job, not a pane.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied

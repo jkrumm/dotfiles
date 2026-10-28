@@ -316,7 +316,7 @@
     },
     {
       "dot": "emerald",
-      "title": "agw dispatch",
+      "title": "agw-legacy dispatch",
       "items": [
         "Settled, bounded work",
         "Haiku 5.5 EU on OpenCode, Sonnet on Max as reverse lane",
