@@ -163,7 +163,7 @@ If nothing changes, `say` reads the bottom of the pane, dismisses a known modal
 `delivered`, `delivered after dismissing <modal>`, `queued: agent busy` (target was already
 working, exit 0) or `NOT delivered: …` (exit 1, hint `rd read <agent>`; no blind re-send; an
 unreadable state or a transport failure also fail before or without a re-send).
-`RD_SAY_WAIT_S` bounds the wait (default 20 s). Hermetic suite: `make fan-test`.
+`RD_SAY_WAIT_S` bounds the wait (default 20 s). The target's state is read by agent name, or by pane id for a hand-started agent that has none (`herdr agent get` takes either). `wave`/`fan` report a transport failure or unreadable state as *delivery unconfirmed* and advise `rd read` before any re-send. Hermetic suite: `make fan-test`.
 
 `work` is idempotent because two agents in one checkout is the file-ownership
 hazard, except across panes where you cannot see it happen. `agents` dedupes on
