@@ -762,11 +762,15 @@ branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.
 each onto the current origin default, installs from the lockfile present (`bun.lock`/`bun.lockb`,
 `pnpm-lock.yaml`, `package-lock.json`; a failed install is a red check; `--no-check` skips it),
 runs `make check`, pushes with lease, readies a draft PR (`gh pr ready`), waits for the PR's
-CI on the pushed sha, merges the PR by rebase and re-fetches before the next; GitHub only.
-The CI gate trusts `gh pr checks` only once the PR head equals the pushed sha; any
-failed/cancelled check dies with its name and run URL; pending past `RD_CI_TIMEOUT` (1200 s)
-dies; no checks at all after `RD_CI_GRACE` (30 s; a push's check suite exists 0–5 s after the
-push, measured over 11 pushes) merges as before; `--no-ci` skips the gate. `rd fan --clean <repo>` removes
+CI on the pushed sha, merges the PR by rebase and re-fetches before the next; GitHub only. The
+CI gate polls one `gh pr view --json headRefOid,statusCheckRollup` (every `RD_CI_POLL` s, default
+10; each gh call bounded by `timeout`) and trusts it only while the head equals the pushed sha.
+A failed or cancelled check dies at once with its name and run URL (the PR URL when the check
+has none). A pass is never declared before `RD_CI_GRACE` (30 s; a push's check suite exists 0–5 s
+after the push, measured over 11 pushes) has passed since the push, and needs one non-skipping
+check, so a partial or skipping-only list cannot merge early. None or skipping-only after the
+grace merges as no-CI; pending past `RD_CI_TIMEOUT` (1200 s) dies; `--no-ci` skips the gate.
+Needs `jq`. `rd fan --clean <repo>` removes
 clean, fully merged worktrees and their tabs. A `rd wave` without `(Wave <n>)` takes the next
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
