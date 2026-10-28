@@ -1,31 +1,27 @@
 ---
 name: review
-description: Multi-angle code review via agent-gateway MCP tool (backend/model per agent-gateway GET /api/routing; the result's `backend` field says which ran). Add --deep to also run Anthropic's native correctness + security review on the orchestrator's Max model.
+description: Multi-angle code review via the agw CLI (agent-workflows). Add --deep to also run Anthropic's native correctness + security review on the orchestrator's Max model.
 ---
 
 # Review
 
-## Default — agent-gateway multi-angle
+## Default — `agw review`
 
-`mcp__agent-gateway__review` is **asynchronous** (a background job; backend and model per tool come from agent-gateway `GET /api/routing`, and the result's `backend` field says which one ran it):
-1. Call `mcp__agent-gateway__review` with `cwd` set to the repo root → returns `{ jobId }`. Parse args for `scope` (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope.
-2. Call `mcp__agent-gateway__job_wait({ jobId })` to block until it finishes — pass `maxWaitMs` up to 29 min rather than looping on the ~50s default; read `result` on `status: "done"`. The submit call does **not** return the findings.
+1. Run `agw review --cwd <repo root> [--scope <scope> | --pr N | --branch B] --format json` via Bash. Parse args for the scope (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope. `--pr` and `--branch` review a throwaway clone and exclude `--scope`. Pass `--depth light|standard|deep` or `--context '<intent>'` through only when the caller gave one; otherwise the router picks the depth.
+2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
+3. Read `output` (REVIEW_OUTPUT, `schemaVersion: 2`; fields per `agw schema review` and the review workflow's `schema.ts`): `outcome` (`clean` / `actionable` / `needs-human`), `blocking`, `discussions`, `improvements` (findings: `file`, `line?`, `message`, `angle`), `testGaps` (strings), `escalationCategory?`, `summary`, `degraded?`. Failure: exit 1 with `status: "failed"` and `error: { kind, message }`.
 
-This runs the deterministic floor (architect, senior-dev, and file-type angles)
-plus a triage router that adds content-driven angles — security, performance,
-concurrency, data-migration, api-contract, resilience — when the diff warrants them. Use
-this by default; read the `backend` field on the result rather than assuming
-where it ran.
+This runs the deterministic floor (architect and senior-dev angles) plus a router that adds content-driven angles — security, performance, concurrency, data-migration, api-contract, resilience, and others — and an adversary pass when the diff warrants them.
 
 ## `--deep` — add native correctness + security (on the orchestrator's Max model)
 
 When the args contain `--deep`, ALSO run Anthropic's native reviewers and merge
-them with the agent-gateway result. These run on the orchestrator's Max model and are
-tuned for real correctness bugs — complementary to agent-gateway's architecture /
-framework / style angles. **Reserve `--deep` for pre-ship gates or risky changes**,
-not routine reviews — it spends Max.
+them with the `agw review` result. These run on the orchestrator's Max model and are
+tuned for real correctness bugs — complementary to the angle reviewers'
+architecture / framework / style view. **Reserve `--deep` for pre-ship gates or risky changes**,
+not routine reviews — it spends Max. `--deep` does not map to `--depth deep`.
 
-1. Run the agent-gateway review (as above).
+1. Run `agw review` (as above).
 2. Invoke the native **`code-review`** skill at high effort over the same scope
    (Skill tool, `args: "high"`). It targets correctness bugs the angle reviewers
    may miss.
@@ -33,20 +29,19 @@ not routine reviews — it spends Max.
    touches security-sensitive surface — auth/authz, secrets or credentials,
    crypto, SQL/command/path construction from input, file uploads, shelling out,
    or env-var handling. Skip it otherwise.
-4. Merge all findings into one verdict, deduplicated against the agent-gateway
+4. Merge all findings into one verdict, deduplicated against the `agw review`
    findings. Map native **Important** → blocking, **Nit** → improvements. Keep
-   agent-gateway's outcome classification (`clean` / `actionable` / `needs-human`); if
+   the review's outcome classification (`clean` / `actionable` / `needs-human`); if
    the native pass surfaces a blocking bug, the merged outcome is at least
    `actionable`.
 
 ## Provider-balance failure — degrade to in-session `/code-review`
 
-Trigger: the job is `status: "failed"`, or comes back degraded, with a balance error — HTTP 402, or 503 with "Insufficient Balance" / "PaymentRequired" — in `error` or in a `(review pipeline)` discussion (e.g. `adversary session failed: IU request failed (503) — Insufficient Balance (PaymentRequired) on Requesty-Global`).
+Trigger: `output.degraded === "provider_balance"` (outcome `needs-human`, `escalationCategory: spend`: the IU provider is out of balance even after the fallback), or a non-zero exit whose error message names a provider balance (402, "Insufficient Balance", "PaymentRequired").
 
-- **Never retry or resubmit** the gateway review.
-- Say in one line that the gateway review is degraded by provider balance, then run `/code-review high <target>` (Skill tool) over the same scope on this session's own Claude (Max).
-- Record the review step as "gateway review degraded (provider balance) → in-session /code-review".
-- **Partial** (only some angles failed on balance, the rest returned findings): keep those findings, still run `/code-review` for the missing cross-family view, and say so.
+- **Never retry or resubmit** the review.
+- Say in one line that `agw review` is degraded by provider balance, then run `/code-review high <target>` (Skill tool) over the same scope on this session's own Claude (Max).
+- Record the review step as "agw review degraded (provider balance) → in-session /code-review".
 - A balance-degraded `needs-human` is **not** an owner escalation — the in-session verdict decides the outcome.
 - With `--deep`, the native `code-review` pass already covers this; don't run it twice.
 

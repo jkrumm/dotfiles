@@ -97,10 +97,11 @@ inline.
 
 ### Async jobs
 
-`mcp__agent-gateway__{check,review,dispatch}` and `mcp__research-gateway__research`
-return `{ jobId }`, not the result: submit → `job_wait({jobId})` → read `result` /
-`error`. The submit call is not the answer. Door-specific waits, `otel`'s
-exemption: `docs/global-reference.md`.
+`mcp__agent-gateway__dispatch` and `mcp__research-gateway__research` return
+`{ jobId }`, not the result: submit → `job_wait({jobId})` → read `result` /
+`error`. The submit call is not the answer. `/check` and `/review` are `agw` CLI
+calls, synchronous with the exit-10 resume (`agw run wait <runId>`). Door-specific
+waits, `otel`'s exemption: `docs/global-reference.md`.
 
 ## Workspaces
 
