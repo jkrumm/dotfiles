@@ -77,7 +77,8 @@ instead — same validated geometry, without that one crossing guarantee.
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
 | `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work as a GitHub issue (nothing works it automatically), 5-job cron layer | see [[agent-platform]] |
-| `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `agw dispatch` or `rd wave` |
+| `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `agw-legacy dispatch` or `rd wave` |
+| `agent-workflows` | The platform replacing agent-gateway, research-gateway and audio-gateway (public repo; concept in its `docs/concept.md`). First deployed process: the host, HTTP on `127.0.0.1:7791`, unauthenticated `GET /health` (200 `ok` / 503 `degraded`), everything else bearer-gated | runs natively here (`com.jkrumm.agent-workflows-host`, `bun packages/host/src/main.ts` from the main checkout via `secrets-run`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `packages/cli/bin/agw.ts` (agent-gateway's old CLI is `agw-legacy`) |
 | `agent-gateway` | Local MCP daemon behind `/check`, `/review`, `dispatch`, `/otel`, `/prose` | `mcp.ts` stdio-only; lives only here |
 | `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
@@ -191,6 +192,7 @@ the weatherorb session workflow.
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
+| `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.audio-gateway` | audio-gateway | KeepAlive |
 | `com.jkrumm.research-gateway` | research-gateway | KeepAlive (:7780, loopback) |
 | `com.jkrumm.research-gateway-lightpanda` | research-gateway | KeepAlive (renderer sidecar, :7781, loopback) |
