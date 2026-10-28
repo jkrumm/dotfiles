@@ -47,7 +47,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
         │                                   │
         ▼                                   │ opens a herdr tab when asked
  Slack #alerts → a human reads and acts     ▼
-                                       @implementer · agw dispatch · rd wave / rd fan
+                                       @implementer · agw-legacy dispatch · rd wave / rd fan
 
  AGENT-GATEWAY the one worker engine: triage · dispatch(investigate|implement) · review · check
            OpenCode + cheap models by default, Sonnet only where judgment gates a merge
@@ -71,7 +71,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 | Lane | When | Engine |
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `agw dispatch` | one bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | OpenCode worker |
+| `agw-legacy dispatch` | one bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | OpenCode worker |
 | `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
 | `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
 
@@ -99,7 +99,7 @@ monitor name, OTel `service.name`) · `## Gotchas`.
 |-|-|-|
 | `triage`, review router | single-shot `iu-openai` cheap model, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
 | `dispatch` investigate | OpenCode session on agw's shared server, Haiku 5.5 EU (`iu-anthropic`) | ~$0.001–0.01/episode, ~100 % cache reads (Wave 5 bench) |
-| `dispatch` implement | OpenCode, Haiku 5.5 EU; DeepSeek-V4-Pro (`max`) escalation for attempt 3+ | 6/6 on the Wave 5 bench; episodes survive an agw restart (re-attach) and take `agw steer` |
+| `dispatch` implement | OpenCode, Haiku 5.5 EU; DeepSeek-V4-Pro (`max`) escalation for attempt 3+ | 6/6 on the Wave 5 bench; episodes survive an agw restart (re-attach) and take `agw-legacy steer` |
 | `review` angles | OpenCode Haiku 5.5 EU for senior-dev/typescript/qa; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
 | `review` synthesis | Sonnet | the judgment that gates every merge |
 | `check` | `claude` harness, Haiku 4.5 over IU (Haiku 5.5 is 4× slower there) | mechanical |

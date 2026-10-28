@@ -15,7 +15,7 @@ Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
 `{env:IU_OPENAI_BASE}` (`oc` derives it from the Keychain base, `/anthropic` →
 `/openai/v1`); `iu-responses` = `@ai-sdk/openai` (the **Responses** wire) on the
 same base, carrying every GPT id — they are Responses-only for agent loops
-(reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw routing`), not
+(reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw-legacy routing`), not
 `iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
 wire split mirror agent-gateway's registry (`server/lib/models.ts`, `wire`), which
 generates the same blocks for its workers. **This file's rows are hand-written
@@ -25,7 +25,7 @@ registry marks unverified is not a recommendation. `iu` declares the rest of the
 roster: the default model is the `model` key in `config/opencode/opencode.json`
 (a DeepSeek id, **not** served on the Anthropic route), with the other DeepSeek,
 GLM, Gemini, Kimi and MiniMax ids declared alongside it;
-`iu-responses` holds the GPT ids (`agw routing` lists them) — context windows, prices and `reasoningEffort` variants
+`iu-responses` holds the GPT ids (`agw-legacy routing` lists them) — context windows, prices and `reasoningEffort` variants
 come from **modelpick** (`STACK.md` for the picks, `make stack` in `~/SourceRoot/modelpick` to re-render it;
 `metric_snapshot` for the frontier ids), so re-check there before editing a row.
 `agents.title.model` (a cheap `iu-responses` id, set in `config/opencode/opencode.json`; v1's `small_model` still loads) is for title/summary generation. On `iu`,

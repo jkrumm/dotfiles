@@ -94,7 +94,7 @@
       "y": 500,
       "label": "steer: POST /api/jobs/:id/steer",
       "variant": "security",
-      "note": "MCP job_steer or agw steer. 409 when no session is live."
+      "note": "MCP job_steer or agw-legacy steer. 409 when no session is live."
     },
     {
       "from": "gateway",

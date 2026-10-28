@@ -34,7 +34,7 @@ Herdr agents run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL
 overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Three lanes start agent work: `@implementer`, `agw dispatch` (one bounded
+Three lanes start agent work: `@implementer`, `agw-legacy dispatch` (one bounded
 unattended change), `rd wave` (a tab you watch; `rd fan` for N independent
 changes). `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.

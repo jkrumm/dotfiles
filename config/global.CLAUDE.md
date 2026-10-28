@@ -62,7 +62,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Work | Route |
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
-| One bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | `agw dispatch` (`implement` / `investigate`) |
+| One bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | `agw-legacy dispatch` (`implement` / `investigate`) |
 | N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
 | Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
 | Search across many files | `Agent` → `Explore` |
@@ -71,7 +71,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
 
-The three lanes — `@implementer`, `agw dispatch`, `rd wave` (incl. fan-out) —
+The three lanes — `@implementer`, `agw-legacy dispatch`, `rd wave` (incl. fan-out) —
 are the only ways to start *another agent*
 (`docs/agent-platform.md`); `Explore`, `@verifier`, `/check`, `/research` and
 `/review` are in-session tools, not lanes. Brief a worker completely: exact
@@ -80,7 +80,7 @@ paths, the change, acceptance criteria, scope limits, and any research baked in
 on disjoint file groups. Delegate for context, not latency; editorial work stays
 inline.
 
-- **Model ids live only in `agw routing`** (`GET /api/routing`; rationale
+- **Model ids live only in `agw-legacy routing`** (`GET /api/routing`; rationale
   `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`). Never write one in prose.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
