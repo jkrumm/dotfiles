@@ -20,4 +20,5 @@ Never touch files outside "Owned files". If the task needs one, stop and say whi
 - Work only inside your worktree. Commit per logical concern; no attribution footers.
 - A blocked sub-part does not block the rest: finish what you can, name what you left out in one line.
 - Do not merge, do not rebase onto other workers' branches, do not run the full suite unless the brief says so; the lead's train does.
+- Never end a turn on a background shell, a sleep or "waiting for X": nothing wakes you. Run validation in the foreground; if you are waiting, you are not done.
 - Bound every probe with `timeout`. A probe of an LLM endpoint uses `opencode-safe`, never bare `opencode run`.
