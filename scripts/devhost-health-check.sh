@@ -888,13 +888,17 @@ probe_agent_gateway() {
 }
 
 probe_agent_workflows() {
-  # 200 {"status":"ok"} or 503 {"status":"degraded","reason":…} — the body carries the
-  # reason, so read it rather than the code alone.
-  local body
-  body=$("$CURL_BIN" -s --max-time 8 "$AGENT_WORKFLOWS_URL/health" 2>/dev/null || true)
-  [[ "$body" == *'"status":"ok"'* ]] && return 0
-  [[ -n "$body" ]] || { echo "agent-workflows host not answering on $AGENT_WORKFLOWS_URL"; return 1; }
-  echo "agent-workflows host not ok (${body:0:160})"
+  # 200 {"status":"ok"} or 503 {"status":"degraded","reason":…} — healthy needs both the
+  # code and the body, and the body carries the reason, so it is echoed on failure.
+  local excerpt_max=160 out code body
+  out=$("$CURL_BIN" -s --max-time 8 -w '\n%{http_code}' "$AGENT_WORKFLOWS_URL/health" 2>/dev/null || true)
+  code=${out##*$'\n'}
+  body=${out%$'\n'*}
+  [[ "$code" =~ ^[0-9]{3}$ && "$code" != "000" ]] || { echo "agent-workflows host not answering on $AGENT_WORKFLOWS_URL"; return 1; }
+  if [[ "$code" == "200" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$body"; then
+    return 0
+  fi
+  echo "agent-workflows host not ok (HTTP $code: ${body:0:excerpt_max})"
   return 1
 }
 
