@@ -155,11 +155,15 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching; `say` verifies delivery (see below) |
 
 `say` does not trust herdr's `agent_prompted`: a Claude Code modal (the "compact earlier"
-prompt) can swallow the text. It waits for the target to enter `working`; if it does not, it
-reads the pane, dismisses a known modal (`RD_SAY_MODALS` in `scripts/remote-dev.sh`) with `esc`
-and re-sends once. Output is one of `delivered`, `delivered after dismissing <modal>`,
-`queued: agent busy` (target was already working, exit 0) or `NOT delivered: …` (exit 1, hint
-`rd read <agent>`; no blind re-send). `RD_SAY_WAIT_MS` bounds the wait (default 20 s).
+prompt) can swallow the text. It snapshots the target's state (`state_change_seq`,
+`completion_seq`, status) before the send and counts any change afterwards as delivered —
+`working`, `blocked` or a fresh `done`. `deliver_prompt` (`wave`/`fan`) uses the same primitive.
+If nothing changes, `say` reads the bottom of the pane, dismisses a known modal
+(`RD_SAY_MODALS` in `scripts/remote-dev.sh`) with `esc` and re-sends once. Output is one of
+`delivered`, `delivered after dismissing <modal>`, `queued: agent busy` (target was already
+working, exit 0) or `NOT delivered: …` (exit 1, hint `rd read <agent>`; no blind re-send; an
+unreadable state or a transport failure also fail before or without a re-send).
+`RD_SAY_WAIT_S` bounds the wait (default 20 s). Hermetic suite: `make fan-test`.
 
 `work` is idempotent because two agents in one checkout is the file-ownership
 hazard, except across panes where you cannot see it happen. `agents` dedupes on
