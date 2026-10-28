@@ -414,23 +414,25 @@ cmd_work() {
 # Hand a prompt to `herdr agent prompt`; prints herdr's body. Returns 0 sent, 2 herdr answered
 # with an error body, 3 the transport failed (ssh/herdr exited non-zero — nothing says whether the
 # text arrived). base64 carries the text across the ssh hop and herdr's argv handling
-# byte-identical (quotes, newlines, a literal `$(...)`). `herdr agent prompt` EXITS 0 ON FAILURE
+# byte-identical (quotes, newlines, a literal `$(...)`); a trailing sentinel keeps `$(…)` from
+# stripping trailing newlines and is cut off again on the host. `herdr agent prompt` EXITS 0 ON FAILURE
 # and reports it in the body (`{"error":{"code":"agent_not_found",…}}`), so for herdr's own
 # answer the body is the signal; a non-zero exit is therefore the hop, not herdr.
 # $1 pane  $2 prompt.
 send_prompt() {
   local b64 sent rc
-  b64=$(printf %s "$2" | base64 | tr -d '\n')
-  sent=$(host_run "herdr agent prompt '$1' \"\$(echo $b64 | base64 -d)\"" 2>&1); rc=$?
+  b64=$(printf %sx "$2" | base64 | tr -d '\n')
+  sent=$(host_run "rd_p=\$(echo $b64 | base64 -d); herdr agent prompt '$1' \"\${rd_p%x}\"" 2>&1); rc=$?
   printf '%s' "$sent"
   (( rc == 0 )) || return 3
   grep -q '"error"' <<<"$sent" && return 2
   return 0
 }
 
-# "<status> <state_change_seq> <completion_seq>" for an agent, by NAME — the id `herdr agent
-# get|wait` are proven with (a pane id works too, a terminal id does not). Returns 1 when herdr
-# did not answer or the answer carries no status: an unreadable state must never be read as idle.
+# "<status> <state_change_seq> <completion_seq>" for an agent, by NAME — the id `herdr agent get`
+# is proven with (deliver_prompt has always addressed agents by name; pane ids churn). Returns 1
+# when herdr did not answer or the answer carries no status: an unreadable state must never be
+# read as idle.
 agent_snapshot() {
   local out
   out=$(host_run "herdr agent get '$1'" 2>/dev/null) || return 1
@@ -451,49 +453,71 @@ except Exception:
 # (a question) or a fresh `done` (completion_seq bumps) without a poll ever seeing `working`, and
 # waiting for `working` alone calls that a loss and invites a duplicate. One poll per second.
 # $1 agent  $2 snapshot taken before the send  $3 number of polls.
+# Returns 0 changed · 1 ran and saw no change · 2 the last snapshot failed — "no change" is then
+# not an observation, and the caller must not treat it as one.
 wait_state_change() {
-  local now i
+  local now i seen=0
   for ((i = 0; i < $3; i++)); do
-    now=$(agent_snapshot "$1") && [[ $now != "$2" ]] && return 0
+    if now=$(agent_snapshot "$1"); then
+      seen=1
+      [[ $now != "$2" ]] && return 0
+    else
+      seen=0
+    fi
     sleep "${RD_POLL_S:-1}"
   done
-  return 1
+  (( seen )) && return 1
+  return 2
 }
 
 # THE delivery primitive — `deliver_prompt` and `cmd_say` both go through it, so what counts as
 # "delivered" cannot diverge between them. Snapshot, send, wait for a state change.
 # $1 pane  $2 agent name  $3 prompt  $4 wait in seconds.
 # Returns 0 picked up · 1 never picked up · 2 rejected · 3 transport failure (2 and 3 leave the
-# body in the global DELIVER_ERR) · 4 state unreadable, NOTHING sent · 5 the agent was already
-# working, so the prompt is queued behind its turn and cannot be proven.
+# reason in the global DELIVER_ERR) · 4 state unreadable BEFORE the send, nothing sent · 5 the
+# agent was already working, so the prompt is queued behind its turn and cannot be proven · 6 sent,
+# but the state became unreadable, so delivery is unconfirmed (a re-send could duplicate it).
 prompt_attempt() {
   local base sent rc
   base=$(agent_snapshot "$2") || return 4
   sent=$(send_prompt "$1" "$3"); rc=$?
-  (( rc == 0 )) || { DELIVER_ERR=$sent; return "$rc"; }
+  case $rc in
+    2) DELIVER_ERR="herdr rejected the prompt: $sent"; return 2 ;;
+    3) DELIVER_ERR="transport failure — the text may or may not have arrived: $sent"; return 3 ;;
+  esac
   [[ $base == working\ * ]] && return 5
-  wait_state_change "$2" "$base" "$4"
+  wait_state_change "$2" "$base" "$4"; rc=$?
+  (( rc == 2 )) && return 6
+  return "$rc"
 }
 
 # Submit a prompt and PROVE it landed. Measured ~1 in 6 prompts is dropped when sent right
 # after `agent start` (the pane exists, a fresh Claude sits in it, nothing ever told it what
 # to do). A delivered prompt changes the agent's state within seconds, so no change inside 30 s
-# means re-send, once.
+# means re-send, once — but only after an observed "no change": an unreadable state is reported,
+# never answered with another send.
 # $1 pane  $2 agent name  $3 prompt. Returns 0 delivered (or queued behind a running turn),
-# 1 never picked up, 2 rejected or state unreadable, 3 transport failure (the reason is left in
-# the global DELIVER_ERR).
+# 1 never picked up, 2 rejected, 3 transport failure, 4 state unreadable (delivery unverified).
+# 2-4 leave the reason in the global DELIVER_ERR; for 4 it says whether anything was sent.
 deliver_prompt() {
-  local try rc=1
+  local try rc=1 reached=0
   for try in 1 2; do
     prompt_attempt "$1" "$2" "$3" "${RD_DELIVER_WAIT_S:-30}"; rc=$?
+    (( rc == 4 )) || reached=1
     case $rc in
       0|5) return 0 ;;
       2|3) return "$rc" ;;
-      4) sleep "${RD_POLL_S:-1}" ;;  # nothing was sent, so retrying cannot duplicate
+      4) sleep "${RD_POLL_S:-1}" ;;  # nothing was sent in this try, so retrying cannot duplicate
+      6) break ;;
       *) (( try == 1 )) && note "   no state change from $2 within ${RD_DELIVER_WAIT_S:-30}s — re-sending the prompt once" ;;
     esac
   done
-  if (( rc == 4 )); then DELIVER_ERR="could not read $2's state from herdr — nothing was sent"; return 2; fi
+  case $rc in
+    4|6)
+      if (( reached )); then DELIVER_ERR="the prompt was sent, but $2's state was unreadable afterwards — delivery unconfirmed"
+      else DELIVER_ERR="could not read $2's state from herdr — nothing was sent"; fi
+      return 4 ;;
+  esac
   return 1
 }
 
@@ -732,13 +756,11 @@ for a in agents:
 
   deliver_prompt "$pane" "$agent" "$prompt"
   case $? in
-    2) note "   pane $pane is live but UNPROMPTED — recover with:"
-       note "     rd say $agent '<the handover prompt>'"
-       die "wave $wnum started but the prompt was rejected: $DELIVER_ERR" ;;
-    3) note "   pane $pane is live but UNPROMPTED — recover with:"
-       note "     rd say $agent '<the handover prompt>'"
-       die "wave $wnum started but the prompt could not be sent (transport failure): $DELIVER_ERR" ;;
-    1) note "   pane $pane never left idle after two sends — check 'rd read $agent', then 'rd say $agent …'" ;;
+    2|3) note "   pane $pane is live but UNPROMPTED — recover with:"
+         note "     rd say $agent '<the handover prompt>'"
+         die "wave $wnum started but the prompt was not delivered: $DELIVER_ERR" ;;
+    4)   note "   pane $pane is live; $DELIVER_ERR — check 'rd read $agent' before any 'rd say'" ;;
+    1)   note "   pane $pane never left idle after two sends — check 'rd read $agent', then 'rd say $agent …'" ;;
   esac
 
   echo "→ wave $wnum started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
@@ -845,6 +867,7 @@ for w in workspaces:
       0) echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}" ;;
       1) echo "→ fan: '$agent' on $branch started but never left idle — 'rd read $agent'" ;;
       2|3) echo "→ fan: '$agent' on $branch UNPROMPTED ($DELIVER_ERR) — 'rd say $agent …'" ;;
+      4) echo "→ fan: '$agent' on $branch started; $DELIVER_ERR — 'rd read $agent'" ;;
     esac
   done
   note "   'rd agents' to watch · scripts/wave-watch.sh --agents … to block · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
@@ -1153,9 +1176,9 @@ say_attempt() {
   local rc
   prompt_attempt "$1" "$2" "$3" "${RD_SAY_WAIT_S:-20}"; rc=$?
   case $rc in
-    2) say_fail "$2" "herdr rejected the prompt: $DELIVER_ERR" ;;
-    3) say_fail "$2" "transport failure reaching $HOST (the text may or may not have arrived): $DELIVER_ERR" ;;
+    2|3) say_fail "$2" "$DELIVER_ERR" ;;
     4) say_fail "$2" "could not read its state from herdr, so nothing was sent" ;;
+    6) say_fail "$2" "the text was sent, but its state became unreadable, so delivery is unconfirmed (not re-sent)" ;;
   esac
   return "$rc"
 }
@@ -1207,7 +1230,8 @@ for a in json.load(sys.stdin)["result"]["agents"]:
   sleep "${RD_SAY_SETTLE:-1}"
   say_attempt "$pane" "$agent" "$text"; rc=$?
   case $rc in
-    0|5) echo "delivered after dismissing $modal" ;;
+    0) echo "delivered after dismissing $modal" ;;
+    5) echo "queued after dismissing $modal — $agent was working, the message waits behind its turn" ;;
     *) say_fail "$agent" "dismissed $modal and re-sent, but it still never changed state" ;;
   esac
 }
@@ -1265,6 +1289,9 @@ usage() {
 
 EOF
 }
+
+# Sourced (by the test suite) rather than run: define the functions, dispatch nothing.
+[[ ${BASH_SOURCE[0]} == "$0" ]] || return 0
 
 case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;

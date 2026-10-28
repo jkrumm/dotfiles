@@ -8,6 +8,10 @@
 #   never                      nothing changes
 #   after_esc                  only a prompt sent after `pane send-keys … esc` is picked up
 # `agent get` accepts the agent NAME only — the id the script must use, as deliver_prompt does.
+# Fault flags (files in $STATE): get_broken · get_broken_after_send · get_fail_from=<n> (every
+# `agent get` after the n-th) make the state unreadable; reject · ssh_fail · keys_fail break the
+# prompt / hop / esc; esc_working makes esc leave the agent `working`. The exact prompt bytes the
+# stub received are in $STATE/last_prompt.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/rd-say-test.XXXXXX") || exit 1
@@ -32,11 +36,17 @@ case "$1 $2" in
   "agent list") echo "{\"result\":{\"agents\":[$(agent_json)]}}" ;;
   "agent get")
     [ "$3" = worker ] || { echo "{\"error\":{\"code\":\"agent_not_found\"}}"; exit 1; }
-    [ -f "$STATE/get_broken" ] && { echo '{"result":{"agent":{}}}'; exit 0; }
+    n=$(( $(cat "$STATE/get_n" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$STATE/get_n"
+    broken=0
+    [ -f "$STATE/get_broken" ] && broken=1
+    [ -f "$STATE/get_broken_after_send" ] && [ -f "$STATE/sent" ] && broken=1
+    [ -f "$STATE/get_fail_from" ] && [ "$n" -gt "$(cat "$STATE/get_fail_from")" ] && broken=1
+    [ "$broken" = 1 ] && { echo '{"result":{"agent":{}}}'; exit 0; }
     echo "{\"result\":{\"agent\":$(agent_json)}}" ;;
   "agent prompt")
     [ -f "$STATE/ssh_fail" ] && { echo "ssh: connection reset" >&2; exit 255; }
     [ -f "$STATE/reject" ] && { echo '{"error":{"code":"agent_not_found"}}'; exit 0; }
+    printf %s "$4" >"$STATE/last_prompt"; touch "$STATE/sent"
     mode=$(cat "$STATE/mode")
     [ "$mode" = after_esc ] && { [ -f "$STATE/esc_sent" ] && mode=working || mode=never; }
     case $mode in
@@ -47,7 +57,8 @@ case "$1 $2" in
   "pane read") cat "$STATE/pane.txt" ;;
   "pane send-keys")
     [ -f "$STATE/keys_fail" ] && { echo '{"error":{"code":"pane_not_found"}}'; exit 0; }
-    touch "$STATE/esc_sent" ;;
+    touch "$STATE/esc_sent"
+    if [ -f "$STATE/esc_working" ]; then echo working >"$STATE/status"; fi ;;
 esac
 STUB
 chmod +x "$TMP/bin/herdr"
@@ -57,7 +68,7 @@ unset RD_DRY_RUN
 
 # scenario <status> <mode> <pane text> [cs]
 scenario() {
-  rm -f "$STATE"/{calls.log,esc_sent,reject,ssh_fail,keys_fail,get_broken}
+  rm -f "$STATE"/{calls.log,esc_sent,reject,ssh_fail,keys_fail,get_broken,get_broken_after_send,get_fail_from,get_n,sent,last_prompt,esc_working}
   echo "$1" >"$STATE/status"; echo 10 >"$STATE/sc"; echo "${4:-0}" >"$STATE/cs"
   echo "$2" >"$STATE/mode"; printf '%s\n' "$3" >"$STATE/pane.txt"
 }
@@ -144,6 +155,57 @@ say "go on"; ends_fail
 has "says transport failure" "$out" "transport failure"
 lacks "not mistaken for a rejection" "$out" "rejected"
 expect_calls "no retry" "agent prompt" 1
+
+echo "modal dismissed and the agent was already working afterwards"
+scenario idle after_esc "$MODAL"; touch "$STATE/esc_working"
+say "go on"; ends_ok
+has "says queued, not delivered" "$out" "queued after dismissing the \"compact earlier\" prompt"
+lacks "not claimed as delivered" "$out" "delivered after"
+
+echo "state becomes unreadable after the send"
+scenario idle never "$MODAL"; touch "$STATE/get_broken_after_send"
+say "go on"; ends_fail
+has "says delivery unconfirmed" "$out" "unconfirmed"
+expect_calls "never re-sent" "agent prompt" 1
+expect_calls "no keys sent" "send-keys" 0
+
+echo "exact bytes: trailing newlines, quotes, \$(…)"
+scenario idle working "> "
+text=$'line one \'quoted\' "dq" $(echo no) `no`\n\nlast line\n\n\n'
+say "$text"; ends_ok
+printf %s "$text" >"$STATE/want_prompt"
+cmp -s "$STATE/want_prompt" "$STATE/last_prompt" && ok "prompt arrives byte-identical" || bad "prompt bytes differ: $(od -c "$STATE/last_prompt" | tail -3)"
+
+echo "deliver_prompt (rd wave / rd fan) shares the primitive"
+export RD_DELIVER_WAIT_S=3
+deliver() { res=$( ( source "$HERE/remote-dev.sh"; deliver_prompt p-1 worker "hello"; rc=$?; echo "rc=$rc"; echo "err=$DELIVER_ERR" ) 2>&1 ); }
+scenario idle blocked "> ";  deliver
+has "fast blocked answer: delivered" "$res" "rc=0"
+expect_calls "sent once" "agent prompt" 1
+scenario idle never "> ";    deliver
+has "never picked up: rc 1" "$res" "rc=1"
+expect_calls "re-sent once after an observed no-change" "agent prompt" 2
+scenario idle working "> ";  touch "$STATE/get_broken"; deliver
+has "unreadable before any send: rc 4" "$res" "rc=4"
+has "claims nothing was sent" "$res" "nothing was sent"
+expect_calls "nothing sent" "agent prompt" 0
+scenario idle never "> ";    touch "$STATE/get_broken_after_send"; deliver
+has "unreadable after the send: rc 4" "$res" "rc=4"
+has "says delivery unconfirmed" "$res" "delivery unconfirmed"
+lacks "does not claim nothing was sent" "$res" "nothing was sent"
+lacks "does not say rejected" "$res" "rejected"
+expect_calls "never re-sent" "agent prompt" 1
+scenario idle never "> ";    echo 4 >"$STATE/get_fail_from"; deliver
+has "unreadable before the re-send: rc 4" "$res" "rc=4"
+has "first send is remembered" "$res" "delivery unconfirmed"
+expect_calls "not re-sent blind" "agent prompt" 1
+scenario idle working "> ";  touch "$STATE/reject"; deliver
+has "rejected: rc 2" "$res" "rc=2"
+scenario idle working "> ";  touch "$STATE/ssh_fail"; deliver
+has "transport failure: rc 3" "$res" "rc=3"
+has "reported as transport failure" "$res" "transport failure"
+lacks "not as a rejection" "$res" "rejected"
+unset RD_DELIVER_WAIT_S
 
 echo "dry run"
 scenario idle never "> "
