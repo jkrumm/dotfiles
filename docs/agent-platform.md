@@ -49,7 +49,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
  Slack #alerts → a human reads and acts     ▼
                                        @implementer · agw-legacy dispatch · rd wave / rd fan
 
- AGENT-GATEWAY the one worker engine: triage · dispatch(investigate|implement) · review · check
+ AGENT-GATEWAY worker engine: triage · dispatch(investigate|implement)   (check · review run on agent-workflows: `agw check`, `agw review`)
            OpenCode + cheap models by default, Sonnet only where judgment gates a merge
            model ids live ONLY in `GET /api/routing`
 
@@ -61,7 +61,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 
 | Component | Does | Never does |
 |-|-|-|
-| **agent-gateway** | runs bounded jobs: triage, investigate, implement, review, check, prose (`/prose`) | decide what to work on, merge |
+| **agent-gateway** | runs bounded jobs: triage, investigate, implement, prose (`/prose`); `check` and `review` run on agent-workflows (`agw check`, `agw review`) | decide what to work on, merge |
 | **Hermes** | answers, narrates, opens herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work |
 | **Argo** | the status surface | hold state of its own |

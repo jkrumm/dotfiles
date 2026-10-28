@@ -42,6 +42,7 @@ Trigger: `output.degraded === "provider_balance"` (outcome `needs-human`, `escal
 - **Never retry or resubmit** the review.
 - Say in one line that `agw review` is degraded by provider balance, then run `/code-review high <target>` (Skill tool) over the same scope on this session's own Claude (Max).
 - Record the review step as "agw review degraded (provider balance) → in-session /code-review".
+- **Partial** (`needs-human` because only some reviewers failed — `discussions` entries with angle `(review pipeline)` naming a balance failure — while the rest returned findings): keep those findings, still run `/code-review high <target>` for the missing view, and say so.
 - A balance-degraded `needs-human` is **not** an owner escalation — the in-session verdict decides the outcome.
 - With `--deep`, the native `code-review` pass already covers this; don't run it twice.
 
