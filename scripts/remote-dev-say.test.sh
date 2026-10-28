@@ -7,7 +7,8 @@
 #                              are `blocked` / a fresh `done`, never a visible `working`)
 #   never                      nothing changes
 #   after_esc                  only a prompt sent after `pane send-keys … esc` is picked up
-# `agent get` accepts the agent NAME only — the id the script must use, as deliver_prompt does.
+# `agent get` accepts the agent NAME (the pane id, for a nameless agent) only — the id the script
+# must use. Live herdr takes either for an agent that has both; the stub is stricter on purpose.
 # Fault flags (files in $STATE): get_broken · get_broken_after_send · get_fail_from=<n> (every
 # `agent get` after the n-th) make the state unreadable; reject · ssh_fail · keys_fail break the
 # prompt / hop / esc; esc_working makes esc leave the agent `working`. The exact prompt bytes the
@@ -30,12 +31,13 @@ cat >"$TMP/bin/herdr" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$STATE/calls.log"
 status=$(cat "$STATE/status"); sc=$(cat "$STATE/sc"); cs=$(cat "$STATE/cs")
-agent_json() { echo "{\"name\":\"worker\",\"pane_id\":\"p-1\",\"cwd\":\"/x\",\"agent_status\":\"$status\",\"state_change_seq\":$sc,\"completion_seq\":$cs}"; }
+agent_json() { n='"name":"worker",'; [ -f "$STATE/nameless" ] && n=""; echo "{${n}\"pane_id\":\"p-1\",\"cwd\":\"/x\",\"agent_status\":\"$status\",\"state_change_seq\":$sc,\"completion_seq\":$cs}"; }
 case "$1 $2" in
   "status ") echo "status: running" ;;
   "agent list") echo "{\"result\":{\"agents\":[$(agent_json)]}}" ;;
   "agent get")
-    [ "$3" = worker ] || { echo "{\"error\":{\"code\":\"agent_not_found\"}}"; exit 1; }
+    want=worker; [ -f "$STATE/nameless" ] && want=p-1
+    [ "$3" = "$want" ] || { echo "{\"error\":{\"code\":\"agent_not_found\"}}"; exit 1; }
     n=$(( $(cat "$STATE/get_n" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$STATE/get_n"
     broken=0
     [ -f "$STATE/get_broken" ] && broken=1
@@ -68,7 +70,7 @@ unset RD_DRY_RUN
 
 # scenario <status> <mode> <pane text> [cs]
 scenario() {
-  rm -f "$STATE"/{calls.log,esc_sent,reject,ssh_fail,keys_fail,get_broken,get_broken_after_send,get_fail_from,get_n,sent,last_prompt,esc_working}
+  rm -f "$STATE"/{calls.log,esc_sent,reject,ssh_fail,keys_fail,get_broken,get_broken_after_send,get_fail_from,get_n,sent,last_prompt,esc_working,nameless}
   echo "$1" >"$STATE/status"; echo 10 >"$STATE/sc"; echo "${4:-0}" >"$STATE/cs"
   echo "$2" >"$STATE/mode"; printf '%s\n' "$3" >"$STATE/pane.txt"
 }
@@ -175,6 +177,31 @@ text=$'line one \'quoted\' "dq" $(echo no) `no`\n\nlast line\n\n\n'
 say "$text"; ends_ok
 printf %s "$text" >"$STATE/want_prompt"
 cmp -s "$STATE/want_prompt" "$STATE/last_prompt" && ok "prompt arrives byte-identical" || bad "prompt bytes differ: $(od -c "$STATE/last_prompt" | tail -3)"
+
+echo "send, esc, then the state is unreadable before the re-send"
+scenario idle after_esc "$MODAL"; echo 4 >"$STATE/get_fail_from"
+say "go on"; ends_fail
+has "says delivery unconfirmed" "$out" "delivery unconfirmed"
+lacks "does not claim nothing was sent" "$out" "nothing was sent"
+expect_calls "first send only" "agent prompt" 1
+
+echo "nameless (hand-started) agent"
+scenario idle working "> "; touch "$STATE/nameless"
+out=$(bash "$HERE/remote-dev.sh" say p-1 "go on" 2>&1); rc=$?; ends_ok
+has "says delivered" "$out" "delivered"
+has "state read by pane id" "$(cat "$STATE/calls.log")" "agent get p-1"
+lacks "never by a name it does not have" "$(cat "$STATE/calls.log")" "agent get worker"
+
+echo "report_deliver_result (shared by rd wave and rd fan)"
+report() { res=$( ( source "$HERE/remote-dev.sh"; DELIVER_ERR="the reason"; report_deliver_result "$1" worker "wave 2 (pane p-1)"; echo "rc=$?" ) 2>&1 ); }
+report 0; lacks "delivered: silent" "$res" "wave 2"; has "delivered: returns 0" "$res" "rc=0"
+report 1; has "never picked up: rd read first" "$res" "rd read worker"; has "returns 0" "$res" "rc=0"
+report 2; has "rejected: UNPROMPTED" "$res" "UNPROMPTED"; has "rejected: advises rd say" "$res" "recover with: rd say worker"; has "rejected: returns 1" "$res" "rc=1"
+report 3; has "transport: UNCONFIRMED" "$res" "delivery UNCONFIRMED"; has "transport: rd read first" "$res" "'rd read worker' BEFORE any 'rd say'"
+lacks "transport: not UNPROMPTED" "$res" "UNPROMPTED"; lacks "transport: no recover advice" "$res" "recover with"; has "transport: returns 0" "$res" "rc=0"
+report 4; has "unreadable: UNCONFIRMED" "$res" "delivery UNCONFIRMED"; lacks "unreadable: not UNPROMPTED" "$res" "UNPROMPTED"
+n=$(grep -c 'UNPROMPTED' "$HERE/remote-dev.sh"); [ "$n" -eq 1 ] && ok "wording lives in the helper only" || bad "UNPROMPTED appears $n× in remote-dev.sh"
+n=$(grep -c 'report_deliver_result' "$HERE/remote-dev.sh"); [ "$n" -ge 3 ] && ok "wave and fan both call the helper" || bad "helper referenced $n×"
 
 echo "deliver_prompt (rd wave / rd fan) shares the primitive"
 export RD_DELIVER_WAIT_S=3

@@ -422,7 +422,7 @@ cmd_work() {
 send_prompt() {
   local b64 sent rc
   b64=$(printf %sx "$2" | base64 | tr -d '\n')
-  sent=$(host_run "rd_p=\$(echo $b64 | base64 -d); herdr agent prompt '$1' \"\${rd_p%x}\"" 2>&1); rc=$?
+  sent=$(host_run "rd_p=\$(echo '$b64' | base64 -d); herdr agent prompt '$1' \"\${rd_p%x}\"" 2>&1); rc=$?
   printf '%s' "$sent"
   (( rc == 0 )) || return 3
   grep -q '"error"' <<<"$sent" && return 2
@@ -451,20 +451,22 @@ except Exception:
 
 # Delivery signal: ANY state change after the send. A prompt answered fast lands in `blocked`
 # (a question) or a fresh `done` (completion_seq bumps) without a poll ever seeing `working`, and
-# waiting for `working` alone calls that a loss and invites a duplicate. One poll per second.
-# $1 agent  $2 snapshot taken before the send  $3 number of polls.
+# waiting for `working` alone calls that a loss and invites a duplicate.
+# $1 agent id  $2 snapshot taken before the send  $3 window in seconds. Polls every RD_POLL_S
+# (whole seconds, default 1); there is no sleep after the last poll.
 # Returns 0 changed · 1 ran and saw no change · 2 the last snapshot failed — "no change" is then
 # not an observation, and the caller must not treat it as one.
 wait_state_change() {
-  local now i seen=0
-  for ((i = 0; i < $3; i++)); do
+  local now i seen=0 step=${RD_POLL_S:-1} polls=$3
+  (( step > 0 )) && polls=$(( ($3 + step - 1) / step ))
+  for ((i = 0; i < polls; i++)); do
     if now=$(agent_snapshot "$1"); then
       seen=1
       [[ $now != "$2" ]] && return 0
     else
       seen=0
     fi
-    sleep "${RD_POLL_S:-1}"
+    (( i < polls - 1 )) && sleep "$step"
   done
   (( seen )) && return 1
   return 2
@@ -489,6 +491,21 @@ prompt_attempt() {
   wait_state_change "$2" "$base" "$4"; rc=$?
   (( rc == 2 )) && return 6
   return "$rc"
+}
+
+# ONE place that words what a failed or unconfirmed deliver_prompt means, for `wave` and `fan`:
+# rc 3 (transport failure) and 4 (state unreadable) are "the text may have arrived", so they must
+# never advise a re-send. Prints a note; returns 1 only for rc 2 (rejected — definitely not
+# delivered), so a caller that needs to stop can. $1 rc  $2 agent  $3 context (names the pane).
+report_deliver_result() {
+  case $1 in
+    0) ;;
+    1) note "   $3: $2 never changed state after two sends — 'rd read $2', then 'rd say $2 …'" ;;
+    2) note "   $3: UNPROMPTED ($DELIVER_ERR) — recover with: rd say $2 '<the prompt>'"
+       return 1 ;;
+    *) note "   $3: delivery UNCONFIRMED ($DELIVER_ERR) — 'rd read $2' BEFORE any 'rd say': a re-send may duplicate it" ;;
+  esac
+  return 0
 }
 
 # Submit a prompt and PROVE it landed. Measured ~1 in 6 prompts is dropped when sent right
@@ -755,13 +772,8 @@ for a in agents:
   fi
 
   deliver_prompt "$pane" "$agent" "$prompt"
-  case $? in
-    2|3) note "   pane $pane is live but UNPROMPTED — recover with:"
-         note "     rd say $agent '<the handover prompt>'"
-         die "wave $wnum started but the prompt was not delivered: $DELIVER_ERR" ;;
-    4)   note "   pane $pane is live; $DELIVER_ERR — check 'rd read $agent' before any 'rd say'" ;;
-    1)   note "   pane $pane never left idle after two sends — check 'rd read $agent', then 'rd say $agent …'" ;;
-  esac
+  report_deliver_result $? "$agent" "wave $wnum (pane $pane)" \
+    || die "wave $wnum started but the prompt was not delivered: $DELIVER_ERR"
 
   echo "→ wave $wnum started: $AGENT_KIND '$agent' in ${ws:+space $ws, }pane $pane  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
@@ -863,12 +875,11 @@ for w in workspaces:
 
     prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
     deliver_prompt "$pane" "$agent" "$prompt"; rc=$?
-    case $rc in
-      0) echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}" ;;
-      1) echo "→ fan: '$agent' on $branch started but never left idle — 'rd read $agent'" ;;
-      2|3) echo "→ fan: '$agent' on $branch UNPROMPTED ($DELIVER_ERR) — 'rd say $agent …'" ;;
-      4) echo "→ fan: '$agent' on $branch started; $DELIVER_ERR — 'rd read $agent'" ;;
-    esac
+    if (( rc == 0 )); then
+      echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}"
+    else
+      report_deliver_result "$rc" "$agent" "fan $branch" || true
+    fi
   done
   note "   'rd agents' to watch · scripts/wave-watch.sh --agents … to block · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
 }
@@ -1171,13 +1182,17 @@ say_fail() { # $1 agent  $2 reason
 }
 
 # One delivery attempt for `say`; exits on every outcome that is not a plain yes/no.
-# $1 pane  $2 agent name  $3 text. Returns 0 picked up · 1 never picked up · 5 queued behind a turn.
+# $1 pane  $2 agent id  $3 text  $4 "1" when an earlier attempt already sent this text.
+# Returns 0 picked up · 1 never picked up · 5 queued behind a turn.
 say_attempt() {
   local rc
   prompt_attempt "$1" "$2" "$3" "${RD_SAY_WAIT_S:-20}"; rc=$?
   case $rc in
     2|3) say_fail "$2" "$DELIVER_ERR" ;;
-    4) say_fail "$2" "could not read its state from herdr, so nothing was sent" ;;
+    4) if [[ ${4:-} == 1 ]]; then
+         say_fail "$2" "delivery unconfirmed: the first send went out, and its state was unreadable before the re-send (not re-sent)"
+       fi
+       say_fail "$2" "could not read its state from herdr, so nothing was sent" ;;
     6) say_fail "$2" "the text was sent, but its state became unreadable, so delivery is unconfirmed (not re-sent)" ;;
   esac
   return "$rc"
@@ -1211,7 +1226,8 @@ for a in json.load(sys.stdin)["result"]["agents"]:
     if a.get("pane_id") == os.environ["PANE"]:
         print(a.get("name") or ""); break
 ' <<<"$roster" 2>/dev/null)
-  [[ -n $agent ]] || say_fail "$name" "pane $pane has no agent name herdr can address, so nothing was sent"
+  # A hand-started agent has no name, only a pane id — `herdr agent get|prompt` take either.
+  [[ -n $agent ]] || agent=$pane
 
   local rc
   say_attempt "$pane" "$agent" "$text"; rc=$?
@@ -1228,7 +1244,7 @@ for a in json.load(sys.stdin)["result"]["agents"]:
     say_fail "$agent" "$modal is blocking it and dismissing it failed: $keys"
   fi
   sleep "${RD_SAY_SETTLE:-1}"
-  say_attempt "$pane" "$agent" "$text"; rc=$?
+  say_attempt "$pane" "$agent" "$text" 1; rc=$?
   case $rc in
     0) echo "delivered after dismissing $modal" ;;
     5) echo "queued after dismissing $modal — $agent was working, the message waits behind its turn" ;;
