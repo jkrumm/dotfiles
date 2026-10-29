@@ -50,15 +50,6 @@ worth building.
   can run unrestricted. The same shape as Claude Code + WebFetch here, but a
   second instance of it — treat an unfamiliar repo or a research-heavy run as
   the case for `cx -s workspace-write -a on-request`.
-- **research-gateway is wired into codex too** (`[mcp_servers]`, bearer via
-  `RESEARCH_GATEWAY_TOKEN`, `tool_timeout_sec = 7200` because one `job_wait`
-  blocks for the whole job). `cx mcp list` reports it. **An empty
-  `bearer_token_env_var` is fatal to codex's MCP startup** — it refuses to
-  start the client rather than taking a 401 — so `cx` disables the server for
-  that launch when the bearer won't resolve. In practice that means a shell
-  that hasn't `sz`'d since this landed. The bearer is resolved
-  once per launch into an env var, where Claude Code's headers helper re-reads
-  it on every reconnect — so a mid-session rotation needs a codex restart.
 - **`codex exec` blocks on stdin** when it isn't a TTY and no prompt is piped —
   redirect `</dev/null` in scripts or it hangs with no output at all.
 - **`codex --strict-config` is the validator**: it names the exact unknown key
