@@ -144,7 +144,7 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1.4** (ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
+**Rule v1.5** (v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
@@ -154,19 +154,23 @@ eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly
                The pick log carries `stale: true`)
 pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
 overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
-units(x)    = registry units, else from the plan: max20x → {session 4, weekly 2}, anything else → {1, 1}
-headroom(x) = (weeklyMax(x) − weekly%(x)) × units(x).weekly     # no weekly window → WEEKLY_MAX × units.weekly
-best(S)     = the member of S with the most headroom (registry order breaks ties)
-home(lane)  = best(eligible x whose homeLanes claim the lane)
+units(x)    = registry units, else from the plan "maxNx": k = max(1, N/5) → {session k, weekly 1 + (k−1)/3}
+              (max5x {1,1}, max10x {2, 1.33}, max20x {4, 2}); any other plan → {1, 1}
+spare(x)    = (weeklyMax(x) − weekly%(x)) × units(x).weekly     # no weekly window → WEEKLY_MAX × units.weekly
+weight(x)   = spare(x) / hoursToWeeklyReset(x)^1.5    # URGENCY_EXP; ≥ 1 h; no weekly reset → a full week
+best(S)     = the member of S with the highest weight (registry order breaks ties)
+share(S)    = a draw from S with probability ∝ weight   # what the CLI uses; `pick --dry` and tests use best(S)
+home(lane)  = share(eligible x whose homeLanes claim the lane)
               iu for interactive, agent-gateway:review, headless
               me and me2 for wave, fan, agent-gateway:* (other tools)
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first (soonest reset)
-  2. eligible(home) ∧ overPace(home) → best(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
+  2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
   3. eligible(home) → the eligible x ≠ home with ¬overPace(x) ∧ session%(home) − session%(x) > 20
-                      and the lowest session% (ties by headroom)   # balance the 5h windows
+                      and the lowest session% (ties by weight); a sibling that shares the lane beats an outsider
+                      # balance the 5h windows
   4. eligible(home) → home
-  5. best(eligible)   # spill to the account with the most room
+  5. share(eligible)   # spill to the accounts with the most room
   6. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
                    (`rd` pauses — Herdr work never spills to IU; agw keeps its IU path for gateway workers)
@@ -175,8 +179,19 @@ pick(lane):
 Why v1.4: with two accounts "the other" was one account, so the first match was the only match. With `me2` the
 siblings `me` and `me2` share the bulk lanes, and registry order would have drained `me` while `me2` idled. Headroom
 is the weekly points left below the account's own ceiling, scaled by its plan, so a 20x account with the same
-percent counts for twice the room. Every threshold and the expiring-capacity step are unchanged, and with two accounts
-the result is identical to v1.3 (a single candidate is the best candidate).
+percent counts for twice the room. Every threshold and the expiring-capacity step are unchanged. From v1.5 the ranking is
+spare per hour to the account's own reset (a reset already past counts as a fresh week), and the CLI's draw is random
+(only the outcome reaches the pick log, so a single pick is not reproducible; `pick --dry` and the tests stay deterministic).
+
+Why v1.5 (2026-10-29): the pick log showed `me2` at 67 % weekly with three days to its reset taking about a tenth
+of the bulk picks while `iu` and `me` (resets 6-7 days out) took the rest. v1.4's best-headroom pick looked at spare
+points only, so an account that expires sooner was no more attractive than one that expires next week, and
+argmax sends a whole fan burst to one account. v1.5 weighs each account's spare capacity per hour to *its own*
+reset (sharpened ×1.5, so a window closing sooner counts for more), and the CLI draws among the home accounts in
+proportion to the weights, so a burst spreads instead of landing on one account. Nothing names an account or a plan:
+a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
+similar 5h load the split at the time was about 49/51; the 5h-balance step (3) still moves work to the emptier
+window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
 
 Why the pace step (v1.1): on 2026-10-24 `c` picked `iu` at 89 % weekly with about
 four days to its reset while `me` sat at 2 %. v1 only leaves home at weekly ≥ 90 %,

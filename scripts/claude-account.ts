@@ -292,7 +292,7 @@ async function main(argv: string[]): Promise<number> {
         console.error(`claude-account: refresh skipped: ${(e as Error).message}`) // a pick must always answer; go on with the current cache
       }
       const cache = readClaudeJson(reg, loadCache())
-      const p = pick(reg, cache, lane, now)
+      const p = pick(reg, cache, lane, now, dry ? undefined : Math.random) // --dry stays deterministic (verify and previews)
       if (!dry) {
         try {
           mkdirSync(dirname(picksPath()), { recursive: true })

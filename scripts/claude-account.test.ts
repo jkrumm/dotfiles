@@ -99,9 +99,10 @@ describe("pick rule v1.4: N accounts", () => {
   })
   test("a missing weekly window counts as full headroom", () => {
     const noWeekly: Sample = { ...sample(10, 0), w: null, w_reset: null, w_ts: null }
-    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 > 90
-    expect(pick(reg3(), cache3(iu, sample(10, 5), noWeekly), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), cache3(iu, noWeekly, sample(10, 0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 = 95: registry order
+    const full = (w: number) => sample(10, w, { wReset: NOW / 1000 + 7 * D }) // a missing window is weighed as a full week away
+    expect(pick(reg3(), cache3(iu, noWeekly, full(5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 > 90
+    expect(pick(reg3(), cache3(iu, full(5), noWeekly), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, noWeekly, full(0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 = 95: registry order
   })
   test("pace step: the calm alternative with the most headroom", () => {
     const iuOver = sample(10, 88, { wReset: NOW / 1000 + 3.9 * D }) // pace 44
@@ -121,6 +122,58 @@ describe("pick rule v1.4: N accounts", () => {
   })
   test("a session alternative must still pass the margin test", () => {
     expect(pick(reg3(), cache3(sample(30, 10), sample(15, 10), sample(12, 10)), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+})
+
+describe("pick rule v1.5: expiry-weighted sharing", () => {
+  const D = 24 * H
+  const iu = sample(10, 10)
+  // me2 resets in 3 days at 67 %, me in 7 days at 11 %: the sooner reset weighs more, the later one still gets a real share
+  const me = sample(10, 11, { wReset: NOW / 1000 + 7 * D })
+  const me2 = sample(10, 67, { wReset: NOW / 1000 + 3 * D })
+  test("deterministic mode takes the account whose spare capacity is most urgent", () => {
+    expect(pick(reg3(), cache3(iu, me, me2), "fan", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    // same spare, later reset: the sooner one still wins
+    expect(pick(reg3(), cache3(iu, sample(10, 40, { wReset: NOW / 1000 + 6 * D }), sample(10, 40, { wReset: NOW / 1000 + 2 * D })), "fan", NOW).picked).toBe("me2")
+  })
+  test("with an rng the siblings share the work in proportion to their weights, not winner-takes-all", () => {
+    const n = 2000
+    const picks = Array.from({ length: n }, (_, i) => pick(reg3(), cache3(iu, me, me2), "fan", NOW, () => (i + 0.5) / n).picked)
+    const share = picks.filter((p) => p === "me2").length / n
+    expect(share).toBeGreaterThan(0.4)
+    expect(share).toBeLessThan(0.65)
+    expect(picks.every((p) => p === "me" || p === "me2")).toBe(true) // iu is not a home of the bulk lanes
+  })
+  test("a drawn home that is session-hot hands over to a sibling before an outsider", () => {
+    const hot = sample(85, 11, { wReset: NOW / 1000 + 7 * D })
+    const calm = sample(15, 67, { wReset: NOW / 1000 + 3 * D })
+    expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "fan", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "session" })
+  })
+  test("N accounts: a fourth subscription joins from the registry alone", () => {
+    const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true } } }
+    const c: Cache = { ...cache3(iu, me, me2), samples: { ...cache3(iu, me, me2).samples, me3: sample(10, 30, { wReset: NOW / 1000 + 1.5 * D }) } }
+    expect(pick(r, c, "fan", NOW)).toMatchObject({ picked: "me3" })
+    const seen = new Set(Array.from({ length: 200 }, (_, i) => pick(r, c, "fan", NOW, () => (i + 0.5) / 200).picked))
+    expect(seen).toEqual(new Set(["me", "me2", "me3"]))
+  })
+  test("weight edge cases: no weekly reset, a reset already past, plan spelling", () => {
+    const wk = (o: Partial<Sample>) => ({ ...sample(10, 50, { wReset: NOW / 1000 + 7 * D }), ...o })
+    // 168 h fallback: w set, w_reset null weighs like a reset a full week away
+    expect(pick(reg3(), cache3(iu, wk({ w_reset: null }), wk({})), "fan", NOW).picked).toBe("me")
+    // reset passed: judged as a fresh week (95 spare), not as the stale 50 %-used sample nor a 1 h rush
+    expect(pick(reg3(), cache3(iu, wk({ w: 90, w_reset: NOW / 1000 - 60 }), wk({ w: 60 })), "fan", NOW).picked).toBe("me")
+    const a = (plan: string) => accountUnits({ dir: null, plan, homeLanes: [], enabled: true })
+    expect(a(" Max10x ")).toEqual(a("max10x"))
+    expect(a("max40x")).toEqual({ session: 8, weekly: 1 + 7 / 3 })
+  })
+  test("units follow any maxNx plan, an explicit block still wins", () => {
+    const a = (plan: string, units?: { session: number; weekly: number }) => accountUnits({ dir: null, plan, units, homeLanes: [], enabled: true })
+    expect(a("max5x")).toEqual({ session: 1, weekly: 1 })
+    expect(a("max20x")).toEqual({ session: 4, weekly: 2 })
+    expect(a("max10x").session).toBe(2)
+    expect(a("max10x").weekly).toBeCloseTo(4 / 3)
+    expect(a("pro")).toEqual({ session: 1, weekly: 1 })
+    expect(a("max20x", { session: 9, weekly: 9 })).toEqual({ session: 9, weekly: 9 })
   })
 })
 

@@ -1,4 +1,4 @@
-// Claude account registry, quota cache and picker rule v1 (docs/claude-accounts.md).
+// Claude account registry, quota cache and picker rule v1.5 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
 import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
@@ -25,6 +25,8 @@ export const PACE_MARGIN = 15
 export const SESSION_MARGIN = 20
 const WEEK_S = 7 * 24 * 3600
 export const EXPIRING_WEEKLY_MAX = 70
+/** How much more a sooner reset weighs than a later one when sharing work (1 = pure spare-per-hour, higher = harder front-loading of the expiring account). */
+export const URGENCY_EXP = 1.5
 
 export interface Account {
   dir: string | null
@@ -109,8 +111,15 @@ export function loadRegistry(path = registryPath()): Registry {
   return { accounts: raw.accounts }
 }
 
-/** Capacity units of an account: the registry's own, else from the plan (max20x 4 / 2, anything else 1 / 1; measured ratios, docs/claude-accounts.md). */
-export const accountUnits = (a: Account): { session: number; weekly: number } => a.units ?? (a.plan === "max20x" ? { session: 4, weekly: 2 } : { session: 1, weekly: 1 })
+/** Capacity units of an account: the registry's own, else from the plan (maxNx: session N/5, weekly 1 + (N/5 - 1)/3, so max20x is 4 / 2; any other plan 1 / 1; measured ratios, docs/claude-accounts.md). */
+export const accountUnits = (a: Account): { session: number; weekly: number } => {
+  if (a.units) return a.units
+  // maxNx: the 5h window scales with N/5; the weekly one grows slower (20x measured at 2x a 5x), interpolated linearly between
+  const n = /^max\s*(\d+)x$/.exec(a.plan.trim().toLowerCase())?.[1]
+  if (!n) return { session: 1, weekly: 1 }
+  const k = Math.max(1, Number(n) / 5)
+  return { session: k, weekly: 1 + (k - 1) / 3 }
+}
 
 /** Absolute config dir of an account; null = default ~/.claude (env unset). */
 export const accountDir = (a: Account): string | null => (a.dir === null ? null : resolve(expandHome(a.dir)))
@@ -592,13 +601,16 @@ export function overPace(reg: Registry, cache: Cache, id: string, nowMs: number)
   return p !== null && x.w! > p + PACE_MARGIN
 }
 
-/** Rule v1.4 (docs/claude-accounts.md §The picker). Among several candidates the best one wins; ties follow registry order. */
-export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number): PickResult {
-  const r = pickRaw(reg, cache, lane, nowMs)
+/**
+ * Rule v1.5 (docs/claude-accounts.md §The picker). Among several candidates the highest weight wins (ties follow
+ * registry order); with `rng` the candidates share the work in proportion to their weights instead.
+ */
+export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): PickResult {
+  const r = pickRaw(reg, cache, lane, nowMs, rng)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
 }
 
-function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit<PickResult, "stale"> {
+function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
   const ok = ids.filter((id) => eligible(reg, cache, id, nowMs))
   const bulk = lane !== "interactive"
@@ -613,35 +625,47 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number): Omit
       .sort((p, q) => cache.samples[p].w_reset! - cache.samples[q].w_reset!)
     if (expiring.length) return { picked: expiring[0], reason: "expiring-capacity" }
   }
-  // weekly points left below the account's own ceiling, scaled by its plan; a missing weekly window is open headroom
-  const headroom = (id: string) => {
+  // Weight = weekly capacity left under the account's own ceiling (scaled by its plan) per hour to its own reset,
+  // sharpened by URGENCY_EXP: the account whose window closes soonest with room left is the one whose points would
+  // otherwise be lost. Everything is read from the registry and the sample, nothing names an account.
+  const weight = (id: string) => {
     const x = cache.samples[id]
-    return (x && hasW(x) ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX) * accountUnits(reg.accounts[id]).weekly
+    const hasWeek = !!x && hasW(x)
+    // a reset that already passed means the cached % predates the rollover: judge it as a fresh week
+    const rolled = hasWeek && x.w_reset !== null && x.w_reset * 1000 <= nowMs
+    const spare = hasWeek && !rolled ? weeklyMax(x, nowMs) - x.w! : WEEKLY_MAX
+    const hoursLeft = hasWeek && !rolled && x.w_reset !== null ? Math.max(1, (x.w_reset * 1000 - nowMs) / 3600_000) : WEEK_S / 3600
+    return (spare * accountUnits(reg.accounts[id]).weekly) / hoursLeft ** URGENCY_EXP
   }
-  const mostHeadroom = (cands: string[]) => cands.reduce<string | undefined>((best, id) => (best === undefined || headroom(id) > headroom(best) ? id : best), undefined)
+  const choose = (cands: string[]): string | undefined => {
+    if (!rng || cands.length < 2) return cands.reduce<string | undefined>((best, id) => (best === undefined || weight(id) > weight(best) ? id : best), undefined)
+    let r = rng() * cands.reduce((sum, id) => sum + weight(id), 0)
+    return cands.find((id) => (r -= weight(id)) < 0) ?? cands[cands.length - 1]
+  }
   const homes = homeIds(reg, lane)
-  const home = mostHeadroom(ok.filter((id) => homes.includes(id)))
+  const home = choose(ok.filter((id) => homes.includes(id)))
   if (home && overPace(reg, cache, home, nowMs)) {
-    const calm = mostHeadroom(ok.filter((id) => id !== home && !overPace(reg, cache, id, nowMs)))
+    const calm = choose(ok.filter((id) => id !== home && !overPace(reg, cache, id, nowMs)))
     if (calm) return { picked: calm, reason: "pace" }
   }
   if (home) {
     const hs = cache.samples[home]
     const freshS = (x: Sample) => hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS
-    const emptier = ok
-      .filter((id) => {
-        const x = cache.samples[id]
-        return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
-      })
-      .reduce<string | undefined>((best, id) => {
-        if (best === undefined) return id
-        const d = cache.samples[id].s! - cache.samples[best].s!
-        return d < 0 || (d === 0 && headroom(id) > headroom(best)) ? id : best
-      }, undefined)
+    const movable = ok.filter((id) => {
+      const x = cache.samples[id]
+      return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
+    })
+    // a sibling that shares the lane beats an outsider (iu keeps its room for interactive work)
+    const siblings = movable.filter((id) => homes.includes(id))
+    const emptier = (siblings.length ? siblings : movable).reduce<string | undefined>((best, id) => {
+      if (best === undefined) return id
+      const d = cache.samples[id].s! - cache.samples[best].s!
+      return d < 0 || (d === 0 && weight(id) > weight(best)) ? id : best
+    }, undefined)
     if (emptier) return { picked: emptier, reason: "session" }
     return { picked: home, reason: "home" }
   }
-  const other = mostHeadroom(ok)
+  const other = choose(ok)
   if (other) return { picked: other, reason: "spill" }
   if (!bulk) return { picked: defaultAccountId(reg), reason: "interactive-fallback" }
   return { picked: SPILL, reason: "no-eligible-account" }
