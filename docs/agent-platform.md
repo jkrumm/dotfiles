@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-gateway), one conversational front door (Hermes), one human cockpit (herdr), three lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
+description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (herdr), two lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
 aliases:
   - agent-estate-model
 tags:
@@ -13,7 +13,7 @@ timestamp: 2026-10-04
 
 # Agent platform
 
-**Verdict:** one worker engine (agent-gateway), one conversational front door
+**Verdict:** one worker engine (agent-workflows), one conversational front door
 (Hermes), one human cockpit (herdr). Every repo describes itself through the same
 four Make targets and four AGENTS.md sections, so no central component holds
 per-repo knowledge. Trust comes from the infrastructure (Tailscale, the owner's
@@ -21,7 +21,7 @@ GitHub account); the only gates left are quality gates. Alerts go to Slack and a
 human acts; there is no autonomous remediation loop.
 
 STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
-rename to agent-gateway and OpenCode as the dispatch default). The autonomous remediation
+rename to agent-gateway and OpenCode as the worker default). The autonomous remediation
 loop was switched off 2026-10-27 by agent-workflows P0; its design and the
 status rows that described it are in
 `docs/archive/agent-platform-2026-10-warden-era.md`. A workflow platform is designed
@@ -33,7 +33,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 |-|-|
 | Three lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
-| agent-gateway: model registry, `triage` job, dispatch git safety, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa, frontend adopted (frontend in Wave 11, measured on real findings) |
+| agent-gateway: model registry, `triage` job, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa, frontend adopted (frontend in Wave 11, measured on real findings) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 
 ## The picture
@@ -47,31 +47,29 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
         │                                   │
         ▼                                   │ opens a herdr tab when asked
  Slack #alerts → a human reads and acts     ▼
-                                       @implementer · agw-legacy dispatch · rd wave / rd fan
+                                       @implementer · rd wave / rd fan
 
- AGENT-GATEWAY worker engine: triage · dispatch(investigate|implement)   (check · review run on agent-workflows: `agw check`, `agw review`)
-           OpenCode + cheap models by default, Sonnet only where judgment gates a merge
-           model ids live ONLY in `GET /api/routing`
+ AGENT-WORKFLOWS (`agw`): check · review · research · prose · diagram · brain
+           model ids live ONLY in `agw routes`
 
  core      ~/.claude (global CLAUDE.md, skills, agents) + per-repo AGENTS.md + Makefile
-           read identically by Claude Code, OpenCode and every agent-gateway worker
+           read identically by Claude Code and OpenCode
 ```
 
 ## Roles — one verb each
 
 | Component | Does | Never does |
 |-|-|-|
-| **agent-gateway** | runs bounded jobs: triage, investigate, implement; `check`, `review`, `prose`, `diagram` and `brain` run on agent-workflows (`agw check`, `agw review`, `agw prose`, `agw diagram`, `agw brain`) | decide what to work on, merge |
+| **agent-workflows (`agw`)** | `check`, `review`, `prose`, `diagram` and `brain` (`agw check`, `agw review`, `agw prose`, `agw diagram`, `agw brain`) | decide what to work on, merge |
 | **Hermes** | answers, narrates, opens herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work |
 | **Argo** | the status surface | hold state of its own |
 
-## Three lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
+## Two lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
 
 | Lane | When | Engine |
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `agw-legacy dispatch` | one bounded change, unattended, in a repo you are not working in; result is a branch/PR or a verdict | OpenCode worker |
 | `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
 | `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
 
@@ -98,8 +96,6 @@ monitor name, OTel `service.name`) · `## Gotchas`.
 | Job | Default | Why |
 |-|-|-|
 | `triage`, review router | single-shot `iu-openai` cheap model, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
-| `dispatch` investigate | OpenCode session on agw's shared server, Haiku 5.5 EU (`iu-anthropic`) | ~$0.001–0.01/episode, ~100 % cache reads (Wave 5 bench) |
-| `dispatch` implement | OpenCode, Haiku 5.5 EU; DeepSeek-V4-Pro (`max`) escalation for attempt 3+ | 6/6 on the Wave 5 bench; episodes survive an agw restart (re-attach) and take `agw-legacy steer` |
 | `review` angles | OpenCode Haiku 5.5 EU for senior-dev/typescript/qa; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
 | `review` synthesis | Sonnet | the judgment that gates every merge |
 | `check` | `claude` harness, Haiku 4.5 over IU (Haiku 5.5 is 4× slower there) | mechanical |
@@ -109,11 +105,6 @@ One model registry (`server/lib/models.ts`): id, wire (`anthropic` / `chat` /
 Unverified ids are refused. GPT ids run only over the Responses
 wire. The dotfiles OpenCode provider block is generated from it. Everything
 else points at `GET /api/routing` — never a model id in prose.
-
-Dispatch git safety: worktree from a fresh fetch; revisions cut from the prior
-branch by the handler (workers have no credentials); rebase onto the latest base
-and re-run checks before push; a per-repo lease for implement episodes from any
-caller.
 
 ## Hermes — the front door
 
