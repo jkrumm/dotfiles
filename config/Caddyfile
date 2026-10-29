@@ -98,12 +98,6 @@ plannotator.test {
 	reverse_proxy localhost:7790
 }
 
-# agent-gateway
-agent-gateway.test {
-	import local
-	reverse_proxy localhost:7705
-}
-
 # observability
 hyperdx.test {
 	import local
@@ -113,10 +107,7 @@ hyperdx.test {
 # basalt-ui marketing site (apps/marketing, Astro) on :7711. Moved off 7710,
 # which it shared with the playground below — both `dev` scripts hard-coded
 # 7710, so whichever started second killed the first (`npx kill-port 7710`
-# literally does that). 7711 rather than the 7714 freed by dropping the
-# audio-gateway door below: dropping a Caddy block does not release a port, and
-# audio-gateway's own `dev` script still claims 7714. Adjacent to its sibling,
-# so the pair reads as a pair.
+# literally does that). Adjacent to its sibling, so the pair reads as a pair.
 basalt.test {
 	import local
 	reverse_proxy localhost:7711
@@ -134,31 +125,20 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
-# audio-gateway.test — DROPPED 2026-07-30. The real gateway is the VPS
-# container reached over the tailnet, so local clients (MacWhisper) point
-# straight at https://audio-gateway.jkrumm.com/v1 and the local door bought
-# nothing. The repo's `dev` script still binds :7714 for actual local work on
-# the gateway — the port is NOT free, it just has no vhost in front of it.
-# The podcast pipeline moved to a SECOND instance of the same service on this
-# machine (:7719, com.jkrumm.audio-gateway LaunchAgent) — see podcasts.test
-# below — because the brain vault is a git checkout only here.
-
-# podcast pipeline — audio-gateway's second instance (repo `audio-gateway`,
-# scripts/launch.sh, port 7719). STT/TTS stays on the VPS container above.
-podcasts.test {
+# audio — agent-workflows' audio process (com.jkrumm.agent-workflows-audio, :7792, loopback): the
+# OpenAI-compatible STT/TTS door, bearer-gated per caller (MacWhisper on the MacBook transcribes
+# through it). Only the door paths are forwarded — /v1/audio/* and /audio/*, the matcher in
+# agent-workflows' packages/audio/src/process/door.ts; /health and /api/* on the same port are 404 here.
+# scripts/lib/caddy-registry.py carries the path restriction into the generated tailnet door.
+audio.test {
 	import local
-	reverse_proxy localhost:7719
-}
-
-# research-gateway — the research HTTP service, native LaunchAgent on the mini
-# (com.jkrumm.research-gateway, :7780, bound to 127.0.0.1; lightpanda sidecar on
-# :7781, loopback, no door). `research.mini.jkrumm.com` is how every consumer
-# reaches it. A job response can stay open for a whole job (tens of
-# minutes, 15s keep-alive frames) — reverse_proxy has no read timeout by default,
-# so nothing here may add one.
-research.test {
-	import local
-	reverse_proxy localhost:7780
+	@door path /v1/audio/* /audio/*
+	handle @door {
+		reverse_proxy localhost:7792
+	}
+	handle {
+		respond 404
+	}
 }
 
 # iris — voice-memo server (Bun + Elysia), native LaunchAgent on the mini

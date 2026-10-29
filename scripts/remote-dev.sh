@@ -1093,7 +1093,7 @@ else:
     if any(r[0] == "interactive" for r in rows):
         print()
         print("  \033[33mnote:\033[0m 'interactive' agents die with their connection.")
-        print("        Unattended work belongs in 'agw-legacy dispatch'.")
+        print("        Long work belongs in 'rd wave' (a herdr tab that outlives the connection).")
 PY
 }
 
@@ -1291,7 +1291,7 @@ usage() {
                               (fan --clean <repo> [--all] reclaims merged fan worktrees)
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          close a finished wave's tab (clean + pushed only)
-    rd reap [--dry-run]       janitor: close finished clean+pushed tabs, message dirty ones (REAP_IDLE_H, default 12)
+    rd reap [--dry-run]       janitor: close finished clean+pushed tabs (idle > REAP_IDLE_H, default 12; a merged fan tab at once), message dirty ones
     rd agents                 every agent on the host, both lanes
     rd read <agent> [src]     read an agent's output without attaching
     rd say <agent> <text…>    send a prompt to a running agent
@@ -1304,9 +1304,8 @@ usage() {
 
     repos · work · agents
 
-  Three lanes for starting agent work (docs/agent-platform.md):
+  Two lanes for starting agent work (docs/agent-platform.md):
     @implementer  native subagent — the edit must land in this session's live tree
-    dispatch      agent-gateway `dispatch` (MCP/CLI) — settled bounded work → branch/PR or verdict
     wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
 
   Getting a terminal is a different layer:

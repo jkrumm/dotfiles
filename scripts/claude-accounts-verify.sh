@@ -15,7 +15,6 @@ STATE_DIR="${CLAUDE_ACCOUNTS_STATE_DIR:-$HOME/.local/state/claude-accounts}"
 LOG_DIR="${CLAUDE_LOG_DIR:-$HOME/.claude/logs}"
 USAGE_DB="${USAGE_TRACKER_DB:-$HOME/.local/share/usage-tracker/usage.db}"
 RD_SCRIPT="${RD_SCRIPT:-$DOTFILES_DIR/scripts/remote-dev.sh}"
-AGW_SESSION_RUNNER="${AGW_SESSION_RUNNER:-$HOME/SourceRoot/agent-gateway/server/mcp/session-runner.ts}"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "$HOME/.local/bin/claude")}"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"
 
@@ -214,18 +213,9 @@ if [[ -r "$RD_SCRIPT" ]]; then
 else
   row FAIL "launcher/rd" "$RD_SCRIPT unreadable"
 fi
-if [[ -r "$AGW_SESSION_RUNNER" ]]; then
-  if grep -q 'claude-account pick' "$AGW_SESSION_RUNNER"; then
-    row PASS "launcher/agent-gateway" "session-runner.ts calls claude-account pick"
-  else
-    row FAIL "launcher/agent-gateway" "session-runner.ts has no 'claude-account pick' — workers inherit the default account"
-  fi
-else
-  row WARN "launcher/agent-gateway" "$AGW_SESSION_RUNNER not found (agent-gateway not on this machine)"
-fi
 
 # ── d. pick table (dry: no picks.jsonl line, no refresh) ──────────────────────
-for lane in interactive wave fan agent-gateway:review agent-gateway:dispatch headless; do
+for lane in interactive wave fan headless; do
   rc=0
   out=$("${CA[@]}" pick --lane "$lane" --dry --why 2>/dev/null) || rc=$?
   why=$(grep '^# ' <<<"$out" | head -1)
@@ -244,8 +234,8 @@ for lane in interactive wave fan agent-gateway:review agent-gateway:dispatch hea
 done
 
 # ── e. attribution (last 24 h) ─────────────────────────────────────────────────
-# Claude Code sessions are the hook lines (and any agent-gateway line on a Max backend); agent-gateway's
-# opencode/IU lines are metered, they have no Max account to carry.
+# Claude Code sessions are the hook lines (and any line on a Max backend); opencode/IU lines
+# are metered, they have no Max account to carry.
 if [[ -z "$SE" ]]; then
   row WARN "attribution/session_env" "no session_env lines in the last 24 h"
 else

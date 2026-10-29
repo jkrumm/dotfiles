@@ -21,9 +21,13 @@ file="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/service.json"
 [[ -f "$file" ]] || exit 0 # no service configured yet; first start creates it, next call fills it
 
 names=(IU_KEY IU_OPENAI_BASE IU_ANTHROPIC_BASE)
+# Keys earlier versions of the service env carried; dropped on the next render so a rewrite
+# leaves no credential for a retired service behind (RESEARCH_GATEWAY_AUTH: research-gateway).
+retired=(RESEARCH_GATEWAY_AUTH)
 # jq reads the values from its environment (`env.NAME`), never from argv.
-filter='. as $c | reduce ($names[]) as $n ($c; if (env[$n] // "") != "" then .env[$n] = env[$n] else . end)'
-next=$(jq --argjson names "$(printf '%s\n' "${names[@]}" | jq -R . | jq -sc .)" "$filter" "$file")
+filter='. as $c | reduce ($names[]) as $n ($c; if (env[$n] // "") != "" then .env[$n] = env[$n] else . end) | del(.env[$retired[]])'
+next=$(jq --argjson names "$(printf '%s\n' "${names[@]}" | jq -R . | jq -sc .)" \
+  --argjson retired "$(printf '%s\n' "${retired[@]}" | jq -R . | jq -sc .)" "$filter" "$file")
 
 if [[ "$next" == "$(jq . "$file")" ]]; then
   exit 0

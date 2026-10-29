@@ -93,7 +93,7 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    - **Pinned npm/binary tools** (`FALLOW_VERSION`, `OCR_VERSION` in the
      Makefile): bump the pin, `make _setup-tools` on the mini, install the
      same version on the MacBook.
-   - **Bun services:** agent-gateway `make reload` (refuses while jobs run).
+   - **Bun services:** agent-workflows `make install-opencode` (pinned OpenCode), then `make deploy` (rolls both LaunchAgents to the new release).
    - **macOS:** majors are held by policy; drift-check reports them as info.
      Same-major companions (CLT, Safari) install with the exact label from
      `softwareupdate -l` (e.g. `Command Line Tools for Xcode 27.0-27.0`).

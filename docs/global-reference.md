@@ -14,8 +14,7 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 | 4–5 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
 
 `Task*` tools are a built-in coordination layer, not MCP-backed. Routines /
-`/schedule` run in Anthropic's cloud and **cannot reach** agent-gateway (localhost) or
-agent-workflows (tailnet).
+`/schedule` run in Anthropic's cloud and **cannot reach** agent-workflows (localhost/tailnet).
 
 ## Async-job contract
 
@@ -29,13 +28,13 @@ Grep to locate before reading; never re-read a file already read this session;
 files over 500 lines → `offset`/`limit`. Cached prefix reads are ~10–20× cheaper
 than fresh input (TTL 1 h idle), so the dominant cost lever is not breaking the
 cache: switching the orchestrator's model or effort, connecting/disconnecting an
-MCP server, or a Claude Code upgrade all invalidate it. Subagents and agent-gateway
+MCP server, or a Claude Code upgrade all invalidate it. Subagents and agw
 workers hold their own caches — the argument for delegating. When it is gone:
 `/compact` or `/clear`.
 
 ## Skills by mode
 
-Everything routed through `agw` or agent-gateway exists only on the mini.
+Everything routed through `agw` exists only on the mini.
 
 | Mode | Skills |
 |-|-|
@@ -48,7 +47,7 @@ Everything routed through `agw` or agent-gateway exists only on the mini.
 
 Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
 `/hermes-update`; `homelab` → `/audit`, `/docs`, `/upgrade-stack`; `vps` →
-`/audit`, `/docs`; `agent-gateway` → `/claude-cli`; `free-planning-poker` →
+`/audit`, `/docs`; `free-planning-poker` →
 `/release-fpp`; `homelab-private` → `/prowlarr`; `tinycast-extensions` →
 `/tinycast`, `/raycast-extension`, `/ticktick-api`; `brain` → `/wildrift-refresh`.
 
@@ -86,8 +85,6 @@ Workflow facts per repo:
 | Repo | Fact |
 |-|-|
 | `homelab-private` | Self-contained. Never reference its services, hostnames or details from any other repo, doc or commit. |
-| `agent-gateway` | Retires in Wave 11; no lane routes to it. Mini only. |
-| `research-gateway` | REST door only (Hermes's lane) until archive; `/research` runs on `agw research`. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for skill domains. |
 | `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
 | `brain` | `wiki/` = agentic knowledge (strict lint); PARA `Projects`/`Areas` = human surface; use `/brain`. |

@@ -125,16 +125,8 @@ DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
 COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_service_expected_plist colima)}"
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
-AGENT_GATEWAY_URL="${AGENT_GATEWAY_URL:-http://127.0.0.1:7705}"
 HERMES_PORT="${HERMES_PORT:-8642}"
-AUDIO_GATEWAY_URL="${AUDIO_GATEWAY_URL:-http://127.0.0.1:7719}"
-RESEARCH_GATEWAY_URL="${RESEARCH_GATEWAY_URL:-http://127.0.0.1:7780}"
 AGENT_WORKFLOWS_URL="${AGENT_WORKFLOWS_URL:-http://127.0.0.1:7791}"
-# The gateway's deploy clone and the marker its poller (scripts/mini-deploy.sh) writes only after a
-# healthy install — the pair probe_research_gateway compares to catch a deploy that is stuck.
-RG_APP_DIR="${RG_APP_DIR:-$HOME/.research-gateway/app}"
-RG_DEPLOYED_SHA_FILE="${RG_DEPLOYED_SHA_FILE:-$HOME/.research-gateway/data/deployed-sha}"
-RG_DEPLOY_STUCK_MIN="${RG_DEPLOY_STUCK_MIN:-15}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
@@ -473,7 +465,7 @@ check_boot_path() {
   #
   # A job that is neither loaded nor on disk means the feature was never
   # installed here — but every label in LAUNCHD_KEEPALIVE is one THIS script's
-  # other components already depend on (herdr/colima/agent-gateway/hermes/collie are
+  # other components already depend on (herdr/colima/agent-workflows/hermes/collie are
   # probed for liveness elsewhere), so absent here is a genuine failure, not a
   # skip.
   local uid label plist want missing="" mismatched="" stale="" path program
@@ -849,10 +841,7 @@ brew_row() {
 LAUNCHD_KEEPALIVE="\
 $(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
-com.jkrumm.agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
-com.jkrumm.research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist
-com.jkrumm.research-gateway-lightpanda|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway-lightpanda.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
@@ -870,23 +859,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
-agent-gateway|$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist|probe_agent_gateway
 agent-workflows|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist|probe_agent_workflows
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
 dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected_plist dnsmasq system)|probe_dnsmasq
-audio-gateway|$HOME/Library/LaunchAgents/com.jkrumm.audio-gateway.plist|probe_audio_gateway
-research-gateway|$HOME/Library/LaunchAgents/com.jkrumm.research-gateway.plist|probe_research_gateway
 brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
 walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad
 postgres|$HOME/Library/LaunchAgents/com.jkrumm.vps-pg-backup.plist|probe_postgres"
-
-probe_agent_gateway() {
-  local code
-  code=$(http_code "$AGENT_GATEWAY_URL/health")
-  [[ "$code" == "200" ]] || { echo "agent-gateway not answering on $AGENT_GATEWAY_URL (got ${code:-000})"; return 1; }
-}
 
 probe_agent_workflows() {
   # 200 {"status":"ok"} or 503 {"status":"degraded","reason":…} — healthy needs both the
@@ -1004,67 +984,6 @@ probe_dnsmasq() {
     || { echo "dnsmasq not resolving *.test (got ${answer:-nothing}) — every .test name on this machine is dead"; return 1; }
 }
 
-probe_audio_gateway() {
-  local code
-  code=$(http_code "$AUDIO_GATEWAY_URL/health")
-  [[ "$code" == "200" ]] || { echo "audio-gateway not answering on $AUDIO_GATEWAY_URL (got ${code:-000})"; return 1; }
-}
-
-probe_research_gateway() {
-  # /health alone stays green with the renderer sidecar dead — the chain is built to
-  # run without it — so the sidecar is probed through the gateway's own /health/render.
-  local code render tavily
-  code=$(http_code "$RESEARCH_GATEWAY_URL/health")
-  [[ "$code" == "200" ]] || { echo "research-gateway not answering on $RESEARCH_GATEWAY_URL (got ${code:-000})"; return 1; }
-  render=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/render" 2>/dev/null || true)
-  [[ "$render" == *'"renderer":"ok"'* ]] || { echo "research-gateway renderer sidecar not ok (${render:-no answer})"; return 1; }
-  # The VPS instance's retirement (2026-09-26) took its Uptime Kuma Tavily-plan
-  # monitor with it — the mini's own /health/tavily is the only thing left that
-  # can catch the account crossing from its Researcher plan into pay-as-you-go
-  # (health.ts: `overPlan` is deliberately not `?? false`, so a renamed/missing
-  # field reads as unhealthy rather than silently "fine").
-  tavily=$("$CURL_BIN" -s --max-time 8 "$RESEARCH_GATEWAY_URL/health/tavily" 2>/dev/null || true)
-  [[ "$tavily" == *'"overPlan":false'* ]] || { echo "research-gateway Tavily plan over quota or unreadable (${tavily:-no answer})"; return 1; }
-  probe_research_gateway_deploy
-}
-
-# A push to master deploys within ~2 min (CI-gated, idle-gated poller), so a deploy marker that
-# lags origin/master for RG_DEPLOY_STUCK_MIN is stuck: CI red or pending, the idle gate never
-# opening, a failed install, or a dead poller. Reads only local state — the poller fetches every
-# tick, so the clone's origin/master is as fresh as FETCH_HEAD, which doubles as the poller's
-# liveness signal. "Behind for how long" needs a clock, so the first tick that sees a given
-# origin sha ahead of the marker records it in STATE_DIR and later ticks measure from there.
-probe_research_gateway_deploy() {
-  [[ -d "$RG_APP_DIR/.git" ]] || return 0 # no deploy clone on this machine — nothing to be behind
-  local limit=$(( RG_DEPLOY_STUCK_MIN * 60 )) now fetched origin deployed state since
-  now=$("$DATE_BIN" +%s)
-  fetched=$("$STAT_BIN" -f %m "$RG_APP_DIR/.git/FETCH_HEAD" 2>/dev/null) || fetched=0
-  if (( fetched > 0 && now - fetched > limit )); then
-    echo "research-gateway deploy poller has not fetched in $(( (now - fetched) / 60 ))m (max ${RG_DEPLOY_STUCK_MIN}m) — check make logs"
-    return 1
-  fi
-  origin=$("$GIT_BIN" -C "$RG_APP_DIR" rev-parse origin/master 2>/dev/null) || return 0
-  read -r deployed <"$RG_DEPLOYED_SHA_FILE" 2>/dev/null || deployed="" # $(<f 2>…) reads nothing: an extra redirect disables the $(<f) form
-  state="$STATE_DIR/rg-deploy-behind"
-  if [[ "$deployed" == "$origin" ]]; then
-    rm -f "$state" 2>/dev/null || true
-    return 0
-  fi
-  since=""
-  if [[ -f "$state" ]]; then
-    read -r state_sha state_ts <"$state" || true
-    [[ "${state_sha:-}" == "$origin" ]] && since="${state_ts:-}"
-  fi
-  if [[ -z "$since" ]]; then
-    mkdir -p "$STATE_DIR" 2>/dev/null || true
-    echo "$origin $now" >"$state" 2>/dev/null || true
-    return 0
-  fi
-  (( now - since > limit )) || return 0
-  echo "research-gateway deploy stuck: ${deployed:0:7} deployed, origin/master ${origin:0:7} for $(( (now - since) / 60 ))m (CI red or pending, idle gate, failed install — see make logs)"
-  return 1
-}
-
 probe_brain_web() {
   # The reader behind brain.<dev domain>; its refresh agent is the gate, the
   # served page is the probe — a rebuilt dist/ nothing serves is still down.
@@ -1108,36 +1027,6 @@ check_services() {
   local skip_note=""
   (( skipped == 0 )) || skip_note=", $skipped not installed"
   echo "services up (${up}${skip_note})"
-}
-
-# agent-gateway's job runner, as distinct from its HTTP liveness in probe_agent_gateway:
-# a daemon that answers /health while every check/review job wedges is the
-# failure that hid behind "services up". The endpoint is agent-gateway's own verdict
-# (`ok:false` = FAIL); a 404 means an agent-gateway that predates it and is reported
-# as starting, not failed — grading an endpoint that does not exist yet would
-# page on every machine the moment this check shipped ahead of it.
-check_agent_gateway_jobs() {
-  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist" ]] || { echo "agent-gateway jobs n/a"; return 0; }
-  local out code body ok warnings
-  out=$("$CURL_BIN" -s --max-time 4 -w '\n%{http_code}' "$AGENT_GATEWAY_URL/api/jobs/health" 2>/dev/null) || out=$'\n000'
-  code=${out##*$'\n'}; body=${out%$'\n'*}
-  case "$code" in
-    200) ;;
-    404) echo "agent-gateway jobs: /api/jobs/health not served yet (starting)"; return 0 ;;
-    *)   echo "agent-gateway jobs endpoint not answering on $AGENT_GATEWAY_URL (got ${code:-000})"; return 1 ;;
-  esac
-  ok=$("$JQ_BIN" -r '.ok // false' <<<"$body" 2>/dev/null) || ok=""
-  # `.error`/`.detail`/`.summary` were never emitted by this endpoint — the real
-  # per-route/fallback detail lives in `.warnings` (added alongside `routeStreaks`/
-  # `degradedRoutes`; a degraded route or a backend fallback is a WARN, never a FAIL,
-  # so it must not flip `ok` on its own).
-  warnings=$("$JQ_BIN" -r '.warnings | join("; ") // empty' <<<"$body" 2>/dev/null) || warnings=""
-  [[ "$ok" == "true" ]] || { echo "agent-gateway jobs unhealthy${warnings:+: $warnings}"; return 1; }
-  if [[ -n "$warnings" ]]; then
-    echo "agent-gateway jobs WARN: $warnings"
-    return 2
-  fi
-  echo "agent-gateway jobs ok"
 }
 
 # The `make agent-overview` pane — a `watch` loop over `agw agents --text`
@@ -1429,7 +1318,7 @@ check_runaways() {
   #
   # Accumulated time alone is not enough either, and the reason is specific to
   # this host: the always-on services here are PPID 1 with a cwd under
-  # ~/SourceRoot too, so given enough uptime a perfectly healthy agent-gateway
+  # ~/SourceRoot too, so given enough uptime a perfectly healthy agent-workflows
   # crosses ANY fixed CPU-minute line and then pages forever until someone
   # restarts it. The second gate is therefore the process's LIFETIME AVERAGE
   # (cputime / elapsed) — still computed from accumulated time, not sampled: a
@@ -1496,7 +1385,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
-                 check_obsidian check_disk check_runaways check_agent_gateway_jobs check_overview_pane \
+                 check_obsidian check_disk check_runaways check_overview_pane \
                  check_jobs check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).

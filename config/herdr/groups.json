@@ -17,11 +17,8 @@
       "members": [
         "dotfiles",
         "dotfiles-private",
-        "agent-gateway",
         "agent-workflows",
         "hermes-agent",
-        "research-gateway",
-        "audio-gateway",
         "modelpick",
         "linewatch",
         "usage-tracker",

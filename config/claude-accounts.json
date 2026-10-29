@@ -24,8 +24,7 @@
       },
       "homeLanes": [
         "wave",
-        "fan",
-        "agent-gateway:*"
+        "fan"
       ],
       "loginBrowser": "Helium",
       "enabled": true
@@ -35,8 +34,7 @@
       "plan": "max5x",
       "homeLanes": [
         "wave",
-        "fan",
-        "agent-gateway:*"
+        "fan"
       ],
       "loginBrowser": "Safari",
       "enabled": true
