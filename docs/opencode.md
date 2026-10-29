@@ -15,17 +15,15 @@ Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
 `{env:IU_OPENAI_BASE}` (`oc` derives it from the Keychain base, `/anthropic` →
 `/openai/v1`); `iu-responses` = `@ai-sdk/openai` (the **Responses** wire) on the
 same base, carrying every GPT id — they are Responses-only for agent loops
-(reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw-legacy routing`), not
+(reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw routes`), not
 `iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
-wire split mirror agent-gateway's registry (`server/lib/models.ts`, `wire`), which
-generates the same blocks for its workers. **This file's rows are hand-written
-and can drift from the registry** — agent-gateway owns ids, limits and verification
-(`GET /api/routing`); re-check there before editing a row, and an id the
-registry marks unverified is not a recommendation. `iu` declares the rest of the
+wire split follow agent-workflows' route table (`wire` per route). **This file's rows are
+hand-written and can drift from it** — `agw routes` owns ids, limits and rates; re-check there
+before editing a row. `iu` declares the rest of the
 roster: the default model is the `model` key in `config/opencode/opencode.json`
 (a DeepSeek id, **not** served on the Anthropic route), with the other DeepSeek,
 GLM, Gemini, Kimi and MiniMax ids declared alongside it;
-`iu-responses` holds the GPT ids (`agw-legacy routing` lists them) — context windows, prices and `reasoningEffort` variants
+`iu-responses` holds the GPT ids (`agw routes` lists them) — context windows, prices and `reasoningEffort` variants
 come from **modelpick** (`STACK.md` for the picks, `make stack` in `~/SourceRoot/modelpick` to re-render it;
 `metric_snapshot` for the frontier ids), so re-check there before editing a row.
 `agents.title.model` (a cheap `iu-responses` id, set in `config/opencode/opencode.json`; v1's `small_model` still loads) is for title/summary generation. On `iu`,
@@ -34,9 +32,8 @@ caching works (95–98% hits in real episodes). Headless `opencode run` auto-**r
 any `ask` permission and that ends the session — workers must set every prompting
 permission to `allow`/`deny` (`deny` returns an error and the run continues).
 `--pure` hangs; don't use it. Concurrent starts can hit `database is locked` on the
-shared `opencode.db` — retry. agent-gateway's dispatch is NOT on this lane: it drives its own
-shared server (`com.jkrumm.agent-gateway-opencode`) over HTTP, config on that server process
-(`agent-gateway/docs/opencode-v2.md`), with no db-lock retry.
+shared `opencode.db` — retry. agent-workflows' agent steps are NOT on this lane: its OpenCode host drives its own
+server over HTTP, configured by that process (`packages/opencode-host` in agent-workflows).
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
 `chrome-devtools` (local, `--isolated
@@ -49,8 +46,8 @@ stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
 a repo that wants one ships it in its own `.claude/rules/`.
 
-**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old pane setup evaluated `_oc_env` (claude.zsh) first so `IU_*` and the gateway bearer
-are in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
+**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old pane setup evaluated `_oc_env` (claude.zsh) first so `IU_*`
+is in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
 **The shared service needs the credentials too (2026-10-14).** OpenCode v2 attaches `oc` and
@@ -62,30 +59,30 @@ first message failed with `Route.model(openai-compatible-chat) requires an endpo
 `~/.config/opencode/service.json` (`env` map, mode 0600, local — that directory is not the
 symlinked `config/opencode`) and restarts the service when a value changed and no session is
 running. Values travel by environment only; `opencode service set env K V` would put the key
-on argv. Re-running is a no-op. agent-gateway episodes do not depend on this: they run on
-agw's own server (`docs/opencode-v2.md` in agent-gateway).
+on argv. Re-running is a no-op. agent-workflows' agent steps do not depend on this: they run on
+its own OpenCode server (`packages/opencode-host` in agent-workflows).
 
 **One OpenCode build on the machine (2026-10-15).** Homebrew's `opencode` is uninstalled (it
-lagged the npm releases and a `brew upgrade` once broke every dispatch). `~/.local/bin/opencode`
-is agent-gateway's shim (`make install-cli` there), which execs the pinned npm build under
-`~/.local/share/agent-gateway/opencode-bin/current` — the same binary agw's server runs. `oc`,
+lagged the npm releases and a `brew upgrade` once broke every agent run). `~/.local/bin/opencode`
+links to agent-workflows' `scripts/opencode` shim (`make install-opencode` there), which execs the pinned
+npm build under `~/.local/share/agent-workflows/opencode-bin/current` — the same binary agw's server runs. `oc`,
 herdr agent panes and the shared per-user service
 (`opencode service restart` after a pin bump) therefore all run one version. A pin bump:
-`make install-cli install-opencode-agent` in agent-gateway (`docs/opencode-v2.md` § Version pin).
+bump `OPENCODE_VERSION` (`packages/opencode-host/src/server.ts`) in agent-workflows, then `make install-opencode` in its
+main checkout (never from a linked worktree) and `make deploy`.
 The first start on a new version shows a one-time release-notes dialog that swallows the pane's
 initial prompt — press Enter once, then `rd say` it again.
 
-**No MCP servers are wired in.** The agent-gateway MCP (and `config/opencode/mini.json` with its
-`OPENCODE_CONFIG` layer) is gone. OpenCode reaches the platform like Claude Code does: the `agw`
-CLI and `agw-legacy dispatch`. External skills load natively from `~/.claude/skills`, so `/check`,
+**No MCP servers are wired in.** OpenCode reaches the platform like Claude Code does: the `agw`
+CLI. External skills load natively from `~/.claude/skills`, so `/check`,
 `/review` and friends resolve to real tools on the mini.
 
 **Yolo is the default here, deliberately** — `permission: "allow"` (normalized by v2 into an allow-all `permissions` rule), so `oc`
 never stops to ask. It is also what makes the lane usable headlessly: `run`
 **ends the session** on an `ask` rather than prompting, so a worker with a
 leftover `ask` rule is not slow, it is broken. This is the one config file
-agent-gateway does *not* share — its dispatch uses two permission agents (`agw-readonly`, `agw-implement`) in its own server config, so
-widening this one cannot loosen a dispatch worker.
+agent-workflows does *not* share — its OpenCode host sets its own permissions in its own server config, so
+widening this one cannot loosen an agw step.
 
 **Config is two files, and the split is enforced.** `opencode.json` is
 `additionalProperties: false`, so `theme` there is a `ConfigInvalidError` — and
@@ -118,4 +115,4 @@ symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
 happily with no model, no provider, no rules. `make status` lists all three
 opencode links for exactly this; run it when `oc` looks unconfigured.
 
-**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is generated from agent-gateway's model registry: `bun scripts/sync-opencode-config.ts ~/SourceRoot/dotfiles/config/opencode/opencode.json` in agent-gateway, re-run after a registry change. `iu-anthropic` (Haiku 5.5 EU, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
+**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is hand-maintained against `agw routes`. `iu-anthropic` (Haiku 5.5 EU, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
