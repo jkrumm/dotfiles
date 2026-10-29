@@ -10,7 +10,6 @@
       },
       "homeLanes": [
         "interactive",
-        "agent-gateway:review",
         "headless"
       ],
       "loginBrowser": "Google Chrome",

@@ -7,7 +7,7 @@
 # chat) requires an endpoint baseURL" on the first message (measured 2026-10-14, opencode 2.0.25).
 # The service reads an `env` map from its own service.json, so the fix is to put the values there.
 #
-# Called by `_oc_env` (config/zsh/claude.zsh) after it exports IU_*/RESEARCH_GATEWAY_AUTH, so it
+# Called by `_oc_env` (config/zsh/claude.zsh) after it exports IU_*, so it
 # inherits them. Values travel by environment only — `opencode service set env K V` would put
 # the key on argv (`ps auxww`). service.json lives in the local, unversioned ~/.config/opencode/
 # (a real directory, mode 0600 file — NOT the symlinked dotfiles/config/opencode).
@@ -20,7 +20,7 @@ file="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/service.json"
 [[ -n "${IU_KEY:-}" && -n "${IU_OPENAI_BASE:-}" ]] || exit 0
 [[ -f "$file" ]] || exit 0 # no service configured yet; first start creates it, next call fills it
 
-names=(IU_KEY IU_OPENAI_BASE IU_ANTHROPIC_BASE RESEARCH_GATEWAY_AUTH)
+names=(IU_KEY IU_OPENAI_BASE IU_ANTHROPIC_BASE)
 # jq reads the values from its environment (`env.NAME`), never from argv.
 filter='. as $c | reduce ($names[]) as $n ($c; if (env[$n] // "") != "" then .env[$n] = env[$n] else . end)'
 next=$(jq --argjson names "$(printf '%s\n' "${names[@]}" | jq -R . | jq -sc .)" "$filter" "$file")

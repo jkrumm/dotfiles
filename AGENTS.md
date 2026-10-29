@@ -423,14 +423,11 @@ and `oc`. `ANTHROPIC_API_KEY` is intentionally
 absent, and exporting it bills API credits instead.
 
 **MCP servers**, registered at user scope by `make setup`: `chrome-devtools`
-(deferred; use only via `/browse`), and **`agent-gateway` on the mini only** — its
-MCP is stdio-only against `~/SourceRoot/agent-gateway/server/mcp.ts`, a repo that lives
-only there, so `dispatch` and the `agw` skills (`/check`, `/review`, `/prose`,
-`/excalidraw-diagram`, `/brain` lookups, `/otel`) are mini-only. Don't clone agent-gateway to the MacBook to "fix"
-(remote reach = a StreamableHTTP transport).
-HyperDX is deliberately *not*
-registered — `/otel` speaks its endpoint through `agw hdx` rather than costing every
-session ~60 deferred tool names. Keep project MCPs minimal.
+(deferred; use only via `/browse`). The agent-gateway MCP server is gone: Claude Code
+reaches the platform through `agw` (`/check`, `/review`, `/prose`,
+`/excalidraw-diagram`, `/brain` lookups, `/otel` — mini-only) and `dispatch` through
+the `agw-legacy dispatch` CLI. HyperDX is deliberately *not* registered — `/otel`
+speaks its endpoint through `agw hdx`. Keep project MCPs minimal.
 
 ## Claude Code launchers
 

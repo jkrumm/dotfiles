@@ -2,13 +2,13 @@
 
 The global CLAUDE.md loads in every session and routes; this file holds the
 detail it points at. Repo descriptions live only in `docs/architecture.md`
-§Repos, model ids only in `agw-legacy routing` (`GET /api/routing`).
+§Repos, model ids only in `agw routes` and `agw-legacy routing`.
 
 ## Parallelism — cheapest tier first
 
 | Tier | Mechanism | Use when |
 |-|-|-|
-| 1 | Parallel `mcp__agent-gateway__*` calls in **one turn** | Independent verifiable *reads and checks* (`check`, `review`, `investigate`). Independent *changes* in one repo are `/wave` fan-out, not parallel dispatch |
+| 1 | Parallel `/check` / `/review` (`agw`) and `agw-legacy dispatch --no-wait` calls in **one turn** | Independent verifiable *reads and checks* (`check`, `review`, `investigate`). Independent *changes* in one repo are `/wave` fan-out, not parallel dispatch |
 | 2 | `agw-legacy dispatch` / `claude_iu` subprocess, ~0 Max cost | Read-heavy, isolated output |
 | 3 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
 | 4–5 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
@@ -17,20 +17,13 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 `/schedule` run in Anthropic's cloud and **cannot reach** agent-gateway (localhost) or
 agent-workflows (tailnet).
 
-## Async-job contract — agent-gateway
+## Async-job contract
 
-`mcp__agent-gateway__dispatch`
-returns `{ jobId, … }` immediately — not the result. Submit → note `jobId` →
-`job_wait({jobId})` → read `result` on `status: "done"`, `error` on failed.
-`job_status` is the non-blocking peek.
-
-- `/check`, `/review` and `/research` are not jobs you poll: `agw check` / `agw review` / `agw research` block up to
-  `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10 naming the run; resume with
-  `agw run wait <runId>` until the exit is not 10.
-- agent-gateway's `job_wait` accepts `maxWaitMs` (up to 29 min) — pass the ceiling
-  instead of looping on the ~50 s default.
-- `otel` is no longer an agent-gateway tool: `/otel` is an `agw` CLI call (`agw otel`,
-  `agw hdx`), synchronous with the same exit-10 resume as `/check`. No exemption left.
+- `/check`, `/review`, `/research` and `/otel` are not jobs you poll: `agw check` / `agw review` /
+  `agw research` / `agw otel` block up to `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10
+  naming the run; resume with `agw run wait <runId>` until the exit is not 10.
+- `agw-legacy dispatch` blocks until the job is terminal and prints the result. For parallel or
+  detached jobs pass `--no-wait` (prints the job id), then `agw-legacy wait|status|steer|cancel <jobId>`.
 
 ## Reading files and the prompt cache
 
@@ -48,9 +41,9 @@ Everything routed through `agw` or agent-gateway exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
-| MCP (agent-gateway, async) | `dispatch` |
-| MCP · fork · subprocess | `/research` · `/browse` (chrome-devtools, haiku) · `/analyze` |
+| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| `agw-legacy` CLI (blocks; `--no-wait` for a job id) | `dispatch` |
+| MCP · fork · subprocess | `/browse` (chrome-devtools, haiku) · `/analyze` |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |
 | inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (inert unless `HERDR_ENV=1`) · `/img` |
@@ -96,7 +89,7 @@ Workflow facts per repo:
 | Repo | Fact |
 |-|-|
 | `homelab-private` | Self-contained. Never reference its services, hostnames or details from any other repo, doc or commit. |
-| `agent-gateway` | Local MCP daemon behind dispatch. Mini only. |
+| `agent-gateway` | Local daemon behind `agw-legacy dispatch`. Mini only. |
 | `research-gateway` | REST door only (Hermes's lane) until archive; `/research` runs on `agw research`. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for skill domains. |
 | `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
