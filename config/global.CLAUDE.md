@@ -80,8 +80,8 @@ paths, the change, acceptance criteria, scope limits, and any research baked in
 on disjoint file groups. Delegate for context, not latency; editorial work stays
 inline.
 
-- **Model ids live only in the route tables** — `agw routes` (the platform's; lands with
-  agent-workflows PR w10/routes-cmd) and `agw-legacy routing` (dispatch). Rationale
+- **Model ids live only in the route tables** — `agw routes` (the platform) and
+  `agw-legacy routing` (dispatch). Rationale
   `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`. Never write one in prose.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.

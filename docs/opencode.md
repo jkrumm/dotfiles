@@ -58,7 +58,7 @@ are in its shell without touching argv. Default model is the `model` key in `con
 *without* the pane's environment, so every `{env:IU_*}` placeholder resolved empty there and the
 first message failed with `Route.model(openai-compatible-chat) requires an endpoint baseURL`.
 `_oc_env` now ends by running `scripts/opencode-service-env.sh`, which merges `IU_KEY`,
-`IU_OPENAI_BASE`, `IU_ANTHROPIC_BASE` and `RESEARCH_GATEWAY_AUTH` into the service's own
+`IU_OPENAI_BASE` and `IU_ANTHROPIC_BASE` into the service's own
 `~/.config/opencode/service.json` (`env` map, mode 0600, local — that directory is not the
 symlinked `config/opencode`) and restarts the service when a value changed and no session is
 running. Values travel by environment only; `opencode service set env K V` would put the key
@@ -75,13 +75,10 @@ herdr agent panes and the shared per-user service
 The first start on a new version shows a one-time release-notes dialog that swallows the pane's
 initial prompt — press Enter once, then `rd say` it again.
 
-**agent-gateway is wired in, mini-only.** `config/opencode/mini.json` declares the
-`agent-gateway` MCP (`bun run …/agent-gateway/server/mcp.ts`, `timeout` 30 min so a `job_wait`
-is not cut off at the default 5 s). It is deliberately *not* in the shared
-`opencode.json`: `oc` layers it in with `OPENCODE_CONFIG` (merged over the global
-config) only where the repo exists, so the MacBook stays agent-gateway-free. External
-skills load natively from `~/.claude/skills`, so `/check`, `/review` and friends
-resolve to real tools on the mini.
+**No MCP servers are wired in.** The agent-gateway MCP (and `config/opencode/mini.json` with its
+`OPENCODE_CONFIG` layer) is gone. OpenCode reaches the platform like Claude Code does: the `agw`
+CLI and `agw-legacy dispatch`. External skills load natively from `~/.claude/skills`, so `/check`,
+`/review` and friends resolve to real tools on the mini.
 
 **Yolo is the default here, deliberately** — `permission: "allow"` (normalized by v2 into an allow-all `permissions` rule), so `oc`
 never stops to ask. It is also what makes the lane usable headlessly: `run`
@@ -121,4 +118,4 @@ symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
 happily with no model, no provider, no rules. `make status` lists all three
 opencode links for exactly this; run it when `oc` looks unconfigured.
 
-**v2 schema (2026-10-14).** `opencode.json` and `mini.json` use the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is generated from agent-gateway's model registry: `bun scripts/sync-opencode-config.ts ~/SourceRoot/dotfiles/config/opencode/opencode.json` in agent-gateway, re-run after a registry change. `iu-anthropic` (Haiku 5.5 EU, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
+**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is generated from agent-gateway's model registry: `bun scripts/sync-opencode-config.ts ~/SourceRoot/dotfiles/config/opencode/opencode.json` in agent-gateway, re-run after a registry change. `iu-anthropic` (Haiku 5.5 EU, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
