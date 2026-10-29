@@ -223,13 +223,58 @@ class UnsupportedMatcher(Exception):
     """A route matcher beyond one path list — skipped, never half-translated."""
 
 
+def is_404_only(route: dict) -> bool:
+    """True when every handler under this route answers 404 and nothing else."""
+    handlers = route.get("handle") or []
+    if not handlers:
+        return False
+    for h in handlers:
+        if not isinstance(h, dict):
+            return False
+        if h.get("handler") == "static_response" and h.get("status_code") in (404, "404"):
+            continue
+        if h.get("handler") == "subroute" and all(
+            isinstance(r, dict) and is_404_only(r) for r in h.get("routes") or []
+        ):
+            continue
+        return False
+    return True
+
+
+def contains_proxy(handlers) -> bool:
+    for h in handlers or []:
+        if not isinstance(h, dict):
+            continue
+        if h.get("handler") == "reverse_proxy":
+            return True
+        for sub in h.get("routes") or []:
+            if isinstance(sub, dict) and contains_proxy(sub.get("handle")):
+                return True
+    return False
+
+
+def has_rewrite(handlers) -> bool:
+    """Any `rewrite` (handle_path's strip-prefix, `uri`, `rewrite`) under these handlers."""
+    for h in handlers or []:
+        if not isinstance(h, dict):
+            continue
+        if h.get("handler") == "rewrite":
+            return True
+        for sub in h.get("routes") or []:
+            if isinstance(sub, dict) and has_rewrite(sub.get("handle")):
+                return True
+    return False
+
+
 def iter_proxies(handlers, paths: tuple = ()):
     """Yield (reverse_proxy handler, path matchers it sits behind).
 
     The path matchers come from the enclosing `handle @name { … }` routes. Only a
     single, non-nested path matcher is understood: anything else (a header or method
     matcher, a second path matcher further in) raises `UnsupportedMatcher`, because
-    emitting the proxy without that condition would widen the door.
+    emitting the proxy without that condition would widen the door. So do several
+    matcher sets on one route (OR'd) and a path-restricted route with a sibling route
+    that is not a plain 404: the generator can only restate "these paths, else 404".
     """
     for h in handlers or []:
         if not isinstance(h, dict):
@@ -239,13 +284,26 @@ def iter_proxies(handlers, paths: tuple = ()):
         for sub in h.get("routes") or []:
             if not isinstance(sub, dict):
                 continue
+            if not contains_proxy(sub.get("handle")):
+                continue  # a sibling `redir`/`respond` route restricts nothing about the proxy
             inner = paths
-            for m in sub.get("match") or []:
+            sets = sub.get("match") or []
+            if len(sets) > 1:
+                raise UnsupportedMatcher("several matcher sets on one route")
+            for m in sets:
                 if not isinstance(m, dict) or set(m) - {"path"}:
                     raise UnsupportedMatcher("matcher other than path")
                 if paths:
                     raise UnsupportedMatcher("nested path matchers")
                 inner = tuple(m.get("path") or ())
+                if any(
+                    o is not sub and not is_404_only(o)
+                    for o in h.get("routes") or []
+                    if isinstance(o, dict)
+                ):
+                    raise UnsupportedMatcher(
+                        "path-restricted proxy with a sibling route that is not a plain 404"
+                    )
             yield from iter_proxies(sub.get("handle"), inner)
 
 
@@ -322,6 +380,9 @@ def extract(config: dict) -> tuple[list[tuple[str, int, int, str]], list[str]]:
                 skipped.append(f"{host}: {exc}")
                 continue
             proxies = [h for h, _ in found]
+            if any(p for _, p in found) and has_rewrite(route.get("handle")):
+                skipped.append(f"{host}: path-restricted proxy under a rewrite (handle_path / strip prefix)")
+                continue
             if not proxies:
                 skipped.append(f"{host}: no reverse_proxy upstream")
                 continue

@@ -41,7 +41,7 @@ printf '#!/bin/sh\necho "{\\"loggedIn\\": false}"\n' > "$TMP/bin/claude"; chmod 
 
 verify() { # [env…] — the verify script against the scratch setup
   env "$@" DOTFILES_DIR="$TMP/dot" CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json" CLAUDE_BIN="$TMP/bin/claude" CLAUDE_ACCOUNTS_STATE_DIR="$TMP/state" CLAUDE_ACCOUNTS_CACHE_DIR="$TMP/cache" \
-    USAGE_TRACKER_DB="$TMP/none.db" AGW_SESSION_RUNNER="$TMP/none.ts" RD_SCRIPT="$TMP/none.sh" CLAUDE_LOG_DIR="$TMP/logs" bash "$HERE/claude-accounts-verify.sh" 2>&1
+    USAGE_TRACKER_DB="$TMP/none.db" RD_SCRIPT="$TMP/none.sh" CLAUDE_LOG_DIR="$TMP/logs" bash "$HERE/claude-accounts-verify.sh" 2>&1
 }
 out=$(verify IU_SEV=PASS)
 row() { grep -E "^(PASS|WARN|FAIL) +login/$1 " <<<"$out" | awk '{print $1}'; }
