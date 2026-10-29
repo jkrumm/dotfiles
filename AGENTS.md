@@ -425,8 +425,8 @@ absent, and exporting it bills API credits instead.
 **MCP servers**, registered at user scope by `make setup`: `chrome-devtools`
 (deferred; use only via `/browse`), and **`agent-gateway` on the mini only** — its
 MCP is stdio-only against `~/SourceRoot/agent-gateway/server/mcp.ts`, a repo that lives
-only there, so `/check`, `/review`, `/otel`, `/prose`, `/excalidraw-diagram` and
-`dispatch` are mini-only skills. Don't clone agent-gateway to the MacBook to "fix"
+only there, so `/otel`, `dispatch` and the `agw` skills (`/check`, `/review`, `/prose`,
+`/excalidraw-diagram`, `/brain` lookups) are mini-only. Don't clone agent-gateway to the MacBook to "fix"
 (remote reach = a StreamableHTTP transport).
 HyperDX is deliberately *not*
 registered — `/otel` speaks its endpoint over HTTP rather than costing every

@@ -61,7 +61,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 
 | Component | Does | Never does |
 |-|-|-|
-| **agent-gateway** | runs bounded jobs: triage, investigate, implement, prose (`/prose`); `check` and `review` run on agent-workflows (`agw check`, `agw review`) | decide what to work on, merge |
+| **agent-gateway** | runs bounded jobs: triage, investigate, implement; `check`, `review`, `prose`, `diagram` and `brain` run on agent-workflows (`agw check`, `agw review`, `agw prose`, `agw diagram`, `agw brain`) | decide what to work on, merge |
 | **Hermes** | answers, narrates, opens herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
 | **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work |
 | **Argo** | the status surface | hold state of its own |

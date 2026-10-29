@@ -85,7 +85,7 @@ Never skipped. Remind the human:
 
 ## Optional: `/prose` pass
 
-After the human polish (step 7), the finished page can go through `/prose` (lint, cross-lab review, keep-gated rewrite). Mini-only; review its diff before accepting. Not part of the checklist.
+After the human polish (step 7), the finished page can go through `/prose` (`agw` lint and cross-lab review, a rewrite by this session, a keep gate). Mini-only; review its diff before accepting. Not part of the checklist.
 
 ## Constraints
 
