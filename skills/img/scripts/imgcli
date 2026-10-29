@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # imgcli — the personal image stack: generate, upload, address.
 #
-#   gen       prompt -> local file via the image-gateway (VPS, tailnet-only);
+#   gen       prompt -> local file via `agw image` (agent-workflows, the mini);
 #             --public / --private hand each result on to one of the two lanes
+#   cutout    background removal, also `agw image`
 #   upload    local file -> public CDN: straight to B2 img/, served by imgproxy
 #             behind Cloudflare (unsigned URLs — an opaque key is the access control)
 #   private   local file -> B2 private/ + a time-limited presigned URL. imgproxy
@@ -18,10 +19,11 @@
 #   op://common/b2-images-admin    img/ incl. deleteFiles     rm only — MacBook-only by design:
 #                                  deliberately NOT in the mini's headless cache
 #   op://common/backblaze-s3       bucket coordinates         every B2 command
-#   op://vps/image-gateway         gateway BASE_URL/API_SECRET   gen
+#   op://vps/image-gateway         gateway BASE_URL/API_SECRET   icon (the /icons build)
 #
 # Infra side lives in ~/SourceRoot/vps/apps/imgproxy/ (docs/image-cdn.md);
-# generation in ~/SourceRoot/image-gateway/gateway/.
+# generation in agent-workflows (`agw image`), the icon build in
+# ~/SourceRoot/image-gateway/gateway/.
 
 set -euo pipefail
 
@@ -31,8 +33,8 @@ REF_BUCKET_ITEM="op://common/backblaze-s3"
 # command keeps working on a mini that hasn't cached these refs.
 REF_PRIVATE_ITEM="op://common/b2-images-private"
 REF_ADMIN_ITEM="op://common/b2-images-admin"
-# Generation (image-gateway, VPS, tailnet-only). Resolved lazily inside `gen`
-# only, same reasoning.
+# Icon build (image-gateway /icons, VPS, tailnet-only). Resolved lazily inside
+# `icon` only, same reasoning.
 REF_GEN_ITEM="op://vps/image-gateway"
 GEN_DIR="${HOME}/Pictures/imgcli"
 
@@ -313,13 +315,42 @@ json_field() {
   python3 -c 'import json, sys; d = json.load(sys.stdin); print(d[sys.argv[1]])' "$field" <<<"$json"
 }
 
-# --- generation (image-gateway) ----------------------------------------------
-# Stateless bearer-auth'd gateway on the VPS wrapping gpt-image-2.5 (flare /
-# sunburst). No model is sent: the gateway auto-routes by quality/endpoint. `gen`
-# is the agent lane into it: generate (or edit / plan-then-generate) and write
-# the PNGs under ~/Pictures/imgcli/. --public uploads each one to the CDN
-# through the same path as `upload`; --private puts it under private/ and
-# presigns it.
+# --- generation (agw image) ---------------------------------------------------
+# `gen` and `cutout` (and the icon source) run `agw image` on the mini: a
+# platform run whose cost is on the run record (`agw run status <runId>`). The
+# PNGs land in agw's artifact store (30-day retention); the commands copy them
+# to ~/Pictures/imgcli/. --public uploads each one to the CDN through the same
+# path as `upload`; --private puts it under private/ and presigns it.
+
+# Not `local`-scoped: the EXIT trap runs after the caller's scope is gone.
+gen_tmp() {
+  GEN_TMP="$(mktemp -d)"
+  trap 'rm -rf "$GEN_TMP"' EXIT
+}
+
+# Runs `agw image <args>` and leaves the finished run envelope in `$1`. Exit 10
+# (wait budget spent) resumes with `agw run wait <runId>` until the run ends.
+agw_image() {
+  local out="$1" label="$2"; shift 2
+  command -v agw >/dev/null 2>&1 || die "imgcli ${label} needs agw (the mini)"
+  local err="${out}.err" rc=0 run_id
+  agw image "$@" --format json >"$out" 2>"$err" || rc=$?
+  while [ "$rc" = 10 ]; do
+    run_id="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["runId"])' "$out")" \
+      || die "agw image is still running but named no run id"
+    rc=0
+    agw run wait "$run_id" --format json >"$out" 2>"$err" || rc=$?
+  done
+  [ "$rc" = 0 ] && return 0
+  die "agw image failed (exit $rc): $(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get("error", {}).get("message") or json.dumps(d)[:400])
+except Exception:
+    print(open(sys.argv[2], errors="replace").read()[:400])
+' "$out" "$err")"
+}
 
 load_gen_config() {
   need secrets-run
@@ -335,9 +366,10 @@ load_gen_config() {
   GEN_BASE="${GEN_BASE%/}"
 }
 
-# Runs one gateway request, writing the response body to `$out_file` (bodies
-# carry base64 images — megabytes, never a shell variable). Prints nothing;
-# dies on a network error or a non-200 with the gateway's `error.message`.
+# Runs one gateway request (the /icons build), writing the response body to
+# `$out_file` (bodies carry base64 images — megabytes, never a shell variable).
+# Prints nothing; dies on a network error or a non-200 with the gateway's
+# `error.message`.
 gen_request() {
   local path="$1" out_file="$2"; shift 2
   local status
@@ -414,106 +446,67 @@ cmd_gen() {
   prefix="$(norm_upload_prefix "$prefix")"
   [ "$private" = 1 ] && parse_expires "$expires"
 
-  # Not `local`: the EXIT trap runs after the function's scope is gone.
-  GEN_TMP="$(mktemp -d)"
-  trap 'rm -rf "$GEN_TMP"' EXIT
+  command -v agw >/dev/null 2>&1 || die "imgcli gen needs agw (the mini)"
+  need python3
+  gen_tmp
   local tmp="$GEN_TMP"
 
-  load_gen_config
   [ "$public" = 1 ] && load_config
   [ "$private" = 1 ] && load_private_config
-  # The bearer reaches curl through a file, never argv — `ps` shows argv for
-  # the whole request, and a gen call runs 10-300 s.
-  ( umask 077; printf 'Authorization: Bearer %s\n' "$GEN_SECRET" >"$tmp/hdr" )
 
-  # --enhance: POST /enhance turns the brief into a playbook-conditioned Plan
-  # (prompt + derived settings + policy warnings) before any generation is
-  # paid for. Explicit flags win over the plan's derived settings; a `hard`
-  # warning is a wall the studio would refuse at, so the CLI refuses too.
-  local plan_json=""
-  if [ "$enhance" = 1 ]; then
-    local plan_req="$tmp/plan-req.json" plan_res="$tmp/plan-res.json"
-    PROMPT="$prompt" HAS_REF="$([ -n "$edit" ] && printf true || printf false)" python3 -c '
-import json, os, sys
-json.dump({"brief": os.environ["PROMPT"], "has_references": os.environ["HAS_REF"] == "true"}, open(sys.argv[1], "w"))
-' "$plan_req"
-    gen_request /enhance "$plan_res" -H "Content-Type: application/json" --data-binary "@$plan_req"
-    plan_json="$(JSON="$json" python3 -c '
-import json, os, sys
-d = json.load(open(sys.argv[1]))
-s = d["settings"]
-hard = [w for w in d.get("warnings", []) if w.get("severity") == "hard"]
-if hard:
-    print("plan refused (hard policy wall): " + "; ".join(w["message"] for w in hard))
-    sys.exit(1)
-if os.environ["JSON"] != "1":
-    for a in d.get("assumptions", []):
-        print("plan assumption: " + a, file=sys.stderr)
-    for w in d.get("warnings", []):
-        print("plan warning [%s]: %s" % (w["severity"], w["message"]), file=sys.stderr)
-print(json.dumps({
-    "prompt": d["prompt"], "size": s["size"], "quality": s["quality"], "n": s["n"],
-    "background": s["background"],
-    "estimated_cost_usd": d["estimated_cost"]["total_usd"],
-    "assumptions": d.get("assumptions", []), "warnings": d.get("warnings", []),
-    "playbook_version": d["playbook_version"], "enhance_model": d["enhance_model"],
-}))
-' "$plan_res")" || die "$plan_json"
-    prompt="$(json_field "$plan_json" prompt)"
-    [ -n "$size" ] || size="$(json_field "$plan_json" size)"
-    [ -n "$quality" ] || quality="$(json_field "$plan_json" quality)"
-    [ -n "$n" ] || n="$(json_field "$plan_json" n)"
-    # The plan's prompt is written to match its background ("transparent
-    # background" wording only when it chose transparent). Dropping the
-    # background while sending that prompt is the painted-checkerboard bug.
-    [ -n "$background" ] || background="$(json_field "$plan_json" background)"
-  fi
-
-  # Generate (JSON) or edit (multipart, `image[]` + the same fields).
-  local res="$tmp/gen-res.json"
+  # Flags map 1:1 onto `agw image`; --enhance runs the planner inside the run
+  # (explicit flags win over its settings, a `hard` policy warning refuses the
+  # run before an image is paid for).
+  local args=("$prompt")
+  [ -n "$size" ] && args+=(--size "$size")
+  [ -n "$n" ] && args+=(--n "$n")
+  [ -n "$quality" ] && args+=(--quality "$quality")
+  [ -n "$background" ] && args+=(--background "$background")
+  [ "$enhance" = 1 ] && args+=(--enhance)
   if [ -n "$edit" ]; then
-    local args=(-F "image[]=@${edit};type=${mime}" --form-string "prompt=${prompt}")
-    [ -n "$size" ] && args+=(--form-string "size=${size}")
-    [ -n "$n" ] && args+=(--form-string "n=${n}")
-    [ -n "$quality" ] && args+=(--form-string "quality=${quality}")
-    [ -n "$background" ] && args+=(--form-string "background=${background}")
-    gen_request /edit "$res" "${args[@]}"
-  else
-    local req="$tmp/gen-req.json"
-    PROMPT="$prompt" SIZE="$size" N="$n" QUALITY="$quality" BACKGROUND="$background" python3 -c '
-import json, os, sys
-body = {"prompt": os.environ["PROMPT"]}
-if os.environ["SIZE"]: body["size"] = os.environ["SIZE"]
-if os.environ["N"]: body["n"] = int(os.environ["N"])
-if os.environ["QUALITY"]: body["quality"] = os.environ["QUALITY"]
-if os.environ["BACKGROUND"]: body["background"] = os.environ["BACKGROUND"]
-json.dump(body, open(sys.argv[1], "w"))
-' "$req"
-    gen_request /generate "$res" -H "Content-Type: application/json" --data-binary "@$req"
+    args+=(--images "$(python3 -c 'import json, os, sys; print(json.dumps([os.path.abspath(sys.argv[1])]))' "$edit")")
   fi
+  local res="$tmp/gen-res.json"
+  agw_image "$res" gen "${args[@]}"
 
-  # Decode every image to disk. Prints one header line (tab-separated
-  # metadata) followed by one absolute file path per image.
+  # Copy every PNG out of the artifact store. Prints one header line
+  # (tab-separated metadata) followed by one absolute file path per image; the
+  # plan (if any) goes to $tmp/plan.json in the old imgcli shape.
   mkdir -p "$GEN_DIR"
   local meta files=()
   {
     read -r meta
     while IFS= read -r line; do files+=("$line"); done
-  } < <(OUT_DIR="$GEN_DIR" python3 -c '
-import base64, json, os, sys, time
+  } < <(OUT_DIR="$GEN_DIR" PLAN_OUT="$tmp/plan.json" JSON="$json" python3 -c '
+import json, os, shutil, sys, time
 d = json.load(open(sys.argv[1]))
+o = d["output"]
+p = o.get("params", {})
 stamp = time.strftime("%Y%m%d-%H%M%S")
-short = d["id"].split("-")[0]
-cost = d.get("cost", {}).get("usd")
-print("\t".join([d["id"], d["model"], str(d["size"]), str(d["quality"]),
-                 "" if cost is None else f"{cost:.4f}", str(d["latency_ms"])]))
-for i, img in enumerate(d["images"], 1):
-    path = os.path.join(os.environ["OUT_DIR"], "gen-%s-%s-%d.%s" % (stamp, short, i, img["format"]))
-    with open(path, "wb") as f:
-        f.write(base64.b64decode(img["b64_json"]))
+short = d["runId"].split("-")[0]
+cost = (o.get("cost") or {}).get("usd")
+print("\t".join([d["runId"], str(o["model"]), str(o.get("size", "")), str(p.get("quality", "")),
+                 "" if cost is None else f"{cost:.4f}", str(o["latencyMs"])]))
+plan = o.get("plan")
+if plan:
+    json.dump({"prompt": plan["prompt"], "size": o.get("size"), "quality": p.get("quality"), "n": p.get("n"),
+               "estimated_cost_usd": plan.get("estimatedCostUsd"),
+               "assumptions": plan.get("assumptions", []), "warnings": plan.get("warnings", []),
+               "playbook_version": plan.get("playbookVersion"), "enhance_model": plan.get("enhanceModel")},
+              open(os.environ["PLAN_OUT"], "w"))
+    if os.environ["JSON"] != "1":
+        for a in plan.get("assumptions", []):
+            print("plan assumption: " + a, file=sys.stderr)
+        for w in plan.get("warnings", []):
+            print("plan warning [%s]: %s" % (w["severity"], w["message"]), file=sys.stderr)
+for i, f in enumerate(o["files"], 1):
+    path = os.path.join(os.environ["OUT_DIR"], "gen-%s-%s-%d.png" % (stamp, short, i))
+    shutil.copyfile(f["path"], path)
     print(path)
 ' "$res")
-  [ ${#files[@]} -gt 0 ] || die "gateway returned no images"
+  [ ${#files[@]} -gt 0 ] || die "agw image returned no images"
+  local plan_json=""
+  [ -f "$tmp/plan.json" ] && plan_json="$(cat "$tmp/plan.json")"
   local gen_id model gsize gquality cost latency
   IFS=$'\t' read -r gen_id model gsize gquality cost latency <<<"$meta"
 
@@ -972,10 +965,9 @@ cmd_rm() {
   fi
 }
 
-# --- cutout & icons (image-gateway) ------------------------------------------
-# Both are thin clients: the gateway owns background removal (Replicate,
-# recraft by default) and the whole icon-set build, so the studio and agents
-# get byte-identical results.
+# --- cutout & icons ------------------------------------------------------------
+# `cutout` is `agw image --file`; `icon` generates its source with `agw image`
+# and builds the set on the image-gateway (/icons: sharp, svgo, ico, icns).
 
 image_mime() {
   case "${1##*.}" in
@@ -986,18 +978,17 @@ image_mime() {
   esac
 }
 
-# Not `local`-scoped: the EXIT trap runs after the caller's scope is gone.
+# Temp dir plus gateway bearer, for the /icons request.
 gen_session() {
-  GEN_TMP="$(mktemp -d)"
-  trap 'rm -rf "$GEN_TMP"' EXIT
+  gen_tmp
   load_gen_config
   ( umask 077; printf 'Authorization: Bearer %s\n' "$GEN_SECRET" >"$GEN_TMP/hdr" )
 }
 
-cutout_model_id() {
+cutout_model() {
   case "$1" in
-    ''|recraft) printf 'recraft-ai/recraft-remove-background' ;;
-    bria) printf 'bria/remove-background' ;;
+    ''|recraft) printf 'recraft' ;;
+    bria) printf 'bria' ;;
     *) die "unknown cutout model: $1 (must be recraft or bria)" ;;
   esac
 }
@@ -1015,24 +1006,29 @@ cmd_cutout() {
   done
   [ -n "$src" ] || die "usage: imgcli cutout <file> [--model recraft|bria] [--out <file.png>] [--json]"
   [ -f "$src" ] || die "no such file: $src"
-  local mime model_id
-  mime="$(image_mime "$src")"
-  model_id="$(cutout_model_id "$model")"
+  local model_arg
+  image_mime "$src" >/dev/null
+  model_arg="$(cutout_model "$model")"
   [ -n "$out" ] || out="${src%.*}-cutout.png"
 
-  gen_session
+  command -v agw >/dev/null 2>&1 || die "imgcli cutout needs agw (the mini)"
+  need python3
+  gen_tmp
   local res="$GEN_TMP/cutout-res.json"
-  gen_request /cutout "$res" -F "image=@${src};type=${mime}" --form-string "model=${model_id}"
+  agw_image "$res" cutout --file "$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$src")" --model "$model_arg"
   OUT="$out" JSON="$json" python3 -c '
-import base64, json, os, sys
+import json, os, shutil, sys
 d = json.load(open(sys.argv[1]))
-open(os.environ["OUT"], "wb").write(base64.b64decode(d["image"]["b64_json"]))
-cost = d.get("cost", {}).get("usd")
+o = d["output"]
+f = o["files"][0]
+shutil.copyfile(f["path"], os.environ["OUT"])
+out = os.path.abspath(os.environ["OUT"])
+cost = (o.get("cost") or {}).get("usd")
 if os.environ["JSON"] == "1":
-    print(json.dumps({"id": d["id"], "model": d["model"], "file": os.path.abspath(os.environ["OUT"]),
-                      "width": d["width"], "height": d["height"], "cost_usd": cost, "latency_ms": d["latency_ms"]}))
+    print(json.dumps({"id": d["runId"], "model": o["model"], "file": out,
+                      "width": f["width"], "height": f["height"], "cost_usd": cost, "latency_ms": o["latencyMs"]}))
 else:
-    print("cutout     %s  %sx%s  $%s  %sms\n  %s" % (d["model"], d["width"], d["height"], cost, d["latency_ms"], os.path.abspath(os.environ["OUT"])))
+    print("cutout     %s  %sx%s  $%s  %sms\n  %s" % (o["model"], f["width"], f["height"], cost, o["latencyMs"], out))
 ' "$res"
 }
 
@@ -1066,19 +1062,14 @@ cmd_icon() {
   if [ -n "$prompt" ]; then
     # Square + native alpha straight from the model, so `cutout: auto` skips
     # the Replicate step for a fresh generation.
-    local req="$GEN_TMP/icon-gen-req.json" res="$GEN_TMP/icon-gen-res.json"
-    PROMPT="$prompt $ICON_PROMPT_SUFFIX" QUALITY="$quality" python3 -c '
-import json, os, sys
-json.dump({"prompt": os.environ["PROMPT"], "size": "1024x1024", "quality": os.environ["QUALITY"],
-           "background": "transparent", "output_format": "png"}, open(sys.argv[1], "w"))
-' "$req"
-    gen_request /generate "$res" -H "Content-Type: application/json" --data-binary "@$req"
+    local res="$GEN_TMP/icon-gen-res.json"
+    agw_image "$res" "icon \"<prompt>\"" "$prompt $ICON_PROMPT_SUFFIX" --size 1024x1024 --quality "$quality" --background transparent
     src="$out/source.png"
     gen_cost="$(SRC="$src" python3 -c '
-import base64, json, os, sys
-d = json.load(open(sys.argv[1]))
-open(os.environ["SRC"], "wb").write(base64.b64decode(d["images"][0]["b64_json"]))
-print(d.get("cost", {}).get("usd") or 0)
+import json, os, shutil, sys
+o = json.load(open(sys.argv[1]))["output"]
+shutil.copyfile(o["files"][0]["path"], os.environ["SRC"])
+print((o.get("cost") or {}).get("usd") or 0)
 ' "$res")"
   fi
 
@@ -1163,18 +1154,18 @@ PRIVATE
   private-url  re-presigns an existing object. private-ls lists private/.
 
 GENERATION
-  gen      generates on the image-gateway (VPS, gpt-image-2.5) and writes the
-           PNGs to ~/Pictures/imgcli/. --public uploads each one to the CDN
+  gen      generates with `agw image` (the mini; gpt-image-2.5, cost recorded as a
+           platform run) and copies the PNGs to ~/Pictures/imgcli/. --public uploads each one to the CDN
            (same path as `upload`) and prints the URL + markdown; --private
            puts it under private/ and prints a presigned URL (not combinable).
            --edit <file> sends the prompt as an edit of that reference image;
-           --enhance runs the brief through the gateway's Plan step first
+           --enhance runs the brief through the planner first
            (playbook prompt + derived size/quality/n, explicit flags win).
            Quality is the cost lever: low ~$0.006, high ~$0.053, xhigh ~$0.094,
            max ~$0.21 per 1024x1024 image.
 
 CUTOUT & ICONS
-  cutout   removes the background via the gateway (Replicate; recraft $0.01
+  cutout   removes the background with `agw image --file` (Replicate; recraft $0.01
            default, bria $0.018) and writes <file>-cutout.png next to the source.
   icon     builds a complete favicon / app-icon set into ~/Pictures/imgcli/icons-<stamp>/:
            favicon.ico (16/32/48), favicon.svg (vectorized, skipped for gradient-heavy
@@ -1203,7 +1194,7 @@ SECRETS (1Password via secrets-run; never bare op)
   op://common/b2-images-admin    img/ incl. delete           rm only — MacBook-only by design,
                                  deliberately not in the mini's headless cache
   op://common/backblaze-s3       bucket coordinates          every B2 command
-  op://vps/image-gateway         gateway BASE_URL/API_SECRET gen
+  op://vps/image-gateway         gateway BASE_URL/API_SECRET icon (the /icons build)
 On the headless mini the write/private/gateway refs must be seeded first
 (dotfiles-private/headless.refs + `make secrets-seed`).
 EOT
