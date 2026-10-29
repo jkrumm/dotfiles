@@ -144,6 +144,7 @@ source "$CONF_FILE"
 APP_NAME=()
 APP_PORT=()
 APP_REWRITE=()   # 1 = rewrite upstream Host to localhost:PORT (derived from the registry)
+APP_PATHS=()     # comma-joined path matchers the door is restricted to; "-" = forward everything
 APP_EXCLUDED=()  # 1 = no door at all
 
 # Capture the extractor's stderr rather than letting it stream past. It reports
@@ -163,11 +164,12 @@ if ! registry=$(python3 "$REGISTRY_PY" --caddyfile "$CADDYFILE" 2>"$skipped_file
 fi
 skipped_blocks=$(cat "$skipped_file")
 
-while IFS=$'\t' read -r name port rewrite; do
+while IFS=$'\t' read -r name port rewrite paths; do
   [[ -n ${name:-} ]] || continue
   APP_NAME+=("$name")
   APP_PORT+=("$port")
   APP_REWRITE+=("$rewrite")
+  APP_PATHS+=("${paths:--}")
   APP_EXCLUDED+=(0)
 done <<< "$registry"
 
@@ -190,6 +192,7 @@ if [[ -f "$APPS_FILE" ]]; then
     APP_NAME+=("$l_name")
     APP_PORT+=("$l_port")
     APP_REWRITE+=("$([[ ${l_flag:-} == rewrite ]] && echo 1 || echo 0)")
+    APP_PATHS+=("-")
     APP_EXCLUDED+=(0)
   done < "$APPS_FILE"
 fi
@@ -564,14 +567,29 @@ fi
       matcher=$(printf '%s' "${APP_NAME[$i]}" | tr -c 'a-z0-9_' '_')
       echo "	@$matcher host ${APP_NAME[$i]}.$DEV_DOMAIN"
       echo "	handle @$matcher {"
+      # A door restricted to path matchers in the Caddyfile (audio.test) keeps
+      # the same restriction here: everything else on the name is a 404, so the
+      # upstream's other paths never become reachable over the tailnet.
+      indent="		"
+      if [[ ${APP_PATHS[$i]} != "-" ]]; then
+        echo "		@${matcher}_paths path ${APP_PATHS[$i]//,/ }"
+        echo "		handle @${matcher}_paths {"
+        indent="			"
+      fi
       if (( APP_REWRITE[i] )); then
         # Escape hatch for a dev server that checks Host on dev-only endpoints
         # and can't be allowlisted — same shape as fpp.test in config/Caddyfile.
-        echo "		reverse_proxy localhost:${APP_PORT[$i]} {"
-        echo "			header_up Host localhost:${APP_PORT[$i]}"
-        echo "		}"
+        echo "${indent}reverse_proxy localhost:${APP_PORT[$i]} {"
+        echo "${indent}	header_up Host localhost:${APP_PORT[$i]}"
+        echo "${indent}}"
       else
-        echo "		reverse_proxy localhost:${APP_PORT[$i]}"
+        echo "${indent}reverse_proxy localhost:${APP_PORT[$i]}"
+      fi
+      if [[ ${APP_PATHS[$i]} != "-" ]]; then
+        echo "		}"
+        echo "		handle {"
+        echo "			respond \"not found\" 404"
+        echo "		}"
       fi
       echo "	}"
       echo ""

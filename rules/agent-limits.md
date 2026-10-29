@@ -5,8 +5,7 @@ paths: ["**/*.ts", "**/*.py", "**/*.sh", "**/Makefile"]
 
 # Agent Limits: None
 
-Agent workers — anything that spawns `claude -p`, `claude_iu`, an agent-gateway
-episode, a Hermes tool loop, a research run, a Codex/Droid run, or an Agent
+Agent workers — anything that spawns `claude -p`, `claude_iu`, an `agw` run, a Hermes tool loop, a research run, a Codex/Droid run, or an Agent
 SDK `query()` — run **as long as the work takes**.
 
 - **No turn limit.** Never pass `--max-turns`; never add a `maxTurns` /
@@ -16,7 +15,7 @@ SDK `query()` — run **as long as the work takes**.
   agent run. A slow episode is not a stuck one — slow models spend
   minutes per turn on hard work by design.
 - **The one liveness rule is an idle watchdog:** no output for N minutes
-  (agent-gateway: 5 min of no stdout on a `claude` route, of no new message on an OpenCode session) means wedged, and only then is the worker
+  (agw: the idle watchdog on an agent step; the only other stop is a runaway cap far above the workflow's normal) means wedged, and only then is the worker
   killed. Lifecycle deadlines (a work item waiting on a human for 7 days)
   are a different fact and stay.
 - **A redeploy never discards an episode.** Drain waits for running work;

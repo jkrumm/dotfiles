@@ -11,8 +11,7 @@
 #       DONE | AGENT | EVENT | HEARTBEAT | STALL so the caller can branch on one word.
 #
 # "Change" = HEAD + status + diff across EVERY worktree of the repo, so a worker busy in a
-# fan-out worktree is not mistaken for a stall, plus agw job states, so a
-# wave waiting on a job is not either. Bound the call from the caller side with
+# fan-out worktree is not mistaken for a stall. Bound the call from the caller side with
 # `timeout` when it must not run forever.
 set -euo pipefail
 
@@ -47,19 +46,11 @@ waiting_on_background() {
   rd read "$1" 2>/dev/null | tail -8 |
     grep -qE '[0-9]+ background tasks?|Waiting for [0-9]+ background|[0-9]+ monitors?\b'
 }
-# A wave legitimately waits on dispatch jobs, where the repo does not change for long
-# stretches. Job movement counts as progress too.
-# Fail-soft: an unreachable gateway contributes an empty line, never an abort.
-activity_sig() {
-  curl -s --max-time 5 http://127.0.0.1:7705/api/jobs 2>/dev/null |
-    jq -c '[.jobs[]? | {id, status}]' 2>/dev/null || true
-}
 repo_sig() {
   [[ -n $repo ]] || return 0
   {
     git -C "$repo" worktree list --porcelain | awk '/^worktree /{print $2}' |
       while read -r wt; do git -C "$wt" rev-parse HEAD; git -C "$wt" status --porcelain; git -C "$wt" diff; done
-    activity_sig
   } | shasum
 }
 

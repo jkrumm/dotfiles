@@ -25,10 +25,10 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 - **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
-- **Gateways — outsourced work** as submit-then-poll HTTP services: research-gateway (mini-only since 2026-09-26; REST only, until archive — research is served by agent-workflows), audio-gateway, image-gateway, email-gateway. Detail: brain `gateways`.
+- **Gateways — outsourced work** as submit-then-poll HTTP services: image-gateway, email-gateway. Detail: brain `gateways`.
 
-**The agent platform** — one engine (agent-gateway),
-one front door (Hermes), one cockpit (herdr), three lanes, one repo contract —
+**The agent platform** — one engine (agent-workflows),
+one front door (Hermes), one cockpit (herdr), two lanes, one repo contract —
 is specified in [`agent-platform.md`](agent-platform.md), which wins over any
 older doc on that topic. This map only places its parts on machines.
 
@@ -41,8 +41,8 @@ own image export, so a screenshot is never the way to share one.
 | File | The question it answers |
 |-|-|
 | `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
-| `agent-platform.html` | How the agent platform fits together: sources, front doors, agent-gateway, the lanes, the repo contract. Spec: `agent-platform.md`. |
-| `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a gateway reload that detaches the session, and the re-attach by state on the next boot. |
+| `agent-platform.html` | How the agent platform fits together: sources, front doors, the engine, the lanes, the repo contract. Spec: `agent-platform.md`. |
+| `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a service reload that detaches the session, and the re-attach by state on the next boot. |
 | `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
 All are compiled from the `.json` beside them with the vendored `archify`
@@ -77,13 +77,10 @@ instead — same validated geometry, without that one crossing guarantee.
 |-|-|-|
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
 | `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work as a GitHub issue (nothing works it automatically), 5-job cron layer | see [[agent-platform]] |
-| `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `agw-legacy dispatch` or `rd wave` |
-| `agent-workflows` | The platform replacing agent-gateway, research-gateway and audio-gateway (public repo; concept in its `docs/concept.md`). Two processes from one release dir: the host, HTTP on `127.0.0.1:7791`, and the audio process on `:7792`, unauthenticated `GET /health` (200 `ok` / 503 `degraded`), everything else bearer-gated | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` (agent-gateway's old CLI is `agw-legacy`) |
-| `agent-gateway` | Local daemon behind `dispatch`, reached as the `agw-legacy dispatch` CLI (its MCP server is gone; `/check`, `/review`, `/prose`, `/excalidraw-diagram`, `/brain` lookups and `/otel` run on `agw`) | lives only here |
-| `audio-gateway` | STT/TTS service; repo here, container on the VPS | second instance on the mini (`com.jkrumm.audio-gateway`, `scripts/launch.sh`, :7719) runs the podcast pipeline only — brain access, STT/TTS stays on the VPS |
+| `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `rd wave` |
+| `agent-workflows` | The agent platform (public repo; concept in its `docs/concept.md`). Two processes from one release dir: the host, HTTP on `127.0.0.1:7791`, and the audio process on `:7792`, unauthenticated `GET /health` (200 `ok` / 503 `degraded`), everything else bearer-gated | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` |
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
-| `research-gateway` | Research REST service (MCP door removed; `/research` runs on `agw research`, served by agent-workflows) — kept until archive | runs natively here since 2026-09-23 (`com.jkrumm.research-gateway{,-lightpanda,-deploy}`, deploy clone `~/.research-gateway/app`, `research.mini.jkrumm.com`); the only instance — its VPS container was retired 2026-09-26 |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
 | `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
 | `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents (legacy pattern, retired at weatherorb's next wave boundary (`agent-platform.md` §herdr)) | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
@@ -133,8 +130,6 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.herdr-reap` | 1800s | the herdr janitor (`rd reap`): closes tabs of finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12) and, regardless of idle age or an active wave, a fan tab whose branch is merged (PR MERGED/CLOSED or patch-equal to the default) or deleted on origin (never a working agent, a dirty/unpushed tree, or a `wave <n>`/`*-mother`/`*-w<n>` tab), messages dirty ones, stops `claude --bg` leftovers > 24 h; actions in `~/Library/Logs/herdr-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
-| `com.jkrumm.agent-gateway` | KeepAlive | agent-gateway daemon (dispatch jobs) |
-| `com.jkrumm.agent-gateway-opencode` | KeepAlive | shared OpenCode v2 server dispatch episodes attach to |
 | `herdr.collie` | KeepAlive | collie bridge (upstream plist) |
 
 ### hermes-agent
@@ -194,10 +189,6 @@ the weatherorb session workflow.
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
-| `com.jkrumm.audio-gateway` | audio-gateway | KeepAlive |
-| `com.jkrumm.research-gateway` | research-gateway | KeepAlive (:7780, loopback) |
-| `com.jkrumm.research-gateway-lightpanda` | research-gateway | KeepAlive (renderer sidecar, :7781, loopback) |
-| `com.jkrumm.research-gateway-deploy` | research-gateway | 120s — deploy-on-push poller (idle-gated) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
 | `com.jkrumm.vps-pg-backup` | vps | 03:15 daily — mini Postgres to the HomeLab, ends with a restore drill (`vps/docs/mini-postgres.md`) |
@@ -255,10 +246,12 @@ Rationale for every one of these: `docs/macbook.md`.
 
 ## Doors (inbound)
 
-Every dev app's own `<name>.test` / `<name>.mini.jkrumm.com` door (25 of them —
-argo, agent-gateway, weatherorb, rollhook, …) is one row in `config/Caddyfile`, the single
+Every dev app's own `<name>.test` / `<name>.mini.jkrumm.com` door (23 of them —
+argo, weatherorb, rollhook, …) is one row in `config/Caddyfile`, the single
 registry — not repeated here. This table is everything else: the fixed,
 non-Caddy doors.
+
+The agent-workflows audio process (`:7792`) has a Caddy door too, `audio.test` and its tailnet twin, so Mac clients (MacWhisper) reach the OpenAI-compatible STT/TTS endpoint over the tailnet with their per-caller bearer token. It forwards only `/v1/audio/*` and `/audio/*`; everything else on that port (`/health`, `/api/*`) is a 404 at Caddy. The generator carries the restriction into the tailnet door (`scripts/lib/caddy-registry.py` → `scripts/caddy-tailnet.sh`).
 
 | Door | Terminates at | Scope |
 |-|-|-|
@@ -299,7 +292,7 @@ Uptime Kuma.
 
 | Monitor | Pusher | Cadence |
 |-|-|-|
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (18 components, incl. agent-gateway job health, the overview pane, Max quota, kernel panics) | 10 min, 1 retry |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (20 components, incl. the overview pane, Max quota, kernel panics) | 10 min, 1 retry |
 | `MacMini Collie - Push` | collie behavioural check | 4 h backstop, 1 retry |
 | `MacMini Secret Seed - Push` | cache-freshness check | 8 days, 1 retry |
 | `MacMini Drift - Push` | drift-check agent | 2 days, 1 retry |
@@ -311,7 +304,6 @@ Uptime Kuma.
 | `WeatherOrb Watchdog - Degraded` | weatherorb watchdog (degraded-state beat) | 35 min |
 | `Home Line - Push` | linewatch | 4 min |
 | `Home Line - Watchdog` | linewatch watchdog latch | 10 min, 2 retries |
-| `Agent Gateway - Push` | agent-gateway job-queue health | 5 min, 1 retry |
 | `Hermes Serve - Push` | hermes-serve-liveness | 4 h backstop, 1 retry |
 | `1Password Backup - Push` | opbackup (MacBook) | weekly |
 

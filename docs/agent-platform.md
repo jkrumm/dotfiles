@@ -21,7 +21,7 @@ GitHub account); the only gates left are quality gates. Alerts go to Slack and a
 human acts; there is no autonomous remediation loop.
 
 STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
-rename to agent-gateway and OpenCode as the worker default). The autonomous remediation
+rename of the worker engine and OpenCode as the worker default). The autonomous remediation
 loop was switched off 2026-10-27 by agent-workflows P0; its design and the
 status rows that described it are in
 `docs/archive/agent-platform-2026-10-warden-era.md`. A workflow platform is designed
@@ -31,9 +31,9 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Three lanes, lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Lanes (now two), lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
-| agent-gateway: model registry, `triage` job, `update_pr`, one source for model ids | **landed** (agent-gateway W1–W4); review angles off Max: senior-dev, typescript, qa, frontend adopted (frontend in Wave 11, measured on real findings) |
+| Worker engine: model registry, review angles, one source for model ids | **landed**, now in agent-workflows (the predecessor service retired 2026-10-29, Wave 11) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 
 ## The picture
@@ -83,7 +83,7 @@ Every repo with a runtime ships:
 | Make target | Contract |
 |-|-|
 | `make check` | all local validation; non-zero on failure; no side effects |
-| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (agent-gateway, hermes-agent) roll back to the previous commit if their own health check fails |
+| `make deploy` | ships the merged default branch; for CI-deployed repos prints `deployed by CI on push` and exits 0; self-hosting repos (agent-workflows, hermes-agent) roll back to the previous commit if their own health check fails |
 | `make verify` | probes production; exit 0 = live and healthy |
 | `make logs` | bounded tail of production logs, then exits |
 
@@ -129,7 +129,7 @@ Uptime Kuma and HyperDX alerts, and background-job failures (`jobs-grade --slack
 
 ## Open facts to verify
 
-- DeepSeek flash rates conflict (agent-gateway 0.15/0.6 vs modelpick 0.50/1.50
+- DeepSeek flash rates conflict (the retired service's registry 0.15/0.6 vs modelpick 0.50/1.50
   per MTok) — re-probe before cost claims.
 - the newest GPT ids, DeepSeek Pro, kimi, minimax on the OpenAI leg are declared but
   never probed — the registry refuses them until verified.

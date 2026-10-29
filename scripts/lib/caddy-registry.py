@@ -3,7 +3,12 @@
 
 Emits one TSV line per `<name>.test` reverse-proxy site block, sorted by name:
 
-    <name>\t<port>\t<host_rewrite 0|1>
+    <name>\t<port>\t<host_rewrite 0|1>\t<paths>
+
+`<paths>` is `-` for a door that forwards everything, else the comma-joined path
+matchers the proxy sits behind (`audio.test` forwards only its API paths). The
+generator must carry them into the tailnet door, otherwise the restriction would
+silently vanish there.
 
 This exists so that `config/Caddyfile` is the SINGLE registry of dev apps.
 Before it there were two lists — the Caddyfile's `*.test` blocks and
@@ -214,21 +219,34 @@ def adapt(source: str, caddy_bin: str) -> dict:
 # --------------------------------------------------------------------------
 
 
-def iter_handlers(handlers):
-    """Yield every handler, descending through Caddy's `subroute` wrapping.
+class UnsupportedMatcher(Exception):
+    """A route matcher beyond one path list — skipped, never half-translated."""
 
-    A bare `name.test { reverse_proxy ... }` block adapts to
-    route -> handle[subroute] -> routes[] -> handle[reverse_proxy], and a block
-    using `handle`/`route` nests further. Recursion keeps this independent of
-    how deep the author nested things.
+
+def iter_proxies(handlers, paths: tuple = ()):
+    """Yield (reverse_proxy handler, path matchers it sits behind).
+
+    The path matchers come from the enclosing `handle @name { … }` routes. Only a
+    single, non-nested path matcher is understood: anything else (a header or method
+    matcher, a second path matcher further in) raises `UnsupportedMatcher`, because
+    emitting the proxy without that condition would widen the door.
     """
     for h in handlers or []:
         if not isinstance(h, dict):
             continue
-        yield h
+        if h.get("handler") == "reverse_proxy":
+            yield h, paths
         for sub in h.get("routes") or []:
-            if isinstance(sub, dict):
-                yield from iter_handlers(sub.get("handle"))
+            if not isinstance(sub, dict):
+                continue
+            inner = paths
+            for m in sub.get("match") or []:
+                if not isinstance(m, dict) or set(m) - {"path"}:
+                    raise UnsupportedMatcher("matcher other than path")
+                if paths:
+                    raise UnsupportedMatcher("nested path matchers")
+                inner = tuple(m.get("path") or ())
+            yield from iter_proxies(sub.get("handle"), inner)
 
 
 def match_hosts(route: dict) -> list[str]:
@@ -262,14 +280,14 @@ def host_rewrite_port(handler: dict) -> int | None:
     return dial_port(values[0])
 
 
-def extract(config: dict) -> tuple[list[tuple[str, int, int]], list[str]]:
+def extract(config: dict) -> tuple[list[tuple[str, int, int, str]], list[str]]:
     """Walk every route; return (rows, skipped).
 
     Everything here is deliberately defensive — an unrecognised block is
     SKIPPED and reported, never guessed at. A wrong port in a generated proxy
     is worse than a missing door.
     """
-    apps: dict[str, tuple[int, int]] = {}
+    apps: dict[str, tuple[int, int, str]] = {}
     skipped: list[str] = []
 
     servers = ((config.get("apps") or {}).get("http") or {}).get("servers") or {}
@@ -298,11 +316,12 @@ def extract(config: dict) -> tuple[list[tuple[str, int, int]], list[str]]:
                 skipped.append(f"{host}: not a single DNS label")
                 continue
 
-            proxies = [
-                h
-                for h in iter_handlers(route.get("handle"))
-                if h.get("handler") == "reverse_proxy"
-            ]
+            try:
+                found = list(iter_proxies(route.get("handle")))
+            except UnsupportedMatcher as exc:
+                skipped.append(f"{host}: {exc}")
+                continue
+            proxies = [h for h, _ in found]
             if not proxies:
                 skipped.append(f"{host}: no reverse_proxy upstream")
                 continue
@@ -311,6 +330,7 @@ def extract(config: dict) -> tuple[list[tuple[str, int, int]], list[str]]:
                 continue
 
             proxy = proxies[0]
+            paths = ",".join(found[0][1]) or "-"
             upstreams = proxy.get("upstreams") or []
             ports = [p for p in (dial_port(u.get("dial")) for u in upstreams) if p]
             if not ports:
@@ -323,12 +343,12 @@ def extract(config: dict) -> tuple[list[tuple[str, int, int]], list[str]]:
             port = ports[0]
             rewrite = 1 if host_rewrite_port(proxy) == port else 0
 
-            if name in apps and apps[name] != (port, rewrite):
+            if name in apps and apps[name] != (port, rewrite, paths):
                 skipped.append(f"{host}: duplicate block disagrees with earlier one")
                 continue
-            apps[name] = (port, rewrite)
+            apps[name] = (port, rewrite, paths)
 
-    rows = sorted((n, p, r) for n, (p, r) in apps.items())
+    rows = sorted((n, p, r, w) for n, (p, r, w) in apps.items())
     return rows, sorted(skipped)
 
 
@@ -372,7 +392,7 @@ def main() -> int:
         )
         return 2
 
-    sys.stdout.write("".join(f"{n}\t{p}\t{r}\n" for n, p, r in rows))
+    sys.stdout.write("".join(f"{n}\t{p}\t{r}\t{w}\n" for n, p, r, w in rows))
     return 0
 
 

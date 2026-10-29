@@ -55,13 +55,13 @@ XCADDY_VERSION           ?= v0.4.7
 CADDY_DNS_MODULE         ?= github.com/caddy-dns/cloudflare
 CADDY_DNS_MODULE_VERSION ?= v0.2.4
 
-# fallow — the static analyzer behind /analyze and agent-gateway's check/review
+# fallow — the static analyzer behind /analyze and agw's check/review
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
 FALLOW_VERSION := 3.33.1
 
-# ocr — alibaba/open-code-review, one input to agent-gateway's review pipeline. A
+# ocr — alibaba/open-code-review, one input to agw's review pipeline. A
 # GitHub-release Go binary (the npm package only wraps it behind a postinstall
 # download), checksum-verified against the release's sha256sum.txt; pinned for
 # the same reason as fallow.
@@ -98,7 +98,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-tools
 	@$(MAKE) --no-print-directory _setup-caddy
 	@$(MAKE) --no-print-directory _setup-browser
-	@$(MAKE) --no-print-directory _setup-agent-gateway
+	@$(MAKE) --no-print-directory _setup-opencode
 	@$(MAKE) --no-print-directory _setup-pnpm
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-secrets
@@ -272,7 +272,7 @@ _setup-tools:
 	done
 	@# fallow — npm global (not brew: needs Node on PATH), pinned to FALLOW_VERSION.
 	@# Linked into ~/.local/bin as well: the fnm-global bin dir is a per-shell
-	@# multishell path that a LaunchAgent (agent-gateway's `which fallow`) never sees.
+	@# multishell path that a LaunchAgent (agw's `which fallow`) never sees.
 	@if [ "$$(fallow --version 2>/dev/null | head -1 | awk '{print $$2}')" = "$(FALLOW_VERSION)" ]; then \
 		echo "    · fallow $(FALLOW_VERSION) (ok)"; \
 	else \
@@ -1190,7 +1190,7 @@ _setup-scripts:
 		DST="$(HOME)/.local/bin/keyprobe"
 	@# rd, ask-human: agent-control commands as real executables on PATH
 	@# (not only zsh functions), so ssh remote commands, OpenCode, Codex and
-	@# agent-gateway workers resolve them.
+	@# agw workers resolve them.
 	@chmod +x $(DOTFILES_DIR)/scripts/remote-dev.sh $(DOTFILES_DIR)/scripts/ask-human.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/scripts/remote-dev.sh" \
@@ -1505,16 +1505,13 @@ _setup-browser:
 		claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false; $(CLAUDE_EACH_END)
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
-.PHONY: _setup-agent-gateway
-_setup-agent-gateway:
-	@echo "  agent-gateway CLI (agw-legacy)..."
-	@# The agent-gateway MCP server is deleted; dispatch is the agw-legacy CLI. Drop the stale
-	@# user-scope registration per account — remove in P6 once every machine ran make setup.
-	@$(CLAUDE_EACH_ACCOUNT) claude mcp remove agent-gateway --scope user 2>/dev/null || true; $(CLAUDE_EACH_END)
-	@if [ -d "$(SOURCEROOT)/agent-gateway" ]; then \
-		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-gateway" install-cli; \
+.PHONY: _setup-opencode
+_setup-opencode:
+	@echo "  OpenCode (pinned build + opencode/opencode-safe shims, from agent-workflows)..."
+	@if [ -d "$(SOURCEROOT)/agent-workflows" ]; then \
+		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-workflows" install-opencode; \
 	else \
-		echo "    · agent-gateway not cloned at $(SOURCEROOT)/agent-gateway — skipping"; \
+		echo "    · agent-workflows not cloned at $(SOURCEROOT)/agent-workflows — skipping"; \
 	fi
 
 .PHONY: _setup-colima
@@ -2158,7 +2155,7 @@ _render-plists:
 # Separate repo (~/SourceRoot/usage-tracker). It owns its own LaunchAgent
 # template + installer; here we just install deps and hand off to its installer,
 # so the plist (absolute bun + repo paths) stays the repo's concern. Skips
-# cleanly if the repo isn't cloned, mirroring _setup-agent-gateway.
+# cleanly if the repo isn't cloned, mirroring _setup-opencode.
 
 .PHONY: _setup-usage-tracker
 _setup-usage-tracker:
