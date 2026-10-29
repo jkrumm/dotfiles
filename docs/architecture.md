@@ -233,13 +233,15 @@ such stray fails the assertion instead of hiding from it.
 
 ## LaunchAgents — MacBook
 
+**Parked while at home (van gear):** the 60 s netgear-watchdog and the 15 min van-sampler
+(both `jobrun`, owner `tinycast-extensions`). Back in the van: `make watchdog-setup
+van-sampler-setup` there (the sampler is gated on a passing Bluetooth spike), restore both
+rows to the list below (original text: this file's git history), and un-hide the `netgear` / `van-power` Tinycast extensions.
+
 `com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
-`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.netgear-watchdog` (60 s, `jobrun`,
-owner `tinycast-extensions`; installed by `make watchdog-setup` there) ·
-`com.jkrumm.van-sampler` (15 min, `jobrun`, owner `tinycast-extensions`; program = signed
-`van-ble --supervise`; `make van-sampler-setup` there, gated on a passing Bluetooth spike) ·
+`com.jkrumm.db-tunnel` (KeepAlive) ·
 `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.smb-keepalive` (60 s +
 network change, `jobrun`, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`
