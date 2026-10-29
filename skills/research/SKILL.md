@@ -5,7 +5,7 @@ description: Deep technical research via the agw CLI (agent-workflows) — one a
 
 # Research — via `agw`
 
-1. Run `agw research "<question>" --depth quick|standard|deep --format json` via Bash (`standard` is the default). Add `--context "<background>"` for what the caller already knows: it is treated as established, never re-searched, never cited. `quick` = one fact, `standard` = a few sources, `deep` = a survey. Ignore `--design` and `--profile`: they are comparison-arm flags, leave them at their defaults.
+1. Run `agw research "<question>" --depth quick|standard|deep --format json` via Bash (`standard` is the default). Add `--context "<background>"` for what the caller already knows: it is treated as established, never re-searched, never cited. `quick` = one fact, `standard` = a few sources, `deep` = a survey.
 2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
 3. Exit 0 = the run finished. Read `status` (`done` | `failed` | `cancelled`), then `output`:
    - `report` — narrative, cited answer in markdown
