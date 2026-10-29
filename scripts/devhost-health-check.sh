@@ -174,6 +174,7 @@ DIAGNOSTIC_REPORTS_DIR="${DEVHOST_DIAGNOSTIC_REPORTS_DIR:-/Library/Logs/Diagnost
 # agent should do next.
 QUOTA_5H_WARN_PCT="${DEVHOST_QUOTA_5H_WARN_PCT:-90}"
 CLAUDE_ACCOUNT_BIN="${DEVHOST_CLAUDE_ACCOUNT_BIN:-$HOME/.local/bin/claude-account}"
+AGW_BIN="${DEVHOST_AGW_BIN:-$HOME/.local/bin/agw}"
 CLAUDE_ACCOUNTS_REGISTRY="${DEVHOST_CLAUDE_ACCOUNTS_REGISTRY:-$HOME/SourceRoot/dotfiles/config/claude-accounts.json}"
 SECRETS_CACHE_FILE="${SECRETS_CACHE_FILE:-$HOME/SourceRoot/dotfiles-private/cache/secrets.enc.json}"
 # Restart detection is a DELTA, so it needs somewhere to remember the last
@@ -1139,14 +1140,14 @@ check_agent_gateway_jobs() {
   echo "agent-gateway jobs ok"
 }
 
-# The `make agent-overview` pane — a `watch` loop over agent-gateway's overview.txt
+# The `make agent-overview` pane — a `watch` loop over `agw agents --text`
 # in a herdr workspace. Panes survive a herdr restart, their processes do not,
 # so this is the one thing that silently stops after every `make herdr-restart`.
 # WARN, never FAIL: it is a display, and a missing display must not page "dev
 # host DOWN".
 check_overview_pane() {
-  [[ -e "$HOME/Library/LaunchAgents/com.jkrumm.agent-gateway.plist" ]] || { echo "overview pane n/a"; return 0; }
-  if "$PGREP_BIN" -f 'watch .*overview\.txt' >/dev/null 2>&1; then
+  [[ -x "$AGW_BIN" ]] || { echo "overview pane n/a"; return 0; }
+  if "$PGREP_BIN" -f 'watch .*agw agents --text' >/dev/null 2>&1; then
     echo "overview pane alive"
     return 0
   fi
@@ -1162,11 +1163,11 @@ check_quota() {
   # Both Claude accounts from the picker's cache (docs/claude-accounts.md), read locally from `claude-account usage --json`:
   # "iu 5h 8% · 7d 88% | me 5h 3% · 7d 12%". WARN (never FAIL) at QUOTA_5H_WARN_PCT on the account interactive
   # sessions land on (the default one) only: the picker routes bulk lanes around a spent window.
-  # Falls back to agent-gateway's single-account view when the picker is not installed or unreadable.
+  # Falls back to the host's `agw quota` (default account iu) when the picker is not installed or unreadable.
   local body five seven text usage
   if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
     usage=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" usage --json 2>/dev/null) || usage=""
-    # Only accounts with a five_hour sample count; none = unavailable, fall through to the gateway view.
+    # Only accounts with a five_hour sample count; none = unavailable, fall through to the host view.
     text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled and .five_hour != null) |
       "\(.id) 5h \(.five_hour | floor)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
       ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
@@ -1183,9 +1184,10 @@ check_quota() {
       return 0
     fi
   fi
-  body=$("$CURL_BIN" -s --max-time 4 "$AGENT_GATEWAY_URL/api/usage" 2>/dev/null) || body=""
-  five=$("$JQ_BIN" -r '.data.five_hour_pct // empty' <<<"$body" 2>/dev/null) || five=""
-  seven=$("$JQ_BIN" -r '.data.seven_day_pct // empty' <<<"$body" 2>/dev/null) || seven=""
+  body=""
+  [[ -x "$AGW_BIN" ]] && body=$(AGW_TIMEOUT_S=5 PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$AGW_BIN" quota 2>/dev/null) || body=""
+  five=$("$JQ_BIN" -r '.accounts.iu.five_hour_pct // empty | floor' <<<"$body" 2>/dev/null) || five=""
+  seven=$("$JQ_BIN" -r '.accounts.iu.seven_day_pct // empty | floor' <<<"$body" 2>/dev/null) || seven=""
   case "$five" in ''|*[!0-9]*) echo "quota unavailable"; return 0 ;; esac
   case "$seven" in ''|*[!0-9]*) seven="?" ;; esac
   text="quota 5h ${five}% · 7d ${seven}%"

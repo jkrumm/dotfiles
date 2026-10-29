@@ -16,8 +16,8 @@ W0 of docs/claude-accounts.md: a fresh (<5 min) default-account (iu) sample in t
 is preferred; the API path below runs only when that sample is stale (retired in W2).
 All accounts are also written to /tmp/claude_sl/usage_accounts.json (per account: plan, and per window the
 fresh `utilization` plus the last known `value`/`value_resets_at_epoch` with its `age_s` — the statusline's
-other-account and pool segments read those). `--accounts` writes only that file: no API call, no gateway
-push (the statusline's own 60 s refresh while a session already has rate_limits).
+other-account and pool segments read those). `--accounts` writes only that file: no API call, no host
+report (the statusline's own 60 s refresh while a session already has rate_limits).
 
 Run via: uv run ~/.claude/fetch_usage.py [--accounts]
 """
@@ -41,7 +41,7 @@ RAW_FILE = CACHE_DIR / "usage_raw.json"
 LOG_DIR = Path.home() / ".claude" / "logs"
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-AGENT_GATEWAY_URL = "http://localhost:7705/api/usage"
+AGW_BIN = "agw"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 ANTHROPIC_BETA = "oauth-2025-04-20"
 
@@ -108,15 +108,6 @@ def _http_get_json(url: str, headers: dict, timeout: int = 10) -> tuple[dict, in
     return json.loads(body), status, round((time.time() - t0) * 1000)
 
 
-def _http_post_json(url: str, payload: dict, timeout: int = 1) -> None:
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
-    )
-    with urllib.request.urlopen(req, timeout=timeout):
-        pass
-
-
 def _write_json(path: Path, payload: dict, indent: int | None = None) -> None:
     """Atomic write via a unique temp file in the same directory (concurrent callers never share one)."""
     fd = tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False)
@@ -129,16 +120,18 @@ def _write_json(path: Path, payload: dict, indent: int | None = None) -> None:
         raise
 
 
-def _push_gateway(five_pct, mins_left, seven_pct, account: str = DEFAULT_ACCOUNT) -> None:
-    # Push to agent-gateway UI (localhost:7705) — fail silently if not running.
-    # Both feeds here read the default account (the cache's default_account, or the default keychain login).
+def _report_quota(five_pct, mins_left, seven_pct, account: str = DEFAULT_ACCOUNT) -> None:
+    # Report to the host's quota view (`agw quota-report`, held in memory, no journal row) — fail silently
+    # when agw or the host is absent (the MacBook). Both feeds here read the default account (the cache's
+    # default_account, or the default keychain login).
+    exe = shutil.which(AGW_BIN) or str(Path.home() / ".local" / "bin" / AGW_BIN)
+    cmd = [exe, "quota-report", "--five-hour-pct", str(round(five_pct or 0)), "--account", account]
+    if mins_left is not None:
+        cmd += ["--five-hour-mins-left", str(mins_left)]
+    if seven_pct is not None:
+        cmd += ["--seven-day-pct", str(round(seven_pct))]
     try:
-        _http_post_json(AGENT_GATEWAY_URL, {
-            "five_hour_pct": round(five_pct or 0),
-            "five_hour_mins_left": mins_left,
-            "seven_day_pct": round(seven_pct) if seven_pct is not None else None,
-            "account": account,
-        })
+        subprocess.run(cmd, capture_output=True, timeout=5)
     except Exception:
         pass
 
@@ -212,7 +205,7 @@ def from_account_cache() -> bool:
         })
         reset = five["resets_at_epoch"]
         mins = round((reset - now) / 60) if reset and reset > now else None
-        _push_gateway(five["utilization"], mins, seven["utilization"], data.get("default_account") or DEFAULT_ACCOUNT)
+        _report_quota(five["utilization"], mins, seven["utilization"], data.get("default_account") or DEFAULT_ACCOUNT)
         log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": five["utilization"], "seven_day_pct": seven["utilization"]})
         return True
     except Exception as e:
@@ -298,7 +291,7 @@ def fetch() -> None:
     now_ts = result["fetched_at"]
     reset_epoch = five_h.get("resets_at_epoch")
     mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
-    _push_gateway(five_h.get("utilization"), mins_left, seven_d.get("utilization"))
+    _report_quota(five_h.get("utilization"), mins_left, seven_d.get("utilization"))
 
 
 if __name__ == "__main__":
