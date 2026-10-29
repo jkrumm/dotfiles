@@ -29,8 +29,8 @@ returns `{ jobId, … }` immediately — not the result. Submit → note `jobId`
   `agw run wait <runId>` until the exit is not 10.
 - agent-gateway's `job_wait` accepts `maxWaitMs` (up to 29 min) — pass the ceiling
   instead of looping on the ~50 s default.
-- `otel` is the one agent-gateway tool exempt: inline, synchronous, on Max, no `jobId`
-  (why: `brain/wiki/engineering/model-routing.md`).
+- `otel` is no longer an agent-gateway tool: `/otel` is an `agw` CLI call (`agw otel`,
+  `agw hdx`), synchronous with the same exit-10 resume as `/check`. No exemption left.
 
 ## Reading files and the prompt cache
 
@@ -48,8 +48,8 @@ Everything routed through `agw` or agent-gateway exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
-| MCP (agent-gateway; `/otel` sync) | `/otel` |
+| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| MCP (agent-gateway, async) | `dispatch` |
 | MCP · fork · subprocess | `/research` · `/browse` (chrome-devtools, haiku) · `/analyze` |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |
@@ -96,7 +96,7 @@ Workflow facts per repo:
 | Repo | Fact |
 |-|-|
 | `homelab-private` | Self-contained. Never reference its services, hostnames or details from any other repo, doc or commit. |
-| `agent-gateway` | Local MCP daemon behind check/review/dispatch/otel. Mini only. |
+| `agent-gateway` | Local MCP daemon behind dispatch. Mini only. |
 | `research-gateway` | REST door only (Hermes's lane) until archive; `/research` runs on `agw research`. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for skill domains. |
 | `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
