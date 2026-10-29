@@ -29,7 +29,7 @@ The full instruction hierarchy (AGENTS.md, rules) is loaded automatically. Follo
 - **Trust the brief.** If it pins a version, signature, import path, or config
   option, use it as given. Do not re-research what the brief settled.
 - **Verify when the brief is silent** and the API is post-2025 or you are unsure:
-  `/research` via the Skill tool (async — jobId, then `job_wait`). Context7 is
+  `/research` via the Skill tool (`agw research`; on exit 10 run the printed `agw run wait <runId>`). Context7 is
   reachable only through it.
 - **Never write remembered library APIs.** "I think this exists" is not enough.
 - **Don't research the trivial** — stdlib, language built-ins, or patterns already
