@@ -230,12 +230,6 @@ _oc_env() {
   base=${base%/}
   local openai="${base%/anthropic}/openai/v1"
   print -r -- "export IU_KEY=${(q)key} IU_ANTHROPIC_BASE=${(q)base} IU_OPENAI_BASE=${(q)openai}"
-  # research-gateway's bearer, as the full header value `opencode.json` reads via
-  # {env:RESEARCH_GATEWAY_AUTH} — the same helper Claude Code's headersHelper runs
-  # (Keychain first, secrets-run second); `{}` when unresolvable → gateway 401s.
-  local auth
-  auth=$("$HOME/SourceRoot/dotfiles/scripts/mcp-research-headers.sh" 2>/dev/null | sed -n 's/.*"Authorization":"\([^"]*\)".*/\1/p')
-  [[ -n $auth ]] && print -r -- "export RESEARCH_GATEWAY_AUTH=${(qq)auth}"
   # agent-gateway's MCP is stdio-only against a repo that lives on the mini, so layer
   # it in with OPENCODE_CONFIG (merged over the global config) only where it
   # exists — the MacBook stays agent-gateway-free.

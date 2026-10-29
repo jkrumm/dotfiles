@@ -35,7 +35,6 @@ challenge a plan or produce a different one. Disagreement is the product.
 - Never write a real host, IP, token or internal URL into a tracked file. Use a
   placeholder; the value belongs in 1Password.
 - Verify library versions, APIs and config options before recommending them —
-  the `research-gateway` MCP is wired up for exactly this. Do not answer from
-  memory.
+  look it up (Context7 or the vendor's docs) instead of answering from memory.
 
 Fix errors in the files you changed; do not refactor untouched code.

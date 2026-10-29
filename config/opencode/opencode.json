@@ -18,17 +18,6 @@
   ],
   "mcp": {
     "servers": {
-      "research-gateway": {
-        "type": "remote",
-        "url": "https://research.mini.jkrumm.com/mcp",
-        "headers": {
-          "Authorization": "{env:RESEARCH_GATEWAY_AUTH}"
-        },
-        "timeout": {
-          "execution": 7200000
-        },
-        "oauth": false
-      },
       "chrome-devtools": {
         "type": "local",
         "command": [

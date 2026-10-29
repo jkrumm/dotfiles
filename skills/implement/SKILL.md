@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration, while keeping the main agent's context window lean.
 
-> **agent-gateway tools are async.** `mcp__agent-gateway__{check,review,dispatch}` return `{ jobId }`, not the result — then `mcp__agent-gateway__job_wait({ jobId })` (pass `maxWaitMs` up to 29 min rather than looping on the ~50s default) yields the structured output. (`/research` is the separate **research-gateway** MCP: submit returns `{ jobId }`, then a single `mcp__research-gateway__job_wait({ jobId })` normally covers the whole job — it blocks rather than returning every 50 s.) **`mcp__agent-gateway__dispatch` is for ONE bounded change, unattended, in a repo you are NOT working in** (tier `implement`: isolated worktree → branch → draft PR, or a verdict; model per `agw-legacy routing`, off Max). N independent changes in ONE repo (disjoint files) go through `/wave` fan-out (`rd fan` / `rd merge`: a worktree + Claude tab per change). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. The same jobs are reachable without MCP via the `agw-legacy` CLI — `agw-legacy dispatch --repo R --tier implement [--workspace in-place] "<brief>"` (`--json`, `--no-wait`) — which is how OpenCode/Codex/cron drive them. See the async-job contract in global CLAUDE.md.
+> **agent-gateway tools are async.** `mcp__agent-gateway__{check,review,dispatch}` return `{ jobId }`, not the result — then `mcp__agent-gateway__job_wait({ jobId })` (pass `maxWaitMs` up to 29 min rather than looping on the ~50s default) yields the structured output. (`/research` is not a job: it runs `agw research`, synchronous with the exit-10 resume.) **`mcp__agent-gateway__dispatch` is for ONE bounded change, unattended, in a repo you are NOT working in** (tier `implement`: isolated worktree → branch → draft PR, or a verdict; model per `agw-legacy routing`, off Max). N independent changes in ONE repo (disjoint files) go through `/wave` fan-out (`rd fan` / `rd merge`: a worktree + Claude tab per change). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. The same jobs are reachable without MCP via the `agw-legacy` CLI — `agw-legacy dispatch --repo R --tier implement [--workspace in-place] "<brief>"` (`--json`, `--no-wait`) — which is how OpenCode/Codex/cron drive them. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 
@@ -51,7 +51,7 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`,
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
 | Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
-| Research | Skip | `/research` (MCP) if external libs | `/research` (MCP) if external libs |
+| Research | Skip | `/research` if external libs | `/research` if external libs |
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
 | Implement | Inline | Inline, `@implementer` for live-tree work, or `mcp__agent-gateway__dispatch` (implement tier) for one change in a repo you are not working in | `@implementer` when the edit needs the live tree; `/wave` fan-out (`rd fan`/`rd merge`) for independent file groups in one repo; `mcp__agent-gateway__dispatch` (implement tier) for one bounded change in a repo you are not working in; `Agent` with `subagent_type: general-purpose, model: opus` for novel-hard logic — see below |
 | Validate (static) | `/check` (MCP) | `/check` (MCP) | `/check` (MCP) |
@@ -177,7 +177,7 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 ## Rules
 
 - State the tier (Quick/Standard/Heavy) upfront
-- Never do exploration or research inline in Standard/Heavy — use `Agent` with `subagent_type: Explore` + `/research` (MCP)
+- Never do exploration or research inline in Standard/Heavy — use `Agent` with `subagent_type: Explore` + `/research`
 - Never switch the **orchestrator's** model mid-session (kills prompt cache). Switch freely **inside** subagents — they have their own cache
 - Never echo full subagent output — summarize in ≤5 bullets
 - Always run `/check` before declaring done
