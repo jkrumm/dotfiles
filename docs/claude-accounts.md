@@ -75,7 +75,7 @@ exists, so a new account ships dark (§Adding an account).
 - **Never copy credentials between dirs.** Each dir does its own `/login`, because
   two homes sharing one refresh-token family invalidate each other (caam,
   ClaudeBar).
-- **User-scope MCP servers** (`agent-gateway`, `research-gateway`,
+- **User-scope MCP servers** (`agent-gateway`,
   `chrome-devtools`) live in `.claude.json`, so the `make setup` registration
   loop runs once per enabled account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`).
 - Same for every other `~/.claude.json` writer: `_claude_theme_auto`

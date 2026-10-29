@@ -39,9 +39,7 @@ shared server (`com.jkrumm.agent-gateway-opencode`) over HTTP, config on that se
 (`agent-gateway/docs/opencode-v2.md`), with no db-lock retry.
 
 **Parity with Claude Code (2026-10-04).** Same tools, same guard, same agents:
-`research-gateway` (remote MCP; `oc` exports `RESEARCH_GATEWAY_AUTH` from the same
-helper Claude Code's `headersHelper` runs — Keychain first, `secrets-run` second —
-so no token sits in the config) and `chrome-devtools` (local, `--isolated
+`chrome-devtools` (local, `--isolated
 --headless`; reach for it only for browser work) in `opencode.json`'s `mcp`;
 `plugins/protect-branches.js` throws on whatever `hooks/protect-branches.ts` denies;
 `agent/{implementer,verifier}.md` are rendered from `agents/` (frontmatter differs,

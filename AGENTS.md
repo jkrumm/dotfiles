@@ -423,12 +423,7 @@ and `oc`. `ANTHROPIC_API_KEY` is intentionally
 absent, and exporting it bills API credits instead.
 
 **MCP servers**, registered at user scope by `make setup`: `chrome-devtools`
-(deferred; use only via `/browse`), `research-gateway` (remote HTTP; the bearer
-is **not** in `~/.claude.json` — `headersHelper` runs
-`scripts/mcp-research-headers.sh` per connect, Keychain first, `secrets-run`
-second. Rotating `op://vps/research-gateway/API_SECRET` means
-`security delete-generic-password -s research-gateway-token` then
-`make setup`), and **`agent-gateway` on the mini only** — its
+(deferred; use only via `/browse`), and **`agent-gateway` on the mini only** — its
 MCP is stdio-only against `~/SourceRoot/agent-gateway/server/mcp.ts`, a repo that lives
 only there, so `/check`, `/review`, `/otel`, `/prose`, `/excalidraw-diagram` and
 `dispatch` are mini-only skills. Don't clone agent-gateway to the MacBook to "fix"

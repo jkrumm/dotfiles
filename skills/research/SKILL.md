@@ -20,7 +20,7 @@ description: Deep technical research via the agw CLI (agent-workflows) — one a
 
 **Never answer from memory when research fails.** Say it failed (quote the exit code and `error`) and, if the question matters, retry once or look the primary source up directly.
 
-**Follow-up on a finished report:** there is no follow-up flag yet. Ask a new question and pass the report's relevant findings as `--context`, so they are not re-searched.
+**Follow-up on a finished report:** `agw research "<new question>" --follow-up <runId>`, with the `runId` of a `done` research run. The earlier question, report and citations become the agent's context; the answer has the same shape. `--context` stays for background the caller brings itself.
 
 Exit codes a caller acts on (`agw schema --exit-codes`):
 
