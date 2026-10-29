@@ -67,10 +67,9 @@ extras, no error. `CLAUDE_SL_DIR` relocates the render caches (test seam,
 
 **Primary: stdin `.rate_limits`** (`five_hour`/`seven_day` → `used_percentage`,
 `resets_at` epoch seconds). Max sessions only, and only from the first API
-response on. Every render that has them also POSTs them to agent-gateway's
-`/api/usage` (throttled to once a minute per account via `/tmp/claude_sl/usage_push_<dir>.stamp`,
-fire-and-forget) — that is what keeps agent-gateway's quota view and the devhost
-heartbeat's quota component fed. The same throttled render also records a
+response on. Every render that has them also reports them to the agent-workflows host with
+`agw quota-report` (throttled to once a minute per account via `/tmp/claude_sl/usage_push_<dir>.stamp`,
+fire-and-forget; a silent no-op without `agw`, e.g. on the MacBook) — that is what keeps the host's quota view fed. The same throttled render also records a
 per-account sample (`claude-account record`, account = registry id resolved from
 `CLAUDE_CONFIG_DIR`, unset → `iu`) into `~/.cache/claude-accounts/<id>.sample.json`
 (`docs/claude-accounts.md`). An `IU`/`ME` badge after the auth mode shows only when
@@ -80,7 +79,7 @@ more than one account is enabled.
 with the Claude Code OAuth token from the macOS Keychain (`Claude Code-credentials`)
 plus `anthropic-beta: oauth-2025-04-20`. Run via `uv run`, cache
 `/tmp/claude_sl/usage_api.json`, 5-min TTL, background refresh via `disown`; it
-also POSTs to agent-gateway. Never spawned on the IU lane. Since claude-accounts W0
+also reports through `agw quota-report`. Never spawned on the IU lane. Since claude-accounts W0
 it first serves a **fresh (<5 min) default-account (`iu`) sample from the quota cache** (same
 `usage_api.json` shape, `source: claude-accounts`, no `limits`/`extra_usage`) and
 calls the API only when that sample is stale; it also writes

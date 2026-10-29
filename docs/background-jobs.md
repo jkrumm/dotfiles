@@ -24,7 +24,7 @@ list and the migration order were written against the retired remediation loop (
 | **0** | unobserved | Runs; a failure exists only in a log nobody reads, or in `/tmp` | — |
 | **1** | recorded | Each run leaves a structured record: `jobrun` state file, or the job's own state/`/health` | the job |
 | **2** | dead-man covered | Something *independent* grades failure **and** absence with period + grace | `jobs-grade`, Kuma push, weatherorb watchdog `overdue_after` |
-| **3** | self-healing | Retries with backoff and a deadline, a lock where needed, and escalates its own ladder before giving up | the job (netgear-watchdog, linewatch watchdog, research-gateway leases, DBOS) |
+| **3** | self-healing | Retries with backoff and a deadline, a lock where needed, and escalates its own ladder before giving up | the job (netgear-watchdog, linewatch watchdog, agw runs resumed from the journal, DBOS) |
 
 Levels are cumulative: a job at 3 must also be at 2. Self-healing that nobody can see failing is
 still a 1. The target is the *right* level, not the highest. The detectors stop at 2 or 3 on

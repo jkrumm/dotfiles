@@ -132,7 +132,7 @@ rows 2+ of an entry, so any two-row entry pushes its own name out of line —
 `scripts/herdr-groups.py` carries the full comparison. Nothing re-applies this
 and nothing has to; both halves are workspace state, which `session.json`
 persists. A separator costs an idle shell and a slot in the workspace picker,
-and stays invisible to agent-gateway's overview (agent-driven; `workspace list` is
+and stays invisible to the agent overview (agent-driven; `workspace list` is
 only an id→label map there). `make herdr-groups-check` prints the plan,
 `herdr-groups.py clear` is the undo. Adding a repo is one line in the JSON; an
 unopened space is skipped, so listing one early costs nothing.
@@ -170,8 +170,7 @@ hazard, except across panes where you cannot see it happen. `agents` dedupes on
 the Claude session id (herdr exposes `agent_session.value`, the daemon
 `sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
 
-Three lanes start agent work (`docs/agent-platform.md`): `@implementer`,
-`agw-legacy dispatch` (one bounded change, unattended), an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
+Two lanes start agent work (`docs/agent-platform.md`): `@implementer` and an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
 `rd bg` were removed 2026-10-04.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
@@ -548,7 +547,7 @@ discarded) with `<id> <text>` right after the request is durably on disk.
 `scripts/human-queue-notify-hook.sh`: one Slack line to `#agents` through Argo's
 Slack proxy (`POST /slack/channels/<id>/messages`, bearer from
 `secrets-run read op://common/api/SECRET`, channel id resolved by name from
-`GET /slack/channels` — the door audio-gateway uses for podcast results), with
+`GET /slack/channels`), with
 the question and the `make human-queue` hint.
 
 - **Every failure is soft** — no token, no channel, Argo down: the hook exits 0

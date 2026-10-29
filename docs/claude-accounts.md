@@ -6,7 +6,7 @@ Status: **W2 done** (2026-10-24); rule v1.4 (N accounts), the peer sample import
 `CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (no room pauses the spawn, never
 IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
-dead = FAIL and `me` dead = WARN. Still open: agent-gateway workers (other repo), usage-tracker
+dead = FAIL and `me` dead = WARN. Still open: usage-tracker
 `account` column (other repo), W2 displays. W2a shipped `make claude-accounts-verify`, the e2e attribution test and the login keepalive (§Operate). W0 shipped the registry, `claude-account`, the quota
 cache, the statusline badge and `account` in `session_env`. Pick log:
 `~/.local/share/claude-accounts/picks.jsonl`; `claude-account exhausted` exists but nothing calls it yet.
@@ -75,8 +75,7 @@ exists, so a new account ships dark (§Adding an account).
 - **Never copy credentials between dirs.** Each dir does its own `/login`, because
   two homes sharing one refresh-token family invalidate each other (caam,
   ClaudeBar).
-- **User-scope MCP servers** (`agent-gateway`,
-  `chrome-devtools`) live in `.claude.json`, so the `make setup` registration
+- **User-scope MCP servers** (`chrome-devtools`) live in `.claude.json`, so the `make setup` registration
   loop runs once per enabled account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`).
 - Same for every other `~/.claude.json` writer: `_claude_theme_auto`
   (`claude.zsh:40`) and `fan-worktree.sh:40` pre-trust. Both loop over the
@@ -161,8 +160,8 @@ weight(x)   = spare(x) / hoursToWeeklyReset(x)^1.5    # URGENCY_EXP; ≥ 1 h; no
 best(S)     = the member of S with the highest weight (registry order breaks ties)
 share(S)    = a draw from S with probability ∝ weight   # what the CLI uses; `pick --dry` and tests use best(S)
 home(lane)  = share(eligible x whose homeLanes claim the lane)
-              iu for interactive, agent-gateway:review, headless
-              me and me2 for wave, fan, agent-gateway:* (other tools)
+              iu for interactive, headless
+              me and me2 for wave, fan
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first (soonest reset)
   2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
@@ -173,7 +172,7 @@ pick(lane):
   5. share(eligible)   # spill to the accounts with the most room
   6. interactive → iu (Claude Code shows the limit itself)
      bulk        → "spill": the caller spills to its IU path
-                   (`rd` pauses — Herdr work never spills to IU; agw keeps its IU path for gateway workers)
+                   (`rd` pauses — Herdr work never spills to IU; agw steps keep their IU path)
 ```
 
 Why v1.4: with two accounts "the other" was one account, so the first match was the only match. With `me2` the
@@ -233,7 +232,6 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 | bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what `herdr agent start` types into a pane) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
 | `c` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
 | `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept); `CLAUDE_ACCOUNT_PICKED=<id>` rides the same spawn-time `--env` (herdr's `--env` repeats; iu included, so no typed `export` can race the pane's shell); `agent_pane_setup` still types only `USAGE_LANE`. When no account has room `rd` pauses the spawn (no IU spill) |
-| agent-gateway workers (`session-runner.ts:373 buildWorkerEnv`, spawn `:1308`) | inherited default dir; reactive IU fallback | set `CLAUDE_CONFIG_DIR` from pick (`lane = agent-gateway:<tool>`); on a quota error retry once on the *other* account, then IU |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 
@@ -244,7 +242,7 @@ session of the cwd, so `claude-account latest "${PWD:A}"` (the physical path: Cl
 `~/.claude/projects/<cwd, every non-alphanumeric as '-'>/`) and the lookup above gives its account. Both lookups fall
 through to the normal pick when they find nothing: no transcript for the cwd, or a `session_env` line older than the
 hook log's 3-day retention (a `--continue` into a session older than that re-picks, and the context is cold anyway).
-The hook line carries no cwd, which is why the transcript directory, not the log, answers "which session". `--account` overrides. agent-gateway pins its own resumed workers the same way.
+The hook line carries no cwd, which is why the transcript directory, not the log, answers "which session". `--account` overrides.
 A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn and subagents inherit it.
 
 **Account marker (`CLAUDE_ACCOUNT_PICKED=<id>`).** An iu pick is `unset CLAUDE_CONFIG_DIR`, indistinguishable
@@ -308,7 +306,7 @@ Claude Code has one global `effortLevel` and no per-model default, so every laun
 the config dir: `c`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
 `rd wave`/`rd fan` (`rd_effort_flag` in `remote-dev.sh`, `RD_WAVE_EFFORT` overrides). An explicit `--effort` always
 wins; an unlisted family (Haiku) gets no flag. `settings.json` `effortLevel` stays `high` in all three accounts on
-purpose: it is what a spawn without the flag runs at, and those are agent-gateway's Claude workers (Sonnet). Custom
+purpose: it is what a spawn without the flag runs at, and those are the off-Max `claude_iu` runs (Sonnet). Custom
 subagents pin their own (`agents/*.md` `effort: high`). A mid-session `/model` switch keeps the session's effort.
 
 ## Operate
@@ -322,8 +320,8 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past for the default account (`iu`); any other account is capped at WARN, like `auth/<id>`. An unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
 | `plan/<id>` | `claude-account expiry` `plan_detected` (parsed from the Keychain item's `rateLimitTier`) equals the registry's `plan`. The picker's default units hang on that plan | WARN only: a mismatch (fix: set `"plan"` in `config/claude-accounts.json`) or an undetectable tier |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
-| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account`; agent-gateway's session-runner calls `claude-account pick` | someone rewired a launcher past the picker |
-| `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, agent-gateway:review, agent-gateway:dispatch, headless: account + reason | the picker errors or stops explaining itself |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account` | someone rewired a launcher past the picker |
+| `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
 
@@ -473,7 +471,6 @@ human queue and its Slack notification, as every `ask-human` request does.
 | a stale expiry or 401 right after a fresh login, `security find-generic-password -s 'Claude Code-credentials…'` without `-a` shows `"acct"<blob>="unknown"` | a Keychain twin: a process that ran without `USER` filed a second item under acct `unknown` next to the real one (acct = `$USER`) | lookups here pass `-a $USER`; delete the twin: `security delete-generic-password -s 'Claude Code-credentials' -a unknown` (add the `-<hash>` suffix for a non-default account) |
 | notification `login finished but the Keychain login did not change` | the CLI exited 0 but the item the reader sees was not rewritten (Keychain twin above, a locked Keychain, a login in the wrong browser profile) | check the twin row above, then `claude-relogin <id> --visible` |
 | log `refresh: peer usage unavailable` / `unreadable` | the other machine is asleep or unreachable over ssh, or answered garbage | nothing: the run continues on its own endpoint; `ssh mini claude-account usage --json` (MacBook) / `ssh iumac …` (mini) shows why |
-| `launcher/agent-gateway` FAIL | session-runner lost its `claude-account pick` call (or agent-gateway not deployed with it) | check agent-gateway `master`, redeploy |
 | `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
 | `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
@@ -487,8 +484,7 @@ human queue and its Slack notification, as every `ask-human` request does.
 
 ## Borrowed from open source (2026-10 survey)
 
-No existing tool does per-lane spawn-time selection across herdr panes and
-agent-gateway workers. The per-spawn tools (diranged/claude-profile, ccs native
+No existing tool does per-lane spawn-time selection across herdr panes. The per-spawn tools (diranged/claude-profile, ccs native
 profiles, RA1NM4KER/agent-relay, CarlosTheory/claude-multi-account) are profile
 launchers that are about 30 lines here. The global-swap tools (claude-swap
 `switch`, herdr-account-switch, herdr-grazr, cc-account-switcher, caam vault
@@ -518,8 +514,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 ## Attribution (usage-tracker → Argo)
 
 - `hooks/session-env.ts` adds `account` to its line: the registry id resolved
-  from `CLAUDE_CONFIG_DIR` (unset → `iu`). agent-gateway's `writeSessionEnv` does
-  the same.
+  from `CLAUDE_CONFIG_DIR` (unset → `iu`).
 - usage-tracker gets a new `account` column on `session_env` and `usage_record`.
   `billing` keeps its meaning (`max` = sunk, `iu` = metered); account is a
   separate dimension. Backfill: all historical `max` rows → `iu`. `billing-audit`
@@ -533,9 +528,8 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | Surface | Change |
 |-|-|
 | Claude Code statusline | Native `rate_limits` already comes from the session's own account, so the own numbers are correct for free; the `IU`/`ME` badge stays at the front. After the duration, one final segment (files only, never a spawn in the render): every enabled account as `<id> <5h>/<wk>` in registry order, e.g. `iu 2/90 · me 41/22 ↺90m · ∑76%`. The own account is bold with the live stdin numbers (and its 5h reset countdown while line 1 fits 130 columns); the others come from `/tmp/claude_sl/usage_accounts.json`, grey when the sample is over 1 h old, `✗login` when the login failed, absent without figures. `∑` is the plan-weighted weekly pool (weight = the plan multiple, `max20x` 20 / `max5x` 5, all 1 when one is unknown; the same formula as Tinycast's `usage/summary.ts`), only with more than one account. Numbers use the context thresholds. The routing reason (`CLAUDE_ACCOUNT_REASON`, see Account marker) and a pace hint are not rendered. `usage_accounts.json` is rewritten in the background at most once a minute by `fetch_usage.py --accounts` (20 s cap). Tests: `scripts/statusline.test.sh` |
-| agent-gateway `/api/usage` (`routes/usage.ts`) | from one `current` object to `{accounts: {a, b}}`; POSTs carry `account` |
 | herdr overview pane (`/api/overview.txt`) | a two-line quota header (`iu` and `me`: 5h/7d/reset) plus an account column per agent |
-| Tinycast (MacBook, `extension/src/usage/quota.ts`) | read `https://agent-gateway.mini.jkrumm.com/api/usage` (the tailnet door exists via the Caddyfile vhost), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
+| Tinycast (MacBook, `extension/src/usage/quota.ts`) | read both accounts from Argo `GET /agents/overview` (`latest.snapshot.quota`), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
 | Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry` (its `severity`): anything but PASS is a WARN (never pages): inside 7 days, an unreadable item, or a check that could not run (helper missing, failing or answering garbage: `login expiry check could not run (<reason>)`, reason also on stderr). Expiry never raises past the existing `iu` policy: a dead keychain login with a working cached token stays the accepted state (WARN at worst); FAIL only where `check_claude_auth_iu` fails too |
 | Hermes digests | inherit from the heartbeat; no change |
 
