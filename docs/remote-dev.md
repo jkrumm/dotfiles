@@ -771,7 +771,8 @@ after the push, measured over 11 pushes) has passed since the push, and needs on
 check, so a partial or skipping-only list cannot merge early. None or skipping-only after the
 grace merges as no-CI; pending past `RD_CI_TIMEOUT` (1200 s) dies; `--no-ci` skips the gate.
 Needs `jq`. `rd fan --clean <repo>` removes
-clean, fully merged worktrees and their tabs. A `rd wave` without `(Wave <n>)` takes the next
+clean, fully merged worktrees and their tabs, but only those `rd fan` created (a `rd-fan` marker in the worktree's git dir;
+others, and ones made before the marker, are kept); `--all` judges every extra worktree. A `rd wave` without `(Wave <n>)` takes the next
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
 Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.

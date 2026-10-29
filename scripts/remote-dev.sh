@@ -783,12 +783,13 @@ for a in agents:
 # Each brief declares its branch on a `Branch: <name>` line (the brief template's "exact
 # branch" field). Worktrees are cut from FETCHED origin state by scripts/fan-worktree.sh and
 # the brief is prefixed with that base, so a stale or ahead local checkout cannot brief a
-# worker against the wrong tree. `rd fan --clean <repo>` reclaims merged worktrees.
+# worker against the wrong tree. `rd fan --clean <repo>` reclaims merged worktrees rd fan
+# created (marked at creation); `--all` also judges worktrees without the marker.
 cmd_fan() {
   parse_kind "$@"
   local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: fan <repo> [--kind K] <brief-file…>   |   fan --clean <repo>"
-  if [[ $name == --clean ]]; then fan_clean "${REST[1]:-}"; return; fi
+  [[ -n $name ]] || die "usage: fan <repo> [--kind K] <brief-file…>   |   fan --clean <repo> [--all]"
+  if [[ $name == --clean ]]; then fan_clean "${REST[@]:1}"; return; fi
   local briefs=("${REST[@]:1}")
   (( ${#briefs[@]} )) || die "usage: fan <repo> [--kind K] <brief-file…>"
   require_server
@@ -844,6 +845,8 @@ for w in workspaces:
     out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" '$path' '$branch'" 2>&1) \
       || die "worktree for '$branch' failed:"$'\n'"$out"
     wt=$(sed -n 1p <<<"$out"); base=$(sed -n 2p <<<"$out"); sha=$(sed -n 3p <<<"$out")
+    host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" --mark '$path' '$wt'" >/dev/null 2>&1 \
+      || note "   could not mark $wt as fan-made — 'rd fan --clean $name' will keep it"
 
     tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
     if [[ -n $ws ]]; then
@@ -886,22 +889,30 @@ for w in workspaces:
 
 # Reclaim fan worktrees whose branch is fully merged into origin's default and whose tree
 # is clean: close the agent's tab, remove the worktree (through wtp when the repo has one),
-# delete the branch. Anything unmerged or dirty is listed and left alone.
+# delete the branch. Anything unmerged or dirty is listed and left alone, and so is every
+# worktree rd fan did not create (no marker) unless --all.
 fan_clean() {
-  local name=${1:-}
-  [[ -n $name ]] || die "usage: fan --clean <repo>"
+  local name="" all="" a
+  for a in "$@"; do
+    case $a in
+      --all) all=--all ;;
+      *) [[ -z $name ]] || die "usage: fan --clean <repo> [--all]"; name=$a ;;
+    esac
+  done
+  [[ -n $name ]] || die "usage: fan --clean <repo> [--all]"
   require_server
   local path
   path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
   local roster
   roster=$(herdr_agent_list) || exit 1
   local rows wt br tab
-  rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" '$path'" 2>&1) \
+  rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" $all '$path'" 2>&1) \
     || die "could not list worktrees of $path: $rows"
   [[ -n $rows ]] || { echo "no extra worktrees for $name"; return 0; }
   local verb reason st qwt qbr
   while IFS=$'\t' read -r verb wt br reason; do
     [[ -n $verb ]] || continue
+    if [[ $reason == no-marker ]]; then echo "keep  $br (not created by rd fan, or made before the marker; --all overrides)  $wt"; continue; fi
     if [[ $verb == keep ]]; then echo "keep  $br ($reason)  $wt"; continue; fi
     read -r tab st <<<"$(WT="$wt" python3 -c '
 import json, os, sys
@@ -1277,7 +1288,7 @@ usage() {
     rd wave <repo> [--kind K] <prompt…>
                               fresh tab + solo agent + prompt — claude
     rd fan <repo> <brief…>    worktree + tab + Claude per brief file (fan-out)
-                              (fan --clean <repo> reclaims merged worktrees)
+                              (fan --clean <repo> [--all] reclaims merged fan worktrees)
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          close a finished wave's tab (clean + pushed only)
     rd reap [--dry-run]       janitor: close finished clean+pushed tabs, message dirty ones (REAP_IDLE_H, default 12)
