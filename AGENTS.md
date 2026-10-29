@@ -177,7 +177,7 @@ substitutes for another.**
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/herdr-reap.py`, also `com.jkrumm.herdr-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/herdr-reap.log` |
 | The raw record | `com.jkrumm.herdr-events` (`scripts/herdr-events.ts`) appends every herdr event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make herdr-events-status` |
-| What every agent is doing | `make agent-overview` — herdr workspace `overview` watching agent-gateway `GET /api/overview.txt`; its JSON twin is the one producer for Hermes, brain and Argo. |
+| What every agent is doing | `make agent-overview` — herdr workspace `overview` running `watch` over `agw agents --text --color`; its JSON twin (`agw agents`) is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 

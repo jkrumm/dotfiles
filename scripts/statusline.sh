@@ -232,23 +232,24 @@ if [ -z "$_5h_pct" ] && [ "$auth_mode" = "MAX" ]; then
   fi
 fi
 
-# Stdin figures also feed agent-gateway's quota view (POST /api/usage, the same body
-# fetch_usage.py sends) — throttled to once a minute, fire-and-forget.
+# Stdin figures also feed the host's quota view (`agw quota-report`, the same figures
+# fetch_usage.py reports) — throttled to once a minute, fire-and-forget. ~65 ms per call
+# against ~1.5 ms for a raw curl; both are backgrounded, and the CLI owns the host URL, secret
+# and field names. Absent `agw` (the MacBook) or an absent host: silent no-op.
 if [ -n "$rl_5h" ]; then
   _push_stamp="$_SL_DIR/usage_push_${_ca_key//\//_}.stamp"   # per account: one account's sessions must not starve the other's POST
   _pushed_at=$(cat "$_push_stamp" 2>/dev/null)
   if [ $(( _now_s - ${_pushed_at:-0} )) -gt 60 ]; then
     mkdir -p "$_SL_DIR" && echo "$_now_s" > "$_push_stamp"
-    _mins=null
-    [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _mins=$(( (rl_5h_reset - _now_s) / 60 ))
     # Account: the badge's resolution (claude-account account). Unknown (not resolved yet, "?" for an unregistered
-    # dir, anything off-pattern) means no POST: never guess iu.
+    # dir, anything off-pattern) means no report: never guess iu.
     _acct="${account_id:-}"
-    if [[ "$_acct" =~ ^[a-z][a-z0-9-]{0,15}$ ]]; then
-      ( _body=$(jq -nc --arg f "$rl_5h" --arg m "$_mins" --arg w "${rl_wk:-}" --arg a "$_acct" \
-          '{five_hour_pct: ($f | tonumber), five_hour_mins_left: (if $m == "null" then null else ($m | tonumber) end),
-            seven_day_pct: (if $w == "" then null else ($w | tonumber) end), account: $a}' 2>/dev/null) \
-        && curl -s -m 1 -X POST -H 'Content-Type: application/json' -d "$_body" http://localhost:7705/api/usage >/dev/null 2>&1 ) &
+    _agw=$(command -v agw 2>/dev/null || echo "$HOME/.local/bin/agw")
+    if [[ "$_acct" =~ ^[a-z][a-z0-9-]{0,15}$ ]] && [ -x "$_agw" ]; then
+      _rep=(--five-hour-pct "$rl_5h" --account "$_acct")
+      [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _rep+=(--five-hour-mins-left $(( (rl_5h_reset - _now_s) / 60 )))
+      [ -n "$rl_wk" ] && _rep+=(--seven-day-pct "$rl_wk")
+      ( "$_agw" quota-report "${_rep[@]}" >/dev/null 2>&1 ) &
     fi
     disown 2>/dev/null
     # Same throttle: resolve the account and feed its quota sample (claude-account record, atomic).

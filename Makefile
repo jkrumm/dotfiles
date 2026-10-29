@@ -2796,12 +2796,13 @@ AGENT_OVERVIEW_COLS ?= 80
 .PHONY: agent-overview
 agent-overview:
 	@# Dev host only: the agent overview pane — a herdr workspace labelled
-	@# `overview` running `watch` over agent-gateway's GET /api/overview.txt, so herdr
+	@# `overview` running `watch` over `agw agents --text` (the host's pane render), so herdr
 	@# and Collie show every Claude pane's state without a second data source.
 	@# Idempotent: reuses the workspace if it exists, (re)starts the loop in its
 	@# first pane. Re-run after a herdr restart (panes survive, processes don't).
 	@command -v herdr >/dev/null || { echo "  ✗ herdr not installed"; exit 1; }
-	@curl -sf localhost:7705/api/overview.txt >/dev/null || { echo "  ✗ agent-gateway not answering on :7705 — is com.jkrumm.agent-gateway loaded?"; exit 1; }
+	@command -v agw >/dev/null || { echo "  ✗ agw not installed"; exit 1; }
+	@agw agents --text --format plain >/dev/null || { echo "  ✗ agw agents failed — is the agent-workflows host up?"; exit 1; }
 	@WS=$$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[] | select(.label=="overview") | .workspace_id' | head -1); \
 	if [ -z "$$WS" ]; then \
 		OUT=$$(herdr workspace create --cwd "$$HOME" --label overview --no-focus 2>&1); \
@@ -2814,9 +2815,9 @@ agent-overview:
 	fi; \
 	PANE=$$(herdr pane list 2>/dev/null | jq -r --arg ws "$$WS" '.result.panes[] | select(.workspace_id==$$ws) | .pane_id' | head -1); \
 	[ -n "$$PANE" ] || { echo "  ✗ no pane in workspace $$WS"; exit 1; }; \
-	pkill -f 'watch --color -t -n 30 curl -sfG localhost:7705/api/overview.txt' 2>/dev/null || true; \
+	pkill -f 'watch --color -t -n 30 agw agents --text' 2>/dev/null || true; \
 	herdr pane send-keys "$$PANE" C-c >/dev/null 2>&1 || true; sleep 1; \
-	herdr pane run "$$PANE" watch --color -t -n 30 'curl -sfG localhost:7705/api/overview.txt -d color=1 -d cols=$(AGENT_OVERVIEW_COLS) || echo agent-gateway unreachable' >/dev/null; \
+	herdr pane run "$$PANE" watch --color -t -n 30 'agw agents --text --color --cols $(AGENT_OVERVIEW_COLS) --format plain || echo agw host unreachable' >/dev/null; \
 	echo "  ✓ overview loop running in $$PANE (workspace $$WS)"
 
 .PHONY: herdr-launchd-status
@@ -3522,7 +3523,7 @@ help:
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
-	@echo "  make agent-overview             Dev host: herdr workspace overview watching agent-gateway /api/overview.txt (idempotent)"
+	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"
 	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane), then re-run agent-overview"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
