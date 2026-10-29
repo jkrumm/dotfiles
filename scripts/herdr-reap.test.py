@@ -12,16 +12,27 @@ import unittest
 REAP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "herdr-reap.py")
 
 FAKE_HERDR = r'''#!/usr/bin/env python3
-import json, os, sys
+import json, os, subprocess, sys
 a = sys.argv[1:]
-d = json.load(open(os.environ["FAKE_WORLD"]))
-open(os.environ["FAKE_CALLS"], "a").write(" ".join(a) + "\n")
+with open(os.environ["FAKE_WORLD"]) as f:
+    d = json.load(f)
+with open(os.environ["FAKE_CALLS"], "a") as f:
+    f.write(" ".join(a) + "\n")
+with open(os.environ["FAKE_CALLS"]) as f:
+    seen = [l for l in f if l.startswith(" ".join(a[:2]))]
+n = len(seen)
 if a[:2] == ["pane", "list"]:
-    print(json.dumps({"result": {"panes": d["panes"]}}))
+    panes = list(d["panes"])
+    if d.get("new_pane_after") is not None and n > d["new_pane_after"]:
+        panes.append({"pane_id": "newp", "tab_id": d["new_pane_tab"]})
+    print(json.dumps({"result": {"panes": panes}}))
 elif a[:2] == ["agent", "list"]:
-    n = sum(1 for l in open(os.environ["FAKE_CALLS"]) if l.startswith("agent list"))
+    if d.get("recheck_cmd") and n == 2:  # the re-query right before the close: something changes in between
+        subprocess.run(d["recheck_cmd"], check=True)
     flip = d.get("flip_after")
-    agents = [dict(x, agent_status="working") for x in d["agents"]] if flip is not None and n > flip else d["agents"]
+    only = d.get("flip_panes")
+    agents = [dict(x, agent_status="working") if flip is not None and n > flip and (only is None or x["pane_id"] in only) else x
+              for x in d["agents"]]
     print(json.dumps({"result": {"agents": agents}}))
 elif a[:2] == ["tab", "list"]:
     print(json.dumps({"result": {"tabs": d["tabs"]}}))
@@ -30,20 +41,29 @@ else:
 '''
 FAKE_GH = r'''#!/usr/bin/env python3
 import json, os, sys
-d = json.load(open(os.environ["FAKE_WORLD"]))
-open(os.environ["FAKE_CALLS"], "a").write("gh " + " ".join(sys.argv[1:]) + "\n")
+with open(os.environ["FAKE_WORLD"]) as f:
+    d = json.load(f)
+with open(os.environ["FAKE_CALLS"], "a") as f:
+    f.write("gh " + " ".join(sys.argv[1:]) + "\n")
 prs = d.get("prs")
 if prs is None:
     sys.exit(1)
-print(json.dumps([{"state": st, "headRefOid": h} for st, h in prs]))
+print(json.dumps([{"state": pr[0], "headRefOid": pr[1], "baseRefName": pr[2] if len(pr) > 2 else "master"} for pr in prs]))
 '''
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, sys
-d = json.load(open(os.environ["FAKE_WORLD"]))
-open(os.environ["FAKE_CALLS"], "a").write("claude " + " ".join(sys.argv[1:]) + "\n")
+with open(os.environ["FAKE_WORLD"]) as f:
+    d = json.load(f)
+with open(os.environ["FAKE_CALLS"], "a") as f:
+    f.write("claude " + " ".join(sys.argv[1:]) + "\n")
 if sys.argv[1:3] == ["agents", "--json"]:
     print(json.dumps(d.get("bg", [])))
 '''
+
+
+def write(path, text):
+    with open(path, "w") as f:
+        f.write(text)
 
 
 def git(cwd, *a):
@@ -63,7 +83,8 @@ class Reap(unittest.TestCase):
             os.chmod(os.path.join(self.bin, n), 0o755)
         self.world = os.path.join(self.t, "world.json")
         self.calls = os.path.join(self.t, "calls.txt")
-        open(self.calls, "w").close()
+        with open(self.calls, "w"):
+            pass
 
     def repo(self, name, dirty=False, plan_active=False):
         r = os.path.join(self.t, name)
@@ -77,7 +98,7 @@ class Reap(unittest.TestCase):
         git(r, "add", "."); git(r, "commit", "-qm", "init"); git(r, "push", "-qu", "origin", "HEAD")
         os.makedirs(os.path.join(r, "sub"))
         if dirty:
-            open(os.path.join(r, "x"), "w").write("x")
+            write(os.path.join(r, "x"), "x")
         return r
 
     def fleet_repo(self, name="fleet"):
@@ -108,12 +129,15 @@ class Reap(unittest.TestCase):
         if mark:  # what scripts/fan-list.sh --mark writes for every worktree rd fan creates
             gd = subprocess.run(["git", "-C", wt, "rev-parse", "--absolute-git-dir"], check=True,
                                 capture_output=True, text=True).stdout.strip()
-            open(os.path.join(gd, "rd-fan"), "w").write("t")
+            write(os.path.join(gd, "rd-fan"), "t")
         git(wt, "config", "user.email", "t@t"); git(wt, "config", "user.name", "t")
         if how == "fresh":
             return wt
+        if how == "freshpushed":  # pushed at the base, no commit of its own
+            git(wt, "push", "-qu", "origin", branch)
+            return wt
         if how == "mergeonly":  # nothing of its own: a merge commit that pulled the default's newer commit in
-            open(os.path.join(r, "newer.txt"), "w").write("newer")
+            write(os.path.join(r, "newer.txt"), "newer")
             git(r, "add", "."); git(r, "commit", "-qm", "newer on master"); git(r, "push", "-q", "origin", "master")
             git(wt, "config", "user.email", "t@t"); git(wt, "config", "user.name", "t")
             git(wt, "fetch", "-q", "origin")
@@ -123,7 +147,7 @@ class Reap(unittest.TestCase):
                            check=True, capture_output=True)
             git(r, "fetch", "-q", "--prune", "origin")
             return wt
-        open(os.path.join(wt, f"{branch}.txt"), "w").write(branch)
+        write(os.path.join(wt, f"{branch}.txt"), branch)
         git(wt, "add", "."); git(wt, "commit", "-qm", branch)
         if how == "unpushed":
             return wt
@@ -149,19 +173,30 @@ class Reap(unittest.TestCase):
         return ({"pane_id": pane, "tab_id": tab}, {"pane_id": pane, "tab_id": tab, "agent": "claude", "agent_status": status,
                 "cwd": cwd, "agent_session": {"value": sid}}, {"tab_id": tab, "label": tab})
 
-    def run_reap(self, agents, bg=(), *flags, prs=None, flip_after=None):
+    def run_reap(self, agents, bg=(), *flags, prs=None, flip_after=None, flip_panes=None,
+                 new_pane_after=None, new_pane_tab="t1", recheck_cmd=None):
         panes, ags, tabs = zip(*agents) if agents else ((), (), ())
-        json.dump({"panes": list(panes), "agents": list(ags), "tabs": list(tabs), "bg": list(bg), "prs": prs, "flip_after": flip_after},
-                  open(self.world, "w"))
+        with open(self.world, "w") as f:
+            json.dump({"panes": list(panes), "agents": list(ags), "tabs": list(tabs), "bg": list(bg), "prs": prs,
+                       "flip_after": flip_after, "flip_panes": flip_panes, "new_pane_after": new_pane_after, "new_pane_tab": new_pane_tab,
+                       "recheck_cmd": recheck_cmd}, f)
         env = dict(os.environ, HOME=self.home, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_WORLD=self.world,
                    FAKE_CALLS=self.calls, HERDR_PANE_ID="own", REAP_IDLE_H="12")
         r = subprocess.run([sys.executable, REAP, *flags], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        return open(self.calls).read()
+        self.last_out = r.stdout
+        return self.calls_text()
+
+    def calls_text(self):
+        with open(self.calls) as f:
+            return f.read()
 
     def log(self):
         p = os.path.join(self.home, "Library/Logs/herdr-reap.log")
-        return open(p).read() if os.path.exists(p) else ""
+        if not os.path.exists(p):
+            return ""
+        with open(p) as f:
+            return f.read()
 
     def test_closes_idle_clean_pushed(self):
         r = self.repo("a")
@@ -216,12 +251,13 @@ class Reap(unittest.TestCase):
         a3 = self.agent("own", "t3", "idle", self.repo("c"))
         shell = ({"pane_id": "sh", "tab_id": "t2"}, None, None)
         panes = [a1, a2, a3]
-        json.dump({"panes": [x[0] for x in panes] + [shell[0]], "agents": [x[1] for x in panes],
-                   "tabs": [x[2] for x in panes], "bg": []}, open(self.world, "w"))
+        with open(self.world, "w") as f:
+            json.dump({"panes": [x[0] for x in panes] + [shell[0]], "agents": [x[1] for x in panes],
+                       "tabs": [x[2] for x in panes], "bg": []}, f)
         env = dict(os.environ, HOME=self.home, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_WORLD=self.world,
                    FAKE_CALLS=self.calls, HERDR_PANE_ID="own", REAP_IDLE_H="12")
         subprocess.run([sys.executable, REAP], env=env, check=True, capture_output=True)
-        self.assertNotIn("tab close", open(self.calls).read())
+        self.assertNotIn("tab close", self.calls_text())
 
     def merged_tab(self, wt, status="idle", name="fleet-slug", idle_h=1, tab="t1", pane="p1"):
         """A tab the old rule would keep (recent idle, active wave): only the merged-fan rule can close it."""
@@ -249,7 +285,7 @@ class Reap(unittest.TestCase):
         wt = self.fan_branch(r, "feat-a", "pruned")  # squash-merged, branch deleted and pruned: only the PR is left
         head = self.head(wt)
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))  # no gh answer: unverifiable, kept
-        open(os.path.join(wt, "later.txt"), "w").write("later")
+        write(os.path.join(wt, "later.txt"), "later")
         git(wt, "add", "."); git(wt, "commit", "-qm", "after the PR head")
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", head)]))
         git(wt, "reset", "-q", "--hard", head)
@@ -287,13 +323,13 @@ class Reap(unittest.TestCase):
     def test_merged_fan_kept_when_dirty(self):
         r = self.fleet_repo()
         wt = self.fan_branch(r, "feat-a", "rebase")
-        open(os.path.join(wt, "scratch"), "w").write("x")
+        write(os.path.join(wt, "scratch"), "x")
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
 
     def test_merged_fan_kept_when_commits_unpushed(self):
         r = self.fleet_repo()
         wt = self.fan_branch(r, "feat-a", "rebase")
-        open(os.path.join(wt, "later.txt"), "w").write("later")
+        write(os.path.join(wt, "later.txt"), "later")
         git(wt, "add", "."); git(wt, "commit", "-qm", "after the merge")
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
 
@@ -338,7 +374,7 @@ class Reap(unittest.TestCase):
         r = self.fleet_repo()
         wt = self.fan_branch(r, "feat-a", "open")
         pr_head = self.head(wt)
-        open(os.path.join(wt, "later.txt"), "w").write("later")
+        write(os.path.join(wt, "later.txt"), "later")
         git(wt, "add", "."); git(wt, "commit", "-qm", "after the PR head"); git(wt, "push", "-q", "origin", "feat-a")
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", pr_head)]))
 
@@ -350,7 +386,7 @@ class Reap(unittest.TestCase):
         subprocess.run(["git", "clone", "-q", os.path.join(self.t, "fleet.git"), other], check=True, capture_output=True)
         git(other, "config", "user.email", "t@t"); git(other, "config", "user.name", "t")
         git(other, "checkout", "-q", "feat-a")
-        open(os.path.join(other, "more.txt"), "w").write("more")
+        write(os.path.join(other, "more.txt"), "more")
         git(other, "add", "."); git(other, "commit", "-qm", "pushed from elsewhere"); git(other, "push", "-q", "origin", "feat-a")
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", pr_head)]))
 
@@ -390,6 +426,47 @@ class Reap(unittest.TestCase):
         r = self.fleet_repo()
         wt = self.fan_branch(r, "feat-a", "mergeonly")  # pushed once, deleted and pruned; cherry sees nothing to port
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
+
+    def test_fresh_but_pushed_branch_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "freshpushed")  # on origin at the base: patch-equal to everything
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
+        self.assertIn("fresh", self.log() + self.last_out)
+
+    def test_pr_merged_into_a_feature_branch_is_not_merged(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "pruned")
+        head = self.head(wt)
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", head, "feat-base")]))
+        self.assertIn("tab close t1", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", head, "master")]))
+
+    def test_new_pane_in_the_tab_before_the_close_keeps_it(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        calls = self.run_reap([self.merged_tab(wt)], new_pane_after=1)  # a shell pane appears after the plan
+        self.assertNotIn("tab close", calls)
+        self.assertIn("panes changed", self.log())
+
+    def test_head_moving_between_plan_and_close_keeps_it(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        calls = self.run_reap([self.merged_tab(wt)], recheck_cmd=["git", "-C", wt, "commit", "--allow-empty", "-qm", "more"])
+        self.assertNotIn("tab close", calls)
+        self.assertIn("HEAD moved", self.log())
+
+    def test_tree_dirtied_between_plan_and_close_keeps_it(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        calls = self.run_reap([self.merged_tab(wt)], recheck_cmd=["touch", os.path.join(wt, "scratch")])
+        self.assertNotIn("tab close", calls)
+        self.assertIn("became dirty", self.log())
+
+    def test_another_agent_joining_the_checkout_before_the_close_keeps_it(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        other = self.merged_tab(wt, "idle", tab="t2", pane="p2")  # idle at plan time, working at the re-query
+        calls = self.run_reap([self.merged_tab(wt), other], flip_after=1, flip_panes=["p2"])
+        self.assertNotIn("tab close", calls)
 
     def test_bg_filter(self):
         old = int((time.time() - 48 * 3600) * 1000)
