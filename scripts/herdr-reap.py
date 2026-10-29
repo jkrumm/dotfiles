@@ -46,12 +46,17 @@ FINISHED = {"done", "idle"}
 FLEET_ROOTS = [os.path.join(HOME, "SourceRoot"), os.path.join(HOME, "IuRoot")]
 # Tabs that own a wave or a fleet: never closed by the merged-fan rule, whatever their checkout says.
 LEAD_LABEL_RE = re.compile(r"^(wave \d+|mother|lead|orchestrator)$", re.I)
-LEAD_NAME_RE = re.compile(r"(-mother|-lead|-orchestrator|-w\d+)$")
+LEAD_NAME_RE = re.compile(r"(-mother|-lead|-orchestrator|-w\d+)$", re.I)  # agent names and tab labels both
+NET_TIMEOUT_S = 30
 BG_STOPPABLE = {"blocked", "idle", "done"}
 
 
-def sh(*cmd: str, cwd: str | None = None, env: dict | None = None) -> tuple[int, str]:
-    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env)
+def sh(*cmd: str, cwd: str | None = None, env: dict | None = None, timeout: float | None = None) -> tuple[int, str]:
+    """rc 124 and no output when `timeout` expires: callers treat that like any failure, i.e. keep."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, ""
     return r.returncode, r.stdout
 
 
@@ -127,12 +132,10 @@ def inside(path: str, root: str) -> bool:
 
 
 def is_fan_checkout(top: str, main: str) -> bool:
-    """A linked worktree `rd fan` made: under <repo>/.claude/worktrees, or carrying fan-list.sh's marker
-    (a repo with a .wtp.yml puts its worktrees elsewhere)."""
+    """A linked worktree `rd fan` made: it carries fan-list.sh's <git-dir>/rd-fan marker. The path alone
+    proves nothing - native Claude and review worktrees live under .claude/worktrees too."""
     if os.path.realpath(top) == os.path.realpath(main):
         return False
-    if inside(top, os.path.join(main, ".claude/worktrees")):
-        return True
     rc, gd = git(top, "rev-parse", "--absolute-git-dir")
     return rc == 0 and os.path.exists(os.path.join(gd.strip(), "rd-fan"))
 
@@ -151,24 +154,45 @@ _fetched: set[str] = set()
 
 
 def fetch_origin(main: str) -> bool:
-    """One fetch per repo per run, no prune: a branch deleted on origin keeps its last-known
-    remote-tracking tip, which is what 'nothing unpushed' is judged against."""
+    """One fetch per repo per run, explicitly --no-prune (fetch.prune config must not change this): a branch
+    deleted on origin keeps its last-known remote-tracking tip, which 'nothing unpushed' is judged against."""
     if main not in _fetched:
-        rc, _ = sh("timeout", "90", "git", "-C", main, "fetch", "-q", "origin")
+        rc, _ = sh("git", "-C", main, "fetch", "-q", "--no-prune", "origin", timeout=90)
         if rc != 0:
             return False
         _fetched.add(main)
     return True
 
 
-def pr_info(cwd: str) -> tuple[str, str] | None:
-    """(state, head sha) of the checkout's branch PR - MERGED/CLOSED/OPEN - GitHub remotes only; None when unknown."""
+def pr_heads(cwd: str, branch: str) -> list[tuple[str, str]] | None:
+    """(state, head sha) of every PR ever opened from `branch` - MERGED/CLOSED/OPEN. [] when the remote is
+    not GitHub or gh has no answer; None when gh timed out (the caller keeps the tab)."""
     rc, url = git(cwd, "config", "--get", "remote.origin.url")
     if rc != 0 or "github.com" not in url:
+        return []
+    rc, out = sh("gh", "pr", "list", "--head", branch, "--state", "all", "--json", "state,headRefOid",
+                 cwd=cwd, timeout=NET_TIMEOUT_S)
+    if rc == 124:
         return None
-    rc, out = sh("gh", "pr", "view", "--json", "state,headRefOid", "-q", '.state + " " + .headRefOid', cwd=cwd)
-    parts = out.split()
-    return (parts[0], parts[1]) if rc == 0 and len(parts) == 2 and parts[0] in ("MERGED", "CLOSED", "OPEN") else None
+    try:
+        return [(p["state"], p["headRefOid"]) for p in json.loads(out)] if rc == 0 else []
+    except (ValueError, KeyError, TypeError):
+        return []
+
+
+def is_ancestor(cwd: str, a: str, b: str) -> bool:
+    """a is b or reachable from b (missing objects: False)."""
+    return git(cwd, "merge-base", "--is-ancestor", a, b)[0] == 0
+
+
+def patch_merged(cwd: str, default: str, ref: str) -> bool:
+    """Every commit of `ref` has a patch-equal twin on `default` (rebase and cherry-pick merges), and `ref`
+    adds no merge commit: cherry cannot see a merge commit's content."""
+    rc, cherry = git(cwd, "cherry", default, ref)
+    if rc != 0 or any(l.startswith("+") for l in cherry.splitlines()):
+        return False
+    rc, n = git(cwd, "rev-list", "--merges", "--count", f"{default}..{ref}")
+    return rc == 0 and n.strip() == "0"
 
 
 def merged_fan(cwd: str) -> tuple[str | None, str]:
@@ -192,38 +216,40 @@ def merged_fan(cwd: str) -> tuple[str | None, str]:
     if rc != 0 or out.strip():
         return None, "uncommitted changes"
     # Published = this branch once reached origin. A fresh worker's branch is at the base and was never
-    # pushed: it looks merged by patch-id and absent on origin, and is neither.
-    published = (git(top, "config", f"branch.{branch}.merge")[0] == 0
-                 or git(top, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{branch}")[0] == 0)
-    rc, ls = git(top, "ls-remote", "--heads", "origin", f"refs/heads/{branch}")
+    # pushed: it looks patch-merged and absent on origin, and is neither.
+    tip = f"refs/remotes/origin/{branch}"
+    has_tip = git(top, "rev-parse", "-q", "--verify", tip)[0] == 0
+    if not (has_tip or git(top, "config", f"branch.{branch}.merge")[0] == 0):
+        return None, "branch never pushed"
+    rc, ls = sh("git", "-C", top, "ls-remote", "--heads", "origin", f"refs/heads/{branch}", timeout=NET_TIMEOUT_S)
     if rc != 0:
         return None, "origin unreachable"
     on_origin = bool(ls.strip())
-    pr, pr_head = pr_info(top) or (None, "")
-    rc, cherry = git(top, "cherry", default, "HEAD")
-    patch_merged = rc == 0 and not any(l.startswith("+") for l in cherry.splitlines())
-    if pr in ("MERGED", "CLOSED"):
-        reason = f"PR {pr.lower()}"
-    elif not published:
-        return None, "branch never pushed"
-    elif not on_origin:
-        reason = "branch deleted on origin"
-    elif patch_merged:
-        reason = f"merged into {default}"
-    else:
-        return None, "branch is live on origin"
-    tip = f"refs/remotes/origin/{branch}"
-    # Nothing unpushed: HEAD is in the PR's last head, else in the last-known origin tip, else every
-    # commit is patch-equal to the default branch. After a prune and a squash merge only the PR can say.
-    if pr in ("MERGED", "CLOSED") and pr_head and git(top, "merge-base", "--is-ancestor", "HEAD", pr_head)[0] == 0:
-        pass
-    elif git(top, "rev-parse", "-q", "--verify", tip)[0] == 0:
-        rc, n = git(top, "rev-list", "--count", f"{tip}..HEAD")
-        if rc != 0 or n.strip() != "0":
-            return None, f"{n.strip() or '?'} unpushed commit(s)"
-    elif not patch_merged:
+    prs = pr_heads(top, branch)
+    if prs is None:
+        return None, "gh timed out"
+
+    # A PR found by branch name counts only if HEAD is inside its head: a stale PR from an earlier use of
+    # the name never closes a fresh worker. Then the branch must hold nothing beyond that head, and a PR
+    # that was closed unmerged does not retire a branch that is still live. No fallback on this path.
+    for state, head in prs:
+        if state not in ("MERGED", "CLOSED") or not is_ancestor(top, "HEAD", head):
+            continue
+        if on_origin and (state != "MERGED" or not has_tip or not is_ancestor(top, tip, head)):
+            return None, "branch is live on origin"
+        return f"PR {state.lower()}", ""
+
+    if not on_origin:
+        # Deleted on origin: nothing unpushed = HEAD within the last-known origin tip, else all patch-equal.
+        if has_tip and git(top, "rev-list", "--count", f"{tip}..HEAD")[1].strip() == "0":
+            return "branch deleted on origin", ""
+        if patch_merged(top, default, "HEAD"):
+            return "branch deleted on origin", ""
         return None, "unpushed commits"
-    return reason, ""
+    if has_tip and git(top, "rev-list", "--count", f"{tip}..HEAD")[1].strip() == "0" \
+            and patch_merged(top, default, "HEAD") and patch_merged(top, default, tip):
+        return f"merged into {default}", ""
+    return None, "branch is live on origin"
 
 
 class Journal:
@@ -257,10 +283,36 @@ def save_messaged(m: dict) -> None:
     os.replace(tmp, STATE)
 
 
+def still_finished(panes: list[str]) -> bool:
+    """Fresh roster read right before a close: the plan was made minutes ago and an agent may have been
+    prompted since. A missing agent, an unreadable roster or a timeout all read as not finished."""
+    rc, out = sh("herdr", "agent", "list", timeout=NET_TIMEOUT_S)
+    if rc != 0:
+        return False
+    try:
+        now = {a["pane_id"]: a["agent_status"] for a in json.loads(out)["result"]["agents"]}
+    except (ValueError, KeyError, TypeError):
+        return False
+    return all(now.get(p) in FINISHED for p in panes)
+
+
+def close_tab(j: Journal, tab: str, panes: list[str], **kv: str) -> None:
+    if not j.dry and not still_finished(panes):
+        j.line("close-skipped", tab=tab, why='"agent status changed or unreadable before the close"')
+        return
+    j.line("close", tab=tab, panes=",".join(panes), **kv)
+    if j.dry:
+        return
+    rc, out = sh("herdr", "tab", "close", tab)
+    if rc != 0 or '"error"' in out:
+        j.line("close-failed", tab=tab, out=out.strip()[:200])
+
+
 def merged_tab_reason(tab: str, label: str, members: list[dict], busy_checkouts: set[str]) -> str | None:
     """Why this tab (all its agents done/idle, no other pane) can close now because its fan branch is
     merged or gone, or None. Independent of idle age and of any active wave."""
-    if LEAD_LABEL_RE.match(label.strip()) or any(LEAD_NAME_RE.search(a.get("name") or "") for a in members):
+    if LEAD_LABEL_RE.match(label.strip()) or LEAD_NAME_RE.search(label.strip()) \
+            or any(LEAD_NAME_RE.search(a.get("name") or "") for a in members):
         return None
     cwds = {a.get("cwd") or "" for a in members}
     if len(cwds) != 1:
@@ -284,7 +336,7 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
     # that agent's, and nudging an idle sibling to commit them would be wrong.
     busy_checkouts = set()
     for a in agents.values():
-        if a["agent_status"] in ("working", "blocked") and (r := repo_roots(a.get("cwd") or "")):
+        if a["agent_status"] not in FINISHED and (r := repo_roots(a.get("cwd") or "")):
             busy_checkouts.add(r[0])
     messaged = load_messaged()
     now = time.time()
@@ -313,12 +365,8 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
         done_reason = merged_tab_reason(tab, labels.get(tab, ""), members, busy_checkouts)
         if done_reason:
             repo = os.path.basename(next(iter({a.get("cwd") or "" for a in members})))
-            j.line("close", tab=tab, panes=",".join(p["pane_id"] for p in tpanes), repo=repo,
-                   why=f'"{done_reason}"', label=f'"{labels.get(tab, "")}"')
-            if not j.dry:
-                rc, out = sh("herdr", "tab", "close", tab)
-                if rc != 0 or '"error"' in out:
-                    j.line("close-failed", tab=tab, out=out.strip()[:200])
+            close_tab(j, tab, [p["pane_id"] for p in tpanes], repo=repo,
+                      why=f'"{done_reason}"', label=f'"{labels.get(tab, "")}"')
             continue
 
         ages = [idle_hours((a.get("agent_session") or {}).get("value")) for a in members]
@@ -365,12 +413,8 @@ def reap_tabs(idle_h: float, j: Journal) -> None:
                 save_messaged(messaged)
             continue
 
-        j.line("close", tab=tab, panes=",".join(p["pane_id"] for p in tpanes), repo=repo,
-               idle=f"{age:.0f}h", label=f'"{labels.get(tab, "")}"')
-        if not j.dry:
-            rc, out = sh("herdr", "tab", "close", tab)
-            if rc != 0 or '"error"' in out:
-                j.line("close-failed", tab=tab, out=out.strip()[:200])
+        close_tab(j, tab, [p["pane_id"] for p in tpanes], repo=repo,
+                  idle=f"{age:.0f}h", label=f'"{labels.get(tab, "")}"')
 
     if not j.dry:
         save_messaged({k: v for k, v in messaged.items() if k.startswith('bg:') or now - v < 7 * 86400})

@@ -19,7 +19,10 @@ open(os.environ["FAKE_CALLS"], "a").write(" ".join(a) + "\n")
 if a[:2] == ["pane", "list"]:
     print(json.dumps({"result": {"panes": d["panes"]}}))
 elif a[:2] == ["agent", "list"]:
-    print(json.dumps({"result": {"agents": d["agents"]}}))
+    n = sum(1 for l in open(os.environ["FAKE_CALLS"]) if l.startswith("agent list"))
+    flip = d.get("flip_after")
+    agents = [dict(x, agent_status="working") for x in d["agents"]] if flip is not None and n > flip else d["agents"]
+    print(json.dumps({"result": {"agents": agents}}))
 elif a[:2] == ["tab", "list"]:
     print(json.dumps({"result": {"tabs": d["tabs"]}}))
 else:
@@ -29,10 +32,10 @@ FAKE_GH = r'''#!/usr/bin/env python3
 import json, os, sys
 d = json.load(open(os.environ["FAKE_WORLD"]))
 open(os.environ["FAKE_CALLS"], "a").write("gh " + " ".join(sys.argv[1:]) + "\n")
-st = d.get("pr")
-if not st:
+prs = d.get("prs")
+if prs is None:
     sys.exit(1)
-print(st)
+print(json.dumps([{"state": st, "headRefOid": h} for st, h in prs]))
 '''
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -96,14 +99,29 @@ class Reap(unittest.TestCase):
         git(r, "config", "remote.origin.url", f"https://github.com/t/{name}.git")
         return r
 
-    def fan_branch(self, r, branch, how, push_upstream=True):
+    def fan_branch(self, r, branch, how, mark=True):
         """Worktree under <repo>/.claude/worktrees on `branch` with one commit, landed per `how`:
         rebase (master gets the commit with a new sha), deleted (branch gone on origin, never merged),
         open (pushed, live), unpushed (never pushed), fresh (at the base, never pushed)."""
         wt = os.path.join(r, ".claude/worktrees", branch)
         git(r, "worktree", "add", "-q", "-b", branch, wt, "master")
+        if mark:  # what scripts/fan-list.sh --mark writes for every worktree rd fan creates
+            gd = subprocess.run(["git", "-C", wt, "rev-parse", "--absolute-git-dir"], check=True,
+                                capture_output=True, text=True).stdout.strip()
+            open(os.path.join(gd, "rd-fan"), "w").write("t")
         git(wt, "config", "user.email", "t@t"); git(wt, "config", "user.name", "t")
         if how == "fresh":
+            return wt
+        if how == "mergeonly":  # nothing of its own: a merge commit that pulled the default's newer commit in
+            open(os.path.join(r, "newer.txt"), "w").write("newer")
+            git(r, "add", "."); git(r, "commit", "-qm", "newer on master"); git(r, "push", "-q", "origin", "master")
+            git(wt, "config", "user.email", "t@t"); git(wt, "config", "user.name", "t")
+            git(wt, "fetch", "-q", "origin")
+            git(wt, "merge", "-q", "--no-ff", "-m", "merge master", "origin/master")
+            git(wt, "push", "-qu", "origin", branch)
+            subprocess.run(["git", "--git-dir", os.path.join(self.t, f"{os.path.basename(r)}.git"), "branch", "-qD", branch],
+                           check=True, capture_output=True)
+            git(r, "fetch", "-q", "--prune", "origin")
             return wt
         open(os.path.join(wt, f"{branch}.txt"), "w").write(branch)
         git(wt, "add", "."); git(wt, "commit", "-qm", branch)
@@ -131,9 +149,9 @@ class Reap(unittest.TestCase):
         return ({"pane_id": pane, "tab_id": tab}, {"pane_id": pane, "tab_id": tab, "agent": "claude", "agent_status": status,
                 "cwd": cwd, "agent_session": {"value": sid}}, {"tab_id": tab, "label": tab})
 
-    def run_reap(self, agents, bg=(), *flags, pr=None):
+    def run_reap(self, agents, bg=(), *flags, prs=None, flip_after=None):
         panes, ags, tabs = zip(*agents) if agents else ((), (), ())
-        json.dump({"panes": list(panes), "agents": list(ags), "tabs": list(tabs), "bg": list(bg), "pr": pr},
+        json.dump({"panes": list(panes), "agents": list(ags), "tabs": list(tabs), "bg": list(bg), "prs": prs, "flip_after": flip_after},
                   open(self.world, "w"))
         env = dict(os.environ, HOME=self.home, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_WORLD=self.world,
                    FAKE_CALLS=self.calls, HERDR_PANE_ID="own", REAP_IDLE_H="12")
@@ -221,8 +239,8 @@ class Reap(unittest.TestCase):
     def test_pr_merged_state_closes(self):
         r = self.fleet_repo()
         wt = self.fan_branch(r, "feat-a", "open")  # squash-merged on GitHub: patches do not match, PR does
-        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], pr=f"OPEN {self.head(wt)}"))
-        calls = self.run_reap([self.merged_tab(wt)], pr=f"MERGED {self.head(wt)}")
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("OPEN", self.head(wt))]))
+        calls = self.run_reap([self.merged_tab(wt)], prs=[("MERGED", self.head(wt))])
         self.assertIn("tab close t1", calls)
         self.assertIn("PR merged", self.log())
 
@@ -233,9 +251,9 @@ class Reap(unittest.TestCase):
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))  # no gh answer: unverifiable, kept
         open(os.path.join(wt, "later.txt"), "w").write("later")
         git(wt, "add", "."); git(wt, "commit", "-qm", "after the PR head")
-        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], pr=f"MERGED {head}"))
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", head)]))
         git(wt, "reset", "-q", "--hard", head)
-        self.assertIn("tab close t1", self.run_reap([self.merged_tab(wt)], pr=f"CLOSED {head}"))
+        self.assertIn("tab close t1", self.run_reap([self.merged_tab(wt)], prs=[("CLOSED", head)]))
 
     def head(self, wt):
         return subprocess.run(["git", "-C", wt, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
@@ -306,6 +324,72 @@ class Reap(unittest.TestCase):
         os.rename(r, main)  # the main repo now lives outside ~/SourceRoot and ~/IuRoot
         subprocess.run(["git", "-C", main, "worktree", "repair", os.path.join(moved, "wt")], check=True, capture_output=True)
         self.assertNotIn("tab close", self.run_reap([self.merged_tab(os.path.join(moved, "wt"))]))
+
+    def test_stale_pr_never_closes_a_fresh_worker(self):
+        r = self.fleet_repo()
+        fresh = self.fan_branch(r, "fresh", "fresh")  # never pushed, at the base: any PR head contains it
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(fresh)], prs=[("MERGED", self.head(fresh))]))
+        old = self.fan_branch(r, "old", "open")
+        newer = self.fan_branch(r, "newer", "open")  # pushed, live; the PR of an earlier use of the name
+        calls = self.run_reap([self.merged_tab(newer)], prs=[("MERGED", self.head(old))])
+        self.assertNotIn("tab close", calls)
+
+    def test_merged_pr_with_newer_pushed_commits_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "open")
+        pr_head = self.head(wt)
+        open(os.path.join(wt, "later.txt"), "w").write("later")
+        git(wt, "add", "."); git(wt, "commit", "-qm", "after the PR head"); git(wt, "push", "-q", "origin", "feat-a")
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", pr_head)]))
+
+    def test_origin_ahead_of_the_pr_head_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "open")
+        pr_head = self.head(wt)
+        other = os.path.join(self.t, "other")
+        subprocess.run(["git", "clone", "-q", os.path.join(self.t, "fleet.git"), other], check=True, capture_output=True)
+        git(other, "config", "user.email", "t@t"); git(other, "config", "user.name", "t")
+        git(other, "checkout", "-q", "feat-a")
+        open(os.path.join(other, "more.txt"), "w").write("more")
+        git(other, "add", "."); git(other, "commit", "-qm", "pushed from elsewhere"); git(other, "push", "-q", "origin", "feat-a")
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("MERGED", pr_head)]))
+
+    def test_closed_pr_with_a_live_branch_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "open")
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)], prs=[("CLOSED", self.head(wt))]))
+
+    def test_unmarked_worktree_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase", mark=False)  # under .claude/worktrees but not made by rd fan
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
+
+    def test_lead_shaped_tab_label_is_kept(self):
+        r = self.fleet_repo()
+        tabs = []
+        for i, label in enumerate(("x-mother", "x-w3"), 1):
+            panes, ag, tab = self.merged_tab(self.fan_branch(r, f"b{i}", "rebase"), tab=f"t{i}", pane=f"p{i}")
+            tab["label"] = label
+            tabs.append((panes, ag, tab))
+        self.assertNotIn("tab close", self.run_reap(tabs))
+
+    def test_status_flip_before_the_close_keeps_the_tab(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        calls = self.run_reap([self.merged_tab(wt)], flip_after=1)  # first roster read: idle; the re-query: working
+        self.assertNotIn("tab close", calls)
+        self.assertIn("close-skipped", self.log())
+
+    def test_unknown_agent_in_the_checkout_protects_it(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "rebase")
+        calls = self.run_reap([self.merged_tab(wt), self.merged_tab(wt, "unknown", tab="t2", pane="p2")])
+        self.assertNotIn("tab close", calls)
+
+    def test_merge_commit_only_branch_is_kept(self):
+        r = self.fleet_repo()
+        wt = self.fan_branch(r, "feat-a", "mergeonly")  # pushed once, deleted and pruned; cherry sees nothing to port
+        self.assertNotIn("tab close", self.run_reap([self.merged_tab(wt)]))
 
     def test_bg_filter(self):
         old = int((time.time() - 48 * 3600) * 1000)
