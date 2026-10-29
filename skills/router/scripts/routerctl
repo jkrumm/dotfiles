@@ -1,0 +1,280 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["tplinkrouterc6u>=5.37"]
+# ///
+"""Read-only CLI for the home TP-Link VX800v (EX-family GDPR web API).
+
+Every call logs in, reads, and logs out: the router allows one admin session,
+so a held session would kick the web UI (and linewatch's poller) out.
+"""
+
+import argparse
+import contextlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import urllib3
+from tplinkrouterc6u import TPLinkEXClientGCM
+
+HOST = os.environ.get("ROUTER_HOST", "https://192.168.1.1")
+OP_REF = "op://Private/WLAN Router TP-Link/password"
+LINEWATCH_PW_FILE = Path.home() / ".config/linewatch/router-password"
+SECRET_KEY = re.compile(r"key|psk|pass|pwd|secret|pin|token", re.IGNORECASE)
+
+urllib3.disable_warnings()
+
+
+def die(msg: str) -> None:
+    print(f"routerctl: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def resolve_password() -> str:
+    if pw := os.environ.get("ROUTER_PASSWORD"):
+        return pw
+    if LINEWATCH_PW_FILE.is_file():
+        return LINEWATCH_PW_FILE.read_text().splitlines()[0].strip()
+    try:
+        out = subprocess.run(
+            ["secrets-run", "read", OP_REF],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except FileNotFoundError:
+        die(
+            "no ROUTER_PASSWORD, no linewatch password file, and secrets-run is not on PATH"
+        )
+    if out.returncode != 0:
+        die(f"secrets-run read failed: {out.stderr.strip()}")
+    return out.stdout.strip()
+
+
+def redact(value):
+    if isinstance(value, list):
+        return [redact(v) for v in value]
+    if isinstance(value, dict):
+        return {
+            k: "<redacted>" if SECRET_KEY.search(k) else redact(v)
+            for k, v in value.items()
+        }
+    return value
+
+
+class Router:
+    def __init__(self) -> None:
+        self.client = TPLinkEXClientGCM(
+            HOST, resolve_password(), "user", verify_ssl=False, timeout=20
+        )
+        # Keep-alive reuse yields BadStatusLine on this firmware; one connection per request.
+        self.client.req.headers["Connection"] = "close"
+
+    def __enter__(self):
+        # getGDPRParm intermittently answers without RSA params; it recovers on retry.
+        for attempt in range(4):
+            try:
+                self.client.authorize()
+                return self
+            except Exception as err:  # noqa: BLE001 — the library raises bare and wrapped errors
+                if "password" in str(err).lower() or attempt == 3:
+                    die(f"login failed: {err}")
+                time.sleep(2 * (attempt + 1))
+        return self
+
+    def __exit__(self, *_):
+        with contextlib.suppress(Exception):
+            self.client.logout()
+
+    def read(self, oid: str, op: str = "gl") -> list[dict]:
+        """`gl` for list objects — `go` on a list silently returns only the first instance."""
+        act = self.client.ActItem
+        kind = {"gl": act.GL, "go": act.GO, "gs": "gs"}[op]
+        _, values = self.client.req_act([act(kind, oid)])
+        value = values[0] if values else None
+        if value is None:
+            return []
+        return value if isinstance(value, list) else [value]
+
+    def oids(self) -> list[str]:
+        r = self.client.req.get(
+            f"{HOST}/js/oid_str.js", headers={"Referer": f"{HOST}/"}, verify=False
+        )
+        return sorted(set(re.findall(r"DEV2_[A-Z0-9_]+", r.text)))
+
+
+def pick(row: dict, keys: list[str]) -> dict:
+    return {k: row.get(k) for k in keys if k in row}
+
+
+def wifi_bands(r: Router) -> list[dict]:
+    keys = [
+        "band",
+        "primaryEnable",
+        "primarySSID",
+        "channel",
+        "autoChannel",
+        "bandwidth",
+        "currentBandwidth",
+        "standard",
+        "transmitPower",
+        "primaryModeEnabled",
+        "guestEnable",
+        "guestSSID",
+        "primaryBSSID",
+    ]
+    return [pick(w, keys) for w in r.read("DEV2_ADT_WIFI_COMMON")]
+
+
+def line(r: Router) -> dict:
+    # DEV2_DSL_LINE reports Down while G.fast carries the line; DEV2_FAST_LINE is the truth here.
+    keys = [
+        "status",
+        "linkStatus",
+        "standardUsed",
+        "currentProfile",
+        "upstreamMaxBitRate",
+        "downstreamMaxBitRate",
+        "upstreamNoiseMargin",
+        "downstreamNoiseMargin",
+        "upstreamAttenuation",
+        "downstreamAttenuation",
+        "upstreamPower",
+        "downstreamPower",
+    ]
+    out = {}
+    for oid in ("DEV2_FAST_LINE", "DEV2_DSL_LINE"):
+        try:
+            rows = r.read(oid)
+        except Exception as err:  # noqa: BLE001 — one missing object must not hide the other
+            out[oid] = f"error: {err}"
+            continue
+        out[oid] = [pick(row, keys) for row in rows] or None
+    return out
+
+
+def clients(r: Router) -> dict:
+    band_by_radio = {
+        w.get("primaryBSSID", "").upper(): w.get("band")
+        for w in r.read("DEV2_ADT_WIFI_COMMON")
+    }
+    wifi = []
+    for d in r.read("DEV2_WIFI_APDEV_ASSOCDEV"):
+        wifi.append(
+            {
+                "host": d.get("X_TP_HostName"),
+                "ip": d.get("X_TP_IPAddress"),
+                "band": band_by_radio.get(
+                    (d.get("X_TP_RadioMac") or "").upper(), d.get("X_TP_RadioMac")
+                ),
+                "bss": d.get("X_TP_BssMac"),
+                "signal": d.get("signalStrength"),
+                "standard": d.get("operatingStandard"),
+                "down_kbps": d.get("lastDataDownlinkRate"),
+                "up_kbps": d.get("lastDataUplinkRate"),
+                # This firmware's `active` flag is unreliable (a connected client can read 0).
+                "active_flag": d.get("active"),
+            }
+        )
+    wired = [
+        {
+            "host": d.get("X_TP_HostName"),
+            "ip": d.get("IPAddress"),
+            "link_mbps": d.get("linkSpeed"),
+            "active_flag": d.get("active"),
+        }
+        for d in r.read("DEV2_WIFI_APDEV_ETHASSOCDEV")
+    ]
+    return {"wifi": wifi, "wired": wired}
+
+
+def status(r: Router) -> dict:
+    fw = r.read("DEV2_DEV_INFO", "go")
+    steering = r.read("DEV2_WIFI_BANDSTEERING", "go")
+    mem = r.read("DEV2_MEM_STATUS", "go")
+    cpu = r.read("DEV2_PROC_STATUS", "go")
+    return {
+        "firmware": pick(
+            fw[0], ["modelName", "softwareVersion", "hardwareVersion", "upTime"]
+        )
+        if fw
+        else None,
+        "band_steering": steering[0].get("enable") == "1" if steering else None,
+        "wifi": wifi_bands(r),
+        "line": line(r),
+        "cpu_pct": cpu[0].get("CPUUsage") if cpu else None,
+        "mem": pick(mem[0], ["total", "free"]) if mem else None,
+    }
+
+
+def render(data, as_json: bool, indent: str = "") -> None:
+    if as_json:
+        print(json.dumps(data, indent=2))
+        return
+    if isinstance(data, list):
+        for row in data:
+            if isinstance(row, dict) and not any(
+                isinstance(v, (dict, list)) for v in row.values()
+            ):
+                print(indent + "  ".join(f"{k}={v}" for k, v in row.items()))
+            else:
+                render(row, False, indent) if isinstance(row, (dict, list)) else print(
+                    f"{indent}{row}"
+                )
+        return
+    if not isinstance(data, dict):
+        print(f"{indent}{data}")
+        return
+    for key, value in data.items():
+        if isinstance(value, (dict, list)):
+            print(f"{indent}{key}:")
+            render(value, False, indent + "  ")
+        else:
+            print(f"{indent}{key}: {value}")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="routerctl", description=__doc__)
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser(
+        "status", help="firmware, band steering, Wi-Fi bands, line stats, CPU/memory"
+    )
+    sub.add_parser("wifi", help="per-band SSID, channel, width, security")
+    sub.add_parser(
+        "clients", help="Wi-Fi clients (band, signal, rates) and wired clients"
+    )
+    sub.add_parser("line", help="G.fast / VDSL line: rates, noise margin, attenuation")
+    o = sub.add_parser("oids", help="list the router's data-model objects")
+    o.add_argument(
+        "pattern", nargs="?", default="", help="regex filter, e.g. WIFI|STEER"
+    )
+    raw = sub.add_parser("raw", help="read one object, secrets redacted")
+    raw.add_argument("oid")
+    raw.add_argument("--op", choices=["gl", "go", "gs"], default="gl")
+    args = p.parse_args()
+
+    with Router() as r:
+        if args.cmd == "status":
+            render(status(r), args.json)
+        elif args.cmd == "wifi":
+            render(wifi_bands(r), args.json)
+        elif args.cmd == "clients":
+            render(clients(r), args.json)
+        elif args.cmd == "line":
+            render(line(r), args.json)
+        elif args.cmd == "oids":
+            rx = re.compile(args.pattern, re.IGNORECASE)
+            render([o for o in r.oids() if rx.search(o)], args.json)
+        elif args.cmd == "raw":
+            print(json.dumps(redact(r.read(args.oid, args.op)), indent=2))
+
+
+if __name__ == "__main__":
+    main()
