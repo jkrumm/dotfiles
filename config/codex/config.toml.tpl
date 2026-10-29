@@ -37,15 +37,3 @@ name = "IU Unified Endpoint"
 base_url = "@@IU_OPENAI_V1@@"
 env_key = "IU_API_KEY"
 wire_api = "responses"
-
-# research-first applies in this lane too, so codex gets the same gateway Claude
-# Code uses. Tailnet-only; the bearer never enters this file — `cx`/`cxa` resolve
-# it into RESEARCH_GATEWAY_TOKEN the way they resolve the endpoint key.
-#
-# `tool_timeout_sec` is the load-bearing line: one `job_wait` blocks for a whole
-# research job, which runs minutes, and the default would abort it mid-flight.
-[mcp_servers.research-gateway]
-url = "https://research.mini.jkrumm.com/mcp"
-bearer_token_env_var = "RESEARCH_GATEWAY_TOKEN"
-startup_timeout_sec = 30
-tool_timeout_sec = 7200

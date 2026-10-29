@@ -9,16 +9,15 @@
 # `make setup`, because the endpoint host never enters git) plus
 # ~/.codex/astra.config.toml for the `astra` profile.
 #
-# Neither secret enters a config file. codex reads them from IU_API_KEY and
-# RESEARCH_GATEWAY_TOKEN, which these functions resolve per call — Keychain on
-# the MacBook, the SOPS cache on the mini — and pass by prefix assignment rather
-# than `env VAR=…`, which would leak them into `ps auxww`.
+# The key never enters a config file. codex reads it from IU_API_KEY, which these
+# functions resolve per call — Keychain on the MacBook, the SOPS cache on the
+# mini — and pass by prefix assignment rather than `env VAR=…`, which would leak
+# it into `ps auxww`.
 
 # Keychain first (milliseconds, no prompt), the secrets shim second — and the
 # shim is time-boxed: on the MacBook it resolves through 1Password and can raise
 # a biometric prompt nobody is watching, which would otherwise hang the launch
-# on an optional secret. `mcp-research-headers.sh` bounds the same call for the
-# same reason.
+# on an optional secret.
 _codex_secret() {
   local svc="$1" ref="$2" val to
   val=$(security find-generic-password -s "$svc" -w 2>/dev/null)
@@ -34,26 +33,14 @@ _codex_secret() {
 }
 
 _codex_run() {
-  local key token
+  local key
   key=$(_codex_secret claude-sdk-api-key op://common/anthropic/API_KEY)
   if [[ -z "$key" ]]; then
     print -ru2 "codex: IU key missing — run 'make setup' in dotfiles"
     return 1
   fi
 
-  # An unset (or empty) bearer_token_env_var is FATAL to codex's MCP startup —
-  # it refuses to start the client rather than connecting and taking a 401. So
-  # an unresolvable bearer disables the server for this launch instead, which
-  # costs research and nothing else. Chiefly this fires on a shell that hasn't
-  # re-sourced this file since the server was wired up: `sz`.
-  local -a args=()
-  token=$(_codex_secret research-gateway-token op://vps/research-gateway/API_SECRET)
-  if [[ -z "$token" ]]; then
-    print -ru2 "codex: research-gateway bearer unresolvable — starting without it"
-    args=(-c mcp_servers.research-gateway.enabled=false)
-  fi
-
-  IU_API_KEY="$key" RESEARCH_GATEWAY_TOKEN="$token" command codex "${args[@]}" "$@"
+  IU_API_KEY="$key" command codex "$@"
 }
 
 # gpt-5.6-sol, effort high. The everyday challenger.

@@ -103,7 +103,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-secrets
 	@$(MAKE) --no-print-directory _setup-sdk-keys
-	@$(MAKE) --no-print-directory _setup-research-gateway-mcp
 	@$(MAKE) --no-print-directory _setup-codex
 	@$(MAKE) --no-print-directory _setup-ssh
 	@$(MAKE) --no-print-directory _setup-tinycast
@@ -1524,33 +1523,6 @@ _setup-agent-gateway:
 		echo "    · agent-gateway not cloned at $(SOURCEROOT)/agent-gateway — skipping"; \
 	fi
 
-# research-gateway is a REMOTE HTTP MCP (research.mini.jkrumm.com/mcp, the mini's native instance) — unlike the
-# stdio servers above, it needs a bearer token. The token is NOT written into the
-# config: `--header` would resolve it into ~/.claude.json, a file every agent
-# reads routinely, and rotating it would mean re-running setup on both machines.
-# Instead `headersHelper` runs scripts/mcp-research-headers.sh on every connect,
-# which reads the Keychain (fast, no prompt) and falls back to the secrets shim.
-# Rotating op://vps/research-gateway/API_SECRET therefore needs the Keychain entry
-# dropped (`security delete-generic-password -s research-gateway-token`) and this
-# target re-run — no `claude mcp` change. Runs after _setup-op-token so op is authed.
-.PHONY: _setup-research-gateway-mcp
-_setup-research-gateway-mcp:
-	@echo "  research-gateway MCP (remote HTTP — bearer via a headers helper)..."
-	@if security find-generic-password -s research-gateway-token -w >/dev/null 2>&1; then \
-		echo "    · bearer cached in Keychain (ok)"; \
-	else \
-		TOKEN="$$(OP_ACCOUNT=tkrumm $(DOTFILES_DIR)/scripts/secrets-run read op://vps/research-gateway/API_SECRET 2>/dev/null)"; \
-		if [ -n "$$TOKEN" ]; then \
-			security add-generic-password -a "$$USER" -s research-gateway-token -w "$$TOKEN" -T /usr/bin/security; \
-			echo "    ✓ bearer cached in Keychain"; \
-		else \
-			echo "    · could not read op://vps/research-gateway/API_SECRET — the helper will fall back to secrets-run"; \
-		fi; \
-	fi
-	@$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_MKDIR) claude mcp remove research-gateway --scope user >/dev/null 2>&1 || true; \
-		claude mcp add-json research-gateway --scope user '{"type":"http","url":"https://research.mini.jkrumm.com/mcp","headersHelper":"$(DOTFILES_DIR)/scripts/mcp-research-headers.sh","timeout":7200000}' >/dev/null; $(CLAUDE_EACH_END)
-	@echo "    ✓ research-gateway MCP registered (no token in ~/.claude.json)"
-
 .PHONY: _setup-colima
 _setup-colima:
 	@echo "  Colima (Docker runtime — replaces OrbStack/Docker Desktop)..."
@@ -1829,8 +1801,6 @@ status:
 	else \
 		$(call CLAUDE_MCP_CHECK,agent-gateway); \
 	fi
-	@echo "  research-gateway MCP"
-	@$(call CLAUDE_MCP_CHECK,research-gateway)
 	@echo "  usage-tracker"
 	@if [ ! -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
 		echo "    · usage-tracker not cloned — skipping"; \

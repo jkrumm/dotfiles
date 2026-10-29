@@ -15,23 +15,20 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 `Task*` tools are a built-in coordination layer, not MCP-backed. Routines /
 `/schedule` run in Anthropic's cloud and **cannot reach** agent-gateway (localhost) or
-research-gateway (tailnet).
+agent-workflows (tailnet).
 
-## Async-job contract — agent-gateway and research-gateway
+## Async-job contract — agent-gateway
 
-`mcp__agent-gateway__dispatch` and `mcp__research-gateway__research`
-return `{ jobId, … }` immediately — not the result. Submit → note `jobId` →
+`mcp__agent-gateway__dispatch`
+returns `{ jobId, … }` immediately — not the result. Submit → note `jobId` →
 `job_wait({jobId})` → read `result` on `status: "done"`, `error` on failed.
 `job_status` is the non-blocking peek.
 
-- `/check` and `/review` are not jobs you poll: `agw check` / `agw review` block up to
+- `/check`, `/review` and `/research` are not jobs you poll: `agw check` / `agw review` / `agw research` block up to
   `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10 naming the run; resume with
   `agw run wait <runId>` until the exit is not 10.
 - agent-gateway's `job_wait` accepts `maxWaitMs` (up to 29 min) — pass the ceiling
   instead of looping on the ~50 s default.
-- research-gateway's MCP wait blocks for the whole job over a kept-alive stream:
-  one call is normally the whole wait; call again only on `stillRunning`. Its REST
-  door (Hermes's lane) still polls.
 - `otel` is the one agent-gateway tool exempt: inline, synchronous, on Max, no `jobId`
   (why: `brain/wiki/engineering/model-routing.md`).
 
@@ -99,7 +96,7 @@ Workflow facts per repo:
 |-|-|
 | `homelab-private` | Self-contained. Never reference its services, hostnames or details from any other repo, doc or commit. |
 | `agent-gateway` | Local MCP daemon behind check/review/dispatch/otel. Mini only. |
-| `research-gateway` | Behind `/research`, tailnet-only; cloud routines can't reach it. |
+| `research-gateway` | REST door only (Hermes's lane) until archive; `/research` runs on `agw research`. |
 | `hermes-agent` | `HERMES_SKILLS` in its Makefile is the source of truth for skill domains. |
 | `basalt-ui` | Mantine v9 + TanStack Charts (`@tanstack/charts`) since 2.0; visx in 1.x (NPM). No Tailwind. Always its own commit. |
 | `brain` | `wiki/` = agentic knowledge (strict lint); PARA `Projects`/`Areas` = human surface; use `/brain`. |

@@ -1,28 +1,37 @@
 ---
 name: research
-description: Deep technical research via the research-gateway MCP — agentic Tavily + Context7 + page-fetch with cross-verification, returns a cited markdown report
+description: Deep technical research via the agw CLI (agent-workflows) — one agent with web search and page fetch, returns a cited markdown report with per-claim confidence
 ---
 
-# Research — via research-gateway MCP
+# Research — via `agw`
 
-The standalone research-gateway service (Elysia + Bun, native on the Mac mini, Tailscale-only) runs the agentic loop on IU models, off Max. It uses an **async job contract** (mirrors agent-gateway's `check`/`review`): submit → wait → read. The submit never blocks; `job_wait` then blocks for the WHOLE job (the server holds the stream open with 15s keep-alives), so one wait call is normally the entire interaction.
-
-1. **Submit.** Call `mcp__research-gateway__research` with `query` set to the user's question, optionally `depth` (`quick` | `standard` | `deep`, default `standard`). It returns IMMEDIATELY with `{ jobId, status }` — **not** the report. Note the `jobId`; do not treat this response as the answer.
-2. **Wait.** Call `mcp__research-gateway__job_wait({ jobId })` — once. It blocks until the job actually finishes (quick ~40s, standard ~2min, deep up to ~20min) and returns the terminal state. Only if it comes back with `stillRunning: true` — meaning the wait was cut short, not that the job failed — call it again with the same `jobId`. (`job_status({ jobId })` is a non-blocking peek if you want to do other work meanwhile.)
-3. **Read the result.** When `status` is `done`, the `result` field (also `structuredContent`) is a `ResearchReport`:
+1. Run `agw research "<question>" --depth quick|standard|deep --format json` via Bash (`standard` is the default). Add `--context "<background>"` for what the caller already knows: it is treated as established, never re-searched, never cited. `quick` = one fact, `standard` = a few sources, `deep` = a survey. Ignore `--design` and `--profile`: they are comparison-arm flags, leave them at their defaults.
+2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
+3. Exit 0 = the run finished. Read `status` (`done` | `failed` | `cancelled`), then `output`:
    - `report` — narrative, cited answer in markdown
-   - `citations` — `[{ claim, url, confidence }]`, each key claim tied to a source, carrying the researching worker's `high` | `medium` | `low` confidence in that specific claim
+   - `citations` — `[{ claim, url, confidence }]`, each key claim tied to a source, carrying the researching agent's `high` | `medium` | `low` confidence in that specific claim
    - `sources` — deduplicated list of all URLs consulted
    - `unverified` — `[{ topic, url, reason }]`, things the run could NOT confirm against a source (unreachable, paywalled, thin). Empty on a clean run.
+   - `status` (`ok` | `partial`), `warnings`, `grounding`
 
-   **Read `confidence` and `unverified` before passing a claim on.** A citation only means a worker tied that claim to that URL — it is not proof the page supports it. Treat `low` confidence and anything in `unverified` as a lead to check, not a fact; for a crisp value (version number, EOL date, API signature) where the report names a primary source, opening that source directly is a cheap confirmation.
+   **Read `confidence` and `unverified` before passing a claim on.** A citation only means the agent tied that claim to that URL — it is not proof the page supports it. Treat `low` confidence and anything in `unverified` as a lead to check, not a fact; for a crisp value (version number, EOL date, API signature) where the report names a primary source, opening that source directly is a cheap confirmation.
 
-   **`result.status` / `warnings` / `grounding`:** `status: "partial"` means the run finished with gaps — the `warnings` array says which, and `grounding` is the code-computed check of citations against fetched pages, not the model's opinion. Treat a partial result as leads, and when research fails outright never fall back to answering from memory: say it failed.
+   **`output.status` / `warnings` / `grounding`:** `output.status: "partial"` means the run finished with gaps — the `warnings` array says which, and `grounding` is the code-computed check of citations against fetched pages (`citations` vs `grounded`, `pagesRetrieved` vs `pagesFailed`), not the model's opinion. Treat a partial result as leads. When the run `failed`, `error.message` says why.
 
-   On `done`, the text content already inlines the report plus a Citations and Sources section, so text-only clients still get the full picture. When `status` is `error`, `error` holds the failure message.
+**Never answer from memory when research fails.** Say it failed (quote the exit code and `error`) and, if the question matters, retry once or look the primary source up directly.
 
-Depth: `quick` = fast, snippet-level; `standard` (default) balances quality and speed; `deep` = most thorough but slowest. Submit is instant at every depth, and one `job_wait` covers any of them — only how long that single call blocks grows with depth, so `deep` is safe to use. If the gateway refuses the submit, `research` returns an `isError` whose text says which of three reasons it was — `queue_full` (backlog), memory pressure (it is shedding new work to protect running jobs), or draining (it is restarting). All three mean retry shortly, not that the query was bad.
+**Follow-up on a finished report:** there is no follow-up flag yet. Ask a new question and pass the report's relevant findings as `--context`, so they are not re-searched.
 
-**Durable job ids.** A finished job stays readable for 7 days, so a wait cut short (a closed session, a gateway restart) is recovered with `job_wait({ jobId })` or `job_status`, never by resubmitting. Pass `idempotencyKey` on `research` when a submit might be retried; the same key returns the original job.
+Exit codes a caller acts on (`agw schema --exit-codes`):
 
-**When the MCP tools are missing** (the server was unreachable at session start, so Claude Code never loaded them): use the CLI over the REST door instead of giving up: `research "<question>" --depth standard` (`--json` for the full report object, `--no-wait` then `research wait <jobId>`). It needs no session state and retries transport errors itself. It defaults to the tailnet door (`https://research.mini.jkrumm.com`) on both machines — the same endpoint the MCP server uses; `RESEARCH_GATEWAY_URL` overrides it. Installed with `make install-cli` from each machine's research-gateway checkout (`git pull` there to update). The bearer comes from `RESEARCH_GATEWAY_TOKEN` or the `research-gateway-token` Keychain entry. Exit codes: 0 done, 1 job error, 2 usage/auth/refused, 3 unreachable.
+| Code | Meaning | Action |
+|-|-|-|
+| 0 | run finished | read `status`, then `output.status` |
+| 10 | still running | `agw run wait <runId>` |
+| 1 | run failed/cancelled, or a 5xx | state is on stdout; report it |
+| 2 | bad flag/value | fix the call |
+| 3 | no secret, or 401/403 | credentials in `~/.config/agw/env` |
+| 7 | host unreachable | report; don't retry-loop |
+| 8 | rate limited | retry after `details.retryAfterS` |
+
+A cut-off session recovers with `agw run wait <runId>`, never by resubmitting.
