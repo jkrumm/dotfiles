@@ -20,6 +20,10 @@ tap "jkrumm/tap"
 brew "age"
 # Editor of encrypted files (paired with age for the headless secrets cache)
 brew "sops"
+# SQLite with transparent AES encryption (finances vault via bun:sqlite setCustomSQLite)
+brew "sqlcipher"
+# PDF rendering library + pdftotext (finances document text extraction)
+brew "poppler"
 # Schema-validated .env loader — resolver plugins (1Password, etc.) + secret redaction
 brew "varlock"
 # Shell script static analysis — gates the secrets-run shim (make secrets-lint)
