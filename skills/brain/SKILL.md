@@ -31,6 +31,12 @@ The first-party `obsidian-cli` (`/usr/local/bin/obsidian`) is metadata-aware —
 3. **Never** default-traverse `Inbox/` — read them only on an explicit ingestion request.
 4. For broad search, use `obsidian search` / `obsidian backlinks` (or `obsidian orphans` / `obsidian deadends` for graph health) rather than reading many files inline; delegate wide fan-out reads to the Explore subagent.
 
+## Lookup through agw
+
+For a question that would mean reading many notes, run `agw brain "<question>"` before (or instead of) an Explore fan-out. It is cheap and read-only (Haiku EU, no fallback), and answers with citations to the vault paths it read. It never reads `Inbox/` or symlinked notes. The result is the run envelope; `.output` carries `answer`, `citations[{path, claim}]`, `grounding`, `read` and `warnings` (`jq -r '.output.answer'`). Exit 10 → `agw run wait <runId>`. Mini-only (`agw`).
+
+Verify a cited note (open it) before relying on it for a write. Reads and writes are otherwise unchanged.
+
 ## How to write knowledge (`wiki/`)
 
 - Prefer editing an existing concept over creating an orphan. Check with `obsidian search` first.

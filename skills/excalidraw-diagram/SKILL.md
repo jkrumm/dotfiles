@@ -1,6 +1,6 @@
 ---
 name: excalidraw-diagram
-description: Create Excalidraw diagram files that make visual arguments. Use when the user wants to visualize workflows, architectures, or concepts. Delegates JSON generation + hydration to the agent-gateway `excalidraw_diagram` MCP tool.
+description: Create Excalidraw diagram files that make visual arguments. Use when the user wants to visualize workflows, architectures, or concepts. Delegates JSON generation + hydration to `agw diagram`. Mini-only: needs agw.
 ---
 
 # Excalidraw Diagram Creator
@@ -9,19 +9,18 @@ Generate `.excalidraw` files that **argue visually**, not just display informati
 
 This skill is the **design director**: you decide depth, pattern variety, and
 evidence. The mechanical work — JSON shape, element bindings, hydration into a
-portable `.excalidraw` v2 file — lives in the agent-gateway MCP tool
-(`mcp__agent-gateway__excalidraw_diagram`). You author the prompt; the tool delivers
-a portable file.
+portable `.excalidraw` v2 file — lives in `agw diagram` (agent-workflows, on the
+mini's PATH). You author the brief; the command returns the document and **you
+write the file** (the host never touches a caller path).
 
 ## Output portability (the guarantee)
 
-The agent-gateway tool emits **fully-hydrated `.excalidraw` v2 files**: complete
+`agw diagram` emits **fully-hydrated `.excalidraw` v2 files**: complete
 `type`/`version`/`source`/`elements`/`appState`/`files` envelope with all IDs,
 seeds, versionNonces, and bindings computed. The same file opens cleanly in:
 
 | Target                                | How                                                       |
 |---------------------------------------|-----------------------------------------------------------|
-| agent-gateway DiagramPanel                 | Open at `https://agent-gateway.test`                           |
 | Obsidian Excalidraw plugin (zsviczian)| Drop the file anywhere in the vault                       |
 | excalidraw.com                        | Drag-and-drop the file onto the canvas, or *File → Open*  |
 | Any third-party Excalidraw renderer   | Standard v2 envelope — no plugin-specific fields          |
@@ -35,16 +34,18 @@ You don't pick the target — the file is universal.
 3. **Design the visual argument** — pattern variety, multi-zoom, evidence.
 4. **Resolve the output path** — infer from context (brain vault path, working
    dir) and state the chosen path in the output.
-5. **Call `mcp__agent-gateway__excalidraw_diagram`** with the prompt + outputPath.
+5. **Run `agw diagram`** with the brief and write the output to the path.
 6. **Open the result** — read the path back to the user. They open it in their
    editor of choice.
 
 ## When to use which mode
 
-- `mode: "create"` (default) — generate a fresh diagram at `outputPath`.
-- `mode: "extend"` — read the existing file at `outputPath`, pass it to the
-  worker as a baseline, and append/modify. Use when the user says "add X to
-  this diagram" or "make Y change to the chart from yesterday."
+- `--mode create` (default) — generate a fresh diagram.
+- `--mode extend --existing "$(cat <path>)"` — pass the current file as the
+  baseline and append/modify. Use when the user says "add X to this diagram" or
+  "make Y change to the chart from yesterday." The result is a **new document**;
+  say in the brief whether the existing elements stay (an extend that does not
+  keep them replaces the diagram).
 
 ## Resolving the output path
 
@@ -56,16 +57,16 @@ Infer from context, in this order:
 - Otherwise → default to the brain vault too, in a sensible subfolder inferred
   from the diagram's subject. Don't dump diagram files in random project repos.
 
-Always pass an **absolute path** ending in `.excalidraw`. State the chosen path
+Always use an **absolute path** ending in `.excalidraw`. State the chosen path
 in the output.
 
 ---
 
 ## Design Philosophy
 
-The technical JSON shape is owned by the agent-gateway tool. The design quality is
+The technical JSON shape is owned by `agw diagram`. The design quality is
 owned by **you, here**. The rest of this file is about how to think before you
-call the tool.
+run the command.
 
 ### Diagrams ARGUE, not DISPLAY
 
@@ -88,7 +89,7 @@ formats, real event names, concrete examples.
 | **Comprehensive/Technical**| Real system, protocol, API, tutorial, YouTube/docs                | Concrete examples, code snippets, real data     |
 
 **For technical diagrams, research first.** Look up the actual specs, formats,
-event names. Pass real terminology to the tool in your prompt — generic
+event names. Pass real terminology to the command in your brief — generic
 "Protocol → Frontend" labels waste the format.
 
 ### Multi-Zoom Architecture
@@ -100,8 +101,7 @@ Comprehensive diagrams operate at three zoom levels simultaneously:
    related elements (`opacity: 35`).
 3. **Detail Inside Sections** — evidence artifacts, code snippets, real names.
 
-State these levels explicitly in your prompt to the tool. The worker handles
-the rendering.
+State these levels explicitly in your brief. The worker handles the rendering.
 
 ### Evidence Artifacts (Technical Diagrams)
 
@@ -146,8 +146,8 @@ Typography (font size + color) creates hierarchy without boxes. **Aim for
 
 ### Color as Meaning
 
-Colors encode information, not decoration. The agent-gateway skill prompt owns the
-palette — don't redefine colors here. When telling the tool what to make,
+Colors encode information, not decoration. The diagram agent owns the
+palette — don't redefine colors here. When telling the command what to make,
 describe roles ("primary action", "external dependency", "error state",
 "cached/secondary path") rather than hex values. The worker will pick the right
 swatch.
@@ -157,7 +157,7 @@ swatch.
 ## Process
 
 ### Step 0: Assess depth
-Simple/conceptual or comprehensive/technical? Tell the tool which.
+Simple/conceptual or comprehensive/technical? State which in the brief.
 
 ### Step 1: Understand deeply
 For each concept, ask: what does it DO? What relationships exist? What would
@@ -170,8 +170,8 @@ Each major concept gets a different visual pattern from the table above.
 Trace how the eye moves through the diagram. Left→right or top→bottom for
 sequences, radial for hub-and-spoke. There should be a clear visual story.
 
-### Step 4: Compose the tool prompt
-Pass a *design brief* to `mcp__agent-gateway__excalidraw_diagram`:
+### Step 4: Compose the brief
+The positional argument of `agw diagram` is a *design brief*:
 
 - The subject of the diagram (be specific — actual system / actual concept).
 - The depth mode you chose (conceptual or technical).
@@ -179,27 +179,46 @@ Pass a *design brief* to `mcp__agent-gateway__excalidraw_diagram`:
   convergence on the database, timeline along the bottom for the lifecycle").
 - Evidence artifacts to include (which real names, which sample payloads).
 - Any zone groupings ("CI block on the left, deploy block on the right").
-- Camera/viewport hint if relevant (default is 800×600).
+- Camera hint if relevant (4:3). The agent may set one; it is returned in the JSON result, not stored in the plain `.excalidraw` output.
 
 The worker handles colors, sizes, fonts, bindings, and JSON shape.
 
-### Step 5: Call the tool
-```
-mcp__agent-gateway__excalidraw_diagram({
-  prompt: "<design brief>",
-  outputPath: "/absolute/path/to/diagram.excalidraw",
-  mode: "create" | "extend"   // default "create"
-})
+### Step 5: Run it
+The result is the run envelope; the file is its `.output.document` string.
+(`--format plain` is documented to print just the document, but the installed
+CLI prints the whole envelope — extract with jq, do not redirect plain output
+straight into the file.)
+
+```bash
+OUT=$(mktemp)
+# create
+agw diagram "<design brief>" > "$OUT"
+
+# extend (existing file ≤ 512 KB)
+agw diagram "<what to change>" --mode extend --existing "$(cat /absolute/path/to/diagram.excalidraw)" > "$OUT"
+
+jq -r '.output.document' "$OUT" > /absolute/path/to/diagram.excalidraw.new \
+  && jq -e '.type == "excalidraw"' /absolute/path/to/diagram.excalidraw.new \
+  && mv /absolute/path/to/diagram.excalidraw.new /absolute/path/to/diagram.excalidraw
 ```
 
-The tool returns `{ outputPath, elementCount, viewport, hydratedBytes }`.
+Writing through a `.new` file and moving it over only after it parses keeps a
+failed run from truncating an existing diagram. `jq '.output.viewport' "$OUT"`
+is the agent's camera hint (null when it gave none); `.output.rationale` is
+its design note.
+
+An existing file over 512 KB (embedded images): pass it without `files`
+(`--existing "$(jq '.files={}' <path>)"`) and merge the original `files` back
+into the result with jq.
+
+Exit 10 = still running; resume with `agw run wait <runId>`. Any other non-zero
+exit: say so; do not hand-write the JSON.
 
 ### Step 6: Hand the file to the user
-Tell the user where it landed and how to open it (browser at
-`https://agent-gateway.test` for agent-gateway, drop into the brain vault for Obsidian,
-drag onto canvas for excalidraw.com).
+Tell the user where it landed and how to open it (drop it into the brain vault
+for Obsidian, drag onto canvas for excalidraw.com).
 
-If the user wants edits, call again with `mode: "extend"` and the same path.
+If the user wants edits, run again with `--mode extend`.
 
 ---
 
@@ -225,20 +244,20 @@ If the user wants edits, call again with `mode: "extend"` and the same path.
 
 ### Delivery
 13. File written and reported back to the user.
-14. User knows which app to open it in (agent-gateway / Obsidian / excalidraw.com).
-15. If extending an existing diagram, used `mode: "extend"` (not "create").
+14. User knows which app to open it in (Obsidian / excalidraw.com).
+15. If extending an existing diagram, used `--mode extend` (not create).
 
 ---
 
 ## Failure modes to avoid
 
-- **Bypassing the tool** to write `.excalidraw` JSON directly. Don't —
+- **Bypassing `agw diagram`** to write `.excalidraw` JSON directly. Don't —
   hand-rolled JSON corrupts arrow bindings, missing `versionNonce`, broken
-  containers. The tool exists to make this reliable.
-- **Specifying hex colors in your prompt.** Describe roles, not colors. The
+  containers. The command exists to make this reliable.
+- **Specifying hex colors in your brief.** Describe roles, not colors. The
   worker has a curated palette.
-- **Asking for camera sizes outside 4:3.** Stick to listed sizes
-  (`400×300`, `600×450`, `800×600`, `1200×900`, `1600×1200`).
+- **Asking for camera sizes outside 4:3.** Stick to `400×300`, `600×450`,
+  `800×600`, `1200×900`, `1600×1200`.
 - **Skipping the design assessment.** A request like "draw the auth flow" is
   too vague to produce a good diagram — clarify depth and patterns first.
 - **Writing diagram files to arbitrary project repos.** Default to the brain

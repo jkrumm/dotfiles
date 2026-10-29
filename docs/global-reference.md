@@ -44,11 +44,12 @@ workers hold their own caches — the argument for delegating. When it is gone:
 
 ## Skills by mode
 
-Everything routed through agent-gateway exists only on the mini.
+Everything routed through `agw` or agent-gateway exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| MCP (agent-gateway, async; `/otel` sync) | `/check` · `/review` (`--deep` adds correctness + security) · `/otel` · `/excalidraw-diagram` |
+| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| MCP (agent-gateway; `/otel` sync) | `/otel` |
 | MCP · fork · subprocess | `/research` · `/browse` (chrome-devtools, haiku) · `/analyze` |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |

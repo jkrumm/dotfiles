@@ -176,7 +176,7 @@ cs() {
 
 # ── Off-Max `claude -p` transport ─────────────────────────────────────────────
 #
-# So subprocess skills (analyze; otel and read-drawing moved to agent-gateway) don't
+# So subprocess skills (analyze) don't
 # copy-paste the IU credential plumbing. Runs `claude -p` off the Max
 # subscription — billing is IU per-token, not Max quota. Pass any `claude -p`
 # flags + a prompt (positional or via stdin), e.g.
