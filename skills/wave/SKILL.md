@@ -113,13 +113,12 @@ greps them.
 1. **Orient.** Read `docs/waves/PLAN.md`. Your wave is the `active` one. If none
    is active, or the active one is already `[x]` complete, stop and say so — do
    not guess which wave you are.
-2. **Execute the steps.** Delegate as always: `agw-legacy dispatch` (tier
-   `implement`) for settled edits off Max, `@implementer` for edits needing this
-   pane's live tree, `Explore` for search, `/research` for library facts. The
+2. **Execute the steps.** Delegate as always: `@implementer` for edits needing this
+   pane's live tree, `rd fan` for independent same-repo changes, `Explore` for search, `/research` for library facts. The
    wave agent orchestrates; it does not grind.
 3. **Close out.** In this order, every time:
    - `/check` — the plan's **Gate**. Report failures verbatim.
-   - `/review` on anything non-trivial; fix findings via `dispatch` or `@implementer`.
+   - `/review` on anything non-trivial; fix findings via `@implementer`.
    - `/commit` per logical concern.
    - Update `docs/waves/PLAN.md`: tick the steps, write **Left behind**, flip this
      wave to `done` and the next to `active`.
@@ -138,7 +137,7 @@ running ("1 shell still running") strands the chain: nothing resumes it. Rules:
 - Wait **in the foreground, bounded**: `timeout <s> <cmd>` or a poll loop of at most ~10 minutes
   per call, then decide (keep waiting, `rd read`, steer, cancel). No unbounded `Monitor` or
   `run_in_background` as the last act of a turn.
-- Anything started in the background is collected (`agw-legacy wait`, `TaskOutput`) or stopped
+- Anything started in the background is collected (`TaskOutput`) or stopped
   (`TaskStop`) before the close-out commit. A wave with a live background task has not closed out.
 - The close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" written into
   **Left behind**. Silence is neither.
