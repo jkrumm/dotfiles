@@ -48,3 +48,19 @@ op_account_for_cwd() {
 op_run() {
   command op --account "$(op_account_for_cwd)" "$@"
 }
+
+# GitHub CLI with the workspace's account: IuRoot (or any IU-Group-Engineering
+# repo argument) uses the IU GitHub account logged in under ~/.config/gh-iu,
+# everything else the personal default. An explicit GH_CONFIG_DIR or GH_TOKEN
+# wins, and a machine without the IU login falls through to the default.
+# One-time login per machine:
+#   GH_CONFIG_DIR=~/.config/gh-iu gh auth login --hostname github.com \
+#     --git-protocol ssh --skip-ssh-key --web --insecure-storage --scopes read:org,workflow
+gh() {
+  if [[ -z "${GH_CONFIG_DIR:-}${GH_TOKEN:-}" && -f "$HOME/.config/gh-iu/hosts.yml" ]] &&
+     [[ "$(op_account_for_cwd)" == careerpartner || "$*" == *IU-Group-Engineering* ]]; then
+    GH_CONFIG_DIR="$HOME/.config/gh-iu" command gh "$@"
+  else
+    command gh "$@"
+  fi
+}
