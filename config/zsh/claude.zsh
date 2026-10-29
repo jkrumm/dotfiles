@@ -213,9 +213,8 @@ claude_iu() {
 # second (`_codex_secret`, codex.zsh), exported only inside `oc`'s subshell (or
 # a wave pane's own shell) — never `env VAR=…`, so they stay out of `ps auxww`.
 #
-# The two machine-dependent bits are gated at launch, not committed into the
-# shared config: the light/dark re-theme (herdr panes only) and the mini-only
-# agent-gateway MCP (config/opencode/mini.json via OPENCODE_CONFIG).
+# The machine-dependent bit is gated at launch, not committed into the shared
+# config: the light/dark re-theme (herdr panes only).
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
 # so the key never rides argv or an ssh hop.
@@ -230,12 +229,6 @@ _oc_env() {
   base=${base%/}
   local openai="${base%/anthropic}/openai/v1"
   print -r -- "export IU_KEY=${(q)key} IU_ANTHROPIC_BASE=${(q)base} IU_OPENAI_BASE=${(q)openai}"
-  # agent-gateway's MCP is stdio-only against a repo that lives on the mini, so layer
-  # it in with OPENCODE_CONFIG (merged over the global config) only where it
-  # exists — the MacBook stays agent-gateway-free.
-  if [[ -f "$HOME/SourceRoot/agent-gateway/server/mcp.ts" ]]; then
-    print -r -- "export OPENCODE_CONFIG=${(q)HOME}/SourceRoot/dotfiles/config/opencode/mini.json"
-  fi
   # v2 attaches to ONE shared background service that never saw this shell's env, so the
   # {env:IU_*} placeholders resolve empty there. Hand it the values (env-only, idempotent).
   print -r -- "\"\$HOME/SourceRoot/dotfiles/scripts/opencode-service-env.sh\" || true"

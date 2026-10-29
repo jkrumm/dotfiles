@@ -1505,19 +1505,13 @@ _setup-browser:
 		claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --usageStatistics=false; $(CLAUDE_EACH_END)
 	@echo "    ✓ chrome-devtools MCP registered (use via /browse skill only)"
 
-# timeout: 1800000 (30 min) on the mcpServers.agent-gateway entry, not the plain
-# `claude mcp add` — that command has no --timeout flag, so this is add-json
-# with the same JSON shape a stdio server would otherwise get. Without it the
-# client falls back to a 60s default per tool call, which hard-aborts any
-# job_wait({maxWaitMs}) above 60000 even though agent-gateway's own worker will
-# happily run up to MAX_WAIT_MS (29 min) — see CLAUDE.md's Async-job contract.
 .PHONY: _setup-agent-gateway
 _setup-agent-gateway:
-	@echo "  agent-gateway MCP..."
-	@if [ -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
-		$(CLAUDE_EACH_ACCOUNT) $(CLAUDE_MKDIR) claude mcp remove agent-gateway --scope user 2>/dev/null || true; \
-			claude mcp add-json agent-gateway --scope user '{"type":"stdio","command":"bun","args":["run","$(SOURCEROOT)/agent-gateway/server/mcp.ts"],"timeout":1800000}'; $(CLAUDE_EACH_END); \
-		echo "    ✓ agent-gateway MCP registered (check, review, ship tools; timeout 1800000 — job_wait maxWaitMs up to 29 min)"; \
+	@echo "  agent-gateway CLI (agw-legacy)..."
+	@# The agent-gateway MCP server is deleted; dispatch is the agw-legacy CLI. Drop the stale
+	@# user-scope registration per account — remove in P6 once every machine ran make setup.
+	@$(CLAUDE_EACH_ACCOUNT) claude mcp remove agent-gateway --scope user 2>/dev/null || true; $(CLAUDE_EACH_END)
+	@if [ -d "$(SOURCEROOT)/agent-gateway" ]; then \
 		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-gateway" install-cli; \
 	else \
 		echo "    · agent-gateway not cloned at $(SOURCEROOT)/agent-gateway — skipping"; \
@@ -1795,12 +1789,6 @@ status:
 	@colima status >/dev/null 2>&1 \
 		&& echo "    ✓ colima VM running" \
 		|| echo "    ✗ colima VM [not running — run: make colima-start]"
-	@echo "  agent-gateway MCP"
-	@if [ ! -f "$(SOURCEROOT)/agent-gateway/server/mcp.ts" ]; then \
-		echo "    · agent-gateway not cloned — skipping"; \
-	else \
-		$(call CLAUDE_MCP_CHECK,agent-gateway); \
-	fi
 	@echo "  usage-tracker"
 	@if [ ! -f "$(SOURCEROOT)/usage-tracker/package.json" ]; then \
 		echo "    · usage-tracker not cloned — skipping"; \

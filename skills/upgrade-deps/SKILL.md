@@ -9,14 +9,14 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ## Skill Architecture (Token Efficiency)
 
-**Principle:** Keep main thread focused on coordination. Delegate heavy operations to MCP-routed skills.
+**Principle:** Keep main thread focused on coordination. Delegate heavy operations to `agw`-routed skills.
 
 ### Available Skills
 
 | Skill | Use For | Mode |
 |-------|---------|------|
 | **`/research`** | Major version research, breaking changes, migration guides | `agw research` |
-| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | MCP (agent-gateway) |
+| **`/check`** | Post-upgrade validation (format, lint, tsc, build) | `agw check` |
 
 ### Delegation Rules
 
@@ -34,7 +34,7 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 ### Token Savings
 
-`/research` routes through `agw research` (agent-workflows, synchronous with the exit-10 resume) and `/check` routes through **agent-gateway** (async job; backend per `GET /api/routing`). Verbose work stays off the main thread; only the structured result returns.
+`/research` and `/check` route through `agw` (agent-workflows, synchronous with the exit-10 resume). Verbose work stays off the main thread; only the structured result returns.
 
 ---
 

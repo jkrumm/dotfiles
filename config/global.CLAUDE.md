@@ -80,8 +80,9 @@ paths, the change, acceptance criteria, scope limits, and any research baked in
 on disjoint file groups. Delegate for context, not latency; editorial work stays
 inline.
 
-- **Model ids live only in `agw-legacy routing`** (`GET /api/routing`; rationale
-  `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`). Never write one in prose.
+- **Model ids live only in the route tables** — `agw routes` (the platform's; lands with
+  agent-workflows PR w10/routes-cmd) and `agw-legacy routing` (dispatch). Rationale
+  `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`. Never write one in prose.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
@@ -97,11 +98,9 @@ inline.
 
 ### Async jobs
 
-`mcp__agent-gateway__dispatch` returns `{ jobId }`, not the result: submit →
-`job_wait({jobId})` → read `result` / `error`. The submit call is not the answer.
-`/check`, `/review` and `/research` are `agw` CLI calls, synchronous with the
-exit-10 resume (`agw run wait <runId>`). Door-specific
-waits, `otel`'s exemption: `docs/global-reference.md`.
+`agw` waits itself; on `pending` (exit 10) run the printed resume command
+(`agw run wait <runId>`). `agw-legacy dispatch` blocks likewise (`--no-wait` →
+`agw-legacy wait <jobId>`). Door-specific waits: `docs/global-reference.md`.
 
 ## Workspaces
 
