@@ -127,6 +127,7 @@ COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/c
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 HERMES_PORT="${HERMES_PORT:-8642}"
 AGENT_WORKFLOWS_URL="${AGENT_WORKFLOWS_URL:-http://127.0.0.1:7791}"
+AGENT_WORKFLOWS_AUDIO_URL="${AGENT_WORKFLOWS_AUDIO_URL:-http://127.0.0.1:7792}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
@@ -842,6 +843,7 @@ LAUNCHD_KEEPALIVE="\
 $(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
+com.jkrumm.agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
 herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
 
@@ -860,6 +862,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 # name|gate path whose absence means "not installed here"|probe function
 DEVHOST_SERVICES="\
 agent-workflows|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist|probe_agent_workflows
+agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist|probe_agent_workflows_audio
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
@@ -881,6 +884,27 @@ probe_agent_workflows() {
   fi
   echo "agent-workflows host not ok (HTTP $code: ${body:0:excerpt_max})"
   return 1
+}
+
+# The audio process: unauthenticated GET /health = 200 {"status":"ok","version":<sha>}. It runs from the
+# same release dir as the host, so a version that differs from the host's means one of the two did not
+# restart onto the new release.
+probe_agent_workflows_audio() {
+  local out code body ver host_ver
+  out=$("$CURL_BIN" -s --max-time 8 -w '\n%{http_code}' "$AGENT_WORKFLOWS_AUDIO_URL/health" 2>/dev/null || true)
+  code=${out##*$'\n'}
+  body=${out%$'\n'*}
+  [[ "$code" =~ ^[0-9]{3}$ && "$code" != "000" ]] || { echo "agent-workflows audio process not answering on $AGENT_WORKFLOWS_AUDIO_URL"; return 1; }
+  if [[ "$code" != "200" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$body"; then
+    echo "agent-workflows audio process not ok (HTTP $code: ${body:0:160})"
+    return 1
+  fi
+  ver=$("$JQ_BIN" -r '.version // empty' <<<"$body" 2>/dev/null) || ver=""
+  host_ver=$("$CURL_BIN" -s --max-time 8 "$AGENT_WORKFLOWS_URL/health" 2>/dev/null | "$JQ_BIN" -r '.version // empty' 2>/dev/null) || host_ver=""
+  if [[ -n "$ver" && -n "$host_ver" && "$ver" != "$host_ver" ]]; then
+    echo "agent-workflows audio process runs ${ver:0:7} but the host runs ${host_ver:0:7} — one did not restart onto the release"
+    return 1
+  fi
 }
 
 probe_hermes() {

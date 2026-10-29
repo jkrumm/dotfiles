@@ -199,6 +199,26 @@ fi
 
 (( ${#APP_NAME[@]} > 0 )) || die "registry came back empty — refusing to tear down every dev door"
 
+# The probe path of a path-restricted door: the first matcher with its trailing
+# '*' replaced by 'speech' (/v1/audio/* -> /v1/audio/speech, which the audio door
+# answers 401 without a bearer = up). Checked against the matcher itself, so a
+# probe outside the allowed set cannot be generated. Matchers without a trailing
+# '/*' are probed as written.
+restricted_probe_path() {
+  local first=${1%%,*} cand
+  if [[ $first == */\* ]]; then cand="${first%\*}speech"; else cand=$first; fi
+  case "$cand" in
+    *\**) return 1 ;;
+  esac
+  local m ok=1 pat
+  for m in ${1//,/ }; do
+    pat=${m%\*}
+    if [[ $m == *\* ]]; then [[ $cand == "$pat"* ]] && ok=0; else [[ $cand == "$m" ]] && ok=0; fi
+  done
+  (( ok == 0 )) || return 1
+  printf '%s' "$cand"
+}
+
 # Index of an app by name, or empty. Linear over ~17 entries; a hash would buy
 # nothing and bash 3.2 doesn't have one anyway.
 app_index() {
@@ -617,7 +637,15 @@ fi
     for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
       (( APP_EXCLUDED[i] )) && continue
       echo "		handle /_up/${APP_NAME[$i]} {"
-      echo "			rewrite * /"
+      # A path-restricted door is probed on a path inside its allowed set, never
+      # on '/': the landing page's host answers for ANY name, so a '/' probe would
+      # reach an upstream path the door itself refuses.
+      probe_path="/"
+      if [[ ${APP_PATHS[$i]} != "-" ]]; then
+        probe_path=$(restricted_probe_path "${APP_PATHS[$i]}") \
+          || die "${APP_NAME[$i]}: cannot derive a probe path inside its restriction (${APP_PATHS[$i]})"
+      fi
+      echo "			rewrite * $probe_path"
       echo "			reverse_proxy localhost:${APP_PORT[$i]} {"
       if (( APP_REWRITE[i] )); then
         echo "				header_up Host localhost:${APP_PORT[$i]}"

@@ -109,7 +109,9 @@ brew "nss"
 # Not on a machine with agent-workflows' pinned build (the mini): there one pinned npm build serves every
 # caller via ~/.local/bin/opencode, and a Homebrew copy earlier on PATH silently shadowed it
 # with an unpinned version (reinstalled by `brew bundle` 2026-10-16). docs/opencode.md.
-brew "opencode" unless File.directory?(File.expand_path("~/.local/share/agent-workflows/opencode-bin"))
+# Setup runs this bundle before agent-workflows' install-opencode, so the checkout's shim counts too.
+brew "opencode" unless File.directory?(File.expand_path("~/.local/share/agent-workflows/opencode-bin")) ||
+                       File.exist?(File.expand_path("~/SourceRoot/agent-workflows/scripts/opencode"))
 # Package compiler and linker metadata toolkit
 brew "pkgconf"
 # Fast, disk space efficient package manager

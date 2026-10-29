@@ -790,7 +790,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -1508,8 +1508,12 @@ _setup-browser:
 .PHONY: _setup-opencode
 _setup-opencode:
 	@echo "  OpenCode (pinned build + opencode/opencode-safe shims, from agent-workflows)..."
+	@# The agent-gateway MCP server is gone; drop its stale user-scope registration on machines
+	@# that have not re-run setup since. Idempotent.
+	@$(CLAUDE_EACH_ACCOUNT) claude mcp remove agent-gateway --scope user 2>/dev/null || true; $(CLAUDE_EACH_END)
 	@if [ -d "$(SOURCEROOT)/agent-workflows" ]; then \
-		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-workflows" install-opencode; \
+		$(MAKE) --no-print-directory -C "$(SOURCEROOT)/agent-workflows" install-opencode \
+			|| echo "    ✗ agent-workflows install-opencode failed — setup continues; rerun 'make install-opencode' there"; \
 	else \
 		echo "    · agent-workflows not cloned at $(SOURCEROOT)/agent-workflows — skipping"; \
 	fi
@@ -2300,6 +2304,11 @@ brew-service-test:
 # are report-only (deliberate-restart markers, SIGTERM, kills, exit codes) and
 # the marker lifecycle. Hermetic — a stubbed launchctl over a scratch state dir,
 # never a live job or the real heartbeat state. Runs on either machine.
+# caddy-registry.py: the port rows, the path column and every refusal (hermetic; needs the caddy binary).
+.PHONY: caddy-registry-test
+caddy-registry-test:
+	@python3 -I $(DOTFILES_DIR)/scripts/lib/caddy-registry.test.py
+
 .PHONY: launchd-restarts-test
 launchd-restarts-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
@@ -3475,6 +3484,7 @@ help:
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
 	@echo "  make fan-test           rd fan / merge-train worktree + base-from-origin suite"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
+	@echo "  make caddy-registry-test   Hermetic Caddyfile registry suite (port rows, path restrictions, refusals)"
 	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"

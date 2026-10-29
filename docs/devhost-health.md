@@ -22,7 +22,7 @@ components:
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | agent-workflows host (`/health`: 200 `ok`, 503 `degraded` names the reason), hermes gateway, colima, caddy, dnsmasq, brain-web (`:7733/`), walkingpad (`:7706/status`) — each gated on its plist |
+| services | agent-workflows host (`/health`: 200 `ok`, 503 `degraded` names the reason), agent-workflows audio process (`:7792/health`, unauthenticated; FAILs when its `version` differs from the host's), hermes gateway, colima, caddy, dnsmasq, brain-web (`:7733/`), walkingpad (`:7706/status`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | claude version | `claude --version` matches the last version `make claude-accounts-verify` verified — **WARN** when unverified |
 | AGENTS.md flag | the cached GrowthBook flag `tengu_agents_md_mod` in `~/.claude.json` is true (else Claude Code may not load AGENTS.md) — **WARN** |
