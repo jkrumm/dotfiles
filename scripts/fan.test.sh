@@ -31,6 +31,9 @@ is "branch has no upstream" "$(g -C "$path" rev-parse --abbrev-ref '@{u}' 2>/dev
 "$HERE/fan-worktree.sh" "$TMP/repo" fan/one >/dev/null 2>&1 && bad "duplicate branch accepted" || ok "duplicate branch refused"
 "$HERE/merge-train.sh" "$TMP/repo" fan/one >/dev/null 2>&1 && bad "train accepted a non-GitHub origin" || ok "train refuses a non-GitHub origin"
 
+# rd fan marks the worktree it created (remote-dev.sh calls this right after fan-worktree.sh)
+"$HERE/fan-list.sh" --mark "$TMP/repo" "$path" && ok "fan worktree marked" || bad "--mark failed"
+
 # fan-list: unmerged worktree is kept; after its branch lands on origin it is dropped; dirty is kept
 echo x > "$path/new"; g -C "$path" add new; g -C "$path" commit -qm work
 is "unmerged worktree is kept" "$("$HERE/fan-list.sh" "$TMP/repo" | cut -f1,4)" "$(printf 'keep\tunmerged')"
@@ -50,7 +53,28 @@ g clone -q "$TMP/m.git" "$TMP/mrepo" 2>/dev/null
 echo a > "$TMP/mrepo/f"; g -C "$TMP/mrepo" add f; g -C "$TMP/mrepo" commit -qm one; g -C "$TMP/mrepo" push -q origin HEAD:main
 g -C "$TMP/mrepo" remote set-head origin -d >/dev/null 2>&1 || true
 mo=$("$HERE/fan-worktree.sh" "$TMP/mrepo" fan/m) || bad "main-default fan-worktree failed"
+"$HERE/fan-list.sh" --mark "$TMP/mrepo" "$(sed -n 1p <<<"$mo")"
 is "main-default: base is origin/main" "$(sed -n 2p <<<"$mo")" "origin/main"
 is "fresh worktree is kept, not dropped" "$("$HERE/fan-list.sh" "$TMP/mrepo" | cut -f1,4)" "$(printf 'keep\tfresh')"
+
+# ownership: --clean reclaims only what rd fan created. Two merged+clean worktrees, one marked
+# (fan/two), one made by someone else with plain git (foreign/x); both land on origin.
+two=$("$HERE/fan-worktree.sh" "$TMP/repo" fan/two | sed -n 1p)
+"$HERE/fan-list.sh" --mark "$TMP/repo" "$two"
+fx="$TMP/foreign-x"; g -C "$TMP/repo" worktree add -q -b foreign/x "$fx" origin/master
+for w in "$two" "$fx"; do f=own-${w##*/}; echo x > "$w/$f"; g -C "$w" add "$f"; g -C "$w" commit -qm own; done
+g -C "$two" push -q origin fan/two; g -C "$fx" push -q origin foreign/x
+g -C "$TMP/other" pull -q origin master 2>/dev/null
+for b in fan/two foreign/x; do
+  g -C "$TMP/other" fetch -q origin "$b"
+  GIT_COMMITTER_DATE="2001-01-01T00:00:00" g -C "$TMP/other" cherry-pick "origin/$b" >/dev/null 2>&1
+done
+g -C "$TMP/other" push -q origin master
+verdict() { "$HERE/fan-list.sh" "${@:2}" "$TMP/repo" | awk -F'\t' -v b="$1" '$3==b{print $1 "\t" $4}'; }
+is "fan-made merged worktree is dropped" "$(verdict fan/two)" "$(printf 'drop\tmerged')"
+is "foreign merged worktree is kept" "$(verdict foreign/x)" "$(printf 'keep\tno-marker')"
+is "dirty fan worktree is still kept" "$(verdict fan/one)" "$(printf 'keep\tdirty')"
+is "--all drops the foreign merged worktree" "$(verdict foreign/x --all)" "$(printf 'drop\tmerged')"
+is "--all still keeps the dirty fan worktree" "$(verdict fan/one --all)" "$(printf 'keep\tdirty')"
 
 echo; [ "$fails" -eq 0 ] && echo "fan: all passed" || { echo "fan: $fails failed"; exit 1; }

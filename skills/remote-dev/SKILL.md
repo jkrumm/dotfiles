@@ -23,7 +23,7 @@ work <repo>                       # herdr workspace + claude for that repo (idem
 rd wave <repo> '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
 rd close <agent>                  # close a finished wave tab (clean + pushed only)
 rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + Claude tab per brief file
-rd fan --clean <repo>             # reclaim clean, merged fan worktrees + their tabs
+rd fan --clean <repo>             # reclaim clean, merged worktrees rd fan made + their tabs (--all: any worktree)
 rd merge <repo> [--check cmd] <branch…>   # merge train: rebase, check, merge by rebase (GitHub only)
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
