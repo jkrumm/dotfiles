@@ -55,7 +55,7 @@ which validates geometry before it delivers.
 
 | Repo | Purpose | Notes |
 |-|-|-|
-| `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed |
+| `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed; runs natively here since 2026-10-30 (`com.jkrumm.argo`, `~/.argo/releases/<sha>`, `make deploy` in the repo), shared Postgres database `shared` (schema `argo`, reads `usage`); still served at `argo.jkrumm.com`. The VPS containers are stopped (rollback kept) |
 | `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work as a GitHub issue (nothing works it automatically), 5-job cron layer | see [[agent-platform]] |
 | `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `rd wave` |
 | `agent-workflows` | The agent platform (public repo; concept in its `docs/concept.md`). Two processes from one release dir: the host, HTTP on `127.0.0.1:7791`, and the audio process on `:7792`, unauthenticated `GET /health` (200 `ok` / 503 `degraded`), everything else bearer-gated | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` |
@@ -170,7 +170,7 @@ the weatherorb session workflow.
 | `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
-| `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the native copy from `~/.argo/releases/<sha>`; Caddy door `argo-live.test`; crons off until the cutover, the VPS copy stays the live one |
+| `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the live Argo since 2026-10-30, from `~/.argo/releases/<sha>`, crons on; Caddy doors `argo-live.test` and `argo.jkrumm.com` (extra FQDN door); health for Kuma through the Kuma door `/h/argo` |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
@@ -241,13 +241,14 @@ The agent-workflows host (`:7791`) has the same kind of door for the image studi
 |-|-|-|
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |
 | `https://<app>.mini.jkrumm.com` | mini Caddy wildcard block | tailnet, ACL `tag:devhost → tag:mac/tag:phone/tag:tablet` on 443 |
+| `https://argo.jkrumm.com` | mini Caddy extra FQDN door (machine-local `~/.config/caddy-tailnet.hosts`, `docs/remote-dev.md`) → 127.0.0.1:7737 | tailnet, DNS-only A record → the mini's tailnet IP; `tag:mac/tag:phone/tag:tablet` on 443; the homelab and VPS get 403 from the source guard |
 | `:7730` (`rb`) | `tailscale serve` → 127.0.0.1:4050 | tailnet only |
 | `:8081` (weatherorb tiles) | `tailscale serve` → 127.0.0.1:8081 | tailnet only |
 | `:8788` (Collie) | `tailscale serve` → 127.0.0.1:8787 | tailnet, ACL `tag:phone → tag:mac` |
 | `:8795` (Kuma door) | `tailscale serve` → 127.0.0.1:8795 | tailnet, ACL `tag:homelab → tag:devhost` on `tcp:8795`; GET `/h/<name>` only, registry-mapped health URLs |
 | `tcp:22` → mini | OpenSSH, key-only | tailnet `tag:mac → tag:mac` |
 | `tcp:5900` → mini | macOS Screen Sharing (VNC) | tailnet `tag:mac → tag:mac`, MacBook → mini only |
-| `tcp:8642` → mini | Hermes's OpenAI-compatible API, for Argo's chat route | tailnet `tag:vps → tag:mac`, grant only — the API server is currently off, port closed |
+| `tcp:8642` → mini | Hermes's OpenAI-compatible API (iris is its consumer; Argo's chat route was removed 2026-10-30 with its `tag:vps → tag:mac` grant) | no tailnet grant — the API server is currently off, port closed |
 | `:8443` (IU dashboard), `:10000` (Athena Teamchat) | `tailscale serve` Funnel | **public internet** — the mini's entire public surface |
 | `tcp:2222` → iumac | userland sshd behind `tailscale serve --tcp` | tailnet `tag:mac → tag:mac` |
 | `ssh homelab` / `ssh vps` | Tailscale SSH (keyless) | tailnet ACL |

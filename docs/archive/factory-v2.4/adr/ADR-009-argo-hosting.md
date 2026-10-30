@@ -1,3 +1,5 @@
+> **Superseded 2026-10-30:** Argo runs natively on the mini (software-factory decisions SF8, A1).
+
 # ADR-009 — Argo runs split: the factory read API on the mini, the SPA and life data on the VPS
 
 > **v2 status (2026-10-24):** superseded — Argo all on the mini (TDD v2 §10). The text below is v1 history.
