@@ -141,6 +141,22 @@ audio.test {
 	}
 }
 
+# agw-image — agent-workflows' host (:7791, loopback): the image door, bearer-gated per caller (the
+# studio app on the MacBook generates, edits and enhances images through it). Only the door paths are
+# forwarded — /door/image/*, the routes in agent-workflows' host; /health, /workflows/* and every API
+# path on the same port are 404 here. scripts/lib/caddy-registry.py carries the path restriction into
+# the generated tailnet door.
+agw-image.test {
+	import local
+	@door path /door/image/*
+	handle @door {
+		reverse_proxy localhost:7791
+	}
+	handle {
+		respond 404
+	}
+}
+
 # iris — voice-memo server (Bun + Elysia), native LaunchAgent on the mini
 # (com.jkrumm.iris, :7730, bound to 127.0.0.1). `iris.mini.jkrumm.com` is how the phone and the
 # Mac reach it. /v1/events (SSE) and /v1/memos/:id/result?wait= (long poll) hold a response open

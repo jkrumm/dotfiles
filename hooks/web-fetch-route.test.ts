@@ -10,11 +10,11 @@ const fetchCall = (url: string, prompt?: string) => ({ tool_name: "WebFetch", to
 describe("routeReason", () => {
   test("a page goes to agw web read with the prompt as --ask, quoted for the shell", () => {
     const reason = routeReason(fetchCall("https://www.idealo.de/preisvergleich/x?q=a&b=c", "What's the price of the E4?"), true);
-    expect(reason).toContain("agw web read 'https://www.idealo.de/preisvergleich/x?q=a&b=c' --ask 'What'\\''s the price of the E4?'");
+    expect(reason).toContain("agw web read 'https://www.idealo.de/preisvergleich/x?q=a&b=c' --ask 'What'\\''s the price of the E4?' --format plain");
   });
 
   test("a call without a prompt reads the page without --ask", () => {
-    expect(routeReason(fetchCall("https://example.com/a"), true)).toContain("agw web read 'https://example.com/a'\n");
+    expect(routeReason(fetchCall("https://example.com/a"), true)).toContain("agw web read 'https://example.com/a' --format plain\n");
   });
 
   test("YouTube goes to agw web youtube, with the summarize pipe for a long video", () => {

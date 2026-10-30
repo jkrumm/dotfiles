@@ -66,7 +66,7 @@ export function routeReason(input: HookInput, available = agwAvailable()): strin
     );
   }
   const ask = input.tool_input?.prompt?.trim();
-  return `${why}\nRun: agw web read ${quote(raw)}${ask ? ` --ask ${quote(ask)}` : ""}\n(Add --fresh for a page that changes by the hour, --max-chars to read more of a long page.)`;
+  return `${why}\nRun: agw web read ${quote(raw)}${ask ? ` --ask ${quote(ask)}` : ""} --format plain\n(Add --fresh for a page that changes by the hour, --max-chars to read more of a long page.)`;
 }
 
 if (import.meta.main) {

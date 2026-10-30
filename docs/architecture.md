@@ -233,6 +233,8 @@ non-Caddy doors.
 
 The agent-workflows audio process (`:7792`) has a Caddy door too, `audio.test` and its tailnet twin, so Mac clients (MacWhisper) reach the OpenAI-compatible STT/TTS endpoint over the tailnet with their per-caller bearer token. It forwards only `/v1/audio/*` and `/audio/*`; everything else on that port (`/health`, `/api/*`) is a 404 at Caddy. The generator carries the restriction into the tailnet door (`scripts/lib/caddy-registry.py` → `scripts/caddy-tailnet.sh`).
 
+The agent-workflows host (`:7791`) has the same kind of door for the image studio, `agw-image.test` and its tailnet twin: it forwards only `/door/image/*` (generate, edit, enhance) with a per-caller bearer token; `/health`, `/workflows/*` and every other path on that port are a 404 at Caddy.
+
 | Door | Terminates at | Scope |
 |-|-|-|
 | `*.test` HTTPS | mini Caddy (`bind 127.0.0.1`) | local machine only |

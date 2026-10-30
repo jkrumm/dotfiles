@@ -56,6 +56,19 @@ class Registry(unittest.TestCase):
             rows, _ = run(fh.read())
         self.assertIn(("audio", 7792, 0, "/v1/audio/*,/audio/*"), rows)
 
+    def test_second_path_restricted_door_carries_its_own_paths(self):
+        rows, skipped = run(
+            "agw-image.test {\n\t@door path /door/image/*\n\thandle @door {\n\t\treverse_proxy localhost:7791\n\t}\n\thandle {\n\t\trespond 404\n\t}\n}\n"
+            + block("\t@door path /v1/audio/* /audio/*\n\thandle @door {\n\t\treverse_proxy localhost:7792\n\t}\n\thandle {\n\t\trespond 404\n\t}")
+        )
+        self.assertEqual(rows, [("agw-image", 7791, 0, "/door/image/*"), ("x", 7792, 0, "/v1/audio/*,/audio/*")])
+        self.assertEqual(skipped, [])
+
+    def test_tracked_caddyfile_agw_image_row(self):
+        with open(TRACKED, encoding="utf-8") as fh:
+            rows, _ = run(fh.read())
+        self.assertIn(("agw-image", 7791, 0, "/door/image/*"), rows)
+
     def assertRefused(self, caddyfile: str, reason: str):
         rows, skipped = run(caddyfile)
         self.assertEqual(rows, [], skipped)
