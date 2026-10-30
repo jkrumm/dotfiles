@@ -125,6 +125,13 @@ argo.test {
 	reverse_proxy localhost:7715
 }
 
+# argo-live — the native Argo (com.jkrumm.argo, :7737, loopback): one Bun process serving the API under /api, the built
+# dashboard and the browser OTLP relay, so this door needs no path logic. `argo.test` above is the Vite dev server.
+argo-live.test {
+	import local
+	reverse_proxy localhost:7737
+}
+
 # audio — agent-workflows' audio process (com.jkrumm.agent-workflows-audio, :7792, loopback): the
 # OpenAI-compatible STT/TTS door, bearer-gated per caller (MacWhisper on the MacBook transcribes
 # through it). Only the door paths are forwarded — /v1/audio/* and /audio/*, the matcher in

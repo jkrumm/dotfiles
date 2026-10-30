@@ -169,6 +169,7 @@ the weatherorb session workflow.
 | `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
+| `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the native copy from `~/.argo/releases/<sha>`; Caddy door `argo-live.test`; crons off until the cutover, the VPS copy stays the live one |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
