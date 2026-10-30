@@ -1,21 +1,22 @@
 ---
 name: analyze
-description: Deep static analysis (dead code, duplication, circular deps, complexity) via fallow + claude -p subprocess
+description: Deep static analysis (dead code, duplication, circular deps, complexity) via fallow in a native subagent
 ---
 
 # Analyze — Deep Static Analysis
 
-Runs fallow static analysis in a `claude -p` subprocess. Only the findings report returns to main context.
+Runs fallow static analysis in a native subagent. Only the findings report returns to main context.
 
 Fallow is a Rust-native project-graph analyzer. It operates at the whole-project dependency graph
 level — catching what linters cannot: exports nobody imports across the entire codebase, packages
 in package.json that nothing references, circular imports, code duplication, and complexity hotspots.
 It replaces knip + jscpd + dependency-cruiser in a single binary.
 
-## IMPORTANT — Subprocess Only
+## IMPORTANT — Subagent Only
 
-Always run via `claude -p`. Never execute inline. Never use the Agent tool.
-If the API key lookup fails, report the error — do not fall back to inline execution.
+Always run in one `Agent` call (`subagent_type: general-purpose`). Never execute fallow inline: the raw
+JSON would land in the main context. If the subagent fails, report the error — do not fall back to
+inline execution.
 
 ## Usage
 
@@ -29,11 +30,11 @@ If the API key lookup fails, report the error — do not fall back to inline exe
 
 ## Execution
 
-Single bash command — `mktemp` ensures no collision if run in parallel:
+One `Agent` call (`subagent_type: general-purpose`, description `fallow analysis`) whose prompt is the
+block below, with `[SCOPE]` replaced by the user's argument. The subagent runs on the pinned
+subagent model; do not set `model`.
 
-```bash
-TMPFILE=$(mktemp /tmp/claude-analyze-XXXXXX)
-cat > "$TMPFILE" << 'PROMPT_END'
+````text
 Run fallow static analysis in the current directory.
 
 ## Fallow CLI Reference
@@ -123,14 +124,4 @@ points, note this in the report and suggest running `fallow init`.
 Prioritize actionable findings. Skip sections with zero issues. If all clean, say so.
 
 SCOPE: [SCOPE]
-PROMPT_END
-zsh -ic 'claude_iu --model claude-haiku-4-5 --dangerously-skip-permissions' < "$TMPFILE"
-rm -f "$TMPFILE"
-```
-
-`claude_iu` (from `~/.zsh/conf.d/claude.zsh`) is a zsh function, not a binary on
-PATH — invoke it via `zsh -ic '…'` so it loads from an interactive shell. It runs
-`claude -p` against the IU unified endpoint's native Anthropic transport (Keychain
-creds, off Max quota, billed IU per-token). Analysis is pure `fallow` + Bash,
-so the no-WebSearch/WebFetch constraint doesn't bite. If the Keychain lookup fails
-it errors with a `make setup` hint; do not fall back to inline execution.
+````

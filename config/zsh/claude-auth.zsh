@@ -55,11 +55,10 @@
 #
 # TOKEN FALLBACK = DEFAULT ACCOUNT ONLY (CLAUDE_CONFIG_DIR unset, account iu).
 #
-# WHAT IT DELIBERATELY DOES NOT TOUCH. `ca` and `claude_iu` (claude.zsh) launch
-# through `env`, which resolves the binary from PATH and
-# bypasses shell functions entirely. Their off-Max `ANTHROPIC_AUTH_TOKEN` flow
-# is therefore untouched by this file — by construction, not by a guard that
-# could rot (they also never pick: their account is chosen by their own launcher).
+# WHAT IT DELIBERATELY DOES NOT TOUCH. A launcher that goes through `env` resolves
+# the binary from PATH and bypasses shell functions entirely, so its off-Max
+# `ANTHROPIC_AUTH_TOKEN` flow stays untouched by this file — by construction, not
+# by a guard that could rot (none exists today: `ca` and `claude_iu` are retired).
 # `c` / `cs` / `cf` call `claude` as a function, so they get the token logic as
 # intended — and the marker they set makes the wrapper skip its own pick.
 #

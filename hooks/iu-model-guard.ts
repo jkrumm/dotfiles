@@ -11,8 +11,8 @@
  * itself: this hook fires inside the child `claude -p` as well.
  *
  * "Metered" = a non-empty `ANTHROPIC_BASE_URL` that is not api.anthropic.com. `c`
- * blanks it, so a Max session never matches; `ca`, `claude_iu` and any hand-rolled
- * runner all set it.
+ * blanks it, so a Max session never matches; any IU launcher and any hand-rolled
+ * runner set it (`ca` and `claude_iu` are retired).
  *
  * The hook input carries no model field (probed 2026-10-22), so the main model is
  * resolved the way Claude Code does: `--model` on the claude process's own argv
@@ -111,7 +111,7 @@ function mainModel({ env, argv, fromSettings }: { env: Env; argv: string; fromSe
 
 const POLICY = [
   "Metered (IU) Claude Code runs cheap models only: Sonnet as the Claude ceiling",
-  "(`claude_iu --model sonnet`). Opus and Fable belong on the Max subscription (`c`).",
+  "(`oc`, `agw`). Opus and Fable belong on the Max subscription (`c`).",
 ].join("\n");
 
 if (import.meta.main) {

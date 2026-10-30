@@ -31,7 +31,7 @@ herdr's own state reporter:
 | `protect-branches.ts` | PreToolUse (Bash) | blocks pushes to protected branches (`config/pr-required-repos.json`) |
 | `docker-makefile.ts` | PreToolUse (Bash) | blocks raw `docker` where a Makefile exists; tokenizes the command so a *mention* is not an invocation |
 | `model-discipline.ts` | PreToolUse (Agent) | denies a worker on `model: fable` outright, and `subagent_type: fork` whenever the caller (read from its own transcript) is Fable/Opus — `model: opus` is denied unless the call's `description` carries `[opus: <reason>]` |
-| `iu-model-guard.ts` | UserPromptSubmit + PreToolUse (Agent) | on a metered `ANTHROPIC_BASE_URL` (IU), blocks an Opus/Fable main model (resolved from the process's `--model` → `ANTHROPIC_MODEL` → settings, aliases through `ANTHROPIC_DEFAULT_*`) and an Opus/Fable worker — runs inside every child `claude -p` too, so a hand-rolled IU runner is caught |
+| `iu-model-guard.ts` | UserPromptSubmit + PreToolUse (Agent) | on a metered `ANTHROPIC_BASE_URL` (IU), blocks an Opus/Fable main model (resolved from the process's `--model` → `ANTHROPIC_MODEL` → settings, aliases through `ANTHROPIC_DEFAULT_*`) and an Opus/Fable worker — runs inside every child `claude` process too, so a hand-rolled IU runner is caught (no launcher sets IU any more; this is the backstop) |
 | `machine-role.ts` | SessionStart | injects this machine's secrets backend + outbound-access routing |
 | `herdr-agent-state.sh` | SessionStart (`*`) | reports agent state to herdr; guarded, so it no-ops where herdr's integration was never installed |
 

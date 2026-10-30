@@ -9,9 +9,8 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 | Tier | Mechanism | Use when |
 |-|-|-|
 | 1 | Parallel `/check` / `/review` (`agw`) calls in **one turn** | Independent verifiable *reads and checks* (`check`, `review`). Independent *changes* in one repo are `/wave` fan-out |
-| 2 | `claude_iu` subprocess, ~0 Max cost | Read-heavy, isolated output |
-| 3 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
-| 4–5 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
+| 2 | Background `Agent` (`run_in_background: true`) | Long work to detach from and resume (`SendMessage`); keep it thin |
+| 3–4 | Foreground `Agent` on a stronger model · agent teams | Novel hard logic only; rarely worth it |
 
 `Task*` tools are a built-in coordination layer, not MCP-backed. Routines /
 `/schedule` run in Anthropic's cloud and **cannot reach** agent-workflows (localhost/tailnet).
@@ -38,12 +37,12 @@ Everything routed through `agw` exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
-| MCP · fork · subprocess | `/browse` (chrome-devtools, haiku) · `/analyze` |
+| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| MCP · subagent | `/browse` (chrome-devtools, haiku) · `/analyze` (fallow in a native subagent) |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |
-| inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (inert unless `HERDR_ENV=1`) · `/img` |
-| inline — writing | `/brain` · `/distill` · `/podcast` |
+| inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (inert unless `HERDR_ENV=1`) · `/router` (`routerctl`) |
+| inline — writing | `/brain` · `/distill` |
 
 Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
 `/hermes-update`; `homelab` → `/audit`, `/docs`, `/upgrade-stack`; `vps` →

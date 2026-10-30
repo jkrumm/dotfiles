@@ -45,7 +45,7 @@ the tree; IU creds via `secrets-run read op://common/anthropic/{API_KEY,BASE_URL
 **The flag dependency did not end.** A cold dir never caches the GrowthBook
 features, so `tengu_agents_md_mod` is unset and AGENTS.md is skipped; the warm
 `~/.claude.json` has it cached `true`. The 2026-10-09 "cold loads it" reading was
-wrong. Every production lane (interactive, `rd wave`, `claude_iu`)
+wrong. Every production lane (interactive, `rd wave`)
 runs on the warm `~/.claude`; only modelpick's bench sandbox
 uses a cold dir, and its fixtures carry their own CLAUDE.md. Shims stay deleted;
 the risk is the flag flipping, which `devhost-health-check.sh`

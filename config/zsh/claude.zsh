@@ -172,36 +172,8 @@ cs() {
 
 # `ca`, `cap`, `cdf`, `cdp` are gone (2026-10-24): Herdr sessions and waves run on the
 # Max subscriptions only (`c`/`cs`/`cf`, account from `claude-account pick`). IU API tokens
-# stay for gateways, OpenCode and Hermes (`oc`, `claude_iu`) — never for development sessions.
-
-# ── Off-Max `claude -p` transport ─────────────────────────────────────────────
-#
-# So subprocess skills (analyze) don't
-# copy-paste the IU credential plumbing. Runs `claude -p` off the Max
-# subscription — billing is IU per-token, not Max quota. Pass any `claude -p`
-# flags + a prompt (positional or via stdin), e.g.
-#
-#   claude_iu --model haiku --dangerously-skip-permissions < prompt.txt
-#
-# ANTHROPIC_API_KEY is stripped: claude v2.x rejects it ("Not logged in") and it
-# would shadow ANTHROPIC_AUTH_TOKEN.
-
-# IU unified endpoint, native Anthropic transport. Best Claude fidelity; NOT
-# EU-residency-guaranteed (native routing can land in the US). Creds from the
-# same Keychain entries `make setup` caches.
-claude_iu() {
-  local key base
-  key=$(security find-generic-password -s claude-sdk-api-key -w 2>/dev/null)
-  base=$(security find-generic-password -s claude-sdk-base-url -w 2>/dev/null)
-  if [[ -z "$key" || -z "$base" ]]; then
-    print -ru2 "claude_iu: IU credentials missing in Keychain — run 'make setup' in dotfiles"
-    return 1
-  fi
-  env -u ANTHROPIC_API_KEY \
-    ANTHROPIC_AUTH_TOKEN="$key" \
-    ANTHROPIC_BASE_URL="$base" \
-    claude -p "$@"
-}
+# stay for `agw`, OpenCode and Hermes (`oc`) — never for development sessions. `claude_iu`
+# (headless `claude -p` on IU) is gone too: no headless claude (docs/agent-platform.md).
 
 # `oc` — OpenCode on the IU endpoint, both routes. The third lane next to `ca`
 # and `cx`: it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,

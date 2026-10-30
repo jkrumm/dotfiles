@@ -5,7 +5,7 @@ paths: ["**/*.ts", "**/*.py", "**/*.sh", "**/Makefile"]
 
 # Agent Limits: None
 
-Agent workers — anything that spawns `claude -p`, `claude_iu`, an `agw` run, a Hermes tool loop, a research run, a Codex/Droid run, or an Agent
+Agent workers — anything that spawns a `claude` session, an `agw` run, a Hermes tool loop, a research run, a Codex/Droid run, or an Agent
 SDK `query()` — run **as long as the work takes**.
 
 - **No turn limit.** Never pass `--max-turns`; never add a `maxTurns` /

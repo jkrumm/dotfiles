@@ -416,8 +416,7 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 `docs/{design,runbook,security-review}.md`. Ops via **`/secrets`**.
 
 **Keychain-cached by `make setup`:** `CLAUDE_SDK_API_KEY` + `CLAUDE_SDK_BASE_URL`
-(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `claude_iu`
-and `oc`. `ANTHROPIC_API_KEY` is intentionally
+(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `oc`. `ANTHROPIC_API_KEY` is intentionally
 **never exported**: Claude Code falls back to the Max subscription when the key is
 absent, and exporting it bills API credits instead.
 
@@ -437,7 +436,6 @@ startup — `source ~/.zshrc` after editing.
 | `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what `herdr agent start` types into a pane; `-p`, subcommands and non-interactive shells never pick |
 | `c` | Max subscription | whatever `/model` last left it on |
 | `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
-| `claude_iu` | IU endpoint, headless `claude -p` | for subprocess skills — no credential plumbing to copy |
 | `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
 | `rd wave` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |

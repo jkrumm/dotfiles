@@ -181,20 +181,8 @@ else
   else
     row FAIL "launcher/marker" "_claude_launch no longer sets CLAUDE_ACCOUNT_PICKED — bare claude would pick a second time"
   fi
-  for f in ca cap cdf cdp; do
-    if [[ -n "$(fn_body "$f")" ]]; then row FAIL "launcher/$f" "retired IU-billed launcher is back: Herdr development is Max-only"; fi
-  done
-  for f in claude_iu; do
-    body=$(fn_body "$f")
-    if [[ -z "$body" ]]; then
-      row FAIL "launcher/$f" "function not found"
-    elif grep -q 'CLAUDE_CONFIG_DIR' <<<"$body"; then
-      row FAIL "launcher/$f" "touches CLAUDE_CONFIG_DIR — IU-endpoint launchers must stay account-agnostic"
-    elif ! grep -q 'ANTHROPIC_BASE_URL' <<<"$body"; then
-      row FAIL "launcher/$f" "no longer sets the IU ANTHROPIC_BASE_URL"
-    else
-      row PASS "launcher/$f" "never sets CLAUDE_CONFIG_DIR, keeps IU env"
-    fi
+  for f in ca cap cdf cdp claude_iu; do
+    if [[ -n "$(fn_body "$f")" ]]; then row FAIL "launcher/$f" "retired IU-billed launcher is back: Herdr development is Max-only, no headless claude"; fi
   done
 fi
 if [[ -r "$RD_SCRIPT" ]]; then

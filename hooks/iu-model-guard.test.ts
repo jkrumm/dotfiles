@@ -2,8 +2,8 @@
 
 /**
  * Tests for the iu-model-guard hook. A false allow is the 2026-10-22 leak (Opus on
- * IU through a hand-rolled runner); a false block wedges every `ca` / `cdf` /
- * `claude_iu` session, or — worse — every Max session.
+ * IU through a hand-rolled runner); a false block wedges every metered
+ * session, or — worse — every Max session.
  */
 
 import { describe, expect, test } from "bun:test";

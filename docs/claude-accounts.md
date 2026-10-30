@@ -275,7 +275,7 @@ from "nobody chose", so the decision travels in this variable instead:
 One `claude` function serves both machines (`config/zsh/claude-auth.zsh`): the pick runs everywhere, then
 `_claude_auth_run` applies the mini's token fallback (defined as a plain `command claude` off the dev host).
 `~/.zshenv` sources only that file for non-interactive mini shells, so `ssh mini 'claude …'` keeps the fallback and
-never picks. `ca`/`claude_iu` call the binary through `env`, bypassing the function by design.
+never picks.
 
 **Trust.** A fresh config dir asks "trust this folder?" on the first start in a path and `herdr agent start` then
 reports not-ready. `make claude-accounts-setup` runs two steps (re-run both after the first `/login` of an account, since
@@ -306,7 +306,7 @@ Claude Code has one global `effortLevel` and no per-model default, so every laun
 the config dir: `c`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
 `rd wave`/`rd fan` (`rd_effort_flag` in `remote-dev.sh`, `RD_WAVE_EFFORT` overrides). An explicit `--effort` always
 wins; an unlisted family (Haiku) gets no flag. `settings.json` `effortLevel` stays `high` in all three accounts on
-purpose: it is what a spawn without the flag runs at, and those are the off-Max `claude_iu` runs (Sonnet). Custom
+purpose: it is what a spawn without the flag runs at, and those are the headless runs (the e2e). Custom
 subagents pin their own (`agents/*.md` `effort: high`). A mid-session `/model` switch keeps the session's effort.
 
 ## Operate
@@ -320,7 +320,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini.
 | `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past for the default account (`iu`); any other account is capped at WARN, like `auth/<id>`. An unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
 | `plan/<id>` | `claude-account expiry` `plan_detected` (parsed from the Keychain item's `rateLimitTier`) equals the registry's `plan`. The picker's default units hang on that plan | WARN only: a mismatch (fix: set `"plan"` in `config/claude-accounts.json`) or an undetectable tier |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
-| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` never touches `CLAUDE_CONFIG_DIR` and keep the IU env; `rd wave`/`fan` call `pick_account` | someone rewired a launcher past the picker |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` and the other retired IU launchers (`ca cap cdf cdp`) must stay gone; `rd wave`/`fan` call `pick_account` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
