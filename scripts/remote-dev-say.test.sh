@@ -64,7 +64,10 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$TMP/bin/herdr"
-export PATH="$TMP/bin:$PATH" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
+# No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
+clean_path=""; IFS=: read -ra dirs <<<"$PATH"
+for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
+export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
   RD_SAY_SETTLE=0 RD_POLL_S=0 RD_SAY_WAIT_S=3
 unset RD_DRY_RUN
 

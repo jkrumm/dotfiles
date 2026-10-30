@@ -37,7 +37,10 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$TMP/bin/herdr" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
-export PATH="$TMP/bin:$PATH" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
+# No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
+clean_path=""; IFS=: read -ra dirs <<<"$PATH"
+for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
+export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
   RD_DELIVER_WAIT_S=0 RD_POLL_S=0
 unset RD_DRY_RUN FACTORY_SESSION
 printf 'Branch: feat/some-change\n\nDo the thing.\n' >"$TMP/brief.md"
@@ -80,13 +83,12 @@ start=$(grep -E '^agent start' "$STATE/calls" | head -1)
 has "agent start uses the fan agent name" "$start" "agent start myrepo-some-change"
 
 # --- role table (FL4) ---------------------------------------------------------------------------------
-# No real `factory` may answer: drop every PATH dir that holds one, then install the stub in the scratch ~/.local/bin.
-clean_path=""; IFS=: read -ra dirs <<<"$PATH"
-for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
-export PATH="$clean_path"
+# The scratch ~/.local/bin holds the stub `factory` (the PATH above carries no real one).
 # factory stub: replies from $STATE/factory-reply with exit code $STATE/factory-rc; "sleep" hangs it.
 cat >"$TMP/home/.local/bin/factory" <<'STUB'
 #!/usr/bin/env bash
+# `health` is not answering here (rd then takes the herdr path this suite inspects); the factory path has its own suite.
+[ "$1" = health ] && exit 1
 echo "$*" >>"$STATE/factory-calls"
 [ -f "$STATE/factory-sleep" ] && sleep 30
 cat "$STATE/factory-reply" 2>/dev/null

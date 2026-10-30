@@ -173,7 +173,105 @@ agent_name() {
 # FACTORY_SESSION=<agent name>, so the account-wide Claude hooks (config/settings.template.json) report
 # for rd-spawned sessions and stay silent for every other one. Same spawn-time `--env` path as PICK_ENV.
 # $1 = the herdr agent name; agent names are [a-z0-9_-], so no quoting beyond the single quotes.
-factory_env() { printf %s "--env FACTORY_SESSION='$1'"; }
+# $2 = the role the session runs under (FACTORY_ROLE becomes the factory session's role); empty = none.
+factory_env() { printf %s "--env FACTORY_SESSION='$1'${2:+ --env FACTORY_ROLE='$2'}"; }
+
+# --- the factory ---------------------------------------------------------------
+#
+# `wave`, `fan`, `say` and `close` go through the software factory when it answers, and keep the herdr path
+# below when it does not (docs/remote-dev.md §rd and the factory). A dead factory must never stop the waves
+# that would repair it, so every call is bounded and every failure before a spawn exists falls back.
+FACTORY_HEALTH_S=3
+FACTORY_CALL_S=15
+FACTORY_UP=""
+
+# Run `factory <args…>` on the dev host, bounded by <secs>. rc 124 = timed out, 127 = not installed.
+# The timeout binary is resolved on the host (`timeout` or Homebrew's `gtimeout`); without one the call runs
+# unbounded rather than failing, like the role lookup.
+factory_host() { # <secs> <args…>
+  local secs=$1 args="" a; shift
+  for a in "$@"; do args+=" $(printf '%q' "$a")"; done
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=\$(command -v timeout || command -v gtimeout); \${t:+\$t $secs} factory$args </dev/null"
+}
+
+# True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
+# skips it (the escape hatch for a factory that answers but misbehaves).
+factory_up() {
+  if [[ -z $FACTORY_UP ]]; then
+    FACTORY_UP=0
+    [[ ${RD_NO_FACTORY:-} == 1 ]] || ! factory_host "$FACTORY_HEALTH_S" health >/dev/null 2>&1 || FACTORY_UP=1
+  fi
+  [[ $FACTORY_UP == 1 ]]
+}
+
+# jq over a `factory … --format json` body. Ids may come as strings or {id|name} objects.
+FACTORY_JQ_DEFS='def s: if type == "object" then (.id // .name // empty) else . end | tostring;'
+factory_field() { # <json> <jq expression>
+  jq -r "$FACTORY_JQ_DEFS $2" <<<"$1" 2>/dev/null
+}
+factory_reason() { # <json>
+  factory_field "$1" '(.hold_reason // .reason // (.hold | objects | .reason) // (.error | objects | .message) // (.error | strings) // "no reason given") | tostring'
+}
+
+# Create a spawn through the factory (idempotent by key) and wait, bounded by RD_FACTORY_WAIT_S (120 s), until
+# it has started. The factory picks the account and starts the pane; it also delivers the prompt.
+#   return 0  handled — FSPAWN_STATE = started | queued (held: FSPAWN_REASON) | starting (claimed, not
+#             started within the wait); FSPAWN_PANE / FSPAWN_ACCOUNT filled when the factory reports them
+#   return 1  the spawn failed (FSPAWN_ERR), or the factory went silent after creating it
+#   return 2  the factory could not create the spawn: the caller falls back to the herdr path
+factory_spawn() { # <key> <repo> <prompt> <role> [space]
+  local key=$1 repo=$2 prompt=$3 role=$4 space=${5:-} out rc=0 get="" state
+  local -a extra=()
+  [[ -n $space ]] && extra=(--space "$space")
+  FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""
+  out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
+    ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
+  if (( rc != 0 )); then
+    # A timeout may have come after the factory recorded the spawn: ask before assuming it did not.
+    local recorded=0
+    if (( rc == 124 )); then
+      get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
+      [[ -z $(factory_field "$get" '.state // empty') ]] || recorded=1
+    fi
+    if (( ! recorded )); then
+      echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
+      return 2
+    fi
+  fi
+
+  local deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
+  while :; do
+    get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
+    state=$(factory_field "$get" '.state // empty')
+    case $state in
+      started|failed|queued|held) break ;;
+    esac
+    (( SECONDS >= deadline )) && break
+    sleep "${RD_FACTORY_POLL_S:-2}"
+  done
+  FSPAWN_PANE=$(factory_field "$get" '(.pane // .pane_id // empty) | s')
+  FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')
+  case $state in
+    started) FSPAWN_STATE=started ;;
+    queued|held) FSPAWN_STATE=queued; FSPAWN_REASON=$(factory_reason "$get") ;;
+    failed) FSPAWN_ERR=$(factory_reason "$get"); return 1 ;;
+    "") FSPAWN_ERR="the factory stopped answering after creating spawn '$key' - 'factory spawn get $key' shows what became of it"; return 1 ;;
+    *) FSPAWN_STATE=starting ;;
+  esac
+  return 0
+}
+
+# One line for a handled spawn. $1 = what started ("wave 4" / "fan <branch>"), $2 agent, $3 space, $4 path.
+factory_spawn_report() {
+  local what=$1 agent=$2 space=$3 path=$4
+  case $FSPAWN_STATE in
+    started) echo "→ $what started: claude '$agent' via the factory, space $space${FSPAWN_PANE:+, pane $FSPAWN_PANE}  ($path)${FSPAWN_ACCOUNT:+  [account $FSPAWN_ACCOUNT]}" ;;
+    queued) echo "queued: $FSPAWN_REASON"
+            note "   the factory starts '$agent' when it releases the hold · 'factory spawn get $agent' to look" ;;
+    *) echo "→ $what claimed by the factory, not started yet: '$agent' in space $space  ($path)"
+       note "   'factory spawn get $agent' to look" ;;
+  esac
+}
 
 # --- herdr agent resolution ---------------------------------------------------
 #
@@ -465,7 +563,7 @@ cmd_work() {
   fi
 
   local pane
-  pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $(factory_env "$agent")" \
+  pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $(factory_env "$agent" "$ROLE")" \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
   [[ -n $pane ]] || die "herdr workspace create failed for $path"
 
@@ -671,6 +769,7 @@ cmd_wave() {
   [[ ${RD_ORCHESTRATED:-} == 1 ]] && orch_flag="--orchestrated"
   gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" $orch_flag '$path' '$plan_ref'" 2>&1) \
     || die "green gate failed for $path:"$'\n'"$gate_out"
+  [[ -z $gate_out ]] || echo "$gate_out" >&2 # a pass can still say a check was skipped (the factory queue)
 
   # The repo's space is the one labelled with its bare name — the convention
   # `work` establishes and `herdr-groups.py` groups by. Waves live inside it as
@@ -787,9 +886,12 @@ for a in agents:
   # role unless told otherwise; unattended work defaults to Sonnet when the role table is unreachable.
   rd_spawn_flags wave sonnet
 
-  # The account is picked once per spawn; no room means pause, never IU.
-  PICK_ENV=""; PICK_NOTE=""
-  if [[ $AGENT_KIND == claude ]]; then
+  # The factory, when it answers, picks the account and queues what has no room; otherwise the account is
+  # picked once per spawn here, and no room means pause, never IU.
+  local use_factory=0
+  [[ -z ${RD_DRY_RUN:-} ]] && factory_up && use_factory=1
+  PICK_ENV=""; PICK_NOTE=""; PICK_SPILL=0
+  if [[ $AGENT_KIND == claude ]] && (( ! use_factory )); then
     pick_account wave
   fi
   (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; waves never spill to IU API tokens"
@@ -807,13 +909,27 @@ for a in agents:
     return 0
   fi
 
+  if (( use_factory )); then
+    [[ -z ${RD_WAVE_MODEL:-}${RD_WAVE_EFFORT:-} ]] \
+      || echo "rd: RD_WAVE_MODEL / RD_WAVE_EFFORT do not reach a factory spawn - the role table decides" >&2
+    local frc=0
+    factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" || frc=$?
+    case $frc in
+      0) factory_spawn_report "wave $wnum" "$agent" "$path" "$path"; return 0 ;;
+      1) die "factory spawn '$agent' failed: $FSPAWN_ERR" ;;
+    esac
+    # The factory could not take it: the herdr path, with the pick the factory would have made.
+    if [[ $AGENT_KIND == claude ]]; then pick_account wave; fi
+    (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; waves never spill to IU API tokens"
+  fi
+
   local created json pane tab
   if [[ -n $ws ]]; then
     created=tab
-    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus $PICK_ENV $(factory_env "$agent")")
+    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus $PICK_ENV $(factory_env "$agent" "${ROLE:-wave}")")
   else
     created=workspace
-    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent")")
+    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent" "${ROLE:-wave}")")
   fi
   pane=$(printf '%s' "$json" | python3 -c \
     "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -918,12 +1034,13 @@ for w in workspaces:
     return 0
   fi
 
-  local wt out base sha pane tab json tabname agent prompt rc
+  local wt out base sha pane tab json tabname agent prompt rc fan_failed=0 frc
   for b in "${briefs[@]}"; do
     # One pick per spawn: each fan agent is a fresh context, so each is a re-pick point (invariant 1
-    # only forbids switching a live session). No room pauses the spawn.
-    AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""
-    if [[ $AGENT_KIND == claude ]]; then
+    # only forbids switching a live session). No room pauses the spawn. A factory that answers picks the
+    # account itself and queues what has no room, so the pick is only ours on the herdr path.
+    AGENT_KIND=$base_kind; PICK_ENV=""; PICK_NOTE=""; PICK_SPILL=0
+    if [[ $AGENT_KIND == claude ]] && ! factory_up; then
       pick_account fan
       if (( PICK_SPILL )); then
         die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"
@@ -943,11 +1060,31 @@ for w in workspaces:
     agent="$(agent_name "$name")"
     agent="${agent:0:$plen}-${leaf}"
 
+    prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
+
+    # Through the factory: the space is the main checkout's, the worktree is where the session works.
+    if factory_up; then
+      [[ -z ${RD_WAVE_MODEL:-}${RD_WAVE_EFFORT:-} ]] \
+        || echo "rd: RD_WAVE_MODEL / RD_WAVE_EFFORT do not reach a factory spawn - the role table decides" >&2
+      frc=0
+      factory_spawn "$agent" "$wt" "$prompt" "${ROLE:-worker}" "$path" || frc=$?
+      case $frc in
+        0) factory_spawn_report "fan $branch" "$agent" "$path" "$wt"; continue ;;
+        1) note "   factory spawn '$agent' failed: $FSPAWN_ERR (worktree kept — 'rd fan --clean $name' reclaims it)"
+           fan_failed=1; continue ;;
+      esac
+      FACTORY_UP=0 # the rest of this fan goes through herdr
+      pick_account fan
+      if (( PICK_SPILL )); then
+        die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"
+      fi
+    fi
+
     tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
     if [[ -n $ws ]]; then
-      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus $PICK_ENV $(factory_env "$agent")")
+      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus $PICK_ENV $(factory_env "$agent" "${ROLE:-worker}")")
     else
-      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent")")
+      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent" "${ROLE:-worker}")")
       ws=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['workspace']['workspace_id'])" 2>/dev/null)
     fi
     pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -964,7 +1101,6 @@ for w in workspaces:
     echo "$started" | grep -q '"type":"agent_started"' \
       || { note "   agent start failed for $branch: $started (tab and worktree kept)"; continue; }
 
-    prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
     deliver_prompt "$pane" "$agent" "$prompt"; rc=$?
     if (( rc == 0 )); then
       echo "→ fan: $AGENT_KIND '$agent' on $branch  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}"
@@ -973,6 +1109,7 @@ for w in workspaces:
     fi
   done
   note "   'rd agents' to watch · scripts/wave-watch.sh --agents … to block · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
+  (( ! fan_failed )) || die "at least one factory spawn failed (above); the others were started"
 }
 
 # Reclaim fan worktrees whose branch is fully merged into origin's default and whose tree
@@ -1052,6 +1189,40 @@ for a in json.load(sys.stdin)["result"]["agents"]:
   IFS=$'\t' read -r tab status cwd <<<"$info"
   [[ -n $tab ]] || die "could not resolve the tab of $pane"
 
+  # Through the factory the tab is the one holding the session's pane, so a fan tab or a first tab named `1`
+  # closes like a `wave <n>` tab. Without a factory answer, or without a session of that name, the tab must
+  # be labelled `wave <n>` (today's rule).
+  local sname fsess="" fpane ftab fstate via_factory=0
+  sname=$(PANE="$pane" python3 -c '
+import json, os, sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a.get("pane_id") == os.environ["PANE"]:
+        print(a.get("name") or ""); break
+' <<<"$roster" 2>/dev/null)
+  if [[ -n $sname ]] && factory_up; then
+    fsess=$(factory_host "$FACTORY_CALL_S" session get "$sname" --format json 2>/dev/null) || fsess=""
+    ftab=$(factory_field "$fsess" '(.tab // .tab_id // empty) | s')
+    if [[ -n $ftab ]]; then
+      fpane=$(factory_field "$fsess" '(.pane // .pane_id // empty) | s')
+      fstate=$(factory_field "$fsess" '.state // empty')
+      [[ -z $fpane || $fpane == "$pane" ]] \
+        || die "the factory has '$sname' in pane $fpane, herdr in $pane — a stale record; refusing to close"
+      [[ $fstate == working || $fstate == blocked ]] && die "session $sname is $fstate — not finished"
+      # Closing a tab closes every pane in it: another agent there is not ours to close.
+      local others
+      others=$(TAB="$ftab" PANE="$pane" python3 -c '
+import json, os, sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a.get("tab_id") == os.environ["TAB"] and a.get("pane_id") != os.environ["PANE"]:
+        print(a.get("name") or a.get("pane_id") or "?")
+' <<<"$roster" 2>/dev/null)
+      [[ -z $others ]] || die "tab $ftab also holds $(tr '\n' ' ' <<<"$others")— closing it would close them too"
+      tab=$ftab; via_factory=1
+    else
+      echo "rd: the factory has no session '$sname' - resolving the tab through herdr" >&2
+    fi
+  fi
+
   label=$(host_run "herdr tab get '$tab'" 2>/dev/null | python3 -c '
 import json, sys
 try:
@@ -1059,7 +1230,9 @@ try:
 except Exception:
     pass
 ' 2>/dev/null)
-  [[ $label =~ ^wave\ [0-9]+$ ]] || die "tab $tab is '${label:-unlabelled}', not a 'wave <n>' tab — refusing to close it"
+  if (( ! via_factory )); then
+    [[ $label =~ ^wave\ [0-9]+$ ]] || die "tab $tab is '${label:-unlabelled}', not a 'wave <n>' tab — refusing to close it"
+  fi
   [[ $status == working || $status == blocked ]] && die "agent $pane is $status — not finished"
 
   # Fail closed: an unreadable checkout (ssh failure, no cwd) is not a clean one.
@@ -1076,7 +1249,7 @@ except Exception:
   closed=$(host_run "herdr tab close '$tab'" 2>&1) || die "herdr tab close failed: $closed"
   # herdr reports failure in the body and exits 0 (same trap as `agent prompt`).
   echo "$closed" | grep -q '"error"' && die "herdr tab close rejected: $closed"
-  echo "→ closed $label ($tab)"
+  echo "→ closed ${label:-tab} ($tab)"
 }
 
 # `claude agents --json` across every enabled Claude account, merged into one JSON array: a background
@@ -1327,6 +1500,18 @@ for a in json.load(sys.stdin)["result"]["agents"]:
 ' <<<"$roster" 2>/dev/null)
   # A hand-started agent has no name, only a pane id — `herdr agent get|prompt` take either.
   [[ -n $agent ]] || agent=$pane
+
+  # The factory holds a note while the agent works, types it at its next prompt and confirms it by the next
+  # turn, which is what the herdr path below can only approximate. A nameless agent is no factory session.
+  if [[ $agent != "$pane" ]] && factory_up; then
+    local nrc=0 nout
+    nout=$(factory_host "$FACTORY_CALL_S" session note "$agent" "$text" 2>&1) || nrc=$?
+    case $nrc in
+      0) echo "noted: the factory holds it while $agent works and types it at its next prompt"; return 0 ;;
+      124) say_fail "$agent" "the factory did not answer within ${FACTORY_CALL_S} s, so the note may be recorded (not re-sent through herdr)" ;;
+    esac
+    echo "rd: factory note for '$agent' failed (exit $nrc: $(head -c 200 <<<"$nout" | tr '\n' ' ')) - sending through herdr" >&2
+  fi
 
   local rc
   say_attempt "$pane" "$agent" "$text"; rc=$?
