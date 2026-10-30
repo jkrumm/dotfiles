@@ -46,7 +46,7 @@ For Quick tasks: skip the formality, just implement and validate. State the tier
 
 **Primary goal: keep the orchestrator's context window small.**
 
-All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. The `@implementer` subagent runs the `sonnet` alias at high effort. Fan out on **disjoint** file groups freely (same-repo groups via `/wave` fan-out, `@implementer` on the live-tree path); reserve Opus subagents for novel-hard reasoning. Note: parallel `@implementer` calls run N× Sonnet-on-Max (detachment, not free); `rd fan` tabs run on Max too.
+All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. The `@implementer` subagent runs the `sonnet` alias at medium effort. Fan out on **disjoint** file groups freely (same-repo groups via `/wave` fan-out, `@implementer` on the live-tree path); reserve Opus subagents for novel-hard reasoning. Note: parallel `@implementer` calls run N× Sonnet-on-Max (detachment, not free); `rd fan` tabs run on Max too.
 
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
@@ -58,7 +58,7 @@ All subagent work uses the native `Agent` tool with an explicit `subagent_type`.
 | Validate (runtime) | Only if obvious | Assess need | Always assess — via `@verifier` |
 
 **Heavy implementer choice (delegate to protect orchestrator CONTEXT and cost):**
-- **Edit in this session's live uncommitted tree, or tight iteration with the orchestrator**: **`@implementer`** (native `sonnet` alias, effort high, on Max). It loads the CLAUDE.md rules automatically and has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, plus exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). **A change in a repo you are not working in** goes to `rd wave <repo> '<prompt>'` (a herdr tab, `/wave` owns the contract); review its diff before merge.
+- **Edit in this session's live uncommitted tree, or tight iteration with the orchestrator**: **`@implementer`** (native `sonnet` alias, effort medium, on Max). It loads the CLAUDE.md rules automatically and has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, plus exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). **A change in a repo you are not working in** goes to `rd wave <repo> '<prompt>'` (a herdr tab, `/wave` owns the contract); review its diff before merge.
 - **Independent file groups**: same-repo groups go through **`/wave` fan-out** (`rd fan` / `rd merge`: one worktree + Claude tab per change — no cross-talk); on the live-tree path, multiple `@implementer` calls. Parallelize **only on disjoint file sets** — never two workers on the same file.
 - **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Opus — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`. The worker is a literal executor, not a planner. State the one-clause reason Sonnet doesn't fit in the call's `description` as `[opus: <reason>]` — `hooks/model-discipline.ts` denies an Opus worker without it.
 - **Mass mechanical migration (codemod across many files)**: `/wave` fan-out on disjoint groups (`rd fan` / `rd merge`).
@@ -114,7 +114,7 @@ State your approach in 3-5 bullets and **proceed**. Include:
 
 **Quick (≤2 files): implement inline.**
 
-**Standard / Heavy settled work: delegate** — **`@implementer`** (native `sonnet` alias, high effort, on Max) when the edit needs the live tree or tight iteration; `/wave` fan-out (`rd fan`/`rd merge`) for N independent changes in one repo; `rd wave <repo>` for a change in a repo you are not working in. **Heavy novel-hard logic: `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`.** Either way the executor has zero prior context, so the brief must include:
+**Standard / Heavy settled work: delegate** — **`@implementer`** (native `sonnet` alias, medium effort, on Max) when the edit needs the live tree or tight iteration; `/wave` fan-out (`rd fan`/`rd merge`) for N independent changes in one repo; `rd wave <repo>` for a change in a repo you are not working in. **Heavy novel-hard logic: `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`.** Either way the executor has zero prior context, so the brief must include:
 - The full task description and acceptance criteria
 - Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)
@@ -187,5 +187,5 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 - Always ask for human sign-off at the end
 - **Action bias is the default**: small decisions are the agent's to make. Only escalate major uncertainty or user-owned decisions (see Default Stance section)
 - Implementation subagent must receive all context upfront (it has no prior conversation)
-- N independent same-repo changes go to `/wave` fan-out; `rd wave <repo>` takes a change in another repo; `@implementer` runs Sonnet at high effort on Max for live-tree/tight-iteration work. Each loads CLAUDE.md → AGENTS.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
+- N independent same-repo changes go to `/wave` fan-out; `rd wave <repo>` takes a change in another repo; `@implementer` runs Sonnet at medium effort on Max for live-tree/tight-iteration work. Each loads CLAUDE.md → AGENTS.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
 - **A subjective goal needs a measurable acceptance criterion, or it comes back "done" unchanged.** "Make it less verbose", "tidy this up", "improve the naming" are unfalsifiable as written: the worker fixes something adjacent and reports success. Convert to a number the worker must measure and report (word count before/after, file count, the specific line that must be gone), or to the exact named sites that must change. A goal stated only in adjectives regressed twice in one project before the brief demanded a count

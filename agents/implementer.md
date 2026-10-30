@@ -2,7 +2,7 @@
 name: implementer
 description: Implement a fully-specified, self-contained coding task — features, refactors, bug fixes — following existing project patterns and the repo's AGENTS.md rules. Delegate when the plan is settled and the work is independently verifiable. Not a planner; it executes a complete brief and returns a diff summary.
 model: sonnet
-effort: high
+effort: medium
 color: green
 tools: Read, Edit, Write, Grep, Glob, Bash, Skill
 permissionMode: bypassPermissions
