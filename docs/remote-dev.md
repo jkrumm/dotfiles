@@ -206,6 +206,20 @@ tab/workspace creation (`factory_env` in `scripts/remote-dev.sh`; the name is th
 gets, e.g. `myrepo-w4`). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
 only when it is set, so the owner's own sessions never report. Covered by `scripts/remote-dev-factory-env.test.sh`.
 
+**Role table (`--role`).** `rd wave|fan|work --role <role>` (`mother|lead|wave|worker|mechanical`) takes the
+tier and effort from the factory's role table: `factory role get <role> --format json` →
+`{"role","tier":"haiku|sonnet|opus","effort":"low|medium|high|xhigh|max"}`, no token needed. The tier goes to
+Claude as `--model <tier>` (the alias, never a model id), the effort as `--effort`. Precedence, per value:
+`RD_WAVE_MODEL` / `RD_WAVE_EFFORT` (explicit env) over `--role` over today's defaults (Sonnet, effort from
+`config/claude-effort.json`). Without `--role`, `rd wave` behaves as `--role wave` and `rd fan` as
+`--role worker`; `rd work` starts bare, as before, unless `--role` is given. **Fail open:** `factory` missing,
+non-zero exit, no answer within 2 s, or JSON off the schema costs one stderr line
+(`rd: factory role '<r>' unavailable (<why>) - using the default model and effort`) and the spawn keeps
+today's defaults — a dead factory never stops a spawn. Only a factory that answers the role does not exist
+(`error.kind` `not_found`, or an "unknown role" message) or a malformed role name is a usage error (exit 2),
+raised before anything is created. One lookup per `rd fan`, not per brief. Covered by
+`scripts/remote-dev-factory-env.test.sh`.
+
 ## Dev-server doors
 
 **`config/Caddyfile` is the single app registry.** Every

@@ -174,7 +174,7 @@ keep the prompt to the two sentences above.
 
 `RD_WAVE_MAX` (default 10) bounds the chain. `RD_DRY_RUN=1` resolves and prints
 without spawning. `rd agents` shows every wave; `rd read <agent>` watches one.
-Waves run on Sonnet unless `RD_WAVE_MODEL` says otherwise (effort defaults per model from `config/claude-effort.json`: Sonnet high, Opus/Fable medium; `RD_WAVE_EFFORT=low|medium|high|xhigh|max` overrides); a chain that needs
+Model and effort come from the factory role table: `rd wave` is `--role wave`, `rd fan` is `--role worker`, and `--role mother|lead|wave|worker|mechanical` picks another. Precedence: `RD_WAVE_MODEL` / `RD_WAVE_EFFORT=low|medium|high|xhigh|max` (explicit env) over `--role` over today's defaults (Sonnet; effort per model from `config/claude-effort.json`: Sonnet high, Opus/Fable medium). A factory that does not answer falls back to those defaults with one stderr line. A chain that needs
 Fable sets it per spawn (rationale: `brain/wiki/engineering/model-routing.md`).
 
 **Never `rd wave` a repo whose live agent is still `working`** — the command
