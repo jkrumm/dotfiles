@@ -315,6 +315,7 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 | Command | Purpose |
 |-|-|
 | `make devhost-health-setup` / `-check` / `-teardown` | The 300 s composite heartbeat. `-check` runs it once, per-component. |
+| `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` | The Kuma door (below): one tailnet port Kuma pulls service health through; `-gen` writes the monitors from the registry |
 | `make drift-check-setup` / `-teardown` | The daily 09:40 upstream-drift agent (collie pin, caddy modules, brew-upgrade recency, pending macOS updates) |
 | `make beszel-agent-setup` / `-status` / `-teardown` | Push-mode system-metrics agent → the homelab Beszel hub, pinned-release install (not Homebrew) |
 | `make doctor` | The on-demand read-only view, including drift without pushing |
@@ -322,11 +323,27 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
 `MacMini Dev Host - Push` is the composite over **20 components**: tailscale,
 sshd, herdr, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (9), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways, overview
-pane, jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). Push, not probe (no ACL grant runs
-`tag:homelab → tag:mac`) — full rationale, transient-tolerance knobs, and the
+services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways, overview
+pane, jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
+the jobs push, no ACL grant runs `tag:homelab → tag:mac`; service health is the
+exception, pulled through the Kuma door (below) — full rationale, transient-tolerance knobs, and the
 paired `make mini-macos-update` applier: `docs/devhost-health.md`,
 [[mac-host-monitoring]].
+
+**Kuma door** (`kuma-door/`, `com.jkrumm.kuma-door`, `127.0.0.1:8795`) — the one
+tailnet port through which the homelab's Uptime Kuma pulls the mini's service
+health. `GET /h/<name>` relays the loopback URL that `kuma-door/registry.json`
+maps to `<name>` and returns the upstream status with a body capped at 4 KiB;
+GET/HEAD only, nothing from the request reaches the upstream. Reachable by
+`tag:homelab` only (ACL grant + `tailscale serve` row, both in dotfiles-private).
+- **Add a service:** edit `registry.json` (`name`, loopback `url`, Kuma `title`),
+  then `make kuma-door-restart kuma-door-gen`; commit the generated
+  `homelab/uptime-kuma/monitors.mini-door.generated.yaml` and run homelab's
+  `sync.py --extra-config`. Monitors are generated, never hand-edited.
+- `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` / `-test`;
+  `-check` proves the door, the serve row and that the generated file is current.
+- Push stays for jobs and the composite — the door carries service health only.
+  Door liveness is a `services` component of the heartbeat (`/healthz`).
 
 ## Collie — the phone control surface
 

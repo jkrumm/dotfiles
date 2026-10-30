@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.kuma-door</string>
+  <!-- The Kuma door: GET /h/NAME on 127.0.0.1:8795 relays the health URL registered in
+       kuma-door/registry.json. `tailscale serve` publishes the port to tag:homelab. See
+       kuma-door/door.ts and AGENTS.md "Kuma door". -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/kuma-door/door.ts</string>
+  </array>
+  <!-- Plain `true` (not a SuccessfulExit dict): make doctor grades a KeepAlive job that is down. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- The shebang is `env bun`: bun's dir must be on launchd's minimal PATH. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/kuma-door.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/kuma-door.err.log</string>
+</dict>
+</plist>

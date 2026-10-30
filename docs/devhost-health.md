@@ -22,7 +22,7 @@ components:
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | agent-workflows host (`/health`: 200 `ok`, 503 `degraded` names the reason), agent-workflows audio process (`:7792/health`, unauthenticated; FAILs when its `version` differs from the host's), hermes gateway, colima, caddy, dnsmasq, brain-web (`:7733/`), walkingpad (`:7706/status`) — each gated on its plist |
+| services | agent-workflows host (`/health`: 200 `ok`, 503 `degraded` names the reason), agent-workflows audio process (`:7792/health`, unauthenticated; FAILs when its `version` differs from the host's), hermes gateway, colima, caddy, dnsmasq, brain-web (`:7733/`), walkingpad (`:7706/status`), the Kuma door (`:8795/healthz`) — each gated on its plist |
 | claude auth | keychain credential, then the token fallback |
 | claude version | `claude --version` matches the last version `make claude-accounts-verify` verified — **WARN** when unverified |
 | AGENTS.md flag | the cached GrowthBook flag `tengu_agents_md_mod` in `~/.claude.json` is true (else Claude Code may not load AGENTS.md) — **WARN** |
@@ -49,9 +49,20 @@ array under `set -u`, which is why checks accumulate into newline-delimited
 strings. A `brew install bash` would make the interactive run silently start
 accepting constructs launchd will fail on.
 
-**Push, not probe.** The ACL grants `tag:homelab → tag:vps` but *not*
-`tag:homelab → tag:mac`, so Kuma cannot reach the mini, and an inbound grant just
-for monitoring would be new attack surface for a check the mini can run itself.
+**Push for the composite and the jobs, pull for service health.** The ACL grants
+`tag:homelab → tag:vps` but *not* `tag:homelab → tag:mac`, so Kuma cannot reach
+the mini in general, and an open inbound grant would be new attack surface for
+checks the mini can run itself. The composite and every job therefore still push.
+Service health is the one exception: Kuma pulls it through the **Kuma door**
+(`kuma-door/`, `127.0.0.1:8795`), a single narrow grant `tag:homelab →
+tag:devhost` on `tcp:8795` plus a `tailscale serve` row for `8795` (both in
+dotfiles-private). The door is GET-only and relays only the loopback URLs listed
+in `kuma-door/registry.json` as `GET /h/<name>` — status code through, body capped
+at 4 KiB, no part of the request forwarded — so the grant exposes health answers,
+not the services. Kuma's monitors are generated from the same registry
+(`make kuma-door-gen`), so a service is added in one place. The door's own
+liveness (`/healthz`) is graded by the `services` component, so a dead door pages
+from the push side even though Kuma sees it as every service down at once.
 
 **One monitor, not thirteen.** tailscale/sshd/herdr fail together when the mini
 sleeps or drops off the tailnet, so separate monitors would be simultaneous pages

@@ -131,6 +131,7 @@ AGENT_WORKFLOWS_AUDIO_URL="${AGENT_WORKFLOWS_AUDIO_URL:-http://127.0.0.1:7792}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
+KUMA_DOOR_URL="${KUMA_DOOR_URL:-http://127.0.0.1:8795}"
 PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
@@ -869,6 +870,7 @@ caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_pli
 dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected_plist dnsmasq system)|probe_dnsmasq
 brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
 walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad
+kuma-door|$HOME/Library/LaunchAgents/com.jkrumm.kuma-door.plist|probe_kuma_door
 postgres|$HOME/Library/LaunchAgents/com.jkrumm.vps-pg-backup.plist|probe_postgres"
 
 probe_agent_workflows() {
@@ -1020,6 +1022,14 @@ probe_walkingpad() {
   local code
   code=$(http_code "$WALKINGPAD_URL/status")
   [[ "$code" == "200" ]] || { echo "walkingpad not answering on $WALKINGPAD_URL (got ${code:-000})"; return 1; }
+}
+
+probe_kuma_door() {
+  # The door's own liveness, not an upstream's: Kuma pulls each service through it, so a dead
+  # door reads there as every service down at once. /healthz never touches an upstream.
+  local code
+  code=$(http_code "$KUMA_DOOR_URL/healthz")
+  [[ "$code" == "200" ]] || { echo "kuma-door not answering on $KUMA_DOOR_URL (got ${code:-000})"; return 1; }
 }
 
 probe_postgres() {

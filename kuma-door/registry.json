@@ -1,0 +1,10 @@
+{
+  "port": 8795,
+  "services": [
+    { "name": "argo", "url": "http://127.0.0.1:7737/api/health", "title": "Argo" },
+    { "name": "agw-host", "url": "http://127.0.0.1:7791/health", "title": "Agent Workflows Host" },
+    { "name": "agw-audio", "url": "http://127.0.0.1:7792/health", "title": "Agent Workflows Audio" },
+    { "name": "brain-web", "url": "http://127.0.0.1:7733/", "title": "Brain Web" },
+    { "name": "walkingpad", "url": "http://127.0.0.1:7706/status", "title": "WalkingPad" }
+  ]
+}

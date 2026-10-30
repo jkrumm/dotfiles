@@ -790,7 +790,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2508,6 +2508,70 @@ herdr-reap-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-reap.json"; \
 	echo "  ✓ herdr-reap torn down (unloaded, plist and jobrun state removed)"
 
+# The Kuma door (kuma-door/): one tailnet port (8795) through which the homelab's Uptime Kuma pulls
+# the mini's service health — GET /h/<name> relays the loopback URL registered in
+# kuma-door/registry.json. Dev host only. The ACL grant (tag:homelab -> tag:devhost, tcp:8795) and
+# the tailscale-serve row live in dotfiles-private; the Kuma monitors are generated from the same
+# registry (`make kuma-door-gen`, then sync.py --extra-config on the homelab).
+KUMA_DOOR_LABEL      := com.jkrumm.kuma-door
+KUMA_DOOR_GENERATED  ?= $(HOME)/SourceRoot/homelab/uptime-kuma/monitors.mini-door.generated.yaml
+
+.PHONY: kuma-door-test kuma-door-setup kuma-door-restart kuma-door-teardown kuma-door-gen kuma-door-check
+kuma-door-test: ## bun test for the Kuma door (door, registry validation, generator)
+	@bun test $(DOTFILES_DIR)/kuma-door/
+# setup reloads the job (bootout, then bootstrap): launchd keeps the definition from the first load,
+# so a changed plist only applies after a reload.
+kuma-door-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — kuma-door skipped"; exit 0; fi; \
+	bun -e 'import("$(DOTFILES_DIR)/kuma-door/registry").then((m) => m.loadRegistry())' || { echo "  ✗ kuma-door/registry.json is invalid"; exit 1; }; \
+	chmod +x "$(DOTFILES_DIR)/kuma-door/door.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="$(KUMA_DOOR_LABEL)" PLIST_DIR="$(DOTFILES_DIR)/kuma-door" || exit 1; \
+	launchctl bootout "gui/$$(id -u)/$(KUMA_DOOR_LABEL)" 2>/dev/null || true; \
+	i=0; while launchctl print "gui/$$(id -u)/$(KUMA_DOOR_LABEL)" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -gt 40 ] && { echo "  ✗ old kuma-door job never went away"; exit 1; }; \
+		sleep 0.25; \
+	done; \
+	launchctl bootstrap "gui/$$(id -u)" "$(LAUNCHAGENTS)/$(KUMA_DOOR_LABEL).plist" \
+		|| { echo "  ✗ bootstrap failed"; exit 1; }; \
+	echo "    ↳ KeepAlive → 127.0.0.1:$$(bun -e 'import("$(DOTFILES_DIR)/kuma-door/registry").then((m) => console.log(m.loadRegistry().port))'); logs: ~/Library/Logs/kuma-door.{out,err}.log"
+kuma-door-restart:
+	@bun -e 'import("$(DOTFILES_DIR)/kuma-door/registry").then((m) => m.loadRegistry())' || { echo "  ✗ kuma-door/registry.json is invalid — not restarting, the running door keeps serving"; exit 1; }
+	@launchctl kickstart -k "gui/$$(id -u)/$(KUMA_DOOR_LABEL)" \
+		&& echo "  ✓ kuma-door restarted (registry re-read)" \
+		|| { echo "  ✗ kuma-door is not loaded — run: make kuma-door-setup"; exit 1; }
+kuma-door-teardown:
+	@PLIST="$(LAUNCHAGENTS)/$(KUMA_DOOR_LABEL).plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
+	echo "  ✓ kuma-door torn down (unloaded, plist removed)"
+kuma-door-gen:
+	@if [ ! -d "$$(dirname "$(KUMA_DOOR_GENERATED)")" ]; then \
+		echo "  ✗ $$(dirname "$(KUMA_DOOR_GENERATED)") not found — is the homelab repo cloned?"; exit 1; fi
+	@bun $(DOTFILES_DIR)/kuma-door/gen.ts --out "$(KUMA_DOOR_GENERATED)" \
+		&& echo "  ✓ wrote $(KUMA_DOOR_GENERATED) — commit it in the homelab repo, then sync.py --extra-config"
+kuma-door-check:
+	@FAIL=0; \
+	ok()  { echo "  ✓ $$1"; }; \
+	bad() { echo "  ✗ $$1"; FAIL=1; }; \
+	REG=$$(bun -e 'import("$(DOTFILES_DIR)/kuma-door/registry").then((m) => { const r = m.loadRegistry(); console.log(r.port + " " + r.services[0].name) })' 2>&1) \
+		&& ok "registry valid" || { bad "registry invalid: $$REG"; exit 1; }; \
+	PORT=$${REG%% *}; NAME=$${REG#* }; BASE="http://127.0.0.1:$$PORT"; \
+	code() { curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$$@" 2>/dev/null || true; }; \
+	[ "$$(code "$$BASE/healthz")" = "200" ] && ok "door answers $$BASE/healthz" || bad "door not answering $$BASE/healthz (make kuma-door-setup)"; \
+	[ "$$(code "$$BASE/h/$$NAME")" = "200" ] && ok "GET /h/$$NAME -> 200" || bad "GET /h/$$NAME did not return 200"; \
+	[ "$$(code -X POST "$$BASE/h/$$NAME")" = "405" ] && ok "POST -> 405" || bad "POST did not return 405"; \
+	[ "$$(code "$$BASE/h/no-such-service")" = "404" ] && ok "unknown name -> 404" || bad "unknown name did not return 404"; \
+	SERVE="$(SECRETS_PRIVATE_REPO)/tailscale-serve.mini.conf"; \
+	if [ ! -f "$$SERVE" ]; then echo "  - SKIP serve row ($(SECRETS_PRIVATE_REPO) absent)"; \
+	elif awk -v p="$$PORT" '!/^#/ && $$1 == p { found = 1 } END { exit !found }' "$$SERVE"; then ok "tailscale-serve row for :$$PORT present"; \
+	else bad "no tailscale-serve row for :$$PORT in $$SERVE"; fi; \
+	if [ ! -d "$$(dirname "$(KUMA_DOOR_GENERATED)")" ]; then echo "  - SKIP generated file (homelab repo absent)"; \
+	elif bun $(DOTFILES_DIR)/kuma-door/gen.ts --check "$(KUMA_DOOR_GENERATED)" 2>/dev/null; then ok "generated monitors match the registry"; \
+	else bad "generated monitors differ or are missing — run: make kuma-door-gen"; fi; \
+	exit $$FAIL
+
 # Order caddy's boot behind the tailnet address it binds. NEEDS SUDO — caddy is
 # a SYSTEM LaunchDaemon in /Library, so this cannot run unattended on the mini
 # (the root password is deliberately MacBook-only). Drive it from the MacBook:
@@ -3559,6 +3623,7 @@ help:
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make herdr-events-setup         Dev-host only: load the herdr event recorder (-status / -teardown)"
 	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min herdr janitor (-teardown); run once: rd reap [--dry-run]"
+	@echo "  make kuma-door-setup           Dev-host only: load the Kuma door (:8795, KeepAlive); -restart / -teardown / -gen (monitors for homelab) / -check / -test"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
 	@echo "  make drift-check-setup          Dev-host only: load the daily 09:40 upstream-drift agent → Uptime Kuma"
