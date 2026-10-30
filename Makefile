@@ -2274,14 +2274,16 @@ opbackup-seed-test:
 # supervise/status/restart targets read and rewrite, so a bug here disarms a boot
 # path silently — the exact failure the resolver exists to end. Hermetic: it
 # drives the lib over a scratch dir and never touches a live LaunchAgent.
-# Hermetic suites for the rd fan / rd merge / rd wave / rd say host scripts (base-from-origin, worktree verdicts, train install + draft handling, agent-name collisions, say delivery verification).
+# Hermetic suites for the rd fan / rd merge / rd wave / rd say host scripts (base-from-origin, worktree verdicts, train install + draft handling, agent-name collisions, say delivery verification) and the factory hooks in settings.template.json.
 .PHONY: fan-test
 fan-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh $(DOTFILES_DIR)/scripts/merge-train.test.sh $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh $(DOTFILES_DIR)/scripts/merge-train.test.sh $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/merge-train.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh
+	@/bin/bash
+	@/bin/bash $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 
 # Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
 .PHONY: claude-launcher-test

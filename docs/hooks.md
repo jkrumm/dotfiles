@@ -35,6 +35,25 @@ herdr's own state reporter:
 | `machine-role.ts` | SessionStart | injects this machine's secrets backend + outbound-access routing |
 | `herdr-agent-state.sh` | SessionStart (`*`) | reports agent state to herdr; guarded, so it no-ops where herdr's integration was never installed |
 
+### Software-factory hooks
+
+Six events call the `factory` CLI (software-factory repo) for sessions `rd` spawned: `SessionStart`,
+`UserPromptSubmit`, `Stop`, `StopFailure` (matcher `rate_limit`), `Notification` (matchers `permission_prompt`,
+`idle_prompt`, `quota_auto_resume_fired|stale|disabled`) and `SessionEnd`. Each runs
+
+```sh
+[ -n "$FACTORY_SESSION" ] && command -v factory >/dev/null && factory hook <event>; exit 0
+```
+
+with `<event>` = `session-start`, `user-prompt-submit`, `stop`, `stop-failure`, `notification`, `session-end`.
+`rd wave|fan|work` set `FACTORY_SESSION=<agent name>` at spawn (`docs/remote-dev.md`), so without it nothing runs and
+the owner's own sessions never see the hooks; without `factory` on `PATH`, or when it fails, the command still
+exits 0, so a session is never blocked. They live in the template's `hooks`, which `make setup` renders into
+`~/.claude` and into every account dir in `config/claude-accounts.json` (`claude-accounts-setup` →
+`_render-settings`). The template wins on merge, so a hand-added live hook is dropped on the next `make setup`.
+`factory hook` must print nothing to stdout on `SessionStart` and `UserPromptSubmit` (stdout becomes context).
+Tests: `scripts/factory-hooks.test.sh` (in `make fan-test`).
+
 Run `make hooks-test` (`bun test hooks/`) after any hook edit.
 
 ## Debug Logs
