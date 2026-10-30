@@ -201,6 +201,11 @@ carries the pick reason. No Claude account with room pauses the spawn (`rd` refu
 `--kind opencode` is rejected). `rd agents` / `rd read` merge `claude agents --json` across every
 enabled account.
 
+**Factory session key.** `rd work`, `rd wave` and `rd fan` also pass `--env FACTORY_SESSION=<agent name>` at
+tab/workspace creation (`factory_env` in `scripts/remote-dev.sh`; the name is the herdr agent name the pane
+gets, e.g. `myrepo-w4`). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
+only when it is set, so the owner's own sessions never report. Covered by `scripts/remote-dev-factory-env.test.sh`.
+
 ## Dev-server doors
 
 **`config/Caddyfile` is the single app registry.** Every

@@ -102,6 +102,12 @@ agent_name() {
   printf %s "${s:0:32}"
 }
 
+# The factory's session key (software-factory docs/design.md §3): the pane is born with
+# FACTORY_SESSION=<agent name>, so the account-wide Claude hooks (config/settings.template.json) report
+# for rd-spawned sessions and stay silent for every other one. Same spawn-time `--env` path as PICK_ENV.
+# $1 = the herdr agent name; agent names are [a-z0-9_-], so no quoting beyond the single quotes.
+factory_env() { printf %s "--env FACTORY_SESSION='$1'"; }
+
 # --- herdr agent resolution ---------------------------------------------------
 #
 # Three states have to stay distinguishable from the error text alone, because
@@ -382,7 +388,7 @@ cmd_work() {
   [[ -n $agent ]] || die "'$name' has no usable herdr agent name — rename the repo or start it by hand"
 
   local pane
-  pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus" \
+  pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $(factory_env "$agent")" \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
   [[ -n $pane ]] || die "herdr workspace create failed for $path"
 
@@ -723,10 +729,10 @@ for a in agents:
   local created json pane tab
   if [[ -n $ws ]]; then
     created=tab
-    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus $PICK_ENV")
+    json=$(host_run "herdr tab create --workspace '$ws' --cwd '$path' --label 'wave $wnum' --no-focus $PICK_ENV $(factory_env "$agent")")
   else
     created=workspace
-    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $PICK_ENV")
+    json=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent")")
   fi
   pane=$(printf '%s' "$json" | python3 -c \
     "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -848,21 +854,23 @@ for w in workspaces:
     host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" --mark '$path' '$wt'" >/dev/null 2>&1 \
       || note "   could not mark $wt as fan-made — 'rd fan --clean $name' will keep it"
 
-    tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
-    if [[ -n $ws ]]; then
-      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus $PICK_ENV")
-    else
-      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus $PICK_ENV")
-      ws=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['workspace']['workspace_id'])" 2>/dev/null)
-    fi
-    pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
-    [[ -n $pane ]] || die "herdr tab create failed for $wt: $json (worktree kept — 'rd fan --clean $name' reclaims it)"
-
+    # The agent name is fixed before the tab exists: FACTORY_SESSION rides the create call.
     local leaf plen
     leaf=$(agent_name "${branch##*/}"); leaf=${leaf:0:20}
     plen=$((31 - ${#leaf})); (( plen < 1 )) && plen=1
     agent="$(agent_name "$name")"
     agent="${agent:0:$plen}-${leaf}"
+
+    tabname="fan ${branch##*/}"; tabname=${tabname:0:30}
+    if [[ -n $ws ]]; then
+      json=$(host_run "herdr tab create --workspace '$ws' --cwd '$wt' --label '$tabname' --no-focus $PICK_ENV $(factory_env "$agent")")
+    else
+      json=$(host_run "herdr workspace create --cwd '$wt' --label '$name' --no-focus $PICK_ENV $(factory_env "$agent")")
+      ws=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['workspace']['workspace_id'])" 2>/dev/null)
+    fi
+    pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
+    [[ -n $pane ]] || die "herdr tab create failed for $wt: $json (worktree kept — 'rd fan --clean $name' reclaims it)"
+
     local model start_cmd effort i=0 started=""
     model="${RD_WAVE_MODEL:-sonnet}"
     effort=$(rd_effort_flag "$model") || exit 1
