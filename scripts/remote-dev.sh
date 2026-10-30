@@ -197,7 +197,7 @@ FACTORY_UP=""
 factory_host() { # <secs> <args…>
   local secs=$1 args="" a; shift
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs factory$args </dev/null"
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs ${FACTORY_NO_PARENT:+env -u FACTORY_SESSION }factory$args </dev/null"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
@@ -928,8 +928,11 @@ for a in agents:
   if (( use_factory )); then
     [[ -z ${RD_WAVE_MODEL:-}${RD_WAVE_EFFORT:-} ]] \
       || echo "rd: RD_WAVE_MODEL / RD_WAVE_EFFORT do not reach a factory spawn - the role table decides" >&2
-    local frc=0
-    factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" || frc=$?
+    # A chain wave's successor is not its worker: with the caller as parent, the send-back would hold the finishing
+    # wave's Stop until its successor ends. Orchestrated waves are the orchestrator's workers and keep the parent.
+    local frc=0 no_parent=1
+    [[ ${RD_ORCHESTRATED:-} == 1 ]] && no_parent=""
+    FACTORY_NO_PARENT=$no_parent factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" || frc=$?
     case $frc in
       0) factory_spawn_report "wave $wnum" "$agent" "$path" "$path"; return 0 ;;
       1) die "factory spawn '$agent' failed: $FSPAWN_ERR" ;;

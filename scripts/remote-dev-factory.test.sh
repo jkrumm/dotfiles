@@ -63,6 +63,7 @@ if [ "$1" = health ]; then
   exit "$(cat "$STATE/health-rc" 2>/dev/null || echo 0)"
 fi
 echo "$*" >>"$STATE/factory-calls"
+[ "$1 $2" = "spawn create" ] && echo "parent-env=${FACTORY_SESSION-unset}" >>"$STATE/factory-calls"
 case "$1 $2" in
   "role get") printf '{"role":"%s","tier":"sonnet","effort":"high"}\n' "$3" ;;
   "spawn create") cat "$STATE/create-reply" 2>/dev/null || echo '{"error":{"kind":"internal","message":"boom"}}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
@@ -239,6 +240,14 @@ rd wave myrepo "adhoc task"
 is "factory not installed: exit 0" "$rc" "0"
 herdr_spawned "factory not installed: herdr path"
 mv "$TMP/factory.away" "$TMP/home/.local/bin/factory"
+
+echo "wave: a chain wave's successor has no parent, an orchestrated one has the caller"
+reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
+FACTORY_SESSION=lead-1 rd wave myrepo "adhoc task"
+has "chain: created without FACTORY_SESSION" "$fcalls" "parent-env=unset"
+reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
+FACTORY_SESSION=lead-1 RD_ORCHESTRATED=1 rd wave myrepo "adhoc task"
+has "orchestrated: the caller is the parent" "$fcalls" "parent-env=lead-1"
 
 # --- fan ----------------------------------------------------------------------------------------------
 echo "fan: the factory answers"
