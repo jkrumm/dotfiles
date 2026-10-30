@@ -65,7 +65,7 @@ fi
 echo "$*" >>"$STATE/factory-calls"
 case "$1 $2" in
   "role get") printf '{"role":"%s","tier":"sonnet","effort":"high"}\n' "$3" ;;
-  "spawn create") echo '{}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
+  "spawn create") cat "$STATE/create-reply" 2>/dev/null || echo '{"error":{"kind":"internal","message":"boom"}}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
   "spawn get")
     [ -f "$STATE/get-rc" ] && exit "$(cat "$STATE/get-rc")"
     f="$STATE/get-$3"; [ -f "$f" ] || f="$STATE/get-default"
@@ -158,30 +158,34 @@ has "FACTORY_ROLE in the pane's env" "$hcalls" "--env FACTORY_ROLE=wave"
 has "FACTORY_SESSION in the pane's env" "$hcalls" "--env FACTORY_SESSION=myrepo-w1"
 
 echo "wave: create times out but the factory recorded it"
-reset; echo 124 >"$STATE/create-rc"; reply default '{"state":"started","pane":"w1:3"}'
+reset; echo 124 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"state":"started","pane":"w1:3"}'
 rd wave myrepo "adhoc task"
 has "carries on to the started spawn" "$out" "pane w1:3"
 no_herdr_spawn "no herdr fallback"
-reset; echo 124 >"$STATE/create-rc"
+reset; echo 124 >"$STATE/create-rc"; : >"$STATE/create-reply"
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "timeout, spawn not visible yet: uncertain, error" || bad "exit 0: $out"
 no_herdr_spawn "no herdr pane while the create may still be in flight"
-reset; echo 255 >"$STATE/create-rc"; reply default '{"state":"claimed"}'
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"
+rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "dropped hop, spawn not visible yet: uncertain, error" || bad "exit 0: $out"
+no_herdr_spawn "no herdr pane while the create may still be in flight"
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"state":"claimed"}'
 RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
 has "a dropped hop after the spawn was recorded is followed" "$out" "claimed by the factory"
 no_herdr_spawn "no second pane under the same name"
-reset; echo 255 >"$STATE/create-rc"; echo 1 >"$STATE/get-rc"
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; echo 1 >"$STATE/get-rc"
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "create failed and get will not say, factory still healthy: error" || bad "exit 0: $out"
 has "says it will not start a second pane" "$out" "not starting a second pane under that name"
 no_herdr_spawn "no herdr pane"
-reset; echo 255 >"$STATE/create-rc"; echo 1 >"$STATE/get-rc"; touch "$STATE/health-dies-after-create"
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; echo 1 >"$STATE/get-rc"; touch "$STATE/health-dies-after-create"
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "create failed and the factory is unreachable now: error, not a guess" || bad "exit 0: $out"
 no_herdr_spawn "no herdr pane (the spawn may be recorded)"
-reset; echo 1 >"$STATE/create-rc"; echo '{"error":{"kind":"internal","message":"config not found"}}' >"$STATE/get-default"
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; echo '{"error":{"kind":"internal","message":"config not found"}}' >"$STATE/get-default"
 rd wave myrepo "adhoc task"
-[ "$rc" -ne 0 ] && ok "an unrelated 'not found' is no answer about the spawn: error" || bad "exit 0: $out"
+[ "$rc" -ne 0 ] && ok "no answer to create and an unrelated error from get: error" || bad "exit 0: $out"
 no_herdr_spawn "no herdr pane"
 
 echo "wave: not answering -> today's path, FACTORY_ROLE added"
