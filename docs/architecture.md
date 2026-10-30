@@ -34,32 +34,23 @@ older doc on that topic. This map only places its parts on machines.
 
 ## Diagrams
 
-Three validated artifacts in `docs/diagrams/`, each one self-contained HTML: open
-the file, no server. They carry pan/zoom, search, relationship tracing and their
-own image export, so a screenshot is never the way to share one.
+One validated artifact in `docs/diagrams/`: a self-contained HTML — open the
+file, no server. It carries pan/zoom, search, relationship tracing and its own
+image export, so a screenshot is never the way to share it.
 
 | File | The question it answers |
 |-|-|
-| `estate.html` | Where does everything sit, and what talks to what — the mental model above, drawn. |
-| `agent-platform.html` | How the agent platform fits together: sources, front doors, the engine, the lanes, the repo contract. Spec: `agent-platform.md`. |
 | `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a service reload that detaches the session, and the re-attach by state on the next boot. |
-| `dispatch-path.html` | What happens between a Slack message and committed work, including the two ways it stops. |
 
-All are compiled from the `.json` beside them with the vendored `archify`
-skill, which validates geometry and composition before it will deliver: an
-arrow through a box or a label over a node fails the build. Regenerate with
+Compiled from the `.json` beside it with the vendored `archify` skill, which
+validates geometry and composition before it will deliver: an arrow through a
+box or a label over a node fails the build. Regenerate with
 `node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html>
---quality showcase`. Both specs carry `quality_profile: showcase`.
-`dispatch-path.html` delivers clean. The estate diagram's readability failure
-was fixed by narrowing `viewBox` from 3000 to 930 (the desktop-reader legibility
-budget caps out at 930px of usable width, and anything under it scores full
-marks regardless of sublabel length) and reflowing the five regions into
-vertical bands instead of one wide row. One open item remains:
-`composition/proper-crossing` between `devhost → kuma` and `argoapi → otel` —
-both must route through the same 40px gap between adjacent VPS nodes, and no
-corridor assignment found so far clears one without re-crossing the other, so
-`deliver` still declines and `estate.html` is regenerated with `render`
-instead — same validated geometry, without that one crossing guarantee.
+--quality showcase`.
+
+The estate, agent-platform and dispatch-path diagrams described the warden-era
+platform and are archived in `docs/archive/diagrams/`; the text above and
+[`agent-platform.md`](agent-platform.md) are the current map.
 
 ## Repos
 
