@@ -9,10 +9,10 @@ Input: the setup audit of 2026-10-30, findings quoted per step below.
 **Gate:** `make check` in every repo a wave touched, `make doctor` on the mini, both green; `/review` on the
 non-doc changes; `rg` for the retired names (step list in Wave 2) returns only legitimately historical hits.
 
-## Wave 1 — Headless claude out, docs true            <!-- status: active -->
+## Wave 1 — Headless claude out, docs true            <!-- status: done -->
 Workers: Sonnet; Haiku subagents for the mechanical doc edits. Orchestrated: do NOT spawn Wave 2.
 
-- [ ] **No `claude -p`.** Replace every live caller:
+- [x] **No `claude -p`.** Replace every live caller:
   - `brain/brain-backup.sh:145` and `brain/brain-sync.sh:377` write commit messages with `claude -p --model haiku`.
     Use an existing `agw` capability if one fits (check `agw --help`); otherwise a deterministic message from
     the diff (files and counts). A hang can no longer hold the brain-sync lock.
@@ -25,32 +25,51 @@ Workers: Sonnet; Haiku subagents for the mechanical doc edits. Orchestrated: do 
   - Two kept on purpose, documented as the only exceptions: `scripts/claude-accounts-e2e.sh` (it tests the
     launchers themselves, a few Haiku tokens per account) and modelpick's bench (it measures the Claude Code
     harness). Write both into `docs/agent-platform.md` as "the only headless runs".
-- [ ] **`docs/agent-platform.md` describes what runs:** `:28` ("designed … not built") is wrong, it is built;
+- [x] **`docs/agent-platform.md` describes what runs:** `:28` ("designed … not built") is wrong, it is built;
   delete the "Agent-Gateway — the engine" section (`:94-107`) and point at `agw routes`; `:74` engine is
   Claude Code only (`--kind opencode` is rejected); `:41` drop the warden-era diagram link.
-- [ ] **Diagrams:** `docs/diagrams/{agent-platform,estate}.architecture.json` and `dispatch-path.sequence.json`
+- [x] **Diagrams:** `docs/diagrams/{agent-platform,estate}.architecture.json` and `dispatch-path.sequence.json`
   (and their HTML) are warden-era: move to `docs/archive/diagrams/`, and stop `docs/architecture.md:43-46`
   presenting them as current. Same for `jkrumm.com/public/diagrams/agent-platform.html` only if jkrumm.com links
   it as current (check; it is a public site, so a removal is a jkrumm.com commit of its own).
-- [ ] **Smaller truths:** `skills/otel/SKILL.md:153` service names are `agw` and `agw-audio`, not
+- [x] **Smaller truths:** `skills/otel/SKILL.md:153` service names are `agw` and `agw-audio`, not
   `audio-gateway`; `docs/opencode.md:76` (chrome-devtools is wired); `rules/research-first.md:12` and
   `agents/implementer.md:32-33` (Context7 → `agw web docs`); `skills/prose/SKILL.md:3` ("agw lint" is not a
   command); `config/settings.template.json:5` drop `MCP_TOOL_TIMEOUT` (it served research-gateway's MCP);
   `config/global.CLAUDE.md:88` and `config/zsh/claude.zsh:175` "IU tokens are for gateways" → for `agw`,
   OpenCode and Hermes; `docs/global-reference.md:42-48` lists `/router`, and `/podcast` and `/img` as agw-backed;
   archive `docs/waves/claude-accounts-handover.md`.
-- [ ] **Stale comments** (Haiku): `scripts/lib/launchd-restarts.sh:23-27,92-95`, `scripts/herdr-groups.py:35`,
+- [x] **Stale comments** (Haiku): `scripts/lib/launchd-restarts.sh:23-27,92-95`, `scripts/herdr-groups.py:35`,
   `scripts/fetch_usage.py:267`, `scripts/human-queue-notify-hook.sh:8`, `scripts/drift-check.sh:21`,
   `scripts/disk-sweep.sh:9,104` (check whether `~/.opencodereview/sessions` is still written; drop the step if
   not), `config/Caddyfile:221-223` (iris binds 7730), `config/gitignore_global:5`,
   `.claude/skills/iu-endpoint/models.txt:10`, the LaunchAgent plist comments (`jobrun-canary`,
   `modelpick-refresh`, `usage-tracker`, `weatherorb.retention`, `weatherorb.verify`: fix the templates and
   re-render), `scripts/claude-account.test.ts` agent-gateway lane fixtures if those lanes no longer exist.
-- [ ] Run `make setup`/the relevant install target so `~/.claude` matches the template, then the gate.
+- [x] Run `make setup`/the relevant install target so `~/.claude` matches the template, then the gate.
 
 **Left behind:**
+Commits `4f69ef4`..`915bf0a` on dotfiles master (pushed); one `docs:` commit each in modelpick, weatherorb, usage-tracker.
+`make check` and `make doctor`: green except two failures that fail identically on clean `ebed695`, unrelated to this wave:
+`architecture-check` (loaded `com.iu.athena-postgres` unmapped; `docs/architecture.md` rows `com.iu.teamchat-*` absent on the mini)
+and `drift-check` (collie pin, tailscale daemon). `/review`: clean, 5 improvements, 3 applied (SIGPIPE-safe `AREAS`, `T` in the
+modified count, a wildcard home-lane test), 2 not (duplicated message builder stays duplicated on purpose; settings note below).
+- `claude -p` is gone from every live caller. Brain commit messages are `chore(brain): … (+A ~M -D rN; areas)` from the diff.
+  `claude_iu` is removed; `claude-accounts-verify` now FAILs if it (or `ca cap cdf cdp`) comes back. `hooks/iu-model-guard.ts` stays:
+  it is the backstop for any hand-rolled IU runner (no launcher sets IU any more). `/analyze` now costs Sonnet on Max, not IU Haiku.
+- Two headless exceptions written into `docs/agent-platform.md` (§No headless claude).
+- **Not done, for the orchestrator:**
+  - `jkrumm.com` embeds `public/diagrams/agent-platform.html` in the Agent Infrastructure guide as current, and its `make diagrams` copies
+    from `dotfiles/docs/diagrams/agent-platform.html` (now archived: path breaks). Untouched: the guide text is the owner's call.
+  - `modelpick/src/db/deployments.ts` `analyze` slot still says "via claude_iu", `SKILL.md:127`; update with the registry's next snapshot.
+  - The plan's plist re-render was skipped: the five fixes were comment-only in templates of other repos (committed there), and
+    `plist.template` for `jobrun-canary` was already true; `weatherorb.retention/verify` are not templates. Re-render on next install.
+  - `settings.template.json` `_NOTE` and `claude.zsh` `oc` comment still mention `ca`; `weatherorb/ops/clickstack/sync.py` has `warden:skip`;
+    `docs/diagrams/episode-lifecycle.*` mentions dispatch once. All for Wave 2's final `rg` sweep.
+  - `~/.claude` and every extra account dir got the new `settings.json` (`make _setup-settings`, `claude-accounts-setup`).
 
-## Wave 2 — Other repos and the disk            <!-- status: pending -->
+
+## Wave 2 — Other repos and the disk            <!-- status: active -->
 Workers: Sonnet; Haiku for the sweeps. Orchestrated.
 
 - [ ] **hermes-agent:** `skills/verify/references/agent-claim-verification.md:111` and
