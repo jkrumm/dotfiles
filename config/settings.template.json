@@ -59,6 +59,15 @@
         ]
       },
       {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/web-fetch-route.ts"
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {

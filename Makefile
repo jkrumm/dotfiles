@@ -1164,6 +1164,9 @@ _setup-hooks:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/iu-model-guard.ts" \
 		DST="$(CLAUDE_DIR)/hooks/iu-model-guard.ts"
+	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/hooks/web-fetch-route.ts" \
+		DST="$(CLAUDE_DIR)/hooks/web-fetch-route.ts"
 	@# Shared PR-required denylist — read by protect-branches.ts, also drives github-config.sh
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/pr-required-repos.json" \
