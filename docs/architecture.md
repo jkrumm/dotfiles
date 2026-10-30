@@ -166,11 +166,14 @@ the weatherorb session workflow.
 | `com.jkrumm.linewatch-watchdog` | linewatch | KeepAlive |
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
+| `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
+| `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
+| `com.jkrumm.software-factory` | software-factory | KeepAlive (:7793, loopback) — the factory server (`factory` CLI) from a release dir `~/.software-factory/releases/<sha>`, started through its `scripts/launch.sh` (`secrets-run`, fails closed) |
 | `com.jkrumm.vps-pg-backup` | vps | 03:15 daily — mini Postgres to the HomeLab, ends with a restore drill (`vps/docs/mini-postgres.md`) |
 | `com.iu.prometheus-epos-token` | IuRoot (prometheus-scripts) | 300s |
 | `com.iu.prometheus-state-backup` | IuRoot | 3600s |
@@ -179,14 +182,11 @@ the weatherorb session workflow.
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
-| `com.iu.teamchat-mirrors` | IuRoot (chat) | 900s — refreshes the teamchat code mirrors (into ~/.local/share/teamchat/mirrors and the teamchat Colima `repos` volume); installed by `make -C chat mirrors-install` |
+| `com.iu.athena-postgres` | IuRoot (chat) | KeepAlive — Athena's own Postgres 18 for teamchat, Unix socket only (no TCP), data under `~/.local/state/athena`; rendered by `make -C chat pg-setup` |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
 | `com.iu.teamchat-api` | IuRoot (chat) | KeepAlive — `make -C chat api` in the teamchat-runtime worktree |
-| `com.iu.teamchat-backup` | IuRoot (chat) | daily 03:30 — `teamchat-backup/backup.sh` |
 | `com.iu.teamchat-broker` | IuRoot (chat) | KeepAlive — `epx serve run --port 8790` in the teamchat-runtime worktree |
 | `com.iu.teamchat-runtime-deploy` | IuRoot (chat) | 600s — `prometheus-deploy-gate/gate.py` for the teamchat runtime |
-| `com.iu.teamchat-atlassian-jira` | IuRoot (chat) | 900s — `teamchat-atlassian-sync/atlassian-sync.sh jira` |
-| `com.iu.teamchat-atlassian-confluence` | IuRoot (chat) | 7200s — `teamchat-atlassian-sync/atlassian-sync.sh confluence` |
 | `com.iu.teamchat-funnel-reconcile` | IuRoot (chat) | 300s — `chat/scripts/funnel.sh reconcile` in the teamchat-runtime worktree |
 
 Five of the seven IU jobs (`epos-token`, `state-backup`, `conduktor-token`,
