@@ -155,22 +155,29 @@ class FactoryQueue(unittest.TestCase):
         )
 
     def test_drain_refuses_and_names_the_scope(self):
-        self.stub("""echo "$@" >> "$HOME/calls"; echo '{"state":"drain","scope":"project dotfiles"}'""")
+        self.stub("""echo "$@" >> "$HOME/calls"; echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scopes":[]}'""")
         r = self.gate()
         self.assertEqual(r.returncode, 1)
-        self.assertIn("project dotfiles is draining", r.stderr)
+        self.assertIn("project /x/dotfiles is draining", r.stderr)
         self.assertNotIn("no plan file", r.stderr)
         with open(os.path.join(self.tmp.name, "calls")) as f:
             self.assertEqual(f.read().strip(), f"queue get --project {self.repo} --format json")
 
-    def test_drain_without_a_scope_names_the_project(self):
-        self.stub("""echo '{"state":"drain"}'""")
-        self.assertIn(f"project {self.repo} is draining", self.gate().stderr)
+    def test_a_global_drain_names_the_global_scope(self):
+        # the repo's own state is run, but the global scope drains: `effective` is what decides
+        self.stub("""echo '{"scope":{"project":null},"state":"run","effective":"drain","scopes":[{"project":null,"state":"drain"}]}'""")
+        r = self.gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("queue for global is draining", r.stderr)
+
+    def test_the_effective_state_decides_not_the_scopes_own(self):
+        self.stub("""echo '{"scope":{"project":"/p"},"state":"drain","effective":"run"}'""")
+        self.assertIn("no plan file", self.gate().stderr)
 
     def test_run_and_pace_let_the_spawn_through_silently(self):
         for state in ("run", "pace"):
             with self.subTest(state=state):
-                self.stub(f"""echo '{{"state":"{state}"}}'""")
+                self.stub(f"""echo '{{"scope":{{"project":"/p"}},"state":"{state}","effective":"{state}"}}'""")
                 r = self.gate()
                 self.assertIn("no plan file", r.stderr)
                 self.assertNotIn("skipped", r.stderr)
@@ -180,8 +187,9 @@ class FactoryQueue(unittest.TestCase):
             "not installed": None,
             "exits non-zero": "exit 3",
             "garbage": "echo not json",
-            "no state": """echo '{"other":1}'""",
-            "unknown state": """echo '{"state":"melting"}'""",
+            "no effective state": """echo '{"state":"drain"}'""",
+            "unknown state": """echo '{"effective":"melting"}'""",
+            "error object": """echo '{"error":{"kind":"usage"}}'; exit 2""",
         }
         for label, body in cases.items():
             with self.subTest(case=label):

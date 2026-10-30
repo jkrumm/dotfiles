@@ -233,15 +233,18 @@ falls back. `RD_DRY_RUN=1` never probes.
 | `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
 | `close` | tab = the tab of `factory session get <agent>` (pane and tab must match herdr's, else a stale record is refused), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
 
-Spawn outcomes: `started` prints today's line plus `via the factory` and the account; `queued` / `held`
-prints `queued: <reason>` and exits 0 (the factory starts it later; the herdr path dies with "paused");
-`failed` exits non-zero with the reason; `claimed` past the wait exits 0 with "not started yet". A spawn that
+Spawn outcomes, from `factory spawn get` `.status`: `started` (`.pane`, `.tab`, `.workspace` set) prints today's
+line plus `via the factory` and the account; `queued` with `.hold` set (`drain|pace|wave`) prints `queued: <hold>`
+and `waiting` (no capacity) prints `queued: no capacity until <resumeAt>`, both exit 0 (the factory starts it later;
+the herdr path dies with "paused"); a `queued` spawn without a hold is waited on like `starting` (claimed) until the
+wait ends, then reports `queued: not claimed yet`; `failed` exits non-zero with `.error`. An empty or unknown status
+after an answered create is an error. A spawn that
 fails after it exists never falls back to herdr (two sessions on one name). `rd fan` keeps going after a
 failed or queued brief and exits non-zero at the end if any failed. On the factory path the factory picks
 the account and the model: `rd` runs no `claude-account pick`, and `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` do
 not reach the spawn (one stderr line says so). `close` keeps its refusals on both paths (agent working,
 checkout dirty, anything unpushed) and adds one: another agent in the same tab. `wave-gate.py` refuses to
-spawn while `factory queue get --project <repo>` says `drain` and, when the factory does not answer, skips
+spawn while `factory queue get --project <repo>` has `effective` `drain` (the message names `project <path>` or `global`) and, when the factory does not answer, skips
 that check with one stderr line (which `rd wave` passes on). Covered by
 `scripts/remote-dev-factory.test.sh` and `scripts/wave-gate.test.py`.
 

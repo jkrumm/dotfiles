@@ -97,7 +97,7 @@ herdr_spawned() { herdr_created && grep -q '^agent start' <<<"$hcalls" && ok "$1
 
 # --- wave ---------------------------------------------------------------------------------------------
 echo "wave: the factory answers and starts it"
-reset; reply default '{"state":"started","pane":"w1:7","account":"max-b"}'
+reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
 rd wave myrepo "adhoc task"
 is "exit 0" "$rc" "0"
 has "prints today's line: agent" "$out" "claude 'myrepo-w1'"
@@ -111,31 +111,53 @@ rd wave myrepo --role mechanical "adhoc task"
 has "--role rides to the spawn" "$fcalls" "--role mechanical"
 
 echo "wave: claimed first, started later (bounded wait)"
-reset; printf '%s\n' '{"state":"claimed"}' '{"state":"started","pane":"w1:2"}' >"$STATE/get-default"
+reset; printf '%s\n' '{"status":"starting","pane":null}' '{"status":"started","pane":"w1:2","tab":"w1:t2","workspace":"w1"}' >"$STATE/get-default"
 rd wave myrepo "adhoc task"
 has "waited for started" "$out" "pane w1:2"
 is "polled twice" "$(grep -c '^spawn get' <<<"$fcalls")" "2"
 
 echo "wave: held or queued"
-reset; reply default '{"state":"queued","reason":"all accounts at their limit"}'
+reset; reply default '{"status":"queued","hold":"pace","pane":null,"error":null}'
 rd wave myrepo "adhoc task"
 is "exit 0" "$rc" "0"
-has "queued: <reason>" "$out" "queued: all accounts at their limit"
+has "queued: <hold>" "$out" "queued: pace"
 no_herdr_spawn "nothing started by rd"
-reset; reply default '{"state":"held","hold_reason":"queue is draining"}'
+reset; reply default '{"status":"waiting","hold":null,"resumeAt":"2026-10-31T01:00:00Z"}'
 rd wave myrepo "adhoc task"
-is "held: exit 0" "$rc" "0"
-has "held: reason" "$out" "queued: queue is draining"
+is "waiting: exit 0" "$rc" "0"
+has "waiting: no capacity until resumeAt" "$out" "queued: no capacity until 2026-10-31T01:00:00Z"
+no_herdr_spawn "waiting: nothing started by rd"
+reset; reply default '{"status":"waiting","hold":null,"resumeAt":null}'
+rd wave myrepo "adhoc task"
+has "waiting without resumeAt" "$out" "queued: no capacity"
+reset; reply default '{"status":"queued","hold":null}'
+RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
+is "plain queued past the wait: exit 0" "$rc" "0"
+has "plain queued: not claimed yet" "$out" "queued: not claimed yet"
+reset; printf '%s\n' '{"status":"queued","hold":null}' '{"status":"started","pane":"w1:5"}' >"$STATE/get-default"
+rd wave myrepo "adhoc task"
+has "plain queued is waited on until started" "$out" "pane w1:5"
 
 echo "wave: failed"
-reset; reply default '{"state":"failed","reason":"folder trust refused"}'
+reset; reply default '{"status":"failed","error":"folder trust refused"}'
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "non-zero exit" || bad "exit 0 on a failed spawn"
 has "names the reason" "$out" "folder trust refused"
 no_herdr_spawn "no herdr fallback after a failed spawn"
+reset; reply default '{"status":"failed","error":{"kind":"start","message":"herdr refused the tab"}}'
+rd wave myrepo "adhoc task"
+has "an error object: its message" "$out" "herdr refused the tab"
+
+echo "wave: an answered create never falls back, whatever the status is"
+for body in '{}' '{"status":""}' '{"status":null}' '{"status":"melting"}' '{"state":"started","pane":"w1:1"}'; do
+  reset; reply default "$body"
+  RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
+  [ "$rc" -ne 0 ] && ok "get says $body: error" || bad "get says $body: exit 0 ($out)"
+  no_herdr_spawn "get says $body: no herdr pane"
+done
 
 echo "wave: claimed and never started within the wait"
-reset; reply default '{"state":"claimed"}'
+reset; reply default '{"status":"starting"}'
 RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
 is "exit 0 (the factory still owns it)" "$rc" "0"
 has "says not started yet" "$out" "claimed by the factory, not started yet"
@@ -144,7 +166,7 @@ echo "wave: the factory goes silent after create"
 reset; echo 1 >"$STATE/get-rc"
 RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "non-zero exit" || bad "exit 0"
-has "says it stopped answering" "$out" "stopped answering after creating spawn 'myrepo-w1'"
+has "says the factory gave no status" "$out" "gave no status for spawn 'myrepo-w1'"
 no_herdr_spawn "no second spawn through herdr"
 
 echo "wave: create fails -> the herdr path"
@@ -158,7 +180,7 @@ has "FACTORY_ROLE in the pane's env" "$hcalls" "--env FACTORY_ROLE=wave"
 has "FACTORY_SESSION in the pane's env" "$hcalls" "--env FACTORY_SESSION=myrepo-w1"
 
 echo "wave: create times out but the factory recorded it"
-reset; echo 124 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"state":"started","pane":"w1:3"}'
+reset; echo 124 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"status":"started","pane":"w1:3"}'
 rd wave myrepo "adhoc task"
 has "carries on to the started spawn" "$out" "pane w1:3"
 no_herdr_spawn "no herdr fallback"
@@ -170,7 +192,7 @@ reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "dropped hop, spawn not visible yet: uncertain, error" || bad "exit 0: $out"
 no_herdr_spawn "no herdr pane while the create may still be in flight"
-reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"state":"claimed"}'
+reset; echo 255 >"$STATE/create-rc"; : >"$STATE/create-reply"; reply default '{"status":"starting"}'
 RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
 has "a dropped hop after the spawn was recorded is followed" "$out" "claimed by the factory"
 no_herdr_spawn "no second pane under the same name"
@@ -220,7 +242,7 @@ mv "$TMP/factory.away" "$TMP/home/.local/bin/factory"
 
 # --- fan ----------------------------------------------------------------------------------------------
 echo "fan: the factory answers"
-reset; reply default '{"state":"started","pane":"w1:9","account":"max-a"}'
+reset; reply default '{"status":"started","pane":"w1:9","tab":"w1:t9","workspace":"w1","account":"max-a"}'
 rd fan myrepo "$TMP/brief1.md"
 is "exit 0" "$rc" "0"
 has "key = <repo>-<branch leaf>" "$fcalls" "spawn create myrepo-one --repo $S/myrepo-wt"
@@ -233,15 +255,15 @@ no_herdr_spawn "no herdr pane"
 
 echo "fan: one queued, one failed, the rest still go"
 reset
-reply myrepo-one '{"state":"queued","reason":"paced"}'
-reply myrepo-two '{"state":"failed","reason":"boom"}'
+reply myrepo-one '{"status":"queued","hold":"paced"}'
+reply myrepo-two '{"status":"failed","error":"boom"}'
 rd fan myrepo "$TMP/brief1.md" "$TMP/brief2.md"
 [ "$rc" -ne 0 ] && ok "non-zero exit when one failed" || bad "exit 0 with a failed spawn"
 has "queued line" "$out" "queued: paced"
 has "failed reason" "$out" "boom"
 is "both spawns were created" "$(grep -c '^spawn create' <<<"$fcalls")" "2"
 reset
-reply myrepo-one '{"state":"queued","reason":"paced"}'
+reply myrepo-one '{"status":"queued","hold":"paced"}'
 rd fan myrepo "$TMP/brief1.md"
 is "queued alone: exit 0" "$rc" "0"
 
@@ -312,7 +334,7 @@ rd say p-1 "go on"
 lacks "no note attempted" "$fcalls" "session note"
 
 # --- close --------------------------------------------------------------------------------------------
-SESSION='{"state":"idle","pane":"p-1","tab":"t9"}'
+SESSION='{"id":"worker","state":"idle","wait":null,"turn":1,"spawn":null,"pane":"p-1","tab":"t9","role":"wave","account":"iu","parent":null}'
 closed() { grep -q '^tab close' <<<"$hcalls"; }
 echo "close: the tab comes from the session, not its name"
 for label in "1" "fan feat-x" "wave 2"; do

@@ -54,8 +54,9 @@ def fail(reason: str) -> None:
 
 
 def queue_state(repo_path: str) -> tuple[str, str] | None:
-    """(state, scope) from `factory queue get --project <repo>`, or None after one stderr line when the
-    factory does not give a usable answer. State is run | pace | drain.
+    """(effective state, scope) from `factory queue get --project <repo>`, or None after one stderr line when
+    the factory does not give a usable answer. The state is run | pace | drain; the scope reads "project
+    <path>" or "global" (the reply's scope is {"project": <path> | null}).
     """
     path = os.pathsep.join([os.path.expanduser(d) for d in FACTORY_PATH_DIRS] + [os.environ.get("PATH", "")])
     try:
@@ -76,12 +77,14 @@ def queue_state(repo_path: str) -> tuple[str, str] | None:
         if not why:
             try:
                 body = json.loads(result.stdout)
-                state = body.get("state") if isinstance(body, dict) else None
+                state = body.get("effective") if isinstance(body, dict) else None
             except ValueError:
                 state = None
             if state in ("run", "pace", "drain"):
-                return state, str(body.get("scope") or f"project {repo_path}")
-            why = "its answer has no run|pace|drain state"
+                scope = body.get("scope")
+                project = scope.get("project") if isinstance(scope, dict) else None
+                return state, f"project {project}" if project else "global"
+            why = "its answer has no run|pace|drain effective state"
     print(f"wave-gate: factory queue check skipped ({why})", file=sys.stderr)
     return None
 
