@@ -1,0 +1,15 @@
+== submit (project folder = Inbox project; file attached; idempotent per content)
+{"id":"msg_01M5HDRT0M48KPRPPGTFZP28VY","message":"msg_01M5HDRT0M48KPRPPGTFZP28VY","project":"proj-alpha","replayed":false}
+PASS  resubmit same content + default replays (true)
+== nobody answers: bounded wait returns timeout + default
+PASS  timeout + default (timeout:ship the plan unchanged)
+   elapsed 4.1s
+== human replies in the Inbox; the waiting agent gets feedback
+PASS  wait status (feedback)
+PASS  reply text delivered (Fine overall. Tighten the Fixed list.)
+== Inbox crashes (SIGKILL) while the agent waits; the adapter restarts it and still gets the reply
+   inbox back after ~2s (pid 48811 -> 49136)
+PASS  inbox pid changed (restarted by the adapter) (yes)
+PASS  feedback delivered after the crash (feedback)
+
+RESULT: 6 passed, 0 failed

@@ -1,0 +1,37 @@
+== submit two artifacts in two projects
+{"id":1,"rev":1}
+{"id":2,"rev":1}
+PASS  resubmit of identical content is idempotent (true)
+== blocking wait is released by a comment (anchored to a quote)
+PASS  wait status (feedback)
+PASS  comment quote delivered (Never break the lane used to fix things)
+   released 0.21s after the comment
+== unacked feedback is redelivered (at-least-once); acked feedback is not
+PASS  redelivery without ack (feedback)
+PASS  after ack: timeout carries the agent default (non-blocking) (timeout:ship)
+   gave up after 3.2s and proceeds with the default
+== crash recovery: comment, SIGKILL the server, restart, the comment is still there
+../rv/rv-demo.sh: line 10: 48314 Killed: 9               nohup $RV serve > "$W/server.log" 2>&1  (wd: ~/.local/share/factory/spikes/05-review/rv-work)
+PASS  server really restarted (new pid owns the port) (yes)
+PASS  restart: unacked comment survives (after the crash?)
+== a wait in flight survives a server crash + restart
+../rv/rv-demo.sh: line 10: 48510 Killed: 9               nohup $RV serve > "$W/server.log" 2>&1  (wd: ~/.local/share/factory/spikes/05-review/rv-work)
+PASS  second restart: new pid owns the port (yes)
+PASS  in-flight wait delivered after restart (sent after the restart)
+== supersede: a new revision releases the old waiter
+{"id":3,"rev":2}
+PASS  old waiter status (superseded)
+PASS  new revision number (2)
+== close releases the waiter on the current revision
+PASS  closed status (closed)
+== nobody answers: bounded wait returns timeout + default, never a gate
+PASS  timeout + default (timeout:proceed-with-default)
+   elapsed 4.1s
+== resolve + project-grouped inbox
+{"project":"proj-alpha","id":3,"path":"~/.local/share/factory/spikes/05-review/rv-work/BRIEF.md","rev":2,"status":"closed","open_comments":0,"undelivered":0}
+{"project":"proj-alpha","id":1,"path":"~/.local/share/factory/spikes/05-review/rv-work/BRIEF.md","rev":1,"status":"superseded","open_comments":3,"undelivered":0}
+{"project":"proj-beta","id":2,"path":"~/.local/share/factory/spikes/05-review/rv-work/diagram.html","rev":1,"status":"open","open_comments":0,"undelivered":1}
+../rv/rv-demo.sh: line 10: 48617 Killed: 9               nohup $RV serve > "$W/server.log" 2>&1  (wd: ~/.local/share/factory/spikes/05-review/rv-work)
+PASS  no server left running ()
+
+RESULT: 14 passed, 0 failed

@@ -1,0 +1,74 @@
+== A: nobody opens the review (defaults): how long is the agent held?
+Reviewing BRIEF-a.md
+http://127.0.0.1:39211/s/s_a586deaa1cc8
+{
+  "status": "closed",
+  "reason": "window_closed",
+  "unsent": {
+    "comments": 0,
+    "edits": 0
+  },
+  "next_step": "The user closed the review tab without sending. Stop waiting — do not run the poll command again. Nothing was left unsent. Tell the user the review closed, then stop."
+}
+   agent released after 120.6s
+PASS  poll returns closed (closed)
+PASS  reason (window_closed)
+PASS  released within 55-130 s (60 s never-opened threshold, checked by a 60 s sweep, so 60 or 120 s) (yes)
+   browser opens recorded by the open shim: 1
+== B: comment + Send -> poll
+{
+  "status": "feedback",
+  "pages": [
+    {
+      "kind": "file",
+      "file": "~/.local/share/factory/spikes/05-review/artifacts/BRIEF.md",
+      "markdown": true,
+      "edits_saved": false,
+      "comments": [
+        {
+          "id": "c_b52fc40ede0b",
+          "kind": "selection",
+          "quote": "Never break the lane used to fix things",
+          "anchor": {
+            "prefix": "- ",
+            "quote": "Never break the lane used to fix things",
+            "suffix": ": the manual Claude Code"
+          },
+          "feedback": "Name the lane explicitly."
+        },
+        {
+          "id": "c_2295370656fb",
+          "kind": "element",
+          "quote": "Fixed - do not debate",
+          "anchor": null,
+          "feedback": "Add a one-line rationale per fixed item."
+        }
+      ],
+      "edits": []
+    }
+  ],
+  "overall_note": "Overall: tighten the Fixed list.",
+  "sent_at": "2026-10-22T09:03:44.733Z",
+  "next_step": "Apply this feedback. Each entry in `pages` names the reviewed file or localhost URL. Items under `edits` are changes the human already made: `after` is their exact new wording, so carry it across verbatim, and never revert it. When an edit carries `after_html`, the human changed formatting (bold, italic, links) — use the HTML version, translated into the source's own syntax. Markdown pages were reviewed rendered, so quotes and `after` wording use the rendered text — apply the change to the Markdown source, keeping its formatting syntax. When every page is updated, run the same poll command again with --ack to clear this batch and wait for more."
+}
+
+PASS  poll returns feedback (feedback)
+PASS  selection comment keeps quote + prefix/suffix anchor (Never break the lane used to fix things)
+PASS  overall note delivered (Overall: tighten the Fixed list.)
+   poll released 0.01s after Send
+PASS  after --ack the next poll times out (no replay) (timeout)
+== C1: unsent comment, then SIGKILL the server
+PASS  server really died (False)
+PASS  status with the server dead reads state.json: unsent comments ((False, 1))
+PASS  re-open after restart reports leftover (1)
+PASS  a new server process owns the port (True)
+== C2: Send, SIGKILL before the agent polls, poll afterwards
+PASS  status with the server dead: feedback waiting on disk (True)
+PASS  fresh poll after the crash delivers the batch (feedback)
+PASS  batch holds the carried-over draft and the new comment (['unsent draft comment', 'sent just before a crash'])
+== E: any list / inbox route across targets?
+    {'/': 404, '/api/sessions': 404, '/api/pages': 404, '/api/inbox': 404, '/api/reviews': 404}
+PASS  no inbox route exists ({404})
+RESULT: 12 passed, 0 failed
+
+RESULT (A): 3 passed, 0 failed; (B-E) exit 0

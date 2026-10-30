@@ -1,0 +1,67 @@
+== P1: annotate --gate --json (blocking gate), run from project proj-alpha
+PASS  nobody answers: the gate is still blocking after 6 s (annotate has no timeout flag) (yes)
+{"ok":true}
+   stdout (the agent reads): {"decision":"annotated","feedback":"# Markdown Annotations\n\n## 1. Feedback on: \"The owner decides business questions only\"\n> Define business question with three examples.\n"}
+PASS  stdout decision (annotated)
+PASS  result-file identical to stdout (same)
+PASS  durable record written before exit, grouped by project (cwd) (proj-alpha:2)
+   feedback dir: feedback/proj-alpha/index.jsonl feedback/proj-alpha/records/2026-10-22T09-04-34-835Z-annotate-feedback.md history/proj-alpha/annotate-brief-md-32ea8593/001.md history/proj-alpha/annotate-brief-md-32ea8593/submissions/2026-10-22T09-04-34-839Z.md 
+== P2: HTML artifact + crash: draft survives SIGKILL and is restored by the same command
+PASS  HTML is rendered raw (html)
+   sessions listing: 1 live annotate session(s)
+./plannotator-exercise.sh: line 32: 43467 Killed: 9               PN_EXTRA_ENV="PLANNOTATOR_PORT=39202" "$D/pn" annotate "$S/artifacts/episode-lifecycle.html" --gate --json --result-file "$S/out/p-html.result.json" > "$S/out/p-html.stdout" 2> "$S/out/p-html.stderr"
+PASS  agent-side stdout after SIGKILL is empty (the call just dies) (0)
+PASS  draft restored after re-running the same command (draft comment before crash)
+== P3: the owner opens the review then closes the tab (client lease), no decision
+PASS  tab closed without a decision -> dismissed (dismissed)
+   released 31.5 s after the tab closed (30 s grace)
+== I1: the Inbox. Two projects, three agent sessions, two attachments, one question with a recommended default
+{"tools": 7, "bytes": 23069, "approx_tokens": 5767, "per_tool": {"send_message": 10424, "read_thread": 2732, "search": 1274, "resolve_message": 743, "wait_for_reply": 1545, "get_guide_brief": 667, "submit_guide": 5670}}
+{"thread_id":"msg_01M5HDQE3WMXJZ5EXKA8FWGETM","project":"proj-alpha","attachments":[{"name":"BRIEF.md","kind":"markdown"},{"name":"episode-lifecycle.html","kind":"html"}],"question":"Should wave 1 start with the event log or the manifest?"}
+PASS  projects grouped (proj-alpha,proj-beta)
+PASS  attention sections (Holding up work|Waiting on you|New since you looked)
+PASS  attachment kinds detected (markdown,html)
+PASS  nobody answers: wait_for_reply returns waiting + cursor (non-blocking) (waiting)
+   returned after 4.4 s including ~3.5 s stdio start-up; the agent proceeds with its default
+pick: 200
+annotation: 200
+reply: 200
+   | Answered 1 question.
+   | 
+   | Go with the recommended option.
+   | 
+   | ## Answers to your questions
+   | 
+   | 1 of 1 question answered.
+   | 
+   | ### Q1. Should wave 1 start with the event log or the manifest? (line 4)
+   | Answer: Event log first (your recommendation)
+PASS  reply delivered with the picked answer (replied:true)
+== I2: SIGKILL the Inbox, restart through the next agent call, read the thread back
+       2 .plannotator/inbox/projects/proj-alpha-7a7870/annotations.jsonl
+       4 .plannotator/inbox/projects/proj-alpha-7a7870/messages.jsonl
+       3 .plannotator/inbox/projects/proj-alpha-7a7870/questions.jsonl
+       1 .plannotator/inbox/projects/proj-beta-51f0a2/messages.jsonl
+       1 .plannotator/inbox/projects/proj-beta-51f0a2/questions.jsonl
+      11 total
+PASS  the person's reply survived the crash (1)
+PASS  a new process serves the Inbox (yes)
+   port before/after restart: 58033 / 58033 (sticky in this run; the docs do not promise it)
+{"v":1,"seq":2,"kind":"message"}
+{"v":1,"seq":7,"kind":"message"}
+== I3: git worktrees fold into the repository's project
+PASS  worktree and main checkout share one project (same)
+== I4: the door. Host guard, framing, Streamable-HTTP MCP
+PASS  foreign Host is refused (403)
+PASS  framing denied (X-Frame-Options) (DENY)
+PASS  HTTP MCP initialize on loopback (200)
+PASS  HTTP MCP refuses a request that carries an Origin header (403)
+PASS  stateless tools/call over HTTP (no session, explicit project_path and agent_session) (1)
+PASS  with PLANNOTATOR_ALLOWED_HOSTS the door host is accepted (200)
+PASS  other hosts stay refused (403)
+PASS  the agent door (/mcp) refuses the proxied host (403)
+== T: tailnet identity facts that decide the vendor phone path (read-only)
+   this host tagged: true
+   iOS peers: 1, tagged: 1
+
+RESULT: 24 passed, 0 failed
