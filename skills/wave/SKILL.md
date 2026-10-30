@@ -23,7 +23,7 @@ The spawner is the worker's parent (`rd fan`, and `rd wave` with `RD_ORCHESTRATE
 2. When the last child finishes, the factory types one note, `workers done: <child> <state>, …`; it starts the next turn.
 3. Look: `rd read <agent>`, `factory status`.
 
-- Only `factory session wait --done` closes a wait; a new turn clears nothing. After a wake the wait is spent (one wake per declaration) but still open, which also mutes send-back. **Declare `--on workers` again after every spawn or `rd say` fix, before ending the turn.** `--done` only cancels. A wake means no child is unfinished, not that a fix landed: if it precedes the fix turn, wait again.
+- Only `factory session wait --done` closes a wait; a new turn clears nothing. After a wake the wait is spent (one wake per declaration) but still open, which also mutes send-back. **Declare `--on workers` again after every spawn or `rd say` fix, before ending the turn.** `--done` only cancels. A wake means no child is unfinished, not that a fix landed: if `factory status` shows the fix note undelivered, wait again.
 - Workers running, no wait declared: the Stop hook sends the turn back once. Declare it then.
 - Not a factory session (an owner's own session, or `rd` fell back to herdr): nothing wakes you. Wait in the foreground: `timeout <s> herdr agent wait <agent> --until idle --until done --until blocked`.
 - A held spawn (`queued: <reason>`) is a worker too: the wake waits for it. A failed spawn does not (`factory status`).
@@ -33,7 +33,7 @@ The spawner is the worker's parent (`rd fan`, and `rd wave` with `RD_ORCHESTRATE
 - Brief from the `Base:` line `rd fan` prepends (fetched origin), never the local checkout; a worker idle after its one re-send: `rd read` it.
 - Gates: cheap check per change in the worker, full `make check` at merge (`roles/lead.md`).
 - Push a worktree's branch with `git -C <worktree>`, never from the orchestrator's cwd (`protect-branches` judges the right tree).
-- Probe LLM endpoints with `opencode-safe` and `timeout` (bare `opencode run` retries forever).
+- Probe LLM endpoints with `opencode-safe` and `timeout` (bare `opencode run` loops).
 
 ## Two modes
 
