@@ -233,6 +233,15 @@ Apps that must not be named in the tracked Caddyfile (work repos, internal servi
 untracked `~/.config/caddy-tailnet.apps` instead — one `<name> <port> [rewrite]` per line, merged into the same
 registry; they get the clean tailnet door only, no `.test` twin.
 
+To also serve a registry app at a fully-qualified name outside `DEV_DOMAIN`, list it in the untracked
+`~/.config/caddy-tailnet.hosts` (`CADDY_TAILNET_HOSTS` overrides the path) — one `<fqdn> <app-name>` per line,
+`#` comments and blanks ignored, a missing file means no extra doors. Each line becomes its own site block after
+the wildcard block (a wildcard cert never covers another zone's names), with its own Let's Encrypt cert via the same
+Cloudflare DNS-01 token, the same homelab/VPS source guard and the app's own path restriction / Host rewrite, but no
+landing page. The generator refuses a name that is or sits under `DEV_DOMAIN`, the landing page's host, an unknown or
+excluded app, or a duplicate. The A record pointing `<fqdn>` at the host's tailnet IP is a DNS-only step; the IP
+never enters git. Covered by `make caddy-tailnet-test`.
+
 | Door | URL | Scope |
 |-|-|-|
 | Local | `https://<name>.test` | this machine only (`bind 127.0.0.1`; dnsmasq wildcards `*.test` → 127.0.0.1) |
