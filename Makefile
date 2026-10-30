@@ -790,7 +790,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2314,6 +2314,13 @@ brew-service-test:
 caddy-registry-test:
 	@python3 -I $(DOTFILES_DIR)/scripts/lib/caddy-registry.test.py
 
+# caddy-tailnet.sh extra FQDN doors: block shape, validation refusals, missing file (hermetic; scratch overrides only).
+.PHONY: caddy-tailnet-test
+caddy-tailnet-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/caddy-tailnet.sh $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh
+
 .PHONY: launchd-restarts-test
 launchd-restarts-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
@@ -3554,6 +3561,7 @@ help:
 	@echo "  make fan-test           rd fan / merge-train worktree + base-from-origin suite"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
 	@echo "  make caddy-registry-test   Hermetic Caddyfile registry suite (port rows, path restrictions, refusals)"
+	@echo "  make caddy-tailnet-test    Hermetic tailnet generator suite (extra FQDN doors, refusals, missing file)"
 	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"

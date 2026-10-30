@@ -34,6 +34,15 @@ set -euo pipefail
 # catch. (A per-app port-based `.ts.net` fallback door used to exist here too;
 # retired — every app now gets only the clean door.)
 #
+# EXTRA DOORS: an app can ALSO be served at a fully-qualified hostname outside
+# $DEV_DOMAIN, e.g. a name on another zone, from the machine-local
+# ~/.config/caddy-tailnet.hosts (one `<fqdn> <app-name>` per line, `#` comments
+# and blanks ignored; a missing file means no extra doors). Each line becomes its
+# own site block with its own Let's Encrypt cert (same Cloudflare DNS-01 token),
+# the same source guard and the same upstream handling as the app's wildcard
+# door, and no landing page. The record pointing <fqdn> at this host's tailnet
+# IP lives in DNS only; the generated include is untracked, the IP never is.
+#
 # It also serves a LANDING PAGE at https://$DEV_DOMAIN and at
 # https://apps.$DEV_DOMAIN — and at any unmatched name, so a typo shows you what
 # exists instead of a bare 404. It probes each app same-origin through generated
@@ -64,6 +73,8 @@ CADDYFILE="${CADDY_TAILNET_CADDYFILE:-$BREW_PREFIX/etc/Caddyfile}"
 #   CADDY_TAILNET_CADDYFILE  the registry to parse
 #   CADDY_TAILNET_PORTS      the opt-out file
 #   CADDY_TAILNET_CONF       DEV_DOMAIN + the token path
+#   CADDY_TAILNET_APPS       machine-local extra apps
+#   CADDY_TAILNET_HOSTS      machine-local extra FQDN doors
 #   CADDY_TAILNET_OUT        the generated include
 #   CADDY_TAILNET_PAGE_DIR   the landing page directory
 #   CADDY_TAILNET_NO_RELOAD  skip validate + reload
@@ -321,6 +332,39 @@ while read -r first second rest || [[ -n ${first:-} ]]; do
   set +f
 done < "$FLAGS_FILE"
 
+# --- extra FQDN doors: input ----------------------------------------------------
+# `<fqdn> <app-name>` per line (see the header). Validated here, on every run,
+# because a bad line is an input error whether or not the token exists yet; only
+# the emission below needs the wildcard prerequisites. Parallel arrays again.
+HOSTS_FILE="${CADDY_TAILNET_HOSTS:-$HOME/.config/caddy-tailnet.hosts}"
+EXTRA_FQDN=()
+EXTRA_APP=()   # index into the APP_* arrays
+FQDN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+if [[ -f "$HOSTS_FILE" ]]; then
+  while read -r h_fqdn h_app h_rest || [[ -n ${h_fqdn:-} ]]; do
+    [[ -z ${h_fqdn:-} || $h_fqdn == \#* ]] && continue
+    [[ -n ${h_app:-} && -z ${h_rest:-} ]] \
+      || die "$HOSTS_FILE: expected '<fqdn> <app-name>', got '$h_fqdn ${h_app:-} ${h_rest:-}'"
+    [[ $h_fqdn =~ $FQDN_RE && ${#h_fqdn} -le 253 ]] \
+      || die "$HOSTS_FILE: '$h_fqdn' is not a lowercase DNS name with at least two labels"
+    [[ -z "${DEV_DOMAIN:-}" || $h_fqdn != "$LANDING_NAME.${DEV_DOMAIN:-}" ]] \
+      || die "$HOSTS_FILE: '$h_fqdn' is the landing page's host"
+    # The wildcard block already answers for these, with a cert it already holds.
+    if [[ -n "${DEV_DOMAIN:-}" && ( $h_fqdn == "$DEV_DOMAIN" || $h_fqdn == *".$DEV_DOMAIN" ) ]]; then
+      die "$HOSTS_FILE: '$h_fqdn' is $DEV_DOMAIN or under it — the wildcard door already covers it (use the app name, not a second door)"
+    fi
+    idx=$(app_index "$h_app") || die "$HOSTS_FILE: '$h_fqdn' names unknown app '$h_app' (not in the registry)"
+    if (( APP_EXCLUDED[idx] )); then
+      die "$HOSTS_FILE: '$h_fqdn' names '$h_app', which is excluded in $FLAGS_FILE"
+    fi
+    for (( j = 0; j < ${#EXTRA_FQDN[@]}; j++ )); do
+      [[ ${EXTRA_FQDN[$j]} != "$h_fqdn" ]] || die "$HOSTS_FILE: '$h_fqdn' is listed twice"
+    done
+    EXTRA_FQDN+=("$h_fqdn")
+    EXTRA_APP+=("$idx")
+  done < "$HOSTS_FILE"
+fi
+
 # --- tailnet identity --------------------------------------------------------
 # Live values, never hardcoded: a device rename or IP change must not silently
 # leave a stale binding behind (the same failure mode tailscale-serve.sh exists
@@ -484,6 +528,75 @@ restore_rollback() {
   printf '  restored the previous include — the live config is unchanged.\n' >&2
 }
 
+# --- site-block pieces shared by the wildcard block and the extra FQDN doors ---
+# One definition each, so an extra door can never drift from the wildcard door it
+# mirrors (the guard, the path restriction, the Host rewrite).
+
+# Caddy matcher names cannot start with a non-letter and, verified via
+# `caddy validate` against 2.11.4, dashes and dots are in fact accepted —
+# sanitised to [a-z0-9_] anyway per the house rule of not depending on
+# incidental parser leniency for a generated identifier. The registry
+# already guarantees the name is one lowercase DNS label.
+matcher_name() { printf '%s' "$1" | tr -c 'a-z0-9_' '_'; }
+
+emit_bind_tls() {
+  echo "	bind $IP"
+  echo "	tls {"
+  echo "		dns cloudflare $token"
+  echo "		resolvers 1.1.1.1"
+  echo "	}"
+  echo ""
+}
+
+emit_source_guard() {
+  echo "	# --- homelab/VPS source guard --------------------------------------------"
+  echo "	# The ACL may still grant the homelab and VPS tags tcp:443 on this whole host"
+  echo "	# (a portless door cannot be narrower), so those sources get 403 on every name."
+  echo "	# Addresses are read from 'tailscale status' at generation time."
+  if [[ -n $GUARD_SRC_IPS ]]; then
+    echo "	@guard_src {"
+    echo "		remote_ip $GUARD_SRC_IPS"
+    echo "	}"
+    echo "	handle @guard_src {"
+    echo "		respond \"forbidden\" 403"
+    echo "	}"
+  else
+    echo "	# (no peer carries $GUARD_SRC_TAGS right now — no source guard emitted)"
+  fi
+  echo ""
+}
+
+# The body of one app's handle, two tabs deep: the upstream, behind the path
+# restriction when the registry carries one. $1 = app index.
+emit_app_upstream() {
+  local i="$1" matcher indent
+  matcher=$(matcher_name "${APP_NAME[$i]}")
+  # A door restricted to path matchers in the Caddyfile (audio.test) keeps
+  # the same restriction here: everything else on the name is a 404, so the
+  # upstream's other paths never become reachable over the tailnet.
+  indent="		"
+  if [[ ${APP_PATHS[$i]} != "-" ]]; then
+    echo "		@${matcher}_paths path ${APP_PATHS[$i]//,/ }"
+    echo "		handle @${matcher}_paths {"
+    indent="			"
+  fi
+  if (( APP_REWRITE[i] )); then
+    # Escape hatch for a dev server that checks Host on dev-only endpoints
+    # and can't be allowlisted — same shape as fpp.test in config/Caddyfile.
+    echo "${indent}reverse_proxy localhost:${APP_PORT[$i]} {"
+    echo "${indent}	header_up Host localhost:${APP_PORT[$i]}"
+    echo "${indent}}"
+  else
+    echo "${indent}reverse_proxy localhost:${APP_PORT[$i]}"
+  fi
+  if [[ ${APP_PATHS[$i]} != "-" ]]; then
+    echo "		}"
+    echo "		handle {"
+    echo "			respond \"not found\" 404"
+    echo "		}"
+  fi
+}
+
 # Tighten the mode BEFORE a single byte of token is written, not after. A plain
 # `> "$OUT"` creates the file at the ambient umask — 644 here — so chmodding
 # only at the end leaves a window in which the Cloudflare token sits in a
@@ -508,6 +621,8 @@ fi
   echo "#   $FLAGS_FILE"
   echo "# DEV_DOMAIN / the Cloudflare token path:"
   echo "#   $CONF_FILE"
+  echo "# Extra FQDN doors (one site block each, after the wildcard block):"
+  echo "#   $HOSTS_FILE"
   if (( wildcard_enabled )); then
     echo "#"
     echo "# This file CONTAINS the Cloudflare API token below (tls > dns cloudflare)."
@@ -554,63 +669,15 @@ fi
     echo "# ~60 days out) — devhost-health-check.sh asserts the module on every run"
     echo "# for that reason; re-run caddy-dns-build after any caddy upgrade."
     echo "*.$DEV_DOMAIN, $DEV_DOMAIN {"
-    echo "	bind $IP"
-    echo "	tls {"
-    echo "		dns cloudflare $token"
-    echo "		resolvers 1.1.1.1"
-    echo "	}"
-    echo ""
-
-    echo "	# --- homelab/VPS source guard --------------------------------------------"
-    echo "	# The ACL may still grant the homelab and VPS tags tcp:443 on this whole host"
-    echo "	# (a portless door cannot be narrower), so those sources get 403 on every name."
-    echo "	# Addresses are read from 'tailscale status' at generation time."
-    if [[ -n $GUARD_SRC_IPS ]]; then
-      echo "	@guard_src {"
-      echo "		remote_ip $GUARD_SRC_IPS"
-      echo "	}"
-      echo "	handle @guard_src {"
-      echo "		respond \"forbidden\" 403"
-      echo "	}"
-    else
-      echo "	# (no peer carries $GUARD_SRC_TAGS right now — no source guard emitted)"
-    fi
-    echo ""
+    emit_bind_tls
+    emit_source_guard
 
     for (( i = 0; i < ${#APP_NAME[@]}; i++ )); do
       (( APP_EXCLUDED[i] )) && continue
-      # Caddy matcher names cannot start with a non-letter and, verified via
-      # `caddy validate` against 2.11.4, dashes and dots are in fact accepted —
-      # sanitised to [a-z0-9_] anyway per the house rule of not depending on
-      # incidental parser leniency for a generated identifier. The registry
-      # already guarantees the name is one lowercase DNS label.
-      matcher=$(printf '%s' "${APP_NAME[$i]}" | tr -c 'a-z0-9_' '_')
+      matcher=$(matcher_name "${APP_NAME[$i]}")
       echo "	@$matcher host ${APP_NAME[$i]}.$DEV_DOMAIN"
       echo "	handle @$matcher {"
-      # A door restricted to path matchers in the Caddyfile (audio.test) keeps
-      # the same restriction here: everything else on the name is a 404, so the
-      # upstream's other paths never become reachable over the tailnet.
-      indent="		"
-      if [[ ${APP_PATHS[$i]} != "-" ]]; then
-        echo "		@${matcher}_paths path ${APP_PATHS[$i]//,/ }"
-        echo "		handle @${matcher}_paths {"
-        indent="			"
-      fi
-      if (( APP_REWRITE[i] )); then
-        # Escape hatch for a dev server that checks Host on dev-only endpoints
-        # and can't be allowlisted — same shape as fpp.test in config/Caddyfile.
-        echo "${indent}reverse_proxy localhost:${APP_PORT[$i]} {"
-        echo "${indent}	header_up Host localhost:${APP_PORT[$i]}"
-        echo "${indent}}"
-      else
-        echo "${indent}reverse_proxy localhost:${APP_PORT[$i]}"
-      fi
-      if [[ ${APP_PATHS[$i]} != "-" ]]; then
-        echo "		}"
-        echo "		handle {"
-        echo "			respond \"not found\" 404"
-        echo "		}"
-      fi
+      emit_app_upstream "$i"
       echo "	}"
       echo ""
     done
@@ -682,6 +749,35 @@ fi
     echo "	}"
     echo "}"
     echo ""
+  fi
+
+  # Extra FQDN doors (~/.config/caddy-tailnet.hosts): one site block each, AFTER
+  # the wildcard block. Separate blocks because a wildcard cert never covers a
+  # name outside its own zone and label set: *.$DEV_DOMAIN cannot serve another
+  # zone's hostname, so each of these provisions its own cert (same DNS-01 token).
+  # They share the wildcard block's bind, source guard and upstream handling via
+  # the helpers above, and have NO landing page: an unmatched path on one of these
+  # hosts just proxies to the app.
+  if (( wildcard_enabled && ${#EXTRA_FQDN[@]} > 0 )); then
+    echo "# --- extra FQDN doors ----------------------------------------------------"
+    echo "#"
+    echo "# One site block per name, not part of the wildcard block above: a wildcard"
+    echo "# cert never covers a name outside its own zone and label set, so each of"
+    echo "# these provisions its own Let's Encrypt cert (same Cloudflare DNS-01 token)."
+    echo "# No landing page here — an unmatched path just proxies to the app."
+    echo ""
+    for (( j = 0; j < ${#EXTRA_FQDN[@]}; j++ )); do
+      i=${EXTRA_APP[$j]}
+      echo "# --- extra door: https://${EXTRA_FQDN[$j]} -> ${APP_NAME[$i]} -------------------"
+      echo "${EXTRA_FQDN[$j]} {"
+      emit_bind_tls
+      emit_source_guard
+      echo "	handle {"
+      emit_app_upstream "$i"
+      echo "	}"
+      echo "}"
+      echo ""
+    done
   fi
 } > "$OUT"
 
@@ -1127,6 +1223,13 @@ if (( wildcard_enabled )); then
   printf '\n  %d clean doors, %d excluded — registry: %s\n' \
     "$n_clean" "$n_excluded" "$CADDYFILE"
 
+  if (( ${#EXTRA_FQDN[@]} > 0 )); then
+    printf '\n  %d extra door(s) — %s\n' "${#EXTRA_FQDN[@]}" "$HOSTS_FILE"
+    for (( j = 0; j < ${#EXTRA_FQDN[@]}; j++ )); do
+      printf '    %-20s https://%s\n' "${APP_NAME[${EXTRA_APP[$j]}]}" "${EXTRA_FQDN[$j]}"
+    done
+  fi
+
   # Same rows the page shows, for the same reason: this output is the other
   # place someone asks "what does this machine expose", and a summary that
   # counts 18 tailnet doors while omitting a live Funnel answers it wrongly.
@@ -1146,6 +1249,9 @@ for r in rows:
 ' || true
 else
   printf '\n  no clean door — set DEV_DOMAIN + a chmod-600 Cloudflare token in %s\n' "$CONF_FILE"
+  if (( ${#EXTRA_FQDN[@]} > 0 )); then
+    printf '  %d extra door(s) in %s NOT generated — they need the same token.\n' "${#EXTRA_FQDN[@]}" "$HOSTS_FILE"
+  fi
 fi
 
 if [[ -n "$skipped_blocks" ]]; then
