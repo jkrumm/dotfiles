@@ -233,18 +233,18 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
   out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
     ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
   if (( rc != 0 )); then
-    # A failed create may still have been recorded (the hop dropped, the call timed out after the factory
-    # wrote it): ask before assuming it was not. Herdr takes over only on a definite "no such spawn"; any other
-    # answer, or none, is an error, never a second pane under the same name (the key makes a re-run safe).
+    # Herdr takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
+    # answered with a structured error. A dropped hop or a timeout may come after the factory recorded the spawn
+    # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
+    # name is worse than a visible error.
+    if (( rc == 126 || rc == 127 )) || jq -e '.error | objects' <<<"$out" >/dev/null 2>&1; then
+      echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
+      return 2
+    fi
     local gout
     gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
     if [[ -z $(factory_field "$gout" '.state // empty') ]]; then
-      # A create that timed out may still be in flight, so "not found" proves nothing then.
-      if (( rc != 124 )) && factory_not_found "$gout"; then
-        echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
-        return 2
-      fi
-      FSPAWN_ERR="spawn create exited $rc and the factory did not say whether '$key' exists ($(head -c 200 <<<"$gout" | tr '\n' ' ')) - 'factory spawn get $key' shows it; not starting a second pane under that name"
+      FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
       return 1
     fi
   fi
@@ -1080,7 +1080,7 @@ for w in workspaces:
       factory_spawn "$agent" "$wt" "$prompt" "${ROLE:-worker}" "$path" || frc=$?
       case $frc in
         0) factory_spawn_report "fan $branch" "$agent" "$path" "$wt"; continue ;;
-        1) note "   factory spawn '$agent' failed: $FSPAWN_ERR (worktree kept — 'rd fan --clean $name' reclaims it)"
+        1) note "   factory spawn '$agent' failed: $FSPAWN_ERR (worktree kept — 'factory spawn get $agent' first, then 'rd fan --clean $name' reclaims it)"
            fan_failed=1; continue ;;
       esac
       pick_account fan
