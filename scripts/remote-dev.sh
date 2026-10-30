@@ -89,11 +89,10 @@ rd_role_resolve() { # <role>
   return 0
 }
 
-# True when a factory reply says the thing asked about does not exist (error.kind "not_found", or a "not found" /
-# "no such" / "unknown session" message). Anything else that fails is not an answer about existence.
+# True only when a factory reply is the structured answer "this does not exist" (error.kind "not_found"). Message
+# text is not matched: "config not found" is a fault, not an answer about the spawn or session asked for.
 factory_not_found() { # <text>
-  jq -e '(try (.error | objects) catch null // {}) | (.kind == "not_found") or ((.message // "") | test("not found|no such|unknown session|unknown spawn"; "i"))' \
-    <<<"$1" >/dev/null 2>&1
+  jq -e '(try (.error | objects) catch null // {}) | .kind == "not_found"' <<<"$1" >/dev/null 2>&1
 }
 
 # Model and effort for a spawn: RD_WAVE_MODEL / RD_WAVE_EFFORT, then the --role (or the verb's default
@@ -235,17 +234,16 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
     ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
   if (( rc != 0 )); then
     # A failed create may still have been recorded (the hop dropped, the call timed out after the factory
-    # wrote it): ask before assuming it was not. Herdr takes over only on a definite "no such spawn", or when
-    # the factory is plainly dead; a factory that answers health but not this is an error, not a second pane
-    # under the same name.
+    # wrote it): ask before assuming it was not. Herdr takes over only on a definite "no such spawn"; any other
+    # answer, or none, is an error, never a second pane under the same name (the key makes a re-run safe).
     local gout
     gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
     if [[ -z $(factory_field "$gout" '.state // empty') ]]; then
-      if factory_not_found "$gout" || ! factory_host "$FACTORY_HEALTH_S" health >/dev/null 2>&1; then
+      if factory_not_found "$gout"; then
         echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
         return 2
       fi
-      FSPAWN_ERR="spawn create exited $rc and the factory will not say whether '$key' exists ($(head -c 200 <<<"$gout" | tr '\n' ' ')) - 'factory spawn get $key' shows it; not starting a second pane under that name"
+      FSPAWN_ERR="spawn create exited $rc and the factory did not say whether '$key' exists ($(head -c 200 <<<"$gout" | tr '\n' ' ')) - 'factory spawn get $key' shows it; not starting a second pane under that name"
       return 1
     fi
   fi

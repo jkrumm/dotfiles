@@ -229,8 +229,8 @@ falls back. `RD_DRY_RUN=1` never probes.
 
 | Verb | Factory answers | Falls back to herdr when |
 |-|-|-|
-| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **and** `spawn get` says it does not exist (or the factory is dead by then). A recorded spawn is followed; a factory that answers health but not `spawn get` is an error, never a second pane under the same name |
-| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory says it has no such session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
+| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **and** `spawn get` answers `error.kind` `not_found` for the key. A recorded spawn is followed; any other answer, or none, is an error (re-run: the key makes it safe), never a second pane under the same name |
+| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
 | `close` | tab = the tab of `factory session get <agent>` (pane and tab must match herdr's, else a stale record is refused), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
 
 Spawn outcomes: `started` prints today's line plus `via the factory` and the account; `queued` / `held`
