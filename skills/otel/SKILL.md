@@ -150,7 +150,8 @@ clickstack_get_alert` to find it first).
   (browser-SDK ingest, ~60 % of edge volume).
 - Status-code attribute per service: argo-api, fpp-server, traefik →
   `http.response.status_code` (+ `http.route`, `http.request.method`); imgproxy,
-  fpp-analytics, audio-gateway → legacy `http.status_code` (+ `http.method`).
+  fpp-analytics → legacy `http.status_code` (+ `http.method`). `agw` and `agw-audio` (the
+  agent-workflows services): attribute convention not verified — `SELECT` a few spans first.
 - Browser SDKs (`free-planning-poker`, `argo-dashboard`) have no Server spans;
   `otelcol*` ships metrics only — `SpanKind='Server' AND ServiceName!='traefik'`
   is the clean app-service set.

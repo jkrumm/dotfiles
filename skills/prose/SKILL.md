@@ -1,6 +1,6 @@
 ---
 name: prose
-description: Polish a finished human-facing draft — agw lint + cross-lab review, a rewrite by this session against the voice guide, a keep gate. Use after drafting articles, vault pages, docs/README, landing or UI copy, or briefings against brain/voice.md, or when the user says "prose", "polish this", "de-slop", "run it through prose". Not for chat replies, code comments, or commit messages. Mini-only: needs agw.
+description: Polish a finished human-facing draft — `agw prose` lint + review brief, a rewrite by this session against the voice guide, a keep gate. Use after drafting articles, vault pages, docs/README, landing or UI copy, or briefings against brain/voice.md, or when the user says "prose", "polish this", "de-slop", "run it through prose". Not for chat replies, code comments, or commit messages. Mini-only: needs agw.
 ---
 
 # Prose — via `agw prose` + `agw prose-gate`

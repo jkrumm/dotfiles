@@ -24,8 +24,8 @@ STATUS: adopted 2026-10-02, landed as of 2026-10-10 (setup round 4 closed the
 rename of the worker engine and OpenCode as the worker default). The autonomous remediation
 loop was switched off 2026-10-27 by agent-workflows P0; its design and the
 status rows that described it are in
-`docs/archive/agent-platform-2026-10-warden-era.md`. A workflow platform is designed
-in `docs/agent-workflows/concept.md` and not built. This page wins over any older
+`docs/archive/agent-platform-2026-10-warden-era.md`. The workflow platform (`agw`,
+agent-workflows) is built; `docs/agent-workflows/concept.md` is its design record. This page wins over any older
 doc that contradicts it; open work is tracked in each repo's `docs/waves/PLAN.md`.
 Before-the-rewrite design: [[agent-platform-history]].
 
@@ -37,8 +37,6 @@ Before-the-rewrite design: [[agent-platform-history]].
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
 
 ## The picture
-
-Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](diagrams/agent-platform.html).
 
 ```
  alerts                                front doors
@@ -71,7 +69,7 @@ Interactive version (pan/zoom, trace, export): [`diagrams/agent-platform.html`](
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
 | `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
-| `rd wave` tab | long work the owner wants to watch or steer | Claude Code / OpenCode in herdr |
+| `rd wave` tab | long work the owner wants to watch or steer | Claude Code in herdr (`--kind opencode` is rejected) |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.
@@ -91,20 +89,18 @@ AGENTS.md carries exactly these sections, in this order, among its own:
 `## Validate` · `## Deploy` · `## Verify & Monitor` (full health URL, Kuma
 monitor name, OTel `service.name`) · `## Gotchas`.
 
-## Agent-Gateway — the engine
+## No headless claude
 
-| Job | Default | Why |
-|-|-|-|
-| `triage`, review router | single-shot `iu-openai` cheap model, JSON | no tools needed; 20–100× cheaper than a `claude -p` session |
-| `review` angles | OpenCode Haiku 5.5 EU for senior-dev/typescript/qa; security + architect stay Sonnet until measured | angles are ~4 of 5 Max sessions per review |
-| `review` synthesis | Sonnet | the judgment that gates every merge |
-| `check` | `claude` harness, Haiku 4.5 over IU (Haiku 5.5 is 4× slower there) | mechanical |
+No script, skill or service runs `claude -p`. Interactive sessions in herdr, native
+subagents and `agw` workflows are the only lanes. Model ids and per-job routing live in
+`agw routes`, never in prose.
 
-One model registry (`server/lib/models.ts`): id, wire (`anthropic` / `chat` /
-`responses`), harnesses, limits, rates with source + date, verified date.
-Unverified ids are refused. GPT ids run only over the Responses
-wire. The dotfiles OpenCode provider block is generated from it. Everything
-else points at `GET /api/routing` — never a model id in prose.
+The only headless runs, kept on purpose:
+
+- `scripts/claude-accounts-e2e.sh` (`make claude-accounts-e2e`) — tests the launchers
+  themselves, a few Haiku tokens per account.
+- modelpick's bench (`modelpick/src/server/bench/`) — it measures the Claude Code harness,
+  so it has to drive the real binary.
 
 ## Hermes — the front door
 

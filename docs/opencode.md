@@ -73,8 +73,8 @@ main checkout (never from a linked worktree) and `make deploy`.
 The first start on a new version shows a one-time release-notes dialog that swallows the pane's
 initial prompt — press Enter once, then `rd say` it again.
 
-**No MCP servers are wired in.** OpenCode reaches the platform like Claude Code does: the `agw`
-CLI. External skills load natively from `~/.claude/skills`, so `/check`,
+**One MCP server is wired in:** `chrome-devtools` (`config/opencode/opencode.json`). Everything else
+OpenCode reaches like Claude Code does: the `agw` CLI. External skills load natively from `~/.claude/skills`, so `/check`,
 `/review` and friends resolve to real tools on the mini.
 
 **Yolo is the default here, deliberately** — `permission: "allow"` (normalized by v2 into an allow-all `permissions` rule), so `oc`
