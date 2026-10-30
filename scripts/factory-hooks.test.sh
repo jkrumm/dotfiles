@@ -2,7 +2,7 @@
 # factory-hooks.test — the software-factory hooks in config/settings.template.json: registered for every event
 # and matcher, rendered into every account dir by the real `_render-settings` merge (fresh dir and a dir with a
 # stale settings.json), existing hooks untouched, and the hook command itself never blocks or fails a session
-# (no FACTORY_SESSION = nothing runs; no `factory` on PATH or a failing `factory` = still exit 0).
+# (no FACTORY_SESSION = nothing runs; no `factory` on PATH or a failing `factory` = still exit 0; a send-back from `factory hook stop` (rc 2) exits 2).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
@@ -63,13 +63,14 @@ renders=$(grep -c '_render-settings SETTINGS_DIR="\$\$dir"' "$ROOT/Makefile")
 [ "$dirs" -ge 1 ] && [ "$renders" -ge 1 ] && ok "$dirs account dir(s) in the registry, rendered by the setup loop" \
   || bad "setup loop does not render settings per registry dir (dirs=$dirs renders=$renders)"
 
-# 4. The hook command: never blocks, never fails, silent for the owner's own sessions.
+# 4. The hook command: never fails, silent for the owner's own sessions; only the factory's send-back (rc 2) blocks.
 echo "hook command behaviour"
 cmd=$(hook_cmd "$TMP/fresh/settings.json" Stop -)
-mkdir -p "$TMP/bin-ok" "$TMP/bin-fail" "$TMP/bin-none"
+mkdir -p "$TMP/bin-ok" "$TMP/bin-fail" "$TMP/bin-back" "$TMP/bin-none"
 printf '#!/bin/sh\necho "$@" >> "$CALLS"\n' >"$TMP/bin-ok/factory"
 printf '#!/bin/sh\necho "$@" >> "$CALLS"\nexit 7\n' >"$TMP/bin-fail/factory"
-chmod +x "$TMP/bin-ok/factory" "$TMP/bin-fail/factory"
+printf '#!/bin/sh\necho "$@" >> "$CALLS"\nexit 2\n' >"$TMP/bin-back/factory"
+chmod +x "$TMP/bin-ok/factory" "$TMP/bin-fail/factory" "$TMP/bin-back/factory"
 # /usr/bin:/bin keeps `command`, `test` and `sh` resolvable while keeping any real factory off PATH.
 BASE=/usr/bin:/bin
 run_hook() { # <bindir> <FACTORY_SESSION or ->  -> sets rc, calls
@@ -87,5 +88,6 @@ run_hook "$TMP/bin-ok" myrepo-w1; is "session set: exit 0" "$rc" 0;           is
 run_hook "$TMP/bin-none" myrepo-w1; is "factory not installed: exit 0" "$rc" 0
 run_hook "$TMP/bin-fail" myrepo-w1; is "factory fails (rc 7): the hook still exits 0" "$rc" 0
 is "factory fails: it was called" "$calls" "hook stop"
+run_hook "$TMP/bin-back" myrepo-w1; is "factory sends the stop back (rc 2): the hook exits 2" "$rc" 2
 
 [ "$fails" -eq 0 ] && { echo "all passed"; exit 0; } || { echo "$fails failed"; exit 1; }
