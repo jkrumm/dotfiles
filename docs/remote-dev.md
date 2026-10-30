@@ -243,9 +243,9 @@ fails after it exists never falls back to herdr (two sessions on one name). `rd 
 failed or queued brief and exits non-zero at the end if any failed. On the factory path the factory picks
 the account and the model: `rd` runs no `claude-account pick`, and `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` do
 not reach the spawn (one stderr line says so). `close` keeps its refusals on both paths (agent working,
-checkout dirty, anything unpushed) and adds one: another agent in the same tab. `wave-gate.py` refuses to
-spawn while `factory queue get --project <repo>` has `effective` `drain` (the message names `project <path>` or `global`) and, when the factory does not answer, skips
-that check with one stderr line (which `rd wave` passes on). Covered by
+checkout dirty, anything unpushed) and adds one: another agent in the same tab. Under a `drain` the factory holds the
+spawn (`queued: drain`) and starts it when the drain lifts; `wave-gate.py` no longer asks the factory, so
+`rd wave` exits 0 and a chain wave counts it as its successor spawned. Covered by
 `scripts/remote-dev-factory.test.sh` and `scripts/wave-gate.test.py`.
 
 ## Dev-server doors
