@@ -219,11 +219,11 @@ jkrumm.test {
 # rb.test is just the local convenience door.
 #
 # This block said 7730 until 2026-07-31, which was the port of a separate Vite
-# web container that no longer exists. Nothing has bound 7730 since, so the
-# local door 502'd and the tailnet status column reported rb red permanently
-# while rb was in fact up and serving. 7730 survives as the OUTSIDE port of the
-# serve row (`:7730 → 127.0.0.1:4050`), which is where the number comes from and
-# why the stale value looked plausible.
+# web container that no longer exists. With that container gone the local door
+# 502'd and the tailnet status column reported rb red permanently while rb was
+# in fact up and serving. 7730 survives as the OUTSIDE port of the serve row
+# (`:7730 → 127.0.0.1:4050`), which is where the number comes from and why the
+# stale value looked plausible.
 rb.test {
 	import local
 	reverse_proxy localhost:4050

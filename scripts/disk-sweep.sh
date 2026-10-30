@@ -6,7 +6,7 @@
 # WHY THIS EXISTS. The mini ran short of disk (2026-10-20) and every large consumer turned out
 # to be an unbounded cache or leak that nothing swept: Docker build cache and dangling images,
 # the Colima data disk (a sparse file that never shrinks on its own), OCR session logs (11 GB),
-# $TMPDIR (300k+ entries — test suites in warden and agent-gateway leak tmp dirs) and the
+# $TMPDIR (300k+ entries — test suites leaked tmp dirs) and the
 # package-manager caches. Each step is one bounded rule; none touches anything that holds state.
 #
 # THE DOCKER STEP IS DELIBERATELY NARROW. Build cache is capped (LRU, with --all: without it only
@@ -101,8 +101,8 @@ step_colima-trim() {
   echo "colima-trim: $(tr '\n' ';' <<<"$summary" | sed 's/;$//'), $(delta "$before" "$after")"
 }
 
-# agent-gateway reads only the session logs of the attempt that just failed (server/lib/ocr.ts),
-# so anything older than two weeks is dead weight. Counts are what is confirmed gone afterwards.
+# `agw review` (workflows/review/ocr.ts) still writes these; it reads only the session logs of the
+# attempt that just failed, so anything older than two weeks is dead weight. Counts are what is confirmed gone afterwards.
 step_ocr-sessions() {
   [ -d "$OCR_ROOT" ] || { skip ocr-sessions "no sessions dir at $OCR_ROOT"; return 0; }
   local before after files_list dirs_list total files dirs left

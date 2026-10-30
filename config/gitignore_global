@@ -2,7 +2,7 @@
 sc-note.md
 sc-queue.md
 
-# agent-gateway atomic write temp files
+# temp file from an atomic sc-note.md write
 .sc-note.md.tmp
 
 # macOS

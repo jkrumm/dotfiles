@@ -20,12 +20,11 @@
 #
 #     d="$HOME/.local/state/devhost/deliberate-restart"; mkdir -p "$d" && date +%s >> "$d/<label>"
 #
-# Writers today: research-gateway `scripts/mini-deploy.sh` and `make
-# launchd-restart` (gateway + lightpanda), agent-gateway `make reload`. The writers
-# inline that line rather than sourcing this file — a deploy script must not
-# depend on a dotfiles checkout path. `bootout` + `bootstrap` (herdr-restart,
-# colima-restart, hermes, agent-gateway install) needs no marker: a freshly loaded
-# job starts again at `runs = 1`, which is never a bump.
+# No live restart path in this repo writes a marker today. A path that does must
+# inline that line rather than source this file — a deploy script must not depend
+# on a dotfiles checkout path. `bootout` + `bootstrap` (herdr-restart,
+# colima-restart, hermes) needs no marker: a freshly loaded job starts again at
+# `runs = 1`, which is never a bump.
 #
 # One marker line excuses one bump inside the window, and exactly that many
 # lines (oldest first) are consumed by the check that evaluates the bump. So a
@@ -89,10 +88,9 @@ check_launchd_restarts() {
   #
   #   1. A marker (header contract) covering the whole bump, on exit 0 or
   #      SIGTERM — a marker never launders `Killed: 9`, a crash signal or a
-  #      non-zero exit. research-gateway
-  #      and agent-gateway drain and exit 0 on their own, so their restarts carry no
-  #      signal at all — 87 dev-host messages in the 14 days to 2026-09-27, a
-  #      third of #alerts, were every research-gateway deploy paging this.
+  #      non-zero exit. A service that drains and exits 0 on its own carries
+  #      no signal at all — 87 dev-host messages in the 14 days to 2026-09-27,
+  #      a third of #alerts, were every deploy restart paging this.
   #   2. `Terminated: 15`. SIGTERM is launchd asking politely, which only ever
   #      happens because a human or a Makefile target asked it to — 40 of the 67
   #      DOWN alerts between 2026-06-14 and 2026-09-07 were `make hermes-restart`

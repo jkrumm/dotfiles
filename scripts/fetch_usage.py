@@ -264,7 +264,7 @@ def fetch() -> None:
     limits = [limit(i, item) for i, item in enumerate(data.get("limits") or [])]
 
     result = {
-        # Legacy top-level keys — statusline.sh and agent-gateway read these.
+        # Legacy top-level keys — statusline.sh reads these.
         "five_hour": extract("five_hour"),
         "seven_day": extract("seven_day"),
         "seven_day_sonnet": extract("seven_day_sonnet"),

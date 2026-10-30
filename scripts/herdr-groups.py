@@ -32,8 +32,8 @@ retired the startup-hook plugin this used to need.
 The costs, all measured rather than assumed: each separator holds an idle
 shell, takes a slot in workspace numbering and the picker, and renders with the
 state_icon herdr puts on every space (`· ── TOOLING`). It stays invisible to
-agent-gateway's agent overview, which reads `herdr agent list` and uses
-`workspace list` only as an id→label map.
+anything that reads `herdr agent list`, which uses `workspace list` only as an
+id→label map.
 
 Stdlib only, and 3.9-compatible: /usr/bin/python3 is the interpreter a
 launchd-spawned caller resolves.

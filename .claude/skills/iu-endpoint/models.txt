@@ -6,8 +6,8 @@
 # only the FIRST slash is the provider separator; validate.sh splits on it.
 #
 # Comments and blank lines are ignored. Edit this file directly to add/drop a
-# model from the health-check set. This is the roster actually in use — `ca`/`cap`
-# (modelpick), agent-gateway workers, research-gateway and Hermes — not a catalog
+# model from the health-check set. This is the roster actually in use — OpenCode
+# (modelpick) and Hermes — not a catalog
 # sample; every id was verified live against /openai/v1/models on 2026-09-07.
 # Hermes's own model config lives in ~/SourceRoot/hermes-agent, not here.
 

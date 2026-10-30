@@ -4,8 +4,7 @@
 # ~/.config/human-queue/notify-hook; ask-human.sh fires it in the background
 # right after a request lands on disk, with `<id> <text>`.
 #
-# One Slack line to #agents, through Argo's Slack proxy — the same door
-# audio-gateway announces podcast results through — so the human learns a
+# One Slack line to #agents, through Argo's Slack proxy, so the human learns a
 # request exists without opening a terminal. The queue itself is the source of
 # truth: this is a nudge, and every failure here is soft. It never blocks, never
 # retries, never exits non-zero — ask-human.sh has already returned by the time
