@@ -10,7 +10,9 @@ fail wedges a legitimate wave chain. Both directions matter.
 
 import importlib.util
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -122,6 +124,85 @@ class ResolvePlanPath(unittest.TestCase):
         got = wave_gate.resolve_plan_path("/repo", "~/SourceRoot/dotfiles/docs/waves/PLAN.md")
         self.assertEqual(got, os.path.expanduser("~/SourceRoot/dotfiles/docs/waves/PLAN.md"))
         self.assertNotIn("/repo", got)
+
+
+class FactoryQueue(unittest.TestCase):
+    """The queue check runs the real script against a stub `factory` on a scratch PATH and HOME. A repo with
+    no plan file fails with "no plan file" once the queue check lets it through, so that message is the
+    "spawn may proceed" signal; the drain message is the refusal."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin = os.path.join(self.tmp.name, "bin")
+        self.repo = os.path.join(self.tmp.name, "repo")
+        os.makedirs(self.bin)
+        os.makedirs(self.repo)
+
+    def stub(self, body: str) -> None:
+        path = os.path.join(self.bin, "factory")
+        with open(path, "w") as f:
+            f.write("#!/bin/sh\n" + body + "\n")
+        os.chmod(path, 0o755)
+
+    def gate(self):
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": self.tmp.name}
+        return subprocess.run(
+            [sys.executable, "-I", os.path.join(os.path.dirname(__file__), "wave-gate.py"), self.repo, "docs/waves/PLAN.md"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_drain_refuses_and_names_the_scope(self):
+        self.stub("""echo "$@" >> "$HOME/calls"; echo '{"state":"drain","scope":"project dotfiles"}'""")
+        r = self.gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("project dotfiles is draining", r.stderr)
+        self.assertNotIn("no plan file", r.stderr)
+        with open(os.path.join(self.tmp.name, "calls")) as f:
+            self.assertEqual(f.read().strip(), f"queue get --project {self.repo} --format json")
+
+    def test_drain_without_a_scope_names_the_project(self):
+        self.stub("""echo '{"state":"drain"}'""")
+        self.assertIn(f"project {self.repo} is draining", self.gate().stderr)
+
+    def test_run_and_pace_let_the_spawn_through_silently(self):
+        for state in ("run", "pace"):
+            with self.subTest(state=state):
+                self.stub(f"""echo '{{"state":"{state}"}}'""")
+                r = self.gate()
+                self.assertIn("no plan file", r.stderr)
+                self.assertNotIn("skipped", r.stderr)
+
+    def test_a_factory_that_does_not_answer_is_skipped_with_one_line(self):
+        cases = {
+            "not installed": None,
+            "exits non-zero": "exit 3",
+            "garbage": "echo not json",
+            "no state": """echo '{"other":1}'""",
+            "unknown state": """echo '{"state":"melting"}'""",
+        }
+        for label, body in cases.items():
+            with self.subTest(case=label):
+                if body is None:
+                    if os.path.exists(os.path.join(self.bin, "factory")):
+                        os.remove(os.path.join(self.bin, "factory"))
+                else:
+                    self.stub(body)
+                r = self.gate()
+                self.assertIn("no plan file", r.stderr)
+                self.assertEqual(r.stderr.count("factory queue check skipped"), 1)
+
+    def test_a_slow_factory_is_cut_off(self):
+        self.stub("sleep 30")
+        original = wave_gate.QUEUE_TIMEOUT_S
+        wave_gate.QUEUE_TIMEOUT_S = 0.3
+        self.addCleanup(setattr, wave_gate, "QUEUE_TIMEOUT_S", original)
+        for key, value in (("PATH", f"{self.bin}:/usr/bin:/bin"), ("HOME", self.tmp.name)):
+            self.addCleanup(os.environ.__setitem__, key, os.environ[key])
+            os.environ[key] = value
+        self.assertIsNone(wave_gate.queue_state(self.repo))
 
 
 if __name__ == "__main__":
