@@ -215,8 +215,9 @@ FACTORY_JQ_DEFS='def s: if type == "object" then (.id // .name // empty) else . 
 factory_field() { # <json> <jq expression>
   jq -r "$FACTORY_JQ_DEFS $2" <<<"$1" 2>/dev/null
 }
-factory_reason() { # <json>
-  factory_field "$1" '(.hold_reason // .reason // (.hold | objects | .reason) // (.error | objects | .message) // (.error | strings) // "no reason given") | tostring'
+# Why a spawn failed: `.error` is a string, or an object with a message.
+factory_error() { # <json>
+  factory_field "$1" '(.error | strings) // (.error | objects | .message) // "no reason given"'
 }
 
 # Create a spawn through the factory (idempotent by key) and wait, bounded by RD_FACTORY_WAIT_S (120 s), until
@@ -243,7 +244,7 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
     fi
     local gout
     gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
-    if [[ -z $(factory_field "$gout" '.state // empty') ]]; then
+    if [[ -z $(factory_field "$gout" '.status // empty') ]]; then
       FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
       return 1
     fi
@@ -252,21 +253,26 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
   local deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
   while :; do
     get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
-    state=$(factory_field "$get" '.state // empty')
+    state=$(factory_field "$get" '.status // empty')
     case $state in
-      started|failed|queued|held) break ;;
+      started|failed|waiting) break ;;
+      queued) [[ -z $(factory_field "$get" '.hold // empty') ]] || break ;; # held; a plain queued spawn is claimed on the next tick
     esac
     (( SECONDS >= deadline )) && break
     sleep "${RD_FACTORY_POLL_S:-2}"
   done
-  FSPAWN_PANE=$(factory_field "$get" '(.pane // .pane_id // empty) | s')
+  FSPAWN_PANE=$(factory_field "$get" '(.pane // empty) | s')
   FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')
+  # Past this point the spawn exists: nothing below falls back to herdr, whatever the status is.
   case $state in
     started) FSPAWN_STATE=started ;;
-    queued|held) FSPAWN_STATE=queued; FSPAWN_REASON=$(factory_reason "$get") ;;
-    failed) FSPAWN_ERR=$(factory_reason "$get"); return 1 ;;
-    "") FSPAWN_ERR="the factory stopped answering after creating spawn '$key' - 'factory spawn get $key' shows what became of it"; return 1 ;;
-    *) FSPAWN_STATE=starting ;;
+    queued) FSPAWN_STATE=queued; FSPAWN_REASON=$(factory_field "$get" '.hold // empty'); FSPAWN_REASON=${FSPAWN_REASON:-not claimed yet} ;;
+    waiting) FSPAWN_STATE=queued
+             FSPAWN_REASON="no capacity$(factory_field "$get" '(.resumeAt // empty) | tostring | " until " + .')" ;;
+    starting) FSPAWN_STATE=starting ;;
+    failed) FSPAWN_ERR=$(factory_error "$get"); return 1 ;;
+    "") FSPAWN_ERR="the factory gave no status for spawn '$key' - 'factory spawn get $key' shows what became of it"; return 1 ;;
+    *) FSPAWN_ERR="the factory reported an unknown status '$state' for spawn '$key' - 'factory spawn get $key' shows it"; return 1 ;;
   esac
   return 0
 }
@@ -1210,9 +1216,9 @@ for a in json.load(sys.stdin)["result"]["agents"]:
 ' <<<"$roster" 2>/dev/null)
   if [[ -n $sname ]] && factory_up; then
     fsess=$(factory_host "$FACTORY_CALL_S" session get "$sname" --format json 2>/dev/null) || fsess=""
-    ftab=$(factory_field "$fsess" '(.tab // .tab_id // empty) | s')
+    ftab=$(factory_field "$fsess" '(.tab // empty) | s')
     if [[ -n $ftab ]]; then
-      fpane=$(factory_field "$fsess" '(.pane // .pane_id // empty) | s')
+      fpane=$(factory_field "$fsess" '(.pane // empty) | s')
       fstate=$(factory_field "$fsess" '.state // empty')
       [[ -z $fpane || $fpane == "$pane" ]] \
         || die "the factory has '$sname' in pane $fpane, herdr in $pane — a stale record; refusing to close"
