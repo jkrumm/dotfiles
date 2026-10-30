@@ -6,6 +6,8 @@
  * Writes one `session_env` entry per session start (ANTHROPIC_BASE_URL +
  * USAGE_LANE + the Claude account id) to the structured JSONL debug log at
  * ~/.claude/logs/YYYY-MM-DD.jsonl — usage-tracker bills each launcher from it.
+ * The line also carries the factory runner's FACTORY_ROLE and FACTORY_SESSION
+ * when set (usage-tracker reads them to attribute a session's lane/role).
  * Prunes log files older than 3 days on every run. Never blocks Claude: any
  * failure exits 0.
  *
@@ -73,6 +75,8 @@ async function main() {
       base_url: process.env.ANTHROPIC_BASE_URL || null,
       lane: process.env.USAGE_LANE || null,
       account: await currentAccount(),
+      factory_role: process.env.FACTORY_ROLE || null,
+      factory_session: process.env.FACTORY_SESSION || null,
     });
   } catch (error) {
     console.error("session-env hook error:", error);

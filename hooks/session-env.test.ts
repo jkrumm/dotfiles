@@ -16,6 +16,8 @@ function run(env: Record<string, string>) {
   rmSync(logs, { recursive: true, force: true })
   const base: Record<string, string> = { ...(process.env as Record<string, string>), HOME: home }
   delete base.CLAUDE_CONFIG_DIR
+  delete base.FACTORY_ROLE
+  delete base.FACTORY_SESSION
   Bun.spawnSync(["bun", HOOK], {
     env: { ...base, ...env },
     stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s1", hook_event_name: "SessionStart" })),
@@ -40,5 +42,18 @@ describe("session_env account", () => {
     expect(e.event).toBe("session_env")
     expect(e.data.account).toBeNull()
     expect(e.data.session).toBe("s1")
+  })
+})
+
+describe("session_env factory fields", () => {
+  test("FACTORY_ROLE and FACTORY_SESSION are logged when set", () => {
+    const e = run({ FACTORY_ROLE: "lead", FACTORY_SESSION: "spawn-1" })
+    expect(e.data.factory_role).toBe("lead")
+    expect(e.data.factory_session).toBe("spawn-1")
+  })
+  test("both are null when unset", () => {
+    const e = run({})
+    expect(e.data.factory_role).toBeNull()
+    expect(e.data.factory_session).toBeNull()
   })
 })
