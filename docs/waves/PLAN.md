@@ -69,40 +69,54 @@ modified count, a wildcard home-lane test), 2 not (duplicated message builder st
   - `~/.claude` and every extra account dir got the new `settings.json` (`make _setup-settings`, `claude-accounts-setup`).
 
 
-## Wave 2 — Other repos and the disk            <!-- status: active -->
+## Wave 2 — Other repos and the disk            <!-- status: done -->
 Workers: Sonnet; Haiku for the sweeps. Orchestrated.
 
-- [ ] **hermes-agent:** `skills/verify/references/agent-claim-verification.md:111` and
+- [x] **hermes-agent:** `skills/verify/references/agent-claim-verification.md:111` and
   `skills/homelab-ops/references/restart-window-prep.md:73` curl warden's port 7735 (nothing listens);
   `skills/herdr/SKILL.md:24,56,82,89` examples use `--cwd ~/SourceRoot/warden` (deleted); `README.md:34-39`
   (deepseek brain, warden channels), `.env.tpl:78`, `Makefile:21`, `docs/scheduled-jobs.md:50-53`,
   `docs/symlinks-and-agents.md:39-50`.
-- [ ] **vps:** `Makefile:60,118,131,528-537` still bring up an `audio-gateway` stack and `AGENTS.md:201,538`
+- [x] **vps:** `Makefile:60,118,131,528-537` still bring up an `audio-gateway` stack and `AGENTS.md:201,538`
   list `apps/audio-gateway` and its Kuma monitor; the container is not running on the VPS (checked 2026-10-30).
   Remove the stack, the app directory, the monitor in `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`) and
   any RollHook registration for the retired repo.
-- [ ] **brain:** `AGENTS.md:329` cites `hermes-agent/config/dispatch-repos.json`, which does not exist.
-- [ ] **Disk:** delete `~/SourceRoot/{agent-gateway,research-gateway,audio-gateway}` and the data dirs
+- [x] **brain:** `AGENTS.md:329` cites `hermes-agent/config/dispatch-repos.json`, which does not exist.
+- [x] **Disk:** delete `~/SourceRoot/{agent-gateway,research-gateway,audio-gateway}` and the data dirs
   `~/.local/share/agent-gateway` (5 GB) and `~/.research-gateway` (1.7 GB), each only after checking its final
   backup on `homelab:/mnt/hdd/backups/<name>-final/` against its `SHA256SUMS`. research-gateway has an unpushed
   branch `feat/paper-reading-and-liveness` (worktree `.claude/worktrees/paper-liveness`, commit `036d7c5`) and
   the GitHub repo is archived: prove the final bundle contains it (`git bundle list-heads`), or write a bundle
   of that branch next to it, before deleting. warden is already gone (2026-10-30).
-- [ ] **herdr:** close duplicate and dead workspaces (three `hermes-agent` spaces today) only where no agent is
+- [x] **herdr:** close duplicate and dead workspaces (three `hermes-agent` spaces today) only where no agent is
   working and nothing is unpushed; one space per repo is the rule.
-- [ ] **Leftovers of Wave 1 and of Hermes leaving Argo:**
+- [x] **Leftovers of Wave 1 and of Hermes leaving Argo** (all but the Hermes loopback, see Left behind):
   - `jkrumm.com/Makefile:30` `make diagrams` copies from `dotfiles/docs/diagrams/agent-platform.html`, which moved to
     `docs/archive/diagrams/`: repoint `DIAGRAMS_SRC` so the target works. The guide's text stays as it is.
   - `modelpick`: `src/db/deployments.ts` `analyze` slot and `SKILL.md:127` still say "via claude_iu".
   - `config/settings.template.json` `_NOTE` and the `oc` comment in `config/zsh/claude.zsh` still mention `ca`;
     `weatherorb/ops/clickstack/sync.py` `warden:skip`; `docs/diagrams/episode-lifecycle.*` mentions dispatch once.
-  - **Hermes API on loopback** (argo's close-out, `argo/docs/waves/PLAN.md`): `API_SERVER_HOST` is still the mini's
+  - **Hermes API on loopback (NOT done, see Left behind)** (argo's close-out, `argo/docs/waves/PLAN.md`): `API_SERVER_HOST` is still the mini's
     tailnet address, which iris also reads as `HERMES_HOST`. Change `hermes-agent/.env.tpl` and `iris/.env.local.tpl`
     together, adjust `hermes-agent/scripts/verify.sh` and the `hermes-validate` skill's `$host:8642` probe, restart
     `ai.hermes.gateway` and iris (`make launchd-restart`), prove iris reaches Hermes (a memo routed to Hermes, not
     just `/health`). Do it only if no iris wave or fan worker is `working`; otherwise leave it in Left behind.
-- [ ] The gate's final sweep: `rg -n -i 'agent-gateway|research-gateway|audio-gateway|agw-legacy|warden|dispatch'`
+- [x] The gate's final sweep: `rg -n -i 'agent-gateway|research-gateway|audio-gateway|agw-legacy|warden|dispatch'`
   across `~/SourceRoot` (excluding archives, `docs/factory/`, node_modules, IuRoot), every hit either fixed or
   listed in Left behind as historical.
 
 **Left behind:**
+Commits: dotfiles `feb0c37`, `2184408`; hermes-agent `9ceda5f`..`209b75b`; vps `2f2c7d6`; brain `70fc539`; jkrumm.com `e697d51`; modelpick `85b414e`.
+Gate: `make check` and `make doctor` fail only on what already failed on clean `ebed695` in Wave 1 (`architecture-check`: `com.iu.athena-postgres` unmapped, `com.iu.teamchat-*` rows absent; `drift-check`: collie pin, tailscale daemon). `disk-sweep` shows 8 failures from a `uv` cache lock timeout, older than this wave. modelpick `db.test.ts` ("contains known IU catalog models", `gpt-image-1`) fails on a clean tree too. No `/review`: the non-doc changes are comments, one Makefile variable and one registry row.
+- **Done:** the three gateway repos, `~/.local/share/agent-gateway` (5 GB) and `~/.research-gateway` (1.7 GB) are deleted after `sha256sum -c SHA256SUMS` was OK on `homelab:/mnt/hdd/backups/{agent,research,audio}-gateway-final` and `audio-gateway-vps-final`. The research-gateway bundle holds `feat/paper-reading-and-liveness` at `036d7c5` (`worktrees/paper-liveness/HEAD` too) and every other local branch head; the agent-gateway bundle holds all five. Eight stale `agent-gateway/server/mcp.ts` processes (children of Claude sessions started before the MCP registration was removed) were killed first; those sessions lose a dead MCP server.
+- **vps** needed only two comment fixes: the audio-gateway stack, app dir, Makefile targets, AGENTS rows and the Kuma monitors were already gone (`3e1c2b3`, `f683d48`, homelab `f6533e0`). `make uk-dry-run` shows no orphaned monitors, so no `uk-sync`.
+- **herdr:** one duplicate pair existed (`hermes-agent`, both idle shells); closed `wS`.
+- **jkrumm.com** `make diagrams` now reads `dotfiles/docs/archive/diagrams`. `episode-lifecycle.*` (all of it warden-era: `agent-gateway` lifeline) moved to `docs/archive/diagrams/`; `jkrumm.com/public/diagrams/episode-lifecycle.html` is a copy and untouched.
+- **Not done: Hermes API on loopback.** `iris-w17-i2-ui-followups` and `iris-w17-i6-route-config-` were `working`. Do it when iris is quiet: `API_SERVER_HOST` in `hermes-agent/.env.tpl` and `HERMES_HOST` in `iris/.env.local.tpl` together, `scripts/verify.sh`, the `hermes-validate` skill's `$host:8642` probe, restart `ai.hermes.gateway` and iris, prove a memo routed to Hermes.
+- **Owner:** the Uptime Kuma push monitor `Hermes Watchdog - Push` has no pinger since warden's poller left (`UPTIME_PUSH_WATCHDOG` in `hermes-agent/.env.tpl` is dead); it is a manual UI monitor, so pause or delete it there, then drop the variable.
+- **Final sweep, hits kept on purpose:**
+  - History and evidence: `docs/factory/`, `docs/archive/`, `docs/waves/archive/`, brain wiki, Areas and Podcasts pages, `docs/agent-workflows/waves/P0-warden-off.md`, `hermes-agent/patches/checkpoint-store-integrity.patch` (editing it breaks `make patch-check`), `argo/apps/api/drizzle/0021_rename_usage_agent_gateway.sql`.
+  - Cleanup code that names what it removes: `dotfiles/Makefile` (warden wrapper, `claude mcp remove agent-gateway`), `claude-accounts-verify`.
+  - **Live code for a retired service, each its own repo's work, none touched:** `argo` (the whole `warden` dashboard feature, `routes/warden.ts`, schema; 665 hits), `weatherorb` (alert route `warden`, label `warden:skip`, ADR 0019, catalog contract; owner call: rename to a neutral route or keep), `basalt-ui` (`scripts/consumers.json` and the playground scenarios point at argo's warden files), `usage-tracker` (`agent-gateway` as a recorded lane in models, relane, collectors), `agent-workflows` (audio/route-table tests and comments name audio-gateway).
+  - Stale comments and refs, small: `homelab/uptime-kuma/monitors.yaml` (5 comments on "warden's verdict budget"), `homelab-private` (3 mentions of audio-gateway feeding Audiobookshelf), `email-gateway/scripts/backup.sh` (comments), `modelpick/src/db/deployments.ts` and `src/stack.ts` (config_refs into the deleted repos; the registry's next snapshot), `shutterflow/fleet/state.json`, `homelab-w7` (stale checkout, 42 behind), `dotfiles-private/headless.refs` (still lists `op://vps/research-gateway/*` refs and audio-gateway comments: removing refs shrinks what the mini may hold, an owner decision), `dotfiles/scripts/{opencode-service-env,devhost-health-check,secrets-run.test}.sh` and `docs/devhost-health.md` (historical incident notes).
+  - "dispatch" as an ordinary word (basalt-ui, argo, hermes-agent upstream `dispatch_*` keys, `~/SourceRoot/dispatch-scratch` repo, still on disk, not in this plan) was not swept.
