@@ -239,7 +239,8 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
     local gout
     gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
     if [[ -z $(factory_field "$gout" '.state // empty') ]]; then
-      if factory_not_found "$gout"; then
+      # A create that timed out may still be in flight, so "not found" proves nothing then.
+      if (( rc != 124 )) && factory_not_found "$gout"; then
         echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
         return 2
       fi
@@ -1082,7 +1083,6 @@ for w in workspaces:
         1) note "   factory spawn '$agent' failed: $FSPAWN_ERR (worktree kept — 'rd fan --clean $name' reclaims it)"
            fan_failed=1; continue ;;
       esac
-      FACTORY_UP=0 # the rest of this fan goes through herdr
       pick_account fan
       if (( PICK_SPILL )); then
         die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"

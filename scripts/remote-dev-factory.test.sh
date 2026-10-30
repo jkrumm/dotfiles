@@ -164,8 +164,8 @@ has "carries on to the started spawn" "$out" "pane w1:3"
 no_herdr_spawn "no herdr fallback"
 reset; echo 124 >"$STATE/create-rc"
 rd wave myrepo "adhoc task"
-has "timeout with a definite 'no such spawn': the herdr path" "$out" "factory spawn create failed"
-herdr_spawned "herdr made the pane"
+[ "$rc" -ne 0 ] && ok "timeout, spawn not visible yet: uncertain, error" || bad "exit 0: $out"
+no_herdr_spawn "no herdr pane while the create may still be in flight"
 reset; echo 255 >"$STATE/create-rc"; reply default '{"state":"claimed"}'
 RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
 has "a dropped hop after the spawn was recorded is followed" "$out" "claimed by the factory"
@@ -241,10 +241,10 @@ reply myrepo-one '{"state":"queued","reason":"paced"}'
 rd fan myrepo "$TMP/brief1.md"
 is "queued alone: exit 0" "$rc" "0"
 
-echo "fan: create fails -> herdr for this and every later brief"
+echo "fan: create fails -> herdr for that brief; every brief still asks the factory about its own key"
 reset; echo 1 >"$STATE/create-rc"
 rd fan myrepo "$TMP/brief1.md" "$TMP/brief2.md"
-is "one create attempted, then herdr only" "$(grep -c '^spawn create' <<<"$fcalls")" "1"
+is "each brief tried the factory" "$(grep -c '^spawn create' <<<"$fcalls")" "2"
 is "two herdr agents started" "$(grep -c '^agent start' <<<"$hcalls")" "2"
 has "FACTORY_ROLE=worker in the pane" "$hcalls" "--env FACTORY_ROLE=worker"
 
