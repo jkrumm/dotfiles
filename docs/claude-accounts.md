@@ -143,7 +143,7 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
 `/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
 compatibility, plus `usage_accounts.json` (all accounts).
 
-**Rule v1.5** (v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
+**Rule v1.6** (v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 
 ```
 eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly% < weeklyMax(x) ∧ sample age < 6 h
@@ -162,10 +162,12 @@ share(S)    = a draw from S with probability ∝ weight   # what the CLI uses; `
 home(lane)  = share(eligible x whose homeLanes claim the lane)
               iu for interactive, headless
               me and me2 for wave, fan
+coolSet      = eligible accounts with session% < 80 (SESSION_SOFT_MAX), else all eligible   # a hot 5h window is the last choice, not excluded
+                 every step below reads coolSet as "eligible"
 pick(lane):
   1. bulk lane ∧ ∃ eligible x with weekly reset < 24 h ∧ weekly% < 70 → x   # use expiring capacity first (soonest reset)
   2. eligible(home) ∧ overPace(home) → share(eligible x ≠ home ∧ ¬overPace(x))   # pace guard, every lane
-  3. eligible(home) → the eligible x ≠ home with ¬overPace(x) ∧ session%(home) − session%(x) > 20
+  3. eligible(home) → the eligible x ≠ home with (¬overPace(x) ∨ session%(home) ≥ 60) ∧ session%(home) − session%(x) > 20
                       and the lowest session% (ties by weight); a sibling that shares the lane beats an outsider
                       # balance the 5h windows
   4. eligible(home) → home
@@ -191,6 +193,12 @@ proportion to the weights, so a burst spreads instead of landing on one account.
 a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
 similar 5h load the split at the time was about 49/51; the 5h-balance step (3) still moves work to the emptier
 window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
+
+Why v1.6 (2026-10-30): all three accounts sat over weekly pace (`iu` 41 % vs 27 % elapsed, `me` 42 vs 18, `me2` 94 vs 68),
+so step 3 had no candidate and `me` (5h window a quarter of `iu`'s) took every wave from 3 % to 99 % in 75 minutes while
+`iu` idled at 5 %. A full 5h window is a wall; an over-pace week is a preference (it recovers over a weekend). So (a) the
+session move ignores the other's pace once the home 5h is at 60 % (`SESSION_PRESSURE`), and (b) from 80 %
+(`SESSION_SOFT_MAX`) an account only takes work when no cooler one is eligible; `SESSION_MAX` 90 stays the hard stop.
 
 Why the pace step (v1.1): on 2026-10-24 `c` picked `iu` at 89 % weekly with about
 four days to its reset while `me` sat at 2 %. v1 only leaves home at weekly ≥ 90 %,

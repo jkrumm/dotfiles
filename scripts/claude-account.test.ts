@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, SESSION_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -90,12 +90,18 @@ describe("pick rule v1.4: N accounts", () => {
     expect(pick(reg3(), cache3(sample(10, 50), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (95-70)*2 = 50
   })
-  test("5h boundary: wave leaves a sibling at SESSION_MAX for iu and returns once a fresh sample shows the new window", () => {
-    const calm = (s: number) => cache3(sample(80, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
-    expect(pick(reg3(), calm(SESSION_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+  test("5h boundary: wave leaves a sibling at SESSION_SOFT_MAX for iu and returns once a fresh sample shows the new window", () => {
+    const calm = (s: number) => cache3(sample(70, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
+    expect(pick(reg3(), calm(SESSION_SOFT_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), calm(SESSION_SOFT_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), calm(SESSION_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), calm(100), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), calm(2), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" }) // window reset: back home
+  })
+  test("past SESSION_SOFT_MAX an account is still used when it is the last one open", () => {
+    const hotAll = (me2: number) => cache3(sample(85, 10), sample(10, 96), sample(me2, 5))
+    expect(pick(reg3(), hotAll(SESSION_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), hotAll(SESSION_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
   })
   test("a missing weekly window counts as full headroom", () => {
     const noWeekly: Sample = { ...sample(10, 0), w: null, w_reset: null, w_ts: null }
@@ -144,10 +150,10 @@ describe("pick rule v1.5: expiry-weighted sharing", () => {
     expect(share).toBeLessThan(0.65)
     expect(picks.every((p) => p === "me" || p === "me2")).toBe(true) // iu is not a home of the bulk lanes
   })
-  test("a drawn home that is session-hot hands over to a sibling before an outsider", () => {
+  test("a session-hot sibling drops out of the draw, the cool sibling is home, not an outsider", () => {
     const hot = sample(85, 11, { wReset: NOW / 1000 + 7 * D })
     const calm = sample(15, 67, { wReset: NOW / 1000 + 3 * D })
-    expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "fan", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "session" })
+    expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "fan", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "home" })
   })
   test("N accounts: a fourth subscription joins from the registry alone", () => {
     const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true } } }
@@ -403,7 +409,11 @@ describe("pick rule v1.2 session balance", () => {
   })
   test("an over-pace other never receives the session move", () => {
     const meOver = sample(0, 80, { wReset: NOW / 1000 + 6.5 * 24 * H })
-    expect(pick(reg(), cacheOf(sample(60, 10), meOver), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+    expect(pick(reg(), cacheOf(sample(50, 10), meOver), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+  })
+  test("a filling home 5h window overrides the other's weekly pace", () => {
+    const meOver = sample(0, 80, { wReset: NOW / 1000 + 6.5 * 24 * H })
+    expect(pick(reg(), cacheOf(sample(60, 10), meOver), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
   })
 })
 

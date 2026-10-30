@@ -1,4 +1,4 @@
-// Claude account registry, quota cache and picker rule v1.5 (docs/claude-accounts.md).
+// Claude account registry, quota cache and picker rule v1.6 (docs/claude-accounts.md).
 // Pure logic + small file helpers; scripts/claude-account.ts is the CLI over it.
 import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
@@ -10,6 +10,10 @@ export const DEFAULT_ACCOUNT_ID = "iu"
 /** pick() result when no account is usable: the caller spills to its IU path (not an account id). */
 export const SPILL = "spill"
 export const SESSION_MAX = 90
+/** 5h% from which an account only takes work when nothing cooler is eligible (SESSION_MAX stays the hard stop). */
+export const SESSION_SOFT_MAX = 80
+/** Home 5h% from which the session move ignores the other's weekly pace: a filling 5h window is a wall, over-pace weekly only a preference. */
+export const SESSION_PRESSURE = 60
 export const WEEKLY_MAX = 95
 /** Weekly ceiling while the window resets within EXPIRING_S: the last points are use-it-or-lose-it, so squeeze them. */
 export const WEEKLY_MAX_EXPIRING = 98
@@ -612,7 +616,14 @@ export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number, r
 
 function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
-  const ok = ids.filter((id) => eligible(reg, cache, id, nowMs))
+  const eligibleIds = ids.filter((id) => eligible(reg, cache, id, nowMs))
+  const hot = (id: string) => {
+    const x = cache.samples[id]
+    return hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS && x.s! >= SESSION_SOFT_MAX
+  }
+  // an account near the end of its 5h window is the last choice, not an excluded one
+  const cool = eligibleIds.filter((id) => !hot(id))
+  const ok = cool.length ? cool : eligibleIds
   const bulk = lane !== "interactive"
 
   if (bulk) {
@@ -653,7 +664,7 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?:
     const freshS = (x: Sample) => hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS
     const movable = ok.filter((id) => {
       const x = cache.samples[id]
-      return id !== home && freshS(x) && freshS(hs) && !overPace(reg, cache, id, nowMs) && hs.s! - x.s! > SESSION_MARGIN
+      return id !== home && freshS(x) && freshS(hs) && (hs.s! >= SESSION_PRESSURE || !overPace(reg, cache, id, nowMs)) && hs.s! - x.s! > SESSION_MARGIN
     })
     // a sibling that shares the lane beats an outsider (iu keeps its room for interactive work)
     const siblings = movable.filter((id) => homes.includes(id))
