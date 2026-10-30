@@ -140,7 +140,8 @@ running ("1 shell still running") strands the chain: nothing resumes it. Rules:
 - Anything started in the background is collected (`TaskOutput`) or stopped
   (`TaskStop`) before the close-out commit. A wave with a live background task has not closed out.
 - The close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" written into
-  **Left behind**. Silence is neither.
+  **Left behind**. Silence is neither. `queued: <reason>` from `rd wave` (a drain, no capacity) is a
+  spawn: the factory starts it when the hold lifts, so the wave ends its turn.
 
 ## The green gate
 
