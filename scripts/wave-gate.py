@@ -23,14 +23,8 @@ Usage: wave-gate.py <repo-path> <plan-path-or-relative-plan-ref>
 Exit 0 and silent on pass. Exit 1 with a reason on stderr on any gate failure
 — `cmd_wave` in remote-dev.sh treats that as a hard stop, matching the skill's
 own "Stop. Do not spawn."
-
-A sixth check asks the software factory: `factory queue get --project <repo>` saying `drain` means the
-owner is draining that scope, so no new wave starts in it. A factory that does not answer (not
-installed, down, slow, an unreadable reply) skips the check with one stderr line: a dead factory must
-never stop the waves that would repair it.
 """
 
-import json
 import os
 import re
 import subprocess
@@ -43,50 +37,9 @@ LEFT_BEHIND_RE = re.compile(r"\*\*Left behind:\*\*\s*(.*)")
 OUTWARD_RE = re.compile(r"\b(merge|publish|release|deploy|ship)\b", re.I)
 
 
-QUEUE_TIMEOUT_S = 3
-# ssh and launchd shells carry no ~/.local/bin; the factory CLI lives there.
-FACTORY_PATH_DIRS = ("~/.local/bin", "/opt/homebrew/bin", "~/.bun/bin")
-
-
 def fail(reason: str) -> None:
     print(reason, file=sys.stderr)
     sys.exit(1)
-
-
-def queue_state(repo_path: str) -> tuple[str, str] | None:
-    """(effective state, scope) from `factory queue get --project <repo>`, or None after one stderr line when
-    the factory does not give a usable answer. The state is run | pace | drain; the scope reads "project
-    <path>" or "global" (the reply's scope is {"project": <path> | null}).
-    """
-    path = os.pathsep.join([os.path.expanduser(d) for d in FACTORY_PATH_DIRS] + [os.environ.get("PATH", "")])
-    try:
-        result = subprocess.run(
-            ["factory", "queue", "get", "--project", repo_path, "--format", "json"],
-            capture_output=True,
-            text=True,
-            timeout=QUEUE_TIMEOUT_S,
-            env={**os.environ, "PATH": path},
-            stdin=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired:
-        why = f"no answer within {QUEUE_TIMEOUT_S} s"
-    except OSError as e:
-        why = f"factory not runnable ({e.strerror or e})"
-    else:
-        why = f"factory exited {result.returncode}" if result.returncode != 0 else ""
-        if not why:
-            try:
-                body = json.loads(result.stdout)
-                state = body.get("effective") if isinstance(body, dict) else None
-            except ValueError:
-                state = None
-            if state in ("run", "pace", "drain"):
-                scope = body.get("scope")
-                project = scope.get("project") if isinstance(scope, dict) else None
-                return state, f"project {project}" if project else "global"
-            why = "its answer has no run|pace|drain effective state"
-    print(f"wave-gate: factory queue check skipped ({why})", file=sys.stderr)
-    return None
 
 
 def resolve_plan_path(repo_path: str, plan_ref: str) -> str:
@@ -208,10 +161,6 @@ def main() -> None:
 
     if not os.path.isdir(repo_path):
         fail(f"repo path does not exist: {repo_path}")
-
-    queue = queue_state(repo_path)
-    if queue and queue[0] == "drain":
-        fail(f"the factory queue for {queue[1]} is draining — no new wave starts until it is lifted")
 
     plan_path = resolve_plan_path(repo_path, plan_ref)
     if not os.path.isfile(plan_path):

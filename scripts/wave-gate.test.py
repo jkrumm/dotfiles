@@ -126,91 +126,33 @@ class ResolvePlanPath(unittest.TestCase):
         self.assertNotIn("/repo", got)
 
 
-class FactoryQueue(unittest.TestCase):
-    """The queue check runs the real script against a stub `factory` on a scratch PATH and HOME. A repo with
-    no plan file fails with "no plan file" once the queue check lets it through, so that message is the
-    "spawn may proceed" signal; the drain message is the refusal."""
+class DrainIsNotTheGatesCall(unittest.TestCase):
+    """A project `drain` is held by the factory (`rd wave` queues the spawn, the factory starts it when the
+    drain lifts), so the gate must not read the queue. The real script runs against a stub `factory` that
+    answers `drain`; a repo with no plan file fails with "no plan file" once every earlier check has passed,
+    so that message is the "spawn may proceed" signal."""
 
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.bin = os.path.join(self.tmp.name, "bin")
-        self.repo = os.path.join(self.tmp.name, "repo")
-        os.makedirs(self.bin)
-        os.makedirs(self.repo)
-
-    def stub(self, body: str) -> None:
-        path = os.path.join(self.bin, "factory")
-        with open(path, "w") as f:
-            f.write("#!/bin/sh\n" + body + "\n")
-        os.chmod(path, 0o755)
-
-    def gate(self):
-        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": self.tmp.name}
-        return subprocess.run(
-            [sys.executable, "-I", os.path.join(os.path.dirname(__file__), "wave-gate.py"), self.repo, "docs/waves/PLAN.md"],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-
-    def test_drain_refuses_and_names_the_scope(self):
-        self.stub("""echo "$@" >> "$HOME/calls"; echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scopes":[]}'""")
-        r = self.gate()
+    def test_a_drain_answer_does_not_stop_the_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = os.path.join(tmp, "bin")
+            repo = os.path.join(tmp, "repo")
+            os.makedirs(bin_dir)
+            os.makedirs(repo)
+            stub = os.path.join(bin_dir, "factory")
+            with open(stub, "w") as f:
+                f.write("""#!/bin/sh
+echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scopes":[]}'
+""")
+            os.chmod(stub, 0o755)
+            r = subprocess.run(
+                [sys.executable, "-I", os.path.join(os.path.dirname(__file__), "wave-gate.py"), repo, "docs/waves/PLAN.md"],
+                capture_output=True,
+                text=True,
+                env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": tmp},
+            )
         self.assertEqual(r.returncode, 1)
-        self.assertIn("project /x/dotfiles is draining", r.stderr)
-        self.assertNotIn("no plan file", r.stderr)
-        with open(os.path.join(self.tmp.name, "calls")) as f:
-            self.assertEqual(f.read().strip(), f"queue get --project {self.repo} --format json")
-
-    def test_a_global_drain_names_the_global_scope(self):
-        # the repo's own state is run, but the global scope drains: `effective` is what decides
-        self.stub("""echo '{"scope":{"project":null},"state":"run","effective":"drain","scopes":[{"project":null,"state":"drain"}]}'""")
-        r = self.gate()
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("queue for global is draining", r.stderr)
-
-    def test_the_effective_state_decides_not_the_scopes_own(self):
-        self.stub("""echo '{"scope":{"project":"/p"},"state":"drain","effective":"run"}'""")
-        self.assertIn("no plan file", self.gate().stderr)
-
-    def test_run_and_pace_let_the_spawn_through_silently(self):
-        for state in ("run", "pace"):
-            with self.subTest(state=state):
-                self.stub(f"""echo '{{"scope":{{"project":"/p"}},"state":"{state}","effective":"{state}"}}'""")
-                r = self.gate()
-                self.assertIn("no plan file", r.stderr)
-                self.assertNotIn("skipped", r.stderr)
-
-    def test_a_factory_that_does_not_answer_is_skipped_with_one_line(self):
-        cases = {
-            "not installed": None,
-            "exits non-zero": "exit 3",
-            "garbage": "echo not json",
-            "no effective state": """echo '{"state":"drain"}'""",
-            "unknown state": """echo '{"effective":"melting"}'""",
-            "error object": """echo '{"error":{"kind":"usage"}}'; exit 2""",
-        }
-        for label, body in cases.items():
-            with self.subTest(case=label):
-                if body is None:
-                    if os.path.exists(os.path.join(self.bin, "factory")):
-                        os.remove(os.path.join(self.bin, "factory"))
-                else:
-                    self.stub(body)
-                r = self.gate()
-                self.assertIn("no plan file", r.stderr)
-                self.assertEqual(r.stderr.count("factory queue check skipped"), 1)
-
-    def test_a_slow_factory_is_cut_off(self):
-        self.stub("sleep 30")
-        original = wave_gate.QUEUE_TIMEOUT_S
-        wave_gate.QUEUE_TIMEOUT_S = 0.3
-        self.addCleanup(setattr, wave_gate, "QUEUE_TIMEOUT_S", original)
-        for key, value in (("PATH", f"{self.bin}:/usr/bin:/bin"), ("HOME", self.tmp.name)):
-            self.addCleanup(os.environ.__setitem__, key, os.environ[key])
-            os.environ[key] = value
-        self.assertIsNone(wave_gate.queue_state(self.repo))
+        self.assertIn("no plan file", r.stderr)
+        self.assertNotIn("drain", r.stderr)
 
 
 if __name__ == "__main__":
