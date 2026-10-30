@@ -112,9 +112,10 @@ The only headless runs, kept on purpose:
 
 The orchestrator is always a visible tab. `/wave` has two modes: **chain**
 (each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab,
-blocks on `herdr agent wait` for the settled states idle/done/blocked — `done` alone
-never fires on a watched tab — reads `PLAN.md`, decides the next, closes the finished
-tab with `rd close`). One active
+declares `factory session wait --on workers` and ends its turn; the factory's wake note
+starts the next one, then it reads `PLAN.md`, decides the next, closes the finished
+tab with `rd close`). Nothing polls: the factory babysits (resume after a quota wall,
+send-back, blocked notes, herdr-restart resume, the wake). One active
 wave per repo; parallel waves only in different repos. A pane-less supervisor
 (`claude --bg` mother) is not a pattern.
 

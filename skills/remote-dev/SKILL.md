@@ -42,7 +42,7 @@ for N independent changes). `agent-dispatch` and
 
 `/wave` owns the contract (chain vs orchestrated mode, the green gate). The
 mechanics this skill owns: `rd wave` adds a tab labelled `wave <n>` to the repo's
-workspace and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, in `fan <branch>` tabs. `scripts/wave-watch.sh` is the one watcher (`/wave` documents both modes). Waiting on it:
+workspace and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, in `fan <branch>` tabs. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand:
 
 ```bash
 herdr agent wait <agent> --until working --timeout 60000   # prompt landed

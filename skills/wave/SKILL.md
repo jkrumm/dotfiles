@@ -1,190 +1,120 @@
 ---
 name: wave
-description: Run a long implementation as a chain of fresh agent contexts on the mini — self-continuing (chain mode) or spawned wave by wave from a visible orchestrator tab (orchestrated mode). Use when work is too large for one context and would otherwise end with a hand-written handover prompt the human copy-pastes into a new herdr pane — multi-wave/multi-round/multi-phase implementations, staged migrations, anything whose plan says "then in the next session". Also use when asked to author a wave plan, to close out a wave, or to continue/resume a wave chain.
+description: Run a long implementation as a chain of fresh agent contexts on the mini — chain mode or orchestrated mode. Use for work too large for one context, multi-wave implementations, staged migrations, plans saying "then in the next session"; also to author a wave plan, close out a wave, or continue a chain.
 ---
 
-# Wave — a chain of fresh contexts that continues itself
+# Wave — a chain of fresh contexts
 
-A long implementation is not one agent's job. It is N agents, each with a clean
-context, each handing the next a durable plan rather than a prompt in a terminal
-someone has to copy.
-
-## Vocabulary — two words, no synonyms
-
-| Term | Is | Test |
-|-|-|-|
-| **Wave** | One agent context: one herdr pane, one fresh Claude, one handover in, one handover out. | Needs a fresh context → wave |
-| **Step** | A unit of work inside a wave. Spawns nothing. | Fits in the current context → step |
-
-A plan that says round, phase, stage, milestone or iteration is renamed at
-authoring time. Nothing downstream searches for synonyms.
+**Wave** = one agent context (one herdr pane, one fresh Claude). **Step** = work inside a wave; spawns nothing. Rename plan "round/phase/stage/milestone/iteration" at authoring time.
 
 ## Pick the shape first
 
-Simplest shape that fits wins. Ask: is validation a shared resource, are there N
-independent changes, or is it long multi-phase work?
-
 | Shape | Use when | Mechanics |
 |-|-|-|
-| **sequential** (default) | One change stream, or validation is a shared resource (one app build, an e2e lock, screenshots). | One wave at a time in the main checkout: this file's chain/orchestrated modes. |
-| **fan-out** | N independent changes with disjoint files and cheap independent validation. | Briefs from `roles/worker.md`'s template, one per change; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief in the repo's existing workspace; the orchestrator tab waits with `wave-watch.sh --agents …` and lands them with `rd merge <repo> <branches…>` (rebase, install from the lockfile, check, ready a draft PR, wait for the pushed head's CI — red CI stops the train, `--no-ci` skips — merge by rebase, re-rebase as main moves; GitHub only). `rd fan --clean <repo>` after. |
-| **fleet** | Long multi-phase work that outlives any one context. | A lean **mother** (`roles/mother.md`, never reads code), a standing **lead** (`roles/lead.md`, owns review and merge), a fresh **worker** per task (`roles/worker.md`). Rotation through `docs/waves/handoff/<name>.md`. Fan-out mechanics for the workers. |
+| **sequential** (default) | One change stream, or a shared validation resource (app build, e2e lock). | One wave at a time, main checkout. |
+| **fan-out** | N independent changes, disjoint files, cheap independent validation. | Briefs from `roles/worker.md`; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief; the orchestrator waits (below), then `rd merge <repo> <branches…>` (`docs/remote-dev.md`). `rd fan --clean <repo>` after. |
+| **fleet** | Multi-phase work that outlives one context. | **mother** (`roles/mother.md`, never reads code), standing **lead** (`roles/lead.md`, owns review and merge), fresh **worker** per task (`roles/worker.md`). Rotation via `docs/waves/handoff/<name>.md`. |
 
-Roles and the brief template are files under `roles/`; briefs reference them, they are not
-re-typed per run.
+### Waiting on workers
 
-### The watcher: `~/SourceRoot/dotfiles/scripts/wave-watch.sh`
+The spawner is the worker's parent, so the factory follows it. Never poll:
 
-One tool, on PATH via its full path above. Sequential/orchestrated: `wave-watch.sh <agent> <repo-dir> <plan> <n>` (PLAN
-status flips to done, the agent idles/blocks/vanishes, or 45 min with no change in any of
-the repo's worktrees). Fan-out/fleet: `wave-watch.sh --agents a,b,c [--events <file>]
-[--heartbeat 20]` wakes on any listed agent leaving `working`, a new event line, or the
-heartbeat. Output begins `DONE|AGENT|EVENT|HEARTBEAT|STALL`. Wrap it in `timeout` when the
-caller must not block forever.
+1. Spawn with `rd wave` or `rd fan`, then `factory session wait --on workers` and end the turn.
+2. When the last child finishes, the factory types one note, `workers done: <child> <state>, …`; it starts the next turn.
+3. Look: `rd read <agent>`, `factory status`.
+
+- Only `factory session wait --done` closes a wait; a new turn clears nothing. After a wake the wait is spent (one wake per declaration) but still open, which also mutes send-back. **Declare `--on workers` again after every spawn, before ending the turn.** `--done` only cancels.
+- Workers running, no wait declared: the Stop hook sends the turn back once. Declare it then.
+- A held spawn (`queued: <reason>`) is a worker too: the factory starts it when the hold lifts and the wake waits for it. A failed spawn does not hold the wake (`factory status`).
 
 ### Fan-out rules
 
-- Brief workers from the `Base:` line `rd fan` prepends (fetched `origin/<default>`), never
-  from the local checkout: a stale or ahead local master briefed a worker against the wrong
-  tree once.
-- Prompt delivery is verified (`rd wave` and `rd fan`): no `working` state within 30 s
-  means one re-send. Still idle after that, `rd read` it.
-- Gates: the cheap check per change inside the worker; full `make check` at merge. No
-  `done` with "Review: none" without a recorded reason.
-- Never `git push` from the orchestrator's cwd for a worktree's branch; the train uses
-  `git -C <worktree>` so `protect-branches` judges the right tree.
-- Probing an LLM endpoint (`opencode run`) uses `opencode-safe` and `timeout`; bare
-  `opencode run` retries forever against a dead endpoint.
+- Brief from the `Base:` line `rd fan` prepends (fetched `origin/<default>`), never the local checkout.
+- A worker still idle after the verified prompt delivery (one re-send at 30 s): `rd read` it.
+- Gates: cheap check per change in the worker, full `make check` at merge (`roles/lead.md`).
+- Push a worktree's branch with `git -C <worktree>`, never from the orchestrator's cwd (`protect-branches` judges the right tree).
+- Probe LLM endpoints with `opencode-safe` and `timeout`; bare `opencode run` retries forever.
 
 ## Two modes
 
-| Mode | Who spawns the next wave | Use when |
-|-|-|-|
-| **chain** | the finishing wave, from its own session (`rd wave`, below) | the plan is settled and nobody needs to look between waves |
-| **orchestrated** | the orchestrator tab — an interactive session the owner can see | the owner wants a review point between waves, or a wave may need a different model/kind next |
+- **chain**: the finishing wave spawns the next from its own session; nobody looks between waves.
+- **orchestrated**: a visible orchestrator tab spawns each wave; for a review point between waves or a different model next.
 
-The brief a wave starts from says which one applies. **"Do NOT spawn the next
-wave"** (or any mention of an orchestrator) means orchestrated: a wave then ends
-at its committed close-out and spawns nothing. No such sentence → chain.
+**"Do NOT spawn the next wave"** (or any mention of an orchestrator) in the brief means orchestrated: end at the committed close-out, spawn nothing. Otherwise chain.
 
-### Orchestrated mode — the orchestrator's loop
+### Orchestrated mode — the loop
 
-The orchestrator holds no plan state of its own; PLAN.md is the state.
+PLAN.md is the state; the orchestrator holds none.
 
-1. Spawn: `RD_ORCHESTRATED=1 rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'`
-   `RD_ORCHESTRATED=1` skips the gate's outward-facing keyword stop — the orchestrator, not a keyword, decides when a merge or deploy happens; every other gate check still runs.
-   Its own tab being `working` does not block the spawn — `rd wave` excludes the caller's pane and tab. Any *other* working agent in the checkout still does.
-2. Block on it with `wave-watch.sh <repo>-w<n> <repo-dir> docs/waves/PLAN.md <n>` (or by hand, one call each): `herdr agent wait <repo>-w<n> --until working --timeout 60000`, then `herdr agent wait <repo>-w<n> --until idle --until done --until blocked`. All three settled states — `done` alone never fires while the tab is being watched (it reports `idle`). `blocked` → `rd read` it before answering.
-3. Review the close-out: read PLAN.md (the wave's **Left behind**, status flips), `git log` and the diff it produced. A wave's report is a claim, the diff is the proof. Re-run `/check` if the wave's own gate result is not in its Left behind.
-4. Decide: red or incomplete → fix inline or `rd say` the wave; green → `rd close <repo>-w<n>` (refuses unless the tab is a `wave <n>` tab, the agent is not working, the checkout is clean and everything is pushed), then spawn the next. A next step that is outward-facing (merge, publish, release, deploy) stops at the owner.
+1. Spawn: `RD_ORCHESTRATED=1 rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'` `RD_ORCHESTRATED=1` skips only the gate's outward-facing keyword stop (the orchestrator decides when to merge or deploy). The caller's own tab does not block the spawn; any other working agent in the checkout does.
+2. Wait (above). `blocked` → `rd read` it before answering.
+3. Review the close-out: PLAN.md (**Left behind**, status flips), `git log`, the diff; the report is a claim, the diff the proof. Re-run `/check` if the gate result is not in Left behind.
+4. Red or incomplete → fix inline or `rd say` the wave. Green → `rd close <repo>-w<n>` (refuses unless a `wave <n>` tab, agent not working, checkout clean and pushed), then spawn the next. An outward-facing next step (merge, publish, release, deploy) stops at the owner.
 5. One active wave per repo; parallel waves only across repos.
 
-Chain mode leaves its tabs open — a wave cannot close the tab it is running in.
+Chain mode leaves its tabs open: a wave cannot close its own.
 
 ## The plan is the handover
 
-`docs/waves/PLAN.md` in the target repo — committed, reviewable, and the reason a
-wave chain survives a herdr restart. The prompt handed to the next wave is one
-line; everything else is in the file.
+`docs/waves/PLAN.md` in the target repo, committed, so a chain survives a herdr restart.
 
 ```markdown
 # <title>
-**Goal:** <one sentence — the state the last wave leaves behind>
+**Goal:** <end state>
 **Gate:** <the check/review command every wave must pass>
 
 ## Wave 1 — <name>            <!-- status: done -->
 - [x] step
-**Left behind:** <what wave 2 inherits: branch, decisions, known gaps>
+**Left behind:** <branch, decisions, known gaps wave 2 inherits>
 
 ## Wave 2 — <name>            <!-- status: active -->
 - [ ] step
-- [ ] step
-**Left behind:**
-
-## Wave 3 — <name>            <!-- status: pending -->
 ```
 
-Exactly one wave is `active`. The status comments are the machine-readable part —
-`rd wave` does not parse them (it reads `(Wave <n>)` from the prompt for the tab label and agent name `<repo>-w<n>`; without one it takes the next tab number whose agent name is not already live), but every wave agent reads them first and the human
-greps them.
+Exactly one wave is `active`. `rd wave` ignores the status comments; `(Wave <n>)` in the prompt names the tab and agent `<repo>-w<n>` (else the next free number).
 
 ## Running a wave
 
-1. **Orient.** Read `docs/waves/PLAN.md`. Your wave is the `active` one. If none
-   is active, or the active one is already `[x]` complete, stop and say so — do
-   not guess which wave you are.
-2. **Execute the steps.** Delegate as always: `@implementer` for edits needing this
-   pane's live tree, `rd fan` for independent same-repo changes, `Explore` for search, `/research` for library facts. The
-   wave agent orchestrates; it does not grind.
-3. **Close out.** In this order, every time:
-   - `/check` — the plan's **Gate**. Report failures verbatim.
-   - `/review` on anything non-trivial; fix findings via `@implementer`.
+1. **Orient.** Read PLAN.md; your wave is the `active` one. None active, or already complete: stop and say so.
+2. **Execute.** Delegate: `@implementer` (live tree), `rd fan` (independent same-repo changes), `Explore`, `/research`. The wave agent orchestrates; it does not grind.
+3. **Close out**, in order:
+   - `/check` — the plan's **Gate**; failures verbatim.
+   - `/review` non-trivial work; fixes via `@implementer`.
    - `/commit` per logical concern.
-   - Update `docs/waves/PLAN.md`: tick the steps, write **Left behind**, flip this
-     wave to `done` and the next to `active`.
-   - Prune what this wave made stale — dead docs, obsolete TODOs, closed issues.
-     A wave that leaves stale docs behind has not closed out.
-   - Commit the plan update, then push (PR-required repo: the branch). An unpushed
-     wave cannot be closed by `rd close`, and the next wave starts from the remote.
-4. **Gate, then chain** (chain mode) — or stop at the committed close-out (orchestrated). Below.
+   - PLAN.md: tick steps, write **Left behind**, flip this wave `done`, the next `active`.
+   - Prune what the wave made stale (dead docs, obsolete TODOs, closed issues).
+   - Commit the plan, push (PR-required repo: the branch): `rd close` refuses an unpushed wave and the next starts from the remote.
+4. **Gate, then chain**, or stop at the committed close-out (orchestrated).
 
-## Never end the turn while waiting
+## Ending the turn
 
-A wave's turn ends only at its committed close-out (orchestrated) or after the explicit
-spawn/stop decision (chain). Ending a turn with a background monitor, shell or agent still
-running ("1 shell still running") strands the chain: nothing resumes it. Rules:
+Ending the turn is right once a wait is declared; the factory resumes you. A background shell, monitor or agent still running at the end strands the chain.
 
-- Wait **in the foreground, bounded**: `timeout <s> <cmd>` or a poll loop of at most ~10 minutes
-  per call, then decide (keep waiting, `rd read`, steer, cancel). No unbounded `Monitor` or
-  `run_in_background` as the last act of a turn.
-- Anything started in the background is collected (`TaskOutput`) or stopped
-  (`TaskStop`) before the close-out commit. A wave with a live background task has not closed out.
-- The close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" written into
-  **Left behind**. Silence is neither. `queued: <reason>` from `rd wave` (a drain, no capacity) is a
-  spawn: the factory starts it when the hold lifts, so the wave ends its turn.
+- Foreground work is bounded: `timeout <s> <cmd>` or a poll loop of ~10 minutes at most. No `Monitor` or `run_in_background` as the last act of a turn; collect (`TaskOutput`) or stop (`TaskStop`) background tasks before the close-out commit.
+- A close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" in **Left behind**. `queued: <reason>` from `rd wave` (a drain, no capacity) is a spawn.
 
 ## The green gate
 
-**A wave spawns its successor only if its own close-out was green.**
+**A wave spawns its successor only if its own close-out was green** (`/check` passed, review findings resolved: the wave's own judgment, `rd wave` trusts it). The rest is mechanical, `rd wave` → `scripts/wave-gate.py`:
 
-| Condition | Action | Enforced by |
-|-|-|-|
-| `/check` passed, review findings resolved | Prerequisite for the rest | The finishing wave's own judgment — not re-provable from the plan file, so `rd wave` trusts it |
-| Plan committed, an `active` wave with a done, fully-ticked predecessor exists | Spawn it | `rd wave` → `scripts/wave-gate.py`, mechanical |
-| No `active` wave, or the predecessor isn't `done`/fully ticked | **Stop.** Write the failure into the active wave's **Left behind**, commit, and leave the pane open. Do not spawn. | `wave-gate.py` refuses before touching herdr |
-| The next step is outward-facing — merge, publish, release, deploy, ship | Stop and hand back to the human. `/ship` is a human's call, not a wave's. | `wave-gate.py`'s keyword heuristic on the active wave's next unchecked step — a subtler outward-facing reason still needs the wave to notice it itself |
-
-A red wave that chains anyway poisons every wave after it with a broken base. The
-mechanical half of the gate is the reason a broken close-out fails loud instead
-of silently spawning into it; the judgment half (did check/review actually pass)
-is still the finishing wave's to get right.
+- An `active` wave with a done, fully-ticked predecessor: spawn it.
+- No `active` wave, or the predecessor isn't `done`/fully ticked: **stop.** Write the failure into the active wave's **Left behind**, commit, leave the pane open.
+- Next step outward-facing (merge, publish, release, deploy, ship): stop and hand back to the human; `/ship` is a human's call. The gate matches keywords only; notice subtler cases yourself.
 
 ## Spawning the next wave (chain mode)
 
-Orchestrated mode: skip this section — the orchestrator spawns. Chain mode: one
-command, from the finishing wave's own session:
+Orchestrated mode skips this. From the finishing wave's own session:
 
 ```bash
 rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n+1>). Follow the /wave skill.'
 ```
 
-That adds a `wave <n>` tab to the repo's workspace, starts the agent in solo mode
-(Claude Code on the Max subscriptions; no room pauses the spawn), and
-submits the prompt. The handover content lives in the committed plan, not in this string —
-keep the prompt to the two sentences above.
+Keep the prompt to those two sentences.
 
-`RD_WAVE_MAX` (default 10) bounds the chain. `RD_DRY_RUN=1` resolves and prints
-without spawning. `rd agents` shows every wave; `rd read <agent>` watches one.
-Model and effort come from the factory role table: `rd wave` is `--role wave`, `rd fan` is `--role worker`, and `--role mother|lead|wave|worker|mechanical` picks another. Precedence: `RD_WAVE_MODEL` / `RD_WAVE_EFFORT=low|medium|high|xhigh|max` (explicit env) over `--role` over today's defaults (Sonnet; effort per model from `config/claude-effort.json`: Sonnet high, Opus/Fable medium). A factory that does not answer falls back to those defaults with one stderr line. A chain that needs
-Fable sets it per spawn (rationale: `brain/wiki/engineering/model-routing.md`).
+`RD_WAVE_MAX` (default 10) bounds the chain; `RD_DRY_RUN=1` prints without spawning. Model and effort come from the factory role table (`--role mother|lead|wave|worker|mechanical`; `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` override; `docs/remote-dev.md`). A chain needing Fable sets it per spawn.
 
-**Never `rd wave` a repo whose live agent is still `working`** — the command
-refuses, and the reason is that two Claudes in one checkout silently race each
-other's edits across panes where you cannot see it happen.
+**Never `rd wave` a repo whose live agent is `working`**: two Claudes in one checkout silently race each other's edits (it refuses).
 
 ## Authoring a plan
 
-Asked to plan a large piece of work: write `docs/waves/PLAN.md`, do not start
-implementing. Size each wave to comfortably finish inside one context — three to
-six steps. A wave that will obviously overflow is two waves. State the **Gate**
-explicitly; a chain with no gate cannot be green.
+Write PLAN.md, do not implement. Three to six steps per wave; an overflowing wave is two. State the **Gate**: no gate, no green.
