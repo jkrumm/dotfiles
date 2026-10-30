@@ -12,8 +12,8 @@ const NOW = 1_800_000_000_000
 const H = 3600
 const reg = (bEnabled = true): Registry => ({
   accounts: {
-    iu: { dir: null, plan: "max20x", units: { session: 4, weekly: 2 }, homeLanes: ["interactive", "agent-gateway:review", "headless"], enabled: true },
-    me: { dir: "/home/x/.claude-me", plan: "max5x", units: { session: 1, weekly: 1 }, homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: bEnabled },
+    iu: { dir: null, plan: "max20x", units: { session: 4, weekly: 2 }, homeLanes: ["interactive", "headless"], enabled: true },
+    me: { dir: "/home/x/.claude-me", plan: "max5x", units: { session: 1, weekly: 1 }, homeLanes: ["wave", "fan"], enabled: bEnabled },
   },
 })
 const sample = (s: number, w: number, o: { age?: number; wReset?: number } = {}): Sample => ({
@@ -29,7 +29,7 @@ describe("pick rule v1.1 pace guard", () => {
   const meCalm = sample(10, 2, { wReset: NOW / 1000 + 6.5 * D }) // pace 7
   test("over-pace home yields to an under-pace other, every lane", () => {
     expect(pick(reg(), cacheOf(iuOver, meCalm), "interactive", NOW)).toMatchObject({ picked: "me", reason: "pace" })
-    expect(pick(reg(), cacheOf(iuOver, meCalm), "agent-gateway:review", NOW)).toMatchObject({ picked: "me", reason: "pace" })
+    expect(pick(reg(), cacheOf(iuOver, meCalm), "headless", NOW)).toMatchObject({ picked: "me", reason: "pace" })
   })
   test("both over pace -> home", () => {
     const meOver = sample(10, 60, { wReset: NOW / 1000 + 6.5 * D })
@@ -52,9 +52,9 @@ describe("pick rule v1.1 pace guard", () => {
 // ── rule v1.4: N accounts. `me` and `me2` share the bulk lanes; units come from the plan (no `units` in this registry). ──
 const reg3 = (): Registry => ({
   accounts: {
-    iu: { dir: null, plan: "max20x", homeLanes: ["interactive", "agent-gateway:review", "headless"], enabled: true },
-    me: { dir: "/home/x/.claude-me", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true },
-    me2: { dir: "/home/x/.claude-me2", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true },
+    iu: { dir: null, plan: "max20x", homeLanes: ["interactive", "headless"], enabled: true },
+    me: { dir: "/home/x/.claude-me", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true },
+    me2: { dir: "/home/x/.claude-me2", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true },
   },
 })
 const cache3 = (iu?: Sample, me?: Sample, me2?: Sample): Cache => ({ ...emptyCache(), samples: { ...(iu ? { iu } : {}), ...(me ? { me } : {}), ...(me2 ? { me2 } : {}) } })
@@ -83,7 +83,7 @@ describe("pick rule v1.4: N accounts", () => {
     const c = { ...cache3(iu, sample(10, 10), sample(10, 30)), exhausted: { me: NOW / 1000 + 600 } }
     expect(pick(reg3(), c, "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
     expect(pick(reg3(), { ...c, exhausted: { me: NOW / 1000 + 600, me2: NOW / 1000 + 600 } }, "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "agent-gateway:dispatch", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
   })
   test("headroom is scaled by the weekly units: a 20x account with the same percent has twice the room", () => {
     // lane without a home -> step 5, the most headroom: iu (95-50)*2 = 90, me (95-30)*1 = 65, me2 (95-40)*1 = 55
@@ -150,7 +150,7 @@ describe("pick rule v1.5: expiry-weighted sharing", () => {
     expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "fan", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "session" })
   })
   test("N accounts: a fourth subscription joins from the registry alone", () => {
-    const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["wave", "fan", "agent-gateway:*"], enabled: true } } }
+    const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true } } }
     const c: Cache = { ...cache3(iu, me, me2), samples: { ...cache3(iu, me, me2).samples, me3: sample(10, 30, { wReset: NOW / 1000 + 1.5 * D }) } }
     expect(pick(r, c, "fan", NOW)).toMatchObject({ picked: "me3" })
     const seen = new Set(Array.from({ length: 200 }, (_, i) => pick(r, c, "fan", NOW, () => (i + 0.5) / 200).picked))
@@ -412,8 +412,8 @@ describe("pick rule v1", () => {
     const c = cacheOf(sample(10, 10), sample(10, 10))
     expect(pick(reg(), c, "wave", NOW)).toEqual({ picked: "me", reason: "home", stale: false })
     expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
-    expect(pick(reg(), c, "agent-gateway:review", NOW).picked).toBe("iu")
-    expect(pick(reg(), c, "agent-gateway:dispatch", NOW).picked).toBe("me")
+    expect(pick(reg(), c, "headless", NOW).picked).toBe("iu")
+    expect(pick(reg(), c, "wave", NOW).picked).toBe("me")
   })
   test("expiring capacity beats home for bulk lanes only", () => {
     const a = sample(10, 40, { wReset: NOW / 1000 + 5 * H })
@@ -469,11 +469,16 @@ describe("pick rule v1", () => {
     // a fresh s next to a 1 h old w: the sample is only as fresh as its stalest window
     expect(pick(reg(false), cacheOf({ ...sample(10, 10), w_ts: NOW - 3_600_000 }), "wave", NOW).stale).toBe(true)
   })
-  test("home lanes: exact match beats a wildcard; review spills to b rather than counting it home", () => {
-    expect(homeIds(reg(), "agent-gateway:review")).toEqual(["iu"])
-    expect(homeIds(reg(), "agent-gateway:dispatch")).toEqual(["me"])
+  test("home lanes: only accounts claiming the lane are home; headless spills to b rather than counting it home", () => {
+    expect(homeIds(reg(), "headless")).toEqual(["iu"])
+    expect(homeIds(reg(), "wave")).toEqual(["me"])
     expect(homeIds(reg(), "nope")).toEqual([])
-    expect(pick(reg(), cacheOf(sample(99, 10), sample(10, 10)), "agent-gateway:review", NOW)).toMatchObject({ picked: "me", reason: "spill" })
+    expect(pick(reg(), cacheOf(sample(99, 10), sample(10, 10)), "headless", NOW)).toMatchObject({ picked: "me", reason: "spill" })
+  })
+  test("home lanes: a `lane:*` wildcard counts only when no account matches exactly", () => {
+    const r: Registry = { accounts: { ...reg().accounts, me: { ...reg().accounts.me, homeLanes: ["wave", "batch:*"] } } }
+    expect(homeIds(r, "batch:nightly")).toEqual(["me"])
+    expect(homeIds({ accounts: { ...r.accounts, iu: { ...r.accounts.iu, homeLanes: ["batch:nightly"] } } }, "batch:nightly")).toEqual(["iu"])
   })
 })
 
