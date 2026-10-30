@@ -1,20 +1,78 @@
-# agent-workflows — dotfiles lane
+# Clean setup: no retired wiring, no headless claude
 
-**Goal:** warden is switched off with no caller left, every former warden alert reaches Slack, and the setup docs describe three lanes (P0 of `docs/agent-workflows/concept.md` §11).
-**Gate:** `make check` in dotfiles and `make doctor` on the mini, both green; `/review` on the non-doc changes.
+**Goal:** nothing on the mini, in dotfiles or in the repos that agents read still names, calls or starts a
+retired service (warden, agent-gateway, research-gateway, audio-gateway, `agw-legacy`, dispatch), and no
+script or skill runs headless `claude -p`. Owner decisions 2026-10-30
+(`docs/factory/feedback/2026-10-30-owner-voice-note-replan.md` and the chat after it): warden is gone for good;
+no `claude -p` anywhere; interactive sessions in herdr, native subagents and `agw` workflows are the only lanes.
+Input: the setup audit of 2026-10-30, findings quoted per step below.
+**Gate:** `make check` in every repo a wave touched, `make doctor` on the mini, both green; `/review` on the
+non-doc changes; `rg` for the retired names (step list in Wave 2) returns only legitimately historical hits.
 
-## Wave 1 — Switch warden off (P0)            <!-- status: done -->
-Brief: `docs/agent-workflows/waves/P0-warden-off.md` — its Rules and Acceptance bind this wave.
+## Wave 1 — Headless claude out, docs true            <!-- status: active -->
+Workers: Sonnet; Haiku subagents for the mechanical doc edits. Orchestrated: do NOT spawn Wave 2.
 
-- [x] Inventory every warden caller and alert path; write it into the brief's `## Inventory`
-- [x] Kill switch, final backup copied to the HomeLab
-- [x] Kuma, HyperDX and jobs-grade alerts rerouted to Slack, each proven
-- [x] Callers removed: dotfiles (global CLAUDE.md, AGENTS.md, docs, rd help, skills), Hermes, Argo, the rest of the inventory
-- [x] LaunchAgents unloaded, architecture map fixed, `warden/AGENTS.md` status line
-- [x] Brief's `## Findings` filled; Acceptance list met
-**Left behind:** warden is off and has no caller in dotfiles, Hermes, Argo (PR #205 merged and live), agent-gateway (deployed), homelab, vps. Findings with evidence: `docs/agent-workflows/waves/P0-warden-off.md` `## Findings`. Open for the orchestrator/owner:
-- `make check` and `make doctor` stay red on pre-existing, unrelated items (IuRoot teamchat/athena LaunchAgents unmapped in architecture.md; collie pin and tailscale daemon drift). Every other check target and all warden-related doctor rows are green.
-- ACL grant removal (`dotfiles-private` `4fc5b42`) is queued in human-queue because the MacBook was unreachable; after the push, drop `GUARD_SRC_TAGS` from `scripts/caddy-tailnet.sh`.
-- Not literal-grep-clean: generated diagrams, other repos' prose, 4 archive pointers (Findings #8-9). Credentials `WARDEN_BOT_TOKEN` and the two ingest tokens are unused but not revoked (Findings #7).
-- `/review` (agent-gateway, 5 of 6 angles; architect timed out) found 2 blocking issues in the Slack path, both fixed in `fix(jobs-grade)`; the improvements list was applied except the complexity refactor of `readCronStates`/`gradeOne`.
-- No next wave in this plan; nothing spawned.
+- [ ] **No `claude -p`.** Replace every live caller:
+  - `brain/brain-backup.sh:145` and `brain/brain-sync.sh:377` write commit messages with `claude -p --model haiku`.
+    Use an existing `agw` capability if one fits (check `agw --help`); otherwise a deterministic message from
+    the diff (files and counts). A hang can no longer hold the brain-sync lock.
+  - `skills/analyze/SKILL.md`: drop the `claude_iu` subprocess and its hard-coded model id (`:127`); run fallow
+    in a native subagent (the report still stays out of the main context).
+  - `skills/implement/SKILL.md:64`: drop the `claude -p … --allowedTools` fan-out; point at `/wave` fan-out.
+  - The `claude_iu` launcher: if no caller is left, remove it with its docs (`AGENTS.md:440`,
+    `config/global.CLAUDE.md` "subprocess `claude_iu --model sonnet`", `config/zsh/claude.zsh`), and say whether
+    `hooks/iu-model-guard.ts` still has a job. Keep it only if a real caller remains, and name it.
+  - Two kept on purpose, documented as the only exceptions: `scripts/claude-accounts-e2e.sh` (it tests the
+    launchers themselves, a few Haiku tokens per account) and modelpick's bench (it measures the Claude Code
+    harness). Write both into `docs/agent-platform.md` as "the only headless runs".
+- [ ] **`docs/agent-platform.md` describes what runs:** `:28` ("designed … not built") is wrong, it is built;
+  delete the "Agent-Gateway — the engine" section (`:94-107`) and point at `agw routes`; `:74` engine is
+  Claude Code only (`--kind opencode` is rejected); `:41` drop the warden-era diagram link.
+- [ ] **Diagrams:** `docs/diagrams/{agent-platform,estate}.architecture.json` and `dispatch-path.sequence.json`
+  (and their HTML) are warden-era: move to `docs/archive/diagrams/`, and stop `docs/architecture.md:43-46`
+  presenting them as current. Same for `jkrumm.com/public/diagrams/agent-platform.html` only if jkrumm.com links
+  it as current (check; it is a public site, so a removal is a jkrumm.com commit of its own).
+- [ ] **Smaller truths:** `skills/otel/SKILL.md:153` service names are `agw` and `agw-audio`, not
+  `audio-gateway`; `docs/opencode.md:76` (chrome-devtools is wired); `rules/research-first.md:12` and
+  `agents/implementer.md:32-33` (Context7 → `agw web docs`); `skills/prose/SKILL.md:3` ("agw lint" is not a
+  command); `config/settings.template.json:5` drop `MCP_TOOL_TIMEOUT` (it served research-gateway's MCP);
+  `config/global.CLAUDE.md:88` and `config/zsh/claude.zsh:175` "IU tokens are for gateways" → for `agw`,
+  OpenCode and Hermes; `docs/global-reference.md:42-48` lists `/router`, and `/podcast` and `/img` as agw-backed;
+  archive `docs/waves/claude-accounts-handover.md`.
+- [ ] **Stale comments** (Haiku): `scripts/lib/launchd-restarts.sh:23-27,92-95`, `scripts/herdr-groups.py:35`,
+  `scripts/fetch_usage.py:267`, `scripts/human-queue-notify-hook.sh:8`, `scripts/drift-check.sh:21`,
+  `scripts/disk-sweep.sh:9,104` (check whether `~/.opencodereview/sessions` is still written; drop the step if
+  not), `config/Caddyfile:221-223` (iris binds 7730), `config/gitignore_global:5`,
+  `.claude/skills/iu-endpoint/models.txt:10`, the LaunchAgent plist comments (`jobrun-canary`,
+  `modelpick-refresh`, `usage-tracker`, `weatherorb.retention`, `weatherorb.verify`: fix the templates and
+  re-render), `scripts/claude-account.test.ts` agent-gateway lane fixtures if those lanes no longer exist.
+- [ ] Run `make setup`/the relevant install target so `~/.claude` matches the template, then the gate.
+
+**Left behind:**
+
+## Wave 2 — Other repos and the disk            <!-- status: pending -->
+Workers: Sonnet; Haiku for the sweeps. Orchestrated.
+
+- [ ] **hermes-agent:** `skills/verify/references/agent-claim-verification.md:111` and
+  `skills/homelab-ops/references/restart-window-prep.md:73` curl warden's port 7735 (nothing listens);
+  `skills/herdr/SKILL.md:24,56,82,89` examples use `--cwd ~/SourceRoot/warden` (deleted); `README.md:34-39`
+  (deepseek brain, warden channels), `.env.tpl:78`, `Makefile:21`, `docs/scheduled-jobs.md:50-53`,
+  `docs/symlinks-and-agents.md:39-50`.
+- [ ] **vps:** `Makefile:60,118,131,528-537` still bring up an `audio-gateway` stack and `AGENTS.md:201,538`
+  list `apps/audio-gateway` and its Kuma monitor; the container is not running on the VPS (checked 2026-10-30).
+  Remove the stack, the app directory, the monitor in `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`) and
+  any RollHook registration for the retired repo.
+- [ ] **brain:** `AGENTS.md:329` cites `hermes-agent/config/dispatch-repos.json`, which does not exist.
+- [ ] **Disk:** delete `~/SourceRoot/{agent-gateway,research-gateway,audio-gateway}` and the data dirs
+  `~/.local/share/agent-gateway` (5 GB) and `~/.research-gateway` (1.7 GB), each only after checking its final
+  backup on `homelab:/mnt/hdd/backups/<name>-final/` against its `SHA256SUMS`. research-gateway has an unpushed
+  branch `feat/paper-reading-and-liveness` (worktree `.claude/worktrees/paper-liveness`, commit `036d7c5`) and
+  the GitHub repo is archived: prove the final bundle contains it (`git bundle list-heads`), or write a bundle
+  of that branch next to it, before deleting. warden is already gone (2026-10-30).
+- [ ] **herdr:** close duplicate and dead workspaces (three `hermes-agent` spaces today) only where no agent is
+  working and nothing is unpushed; one space per repo is the rule.
+- [ ] The gate's final sweep: `rg -n -i 'agent-gateway|research-gateway|audio-gateway|agw-legacy|warden|dispatch'`
+  across `~/SourceRoot` (excluding archives, `docs/factory/`, node_modules, IuRoot), every hit either fixed or
+  listed in Left behind as historical.
+
+**Left behind:**
