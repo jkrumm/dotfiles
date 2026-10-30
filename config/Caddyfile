@@ -92,7 +92,7 @@ rollhook-dashboard.test {
 
 # factory review — plannotator Inbox behind a loopback door on :7790 (follows the Inbox's own port and drops
 # the client-address headers the Inbox refuses); the interim artifact-review backend behind `rv` until the
-# factory's own review service lands (docs/factory/adr/ADR-005-artifact-review.md, rewrite wave W7)
+# factory's own review service lands (docs/archive/factory-v2.4/adr/ADR-005-artifact-review.md, archived; software-factory owns the replacement)
 plannotator.test {
 	import local
 	reverse_proxy localhost:7790
