@@ -173,15 +173,6 @@ iris.test {
 	reverse_proxy localhost:7730
 }
 
-# image-gateway — stateless image-generation gateway (Elysia + Bun) on :7716.
-# Local dev for the image-gateway monorepo (`bun run dev` at its root also starts the
-# Tauri app; Vite on :1420 is Tauri-internal, not proxied). VPS container reached
-# over the tailnet at image-gateway.<domain>.
-image-gateway.test {
-	import local
-	reverse_proxy localhost:7716
-}
-
 # photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
 # Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
 # Caddy streams SSE (/events/*) fine by default — no special flush config needed.

@@ -25,7 +25,7 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 - **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
-- **Gateways — outsourced work** as submit-then-poll HTTP services: image-gateway, email-gateway. Detail: brain `gateways`.
+- **Gateways — outsourced work** as submit-then-poll HTTP services: email-gateway. Detail: brain `gateways`.
 
 **The agent platform** — one engine (agent-workflows),
 one front door (Hermes), one cockpit (herdr), two lanes, one repo contract —
@@ -72,7 +72,7 @@ which validates geometry before it delivers.
 | Repo | Purpose |
 |-|-|
 | `photo-flow` · `shutterflow` | the two photography apps |
-| `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; its gateway stays on the VPS |
+| `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; it generates through agw's image door on the mini (the VPS gateway is retired) |
 | `basalt-ui` | followed image-gateway when the studio consumed it as a `file:` dependency; every consumer now pins the published npm version, so this placement is convenience, not a requirement |
 | `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
 
