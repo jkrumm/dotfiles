@@ -831,3 +831,5 @@ others, and ones made before the marker, are kept); `--all` judges every extra w
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
 Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.
+
+**Waiting on spawned agents.** Nothing polls. The spawner is the worker's parent: `factory session wait --on workers`, then end the turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn is a worker too. Only `factory session wait --done` closes a wait (a new turn clears nothing), so declare `--on workers` again after every spawn. `rd read <agent>` and `factory status` are how a woken orchestrator looks.
