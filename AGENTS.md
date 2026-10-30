@@ -168,7 +168,7 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only; no room pauses, never IU), bounded by `RD_WAVE_MAX`; `rd close <agent>` closes a finished wave tab (clean + pushed only); `/wave` owns the contract (chain or orchestrated) and the green gate |
+| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave|fan` queue a spawn there (no room or a `drain` prints `queued: <reason>` and the factory starts it later), `rd say` becomes a held `factory session note`; without it, today's path (no room pauses). `rd close <agent>` closes a finished agent's tab (clean + pushed only), found through the factory's session, else only a `wave <n>` tab; `/wave` owns the contract (chain or orchestrated) and the green gate |
 
 | Want | Command |
 |-|-|
