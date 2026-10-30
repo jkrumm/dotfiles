@@ -2280,7 +2280,7 @@ opbackup-seed-test:
 # Hermetic suites for the rd fan / rd merge / rd wave / rd say host scripts (base-from-origin, worktree verdicts, train install + draft handling, agent-name collisions, say delivery verification, FACTORY_SESSION at spawn, which path rd takes when the factory answers, holds, fails or is absent, the wave gate) and the factory hooks in settings.template.json.
 .PHONY: fan-test
 fan-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/wave-watch.sh $(DOTFILES_DIR)/scripts/fan.test.sh $(DOTFILES_DIR)/scripts/merge-train.test.sh $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/fan.test.sh $(DOTFILES_DIR)/scripts/merge-train.test.sh $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/merge-train.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh
