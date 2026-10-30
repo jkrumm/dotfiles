@@ -17,7 +17,7 @@ prompt ──gen──▶ local file ──upload──▶ img/      public CDN 
 
 Consumers take URLs, never raw files. **gen** = prompt → local, then optionally `--public` (CDN) or `--private` (presigned). **upload** = local → CDN. **private** = local → `private/` + presigned URL.
 
-The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Everything resolves through `secrets-run` (never bare `op`), refs in `dotfiles-private/headless.refs` (`make secrets-seed` after a rotation), never hardcoded — this repo is public. Infra: `vps/apps/imgproxy/` (CDN), `agent-workflows` (`agw image`, generation), `image-gateway/gateway/` (icon build).
+The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Everything resolves through `secrets-run` (never bare `op`), refs in `dotfiles-private/headless.refs` (`make secrets-seed` after a rotation), never hardcoded — this repo is public. Infra: `vps/apps/imgproxy/` (CDN), `agent-workflows` (`agw image` generation, `agw image-icon` icon build).
 
 | Key (1Password, scopes only) | Scope | Used by |
 |-|-|-|
@@ -25,7 +25,6 @@ The tool is `scripts/imgcli` (→ `~/.local/bin/imgcli` via `make setup`). Every
 | `op://common/b2-images-private` | `private/`, list/read/write, no delete | `private`, `private-url`, `private-ls`, `gen --private` |
 | `op://common/b2-images-admin` | `img/` incl. deleteFiles | `rm` only |
 | `op://common/backblaze-s3` | bucket coordinates | every B2 command |
-| `op://vps/image-gateway` | gateway `BASE_URL`/`API_SECRET` | `icon` (the `/icons` build) |
 
 **`rm` is MacBook-only by design**: the admin key is deliberately not in the mini's headless cache, so a headless agent cannot delete. On the mini `rm` dies with a one-line message saying so — do not seed the key to "fix" it. The private lane has no delete at all.
 
@@ -64,7 +63,7 @@ imgcli ls [prefix/] · info <key> · url <key> [transform ...] · transforms · 
 
 ## cutout & icon
 
-`cutout` is `agw image --file` (mini-only); `icon` generates its source with `agw image` and builds the set on the image-gateway (`/icons`). **Fresh art needs no cutout** — `gen --background transparent` (and `icon "<prompt>"`, which always asks for it) returns native alpha. `cutout` is for images that already exist opaque: photos, screenshots, old generations. It uses Replicate through the same IU host: `recraft` ($0.01, keeps resolution, the default) or `bria` ($0.018, caps output at 1024px).
+`cutout` is `agw image --file` (mini-only); `icon` generates its source with `agw image` and builds the set with `agw image-icon` (sharp, svgo, Replicate upscale/cutout/vectorize). **Fresh art needs no cutout** — `gen --background transparent` (and `icon "<prompt>"`, which always asks for it) returns native alpha. `cutout` is for images that already exist opaque: photos, screenshots, old generations. It uses Replicate through the same IU host: `recraft` ($0.01, keeps resolution, the default) or `bria` ($0.018, caps output at 1024px).
 
 `icon` writes the whole set: `favicon.ico` (16/32/48), `favicon.svg` (vectorized via recraft, $0.01 — omitted with a reason when gradient-heavy art would produce a bloated SVG), `icon-192.png`, `icon-512.png`, `icon-mask.png` (maskable, subject inside the 409px safe zone), `apple-touch-icon.png` (180, opaque on `--bg`), `icon-1024.png` (opaque, Xcode single-size/App Store), `AppIcon.icns` (macOS), plus `head.html` (the `<link>` tags) and `manifest.webmanifest` (icons array — add `name`/`theme_color` yourself). Sources under 512 px are upscaled first (real-esrgan, $0.002, keeps alpha) — recraft cutout and vectorize both reject inputs under 256 px. `--from` art without transparency is cut out automatically (`--cutout auto`). Opaque targets (apple-touch, maskable, 1024) are flattened onto `--bg`, default white — pick a brand colour when the subject is light.
 

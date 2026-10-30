@@ -19,11 +19,9 @@
 #   op://common/b2-images-admin    img/ incl. deleteFiles     rm only — MacBook-only by design:
 #                                  deliberately NOT in the mini's headless cache
 #   op://common/backblaze-s3       bucket coordinates         every B2 command
-#   op://vps/image-gateway         gateway BASE_URL/API_SECRET   icon (the /icons build)
 #
 # Infra side lives in ~/SourceRoot/vps/apps/imgproxy/ (docs/image-cdn.md);
-# generation in agent-workflows (`agw image`), the icon build in
-# ~/SourceRoot/image-gateway/gateway/.
+# generation and the icon build in agent-workflows (`agw image`, `agw image-icon`).
 
 set -euo pipefail
 
@@ -33,9 +31,6 @@ REF_BUCKET_ITEM="op://common/backblaze-s3"
 # command keeps working on a mini that hasn't cached these refs.
 REF_PRIVATE_ITEM="op://common/b2-images-private"
 REF_ADMIN_ITEM="op://common/b2-images-admin"
-# Icon build (image-gateway /icons, VPS, tailnet-only). Resolved lazily inside
-# `icon` only, same reasoning.
-REF_GEN_ITEM="op://vps/image-gateway"
 GEN_DIR="${HOME}/Pictures/imgcli"
 
 PRIVATE_PREFIX="private/"
@@ -328,21 +323,21 @@ gen_tmp() {
   trap 'rm -rf "$GEN_TMP"' EXIT
 }
 
-# Runs `agw image <args>` and leaves the finished run envelope in `$1`. Exit 10
+# Runs `agw <command> <args>` and leaves the finished run envelope in `$1`. Exit 10
 # (wait budget spent) resumes with `agw run wait <runId>` until the run ends.
-agw_image() {
-  local out="$1" label="$2"; shift 2
+agw_run() {
+  local out="$1" label="$2" cmd="$3"; shift 3
   command -v agw >/dev/null 2>&1 || die "imgcli ${label} needs agw (the mini)"
   local err="${out}.err" rc=0 run_id
-  agw image "$@" --format json >"$out" 2>"$err" || rc=$?
+  agw "$cmd" "$@" --format json >"$out" 2>"$err" || rc=$?
   while [ "$rc" = 10 ]; do
     run_id="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["runId"])' "$out")" \
-      || die "agw image is still running but named no run id"
+      || die "agw ${cmd} is still running but named no run id"
     rc=0
     agw run wait "$run_id" --format json >"$out" 2>"$err" || rc=$?
   done
   [ "$rc" = 0 ] && return 0
-  die "agw image failed (exit $rc): $(python3 -c '
+  die "agw ${cmd} failed (exit $rc): $(python3 -c '
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -352,42 +347,9 @@ except Exception:
 ' "$out" "$err")"
 }
 
-load_gen_config() {
-  need secrets-run
-  need curl
-  need python3
-
-  GEN_BASE=$(secrets-run read "$REF_GEN_ITEM/BASE_URL") \
-    || die "could not resolve image-gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
-  GEN_SECRET=$(secrets-run read "$REF_GEN_ITEM/API_SECRET") \
-    || die "could not resolve image-gateway secrets — add $REF_GEN_ITEM to dotfiles-private/headless.refs and run 'make secrets-seed'"
-
-  [ -n "$GEN_BASE" ] && [ -n "$GEN_SECRET" ] || die "image-gateway config incomplete"
-  GEN_BASE="${GEN_BASE%/}"
-}
-
-# Runs one gateway request (the /icons build), writing the response body to
-# `$out_file` (bodies carry base64 images — megabytes, never a shell variable).
-# Prints nothing; dies on a network error or a non-200 with the gateway's
-# `error.message`.
-gen_request() {
-  local path="$1" out_file="$2"; shift 2
-  local status
-  status="$(curl -sS -o "$out_file" -w '%{http_code}' --connect-timeout 5 --max-time 300 \
-    -X POST "${GEN_BASE}${path}" \
-    -H "@${GEN_TMP}/hdr" "$@")" \
-    || die "image-gateway request failed (network error — the gateway is tailnet-only)"
-  [ "$status" = "200" ] && return 0
-  local message
-  message="$(python3 -c '
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print(d.get("error", {}).get("message") or json.dumps(d))
-except Exception:
-    print(open(sys.argv[1], errors="replace").read()[:400])
-' "$out_file")"
-  die "image-gateway ${path} failed (HTTP $status): $message"
+agw_image() {
+  local out="$1" label="$2"; shift 2
+  agw_run "$out" "$label" image "$@"
 }
 
 cmd_gen() {
@@ -967,7 +929,7 @@ cmd_rm() {
 
 # --- cutout & icons ------------------------------------------------------------
 # `cutout` is `agw image --file`; `icon` generates its source with `agw image`
-# and builds the set on the image-gateway (/icons: sharp, svgo, ico, icns).
+# and builds the set with `agw image-icon`.
 
 image_mime() {
   case "${1##*.}" in
@@ -976,13 +938,6 @@ image_mime() {
     webp|WEBP) printf 'image/webp' ;;
     *) die "image must be png, jpeg or webp: $1" ;;
   esac
-}
-
-# Temp dir plus gateway bearer, for the /icons request.
-gen_session() {
-  gen_tmp
-  load_gen_config
-  ( umask 077; printf 'Authorization: Bearer %s\n' "$GEN_SECRET" >"$GEN_TMP/hdr" )
 }
 
 cutout_model() {
@@ -1057,7 +1012,7 @@ cmd_icon() {
   [ -n "$out" ] || out="${GEN_DIR}/icons-$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$out"
 
-  gen_session
+  gen_tmp
   local src="$from" gen_cost=""
   if [ -n "$prompt" ]; then
     # Square + native alpha straight from the model, so `cutout: auto` skips
@@ -1073,27 +1028,30 @@ print((o.get("cost") or {}).get("usd") or 0)
 ' "$res")"
   fi
 
-  local mime res="$GEN_TMP/icons-res.json"
-  mime="$(image_mime "$src")"
-  gen_request /icons "$res" -F "image=@${src};type=${mime}" --form-string "background=${bg}" --form-string "cutout=${cutout}"
+  local res="$GEN_TMP/icons-res.json"
+  image_mime "$src" >/dev/null
+  agw_run "$res" icon image-icon "$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$src")" \
+    --background "$bg" --cutout "$cutout"
   OUT="$out" JSON="$json" GEN_COST="$gen_cost" SRC="$src" python3 -c '
-import base64, json, os, sys
-d = json.load(open(sys.argv[1]))
+import json, os, shutil, sys
+env = json.load(open(sys.argv[1]))
+d = env["output"]
 out = os.environ["OUT"]
 files = []
 for f in d["files"]:
     path = os.path.join(out, f["name"])
-    open(path, "wb").write(base64.b64decode(f["b64"]))
+    shutil.copyfile(f["path"], path)
     files.append({"name": f["name"], "file": path, "width": f["width"], "height": f["height"]})
-open(os.path.join(out, "head.html"), "w").write(d["html"].rstrip() + "\n")
-with open(os.path.join(out, "manifest.webmanifest"), "w") as m:
+head = os.path.join(out, "head.html")
+manifest = os.path.join(out, "manifest.webmanifest")
+open(head, "w").write(d["html"].rstrip() + "\n")
+with open(manifest, "w") as m:
     json.dump(d["manifest"], m, indent=2); m.write("\n")
-cost = (d.get("cost", {}).get("usd") or 0) + float(os.environ["GEN_COST"] or 0)
+cost = ((d.get("cost") or {}).get("usd") or 0) + float(os.environ["GEN_COST"] or 0)
 steps = d.get("steps", [])
-summary = {"id": d["id"], "dir": out, "source": os.path.abspath(os.environ["SRC"]),
-           "steps": steps, "svg_skipped_reason": d.get("svg_skipped_reason"),
-           "cost_usd": round(cost, 4), "files": files,
-           "html": os.path.join(out, "head.html"), "manifest": os.path.join(out, "manifest.webmanifest")}
+summary = {"id": env["runId"], "dir": out, "source": os.path.abspath(os.environ["SRC"]),
+           "steps": steps, "svg_skipped_reason": d.get("svgSkippedReason"),
+           "cost_usd": round(cost, 4), "files": files, "html": head, "manifest": manifest}
 if os.environ["JSON"] == "1":
     print(json.dumps(summary))
 else:
@@ -1101,8 +1059,8 @@ else:
     print("icons      %d files  steps: %s  $%.4f\n  %s" % (len(files), ran, cost, out))
     for f in files:
         print("  %-22s %sx%s" % (f["name"], f["width"], f["height"]))
-    if d.get("svg_skipped_reason"):
-        print("  no favicon.svg: " + d["svg_skipped_reason"])
+    if d.get("svgSkippedReason"):
+        print("  no favicon.svg: " + d["svgSkippedReason"])
 ' "$res"
 }
 
@@ -1194,8 +1152,7 @@ SECRETS (1Password via secrets-run; never bare op)
   op://common/b2-images-admin    img/ incl. delete           rm only — MacBook-only by design,
                                  deliberately not in the mini's headless cache
   op://common/backblaze-s3       bucket coordinates          every B2 command
-  op://vps/image-gateway         gateway BASE_URL/API_SECRET icon (the /icons build)
-On the headless mini the write/private/gateway refs must be seeded first
+On the headless mini the write/private refs must be seeded first
 (dotfiles-private/headless.refs + `make secrets-seed`).
 EOT
 }
