@@ -23,12 +23,15 @@ HOST="${REMOTE_DEV_HOST:-mini}"
 
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 note() { printf '\033[2m%s\033[0m\n' "$*"; }
-# " --effort '<level>'" for a wave/fan agent: RD_WAVE_EFFORT wins, else the per-model default from
-# config/claude-effort.json (Sonnet high, Opus/Fable medium); empty when neither applies.
-rd_effort_flag() { # <model>
+# " --effort '<level>'" for a spawned agent: RD_WAVE_EFFORT wins, then the factory role's effort ($2),
+# else the per-model default from config/claude-effort.json (Sonnet high, Opus/Fable medium); empty
+# when none applies.
+rd_effort_flag() { # <model> [role-effort]
   local level
   if [[ -n "${RD_WAVE_EFFORT:-}" ]]; then
     level=$RD_WAVE_EFFORT
+  elif [[ -n "${2:-}" ]]; then
+    level=$2
   else
     level=$(jq -r --arg m "$(printf %s "$1" | tr '[:upper:]' '[:lower:]')" 'del(._note) | if $m == "" then .default else (to_entries | map(select(.key as $k | $k != "default" and ($m | contains($k)))) | .[0].value) end // empty' \
       "${CLAUDE_EFFORT_TABLE:-$HOME/SourceRoot/dotfiles/config/claude-effort.json}" 2>/dev/null) || level=""
@@ -38,6 +41,70 @@ rd_effort_flag() { # <model>
     low|medium|high|xhigh|max) printf " --effort '%s'" "$level" ;;
     *) die "RD_WAVE_EFFORT must be low|medium|high|xhigh|max (got '$level')" ;;
   esac
+}
+
+# --- role table (FL4) ---------------------------------------------------------
+# `--role <role>` reads tier + effort from the factory's role table (`factory role get`). It is a
+# client lookup that fails open: a dead, missing, slow or off-schema factory costs one stderr line and the
+# spawn keeps today's defaults. Only a factory that ANSWERS "no such role" (or a malformed role name)
+# is a usage error, exit 2.
+ROLE=""            # --role given on the command line
+ROLE_TIER=""       # resolved tier alias (haiku|sonnet|opus), empty when the lookup failed open
+ROLE_EFFORT=""     # resolved effort, empty when the lookup failed open
+ROLE_TIMEOUT_S=2
+
+role_usage_error() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 2; }
+
+# True when a factory reply says the role does not exist: error.kind "not_found" or an "unknown role"
+# message. A bare "unknown command" (a factory without the verb yet) is NOT this — that fails open.
+role_not_found() { # <text>
+  jq -e '(try (.error | objects) catch null // {}) | (.kind == "not_found") or ((.message // "") | test("unknown role|no such role"; "i"))' \
+    <<<"$1" >/dev/null 2>&1
+}
+
+rd_role_resolve() { # <role>
+  local role=$1 out err efile rc=0 why=""
+  ROLE_TIER=""; ROLE_EFFORT=""
+  [[ $role =~ ^[a-z][a-z0-9_-]*$ ]] || role_usage_error "invalid role name '$role' — mother|lead|wave|worker|mechanical"
+  efile=$(mktemp "${TMPDIR:-/tmp}/rd-role.XXXXXX") || efile=/dev/null
+  # The timeout binary is resolved on the host (coreutils is `timeout` or Homebrew's `gtimeout`); without one the
+  # lookup runs unbounded rather than failing.
+  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=\$(command -v timeout || command -v gtimeout); \${t:+\$t $ROLE_TIMEOUT_S} factory role get '$role' --format json" 2>"$efile") || rc=$?
+  err=$(cat "$efile" 2>/dev/null); [[ $efile == /dev/null ]] || rm -f "$efile"
+
+  if (( rc == 0 )); then
+    if jq -e --arg r "$role" '.role == $r and (.tier | IN("haiku","sonnet","opus")) and (.effort | IN("low","medium","high","xhigh","max"))' \
+         <<<"$out" >/dev/null 2>&1; then
+      ROLE_TIER=$(jq -r .tier <<<"$out"); ROLE_EFFORT=$(jq -r .effort <<<"$out")
+      return 0
+    fi
+    why="its answer did not match the role schema"
+  elif role_not_found "$out" || role_not_found "$err"; then
+    role_usage_error "unknown role '$role' — mother|lead|wave|worker|mechanical"
+  elif (( rc == 124 )); then why="no answer within ${ROLE_TIMEOUT_S} s"
+  elif (( rc == 127 )); then why="factory is not installed"
+  else why="factory exited $rc"
+  fi
+  echo "rd: factory role '$role' unavailable ($why) - using the default model and effort" >&2
+  return 0
+}
+
+# Model and effort for a spawn: RD_WAVE_MODEL / RD_WAVE_EFFORT, then the --role (or the verb's default
+# role, $1), then today's defaults ($2: the fallback model, empty for `work`). Sets SPAWN_MODEL_FLAG
+# and SPAWN_EFFORT_FLAG (empty or " --model '<m>'" / " --effort '<l>'"). The lookup is skipped only when
+# both env vars already decide everything and no --role was asked for.
+rd_spawn_flags() { # <default-role> <fallback-model>
+  local role=${ROLE:-${1:-}} model
+  ROLE_TIER=""; ROLE_EFFORT=""
+  if [[ -n $role ]] && { [[ -n $ROLE ]] || [[ -z ${RD_WAVE_MODEL:-} || -z ${RD_WAVE_EFFORT:-} ]]; }; then
+    rd_role_resolve "$role"
+  fi
+  model=${RD_WAVE_MODEL:-${ROLE_TIER:-${2:-}}}
+  SPAWN_MODEL_FLAG=""; SPAWN_EFFORT_FLAG=""
+  [[ -n $model ]] && SPAWN_MODEL_FLAG=" --model '$model'"
+  if [[ -n $model || -n ${RD_WAVE_EFFORT:-} || -n $ROLE_EFFORT ]]; then
+    SPAWN_EFFORT_FLAG=$(rd_effort_flag "$model" "$ROLE_EFFORT") || exit 1 # a bad RD_WAVE_EFFORT dies in the subshell: stop here too
+  fi
 }
 
 # --- routing -----------------------------------------------------------------
@@ -297,6 +364,8 @@ parse_kind_flags() {
     case $1 in
       --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude)"; AGENT_KIND=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
       --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
+      --role)   [[ -n ${2:-} ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; ROLE=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
+      --role=*) ROLE=${1#--role=}; [[ -n $ROLE ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       *)        break ;;
     esac
   done
@@ -366,7 +435,7 @@ agent_pane_setup() {
 cmd_work() {
   parse_kind "$@"
   local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: work <repo> [--kind claude]   (see 'repos')"
+  [[ -n $name ]] || die "usage: work <repo> [--kind claude] [--role R]   (see 'repos')"
   require_server
 
   local path
@@ -387,6 +456,14 @@ cmd_work() {
   agent=$(agent_name "$name")
   [[ -n $agent ]] || die "'$name' has no usable herdr agent name — rename the repo or start it by hand"
 
+  # `work` passes a model and effort only when --role asks for them; otherwise today's bare start. Resolved
+  # before anything is created: an unknown role is a usage error, not a half-made workspace.
+  local start_cmd_tail=""
+  if [[ -n $ROLE ]]; then
+    rd_spawn_flags "" ""
+    [[ -n $SPAWN_MODEL_FLAG$SPAWN_EFFORT_FLAG ]] && start_cmd_tail=" --$SPAWN_MODEL_FLAG$SPAWN_EFFORT_FLAG"
+  fi
+
   local pane
   pane=$(host_run "herdr workspace create --cwd '$path' --label '$name' --no-focus $(factory_env "$agent")" \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
@@ -401,7 +478,7 @@ cmd_work() {
   local out="" i=0
   while (( i < 10 )); do
     sleep 1; i=$((i+1))
-    out=$(host_run "herdr agent start '$agent' --kind $AGENT_KIND --pane '$pane'")
+    out=$(host_run "herdr agent start '$agent' --kind $AGENT_KIND --pane '$pane'$start_cmd_tail")
     echo "$out" | grep -q 'agent_pane_busy' || break
   done
 
@@ -566,7 +643,7 @@ cmd_wave() {
   parse_kind "$@"
   local name="${REST[0]:-}"
   local prompt="${REST[*]:1}"
-  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] <prompt…>"
+  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] [--role R] <prompt…>"
   require_server
 
   local path
@@ -706,6 +783,10 @@ for a in agents:
   fi
   agent="$(wave_agent_name "$wnum")"
 
+  # Model and effort before anything is created: an unknown --role is a usage error. A wave is the `wave`
+  # role unless told otherwise; unattended work defaults to Sonnet when the role table is unreachable.
+  rd_spawn_flags wave sonnet
+
   # The account is picked once per spawn; no room means pause, never IU.
   PICK_ENV=""; PICK_NOTE=""
   if [[ $AGENT_KIND == claude ]]; then
@@ -722,7 +803,7 @@ for a in agents:
     else
       echo "would create space '$name' at $path (no space exists yet) and use its first tab"
     fi
-    echo "would start agent '$agent' solo in it and prompt it"
+    echo "would start agent '$agent' solo in it and prompt it${SPAWN_MODEL_FLAG}${SPAWN_EFFORT_FLAG}"
     return 0
   fi
 
@@ -759,10 +840,8 @@ for a in agents:
   # (`RD_WAVE_MODEL`). The pane setup (lane tag) runs in the
   # pane's shell first — `herdr agent start` types the agent command into that
   # same shell, so the agent inherits it.
-  local model start_cmd effort
-  model="${RD_WAVE_MODEL:-sonnet}"
-  effort=$(rd_effort_flag "$model") || exit 1 # a bad RD_WAVE_EFFORT dies in the subshell: stop here too
-  start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'$effort"
+  local start_cmd
+  start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions$SPAWN_MODEL_FLAG$SPAWN_EFFORT_FLAG"
   agent_pane_setup "$pane" wave
 
   local out="" i=0
@@ -794,10 +873,10 @@ for a in agents:
 cmd_fan() {
   parse_kind "$@"
   local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: fan <repo> [--kind K] <brief-file…>   |   fan --clean <repo> [--all]"
+  [[ -n $name ]] || die "usage: fan <repo> [--kind K] [--role R] <brief-file…>   |   fan --clean <repo> [--all]"
   if [[ $name == --clean ]]; then fan_clean "${REST[@]:1}"; return; fi
   local briefs=("${REST[@]:1}")
-  (( ${#briefs[@]} )) || die "usage: fan <repo> [--kind K] <brief-file…>"
+  (( ${#briefs[@]} )) || die "usage: fan <repo> [--kind K] [--role R] <brief-file…>"
   require_server
 
   local path
@@ -826,12 +905,15 @@ for w in workspaces:
         print(w["workspace_id"]); break
 ' <<<"$(host_run 'herdr workspace list' 2>/dev/null)" 2>/dev/null)
 
+  # One lookup per `rd fan`, before the first worktree: every worker is the `worker` role unless told otherwise.
+  rd_spawn_flags worker sonnet
+
   local base_kind=$AGENT_KIND
   if [[ -n ${RD_DRY_RUN:-} ]]; then
     PICK_ENV=""; PICK_NOTE=""
     [[ $base_kind == claude ]] && pick_account fan
     for b in "${briefs[@]}"; do
-      echo "would fan '$b' -> worktree + tab in ${ws:-<new space $name>}${PICK_NOTE:+  [account pick (fan): $PICK_NOTE${PICK_ENV:+ $PICK_ENV}]}"
+      echo "would fan '$b' -> worktree + tab in ${ws:-<new space $name>}${SPAWN_MODEL_FLAG}${SPAWN_EFFORT_FLAG}${PICK_NOTE:+  [account pick (fan): $PICK_NOTE${PICK_ENV:+ $PICK_ENV}]}"
     done
     return 0
   fi
@@ -871,10 +953,8 @@ for w in workspaces:
     pane=$(printf '%s' "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['root_pane']['pane_id'])" 2>/dev/null)
     [[ -n $pane ]] || die "herdr tab create failed for $wt: $json (worktree kept — 'rd fan --clean $name' reclaims it)"
 
-    local model start_cmd effort i=0 started=""
-    model="${RD_WAVE_MODEL:-sonnet}"
-    effort=$(rd_effort_flag "$model") || exit 1
-    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions --model '$model'$effort"
+    local start_cmd i=0 started=""
+    start_cmd="herdr agent start '$agent' --kind claude --pane '$pane' -- --dangerously-skip-permissions$SPAWN_MODEL_FLAG$SPAWN_EFFORT_FLAG"
     agent_pane_setup "$pane" fan
     while (( i < 10 )); do
       sleep 1; i=$((i+1))
@@ -1292,11 +1372,13 @@ usage() {
   rd — drive the mini's workspaces and agents from anywhere
 
     rd repos [filter]         repos on the dev host, with branch + dirty count
-    rd work <repo> [--kind K]   herdr workspace + claude for that repo (idempotent)
-    rd wave <repo> [--kind K] <prompt…>
+    rd work <repo> [--kind K] [--role R]   herdr workspace + claude for that repo (idempotent)
+    rd wave <repo> [--kind K] [--role R] <prompt…>
                               fresh tab + solo agent + prompt — claude
-    rd fan <repo> <brief…>    worktree + tab + Claude per brief file (fan-out)
+    rd fan <repo> [--role R] <brief…>   worktree + tab + Claude per brief file (fan-out)
                               (fan --clean <repo> [--all] reclaims merged fan worktrees)
+                              --role R: tier + effort from the factory role table (mother|lead|wave|worker|mechanical);
+                              wave defaults to wave, fan to worker; RD_WAVE_MODEL / RD_WAVE_EFFORT win over it
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          close a finished wave's tab (clean + pushed only)
     rd reap [--dry-run]       janitor: close finished clean+pushed tabs (idle > REAP_IDLE_H, default 12; a merged fan tab at once), message dirty ones
