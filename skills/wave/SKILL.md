@@ -23,7 +23,7 @@ The spawner is the worker's parent (`rd fan`, and `rd wave` with `RD_ORCHESTRATE
 2. When the last child finishes, the factory types one note, `workers done: <child> <state>, …`; it starts the next turn.
 3. Look: `rd read <agent>`, `factory status`.
 
-- One wake per declaration: **declare `--on workers` again after each new spawn or `rd say` fix, before ending the turn.** A wake means no child is unfinished, not that a fix landed: if `factory status` shows the fix note undelivered, wait again.
+- One wake per declaration: **declare `--on workers` again after each new spawn or `rd say` fix, before ending the turn.** A finished child counts as done even with an `rd say` fix note still queued: after a fix, wait only once `factory status` lists no undelivered note for it and it is `working`.
 - Workers running, no wait declared: the Stop hook sends the turn back once. Declare it then.
 - Not a factory session (an owner's own session, or `rd` fell back to herdr): nothing wakes you. Wait in the foreground: `timeout <s> herdr agent wait <agent> --until idle --until done --until blocked`.
 - A held spawn (`queued: <reason>`) is a worker too: the wake waits for it. A failed spawn does not (`factory status`).
