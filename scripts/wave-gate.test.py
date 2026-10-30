@@ -141,6 +141,7 @@ class DrainIsNotTheGatesCall(unittest.TestCase):
             stub = os.path.join(bin_dir, "factory")
             with open(stub, "w") as f:
                 f.write("""#!/bin/sh
+echo "$@" >> "$HOME/calls"
 echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scopes":[]}'
 """)
             os.chmod(stub, 0o755)
@@ -150,9 +151,10 @@ echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scop
                 text=True,
                 env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": tmp},
             )
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("no plan file", r.stderr)
-        self.assertNotIn("drain", r.stderr)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("no plan file", r.stderr)
+            self.assertNotIn("drain", r.stderr)
+            self.assertFalse(os.path.exists(os.path.join(tmp, "calls")), "the gate must not ask the factory")
 
 
 if __name__ == "__main__":
