@@ -58,6 +58,7 @@ cat >"$TMP/home/.local/bin/factory" <<'STUB'
 #!/usr/bin/env bash
 if [ "$1" = health ]; then
   echo "health" >>"$STATE/factory-calls"
+  [ -f "$STATE/health-dies-after-create" ] && grep -q '^spawn create' "$STATE/factory-calls" && exit 1
   [ -f "$STATE/health-hang" ] && sleep 30
   exit "$(cat "$STATE/health-rc" 2>/dev/null || echo 0)"
 fi
@@ -68,11 +69,12 @@ case "$1 $2" in
   "spawn get")
     [ -f "$STATE/get-rc" ] && exit "$(cat "$STATE/get-rc")"
     f="$STATE/get-$3"; [ -f "$f" ] || f="$STATE/get-default"
+    [ -f "$f" ] || { echo '{"error":{"kind":"not_found","message":"no such spawn"}}'; exit 1; }
     n=$(( $(cat "$f.n" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$f.n"
     total=$(wc -l <"$f"); [ "$n" -gt "$total" ] && n=$total
     sed -n "${n}p" "$f" ;;
   "session get") cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
-  "session note") echo "noted"; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
+  "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
 chmod +x "$TMP/bin/herdr" "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
@@ -160,9 +162,22 @@ reset; echo 124 >"$STATE/create-rc"; reply default '{"state":"started","pane":"w
 rd wave myrepo "adhoc task"
 has "carries on to the started spawn" "$out" "pane w1:3"
 no_herdr_spawn "no herdr fallback"
-reset; echo 124 >"$STATE/create-rc"; echo 1 >"$STATE/get-rc"
+reset; echo 124 >"$STATE/create-rc"
 rd wave myrepo "adhoc task"
-has "timeout with nothing recorded: the herdr path" "$out" "factory spawn create failed"
+has "timeout with a definite 'no such spawn': the herdr path" "$out" "factory spawn create failed"
+herdr_spawned "herdr made the pane"
+reset; echo 255 >"$STATE/create-rc"; reply default '{"state":"claimed"}'
+RD_FACTORY_WAIT_S=0 rd wave myrepo "adhoc task"
+has "a dropped hop after the spawn was recorded is followed" "$out" "claimed by the factory"
+no_herdr_spawn "no second pane under the same name"
+reset; echo 255 >"$STATE/create-rc"; echo 1 >"$STATE/get-rc"
+rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "create failed and get will not say, factory still healthy: error" || bad "exit 0: $out"
+has "says it will not start a second pane" "$out" "not starting a second pane under that name"
+no_herdr_spawn "no herdr pane"
+reset; echo 255 >"$STATE/create-rc"; echo 1 >"$STATE/get-rc"; touch "$STATE/health-dies-after-create"
+rd wave myrepo "adhoc task"
+has "create failed and the factory is dead now: the herdr path" "$out" "factory spawn create failed"
 herdr_spawned "herdr made the pane"
 
 echo "wave: not answering -> today's path, FACTORY_ROLE added"
@@ -183,6 +198,11 @@ if command -v timeout >/dev/null || command -v gtimeout >/dev/null; then
   herdr_spawned "a hanging health probe: herdr path"
   (( SECONDS - t0 < 20 )) && ok "gave up at the probe limit, not after the stub's 30 s" || bad "took $((SECONDS - t0)) s"
 fi
+reset
+RD_TIMEOUT_CMDS="no-such-timeout-binary" rd wave myrepo "adhoc task"
+is "no timeout binary on the host: exit 0" "$rc" "0"
+lacks "no unbounded factory call is made" "$fcalls" "health"
+herdr_spawned "no timeout binary: the herdr path"
 mv "$TMP/home/.local/bin/factory" "$TMP/factory.away"
 reset
 rd wave myrepo "adhoc task"
@@ -253,10 +273,16 @@ has "noted" "$out" "noted: the factory holds it while worker works"
 has "session note <agent> <text>" "$fcalls" "session note worker go on"
 lacks "nothing typed through herdr" "$hcalls" "agent prompt"
 echo "say: the note fails -> herdr"
-reset; agents_json; echo 1 >"$STATE/note-rc"
+reset; agents_json; echo 1 >"$STATE/note-rc"; echo '{"error":{"kind":"not_found","message":"no such session: worker"}}' >"$STATE/note-reply"
 rd say worker "go on"
-has "one stderr line says so" "$out" "factory note for 'worker' failed"
+has "one stderr line says so" "$out" "the factory has no session 'worker'"
 has "typed through herdr" "$hcalls" "agent prompt p-1 go on"
+echo "say: any other note failure may have recorded it -> never re-sent"
+reset; agents_json; echo 255 >"$STATE/note-rc"; echo "ssh: connection reset" >"$STATE/note-reply"
+rd say worker "go on"
+[ "$rc" -ne 0 ] && ok "non-zero exit" || bad "exit 0"
+has "says NOT delivered" "$out" "NOT delivered"
+lacks "no herdr re-send" "$hcalls" "agent prompt"
 echo "say: the note times out -> never re-sent"
 reset; agents_json; echo 124 >"$STATE/note-rc"
 rd say worker "go on"
@@ -303,6 +329,9 @@ g -C "$TMP/co" push -q origin master 2>/dev/null
 reset; agents_json; echo '{"state":"idle","pane":"p-9","tab":"t9"}' >"$STATE/session-reply"
 rd close worker
 [ "$rc" -ne 0 ] && ! closed && ok "pane mismatch: refused" || bad "closed on a stale record: $out"
+reset; agents_json; echo '{"state":"idle","pane":"p-1","tab":"t8"}' >"$STATE/session-reply"
+rd close worker
+[ "$rc" -ne 0 ] && ! closed && ok "factory tab differs from herdr's tab for the pane: refused" || bad "closed on a stale tab: $out"
 reset; agents_json ',{"name":"shell","pane_id":"p-2","tab_id":"t9","cwd":"x","agent_status":"idle"}'; echo "$SESSION" >"$STATE/session-reply"
 rd close worker
 [ "$rc" -ne 0 ] && ! closed && ok "another agent in the tab: refused" || bad "closed a shared tab: $out"

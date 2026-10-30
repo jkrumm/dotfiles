@@ -221,7 +221,7 @@ raised before anything is created. One lookup per `rd fan`, not per brief. Cover
 `scripts/remote-dev-factory-env.test.sh`.
 
 **`rd` and the factory (which path, when).** `wave`, `fan`, `say` and `close` ask `factory health` first
-(`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it). Answers → the factory path; anything else (not
+(`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it; a host with no `timeout`/`gtimeout` has no factory path, since an unbounded call could stall the repair). Answers → the factory path; anything else (not
 installed, down, slow, non-zero) → the herdr path above, unchanged, and every pane it makes carries
 `FACTORY_ROLE=<role>` next to `FACTORY_SESSION` (`rd work` only when `--role` is given). A dead factory
 never stops the waves that would repair it: every call is bounded and every failure before a spawn exists
@@ -229,9 +229,9 @@ falls back. `RD_DRY_RUN=1` never probes.
 
 | Verb | Factory answers | Falls back to herdr when |
 |-|-|-|
-| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails (a timeout is first checked with `spawn get`: a recorded spawn is followed, not repeated) |
-| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the note fails, or the agent has no name; a note that **times out** is reported NOT delivered and never re-sent |
-| `close` | tab = the tab of `factory session get <agent>` (pane must match herdr's), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
+| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **and** `spawn get` says it does not exist (or the factory is dead by then). A recorded spawn is followed; a factory that answers health but not `spawn get` is an error, never a second pane under the same name |
+| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory says it has no such session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
+| `close` | tab = the tab of `factory session get <agent>` (pane and tab must match herdr's, else a stale record is refused), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
 
 Spawn outcomes: `started` prints today's line plus `via the factory` and the account; `queued` / `held`
 prints `queued: <reason>` and exits 0 (the factory starts it later; the herdr path dies with "paused");

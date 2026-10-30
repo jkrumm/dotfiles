@@ -89,6 +89,13 @@ rd_role_resolve() { # <role>
   return 0
 }
 
+# True when a factory reply says the thing asked about does not exist (error.kind "not_found", or a "not found" /
+# "no such" / "unknown session" message). Anything else that fails is not an answer about existence.
+factory_not_found() { # <text>
+  jq -e '(try (.error | objects) catch null // {}) | (.kind == "not_found") or ((.message // "") | test("not found|no such|unknown session|unknown spawn"; "i"))' \
+    <<<"$1" >/dev/null 2>&1
+}
+
 # Model and effort for a spawn: RD_WAVE_MODEL / RD_WAVE_EFFORT, then the --role (or the verb's default
 # role, $1), then today's defaults ($2: the fallback model, empty for `work`). Sets SPAWN_MODEL_FLAG
 # and SPAWN_EFFORT_FLAG (empty or " --model '<m>'" / " --effort '<l>'"). The lookup is skipped only when
@@ -185,13 +192,13 @@ FACTORY_HEALTH_S=3
 FACTORY_CALL_S=15
 FACTORY_UP=""
 
-# Run `factory <args…>` on the dev host, bounded by <secs>. rc 124 = timed out, 127 = not installed.
-# The timeout binary is resolved on the host (`timeout` or Homebrew's `gtimeout`); without one the call runs
-# unbounded rather than failing, like the role lookup.
+# Run `factory <args…>` on the dev host, bounded by <secs>. rc 124 = timed out, 127 = not installed, 126 = the host
+# has no timeout binary (`timeout` or Homebrew's `gtimeout`; RD_TIMEOUT_CMDS overrides the names): an unbounded call
+# could hang a wave that would repair the factory, so without a bound there is no factory path.
 factory_host() { # <secs> <args…>
   local secs=$1 args="" a; shift
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=\$(command -v timeout || command -v gtimeout); \${t:+\$t $secs} factory$args </dev/null"
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs factory$args </dev/null"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
@@ -227,15 +234,19 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
   out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
     ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
   if (( rc != 0 )); then
-    # A timeout may have come after the factory recorded the spawn: ask before assuming it did not.
-    local recorded=0
-    if (( rc == 124 )); then
-      get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
-      [[ -z $(factory_field "$get" '.state // empty') ]] || recorded=1
-    fi
-    if (( ! recorded )); then
-      echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
-      return 2
+    # A failed create may still have been recorded (the hop dropped, the call timed out after the factory
+    # wrote it): ask before assuming it was not. Herdr takes over only on a definite "no such spawn", or when
+    # the factory is plainly dead; a factory that answers health but not this is an error, not a second pane
+    # under the same name.
+    local gout
+    gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
+    if [[ -z $(factory_field "$gout" '.state // empty') ]]; then
+      if factory_not_found "$gout" || ! factory_host "$FACTORY_HEALTH_S" health >/dev/null 2>&1; then
+        echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using the herdr path" >&2
+        return 2
+      fi
+      FSPAWN_ERR="spawn create exited $rc and the factory will not say whether '$key' exists ($(head -c 200 <<<"$gout" | tr '\n' ' ')) - 'factory spawn get $key' shows it; not starting a second pane under that name"
+      return 1
     fi
   fi
 
@@ -1210,14 +1221,16 @@ for a in json.load(sys.stdin)["result"]["agents"]:
       [[ $fstate == working || $fstate == blocked ]] && die "session $sname is $fstate — not finished"
       # Closing a tab closes every pane in it: another agent there is not ours to close.
       local others
-      others=$(TAB="$ftab" PANE="$pane" python3 -c '
+      others=$(TAB="$tab" PANE="$pane" python3 -c '
 import json, os, sys
 for a in json.load(sys.stdin)["result"]["agents"]:
     if a.get("tab_id") == os.environ["TAB"] and a.get("pane_id") != os.environ["PANE"]:
         print(a.get("name") or a.get("pane_id") or "?")
 ' <<<"$roster" 2>/dev/null)
-      [[ -z $others ]] || die "tab $ftab also holds $(tr '\n' ' ' <<<"$others")— closing it would close them too"
-      tab=$ftab; via_factory=1
+      [[ -z $others ]] || die "tab $tab also holds $(tr '\n' ' ' <<<"$others")— closing it would close them too"
+      [[ $ftab == "$tab" ]] \
+        || die "the factory has '$sname' in tab $ftab, herdr has pane $pane in tab $tab — a stale record; refusing to close"
+      via_factory=1
     else
       echo "rd: the factory has no session '$sname' - resolving the tab through herdr" >&2
     fi
@@ -1508,9 +1521,13 @@ for a in json.load(sys.stdin)["result"]["agents"]:
     nout=$(factory_host "$FACTORY_CALL_S" session note "$agent" "$text" 2>&1) || nrc=$?
     case $nrc in
       0) echo "noted: the factory holds it while $agent works and types it at its next prompt"; return 0 ;;
-      124) say_fail "$agent" "the factory did not answer within ${FACTORY_CALL_S} s, so the note may be recorded (not re-sent through herdr)" ;;
     esac
-    echo "rd: factory note for '$agent' failed (exit $nrc: $(head -c 200 <<<"$nout" | tr '\n' ' ')) - sending through herdr" >&2
+    # Only a definite "no such session" falls back: any other failure may have recorded the note, and a
+    # duplicate instruction is worse than a visible miss.
+    if ! factory_not_found "$nout"; then
+      say_fail "$agent" "the factory note failed (exit $nrc: $(head -c 200 <<<"$nout" | tr '\n' ' ')), so it may be recorded - not re-sent through herdr"
+    fi
+    echo "rd: the factory has no session '$agent' - sending through herdr" >&2
   fi
 
   local rc
