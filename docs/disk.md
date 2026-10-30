@@ -17,7 +17,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | ↳ volume `vps_clickstack-ch-data` | 9 | local ClickStack telemetry, no container | ask owner (likely waste) |
 | `~/Library` | 36 | Chrome profile 6.3, Caches ~14, Notion, Teams, Slack, MacWhisper | needed (app state) |
 | `~/SourceRoot` other repos | 30 | node_modules (argo 2.9, basalt-ui 1.9, …), `shutterflow/target` 8.5 (active Rust build) | needed. Regenerable |
-| `~/.local` | 25 | agent-gateway 4.6 (retired 2026-10-29, data kept until archive), usage-tracker 3.8, opencode 3.7, fnm 3.3 (16 node versions), IU `prometheus-scripts` state backups 6.8 (hourly 48 h + daily 30 d, bounded by `com.iu.prometheus-state-backup`) | needed |
+| `~/.local` | 25 | usage-tracker 3.8, opencode 3.7, fnm 3.3 (16 node versions), IU `prometheus-scripts` state backups 6.8 (hourly 48 h + daily 30 d, bounded by `com.iu.prometheus-state-backup`) | needed |
 | `/private/var` | 20 | `$TMPDIR` 17 (Chrome code-sign clones, test-suite tmp dirs), system | swept |
 | `~/Pictures/Photos Library` | 19 | personal photos | ask owner |
 | `~/.claude` | 16 | Claude Code transcripts (`projects/`; argo 6.8) | needed (Claude Code prunes by `cleanupPeriodDays`) |
@@ -29,7 +29,7 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | `/Library` | 7.5 | system-wide | needed |
 | `~/.hermes` | 7.2 | Hermes agent: install, `state.db` 1.6 | needed |
 | `~/.cache` | 4.5 | uv 2.3, puppeteer, … | swept |
-| everything else | ~15 | `~/go` 2.7, `.rustup` 2.1, `.research-gateway` 1.4 (retired 2026-10-29, data kept until archive), … | needed |
+| everything else | ~15 | `~/go` 2.7, `.rustup` 2.1, … | needed |
 
 The VM volume (swap, 5 GiB) and the System, Preboot and Recovery volumes (~22 GiB) sit outside
 the Data volume.

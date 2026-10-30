@@ -34,23 +34,12 @@ older doc on that topic. This map only places its parts on machines.
 
 ## Diagrams
 
-One validated artifact in `docs/diagrams/`: a self-contained HTML — open the
-file, no server. It carries pan/zoom, search, relationship tracing and its own
-image export, so a screenshot is never the way to share it.
-
-| File | The question it answers |
-|-|-|
-| `episode-lifecycle.html` | Life of an OpenCode episode: submit, steer, a service reload that detaches the session, and the re-attach by state on the next boot. |
-
-Compiled from the `.json` beside it with the vendored `archify` skill, which
-validates geometry and composition before it will deliver: an arrow through a
-box or a label over a node fails the build. Regenerate with
-`node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html>
---quality showcase`.
-
-The estate, agent-platform and dispatch-path diagrams described the warden-era
-platform and are archived in `docs/archive/diagrams/`; the text above and
-[`agent-platform.md`](agent-platform.md) are the current map.
+No diagram is current. The estate, agent-platform, dispatch-path and episode-lifecycle diagrams
+described the warden-era platform and are archived in `docs/archive/diagrams/`; the text above and
+[`agent-platform.md`](agent-platform.md) are the current map. A new one is a self-contained HTML
+compiled from a `.json` spec with the vendored `archify` skill
+(`node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html> --quality showcase`),
+which validates geometry before it delivers.
 
 ## Repos
 

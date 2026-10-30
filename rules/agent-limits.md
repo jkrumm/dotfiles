@@ -24,8 +24,8 @@ SDK `query()` — run **as long as the work takes**.
 **Why:** every cap ever added here turned a working episode into a failure
 (a remediation-loop item: killed at turn 26 of 25 after eleven minutes of real
 progress, misreported as a model error). The owner has said so repeatedly;
-this rule exists so it is never re-introduced "for safety". Measured in
-`warden/docs/history/state-log.md` §64–§66 (reference only; warden switched off 2026-10-27).
+this rule exists so it is never re-introduced "for safety". Measured in the
+retired remediation loop's state log (warden, switched off 2026-10-27; repo deleted).
 
 **Not covered:** plain HTTP request timeouts to non-LLM APIs, git/CLI helper
 timeouts, database busy timeouts, LaunchAgent intervals, spend caps (a
