@@ -1075,8 +1075,8 @@ smb-keepalive-teardown:
 	echo "  ✓ smb-keepalive torn down (unloaded, plist, jobrun state + nsmb.conf link removed)"
 
 # The nightly (03:30) leftover-dirt sweep on the mini — commits any working tree
-# the day's Claude Code sessions left dirty (claude_iu/Haiku writes the commit
-# message) and pushes. It is NOT the sync layer: brain-sync above is, on a
+# the day's Claude Code sessions left dirty (the commit message is built
+# from the diff) and pushes. It is NOT the sync layer: brain-sync above is, on a
 # 5-minute interval on both machines. This is the backstop for the one thing
 # brain-sync deliberately will not do, which is commit on the mini. Self-guards
 # on a missing vault; the script's `git add -A` respects .gitignore, so secrets

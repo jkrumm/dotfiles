@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "The personal agent estate",
+    "subtitle": "Where agents run, where he watches them, and what the work is handed to",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "viewBox": [
+      930,
+      1800
+    ],
+    "legend": {
+      "mode": "auto"
+    }
+  },
+  "components": [
+    {
+      "id": "macbook",
+      "type": "frontend",
+      "label": "MacBook",
+      "sublabel": "desk into the mini, biometric 1Password",
+      "pos": [480, 120],
+      "size": [180, 64]
+    },
+    {
+      "id": "iphone",
+      "type": "frontend",
+      "label": "iPhone",
+      "sublabel": "the surface he carries",
+      "pos": [260, 120],
+      "size": [180, 64]
+    },
+    {
+      "id": "brainweb",
+      "type": "frontend",
+      "label": "brain reader",
+      "sublabel": "the vault as a PWA",
+      "pos": [40, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "slack",
+      "type": "external",
+      "label": "Slack",
+      "sublabel": "ask, approve, get told",
+      "pos": [260, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "collie",
+      "type": "frontend",
+      "label": "Collie",
+      "sublabel": "every pane on the phone",
+      "pos": [480, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "argoui",
+      "type": "frontend",
+      "label": "Argo dashboard",
+      "sublabel": "rendered by argo-api on the VPS",
+      "pos": [700, 404],
+      "size": [180, 64]
+    },
+    {
+      "id": "warden",
+      "type": "backend",
+      "label": "Warden",
+      "sublabel": "control plane · lifecycle lane",
+      "pos": [370, 688],
+      "size": [180, 64]
+    },
+    {
+      "id": "hermes",
+      "type": "backend",
+      "label": "Hermes gateway",
+      "sublabel": "answers, narrates, 7 cron jobs",
+      "pos": [150, 858],
+      "size": [180, 64]
+    },
+    {
+      "id": "agent-gateway",
+      "type": "backend",
+      "label": "agent-gateway",
+      "sublabel": "the job queue",
+      "pos": [370, 858],
+      "size": [180, 64]
+    },
+    {
+      "id": "herdr",
+      "type": "backend",
+      "label": "herdr",
+      "sublabel": "pane multiplexer",
+      "pos": [590, 858],
+      "size": [180, 64]
+    },
+    {
+      "id": "vault",
+      "type": "database",
+      "label": "brain vault",
+      "sublabel": "Obsidian + git, 5 min sync",
+      "pos": [150, 1028],
+      "size": [180, 64]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Claude Code workers",
+      "sublabel": "one worktree, one verdict",
+      "pos": [370, 1028],
+      "size": [180, 64]
+    },
+    {
+      "id": "devhost",
+      "type": "security",
+      "label": "devhost heartbeat",
+      "sublabel": "16 components + drift",
+      "pos": [590, 1028],
+      "size": [180, 64]
+    },
+    {
+      "id": "research",
+      "type": "cloud",
+      "label": "research-gateway",
+      "sublabel": "search, read, cross-verify",
+      "pos": [150, 1312],
+      "size": [180, 64]
+    },
+    {
+      "id": "otel",
+      "type": "cloud",
+      "label": "HyperDX",
+      "sublabel": "traces, logs, alerts",
+      "pos": [370, 1312],
+      "size": [180, 64]
+    },
+    {
+      "id": "argoapi",
+      "type": "backend",
+      "label": "argo-api",
+      "sublabel": "the estate's own API",
+      "pos": [590, 1312],
+      "size": [180, 64]
+    },
+    {
+      "id": "audio",
+      "type": "cloud",
+      "label": "audio-gateway",
+      "sublabel": "speech in, speech out",
+      "pos": [260, 1482],
+      "size": [180, 64]
+    },
+    {
+      "id": "imggw",
+      "type": "cloud",
+      "label": "image gateway + CDN",
+      "sublabel": "generate, then serve",
+      "pos": [480, 1482],
+      "size": [180, 64]
+    },
+    {
+      "id": "abs",
+      "type": "database",
+      "label": "Audiobookshelf",
+      "sublabel": "where an episode lands",
+      "pos": [150, 1596],
+      "size": [180, 64]
+    },
+    {
+      "id": "kuma",
+      "type": "security",
+      "label": "Uptime Kuma",
+      "sublabel": "31 push monitors",
+      "pos": [590, 1596],
+      "size": [180, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "MacBook and iPhone — the UI layer he builds from",
+      "wraps": ["macbook", "iphone"],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Where he sees what happened, and answers",
+      "wraps": ["slack", "collie", "argoui", "brainweb"],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "Mac mini — the always-on dev host, where agents run",
+      "wraps": ["hermes", "warden", "herdr", "agent-gateway", "vault", "devhost", "workers"],
+      "pad": 34
+    },
+    {
+      "kind": "region",
+      "label": "VPS — the mature stack (research-gateway is mini-only now)",
+      "wraps": ["argoapi", "research", "audio", "imggw", "otel"],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "HomeLab — his own container world",
+      "wraps": ["abs", "kuma"],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "from": "iphone",
+      "to": "slack",
+      "label": "ask, approve",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30
+    },
+    {
+      "from": "macbook",
+      "to": "herdr",
+      "label": "a terminal on the mini",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [[570, 300], [895, 300], [895, 890]]
+    },
+    {
+      "from": "slack",
+      "to": "hermes",
+      "label": "socket mode",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[350, 520], [240, 520]]
+    },
+    {
+      "from": "warden",
+      "to": "agent-gateway",
+      "label": "dispatch: budgeted and signed",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 30
+    },
+    {
+      "from": "agent-gateway",
+      "to": "workers",
+      "label": "a worktree per tier",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -70,
+      "labelDy": 45
+    },
+    {
+      "from": "workers",
+      "to": "agent-gateway",
+      "label": "one verdict",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDx": 70,
+      "labelDy": -75
+    },
+    {
+      "from": "herdr",
+      "to": "agent-gateway",
+      "label": "pane and agent state",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": 60
+    },
+    {
+      "from": "agent-gateway",
+      "to": "hermes",
+      "label": "overview, human queue",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": -30
+    },
+    {
+      "from": "hermes",
+      "to": "slack",
+      "label": "digest, briefing, triage",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [[240, 560], [350, 560]],
+      "labelDx": 70
+    },
+    {
+      "from": "herdr",
+      "to": "collie",
+      "label": "the same panes",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [[680, 580], [570, 580]]
+    },
+    {
+      "from": "agent-gateway",
+      "to": "argoapi",
+      "label": "overview push",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [460, 975],
+        [905, 975],
+        [905, 1344]
+      ],
+      "labelDx": 60
+    },
+    {
+      "from": "hermes",
+      "to": "vault",
+      "label": "narratives",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": -40,
+      "labelDy": 30
+    },
+    {
+      "from": "vault",
+      "to": "brainweb",
+      "label": "rebuilt on commit",
+      "fromSide": "left",
+      "toSide": "bottom",
+      "via": [
+        [28, 1060],
+        [28, 490],
+        [130, 490]
+      ],
+      "labelDx": 60
+    },
+    {
+      "from": "workers",
+      "to": "research",
+      "label": "research",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[460, 1180], [240, 1180]]
+    },
+    {
+      "from": "workers",
+      "to": "imggw",
+      "label": "generate",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [460, 1220],
+        [570, 1220],
+        [570, 1290],
+        [340, 1290],
+        [340, 1390],
+        [570, 1390],
+        [570, 1482]
+      ]
+    },
+    {
+      "from": "audio",
+      "to": "abs",
+      "label": "episode and chapters",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[350, 1580], [240, 1580]]
+    },
+    {
+      "from": "devhost",
+      "to": "kuma",
+      "label": "push, never probed",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [680, 1300],
+        [580, 1300],
+        [580, 1390],
+        [680, 1390]
+      ]
+    },
+    {
+      "from": "kuma",
+      "to": "slack",
+      "label": "down and up",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [680, 1750],
+        [5, 1750],
+        [5, 250],
+        [350, 250]
+      ]
+    },
+    {
+      "from": "argoapi",
+      "to": "otel",
+      "label": "traces",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [460, 1420]
+    }
+  ]
+}

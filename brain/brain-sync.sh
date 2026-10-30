@@ -28,10 +28,7 @@
 set -euo pipefail
 
 # launchd hands agents a minimal PATH — make sure git/security/curl resolve
-# either way. ~/.local/bin is where `claude` and `secrets-run` live (neither is
-# Homebrew-managed); without it the claude call below silently misses and every
-# commit gets the literal fallback message instead of a generated one. This is
-# the same export brain-backup.sh needs, for the same reason.
+# either way. The same export brain-backup.sh needs, for the same reason.
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 
 # A credential prompt under launchd is a hang, not a question: there is no
@@ -330,58 +327,17 @@ fi
 
 # --- commit (mirror only) ----------------------------------------------------
 
-# The login keychain is unreadable to a launchd job whose GUI session is locked
-# or absent, and `security` then just fails. Fall back to `secrets-run read` on
-# the same op:// refs `make setup` cached these entries from. Missing credentials
-# stay non-fatal: a generated commit message is a nicety, and refusing to sync
-# the vault over it would be the worse failure. Deliberately duplicated from
-# brain-backup.sh rather than shared — six lines beats a third file that both
-# LaunchAgents would then depend on.
-keychain_or_cache() {
-  local v
-  v=$(security find-generic-password -s "$1" -w 2>/dev/null) && [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  command -v secrets-run >/dev/null 2>&1 || return 0
-  v=$(secrets-run read "$2" 2>/dev/null) && printf '%s' "$v"
-}
-
-# A hung `claude -p` would hold the single-instance lock indefinitely and stall
-# every later tick, so the call is bounded when a timeout binary exists. It is
-# coreutils, not macOS base, hence the graceful degrade — and the runner is
-# never an empty array, because launchd resolves `env bash` against ITS PATH and
-# lands on bash 3.2, where "${empty[@]}" trips `set -u`.
+# Deterministic message from the staged diff: no network, no credentials, nothing
+# that can hang while holding the single-instance lock.
 commit_message() {
-  local key base prompt msg runner=(env)
-  command -v timeout >/dev/null 2>&1 && runner=(timeout 1800 env)
-
-  key="$(keychain_or_cache claude-sdk-api-key op://common/anthropic/API_KEY || true)"
-  base="$(keychain_or_cache claude-sdk-base-url op://common/anthropic/BASE_URL || true)"
-
-  if [ -z "$key" ] || [ -z "$base" ]; then
-    warn "IU credential unresolvable (Keychain claude-sdk-* and secrets-run both failed) — using the fallback commit message"
-    printf '%s' "chore(brain): vault sync"
-    return 0
-  fi
-
-  prompt="Write ONE git commit message line, conventional-commits format
-'type(scope): description' (imperative mood, no trailing period, no AI
-attribution), summarizing this diff to a personal Obsidian vault. Scope is
-usually 'brain'. Output ONLY the commit message line, nothing else.
-
-$(git diff --cached --stat)
-
-$(git diff --cached | head -c 20000 || true)"
-
-  msg="$(printf '%s' "$prompt" | "${runner[@]}" -u ANTHROPIC_API_KEY \
-    ANTHROPIC_AUTH_TOKEN="$key" \
-    ANTHROPIC_BASE_URL="$base" \
-    claude -p --model haiku --dangerously-skip-permissions 2>/dev/null \
-    | tail -1 | tr -d '\r' || true)"
-
-  if [ -z "$msg" ]; then
-    warn "claude produced no message (is 'claude' on PATH? did the call time out?) — using the fallback"
-    msg="chore(brain): vault sync"
-  fi
-  printf '%s' "$msg"
+  local status added modified deleted renamed areas
+  status="$(git diff --cached --name-status)"
+  added="$(printf '%s\n' "$status" | grep -c '^A' || true)"
+  modified="$(printf '%s\n' "$status" | grep -c '^[MT]' || true)"
+  deleted="$(printf '%s\n' "$status" | grep -c '^D' || true)"
+  renamed="$(printf '%s\n' "$status" | grep -c '^R' || true)"
+  areas="$(git diff --cached --name-only | awk -F/ 'NF>1{print $1}' | sort -u | awk 'NR<=3' | paste -sd, - | sed 's/,/, /g')"
+  printf '%s' "chore(brain): vault sync (+$added ~$modified -$deleted r$renamed${areas:+; $areas})"
 }
 
 summary="pulled"
