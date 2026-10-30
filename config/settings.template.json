@@ -100,6 +100,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook session-start; exit 0",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -108,6 +117,57 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/iu-model-guard.ts"
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook user-prompt-submit; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook stop; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook stop-failure; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt|quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook notification; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook session-end; exit 0",
+            "timeout": 5
           }
         ]
       }
