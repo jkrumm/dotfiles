@@ -30,7 +30,10 @@ STUB
 # The account picker is the real machine state otherwise (it can answer "spill"); pin it to the default account.
 printf '#!/usr/bin/env bash\necho "unset CLAUDE_CONFIG_DIR"\n' >"$TMP/home/.local/bin/claude-account"
 chmod +x "$TMP/bin/herdr" "$TMP/home/.local/bin/claude-account"
-export PATH="$TMP/bin:$PATH" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" RD_DRY_RUN=1
+# No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
+clean_path=""; IFS=: read -ra dirs <<<"$PATH"
+for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
+export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" RD_DRY_RUN=1
 
 # agents <name…>: a roster with one live, named agent per argument
 agents() {

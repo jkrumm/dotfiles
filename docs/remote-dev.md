@@ -220,6 +220,31 @@ today's defaults — a dead factory never stops a spawn. Only a factory that ans
 raised before anything is created. One lookup per `rd fan`, not per brief. Covered by
 `scripts/remote-dev-factory-env.test.sh`.
 
+**`rd` and the factory (which path, when).** `wave`, `fan`, `say` and `close` ask `factory health` first
+(`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it). Answers → the factory path; anything else (not
+installed, down, slow, non-zero) → the herdr path above, unchanged, and every pane it makes carries
+`FACTORY_ROLE=<role>` next to `FACTORY_SESSION` (`rd work` only when `--role` is given). A dead factory
+never stops the waves that would repair it: every call is bounded and every failure before a spawn exists
+falls back. `RD_DRY_RUN=1` never probes.
+
+| Verb | Factory answers | Falls back to herdr when |
+|-|-|-|
+| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails (a timeout is first checked with `spawn get`: a recorded spawn is followed, not repeated) |
+| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the note fails, or the agent has no name; a note that **times out** is reported NOT delivered and never re-sent |
+| `close` | tab = the tab of `factory session get <agent>` (pane must match herdr's), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
+
+Spawn outcomes: `started` prints today's line plus `via the factory` and the account; `queued` / `held`
+prints `queued: <reason>` and exits 0 (the factory starts it later; the herdr path dies with "paused");
+`failed` exits non-zero with the reason; `claimed` past the wait exits 0 with "not started yet". A spawn that
+fails after it exists never falls back to herdr (two sessions on one name). `rd fan` keeps going after a
+failed or queued brief and exits non-zero at the end if any failed. On the factory path the factory picks
+the account and the model: `rd` runs no `claude-account pick`, and `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` do
+not reach the spawn (one stderr line says so). `close` keeps its refusals on both paths (agent working,
+checkout dirty, anything unpushed) and adds one: another agent in the same tab. `wave-gate.py` refuses to
+spawn while `factory queue get --project <repo>` says `drain` and, when the factory does not answer, skips
+that check with one stderr line (which `rd wave` passes on). Covered by
+`scripts/remote-dev-factory.test.sh` and `scripts/wave-gate.test.py`.
+
 ## Dev-server doors
 
 **`config/Caddyfile` is the single app registry.** Every
