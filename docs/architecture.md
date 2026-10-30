@@ -168,6 +168,7 @@ the weatherorb session workflow.
 | `com.jkrumm.linewatch-heartbeat` | linewatch | 60s |
 | `com.jkrumm.usage-tracker` | usage-tracker | 900s |
 | `com.jkrumm.usage-tracker-prices` | usage-tracker | 04:20 daily — `prices-sync` under `jobrun`: refreshes the model price catalog behind `usage.compute_cost` |
+| `com.jkrumm.usage-tracker-report` | usage-tracker | Monday 07:00 — `report weekly` under `jobrun`: writes the weekly "where the window went" report that Hermes posts at 07:30 |
 | `com.jkrumm.walkingpad` | king-smith-walkingpad-mac | KeepAlive |
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the live Argo since 2026-10-30, from `~/.argo/releases/<sha>`, crons on; Caddy doors `argo-live.test` and `argo.jkrumm.com` (extra FQDN door); health for Kuma through the Kuma door `/h/argo` |
