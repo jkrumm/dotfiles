@@ -1126,7 +1126,7 @@ for w in workspaces:
       report_deliver_result "$rc" "$agent" "fan $branch" || true
     fi
   done
-  note "   'rd agents' to watch · scripts/wave-watch.sh --agents … to block · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
+  note "   'rd agents' to watch · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
   (( ! fan_failed )) || die "at least one factory spawn failed (above); the others were started"
 }
 
