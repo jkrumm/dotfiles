@@ -175,8 +175,8 @@ cs() {
 # stay for `agw`, OpenCode and Hermes (`oc`) — never for development sessions. `claude_iu`
 # (headless `claude -p` on IU) is gone too: no headless claude (docs/agent-platform.md).
 
-# `oc` — OpenCode on the IU endpoint, both routes. The third lane next to `ca`
-# and `cx`: it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,
+# `oc` — OpenCode on the IU endpoint, both routes. The second lane next to `cx`:
+# it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,
 # and gets the always-on rules through `instructions` in config/opencode/opencode.json
 # (→ ~/.config/opencode/opencode.json), which holds only {env:IU_*} placeholders —
 # no key, no host. Pattern and measured load matrix: docs/agents-md.md.
