@@ -90,6 +90,17 @@ Workers: Sonnet; Haiku for the sweeps. Orchestrated.
   of that branch next to it, before deleting. warden is already gone (2026-10-30).
 - [ ] **herdr:** close duplicate and dead workspaces (three `hermes-agent` spaces today) only where no agent is
   working and nothing is unpushed; one space per repo is the rule.
+- [ ] **Leftovers of Wave 1 and of Hermes leaving Argo:**
+  - `jkrumm.com/Makefile:30` `make diagrams` copies from `dotfiles/docs/diagrams/agent-platform.html`, which moved to
+    `docs/archive/diagrams/`: repoint `DIAGRAMS_SRC` so the target works. The guide's text stays as it is.
+  - `modelpick`: `src/db/deployments.ts` `analyze` slot and `SKILL.md:127` still say "via claude_iu".
+  - `config/settings.template.json` `_NOTE` and the `oc` comment in `config/zsh/claude.zsh` still mention `ca`;
+    `weatherorb/ops/clickstack/sync.py` `warden:skip`; `docs/diagrams/episode-lifecycle.*` mentions dispatch once.
+  - **Hermes API on loopback** (argo's close-out, `argo/docs/waves/PLAN.md`): `API_SERVER_HOST` is still the mini's
+    tailnet address, which iris also reads as `HERMES_HOST`. Change `hermes-agent/.env.tpl` and `iris/.env.local.tpl`
+    together, adjust `hermes-agent/scripts/verify.sh` and the `hermes-validate` skill's `$host:8642` probe, restart
+    `ai.hermes.gateway` and iris (`make launchd-restart`), prove iris reaches Hermes (a memo routed to Hermes, not
+    just `/health`). Do it only if no iris wave or fan worker is `working`; otherwise leave it in Left behind.
 - [ ] The gate's final sweep: `rg -n -i 'agent-gateway|research-gateway|audio-gateway|agw-legacy|warden|dispatch'`
   across `~/SourceRoot` (excluding archives, `docs/factory/`, node_modules, IuRoot), every hit either fixed or
   listed in Left behind as historical.
