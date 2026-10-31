@@ -184,6 +184,34 @@ valid, but `--resume` takes an optional value, so an id must always be passed or
 a terminal name that can read as an address (`t7`). Verify the doc shape against the app on the MacBook before
 trusting tab names.
 
+**10. Resume (Wave 3).** `hooks/hc-session-label.ts` labels its own terminal on SessionStart
+(`jk.claude.session=<id>`, `jk.claude.config=<CLAUDE_CONFIG_DIR>`, empty for `iu`) and clears the session label on
+SessionEnd; it only runs `hc` when `HC_TERMINAL_ID` is set. `scripts/hc-resume.ts` (LaunchAgent `com.jkrumm.hc-resume`,
+`make hc-resume-setup`) subscribes over `hc connect` and types `env CLAUDE_CONFIG_DIR='<dir>' claude
+--dangerously-skip-permissions --resume <id>` (`env -u CLAUDE_CONFIG_DIR …` without the label) into a terminal whose
+foreground (else its program) is a login shell. A subscribed `hc connect` connection answers no requests, so each send is
+a `terminal.send` on its own short-lived `hc connect`. Proof in a scratch core (own `HC_SESSION`, scratch `XDG_*`, torn down):
+
+```text
+hc run --bg --keep --name standin sh -c '<SessionStart JSON> | CLAUDE_CONFIG_DIR=/tmp/hcs/cfgdir bun hooks/hc-session-label.ts; exec sleep 600'
+  → labels {jk.claude.config: /tmp/hcs/cfgdir, jk.claude.session: 0d6f3a52-…}
+bun scripts/hc-resume.ts &            → started; snapshot: nothing sent (foreground is sleep)
+kill -9 <sleep>                       → lost, restarted (argv /bin/zsh -l)
+  hc-resume.log: resume t2 0d6f3a52-… (/tmp/hcs/cfgdir)
+  hc read: ❯ env CLAUDE_CONFIG_DIR='/tmp/hcs/cfgdir' claude --dangerously-skip-permissions --resume 0d6f3a52-…
+  hc get: foreground argv [claude, --dangerously-skip-permissions, --resume, 0d6f3a52-…]
+kill -9 that claude                   → restarted again, no second send (one attempt per terminal + session id)
+hc server stop; hc server start       → "stream ended, reconnecting"; the parked second terminal (kept, labelled) had a
+                                         shell again: resume t3 1e7a4b63-… typed on the reconnect snapshot
+```
+
+SessionEnd clears the label only for `reason` `prompt_input_exit` or `logout` (SIGTERM fires `other`, which must stay
+resumable). A `restarted` event resets the per-terminal attempt (a new loss resumes again); snapshots need the foreground
+fact; each send re-reads the terminal (`terminal.get`) and skips unless it is still a login shell with the same session
+label, under a 15 s deadline. `hc connect` exits 2 with no core, so a stopped core means backoff retries, never an auto-start. Not mirrored on resume:
+model/effort flags and the `c` launcher's env (`ENABLE_TOOL_SEARCH`, lane vars). A terminal sitting at a shell prompt
+that carries a session label (the claude exited without SessionEnd, e.g. the shell was reused) is resumed too, once.
+
 ## Upstream state (2026-10-31)
 
 agw research run `01a191f9-802c-75f1-ab6a-b3914a286ec5` (deep, 39/39 citations grounded, 78 pages). It covers

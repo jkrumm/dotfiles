@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.hc-resume</string>
+  <!-- Restores Claude sessions into kept herdr-core terminals whose program was lost: subscribes to the
+       core (`hc connect`, never starts one) and types `claude --resume <id>` into the login shell that
+       replaced it. See scripts/hc-resume.ts and docs/herdr-core.md. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/scripts/hc-resume.ts</string>
+  </array>
+  <!-- Plain `true` (not a SuccessfulExit dict): make doctor grades a KeepAlive job that is down. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- bun's dir and hc (Homebrew) must be on launchd's minimal PATH. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/hc-resume.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/hc-resume.log</string>
+</dict>
+</plist>

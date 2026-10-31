@@ -92,6 +92,11 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/machine-role.ts"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/hc-session-label.ts",
+            "timeout": 10
           }
         ]
       },
@@ -173,6 +178,11 @@
     "SessionEnd": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/hc-session-label.ts",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "[ -n \"$FACTORY_SESSION\" ] && command -v factory >/dev/null && factory hook session-end; exit 0",
