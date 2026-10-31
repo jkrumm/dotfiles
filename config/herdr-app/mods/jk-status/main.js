@@ -24,6 +24,7 @@ export default class JkStatus extends View {
   init(_props, cx) {
     this.stats = {}; // machine ("" = this computer) -> { cpu, used, total } | null
     this.remotes = [];
+    this.pending = new Set(); // machines whose stats call is still out
     this.usage = [];
     cx.timer.every(STATS_MS, (cx) => this.refreshStats(cx));
     cx.timer.every(USAGE_MS, (cx) => this.refreshUsage(cx));
@@ -39,12 +40,17 @@ export default class JkStatus extends View {
         const remotes = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary && m.state === "connected").map((m) => m.name).sort();
         if (!same(remotes, this.remotes)) { this.remotes = remotes; changed = true; }
       } catch {}
-      for (const machine of [null, ...this.remotes]) {
+      // In parallel, and a machine still answering the last poll is skipped: a
+      // remote that hangs (exec's 30 s limit) must not stall the others.
+      await Promise.all([null, ...this.remotes].filter((m) => !this.pending.has(m ?? "")).map(async (machine) => {
+        const key = machine ?? "";
+        this.pending.add(key);
         const r = await exec("sh", ["-c", STATS], { on: machine }).catch(() => null);
+        this.pending.delete(key);
         const [cpu, used, total] = (r?.stdout ?? "").trim().split(" ").map(Number);
         const next = Number.isFinite(total) && total > 0 ? { cpu, used: used / 10, total: total / 10 } : null;
-        if (!same(this.stats[machine ?? ""], next)) { this.stats[machine ?? ""] = next; changed = true; }
-      }
+        if (!same(this.stats[key], next)) { this.stats[key] = next; changed = true; }
+      }));
       if (changed) cx.notify();
     });
   }

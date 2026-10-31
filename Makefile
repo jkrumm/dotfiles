@@ -2486,24 +2486,29 @@ herdr-core-setup:
 		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-core skipped"; exit 0; fi; \
 	[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — from the MacBook: scp ~/.local/bin/herdr-core mini:.local/bin/ (docs/herdr-core.md §Mini core)"; exit 1; }; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
-	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; \
-	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP"; \
-	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" >/dev/null 2>&1; then \
+	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; \
+	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
+		&& plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "    ✗ plist render failed"; exit 1; }; \
+	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "$$TARGET" >/dev/null 2>&1; then \
 		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \
 	else \
-		mv "$$TMP" "$$DST"; \
-		launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
-		launchctl bootstrap "gui/$$(id -u)" "$$DST"; \
+		mv "$$TMP" "$$DST" || { echo "    ✗ could not write $$DST"; exit 1; }; \
+		launchctl bootout "$$TARGET" 2>/dev/null || true; \
+		i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
+			i=$$((i+1)); [ $$i -gt 120 ] && { echo "    ✗ old herdr-core job never deregistered"; exit 1; }; sleep 0.5; done; \
+		launchctl bootstrap "gui/$$(id -u)" "$$DST" || { echo "    ✗ bootstrap failed — core is DOWN"; exit 1; }; \
 		echo "    ✓ com.jkrumm.herdr-core (installed + bootstrapped into gui/$$(id -u))"; \
 	fi; \
-	echo "    ↳ KeepAlive hc serve; log: ~/Library/Logs/herdr-core.log"
+	i=0; until launchctl print "$$TARGET" 2>/dev/null | grep -q "state = running"; do \
+		i=$$((i+1)); [ $$i -gt 40 ] && { echo "    ✗ com.jkrumm.herdr-core not running — ~/Library/Logs/herdr-core.log"; exit 1; }; sleep 0.5; done; \
+	echo "    ↳ running (KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"
 herdr-core-teardown:
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
-	echo "  ✓ herdr-core torn down (its terminals end with it)"
+	echo "  ✓ herdr-core torn down (its terminals end with it; on the MacBook: hc machine rm mini)"
 herdr-core-status:
-	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
-	"$(HOME)/.local/bin/hc" server status --json 2>/dev/null || true
+	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
+	"$(HOME)/.local/bin/hc" server status --json
 
 # The herdr event record (factory Phase 0): every event the server emits, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where

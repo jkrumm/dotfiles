@@ -8,6 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
+MODS=(jk-spaces jk-status)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -29,11 +30,13 @@ link() { # src dst
   ln -sfn "$1" "$2"; say "✓ $(basename "$2")"
 }
 
-for mod in jk-spaces jk-status; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
+for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
+# jk-spaces reads its folders from here: one taxonomy with classic herdr's sidebar.
+link "$DOTFILES_DIR/config/herdr/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
 
-for mod in jk-spaces jk-status; do
+for mod in "${MODS[@]}"; do
   herdr-app check "$HOME_DIR/mods/$mod" >/dev/null || { echo "✗ herdr-app check $mod failed:"; herdr-app check "$HOME_DIR/mods/$mod"; exit 1; }
   say "✓ check $mod"
 done
@@ -43,8 +46,10 @@ if ! herdr-app status >/dev/null 2>&1; then
 fi
 
 # Switching away and back reloads the layout and its mods: edits inside a symlinked mod folder go unnoticed otherwise.
-herdr-app "do" layout.switch --name main >/dev/null; sleep 1
-herdr-app "do" layout.switch --name jk >/dev/null && say "✓ layout jk (reloaded)"
+herdr-app "do" layout.switch --name main >/dev/null
+for _ in $(seq 20); do herdr-app status | grep -q '"layout": "main"' && break; sleep 0.25; done
+herdr-app "do" layout.switch --name jk >/dev/null || { echo "✗ layout.switch jk failed — herdr-app status:"; herdr-app status; exit 1; }
+say "✓ layout jk (reloaded)"
 
 open_folders=$(herdr-app ls | /usr/bin/python3 -c 'import json,sys; [print(s["folder"]) for s in json.load(sys.stdin)["spaces"] if not s.get("machine")]')
 for entry in "${SPACES[@]}"; do

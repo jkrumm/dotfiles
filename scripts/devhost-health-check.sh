@@ -846,7 +846,8 @@ $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
 com.jkrumm.agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
-herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist"
+herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist
+com.jkrumm.herdr-core|$HOME/Library/LaunchAgents/com.jkrumm.herdr-core.plist"
 
 # check_launchd_restarts lives in its own lib so the classification can be
 # driven hermetically (scripts/launchd-restarts.test.sh) — it reads

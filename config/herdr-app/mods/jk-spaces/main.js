@@ -43,7 +43,8 @@ const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b
 
 // Folders: groups.json's groups in order, each a hue from the theme; a space joins the
 // group naming its repo (worktrees follow their repo), the rest land in the fallback.
-const GROUPS = "SourceRoot/dotfiles/config/herdr/groups.json";
+// Linked into the app home by make herdr-app-setup.
+const GROUPS = ".config/herdr-app/groups.json";
 const HUES = ["ansi4", "ansi6", "ansi5", "ansi3", "ansi2", "ansi1"];
 const URGENT = (status) => status === "blocked" || status === "done";
 
@@ -138,12 +139,16 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try {
         const r = await exec("cat", [`${home()}/${GROUPS}`]);
+        if (r.code !== 0) throw new Error(r.stderr);
         const d = JSON.parse(r.stdout);
         const list = (d.groups ?? []).map((g, n) => ({ label: g.label, members: new Set(g.members ?? []), hue: HUES[n % HUES.length] }));
         const next = { list, fallback: d.fallback ?? "OTHER" };
         if (JSON.stringify(next, (_k, v) => (v instanceof Set ? [...v] : v)) === JSON.stringify(this.groups, (_k, v) => (v instanceof Set ? [...v] : v))) return;
         this.groups = next;
-      } catch { return; }
+      } catch (e) {
+        console.log(`jk-spaces: no folders from ~/${GROUPS}: ${e?.message ?? e}`);
+        return;
+      }
       cx.notify();
     });
   }
