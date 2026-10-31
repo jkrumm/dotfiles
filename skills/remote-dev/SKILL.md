@@ -42,7 +42,7 @@ for N independent changes). `agent-dispatch` and
 
 `/wave` owns the contract (chain vs orchestrated mode, the green gate). The
 mechanics this skill owns: `rd wave` adds a tab labelled `wave <n>` to the repo's
-space and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, as hidden children of the orchestrator. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
+space and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). The prompt travels in argv (no delivery check, no re-send). `rd fan` spawns one hidden child of the orchestrator per brief. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
 for helpers; `hc wait --help`). A wake can mean `blocked` (an approval/question UI): read it before answering.
 
 ### Scripting hc directly (stack rules on top of the `herdr` skill)

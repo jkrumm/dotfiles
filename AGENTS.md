@@ -33,7 +33,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
 | `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
-| `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json`; link per item, never the dir (it holds the app's shipped mods) |
+| `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json` (sidebar folders, one line per repo); link per item, never the dir (it holds the app's shipped mods) |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |
@@ -100,7 +100,7 @@ logs, missing programs and plaintext credentials.
 
 **settings.json merge:** the template wins on structural keys (hooks, statusLine,
 plugins, env) and on `permissions.deny` + `permissions.defaultMode`
-(`bypassPermissions`, so `hc-resume`'s `claude --resume` and `rd work` terminals come back
+(`bypassPermissions`, so resumed and `rd work` terminals come back
 in bypass, not manual); `permissions.allow` and
 `model`/`effortLevel`/`alwaysThinkingEnabled` are preserved from the live file.
 
@@ -172,7 +172,7 @@ substitutes for another.**
 
 | Want | Command |
 |-|-|
-| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
+| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree or mother/lead/wave tab; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
@@ -183,7 +183,7 @@ Commands take a repo **name, never a path** — resolution happens on the host.
 Facts to hold:
 
 - **A core restart keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
-  shells, and `com.jkrumm.hc-resume` types `claude --resume <id>` under the right account from the
+  shells, and `com.jkrumm.hc-resume` (mini only) types `claude --resume <id>` under the right account from the
   `jk.claude.*` labels (model, effort and the turn in flight are lost). Never `hc server restart|stop`, `hc update` or `hc machine
   update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
@@ -201,10 +201,8 @@ Facts to hold:
   command (`CLAUDE_CONFIG_DIR`, unset = `iu`), never by inheritance.
 - **Full Disk Access sits on the core launcher, not on the core.** A new core build keeps the grant
   (`~/.local/libexec/herdr-core-launcher`); a terminal born before a cutover keeps the old identity until it
-  ends. Frozen agent at 0 % CPU on `openat` = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
+  ends. A frozen agent at 0 % CPU = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
   The core updates itself daily after a 24 h cooldown (`com.jkrumm.herdr-core-update`); the app never touches it.
-
-**Sidebar groups:** `config/herdr-app/groups.json` (one line per repo) feeds the `jk-spaces` mod; `make herdr-app-setup` links it.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
@@ -530,8 +528,8 @@ nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
 **Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
 permitted". Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
 
-**The look** — `make theme` applies the terminal + Herdr app layers (run it on both
-machines); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
+**The look** — `make theme` applies the terminal layer (+ classic herdr's chrome until Wave 7), `make herdr-app-setup` the Herdr app's (run both on each
+machine); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
 on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
 middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
 `make theme` asserts the theme files rather than trusting a config check's exit code.

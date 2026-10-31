@@ -34,7 +34,7 @@ The Herdr app on the MacBook is the window. It links the mini's core as machine 
 once; ssh config host `mini`), so the mini's spaces and terminals sit next to the MacBook's (`herdr-app --skill`, MacBook
 only, is its manual; the `herdr` skill holds the rules). The core and every terminal run on the mini and the link is
 ssh/TCP, so a roam or lid-close ends the *link*, never a terminal: the app reconnects. Terminal-only fallback, no app:
-`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches). `desk` (classic's `--remote` attach) stays only until
+`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches; only while `launchctl print gui/$(id -u)/com.jkrumm.herdr-core` shows the core running, since an `hc` call with no core starts one without the keychain). `desk` (classic's `--remote` attach) stays only until
 Wave 7 deletes classic.
 
 - **No ssh to the mini needs a 1Password approval, and plain `ssh mini` never
@@ -844,6 +844,6 @@ clean, fully merged worktrees and their terminals, but only those `rd fan` creat
 others, and ones made before the marker, are kept); `--all` judges every extra worktree. A `rd wave` without `(Wave <n>)` takes the next
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
-Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.
+Prompt delivery for `rd wave` and `rd fan`: the prompt travels in argv (the spawn contract), so there is no delivery check or re-send; a spawn that never reaches `working` shows in `rd agents` / `rd read`.
 
 **Waiting on spawned agents.** Nothing polls. The spawner is the worker's parent: `factory session wait --on workers`, then end the turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn is a worker too. One wake per declaration, so declare `--on workers` again after each new spawn or `rd say` fix. A finished child counts as done even while a fix note is still queued, so after `rd say` check `factory status` in the foreground, bounded by `timeout` (a few minutes): note delivered and worker `working` → declare; worker idle again after delivery → read its diff, no wait; note still queued (an idle worker is not proof the fix ran) → `rd read` it, then escalate to the owner. Only `rd fan` and `RD_ORCHESTRATED=1 rd wave` make the caller the parent (a plain chain `rd wave` is parentless by design), and a session without `FACTORY_SESSION`, or an `rd` that fell back to hc direct, has no factory wake: wait with `timeout <s> hc wait --children all` (`any` for the next news; it returns early on a note, then wait again). `rd read <agent>` and `factory status` are how a woken orchestrator looks.
