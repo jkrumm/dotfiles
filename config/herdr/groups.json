@@ -6,17 +6,24 @@
   "groups": [
     {
       "label": "HERD",
-      "members": ["overview"]
+      "members": [
+        "overview"
+      ]
     },
     {
       "label": "INFRA",
-      "members": ["homelab", "homelab-private", "vps"]
+      "members": [
+        "homelab",
+        "homelab-private",
+        "vps"
+      ]
     },
     {
       "label": "TOOLING",
       "members": [
         "dotfiles",
         "dotfiles-private",
+        "software-factory",
         "agent-workflows",
         "hermes-agent",
         "modelpick",
@@ -24,12 +31,20 @@
         "usage-tracker",
         "rb",
         "dispatch-scratch",
-        "tinycast-extensions"
+        "tinycast-extensions",
+        "email-gateway"
       ]
     },
     {
       "label": "PERSONAL",
-      "members": ["jkrumm.com", "software-factory", "argo", "iris", "brain", "basalt-ui-obsidian", "weatherorb", "finances"]
+      "members": [
+        "jkrumm.com",
+        "argo",
+        "iris",
+        "brain",
+        "basalt-ui-obsidian",
+        "finances"
+      ]
     },
     {
       "label": "APPS",
@@ -37,13 +52,12 @@
         "rollhook",
         "rollhook-action",
         "basalt-ui",
+        "weatherorb",
         "free-planning-poker",
         "shutterflow",
         "ShutterflowOps",
         "shutterflow-wt",
-        "photo-flow",
         "image-gateway",
-        "email-gateway",
         "kobo-mods",
         "ticktick-raycast",
         "king-smith-walkingpad-mac"
@@ -52,11 +66,11 @@
     {
       "label": "WORK",
       "members": [
+        "prometheus-scripts",
         "epos.student-enrolment",
         "epos_fe.academic-profile",
         "epos_fe.booking",
         "epos_fe.spa-orchestrator",
-        "prometheus-scripts",
         "epos.crm-bridge",
         "epos.dam",
         "epos.exam",

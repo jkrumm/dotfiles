@@ -56,6 +56,14 @@ const worst = (states) => RANK.find((s) => states.includes(s)) ?? null;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const AGENTS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" agw agents | jq -c '[.data.projects[] | {cwd, states: [.agents[].state]}]'`;
 
+// What a dot means, on hover (jk-waves shows the same legend).
+const MEANING = {
+  working: "Agent working",
+  blocked: "Agent blocked: needs you",
+  done: "Agent finished, not looked at yet",
+  idle: "Agent idle",
+};
+
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
@@ -430,7 +438,8 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(div().size(7).flex_none().rounded(4).when(live, (d) => d.bg(fill)).when(status === "idle", (d) => d.border_1().border_color(t.dim))))
+          .when(!tree, el => el.child(div().id(`dot-${w.id}`).p(3).m(-3).flex_none().when(Boolean(status), (d) => d.tooltip(MEANING[status]))
+            .child(div().size(7).rounded(4).when(live, (d) => d.bg(fill)).when(status === "idle", (d) => d.border_1().border_color(t.dim)))))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
           .child(div().flex_1()),
       );

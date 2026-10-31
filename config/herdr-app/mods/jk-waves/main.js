@@ -91,6 +91,14 @@ function assemble(data) {
   return { shown: shown.sort(order), paused: paused.sort(byName), planned: planned.sort(byName) };
 }
 
+// Hover text and the footer legend; the left sidebar's dots use the same colors.
+const MEANING = {
+  needs: "Needs you: blocked, or waiting on the owner",
+  working: "Working",
+  waiting: "Waiting on its workers or a deploy",
+  idle: "Idle",
+};
+
 const shortId = (id, repo) => (id.startsWith(repo) ? id.slice(repo.length).replace(/^-/, "") : id) || id;
 
 export default class Waves extends View {
@@ -148,14 +156,15 @@ export default class Waves extends View {
   }
 
   tone(t, kind) {
-    return { needs: t.blocked, working: t.working, waiting: t.accent, idle: t.dim }[kind] ?? t.dim;
+    return { needs: t.blocked, working: t.working, waiting: t.working, idle: t.dim }[kind] ?? t.dim;
   }
 
   dot(t, kind, size = 7) {
-    const live = kind && kind !== "idle";
-    return div().size(size).flex_none().rounded(size / 2)
+    // Filled for needs you / working, a ring for waiting (amber: busy through its workers) and idle.
+    const live = kind === "needs" || kind === "working";
+    return div().size(size).flex_none().rounded(size / 2).when(Boolean(MEANING[kind]), (d) => d.tooltip(MEANING[kind]))
       .when(live, (d) => d.bg(this.tone(t, kind)))
-      .when(!live, (d) => d.border_1().border_color(t.dim));
+      .when(!live, (d) => d.border_1().border_color(this.tone(t, kind)));
   }
 
   sessionRow(t, r, s) {
@@ -257,7 +266,21 @@ export default class Waves extends View {
         .when(Boolean(this.data) && !shown.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No waves running")))
         .children(this.folders(t, shown))
         .children(this.parked(t, "PAUSED", paused))
-        .children(this.parked(t, "PLANNED", planned)));
+        .children(this.parked(t, "PLANNED", planned)))
+      .child(this.legend(t));
+  }
+
+  // Every dot color in one line, with its meaning on hover.
+  legend(t) {
+    const item = (id, color, label, hint, ring = false) => h_flex().id(`wv-legend-${id}`).flex_none().gap(4).items_center().tooltip(hint)
+      .child(div().size(6).rounded(3).when(!ring, (d) => d.bg(color)).when(ring, (d) => d.border_1().border_color(color)))
+      .child(label);
+    return h_flex().flex_none().flex_wrap().gap_x(10).gap_y(2).px(16).py(8).border_t_1().border_color(t.border).text_size(10.5).text_color(t.dim)
+      .child(item("working", t.working, "working", "Agent working"))
+      .child(item("blocked", t.blocked, "needs you", "Blocked, or waiting on the owner"))
+      .child(item("done", t.done, "done", "Finished, not looked at yet (left sidebar)"))
+      .child(item("waiting", t.working, "waiting", "Waiting on its workers or a deploy", true))
+      .child(item("idle", t.dim, "idle", "Agent there, idle", true));
   }
 
   // A section folded by default: open only once clicked.
