@@ -7,14 +7,13 @@ one-line gotchas live in `AGENTS.md`.
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
 `com.jkrumm.devhost-health` LaunchAgent and pushes **three** Uptime Kuma
-monitors. `MacMini Dev Host - Push` is the composite, covering **twenty**
+monitors. `MacMini Dev Host - Push` is the composite, covering **nineteen**
 components:
 
 | Component | Checks |
 |-|-|
 | tailscale | daemon state + node-key expiry days |
 | sshd | listener present |
-| herdr | classic server answering (`herdr status --json`); retires in Wave 7, `core` below is the hc world's check |
 | core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh` and `brew-upgrade.sh`): `com.jkrumm.herdr-core` `state = running` in launchd, then `hc server status` answers and reports `installed_by` — **FAIL** when the job is not running or `hc` does not answer, **WARN** when the core is unmanaged (`installed_by` null) or the other machine's core version differs (`hc machine ls`, else `ssh iumac hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: launchd is asked first, because any `hc` call auto-starts a stray core |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
@@ -245,11 +244,10 @@ agent-workflows, Hermes and every dev door is a mechanism for introducing exactl
 at 3am with nobody watching. `make collie-upgrade` is the paired human-invoked
 applier (needs a TTY, refuses automation): **notice unattended, apply attended.**
 
-`make mini-macos-update` (the macOS applier) writes two best-effort records on the mini before it
+`make mini-macos-update` (the macOS applier) writes a best-effort record on the mini before it
 reboots it: `herdr-core-resume-pre-reboot-<stamp>.tsv` (one line per terminal that carries a
 `jk.claude.session` label: address, session, config, cwd, state; taken only when launchd says
-`com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core) and, until Wave 7, the classic
-`herdr-panes-pre-reboot-<stamp>.txt`. `hc-resume` revives the sessions
+`com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core). `hc-resume` revives the sessions
 after the reboot; the tsv is what it should find.
 
 Four decisions that are not arbitrary:

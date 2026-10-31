@@ -297,7 +297,7 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
-`MacMini Dev Host - Push` is the composite over **20 components**: tailscale,
+`MacMini Dev Host - Push` is the composite over **19 components**: tailscale,
 sshd, core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
 services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
 jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
@@ -528,7 +528,7 @@ nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
 **Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
 permitted". Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
 
-**The look** — `make theme` applies the terminal layer (+ classic herdr's chrome until Wave 7), `make herdr-app-setup` the Herdr app's (run both on each
+**The look** — `make theme` applies the terminal layer, `make herdr-app-setup` the Herdr app's (run both on each
 machine); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
 on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
 middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
