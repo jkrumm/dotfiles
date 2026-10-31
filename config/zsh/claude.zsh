@@ -186,7 +186,7 @@ cs() {
 # a wave pane's own shell) — never `env VAR=…`, so they stay out of `ps auxww`.
 #
 # The machine-dependent bit is gated at launch, not committed into the shared
-# config: the light/dark re-theme (herdr panes only).
+# config: the light/dark re-theme (Herdr app terminals only).
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
 # so the key never rides argv or an ssh hop.
@@ -209,8 +209,8 @@ _oc_env() {
 oc() {
   local envs
   envs=$(_oc_env) || return 1
-  # Re-theme this pane to the appearance the MacBook last pushed. herdr panes
-  # only — a Ghostty client answers OpenCode's own terminal query. Mirrors
+  # Re-theme this terminal to the appearance the MacBook last pushed. Herdr app
+  # terminals only — a Ghostty client answers OpenCode's own terminal query. Mirrors
   # Claude's SessionStart hook; sends after the TUI is up.
   "$HOME/SourceRoot/dotfiles/scripts/claude-appearance.sh" session >/dev/null 2>&1 || true
   (eval "$envs"; command opencode "$@")

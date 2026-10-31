@@ -3,8 +3,8 @@
 #
 # ONE FUNCTION, TWO JOBS. `claude()` at the bottom is the only definition on any machine:
 #
-#   1. Account pick. A `claude` typed into an interactive zsh — which is exactly what
-#      `herdr agent start` does into a pane — picks its account with
+#   1. Account pick. A `claude` typed into an interactive zsh (a Herdr app terminal, a
+#      resumed session in a kept login shell) picks its account with
 #      `claude-account pick --lane ${USAGE_LANE:-interactive}` (docs/claude-accounts.md), unless
 #      CLAUDE_ACCOUNT_PICKED is already set: every chooser that decided an account sets that
 #      variable (`c`/`cs`/`cf`, `rd wave|work|fan`), and it is inherited by children. The marker, not
@@ -47,7 +47,7 @@
 # lifecycle: it is defined from tracked config on every shell.
 #
 # WHERE IT APPLIES. `~/.zshrc` sources this via conf.d for interactive shells
-# (herdr panes, `desk`), and `~/.zshenv` sources it directly for
+# (hc terminals), and `~/.zshenv` sources it directly for
 # NON-interactive ones — `ssh mini 'claude …'` reads only `.zshenv`, and that is
 # precisely the path whose acceptance test this whole package is gated on. The
 # limit, stated plainly: it does not reach a bash script or a LaunchAgent that
@@ -90,7 +90,7 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
   # binary uses it, and only then. Preempt it on every zsh launch and nothing on
   # this machine ever exercises it, so it quietly ages out and the "fallback"
   # becomes the only thing holding the host up. Measured 2026-08-17: the bare
-  # binary reported `loggedIn: false, authMethod: none` while every herdr pane
+  # binary reported `loggedIn: false, authMethod: none` while every hc terminal
   # worked fine on the token. It would also have silently swallowed the next
   # `/login` — you would restore the keychain and still be running on the token,
   # with no way to tell.
@@ -126,7 +126,7 @@ if [[ -r ${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend ]] \
       if command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
         command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude "$@"
       else
-        print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a herdr pane (no token fallback for this account)"
+        print -u2 "claude: not logged in under CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR — run /login in a Herdr app terminal (no token fallback for this account)"
         command env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude "$@"
       fi
       return
@@ -180,8 +180,8 @@ _claude_starts_session() {
 }
 
 # True when CLAUDE_ACCOUNT_PICKED still describes this environment: the marked account's registry dir is
-# the current CLAUDE_CONFIG_DIR (iu = unset). A stale marker inherited from a long-lived parent (the herdr
-# server's env, an old shell) fails this and the pick runs. Every chooser sets marker and dir together.
+# the current CLAUDE_CONFIG_DIR (iu = unset). A stale marker inherited from a long-lived parent (the core's
+# env, an old shell) fails this and the pick runs. Every chooser sets marker and dir together.
 # An unreadable registry cannot say otherwise, so the marker stands.
 _claude_marker_valid() {
   [[ -n ${CLAUDE_ACCOUNT_PICKED-} ]] || return 1

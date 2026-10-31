@@ -1,36 +1,7 @@
-# Remote dev — one command to land in a persistent session on the Mac mini.
+# Remote dev — the front door to the Mac mini.
 #
-# The three-layer model (Tailscale / herdr / Caddy) is in
-# dotfiles/docs/remote-dev.md; this file is only the front door. The design goal
-# is that reaching the dev host costs one word, and that the word picks the
-# right transport instead of making you remember which one you wanted.
-
-# `desk` — herdr's native attach over ssh. The client runs HERE.
-#
-# Buys local keybindings and local image paste, which matter when you are
-# actually sitting at the laptop. Costs roaming: this is TCP, so a lid-close
-# ends the connection and you re-run it. The herdr SERVER and every pane live on
-# the mini either way — this is a client-experience choice, not a persistence
-# one.
-#
-# It used to ask "restart the remote server now? [y/N]" on EVERY launch, and
-# the only correct answer was N — y restarts the server outside brew services
-# and kills every process in every pane. Root cause, measured rather than
-# guessed: herdr derives `detached_server_daemon` from `getsid(0) == getpid()`,
-# and a launchd job is not a session leader (the mini's server ran pid 671,
-# pgid 671, sid 1). The warning is true as asked and false as meant — launchd
-# owns the job and no ssh disconnect can reach it.
-#
-# Fixed by herdr/herdr-server-start.py, which forks + setsid()s before exec'ing
-# the server; `make _herdr-supervise` pins it into the brew plist and
-# `brew-upgrade.sh` asserts it (brew regenerates that plist silently). If the
-# prompt ever comes back, that assertion is what to run — and still answer N.
-desk() {
-  local session="${1:-}"
-  local -a args=(--remote mini)
-  [[ -n "$session" ]] && args+=(--session "$session")
-  herdr "${args[@]}"
-}
+# The three-layer model (Tailscale / herdr-core / Caddy) is in dotfiles/docs/remote-dev.md. Getting a terminal is the
+# Herdr app (MacBook) or `ssh -t mini hc`; this file holds the shorthands for steering work without one.
 
 # `rd` — the layer above the transport: prepare and steer work on the mini
 # WITHOUT a terminal into it. A script on PATH (~/.local/bin/rd, linked by

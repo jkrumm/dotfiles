@@ -5,7 +5,7 @@
 #
 # The config lives in config/starship.toml and is deliberately palette-neutral
 # (ANSI color names, not hex) so it follows the zinc-dark/zinc-light switch
-# along with the terminal and herdr. See that file's header.
+# along with the terminal and the Herdr app. See that file's header.
 
 # Guarded rather than assumed: conf.d is symlinked as a whole, so this file
 # lands on a machine the moment `make setup` links the directory — which can be
