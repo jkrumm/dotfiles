@@ -92,6 +92,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 # check_boot_path from "the boot path is intact" to "there is no file, skip".
 # shellcheck source=lib/brew-service.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
+# The herdr-core grader, shared with doctor.sh and brew-upgrade.sh (asks launchd before it
+# ever calls `hc`, which would auto-start a stray core).
+export HC_BIN="${HC_BIN:-$HOME/.local/bin/hc}"
+export LAUNCHCTL_BIN="${LAUNCHCTL_BIN:-/bin/launchctl}"
+# shellcheck source=lib/core-health.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/core-health.sh"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
@@ -132,7 +138,6 @@ GIT_BIN="${GIT_BIN:-/usr/bin/git}"
 BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
 WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
 KUMA_DOOR_URL="${KUMA_DOOR_URL:-http://127.0.0.1:8795}"
-PGREP_BIN="${PGREP_BIN:-/usr/bin/pgrep}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
 # side on a healthy machine — otherwise the only way to test the alarm is to
@@ -420,6 +425,15 @@ check_sshd() {
   echo "sshd listening"
 }
 
+# The herdr-core (`hc`) — the multiplexer every agent runs in once Wave 7 drops classic herdr.
+# FAIL when the LaunchAgent is down or `hc server status` does not answer; WARN (rc 2) when
+# the core is unmanaged or the other machine runs a different version. The peer version is
+# cached 30 min in STATE_DIR so a 300 s heartbeat does not ssh to a laptop every run.
+check_core() {
+  CORE_PEER_CACHE_FILE="$STATE_DIR/core-peer-version" core_health_check
+}
+
+# TODO(Wave 7): drop classic — check_herdr and its entry in the component loop.
 check_herdr() {
   # `herdr status --json` exposes server.running as a real boolean. Prefer it
   # over scraping the human output: herdr is pre-1.0, and a reformatted status
@@ -1064,21 +1078,6 @@ check_services() {
   echo "services up (${up}${skip_note})"
 }
 
-# The `make agent-overview` pane — a `watch` loop over `agw agents --text`
-# in a herdr workspace. Panes survive a herdr restart, their processes do not,
-# so this is the one thing that silently stops after every `make herdr-restart`.
-# WARN, never FAIL: it is a display, and a missing display must not page "dev
-# host DOWN".
-check_overview_pane() {
-  [[ -x "$AGW_BIN" ]] || { echo "overview pane n/a"; return 0; }
-  if "$PGREP_BIN" -f 'watch .*agw agents --text' >/dev/null 2>&1; then
-    echo "overview pane alive"
-    return 0
-  fi
-  echo "overview pane not running (fix: make agent-overview)"
-  return 2
-}
-
 # Max quota utilisation, appended to the push msg so the heartbeat carries the
 # one number every agent decision on this host depends on. Reported, not
 # graded: a spent window is a scheduling fact, not a broken machine. The one
@@ -1418,9 +1417,9 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
-for component in check_tailscale check_sshd check_herdr check_git_push check_dev_vhosts \
+for component in check_tailscale check_sshd check_herdr check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
-                 check_obsidian check_disk check_runaways check_overview_pane \
+                 check_obsidian check_disk check_runaways \
                  check_jobs check_quota; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).

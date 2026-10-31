@@ -14,7 +14,8 @@ components:
 |-|-|
 | tailscale | daemon state + node-key expiry days |
 | sshd | listener present |
-| herdr | server answering |
+| herdr | classic server answering (`herdr status --json`) — `TODO(Wave 7): drop classic` |
+| core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh` and `brew-upgrade.sh`): `com.jkrumm.herdr-core` `state = running` in launchd, then `hc server status` answers and reports `installed_by` — **FAIL** when the job is not running or `hc` does not answer, **WARN** when the core is unmanaged (`installed_by` null) or the other machine's core version differs (`hc machine ls`, else `ssh iumac hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: launchd is asked first, because any `hc` call auto-starts a stray core |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |
@@ -29,7 +30,6 @@ components:
 | obsidian | CLI answers (i.e. the app is running) |
 | disk | used % under the ceiling (93) **and** free space above the floor (20G) — the ceiling is not raised to follow the volume's band (81-84% used at the oldest rotated log entries, 90% on 2026-10-10, 92-94% now), because that would hide a genuinely near-full disk; the floor guards a small volume |
 | runaways | report-only CPU-time reaper |
-| overview pane | the `make agent-overview` `watch` loop is alive — **WARN**, never FAIL |
 | jobs | `jobs-grade` over the `jobrun` state dir (`~/.local/state/jobs`) — any `failing`/`stale`/`flapping`/`unloaded` label is a **WARN**, never FAIL (job failures reach Slack #alerts through `jobs-grade --slack`); a grader that cannot run is a WARN too. `jobs ok (0)` until jobs are wrapped |
 | quota | both Claude accounts from the picker's cache (`claude-account usage --json`; falls back to `agw quota`), appended (`quota iu 5h 8% · 7d 88% \| me 5h 3% · 7d 12%`); **WARN** at 5 h ≥ 90 % on the interactive account, or a sample older than 6 h |
 
