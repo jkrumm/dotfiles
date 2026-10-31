@@ -5,7 +5,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/la" "$T/bin"
 cp /bin/ls "$T/bin/adhoc-tool"; codesign -f -s - "$T/bin/adhoc-tool" 2>/dev/null
-mkplist() { /usr/bin/plutil -create xml1 "$T/la/$1.plist" && /usr/bin/plutil -insert Label -string "$1" "$T/la/$1.plist" \
+mkplist() { rm -f "$T/la/$1.plist"; /usr/bin/plutil -create xml1 "$T/la/$1.plist" && /usr/bin/plutil -insert Label -string "$1" "$T/la/$1.plist" \
   && /usr/bin/plutil -insert ProgramArguments -array "$T/la/$1.plist" && /usr/bin/plutil -insert ProgramArguments.0 -string "$2" "$T/la/$1.plist"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 run() { TCC_CHECK_LAUNCHAGENTS="$T/la" TCC_CHECK_LIST="$T/list.json" TCC_CHECK_LAUNCHER="$T/bin/launcher" bash "$HERE/tcc-check.sh"; }
@@ -28,4 +28,9 @@ cp "$T/bin/adhoc-tool" "$T/bin/launcher"
 mkplist com.jkrumm.herdr-core "$T/bin/launcher"
 echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"t"},"com.jkrumm.herdr-core":{"class":"launcher","why":"t"}}}' > "$T/list.json"
 run >/dev/null || fail "core on the launcher must pass"
+mkplist com.jkrumm.opbackup /bin/bash
+if out=$(run); then fail "an op job outside the launcher must fail"; fi
+case "$out" in *"com.jkrumm.opbackup"*"not the launcher"*) ;; *) fail "opbackup message: $out" ;; esac
+mkplist com.jkrumm.opbackup "$T/bin/launcher"
+run >/dev/null || fail "an op job on the launcher must pass"
 echo "tcc-check.test.sh: ok"

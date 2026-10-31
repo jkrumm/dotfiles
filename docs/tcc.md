@@ -64,26 +64,61 @@ MacBook (different user home): LaunchAgent programs were read over ssh; the TCC 
 | Machine | Grant | Why |
 |-|-|-|
 | mini | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | every program in a core terminal; survives core upgrades |
-| MacBook | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | same; the app's terminals run in that core |
+| MacBook | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | same; the app's terminals run in that core, and it is what spares `op` the AppData dialog (§1Password) |
+| MacBook | Full Disk Access → Ghostty.app (optional) | `op` and everything else started from a plain Ghostty tab |
 
 Both are queued with `ask-human` (one batch per machine). After a grant: `make tcc-probe`. The grants on
 `~/.local/bin/herdr-core` can stay; they match nothing once the symlink points at the Cellar.
 
 ## 1Password (`op`) — the AppData dialog
 
-`op` reads the desktop app's group container to handshake, which is `SystemPolicyAppData`. The grant is keyed on the
-path, which is `/opt/homebrew/Caskroom/1password-cli/<ver>/op`, so every `brew upgrade` drops it. "Allow" does not persist
-(it re-prompts per `op` process); Full Disk Access on that exact path supersedes the check (`AGENTS.md` §Secrets).
+**Acceptance (owner, 2026-10-31):** `op` (biometric, desktop-app integration ON) in any Herdr terminal on the MacBook shows
+only the 1Password Touch ID prompt, never *"op möchte auf Daten aus anderen Apps zugreifen"*
+(`kTCCServiceSystemPolicyAppData`), and that survives core updates and `brew upgrade 1password-cli`. No
+`OP_LOAD_DESKTOP_APP_SETTINGS=false` on the MacBook: it can cost biometric unlock.
 
-Recipes, cheapest first. **None is verified yet**: it needs the launcher grant on the MacBook and a Touch ID prompt in
-front of the owner, and `secrets-run` stays untouched (`AGENTS.md` §Secrets), so the item stops here and is reported.
+**Cause:** `op` reads the desktop app's group container to handshake. The grant is keyed on the requesting program's
+path, which for a bare `op` is `/opt/homebrew/Caskroom/1password-cli/<ver>/op`, so every `brew upgrade` drops it, and
+"Allow" does not persist (it re-prompts per `op` process). **Full Disk Access on the responsible process supersedes the
+AppData check**, so the fix is to make `op` run under a process that holds FDA durably, not to grant `op` itself.
 
-1. `OP_LOAD_DESKTOP_APP_SETTINGS=false` + `OP_CACHE=false` in headless contexts. Undocumented; verify with
-   `OP_… op whoami` while watching `log show` for a `kTCCServiceSystemPolicyAppData` request from `op`.
-2. Run `make secrets-seed` from a core terminal on the MacBook once its launcher holds FDA: `op` inherits the grant, and
-   the Caskroom path stops mattering. The pushed `ask-human --cmd` arrives through ssh, so route it through `hc exec`
-   (responsible process: the launcher) instead of the ssh session.
-3. A stable-path copy of `op` with its own FDA grant, refreshed after each upgrade.
+**Fix:** the launcher pattern on the MacBook as well, plus routing every other `op` caller under the launcher or a
+terminal app that has its own grant. `op`'s own path stops mattering.
 
-When one is verified: wire it into `secrets-seed` / `brew-upgrade.sh` and drop the FDA-on-Caskroom-path assertion
-(`brew-upgrade.sh` §op, `docs/homebrew.md`).
+| Context where `op` runs (MacBook) | Responsible process | Covered by |
+|-|-|-|
+| A Herdr app terminal, `hc run`, `hc exec` (incl. Claude Code and `make secrets-seed` started there) | `herdr-core-launcher` | the launcher's FDA, survives core swaps (below) |
+| `ask-human --cmd` / `make human-queue` commands (arrive over ssh) | sshd | **not covered**: wrap the command as `hc run --timeout 900 '<cmd>'`. The mini's `secrets-seed` guidance (SessionStart hook) already does |
+| `com.jkrumm.opbackup` LaunchAgent (backup + the secrets reseed guard) | its program | the plist's program is the launcher, which spawns bash; `make opbackup-setup` builds the launcher first, `make tcc-check` fails otherwise |
+| Ghostty (login shells, Claude Code started there) | Ghostty.app | Full Disk Access on Ghostty.app: a Developer-ID-signed app, so the row survives updates. One-time grant, a broad one: it covers every program in every Ghostty tab |
+| `ssh iumac '… op …'` from the mini | sshd | **not covered**: use `ask-human` with the `hc run` wrapper |
+| Anything else that launches `op` (a new LaunchAgent, a cron-like job) | its program | run it through the launcher: `ProgramArguments` = launcher, then the real program; add the label to `OP_JOBS` in `scripts/tcc-check.sh` |
+
+**Why a core swap keeps the grant:** the key is the launcher (stable path, identifier `com.jkrumm.herdr-core-launcher`),
+and a terminal's attribution survives the death of the process that spawned it. Measured 2026-10-31 on the mini: a
+terminal born *before* a `kickstart -k` that swapped the core for a differently signed build, running `ls ~/Documents`
+*after* it, was attributed to `responsible=com.jkrumm.herdr-core-launcher, responsible_path=~/.local/libexec/herdr-core-launcher`
+(the launcher pid it names is gone). Without a grant that attribution is the only thing observable; the grant itself is
+exercised by the probe below.
+
+**Acceptance check, with evidence:** `scripts/op-tcc-probe.sh`, run inside a core terminal on the MacBook:
+
+```text
+hc run --timeout 900 'make op-tcc-probe SWAP=1'
+```
+
+It reads one ref from `dotfiles-private/headless.refs` (value discarded), then searches the unified log for an
+`AUTHREQ_PROMPTING … kTCCServiceSystemPolicyAppData` since the read began; PASS means the read worked and none was raised.
+`SWAP=1` repeats the check from the same terminal and from a fresh one after pointing the core at a differently signed
+copy and kickstarting it (the original build is restored on exit). "Exactly one Touch ID prompt" is the half only the
+person at the machine sees. A terminal without Full Disk Access cannot even read that log, which the probe reports as
+FAIL. Evidence is recorded below when run.
+
+**Status (2026-10-31):** design and attribution evidence are in; the grant on the MacBook launcher, the cutover and the
+probe run are pending the owner (ask-human, MacBook). When the probe passes:
+1. Drop the FDA-on-Caskroom-path assertion in `scripts/brew-upgrade.sh` §op and the `docs/homebrew.md` row.
+2. Ghostty: add the FDA row if `op` is used from plain Ghostty tabs.
+
+Rejected: a stable-path copy of `op` (recipe 3: refresh logic after each upgrade, one more grant to keep) and the
+`OP_LOAD_DESKTOP_APP_SETTINGS` switch (undocumented, may cost biometric unlock). `secrets-run` is untouched
+(`AGENTS.md` §Secrets).

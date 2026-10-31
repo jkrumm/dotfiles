@@ -23,8 +23,12 @@
        at :17 — not daily. A single daily fire that lands at a locked screen is
        skipped with the next chance 24h out, so a laptop shut at that one clock
        time drifts red while sitting open all afternoon. -->
+  <!-- The program is herdr-core-launcher, which spawns bash as its child: macOS attributes the AppData request
+       op raises to the job's program, and the launcher holds the durable Full Disk Access grant
+       (docs/tcc.md). Bash itself has no grant of its own, and `op`'s versioned Caskroom path moves on every upgrade. -->
   <key>ProgramArguments</key>
   <array>
+    <string>__HOME__/.local/libexec/herdr-core-launcher</string>
     <string>/bin/bash</string>
     <string>__HOME__/SourceRoot/dotfiles/scripts/opbackup-auto.sh</string>
   </array>

@@ -12,6 +12,7 @@ LA_DIR="${TCC_CHECK_LAUNCHAGENTS:-$HOME/Library/LaunchAgents}"
 LIST="${TCC_CHECK_LIST:-$DOTFILES_DIR/config/tcc-programs.json}"
 LAUNCHER="${TCC_CHECK_LAUNCHER:-$HOME/.local/libexec/herdr-core-launcher}"
 
+launcher_real=$(realpath "$LAUNCHER" 2>/dev/null || echo "$LAUNCHER")
 fail=0
 checked=0
 flagged=0
@@ -25,6 +26,7 @@ for plist in "$LA_DIR"/*.plist; do
   [ -n "$prog" ] || continue
   real=$(realpath "$prog" 2>/dev/null) || { printf '  · %s: program %s does not resolve (not checked)\n' "$label" "$prog"; continue; }
   checked=$((checked + 1))
+  [ "$real" = "$launcher_real" ] && continue   # the launcher itself: the grant holder, never flagged
   why=""
   case "$real" in
     */Cellar/*|*/Caskroom/*|*/.local/share/claude/versions/*|*/releases/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) why="versioned path" ;;
@@ -55,6 +57,18 @@ if [ -f "$core" ]; then
     fail=$((fail + 1))
   fi
 fi
+
+# Jobs that run `op` must go through the launcher (its Full Disk Access supersedes the AppData prompt op raises).
+OP_JOBS="com.jkrumm.opbackup"   # extend when another LaunchAgent starts calling op
+for opjob in $OP_JOBS; do
+  f="$LA_DIR/$opjob.plist"
+  [ -f "$f" ] || continue
+  p0=$(/usr/libexec/PlistBuddy -c "Print :Program" "$f" 2>/dev/null || /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$f" 2>/dev/null)
+  if [ "$p0" != "$LAUNCHER" ]; then
+    printf '  ✗ %s: runs op but its program is %s, not the launcher (fix: make opbackup-setup)\n' "$opjob" "$p0"
+    fail=$((fail + 1))
+  fi
+done
 
 if [ "$fail" -eq 0 ]; then
   printf '  ✓ tcc: %s LaunchAgent programs checked, %s flagged and all classified\n' "$checked" "$flagged"

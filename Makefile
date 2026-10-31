@@ -2384,7 +2384,7 @@ secrets-freshness-check:
 # with every real decision in scripts/opbackup-auto.sh. Opt-in per machine like
 # remote-access, not part of the default setup chain.
 .PHONY: opbackup-setup opbackup-teardown opbackup-check
-opbackup-setup:
+opbackup-setup: herdr-core-launcher
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "op" ]; then \
 		echo "  ✗ secrets backend is '$${BACKEND:-unset}', not 'op' — this is not a present-human machine."; \
@@ -2536,13 +2536,15 @@ herdr-core-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
 	"$(HOME)/.local/bin/hc" server status --json
 
-.PHONY: tcc-check tcc-check-test tcc-probe
+.PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
 tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.sh
 tcc-probe: ## Live proof that a core terminal reaches Documents/Desktop/Downloads (raises the dialog if the launcher has no grant)
 	@out=$$(hc run --timeout 15 'ls ~/Documents ~/Desktop ~/Downloads >/dev/null && echo FDA_O""K' 2>&1); \
 	case "$$out" in *FDA_OK*) echo "  ✓ a core terminal reaches the protected folders (a Full Disk Access grant holds)";; \
 	*) echo "  ✗ blocked or failed: $$out"; echo "    grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md), then dismiss the dialog on the screen"; exit 1;; esac
+op-tcc-probe: ## MacBook acceptance check: op read in a core terminal raises no AppData dialog (SWAP=1: also after a core swap). Run: hc run --timeout 900 'make op-tcc-probe SWAP=1'
+	@bash $(DOTFILES_DIR)/scripts/op-tcc-probe.sh $(if $(SWAP),--swap,)
 tcc-check-test: ## Hermetic test for tcc-check
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.test.sh

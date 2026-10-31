@@ -412,7 +412,8 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   Disk Access grant on that exact path (FDA supersedes the AppData check; clicking "Allow" on the dialog does **not** stick — it re-prompts per `op` process),
   asserted by `make brew-upgrade`. A grant earned through a Claude Code chain
   never sticks: claude's TCC client is `~/.local/share/claude/versions/<ver>`,
-  a fresh client on every auto-update — run the seed from a plain terminal.
+  a fresh client on every auto-update — run the seed from a plain terminal. MacBook route (docs/tcc.md §1Password): run `op` under the herdr-core launcher's FDA
+  (Herdr terminals, `hc run` for `ask-human --cmd`, the opbackup LaunchAgent) — `make op-tcc-probe SWAP=1` is the acceptance check.
 - **`secrets-seed` never fans out on an access failure.** A batch/read that dies on
   authorization, a timeout or the desktop-app handshake aborts the run at once (no
   per-ref fallback, no retry) and prints the resolved `op` path to add to Full Disk
