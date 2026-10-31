@@ -465,6 +465,9 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
   `make herdr-core-setup` refuses to swap in a rebuilt launcher without queueing the re-grant (`ask-human`), and
   `make tcc-probe` runs after every launcher change. The mini grant was verified at 16:32 (`tcc-probe` ✓).
 
+**Left behind:**
+- not started: the green gate refused the spawn from Wave 7 (`scripts/wave-gate.py` matched "merged" in the first step, "P1 is merged: …", a verification, not a merge). Wave 7 closed green; start it with `RD_ORCHESTRATED=1 rd wave dotfiles 'Read docs/waves/PLAN.md. Execute the active wave (Wave 8). Follow the /wave skill.'` or reword that step. Wave 8 inherits the MacBook owner steps listed under Wave 7 (`make setup`/`doctor` there, the cask shells).
+
 ## Wave 9 — the mini maintenance window            <!-- status: pending -->
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
 note).
