@@ -207,22 +207,48 @@ function pendingFrom(text: string, nowMs: number): PendingAsk[] {
     return m ? [{ id: m[1], ageMs: nowMs - Number(m[2]) * 1000 }] : []
   })
 }
-/** One machine's `usage`, `expiry` and pending asks via a shell (local sh, or ssh to the peer); null usage = unreachable. */
-function machineSnapshot(argv: string[] | null, nowMs: number) {
-  const r = argv
-    ? spawnSync("ssh", [...SSH_OPTS, ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
-    : spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
-  if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] }
-  const [u = "", e = "", q = ""] = r.stdout.split("@@\n")
+const hcBin = () => process.env.CLAUDE_ACCOUNTS_HC ?? "hc" // test seam, like CLAUDE_ACCOUNTS_SSH
+const hcOk = (args: string[]) => spawnSync(hcBin(), args, { encoding: "utf8", timeout: 5_000 })
+/**
+ * The peer's herdr-core, when this machine's core is already running and lists the peer connected. Never starts a core
+ * (`server status` only inspects). Why: an ssh session cannot read the mini's login Keychain (rc=36), the core runs in
+ * the GUI session and can.
+ */
+function peerViaCore(name: string, nowMs: number) {
+  const status = hcOk(["server", "status", "--json"])
+  if (status.error || status.status !== 0) return null
+  const ls = hcOk(["machine", "ls", "--json"])
+  if (ls.error || ls.status !== 0) return null
+  const machines = (parseJson(ls.stdout) as { machines?: { name: string; state: string }[] } | null)?.machines ?? []
+  if (!machines.some((m) => m.name === name && m.state === "connected")) return null
+  const script = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; ${PEER_SCRIPT}`
+  const r = spawnSync(hcBin(), ["exec", "--on", name, "--timeout", "30", "sh", "-c", script], { encoding: "utf8", timeout: 35_000 })
+  if (r.error || !r.stdout.includes("@@\n")) return null
+  return parseSnapshot(r.stdout, nowMs)
+}
+function parseSnapshot(stdout: string, nowMs: number) {
+  const [u = "", e = "", q = ""] = stdout.split("@@\n")
   const pending = pendingFrom(q, nowMs)
   return { usage: parseJson(u), expiry: parseJson(e), pending, pendingIds: pending }
+}
+/** One machine's `usage`, `expiry` and pending asks via a shell (local sh, or the peer's core, else ssh); null usage = unreachable. */
+function machineSnapshot(argv: string[] | null, nowMs: number, peerName?: string): ReturnType<typeof parseSnapshot> & { via?: "core" | "ssh" } {
+  if (!argv) {
+    const r = spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
+    return r.status !== 0 && !r.stdout ? { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] } : parseSnapshot(r.stdout, nowMs)
+  }
+  const viaCore = peerName ? peerViaCore(peerName, nowMs) : null
+  if (viaCore) return { ...viaCore, via: "core" }
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
+  if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[], via: "ssh" }
+  return { ...parseSnapshot(r.stdout, nowMs), via: "ssh" }
 }
 
 async function health(argv: string[]): Promise<number> {
   const now = Date.now()
   const { onMini, local, peer } = peerMachine()
   const mine = machineSnapshot(null, now)
-  const theirs = machineSnapshot(peer.ssh, now)
+  const theirs = machineSnapshot(peer.ssh, now, peer.name)
   const rows: HealthRow[] = [
     ...gradeMachine(local, mine),
     ...gradeMachine(peer.name, theirs),

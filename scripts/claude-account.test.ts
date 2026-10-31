@@ -1238,6 +1238,28 @@ describe("CLI (isolated HOME)", () => {
     expect(dead.err).toContain("no fresh sample and no auth verdict for iu")
   })
 
+  test("health reads the peer through its core when connected, falls back to ssh, and never grades an unreadable login ok", () => {
+    const usageJson = JSON.stringify({ default_account: "iu", accounts: [{ id: "iu", auth_ok: true, age_s: 30 }] })
+    const exp = (severity: string, days: number | null) => JSON.stringify({ accounts: [{ id: "iu", severity, days_left: days, expired: false, refresh_expires_at: days === null ? null : 1 }] })
+    const payload = (e: string) => `${usageJson}\n@@\n${e}\n@@\n`
+    const okOut = join(home, "peer-ok.txt")
+    const unreadableOut = join(home, "peer-unreadable.txt")
+    writeFileSync(okOut, payload(exp("PASS", 12)))
+    writeFileSync(unreadableOut, payload(exp("WARN", null)))
+    const hcStub = join(bin, "hc-stub")
+    const machines = JSON.stringify({ machines: [{ name: "mini", state: "connected" }, { name: "macbook", state: "connected" }] })
+    writeFileSync(hcStub, `#!/bin/sh\ncase "$1" in\n server) exit 0;;\n machine) echo '${machines}';;\n exec) cat "${okOut}";;\nesac\n`)
+    chmodSync(hcStub, 0o755)
+    const sshStub = join(bin, "ssh-unreadable")
+    writeFileSync(sshStub, `#!/bin/sh\ncat "${unreadableOut}"\n`)
+    chmodSync(sshStub, 0o755)
+    const peerRows = (env: Record<string, string>) => (JSON.parse(cli(["health", "--json"], env).out).rows as { machine: string; check: string; state: string; detail: string; via?: string }[]).filter((r) => r.via && r.check === "login")
+    const viaCore = peerRows({ CLAUDE_ACCOUNTS_HC: hcStub, CLAUDE_ACCOUNTS_SSH: sshStub })
+    expect(viaCore).toMatchObject([{ state: "ok", detail: "12 d left", via: "core" }])
+    const fallback = peerRows({ CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub })
+    expect(fallback).toMatchObject([{ state: "warn", detail: "login expiry unreadable (via ssh)", via: "ssh" }])
+  })
+
   test("refresh --all asks for a re-login of a dead login once per 24 h (stub dialog script)", async () => {
     const asks = join(home, "asks.log")
     const stubScript = join(bin, "relogin-stub")

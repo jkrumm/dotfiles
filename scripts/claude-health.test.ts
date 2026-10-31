@@ -18,11 +18,19 @@ describe("gradeMachine", () => {
     expect(rows.map((r) => r.state)).toEqual(["fail", "warn"])
     expect(rows[0].fix).toBe("claude-relogin iu --machine mini")
   })
-  test("login ending soon warns; unreadable item (no date) stays ok", () => {
+  test("login ending soon warns; unreadable item (no date) warns, never ok", () => {
     const soon = gradeMachine("macbook", { usage: { accounts: [u("iu")] }, expiry: { accounts: [e("iu", "WARN", 6.6)] }, pending: [] })
     expect(soon[0]).toMatchObject({ state: "warn", detail: "login ends in 6.6 d" })
     const unreadable = gradeMachine("mini", { usage: { accounts: [u("iu")] }, expiry: { accounts: [e("iu", "WARN", null)] }, pending: [] })
-    expect(unreadable[0].state).toBe("ok")
+    expect(unreadable[0]).toMatchObject({ state: "warn", detail: "login expiry unreadable", fix: null })
+    const viaSsh = gradeMachine("mini", { usage: { accounts: [u("iu")] }, expiry: { accounts: [e("iu", "WARN", null)] }, pending: [], via: "ssh" })
+    expect(viaSsh[0]).toMatchObject({ state: "warn", detail: "login expiry unreadable (via ssh)", via: "ssh" })
+    const missing = gradeMachine("mini", { usage: { accounts: [u("iu")] }, expiry: null, pending: [] })
+    expect(missing[0].state).toBe("warn")
+  })
+  test("a readable PASS expiry is ok and carries the transport", () => {
+    const rows = gradeMachine("mini", { usage: { accounts: [u("iu")] }, expiry: { accounts: [e("iu", "PASS", 20)] }, pending: [], via: "core" })
+    expect(rows[0]).toMatchObject({ state: "ok", detail: "20 d left", via: "core" })
   })
   test("logged in but a quota sample older than 6 h means the token is rejected", () => {
     const rows = gradeMachine("mini", { usage: { accounts: [u("iu", true, 7 * 3600)] }, expiry: null, pending: [] })

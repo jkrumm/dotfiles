@@ -11,6 +11,8 @@ export interface HealthRow {
   detail: string
   /** shell command that repairs it, run on the MacBook; null when nothing to run */
   fix: string | null
+  /** transport the peer's data came over; absent for the local machine */
+  via?: "core" | "ssh"
 }
 
 interface UsageAcct { id: string; auth_ok: boolean; age_s: number | null }
@@ -26,9 +28,12 @@ export function gradeMachine(machine: string, d: {
   usage: { default_account?: string; accounts: UsageAcct[] } | null
   expiry: { accounts: ExpiryAcct[] } | null
   pending: PendingAsk[] | null
+  via?: "core" | "ssh"
 }): HealthRow[] {
   if (!d.usage) return [{ machine, id: "-", check: "reach", state: "fail", detail: "unreachable", fix: null }]
   const rows: HealthRow[] = []
+  const via = d.via
+  const hint = via ? ` (via ${via})` : ""
   const dflt = d.usage.default_account ?? "iu"
   for (const a of d.usage.accounts) {
     const exp = d.expiry?.accounts.find((e) => e.id === a.id)
@@ -37,8 +42,11 @@ export function gradeMachine(machine: string, d: {
     } else if (exp && exp.refresh_expires_at !== null && exp.severity !== "PASS") {
       const detail = exp.expired ? "login expired" : `login ends in ${exp.days_left} d`
       rows.push({ machine, id: a.id, check: "login", state: exp.severity === "FAIL" ? "fail" : "warn", detail, fix: relogin(machine, a.id) })
+    } else if (exp?.severity === "PASS" && exp.days_left !== null) {
+      rows.push({ machine, id: a.id, check: "login", state: "ok", detail: `${exp.days_left} d left`, fix: null })
     } else {
-      rows.push({ machine, id: a.id, check: "login", state: "ok", detail: exp?.days_left != null ? `${exp.days_left} d left` : "ok", fix: null })
+      // No readable expiry (Keychain unreadable over ssh, entry missing, check failed): never "ok" without data.
+      rows.push({ machine, id: a.id, check: "login", state: "warn", detail: `login expiry unreadable${hint}`, fix: null })
     }
     if (a.auth_ok && a.age_s !== null && a.age_s > STALE_QUOTA_S) {
       rows.push({ machine, id: a.id, check: "quota", state: "warn", detail: `no quota sample for ${Math.round(a.age_s / 3600)} h (token rejected?)`, fix: relogin(machine, a.id) })
@@ -46,7 +54,7 @@ export function gradeMachine(machine: string, d: {
   }
   const waiting = (d.pending ?? []).filter((p) => p.ageMs < 24 * 3600_000)
   if (waiting.length) rows.push({ machine, id: "-", check: "queue", state: "warn", detail: `${waiting.length} re-login request(s) waiting for your click`, fix: null })
-  return rows
+  return via ? rows.map((r) => ({ ...r, via })) : rows
 }
 
 /** Stable signature of the non-ok rows: the notifier only speaks again when it changes. */

@@ -368,6 +368,11 @@ claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/
 
 **Health on wake.** `claude-account health [--json] [--wake]` grades this machine and its peer (MacBook reaches the mini over
 `ssh mini`, the mini the MacBook over `ssh iumac`; both unauthenticated reads: `usage --json`, `expiry --json`, the human-queue).
+**Transport:** the peer is read through its herdr-core first (`hc exec --on <peer>`, only when this machine's core already runs
+per `hc server status` and `hc machine ls` shows the peer `connected`; nothing is ever started), else over ssh. Why: an ssh
+session on the mini cannot read the login Keychain (`security` rc=36), so over ssh every login expiry is unreadable; the
+core runs in the GUI session and reads it. Every peer row carries `via: "core"|"ssh"` (unreadable details end `(via ssh)`).
+A login with no readable expiry is `warn` (`login expiry unreadable`), never `ok`. Test seam: `CLAUDE_ACCOUNTS_HC` (the hc binary).
 Rows: `login` (logged out = FAIL for `iu`, WARN otherwise; login ending <= 7 d = WARN), `quota` (logged in but no sample for
 > 6 h: the usage endpoint is rejecting the token, the failure `auth status` alone cannot see), `queue` (re-login asks
 waiting for a click). `--wake`, run 30 s after wake by `scripts/wakeup.sh` (sleepwatcher, MacBook), re-pushes the mini's
