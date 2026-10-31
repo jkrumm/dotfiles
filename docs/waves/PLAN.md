@@ -381,19 +381,17 @@ note).
 - [ ] Final report into Left behind: everything ported, retired or deferred (one line each), anything still
   classic, and the verified state of both machines. Update the memory note.
 
-## Wave 10 — reboot proof and the owner's next work            <!-- status: pending -->
-Role `wave`. The last wave: it spawns no further wave.
+## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: pending -->
+Role `wave`. The last wave: it spawns no further wave. Owner 2026-10-31: the mini macOS update happens **much later**,
+so nothing here waits for it.
 
-- [ ] Write this wave's Left behind first (what follows, and that a reboot is next), commit, push. Then queue the macOS
-  update: `ask-human ask "Mini: make mini-macos-update, staying on 26.x (never 27)" --cmd "make -C ~/SourceRoot/dotfiles
-  mini-macos-update"`. It pushes a dialog to the MacBook, and the owner clicks Run. The mini reboots and this terminal ends.
-- [ ] After the reboot, `hc-resume` (Wave 3) should bring this session back under its account. If it does, continue
-  here: the resume itself is the proof. If it doesn't, the next owner session reads this Left behind and continues.
-  Verify both cores are up (launcher, managed version, versions match), the factory is healthy, `make doctor` is green
-  on both machines, and `make tcc-probe` passes on the mini.
 - [ ] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If `rd wave`'s
   gate refuses a repo's plan state, start the agent with `rd work <repo>` and deliver the prompt as its first message
-  instead. Never edit the prompts.
-- [ ] Final report into Left behind (the Wave 9 report plus the reboot result and the two spawned agents), and update
-  the memory note `mini-maintenance-window.md` to "done" (or delete it).
-
+  instead. Never edit the prompts. (`athena-orchestrator` was already resumed on 2026-10-31 by the owner's session.)
+- [ ] Queue the macOS update for the owner and do not wait for it: `ask-human ask "Mini: make mini-macos-update,
+  staying on 26.x (never 27). Reboots the mini; the agents come back through hc-resume." --cmd "make -C
+  ~/SourceRoot/dotfiles mini-macos-update"`. Write the after-reboot checklist into Left behind: both cores up
+  (launcher, managed version, versions match), factory healthy, `hc-resume` brought the Claude sessions back
+  (labels `jk.claude.*`), `make doctor` green on both machines, `make tcc-probe` on the mini.
+- [ ] Final report into Left behind (the Wave 9 report plus the two spawned agents), and update the memory note
+  `mini-maintenance-window.md`: only the macOS update is left, owner-timed.

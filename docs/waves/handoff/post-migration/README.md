@@ -12,4 +12,4 @@ is done and the mini is back from its macOS update. Do not edit the prompt files
 
 | Agent | Where | How |
 |-|-|-|
-| `athena-orchestrator` (IuRoot, not in the factory) | mini core, prometheus-scripts space, session `9a656a02…` under `~/.claude-me`, moved off classic herdr 2026-10-31 | It paused itself for the mini update ("When you say resume, I restart Wave 69 from its resume note"). After the reboot, check it came back (labels `jk.claude.*`), then `hc send` it: "Resume. The mini update is done. Classic herdr is gone: watch your waves with `rd agents` / `hc ls`, not `herdr agent list`." |
+| `athena-orchestrator` (IuRoot, not in the factory) | mini core, prometheus-scripts space, session `9a656a02…` under `~/.claude-me`, moved off classic herdr 2026-10-31 | **Resumed 2026-10-31 evening by the owner's session** (the owner postponed the macOS update). Nothing to do here except confirm it is still alive; after the reboot, check that `hc-resume` brought it back (labels `jk.claude.*`). |
