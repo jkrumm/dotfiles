@@ -12,7 +12,7 @@
 // unset, i.e. the real core) com.jkrumm.herdr-core must be `state = running` in launchd; otherwise it counts
 // as "no core" and retries with backoff.
 // Runs under launchd KeepAlive: com.jkrumm.hc-resume.
-import { splitLines } from "./herdr-events"
+import { splitLines } from "./hc-events"
 
 type Json = Record<string, unknown>
 export type Terminal = {

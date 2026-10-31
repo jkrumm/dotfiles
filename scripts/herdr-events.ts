@@ -10,6 +10,7 @@
 //
 // Every disconnect writes `recorder.gap` on reconnect, so a hole in the record is visible as a
 // line, not inferred from silence. Runs under launchd KeepAlive: com.jkrumm.herdr-events.
+// TODO(Wave 7): drop classic (scripts/hc-events.ts is the herdr-core port and carries on)
 import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 

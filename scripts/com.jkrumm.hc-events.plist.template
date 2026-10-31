@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.hc-events</string>
+  <!-- The raw event record of herdr-core: `events.subscribe` over `hc connect` (only while
+       com.jkrumm.herdr-core runs: hc would start a core), stamped with its receive time and appended to
+       ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, not a log — never rotated. Records only;
+       nothing consumes it yet. See scripts/hc-events.ts. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DOTFILES_DIR__/scripts/hc-events.ts</string>
+  </array>
+  <!-- Plain `true` (not a SuccessfulExit dict): make doctor grades a KeepAlive job that is down. -->
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- bun's dir and hc (Homebrew) must be on launchd's minimal PATH. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/hc-events.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/hc-events.log</string>
+</dict>
+</plist>

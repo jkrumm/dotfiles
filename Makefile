@@ -116,6 +116,7 @@ setup:
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
 	@$(MAKE) --no-print-directory herdr-events-setup
+	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory herdr-reap-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
@@ -2602,6 +2603,25 @@ herdr-events-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-events" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
 	ls -l "$(HOME)/.local/share/herdr-events/" 2>/dev/null | tail -3
 
+# The herdr-core event record: `events.subscribe` over `hc connect`, appended raw to the same
+# ~/.local/share/herdr-events/YYYY-MM-DD.jsonl (data, never rotated). Dev host only; never starts a core.
+.PHONY: hc-events-setup hc-events-teardown hc-events-status
+hc-events-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — hc-events skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/hc-events.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/share/herdr-events"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.hc-events" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ KeepAlive → ~/.local/share/herdr-events/YYYY-MM-DD.jsonl; log: ~/Library/Logs/hc-events.log"
+hc-events-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.hc-events.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
+	echo "  ✓ hc-events torn down (unloaded; the recorded data is kept)"
+hc-events-status:
+	@launchctl print "gui/$$(id -u)/com.jkrumm.hc-events" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
+	tail -3 "$(HOME)/Library/Logs/hc-events.log" 2>/dev/null; ls -l "$(HOME)/.local/share/herdr-events/" 2>/dev/null | tail -3
+
 # Claude session resume on herdr-core: types `claude --resume <id>` into a kept terminal's login shell
 # after its program was lost (labels set by hooks/hc-session-label.ts). Dev host only; subscribes to the
 # core and never starts one. docs/herdr-core.md.
@@ -3791,6 +3811,7 @@ help:
 	@echo "  make hc-resume-setup            Dev-host only: load the Claude session resume for herdr-core (-status / -teardown)"
 	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min classic-herdr janitor (-teardown)"
 	@echo "  make hc-reap-setup              Dev-host only: load the 30 min herdr-core janitor (-teardown); run once: rd reap [--dry-run]"
+	@echo "  make hc-events-setup            Dev-host only: load the herdr-core event recorder (-status / -teardown)"
 	@echo "  make kuma-door-setup           Dev-host only: load the Kuma door (:8795, KeepAlive); -restart / -teardown / -gen (monitors for homelab) / -check / -test"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
