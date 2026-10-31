@@ -247,6 +247,8 @@ gate next to the typed-yes TTY gate, not a bypass of it.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
+**herdr-core (`hc`) + Herdr app**: MacBook-only evaluation, shares nothing with the mini's herdr. See `docs/herdr-core.md` and the `herdr-core` skill.
+
 ## Dev-server doors
 
 **`config/Caddyfile` is the single app registry.** Every
