@@ -46,7 +46,7 @@ stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
 a repo that wants one ships it in its own `.claude/rules/`.
 
-**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old pane setup evaluated `_oc_env` (claude.zsh) first so `IU_*`
+**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old terminal setup evaluated `_oc_env` (claude.zsh) first so `IU_*`
 is in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
 `RD_WAVE_MODEL` overrides (`provider/id`).
 
@@ -66,11 +66,11 @@ its own OpenCode server (`packages/opencode-host` in agent-workflows).
 lagged the npm releases and a `brew upgrade` once broke every agent run). `~/.local/bin/opencode`
 links to agent-workflows' `scripts/opencode` shim (`make install-opencode` there), which execs the pinned
 npm build under `~/.local/share/agent-workflows/opencode-bin/current` — the same binary agw's server runs. `oc`,
-herdr agent panes and the shared per-user service
+agent terminals in herdr-core and the shared per-user service
 (`opencode service restart` after a pin bump) therefore all run one version. A pin bump:
 bump `OPENCODE_VERSION` (`packages/opencode-host/src/server.ts`) in agent-workflows, then `make install-opencode` in its
 main checkout (never from a linked worktree) and `make deploy`.
-The first start on a new version shows a one-time release-notes dialog that swallows the pane's
+The first start on a new version shows a one-time release-notes dialog that swallows the terminal's
 initial prompt — press Enter once, then `rd say` it again.
 
 **One MCP server is wired in:** `chrome-devtools` (`config/opencode/opencode.json`). Everything else
@@ -102,14 +102,14 @@ lifted panel is invisible and a white one glares — why this repo never uses
 `#ffffff`.
 
 **It follows the system appearance — via the same push Claude Code uses.** The
-dual mode only selects when opencode hears the terminal's mode; herdr answers none
-of those queries for a pane, so it sat dark forever. opentui ignores the
+dual mode only selects when opencode hears the terminal's mode; an unattached
+herdr-core terminal answers fixed dark colours and pushes nothing on a switch, so it sat dark forever. opentui ignores the
 `CSI ?997;Nn` report on its own — it only re-queries, and then needs **both** the
 OSC 11 (background) and OSC 10 (foreground) answers to infer a mode, so sending
 OSC 11 alone (the old form) still left it dark. `scripts/claude-appearance.sh`
-sends all three to every `claude` **and** `opencode` pane, and `oc` replays it into
-its own pane at 0.4 s — early enough to beat opencode's first paint, unlike the
-old 3 s send. The push applies both locally (this machine's own herdr panes run
+sends all three to every `claude` **and** `opencode` terminal (raw input over `terminal.attach`), and `oc` replays it into
+its own terminal at 0.4 s — early enough to beat opencode's first paint, unlike the
+old 3 s send. The push applies both locally (this machine's own core terminals run
 opencode too) and on the mini. A `/theme` Dark/Light/Auto pick still persists into
 `theme_mode_lock` and wins, so leave it on **Auto** to follow the host.
 

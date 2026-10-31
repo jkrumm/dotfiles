@@ -14,7 +14,7 @@ components:
 |-|-|
 | tailscale | daemon state + node-key expiry days |
 | sshd | listener present |
-| herdr | classic server answering (`herdr status --json`) — `TODO(Wave 7): drop classic` |
+| herdr | classic server answering (`herdr status --json`); retires in Wave 7, `core` below is the hc world's check |
 | core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh` and `brew-upgrade.sh`): `com.jkrumm.herdr-core` `state = running` in launchd, then `hc server status` answers and reports `installed_by` — **FAIL** when the job is not running or `hc` does not answer, **WARN** when the core is unmanaged (`installed_by` null) or the other machine's core version differs (`hc machine ls`, else `ssh iumac hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: launchd is asked first, because any `hc` call auto-starts a stray core |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
@@ -64,7 +64,7 @@ not the services. Kuma's monitors are generated from the same registry
 liveness (`/healthz`) is graded by the `services` component, so a dead door pages
 from the push side even though Kuma sees it as every service down at once.
 
-**One monitor, not thirteen.** tailscale/sshd/herdr fail together when the mini
+**One monitor, not thirteen.** tailscale/sshd/the core fail together when the mini
 sleeps or drops off the tailnet, so separate monitors would be simultaneous pages
 saying one thing; the failing component is named in the push `msg`, where the
 diagnosis belongs. The rest are deliberate exceptions — a token expires, `brew
@@ -115,7 +115,7 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   `~/.local/state/devhost-health/launchd-runs`, never a threshold on `runs`:
   `runs` is cumulative since load, so failing on `runs > 1` pages forever over a
   `Killed: 9` from weeks ago. The alertable fact is "restarted since the last
-  check" — for herdr, that every pane's processes are gone right now.
+  check" — for the core, that its job just restarted (a kickstart keeps terminals, a `bootout` ends them).
   `StartInterval` agents are excluded (there `runs` counts scheduled runs), and
   so is **`Terminated: 15`**: SIGTERM only reaches a KeepAlive job because a
   human or a Makefile target asked launchd to bounce it, so a `make
@@ -234,13 +234,13 @@ It watches the collie commit pin (`COLLIE_REF`), the versions compiled into cadd
 macOS updates. **Pins are read out of the Makefile, never duplicated.** Tag
 resolution is shared with `make collie-upgrade` via `scripts/lib/github-tags.sh`:
 the subtle half is `tag_commit`'s annotated-tag peel, since
-`herdr plugin install --ref` pins the *dereferenced* commit and reading the tag
+Collie is built from the *dereferenced* commit, and reading the tag
 object's own sha reports drift no upgrade can clear.
 
 **It reports and never upgrades, deliberately.** The hazard here is not a
 compromised release, it is *silent config revert*: caddy loses its DNS module and
 nothing fails for ~60 days; colima's plist reverts and nothing fails until the
-next power cut. An unattended upgrader on the host running herdr, colima,
+next power cut. An unattended upgrader on the host running herdr-core, colima,
 agent-workflows, Hermes and every dev door is a mechanism for introducing exactly that
 at 3am with nobody watching. `make collie-upgrade` is the paired human-invoked
 applier (needs a TTY, refuses automation): **notice unattended, apply attended.**
@@ -248,8 +248,8 @@ applier (needs a TTY, refuses automation): **notice unattended, apply attended.*
 `make mini-macos-update` (the macOS applier) writes two best-effort records on the mini before it
 reboots it: `herdr-core-resume-pre-reboot-<stamp>.tsv` (one line per terminal that carries a
 `jk.claude.session` label: address, session, config, cwd, state; taken only when launchd says
-`com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core) and the classic
-`herdr-panes-pre-reboot-<stamp>.txt` (`TODO(Wave 7): drop classic`). `hc-resume` revives the sessions
+`com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core) and, until Wave 7, the classic
+`herdr-panes-pre-reboot-<stamp>.txt`. `hc-resume` revives the sessions
 after the reboot; the tsv is what it should find.
 
 Four decisions that are not arbitrary:

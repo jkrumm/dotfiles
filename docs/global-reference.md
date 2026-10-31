@@ -41,7 +41,7 @@ Everything routed through `agw` exists only on the mini.
 | MCP · subagent | `/browse` (chrome-devtools, haiku) · `/analyze` (fallow in a native subagent) |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |
-| inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (inert unless `HERDR_ENV=1`) · `/router` (`routerctl`) |
+| inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (hc + the Herdr app) · `/router` (`routerctl`) |
 | inline — writing | `/brain` · `/distill` |
 
 Per-repo: `dotfiles` → `/iu-endpoint`; `hermes-agent` → `/hermes-validate`,
