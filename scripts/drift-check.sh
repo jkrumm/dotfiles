@@ -17,7 +17,7 @@ set -euo pipefail
 # compromised release — scripts/brew-upgrade.sh spends forty lines establishing
 # that, and it is right. The hazard is SILENT CONFIG REVERT: caddy loses its DNS
 # module and nothing fails for ~60 days; colima's plist reverts and nothing fails
-# until the next power cut. An unattended upgrader on the host that runs herdr,
+# until the next power cut. An unattended upgrader on the host that runs the herdr-core,
 # colima, Hermes and every dev door is a mechanism for introducing
 # exactly that class of fault at 3am with nobody watching. So this reports and a
 # human applies — the same trade the caddy pin already makes, and the same one
@@ -110,7 +110,7 @@ trap 'gh_tags_cleanup' EXIT
 
 # --- Checks ------------------------------------------------------------------
 
-# A commit-pinned herdr plugin. There is no `plugin update` — upgrading is a
+# A commit-pinned upstream (collie). There is no `plugin update` — upgrading is a
 # reviewed diff of the pin — so nothing anywhere notices these moving.
 check_pinned_commit() {
   local key="$1" repo="$2" pinned="$3" fixup="$4" latest sha

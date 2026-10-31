@@ -12,7 +12,7 @@ set -uo pipefail
 # Routing is deliberate and invisible: every subcommand runs on the dev host,
 # whether you are sitting at it or a hop away. There is one definition of "am I
 # the dev host" (the secrets backend marker, same signal `git-headless` and
-# `herdr-setup` key off) so the two machines can share one command surface.
+# `herdr-core-setup` key off) so the two machines can share one command surface.
 #
 # The MacBook's sanctioned repos are dotfiles/dotfiles-private/brain —
 # no project repos. `repos` and `work` resolve paths ON the host, which
