@@ -216,10 +216,10 @@ contract to keep.
   `installed_by: homebrew`); **all 22 mini terminals survived the bootout**. The MacBook link went `needs_login` (the
   1Password agent refuses a background requester) and was re-logged by the owner; a dedicated link key follows.
 
-## Wave 3 — rd, waves and resume on hc            <!-- status: active -->
+## Wave 3 — rd, waves and resume on hc            <!-- status: done -->
 Role `lead`. dotfiles.
 
-- [ ] `scripts/remote-dev.sh`: every subcommand on hc (§Port design), the classic paths deleted, `factory`
+- [x] `scripts/remote-dev.sh`: every subcommand on hc (§Port design), the classic paths deleted, `factory`
   first and hc-direct as the fallback, same spawn contract as `HcRunner`. `read`/`say`/`close` keep a
   classic fallback for targets hc doesn't know, and `agents` lists both rosters, until Wave 7. `fan` workers are hidden children of
   the orchestrator; `wave` tabs (the chain's next wave included) are `no_parent`. Update the
@@ -229,19 +229,44 @@ Role `lead`. dotfiles.
   `RD_ORCHESTRATED=1 rd wave iris '…'` and workers with `rd fan` (and the train that lands them), `rd read`, `rd say`. Keep those
   verbs, flags and the `rd agents` text shape (name + status word per line) working, or update iris's scripts in
   the same wave.
-- [ ] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
+- [x] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
   jk.claude.config=<dir>`, `jk.claude.config=` for `iu`), and `scripts/hc-resume` restores Claude sessions under
   the right account into kept shells (at login, on a `restarted` event, after a reconnect or `missed` snapshot;
   one attempt per terminal, only into a login shell). Tests cover an account change on a reused terminal and
   overlapping triggers. Wire the hook in
   `config/settings.template.json`, write tests, and prove it with a scratch-core kill/restart.
-- [ ] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc
+- [x] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc
   terminal yet; hc-direct waits on the notes hc types into the parent plus `hc wait --children`), `skills/implement`,
   `docs/agent-platform.md`, `docs/remote-dev.md` §rd: hc semantics.
-- [ ] Spawn Wave 4 through the new `rd wave`. That is the end-to-end proof that an orchestrator tab lands in the
+- [x] Spawn Wave 4 through the new `rd wave`. That is the end-to-end proof that an orchestrator tab lands in the
   dotfiles space on the mini core.
+**Left behind:**
+- `rd` runs on hc (`4161e0d`): the factory first, hc-direct (`hc connect` `terminal.run`, HcRunner's space rule) as the
+  fallback, and for an owner's own session (dev host, `HC_TERMINAL_ID`, no `FACTORY_SESSION`) on `fan` and orchestrated
+  `wave`, so `hc wait --children` sees the workers. Chain waves and `work` are labelled tabs with `no_parent`; fan workers and
+  orchestrated waves are children with `outlive_parent`. `close`/`fan --clean` need a Claude program plus an rd/factory
+  ownership marker; `say` refuses blocked, unknown and non-Claude targets. The classic path survives only as 17
+  `TODO(Wave 7)` fallbacks (read/say/close/agents, busy and name checks, `fan --clean`). The iris contract holds: verbs
+  and flags unchanged, `rd agents` lines are `SOURCE NAME STATUS …` (a test pins it). Three `agw review` rounds
+  (`01a192a9…` + two), the findings fixed; dismissed on purpose: keychain/OAuth fallback (bare `claude` + env is the
+  spawn contract), `CLAUDE_CONFIG_DIR` inheritance (the core's launchd env has none), pretrust, classic robustness,
+  check-to-connect and close-vs-send races.
+- **Fact 9 was wrong:** `hc connect` starts a core when none runs. `rd` and `hc-resume` check
+  `launchctl print …/com.jkrumm.herdr-core` first (`docs/herdr-core.md` facts 9 and 10). Wave 4's reap and events
+  ports need the same guard.
+- Resume (`9f89240`, `27ae8a8`): `hooks/hc-session-label.ts` (SessionStart labels; SessionEnd clears only on
+  `prompt_input_exit`/`logout`, so a SIGTERM at reboot keeps the label) and `com.jkrumm.hc-resume` (dev host only), running
+  on the mini. Settings rendered into `~/.claude`, `~/.claude-me`, `~/.claude-me2` on the mini; the MacBook needs `make
+  setup` for the hook (hc-resume stays mini-only). Sessions started before the render, this one included, carry no
+  labels. Proven in a scratch core (kill -9 → resume, core stop/start → reconnect resume); a live `missed` snapshot was
+  not exercised. The resume line is `claude --dangerously-skip-permissions --resume <id>`: model and effort are not
+  restored. Open for Wave 10's reboot proof: the factory witness marks a lost session dead while hc-resume revives Claude
+  in the same terminal.
+- Gate: `make check` green on the mini (last run on the final tree); AGENTS.md untouched (42.1k).
+- The end-to-end proof is Wave 4 itself: it records its own terminal's labels (`herdr.space` = the dotfiles space,
+  `no_parent`) in its Left behind.
 
-## Wave 4 — the side consumers            <!-- status: pending -->
+## Wave 4 — the side consumers            <!-- status: active -->
 Role `wave`.
 
 - [ ] dotfiles: reap and events recorder ported (new plists `com.jkrumm.hc-{reap,events}`; the classic
