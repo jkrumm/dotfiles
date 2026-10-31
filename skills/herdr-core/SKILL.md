@@ -29,7 +29,7 @@ Inside a core terminal `$HC_TERMINAL_ID` is set. Inside a classic herdr pane `HE
 
 ## Rules that override the upstream manual
 
-- **Lane policy wins.** `hc --skill` says to delegate through `hc run … claude`. In this setup only `@implementer`, `agw-legacy dispatch` and `rd wave` start agents (`docs/agent-platform.md`). Use `hc run` for a non-agent program (tests, a watcher), or for an agent only when the user asks for one in core.
+- **Lane policy wins.** `hc --skill` says to delegate through `hc run … claude`. In this setup only `@implementer` and `rd wave` start agents (`docs/agent-platform.md`). Use `hc run` for a non-agent program (tests, a watcher), or for an agent only when the user asks for one in core.
 - **Never touch the mini's herdr from here.** No `hc machine add mini` against the live host, no core on the mini, until the migration is decided (`docs/herdr-core.md` §Decision).
 - Always `--bg` and `--name` for anything long. Read output with `hc read <t> --lines N`, never by attaching.
 - `hc kill` whatever you started when you're done. Children end with their parent by default, but an `--outlive-parent` or a top-level `hc run` from a shell keeps going.
