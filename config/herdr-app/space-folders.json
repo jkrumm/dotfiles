@@ -1,9 +1,0 @@
-{
-  "list": [
-    { "id": "fshutterflow", "name": "Shutterflow", "color": "ansi3", "path": "~/SourceRoot/shutterflow", "match": "shutterflow,ShutterflowOps,shutterflow-wt", "folded": false },
-    { "id": "ftooling", "name": "Tooling", "color": "ansi4", "path": "~/SourceRoot", "match": "~/SourceRoot/dotfiles,~/SourceRoot/tinycast-extensions", "folded": false },
-    { "id": "fpersonal", "name": "Personal", "color": "ansi2", "path": "~/SourceRoot", "match": "~/SourceRoot/finances", "folded": false }
-  ],
-  "of": {},
-  "at": 0
-}

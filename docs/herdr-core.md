@@ -2,7 +2,7 @@
 
 The classic `herdr` TUI 0.9.x runs the mini. herdr-core (`hc`) and the Herdr desktop app are its vendor's new split: a headless core that owns the PTYs, and a native GPUI window on top of it. This page records what that split buys, what it costs, and the migration plan. Operational how-to: the `herdr-core` skill.
 
-Status 2026-10-31: **evaluation on the MacBook only** (core 0.1.15, app 0.1.10). The mini stays on classic herdr.
+Status 2026-10-31: **running in parallel** (core 0.1.15, app 0.1.10). The MacBook runs the app; the mini runs a core beside classic herdr, and every agent workflow (`rd`, waves, reap, overview) stays on classic herdr until the gaps below close. Classic herdr is phased out one consumer at a time.
 
 ## What the split buys
 
@@ -32,22 +32,31 @@ Status 2026-10-31: **evaluation on the MacBook only** (core 0.1.15, app 0.1.10).
 
 ## Decision
 
-1. **Now:** evaluate on the MacBook for local work. Learn the window, layouts and mods, and the `hc` model.
+1. **Now:** both in parallel. Local work runs in the app on the MacBook, and the mini's core is reachable as machine `mini`. Learn the window, the mods and the `hc` model there.
 2. **Mini maintenance window** (herdr 0.9.5, brew, macOS 26.x, Colima): runs as planned, on classic herdr.
 3. **Move the mini to core only when** (a) core resumes Claude sessions, or we accept a scripted `claude --resume` rebuild per account; (b) quitting the app provably leaves core running; (c) core runs under a LaunchAgent on the mini and survives a reboot. Then port the consumers listed above as a `/wave`.
 
 Sources: the herdr-core and herdr-app READMEs, CHANGELOGs and issues cited above; agw research run `01a19101-d7ba-7122-98db-6230df648a9f` (deep, 41/42 citations grounded).
 
+## Mini core
+
+`com.jkrumm.herdr-core` (`make herdr-core-setup`, dev host only) runs `hc serve` as a KeepAlive LaunchAgent, **bootstrapped into `gui/<uid>`**. The MacBook links it with `hc machine add mini --name mini` (once; ssh config host `mini`).
+
+- **Always up, on purpose.** Any `hc` client call auto-starts a core when none runs, including the MacBook's link arriving over ssh. A core born in an ssh session spawns Claude without the login keychain (the `ssh mini 'claude …'` trap). Under launchd, a terminal in the core reaches the keychain (verified 2026-10-31).
+- **Restart = `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.** Terminals survive: a `sleep` kept its pid across the kickstart (verified). Don't use `hc server restart`, `hc update` or `hc machine update mini` on the mini. They restart the core outside launchd's view, and that combination is untested.
+- **Upgrade:** `scp ~/.local/bin/herdr-core mini:.local/bin/`, then the kickstart. Keep MacBook and mini on the same `hc` version (`hc machine ls` shows it).
+- State: `~/.local/state/herdr-core/` on the mini. Log: `~/Library/Logs/herdr-core.log`.
+
 ## Desktop layout (MacBook)
 
-`make herdr-app-setup` converges the app onto `config/herdr-app/`. It's idempotent and needs the window open to switch the layout and open spaces.
+`make herdr-app-setup` converges the app onto `config/herdr-app/`. It's idempotent, and needs the window open to switch the layout and open spaces. It ends by switching layouts away and back, the only reload that picks up edits inside a symlinked mod folder.
 
-| Piece | Source | How it lands |
+| Piece | Source | Lands as |
 |-|-|-|
-| `jk` layout: the shipped `main` with space folders, the agents list removed, and `jk-status` as the status bar | `config/herdr-app/layouts/jk.json` | symlink into `~/.config/herdr-app/layouts/` |
-| `jk-status`: the shipped status bar plus CPU % and memory used (active + wired + compressed), polled every 5 s on the **active space's machine** (a mini space shows the mini) | `config/herdr-app/mods/jk-status/` | symlink |
-| `space-folders`: folders in the spaces list, smart rules by path | [jankeesvw/herdr-space-folders](https://github.com/jankeesvw/herdr-space-folders), **unlicensed**, pinned commit in `scripts/herdr-app-setup.sh` | cloned to `~/.local/share/herdr-app-vendor/`, mod symlinked. Read the `main.js` diff before bumping the pin |
-| Folders Shutterflow / Tooling / Personal | `config/herdr-app/space-folders.json` | **copied** once to `~/.config/herdr-space-folders.json` (the mod rewrites the file with tmp+mv, so a symlink wouldn't survive). After that the live file wins |
-| Spaces shutterflow, ShutterflowOps, tinycast-extensions, finances, dotfiles | `SPACES` in the script | `herdr-app do space.new`, skipped when a space already works in that folder |
+| `jk` layout: the shipped `main` with `jk-spaces` instead of spaces + agents, `jk-status` as the bar, theme `one-zinc-{light,dark}` following the system | `config/herdr-app/layouts/jk.json` | symlink |
+| `jk-spaces`: Herdr's `spaces` mod (Apache-2.0) plus folders. Folders come from **`config/herdr/groups.json`**, the same taxonomy as classic herdr's sidebar. A space joins the group naming its repo (worktrees follow their repo), the rest go to the fallback (`OTHER`). Folders fold (state in the app), a folded folder shows ● when a space in it needs you, avatars take the folder's color, and rows carry the agent-status dot | `config/herdr-app/mods/jk-spaces/` | symlink |
+| `jk-status`: CPU % and memory used (active + wired + compressed) for this computer and every connected machine, every 5 s via `exec … { on }`. Claude Max usage per account (`5h/7d %`, red ≥ 90, dim when the sample is > 3 h old, `login` when auth failed), every 60 s from `claude-account usage --json`, which reads its local quota cache only (the MacBook's includes the mini's samples) | `config/herdr-app/mods/jk-status/` | symlink |
+| Themes `one-zinc-*` (the terminal look, `docs/theme.md`) and `basalt-ui-*` (Blueprint palette), converted from `config/ghostty/themes/` | `config/herdr-app/themes/` | symlink, pickable in Settings |
+| Spaces shutterflow, ShutterflowOps, tinycast-extensions, finances, dotfiles | `SPACES` in `scripts/herdr-app-setup.sh` | `herdr-app do space.new`, skipped when one already works in that folder |
 
-The app doesn't notice edits inside a symlinked mod folder. After changing `jk-status`, run `herdr-app check ~/.config/herdr-app/mods/jk-status` and switch layouts (or restart the app). Revert with `herdr-app do layout.switch --name main`.
+A new repo gets its folder through one line in `groups.json`. Revert to stock with `herdr-app do layout.switch --name main`. The theme picker in Settings overrides the layout's theme.

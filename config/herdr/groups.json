@@ -23,12 +23,13 @@
         "linewatch",
         "usage-tracker",
         "rb",
-        "dispatch-scratch"
+        "dispatch-scratch",
+        "tinycast-extensions"
       ]
     },
     {
       "label": "PERSONAL",
-      "members": ["jkrumm.com", "software-factory", "argo", "iris", "brain", "basalt-ui-obsidian", "weatherorb"]
+      "members": ["jkrumm.com", "software-factory", "argo", "iris", "brain", "basalt-ui-obsidian", "weatherorb", "finances"]
     },
     {
       "label": "APPS",
@@ -38,6 +39,8 @@
         "basalt-ui",
         "free-planning-poker",
         "shutterflow",
+        "ShutterflowOps",
+        "shutterflow-wt",
         "photo-flow",
         "image-gateway",
         "email-gateway",

@@ -10,9 +10,9 @@ Two products, one vendor, **no shared state**:
 | | Command | Runs where (2026-10-31) |
 |-|-|-|
 | Classic TUI 0.9.x | `herdr` | the mini — every agent, `rd`, reap, events, overview, collie. Skill: `herdr` |
-| herdr-core + app | `hc`, `herdr-app` | the MacBook only, as an evaluation. Nothing in this repo calls them yet |
+| herdr-core + app | `hc`, `herdr-app` | MacBook: app + core. Mini: core only (`com.jkrumm.herdr-core`), reachable as machine `mini` |
 
-They can't see each other's agents. A pane in one is invisible to the other.
+They run in parallel and can't see each other's agents.
 
 ## First step, every time
 
@@ -30,7 +30,8 @@ Inside a core terminal `$HC_TERMINAL_ID` is set. Inside a classic herdr pane `HE
 ## Rules that override the upstream manual
 
 - **Lane policy wins.** `hc --skill` says to delegate through `hc run … claude`. In this setup only `@implementer` and `rd wave` start agents (`docs/agent-platform.md`). Use `hc run` for a non-agent program (tests, a watcher), or for an agent only when the user asks for one in core.
-- **Never touch the mini's herdr from here.** No `hc machine add mini` against the live host, no core on the mini, until the migration is decided (`docs/herdr-core.md` §Decision).
+- **The mini's core belongs to launchd.** Restart it only with `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`. Never use `hc server restart|stop`, `hc update` or `hc machine update mini` there, and never start a core from an ssh session (no keychain, so Claude runs logged out). Upgrades: `docs/herdr-core.md` §Mini core.
+- **The look is tracked.** Layout, mods and themes live in `config/herdr-app/` and folders in `config/herdr/groups.json`. Edit there, then `make herdr-app-setup` (it reloads). Never edit the shipped mods in `~/.config/herdr-app/mods/`.
 - Always `--bg` and `--name` for anything long. Read output with `hc read <t> --lines N`, never by attaching.
 - `hc kill` whatever you started when you're done. Children end with their parent by default, but an `--outlive-parent` or a top-level `hc run` from a shell keeps going.
 

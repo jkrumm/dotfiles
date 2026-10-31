@@ -2484,7 +2484,7 @@ herdr-core-setup:
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" != "cache" ]; then \
 		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-core skipped"; exit 0; fi; \
-	[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — from the MacBook: hc machine update mini"; exit 1; }; \
+	[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — from the MacBook: scp ~/.local/bin/herdr-core mini:.local/bin/ (docs/herdr-core.md §Mini core)"; exit 1; }; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; \
 	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP"; \

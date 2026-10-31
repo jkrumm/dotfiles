@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
 # Converge the Herdr desktop app (herdr-core evaluation, MacBook) onto the tracked
-# config: the `jk` layout (space folders, no agents list, CPU/MEM status bar), the
-# pinned third-party space-folders mod, the folder seed, and one space per repo.
+# config: the `jk` layout (One Zinc theme, jk-spaces folders from config/herdr/groups.json,
+# no agents list, jk-status bar), and one space per daily repo.
 # Idempotent. docs/herdr-core.md §Desktop layout.
 set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-
-# jankeesvw/herdr-space-folders has no license: cloned and linked, never vendored here.
-# Bumping the pin = read the diff of main.js first (it runs trusted JS with exec).
-FOLDERS_REPO="https://github.com/jankeesvw/herdr-space-folders.git"
-FOLDERS_PIN="cb83ff4aeed32b674fb8fe66b183ae60fe8944f6"
-FOLDERS_DIR="$HOME/.local/share/herdr-app-vendor/herdr-space-folders"
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -35,20 +29,11 @@ link() { # src dst
   ln -sfn "$1" "$2"; say "✓ $(basename "$2")"
 }
 
-say "space-folders mod @ ${FOLDERS_PIN:0:7}"
-[ -d "$FOLDERS_DIR/.git" ] || git clone -q "$FOLDERS_REPO" "$FOLDERS_DIR"
-git -C "$FOLDERS_DIR" fetch -q origin "$FOLDERS_PIN" 2>/dev/null || git -C "$FOLDERS_DIR" fetch -q origin
-git -C "$FOLDERS_DIR" -c advice.detachedHead=false checkout -q "$FOLDERS_PIN"
-
-link "$FOLDERS_DIR/mods/space-folders" "$HOME_DIR/mods/space-folders"
-link "$SRC/mods/jk-status" "$HOME_DIR/mods/jk-status"
+for mod in jk-spaces jk-status; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
+for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
 
-# Seeded, not linked: the mod rewrites the file with tmp+mv, which would replace a symlink.
-if [ -e "$HOME/.config/herdr-space-folders.json" ]; then say "· herdr-space-folders.json (kept, live wins)"
-else cp "$SRC/space-folders.json" "$HOME/.config/herdr-space-folders.json"; say "✓ herdr-space-folders.json (seeded)"; fi
-
-for mod in space-folders jk-status; do
+for mod in jk-spaces jk-status; do
   herdr-app check "$HOME_DIR/mods/$mod" >/dev/null || { echo "✗ herdr-app check $mod failed:"; herdr-app check "$HOME_DIR/mods/$mod"; exit 1; }
   say "✓ check $mod"
 done
@@ -57,7 +42,9 @@ if ! herdr-app status >/dev/null 2>&1; then
   say "window not running — open Herdr and re-run to switch the layout and open the spaces"; exit 0
 fi
 
-herdr-app "do" layout.switch --name jk >/dev/null && say "✓ layout jk"
+# Switching away and back reloads the layout and its mods: edits inside a symlinked mod folder go unnoticed otherwise.
+herdr-app "do" layout.switch --name main >/dev/null; sleep 1
+herdr-app "do" layout.switch --name jk >/dev/null && say "✓ layout jk (reloaded)"
 
 open_folders=$(herdr-app ls | /usr/bin/python3 -c 'import json,sys; [print(s["folder"]) for s in json.load(sys.stdin)["spaces"] if not s.get("machine")]')
 for entry in "${SPACES[@]}"; do
