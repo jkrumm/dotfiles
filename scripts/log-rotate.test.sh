@@ -53,6 +53,17 @@ rm "$AGENTS/com.jkrumm.alpha.plist"; rm -f "$LOGS"/*.1; big "$LOGS/alpha.log"
 LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
 check "a retired plist's log stops being rotated" untouched alpha.log
 
+# The herdr-core world needs no hand list: every plist's log is derived, so the core, its daily update,
+# resume and the Wave 4 reap/events recorders are rotated the moment their plists land.
+for l in herdr-core herdr-core-update hc-resume hc-reap hc-events; do
+  plist "com.jkrumm.$l" "$LOGS/$l.log" "$LOGS/$l.log"; big "$LOGS/$l.log"
+done
+rm -f "$LOGS"/*.1
+LOG_ROTATE_MAX_BYTES=1024 bash "$HERE/log-rotate.sh" >/dev/null 2>&1
+for l in herdr-core herdr-core-update hc-resume hc-reap hc-events; do
+  check "herdr-core world: $l.log rotated" rotated "$l.log"
+done
+
 CR="$CHROME_CLONE_ROOT"
 mkdir "$CR/code_sign_clone.old" "$CR/code_sign_clone.fresh" "$CR/code_sign_clone.open"
 touch -t "$(date -v-2d +%Y%m%d%H%M)" "$CR/code_sign_clone.old" "$CR/code_sign_clone.open"
