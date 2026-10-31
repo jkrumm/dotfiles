@@ -1,15 +1,15 @@
 # starship — cross-shell prompt, symlinked to ~/.config/starship.toml.
 #
-# Two design constraints come from the herdr setup, not from taste:
+# Two design constraints come from the Herdr app setup, not from taste:
 #
 # 1. COLORS ARE ANSI NAMES, NEVER HEX. The terminal auto-switches between
 #    one-zinc-dark (#1f1f23) and one-zinc-light (#f2f2f5) with macOS appearance. A hex
 #    color that reads well on one is unreadable on the other; "blue"/"cyan"/
 #    "green" resolve through the terminal's palette, so they follow the switch
-#    for free — and unlike herdr's sidebar, which can only take strict hex,
+#    for free — and unlike the Herdr app's chrome, which takes fixed colors,
 #    nothing here has to compromise between the two backgrounds.
 #
-# 2. TWO LINES. herdr splits panes down to ~half width. A single-line prompt
+# 2. TWO LINES. the Herdr app splits panes down to ~half width. A single-line prompt
 #    with a path and git state leaves almost no room to type before wrapping;
 #    putting the input on its own line makes narrow panes usable.
 #

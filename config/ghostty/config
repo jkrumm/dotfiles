@@ -10,30 +10,20 @@ shell-integration-features = cursor,sudo,title
 macos-option-as-alt = left
 
 # ── Themes (One Zinc Dark / One Zinc Light) ──────────────────────────────────
-# Muted Atom One hues on basalt-ui zinc surfaces, for PANE CONTENT. herdr paints
-# its own chrome from its built-in one-dark/one-light — same hue family, so the
-# two agree without having to be the same file.
+# Muted Atom One hues on basalt-ui zinc surfaces, for PANE CONTENT. The Herdr app paints
+# its chrome from its own one-zinc-{light,dark} themes (config/herdr-app/themes/, basalt-ui
+# tokens), so terminal and chrome agree without being the same file.
 #
 # The backgrounds are middle-ground on purpose: #1f1f23 dark (between basalt's
 # zinc-900 and zinc-800), #f2f2f5 light (basalt's own --vx-surface-bg). Never
-# black, never white. herdr's focused sidebar row lands on these at 1.17 / 1.03
-# separation, which is subtle by design — it also renders that row bold and in a
-# brighter fg, so the background is not the only cue. Full reasoning and the pty
-# measurements behind it are in each theme file's header.
-#
-# Ghostty theme names are EXACT FILENAMES. These resolve because the files are
-# literally named one-zinc-dark / one-zinc-light; bundled themes with spaces and
-# capitals must be written that way ("Catppuccin Mocha", not catppuccin-mocha).
-#
-# The Blueprint v6 pair is still tracked as basalt-ui-{dark,light} if you want it
-# back.
+# black, never white. The theme file headers keep the contrast measurements taken
+# against classic herdr's sidebar (history, retiring with it).
 theme = dark:one-zinc-dark,light:one-zinc-light
 
 # ── Font ─────────────────────────────────────────────────────────────────────
-# Nerd Font variant: herdr's sidebar state icons and starship's prompt glyphs
-# are Nerd Font codepoints and render as tofu without it. "Mono" (not "Propo")
-# is deliberate — it forces single-width glyphs, so icons can't push herdr's
-# column-aligned sidebar rows out of alignment.
+# Nerd Font variant: starship's prompt glyphs and the Herdr app's status icons are
+# Nerd Font codepoints and render as tofu without it. "Mono" (not "Propo") forces
+# single-width glyphs, so icons can't push column-aligned rows out of alignment.
 font-family = JetBrainsMono Nerd Font Mono
 font-size = 16
 

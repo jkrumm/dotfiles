@@ -39,7 +39,7 @@ Host mini
     IdentitiesOnly yes
     IdentityAgent none
     ForwardAgent no
-    # ControlMaster: herdr opens several connections, and without multiplexing
+    # ControlMaster: the Herdr app and `hc machine` open several connections, and without multiplexing
     # each one repeats a full handshake. One shared connection, held 10m after
     # the last exit. Socket dir is created by `make setup` (_setup-ssh).
     ControlMaster auto
