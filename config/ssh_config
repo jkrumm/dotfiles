@@ -23,25 +23,39 @@ Host *
 
 # Personal Mac mini (always-on home base — Hermes + Feuer live here). Reached
 # over Tailscale (tag:mac ACL) with OpenSSH, not Tailscale SSH: remote dev needs
-# agent forwarding, ControlMaster and full-speed transfer. ForwardAgent lets the
-# mini do git/ssh with approval popping on the connecting machine's 1Password.
+# ControlMaster and full-speed transfer.
 Host mini
     HostName mini
     User jkrumm
     # The dedicated key authenticates (no 1Password prompt; works from launchd
-    # jobs such as herdr-core's link, which have no SSH_AUTH_SOCK). ForwardAgent
-    # still forwards the 1Password agent, so the mini's git/ssh use of the human
-    # key keeps asking for approval on the MacBook.
+    # jobs such as herdr-core's link, which have no SSH_AUTH_SOCK). No agent
+    # contact at all: connecting to the 1Password socket inside its group
+    # container raises macOS's "access data from other apps" (AppData) dialog,
+    # attributed to whatever background chain ran ssh. That also means no
+    # forwarding (OpenSSH disables it under IdentityAgent none) — use `mini-fwd`
+    # when the human key is needed on the mini. This block precedes the
+    # `Match host mini` below, and the first value wins, so `none` sticks.
     IdentityFile ~/.ssh/id_ed25519_mini
     IdentitiesOnly yes
-    ForwardAgent yes
-    # ControlMaster — this comment claimed it for a long time without it being
-    # set. It matters now: herdr opens several connections, and without
-    # multiplexing each one repeats a full handshake *and* a separate 1Password
-    # biometric approval. One shared connection, held 10m after the last exit.
-    # Socket dir is created by `make setup` (_setup-ssh).
+    IdentityAgent none
+    ForwardAgent no
+    # ControlMaster: herdr opens several connections, and without multiplexing
+    # each one repeats a full handshake. One shared connection, held 10m after
+    # the last exit. Socket dir is created by `make setup` (_setup-ssh).
     ControlMaster auto
     ControlPath ~/.ssh/cm/%r@%h:%p
+    ControlPersist 10m
+
+# The mini WITH the human key forwarded (1Password agent via the Match below):
+# use only when the mini needs the human key (rare). Touches the 1Password
+# socket, so it may raise the AppData dialog. Own ControlPath so it never reuses
+# the agent-less `mini` master.
+Host mini-fwd
+    HostName mini
+    User jkrumm
+    ForwardAgent yes
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/fwd-%r@%h:%p
     ControlPersist 10m
 
 # A GUI app launched from Dock/Raycast (Herdr.app's saved SSH device) inherits

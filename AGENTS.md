@@ -88,7 +88,7 @@ endpoint and diffs the live catalog against `models.txt`.
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map
 assertion, the brew report, a worktree-audit nudge. **Mini** adds drift (no push)
 and names the heartbeat rather than running it (it always pushes). **MacBook** adds the remote path
-(Tailscale, ssh, ControlMaster reuse, agent forwarding, herdr `--remote`, GitHub
+(Tailscale, ssh, ControlMaster reuse, agent-free `mini` + `mini-fwd`, herdr `--remote`, GitHub
 credential + `git push --dry-run`), Kuma monitor states, then recurses into the
 mini's doctor over ssh — `--local` skips that. Read-only by construction.
 

@@ -216,7 +216,7 @@ section_claude_accounts() {
 }
 
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
-# Tailscale, ssh, ControlMaster, agent forwarding, herdr, then the GitHub
+# Tailscale, ssh, ControlMaster, agent isolation + forwarding (mini-fwd), herdr, then the GitHub
 # credential + push rights. The reverse mini->iumac leg is not probed here: it
 # is only meaningful running ON the mini, which this section by definition is
 # not.
@@ -249,10 +249,20 @@ section_remote_path() {
     skip "ControlMaster" "no master socket — next connection creates one"
   fi
 
-  if ssh "$HOST" 'ssh-add -l' >/dev/null 2>&1; then
-    ok "agent forwarding" "mini can use this machine's keys"
+  # Plain `ssh mini` must never touch the 1Password agent (macOS AppData dialog).
+  local cfg
+  cfg=$(ssh -G "$HOST" 2>/dev/null)
+  if printf '%s\n' "$cfg" | grep -qx 'identityagent none' && printf '%s\n' "$cfg" | grep -qx 'forwardagent no'; then
+    ok "ssh $HOST agent-free" "IdentityAgent none, ForwardAgent no"
   else
-    bad "agent forwarding" "forwarded agent has no usable keys"
+    bad "ssh $HOST agent-free" "ssh -G $HOST must report identityagent none + forwardagent no (make _setup-ssh)"
+  fi
+
+  # Forwarding lives on the mini-fwd alias (1Password agent; may prompt).
+  if ssh -o ControlPath=none -o BatchMode=yes "$HOST-fwd" 'ssh-add -l' >/dev/null 2>&1; then
+    ok "agent forwarding" "$HOST-fwd: mini can use this machine's keys"
+  else
+    bad "agent forwarding" "$HOST-fwd: forwarded agent has no usable keys"
   fi
 
   local running

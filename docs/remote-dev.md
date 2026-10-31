@@ -39,16 +39,25 @@ appearance switch); the **server and every pane** run on the mini. ssh/TCP, so a
 roam or lid-close ends the *connection* — re-run `desk`. Nothing in a pane dies
 with it.
 
-- **No ssh to the mini needs a 1Password approval.** `Host mini` authenticates
-  with the dedicated `~/.ssh/id_ed25519_mini` (`IdentitiesOnly yes`; public half
+- **No ssh to the mini needs a 1Password approval, and plain `ssh mini` never
+  touches the 1Password agent.** `Host mini` authenticates with the dedicated
+  `~/.ssh/id_ed25519_mini` (`IdentitiesOnly yes`; public half
   `config/ssh/authorized_keys.mini`, installed on the mini only by `make
-  authorized-keys`), so scripts, `rd` and herdr-core's launchd-run machine link
-  connect with no agent. `ForwardAgent yes` still forwards the 1Password agent:
-  only the mini's own git/ssh use of the human key asks on the MacBook.
+  authorized-keys`, as `restrict,pty,port-forwarding`), so scripts, `rd` and
+  herdr-core's launchd-run machine link connect with no agent. It sets
+  `IdentityAgent none` + `ForwardAgent no`: connecting to the agent socket inside
+  1Password's group container raises macOS's "access data from other apps"
+  (AppData) dialog, attributed to whichever background chain ran ssh (seen as
+  `gtimeout` from the statusline's usage refresh). OpenSSH disables forwarding
+  under `IdentityAgent none`, so **`ssh mini-fwd`** is the alias for the rare
+  time the mini needs the human key (1Password agent, `ForwardAgent yes`, own
+  ControlPath); the mini's git push uses its own credential. `make doctor`
+  asserts both (`ssh -G mini`, `ssh-add -l` over `mini-fwd`).
 - **ControlMaster shares one connection across herdr's several.** `Host mini`
   sets `ControlMaster auto` / `ControlPath ~/.ssh/cm/%r@%h:%p` /
-  `ControlPersist 10m`; herdr opens several connections. `_setup-ssh` creates
-  `~/.ssh/cm` — ssh will not, and connections fail without it.
+  `ControlPersist 10m` (`mini-fwd` uses `~/.ssh/cm/fwd-%r@%h:%p`, so it never
+  reuses the agent-less master); herdr opens several connections. `_setup-ssh`
+  creates `~/.ssh/cm` — ssh will not, and connections fail without it.
 - **`~/.zshenv` is the only file a non-interactive `ssh mini -- cmd` sources**
   (macOS runs `path_helper` from the *login* file `/etc/zprofile`). Without the
   guarded block `_setup-zshenv` appends, remote commands land with no Homebrew on
