@@ -22,7 +22,7 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 
 - **Mac mini — the always-on dev host.** Every agent and LaunchAgent runs here. It never sleeps and has no UI of its own.
 - **MacBook and iPhone — the UI layer.** No durable state. The MacBook runs the Herdr app (a window on the mini's core) plus biometric 1Password; the iPhone is Collie in a browser tab. Closing the lid ends a *connection*, never the work.
-- **Windows onto the mini.** the Herdr app (live terminals), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
+- **Windows onto the mini.** The Herdr app (live terminals), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
 - **Gateways — outsourced work** as submit-then-poll HTTP services: email-gateway. Detail: brain `gateways`.
