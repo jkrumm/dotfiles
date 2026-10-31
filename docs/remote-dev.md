@@ -39,7 +39,13 @@ appearance switch); the **server and every pane** run on the mini. ssh/TCP, so a
 roam or lid-close ends the *connection* — re-run `desk`. Nothing in a pane dies
 with it.
 
-- **ControlMaster is why one `desk` costs one biometric approval.** `Host mini`
+- **No ssh to the mini needs a 1Password approval.** `Host mini` authenticates
+  with the dedicated `~/.ssh/id_ed25519_mini` (`IdentitiesOnly yes`; public half
+  `config/ssh/authorized_keys.mini`, installed on the mini only by `make
+  authorized-keys`), so scripts, `rd` and herdr-core's launchd-run machine link
+  connect with no agent. `ForwardAgent yes` still forwards the 1Password agent:
+  only the mini's own git/ssh use of the human key asks on the MacBook.
+- **ControlMaster shares one connection across herdr's several.** `Host mini`
   sets `ControlMaster auto` / `ControlPath ~/.ssh/cm/%r@%h:%p` /
   `ControlPersist 10m`; herdr opens several connections. `_setup-ssh` creates
   `~/.ssh/cm` — ssh will not, and connections fail without it.

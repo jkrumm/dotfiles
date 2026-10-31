@@ -594,8 +594,10 @@ _setup-appearance-sync:
 # `remote-access`'s sudo/sharing side effects are unwanted. `remote-access`
 # below calls this instead of duplicating the install logic.
 #
-# TWO FILES, HOST-SCOPED. config/ssh/authorized_keys installs everywhere,
-# always. config/ssh/authorized_keys.iumac — the mini's OUTBOUND key into the
+# THREE FILES, HOST-SCOPED. config/ssh/authorized_keys installs everywhere,
+# always. config/ssh/authorized_keys.mini — the MacBook's OUTBOUND key into the
+# mini — is the mirror image: installed only on the mini (backend marker ==
+# cache), never on the MacBook that holds its private half. config/ssh/authorized_keys.iumac — the mini's OUTBOUND key into the
 # MacBook — installs only on a present-human machine (backend marker != cache,
 # the same "am I the mini" discriminator git-headless/opbackup-setup already
 # use). That key must never land in the mini's OWN authorized_keys: the mini
@@ -616,6 +618,14 @@ authorized-keys:
 	@grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys" | while IFS= read -r key; do \
 		grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
 	done
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" = "cache" ]; then \
+		grep -E '^(ssh-|restrict|command=|no-|from=)' "$(DOTFILES_DIR)/config/ssh/authorized_keys.mini" | while IFS= read -r key; do \
+			grep -qF "$$key" "$(HOME)/.ssh/authorized_keys" 2>/dev/null || printf '%s\n' "$$key" >> "$(HOME)/.ssh/authorized_keys"; \
+		done; \
+	else \
+		echo "    · authorized_keys.mini skipped — this is a present-human machine (backend!=cache); that key is the MacBook's own OUTBOUND credential and must never also be an inbound one here"; \
+	fi
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" = "cache" ]; then \
 		echo "    · authorized_keys.iumac skipped — this is the mini (backend=cache); that key is the mini's own OUTBOUND credential and must never also be an inbound one here"; \

@@ -1,0 +1,18 @@
+# MacBook -> mini — the MacBook's dedicated OUTBOUND key into the mini, so every
+# ssh to the mini (interactive, scripts, rd, herdr-core's machine link from a
+# launchd job with no SSH_AUTH_SOCK) works with no 1Password prompt. Mirror of
+# config/ssh/authorized_keys.iumac, reversed: it must be installed on the mini
+# ONLY, never on the MacBook, which holds the matching PRIVATE key on disk
+# (~/.ssh/id_ed25519_mini, mode 600, never in git). Installing the public half
+# on the MacBook too would let that private key authenticate back into it.
+#
+# `make authorized-keys` enforces the split with the same backend marker
+# (`${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend`, "cache" = the mini) as
+# the .iumac file, inverted: installed when backend == cache, skipped elsewhere.
+#
+# No `restrict`: `Host mini` uses `ForwardAgent yes` and the mini relies on that
+# forwarded 1Password agent for its git/ssh use of the human key (approval pops
+# on the MacBook), so forwarding must stay on. No `from=`: source restriction
+# is the tailnet ACL's job (only tag:mac reaches tcp:22), and a Tailscale IP
+# must not enter git.
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFV6VLkwTt7YVwApTOgd7bMOIa1+F8Fk1jftN0sSMOsG macbook->mini

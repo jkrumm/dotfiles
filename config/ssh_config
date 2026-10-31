@@ -28,6 +28,12 @@ Host *
 Host mini
     HostName mini
     User jkrumm
+    # The dedicated key authenticates (no 1Password prompt; works from launchd
+    # jobs such as herdr-core's link, which have no SSH_AUTH_SOCK). ForwardAgent
+    # still forwards the 1Password agent, so the mini's git/ssh use of the human
+    # key keeps asking for approval on the MacBook.
+    IdentityFile ~/.ssh/id_ed25519_mini
+    IdentitiesOnly yes
     ForwardAgent yes
     # ControlMaster — this comment claimed it for a long time without it being
     # set. It matters now: herdr opens several connections, and without

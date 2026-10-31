@@ -419,8 +419,8 @@ resolves every ref through 1Password in one biometric pass, and reseals.
   per-ref fallback, no retry) and prints the resolved `op` path to add to Full Disk
   Access; only a genuine ref error (`isn't an item`…) falls back per-ref to name the
   dead ref. Seeing the TCC dialog = grant FDA on that exact path, then re-run.
-- **"mini unreachable" usually means "1Password is locked"** — the same agent
-  serves `ssh mini`, and a locked app fails it as `Permission denied (publickey)`.
+- **"mini unreachable" no longer means "1Password is locked"** — `ssh mini` uses the
+  dedicated `~/.ssh/id_ed25519_mini`; check Tailscale and that key's presence.
 - **The login Keychain is not a headless credential store and it fails quietly** —
   `security find-generic-password` returns non-zero when the keychain is locked,
   which is what a launchd job gets with no GUI session. Callers fall back to
