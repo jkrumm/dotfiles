@@ -104,7 +104,7 @@ if [ "${YES:-0}" != "1" ]; then
 fi
 
 # --- snapshot resumable agents ----------------------------------------------
-# herdr restores the layout and loses the processes, so the session ids are the
+# TODO(Wave 7): drop classic. herdr restores the layout and loses the processes, so the session ids are the
 # only way back into work that was mid-flight. Best effort: never block on it.
 stamp="$(date +%Y%m%d-%H%M)"
 snap="\$HOME/Library/Logs/herdr-panes-pre-reboot-$stamp.txt"
@@ -114,6 +114,40 @@ if ssh "${SSH_OPTS[@]}" "$HOST" "herdr pane list > $snap 2>/dev/null"; then
 else
   say "· herdr pane snapshot skipped (herdr not answering)"
 fi
+
+# The core's terminals survive a core restart but not a reboot. hc-resume revives Claude from the
+# resume labels (jk.claude.session / jk.claude.config, hooks/hc-session-label.ts) once the core is
+# back, and this file is the human-readable record of what it should find. Same rules as above: best
+# effort, and `launchctl print` first because any `hc` call auto-starts a stray core.
+core_snap="\$HOME/Library/Logs/herdr-core-resume-pre-reboot-$stamp.tsv"
+core_n=""
+# shellcheck disable=SC2029  # $core_snap is built here on purpose; \$HOME expands on the mini
+if core_n=$(ssh "${SSH_OPTS[@]}" "$HOST" "/usr/bin/python3 - $core_snap" <<'PY' 2>/dev/null
+import json, os, subprocess, sys
+uid = os.getuid()
+job = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/com.jkrumm.herdr-core"], capture_output=True, text=True).stdout
+if not any(l.strip() == "state = running" for l in job.splitlines()):
+    sys.exit(3)
+hc = os.path.expanduser("~/.local/bin/hc")
+def run(*a):
+    return json.loads(subprocess.run([hc, *a, "--json"], capture_output=True, text=True, check=True, timeout=20).stdout)
+rows = []
+for t in run("ls").get("terminals", []):
+    d = run("get", t["address"])
+    lab = d.get("labels") or {}
+    if lab.get("jk.claude.session"):
+        rows.append("\t".join([d["address"], lab["jk.claude.session"], lab.get("jk.claude.config", ""), d.get("cwd") or "", d.get("state") or ""]))
+with open(sys.argv[1], "w") as f:
+    f.write("\n".join(rows) + ("\n" if rows else ""))
+print(len(rows))
+PY
+)
+then
+  say "· $core_n resumable Claude terminal(s) snapshotted to $core_snap on $HOST (address, session, config, cwd, state)"
+else
+  say "· herdr-core resume snapshot skipped (core not running or not answering)"
+fi
+# TODO(Wave 7): drop classic — the herdr pane snapshot above.
 
 # --- launch the installer, detached -----------------------------------------
 # Detached on purpose: a brew upgrade of the tailscale formula in the same

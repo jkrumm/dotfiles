@@ -245,6 +245,13 @@ agent-workflows, Hermes and every dev door is a mechanism for introducing exactl
 at 3am with nobody watching. `make collie-upgrade` is the paired human-invoked
 applier (needs a TTY, refuses automation): **notice unattended, apply attended.**
 
+`make mini-macos-update` (the macOS applier) writes two best-effort records on the mini before it
+reboots it: `herdr-core-resume-pre-reboot-<stamp>.tsv` (one line per terminal that carries a
+`jk.claude.session` label: address, session, config, cwd, state; taken only when launchd says
+`com.jkrumm.herdr-core` is running, since any `hc` call would otherwise auto-start a core) and the classic
+`herdr-panes-pre-reboot-<stamp>.txt` (`TODO(Wave 7): drop classic`). `hc-resume` revives the sessions
+after the reboot; the tsv is what it should find.
+
 Four decisions that are not arbitrary:
 
 - **Its own scheduler**, breaking the one-scheduler rule collie and
