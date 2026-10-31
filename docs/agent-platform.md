@@ -110,14 +110,20 @@ The only headless runs, kept on purpose:
 
 ## Herdr — the cockpit
 
-The orchestrator is always a visible tab. `/wave` has two modes: **chain**
-(each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab,
-declares `factory session wait --on workers` and ends its turn; the factory's wake note
-starts the next one, then it reads `PLAN.md`, decides the next, closes the finished
-tab with `rd close`). Nothing polls: the factory babysits (resume after a quota wall,
-send-back, blocked notes, the wake); `hc-resume` restores Claude sessions after a core restart. One active
-wave per repo; parallel waves only in different repos. A pane-less supervisor
-(`claude --bg` mother) is not a pattern.
+The orchestrator is always a visible tab; workers are hidden children of its terminal (listed under it in the app).
+`/wave` has two modes: **chain** (each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab, declares
+`factory session wait --on workers` and ends its turn; the factory's wake note starts the next one, then it reads
+`PLAN.md`, decides the next, closes the finished tab with `rd close`). Nothing polls. Waiting is one of three, by who spawned:
+
+| Spawned through | Wait with |
+|-|-|
+| The factory (the `rd` default) | `factory session wait --on workers`: a held `queued:` spawn has no terminal yet, so only the factory sees it |
+| `hc run` / `rd` hc-direct, with the caller as parent | `hc wait --children all\|any`; hc also types a note into the parent when a child finishes, blocks or exits |
+| A single terminal | `hc wait <t>` (`--output X` for a program), never `sleep` |
+
+The factory babysits (resume after a quota wall, send-back, blocked notes, the wake); `hc-resume` restores Claude sessions after
+a lost program. One active wave per repo; parallel waves only in different repos. A pane-less supervisor (`claude --bg` mother)
+is not a pattern.
 
 ## Notifications
 
