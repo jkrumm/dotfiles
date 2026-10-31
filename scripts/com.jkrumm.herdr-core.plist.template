@@ -6,7 +6,7 @@
   <!-- herdr-core's server, in the GUI session (keychain reach for the Claude Max login).
        Must always be up: any `hc` client call — the MacBook's `hc machine` link arrives
        over ssh — auto-starts a core when none runs, and a core born in an ssh session
-       spawns Claude without the keychain (docs/herdr-core.md §Mini core). Runs beside
+       spawns Claude without the keychain (docs/herdr-core.md §Core as a LaunchAgent). Runs beside
        the classic herdr server; they share nothing. -->
   <key>ProgramArguments</key>
   <array>
