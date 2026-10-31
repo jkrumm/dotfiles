@@ -324,6 +324,18 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
 - [ ] P1 is merged: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
   and `make doctor` are green; one real automatic update has run (or a forced dry run with a fake newer release).
 - [ ] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
+- [ ] **MacBook cutover done by the owner's session (2026-10-31 16:5x):** launcher + managed 0.1.15 + update job on the
+  MacBook, all 6 terminals survived; FDA granted, `make tcc-probe` ✓; `op read` (desktop-app integration on) in a
+  fresh core terminal: OP_OK and **0 AppData prompts** in the unified log. Fix what that run exposed:
+  (1) **terminals born before a cutover keep the old core's TCC identity** (they hang off the pre-cutover holder,
+  `~/.local/bin/herdr-core hold` from before the cutover) and get no grant until they end; only terminals created
+  after it inherit the launcher. Document it in `docs/tcc.md`, and have `op-tcc-probe` and `tcc-probe` always run
+  in a fresh terminal. The "cannot read the unified log … no Full Disk Access" verdict was this, not a missing grant.
+  (2) `op-tcc-probe` must pick the account: `op://hermes/…` failed against the default account
+  (`--account tkrumm.1password.com` works); resolve it like `op_account_for_cwd`.
+  (3) `make herdr-core-setup` failed with `No available formula … jkrumm/tap/herdr-core` because
+  `HOMEBREW_NO_AUTO_UPDATE=1` kept a stale local tap: refresh `jkrumm/tap` first (`git -C "$(brew --repo
+  jkrumm/tap)" pull --ff-only`), and the update job does the same.
 - [ ] **The launcher's grant survives a rebuild too.** 2026-10-31: P1 rebuilt the ad-hoc launcher at 15:40, the owner's
   earlier FDA entry kept the old cdhash, and tccd logged `Failed to match existing code requirement` and prompted per
   folder until the entry was removed and re-added. Sign the launcher with one stable self-signed code-signing identity
