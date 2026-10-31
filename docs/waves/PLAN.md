@@ -266,32 +266,68 @@ Role `lead`. dotfiles.
 - The end-to-end proof is Wave 4 itself: it records its own terminal's labels (`herdr.space` = the dotfiles space,
   `no_parent`) in its Left behind.
 
-## Wave 4 — the side consumers            <!-- status: active -->
+## Wave 4 — the side consumers            <!-- status: done -->
 Role `wave`.
 
-- [ ] dotfiles: reap and events recorder ported (new plists `com.jkrumm.hc-{reap,events}`; the classic
+- [x] dotfiles: reap and events recorder ported (new plists `com.jkrumm.hc-{reap,events}`; the classic
   `herdr-reap` keeps running beside them until Wave 7), with tests.
   `herdr-groups` retires (`groups.json` → `config/herdr-app/`); `make agent-overview` and the heartbeat's
   overview component retire. Port `claude-relogin` to `hc run --on mini`; `herdr-app-setup.sh` stops reading
   `herdr workspace list`. The `herdr-agent-state.sh` hook stays until Wave 7 (classic agents need it).
-- [ ] Collie: `make collie-upgrade` to a ref with `COLLIE_MUX=herdr-core`, run standalone under its own
+- [x] Collie: `make collie-upgrade` to a ref with `COLLIE_MUX=herdr-core`, run standalone under its own
   LaunchAgent (no herdr plugin), keep the ACL/serve rows. If its behavioural check fails on hc, retire it and
   hand the row removal to Wave 5.
-- [ ] Appearance: the push retires only if the current core does both (unattached terminals answer from the
+- [x] Appearance: the push retires only if the current core does both (unattached terminals answer from the
   Mac's appearance, running programs get `?997` on a switch); else move it to raw input over
   `terminal.attach` (`hc send` adds Enter). Brain-note: a `jk-keys` mod whose command
   runs the script with `hc run --bg` and shows it with `terminal.peek`, bound in `keys.json` (MacBook).
-- [ ] `claude-account health` reads the peer's logins through its core (`hc exec --on mini`), not ssh: over
+- [x] `claude-account health` reads the peer's logins through its core (`hc exec --on mini`), not ssh: over
   ssh the mini's keychain is invisible, so the app's ⚠ chip said ok while `me`/`me2` were logged out on the mini
   (2026-10-31). Re-poll ~60 s after a Re-login starts.
-- [ ] dotfiles health: heartbeat herdr component → core component (+ version parity),
+- [x] dotfiles health: heartbeat herdr component → core component (+ version parity),
   `doctor.sh`, `brew-upgrade.sh`, `architecture-check.sh`, `log-rotate.sh`, `mini-macos-update.sh`, and the
   `docs/architecture.md` rows.
-- [ ] agent-workflows `agw agents` collectors on hc (+ fixtures, README), and argo's `herdrStatus` follows:
+- [x] agent-workflows `agw agents` collectors on hc (+ fixtures, README), and argo's `herdrStatus` follows:
   built by parallel track P2, verify it landed and fill gaps.
-- [ ] Each repo: its gate, `/review`, commit, push.
+- [x] Each repo: its gate, `/review`, commit, push.
+**Left behind:**
+- Five fan workers (`rd fan`, hidden children of this wave's terminal), cherry-picked onto master in order, integration fixes in
+  `7075c73`, review fixes in `ddf5e8a`. `make -k check` green on the mini before the review fixes; the suites the fixes touch
+  (`hc-reap-test`, `herdr-app-keys-test`, `architecture-check`, `hc-events` bun test, `collie-check`) re-run green after.
+  AGENTS.md 42.36k (was 42.39k, no growth; Wave 6 brings it under 40k).
+- Done: `hc-reap` + `hc-events` (plists `com.jkrumm.hc-{reap,events}` installed live, classic beside them: events write the same
+  JSONL dir without a source field, `recorder.*` lines are the hc ones); `herdr-groups` and `agent-overview` deleted
+  (`groups.json` is `config/herdr-app/groups.json`); heartbeat `core` component (overview pane component retired, count stays 20),
+  `doctor.sh` `section_core`, `brew-upgrade.sh` core invariants, `mini-macos-update.sh` resume-label snapshot, architecture rows;
+  `claude-relogin` mini login in a labelled `relogin` tab through `hc run`; `claude-account health` reaches the peer through its
+  core (ssh last, said out loud) + the Re-login chip re-polls; `herdr-app-setup.sh` reads the mini's spaces from its core;
+  **collie live on herdr-core**: `make collie-setup` ran (1.25.3, `com.jkrumm.collie`, check green incl. spoofed Host 403, 31
+  terminals listed), the plugin uninstalled, the heartbeat watches the new plist. **Upstream now requires a paired device for
+  every `/api` route: the phone must be re-paired with `make collie-pair` (not verified whether the old pairing carries over).**
+  Not installed: `collie hooks install claude` (it edits Claude's settings; own decision).
+- Appearance: the push now goes over raw `terminal.attach` input (`scripts/hc-raw-input.ts`), classic beside it; it does **not**
+  retire (an unattached terminal still answers fixed dark; the `?997` half needed an app viewer and was not exercised).
+- Brain-note: `jk-keys` mod bound to `cmd-e` by `scripts/herdr-app-keys.sh` (jq merge, tested), proven in a scratch app on the
+  mini. **Owner step (queued, `ask-human` `20261031T180743-4902`, a dialog on the MacBook):** `git pull && make herdr-app-setup &&
+  make setup` there, which links `jk-keys`, binds the key, loads the re-poll mod and installs the session-label hook.
+- P2 verified: `agw agents` lists `source: hc` terminals (session from the label, project from the space), argo's ingest accepts
+  `source: hc`; `herdrStatus` stays the runner-neutral field in both (no rename). Argo's dashboard rendering of `hc` rows was not looked at.
+- `/review` (`agw review`, 20 blocking claims) triaged. Fixed: failed collie check stops the bridge, scratch teardown leaves the
+  live legacy agent alone, an unreadable wave plan keeps a terminal in hc-reap, hc-events survives a read error, the collie bearer
+  is out of curl's argv. Dismissed on purpose: authorized_keys diff (not this wave's, from `d26fe1c`), legacy-plist detection in the
+  heartbeat (collie-setup removes it), lead/wave protection on the idle reap rule (the classic janitor only protects them on the
+  merged-fan rule too), close/send TOCTOU races (single-user host, 30-min janitor with a recheck), event-file umask, a persisted
+  recorder gap checkpoint, the hc-resume and `rd say` claims (earlier waves). Open, not fixed: `hc-raw-input` re-verifies a terminal
+  is live but not that it is still an agent before typing escape sequences, and its 8 s deadline spans all terminals (fine for ~10).
+- Incident: the accounts worker's scratch smoke ran the real `claude auth login` once (its PATH lacked the stub), which opened an
+  unapproved authorize page in the MacBook browser. Nothing was approved; no process was left.
+- Gap for Waves 5-7: `docs/remote-dev.md` and `docs/macbook.md` still describe classic sections (Wave 6 rewrites them); a scratch
+  core stopped via `launchctl bootout` can leave a `herdr-core serve` child of the holder (observed by the collie worker): relevant to
+  Wave 8's restart work.
+- Proof of the Wave 3 end-to-end claim: this wave's terminal `t1s` carries `herdr.space=sp1a1c873f…` (the dotfiles space),
+  `herdr.tab=tb-99ee0bf7fe6e`, `jk.claude.session`, no parent, and the app's `where` label `dotfiles / dotfiles-w4`.
 
-## Wave 5 — the other repos            <!-- status: pending -->
+## Wave 5 — the other repos            <!-- status: active -->
 Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
 
 - [ ] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
