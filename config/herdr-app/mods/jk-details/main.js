@@ -115,7 +115,7 @@ export default class JkDetails extends View {
   }
 
   usage(t) {
-    const { accounts = [] } = shared("jk.usage") ?? {};
+    const { accounts = [], pool = null } = shared("jk.usage") ?? {};
     // Fixed columns: label, %, countdown, clock — every reset lines up.
     const row = (label, value, resets) => {
       const [left, clock] = until(resets);
@@ -127,7 +127,9 @@ export default class JkDetails extends View {
     };
     // Only what changes a decision: the plan, and a warning when the numbers can't be trusted.
     return v_flex().gap(14)
-      .child(div().text_size(13).font_bold().text_color(t.foreground).child("Claude usage · resets"))
+      .child(h_flex().items_center().gap(8)
+        .child(div().flex_1().text_size(13).font_bold().text_color(t.foreground).child("Claude usage · resets"))
+        .when(pool != null, (el) => el.child(div().text_size(11.5).text_color(t.muted).child(`all accounts ∑${pool}% of the week`))))
       .children(accounts.map((a) => v_flex().id(`acct-${a.id}`).gap(4)
         .child(h_flex().gap(8).items_center()
           .child(div().text_size(12.5).font_bold().text_color(a.auth_ok ? t.foreground : t.blocked).child(a.id))

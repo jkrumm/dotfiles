@@ -21,6 +21,27 @@ const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" cl
 const HEALTH = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account health --json';
 const HEALTH_MS = 5 * 60000;
 
+// Uptime Kuma: the newest heartbeat of every active monitor, read-only from its SQLite on
+// homelab over keyless Tailscale SSH (as `make doctor` does). One line per monitor:
+// "<status>|<name>", status 1 up, 0 down, 2 pending, 3 maintenance.
+const KUMA = `ssh -o ConnectTimeout=6 -o BatchMode=yes homelab "sqlite3 -readonly /home/jkrumm/ssd/uptime-kuma/kuma.db 'SELECT h.status || \\"|\\" || m.name FROM monitor m JOIN heartbeat h ON h.id=(SELECT id FROM heartbeat WHERE monitor_id=m.id ORDER BY time DESC LIMIT 1) WHERE m.active=1;'"`;
+const KUMA_MS = 60000;
+
+// The pool: plan-weighted 7-day use across accounts, the statusline's ∑ (scripts/statusline.sh):
+// weight = the plan's multiple (max20x = 20), all 1 when one is unknown; a window that has
+// already reset counts as 0. Null below two accounts.
+export function pool(accounts, now = Date.now() / 1000) {
+  if (accounts.length < 2) return null;
+  const acc = accounts.map((a) => ({
+    wk: a.seven_day == null ? null : (a.seven_day_resets_at ?? Infinity) < now ? 0 : a.seven_day,
+    mult: Number(/(\d+)x/i.exec(a.plan ?? "")?.[1]) || null,
+  }));
+  const weighted = acc.every((a) => a.mult);
+  const known = acc.filter((a) => a.wk != null).map((a) => ({ ...a, w: weighted ? a.mult : 1 }));
+  if (!known.length) return null;
+  return Math.round(known.reduce((s, a) => s + a.w * a.wk, 0) / known.reduce((s, a) => s + a.w, 0));
+}
+
 const STATS_MS = 5000;
 const USAGE_MS = 60000;
 const HISTORY = 180; // samples per machine: 15 min at STATS_MS
@@ -47,6 +68,9 @@ export default class JkStatus extends View {
     this.pending = new Set(); // machines whose stats call is still out
     this.usage = [];
     this.issues = []; // health rows that are not ok
+    this.kuma = null; // { up, down: [names] } | null
+    cx.timer.every(KUMA_MS, (cx) => this.refreshKuma(cx));
+    this.refreshKuma(cx);
     cx.timer.every(HEALTH_MS, (cx) => this.refreshHealth(cx));
     cx.timer.every(STATS_MS, (cx) => this.refreshStats(cx));
     cx.timer.every(USAGE_MS, (cx) => this.refreshUsage(cx));
@@ -93,12 +117,23 @@ export default class JkStatus extends View {
     });
   }
 
+  refreshKuma(cx) {
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", KUMA]).catch(() => null);
+      const rows = (r?.code === 0 ? r.stdout : "").split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf("|")), l.slice(l.indexOf("|") + 1)]);
+      const next = rows.length ? { up: rows.filter(([s]) => s === "1").length, down: rows.filter(([s]) => s === "0").map(([, n]) => n).sort() } : null;
+      if (same(next, this.kuma)) return;
+      this.kuma = next;
+      cx.notify();
+    });
+  }
+
   refreshUsage(cx) {
     cx.spawn(async (cx) => {
       const r = await exec("sh", ["-c", USAGE]).catch(() => null);
       let next = [];
       try { next = (JSON.parse(r?.stdout ?? "").accounts ?? []).filter((a) => a.enabled); } catch {}
-      setShared("jk.usage", { at: Date.now(), accounts: next });
+      setShared("jk.usage", { at: Date.now(), accounts: next, pool: pool(next) });
       if (same(next, this.usage)) return;
       this.usage = next;
       cx.notify();
@@ -160,7 +195,8 @@ export default class JkStatus extends View {
         .child(h_flex().id("usage").gap(10).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
           .on_mouse_move((e) => this.track("usage", e))
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "usage"))
-          .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))))
+          .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))
+          .when(pool(this.usage) != null, (el) => el.child(div().text_color(t.muted).child(`∑${pool(this.usage)}%`)))))
       .when(this.issues.length > 0, (el) => {
         const bad = this.issues.some((x) => x.state === "fail");
         const who = [...new Set(this.issues.map((x) => `${x.id}·${x.machine === "macbook" ? "MacBook" : x.machine}`))].join(" ");
@@ -173,6 +209,10 @@ export default class JkStatus extends View {
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
       .child(div().flex_1())
+      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
+        .tooltip(this.kuma.down.length ? `Uptime Kuma down: ${this.kuma.down.join(", ")}` : "Uptime Kuma: every active monitor up")
+        .child(div().child(`▲${this.kuma.up}`))
+        .child(div().text_color(this.kuma.down.length ? t.blocked : t.dim).child(`▼${this.kuma.down.length}`))))
       .child(div().id("palette").px(6).text_color(t.dim).on_click(() => run("app.palette")).child(`${window()?.platform === "macos" ? "⌘" : "Ctrl"} Shift P`));
   }
 }

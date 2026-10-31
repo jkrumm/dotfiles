@@ -172,10 +172,10 @@
       "id": "waves",
       "type": "block",
       "size": {
-        "px": 260
+        "px": 320
       },
-      "min": 200,
-      "max": 420,
+      "min": 240,
+      "max": 480,
       "background": "chrome",
       "resizable": true,
       "content": {
