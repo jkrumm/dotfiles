@@ -14,21 +14,20 @@ const BARS = 90;
 const props = () => rawProps() ?? {};
 // Anthropic renamed the tiers on 2026-10-30: Max 5x is "Max", Max 20x is "Ultra".
 const PLAN = { max5x: "Max", max20x: "Ultra" };
-const STALE_S = 3 * 3600;
 
-const mem = (kib) => (kib >= 1048576 ? `${(kib / 1048576).toFixed(1)}G` : `${Math.round(kib / 1024)}M`);
+const mem = (kib) => (kib >= 1048576 ? `${Math.round(kib / 1048576)}G` : `${Math.round(kib / 1024)}M`);
 const name = (cmd) => cmd.replace(/\.app\/.*$/, ".app").split("/").pop();
 
 function until(epoch) {
-  if (!epoch) return "—";
+  if (!epoch) return ["—", ""];
   const s = epoch - Date.now() / 1000;
-  if (s <= 0) return "now";
+  if (s <= 0) return ["now", ""];
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
   // Formatted by hand: this runtime's toLocaleString ignores its options.
   const at = new Date(epoch * 1000);
   const hm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
   const clock = d >= 1 ? `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][at.getDay()]} ${hm}` : hm;
-  return `${d ? `${d}d ` : ""}${h}h ${m}m · ${clock}`;
+  return [`${d ? `${d}d ` : ""}${h}h ${m}m`, clock];
 }
 
 export default class JkDetails extends View {
@@ -56,9 +55,9 @@ export default class JkDetails extends View {
     return v_flex().gap(4)
       .child(h_flex().gap(10).text_size(11.5).text_color(t.muted)
         .child(div().w(36).text_color(t.foreground).child(label))
-        .child(div().child(`now ${last.toFixed(1)}${unit}`))
-        .child(div().child(`avg ${avg.toFixed(1)}${unit}`))
-        .child(div().child(`max ${max.toFixed(1)}${unit}`)))
+        .child(div().child(`now ${Math.round(last)}${unit}`))
+        .child(div().child(`avg ${Math.round(avg)}${unit}`))
+        .child(div().child(`max ${Math.round(max)}${unit}`)))
       .child(h_flex().h(40).items_end().gap(1).p(2).rounded(4).bg(t.canvas)
         .children(bars.map((v, i) => div().id(`${label}-${i}`).w(3).flex_none().h(Math.max(1, (Math.min(v, 100) / 100) * 36)).bg(v >= 85 ? t.blocked : color))));
   }
@@ -74,58 +73,58 @@ export default class JkDetails extends View {
       .child(v_flex().gap(2).text_size(11.5)
         .child(h_flex().gap(8).text_color(t.dim).child(div().w(48).text_right().child("CPU")).child(div().w(52).text_right().child("MEM")).child(div().child("process")))
         .children(Array.from({ length: TOP_ROWS }, (_, i) => this.top?.[i] ?? null).map((p, i) => !p ? h_flex().id(`p-${i}`).h(18).child(div().w(48).text_right().text_color(t.dim).child(i === 0 && this.top === null ? "…" : "")) : h_flex().id(`p-${i}`).h(18).gap(8)
-          .child(div().w(48).text_right().text_color(p.cpu >= 50 ? t.blocked : t.foreground).child(`${p.cpu.toFixed(1)}%`))
+          .child(div().w(48).text_right().text_color(p.cpu >= 50 ? t.blocked : t.foreground).child(`${Math.round(p.cpu)}%`))
           .child(div().w(52).text_right().text_color(t.muted).child(mem(p.rss)))
           .child(div().flex_1().truncate().text_color(t.muted).child(p.name)))));
   }
 
-  // Starts the wired re-login (docs/claude-accounts.md §Re-login) detached: windowless on
-  // the MacBook, a herdr workspace plus reverse tunnel on the mini; either way the account's
-  // own browser opens for the approval and a notification reports the result.
-  relogin(id, machine, cx) {
-    const target = machine === "MacBook" ? "macbook" : machine;
-    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(target)) return;
-    this.started = { ...(this.started ?? {}), [`${id}/${machine}`]: true };
-    exec("sh", ["-c", `PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" nohup claude-relogin '${id}' --machine '${target}' >/dev/null 2>&1 &`]).catch(() => null);
+  // A health row's fix, as claude-account built it ("claude-relogin <id> --machine <m>"):
+  // the wired re-login (docs/claude-accounts.md §Re-login), started detached. Anything
+  // else is shown, never run.
+  fix(row, cx) {
+    if (!/^claude-relogin [\w.-]+ --machine (macbook|mini)$/.test(row.fix ?? "")) return;
+    this.started = { ...(this.started ?? {}), [`${row.id}/${row.machine}/${row.check}`]: true };
+    exec("sh", ["-c", `PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" nohup ${row.fix} >/dev/null 2>&1 &`]).catch(() => null);
     cx.notify();
   }
 
-  logins(t, id) {
-    const per = Object.entries(shared("jk.expiry") ?? {}).map(([m, list]) => ({ machine: m || "MacBook", a: list.find((x) => x.id === id) })).filter((x) => x.a);
-    if (!per.length) return null;
-    const due = (a) => a.expired || a.grade === "FAIL" || (a.grade === "WARN" && a.days_left != null);
-    return h_flex().gap(8).text_size(11.5).items_center()
-      .child(div().w(34).flex_none().text_color(t.dim).child("login"))
-      .children(per.map(({ machine, a }) => {
-        const label = a.expired ? "expired" : a.days_left == null ? "?" : `${Math.floor(a.days_left)} d`;
-        const key = `${id}/${machine}`;
-        return h_flex().id(`login-${key}`).gap(4).items_center()
-          .child(div().text_color(due(a) ? (a.expired || a.grade === "FAIL" ? t.blocked : t.ansi3) : t.muted).child(`${machine} ${label}`))
-          .when(due(a), (el) => el.child(this.started?.[key]
-            ? div().text_color(t.dim).child("· approve in browser")
-            : div().id(`relogin-${key}`).px(6).rounded(4).bg(t.accent).text_color(t.accent_foreground).cursor_pointer()
-                .on_click((_e, cx) => this.relogin(id, machine, cx)).child("Re-login")));
-      }));
+  issues(t, id) {
+    const rows = (shared("jk.health") ?? []).filter((x) => x.id === id);
+    return rows.map((x, i) => {
+      const key = `${x.id}/${x.machine}/${x.check}`;
+      const runnable = /^claude-relogin [\w.-]+ --machine (macbook|mini)$/.test(x.fix ?? "");
+      return h_flex().id(`issue-${key}-${i}`).gap(8).items_center().text_size(11.5)
+        .child(div().w(34).flex_none().text_color(t.dim).child(x.check))
+        .child(div().flex_1().min_w(0).truncate().text_color(x.state === "fail" ? t.blocked : t.ansi3)
+          .child(`${x.machine === "macbook" ? "MacBook" : x.machine}: ${x.detail}`))
+        .when(runnable, (el) => el.child(this.started?.[key]
+          ? div().flex_none().text_color(t.dim).child("approve in browser")
+          : div().id(`fix-${key}`).flex_none().px(6).rounded(4).bg(t.accent).text_color(t.accent_foreground).cursor_pointer()
+              .on_click((_e, cx) => this.fix(x, cx)).child("Re-login")));
+    });
   }
 
   usage(t) {
     const { accounts = [] } = shared("jk.usage") ?? {};
-    const row = (label, value, resets) => h_flex().gap(8).text_size(11.5)
-      .child(div().w(34).flex_none().text_color(t.dim).child(label))
-      .child(div().w(40).text_right().text_color(value >= 90 ? t.blocked : t.foreground).child(value == null ? "?" : `${value}%`))
-      .child(div().flex_1().text_color(t.muted).child(until(resets)));
+    // Fixed columns: label, %, countdown, clock — every reset lines up.
+    const row = (label, value, resets) => {
+      const [left, clock] = until(resets);
+      return h_flex().gap(8).text_size(11.5)
+        .child(div().w(34).flex_none().text_color(t.dim).child(label))
+        .child(div().w(40).flex_none().text_right().text_color(value >= 90 ? t.blocked : t.foreground).child(value == null ? "?" : `${value}%`))
+        .child(div().w(88).flex_none().text_right().text_color(t.muted).child(left))
+        .child(div().w(76).flex_none().text_right().text_color(t.dim).child(clock));
+    };
     // Only what changes a decision: the plan, and a warning when the numbers can't be trusted.
-    const note = (a) => !a.auth_ok ? "login expired" : (a.age_s ?? 0) > STALE_S ? `data ${Math.round(a.age_s / 3600)} h old` : "";
     return v_flex().gap(14)
       .child(div().text_size(13).font_bold().text_color(t.foreground).child("Claude usage · resets"))
       .children(accounts.map((a) => v_flex().id(`acct-${a.id}`).gap(4)
         .child(h_flex().gap(8).items_center()
           .child(div().text_size(12.5).font_bold().text_color(a.auth_ok ? t.foreground : t.blocked).child(a.id))
-          .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? ""))
-          .child(div().text_size(11).text_color(a.auth_ok ? t.dim : t.blocked).child(note(a))))
+          .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? "")))
         .child(row("5h", a.five_hour, a.five_hour_resets_at))
         .child(row("7d", a.seven_day, a.seven_day_resets_at))
-        .child(this.logins(t, a.id) ?? div())))
+        .children(this.issues(t, a.id))))
       .when(!accounts.length, (el) => el.child(div().text_color(t.dim).child("no usage data yet")));
   }
 

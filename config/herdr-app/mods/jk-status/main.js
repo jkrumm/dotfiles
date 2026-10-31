@@ -15,11 +15,11 @@ echo "$cpu $used $(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1073741824}')"
 // samples, imported as source "peer"): no API call, ~20 ms. docs/claude-accounts.md.
 const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account usage --json';
 
-// When each Claude login ends, per machine: logins are per-machine Keychain items. Run via
-// exec `on`, i.e. inside that machine's core, which sits in the GUI session and can read
-// the Keychain (an ssh session can't, and reports every login as unreadable).
-const EXPIRY = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account expiry --json';
-const EXPIRY_MS = 10 * 60000;
+// Login, quota and pending-ask health of this machine and its peer, each problem with its
+// fix command: claude-account's own verdict (docs/claude-accounts.md), the one source the
+// statusline-adjacent tools share. ~1 s (it asks the peer over ssh).
+const HEALTH = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account health --json';
+const HEALTH_MS = 5 * 60000;
 
 const STATS_MS = 5000;
 const USAGE_MS = 60000;
@@ -27,8 +27,8 @@ const HISTORY = 180; // samples per machine: 15 min at STATS_MS
 const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-// Fixed width, one decimal: the bar doesn't jump when a value crosses 10.
-const pct = (v) => `${v.toFixed(1)}%`;
+// Whole numbers in fixed-width cells: the bar doesn't jump when a value crosses 10.
+const pct = (v) => `${Math.round(v)}%`;
 
 export default class JkStatus extends View {
   init(_props, cx) {
@@ -37,35 +37,26 @@ export default class JkStatus extends View {
     this.remotes = [];
     this.pending = new Set(); // machines whose stats call is still out
     this.usage = [];
-    this.expiry = {}; // machine ("" = this computer) -> [{ id, grade, days_left, expired }]
-    cx.timer.every(EXPIRY_MS, (cx) => this.refreshExpiry(cx));
+    this.issues = []; // health rows that are not ok
+    cx.timer.every(HEALTH_MS, (cx) => this.refreshHealth(cx));
     cx.timer.every(STATS_MS, (cx) => this.refreshStats(cx));
     cx.timer.every(USAGE_MS, (cx) => this.refreshUsage(cx));
     this.refreshStats(cx);
     this.refreshUsage(cx);
-    this.refreshExpiry(cx);
+    this.refreshHealth(cx);
   }
 
-  refreshExpiry(cx) {
+  refreshHealth(cx) {
     cx.spawn(async (cx) => {
-      const next = {};
-      await Promise.all([null, ...this.remotes].map(async (machine) => {
-        const r = await exec("sh", ["-c", EXPIRY], { on: machine }).catch(() => null);
-        try { next[machine ?? ""] = JSON.parse(r?.stdout ?? "").accounts ?? []; } catch {}
-      }));
-      setShared("jk.expiry", next);
-      if (same(next, this.expiry)) return;
-      this.expiry = next;
+      const r = await exec("sh", ["-c", HEALTH]).catch(() => null);
+      let rows;
+      try { rows = JSON.parse(r?.stdout ?? "").rows ?? []; } catch { return; }
+      const next = rows.filter((x) => x.state !== "ok");
+      setShared("jk.health", next);
+      if (same(next, this.issues)) return;
+      this.issues = next;
       cx.notify();
     });
-  }
-
-  // Logins that need a human: expired, FAIL, or a known end within 7 days. An unreadable
-  // Keychain item (days_left null) never warns, as in claude-account's own ask path.
-  dueLogins() {
-    return Object.entries(this.expiry).flatMap(([m, list]) => list
-      .filter((a) => a.expired || a.grade === "FAIL" || (a.grade === "WARN" && a.days_left != null))
-      .map((a) => ({ id: a.id, machine: m || "MacBook", days: a.days_left, bad: a.expired || a.grade === "FAIL" })));
   }
 
   refreshStats(cx) {
@@ -74,8 +65,7 @@ export default class JkStatus extends View {
       try {
         const r = await hc(["machine", "ls", "--json"]);
         const remotes = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary && m.state === "connected").map((m) => m.name).sort();
-        // A newly connected machine gets its logins read now, not at the next 10-min tick.
-        if (!same(remotes, this.remotes)) { this.remotes = remotes; changed = true; this.refreshExpiry(cx); }
+        if (!same(remotes, this.remotes)) { this.remotes = remotes; changed = true; }
       } catch {}
       // In parallel, and a machine still answering the last poll is skipped: a
       // remote that hangs (exec's 30 s limit) must not stall the others.
@@ -113,10 +103,14 @@ export default class JkStatus extends View {
   // Centered over the clicked field, just above the bar; at the pointer if the
   // field's bounds aren't known yet (not painted).
   details(props, event, key) {
-    const width = 400, height = props.kind === "usage" ? 380 : 540;
-    // Mouse-button events may come without bounds; the hover record always has them.
-    const b = event?.bounds ?? this.bounds?.[key];
-    const at = b ? { x: Math.max(8, Math.round(b.x + b.width / 2 - width / 2)), y: Math.max(8, Math.round(b.y - height - 12)) } : "pointer";
+    const width = props.kind === "usage" ? 460 : 400, height = props.kind === "usage" ? 470 : 540;
+    // The field's bounds (from the click, else the hover record); only trusted when they
+    // are bar-sized, since a press can report a child's or an outer element's bounds.
+    const b = [event?.bounds, this.bounds?.[key]].find((x) => x && x.height <= 40);
+    const p = event?.position;
+    const cx0 = b ? b.x + b.width / 2 : p?.x;
+    const top = b ? b.y : p ? p.y - 14 : null;
+    const at = cx0 != null && top != null ? { x: Math.max(8, Math.round(cx0 - width / 2)), y: Math.max(8, Math.round(top - height - 10)) } : "pointer";
     openOverlay({ mod: "jk-details", kind: "popup", width, height, at, props });
   }
 
@@ -129,8 +123,8 @@ export default class JkStatus extends View {
       .child(svg(`mods/workspace-chrome/${name ? "server" : "monitor"}.svg`).size(13))
       .child(div().child(name ?? "MacBook"))
       .when(Boolean(stats), (el) => el
-        .child(num(42, pct(stats.cpu), hot(stats.cpu)))
-        .child(num(64, `${stats.used.toFixed(1)}/${stats.total}G`, hot((stats.used / stats.total) * 100))))
+        .child(num(32, pct(stats.cpu), hot(stats.cpu)))
+        .child(num(48, `${Math.round(stats.used)}/${stats.total}G`, hot((stats.used / stats.total) * 100))))
       .when(!stats, (el) => el.child(div().text_color(t.dim).child("…")));
   }
 
@@ -156,15 +150,14 @@ export default class JkStatus extends View {
           .on_mouse_move((e) => this.track("usage", e))
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "usage"))
           .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))))
-      .when(this.dueLogins().length > 0, (el) => {
-        const due = this.dueLogins();
-        const bad = due.some((d) => d.bad);
-        const text = due.map((d) => `${d.id}·${d.machine} ${d.bad ? "expired" : `${Math.max(0, Math.floor(d.days))}d`}`).join("  ");
+      .when(this.issues.length > 0, (el) => {
+        const bad = this.issues.some((x) => x.state === "fail");
+        const who = [...new Set(this.issues.map((x) => `${x.id}·${x.machine === "macbook" ? "MacBook" : x.machine}`))].join(" ");
         return el.child(h_flex().id("logins").gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
           .text_color(bad ? t.blocked : t.ansi3)
           .on_mouse_move((e) => this.track("logins", e))
           .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e, "logins"))
-          .child(`⚠ login ${text}`));
+          .child(`⚠ ${who}`));
       })
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
