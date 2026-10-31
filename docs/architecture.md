@@ -116,7 +116,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.hc-reap` | 1800s | the herdr-core janitor (`rd reap`, `scripts/hc-reap.py` over `hc connect`, only while the core runs): the `herdr-reap` rules on `terminal.list` — closes (`terminal.kill` + `rm`) finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12; idle age from the `jk.claude.session` label's transcript) and, regardless of idle age or an active wave, a fan terminal whose branch is merged or deleted on origin (never a working agent, a dirty/unpushed tree, a terminal with live children or a `wave <n>`/`*-mother`/`*-w<n>` name), messages dirty ones, stops `claude --bg` leftovers > 24 h; `make hc-reap-setup`, actions in `~/Library/Logs/hc-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
-| `herdr.collie` | KeepAlive | collie bridge (upstream plist) |
+| `com.jkrumm.collie` | KeepAlive | collie bridge, the phone control surface, standalone on herdr-core (`bin/collie _exec-bridge`, loopback `:8787`, pinned commit, log `~/Library/Logs/collie.log`); `make collie-setup` also boots out the classic plugin's herdr.collie agent and uninstalls the plugin; `docs/collie.md` |
 
 ### hermes-agent
 

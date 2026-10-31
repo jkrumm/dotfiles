@@ -4,13 +4,23 @@ Condensed reference lives in `AGENTS.md` → "Collie". This is the full rational
 
 [Collie](https://github.com/AltanS/collie) is a loopback-bound Bun bridge + PWA
 that mirrors the herd on a phone: open a URL, see which agent is blocked, type
-a reply. Third-party, installed and **commit-pinned** by `make collie-setup` —
+a reply. Third-party, built and **commit-pinned** by `make collie-setup` —
 `COLLIE_REF`/`COLLIE_VERSION` in the Makefile — a commit, not a tag, because
-tags move and `plugin install` re-clones and rebuilds the repo every time.
-Since herdr-notes was retired it is the **only** pinned plugin left. Upgrading
-is a reviewed diff of that pin, driven by `make collie-upgrade`; there is no
-`plugin update`. Collie was chosen over granting the phone raw ssh: no port-22
-grant, no SSH key on a device that can be lost or stolen.
+tags move and the setup compiles whatever the pin resolves to. Upgrading is a
+reviewed diff of that pin, driven by `make collie-upgrade`. Collie was chosen
+over granting the phone raw ssh: no port-22 grant, no SSH key on a device that
+can be lost or stolen.
+
+**It runs standalone on herdr-core, not as a herdr plugin** (Wave 4, upstream
+1.25.0+, `COLLIE_MUX=herdr-core`, tested upstream on hc 0.1.14, proven here on
+0.1.15). The bridge is upstream's compiled `bin/collie _exec-bridge` under
+our own LaunchAgent `com.jkrumm.collie`. It reaches the core **only through the
+core's socket** (`$XDG_STATE_HOME/herdr-core/<session>/<session>.sock`, the same
+file `hc` dials; `HC_SESSION` / `HC_SOCKET` in the plist select another) and
+never runs `hc`, so it cannot start a core: **launchd owns the core**, and a
+stopped core reads as `bridge: disconnected` until `com.jkrumm.herdr-core` is
+back, after which the bridge reconnects by itself. `make collie-setup` refuses
+while the core's LaunchAgent is not running.
 
 **It is remote shell access by design, not "just a web UI".** One bridge call
 types arbitrary keystrokes into a live pane — Collie's own README says to
@@ -26,10 +36,19 @@ why the `.env` leaves `COLLIE_TRUSTED_USER` unset and the grant is scoped to
 never be granted** — a television driving coding agents is not a theoretical
 failure mode once the check itself can't discriminate.
 
-The `.env` (written once by hand, not templated — `make collie-setup` never
-touches it) carries four settings, each closing a specific gap:
-- `COLLIE_MULTI_SESSION=off` — the default `on` fronts **every** named herdr
-  session through one URL; this pins the bridge to the primary session only.
+The `.env` lives at `~/.config/collie/.env` (mode 600, never templated). It was
+written once by hand; `make collie-setup` copies it once from the old plugin
+config dir if the new one is missing, and then touches exactly one line:
+`COLLIE_MUX=herdr-core`. It also **refuses** to install when `COLLIE_SKIP_SERVE=1`,
+`COLLIE_HOST=127.0.0.1` or a non-empty `COLLIE_PUBLIC_HOSTS` is missing. The
+settings, each closing a specific gap:
+- `COLLIE_MUX=herdr-core` — which terminal host the bridge drives. Named
+  explicitly, because with it unset upstream picks by what it finds, and a
+  machine that still has the classic herdr installed keeps `herdr`. The plist
+  repeats it, so an `.env` edit cannot move the bridge off the core.
+- `COLLIE_MULTI_SESSION=off` — carried over from the plugin era, where the
+  default `on` fronted **every** named herdr session through one URL. The core
+  adapter drives exactly one session (`HC_SESSION`, default `default`).
 - `COLLIE_PUBLIC_HOSTS=mini.<tailnet>.ts.net:8788,mini.<tailnet>.ts.net` — defeats
   DNS rebinding, and **both entries are required**. `isHostAllowed`
   (`bridge/server.ts`) matches the full `Host` header by exact string, and the
@@ -62,59 +81,77 @@ touches it) carries four settings, each closing a specific gap:
 - `COLLIE_HOST=127.0.0.1` — no interface binding beyond loopback; `serve`
   terminates TLS on the tailnet and proxies in.
 
-**Supervision is upstream's**: `collie-ctl.sh start` writes
-`~/Library/LaunchAgents/herdr.collie.plist` itself (`RunAtLoad` +
-`KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`), so this repo ships no
-plist template of its own — two `RunAtLoad` + `KeepAlive` agents on port 8787 is
-a fight neither wins cleanly, and upstream's `start` clears only its own pidfile
-tier, so it cannot free the port from a label it has never heard of.
-`make collie-setup` boots any legacy label out before calling `start`; that
-migration is idempotent and self-deleting.
+**Supervision is ours**, and so is the plist: `scripts/com.jkrumm.collie.plist.template`
+(`RunAtLoad` + `KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`, log
+`~/Library/Logs/collie.log`, rotated by `log-rotate` from the plist). We never run
+upstream's `collie start`: it writes a unit of its own and publishes `tailscale
+serve` imperatively. `make collie-setup` boots the classic plugin's `herdr.collie`
+agent out first (two `RunAtLoad` + `KeepAlive` agents on port 8787 is a fight neither
+wins) and uninstalls the plugin once the new bridge passed its check. That migration
+is idempotent and removes itself from the picture on a clean machine.
 
-It is a **LaunchAgent, so it starts at login, not at boot** — and a Mac
-administered purely over SSH has no `gui/<uid>` to bootstrap into, so upstream
-degrades to the unsupervised tier with a warning instead of failing. That tier
-passes every liveness probe and dies on the next reboot, which is precisely the
-gap this whole section exists to close, so `collie-setup` asserts the plist
-exists *and* the label is loaded, and fails otherwise. The mini clears this only
-because it auto-logs-in (`docs/remote-dev.md` → *Unattended boot posture*) — that is what makes
+**The install is deliberately not a git checkout.** Upstream can update a git
+checkout in place, from a paired phone (`POST /api/update` pulls the newest release
+tag), which would walk past the commit pin. `collie-setup.sh` keeps a bare clone
+cache, checks the pinned commit out into `~/.local/share/collie/<ref12>/`, builds it
+(`bun run cli/main.ts build`, the fetched source building itself, not an older
+binary), asserts `bin/collie version` is `<version>+<commit>`, and then **deletes
+`.git`**. Upstream classifies a tree like that as `unknown/loose-binary` and declines
+to update it. One directory per pinned commit; the previous one stays for a rollback,
+older ones are pruned. The bridge keeps its state (paired devices, local credential)
+in `~/.local/state/collie`, outside the build directories.
+
+It is a **LaunchAgent, so it starts at login, not at boot** — and a Mac administered
+purely over SSH has no `gui/<uid>` to bootstrap into, so `collie-setup` fails there
+rather than degrading to an unsupervised process. The mini clears this only because it
+auto-logs-in (`docs/remote-dev.md` → *Unattended boot posture*) — that is what makes
 "at login" equivalent to "at boot" here, and it is not true of a Mac without it.
 
-Two upstream properties make that safe. PATH: `collie-ctl` resolves Bun from its
-install locations rather than `PATH` alone, which matters because a
-herdr-server-spawned command does not inherit Homebrew's PATH. And the `.env`:
-upstream's plist execs `collie-ctl.sh _exec-bridge` rather than `bun`, and the
-script sources the `.env` at top level (`set -a; . "$CONFIG_DIR/.env"; set +a`).
+**Whatever starts it must get the `.env` in.** This is the invariant, and it outlives
+whoever owns the plist. The plist carries paths only (it is world-readable, the `.env`
+is mode 600 and can hold a push key); `_exec-bridge` parses the `.env` at launch via
+`HERDR_PLUGIN_CONFIG_DIR`. Any start path that reaches the bridge without it brings it
+up with `COLLIE_PUBLIC_HOSTS`, `COLLIE_SKIP_SERVE` and the rest **all unset** — every
+hardening setting above quietly off, DNS-rebinding guard included — while `launchctl
+list` shows status 0 and the UI works perfectly. That is why the check is
+**behavioural** (`scripts/collie-check.sh`, run by `collie-setup` and `collie-status`):
 
-**Whatever starts it must source the `.env`.** This is the invariant, and it
-outlives whoever owns the plist. The bridge reads `process.env` only
-(`bridge/config.ts`) and never parses `.env` itself — on Linux systemd feeds it
-in with `EnvironmentFile=-`, and launchd has no equivalent. Any start path that
-reaches `bun` without sourcing it first brings the bridge up with
-`COLLIE_PUBLIC_HOSTS`, `COLLIE_MULTI_SESSION` and `COLLIE_SKIP_SERVE` **all
-unset** — every hardening setting above quietly off, DNS-rebinding guard
-included — while `launchctl list` shows status 0 and the UI works perfectly.
-Upstream holds that invariant today and is one refactor away from silently
-inverting it, which is why the check is **behavioural**: after any change to how
-the bridge is started or to the `.env`, a spoofed `Host` header must still return
-403 **on `/api/snapshot`**. The path is load-bearing — the guard fires on API
-routes only, and the CSP-locked SPA shell at `/` answers 200 to any Host, so a
-pathless probe reports the guard broken when it is fine. `make collie-setup`
-**fails** on anything but 403, so re-run that assertion, not just
-`launchctl list`.
+1. `/api/health` answers, with the pinned `<version>+<commit>`.
+2. `/` serves the SPA shell.
+3. A spoofed `Host` on **`/api/snapshot`** returns 403. The path is load-bearing: the
+   guard fires on API routes only, and the CSP-locked shell at `/` answers 200 to any
+   Host, so a pathless probe reports a healthy guard as broken.
+4. The bridge reaches the core: `/api/snapshot` with the host-local credential (the
+   bridge's own `local-secret`, **read-only**, it cannot type) says `bridge: connected`
+   and lists the core's terminals.
+
+`make collie-setup` **fails** on any of them, so re-run that, not just `launchctl list`.
+The check never calls `hc`: an `hc` call with no core running starts one.
+
+**Every `/api` route needs a paired device** (upstream ADR 0086; only `/api/health` and
+`POST /api/pair` are open). The code is minted on the host's terminal on purpose:
+`make collie-pair`, then enter it in the phone's Settings. A phone refused after an
+upgrade re-pairs the same way.
+
+**What the core adapter does and does not do** (upstream, 1.25.x): the mirror is plain
+text without colour; a send takes about six seconds (the core holds keys for ~3 s);
+there is no focus, rename or worktree; History and Chat for a Claude pane need `collie
+hooks install claude`, which is **not** installed here — it edits Claude's settings,
+which this repo renders from a template, so it needs its own decision.
 
 | Command | Does |
 |-|-|
-| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): install/refresh the pinned plugin, migrate off the legacy agent, `collie-ctl.sh start`, then assert liveness + the rebind guard + that launchd actually supervises it |
-| `make collie-upgrade` | Dev-host only: resolve the newest release tag, print its changelog + diffstat + a scope verdict, and on `y` bump the pin, reinstall, assert, commit |
-| `make collie-status` | Read-only: LaunchAgent state, bridge health, rebind guard, `tailscale serve status` |
-| `make collie-teardown` | Boot out both labels (current + legacy), uninstall the plugin — deliberately **not** `collie-ctl.sh uninstall`, which attempts a `tailscale serve` teardown even under `COLLIE_SKIP_SERVE=1`; serve is declared state and no upstream script gets to mutate it |
+| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): refuse unless the core's LaunchAgent runs, build the pinned commit, check `.env`, render + bootstrap `com.jkrumm.collie`, retire the classic plugin, then run the behavioural check |
+| `make collie-upgrade` | Dev-host only: resolve the newest release tag, print its changelog + diffstat + a scope verdict, and on `y` bump the pin, rebuild, assert, commit |
+| `make collie-status` | Read-only: LaunchAgent state, installed build vs pin, the behavioural check, `tailscale serve status` |
+| `make collie-pair` | Mint a one-time pairing code for a phone |
+| `make collie-hc-proof` | Re-prove the pinned build against a **scratch** core (own session + LaunchAgent, torn down on exit): setup, list, read, type, "core gone: nothing starts one, the bridge reconnects". a few minutes, mostly the build; run it after a pin bump or a core bump |
+| `make collie-teardown` | Boot out both labels (current + legacy), remove the checkouts and uninstall the plugin if still there — deliberately **not** `collie uninstall`, which attempts a `tailscale serve` teardown even under `COLLIE_SKIP_SERVE=1`; serve is declared state and no upstream script gets to mutate it. The `.env` and the paired devices stay |
 
 **Upgrading is still a reviewed diff — `make collie-upgrade` just removes the
-eleven mechanical steps around it.** There is no `plugin update` (herdr's docs:
-"reinstall from GitHub to refresh"), and upstream's own `collie-ctl.sh update`
-is deliberately unused here: it pulls **branch head**, which discards the pin and
-can land pre-release commits.
+mechanical steps around it.** Upstream's own `collie update` and the phone's in-app
+update are deliberately unusable here (see *not a git checkout* above): they pull the
+newest release, which discards the pin.
 
 **The scope verdict it prints is decision support, not a safety boundary — do
 not let it grow into an auto-applier.** It answers "did anything outside `web/`
@@ -123,8 +160,8 @@ does not make a UI-only release safe: the PWA **is** the control surface, so
 malicious `web/` code reads the snapshot and sends keys exactly as well as
 malicious `bridge/` code would. `bun.lock` is excluded from the safe set for the
 same reason — a changed lockfile is a changed dependency. What makes a bad
-release survivable is the rollback: `collie-setup`'s spoofed-Host assertion runs
-after the install, and a failure restores the previous pin and reinstalls it.
+release survivable is the rollback: `collie-setup`'s behavioural check runs after the
+install, and a failure restores the previous pin and rebuilds it.
 
 It refuses to run unattended (no TTY and no `COLLIE_UPGRADE_YES=1` → exit 1) and
 refuses on a dirty `Makefile`, since it commits that file. It commits locally and

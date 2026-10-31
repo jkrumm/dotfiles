@@ -8,9 +8,9 @@ set -euo pipefail
 # WHY THIS IS NOT AN AUTO-UPGRADER, even though collie releases weekly and is
 # "just the phone UI". Collie is remote shell access: one bridge call types
 # arbitrary keystrokes into a live pane, and upstream's own README says to treat
-# the URL like a root login. `herdr plugin install` re-clones and REBUILDS the
-# whole repo, so applying a release runs unreviewed third-party code on the host
-# that runs every agent. A path-scope gate ("only web/ changed, apply it") is
+# the URL like a root login. `collie-setup` clones the pinned commit and BUILDS
+# the whole repo (bun install, compile), so applying a release runs unreviewed
+# third-party code on the host that runs every agent. A path-scope gate ("only web/ changed, apply it") is
 # weaker than it looks, because the PWA *is* the control surface — malicious
 # web/ code reads the snapshot and sends keys just as well as malicious bridge/
 # code. So the scope verdict below is DECISION SUPPORT, not a safety boundary:
@@ -22,9 +22,11 @@ set -euo pipefail
 # review kept and the eleven mechanical steps gone.
 #
 # Sibling of scripts/brew-upgrade.sh: converge, then ASSERT rather than assume.
-# collie-setup re-checks the DNS-rebinding guard (spoofed Host must 403) and
-# fails otherwise, so a release that silently breaks the hardening rolls the pin
-# straight back instead of landing.
+# collie-setup runs scripts/collie-check.sh (spoofed Host must 403, the bridge
+# must reach the herdr-core) and fails otherwise, so a release that silently
+# breaks the hardening or the core adapter rolls the pin straight back instead
+# of landing. After a bump, `make collie-hc-proof` re-proves list/read/type in a
+# scratch core.
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MAKEFILE="${COLLIE_UPGRADE_MAKEFILE:-$DOTFILES_DIR/Makefile}"
@@ -50,9 +52,11 @@ cleanup() {
     echo ""
     echo "  ✗ upgrade failed — rolling back to $ROLLBACK_REF"
     pin_write "$ROLLBACK_PIN_REF" "$ROLLBACK_PIN_VERSION"
-    herdr plugin install "$SOURCE" --ref "$ROLLBACK_PIN_REF" -y >/dev/null 2>&1 \
-      && echo "    ✓ pin and plugin restored to $ROLLBACK_PIN_VERSION" \
-      || echo "    ✗ plugin restore FAILED — run: make collie-setup"
+    if /usr/bin/make -C "$DOTFILES_DIR" --no-print-directory collie-setup >/dev/null 2>&1; then
+      echo "    ✓ pin and install restored to $ROLLBACK_PIN_VERSION"
+    else
+      echo "    ✗ restore FAILED — run: make collie-setup"
+    fi
   fi
 }
 trap cleanup EXIT
@@ -75,14 +79,12 @@ pin_write() {
 
 # --- Gate --------------------------------------------------------------------
 # Same dev-host marker collie-setup and git-headless use. Collie only exists
-# where the herdr server does.
+# where the herdr-core does.
 BACKEND=$(/usr/bin/tr -d '[:space:]' < "$HOME/.config/secrets/backend" 2>/dev/null || echo "")
 if [ "$BACKEND" != "cache" ]; then
   echo "    · not the dev host (backend=${BACKEND:-unset}) — collie-upgrade skipped"
   exit 0
 fi
-
-command -v herdr >/dev/null 2>&1 || die "herdr not installed — run: brew bundle install"
 
 SOURCE=$(makefile_var COLLIE_SOURCE)
 CUR_REF=$(makefile_var COLLIE_REF)
@@ -188,9 +190,9 @@ ROLLBACK_REF="$CUR_VERSION"
 
 pin_write "$NEW_REF" "$NEW_VERSION"
 
-# collie-setup does the install AND the assertions: liveness, launchd
-# supervision, and the spoofed-Host 403. A release that breaks the rebind guard
-# fails here and trips the rollback above.
+# collie-setup does the build, the install AND the assertions: liveness, the
+# spoofed-Host 403, the bridge reaching the core. A release that breaks the
+# rebind guard or the core adapter fails here and trips the rollback above.
 /usr/bin/make -C "$DOTFILES_DIR" --no-print-directory collie-setup
 
 ROLLBACK_REF=""
@@ -206,8 +208,8 @@ SCOPE_NOTE="web/ + metadata only — bridge/ and scripts/ untouched"
 "$GIT_BIN" -C "$DOTFILES_DIR" commit --quiet -m "chore(collie): upgrade to $NEW_VERSION" -m \
 "Pin moves $CUR_VERSION → $NEW_VERSION (${NEW_REF:0:7}). Scope: $SCOPE_NOTE.
 
-Installed and asserted by make collie-setup: launchd supervision, bridge
-liveness, and the DNS-rebinding guard (spoofed Host → 403)."
+Built and asserted by make collie-setup: bridge liveness, the DNS-rebinding
+guard (spoofed Host → 403) and the bridge reaching herdr-core."
 
 echo ""
 echo "  ✓ collie $NEW_VERSION pinned, installed, asserted and committed"

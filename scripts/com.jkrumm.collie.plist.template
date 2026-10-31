@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>__COLLIE_LABEL__</string>
+  <!-- Collie, the phone control surface, standalone on herdr-core (docs/collie.md). Rendered by
+       scripts/collie-setup.sh, which owns the checkout, the build and the placeholders below.
+       Runs upstream's own bridge entry (`bin/collie _exec-bridge`), which parses the mode-600 .env in
+       HERDR_PLUGIN_CONFIG_DIR itself at launch: PATHS ONLY here, never a config value, because a plist is
+       world-readable. COLLIE_MUX is pinned here as well as in the .env, so an .env edit cannot move the
+       bridge off the core.
+       Launchd-first: the bridge only dials the core's socket and never starts a core. A stopped core
+       reads as unreachable until com.jkrumm.herdr-core is back. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__COLLIE_ROOT__/bin/collie</string>
+    <string>_exec-bridge</string>
+  </array>
+  <key>WorkingDirectory</key><string>__COLLIE_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>COLLIE_MUX</key><string>herdr-core</string>
+    <key>COLLIE_PLUGIN_ROOT</key><string>__COLLIE_ROOT__</string>
+    <key>HERDR_PLUGIN_CONFIG_DIR</key><string>__COLLIE_CONFIG_DIR__</string>
+__COLLIE_EXTRA_ENV__
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>__COLLIE_LOG__</string>
+  <key>StandardErrorPath</key><string>__COLLIE_LOG__</string>
+</dict>
+</plist>

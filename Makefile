@@ -36,15 +36,15 @@ COLIMA_MEMORY ?= 12
 COLIMA_DISK   ?= 60
 endif
 
-# Collie — phone web-UI control surface for the herd (herdr plugin + Bun
-# bridge), installed by `make collie-setup`. Pinned to a COMMIT for the same
-# reason a third-party plugin always is here: `herdr plugin install` re-clones
-# and rebuilds the repo
-# every time, so an upgrade has to be a reviewed diff of this pin, not
-# whatever tag happens to move.
+# Collie — phone web-UI control surface for the herd: upstream's compiled Bun
+# bridge, standalone under its own LaunchAgent, driving herdr-core
+# (COLLIE_MUX=herdr-core; no herdr plugin). Installed by `make collie-setup`.
+# Pinned to a COMMIT, never a tag: tags move, and collie-setup builds whatever
+# the pin resolves to on a host that runs every agent, so an upgrade has to be a
+# reviewed diff of this pin (`make collie-upgrade`).
 COLLIE_SOURCE  := AltanS/collie
-COLLIE_REF     := aacece40a284a7db5f459b27dd6732313dfb9bb7
-COLLIE_VERSION := 1.19.2
+COLLIE_REF     := 9eeedd89b380ac19005da6aa0f72f09a1df2df9c
+COLLIE_VERSION := 1.25.3
 
 # xcaddy + the Cloudflare DNS module, used by `make caddy-dns-build` to bake
 # DNS-01 support into the Homebrew Caddy binary (stock Homebrew Caddy ships
@@ -3104,161 +3104,52 @@ herdr-restart:
 	@herdr status --json 2>/dev/null | jq -r '"    · detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring) + " (false still prompts on desk)"' \
 		|| echo "  ! could not read herdr status"
 
-# Collie — phone web-UI control surface for the herd (herdr plugin + Bun
-# bridge). See AGENTS.md "Collie — the phone control surface" for the full
-# model: what it is, the ACL gate, why COLLIE_SKIP_SERVE=1 is mandatory here.
+# Collie — phone web-UI control surface for the herd, standalone on herdr-core.
+# See docs/collie.md for the full model: what it is, the ACL gate, why
+# COLLIE_SKIP_SERVE=1 is mandatory here, why the install is not a git checkout.
 # Opt-in per machine, NOT in the default `setup` chain — same policy as
 # remote-access/devhost-health-setup/batt-setup. Gated on the dev-host marker
 # (same signal herdr-setup and git-headless use) because Collie only makes
-# sense pointed at the mini's herdr server.
-.PHONY: collie-setup collie-upgrade collie-status collie-teardown
+# sense pointed at the mini's core. The logic lives in scripts/collie-setup.sh
+# (setup | status | teardown) and scripts/collie-check.sh (the behavioural check).
+.PHONY: collie-setup collie-upgrade collie-status collie-teardown collie-pair collie-hc-proof
 # The other half of `make drift-check`. That one NOTICES a drifted pin and
 # deliberately never applies it; this applies one, with the review kept and the
 # mechanical steps gone — resolve the newest tag, show the changelog + diffstat
 # + a scope verdict (did anything outside web/ move?), then on your `y` bump the
-# pin, reinstall, assert, and commit. Rolls the pin back if collie-setup's
-# rebind-guard assertion fails. No `-dry` sibling on purpose: the prompt IS the
+# pin, rebuild, assert, and commit. Rolls the pin back if collie-setup's
+# behavioural check fails. No `-dry` sibling on purpose: the prompt IS the
 # preview, and a second "same thing but more thorough" target is the choice this
 # repo's makefile-conventions rule exists to avoid.
 collie-upgrade:
 	@bash $(DOTFILES_DIR)/scripts/collie-upgrade.sh
 
+# Clone the pinned commit, build it, render com.jkrumm.collie, bootstrap it,
+# retire the classic herdr.collie plugin, then ASSERT: bridge up, spoofed Host
+# 403, bridge connected to the core. Launchd-first — it refuses while
+# com.jkrumm.herdr-core is not running, and the bridge never starts a core.
 collie-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — collie-setup skipped"; \
-		exit 0; \
-	fi
-	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
-	@BUN_BIN_DIR=$$(bash $(DOTFILES_DIR)/scripts/lib/bun-bin.sh) || { echo "  ✗ bun not found on PATH, ~/.bun/bin or the Homebrew prefixes — run: brew bundle install"; exit 1; }; \
-	if [ ! -x "$$BUN_BIN_DIR/bunx" ]; then \
-		echo "  ✗ bunx shim missing next to bun ($$BUN_BIN_DIR/bunx) — reinstall bun (the plugin rebuild needs it)"; exit 1; \
-	fi; \
-	echo "    · bun from $$BUN_BIN_DIR (bunx present)"
-	@# Install/refresh only when the pin moved: `plugin install` re-clones and
-	@# rebuilds every time. The rebuild runs `bun`/`bunx` from the plugin's own
-	@# scripts and inherits THIS shell's PATH, so the resolved dir is prepended
-	@# here rather than trusted to be there already — a non-login make
-	@# (launchd, agent dispatch) has neither a login shell's PATH nor ~/.bun/bin.
-	@if [ "$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .source.resolved_commit')" = "$(COLLIE_REF)" ]; then \
-		echo "    ✓ collie $(COLLIE_VERSION) plugin installed"; \
-	else \
-		echo "    → installing collie $(COLLIE_VERSION) ($(COLLIE_REF))"; \
-		export PATH="$$(bash $(DOTFILES_DIR)/scripts/lib/bun-bin.sh):$$PATH"; \
-		herdr plugin install $(COLLIE_SOURCE) --ref $(COLLIE_REF) -y >/dev/null \
-			&& echo "    ✓ collie $(COLLIE_VERSION) installed" \
-			|| { echo "  ✗ collie plugin install failed"; exit 1; }; \
-	fi
-	@# Upstream owns supervision as of collie 0.21.0: `collie-ctl.sh start` writes
-	@# ~/Library/LaunchAgents/herdr.collie.plist itself. This repo carried its own
-	@# com.jkrumm.collie.plist for exactly as long as macOS launchd support was
-	@# missing upstream; keeping both now would mean two RunAtLoad+KeepAlive agents
-	@# racing for port 8787, so the block below boots the old one out FIRST.
-	@# Upstream's `start` clears only the pidfile tier — it has never heard of our
-	@# label and cannot free the port for us.
-	@#
-	@# The one property that made ours worth carrying is preserved upstream: the
-	@# plist execs `collie-ctl.sh _exec-bridge`, and the script sources the .env at
-	@# top level (`set -a; . "$$CONFIG_DIR/.env"; set +a`), so the four hardening
-	@# vars do reach the process. Asserted behaviourally below, never assumed — a
-	@# bridge started without the .env answers 200 exactly the same.
-	@#
-	@# Comments must stay OUT of the block: make joins backslash-continued lines
-	@# before handing them to sh, so a `#` inside would swallow the rest.
-	@PLUGIN_ROOT=$$(herdr plugin list --json 2>/dev/null | jq -r '.result.plugins[]? | select(.plugin_id=="herdr.collie") | .plugin_root'); \
-	[ -n "$$PLUGIN_ROOT" ] || { echo "  ✗ could not resolve herdr.collie plugin_root"; exit 1; }; \
-	CONFIG_DIR=$$(herdr plugin config-dir herdr.collie 2>/dev/null); \
-	[ -n "$$CONFIG_DIR" ] || CONFIG_DIR="$(HOME)/.config/herdr/plugins/config/herdr.collie"; \
-	[ -f "$$CONFIG_DIR/.env" ] || { echo "  ✗ no .env at $$CONFIG_DIR — write it by hand first (see AGENTS.md)"; exit 1; }; \
-	LEGACY="$(LAUNCHAGENTS)/com.jkrumm.collie.plist"; \
-	if [ -f "$$LEGACY" ]; then \
-		launchctl bootout gui/$$(id -u)/com.jkrumm.collie 2>/dev/null \
-			|| launchctl unload "$$LEGACY" 2>/dev/null || true; \
-		rm -f "$$LEGACY"; \
-		echo "    ✓ legacy com.jkrumm.collie booted out + removed (upstream supervises now)"; \
-	fi; \
-	bash "$$PLUGIN_ROOT/scripts/collie-ctl.sh" start || { echo "  ✗ collie-ctl.sh start failed"; exit 1; }; \
-	if [ "$$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 1 --retry-connrefused --max-time 20 http://127.0.0.1:8787/ 2>/dev/null)" != "200" ]; then \
-		echo "  ✗ bridge is not answering on 127.0.0.1:8787"; \
-		echo "    check: launchctl list | grep collie   and   $$CONFIG_DIR/collie.log"; \
-		exit 1; \
-	fi; \
-	if [ "$$(curl -s -H 'Host: evil.example.com' -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8787/api/snapshot 2>/dev/null)" != "403" ]; then \
-		echo "  ✗ spoofed Host NOT rejected on /api/snapshot — the .env did not reach the process"; \
-		echo "    every hardening setting is silently off; do not leave the front door published"; \
-		exit 1; \
-	fi; \
-	echo "    ✓ bridge up, DNS-rebinding guard in effect (spoofed Host → 403)"; \
-	if [ -f "$(LAUNCHAGENTS)/herdr.collie.plist" ] \
-		&& launchctl list 2>/dev/null | awk '$$3=="herdr.collie"{f=1} END{exit !f}'; then \
-		echo "    ✓ supervised by launchd (RunAtLoad + KeepAlive — survives reboot)"; \
-	else \
-		echo "  ✗ running UNSUPERVISED (no gui/<uid> to bootstrap into) — dies on reboot"; \
-		echo "    log in at the console once, then re-run: make collie-setup"; \
-		exit 1; \
-	fi
-	@echo "    ↳ Front door is declared state, not this target: the tailnet binding is"
-	@echo "      a row in dotfiles-private/tailscale-serve.mini.conf, applied by"
-	@echo "      'make tailscale-serve'. URL: https://mini.<tailnet>.ts.net"
-	@echo "    ↳ The phone additionally needs an ACL grant (tag:phone → tcp:8788),"
-	@echo "      applied from the MacBook only — see dotfiles-private's tailscale-acl.jsonc"
-	@echo "      + 'make tailscale-acl-diff/push'."
+	@COLLIE_SOURCE=$(COLLIE_SOURCE) COLLIE_REF=$(COLLIE_REF) COLLIE_VERSION=$(COLLIE_VERSION) \
+		bash $(DOTFILES_DIR)/scripts/collie-setup.sh setup
 
 # Read-only. `tailscale` is an alias to the app bundle in interactive shells,
-# not in make — call it by absolute path (same trap devhost-health-check.sh hit).
+# not in make — collie-setup.sh resolves the CLI the way devhost-health-check.sh does.
 collie-status:
-	@echo "  LaunchAgent:"
-	@ROW=$$(launchctl list 2>/dev/null | awk '$$3=="herdr.collie" {print $$1" "$$2}'); \
-	if [ -z "$$ROW" ]; then \
-		echo "    ✗ not loaded — run: make collie-setup"; \
-	else \
-		set -- $$ROW; \
-		if [ "$$1" = "-" ]; then \
-			echo "    ✗ loaded but NOT running (last exit $$2) — check $(HOME)/.config/herdr/plugins/config/herdr.collie/collie.log"; \
-		else \
-			echo "    ✓ loaded and running (pid $$1, last exit $$2)"; \
-		fi; \
-	fi
-	@echo "  Bridge health (http://127.0.0.1:8787):"
-	@CODE=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/ 2>/dev/null || echo "000"); \
-	if [ "$$CODE" = "000" ]; then echo "    ✗ unreachable"; else echo "    ✓ HTTP $$CODE"; fi
-	@# Behavioural, not configural: proves COLLIE_PUBLIC_HOSTS actually reached the
-	@# process. A bridge started without its .env silently drops every hardening
-	@# setting and still answers 200 on the line above. The path matters as much as
-	@# the header — `/` serves the SPA shell to any Host and always answers 200, so
-	@# probing it reports a perfectly healthy guard as broken.
-	@echo "  DNS-rebinding guard (spoofed Host must be rejected):"
-	@CODE=$$(curl -s -H "Host: evil.example.com" -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8787/api/snapshot 2>/dev/null || echo "000"); \
-	if [ "$$CODE" = "403" ]; then echo "    ✓ 403 — COLLIE_PUBLIC_HOSTS in effect"; \
-	else echo "    ✗ got $$CODE, expected 403 — the .env did not reach the process"; fi
-	@echo "  tailscale serve:"
-	@# CLI resolved, not hardcoded: the mini runs the brew daemon since
-	@# 2026-08-06 and the app bundle there answers from a dormant daemon.
-	@TS=$$(bash -c 'source $(DOTFILES_DIR)/scripts/lib/tailscale-cli.sh; echo "$$TAILSCALE_BIN $${TAILSCALE_SOCKET:+--socket=$$TAILSCALE_SOCKET}"'); \
-	$$TS serve status 2>/dev/null | sed 's/^/    /' || echo "    · tailscale not reachable"
+	@COLLIE_REF=$(COLLIE_REF) bash $(DOTFILES_DIR)/scripts/collie-setup.sh status
 
-	@# Deliberately NOT `collie-ctl.sh uninstall`: that always attempts a tailscale
-	@# serve teardown, even under COLLIE_SKIP_SERVE=1. Serve is declared state in
-	@# this repo (dotfiles-private/tailscale-serve.mini.conf) and no upstream script
-	@# gets to mutate it. Booting the agent out by label does the same job locally.
 collie-teardown:
-	@for L in herdr.collie com.jkrumm.collie; do \
-		DST="$(LAUNCHAGENTS)/$$L.plist"; \
-		[ -f "$$DST" ] || continue; \
-		launchctl bootout gui/$$(id -u)/$$L 2>/dev/null \
-			|| launchctl unload "$$DST" 2>/dev/null || true; \
-		rm -f "$$DST"; \
-		echo "  ✓ $$L LaunchAgent unloaded + removed"; \
-	done
-	@if command -v herdr >/dev/null 2>&1 && herdr plugin list --json 2>/dev/null | jq -e '.result.plugins[]? | select(.plugin_id=="herdr.collie")' >/dev/null 2>&1; then \
-		herdr plugin uninstall herdr.collie >/dev/null 2>&1 \
-			&& echo "  ✓ herdr.collie plugin uninstalled" \
-			|| echo "  ✗ herdr plugin uninstall failed"; \
-	else \
-		echo "  · herdr.collie plugin not installed"; \
-	fi
-	@echo "  · dotfiles-private/tailscale-serve.mini.conf left untouched — that is"
-	@echo "    declared state, not this target's to change."
+	@bash $(DOTFILES_DIR)/scripts/collie-setup.sh teardown
+
+# A one-time code for a phone to pair with (Settings → enter the code). Every /api
+# route needs a paired device, so a phone that is refused after an upgrade re-pairs here.
+collie-pair:
+	@bash $(DOTFILES_DIR)/scripts/collie-setup.sh pair
+
+# Re-prove the pinned build against a scratch herdr-core (own session + LaunchAgent,
+# torn down on exit): setup, list, read, type, and "core gone, nothing starts one".
+# Run it after a collie-upgrade or a core bump, before trusting the live install.
+collie-hc-proof:
+	@bash $(DOTFILES_DIR)/scripts/collie-hc-proof.sh
 
 # The look: one command, both machines. Three programs paint one screen and none
 # of them can see the other two — the terminal paints pane content from its ANSI

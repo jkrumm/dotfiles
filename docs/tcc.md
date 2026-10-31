@@ -46,6 +46,7 @@ Mini, 2026-10-31 (68 agents; the unified log of the last 7 days holds no `AUTHRE
 | `com.iu.prometheus-vpn-watcher`, `com.jkrumm.weatherorb.worker-*`, `…watchdog` | uv python, ad-hoc | no grant (`~/IuRoot`, `~/SourceRoot`) |
 | `com.jkrumm.modelpick-web` | bun in a Cellar path (Developer ID signed) | no grant |
 | `com.jkrumm.weatherorb.serve` | ad-hoc built `openmeteo-api` | no grant (`~/SourceRoot/weatherorb`) |
+| `com.jkrumm.collie` | compiled bridge in `~/.local/share/collie` | no grant (own config, state and log only) |
 | `herdr.collie` | ad-hoc plugin binary | no grant, retires with Wave 7 |
 | `homebrew.mxcl.sleepwatcher` | Cellar path, ad-hoc | no grant |
 | bash/zsh/osascript/python-by-shebang jobs, `jobrun`/script jobs | Apple platform binaries or unsigned scripts: stable identity | not flagged |

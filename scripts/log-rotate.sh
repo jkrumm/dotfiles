@@ -63,13 +63,11 @@ PLIST_DIR="${LOG_ROTATE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
 #   the only record of what Hermes did unattended. Rotated, not deleted.
 # - claude-relogin.log: the windowless MacBook relogin worker's output (redacted, owner-only), written by
 #   scripts/claude-relogin.sh, no plist names it.
-# - the herdr collie plugin's own log.
 EXTRA=(
   "$HOME/.hermes/logs/gateway.error.log"
   "$HOME/.hermes/logs/gateway.log"
   hermes-ops.log
   claude-relogin.log
-  "$HOME/.config/herdr/plugins/config/herdr.collie/collie.log"
 )
 
 # Log paths of every com.jkrumm.* / com.iu.* plist, one per line. log-rotate's own log stays

@@ -12,6 +12,7 @@
     "com.jkrumm.weatherorb.watchdog": { "class": "no-grant", "why": "uv in a Cellar path; ~/SourceRoot only" },
     "com.jkrumm.weatherorb.worker-ingest": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
     "com.jkrumm.weatherorb.worker-round": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
+    "com.jkrumm.collie": { "class": "no-grant", "why": "compiled bridge under ~/.local/share/collie; touches only its own config, state and log" },
     "herdr.collie": { "class": "no-grant", "why": "classic herdr plugin binary, retires with Wave 7" },
     "homebrew.mxcl.sleepwatcher": { "class": "no-grant", "why": "runs ~/.sleep and ~/.wakeup, which touch nothing protected" },
     "homebrew.mxcl.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
