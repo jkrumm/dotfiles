@@ -1,33 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# brain-note — open THIS pane's repo project page from the brain vault in
-# $EDITOR. Two callers: prefix+e in config/herdr/config.toml (classic herdr `popup`,
-# TODO(Wave 7): drop classic) and cmd-e in the Herdr app, where the jk-keys mod
+# brain-note — open THIS terminal's repo project page from the brain vault in
+# $EDITOR. Called by cmd-e in the Herdr app, where the jk-keys mod
 # (config/herdr-app/mods/jk-keys) starts it with `hc run --bg --cwd <the focused
 # terminal's cwd>` and shows it with `terminal.peek`. hc terminals take the core's
 # launchd environment, so there is no $EDITOR there unless the machine sets one:
 # vim is the fallback, BRAIN_NOTE_EDITOR overrides.
 #
-# WHY THIS REPLACED THE herdr-notes PLUGIN. That plugin kept one markdown note
-# per herdr WORKSPACE, in herdr's plugin state dir — untracked, unsynced,
-# unbackuped, keyed to a workspace id that a closed workspace orphans. It was a
-# third place notes could live, next to a git-backed Obsidian vault on the same
-# disk and TickTick for tasks. The vault already syncs to both machines every 5
-# minutes, is searchable by /brain and Hermes, and survives the machine. So the
-# note moved there and the plugin went away; the keybinding is the only part
-# worth keeping.
+# WHY IT LIVES IN THE VAULT. Notes used to sit in a per-workspace plugin store
+# (untracked, unsynced, keyed to an id a closed workspace orphans). The vault
+# already syncs to both machines every 5 minutes, is searchable by /brain and
+# Hermes, and survives the machine: one store.
 #
-# WHY PER-REPO, NOT PER-WORKSPACE. Two workspaces open on the same checkout are
-# the same project, and their notes were two files under the plugin. Resolving
-# through `git rev-parse --show-toplevel` makes them one page — and makes the
-# note findable by a human who has never heard of herdr.
+# WHY PER-REPO, NOT PER-WORKSPACE. Two spaces open on the same checkout are
+# the same project, and their notes were two files. Resolving through
+# `git rev-parse --show-toplevel` makes them one page, findable by a human who has
+# never heard of Herdr.
 #
 # WHY `Projects/<repo>.md` AND NOT A SCRATCH TREE. PARA `Projects` is the vault's
 # curated human surface (light lint: wikilinks must resolve, no forced schema),
 # and an active repo IS an active project. Scratch that turns out to matter gets
 # tidied in place instead of migrated; scratch that does not gets deleted. One
-# store, which was the entire point of dropping the plugin.
+# store, which was the entire point.
 #
 # WHY NO `git pull` HERE. brain-sync reconciles both machines through GitHub
 # every 5 minutes and is the designated reconciler; AGENTS.md's "pull before you
@@ -40,7 +35,7 @@ set -euo pipefail
 VAULT="${BRAIN_VAULT:-$HOME/SourceRoot/brain}"
 EDITOR_BIN="${BRAIN_NOTE_EDITOR:-${EDITOR:-${VISUAL:-vim}}}"
 
-# A popup closes the instant this exits, so an unpaused error message is a flash
+# A terminal closes the instant this exits, so an unpaused error message is a flash
 # of text nobody can read. Every failure path goes through here.
 die() {
   echo "" >&2
@@ -53,17 +48,15 @@ die() {
 
 [ -d "$VAULT/.git" ] || die "no brain vault at $VAULT (set BRAIN_VAULT to override)"
 
-# Classic herdr exports the focused pane's cwd for custom commands
-# (TODO(Wave 7): drop classic); under hc the run's --cwd is $PWD, which is also the
-# fallback for running this by hand from a shell.
-CWD="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
-[ -d "$CWD" ] || CWD="$PWD"
+# Under hc the run's --cwd is $PWD, which is also what running this by hand from a
+# shell gives.
+CWD="$PWD"
 
 # Refuse rather than guess. Without a repo the only name available is the
 # basename of whatever directory the pane happens to sit in, and writing
 # `Projects/Downloads.md` into a curated tree is worse than doing nothing.
 ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) \
-  || die "this pane is not inside a git repo — the project-note key opens the note for the repo you are in"
+  || die "this terminal is not inside a git repo — the project-note key opens the note for the repo you are in"
 
 REPO=$(basename "$ROOT")
 
