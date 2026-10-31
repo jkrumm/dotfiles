@@ -79,10 +79,39 @@ export default class JkDetails extends View {
           .child(div().flex_1().truncate().text_color(t.muted).child(p.name)))));
   }
 
+  // Starts the wired re-login (docs/claude-accounts.md §Re-login) detached: windowless on
+  // the MacBook, a herdr workspace plus reverse tunnel on the mini; either way the account's
+  // own browser opens for the approval and a notification reports the result.
+  relogin(id, machine, cx) {
+    const target = machine === "MacBook" ? "macbook" : machine;
+    if (!/^[\w.-]+$/.test(id) || !/^[\w.-]+$/.test(target)) return;
+    this.started = { ...(this.started ?? {}), [`${id}/${machine}`]: true };
+    exec("sh", ["-c", `PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" nohup claude-relogin '${id}' --machine '${target}' >/dev/null 2>&1 &`]).catch(() => null);
+    cx.notify();
+  }
+
+  logins(t, id) {
+    const per = Object.entries(shared("jk.expiry") ?? {}).map(([m, list]) => ({ machine: m || "MacBook", a: list.find((x) => x.id === id) })).filter((x) => x.a);
+    if (!per.length) return null;
+    const due = (a) => a.expired || a.grade === "FAIL" || (a.grade === "WARN" && a.days_left != null);
+    return h_flex().gap(8).text_size(11.5).items_center()
+      .child(div().w(34).flex_none().text_color(t.dim).child("login"))
+      .children(per.map(({ machine, a }) => {
+        const label = a.expired ? "expired" : a.days_left == null ? "?" : `${Math.floor(a.days_left)} d`;
+        const key = `${id}/${machine}`;
+        return h_flex().id(`login-${key}`).gap(4).items_center()
+          .child(div().text_color(due(a) ? (a.expired || a.grade === "FAIL" ? t.blocked : t.ansi3) : t.muted).child(`${machine} ${label}`))
+          .when(due(a), (el) => el.child(this.started?.[key]
+            ? div().text_color(t.dim).child("· approve in browser")
+            : div().id(`relogin-${key}`).px(6).rounded(4).bg(t.accent).text_color(t.accent_foreground).cursor_pointer()
+                .on_click((_e, cx) => this.relogin(id, machine, cx)).child("Re-login")));
+      }));
+  }
+
   usage(t) {
     const { accounts = [] } = shared("jk.usage") ?? {};
     const row = (label, value, resets) => h_flex().gap(8).text_size(11.5)
-      .child(div().w(24).text_color(t.dim).child(label))
+      .child(div().w(34).flex_none().text_color(t.dim).child(label))
       .child(div().w(40).text_right().text_color(value >= 90 ? t.blocked : t.foreground).child(value == null ? "?" : `${value}%`))
       .child(div().flex_1().text_color(t.muted).child(until(resets)));
     // Only what changes a decision: the plan, and a warning when the numbers can't be trusted.
@@ -95,7 +124,8 @@ export default class JkDetails extends View {
           .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? ""))
           .child(div().text_size(11).text_color(a.auth_ok ? t.dim : t.blocked).child(note(a))))
         .child(row("5h", a.five_hour, a.five_hour_resets_at))
-        .child(row("7d", a.seven_day, a.seven_day_resets_at))))
+        .child(row("7d", a.seven_day, a.seven_day_resets_at))
+        .child(this.logins(t, a.id) ?? div())))
       .when(!accounts.length, (el) => el.child(div().text_color(t.dim).child("no usage data yet")));
   }
 
