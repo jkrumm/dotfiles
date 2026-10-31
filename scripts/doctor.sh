@@ -122,6 +122,23 @@ section_launchagents() {
   done
 }
 
+# --- herdr-core (both machines) ----------------------------------------------
+# The same grader the mini's heartbeat runs (scripts/lib/core-health.sh): launchd job
+# running, `hc server status` answers, managed install, version parity with the other
+# machine. It asks launchd before any `hc` call, because `hc` auto-starts a stray core.
+section_core() {
+  hdr "herdr-core"
+  # shellcheck source=lib/core-health.sh
+  source "$DOTFILES_DIR/scripts/lib/core-health.sh"
+  local msg rc=0
+  msg=$(core_health_check) || rc=$?
+  case "$rc" in
+    0) ok "herdr-core" "$msg" ;;
+    2) skip "herdr-core" "WARN: $msg" ;;
+    *) bad "herdr-core" "$msg" ;;
+  esac
+}
+
 # --- Architecture map (both machines) ----------------------------------------
 # Every launchd label loaded/on-disk on this machine must appear in
 # docs/architecture.md. The script itself already covers both machines (the
@@ -265,6 +282,7 @@ section_remote_path() {
     bad "agent forwarding" "$HOST-fwd: forwarded agent has no usable keys"
   fi
 
+  # TODO(Wave 7): drop classic — the two herdr checks below (the core is graded by section_core, here and on the mini).
   local running
   running=$(ssh "$HOST" 'herdr status --json 2>/dev/null' 2>/dev/null \
     | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("server",{}).get("running"))' 2>/dev/null)
@@ -363,6 +381,7 @@ section_tcc() {
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
+section_core
 section_tcc
 section_architecture
 section_jobs
