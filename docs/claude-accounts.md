@@ -403,7 +403,7 @@ mini|macbook` reaches the other one over ssh.
 ```
 claude-relogin me              # log in on this machine behind the scenes, approve in the browser, get a notification
 claude-relogin me --ask        # push an approval dialog to the MacBook; its one click starts the same thing
-claude-relogin me --visible    # debugging: a Terminal window / herdr workspace that stays open, no notification
+claude-relogin me --visible    # debugging: a Terminal window / herdr terminal that stays open, no notification
 claude-relogin me --dry-run    # print exactly what would run, run nothing
 ```
 
@@ -417,14 +417,23 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
      other session it goes straight to that Terminal path via osascript (`launchctl asuser` would need root). The log is
      owner-only (mode 600), redacted (`sk-ant-…`, `Bearer`, and the value of any `code`/`state`/`*token`/`*secret`
      key), and rotated by `log-rotate.sh`.
-   - *mini:* a herdr workspace `relogin <id>` runs the same command interactively. After success the watcher closes
-     that workspace (only the one it created) a few seconds later; a failed login leaves it open for the paste
-     fallback. The workspace id is read from the `herdr workspace create` response (`.result.workspace.workspace_id`).
+   - *mini:* a terminal in the mini's herdr-core runs the same command interactively: `hc run --bg --no-parent --rm
+     --name relogin-<id>` with labels `herdr.space=<the dotfiles space>` (rd's rule: the `herdr-app` doc entry for the
+     folder, else the stable id from the full root; an unreadable doc refuses rather than guesses) and `herdr.tab=tb-relogin-<id>`,
+     so the app shows it as the tab `relogin <id>` (named best-effort through the doc once the app has adopted it).
+     The core is a launchd GUI-session child, which is why the Keychain works (`ssh mini` is not enough). After success
+     the command exits and the terminal removes itself (`--rm`); the watcher sweeps it a few seconds later with `hc rm`
+     (never a live one). A failed login drops into `exec $SHELL -l` in that terminal, left open for the paste fallback;
+     `--visible` always keeps the shell. A second relogin for the account while its terminal is still open refuses and names
+     it (`hc kill relogin-<id>` closes it); a finished one is removed first. `launchctl print` checks the core runs before
+     any `hc` call (an `hc` call starts a stray core otherwise); with no core it falls back to the classic herdr workspace
+     `relogin <id>` (closed after success, `TODO(Wave 7): drop classic`). From the MacBook the hop is still one ssh to the
+     mini, where this script then talks to the local core.
    - *Waiting for the terminal:* the opener polls for a result file (`mktemp`, owner-checked, never a symlink) and for
-     the terminal's existence. A probe that could not ask (osascript or herdr failing, timing out, answering garbage)
+     the terminal's existence (`hc get`: not found or `finished` = gone). A probe that could not ask (osascript, hc or herdr failing, timing out, answering garbage)
      never counts as "closed": the terminal is gone only after 3 clean "absent" answers in a row, and that is
      reported by notification, never silently. After 60 minutes without a result it notifies "did not finish" and
-     leaves the window/workspace open.
+     leaves the window/terminal open.
 2. The CLI calls the helper with the authorize URL (redirect_uri `http://localhost:<port>/callback`, random port). The
    helper opens it in the browser signed in to that account, registry field `loginBrowser` (`iu` Google Chrome, `me`
    Helium; no field = the system default, and it says so). On the MacBook that is `open -a <app> <url>`. On the mini the
@@ -443,7 +452,7 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
    "Renewed" is proven: the Keychain item's `refresh_expires_at` is read before the login and again after it
    (`claude-account expiry --json --ids <id>`) and must be newer afterwards (or there was none before). A login that
    exits 0 without moving it is a failure with the text `login finished but the Keychain login did not change (still valid until
-   <date>)`, on the usual failure path: notification, and on the mini the workspace stays open (seen 2026-10-27: a
+   <date>)`, on the usual failure path: notification, and on the mini the terminal stays open (seen 2026-10-27: a
    "renewed" report while the reader still saw the old item).
 
 A registered but **disabled** account is accepted: its first login is how a new account comes out of the dark, and
@@ -557,7 +566,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 - **Per machine, per account:** the mini and the MacBook keep separate Keychain items, so every machine needs its own
   login for each account it uses (a pick on the MacBook for `me` needs `me` logged in there). Never copy credentials
   between machines or dirs. `claude-relogin <id> --machine mini|macbook` logs in on the machine that owns the credential.
-- **Where it runs:** in a GUI-session terminal on that machine (herdr workspace on the mini, Terminal on the MacBook);
+- **Where it runs:** in a GUI-session terminal on that machine (a herdr-core terminal on the mini, Terminal on the MacBook);
   the login Keychain is only reachable from the GUI session; never `ssh mini 'claude …'`. `claude-relogin` opens it.
 - **Browser:** the registry's `loginBrowser` names the app signed in to the account (`iu` Chrome, the work session; `me`
   Helium and `me2` Safari, the personal ones). It lives on the MacBook, so a login on the mini forwards the callback through a reverse ssh

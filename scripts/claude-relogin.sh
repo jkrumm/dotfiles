@@ -18,23 +18,27 @@
 #             ~/Library/Logs/claude-relogin.log. Only if that cannot complete (the callback never arrived within the
 #             idle watchdog, the Keychain is locked, any failure) it opens Terminal with the interactive login, and
 #             closes exactly that window after success.
-#   mini      a herdr workspace `relogin <id>` (the GUI session is needed) that is closed a few seconds after success,
-#             only that workspace; the outcome notification goes to the MacBook over ssh. A failed login leaves the
-#             workspace open for the paste fallback.
-#   --visible   today's behaviour for debugging: a Terminal window / herdr workspace that stays open, no worker, no
+#   mini      a terminal in the mini's herdr-core (`hc run`; the core is a launchd GUI-session child, so the Keychain
+#             works), labelled into the dotfiles space as the tab `relogin <id>`, no parent. After success it exits and
+#             removes itself a few seconds later, only that terminal; the outcome notification goes to the MacBook over
+#             ssh. A failed login drops into a shell there, left open for the paste fallback. Without a running core
+#             (checked through launchd first: an `hc` call would start a stray one) it falls back to a classic herdr
+#             workspace `relogin <id>`.
+#   --visible   today's behaviour for debugging: a Terminal window / herdr terminal that stays open, no worker, no
 #               notification.
 #
 #   (no flag)   from any machine: reach the owning machine and start the login there
 #   --ask       instead push a native approval dialog to the MacBook (scripts/ask-human.sh); its command is the
 #               line above, so one click starts the login. Never runs anything by itself.
 #   --dry-run   print exactly what would run, run nothing
-#   --in-pane / --worker / --watch <workspace> / --result-file <file>   internal
+#   --in-pane / --worker / --watch <hc:address|workspace> / --result-file <file>   internal
 #
 # Automating the login itself (driving the browser, reading the mail) is out of bounds: a human always approves.
 # Test seams: CLAUDE_RELOGIN_ASK_HUMAN, CLAUDE_RELOGIN_PANE_WAIT, CLAUDE_RELOGIN_LOG, CLAUDE_RELOGIN_POLL_S,
 # CLAUDE_RELOGIN_CLOSE_DELAY_S, CLAUDE_RELOGIN_BG_IDLE_S, CLAUDE_RELOGIN_MAX_WAIT_S, CLAUDE_RELOGIN_ABSENT_N,
 # CLAUDE_RELOGIN_TERM_GRACE_S, CLAUDE_RELOGIN_FOREGROUND (run the workers inline);
-# PATH stubs for ssh, herdr, osascript, claude, claude-account.
+# CLAUDE_RELOGIN_SPACE_DIR (the repo whose herdr space the tab joins; default ~/SourceRoot/dotfiles);
+# PATH stubs for ssh, hc, herdr, osascript, launchctl, claude, claude-account.
 set -u
 SELF="$(readlink -f "${BASH_SOURCE[0]}")" # ~/.local/bin/claude-relogin is a symlink into the checkout
 HERE="$(dirname "$SELF")"
@@ -72,7 +76,7 @@ while (( $# )); do
     --in-pane) in_pane=1 ;;
     --visible) visible=1 ;;
     --worker) worker=1 ;;
-    --watch) [[ $# -ge 2 ]] || die "--watch needs a workspace id"; watch_ws=$2; shift ;;
+    --watch) [[ $# -ge 2 ]] || die "--watch needs a terminal or workspace id"; watch_ws=$2; shift ;;
     --result-file) [[ $# -ge 2 ]] || die "--result-file needs a path"; result_file=$2; shift ;;
     -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $1" ;;
@@ -214,6 +218,69 @@ probe_workspace() { # <workspace id>
   out=$(herdr workspace list 2>/dev/null) || return 2
   jq -e '.result.workspaces | type == "array"' <<<"$out" >/dev/null 2>&1 || return 2
   jq -e --arg ws "$1" '[.result.workspaces[].workspace_id] | index($ws) != null' <<<"$out" >/dev/null 2>&1
+}
+# ── herdr-core (hc): the mini's login terminal ───────────────────────────────────────────────────
+CORE_LABEL=com.jkrumm.herdr-core
+SPACE_DIR="${CLAUDE_RELOGIN_SPACE_DIR:-$HOME/SourceRoot/dotfiles}"
+APP_DOC=herdr-app
+# True when hc exists and launchd has the core running. HC_SESSION names another core (a scratch one): its owner started it.
+# Never call hc otherwise: an hc call starts a stray core when none runs.
+hc_usable() {
+  command -v hc >/dev/null 2>&1 || return 1
+  [[ -n "${HC_SESSION:-}" ]] && return 0
+  launchctl print "gui/$(id -u)/$CORE_LABEL" 2>/dev/null | grep -q 'state = running'
+}
+sha12() { printf %s "$1" | shasum -a 256 | cut -c1-12; }
+# One JSON-RPC call over `hc connect`; prints the answer line. rc 1 when nothing usable came back.
+hc_rpc() { # <method> <params-json>
+  local req out
+  req=$(jq -nc --arg m "$1" --argjson p "$2" '{jsonrpc:"2.0",id:1,method:$m,params:$p}') || return 1
+  out=$(printf '%s\n' "$req" | bounded hc connect 2>/dev/null) || return 1
+  out=$(jq -c 'select(.id == 1)' <<<"$out" 2>/dev/null | head -1)
+  [[ -n "$out" ]] || return 1
+  printf '%s' "$out"
+}
+# The dotfiles space, rd's rule (remote-dev.sh hc_space_id): the herdr-app doc entry whose folder is the repo root, else the
+# stable id from the full root. Fails when the doc cannot be read: a space is never made up from a call that told nothing.
+hc_space_id() {
+  local root doc kind id
+  root=$(cd "$SPACE_DIR" 2>/dev/null && pwd -P) || root=$SPACE_DIR
+  doc=$(hc_rpc doc.get "$(jq -nc --arg n "$APP_DOC" '{name:$n}')") || return 1
+  kind=$(jq -r 'if .error then (.error.data.kind // "error") else empty end' <<<"$doc" 2>/dev/null)
+  [[ -z "$kind" || "$kind" == not_found ]] || return 1
+  id=$(jq -r --arg a "$SPACE_DIR" --arg b "$root" '((.result.value | objects | .spaces | arrays) // [])
+    | map(select(type == "object" and ((.folder // "") | . == $a or . == $b))) | .[0].id // empty' <<<"$doc" 2>/dev/null)
+  if [[ -n "$id" ]]; then printf %s "$id"; else printf 'sp-%s-%s' "$(basename "$root")" "$(sha12 "$root")"; fi
+}
+# Name the tab "relogin <id>" once the app has an entry for it (it adopts a labelled tab only after it saw the terminal),
+# compare-and-set on the doc, retried on a conflict. Best effort: the tab is numbered when this never lands.
+name_tab() { # <tab id> <name>
+  local i doc version value resp
+  for i in 1 2 3; do
+    doc=$(hc_rpc doc.get "$(jq -nc --arg n "$APP_DOC" '{name:$n}')") || return 0
+    jq -e '.error' <<<"$doc" >/dev/null 2>&1 && return 0
+    version=$(jq -r '.result.version // empty' <<<"$doc")
+    [[ -n "$version" ]] || return 0
+    value=$(jq -c --arg id "$1" --arg n "$2" '.result.value
+      | if type == "object" and ((.spaces | type) == "array")
+           and any(.spaces[] | objects | .tabs | arrays | .[] | objects; .id == $id and .name != $n)
+        then .spaces |= map(if type == "object" and ((.tabs | type) == "array")
+                             then .tabs |= map(if type == "object" and .id == $id then .name = $n else . end) else . end)
+        else empty end' <<<"$doc" 2>/dev/null)
+    [[ -n "$value" ]] || return 0
+    resp=$(hc_rpc doc.set "$(jq -nc --arg n "$APP_DOC" --argjson v "$value" --argjson ver "$version" '{name:$n,version:$ver,value:$v}')") || return 0
+    jq -e '.error.data.kind == "conflict"' <<<"$resp" >/dev/null 2>&1 || return 0
+  done
+  return 0
+}
+# hc terminal names: 1-32 of a-z 0-9 - _
+hc_term_name() { local n; n=$(printf 'relogin-%s' "$1" | tr '[:upper:]' '[:lower:]'); printf %s "${n:0:32}"; }
+probe_terminal() { # <address> — 0 live, 1 gone (not found or finished), 2 could not ask
+  local out rc=0
+  out=$(bounded hc get "$1" --json 2>/dev/null) || rc=$?
+  (( rc == 3 )) && return 1
+  (( rc == 0 )) || return 2
+  case "$(jq -r '.state // empty' <<<"$out" 2>/dev/null)" in live) return 0 ;; finished) return 1 ;; *) return 2 ;; esac
 }
 # A private empty file (mktemp: unpredictable name, mode 600, ours). Content counts only if it is a regular file we own.
 new_result_file() { mktemp "${TMPDIR:-/tmp}/claude-relogin-result.XXXXXX"; }
@@ -417,45 +484,60 @@ worker_macbook() {
   return 1
 }
 
-# ── mini watcher: closes the workspace we created after success, notifies the MacBook ───────────
-watcher_mini() { # <workspace id> <result file>
-  local ws=$1 resf=$2 res d
+# ── mini watcher: closes the terminal/workspace we created after success, notifies the MacBook ─
+# <target> is `hc:<address>` (a terminal in the mini's core) or a classic herdr workspace id.
+watcher_mini() { # <target> <result file>
+  local target=$1 resf=$2 res d what arc=0 probe=(probe_workspace "$1")
+  what="login workspace"
+  if [[ "$target" == hc:* ]]; then what="login terminal"; probe=(probe_terminal "${target#hc:}"); fi
   if (( dry )); then
-    echo "would start detached: bash $(login_shquote "$SELF") $id --machine mini --watch <workspace> --result-file <result file>"
-    echo "  on success: wait ${CLOSE_DELAY_S}s, then:"
-    step herdr workspace close "<the workspace created above>"
+    echo "would start detached: bash $(login_shquote "$SELF") $id --machine mini --watch <hc:address or workspace> --result-file <result file>"
+    if [[ "$target" == hc:* ]]; then
+      echo "  on success: wait ${CLOSE_DELAY_S}s, then (the terminal has exited and removed itself; this only sweeps it):"
+      step hc rm "<the terminal created above>"
+    else
+      echo "  on success: wait ${CLOSE_DELAY_S}s, then:"
+      step herdr workspace close "<the workspace created above>" # TODO(Wave 7): drop classic
+    fi
     notify "$(ok_text "<date>")"
-    echo "  on failure (the workspace stays open for the paste fallback):"
+    echo "  on failure (the terminal stays open, in a shell, for the paste fallback):"
     notify "$(fail_text)"
     return 0
   fi
-  local arc=0
-  res=$(await_result "$resf" probe_workspace "$ws") || arc=$?
+  if [[ "$target" == hc:* ]]; then
+    name_tab "tb-relogin-$id" "relogin $id" # TODO(Wave 7): the classic path below has no tab to name
+  fi
+  res=$(await_result "$resf" "${probe[@]}") || arc=$?
   rm -f "$resf"
   if (( arc == 1 )); then
-    stamp "workspace $ws was closed before the login finished" >>"$RELOGIN_LOG"
-    notify "$(gone_text "login workspace")"
+    stamp "$what $target was closed before the login finished" >>"$RELOGIN_LOG"
+    notify "$(gone_text "$what")"
     return 1
   elif (( arc != 0 )); then
-    stamp "no result within ${MAX_WAIT_S}s; workspace $ws is left open" >>"$RELOGIN_LOG"
-    notify "$(timeout_text "login workspace")"
+    stamp "no result within ${MAX_WAIT_S}s; $what $target is left open" >>"$RELOGIN_LOG"
+    notify "$(timeout_text "$what")"
     return 1
   fi
   if is_ok "$res"; then
     d=${res#ok}; d=${d# }
     sleep "$CLOSE_DELAY_S"
-    herdr workspace close "$ws" >/dev/null 2>&1 || stamp "could not close workspace $ws" >&2
+    if [[ "$target" == hc:* ]]; then
+      # a clean exit removes the terminal by itself (--rm); this sweeps one that is merely finished. Never a live one.
+      bounded hc rm "${target#hc:}" >/dev/null 2>&1 || true
+    else
+      herdr workspace close "$target" >/dev/null 2>&1 || stamp "could not close workspace $target" >&2 # TODO(Wave 7): drop classic
+    fi
     stamp "login '$id' renewed, valid until ${d:-unknown}" >>"$RELOGIN_LOG"
     notify "$(ok_text "$d")"
     return 0
   fi
   if is_unchanged "$res"; then
     d=${res#unchanged}; d=${d# }
-    stamp "$(unchanged_text "$d"); workspace $ws stays open" >>"$RELOGIN_LOG"
+    stamp "$(unchanged_text "$d"); $what $target stays open" >>"$RELOGIN_LOG"
     notify "$(unchanged_text "$d")"
     return 1
   fi
-  stamp "login '$id' failed ($res); workspace $ws stays open" >>"$RELOGIN_LOG"
+  stamp "login '$id' failed ($res); $what $target stays open" >>"$RELOGIN_LOG"
   notify "$(fail_text)"
   return 1
 }
@@ -467,6 +549,7 @@ if (( worker )); then
 fi
 if [[ -n "$watch_ws" ]]; then
   [[ "$machine" == mini && "$here" == mini && -n "$result_file" ]] || die "--watch runs on the mini with --result-file"
+  [[ "$watch_ws" =~ ^(hc:t[0-9a-z]+|[A-Za-z0-9_-]+)$ ]] || die "bad --watch target '$watch_ws'"
   watcher_mini "$watch_ws" "$result_file"
   exit $?
 fi
@@ -495,14 +578,51 @@ if [[ "$visible" != 1 ]]; then
 fi
 inner="bash $(login_shquote "$SELF") $id --machine $machine --in-pane$result_arg"
 if [[ "$machine" == mini ]]; then
-  # herdr workspace in the GUI session (rd does the same); the shell needs a moment before it takes input
+  # The mini's herdr-core (a launchd GUI-session child: the Keychain works). No core running: the classic workspace.
+  tab="tb-relogin-$id"; tname=$(hc_term_name "$id")
+  # The login, then: success exits (the terminal removes itself), failure drops into a shell for the paste fallback;
+  # --visible always keeps the shell. The shell is an exec, so the terminal stays live (and "present" to the watcher).
+  keep_shell='exec "${SHELL:-/bin/zsh}" -l'
+  if [[ "$visible" == 1 ]]; then hc_cmd="$inner; $keep_shell"
+  else hc_cmd="$inner; rc=\$?; if [ \"\$rc\" -ne 0 ]; then $keep_shell; fi; exit \"\$rc\""; fi
+  build_hc_args() { # <space id> — builds hc_args; no --rm for --visible
+    hc_args=(run --bg --json --no-parent --no-notify --name "$tname" --cwd "$HOME" --label "herdr.space=$1" --label "herdr.tab=$tab")
+    [[ "$visible" == 1 ]] || hc_args+=(--rm)
+  }
   if (( dry )); then
+    if hc_usable; then
+      build_hc_args "<the dotfiles space>"; step hc "${hc_args[@]}" "$hc_cmd"
+      echo "then, in that terminal:"; bash "$SELF" "$id" --machine "$machine" --in-pane --dry-run
+      [[ "$visible" == 1 ]] || watcher_mini "hc:<address>" "<result file>"
+      exit 0
+    fi
+    # TODO(Wave 7): drop classic
     step herdr workspace create --cwd "$HOME" --label "relogin $id" --focus
     step herdr pane run "<pane of that workspace>" "$inner"
     echo "then, in that pane:"; bash "$SELF" "$id" --machine "$machine" --in-pane --dry-run
     [[ "$visible" == 1 ]] || watcher_mini "<workspace>" "<result file>"
     exit 0
   fi
+  if hc_usable; then
+    # A login terminal of this account that is still around (a failed one left at its shell, or one being approved): not ours
+    # to replace silently, and hc refuses a second terminal of the same name anyway.
+    if existing=$(bounded hc get "$tname" --json 2>/dev/null); then
+      case "$(jq -r '.state // empty' <<<"$existing" 2>/dev/null)" in
+        finished) bounded hc rm "$tname" >/dev/null 2>&1 ;;
+        *) die "a login terminal for '$id' is still open on the mini ($(jq -r '.address // "?"' <<<"$existing")): finish it there, or close it with  hc kill $tname" ;;
+      esac
+    fi
+    space=$(hc_space_id) || die "could not read the herdr-app document from the mini's core - refusing to guess the dotfiles space"
+    build_hc_args "$space"
+    json=$(bounded hc "${hc_args[@]}" "$hc_cmd") || die "hc run failed: ${json:-no output}"
+    addr=$(jq -r '.address // empty' <<<"$json" 2>/dev/null)
+    [[ "$addr" =~ ^t[0-9a-z]+$ ]] || die "hc run gave no terminal address: $json"
+    wrc=0
+    [[ "$visible" == 1 ]] || spawn_worker "$id" --machine mini --watch "hc:$addr" --result-file "$result_file" || wrc=$?
+    echo "claude-relogin: login terminal '$tname' ($addr) opened on the mini; approve in ${app:-your browser}"
+    exit "$wrc"
+  fi
+  # TODO(Wave 7): drop classic
   json=$(herdr workspace create --cwd "$HOME" --label "relogin $id" --focus) || die "herdr workspace create failed"
   pane=$(printf '%s' "$json" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
   # the workspace we created, and the only one the watcher may close: from the response (as remote-dev.sh reads it),
