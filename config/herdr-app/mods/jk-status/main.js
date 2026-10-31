@@ -75,7 +75,7 @@ export default class JkStatus extends View {
   }
 
   details(props) {
-    openOverlay({ mod: "jk-details", kind: "popup", width: 400, height: 540, props });
+    openOverlay({ mod: "jk-details", kind: "popup", width: 400, height: props.kind === "usage" ? 290 : 540, props });
   }
 
   machine(t, name, stats) {

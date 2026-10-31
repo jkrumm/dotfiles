@@ -1,7 +1,8 @@
 // jk-spaces — derived from Herdr's shipped `spaces` mod (herdr-app, Apache-2.0).
 // Changes: spaces sit in folders taken from dotfiles' config/herdr/groups.json (the
 // taxonomy classic herdr's sidebar uses too), folders fold and still flag a space
-// that needs you, avatars take their folder's color, rows carry the agent-status dot.
+// that needs you, the avatar shows the space's agent status instead of a color, no
+// git tail after the name, tighter rows.
 //
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
@@ -30,16 +31,13 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 28 : 30);
+const rowHeight = ({ tree }) => (tree ? 24 : 26);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
 
-// What a stored color name looks like on an avatar (the same in every mod
-// that draws space avatars): one strong color per hue, light and dark alike.
-const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
 // Folders: groups.json's groups in order, each a hue from the theme; a space joins the
 // group naming its repo (worktrees follow their repo), the rest land in the fallback.
@@ -176,7 +174,7 @@ export default class Spaces extends View {
       const key = `${m ?? ""}/${label}`;
       const folded = this.foldersFolded.has(key);
       const urgent = rows.find((r) => URGENT(r.w.status))?.w.status;
-      const head = h_flex().id(`folder-${key}`).h(24).mt(6).flex_none().px(8).gap(7).items_center().rounded(6)
+      const head = h_flex().id(`folder-${key}`).h(20).mt(4).flex_none().px(8).gap(7).items_center().rounded(6)
         .text_size(10.5).font_bold().text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => {
           folded ? this.foldersFolded.delete(key) : this.foldersFolded.add(key);
@@ -188,7 +186,7 @@ export default class Spaces extends View {
         .when(folded && Boolean(urgent), (el) => el.child(div().flex_none().text_color(tone(t, urgent)).child("●")))
         .child(div().flex_none().child(String(rows.length)))
         .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none());
-      return [head, ...(folded ? [] : rows.map((r) => draw(r, hue)))];
+      return [head, ...(folded ? [] : rows.map((r) => draw(r)))];
     });
   }
 
@@ -298,7 +296,7 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   grouped(t, collapsed) {
     const rows = this.ordered();
-    const draw = (r, hue) => (collapsed ? this.compact(r, t) : this.row(r, t, hue));
+    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
       const layout = machines().find(k => k.name === m)?.layout;
@@ -335,33 +333,12 @@ export default class Spaces extends View {
     });
   }
 
-  // Only what's unusual, after the name: "herdr \u00b7 spike \u21912 \u21931". The repo or
-  // branch goes when the name already says it (a worktree is named after its branch),
-  // and master/main go: nearly every space is on one.
-  gitTail(g, tree, name, t) {
-    const raw = g.branch ?? "detached";
-    const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = same(raw) || raw === "master" || raw === "main" ? "" : raw;
-    const repo = tree || same(g.name) ? "" : g.name;
-    const where = [repo, branch].filter(Boolean).join(" \u00b7 ");
-    return h_flex()
-      .flex_1()
-      .min_w(0)
-      .gap(5)
-      .justify_end()
-      .items_center()
-      .text_size(11.5)
-      .text_color(t.dim)
-      .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().child(where)))
-      .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.ansi2).child(`\u2191${g.ahead}`)))
-      .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
-  }
-
-  row({ w, i, g, tree }, t, hue) {
+  row({ w, i, g, tree }, t) {
     const on = w.active;
-    const colors = shared("space.colors") ?? {};
-    const color = hue ?? colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (t[color] ?? MARK[color]);
+    // The avatar is the space's agent status: filled while an agent works, needs you or
+    // just finished; a quiet tile otherwise. The folder header carries the color.
+    const live = w.status && w.status !== "idle";
+    const fill = live ? tone(t, w.status) : t.raised;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -405,10 +382,9 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color(live ? "#ffffff" : t.muted).child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(Boolean(w.status) && w.status !== "idle", (el) => el.child(div().flex_none().text_size(10).text_color(tone(t, w.status)).child(glyph(w.status)))),
+          .child(div().flex_1()),
       );
   }
 
