@@ -790,7 +790,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2536,6 +2536,17 @@ herdr-core-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
 	"$(HOME)/.local/bin/hc" server status --json
 
+.PHONY: tcc-check tcc-check-test tcc-probe
+tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
+	@bash $(DOTFILES_DIR)/scripts/tcc-check.sh
+tcc-probe: ## Live proof that a core terminal reaches Documents/Desktop/Downloads (raises the dialog if the launcher has no grant)
+	@out=$$(hc run --timeout 15 'ls ~/Documents ~/Desktop ~/Downloads >/dev/null && echo FDA_O""K' 2>&1); \
+	case "$$out" in *FDA_OK*) echo "  ✓ a core terminal reaches the protected folders (a Full Disk Access grant holds)";; \
+	*) echo "  ✗ blocked or failed: $$out"; echo "    grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md), then dismiss the dialog on the screen"; exit 1;; esac
+tcc-check-test: ## Hermetic test for tcc-check
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh
+	@bash $(DOTFILES_DIR)/scripts/tcc-check.test.sh
+
 # Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old, via the tap formula.
 herdr-core-update-setup:
 	@chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"; \
@@ -3689,6 +3700,7 @@ help:
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
 	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent via the FDA-holding launcher (both machines, clean env)"
+	@echo "  make tcc-check                  flag LaunchAgent programs without a durable file-access grant (docs/tcc.md; in make doctor)"
 	@echo "  make herdr-core-update-check    preview the daily core update (herdr-core-update runs it now)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"

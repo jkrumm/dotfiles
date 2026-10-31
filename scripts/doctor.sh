@@ -339,9 +339,21 @@ section_jobs() {
   esac
 }
 
+# TCC: a LaunchAgent program that is ad-hoc signed or on a versioned path loses its file-access grant on every
+# upgrade (docs/tcc.md). Static and read-only; the check itself lives in scripts/tcc-check.sh.
+section_tcc() {
+  hdr "TCC (durable file-access grants)"
+  local out rc=0
+  out=$(bash "$DOTFILES_DIR/scripts/tcc-check.sh" 2>&1) || rc=$?
+  if [ "$rc" -eq 0 ]; then ok "tcc" "$(printf '%s' "$out" | sed 's/^ *✓ tcc: //')"; return; fi
+  printf '%s\n' "$out" | sed 's/^/    /'
+  bad "tcc" "unclassified LaunchAgent program(s) above (docs/tcc.md)"
+}
+
 # --- Run -----------------------------------------------------------------------
 
 section_launchagents
+section_tcc
 section_architecture
 section_jobs
 section_brew

@@ -1,0 +1,19 @@
+{
+  "_doc": "LaunchAgents whose program is ad-hoc signed or sits on a versioned path, and why that is fine. docs/tcc.md. A label not listed here makes `make tcc-check` fail. class: launcher = file access is covered by herdr-core-launcher's Full Disk Access; no-grant = the job touches no TCC-protected folder (Desktop, Documents, Downloads, iCloud, other apps' data).",
+  "programs": {
+    "com.jkrumm.herdr-core": { "class": "launcher", "why": "program is herdr-core-launcher, which holds the Full Disk Access grant; the core is its child" },
+    "com.iu.athena-postgres": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
+    "sh.brew.postgresql@18": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
+    "com.iu.prometheus-dashboard-autodeploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },
+    "com.iu.teamchat-runtime-deploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },
+    "com.iu.prometheus-vpn-watcher": { "class": "no-grant", "why": "uv python; touches the VPN client and ~/IuRoot only" },
+    "com.jkrumm.modelpick-web": { "class": "no-grant", "why": "bun in a Cellar path; serves from ~/SourceRoot" },
+    "com.jkrumm.weatherorb.serve": { "class": "no-grant", "why": "ad-hoc built openmeteo-api; data under ~/SourceRoot/weatherorb" },
+    "com.jkrumm.weatherorb.watchdog": { "class": "no-grant", "why": "uv in a Cellar path; ~/SourceRoot only" },
+    "com.jkrumm.weatherorb.worker-ingest": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
+    "com.jkrumm.weatherorb.worker-round": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
+    "herdr.collie": { "class": "no-grant", "why": "classic herdr plugin binary, retires with Wave 7" },
+    "homebrew.mxcl.sleepwatcher": { "class": "no-grant", "why": "runs ~/.sleep and ~/.wakeup, which touch nothing protected" },
+    "homebrew.mxcl.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
+  }
+}
