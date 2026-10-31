@@ -2,8 +2,8 @@
 # claude-launcher.test.sh — regression harness for the `claude` shell function and the account
 # marker contract (config/zsh/claude-auth.zsh + claude.zsh, remote-dev.sh pick_account + the hc spawn env).
 #
-# Hermetic: HOME/XDG_CONFIG_HOME are scratch dirs, `claude`, `claude-account`, `secrets-run` and
-# `herdr`, `launchctl` and (for rd) a fake `hc` are stubs. The stub `claude-account pick` appends one line per call to a pick
+# Hermetic: HOME/XDG_CONFIG_HOME are scratch dirs, `claude`, `claude-account`, `secrets-run`,
+# `launchctl` and (for rd) a fake `hc` are stubs. The stub `claude-account pick` appends one line per call to a pick
 # log, so "one pick-log line per spawn" is counted, not argued. Never starts a real agent.
 #
 # Usage: scripts/claude-launcher.test.sh   (exit 0 = all pass)
@@ -61,21 +61,13 @@ cat > "$TMP/bin/secrets-run" <<'EOF'
 #!/usr/bin/env bash
 echo "stub-token"
 EOF
-cat > "$TMP/bin/herdr" <<'EOF'
-#!/usr/bin/env bash
-# `herdr pane run <pane> <cmd…>`: record the command as the pane's startup lines;
-# `herdr … create --env K=V …`: record the spawn-time env
-[[ ${1-} == pane && ${2-} == run ]] && { shift 3; echo "$*" >> "$STUB_PANE"; }
-while (( $# )); do [[ $1 == --env ]] && echo "$2" >> "$STUB_ENVS"; shift; done
-exit 0
-EOF
 chmod +x "$TMP/bin/"*
 
 # The harness may itself run inside a picked session: scrub everything the contract reads.
 unset CLAUDE_CONFIG_DIR CLAUDE_ACCOUNT_PICKED CLAUDE_ACCOUNT_REASON USAGE_LANE CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
-export STUB_PICKS="$PICKS" STUB_CALLS="$CALLS" STUB_PANE="$TMP/pane.rc" STUB_ENVS="$TMP/pane.env"
+export STUB_PICKS="$PICKS" STUB_CALLS="$CALLS"
 
-reset() { : > "$PICKS"; : > "$CALLS"; : > "$STUB_PANE"; : > "$STUB_ENVS"; }
+reset() { : > "$PICKS"; : > "$CALLS"; }
 picks() { wc -l < "$PICKS" | tr -d ' '; }
 # Run a snippet in a scratch zsh. $1 = interactive|plain, $2 = snippet; extra env via the caller's `env`-style prefix.
 zrun() {
@@ -219,8 +211,7 @@ printf '#!/usr/bin/env python3\n' > "$S/dotfiles/scripts/wave-gate.py"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' > "$TMP/bin/launchctl"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/bin/herdr"
-chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc" "$TMP/bin/launchctl" "$TMP/bin/herdr"
+chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc" "$TMP/bin/launchctl"
 rd_spawn() { # $1 = pick line, $2 = id
   reset
   rm -rf "${HCSTATE:?}"/*; echo '[]' > "$HCSTATE/terminals.json"
