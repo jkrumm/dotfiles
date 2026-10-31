@@ -71,7 +71,7 @@ secret=$(cat "$STATE_DIR/local-secret" 2>/dev/null || true)
 if [ -z "$secret" ]; then
   bad "no local credential at $STATE_DIR/local-secret — cannot read the snapshot"
 else
-  snap=$(curl -s --max-time 10 -H "Authorization: Bearer $secret" "$BASE/api/snapshot" 2>/dev/null || true)
+  snap=$(printf 'Authorization: Bearer %s\n' "$secret" | curl -s --max-time 10 -H @- "$BASE/api/snapshot" 2>/dev/null || true)
   link=$(printf '%s' "$snap" | jq -r '.bridge // empty' 2>/dev/null)
   if [ "$link" = "connected" ]; then
     n=$(printf '%s' "$snap" | jq '(.agents | length) + (.shellPanes | length)')
@@ -86,7 +86,7 @@ if [ "${COLLIE_CHECK_WRITE:-}" = "1" ]; then
   : "${COLLIE_CHECK_PANE:?COLLIE_CHECK_PANE (a terminal address) required with COLLIE_CHECK_WRITE=1}"
   : "${COLLIE_CHECK_PAIRED_TOKEN:?COLLIE_CHECK_PAIRED_TOKEN required with COLLIE_CHECK_WRITE=1}"
   pane="$COLLIE_CHECK_PANE"
-  screen=$(curl -s --max-time 10 -H "Authorization: Bearer $secret" "$BASE/api/pane/$pane" | jq -r '.text // empty')
+  screen=$(printf 'Authorization: Bearer %s\n' "$secret" | curl -s --max-time 10 -H @- "$BASE/api/pane/$pane" | jq -r '.text // empty')
   if [ -n "$screen" ]; then ok "read $pane: $(printf '%s' "$screen" | tail -1 | cut -c1-60)"; else bad "could not read $pane through the bridge"; fi
   sent=$(curl -s --max-time 10 -X POST -H "Authorization: Bearer $COLLIE_CHECK_PAIRED_TOKEN" -H 'Content-Type: application/json' \
     -d "{\"keys\":[\"${COLLIE_CHECK_KEYS:-q}\"]}" "$BASE/api/pane/$pane/keys" | jq -r '.ok // empty')

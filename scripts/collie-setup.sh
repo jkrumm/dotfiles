@@ -253,7 +253,8 @@ cmd_setup() {
   PREV_ROOT=""
   activate "$root"
   if ! COLLIE_PORT="$PORT" COLLIE_EXPECT_VERSION="$COLLIE_VERSION+${COLLIE_REF:0:10}" bash "$DOTFILES_DIR/scripts/collie-check.sh"; then
-    echo "  ✗ behavioural check failed — do not leave the front door published" >&2
+    echo "  ✗ behavioural check failed — stopping the bridge so the front door proxies to nothing" >&2
+    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     echo "    log: $LOG" >&2
     exit 1
   fi
@@ -322,6 +323,7 @@ cmd_pair() {
 cmd_teardown() {
   local l f
   for l in "$LABEL" "$LEGACY_LABEL"; do
+    [ "$l" = "$LEGACY_LABEL" ] && [ "${COLLIE_LEGACY_MIGRATE:-1}" = "0" ] && continue
     f="$AGENT_DIR/$l.plist"
     if loaded "$l"; then
       launchctl bootout "$DOMAIN/$l" 2>/dev/null || true
@@ -329,7 +331,7 @@ cmd_teardown() {
     fi
     [ -f "$f" ] && { rm -f "$f"; echo "  ✓ $l plist removed"; }
   done
-  legacy_plugin_uninstall
+  [ "${COLLIE_LEGACY_MIGRATE:-1}" = "0" ] || legacy_plugin_uninstall
   rm -rf "$HOME_DIR"
   echo "  ✓ checkouts removed ($HOME_DIR)"
   echo "  · $CONFIG_DIR (.env) and the bridge's state dir (paired devices) left in place"

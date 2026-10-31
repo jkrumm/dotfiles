@@ -131,8 +131,10 @@ def active_wave(root: str) -> bool:
     try:
         with open(os.path.join(root, "docs/waves/PLAN.md")) as f:
             return any(ACTIVE_RE.search(line) for line in f)
-    except OSError:
+    except FileNotFoundError:
         return False
+    except OSError:
+        return True  # unreadable plan: unknown, so the terminal stays
 
 
 TS_RE = re.compile(rb'"timestamp":"(\d{4}-\d\d-\d\dT[\d:.]+Z)"')

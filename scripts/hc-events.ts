@@ -146,7 +146,8 @@ export async function run(deps: Deps): Promise<void> {
       buf ??= it.next()
       let timer: ReturnType<typeof setTimeout> | undefined
       const idle = new Promise<Next>((res) => { timer = setTimeout(() => res("idle"), idleMs) })
-      const got = await Promise.race([buf, idle])
+      let got: Next
+      try { got = await Promise.race([buf, idle]) } catch { clearTimeout(timer); ended = "read error"; break }
       clearTimeout(timer)
       if (got === "idle") { ended = "idle"; break }
       buf = null
