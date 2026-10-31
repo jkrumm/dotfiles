@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude-relogin.test.sh — hermetic suite for claude-relogin.sh, claude-login-browser.sh and lib/claude-login.sh.
-# ssh, open, hc, herdr, osascript, claude, claude-account, launchctl, lsof and ask-human are PATH stubs that only record their
+# ssh, open, hc, osascript, claude, claude-account, launchctl, lsof and ask-human are PATH stubs that only record their
 # argv: no real browser, tunnel, dialog or login ever happens. A scratch HOME, registry and machine marker.
 # Usage: scripts/claude-relogin.test.sh   (exit 0 = all pass)
 set -u
@@ -58,25 +58,6 @@ esac
 printf 'osascript:%s' "$kind" >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
 STUB
 chmod +x "$TMP/bin/osascript"
-cat > "$TMP/bin/herdr" <<'STUB'
-#!/bin/bash
-printf 'herdr' >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"
-case "$1 $2" in
-  "workspace create") case "${STUB_CREATE:-ok}" in
-      noworkspace) echo '{"result":{"root_pane":{"pane_id":"w9:1"}}}' ;;
-      *) echo "{\"result\":{\"workspace\":{\"workspace_id\":\"${STUB_WS_ID:-w9}\"},\"root_pane\":{\"pane_id\":\"w9:1\"}}}" ;;
-    esac ;;
-  "workspace list") case "${STUB_WS_LIST:-ok}" in
-      fail) printf 'herdr:list-error\n' >> "$LOG"; exit 1 ;;
-      garbage) echo "not json" ;;
-      gone) echo '{"result":{"workspaces":[{"workspace_id":"w1F"}]}}' ;;
-      *) echo "{\"result\":{\"workspaces\":[{\"workspace_id\":\"w1F\"},{\"workspace_id\":\"${STUB_WS_ID:-w9}\"}]}}" ;;
-    esac ;;
-  "pane run") # play the login that would run in the pane: write its result file
-    if [ -n "${STUB_PANE_RESULT:-}" ]; then f=$(printf '%s' "$4" | sed -nE "s/.*--result-file '([^']*)'.*/\1/p"); [ -z "$f" ] || echo "$STUB_PANE_RESULT" > "$f"; fi ;;
-esac
-STUB
-chmod +x "$TMP/bin/herdr"
 # The mini's core. connect: doc.get answers STUB_DOC_VALUE (JSON, default null), doc.set is recorded and accepted; run plays the
 # login that would run in the terminal (STUB_PANE_RESULT -> its result file) and answers STUB_HC_ADDR; get answers by name:
 # `relogin-*` is the pre-start check (STUB_HC_EXISTING: live|finished, default not found), anything else the watcher's probe
@@ -121,18 +102,18 @@ mk claude-account 'case "$1 $2" in
     echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":$ms},{\"id\":\"iu\",\"refresh_expires_at\":$ms}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
-# `launchctl print …herdr-core` says whether the mini's core runs (STUB_CORE=running; default down: the classic workspace path);
+# `launchctl print …herdr-core` says whether the mini's core runs (default running; STUB_CORE="not running" for none);
 # anything else is `managername`
-mk launchctl 'case "$1" in print) echo "state = ${STUB_CORE:-not running}" ;; *) echo "${STUB_SESSION:-Aqua}" ;; esac'
+mk launchctl 'case "$1" in print) echo "state = ${STUB_CORE:-running}" ;; *) echo "${STUB_SESSION:-Aqua}" ;; esac'
 mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
 mkdir -p "$TMP/space-repo"; export CLAUDE_RELOGIN_SPACE_DIR="$TMP/space-repo"
-export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_RELOGIN_PANE_WAIT=0 CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
+export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
 # workers run inline (never a stray detached process), no waits, a scratch log
 export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
-# Safety net: every external command the scripts reach must be one of our stubs, never the real herdr/ssh/claude.
-for c in ssh open hc herdr osascript claude claude-account launchctl; do
+# Safety net: every external command the scripts reach must be one of our stubs, never the real hc/ssh/claude.
+for c in ssh open hc osascript claude claude-account launchctl; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
@@ -277,12 +258,12 @@ assert_contains "MacBook: dialog shown locally" "hm=local" "$(calls)"
 assert_contains "MacBook: command for the macbook" "iu --machine macbook]" "$(calls)"
 assert_contains "iu text names Chrome" "Google Chrome" "$(calls)"
 
-echo "relogin opens the login terminal (no core running: the classic herdr workspace)"
+echo "relogin opens the login terminal in the mini's core"
 as mini; reset
 bash "$RELOGIN" me --visible >/dev/null; rc=$?
 assert_eq "rc 0" 0 "$rc"
-assert_contains "herdr workspace in HOME" "herdr[workspace][create][--cwd][$HOME][--label][relogin me][--focus]" "$(calls)"
-assert_contains "typed into that pane: the --in-pane run" "herdr[pane][run][w9:1][bash '$HERE/claude-relogin.sh' me --machine mini --in-pane]" "$(calls)"
+assert_contains "hc run in HOME, named for the account" "hc[run][--bg][--json][--no-parent][--no-notify][--name][relogin-me][--cwd][$HOME]" "$(calls)"
+assert_contains "the --in-pane run is the terminal's command" "bash '$HERE/claude-relogin.sh' me --machine mini --in-pane; exec" "$(calls)"
 as macbook; reset
 bash "$RELOGIN" me --visible >/dev/null
 assert_contains "MacBook --visible: Terminal via osascript, command as argv" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
@@ -358,29 +339,6 @@ reset; bash "$RELOGIN" me --machine macbook --visible >/dev/null
 assert_contains "--visible: today's Terminal window, no result file" "osascript:open[-][bash '$HERE/claude-relogin.sh' me --machine macbook --in-pane]" "$(calls)"
 assert_eq "--visible: no notification, no close" "0/0" "$(count 'osascript:notify')/$(count 'osascript:close')"
 
-echo "mini: the workspace we created is closed after success; the outcome goes to the MacBook"
-as mini; reset
-STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null; rc=$?
-c=$(calls)
-assert_eq "rc 0" 0 "$rc"
-assert_contains "workspace created" "herdr[workspace][create][--cwd][$HOME][--label][relogin me][--focus]" "$c"
-assert_contains "pane run carries a result file" "herdr[pane][run][w9:1][bash '$HERE/claude-relogin.sh' me --machine mini --in-pane --result-file '" "$c"
-assert_eq "exactly one workspace closed" 1 "$(count 'herdr\[workspace\]\[close\]')"
-assert_contains "...the one created (w9), no other" "herdr[workspace][close][w9]" "$c"
-assert_contains "notification over ssh to the MacBook, text as quoted argv" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][osascript - 'Claude login me' 'Claude login me: renewed, valid until 2027-01-01']" "$c"
-reset; STUB_PANE_RESULT="fail 1" bash "$RELOGIN" me >/dev/null; rc=$?
-c=$(calls)
-assert_eq "failed login: rc 1, workspace stays open" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
-assert_contains "...failure notification to the MacBook" "Claude login me failed - retry with: claude-relogin me" "$c"
-reset; STUB_WS_LIST=gone bash "$RELOGIN" me >/dev/null; rc=$?
-c=$(calls)
-assert_eq "workspace closed by the user: nothing closed" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
-assert_contains "...and the owner is told, never silent" "Claude login me: the login workspace was closed before the login finished" "$c"
-reset; STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me --visible >/dev/null
-c=$(calls)
-assert_eq "--visible: nothing closed, no notification" "0/0" "$(count 'herdr\[workspace\]\[close\]')/$(count 'osascript - ')"
-assert_not_contains "--visible: no result file in the pane command" "--result-file" "$c"
-
 echo "a probe that could not ask never reads as closed"
 as macbook; reset
 STUB_LOGIN_RC=1 STUB_WIN_EXISTS=error bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
@@ -395,17 +353,6 @@ STUB_LOGIN_RC=1 STUB_WIN_SEQ_FILE="$TMP/seq" bash "$RELOGIN" me --machine macboo
 c=$(calls)
 assert_eq "absent, could-not-ask, absent, absent: only the last two are consecutive (4 probes)" 4 "$(count 'osascript:exists')"
 assert_contains "...then it concludes closed, and says so" "was closed before the login finished" "$c"
-as mini; reset
-STUB_WS_LIST=fail bash "$RELOGIN" me >/dev/null 2>&1
-c=$(calls)
-assert_eq "herdr list fails every time: workspace not closed" 0 "$(count 'herdr\[workspace\]\[close\]')"
-assert_not_contains "...never concluded as closed" "was closed before" "$c"
-assert_contains "...did-not-finish notification, workspace left open" "the login workspace is still open" "$c"
-reset; STUB_WS_LIST=garbage bash "$RELOGIN" me >/dev/null 2>&1
-assert_not_contains "herdr answering garbage is not 'gone'" "was closed before" "$(calls)"
-reset; STUB_PANE_RESULT="" bash "$RELOGIN" me >/dev/null 2>&1
-assert_contains "no result within the maximum wait, workspace still there: notified, not closed" "the login workspace is still open" "$(calls)"
-assert_eq "...nothing closed" 0 "$(count 'herdr\[workspace\]\[close\]')"
 as macbook; reset
 STUB_LOGIN_RC=1 bash "$RELOGIN" me --machine macbook >/dev/null 2>&1
 assert_contains "terminal present but no result within the maximum wait: notified" "the login window is still open" "$(calls)"
@@ -432,19 +379,7 @@ assert_contains "...Terminal via osascript instead" "osascript:open[-][bash '$HE
 assert_contains "...closed again and notified" "osascript:close[-][4242]" "$c"
 assert_contains "...the log says why" "not in the Aqua GUI session (Background)" "$(cat "$CLAUDE_RELOGIN_LOG")"
 
-echo "mini: workspace id comes from the create response"
-as mini; reset
-STUB_WS_ID=wZ9 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
-c=$(calls)
-assert_contains "the workspace_id field is what gets closed" "herdr[workspace][close][wZ9]" "$c"
-assert_eq "...exactly one close" 1 "$(count 'herdr\[workspace\]\[close\]')"
-reset; STUB_CREATE=noworkspace bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
-assert_eq "response without workspace_id: fails loudly (rc 2)" 2 "$rc"
-assert_contains "...says what was missing" "gave no pane or workspace id" "$(cat "$TMP/err")"
-assert_not_contains "...nothing typed into any pane" "pane][run" "$(calls)"
-
 echo "mini: the login runs in the mini's core (hc run), labelled into the dotfiles space"
-export STUB_CORE=running
 SPACE_ID="sp-space-repo-$(printf %s "$(cd "$TMP/space-repo" && pwd -P)" | shasum -a 256 | cut -c1-12)"
 as mini; reset
 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null; rc=$?
@@ -452,7 +387,6 @@ c=$(calls)
 assert_eq "rc 0" 0 "$rc"
 assert_contains "hc run: background, no parent, named, labelled into the space and tab, removed on exit" "hc[run][--bg][--json][--no-parent][--no-notify][--name][relogin-me][--cwd][$HOME][--label][herdr.space=$SPACE_ID][--label][herdr.tab=tb-relogin-me][--rm][bash '$HERE/claude-relogin.sh' me --machine mini --in-pane --result-file '" "$c"
 assert_contains "...a failed login drops into a shell, a clean one exits" 'if [ "$rc" -ne 0 ]; then exec "${SHELL:-/bin/zsh}" -l; fi; exit "$rc"' "$c"
-assert_not_contains "no classic herdr call" "herdr[" "$c"
 assert_eq "the herdr-app doc is read for the space, then once more to name the tab (no entry yet: no write)" "2/0" "$(count 'rpc:doc.get')/$(count 'rpc:doc.set')"
 assert_contains "terminal swept after success: hc rm of the address it created, no other" "hc[rm][t9]" "$c"
 assert_eq "...exactly one rm" 1 "$(count 'hc\[rm\]')"
@@ -502,11 +436,12 @@ reset; STUB_HC_RUN=fail bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
 assert_eq "hc run fails: rc 2, no watcher notification" "2/0" "$rc/$(count 'osascript - ')"
 reset; STUB_HC_ADDR='t9; rm -rf /' bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
 assert_eq "a malformed address is never passed on (rc 2)" 2 "$rc"
-STUB_CORE="not running"; reset
-STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
-assert_not_contains "core not running per launchd: hc is never called (it would start a stray core)" "hc[" "$(calls)"
-assert_contains "...the classic workspace instead" "herdr[workspace][create]" "$(calls)"
-STUB_CORE=running
+export STUB_CORE="not running"; reset
+STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "core not running per launchd: refuses (rc 2)" 2 "$rc"
+assert_not_contains "...hc is never called (it would start a stray core)" "hc[" "$(calls)"
+assert_contains "...says how to start the core" "herdr-core is not running on the mini" "$(cat "$TMP/err")"
+unset STUB_CORE
 as mini; reset
 CLAUDE_RELOGIN_FOREGROUND=0 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
 for _ in $(seq 1 20); do grep -q "hc\[rm\]" "$LOG" && break; sleep 1; done
@@ -516,7 +451,6 @@ assert_eq "core dry run: nothing called" "" "$(calls)"
 assert_contains "core dry run: the hc run step, labelled" "'hc' 'run' '--bg'" "$out"
 assert_contains "core dry run: space label placeholder" "herdr.space=<the dotfiles space>" "$out"
 assert_contains "core dry run: sweep" "'hc' 'rm'" "$out"
-unset STUB_CORE
 
 echo "idle watchdog: per-run output, SIGKILL after the grace period"
 as macbook; reset; : > "$CLAUDE_RELOGIN_LOG"; rm -f "$TMP/claude.pid"
@@ -549,9 +483,6 @@ assert_eq "...worker output went to the owner-only log, not the caller's stdout"
 assert_not_contains "...caller's stdout stays clean" "background login for" "$out"
 as mini; reset
 CLAUDE_RELOGIN_FOREGROUND=0 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null; rc=$?
-for _ in $(seq 1 20); do grep -q "herdr\[workspace\]\[close\]" "$LOG" && break; sleep 1; done
-assert_contains "detached watcher closes the workspace it created" "herdr[workspace][close][w9]" "$(calls)"
-
 echo "in-pane result file"
 as mini; reset; rf="$TMP/result-ok"; rm -f "$rf"
 bash "$RELOGIN" me --machine mini --in-pane --result-file "$rf" >/dev/null
@@ -601,14 +532,6 @@ c=$(calls)
 assert_eq "Terminal fallback that changed nothing: rc 1, window stays open" "1/0" "$rc/$(count 'osascript:close')"
 assert_contains "...with the unchanged notification" "osascript:notify[-][Claude login me][$UNCH]" "$c"
 
-echo "mini: an unchanged login keeps the workspace open and tells the MacBook"
-as mini; reset
-STUB_PANE_RESULT="unchanged $D0" bash "$RELOGIN" me >/dev/null; rc=$?
-c=$(calls)
-assert_eq "rc 1, workspace stays open" "1/0" "$rc/$(count 'herdr\[workspace\]\[close\]')"
-assert_contains "notification over ssh to the MacBook" "ssh[-o][BatchMode=yes][-o][ConnectTimeout=8][iumac][osascript - 'Claude login me' '$UNCH']" "$c"
-assert_not_contains "...never 'renewed'" "renewed" "$c"
-
 echo "the login owner kills the tunnel on exit"
 as mini; reset
 export STUB_URL="$URL"
@@ -628,7 +551,7 @@ echo "relogin --dry-run (me and iu on the mini) runs nothing"
 for a in me iu; do
   reset; out=$(bash "$RELOGIN" $a --dry-run 2>&1)
   assert_eq "$a: no stub called" "" "$(calls)"
-  assert_contains "$a: prints the herdr step" "would run: 'herdr' 'workspace' 'create'" "$out"
+  assert_contains "$a: prints the hc step" "would run: 'hc' 'run'" "$out"
   assert_contains "$a: prints the login command" "'claude' 'auth' 'login' '--claudeai'" "$out"
   assert_contains "$a: prints the tunnel" "'-R' '127.0.0.1:58876:localhost:58876'" "$out"
 done
@@ -638,7 +561,7 @@ assert_contains "macbook dry run: detached worker, no window" "would start detac
 assert_contains "macbook dry run: success notification" "'osascript' '-' 'Claude login me' 'Claude login me: renewed, valid until <date>'" "$out"
 assert_contains "macbook dry run: Terminal fallback and its close" "close of that window id" "$out"
 as mini; reset; out=$(bash "$RELOGIN" me --dry-run 2>&1)
-assert_contains "mini dry run: watcher closes the workspace" "'herdr' 'workspace' 'close'" "$out"
+assert_contains "mini dry run: watcher sweeps the terminal" "'hc' 'rm'" "$out"
 assert_contains "mini dry run: notification over ssh" "osascript - " "$out"
 assert_contains "iu dry run: config dir unset" "'-u' 'CLAUDE_CONFIG_DIR' 'USER=" "$(bash "$RELOGIN" iu --dry-run 2>&1)"
 assert_contains "me dry run: config dir set" "CLAUDE_CONFIG_DIR=$HOME/.claude-me" "$(bash "$RELOGIN" me --dry-run 2>&1)"
