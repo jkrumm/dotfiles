@@ -174,9 +174,9 @@ substitutes for another.**
 |-|-|
 | A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/herdr-reap.py`, also `com.jkrumm.herdr-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/herdr-reap.log` |
-| The raw record | `com.jkrumm.herdr-events` (`scripts/herdr-events.ts`) appends every herdr event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make herdr-events-status` |
-| What every agent is doing | `make agent-overview` — herdr workspace `overview` running `watch` over `agw agents --text --color`; its JSON twin (`agw agents`) is the one producer for Hermes, brain and Argo. |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min; classic `herdr-reap` beside it until Wave 7): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/hc-reap.log` |
+| The raw record | `com.jkrumm.hc-events` (`scripts/hc-events.ts`, `events.subscribe`; classic `herdr-events` beside it until Wave 7) appends every event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make hc-events-status` |
+| What every agent is doing | the app's sidebar; `agw agents` (hc + classic) is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 
@@ -225,10 +225,8 @@ Five facts to hold:
   screen share unfreezes it in place. `make herdr-upgrade` prints the path to
   re-grant.
 
-**Sidebar groups** — `config/herdr/groups.json` declares the taxonomy; `make
-herdr-groups` applies it (headers are separator workspaces), `make
-herdr-groups-check` prints the plan, `herdr-groups.py clear` is the undo. Adding
-a repo is one line in the JSON. Rationale: `docs/remote-dev.md` §Sidebar groups.
+**Sidebar groups** — `config/herdr-app/groups.json` is the taxonomy the `jk-spaces`
+mod reads (a repo is one line); `make herdr-app-setup` links it. `docs/remote-dev.md` §Sidebar groups.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
@@ -324,9 +322,9 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
 `MacMini Dev Host - Push` is the composite over **20 components**: tailscale,
-sshd, herdr, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways, overview
-pane, jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
+sshd, herdr + core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
+services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
+jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
 the jobs push, no ACL grant runs `tag:homelab → tag:mac`; service health is the
 exception, pulled through the Kuma door (below) — full rationale, transient-tolerance knobs, and the
 paired `make mini-macos-update` applier: `docs/devhost-health.md`,
@@ -351,10 +349,10 @@ GET/HEAD only, nothing from the request reaches the upstream. Reachable by
 
 | Command | Does |
 |-|-|
-| `make collie-setup` | Dev-host only: install/refresh the pinned plugin, start, assert liveness + rebind guard + real launchd supervision |
+| `make collie-setup` | Dev-host only: install/refresh the pinned bridge (standalone `com.jkrumm.collie`, `COLLIE_MUX=herdr-core`), start, assert liveness + rebind guard + launchd supervision |
 | `make collie-upgrade` | Resolve the newest tag, print changelog/diffstat/scope, on `y` bump the pin + reinstall + assert + commit |
 | `make collie-status` | Read-only: LaunchAgent, bridge health, rebind guard, serve state |
-| `make collie-teardown` | Boot out both labels, uninstall the plugin (never `collie-ctl.sh uninstall` — it mutates declared serve state) |
+| `make collie-teardown` | Boot out the agent, remove the bridge (never `collie-ctl.sh uninstall` — it mutates declared serve state); `make collie-pair` pairs a phone |
 
 **It is remote shell access by design, not "just a web UI"** — one bridge call
 types arbitrary keystrokes into a live pane; treat the URL like a root login.

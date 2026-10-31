@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Converge the Herdr desktop app (herdr-core evaluation, MacBook) onto the tracked
-# config: the `jk` layout (One Zinc theme, jk-spaces folders from config/herdr/groups.json,
+# config: the `jk` layout (One Zinc theme, jk-spaces folders from config/herdr-app/groups.json,
 # no agents list, jk-status bar), and one space per daily repo.
 # Idempotent. docs/herdr-core.md §Desktop layout.
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details jk-board)
+MODS=(jk-spaces jk-status jk-details jk-board jk-keys)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -32,7 +32,7 @@ link() { # src dst
 
 for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
 # jk-spaces reads its folders from here: one taxonomy with classic herdr's sidebar.
-link "$DOTFILES_DIR/config/herdr/groups.json" "$HOME_DIR/groups.json"
+link "$DOTFILES_DIR/config/herdr-app/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
 
@@ -46,6 +46,7 @@ if [ -f "$KEYS" ]; then
     jq '.global["cmd-shift-b"] = "layout.toggle:board"' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ key cmd-shift-b → layout.toggle:board"
   else say "- cmd-shift-b is taken ($CUR), board toggle not bound"; fi
 fi
+"$(dirname "$0")/herdr-app-keys.sh" "$HOME_DIR"
 
 # The mod was jk-waves: drop its stale link (only a symlink).
 if [ -L "$HOME_DIR/mods/jk-waves" ]; then rm "$HOME_DIR/mods/jk-waves"; say "✓ removed stale jk-waves link"; fi

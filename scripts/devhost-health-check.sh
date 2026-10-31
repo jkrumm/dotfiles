@@ -101,7 +101,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/core-health.sh"
 GIT_CRED_HELPER_BIN="${GIT_CRED_HELPER_BIN:-$HOME/.local/bin/git-credential-secrets-cache}"
 ALF_BIN="${ALF_BIN:-/usr/libexec/ApplicationFirewall/socketfilterfw}"
 CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
-COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/herdr.collie.plist}"
+COLLIE_PLIST="${COLLIE_PLIST:-$HOME/Library/LaunchAgents/com.jkrumm.collie.plist}"
 COLLIE_URL="${COLLIE_URL:-http://127.0.0.1:8787}"
 CADDY_BIN="${CADDY_BIN:-/opt/homebrew/bin/caddy}"
 DIG_BIN="${DIG_BIN:-/usr/bin/dig}"
@@ -860,7 +860,7 @@ $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
 com.jkrumm.agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
-herdr.collie|$HOME/Library/LaunchAgents/herdr.collie.plist
+com.jkrumm.collie|$HOME/Library/LaunchAgents/com.jkrumm.collie.plist
 com.jkrumm.herdr-core|$HOME/Library/LaunchAgents/com.jkrumm.herdr-core.plist"
 
 # check_launchd_restarts lives in its own lib so the classification can be
