@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.herdr-core</string>
+  <!-- herdr-core's server, in the GUI session (keychain reach for the Claude Max login).
+       Must always be up: any `hc` client call — the MacBook's `hc machine` link arrives
+       over ssh — auto-starts a core when none runs, and a core born in an ssh session
+       spawns Claude without the keychain (docs/herdr-core.md §Mini core). Runs beside
+       the classic herdr server; they share nothing. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/herdr-core</string>
+    <string>serve</string>
+  </array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LANG</key><string>en_US.UTF-8</string>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/herdr-core.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/herdr-core.log</string>
+</dict>
+</plist>

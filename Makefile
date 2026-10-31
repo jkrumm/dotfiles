@@ -2476,6 +2476,35 @@ jobrun-canary-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.jobrun-canary.json"; \
 	echo "  ✓ jobrun-canary torn down (unloaded, plist and jobrun state removed)"
 
+# herdr-core (`hc`) server beside the classic herdr — docs/herdr-core.md §Mini core. Dev host only.
+# bootstrap into gui/<uid> explicitly: a plain `launchctl load` from an ssh session lands outside the
+# GUI session, and a core there spawns Claude without the keychain (the `ssh mini 'claude …'` trap).
+.PHONY: herdr-core-setup herdr-core-teardown herdr-core-status
+herdr-core-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-core skipped"; exit 0; fi; \
+	[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — from the MacBook: hc machine update mini"; exit 1; }; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; \
+	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP"; \
+	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" >/dev/null 2>&1; then \
+		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \
+	else \
+		mv "$$TMP" "$$DST"; \
+		launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
+		launchctl bootstrap "gui/$$(id -u)" "$$DST"; \
+		echo "    ✓ com.jkrumm.herdr-core (installed + bootstrapped into gui/$$(id -u))"; \
+	fi; \
+	echo "    ↳ KeepAlive hc serve; log: ~/Library/Logs/herdr-core.log"
+herdr-core-teardown:
+	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
+	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
+	echo "  ✓ herdr-core torn down (its terminals end with it)"
+herdr-core-status:
+	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
+	"$(HOME)/.local/bin/hc" server status --json 2>/dev/null || true
+
 # The herdr event record (factory Phase 0): every event the server emits, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where
 # the herdr server runs. Records only; no consumer.
@@ -3612,6 +3641,7 @@ help:
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
+	@echo "  make herdr-core-setup           Dev host: hc serve as a GUI-session LaunchAgent beside classic herdr"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
 	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"
