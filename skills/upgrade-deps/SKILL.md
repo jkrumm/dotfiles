@@ -73,8 +73,7 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    then `brew pin caddy`.
 5. **Never unattended on the mini:** the `tailscale` follow-up (its restart is
    the ssh session you are using — run it only with a human able to reach the
-   mini another way), macOS majors, `make herdr-upgrade` from inside a herdr
-   pane (it refuses).
+   mini another way), macOS majors.
 6. **Agent tooling, and what is *running*.** Installed ≠ running; check both.
    - **Cooldown override** only on the owner's explicit ask for "recent agent
      tooling" — per command (`brew upgrade --cask <name>`), never by editing
@@ -83,10 +82,12 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
      patches and restarts the gateway unpatched. Run it through the
      `hermes-update` skill in an agent in the mini's `hermes-agent` workspace
      (`rd work hermes-agent` + `rd say`); `make patch-check` must end green.
-   - **herdr server:** compare the running keg
-     (`lsof -p $(pgrep -f 'bin/herdr server') | grep txt`) with the installed
-     one. Mini: `make herdr-upgrade` / `make herdr-restart YES=1` (human-timed).
-     A server hosting your own session is restarted by the human.
+   - **herdr-core and the Herdr app are not upgrade targets.** The core is the
+     `jkrumm/tap` formula `herdr-core`, bumped only by the daily
+     `com.jkrumm.herdr-core-update` (`docs/herdr-core.md` §Updates): skip it
+     when `brew-upgrade` lists it under third-party taps. The app self-updates
+     and never touches a managed core. The classic `herdr` formula and
+     `penso/tap/herdr-gpui` cask are retired in Wave 7: leave them alone.
    - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
      unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
      `collie pair` on the phone.
