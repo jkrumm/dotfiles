@@ -324,6 +324,12 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
 - [ ] P1 is merged: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
   and `make doctor` are green; one real automatic update has run (or a forced dry run with a fake newer release).
 - [ ] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
+- [ ] **The launcher's grant survives a rebuild too.** 2026-10-31: P1 rebuilt the ad-hoc launcher at 15:40, the owner's
+  earlier FDA entry kept the old cdhash, and tccd logged `Failed to match existing code requirement` and prompted per
+  folder until the entry was removed and re-added. Sign the launcher with one stable self-signed code-signing identity
+  and an explicit `--identifier` (research run `01a1923f`, §1), so its designated requirement survives a rebuild.
+  `make herdr-core-setup` refuses to swap in a rebuilt launcher without queueing the re-grant (`ask-human`), and
+  `make tcc-probe` runs after every launcher change. The mini grant was verified at 16:32 (`tcc-probe` ✓).
 
 ## Wave 9 — the mini maintenance window            <!-- status: pending -->
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
