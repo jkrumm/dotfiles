@@ -43,7 +43,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
 | `hooks/{session-env,protect-branches,docker-makefile,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
-| `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · Claude.ai usage-% fetcher (uv script) — `docs/statusline.md` |
+| `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
 | `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |

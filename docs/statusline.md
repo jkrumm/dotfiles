@@ -75,21 +75,17 @@ per-account sample (`claude-account record`, account = registry id resolved from
 (`docs/claude-accounts.md`). An `IU`/`ME` badge after the auth mode shows only when
 more than one account is enabled.
 
-**Fallback until then: `fetch_usage.py`** — `https://api.anthropic.com/api/oauth/usage`
-with the Claude Code OAuth token from the macOS Keychain (`Claude Code-credentials`)
-plus `anthropic-beta: oauth-2025-04-20`. Run via `uv run`, cache
-`/tmp/claude_sl/usage_api.json`, 5-min TTL, background refresh via `disown`; it
-also reports through `agw quota-report`. Never spawned on the IU lane. Since claude-accounts W0
-it first serves a **fresh (<5 min) default-account (`iu`) sample from the quota cache** (same
-`usage_api.json` shape, `source: claude-accounts`, no `limits`/`extra_usage`) and
-calls the API only when that sample is stale; it also writes
-`/tmp/claude_sl/usage_accounts.json` (all accounts). The API path retires in W2.
+**Fallback until then: `fetch_usage.py`**, an adapter over `claude-account` that never calls Anthropic itself
+(the API path retired 2026-10-31). It writes the default account's sample from `claude-account usage --json` to
+`/tmp/claude_sl/usage_api.json` (`source: claude-accounts`, empty `limits`/`extra_usage`), and all accounts to
+`/tmp/claude_sl/usage_accounts.json`. When the default sample is stale (> 5 min) it asks the owner,
+`claude-account refresh --ids <default>` (its rate-limit budget and claim apply), and reads again. Still stale:
+the old file is kept, or `{"error": …}` is written when claude-account reports the login rejected, so the line shows
+`⚠ claude.ai login`. Run via `uv run`, 5-min respawn gate, background via `disown`; it also reports through
+`agw quota-report`. Never spawned on the IU lane.
 
-- On the headless mini the Keychain read fails (`security` exit 36, locked
-  keychain), the cache holds `{"error": …}` and the line shows `⚠ claude.ai login`
-  until the first response brings `rate_limits` — which is why the push moved here.
-- The endpoint is **rate-limited** (per-token 429s within a few requests/min) —
-  on 429 the existing cache is kept rather than blanked.
+- The usage endpoint is **rate-limited** (per-token 429s within a few requests/min), which is why only
+  `claude-account refresh` calls it, under its budget and claim; this adapter never does.
 - Fields used: `five_hour.utilization` (5h window %, color-coded),
   `five_hour.resets_at` → the "↺Nm" countdown, `seven_day.utilization` (weekly).
   `seven_day_sonnet` is also captured (legacy; `null` on current plans).

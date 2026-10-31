@@ -139,9 +139,10 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    unchanged. It runs only in the keepalive and the *detached* pick-time refresh; the synchronous refresh a
    non-interactive pick may wait for skips it, so no pick ever waits on ssh.
 
-`fetch_usage.py` becomes a reader of this cache. It still writes
-`/tmp/claude_sl/usage_api.json` (account `iu`, the old shape) for backward
-compatibility, plus `usage_accounts.json` (all accounts).
+`fetch_usage.py` is only a reader of this cache (its own API path retired 2026-10-31; on a stale default sample it
+runs `claude-account refresh --ids <default>`). It writes `/tmp/claude_sl/usage_api.json` (the default account, the
+old shape the statusline and Tinycast read) plus `usage_accounts.json` (all accounts). Every consumer (the statusline,
+Tinycast and the Herdr app's `jk-status`) now reads subscription data through `claude-account` (`usage`, `health`).
 
 **Rule v1.6** (v1.5 plus the 5h guards below, 2026-10-30; v1.4 plus expiry-weighted sharing below; ceilings tightened 2026-10-27: `SESSION_MAX` 85 → 90, `WEEKLY_MAX` 90 → 95, to use more of each subscription; v1.3 plus N accounts: where v1.3 took the first match in registry order for every alternative, v1.4 takes the best one; v1.3 = `weeklyMax(x)` 98 while x's weekly window resets within 24 h, else 95, the last points of an expiring window being use-it-or-lose-it, decided 2026-10-27 after `iu` sat idle at 93 % with 14 h to its reset; v1.4 decided the same day when `me2` joined):
 

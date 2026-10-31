@@ -1,19 +1,14 @@
 # /// script
 # requires-python = ">=3.14"
 # ///
-"""Fetch Claude Code subscription usage via the official OAuth /api/oauth/usage endpoint.
+"""Adapt claude-account's quota cache to the files statusline.sh and Tinycast read.
 
-Reads the OAuth access token from macOS Keychain (entry "Claude Code-credentials"),
-calls Anthropic's usage endpoint, writes /tmp/claude_sl/usage_api.json for
-statusline.sh. Same output shape as the legacy Chrome-cookie scraper —
-statusline.sh consumes this file as its pre-first-response fallback (docs/statusline.md).
-
-The endpoint is rate-limited (per-token 429s within a few requests/min); on 429
-we keep the existing cache rather than blanking it.
-
-W0 of docs/claude-accounts.md: a fresh (<5 min) default-account (iu) sample in the quota cache
-(read through `claude-account usage --json`, the single owner of the cache schema and freshness)
-is preferred; the API path below runs only when that sample is stale (retired in W2).
+`claude-account` is the only owner of subscription usage (docs/claude-accounts.md): this script never calls
+Anthropic itself. It writes /tmp/claude_sl/usage_api.json (the default account, the legacy shape the
+statusline's pre-first-response fallback and Tinycast read) from `claude-account usage --json`. When that
+account's sample is stale it asks the owner for one (`claude-account refresh --ids <default>`, which applies
+its own rate-limit budget and claim) and reads again. Still stale afterwards: the existing file is kept, or a
+login error is written when claude-account says the login is rejected.
 All accounts are also written to /tmp/claude_sl/usage_accounts.json (per account: plan, and per window the
 fresh `utilization` plus the last known `value`/`value_resets_at_epoch` with its `age_s` — the statusline's
 other-account and pool segments read those). `--accounts` writes only that file: no API call, no host
@@ -22,7 +17,6 @@ report (the statusline's own 60 s refresh while a session already has rate_limit
 Run via: uv run ~/.claude/fetch_usage.py [--accounts]
 """
 
-import getpass
 import json
 import os
 import shutil
@@ -30,20 +24,15 @@ import subprocess
 import tempfile
 import sys
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 CACHE_DIR = Path("/tmp/claude_sl")
 CACHE_FILE = CACHE_DIR / "usage_api.json"
-RAW_FILE = CACHE_DIR / "usage_raw.json"
 LOG_DIR = Path.home() / ".claude" / "logs"
 
-USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 AGW_BIN = "agw"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
-ANTHROPIC_BETA = "oauth-2025-04-20"
 
 CLAUDE_ACCOUNT_BIN = "claude-account"
 DEFAULT_ACCOUNT = "iu"  # registry id of the default ~/.claude login (CLAUDE_CONFIG_DIR unset)
@@ -76,36 +65,6 @@ def cleanup_old_logs(keep_days: int = 3) -> None:
                 f.unlink(missing_ok=True)
     except Exception:
         pass
-
-
-def _oauth_token() -> str:
-    """Pull the Claude Code OAuth access token from macOS Keychain."""
-    result = subprocess.run(
-        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", os.environ.get("USER") or getpass.getuser(), "-w"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    payload = json.loads(result.stdout.strip())
-    return payload["claudeAiOauth"]["accessToken"]
-
-
-def _to_epoch(ts: str | None) -> int | None:
-    if not ts:
-        return None
-    try:
-        return int(datetime.fromisoformat(ts).timestamp())
-    except Exception:
-        return None
-
-
-def _http_get_json(url: str, headers: dict, timeout: int = 10) -> tuple[dict, int, int]:
-    req = urllib.request.Request(url, headers=headers, method="GET")
-    t0 = time.time()
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read()
-        status = resp.status
-    return json.loads(body), status, round((time.time() - t0) * 1000)
 
 
 def _write_json(path: Path, payload: dict, indent: int | None = None) -> None:
@@ -213,85 +172,30 @@ def from_account_cache() -> bool:
         return False
 
 
+def _refresh_default(default: str) -> None:
+    """Ask the owner for a fresh sample of the default account (its budget and claim apply)."""
+    exe = shutil.which(CLAUDE_ACCOUNT_BIN) or str(Path.home() / ".local" / "bin" / CLAUDE_ACCOUNT_BIN)
+    subprocess.run([exe, "refresh", "--ids", default], capture_output=True, text=True, timeout=60)
+
+
 def fetch() -> None:
     CACHE_DIR.mkdir(exist_ok=True)
     cleanup_old_logs()
     if from_account_cache():
         return
-
-    token = _oauth_token()
-    log_event("fetch_usage", "token_ok", "info", {"prefix": token[:8]})
-
-    data, status, latency_ms = _http_get_json(
-        USAGE_URL,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "anthropic-beta": ANTHROPIC_BETA,
-            "Accept": "application/json",
-        },
-    )
-
-    def extract(key: str) -> dict:
-        w = data.get(key) or {}
-        return {
-            "utilization": w.get("utilization"),
-            "resets_at_epoch": _to_epoch(w.get("resets_at")),
-        }
-
-    # The endpoint's generic limit list (session, weekly_all, weekly_scoped
-    # per model — Fable today, whatever later), normalized: consumers show
-    # model limits from here instead of hardcoding a seven_day_<model> key.
-    shares = {
-        share.get("limit_index"): share.get("allowance_percent_of_weekly")
-        for share in data.get("weekly_scoped_shares") or []
-    }
-
-    def limit(index: int, item: dict) -> dict:
-        scope = item.get("scope") or {}
-        model = (scope.get("model") or {}).get("display_name")
-        surface = scope.get("surface")
-        return {
-            "kind": item.get("kind"),
-            "group": item.get("group"),
-            "label": model or (surface if isinstance(surface, str) else None),
-            "percent": item.get("percent"),
-            "resets_at_epoch": _to_epoch(item.get("resets_at")),
-            "severity": item.get("severity"),
-            "is_active": item.get("is_active"),
-            "allowance_percent_of_weekly": shares.get(index),
-        }
-
-    limits = [limit(i, item) for i, item in enumerate(data.get("limits") or [])]
-
-    result = {
-        # Legacy top-level keys — statusline.sh reads these.
-        "five_hour": extract("five_hour"),
-        "seven_day": extract("seven_day"),
-        "seven_day_sonnet": extract("seven_day_sonnet"),
-        "limits": limits,
-        "extra_usage": data.get("extra_usage"),
-        "fetched_at": int(datetime.now(timezone.utc).timestamp()),
-    }
-
-    five_h_pct = round(result["five_hour"].get("utilization") or 0)
-    seven_d_pct = result["seven_day"].get("utilization")
-    log_event("fetch_usage", "fetch_success", "info", {
-        "five_hour_pct": five_h_pct,
-        "seven_day_pct": round(seven_d_pct) if seven_d_pct is not None else None,
-        "http_status": status,
-        "latency_ms": latency_ms,
-    })
-
-    _write_json(CACHE_FILE, result)
-    # Unmodified response, for checking what the endpoint returns today.
-    _write_json(RAW_FILE, data, indent=2)
-
-    five_h = result["five_hour"]
-    seven_d = result["seven_day"]
-    now_ts = result["fetched_at"]
-    reset_epoch = five_h.get("resets_at_epoch")
-    mins_left = round((reset_epoch - now_ts) / 60) if reset_epoch and reset_epoch > now_ts else None
-    _report_quota(five_h.get("utilization"), mins_left, seven_d.get("utilization"))
+    data = _claude_account_usage()
+    default = data.get("default_account") or DEFAULT_ACCOUNT
+    _refresh_default(default)
+    if from_account_cache():
+        return
+    row = next((r for r in _claude_account_usage()["accounts"] if r["id"] == default), None)
+    if row and row.get("auth_ok") is False:
+        # The statusline shows "⚠ claude.ai login" for an error file; claude-account health names the fix.
+        _write_json(CACHE_FILE, {"error": f"{default}: login rejected (claude-account health)", "fetched_at": int(time.time())})
+        log_event("fetch_usage", "login_rejected", "warning", {"account": default})
+        return
+    # Stale but logged in: keep the last file; the statusline's 5-min respawn gate tries again.
+    log_event("fetch_usage", "stale_kept", "info", {"account": default})
 
 
 if __name__ == "__main__":
@@ -305,25 +209,9 @@ if __name__ == "__main__":
         sys.exit(0)
     try:
         fetch()
-    except urllib.error.HTTPError as e:
-        # 429: keep existing cache rather than blanking — endpoint is rate-limited
-        # per-token and statusline tolerates stale data better than missing data.
-        if e.code == 429:
-            log_event("fetch_usage", "rate_limited", "warning", {"http_status": 429})
-            sys.exit(0)
-        log_event("fetch_usage", "fetch_error", "error", {
-            "error": str(e),
-            "type": type(e).__name__,
-            "http_status": e.code,
-        })
-        CACHE_DIR.mkdir(exist_ok=True)
-        _write_json(CACHE_FILE, {"error": str(e), "fetched_at": 0})
-        sys.exit(1)
     except Exception as e:
         log_event("fetch_usage", "fetch_error", "error", {
             "error": str(e),
             "type": type(e).__name__,
         })
-        CACHE_DIR.mkdir(exist_ok=True)
-        _write_json(CACHE_FILE, {"error": str(e), "fetched_at": 0})
         sys.exit(1)
