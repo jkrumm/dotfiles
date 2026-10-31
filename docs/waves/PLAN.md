@@ -224,6 +224,11 @@ Role `lead`. dotfiles.
   classic fallback for targets hc doesn't know, and `agents` lists both rosters, until Wave 7. `fan` workers are hidden children of
   the orchestrator; `wave` tabs (the chain's next wave included) are `no_parent`. Update the
   `remote-dev-*.test.sh` stubs to a fake `hc`.
+  **CLI compatibility (owner's iris fleet depends on it):** iris `docs/waves/handoff/mother-watch.sh` greps the text
+  of `rd agents` for agent names (`iris-w<n>`) and the word `blocked`; its `mother.md` spawns leads with
+  `RD_ORCHESTRATED=1 rd wave iris '…'` and workers with `rd fan` / `rd merge` / `rd read` / `rd say`. Keep those
+  verbs, flags and the `rd agents` text shape (name + status word per line) working, or update iris's scripts in
+  the same wave.
 - [ ] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
   jk.claude.config=<dir>`, `jk.claude.config=` for `iu`), and `scripts/hc-resume` restores Claude sessions under
   the right account into kept shells (at login, on a `restarted` event, after a reconnect or `missed` snapshot;
@@ -329,8 +334,23 @@ note).
 - [ ] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
   `make claude-accounts-verify`; me2's stale quota sample. (photoflow's architecture-map entry: already retired
   in `1190896`.)
-- [ ] `make mini-macos-update` staying on 26.x (**never 27**, owner-confirmed 2026-10-31), last, after the close-out commit, from the MacBook
-  (`ask-human` push, it reboots the mini). After the reboot: cores up, `hc-resume` restored the sessions,
-  `make doctor` green on both machines.
+- [ ] The macOS update moved to Wave 10 (it reboots the mini, and with it this wave's own terminal).
 - [ ] Final report into Left behind: everything ported, retired or deferred (one line each), anything still
   classic, and the verified state of both machines. Update the memory note.
+
+## Wave 10 — reboot proof and the owner's next work            <!-- status: pending -->
+Role `wave`. The last wave: it spawns no further wave.
+
+- [ ] Write this wave's Left behind first (what follows, and that a reboot is next), commit, push. Then queue the macOS
+  update: `ask-human ask "Mini: make mini-macos-update, staying on 26.x (never 27)" --cmd "make -C ~/SourceRoot/dotfiles
+  mini-macos-update"`. It pushes a dialog to the MacBook, and the owner clicks Run. The mini reboots and this terminal ends.
+- [ ] After the reboot, `hc-resume` (Wave 3) should bring this session back under its account. If it does, continue
+  here: the resume itself is the proof. If it doesn't, the next owner session reads this Left behind and continues.
+  Verify both cores are up (launcher, managed version, versions match), the factory is healthy, `make doctor` is green
+  on both machines, and `make tcc-probe` passes on the mini.
+- [ ] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If `rd wave`'s
+  gate refuses a repo's plan state, start the agent with `rd work <repo>` and deliver the prompt as its first message
+  instead. Never edit the prompts.
+- [ ] Final report into Left behind (the Wave 9 report plus the reboot result and the two spawned agents), and update
+  the memory note `mini-maintenance-window.md` to "done" (or delete it).
+
