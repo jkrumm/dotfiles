@@ -97,6 +97,13 @@ Design, launcher, updates, verified facts: `docs/herdr-core.md`.
   **Per repo, not per space.** A mini terminal edits the mini's checkout, where the brain-sync lane never commits — the note
   lands via the nightly `brain-backup` sweep.
 
+### Janitor rules and `rd wave` detail
+
+Moved verbatim from `AGENTS.md`.
+
+- **`rd wave <repo> '<prompt>'`:** long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app (a space only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave
+- **`rd reap`:** `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/hc-reap.log`
+
 ### Sidebar groups
 
 The Herdr app's `jk-spaces` mod draws the folders: `config/herdr-app/groups.json`

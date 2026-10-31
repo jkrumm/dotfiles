@@ -31,9 +31,9 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | The **file** only — the dir holds opencode's plugin `node_modules`. Rules via `instructions`, IU provider via `{env:IU_*}`, yolo via `permission` |
 | `config/opencode/tui.json` | `~/.config/opencode/tui.json` | TUI-only keys. `theme` lives **here**, not in `opencode.json` |
 | `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
-| `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**; another tool may own a sibling) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
+| `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
-| `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | The Herdr app's layout `jk`, mods, themes `one-zinc-*` and `groups.json`; the same dir holds the app's own generated guide and shipped mods, so never the directory |
+| `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json`; link per item, never the dir (it holds the app's shipped mods) |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |
@@ -51,8 +51,8 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/hl` | `~/.local/bin/hl` | HomeLab files over S3 — rclone with an env-defined `homelab:` remote + `presign`/`mount`; key per machine (see *HomeLab files*) |
-| `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-me`; `make claude-accounts-verify` (read-only, in `make doctor`) and `make claude-accounts-e2e` prove routing + attribution, the hourly keepalive agent (both machines) keeps samples fresh and logins alive; `claude-account expiry` (and the `login/<id>` verify rows) say when each login ends — `docs/claude-accounts.md` §Operate |
-| `scripts/claude-relogin.sh` (+ `claude-login-browser.sh`, the `BROWSER` target) | `~/.local/bin/claude-relogin` | One-click re-login of a Claude account on the machine that owns the credential — `claude-relogin <id> [--machine mini\|macbook] [--ask] [--visible] [--dry-run]`; runs windowless on the MacBook (log `~/Library/Logs/claude-relogin.log`, Terminal only as fallback, closed after success), in a herdr workspace that closes itself on the mini, then a native notification; the owner only approves in the account's browser (never automated) — `docs/claude-accounts.md` §Re-login |
+| `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-me`; `make claude-accounts-verify` (in `make doctor`) and `make claude-accounts-e2e` prove routing + attribution; the hourly keepalive agent keeps samples fresh and logins alive; `claude-account expiry` says when each login ends — `docs/claude-accounts.md` §Operate |
+| `scripts/claude-relogin.sh` (+ `claude-login-browser.sh`) | `~/.local/bin/claude-relogin` | One-click re-login on the machine that owns the credential: `claude-relogin <id> [--machine mini\|macbook] [--ask] [--visible] [--dry-run]`; the owner only approves in the account's browser (never automated) — `docs/claude-accounts.md` §Re-login |
 | `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; alert flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload`, Colima socket heal, and (MacBook) `jobs-grade --notify` 2 min after wake, staleness judged against awake time |
 
@@ -168,14 +168,14 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app (a space only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave|fan` queue a spawn there (no room or a `drain` prints `queued: <reason>` and the factory starts it later), `rd say` becomes a held `factory session note`; without it, today's path (no room pauses). `rd close <agent>` closes a finished agent's tab (clean + pushed only), found through the factory's session, else only a `wave <n>` tab; `/wave` owns the contract (chain or orchestrated) and the green gate. The spawner waits with `factory session wait --on workers` and ends its turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn counts as a worker. No watcher script polls |
+| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app, solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. The factory queues the spawn (`queued: <reason>`); the spawner waits with `factory session wait --on workers` and ends its turn. `/wave` owns the contract and the green gate; queueing and `rd close`/`say` semantics: `docs/remote-dev.md` §Janitor rules and `rd wave` detail |
 
 | Want | Command |
 |-|-|
-| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` picks a terminal and attaches (Ctrl+\ detaches). Terminals live in the mini's core, so a roam or lid-close ends only the view. |
+| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/hc-reap.log` |
-| The raw record | `com.jkrumm.hc-events` (`scripts/hc-events.ts`, `events.subscribe`) appends every event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make hc-events-status` |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree or mother/lead/wave tab; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
+| The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
 | What every agent is doing | the app's sidebar; `agw agents` is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
@@ -184,8 +184,7 @@ Facts to hold:
 
 - **A core restart keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
   shells, and `com.jkrumm.hc-resume` types `claude --resume <id>` under the right account from the
-  `jk.claude.*` labels (model and effort are not restored; a turn in flight is lost).
-  Shells, dev servers and `bun` loops still die. Never `hc server restart|stop`, `hc update` or `hc machine
+  `jk.claude.*` labels (model, effort and the turn in flight are lost). Never `hc server restart|stop`, `hc update` or `hc machine
   update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
@@ -203,11 +202,9 @@ Facts to hold:
 - **Full Disk Access sits on the core launcher, not on the core.** A new core build keeps the grant
   (`~/.local/libexec/herdr-core-launcher`); a terminal born before a cutover keeps the old identity until it
   ends. Frozen agent at 0 % CPU on `openat` = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
-  The core updates itself daily with a 24 h cooldown (`com.jkrumm.herdr-core-update`, `make herdr-core-update-check`);
-  the app auto-updates and never touches the managed core.
+  The core updates itself daily after a 24 h cooldown (`com.jkrumm.herdr-core-update`); the app never touches it.
 
-**Sidebar groups** — `config/herdr-app/groups.json` is the taxonomy the `jk-spaces`
-mod reads (a repo is one line); `make herdr-app-setup` links it. `docs/remote-dev.md`.
+**Sidebar groups:** `config/herdr-app/groups.json` (one line per repo) feeds the `jk-spaces` mod; `make herdr-app-setup` links it.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
@@ -226,7 +223,7 @@ gate next to the typed-yes TTY gate, not a bypass of it.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
-**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a core under launchd on each machine). Design, verified facts and updates: `docs/herdr-core.md`; the global `herdr` skill drives them. The retired classic `herdr` TUI left one line each in the docs it touched.
+**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a core under launchd on each machine). Design and facts: `docs/herdr-core.md`; the global `herdr` skill drives them.
 
 ## Dev-server doors
 
