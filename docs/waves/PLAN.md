@@ -400,21 +400,43 @@ Role `wave`.
 - Found, not mine: the mini's `~/.local/bin/herdr-app` is a dangling symlink into `/tmp/w4ak/…` (Wave 4's scratch app); there is no `herdr-app` on the mini. Not removed.
 - The `rd` usage says `rd merge` for fan branches; on dotfiles (direct-to-master, no PRs) it needs a cherry-pick fallback or a flag. Not changed (out of scope).
 
-## Wave 7 — remove classic herdr            <!-- status: active -->
+## Wave 7 — remove classic herdr            <!-- status: done -->
 Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `working`. Otherwise write
 `stopped: <who is working>` and stop. Never stop someone's work.
 
-- [ ] Inventory both machines' classic state (agents, workspaces, plists, `~/.config/herdr`, the brew service)
+- [x] Inventory both machines' classic state (agents, workspaces, plists, `~/.config/herdr`, the brew service)
   into Left behind. The classic Claude sessions are not carried over (owner, 2026-10-31): no migration and no
   `--resume` into hc. Then: `brew services stop herdr`, `brew uninstall herdr`, `brew uninstall --cask
   herdr-gpui`, `brew untap penso/tap` (if nothing else needs it); boot out and delete the `herdr-reap`,
   `herdr-events` and `herdr.collie` plists; archive `~/.config/herdr` to `~/.local/share/herdr-classic-archive/`.
   Both machines.
-- [ ] Repo: delete `herdr/`, the classic scripts (and `rd`'s classic fallbacks), `config/herdr/config.toml`, the
+- [x] Repo: delete `herdr/`, the classic scripts (and `rd`'s classic fallbacks), `config/herdr/config.toml`, the
   Makefile targets, the Brewfile lines and the settings-template hook (`herdr-agent-state.sh`). `make setup` + `make doctor` on both machines are green.
-- [ ] `make check`, `/review`, and one commit per concern, each naming what was retired and why.
+- [x] `make check`, `/review`, and one commit per concern, each naming what was retired and why.
+**Left behind:**
+- Gate held: 10 mini + 5 MacBook classic agents, all `idle`, none `working`. Roster JSON (session ids, for a manual `claude --resume`) is archived
+  with each machine's `~/.config/herdr` in `~/.local/share/herdr-classic-archive/{mini,macbook}/`. Not carried over (owner decision).
+- Mini: `herdr-reap`, `herdr-events`, `homebrew.mxcl.herdr` booted out and their plists deleted, `brew services stop herdr`, formula `herdr` and cask
+  `herdr-gpui` uninstalled, `penso/tap` untapped (nothing else from it installed), the classic server process killed, `~/.config/herdr` archived, the
+  stale `~/.local/state/jobs/com.jkrumm.herdr-reap.json` removed (it kept `jobs-grade` WARN `unloaded`). MacBook: same, except see below.
+- Repo (three `rd fan` workers, cherry-picked, 20 commits + 2 comment fixes, `8fbbfdd` pushed): `herdr/`, `config/herdr/`, the classic scripts and plist
+  templates, the Makefile/Brewfile/settings-template entries, the collie plugin migration, `rd`'s 17 classic fallbacks, `desk`, the classic
+  relogin/appearance/brain-note/herdr-app-setup legs, the `herdr` heartbeat component (20 → 19), doctor's classic checks, the map rows. `-3,201`/`-996`/`-153` lines.
+  AGENTS.md 39.93k. `make -k check`: green except `architecture-check`, which was red only on the live classic jobs until the teardown; re-run green.
+- `agw review` (`01a19346`) triaged. Dismissed on purpose: classic jobs left registered by `make setup` (the teardown above is the migration), `rd fan --clean`
+  ignoring classic occupancy and the dropped collie `.env` copy-once migration (classic is gone, collie migrated in Wave 4), `herdr-app-setup.sh` missing
+  `~/IuRoot/worktrees/…` repos and treating a failed mini query as empty (both unchanged by this wave). Open, not fixed: Tinycast's live `so.pen.herdr-gpui`
+  hotkey/app entry stays on the MacBook (`config/tinycast/defaults.json` dropped it; `make tinycast-check` may flag it; remove it in Tinycast).
+- **Owner steps, MacBook (queued, no dialog answered):** (1) `ask-human` `20261031T194722-1121`: `/Applications` is root-owned, so the emptied
+  `/Applications/Herdr.app` (herdr-gpui) and `/Applications/herdrm.app` shells need one password (osascript), then `brew uninstall --cask --force
+  herdr-gpui herdrm && brew untap penso/tap`. (`herdrm` was a third-party classic console, not in the plan or Brewfile; removed with the daemon.) (2) `20261031T200248-23342`:
+  `make setup && make doctor` there (the master is pulled; `make setup` stopped at the Touch ID step over ssh, after its herdr-core and skill steps passed).
+  MacBook `make doctor` over ssh showed no classic hits; its reds are not classic: `opbackup` unclassified in `tcc`, `mini-fwd` agent forwarding, a Kuma monitor, the
+  tailscale `drift-check` and `auth/iu` (needs `claude-relogin iu`).
+- Mini `make doctor`: 1 FAILED, `drift-check` (tailscale 1.102.4 → 1.104.4; Wave 9). `make setup` green.
 
-## Wave 8 — automatic core updates, durable Full Disk Access            <!-- status: pending -->
+
+## Wave 8 — automatic core updates, durable Full Disk Access            <!-- status: active -->
 Role `wave`. Built by parallel track **P1** (below); this wave only verifies that P1 landed on master and fixes
 what is missing. Owner decisions 2026-10-31: the core updates **automatically, daily, with a 1-day cooldown**,
 through our own launchd job (never the app's updater, never `hc update`); the app's window auto-update stays
