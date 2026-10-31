@@ -56,7 +56,7 @@ const worst = (states) => RANK.find((s) => states.includes(s)) ?? null;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const AGENTS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" agw agents | jq -c '[.data.projects[] | {cwd, states: [.agents[].state]}]'`;
 
-// What a dot means, on hover (jk-waves shows the same legend).
+// What a dot means, on hover (jk-board shows the same legend).
 const MEANING = {
   working: "Agent working",
   blocked: "Agent blocked: needs you",

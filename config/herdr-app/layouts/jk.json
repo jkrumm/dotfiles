@@ -169,7 +169,7 @@
       ]
     },
     {
-      "id": "waves",
+      "id": "board",
       "type": "block",
       "size": {
         "px": 320
@@ -179,7 +179,7 @@
       "background": "chrome",
       "resizable": true,
       "content": {
-        "mod": "jk-waves"
+        "mod": "jk-board"
       }
     }
   ],

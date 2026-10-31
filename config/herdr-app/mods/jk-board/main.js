@@ -1,17 +1,26 @@
-// jk-waves — the right-hand sidebar: ongoing wave work across the mini's repos.
-// Read-only. Every 30 s one call on the mini reads software-factory's `status` (sessions
+// jk-board — the right-hand sidebar, two tabs. Waves (default): ongoing wave work across the
+// mini's repos. Uptime: an Uptime Kuma overview from Argo's /uptime-kuma/monitors, read on the
+// mini with secrets-run (the token never reaches argv), grouped by parent group. jk-status
+// switches it to Uptime through shared("jk.board.tab"). Read-only.
+// Waves:  Every 30 s one call on the mini reads software-factory's `status` (sessions
 // and spawn queue) and every repo's docs/waves/PLAN.md headings. A repo shows while a
 // live session runs in it or a spawn is queued; an active plan nobody works on waits in a
 // collapsed "Paused" section, one with only pending waves in "Planned", finished plans are hidden. Repos sit under
 // the left sidebar's folders (config/herdr/groups.json). Click a card to open it.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, home, machines } from "herdr";
+import { exec, theme, home, machines, shared, setShared } from "herdr";
 
 const FACTORY = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory --format json status`;
 const PLANS = `for f in ~/SourceRoot/*/docs/waves/PLAN.md ~/IuRoot/*/docs/waves/PLAN.md; do [ -f "$f" ] && { echo "== $f"; grep -E '^# |^## Wave'; } < "$f"; done`;
 const MARK = "@@PLANS@@";
 const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
+
+// Argo's live Kuma snapshot. The token is read on the mini and piped to curl as a header file.
+const UPTIME = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
+const UPTIME_MS = 30000; // while the Uptime tab shows
+const UPTIME_BG_MS = 60000; // otherwise, for the tab badge
+const TABS = [["waves", "Waves"], ["uptime", "Uptime"]];
 
 const POLL_MS = 30000;
 const STALE_MS = 2 * 60000;
@@ -101,11 +110,17 @@ const MEANING = {
 
 const shortId = (id, repo) => (id.startsWith(repo) ? id.slice(repo.length).replace(/^-/, "") : id) || id;
 
-export default class Waves extends View {
+export default class Board extends View {
   init(_props, cx) {
     this.data = null; // last good parse
     this.at = 0; // when it was read
     this.polling = false;
+    this.tab = localStorage.getItem("board.tab") === "uptime" ? "uptime" : "waves";
+    this.seenTab = null; // last shared("jk.board.tab") adopted
+    this.uptime = null; // last good Argo answer
+    this.uptimeAt = 0;
+    this.uptimeBusy = false;
+    this.upOpen = JSON.parse(localStorage.getItem("board.uptime.open") ?? "{}"); // group -> shown?
     this.open = new Set(JSON.parse(localStorage.getItem("waves.open") ?? "[]"));
     this.folded = new Set(JSON.parse(localStorage.getItem("waves.folded") ?? "[]"));
     this.groups = { list: [], fallback: "OTHER" };
@@ -113,6 +128,24 @@ export default class Waves extends View {
     cx.timer.every(60000, (cx) => this.loadGroups(cx));
     this.refresh(cx);
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
+    this.refreshUptime(cx);
+    cx.timer.every(UPTIME_MS, (cx) => {
+      if (this.tab === "uptime" || Date.now() - this.uptimeAt >= UPTIME_BG_MS - 1000) this.refreshUptime(cx);
+      else cx.notify();
+    });
+  }
+
+  refreshUptime(cx) {
+    if (this.uptimeBusy || machines().find((m) => m.name === "mini")?.layout !== "ready") return;
+    this.uptimeBusy = true;
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", UPTIME], { on: "mini" }).catch(() => null);
+      this.uptimeBusy = false;
+      let d = null;
+      try { d = JSON.parse(r?.stdout ?? ""); } catch {}
+      if (Array.isArray(d?.monitors)) { this.uptime = d; this.uptimeAt = Date.now(); }
+      cx.notify();
+    });
   }
 
   loadGroups(cx) {
@@ -123,7 +156,7 @@ export default class Waves extends View {
         const d = JSON.parse(r.stdout);
         this.groups = { list: (d.groups ?? []).map((g) => ({ label: g.label, members: new Set(g.members ?? []) })), fallback: d.fallback ?? "OTHER" };
       } catch (e) {
-        console.log(`jk-waves: no folders from ~/${GROUPS}: ${e?.message ?? e}`);
+        console.log(`jk-board: no folders from ~/${GROUPS}: ${e?.message ?? e}`);
         return;
       }
       cx.notify();
@@ -248,13 +281,60 @@ export default class Waves extends View {
     return parts.join(" · ");
   }
 
+  // Honor a switch another mod asked for (jk-status' Kuma counter) once per change.
+  adoptTab() {
+    const want = shared("jk.board.tab");
+    if (want === this.seenTab) return;
+    this.seenTab = want;
+    if (want === "waves" || want === "uptime") this.setTab(want, null);
+  }
+
+  setTab(tab, cx) {
+    this.tab = tab;
+    localStorage.setItem("board.tab", tab);
+    if (!cx) return;
+    this.seenTab = tab;
+    setShared("jk.board.tab", tab);
+    cx.notify();
+  }
+
+  // Monitors that count: not groups, not paused (as Argo's /uptime-kuma/status).
+  upStats() {
+    const ms = (this.uptime?.monitors ?? []).filter((m) => m.type !== "group" && m.active);
+    const by = (s) => ms.filter((m) => m.status === s);
+    return { ms, up: by(1), down: by(0), pending: by(2), maint: by(3) };
+  }
+
+  tabs(t) {
+    const down = this.upStats().down.length;
+    return h_flex().flex_none().px(8).pt(8).pb(2)
+      .child(h_flex().flex_1().gap(2).p(2).rounded(8).bg(t.hover)
+        .children(TABS.map(([id, label]) => {
+          const on = this.tab === id;
+          return h_flex().id(`bd-tab-${id}`).flex_1().h(22).gap(5).items_center().justify_center().rounded(6).cursor_pointer().text_size(11.5)
+            .text_color(on ? t.foreground : t.dim)
+            .when(on, (el) => el.bg(t.selected).font_semibold())
+            .when(!on, (el) => el.hover((s) => s.bg(t.selected)))
+            .on_click((_e, cx) => this.setTab(id, cx))
+            .child(label)
+            .when(id === "uptime" && down > 0, (el) => el.child(div().text_color(t.blocked).child(String(down))));
+        })));
+  }
+
   render() {
+    this.adoptTab();
     const t = theme();
+    return v_flex().size_full().min_h(0).bg(t.chrome)
+      .child(this.tabs(t))
+      .child(this.tab === "uptime" ? this.uptimeView(t) : this.wavesView(t));
+  }
+
+  wavesView(t) {
     const stale = this.at && Date.now() - this.at > STALE_MS;
     const factory = this.data?.factory;
     const { shown, paused, planned } = this.data ? assemble(this.data) : { shown: [], paused: [], planned: [] };
     const attention = factory?.attention?.length ?? 0;
-    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
+    return v_flex().flex_1().min_h(0).text_size(13)
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
         .child(h_flex().items_center().gap(8).text_size(11.5).text_color(t.dim)
           .child(div().flex_1().child("Waves"))
@@ -272,15 +352,120 @@ export default class Waves extends View {
 
   // Every dot color in one line, with its meaning on hover.
   legend(t) {
-    const item = (id, color, label, hint, ring = false) => h_flex().id(`wv-legend-${id}`).flex_none().gap(4).items_center().tooltip(hint)
+    return this.legendRow(t, "wv", [
+      ["working", t.working, "working", "Agent working"],
+      ["blocked", t.blocked, "needs you", "Blocked, or waiting on the owner"],
+      ["done", t.done, "done", "Finished, not looked at yet (left sidebar)"],
+      ["waiting", t.working, "waiting", "Waiting on its workers or a deploy", true],
+      ["idle", t.dim, "idle", "Agent there, idle", true],
+    ]);
+  }
+
+  legendRow(t, prefix, items) {
+    const item = (id, color, label, hint, ring = false) => h_flex().id(`${prefix}-legend-${id}`).flex_none().gap(4).items_center().tooltip(hint)
       .child(div().size(6).rounded(3).when(!ring, (d) => d.bg(color)).when(ring, (d) => d.border_1().border_color(color)))
       .child(label);
     return h_flex().flex_none().flex_wrap().gap_x(10).gap_y(2).px(16).py(8).border_t_1().border_color(t.border).text_size(10.5).text_color(t.dim)
-      .child(item("working", t.working, "working", "Agent working"))
-      .child(item("blocked", t.blocked, "needs you", "Blocked, or waiting on the owner"))
-      .child(item("done", t.done, "done", "Finished, not looked at yet (left sidebar)"))
-      .child(item("waiting", t.working, "waiting", "Waiting on its workers or a deploy", true))
-      .child(item("idle", t.dim, "idle", "Agent there, idle", true));
+      .children(items.map((i) => item(...i)));
+  }
+
+  upTone(t, status) {
+    return { 0: t.blocked, 2: t.ansi3, 3: t.accent }[status] ?? t.dim;
+  }
+
+  upDot(t, m) {
+    return div().size(7).flex_none().rounded(3.5).bg(this.upTone(t, m.status));
+  }
+
+  // "Parent / Child" for a monitor's group chain; null when Argo sends no parents (a flat list).
+  upGroup(m, byId) {
+    if (!("parent" in m)) return null;
+    const names = [];
+    for (let p = byId.get(String(m.parent)), n = 0; p && n < 8; p = byId.get(String(p.parent)), n++) names.unshift(p.name);
+    return names.length ? names.join(" / ") : "Other";
+  }
+
+  upTip(m) {
+    const parts = [m.msg, m.lastBeatAt ? `last beat ${new Date(m.lastBeatAt).toLocaleString()}` : null,
+      m.uptime30d != null ? `30 d: ${(m.uptime30d * 100).toFixed(2)}%` : null].filter(Boolean);
+    return parts.join("\n");
+  }
+
+  upRow(t, m, scope, group) {
+    const tip = this.upTip(m);
+    const day = m.uptime1d;
+    const alarm = m.status === 0 || m.status === 2;
+    return h_flex().id(`ub-${scope}-${m.id}`).h(20).flex_none().gap(7).items_center().px(8).rounded(6).text_size(11.5)
+      .hover((s) => s.bg(t.hover)).when(Boolean(tip), (el) => el.tooltip(tip))
+      .child(this.upDot(t, m))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(m.name))
+      .when(alarm && Boolean(group), (el) => el.child(div().flex_shrink(0).max_w(60).truncate().text_size(10.5).text_color(t.dim).child(group.split(" / ").pop())))
+      .when(alarm && Boolean(m.msg), (el) => el.child(div().flex_shrink(1).max_w(80).truncate().text_size(10.5).text_color(t.dim).child(m.msg)))
+      .when(!alarm, (el) => el
+        .child(div().w(44).flex_none().text_right().text_size(10.5).text_color(t.dim).child(m.ping != null ? `${Math.round(m.ping)} ms` : ""))
+        .child(div().w(42).flex_none().text_right().text_size(10.5).text_color(day != null && day < 0.95 ? t.blocked : t.dim)
+          .child(day == null ? "" : day >= 0.9995 ? "100%" : `${(day * 100).toFixed(1)}%`)));
+  }
+
+  upHeader(t, label, count, shown, hasDown) {
+    return h_flex().id(`ub-g-${label}`).h(20).mt(4).flex_none().px(8).gap(7).items_center().rounded(6)
+      .text_size(10.5).font_bold().text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => {
+        this.upOpen[label] = !shown;
+        localStorage.setItem("board.uptime.open", JSON.stringify(this.upOpen));
+        cx.notify();
+      })
+      .child(div().flex_1().truncate().child(label))
+      .when(!shown && hasDown, (el) => el.child(div().flex_none().text_color(t.blocked).child("●")))
+      .child(div().flex_none().child(String(count)))
+      .child(svg(`mods/workspace-chrome/chevron-${shown ? "down" : "right"}.svg`).size(11).flex_none());
+  }
+
+  uptimeView(t) {
+    const d = this.uptime;
+    const { ms, up, down, pending, maint } = this.upStats();
+    const age = Date.now() - this.uptimeAt;
+    const stale = d && (age > STALE_MS || d.status !== "ready");
+    const byId = new Map((d?.monitors ?? []).map((m) => [String(m.id), m]));
+    const alarms = ms.filter((m) => m.status === 0 || m.status === 2).sort((a, b) => a.status - b.status || a.name.localeCompare(b.name));
+    const buckets = new Map();
+    for (const m of ms) {
+      const label = this.upGroup(m, byId) ?? "";
+      if (!buckets.has(label)) buckets.set(label, []);
+      buckets.get(label).push(m);
+    }
+    const labels = [...buckets.keys()].sort((a, b) => a.localeCompare(b));
+    const parts = [`${up.length} up`, `${down.length} down`];
+    if (pending.length) parts.push(`${pending.length} pending`);
+    if (maint.length) parts.push(`${maint.length} maintenance`);
+    const note = !d ? null
+      : d.status === "stale" ? `Argo: stale since ${d.staleSince ?? "?"}`
+      : d.status !== "ready" ? `Argo: ${d.status}`
+      : age > STALE_MS ? "Argo: no fresh answer" : null;
+    return v_flex().flex_1().min_h(0).text_size(13)
+      .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
+        .child(div().truncate().text_size(11.5).text_color(down.length ? t.foreground : t.dim).child(d ? parts.join(" · ") : "Uptime"))
+        .when(Boolean(note), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(note))))
+      .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
+        .when(Boolean(stale), (el) => el.opacity(0.5))
+        .when(!d, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.uptimeAt ? "No answer from Argo" : "Loading…")))
+        .when(alarms.length > 0, (el) => el
+          .child(h_flex().h(20).mt(4).flex_none().px(8).gap(7).items_center().text_size(10.5).font_bold().text_color(t.blocked)
+            .child(div().flex_1().child("DOWN")).child(div().flex_none().child(String(alarms.length))))
+          .children(alarms.map((m) => this.upRow(t, m, "d", this.upGroup(m, byId)))))
+        .children(labels.flatMap((label) => {
+          const rows = buckets.get(label).sort((a, b) => a.name.localeCompare(b.name));
+          if (!label) return rows.map((m) => this.upRow(t, m, "g", null));
+          const hasDown = rows.some((m) => m.status === 0 || m.status === 2);
+          const shown = this.upOpen[label] ?? hasDown;
+          return [this.upHeader(t, label, rows.length, shown, hasDown), ...(shown ? rows.map((m) => this.upRow(t, m, "g", null)) : [])];
+        })))
+      .child(this.legendRow(t, "ub", [
+        ["up", t.dim, "up", "Up"],
+        ["down", t.blocked, "down", "Down"],
+        ["pending", t.ansi3, "pending", "Pending: failed, retrying"],
+        ["maint", t.accent, "maintenance", "Under maintenance"],
+      ]));
   }
 
   // A section folded by default: open only once clicked.

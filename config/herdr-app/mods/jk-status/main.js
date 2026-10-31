@@ -21,10 +21,9 @@ const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" cl
 const HEALTH = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account health --json';
 const HEALTH_MS = 5 * 60000;
 
-// Uptime Kuma: the newest heartbeat of every active monitor, read-only from its SQLite on
-// homelab over keyless Tailscale SSH (as `make doctor` does). One line per monitor:
-// "<status>|<name>", status 1 up, 0 down, 2 pending, 3 maintenance.
-const KUMA = `ssh -o ConnectTimeout=6 -o BatchMode=yes homelab "sqlite3 -readonly /home/jkrumm/ssd/uptime-kuma/kuma.db 'SELECT h.status || \\"|\\" || m.name FROM monitor m JOIN heartbeat h ON h.id=(SELECT id FROM heartbeat WHERE monitor_id=m.id ORDER BY time DESC LIMIT 1) WHERE m.active=1;'"`;
+// Uptime Kuma through Argo's live snapshot, read on the mini (the token is piped to curl, never
+// in argv). Same call as jk-board's Uptime tab; groups and paused monitors don't count.
+const KUMA = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
 const KUMA_MS = 60000;
 
 // The pool: plan-weighted 7-day use across accounts, the statusline's ∑ (scripts/statusline.sh):
@@ -119,9 +118,12 @@ export default class JkStatus extends View {
 
   refreshKuma(cx) {
     cx.spawn(async (cx) => {
-      const r = await exec("sh", ["-c", KUMA]).catch(() => null);
-      const rows = (r?.code === 0 ? r.stdout : "").split("\n").filter(Boolean).map((l) => [l.slice(0, l.indexOf("|")), l.slice(l.indexOf("|") + 1)]);
-      const next = rows.length ? { up: rows.filter(([s]) => s === "1").length, down: rows.filter(([s]) => s === "0").map(([, n]) => n).sort() } : null;
+      const r = await exec("sh", ["-c", KUMA], { on: "mini" }).catch(() => null);
+      let ms = null;
+      try { ms = JSON.parse(r?.stdout ?? "").monitors; } catch {}
+      if (!Array.isArray(ms)) return; // keep the last good counter
+      const live = ms.filter((m) => m.type !== "group" && m.active);
+      const next = { up: live.filter((m) => m.status === 1).length, down: live.filter((m) => m.status === 0).map((m) => m.name).sort() };
       if (same(next, this.kuma)) return;
       this.kuma = next;
       cx.notify();
@@ -209,7 +211,8 @@ export default class JkStatus extends View {
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
       .child(div().flex_1())
-      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).text_color(t.dim)
+      .when(Boolean(this.kuma), (el) => el.child(h_flex().id("kuma").gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover)).text_color(t.dim)
+        .on_click(() => { setShared("jk.board.tab", "uptime"); run("layout.show", { id: "board" }); })
         .tooltip(this.kuma.down.length ? `Uptime Kuma down: ${this.kuma.down.join(", ")}` : "Uptime Kuma: every active monitor up")
         .child(div().child(`▲${this.kuma.up}`))
         .child(div().text_color(this.kuma.down.length ? t.blocked : t.dim).child(`▼${this.kuma.down.length}`))))
