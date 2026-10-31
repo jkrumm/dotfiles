@@ -11,7 +11,6 @@
     "com.microsoft.teams2",
     "com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip",
     "com.goodsnooze.MacWhisper",
-    "so.pen.herdr-gpui",
     "com.google.Chrome",
     "net.imput.helium",
     "dev.zed.Zed"
@@ -134,16 +133,6 @@
         "_0": {
           "carbonModifiers": 6400,
           "carbonKeyCode": 4
-        }
-      }
-    }
-  },
-  "hotkey.app.so.pen.herdr-gpui": {
-    "$jsonString": {
-      "combo": {
-        "_0": {
-          "carbonModifiers": 6400,
-          "carbonKeyCode": 5
         }
       }
     }

@@ -14,7 +14,6 @@
 tap "oven-sh/bun"
 tap "satococoa/tap"
 tap "abue-ammar/tinycast"
-tap "penso/tap"
 tap "jkrumm/tap"
 # Simple, modern, secure file encryption
 brew "age"
@@ -76,10 +75,6 @@ brew "gnupg"
 brew "golangci-lint"
 # OpenType text shaping engine
 brew "harfbuzz"
-# Agent multiplexer — owns the workspace model on the mini (remote persistence
-# + per-pane agent state). Runs as a brew service there; needed on BOTH ends,
-# since the MacBook attaches with `herdr --remote`.
-brew "herdr"
 # TIFF library and utilities
 brew "libtiff"
 # New file format for still image compression
@@ -132,8 +127,7 @@ brew "starship"
 brew "terminal-notifier"
 # OCR (Optical Character Recognition) engine
 brew "tesseract"
-# Terminal multiplexer — deliberate fallback, not the daily driver. herdr owns
-# the workspace model; tmux is what you reattach with if herdr (pre-1.0) breaks.
+# Terminal multiplexer — deliberate fallback if herdr-core (pre-1.0) breaks.
 brew "tmux"
 # Validating, recursive, caching DNS resolver
 brew "unbound"
@@ -164,10 +158,9 @@ cask "devutils"
 # app still configured with the plain name (editors, IDEs) would silently fall
 # back to a system font if the plain cask were dropped.
 cask "font-jetbrains-mono"
-# Terminal font. herdr's sidebar state icons and starship's prompt glyphs are
-# Nerd Font codepoints and render as tofu without it. Ghostty is pointed at the
-# "Mono" family so glyphs stay single-width and cannot push herdr's
-# column-aligned sidebar rows out of alignment.
+# Terminal font. Starship's prompt glyphs are Nerd Font codepoints and render
+# as tofu without it. Ghostty is pointed at the "Mono" family so glyphs stay
+# single-width and cannot break column alignment.
 cask "font-jetbrains-mono-nerd-font"
 # The terminal. Reads ~/.config/ghostty/config (config/ghostty/config here) —
 # see that file's header for the full settings list (theme, font, padding).
@@ -199,11 +192,5 @@ cask "spotify"
 # extension views more room (stable 0.11.3 does neither) — separate app, own
 # com.tinycast.app.beta domain, self-updates within the beta channel.
 cask "abue-ammar/tinycast/tinycast@beta"
-# Herdr GPUI — native desktop client for herdr (unaffiliated, third-party tap),
-# attached to the mini through the saved `herdr machine` profile. Its config is
-# ~/.config/herdr/config-gpui.local.toml (machine-local, untracked — the app
-# and com.jkrumm.appearance-sync both rewrite it); the light/dark theme flip is
-# scripts/appearance-sync.sh, since the app has no system-appearance support.
-cask "penso/tap/herdr-gpui"
 # Multimedia player
 cask "vlc"
