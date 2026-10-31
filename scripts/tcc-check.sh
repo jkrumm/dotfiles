@@ -67,6 +67,9 @@ for opjob in $OP_JOBS; do
   if [ "$p0" != "$LAUNCHER" ]; then
     printf '  ✗ %s: runs op but its program is %s, not the launcher (fix: make opbackup-setup)\n' "$opjob" "$p0"
     fail=$((fail + 1))
+  elif [ ! -x "$LAUNCHER" ]; then
+    printf '  ✗ %s: the launcher %s is missing (fix: make herdr-core-launcher)\n' "$opjob" "$LAUNCHER"
+    fail=$((fail + 1))
   fi
 done
 
