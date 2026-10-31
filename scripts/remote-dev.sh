@@ -1656,9 +1656,10 @@ say_classic() { # <pane> <agent> <text>
   esac
 }
 
-# The janitor: closes finished, clean, pushed tabs; messages dirty ones. All logic lives in
-# herdr-reap.py (also what com.jkrumm.herdr-reap runs); this is the routing hop.
-# TODO(Wave 4): ported to hc with the janitor itself; until then it still reaps classic herdr tabs.
+# The janitor: closes finished, clean, pushed terminals; messages dirty ones. All logic lives in
+# hc-reap.py (also what com.jkrumm.hc-reap runs); this is the routing hop. Classic herdr's tabs are
+# still reaped by herdr-reap.py beside it.
+# TODO(Wave 7): drop classic (the herdr-reap.py leg)
 cmd_reap() {
   local args="" a
   for a in "$@"; do
@@ -1668,7 +1669,10 @@ cmd_reap() {
     esac
   done
   # shellcheck disable=SC2016  # $HOME expands on the host
-  host_run "REAP_IDLE_H='${REAP_IDLE_H:-12}' python3 \"\$HOME/SourceRoot/dotfiles/scripts/herdr-reap.py\"$args"
+  host_run "d=\"\$HOME/SourceRoot/dotfiles/scripts\"; export REAP_IDLE_H='${REAP_IDLE_H:-12}'; rc=0; \
+    if [ -x \"\$d/hc-reap.py\" ]; then python3 \"\$d/hc-reap.py\"$args || rc=\$?; fi; \
+    if [ -x \"\$d/herdr-reap.py\" ] && command -v herdr >/dev/null 2>&1; then python3 \"\$d/herdr-reap.py\"$args || rc=\$?; fi; \
+    exit \$rc"
 }
 
 usage() {

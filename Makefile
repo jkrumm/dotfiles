@@ -118,6 +118,7 @@ setup:
 	@$(MAKE) --no-print-directory herdr-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory herdr-reap-setup
+	@$(MAKE) --no-print-directory hc-reap-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -801,7 +802,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test hc-reap-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2580,6 +2581,7 @@ herdr-core-update-check: ## Preview the core update: candidate, age, sha256 chec
 herdr-core-update: ## Run the core update now, recorded like the daily job
 	@jobrun com.jkrumm.herdr-core-update --owner dotfiles --every 86400 --timeout 900 --lock herdr-core-update -- "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"
 
+# TODO(Wave 7): drop classic (herdr-events, herdr-reap and their targets); hc-events / hc-reap carry on.
 # The herdr event record (factory Phase 0): every event the server emits, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where
 # the herdr server runs. Records only; no consumer.
@@ -2640,6 +2642,28 @@ herdr-reap-teardown:
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-reap.json"; \
 	echo "  ✓ herdr-reap torn down (unloaded, plist and jobrun state removed)"
+
+.PHONY: hc-reap-test
+hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/launchctl/claude/gh, real throwaway git repos)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/hc-reap.test.py
+
+# The herdr-core janitor (`rd reap`), every 30 min under jobrun. Dev host only; talks to the core through
+# `hc connect` and never starts one. Teardown removes the jobrun state file too, or jobs-grade would grade
+# the retired label `unloaded` forever.
+.PHONY: hc-reap-setup hc-reap-teardown
+hc-reap-setup:
+	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	if [ "$$BACKEND" != "cache" ]; then \
+		echo "    · not the dev host (backend=$${BACKEND:-unset}) — hc-reap skipped"; exit 0; fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/hc-reap.py"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.hc-reap" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ every 30 min → rd reap; actions: ~/Library/Logs/hc-reap.log"
+hc-reap-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.hc-reap.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.hc-reap.json"; \
+	echo "  ✓ hc-reap torn down (unloaded, plist and jobrun state removed)"
 
 # The Kuma door (kuma-door/): one tailnet port (8795) through which the homelab's Uptime Kuma pulls
 # the mini's service health — GET /h/<name> relays the loopback URL registered in
@@ -3765,7 +3789,8 @@ help:
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
 	@echo "  make herdr-events-setup         Dev-host only: load the herdr event recorder (-status / -teardown)"
 	@echo "  make hc-resume-setup            Dev-host only: load the Claude session resume for herdr-core (-status / -teardown)"
-	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min herdr janitor (-teardown); run once: rd reap [--dry-run]"
+	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min classic-herdr janitor (-teardown)"
+	@echo "  make hc-reap-setup              Dev-host only: load the 30 min herdr-core janitor (-teardown); run once: rd reap [--dry-run]"
 	@echo "  make kuma-door-setup           Dev-host only: load the Kuma door (:8795, KeepAlive); -restart / -teardown / -gen (monitors for homelab) / -check / -test"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"

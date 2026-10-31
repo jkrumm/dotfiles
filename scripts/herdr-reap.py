@@ -25,6 +25,7 @@ Idle age comes from the last timestamped record of the agent's Claude session tr
 transcript cannot be found has an unknown age and is never closed.
 """
 
+# TODO(Wave 7): drop classic (scripts/hc-reap.py is the herdr-core port and carries on)
 import argparse
 import calendar
 import fcntl

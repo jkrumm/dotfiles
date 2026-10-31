@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.hc-reap</string>
+  <!-- The herdr-core janitor (`rd reap`): closes terminals whose agent has been done/idle past REAP_IDLE_H
+       with a clean, pushed checkout and no active wave; messages dirty/unpushed ones; stops stale
+       `claude --bg` sessions. Talks to the core through `hc connect`, and only while com.jkrumm.herdr-core
+       runs (hc would start a core). Every live action is one line in ~/Library/Logs/hc-reap.log
+       (written by the script); this plist's stdout is only the run transcript. See scripts/hc-reap.py. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.hc-reap</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>1800</string>
+    <string>--timeout</string><string>600</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/hc-reap.py</string>
+  </array>
+  <!-- jobrun is a bun script; launchd's minimal PATH needs bun's dir, Homebrew and ~/.local/bin (hc, claude). -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/hc-reap.out</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/hc-reap.out</string>
+</dict>
+</plist>
