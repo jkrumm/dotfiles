@@ -185,7 +185,9 @@ async function main() {
   const status = coreStatus()
   say(`${hostname().split(".")[0]}: core ${status.version}, installed_by=${status.installed_by}`)
   if (status.installed_by !== "homebrew") {
-    fail(`core is not managed by homebrew (installed_by=${status.installed_by}); run: make herdr-core-setup`)
+    const why = `core is not managed by homebrew (installed_by=${status.installed_by}); run: make herdr-core-setup`
+    if (!dry) fail(why)
+    say(`dry: a real run would fail here: ${why}`)
   }
 
   const latest = await fetchManifest("latest")
