@@ -6,8 +6,8 @@
 # throwaway LaunchAgent (a core is only ever started through launchd), scratch XDG_* /
 # HERDR_APP_HOME, its own bridge LaunchAgent on a scratch port, state dir and config dir. It runs
 # the REAL scripts/collie-setup.sh with the scratch overrides, so the build, the plist and the
-# behavioural check are the production ones. The owner's core, the live collie and the classic
-# herdr.collie plugin are never touched (COLLIE_LEGACY_MIGRATE=0).
+# behavioural check are the production ones. The owner's core and the live collie are never
+# touched.
 #
 #   1. collie-setup.sh setup  → build the pinned commit, render + bootstrap the agent, run the
 #      behavioural check (health, SPA, spoofed-Host 403, bridge ↔ core connected)
@@ -111,7 +111,7 @@ csetup() {
   COLLIE_SOURCE="$COLLIE_SOURCE" COLLIE_REF="$COLLIE_REF" COLLIE_VERSION="$COLLIE_VERSION" \
   COLLIE_LABEL="$BRIDGE_LABEL" COLLIE_HOME="$T/home" COLLIE_CONFIG_DIR="$T/cfg" COLLIE_LOG="$T/collie.log" \
   COLLIE_AGENT_DIR="$T/agents" COLLIE_PORT="$PORT" COLLIE_STATE_DIR="$T/cstate" \
-  COLLIE_HC_SESSION="$SESSION" COLLIE_HC_SOCKET="$SOCK" COLLIE_LEGACY_MIGRATE=0 \
+  COLLIE_HC_SESSION="$SESSION" COLLIE_HC_SOCKET="$SOCK" \
     bash "$DOTFILES_DIR/scripts/collie-setup.sh" "$@"
 }
 csetup setup || { bad "collie-setup.sh setup failed"; tail -20 "$T/collie.log" 2>/dev/null; exit 1; }

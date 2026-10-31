@@ -6,9 +6,9 @@
 #   collie-setup.sh teardown   boot the agent out; checkouts go, .env and state stay
 #   collie-setup.sh pair       mint a one-time pairing code for a phone (the bridge's own `pair`)
 #
-# Collie (docs/collie.md) is the phone control surface: remote shell by design. As of Wave 4 it
-# is no longer a herdr plugin. It is upstream's compiled bridge (`bin/collie _exec-bridge`) under
-# its own LaunchAgent, driving herdr-core (COLLIE_MUX=herdr-core). `make collie-setup` calls this
+# Collie (docs/collie.md) is the phone control surface: remote shell by design. It is upstream's
+# compiled bridge (`bin/collie _exec-bridge`) under its own LaunchAgent, driving herdr-core
+# (COLLIE_MUX=herdr-core). `make collie-setup` calls this
 # with COLLIE_SOURCE / COLLIE_REF / COLLIE_VERSION from the Makefile, the single pin.
 #
 # Never `collie start`: that writes its own unit and publishes `tailscale serve` imperatively.
@@ -28,7 +28,6 @@
 #   COLLIE_AGENT_DIR    ~/Library/LaunchAgents   COLLIE_PORT    8787
 #   COLLIE_STATE_DIR    unset (bridge default ~/.local/state/collie)
 #   COLLIE_HC_SESSION / COLLIE_HC_SOCKET   a non-default core session (scratch cores)
-#   COLLIE_LEGACY_MIGRATE=0   leave the classic herdr.collie plugin alone (scratch cores)
 set -euo pipefail
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -39,9 +38,6 @@ LOG="${COLLIE_LOG:-$HOME/Library/Logs/collie.log}"
 AGENT_DIR="${COLLIE_AGENT_DIR:-$HOME/Library/LaunchAgents}"
 PORT="${COLLIE_PORT:-8787}"
 CORE_LABEL="${COLLIE_CORE_LABEL:-com.jkrumm.herdr-core}"
-LEGACY_LABEL="herdr.collie"
-LEGACY_PLUGIN_ID="herdr.collie"
-LEGACY_CONFIG_DIR="$HOME/.config/herdr/plugins/config/herdr.collie"
 TEMPLATE="$DOTFILES_DIR/scripts/com.jkrumm.collie.plist.template"
 PLIST="$AGENT_DIR/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
@@ -150,18 +146,13 @@ prune_builds() {
 }
 
 # --- config -------------------------------------------------------------------------------
-# The .env is written once by hand (secrets-adjacent, never templated), except for this
-# one-time copy from the plugin's config dir and the COLLIE_MUX line, which is ours.
+# The .env is written once by hand (secrets-adjacent, never templated), except for the
+# COLLIE_MUX line, which is ours.
 ensure_env() {
   local env="$CONFIG_DIR/.env"
   mkdir -p "$CONFIG_DIR"
   chmod 700 "$CONFIG_DIR"
-  if [ ! -f "$env" ]; then
-    [ -f "$LEGACY_CONFIG_DIR/.env" ] \
-      || die "no .env at $CONFIG_DIR — write it by hand first (docs/collie.md §The .env)"
-    cp "$LEGACY_CONFIG_DIR/.env" "$env"
-    note "✓ .env copied from the plugin's config dir"
-  fi
+  [ -f "$env" ] || die "no .env at $CONFIG_DIR — write it by hand first (docs/collie.md §The .env)"
   chmod 600 "$env"
   if grep -q '^COLLIE_MUX=' "$env"; then
     if ! grep -q '^COLLIE_MUX=herdr-core$' "$env"; then
@@ -185,32 +176,6 @@ core_running() {
   launchctl print "$DOMAIN/$CORE_LABEL" 2>/dev/null | grep -Eq '^[[:space:]]+state = running'
 }
 
-legacy_retire() {
-  [ "${COLLIE_LEGACY_MIGRATE:-1}" = "1" ] || return 0
-  local legacy_plist="$AGENT_DIR/$LEGACY_LABEL.plist"
-  if loaded "$LEGACY_LABEL"; then
-    launchctl bootout "$DOMAIN/$LEGACY_LABEL" 2>/dev/null || true
-    note "✓ legacy $LEGACY_LABEL (upstream plugin supervisor) booted out"
-  fi
-  if [ -f "$legacy_plist" ]; then
-    rm -f "$legacy_plist"
-    note "✓ legacy $LEGACY_LABEL plist removed"
-  fi
-}
-
-legacy_plugin_uninstall() {
-  [ "${COLLIE_LEGACY_MIGRATE:-1}" = "1" ] || return 0
-  command -v herdr >/dev/null 2>&1 || return 0
-  if herdr plugin list --json 2>/dev/null | jq -e --arg id "$LEGACY_PLUGIN_ID" '.result.plugins[]? | select(.plugin_id==$id)' >/dev/null 2>&1; then
-    # TODO(Wave 7): drop classic — the whole plugin migration goes with classic herdr.
-    if herdr plugin uninstall "$LEGACY_PLUGIN_ID" >/dev/null 2>&1; then
-      note "✓ $LEGACY_PLUGIN_ID plugin uninstalled"
-    else
-      note "! could not uninstall the $LEGACY_PLUGIN_ID plugin — remove it by hand: herdr plugin uninstall $LEGACY_PLUGIN_ID"
-    fi
-  fi
-}
-
 activate() {
   local root="$1" new changed=0 prev_root
   prev_root=$(installed_root)
@@ -229,12 +194,10 @@ activate() {
     || die "no $DOMAIN session to bootstrap into — log in at the console once, then re-run: make collie-setup"
 
   if [ "$changed" = "1" ] || ! loaded "$LABEL"; then
-    legacy_retire
     loaded "$LABEL" && launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST" || die "launchctl bootstrap failed for $PLIST"
     note "✓ $LABEL bootstrapped (RunAtLoad + KeepAlive)"
   else
-    legacy_retire
     note "· $LABEL up to date"
   fi
   PREV_ROOT="$prev_root"
@@ -258,7 +221,6 @@ cmd_setup() {
     echo "    log: $LOG" >&2
     exit 1
   fi
-  legacy_plugin_uninstall
   prune_builds "$root" "${PREV_ROOT:-}"
   note "↳ Front door is declared state, not this target: the tailnet binding is"
   note "  a row in dotfiles-private/tailscale-serve.mini.conf, applied by"
@@ -281,9 +243,6 @@ cmd_status() {
     else
       echo "    ✓ loaded and running (pid $pid, last exit $status)"
     fi
-  fi
-  if loaded "$LEGACY_LABEL"; then
-    echo "    ! legacy $LEGACY_LABEL is still loaded — run: make collie-setup"
   fi
   local root pinned
   root=$(installed_root)
@@ -321,17 +280,12 @@ cmd_pair() {
 # Deliberately NOT `collie uninstall`: that always attempts a tailscale serve teardown, even under
 # COLLIE_SKIP_SERVE=1. Serve is declared state in this repo and no upstream script gets to mutate it.
 cmd_teardown() {
-  local l f
-  for l in "$LABEL" "$LEGACY_LABEL"; do
-    [ "$l" = "$LEGACY_LABEL" ] && [ "${COLLIE_LEGACY_MIGRATE:-1}" = "0" ] && continue
-    f="$AGENT_DIR/$l.plist"
-    if loaded "$l"; then
-      launchctl bootout "$DOMAIN/$l" 2>/dev/null || true
-      echo "  ✓ $l booted out"
-    fi
-    [ -f "$f" ] && { rm -f "$f"; echo "  ✓ $l plist removed"; }
-  done
-  [ "${COLLIE_LEGACY_MIGRATE:-1}" = "0" ] || legacy_plugin_uninstall
+  local f="$AGENT_DIR/$LABEL.plist"
+  if loaded "$LABEL"; then
+    launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+    echo "  ✓ $LABEL booted out"
+  fi
+  [ -f "$f" ] && { rm -f "$f"; echo "  ✓ $LABEL plist removed"; }
   rm -rf "$HOME_DIR"
   echo "  ✓ checkouts removed ($HOME_DIR)"
   echo "  · $CONFIG_DIR (.env) and the bridge's state dir (paired devices) left in place"
