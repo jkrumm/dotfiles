@@ -21,14 +21,14 @@ description: The whole personal environment on one page — the owner's mental m
 Six boxes, each with one job; the *why* only — depth lives behind the links.
 
 - **Mac mini — the always-on dev host.** Every agent and LaunchAgent runs here. It never sleeps and has no UI of its own.
-- **MacBook and iPhone — the UI layer.** No durable state. The MacBook is `desk` (a herdr client) plus biometric 1Password; the iPhone is Collie in a browser tab. Closing the lid ends a *connection*, never the work.
-- **Windows onto the mini.** herdr (live panes), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
+- **MacBook and iPhone — the UI layer.** No durable state. The MacBook runs the Herdr app (a window on the mini's core) plus biometric 1Password; the iPhone is Collie in a browser tab. Closing the lid ends a *connection*, never the work.
+- **Windows onto the mini.** the Herdr app (live terminals), Slack `#agents` (Hermes's channel), Argo `/agents` (the durable record), the brain reader, Collie (the only one that can *act*).
 - **VPS — the mature production stack.** Traefik-fronted apps, ClickStack/HyperDX, its own crons. Nothing there depends on the mini; reached over Tailscale SSH.
 - **HomeLab — his own container world**, plus the single Uptime Kuma every push monitor reports to.
 - **Gateways — outsourced work** as submit-then-poll HTTP services: email-gateway. Detail: brain `gateways`.
 
 **The agent platform** — one engine (agent-workflows),
-one front door (Hermes), one cockpit (herdr), two lanes, one repo contract —
+one front door (Hermes), one cockpit (the Herdr app over herdr-core), two lanes, one repo contract —
 is specified in [`agent-platform.md`](agent-platform.md), which wins over any
 older doc on that topic. This map only places its parts on machines.
 
@@ -88,7 +88,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 
 | Label | Schedule | What |
 |-|-|-|
-| `sh.brew.herdr` | KeepAlive | herdr server, setsid wrapper — **supervised boot path** (`TODO(Wave 7): drop classic`) |
+| `sh.brew.herdr` | KeepAlive | classic herdr server (setsid wrapper, **supervised boot path**); still running until Wave 7 retires it, the hc world is `com.jkrumm.herdr-core` below |
 | `sh.brew.colima` | KeepAlive | Docker VM, bounded-retry wrapper — **supervised boot path** |
 | `com.colima.docker-socket` | daemon (root) | `/var/run/docker.sock` symlink at boot |
 | `sh.brew.caddy` | daemon (root) | local HTTPS + tailnet doors |
@@ -106,17 +106,17 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, OCR sessions > 14 d, stale `$TMPDIR` entries, package caches |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → Slack chain; exits 1 unless `config/jobrun-canary.json` is healthy |
-| `com.jkrumm.herdr-events` | KeepAlive | raw herdr event record → `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.started` / `recorder.gap` lines mark restarts; records only, no consumer |
-| `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `com.jkrumm.herdr-core` runs: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log`; the classic `herdr-events` row goes in Wave 7 |
+| `com.jkrumm.herdr-events` | KeepAlive | classic herdr event record into the same JSONL dir as `hc-events` below; retires in Wave 7 |
+| `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `com.jkrumm.herdr-core` runs: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log` |
 | `com.jkrumm.hc-resume` | KeepAlive | Claude session resume on herdr-core: subscribes via `hc connect` (only while `com.jkrumm.herdr-core` runs: `hc connect` would start a core) and types `claude --resume <id>` into the login shell of a kept terminal whose program was lost, from the `jk.claude.*` labels `hooks/hc-session-label.ts` sets; `make hc-resume-setup`, log `~/Library/Logs/hc-resume.log`, `docs/herdr-core.md` §Resume |
-| `com.jkrumm.herdr-core` | KeepAlive | `hc serve` — the herdr-core server beside classic herdr, in the GUI session (keychain reach for Claude), started through `~/.local/libexec/herdr-core-launcher` (built once from `scripts/herdr-core-launcher.c`; it holds the Full Disk Access grant, the homebrew-installed core runs as its child); the MacBook connects as `hc machine` `mini`; graded by the heartbeat's `core` component and `doctor.sh` (`scripts/lib/core-health.sh`: job running, `hc server status`, managed install, version parity) and by `brew-upgrade.sh` (launcher, `/Cellar/` path, `tcc-check`); `make herdr-core-setup`, `docs/herdr-core.md`, `docs/tcc.md` |
+| `com.jkrumm.herdr-core` | KeepAlive | `hc serve` — the herdr-core server, in the GUI session (keychain reach for Claude), started through `~/.local/libexec/herdr-core-launcher` (built once from `scripts/herdr-core-launcher.c`; it holds the Full Disk Access grant, the homebrew-installed core runs as its child); the MacBook connects as `hc machine` `mini`; graded by the heartbeat's `core` component and `doctor.sh` (`scripts/lib/core-health.sh`: job running, `hc server status`, managed install, version parity) and by `brew-upgrade.sh` (launcher, `/Cellar/` path, `tcc-check`); `make herdr-core-setup`, `docs/herdr-core.md`, `docs/tcc.md` |
 | `com.jkrumm.herdr-core-update` | 04:15 daily (both machines) | `jobrun` job: bumps `jkrumm/tap` `herdr-core` to the newest release ≥ 24 h old, `brew upgrade`, kickstarts the core, asserts terminals kept their pids and `hc machine ls` versions match; `make herdr-core-update-check` previews, `docs/herdr-core.md` §Updates |
 | `com.jkrumm.kuma-door` | KeepAlive | the Kuma door: `GET /h/<name>` on `127.0.0.1:8795` relays the loopback health URLs in `kuma-door/registry.json` for the homelab's Uptime Kuma (log `~/Library/Logs/kuma-door.{out,err}.log`) |
-| `com.jkrumm.herdr-reap` | 1800s | the herdr janitor (`rd reap`): closes tabs of finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12) and, regardless of idle age or an active wave, a fan tab whose branch is merged (PR MERGED/CLOSED or patch-equal to the default) or deleted on origin (never a working agent, a dirty/unpushed tree, or a `wave <n>`/`*-mother`/`*-w<n>` tab), messages dirty ones, stops `claude --bg` leftovers > 24 h; actions in `~/Library/Logs/herdr-reap.log` |
+| `com.jkrumm.herdr-reap` | 1800s | the classic herdr janitor (same rules as `hc-reap`, over the classic socket); retires in Wave 7, log `~/Library/Logs/herdr-reap.log` |
 | `com.jkrumm.hc-reap` | 1800s | the herdr-core janitor (`rd reap`, `scripts/hc-reap.py` over `hc connect`, only while the core runs): the `herdr-reap` rules on `terminal.list` — closes (`terminal.kill` + `rm`) finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12; idle age from the `jk.claude.session` label's transcript) and, regardless of idle age or an active wave, a fan terminal whose branch is merged or deleted on origin (never a working agent, a dirty/unpushed tree, a terminal with live children or a `wave <n>`/`*-mother`/`*-w<n>` name), messages dirty ones, stops `claude --bg` leftovers > 24 h; `make hc-reap-setup`, actions in `~/Library/Logs/hc-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
-| `com.jkrumm.collie` | KeepAlive | collie bridge, the phone control surface, standalone on herdr-core (`bin/collie _exec-bridge`, loopback `:8787`, pinned commit, log `~/Library/Logs/collie.log`); `make collie-setup` also boots out the classic plugin's herdr.collie agent and uninstalls the plugin; `docs/collie.md` |
+| `com.jkrumm.collie` | KeepAlive | collie bridge, the phone control surface, standalone on herdr-core (`bin/collie _exec-bridge`, loopback `:8787`, pinned commit, log `~/Library/Logs/collie.log`); `docs/collie.md` |
 
 ### hermes-agent
 
@@ -218,7 +218,7 @@ such stray fails the assertion instead of hiding from it.
 van-sampler-setup` there (the sampler is gated on a passing Bluetooth spike), restore both
 rows to the list below (original text: this file's git history), and un-hide the `netgear` / `van-power` Tinycast extensions.
 
-`com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
+`com.jkrumm.appearance-sync` (WatchPaths, Herdr app light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.herdr-core` (KeepAlive `hc serve`, the core behind the Herdr app; clean env, via the FDA-holding launcher, `make herdr-core-setup`) · `com.jkrumm.herdr-core-update` (daily 04:15, `jobrun`) ·
@@ -288,7 +288,7 @@ Uptime Kuma.
 | Monitor | Pusher | Cadence |
 |-|-|-|
 | `Local / Mac mini door` (group, one `<service> - Door` monitor each) | Kuma **pulls** `https://<mini MagicDNS host>:8795/h/<name>`; generated by `make kuma-door-gen` | 120 s, 2 retries |
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (20 components, incl. the herdr-core beside classic herdr, Max quota, kernel panics) | 10 min, 1 retry |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (20 components, incl. the herdr-core, Max quota, kernel panics) | 10 min, 1 retry |
 | `MacMini Collie - Push` | collie behavioural check | 4 h backstop, 1 retry |
 | `MacMini Secret Seed - Push` | cache-freshness check | 8 days, 1 retry |
 | `MacMini Drift - Push` | drift-check agent | 2 days, 1 retry |

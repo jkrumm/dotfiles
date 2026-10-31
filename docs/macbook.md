@@ -69,33 +69,25 @@ file, so that doubles as cancel. Changing the resting default means editing both
 command of the `tinycast-extensions` repo (status via `batt status --json`, limit
 changes via `launcher/battery-limit.sh`, so the pause logic lives in one place).
 
-## Herdr GPUI light/dark — `com.jkrumm.appearance-sync`
+## Light/dark — `com.jkrumm.appearance-sync`
 
-Herdr GPUI (the herdr desktop client, attached to the mini through the saved
-`herdr machine` profile) takes one `theme` name and has no system-appearance
-support. `scripts/appearance-sync.sh` rewrites the `theme` line of
-`~/.config/herdr/config-gpui.local.toml` to `basalt-ui-light`/`-dark`; the app
-reloads it on save. The agent `WatchPaths` the global preferences plist, so it
-also fires on unrelated preference writes (no-ops) and lags a flip by ~7–10 s
-(cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the
-mini.
+The Herdr app follows the system appearance itself (theme `one-zinc-{light,dark}`, `docs/theme.md`). What it
+does not do is tell the programs inside its terminals: an unattached core terminal answers OSC 10/11 with fixed dark
+colours and a running program gets no `?997` push on a switch (`docs/herdr-core.md` fact 6). The agent `WatchPaths` the
+global preferences plist, so it also fires on unrelated preference writes (no-ops) and lags a flip by ~7-10 s
+(cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the mini. Its classic-GPUI step (rewriting the
+`theme` line of `~/.config/herdr/config-gpui.local.toml`) goes with classic herdr in Wave 7.
 
-**Claude and OpenCode panes follow too — here and on the mini.** Claude Code on
-`theme: auto` flips on a DEC 2031 report plus the OSC 11 background answer it
-re-queries — which only a Ghostty client supplies; Herdr GPUI never sends either.
-OpenCode's opentui renderer needs that report **and both** the OSC 11 (background)
-and OSC 10 (foreground) answers: the report alone only makes it re-query, and a
-missing colour leaves it dark. So on a change the agent re-themes every `claude`
-and `opencode` pane on this machine with `scripts/claude-appearance.sh light|dark`,
-then does the same on the mini over `ssh mini … claude-appearance.sh light|dark`
-(BatchMode, riding the ControlMaster a connected GUI keeps open; a failed push
-retries on the next preferences write). Both paths record the mode in
-`~/.local/state/claude-appearance`. The `oc` wrapper replays it into a new OpenCode
-pane at 0.4 s — early enough to beat opencode's first paint, unlike the old single
-3 s send — as does Claude's SessionStart hook ~3 s after start. Measured in a pty:
-OSC 11 alone leaves OpenCode dark, OSC 11 + OSC 10 flips it. Live flip, no redraw,
-nothing typed into the prompt. Either half alone, or editing `~/.claude.json`,
-does nothing to a running session.
+**Claude and OpenCode terminals follow too, here and on the mini.** Claude Code on `theme: auto` flips on a DEC 2031
+report plus the OSC 11 answer it re-queries; OpenCode's opentui renderer needs the report **and both** OSC 11
+(background) and OSC 10 (foreground): the report alone only makes it re-query, and a missing colour leaves it dark. So
+on a change the agent runs `scripts/claude-appearance.sh light|dark` for this machine, then on the mini over
+`ssh mini … claude-appearance.sh light|dark` (BatchMode; a failed push retries on the next preferences write). The script
+sends the bytes as raw input over `terminal.attach` (`scripts/hc-raw-input.ts`, because `hc send` always adds Enter) to
+every live terminal running `claude` or `opencode`, and records the mode in `~/.local/state/claude-appearance`. The `oc`
+wrapper replays it into a new OpenCode terminal at 0.4 s (early enough to beat opencode's first paint) and Claude's
+SessionStart hook ~3 s after start. Live flip, no redraw, nothing typed into the prompt; editing `~/.claude.json` does
+nothing to a running session.
 
 ## Database access — `make db-tunnel-setup`
 
