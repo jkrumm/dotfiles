@@ -2863,11 +2863,8 @@ obsidian-autostart-teardown:
 herdr-setup:
 	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
 	@herdr integration install claude
-	@# Two different things, both needed. `integration install claude` writes the
-	@# SessionStart hook that makes a pane report real agent state. This writes the
-	@# agent SKILL.md that teaches Claude Code to DRIVE herdr — generated from the
-	@# binary, never hand-written, so it can't go stale on a brew upgrade.
-	@bash $(DOTFILES_DIR)/scripts/herdr-skill-sync.sh
+	@# The agent skill is hand-written for herdr-core now (skills/herdr); the generator that
+	@# overwrote it from `herdr --skill` is no longer called. Wave 7 deletes the script.
 	@$(MAKE) --no-print-directory _setup-settings
 	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	if [ "$$BACKEND" = "cache" ]; then \
