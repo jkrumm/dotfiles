@@ -2919,6 +2919,10 @@ herdr-upgrade:
 herdr-app-setup:
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
 
+.PHONY: herdr-app-keys-test
+herdr-app-keys-test: ## Hermetic test for herdr-app-keys.sh (jq merge into a temp keys.json)
+	@bash $(DOTFILES_DIR)/scripts/herdr-app-keys.test.sh
+
 # Converge herdr's brew-service plist so the server starts as a SESSION LEADER.
 # Same shape, same trap and same reason as _colima-supervise: BREW REGENERATES
 # THIS PLIST on every `brew services start/restart` and every `brew upgrade

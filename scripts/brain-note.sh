@@ -2,7 +2,12 @@
 set -euo pipefail
 
 # brain-note — open THIS pane's repo project page from the brain vault in
-# $EDITOR. Bound to prefix+e in config/herdr/config.toml as a herdr `popup`.
+# $EDITOR. Two callers: prefix+e in config/herdr/config.toml (classic herdr `popup`,
+# TODO(Wave 7): drop classic) and cmd-e in the Herdr app, where the jk-keys mod
+# (config/herdr-app/mods/jk-keys) starts it with `hc run --bg --cwd <the focused
+# terminal's cwd>` and shows it with `terminal.peek`. hc terminals take the core's
+# launchd environment, so there is no $EDITOR there unless the machine sets one:
+# vim is the fallback, BRAIN_NOTE_EDITOR overrides.
 #
 # WHY THIS REPLACED THE herdr-notes PLUGIN. That plugin kept one markdown note
 # per herdr WORKSPACE, in herdr's plugin state dir — untracked, unsynced,
@@ -48,8 +53,9 @@ die() {
 
 [ -d "$VAULT/.git" ] || die "no brain vault at $VAULT (set BRAIN_VAULT to override)"
 
-# herdr exports the focused pane's cwd for custom commands; $PWD is the fallback
-# for running this by hand from a shell.
+# Classic herdr exports the focused pane's cwd for custom commands
+# (TODO(Wave 7): drop classic); under hc the run's --cwd is $PWD, which is also the
+# fallback for running this by hand from a shell.
 CWD="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
 [ -d "$CWD" ] || CWD="$PWD"
 
@@ -57,7 +63,7 @@ CWD="${HERDR_ACTIVE_PANE_CWD:-$PWD}"
 # basename of whatever directory the pane happens to sit in, and writing
 # `Projects/Downloads.md` into a curated tree is worse than doing nothing.
 ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) \
-  || die "this pane is not inside a git repo — prefix+e opens the project note for the repo you are in"
+  || die "this pane is not inside a git repo — the project-note key opens the note for the repo you are in"
 
 REPO=$(basename "$ROOT")
 

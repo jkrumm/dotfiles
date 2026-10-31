@@ -181,6 +181,17 @@
       "content": {
         "mod": "jk-board"
       }
+    },
+    {
+      "id": "keys",
+      "type": "block",
+      "size": {
+        "px": 0
+      },
+      "min": 0,
+      "content": {
+        "mod": "jk-keys"
+      }
     }
   ],
   "theme": {
