@@ -4,8 +4,8 @@
 # .hasTrustDialogAccepted = true, written by atomic replace (a running session rewrites the same file).
 #
 # Why: a fresh config dir shows the dialog on first start in a path, and it blocks
-# `herdr agent start` (agent_not_ready). `make claude-accounts-setup` runs this for $HOME so a bare
-# `claude` in a fresh herdr pane starts; fan-worktree.sh does the same for each new worktree.
+# the start of `claude` in it. `make claude-accounts-setup` runs this for $HOME so a bare
+# `claude` in a fresh hc terminal starts; fan-worktree.sh does the same for each new worktree.
 # An account whose .claude.json does not exist yet (never logged in) is skipped — re-run after /login.
 # Idempotent; exits 1 if any account file could not be updated.
 set -u

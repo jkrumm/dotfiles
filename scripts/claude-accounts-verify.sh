@@ -61,7 +61,7 @@ while IFS=$'\t' read -r id dir; do
   elif [[ "$logged" == "true" ]]; then
     row PASS "auth/$id" "loggedIn, configDirectory $want_dir, keychain '$svc' present"
   else
-    row "$bad" "auth/$id" "NOT logged in (keychain '$svc' $kc) — fix: claude-relogin $id (or /login with ${dir/#-/CLAUDE_CONFIG_DIR unset} in a herdr pane)"
+    row "$bad" "auth/$id" "NOT logged in (keychain '$svc' $kc) — fix: claude-relogin $id (or /login with ${dir/#-/CLAUDE_CONFIG_DIR unset} in a Herdr app terminal)"
   fi
 done <<<"$ACCOUNTS"
 
@@ -169,12 +169,12 @@ else
   else
     row FAIL "launcher/picker" "_claude_launch no longer reaches 'claude-account pick --lane'"
   fi
-  # bare `claude` (what herdr types into a pane): one function that picks on ${USAGE_LANE:-interactive} unless
+  # bare `claude` (what a Herdr app terminal runs): one function that picks on ${USAGE_LANE:-interactive} unless
   # CLAUDE_ACCOUNT_PICKED is set, and every chooser sets that marker.
   if fn_body claude | grep -q '_claude_account_line' && fn_body claude | grep -q '_claude_marker_valid' && fn_body _claude_marker_valid | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body claude | grep -q 'USAGE_LANE'; then
     row PASS "launcher/claude" "bare claude picks on \${USAGE_LANE:-interactive} unless CLAUDE_ACCOUNT_PICKED is set"
   else
-    row FAIL "launcher/claude" "the claude function no longer picks (herdr agent start would land on iu) or ignores the marker"
+    row FAIL "launcher/claude" "the claude function no longer picks (a bare claude would land on iu) or ignores the marker"
   fi
   if fn_body _claude_enter_account | grep -q 'CLAUDE_ACCOUNT_PICKED' && fn_body _claude_launch | grep -q '_claude_enter_account'; then
     row PASS "launcher/marker" "c/cs/cf set CLAUDE_ACCOUNT_PICKED (no double pick)"
@@ -194,9 +194,9 @@ if [[ -r "$RD_SCRIPT" ]]; then
     fi
   done
   if grep -q "CLAUDE_ACCOUNT_PICKED=" "$RD_SCRIPT"; then
-    row PASS "launcher/rd-marker" "remote-dev.sh passes CLAUDE_ACCOUNT_PICKED to its panes (herdr --env)"
+    row PASS "launcher/rd-marker" "remote-dev.sh passes CLAUDE_ACCOUNT_PICKED to its terminals (hc spawn env)"
   else
-    row FAIL "launcher/rd-marker" "remote-dev.sh no longer passes CLAUDE_ACCOUNT_PICKED — an rd pane would pick twice"
+    row FAIL "launcher/rd-marker" "remote-dev.sh no longer passes CLAUDE_ACCOUNT_PICKED — an rd terminal would pick twice"
   fi
 else
   row FAIL "launcher/rd" "$RD_SCRIPT unreadable"

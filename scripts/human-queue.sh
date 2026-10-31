@@ -47,7 +47,7 @@ REMOTE_QUEUE_DIR='${XDG_STATE_HOME:-$HOME/.local/state}/human-queue'
 
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# Same "am I the dev host" signal remote-dev.sh, git-headless and herdr-setup
+# Same "am I the dev host" signal remote-dev.sh and git-headless
 # already key off — one definition, so this script cannot silently disagree
 # with them about which machine it is running on.
 on_dev_host() {

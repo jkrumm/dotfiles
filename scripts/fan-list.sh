@@ -7,7 +7,7 @@
 # and every one is in the fetched origin default (patch-id, so a rebase-merge counts). A branch
 # still AT the base is "fresh": a worker just started there. Nothing else is touched.
 # Ownership: `rd fan` marks each worktree it creates with <git-dir>/rd-fan (the worktree's own
-# admin dir, so it survives a herdr restart and goes away with the worktree). A worktree without
+# admin dir, so it survives a core restart and goes away with the worktree). A worktree without
 # the marker - another session's, or made before the marker existed - is always "keep"
 # (no-marker); only --all (the human's explicit repo-wide clean) judges it by merged+clean.
 set -euo pipefail

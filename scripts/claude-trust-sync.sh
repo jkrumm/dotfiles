@@ -4,7 +4,7 @@
 # For each registered account with its own dir (config/claude-accounts.json, or $CLAUDE_ACCOUNTS_REGISTRY): every
 # project path the DEFAULT ~/.claude.json already trusts (.projects[p].hasTrustDialogAccepted == true) is set to
 # true in the extra account's file. Why: a fresh `me` start in a folder it never opened stops at "trust this
-# folder?", and `herdr agent start` then reports not-ready.
+# folder?", and a spawned `claude` then stops there.
 #
 # Only ever tightens toward the default, never loosens: it sets true only where the default says true (a path the
 # default marks false or does not know is left alone), and touches no other key. One atomic replace per account

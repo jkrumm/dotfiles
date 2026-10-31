@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """What does this terminal actually send? Run in a BARE Ghostty window,
-NOT inside herdr — herdr intercepts bound keys and would confound the result.
+NOT inside the Herdr app — the app intercepts bound keys and would confound the result.
 
-Enables the Kitty keyboard protocol exactly the way herdr does (CSI > 7 u),
+Enables the Kitty keyboard protocol exactly the way the Herdr app does (CSI > 7 u),
 then prints the raw bytes of every key you press.
 
 Press keys, then Ctrl-] to quit.
@@ -44,7 +44,7 @@ def main() -> None:
         sys.exit("not a tty")
     saved = termios.tcgetattr(fd)
     os.write(1, KITTY_PUSH)
-    print("Kitty keyboard protocol pushed (CSI > 7 u) — same as herdr.\r")
+    print("Kitty keyboard protocol pushed (CSI > 7 u) — same as the Herdr app.\r")
     print("Press Caps+b, Caps+e, then plain b. Ctrl-] quits.\r\n")
     try:
         tty.setraw(fd)

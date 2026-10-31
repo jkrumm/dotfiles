@@ -9,10 +9,9 @@
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
 //
-// Status dot: herdr-core's terminal status, merged with classic herdr's agents. The
-// real agents on `mini` run in classic herdr, which core can't see, so `agw agents`
-// is polled there every 10 s and each project is matched to the mini space whose
-// folder is the longest prefix of its cwd. The most urgent state wins.
+// Status dot: herdr-core's terminal status, merged with `agw agents` for the mini's
+// projects, polled every 10 s and matched to the mini space whose folder is the
+// longest prefix of its cwd. The most urgent state wins.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -93,7 +92,7 @@ export default class Spaces extends View {
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.foldersFolded = new Set(JSON.parse(localStorage.getItem("folders.folded") ?? "[]"));
     this.groups = { list: [], fallback: "OTHER" };
-    this.projects = []; // classic herdr's agents on mini: [{ cwd, states }]
+    this.projects = []; // `agw agents` projects on mini: [{ cwd, states }]
     this.mini = {}; // space -> the status of its agents on mini
     this.polling = false;
     this.loadGroups(cx);

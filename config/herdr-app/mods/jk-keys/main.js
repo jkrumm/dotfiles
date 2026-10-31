@@ -1,7 +1,7 @@
 // jk-keys — headless: key commands that run a script. No UI; a layout block of zero size hosts it
 // because `<mod>.<command>` reaches shown copies only.
 //   keys.json "cmd-e": "jk-keys.brain-note"   the focused terminal's repo page from the brain vault,
-//                                             in $EDITOR, as a peek over the tab (classic prefix+e)
+//                                             in $EDITOR, as a peek over the tab
 // Bound by scripts/herdr-app-keys.sh, never by hand. The key list is the file's job; this mod
 // only answers the commands.
 import { View, div } from "gpui-kit";

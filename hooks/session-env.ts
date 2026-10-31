@@ -11,7 +11,7 @@
  * Prunes log files older than 3 days on every run. Never blocks Claude: any
  * failure exits 0.
  *
- * Desktop notifications were removed — herdr's native agent-state
+ * Desktop notifications were removed — the Herdr app's native agent-state
  * notifications cover "input required" and "done".
  */
 

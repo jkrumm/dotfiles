@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-// hc-events — the raw event record of herdr-core (the herdr-events successor).
+// hc-events — the raw event record of herdr-core (successor of the retired classic herdr-events job).
 // `events.subscribe` over `hc connect`; every event is appended, stamped with its receive time, to
-// <dir>/YYYY-MM-DD.jsonl (the same directory herdr-events.ts writes). The files are data, not a log: never
+// <dir>/YYYY-MM-DD.jsonl (the directory the retired herdr-events job wrote, so existing readers keep working). The files are data, not a log: never
 // rotated, truncated or pruned. No consumers; this only records.
 //
 // Line shapes (docs/herdr-core.md fact 7):

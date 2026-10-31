@@ -34,7 +34,7 @@ fi
 # A branch cut from origin/<default> must not track it: `git push` would target master.
 git -C "$path" branch --unset-upstream "$branch" 2>/dev/null || true
 # Claude Code asks "do you trust this folder?" for every new path, even under a trusted
-# repo, and the prompt blocks `herdr agent start` (agent_not_ready). Accept it the way the
+# repo, and the prompt blocks a fresh `claude` start in it. Accept it the way the
 # dialog would: hasTrustDialogAccepted on the worktree's ~/.claude.json project entry,
 # written by atomic replace (measured 2026-10-10, 2.1.296).
 # Every registry account has its own .claude.json (config/claude-accounts.json): the worktree is
