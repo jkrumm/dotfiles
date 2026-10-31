@@ -226,7 +226,7 @@ Role `lead`. dotfiles.
   `remote-dev-*.test.sh` stubs to a fake `hc`.
   **CLI compatibility (owner's iris fleet depends on it):** iris `docs/waves/handoff/mother-watch.sh` greps the text
   of `rd agents` for agent names (`iris-w<n>`) and the word `blocked`; its `mother.md` spawns leads with
-  `RD_ORCHESTRATED=1 rd wave iris '…'` and workers with `rd fan` / `rd merge` / `rd read` / `rd say`. Keep those
+  `RD_ORCHESTRATED=1 rd wave iris '…'` and workers with `rd fan` (and the train that lands them), `rd read`, `rd say`. Keep those
   verbs, flags and the `rd agents` text shape (name + status word per line) working, or update iris's scripts in
   the same wave.
 - [ ] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
