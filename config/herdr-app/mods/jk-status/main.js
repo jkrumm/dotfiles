@@ -138,11 +138,12 @@ export default class JkStatus extends View {
       .when(!stats, (el) => el.child(div().text_color(t.dim).child("…")));
   }
 
-  // "iu 7/59": 5-hour / 7-day %, as in the Claude statusline. Red at ≥ 90, dim when stale or logged out.
+  // "iu 7/59": 5-hour / 7-day %, as in the Claude statusline. No quota color (a full account is the picker's job, not
+  // an alarm); red only for a failed login, dim when stale.
   account(t, a) {
     const bad = !a.auth_ok;
     const stale = (a.age_s ?? 0) > STALE_S;
-    const color = bad ? t.blocked : stale ? t.dim : Math.max(a.five_hour ?? 0, a.seven_day ?? 0) >= 90 ? t.blocked : t.muted;
+    const color = bad ? t.blocked : stale ? t.dim : t.muted;
     const text = bad ? `${a.id} login` : `${a.id} ${a.five_hour ?? "?"}/${a.seven_day ?? "?"}`;
     return div().text_color(color).child(text);
   }
