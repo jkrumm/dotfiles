@@ -233,7 +233,7 @@ section_claude_accounts() {
 }
 
 # --- Remote path — MacBook -> mini (MacBook only) -----------------------------
-# Tailscale, ssh, ControlMaster, agent isolation + forwarding (mini-fwd), herdr, then the GitHub
+# Tailscale, ssh, ControlMaster, agent isolation + forwarding (mini-fwd), then the GitHub
 # credential + push rights. The reverse mini->iumac leg is not probed here: it
 # is only meaningful running ON the mini, which this section by definition is
 # not.
@@ -280,22 +280,6 @@ section_remote_path() {
     ok "agent forwarding" "$HOST-fwd: mini can use this machine's keys"
   else
     bad "agent forwarding" "$HOST-fwd: forwarded agent has no usable keys"
-  fi
-
-  # TODO(Wave 7): drop classic — the two herdr checks below (the core is graded by section_core, here and on the mini).
-  local running
-  running=$(ssh "$HOST" 'herdr status --json 2>/dev/null' 2>/dev/null \
-    | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("server",{}).get("running"))' 2>/dev/null)
-  if [ "$running" = "True" ]; then
-    ok "herdr server" "running on $HOST"
-  else
-    bad "herdr server" "down — 'make herdr-restart YES=1' on $HOST"
-  fi
-
-  if ssh "$HOST" 'test -f "$HOME/.claude/hooks/herdr-agent-state.sh"' 2>/dev/null; then
-    ok "herdr agent-state hook" "panes report real agent status"
-  else
-    bad "herdr agent-state hook" "run 'make herdr-setup' on $HOST"
   fi
 
   if ! ssh "$HOST" 'printf "protocol=https\nhost=github.com\n\n" | "$HOME/.local/bin/git-credential-secrets-cache" get 2>/dev/null | grep -q "^password=."' 2>/dev/null; then

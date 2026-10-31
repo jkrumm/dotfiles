@@ -13,7 +13,7 @@ set -euo pipefail
 # the mini pushes outbound over the already-granted `tag:mac → tag:homelab`
 # tcp:443. Same pattern as MacMini Secret Seed - Push and the Hermes monitors.
 #
-# ONE composite monitor, not four: herdr/sshd/tailscaled all fail together
+# ONE composite monitor, not four: core/sshd/tailscaled all fail together
 # when the mini sleeps or drops off the tailnet, so separate monitors would just
 # be simultaneous pages saying the same thing. The failing component is named in
 # the push `msg`, which is where the diagnosis belongs.
@@ -27,7 +27,7 @@ set -euo pipefail
 # `check_dev_vhosts` (the clean https://<app>.$DEV_DOMAIN door — see
 # scripts/caddy-tailnet.sh) is the same exception for the same reason: a
 # reverted DNS module, an aging cert, or a drifted A record can each happen
-# on a perfectly healthy dev host, independently of herdr/sshd/tailscaled
+# on a perfectly healthy dev host, independently of the core/sshd/tailscaled
 # — but it is one component, not another whole monitor. It SKIPS (not fails)
 # on a machine that never set DEV_DOMAIN — see its own comment.
 #
@@ -77,7 +77,6 @@ set -euo pipefail
 # LaunchAgents get a minimal PATH and no shell aliases — note `tailscale` is an
 # alias to the app bundle in the interactive shell and would simply not exist
 # here. Resolve every binary by absolute path.
-HERDR_BIN="${HERDR_BIN:-/opt/homebrew/bin/herdr}"
 # Tailscale CLI: resolved by lib/tailscale-cli.sh, NOT hardcoded. The mini moved
 # to the open-source brew daemon on 2026-08-06 while the app-bundle path stayed
 # on disk (the dormant macsys extension is kept for rollback) — so the old
@@ -425,27 +424,12 @@ check_sshd() {
   echo "sshd listening"
 }
 
-# The herdr-core (`hc`) — the multiplexer every agent runs in once Wave 7 drops classic herdr.
+# The herdr-core (`hc`) — the multiplexer every agent runs in.
 # FAIL when the LaunchAgent is down or `hc server status` does not answer; WARN (rc 2) when
 # the core is unmanaged or the other machine runs a different version. The peer version is
 # cached 30 min in STATE_DIR so a 300 s heartbeat does not ssh to a laptop every run.
 check_core() {
   CORE_PEER_CACHE_FILE="$STATE_DIR/core-peer-version" core_health_check
-}
-
-# TODO(Wave 7): drop classic — check_herdr and its entry in the component loop.
-check_herdr() {
-  # `herdr status --json` exposes server.running as a real boolean. Prefer it
-  # over scraping the human output: herdr is pre-1.0, and a reformatted status
-  # line would silently flip a text scrape to the wrong answer rather than
-  # failing loudly. A missing/!=true value here is treated as down, which is the
-  # safe direction — an unreadable status IS a reason to look.
-  local running
-  running=$("$HERDR_BIN" status --json 2>/dev/null \
-    | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin).get("server",{}).get("running"))' 2>/dev/null) || true
-  [[ "$running" == "True" ]] \
-    || { echo "herdr server down (brew service KeepAlive should have restarted it)"; return 1; }
-  echo "herdr up"
 }
 
 check_agents_md_flag() {
@@ -462,10 +446,10 @@ check_agents_md_flag() {
 }
 
 check_boot_path() {
-  # The colima/herdr plist gap, made impossible to repeat. On 2026-08-29 both
+  # The colima plist gap, made impossible to repeat. On 2026-08-29 both
   # plists were observed missing from disk while launchd kept running the jobs
   # from its cached definition — every liveness probe stayed green, and the
-  # next power cut would have brought the VM and every herdr pane up dead, with
+  # next power cut would have brought the VM and every agent terminal up dead, with
   # nothing paging. `launchctl print` does NOT re-read the file, so a loaded
   # job with no plist behind it is indistinguishable from a healthy one until
   # the machine reboots.
@@ -481,7 +465,7 @@ check_boot_path() {
   #
   # A job that is neither loaded nor on disk means the feature was never
   # installed here — but every label in LAUNCHD_KEEPALIVE is one THIS script's
-  # other components already depend on (herdr/colima/agent-workflows/hermes/collie are
+  # other components already depend on (colima/agent-workflows/hermes/collie are
   # probed for liveness elsewhere), so absent here is a genuine failure, not a
   # skip.
   local uid label plist want missing="" mismatched="" stale="" path program
@@ -514,7 +498,7 @@ check_boot_path() {
 
   [[ -z "$missing" ]] || { echo "boot path BROKEN — plist missing/unloaded: $missing (re-run the owning make target)"; return 1; }
   [[ -z "$mismatched" ]] || { echo "boot path DRIFTED — launchd runs a different file than on disk: $mismatched (bootout+bootstrap to reload, never kickstart -k)"; return 1; }
-  [[ -z "$stale" ]] || { echo "boot path STALE — file converged but launchd still runs the stock command: $stale (make colima-restart / herdr-restart YES=1, never brew services restart)"; return 1; }
+  [[ -z "$stale" ]] || { echo "boot path STALE — file converged but launchd still runs the stock command: $stale (make colima-restart, never brew services restart)"; return 1; }
   echo "boot path ok ($(printf '%s\n' "$LAUNCHD_KEEPALIVE" | grep -c .) jobs)"
 }
 
@@ -586,7 +570,7 @@ check_dev_vhosts() {
   # The clean dev-vhost door (https://<app>.$DEV_DOMAIN, scripts/caddy-tailnet.sh
   # + `make caddy-dns-build`). Folded into the COMPOSITE monitor below, not a
   # dedicated one — same exception check_git_push already is: this does NOT
-  # fail together with tailscaled/sshd/herdr (a reverted DNS module, a
+  # fail together with tailscaled/sshd/the core (a reverted DNS module, a
   # cert nearing expiry, or a drifted A record can all happen on an otherwise
   # perfectly healthy dev host), but it is one component, and a second Kuma
   # push monitor wasn't worth it for this one either. Revisit only if it ever
@@ -670,10 +654,10 @@ check_dev_vhosts() {
 
 check_memory() {
   # The single most likely thing to break this machine, and until now nothing
-  # watched it. An OOM kill has already taken herdr once — and the monitor
-  # reported "herdr up" straight through it, in BOTH directions: healthy before
+  # watched it. An OOM kill has already taken the terminal server once — and the monitor
+  # reported "up" straight through it, in BOTH directions: healthy before
   # the kill, healthy again seconds later once KeepAlive restarted an EMPTY
-  # layout. Every process in every pane was gone and no check could tell.
+  # layout. Every process in every terminal was gone and no check could tell.
   #
   # Two signals, both single sysctl reads, and NEITHER is a raw swap number.
   # macOS grows AND SHRINKS the swap file on demand, so "3.7G of 5.1G used"
@@ -682,7 +666,7 @@ check_memory() {
   # sick one whose swap file happened to grow. Threshold on what is scarce:
   #   1. kern.memorystatus_vm_pressure_level — the kernel's own verdict
   #      (1 normal, 2 warn, 4 critical). This is the signal that PRECEDES a
-  #      jetsam kill, which is exactly the event that cost us herdr.
+  #      jetsam kill, which is exactly the event that cost us the server.
   #   2. swap in use as a fraction of PHYSICAL RAM, which does not move when
   #      the swap file is resized underneath it.
   local level swap phys
@@ -855,7 +839,6 @@ brew_row() {
 # is the `brew services restart` trap: the file looks right, launchd still runs
 # the stock command until bootout + bootstrap.
 LAUNCHD_KEEPALIVE="\
-$(brew_row herdr "${HERDR_START_WRAPPER:-$HOME/SourceRoot/dotfiles/herdr/herdr-server-start.py}")
 $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
 com.jkrumm.agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist
@@ -1163,21 +1146,21 @@ check_claude_auth_iu() {
   # TWO CREDENTIALS, TWO PATHS — and the bare binary above can only see one of
   # them. `config/zsh/claude-auth.zsh` falls back to CLAUDE_CODE_OAUTH_TOKEN from
   # the secrets cache, so a host with a dead keychain but a live token runs every
-  # herdr pane and `claude --bg` daemon perfectly on Max. Reporting that as "every
+  # core terminal and `claude --bg` daemon perfectly on Max. Reporting that as "every
   # agent on this host is billing API credits" — as this did — is false, and a
   # component that overstates is one you learn to skim past.
   #
   # So probe the fallback too, and grade the three states differently:
   #   keychain ok                → ok
   #   keychain dead, token works → DEGRADED, and say what to do (a `/login` in a
-  #                                herdr pane restores a self-refreshing
+  #                                core terminal restores a self-refreshing
   #                                credential; the token is a 1-year static one
   #                                with no refresh and no reliable revocation)
   #   neither                    → the real "billing API credits" alert
 
   if [[ "$logged" != "true" ]]; then
     if claude_token_works; then
-      # PASSES, deliberately. Max billing is intact, every herdr pane and `claude --bg`
+      # PASSES, deliberately. Max billing is intact, every core terminal and `claude --bg`
       # daemon works, and the only cost is a worse CREDENTIAL — static 1y, no
       # refresh, no reliable revocation — not a broken host. Failing here would
       # put the composite monitor red indefinitely for a state that has been
@@ -1189,10 +1172,10 @@ check_claude_auth_iu() {
       # visible without being an alarm, and the real failure is not softened:
       # when the token stops working the branch below fails loudly. That is also
       # what covers the one-year cliff — no separate expiry monitor needed.
-      echo "claude on the cached oauth token (Max ok; keychain login gone — restore with /login in a herdr pane, static 1y otherwise)"
+      echo "claude on the cached oauth token (Max ok; keychain login gone — restore with /login in a core terminal, static 1y otherwise)"
       return 0
     fi
-    echo "claude NOT logged in and the cached oauth token does not work either — every agent on this host is billing API credits (fix: /login in a herdr pane, or claude setup-token; needs a human)"
+    echo "claude NOT logged in and the cached oauth token does not work either — every agent on this host is billing API credits (fix: /login in a core terminal, or claude setup-token; needs a human)"
     return 1
   fi
 
@@ -1202,7 +1185,7 @@ check_claude_auth_iu() {
 }
 
 # iu dead = FAIL (as before). Any other enabled account dead = WARN: the picker routes around it, and
-# its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a herdr pane.
+# its login never has a token fallback (claude-auth.zsh), so the fix is `/login` in a core terminal.
 # Login expiry (the 30-day refresh token) is graded after the liveness checks, see the end of the function.
 check_claude_auth() {
   local iu_msg iu_rc=0 accts id dir out dead="" ok="" worst msg
@@ -1222,7 +1205,7 @@ check_claude_auth() {
   done <<<"$accts"
   msg="$iu_msg"
   if [[ -n "$dead" ]]; then
-    msg="$msg; account${dead} NOT logged in — picker routes around it (fix: claude-relogin <id>, or /login in a herdr pane with CLAUDE_CONFIG_DIR set)"
+    msg="$msg; account${dead} NOT logged in — picker routes around it (fix: claude-relogin <id>, or /login in a core terminal with CLAUDE_CONFIG_DIR set)"
     (( worst == 0 )) && worst=2
   elif [[ -n "$ok" ]]; then
     msg="$msg; also${ok}"
@@ -1417,7 +1400,7 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 
 /bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
 
-for component in check_tailscale check_sshd check_herdr check_core check_git_push check_dev_vhosts \
+for component in check_tailscale check_sshd check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
                  check_obsidian check_disk check_runaways \
                  check_jobs check_quota; do
@@ -1499,7 +1482,7 @@ fi
 # Collie is deliberately NOT a component of the composite above. It does not
 # fail with the other five — it is opt-in per machine and can be absent, down or
 # mis-hardened while the dev host is perfectly healthy — so folding it in would
-# mark the dev host DOWN and implicate herdr/sshd/tailscaled when nothing is
+# mark the dev host DOWN and implicate the core/sshd/tailscaled when nothing is
 # wrong with them. That is the same reasoning that keeps the composite composite,
 # applied in the other direction.
 #
@@ -1536,7 +1519,7 @@ fi
 # already made and accepted for collie.
 #
 # It keeps its OWN monitor for the same reason collie does, not as an
-# afterthought: a stale cache does not fail with tailscaled/sshd/herdr, so
+# afterthought: a stale cache does not fail with tailscaled/sshd/the core, so
 # folding it into the composite would mark the dev host DOWN and implicate
 # healthy components for a reseed reminder.
 #

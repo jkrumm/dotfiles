@@ -78,7 +78,7 @@ echo "  pending: $(echo "$pending" | tr '\n' ',' | sed 's/,$//')"
 # --- pick ONE label, same major only ------------------------------------------
 # `softwareupdate -i -a` installs every RECOMMENDED update, and Apple marks the
 # next major (macOS 27 while this host is on 26) as recommended too — so -a is a
-# remote major upgrade waiting to happen. A major resets TCC grants (herdr and op
+# remote major upgrade waiting to happen. A major resets TCC grants (the core launcher and op
 # FDA) and can break brew/colima/caddy; it is done in person, never from here.
 # So the install is pinned to the newest macOS label on the CURRENT major;
 # MACOS_LABEL overrides with an exact label from `softwareupdate -l`.
@@ -94,31 +94,21 @@ fi
 echo "  installing: $label"
 
 # --- confirm -----------------------------------------------------------------
-# Reboots the host every agent runs on: herdr restores the layout by name but
-# every process inside it dies. Policy override, not a doubt override.
+# Reboots the host every agent runs on: the core's terminals survive a core restart but
+# every process inside them dies on a reboot. Policy override, not a doubt override.
 if [ "${YES:-0}" != "1" ]; then
   [ -t 0 ] || die "refusing to reboot $HOST unattended — re-run with YES=1"
-  printf "  This reboots %s and kills every herdr pane. Type 'yes' to continue: " "$HOST"
+  printf "  This reboots %s and kills every core terminal. Type 'yes' to continue: " "$HOST"
   read -r reply
   [ "$reply" = "yes" ] || die "aborted"
 fi
 
 # --- snapshot resumable agents ----------------------------------------------
-# TODO(Wave 7): drop classic. herdr restores the layout and loses the processes, so the session ids are the
-# only way back into work that was mid-flight. Best effort: never block on it.
+# Terminals survive a core restart but not a reboot. hc-resume revives Claude from the resume labels
+# (jk.claude.session / jk.claude.config, hooks/hc-session-label.ts) once the core is back, and this
+# file is the human-readable record of what it should find. Best effort: never block on it, and
+# `launchctl print` first because any `hc` call auto-starts a stray core.
 stamp="$(date +%Y%m%d-%H%M)"
-snap="\$HOME/Library/Logs/herdr-panes-pre-reboot-$stamp.txt"
-# shellcheck disable=SC2029  # $snap is built here on purpose; \$HOME expands on the mini
-if ssh "${SSH_OPTS[@]}" "$HOST" "herdr pane list > $snap 2>/dev/null"; then
-  say "· agent panes snapshotted to $snap on $HOST"
-else
-  say "· herdr pane snapshot skipped (herdr not answering)"
-fi
-
-# The core's terminals survive a core restart but not a reboot. hc-resume revives Claude from the
-# resume labels (jk.claude.session / jk.claude.config, hooks/hc-session-label.ts) once the core is
-# back, and this file is the human-readable record of what it should find. Same rules as above: best
-# effort, and `launchctl print` first because any `hc` call auto-starts a stray core.
 core_snap="\$HOME/Library/Logs/herdr-core-resume-pre-reboot-$stamp.tsv"
 core_n=""
 # shellcheck disable=SC2029  # $core_snap is built here on purpose; \$HOME expands on the mini
@@ -147,7 +137,6 @@ then
 else
   say "· herdr-core resume snapshot skipped (core not running or not answering)"
 fi
-# TODO(Wave 7): drop classic — the herdr pane snapshot above.
 
 # --- launch the installer, detached -----------------------------------------
 # Detached on purpose: a brew upgrade of the tailscale formula in the same

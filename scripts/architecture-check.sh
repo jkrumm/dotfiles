@@ -11,7 +11,7 @@
 #      or a known third-party allowlist entry must appear in the map.
 #   2. Every plist in ~/Library/LaunchAgents, /Library/LaunchAgents and
 #      /Library/LaunchDaemons named com.jkrumm.* / com.iu.* / ai.hermes.* /
-#      herdr.* / homebrew.mxcl.* / sh.brew.* must appear in the map — a plist
+#      homebrew.mxcl.* / sh.brew.* must appear in the map — a plist
 #      on disk that launchd has not loaded is exactly the silent state the map
 #      exists to prevent. /Library/LaunchAgents is where a dead vendor stub
 #      crash-loops at exit 78 for every login with nothing reporting it.
@@ -151,7 +151,7 @@ done < <(/usr/bin/awk -v re="$section_re" '
     $0 ~ re {on=1; next}
     /^## / {on=0}
     on' "$MAP" \
-  | grep -oE '`(com\.jkrumm\.|com\.iu\.|com\.colima\.|ai\.hermes\.|herdr\.|sh\.brew\.|homebrew\.mxcl\.|cc\.chlc\.)[A-Za-z0-9._@-]*[A-Za-z0-9@_-]`' \
+  | grep -oE '`(com\.jkrumm\.|com\.iu\.|com\.colima\.|ai\.hermes\.|sh\.brew\.|homebrew\.mxcl\.|cc\.chlc\.)[A-Za-z0-9._@-]*[A-Za-z0-9@_-]`' \
   | tr -d '`' | sort -u)
 # A renamed heading would extract nothing and pass green; fail closed instead.
 if [[ $checked -eq 0 ]]; then
