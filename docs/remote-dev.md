@@ -383,7 +383,7 @@ host matchers to the same landing page.
 ## Phone
 
 Three tiers: notification hooks (outbound push when an agent needs input), Claude
-Remote Control (first-party, one session), and **Collie** — a herdr plugin +
+Remote Control (first-party, one session), and **Collie** — a standalone bridge on herdr-core +
 loopback bridge serving a PWA on `:8788`, the only one that sees the whole herd.
 Collie is remote shell access by design; the gate is the ACL (`tag:phone` only —
 `tag:client`, the TVs and tablet, never), not `COLLIE_TRUSTED_USER`, which cannot
