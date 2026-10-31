@@ -2,15 +2,18 @@
 
 **Goal:** classic herdr is gone from both machines and from every live file an agent could follow. Each consumer
 is ported to the herdr-core API (`hc schema`, `hc events`, core docs) or to `herdr-app do …`, replaced by a native
-hc feature, or retired with the reason in its commit. One global `herdr` skill describes the hc world. Core and
-app updates follow a cooldown and never need idle agents. The mini maintenance window has run.
+hc feature, or retired with the reason in its commit. One global `herdr` skill describes the hc world. Core
+updates follow a cooldown and never need idle agents; the app auto-updates (no off switch, herdr-app #207) and
+never touches the pinned core. The mini maintenance window has run.
 **Gate (every wave):** `make check` green (the pre-existing reds are listed in the wave's Left behind, never new
 ones); `/review` on every non-trivial diff, with findings fixed; one commit per concern; every other repo's own gate
 and conventions apply (PR-required list: `config/pr-required-repos.json`; IuRoot: `EP-XX` branches, MR to `main`).
 The plan is pushed before a wave spawns the next one.
 Baseline 2026-10-31 (MacBook): `make -k check` is red only on `architecture-check` (`com.jkrumm.photoflow`, MacBook
 only, fixed in Wave 9). It took 40 min of wall time at 5 % CPU, so a suite sleeps or waits on the network
-(`fan-test` was running when a 10-min timeout hit). Run it in the background with a log; Wave 1 names the slow suite.
+(`fan-test` was running when a 10-min timeout hit). Run it in the background with a log.
+Mini 2026-10-31 (Wave 1, each suite timed alone): all 17 green in ~6.5 min; the slow ones are `fan-test` (156 s) and
+`claude-launcher-test` (121 s), then `herdr-reap-test` (55 s). The MacBook's 40 min was not reproduced (it was offline).
 
 Handover and context: `docs/herdr-core.md`, `hc --skill`, `herdr-app --skill`, `~/.config/herdr-app/AGENTS.md` +
 its `.d.ts` files, `hc schema`. The binaries' own manuals are version-current; trust them over memory and over
@@ -32,42 +35,17 @@ this file. Chain mode. A wave that cannot finish writes `stopped: <reason>` into
 - **`AGENTS.md` must end under 40k chars.** It is 42.1k on 2026-10-31. Every wave that touches it leaves it no
   larger, and Wave 6 brings it under the limit.
 
-## Port map (seeded 2026-10-31, Wave 1 confirms or corrects every row)
+## Port map
 
-| Classic consumer | Fate | hc-world replacement |
-|-|-|-|
-| software-factory `HerdrRunner` + witness (spawn, prompt, status, restart-resume) | port | `HcRunner` over the API (`hc connect`): `terminal.run` with `env`, `labels`, `parent`, `keep`; `terminal.send`/`wait`; witness on `events.subscribe` (snapshot + `missed` gap recovery) instead of a 60 s `agent list` poll; restart detected from `restarted`/`lost` events, not `ps` |
-| `rd work|wave|fan|close|read|say|agents` | port | factory first, hc direct as fallback. Project space found by folder in the core doc `herdr-app` (the app's space tree, per machine); tab = label `herdr.space=<id>` (the app makes the tab), named; `--keep`. `read` → `hc read`, `say` → `hc send` (refuses on `blocked`), `close` → `hc kill` + `hc rm` |
-| Waves: orchestrator tab, workers | port | orchestrator = visible tab; workers = unlabeled children (`parent` = orchestrator, hidden by the app), `hc wait --children all\|any` replaces `factory session wait --on workers` / `herdr agent wait` |
-| `resume_agents_on_restore` | replace | a Claude SessionStart hook records `{terminal, session_id, CLAUDE_CONFIG_DIR, cwd, space, tab, name}` in a core doc per terminal (`doc.set`); `hc-resume` (on `restarted`/at login) types `env CLAUDE_CONFIG_DIR=… claude --resume <id>` into each kept shell; `claude-account latest <cwd>` as fallback |
-| `herdr-reap.py` + `com.jkrumm.herdr-reap` | port | same rules over `hc ls --all` / `hc kill` / `hc rm` / `hc send` |
-| `herdr-events.ts` + `com.jkrumm.herdr-events` | port | `hc events --json` recorder, same JSONL dir and gap markers (from hc's `missed`) |
-| `herdr-groups.py`, `make herdr-groups*` | retire | `jk-spaces` folders from `config/herdr/groups.json` (keep the file, move it to `config/herdr-app/`) |
-| `make agent-overview` watch pane + heartbeat component | decide (W1) | app sidebar status dots; `agw agents` stays the JSON producer (ported to hc) |
-| collie (classic plugin, phone surface) + ACL/serve rows | decide (W1) | no hc equivalent known; candidate: `ssh mini -t hc attach` from a phone ssh client. Retiring collie removes `:8787/:8788` grants in dotfiles-private |
-| `desk` (`herdr --remote mini`) | replace | the app (MacBook); terminal-only fallback `ssh -t mini hc` (picker) |
-| `claude-relogin.sh --machine mini` (classic workspace = GUI-session child) | port | `hc run --on mini` with labels into a `relogin` tab: the mini core is a launchd GUI-session child with the keychain |
-| `claude-appearance.sh` / `appearance-sync.sh` (OSC 10/11 + `?997` push into panes) | decide (W1) | probably retire: the app's libghostty engine may answer OSC 10/11 and DEC 2031 itself. Verify with and without an attached window |
-| `brain-note.sh` (prefix+e popup) | port or retire | app key binding running a command, if `keys.json` supports one |
-| `herdr-agent-state.sh` SessionStart hook (`herdr integration install`) | retire | Claude reports to core natively (OSC 7501) |
-| `herdr-server-start.py`, `_herdr-supervise`, `lib/herdr-ready.sh`, `herdr-upgrade.sh`, `herdr-wait-quiet.sh`, `herdr-skill-sync.sh`, `make herdr-{setup,upgrade,restart,status,launchd-status,server-start-test}` | retire | `com.jkrumm.herdr-core` + the Wave 8 upgrade target |
-| heartbeat herdr component, `doctor.sh`, `brew-upgrade.sh` herdr invariant, `architecture-check` `herdr.*` regex, `log-rotate` collie log, `mini-macos-update` pane snapshot | port | core LaunchAgent running + `hc server status` + MacBook/mini version parity; resume ledger as the pre-reboot snapshot |
-| `Brewfile` `herdr`, cask `penso/tap/herdr-gpui`, tinycast `so.pen.herdr-gpui` hotkey, `config/herdr/config.toml`, `config-gpui.local.toml` | retire | Herdr.app (bundle id from its `Info.plist`) |
-| agent-workflows `agw agents` collectors (+ argo `herdrStatus`) | port | `hc ls --json` per machine (`hc machine` links) merged with the Claude registry |
-| iris herdr destination (raw `herdr.sock`) | port | `terminal.list` (labels) + `terminal.send` over `hc connect`; keep the `"herdr"` destination value, the product is still Herdr (no Swift change) |
-| hermes-agent `skills/herdr`, SOUL/AGENTS/config refs | port | hc-world skill text |
-| shutterflow `scripts/fleet/*` + PROTOCOL | port | `hc run`/`send`/`ls`/`kill` |
-| sy-serendipity AGENTS.md dev-server pane | port | `hc run --bg --name dev …` + `hc wait --output` |
-| brain wiki (`wiki/engineering/herdr.md` and live how-to pages) | port | rewrite live pages; dated pages, log and podcasts stay history |
-| IuRoot/prometheus-epx eval adapter `SubprocessHerdr` | port, owner pushes | branch + commit locally (work repo, MR to colleagues = owner's step) |
-| jkrumm.com published guide, weatherorb/basalt-ui/prometheus-stack plans, archives | history | untouched; listed in the final report |
-| comments: ghostty, starship, ssh_config, usage-tracker, modelpick, homelab monitors, linewatch, image-gateway | port | one-line comment fixes when the file is touched anyway; listed otherwise |
+Decided in Wave 1: `docs/herdr-core.md` §Port design (every consumer's fate and replacement, and the spawn contract),
+resting on §Verified facts. That page is the contract for Waves 2–9. The seeded table that was here is in git history
+(`b387732`).
 
-## Wave 1 — Facts and port design            <!-- status: active -->
+## Wave 1 — Facts and port design            <!-- status: done -->
 Role `lead`. Design and verification only: no consumer code. The MacBook is reachable from the mini as `ssh iumac`
 (the app and its `herdr-app` socket live there).
 
-- [ ] **Verify the open facts in a scratch core** (and a scratch `HERDR_APP_HOME` window on the MacBook where a
+- [x] **Verify the open facts in a scratch core** (and a scratch `HERDR_APP_HOME` window on the MacBook where a
   window is needed), each with the command and output recorded in `docs/herdr-core.md`:
   (1) a terminal labelled `herdr.space=<existing id>` without `herdr.tab` gets a new tab, and what names it; a
   label with an unknown space id: ignored, adopted or a new space? How to create a space with no window open
@@ -83,30 +61,50 @@ Role `lead`. Design and verification only: no consumer code. The MacBook is reac
   appearance push can retire;
   (7) `hc events` field shapes for status/turn/restarted/lost/doc, and the `missed` gap recovery;
   (8) can `keys.json` bind a key to a command (brain-note popup).
-- [ ] **`/research` upstream state** (herdr-core and herdr-app repos, changelogs, issues, as of today): the
+- [x] **`/research` upstream state** (herdr-core and herdr-app repos, changelogs, issues, as of today): the
   OSC 7501 resume descriptor (#13/#15), the app auto-update off switch (#207), #219, a phone/web client or
   bridge that could replace collie, and the release cadence. Cite run ids in `docs/herdr-core.md`.
-- [ ] **Decide every port-map row** above: confirm or correct the fate and the replacement, settle the three
+- [x] **Decide every port-map row** above: confirm or correct the fate and the replacement, settle the three
   `decide (W1)` rows, and write the result as `docs/herdr-core.md` §Port design. Rewrite the page from
   "evaluation" to "the design we run" and keep the facts sections.
-- [ ] **Reconcile the plan:** edit Waves 2–9 of this file to match the decisions (steps, owners, order). Record
+- [x] **Reconcile the plan:** edit Waves 2–9 of this file to match the decisions (steps, owners, order). Record
   the classic agents still `working` on both machines (`herdr agent list`).
+**Left behind:**
+- Facts 1–8 verified and written up in `docs/herdr-core.md` §Verified facts; §Port design settles every row
+  (overview **retire**, collie **port** to `COLLIE_MUX=herdr-core`, appearance **port**: the core answers fixed dark
+  when no viewer is attached and never pushes `?997`). Research run `01a191f9-802c-75f1-ab6a-b3914a286ec5`.
+- Design changes against the seeded map: resume uses **labels** on the terminal (`jk.claude.session`,
+  `jk.claude.config`), not a core doc; a core restart is the event stream's EOF (`restarted` is per terminal);
+  tabs and next waves need `no_parent` (the CLI defaults `parent` to the caller and children die with it); prompts go
+  in argv (`first_message` is template-only); every API spawn passes `cwd` (default `/`).
+- The MacBook was offline the whole wave (Tailscale "last seen", ssh :2222 timed out). App facts ran in a scratch
+  Herdr.app on the mini's screen instead. Not done there: its classic `herdr agent list` (Wave 7's gate covers it).
+  Mini: 22 classic agents, 1 `working` (this wave, `dotfiles-w1`), 12 idle, 9 done.
+- FDA for `~/.local/bin/herdr-core` on the mini is queued (`ask-human` `20261031T135442-12744`, MacBook unreachable,
+  so it waits in the queue). The TCC probe may have left consent dialogs for a deleted `/private/tmp/hcw1/…/herdr-core`
+  on the mini's screen; the ask says to dismiss them.
+- The MacBook core sits at `~/.local/bin` (unmanaged), so the app's auto-update can bump it ahead of the mini's
+  until Wave 8.
+- Gate: `make check` green on the mini (timings above); AGENTS.md untouched (42.1k).
 
-## Wave 2 — software-factory on hc            <!-- status: pending -->
+## Wave 2 — software-factory on hc            <!-- status: active -->
 Role `lead`. Repo `~/SourceRoot/software-factory`, in a worktree (its program lead commits on master): read its
 `AGENTS.md`, `docs/design.md` and `docs/decisions.md` first. Its runner, witness and FL6 space rules are the
 contract to keep.
 
 - [ ] Write `HcRunner` behind the existing runner interface, over the API (`hc connect` JSON-RPC, not the CLI:
-  the CLI has no `env`). Spawn = project space tab by label, `keep`, `env` (`FACTORY_SESSION`, `FACTORY_ROLE`,
-  the account), `parent` = the spawning session's terminal when there is one (hidden worker). Prompt delivery
-  uses `first_message` (`terminal.run` with a task) or `send --wait`, notes go through `terminal.send` and respect
-  `blocked`.
-- [ ] Witness on `events.subscribe`: status, turn, restarted, lost, gap recovery. Schema fields are
+  the CLI has no `env`), following `docs/herdr-core.md` §Spawn contract: `cwd` always, the prompt in argv,
+  `env` (`FACTORY_SESSION`, `FACTORY_ROLE`, `CLAUDE_CONFIG_DIR` or absent for `iu`), `keep`. A tab gets labels
+  `herdr.space` (the `herdr-app` doc entry by folder, else `sp-<repo>-<hash of the full root>`) + a chosen `herdr.tab` id and
+  `no_parent`, and is named through a compare-and-set `doc.set`. A worker gets `parent` = the spawning terminal
+  and no labels. Notes go through `terminal.send` and respect `blocked`.
+- [ ] Witness on `events.subscribe` (shapes: §Verified facts 7): status, turn, lost/restarted per terminal,
+  `missed` → rebuild from its snapshot, stream EOF → core restart (reconnect, compare `server.status` pid). Schema fields are
   renamed or aliased (`herdr_status` → a runner-neutral name) with a migration and contract bump. The hook's
   `HERDR_PANE_ID`/`HERDR_TAB_ID` become `HC_TERMINAL_ID` plus labels.
 - [ ] A fake hc for the tests replaces `fake-herdr.ts`. Delete `HerdrRunner` once `HcRunner` is green: no
-  dual-runner flag remains.
+  dual-runner flag remains. Roll out only when `factory status` shows no live session on the classic runner
+  (they lose their witness otherwise); else write `stopped: <sessions>` and stop.
 - [ ] Roll it out with software-factory's own release procedure (`~/.software-factory/releases/<sha>`, the
   LaunchAgent). Then prove it: one throwaway spawn lands as a named tab in the right space on the mini core and
   shows up in the app on the MacBook.
@@ -114,13 +112,19 @@ contract to keep.
 ## Wave 3 — rd, waves and resume on hc            <!-- status: pending -->
 Role `lead`. dotfiles.
 
-- [ ] `scripts/remote-dev.sh`: every subcommand on hc (port map), the classic paths deleted, `factory`
-  first and hc-direct as the fallback. `fan` workers are hidden children of the orchestrator. Update the
+- [ ] `scripts/remote-dev.sh`: every subcommand on hc (§Port design), the classic paths deleted, `factory`
+  first and hc-direct as the fallback, same spawn contract as `HcRunner`. `read`/`say`/`close` keep a
+  classic fallback for targets hc doesn't know, and `agents` lists both rosters, until Wave 7. `fan` workers are hidden children of
+  the orchestrator; `wave` tabs (the chain's next wave included) are `no_parent`. Update the
   `remote-dev-*.test.sh` stubs to a fake `hc`.
-- [ ] Resume: a SessionStart hook writes the per-terminal resume doc, and `scripts/hc-resume` restores Claude
-  sessions under the right account into kept shells (triggered at login and on a `restarted` event). Wire the
-  hook in `config/settings.template.json`, write tests, and prove it with a scratch-core kill/restart.
-- [ ] `skills/wave` (waiting = `hc wait --children`, the not-a-factory fallback), `skills/implement`,
+- [ ] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
+  jk.claude.config=<dir>`, `jk.claude.config=` for `iu`), and `scripts/hc-resume` restores Claude sessions under
+  the right account into kept shells (at login, on a `restarted` event, after a reconnect or `missed` snapshot;
+  one attempt per terminal, only into a login shell). Tests cover an account change on a reused terminal and
+  overlapping triggers. Wire the hook in
+  `config/settings.template.json`, write tests, and prove it with a scratch-core kill/restart.
+- [ ] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc
+  terminal yet; hc-direct waits on the notes hc types into the parent plus `hc wait --children`), `skills/implement`,
   `docs/agent-platform.md`, `docs/remote-dev.md` §rd: hc semantics.
 - [ ] Spawn Wave 4 through the new `rd wave`. That is the end-to-end proof that an orchestrator tab lands in the
   dotfiles space on the mini core.
@@ -128,9 +132,18 @@ Role `lead`. dotfiles.
 ## Wave 4 — the side consumers            <!-- status: pending -->
 Role `wave`.
 
-- [ ] dotfiles: reap and events recorder ported (plists renamed `com.jkrumm.hc-{reap,events}`), with tests.
-  Settle `herdr-groups`, overview, collie, appearance and brain-note per §Port design. Port `claude-relogin`
-  to `hc run --on mini`; `herdr-app-setup.sh` stops reading `herdr workspace list`.
+- [ ] dotfiles: reap and events recorder ported (new plists `com.jkrumm.hc-{reap,events}`; the classic
+  `herdr-reap` keeps running beside them until Wave 7), with tests.
+  `herdr-groups` retires (`groups.json` → `config/herdr-app/`); `make agent-overview` and the heartbeat's
+  overview component retire. Port `claude-relogin` to `hc run --on mini`; `herdr-app-setup.sh` stops reading
+  `herdr workspace list`. The `herdr-agent-state.sh` hook stays until Wave 7 (classic agents need it).
+- [ ] Collie: `make collie-upgrade` to a ref with `COLLIE_MUX=herdr-core`, run standalone under its own
+  LaunchAgent (no herdr plugin), keep the ACL/serve rows. If its behavioural check fails on hc, retire it and
+  hand the row removal to Wave 5.
+- [ ] Appearance: the push retires only if the current core does both (unattached terminals answer from the
+  Mac's appearance, running programs get `?997` on a switch); else move it to raw input over
+  `terminal.attach` (`hc send` adds Enter). Brain-note: a `jk-keys` mod whose command
+  runs the script with `hc run --bg` and shows it with `terminal.peek`, bound in `keys.json` (MacBook).
 - [ ] dotfiles health: heartbeat herdr component → core component (+ version parity),
   `doctor.sh`, `brew-upgrade.sh`, `architecture-check.sh`, `log-rotate.sh`, `mini-macos-update.sh`, and the
   `docs/architecture.md` rows.
@@ -143,8 +156,8 @@ Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
 - [ ] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
   terminals; the e2e passes.
 - [ ] hermes-agent skill + SOUL/AGENTS/config; shutterflow `scripts/fleet` + PROTOCOL; sy-serendipity
-  AGENTS.md; brain live wiki pages (`brain/voice.md` applies); dotfiles-private collie rows (if collie retires:
-  ACL and serve rows, applied from the MacBook with `make tailscale-acl-diff` first).
+  AGENTS.md; brain live wiki pages (`brain/voice.md` applies); dotfiles-private collie rows only if Wave 4
+  retired collie (ACL and serve rows, applied from the MacBook with `make tailscale-acl-diff` first).
 - [ ] IuRoot/prometheus-epx: the port on an `EP-XX` branch, committed locally, not pushed. Name the branch and
   the open MR step in Left behind for the owner.
 - [ ] The one-line comment fixes from the port map. List every remaining hit as history.
@@ -181,22 +194,29 @@ Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `work
   herdr-gpui`, `brew untap penso/tap` (if nothing else needs it); boot out and delete the `herdr-reap`,
   `herdr-events` and `herdr.collie` plists; archive `~/.config/herdr` to `~/.local/share/herdr-classic-archive/`.
   Both machines.
-- [ ] Repo: delete `herdr/`, the classic scripts, `config/herdr/config.toml`, the Makefile targets, the Brewfile
-  lines and the settings-template hook. `make setup` + `make doctor` on both machines are green.
+- [ ] Repo: delete `herdr/`, the classic scripts (and `rd`'s classic fallbacks), `config/herdr/config.toml`, the
+  Makefile targets, the Brewfile lines and the settings-template hook (`herdr-agent-state.sh`). `make setup` + `make doctor` on both machines are green.
 - [ ] `make check`, `/review`, and one commit per concern, each naming what was retired and why.
 
 ## Wave 8 — updates with a cooldown            <!-- status: pending -->
 Role `wave`.
 
 - [ ] Pin the core as a managed install, so the app's auto-update never replaces it: a formula in
-  `jkrumm/tap` (hc + herdr-core from `releases.herdr.dev`, sha256 pinned, Brewfile entry) or the stable-path
-  variant Wave 1 chose. The FDA path matters (fact 5). The LaunchAgent runs the pinned binary on both
-  machines; `~/.local/bin/{hc,herdr-core}` go away.
-- [ ] `make herdr-core-upgrade`: only a release ≥ 3 days old (from the release index date, the spirit of
-  `config/bunfig.toml`'s `minimumReleaseAge`). It bumps the pin, upgrades both machines, kickstarts each core and
-  asserts terminals survived and versions match. No idle-gating. `make herdr-core-upgrade-dry` previews.
-- [ ] App auto-update: apply the owner's decision (default: accept, because the window only updates and the
-  managed core stays pinned; else an app-side pin). The heartbeat flags a core version the pin doesn't own.
+  `jkrumm/tap` (hc + herdr-core from `releases.herdr.dev`, sha256 pinned, Brewfile entry). A `/Cellar/` path
+  makes the core report `installed_by: homebrew`, the app stop offering updates and `hc update` refuse (fact 4).
+  The LaunchAgent runs the pinned binary (the stable `opt` link, resolved under `/Cellar/`) on both machines;
+  `~/.local/bin/{hc,herdr-core}` go away.
+- [ ] FDA (fact 5): the grant is keyed to the ad-hoc build, so every core upgrade loses it on the mini. The
+  upgrade target queues the re-grant with `ask-human` (the new resolved path) and reports the mini upgrade as
+  incomplete until the grant is confirmed; it never probes a protected folder from the core (the probe itself
+  raises a dialog nobody sees).
+- [ ] `make herdr-core-upgrade`: only a release ≥ 3 days old. The manifests carry no date: take the HTTP
+  `Last-Modified` of `core/<v>/manifest.json` (or the GitHub tag date), in the spirit of `config/bunfig.toml`'s
+  `minimumReleaseAge`. It bumps the pin, upgrades both machines, kickstarts each core and asserts terminals
+  survived and versions match. No idle-gating. `make herdr-core-upgrade-dry` previews.
+- [ ] App auto-update: no off switch exists (herdr-app #207, open), so accept it (the window only updates, and
+  the managed core stays pinned). The heartbeat flags a core version the pin doesn't own and an app whose
+  `core_min` (`app/latest.json`) is above the pin.
 - [ ] Fold it into `skills/upgrade-deps` machine mode and `docs/homebrew.md`.
 
 ## Wave 9 — the mini maintenance window            <!-- status: pending -->
