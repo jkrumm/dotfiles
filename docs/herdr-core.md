@@ -173,6 +173,16 @@ compare-and-set: a stale version returns `conflict` ("is at version 1, not 0").
 the whole file from loading. `terminal.open {argv, folder, place: tab|right|down, name}` and `terminal.peek {terminal}`
 exist. There is no float command.
 
+**9. Spawn facts (Wave 2, scratch cores).** `outlive_parent: true` keeps a child running after its parent's program ends
+(the parent killed, the child with the flag stayed live, the one without was killed). `claude --resume <id> "<prompt>"` is
+valid, but `--resume` takes an optional value, so an id must always be passed or the prompt is read as the id. A
+`doc.set` of a `herdr-app` space+tab entry before any terminal exists is accepted (version 0 → 1, stale version →
+`conflict`); whether the app adopts a pre-written tab entry is **not** verified (no app on the mini), and the doc's shape
+(`spaces[].{id,folder,tabs[].{id,name}}`) is a guess: software-factory reads it defensively and falls back to a stable
+`sp-<dir>-<hash>` id. `hc connect` exits 2 when no core runs and does not start one (launchd owns the core). hc refuses
+a terminal name that can read as an address (`t7`). Verify the doc shape against the app on the MacBook before
+trusting tab names.
+
 ## Upstream state (2026-10-31)
 
 agw research run `01a191f9-802c-75f1-ab6a-b3914a286ec5` (deep, 39/39 citations grounded, 78 pages). It covers
