@@ -56,7 +56,26 @@ Sources: the herdr-core and herdr-app READMEs, CHANGELOGs and issues cited above
 | `jk` layout: the shipped `main` with `jk-spaces` instead of spaces + agents, `jk-status` as the bar, theme `one-zinc-{light,dark}` following the system | `config/herdr-app/layouts/jk.json` | symlink |
 | `jk-spaces`: Herdr's `spaces` mod (Apache-2.0) plus folders. Folders come from **`config/herdr/groups.json`**, the same taxonomy as classic herdr's sidebar. A space joins the group naming its repo (worktrees follow their repo), the rest go to the fallback (`OTHER`). Folders fold (state in the app), a folded folder shows ● when a space in it needs you, avatars take the folder's color, and rows carry the agent-status dot | `config/herdr-app/mods/jk-spaces/` | symlink |
 | `jk-status`: CPU % and memory used (active + wired + compressed) for this computer and every connected machine, every 5 s via `exec … { on }`. Claude Max usage per account (`5h/7d %`, red ≥ 90, dim when the sample is > 3 h old, `login` when auth failed), every 60 s from `claude-account usage --json`, which reads its local quota cache only (the MacBook's includes the mini's samples) | `config/herdr-app/mods/jk-status/` | symlink |
-| Themes `one-zinc-*` (the terminal look, `docs/theme.md`) and `basalt-ui-*` (Blueprint palette), converted from `config/ghostty/themes/` | `config/herdr-app/themes/` | symlink, pickable in Settings |
+| `jk-details`: the popup behind a click on a machine (15-min CPU and memory history plus the top 10 processes on that machine, live) or on the usage (each account's 5-hour and 7-day %, reset countdown and clock time, sample age and source) | `config/herdr-app/mods/jk-details/` | symlink |
+| Themes `one-zinc-*`: the terminal palette (`docs/theme.md`) plus a `colors` map for the chrome taken from basalt-ui's semantic tokens (background, card, sidebar, border, accent: the oklch values converted to hex), so sidebar, bars and popups read as basalt-ui rather than derived darker. `basalt-ui-*` is the Blueprint palette, converted from `config/ghostty/themes/` | `config/herdr-app/themes/` | symlink, pickable in Settings |
 | Spaces shutterflow, ShutterflowOps, tinycast-extensions, finances, dotfiles | `SPACES` in `scripts/herdr-app-setup.sh` | `herdr-app do space.new`, skipped when one already works in that folder |
+| Mini spaces: one per repo classic herdr has open on the mini (label resolved to `~/SourceRoot/<name>` or `~/IuRoot/<name>`), filed into the same folders | classic herdr's live workspace list | `space.new --machine mini`, skipped when already open. Spaces only, no agents |
 
 A new repo gets its folder through one line in `groups.json`. Revert to stock with `herdr-app do layout.switch --name main`. The theme picker in Settings overrides the layout's theme.
+
+## Ecosystem notes (2026-10-31)
+
+A snapshot from agw research run `01a19165` (deep, partial: 22/34 citations grounded, so treat repo names and star counts as leads). The scene is days old: about 68 `herdr-mod` and 36 `herdr-layout` repos, mostly one to five commits.
+
+| Pattern | Seen in | Status here |
+|-|-|-|
+| Folders over spaces | jankeesvw/herdr-space-folders (unlicensed), ejklock/herdr-workspaces | Done our way in `jk-spaces`, from `groups.json` |
+| One status bar with machine load and plan usage | DanielFGray/herdr-config, berkeatac/herdr-usage-bar, kvkenyon/herdr-quota | Done in `jk-status`. Ours reads `claude-account`'s cache; theirs read the keychain and call the API |
+| Click-through detail popup | DanielFGray (same mod, `props.panel`) | Done in `jk-details` (a separate mod). None of the public mods shows top processes |
+| Orchestrator visible, workers hidden | Filter `agents()` by terminals that have a `parent` | Next, together with waves on core |
+| Light chrome as a design, not a palette | ritiksahni/herdr-linen | Basalt tokens in the theme `colors` |
+| Import classic workspaces into the app | CiprianSpiridon/herdr-migration (claims conversation resume; **unverified**) | Read the code before relying on it |
+| Remote host metrics from a GPUI client | penso/herdr-gpui (a client for the classic daemon) | Reference only |
+
+The official `herdrdev/herdr-layout-examples` (board, call, chat, code, mission, pasture, threads, tmux-prefix) is the best API tour; several of its controls are decorative. App telemetry is on by default; `HERDR_TELEMETRY=0` or `DO_NOT_TRACK=1` turns it off (`~/.config/herdr-app/AGENTS.md`).
+
