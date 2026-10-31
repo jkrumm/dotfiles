@@ -3,7 +3,7 @@
 Status: **W2 done** (2026-10-24); rule v1.4 (N accounts), the peer sample import and plan detection shipped 2026-10-27; W3 = tune from picks.jsonl and `quota_sample` after 2 weeks, and decide a 20x upgrade for `me` if its weekly stays > 80 %. Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled, plus `me2` (second personal Max 5x at `~/.claude-me2`, Safari), registered dark (`enabled: false`) until its logins exist. Shipped in W1: ids renamed from
 `a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
-`CLAUDE_CONFIG_DIR` through herdr `--env` at tab/workspace creation (no room pauses the spawn, never
+`CLAUDE_CONFIG_DIR` through the spawn's `env` (no room pauses the spawn, never
 IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
 dead = FAIL and `me` dead = WARN. Still open: usage-tracker
@@ -15,7 +15,7 @@ Decision record and the numbers behind it: `~/Reports/ai-subscription-2026-10/in
 ## Goal
 
 All subscriptions behave like one larger pool, with no manual switching and
-no lost prompt cache. Every display (statusline, Tinycast, herdr overview,
+no lost prompt cache. Every display (statusline, Tinycast, the Herdr app's `jk-status`,
 heartbeat, Argo) shows every account, and every usage row says which account
 paid for it.
 
@@ -238,11 +238,11 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 
 | Spawner | Today | Change |
 |-|-|-|
-| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what `herdr agent start` types into a pane) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
+| bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
 | `c` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
-| `rd wave` / `rd fan` (`remote-dev.sh:304-310, 603-711`) | pane exports `USAGE_LANE` only | pick before spawn and pass it with herdr's `--env CLAUDE_CONFIG_DIR=…` at pane creation (herdr's only spawn-time injection point; it has no account concept); `CLAUDE_ACCOUNT_PICKED=<id>` rides the same spawn-time `--env` (herdr's `--env` repeats; iu included, so no typed `export` can race the pane's shell); `agent_pane_setup` still types only `USAGE_LANE`. When no account has room `rd` pauses the spawn (no IU spill) |
+| `rd wave` / `rd fan` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
-| `herdr-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
+| `hc-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 
 Resume pins the account: `c --resume <id>` (also `-r`, `--resume=<id>`) looks the session up in the
 `session_env` hook log (`claude-account session <id>`) and launches on the account it ran on, so the
@@ -258,25 +258,25 @@ A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn a
 from "nobody chose", so the decision travels in this variable instead:
 
 - every chooser sets it: `c`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
-  (herdr `--env` at pane creation, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
+  (the spawn's `env`, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
 - the routing reason rides with it as `CLAUDE_ACCOUNT_REASON=<reason>` (the picker's `reason=`, `forced` for `--account`, `resume`
   for a session pin; unset when unknown), set and unset together with the marker by `_claude_enter_account` and by `pick_account`'s
-  `--env`. It is display-only (kept for Tinycast and later displays; the statusline does not render it); nothing routes on it.
+  spawn `env`. It is display-only (kept for Tinycast and later displays; the statusline does not render it); nothing routes on it.
 - bare `claude` in an interactive zsh picks unless the marker is set **and consistent**: the marked account's registry dir
   must equal the current `CLAUDE_CONFIG_DIR` (iu = unset; one `jq` read, only when the marker is set). A stale marker
-  inherited from a long-lived parent (herdr server env, an old shell) fails that check and is ignored, so it cannot
+  inherited from a long-lived parent (a core's env, an old shell) fails that check and is ignored, so it cannot
   silently skip the pick; every chooser sets marker and dir together. An unreadable registry lets the marker stand. It
-  then sets the marker inside a subshell (the pane's own
+  then sets the marker inside a subshell (the terminal's own
   environment stays unmarked: the next `claude` typed there is a new spawn and picks again).
-- **A consistent marker in a pane's own environment stays valid after its agent exits (decided 2026-10-25, no code
-  change).** An `rd` pane gets marker and `CLAUDE_CONFIG_DIR` from herdr's spawn-time `--env`, so they are the pane's
+- **A consistent marker in a terminal's own environment stays valid after its agent exits (decided 2026-10-25, no code
+  change).** An `rd` terminal gets marker and `CLAUDE_CONFIG_DIR` from the spawn's `env`, so they are the terminal's
   environment, not a subshell's. A second `claude` typed there after the first exited skips the pick and runs on the
-  pane's account. That is intended: the pane is one seat on one account (and one `USAGE_LANE`), the second session is the
+  terminal's account. That is intended: the terminal is one seat on one account (and one `USAGE_LANE`), the second session is the
   same work in the same place, and it shares the account's prompt-cache organisation, which a re-pick could only
   forfeit; the guard above exists for markers that *disagree* with the dir, and this one agrees. Costs, accepted: that
   second spawn writes no `picks.jsonl` line, and if the account was exhausted meanwhile Claude Code shows the limit
-  itself (the statusline feed marks it). To re-route from such a pane, type `c` (always picks, then sets the marker for
-  its own `claude`) or `c --account <id>`. A bare `claude` in a *plain* pane is the other case: its marker lives in a
+  itself (the statusline feed marks it). To re-route from such a terminal, type `c` (always picks, then sets the marker for
+  its own `claude`) or `c --account <id>`. A bare `claude` in a *plain* terminal is the other case: its marker lives in a
   subshell, so each typed `claude` picks.
 - result: exactly one `picks.jsonl` line per spawn (`scripts/claude-launcher.test.sh` counts them for `rd`,
   `c` and bare `claude`). Never export it from a profile (it would be ignored whenever it disagrees with the dir, but a matching one still skips the pick).
@@ -286,8 +286,8 @@ One `claude` function serves both machines (`config/zsh/claude-auth.zsh`): the p
 `~/.zshenv` sources only that file for non-interactive mini shells, so `ssh mini 'claude …'` keeps the fallback and
 never picks.
 
-**Trust.** A fresh config dir asks "trust this folder?" on the first start in a path and `herdr agent start` then
-reports not-ready. `make claude-accounts-setup` runs two steps (re-run both after the first `/login` of an account, since
+**Trust.** A fresh config dir asks "trust this folder?" on the first start in a path and an `rd` spawn then
+sits at the dialog (status `null` on a Claude terminal). `make claude-accounts-setup` runs two steps (re-run both after the first `/login` of an account, since
 an account without a `.claude.json` is skipped): `scripts/claude-pretrust.sh "$HOME"` (atomic jq write of
 `.projects[$HOME].hasTrustDialogAccepted` in every registered account that has a `.claude.json`) and
 `scripts/claude-trust-sync.sh`, which copies `hasTrustDialogAccepted=true` from the default `~/.claude.json` into each
@@ -298,14 +298,12 @@ worktree. A folder the default has never opened still prompts once per account.
 
 Known gaps:
 
-- **herdr restart:** panes come back via `claude --resume <id>`. If the pane
-  `--env` isn't restored, a `me` session resumes on `iu`: it works because `projects/`
-  is shared, but the cache is cold. Verify whether herdr persists `--env`;
-  accepted for v1 if not.
+- **Core restart or reboot:** `hc-resume` types `env CLAUDE_CONFIG_DIR=… claude --resume <id>` (`env -u …` for `iu`) from the
+  terminal's `jk.claude.config` label, so a `me` session resumes on `me`. Model, effort and the `c` launcher's env are not restored.
 - **`claude --bg` / `claude agents`:** the background supervisor is a long-lived
   daemon bound to one identity. caam defaults `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`
-  for non-default profiles for this reason. Keep `--bg` (herdr-upgrade) on `iu`
-  only; `herdr-reap` queries `claude agents` once per account.
+  for non-default profiles for this reason. Keep `--bg` on `iu`
+  only; `hc-reap` queries `claude agents` once per account.
 
 ## Effort per model
 
@@ -406,7 +404,7 @@ mini|macbook` reaches the other one over ssh.
 ```
 claude-relogin me              # log in on this machine behind the scenes, approve in the browser, get a notification
 claude-relogin me --ask        # push an approval dialog to the MacBook; its one click starts the same thing
-claude-relogin me --visible    # debugging: a Terminal window / herdr terminal that stays open, no notification
+claude-relogin me --visible    # debugging: a Terminal window / core terminal that stays open, no notification
 claude-relogin me --dry-run    # print exactly what would run, run nothing
 ```
 
@@ -429,11 +427,10 @@ claude-relogin me --dry-run    # print exactly what would run, run nothing
      (never a live one). A failed login drops into `exec $SHELL -l` in that terminal, left open for the paste fallback;
      `--visible` always keeps the shell. A second relogin for the account while its terminal is still open refuses and names
      it (`hc kill relogin-<id>` closes it); a finished one is removed first. `launchctl print` checks the core runs before
-     any `hc` call (an `hc` call starts a stray core otherwise); with no core it falls back to the classic herdr workspace
-     `relogin <id>` (closed after success, `TODO(Wave 7): drop classic`). From the MacBook the hop is still one ssh to the
+     any `hc` call (an `hc` call starts a stray core otherwise); with no core it falls back to a classic herdr workspace (until Wave 7). From the MacBook the hop is still one ssh to the
      mini, where this script then talks to the local core.
    - *Waiting for the terminal:* the opener polls for a result file (`mktemp`, owner-checked, never a symlink) and for
-     the terminal's existence (`hc get`: not found or `finished` = gone). A probe that could not ask (osascript, hc or herdr failing, timing out, answering garbage)
+     the terminal's existence (`hc get`: not found or `finished` = gone). A probe that could not ask (osascript or hc failing, timing out, answering garbage)
      never counts as "closed": the terminal is gone only after 3 clean "absent" answers in a row, and that is
      reported by notification, never silently. After 60 minutes without a result it notifies "did not finish" and
      leaves the window/terminal open.
@@ -462,7 +459,7 @@ A registered but **disabled** account is accepted: its first login is how a new 
 `expiry --ids <id>` reads it before `enabled` is flipped (§Adding an account).
 
 If the forward or ssh fails, the helper prints the URL and the CLI prompt is still there: open the URL yourself and paste
-the code. **Manual fallback** (no script at all): on the machine that owns the login, in a herdr pane or Terminal,
+the code. **Manual fallback** (no script at all): on the machine that owns the login, in a core terminal or Terminal,
 `CLAUDE_CONFIG_DIR=$HOME/.claude-me command claude` (`iu`: unset it), `/login`, press `c` to copy the URL, open it in the
 right profile, approve, paste the code, then `claude-account refresh --ids <id>` and `make claude-accounts-verify`.
 
@@ -505,7 +502,7 @@ human queue and its Slack notification, as every `ask-human` request does.
 | `attribution/session_env` FAIL with old timestamps | lines from sessions that started before the `account` field shipped | ages out within 24 h; newest timestamp in the row says when |
 | `attribution/me-rows` FAIL | usage-tracker has not ingested, or the join lost the account | `cd ~/SourceRoot/usage-tracker && bun run src/cli.ts ingest`, rerun |
 | `pick/*` all `iu`, reason `interactive-fallback` or `spill` | `me` has no fresh sample or is auth-failed | `claude-account usage`, `claude-account refresh --ids me` |
-| a `me` session shows `IU` quota | session started with `CLAUDE_CONFIG_DIR` unset (herdr restart, `--env` not restored) | known gap; restart the session through `c --account me` |
+| a `me` session shows `IU` quota | session started with `CLAUDE_CONFIG_DIR` unset (resumed without the `jk.claude.config` label) | restart the session through `c --account me` |
 | `quota/<id>` WARN "no cachedUsageUtilization" | no session ever ran on that account (only sessions write it now) | informational; `claude-account refresh --ids <id>` feeds the picker's cache regardless |
 | `usage` shows `auth FAILED` right after a fresh `/login` | the mark only clears on a verdict, a sample or a statusline record | `claude-account refresh --ids <id>` (`auth status` loggedIn=true clears it) |
 | keepalive exits 1, log `no fresh sample and no auth verdict` or `logged in but still without a fresh sample` | neither the endpoint (Keychain locked / 429 / network) nor `claude auth status` answered, or only the verdict did and the stored sample is over 6 h old | `~/Library/Logs/claude-accounts-keepalive.log` says which; a locked Keychain on the mini needs the GUI session unlocked, retry `claude-account refresh --all` |
@@ -515,7 +512,7 @@ human queue and its Slack notification, as every `ask-human` request does.
 
 ## Borrowed from open source (2026-10 survey)
 
-No existing tool does per-lane spawn-time selection across herdr panes. The per-spawn tools (diranged/claude-profile, ccs native
+No existing tool does per-lane spawn-time selection across terminals. The per-spawn tools (diranged/claude-profile, ccs native
 profiles, RA1NM4KER/agent-relay, CarlosTheory/claude-multi-account) are profile
 launchers that are about 30 lines here. The global-swap tools (claude-swap
 `switch`, herdr-account-switch, herdr-grazr, cc-account-switcher, caam vault
@@ -559,7 +556,7 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | Surface | Change |
 |-|-|
 | Claude Code statusline | Native `rate_limits` already comes from the session's own account, so the own numbers are correct for free; the `IU`/`ME` badge stays at the front. After the duration, one final segment (files only, never a spawn in the render): every enabled account as `<id> <5h>/<wk>` in registry order, e.g. `iu 2/90 · me 41/22 ↺90m · ∑76%`. The own account is bold with the live stdin numbers (and its 5h reset countdown while line 1 fits 130 columns); the others come from `/tmp/claude_sl/usage_accounts.json`, grey when the sample is over 1 h old, `✗login` when the login failed, absent without figures. `∑` is the plan-weighted weekly pool (weight = the plan multiple, `max20x` 20 / `max5x` 5, all 1 when one is unknown; the same formula as Tinycast's `usage/summary.ts`), only with more than one account. Numbers use the context thresholds. The routing reason (`CLAUDE_ACCOUNT_REASON`, see Account marker) and a pace hint are not rendered. `usage_accounts.json` is rewritten in the background at most once a minute by `fetch_usage.py --accounts` (20 s cap). Tests: `scripts/statusline.test.sh` |
-| herdr overview pane (`/api/overview.txt`) | a two-line quota header (`iu` and `me`: 5h/7d/reset) plus an account column per agent |
+| Herdr app (`jk-status`, `jk-details`) | per-account `5h/7d %` and the `∑` pool from `claude-account usage --json`, the usage popup, and `⚠` chips from `claude-account health --json`; the classic overview pane (a quota header in its agents list) retired with it |
 | Tinycast (MacBook, `extension/src/usage/quota.ts`) | read both accounts from Argo `GET /agents/overview` (`latest.snapshot.quota`), local `fetch_usage.py` as fallback; show both accounts, each with 5h/7d and reset |
 | Heartbeat (`devhost-health-check.sh:1133, 1148`) | `quota` shows both accounts (WARN never pages, as today). In `claude auth`, `iu` dead = FAIL; `me` dead = WARN (built in W1), because the picker routes around it. The same check grades login expiry from `claude-account expiry` (its `severity`): anything but PASS is a WARN (never pages): inside 7 days, an unreadable item, or a check that could not run (helper missing, failing or answering garbage: `login expiry check could not run (<reason>)`, reason also on stderr). Expiry never raises past the existing `iu` policy: a dead keychain login with a working cached token stays the accepted state (WARN at worst); FAIL only where `check_claude_auth_iu` fails too |
 | Hermes digests | inherit from the heartbeat; no change |
