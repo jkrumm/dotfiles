@@ -528,7 +528,7 @@ nothing reports it. `make log-rotate-setup` bounds them: hourly, **copytruncate*
 (a rename follows the inode, exactly like the sweep), 16 MB cap, one `.1`
 generation, safe because launchd's fds are `O_APPEND`. The list in
 `scripts/log-rotate.sh` is **declared, never globbed** (`~/Library/Logs` also
-holds Apple and vendor logs). `com.jkrumm.photoflow` still logs to `/tmp` — known.
+holds Apple and vendor logs).
 
 **File shuttle** — `smb://mini/jkrumm` on the MacBook, `~/Shuttle` the drop
 folder, for ad-hoc **human** file movement only (code → `rd`/git; vault pages →

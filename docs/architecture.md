@@ -71,7 +71,7 @@ which validates geometry before it delivers.
 
 | Repo | Purpose |
 |-|-|
-| `photo-flow` · `shutterflow` | the two photography apps |
+| `shutterflow` | the photography app (photo-flow is discontinued) |
 | `image-gateway` | the Tauri studio — a GUI app belongs on the machine with a human at it; it generates through agw's image door on the mini (the VPS gateway is retired) |
 | `basalt-ui` | followed image-gateway when the studio consumed it as a `file:` dependency; every consumer now pins the published npm version, so this placement is convenience, not a requirement |
 | `tinycast-extensions` | the personal Tinycast extension (TickTick, Claude usage, Netgear M2) — Tinycast and the router's LAN both live here |
@@ -219,7 +219,7 @@ rows to the list below (original text: this file's git history), and un-hide the
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
 `com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.herdr-core` (KeepAlive `hc serve`, the core behind the Herdr app; clean env, `make herdr-core-setup`) ·
 `com.jkrumm.opbackup` (hourly guard) ·
-`com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.smb-keepalive` (60 s +
+`com.jkrumm.smb-keepalive` (60 s +
 network change, `jobrun`, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`
 (KeepAlive, :2222 door) · `sh.brew.colima` · `sh.brew.sleepwatcher` ·
 `sh.brew.ntfy-mac` (push notifications) · `cc.chlc.batt` (root daemon, the

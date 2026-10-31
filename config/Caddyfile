@@ -173,19 +173,6 @@ iris.test {
 	reverse_proxy localhost:7730
 }
 
-# photo-flow — control panel (FastAPI serves the built SPA + API + SSE).
-# Always-on via LaunchAgent on :7717; Vite dev server is :7718 (proxies to :7717).
-# Caddy streams SSE (/events/*) fine by default — no special flush config needed.
-#
-# MacBook-only: the repo and its LaunchAgent live there, and nothing on the mini
-# has ever bound 7717. The block stays here because both machines share this
-# file; the mini carries `exclude photoflow` in ~/.config/caddy-tailnet.ports so
-# it gets no tailnet door and stops reporting red for an app it does not run.
-photoflow.test {
-	import local
-	reverse_proxy localhost:7717
-}
-
 # free-planning-poker — web (Next.js), server (Bun WS), analytics (FastAPI),
 # logdy UI. Ports 7723-7726 reserved; 7724-7726 are logdy ingest sockets and
 # don't need .test hosts. Caddy auto-handles WebSocket upgrades for fpp-server.

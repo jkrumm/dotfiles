@@ -40,7 +40,6 @@ purpose: the heartbeat and Kuma pushers must stay dumb. (The archived inventory 
 | `opbackup` | 2 | 2 | Kuma weekly (data leaves the box) |
 | smb-keepalive (`com.jkrumm.smb-keepalive`, launchd 60 s + network change, `jobrun`) | 2 | 2 | Born on `jobrun` (2026-10-19): remounts a stale HomeLab Samba share; exits non-zero only on a failed (re)mount, unreachable is normal. Graded on wake |
 | `brain-sync`, `batt-reset`, `appearance-sync`, `db-tunnel`, `tailnet-sshd` | 0–1 | 2 | Graded on wake, local notification |
-| `photoflow` | 0 | 2 | `/tmp` log |
 
 Job state dir, grading and the heartbeat `jobs` component: see Pattern below.
 
