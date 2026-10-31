@@ -32,8 +32,8 @@ this file. Chain mode. A wave that cannot finish writes `stopped: <reason>` into
 - **Lane policy holds** (`docs/agent-platform.md`): only `@implementer` and `rd wave` start agents.
 - **Other repos:** work in a worktree from fetched origin, never in a checkout another agent or the owner is
   committing in. Check `rd agents` or `hc ls` for a working agent in that repo first.
-- **`AGENTS.md` must end under 40k chars.** It is 42.1k on 2026-10-31. Every wave that touches it leaves it no
-  larger, and Wave 6 brings it under the limit.
+- **`AGENTS.md` must end under 40k chars.** It is 39.97k after Wave 6. Every wave that touches it leaves it no
+  larger.
 
 ## Port map
 
@@ -371,10 +371,10 @@ Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
 - Not verified: iris `/herd` against the live iris server and the e2e (no dev servers started); hermes `skills/herdr` was not
   exercised by a live Hermes run.
 
-## Wave 6 — the `herdr` skill and the docs            <!-- status: active -->
+## Wave 6 — the `herdr` skill and the docs            <!-- status: done -->
 Role `wave`.
 
-- [ ] Write the new global `skills/herdr/SKILL.md` (replaces the classic `herdr` skill and `herdr-core`;
+- [x] Write the new global `skills/herdr/SKILL.md` (replaces the classic `herdr` skill and `herdr-core`;
   delete `skills/herdr-core`, `make setup` re-links). Its rules:
   - **One space per project.** Work happens in tabs inside it. A new space only for genuinely separate work,
     such as a long-lived worktree, named so `groups.json` files it. The sidebar stays clean.
@@ -386,14 +386,21 @@ Role `wave`.
     templates, labels, events, docs, and placing a terminal in a given space and tab.
 
   Point to `hc --skill` and `herdr-app --skill` for the version-current detail rather than copying it.
-- [ ] `AGENTS.md` (every classic section rewritten, **under 40k**), `config/global.CLAUDE.md`,
+- [x] `AGENTS.md` (every classic section rewritten, **under 40k**), `config/global.CLAUDE.md`,
   `docs/{remote-dev,architecture,agent-platform,collie,global-reference,claude-accounts,hooks,homebrew,devhost-health,theme,macbook,opencode}.md`,
   `skills/{remote-dev,upgrade-deps}`. Retired features get one line with the reason, never a dangling
   reference.
-- [ ] `git grep -n -i 'herdr ' -- ':!docs/archive' ':!docs/waves/archive'` hits only hc-world text, the Herdr
+- [x] `git grep -n -i 'herdr ' -- ':!docs/archive' ':!docs/waves/archive'` hits only hc-world text, the Herdr
   product name or the history list.
+**Left behind:**
+- `skills/herdr/SKILL.md` is the one hc-world skill (all API areas checked against `hc --skill`/`--help`/`schema` 0.1.15 and `herdr-app --skill` read from the MacBook); `skills/herdr-core` deleted. `make herdr-setup` no longer calls `herdr-skill-sync.sh` (it would overwrite the hand-written skill); the script itself is Wave 7's.
+- Docs: two `rd fan` workers (remote-dev group, the rest), cherry-picked by hand because `rd merge` stops on a repo without PRs ("no PR — worker must open one"; it also pushed their branches, deleted again). I wrote AGENTS.md (**39.97k**, was 42.36k: the janitor and `rd wave` detail moved verbatim into `docs/remote-dev.md` §Janitor rules and `rd wave` detail) and `config/global.CLAUDE.md`. `make -k check` exit 0 (log `/private/tmp/w6-check.log`) before the last doc-only fixes; `architecture-check` re-run green.
+- `agw review` (`01a19324`): fixed a false "prompts are re-sent after 30 s" claim (argv prompts, `deliver_prompt` is dead code), `make theme` scope, `ssh -t mini hc` needing a running core, hc-resume mini-only. Dismissed: the `hc wait --children` wait claim (the doc already limits it to `rd fan`/orchestrated children), the truncated `rd wave` contract (moved, not lost), "keep a classic skill" (the plan retires it).
+- **Remaining `herdr ` hits are code or history for Wave 7:** Makefile, `scripts/{remote-dev,herdr-*,devhost-health-check,claude-relogin,claude-appearance,brew-upgrade,doctor,...}`, `herdr/`, `config/herdr/config.toml`, `config/zsh/{remote-dev,claude-auth,claude}.zsh` comments and the classic `desk()`, Brewfile, `config/tcc-programs.json` (`herdr.collie`), plist templates, the ghostty theme headers (classic sidebar contrast history), `docs/herdr-core.md` (Wave 1 facts about classic), and the explicit "retires in Wave 7" lines in architecture, devhost-health, homebrew, macbook, theme, claude-accounts. Wave 7 must also remove `desk`, the `herdr` heartbeat component, the `herdr-*` architecture rows and the `make theme` classic step.
+- Found, not mine: the mini's `~/.local/bin/herdr-app` is a dangling symlink into `/tmp/w4ak/…` (Wave 4's scratch app); there is no `herdr-app` on the mini. Not removed.
+- The `rd` usage says `rd merge` for fan branches; on dotfiles (direct-to-master, no PRs) it needs a cherry-pick fallback or a flag. Not changed (out of scope).
 
-## Wave 7 — remove classic herdr            <!-- status: pending -->
+## Wave 7 — remove classic herdr            <!-- status: active -->
 Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `working`. Otherwise write
 `stopped: <who is working>` and stop. Never stop someone's work.
 
