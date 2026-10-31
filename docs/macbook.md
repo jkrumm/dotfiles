@@ -75,8 +75,7 @@ The Herdr app follows the system appearance itself (theme `one-zinc-{light,dark}
 does not do is tell the programs inside its terminals: an unattached core terminal answers OSC 10/11 with fixed dark
 colours and a running program gets no `?997` push on a switch (`docs/herdr-core.md` fact 6). The agent `WatchPaths` the
 global preferences plist, so it also fires on unrelated preference writes (no-ops) and lags a flip by ~7-10 s
-(cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the mini. Its classic-GPUI step (rewriting the
-`theme` line of `~/.config/herdr/config-gpui.local.toml`) goes with classic herdr in Wave 7.
+(cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the mini.
 
 **Claude and OpenCode terminals follow too, here and on the mini.** Claude Code on `theme: auto` flips on a DEC 2031
 report plus the OSC 11 answer it re-queries; OpenCode's opentui renderer needs the report **and both** OSC 11

@@ -37,14 +37,12 @@ never be granted** — a television driving coding agents is not a theoretical
 failure mode once the check itself can't discriminate.
 
 The `.env` lives at `~/.config/collie/.env` (mode 600, never templated). It was
-written once by hand; `make collie-setup` copies it once from the classic plugin's
-config dir if the new one is missing, and then touches exactly one line:
+written once by hand; `make collie-setup` touches exactly one line of it:
 `COLLIE_MUX=herdr-core`. It also **refuses** to install when `COLLIE_SKIP_SERVE=1`,
 `COLLIE_HOST=127.0.0.1` or a non-empty `COLLIE_PUBLIC_HOSTS` is missing. The
 settings, each closing a specific gap:
 - `COLLIE_MUX=herdr-core` — which terminal host the bridge drives. Named
-  explicitly, because with it unset upstream picks by what it finds and could
-  land on classic herdr, still installed until Wave 7. The plist repeats it, so
+  explicitly, because with it unset upstream picks by what it finds. The plist repeats it, so
   an `.env` edit cannot move the bridge off the core.
 - `COLLIE_MULTI_SESSION=off` — the core adapter drives exactly one session
   (`HC_SESSION`, default `default`); upstream's default `on` would front every
@@ -85,8 +83,7 @@ settings, each closing a specific gap:
 (`RunAtLoad` + `KeepAlive {SuccessfulExit: false}` + `ThrottleInterval 5`, log
 `~/Library/Logs/collie.log`, rotated by `log-rotate` from the plist). We never run
 upstream's `collie start`: it writes a unit of its own and publishes `tailscale
-serve` imperatively. Until Wave 7, `make collie-setup` also boots out the classic
-plugin's `herdr.collie` agent and uninstalls the plugin (idempotent; a no-op on a clean machine).
+serve` imperatively. The earlier run as a classic herdr plugin (`herdr.collie`) is gone with classic herdr.
 
 **The install is deliberately not a git checkout.** Upstream can update a git
 checkout in place, from a paired phone (`POST /api/update` pulls the newest release
@@ -139,7 +136,7 @@ which this repo renders from a template, so it needs its own decision.
 
 | Command | Does |
 |-|-|
-| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): refuse unless the core's LaunchAgent runs, build the pinned commit, check `.env`, render + bootstrap `com.jkrumm.collie`, retire the classic plugin (until Wave 7), then run the behavioural check |
+| `make collie-setup` | Dev-host only (gated on the `cache` backend marker): refuse unless the core's LaunchAgent runs, build the pinned commit, check `.env`, render + bootstrap `com.jkrumm.collie`, then run the behavioural check |
 | `make collie-upgrade` | Dev-host only: resolve the newest release tag, print its changelog + diffstat + a scope verdict, and on `y` bump the pin, rebuild, assert, commit |
 | `make collie-status` | Read-only: LaunchAgent state, installed build vs pin, the behavioural check, `tailscale serve status` |
 | `make collie-pair` | Mint a one-time pairing code for a phone |

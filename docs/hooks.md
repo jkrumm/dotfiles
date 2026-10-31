@@ -23,8 +23,7 @@ persistent change.
 The hook receives a JSON payload on stdin describing the event and its context.
 
 The template registers six more of this repo's hooks alongside it — symlinked
-live from `dotfiles/hooks/`, so an edit takes effect on the next tool call — plus
-classic herdr's own state reporter:
+live from `dotfiles/hooks/`, so an edit takes effect on the next tool call:
 
 | Hook | Event | Does |
 |-|-|-|
@@ -34,7 +33,6 @@ classic herdr's own state reporter:
 | `iu-model-guard.ts` | UserPromptSubmit + PreToolUse (Agent) | on a metered `ANTHROPIC_BASE_URL` (IU), blocks an Opus/Fable main model (resolved from the process's `--model` → `ANTHROPIC_MODEL` → settings, aliases through `ANTHROPIC_DEFAULT_*`) and an Opus/Fable worker — runs inside every child `claude` process too, so a hand-rolled IU runner is caught (no launcher sets IU any more; this is the backstop) |
 | `machine-role.ts` | SessionStart | injects this machine's secrets backend + outbound-access routing |
 | `hc-session-label.ts` | SessionStart + SessionEnd | labels its own herdr-core terminal (`jk.claude.session`, `jk.claude.config`) so `hc-resume` can restore the conversation; no-op outside a core terminal (`HC_TERMINAL_ID` unset) |
-| `herdr-agent-state.sh` | SessionStart (`*`) | classic-only; no-ops where classic herdr's integration was never installed; retires in Wave 7 |
 
 ### Software-factory hooks
 

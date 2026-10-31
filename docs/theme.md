@@ -18,9 +18,8 @@ and `make theme` on the mini; applying one layer is how they drift apart.
 | Prompt | `config/starship.toml` | ANSI color *names*, so they resolve through whichever palette is active |
 | opencode | `config/opencode/tui.json` → `config/opencode/themes/one-zinc.json` | `theme = "one-zinc"`; one file, `{dark, light}` per token |
 
-Classic herdr's layer (`config/herdr/config.toml`: `one-dark` / `catppuccin-latte`, applied and
-reloaded by `make theme`) and its sidebar contrast measurements retire with classic herdr in Wave 7;
-the numbers are in this file's git history.
+Classic herdr's layer (`config/herdr/config.toml`, `one-dark` / `catppuccin-latte`) is retired with classic herdr; its sidebar contrast
+measurements are in this file's git history.
 
 opencode is the one layer with no terminal-independent switch of its own: its
 `one-zinc` theme picks dark/light from the mode the **terminal** reports, and an
@@ -65,8 +64,7 @@ and are non-empty.
 
 ## Operating notes (moved from AGENTS.md)
 
-**The look** — `make theme` applies the terminal + prompt layers (and, until Wave 7,
-classic herdr's); the Herdr app's theme is `make herdr-app-setup`. Run both on the
+**The look** — `make theme` applies the terminal + prompt layers; the Herdr app's theme is `make herdr-app-setup`. Run both on the
 machines they apply to, since applying one layer is how they drift.
 opencode is the fourth layer and is **file-based, not a make target** — it
 carries both modes in one `one-zinc.json`, so `make theme` has nothing to copy

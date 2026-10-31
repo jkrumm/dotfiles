@@ -34,8 +34,7 @@ The Herdr app on the MacBook is the window. It links the mini's core as machine 
 once; ssh config host `mini`), so the mini's spaces and terminals sit next to the MacBook's (`herdr-app --skill`, MacBook
 only, is its manual; the `herdr` skill holds the rules). The core and every terminal run on the mini and the link is
 ssh/TCP, so a roam or lid-close ends the *link*, never a terminal: the app reconnects. Terminal-only fallback, no app:
-`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches; only while `launchctl print gui/$(id -u)/com.jkrumm.herdr-core` shows the core running, since an `hc` call with no core starts one without the keychain). `desk` (classic's `--remote` attach) stays only until
-Wave 7 deletes classic.
+`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches; only while `launchctl print gui/$(id -u)/com.jkrumm.herdr-core` shows the core running, since an `hc` call with no core starts one without the keychain).
 
 - **No ssh to the mini needs a 1Password approval, and plain `ssh mini` never
   touches the 1Password agent.** `Host mini` authenticates with the dedicated
@@ -87,8 +86,7 @@ Design, launcher, updates, verified facts: `docs/herdr-core.md`.
   in-flight turn are lost.
 - **Janitor and recorder.** `com.jkrumm.hc-reap` (`make hc-reap-setup`, every 30 min → `rd reap`, log
   `~/Library/Logs/hc-reap.log`) closes terminals of finished agents. `com.jkrumm.hc-events` (`make hc-events-setup`) appends the
-  core's event stream to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl`, with a gap marker on `missed` or a core restart. Classic
-  `herdr-reap`/`herdr-events` run beside them until Wave 7.
+  core's event stream to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl`, with a gap marker on `missed` or a core restart.
 - **`HC_TERMINAL_ID` is how an agent knows it is in a core terminal** (`t7`; `mini/t7` from another machine), which makes the
   `herdr` skill inert on a plain shell. It is inherited at spawn, not tracked: `hc get` is the live state.
 - **cmd-e opens `Projects/<repo>.md`** from `~/SourceRoot/brain` in `$EDITOR`: the `jk-keys` mod runs `scripts/brain-note.sh` for
@@ -111,7 +109,7 @@ declares the taxonomy (linked to `~/.config/herdr-app/groups.json` by `make
 herdr-app-setup`), a space joins the group naming its repo, the rest land in
 `OTHER`, and `jk-board` files its repo cards under the same folders. Adding a
 repo is one line in the JSON; an unopened space is skipped, so listing one early
-costs nothing. Classic's separator-workspace headers (`make herdr-groups`) are gone: the folders replaced them.
+costs nothing.
 
 ## Putting work on the mini
 
@@ -165,7 +163,7 @@ is tried first and hc-direct is the fallback (below). Four rules hold:
 `rd agents` prints one line per agent: `SOURCE  NAME  STATUS  CWD  ID`, the status being hc's own word (`working`,
 `idle`, `done`, `blocked`). **That text is a contract**: iris' `mother-watch.sh` greps it for `iris-w<n>` and `blocked`
 (pinned by `scripts/remote-dev-wave.test.sh`). Sources: `hc` (an agent terminal: it reports a status or runs `claude`
-itself — a plain shell is not one), `herdr` (classic, until Wave 7), `bg` and `interactive` (`claude agents --json`).
+itself — a plain shell is not one), `bg` and `interactive` (`claude agents --json`).
 
 `say` on an hc terminal is `hc send`: it pastes the text and presses Enter once nobody is typing. A **blocked** agent is
 refused (`NOT delivered: … blocked on a dialog`; the text would answer its dialog; `rd read` it and answer by hand),
@@ -175,14 +173,12 @@ and a working one queues the message (`queued: agent busy`). `close` is `hc kill
 screen). Names resolve against the live agents' address, terminal name, `factory.key` label, cwd and the cwd's
 basename; two matches stop with the candidates listed.
 
-**Classic fallback (until Wave 7).** A token hc does not know falls through to classic herdr's old paths for `read`, `say` and `close`;
-`agents` lists both rosters, and `wave`/`work`/`fan --clean` also check classic agents for a second editor. Wave 7 deletes the
-branch. Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against `scripts/remote-dev-fake-hc.sh`
+Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against `scripts/remote-dev-fake-hc.sh`
 (a fake core; never a real one).
 
 `work` is idempotent because two agents in one checkout is the file-ownership
 hazard, except across terminals where you cannot see it happen. `agents` dedupes on
-the Claude session id (hc: the `jk.claude.session` label; a classic agent: its session value; the daemon:
+the Claude session id (hc: the `jk.claude.session` label; the daemon:
 `sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
 Two lanes start agent work (`docs/agent-platform.md`): `@implementer` and an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
@@ -245,7 +241,7 @@ falls back. `RD_DRY_RUN=1` never probes.
 |-|-|-|
 | `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **certainly**: the call never ran (no `factory`, no `timeout` binary) or the factory answered with an `error` object. A silent failure (a dropped hop, a timeout) may come after the factory recorded the spawn: `spawn get` showing it is followed, anything else is an error (look at `factory spawn get <key>` before re-running), never a second terminal under the same name |
 | `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
-| `close` | none on an hc terminal (`hc kill` + `hc rm` after the safety checks); a classic agent still asks `factory session get` for its tab | classic only: the factory has no such session, so the tab must be labelled `wave <n>` |
+| `close` | none (`hc kill` + `hc rm` after the safety checks) | not applicable |
 
 Spawn outcomes, from `factory spawn get` `.status`: `started` (`.pane`, `.tab`, `.workspace` set) prints today's
 line plus `via the factory` and the account; `queued` with `.hold` set (`drain|pace|wave`) prints `queued: <hold>`

@@ -47,12 +47,11 @@ Mini, 2026-10-31 (68 agents; the unified log of the last 7 days holds no `AUTHRE
 | `com.jkrumm.modelpick-web` | bun in a Cellar path (Developer ID signed) | no grant |
 | `com.jkrumm.weatherorb.serve` | ad-hoc built `openmeteo-api` | no grant (`~/SourceRoot/weatherorb`) |
 | `com.jkrumm.collie` | compiled bridge in `~/.local/share/collie` | no grant (own config, state and log only) |
-| `herdr.collie` | ad-hoc plugin binary | no grant, retires with Wave 7 |
 | `homebrew.mxcl.sleepwatcher` | Cellar path, ad-hoc | no grant |
 | bash/zsh/osascript/python-by-shebang jobs, `jobrun`/script jobs | Apple platform binaries or unsigned scripts: stable identity | not flagged |
 
 Not LaunchAgents but the same failure: `claude` (`~/.local/share/claude/versions/<v>`, a fresh client on every
-auto-update), `op` (Caskroom path), `herdr` classic (Cellar path). Anything they spawn from a **core terminal** is covered
+auto-update), `op` (Caskroom path). Anything they spawn from a **core terminal** is covered
 by the launcher's grant; run from a plain Ghostty shell they are not.
 
 MacBook (different user home): LaunchAgent programs were read over ssh; the TCC log is not readable from an ssh session
