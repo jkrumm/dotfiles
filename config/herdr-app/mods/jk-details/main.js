@@ -14,6 +14,8 @@ const BARS = 90;
 const props = () => rawProps() ?? {};
 // Anthropic renamed the tiers on 2026-10-30: Max 5x is "Max", Max 20x is "Ultra".
 const PLAN = { max5x: "Max", max20x: "Ultra" };
+// Older than this, the numbers are a past sample, not the current state.
+const STALE_S = 3 * 3600;
 
 const mem = (kib) => (kib >= 1048576 ? `${Math.round(kib / 1048576)}G` : `${Math.round(kib / 1024)}M`);
 const name = (cmd) => cmd.replace(/\.app\/.*$/, ".app").split("/").pop();
@@ -121,7 +123,8 @@ export default class JkDetails extends View {
       .children(accounts.map((a) => v_flex().id(`acct-${a.id}`).gap(4)
         .child(h_flex().gap(8).items_center()
           .child(div().text_size(12.5).font_bold().text_color(a.auth_ok ? t.foreground : t.blocked).child(a.id))
-          .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? "")))
+          .child(div().text_size(11).text_color(t.dim).child(PLAN[a.plan] ?? a.plan ?? ""))
+          .when((a.age_s ?? 0) > STALE_S, (el) => el.child(div().text_size(11).text_color(t.ansi3).child(`numbers ${Math.round(a.age_s / 3600)} h old`))))
         .child(row("5h", a.five_hour, a.five_hour_resets_at))
         .child(row("7d", a.seven_day, a.seven_day_resets_at))
         .children(this.issues(t, a.id))))
@@ -130,7 +133,7 @@ export default class JkDetails extends View {
 
   render() {
     const t = theme();
-    return v_flex().id("jk-details").size_full().p(16).gap(8).bg(t.popover).text_color(t.foreground).overflow_y_scrollbar()
+    return v_flex().id("jk-details").w_full().h(props().height ?? 540).p(16).gap(8).bg(t.popover).text_color(t.foreground).overflow_y_scrollbar()
       .on_mouse_down("left", () => {})
       .child(props().kind === "usage" ? this.usage(t) : this.machine(t))
       .child(div().id("close").mt(6).text_size(11).text_color(t.dim).cursor_pointer().hover((s) => s.text_color(t.foreground))
