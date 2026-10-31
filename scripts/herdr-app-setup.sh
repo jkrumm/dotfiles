@@ -31,7 +31,7 @@ link() { # src dst
 }
 
 for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
-# jk-spaces reads its folders from here: one taxonomy with classic herdr's sidebar.
+# jk-spaces reads its folders from here: one taxonomy for the app's sidebar.
 link "$DOTFILES_DIR/config/herdr-app/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
@@ -78,7 +78,6 @@ done
 # groups.json's folders. Spaces only: every agent stays where it runs (docs/herdr-core.md §Decision).
 # The working set is the repos the mini core's live terminals sit in (their cwd, a worktree resolves to its repo): a
 # labelled tab already has its space, this adds the ones an unlabelled shell or a manual `hc run` left without one.
-# Classic herdr workspaces still count until it retires. TODO(Wave 7): drop the classic list below.
 if ! hc machine ls --json 2>/dev/null | /usr/bin/python3 -c 'import json,sys; sys.exit(not any(m["name"] == "mini" and m["state"] == "connected" for m in json.load(sys.stdin)["machines"]))'; then
   say "- mini not connected (hc machine ls) — mini spaces skipped"; exit 0
 fi
@@ -90,10 +89,7 @@ core_cwds=$(hc exec --on mini sh -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$P
   | /usr/bin/python3 -c 'import json,sys; [print(t["cwd"]) for t in json.load(sys.stdin).get("terminals", []) if t.get("cwd")]' 2>/dev/null || true)
 core_repos=""
 [ -z "$core_cwds" ] || core_repos=$(printf '%s\n' "$core_cwds" | hc exec --on mini -i sh -c "$REPOS_OF" 2>/dev/null || true)
-# TODO(Wave 7): drop classic — label<TAB>path for each classic workspace that is a repo there.
-classic_repos=$(ssh -o BatchMode=yes mini 'herdr workspace list' 2>/dev/null | /usr/bin/python3 -c 'import json,sys; [print(w["label"]) for w in json.load(sys.stdin)["result"]["workspaces"] if not w["label"].startswith("──")]' 2>/dev/null \
-  | ssh -o BatchMode=yes mini 'while read -r l; do for r in "$HOME/SourceRoot" "$HOME/IuRoot"; do if [ -d "$r/$l/.git" ]; then printf "%s\t%s\n" "$l" "$r/$l"; break; fi; done; done' 2>/dev/null || true)
-mini_repos=$(printf '%s\n%s\n' "$core_repos" "$classic_repos" | sort -u)
+mini_repos=$(printf '%s\n' "$core_repos" | sort -u)
 while IFS=$'\t' read -r name folder; do
   [ -n "$name" ] || continue
   if grep -qxF "$folder" <<<"$mini_open"; then say "· mini space $name (open)"; continue; fi
