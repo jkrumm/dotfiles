@@ -74,15 +74,20 @@ export default class JkStatus extends View {
     });
   }
 
-  details(props) {
-    openOverlay({ mod: "jk-details", kind: "popup", width: 400, height: props.kind === "usage" ? 290 : 540, props });
+  // Centered over the clicked field, just above the bar; at the pointer if the
+  // field's bounds aren't known yet (not painted).
+  details(props, event) {
+    const width = 400, height = props.kind === "usage" ? 290 : 540;
+    const b = event?.bounds;
+    const at = b ? { x: Math.max(8, Math.round(b.x + b.width / 2 - width / 2)), y: Math.max(8, Math.round(b.y - height - 12)) } : "pointer";
+    openOverlay({ mod: "jk-details", kind: "popup", width, height, at, props });
   }
 
   machine(t, name, stats) {
     const hot = (v) => (v >= 85 ? t.blocked : t.muted);
     const num = (w, text, color) => div().w(w).flex_none().text_right().text_color(color).child(text);
     return h_flex().id(`stats-${name ?? "local"}`).gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click(() => this.details({ kind: "machine", machine: name }))
+      .on_mouse_up("left", (e) => this.details({ kind: "machine", machine: name }, e))
       .child(svg(`mods/workspace-chrome/${name ? "server" : "monitor"}.svg`).size(13))
       .child(div().child(name ?? "MacBook"))
       .when(Boolean(stats), (el) => el
@@ -110,7 +115,7 @@ export default class JkStatus extends View {
       .children(this.remotes.map((m) => this.machine(t, m, this.stats[m])))
       .when(this.usage.length > 0, (el) => el.child(sep())
         .child(h_flex().id("usage").gap(10).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
-          .on_click(() => this.details({ kind: "usage" }))
+          .on_mouse_up("left", (e) => this.details({ kind: "usage" }, e))
           .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))))
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
