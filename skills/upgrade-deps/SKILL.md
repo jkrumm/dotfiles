@@ -86,8 +86,7 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
      `jkrumm/tap` formula `herdr-core`, bumped only by the daily
      `com.jkrumm.herdr-core-update` (`docs/herdr-core.md` §Updates): skip it
      when `brew-upgrade` lists it under third-party taps. The app self-updates
-     and never touches a managed core. The classic `herdr` formula and
-     `penso/tap/herdr-gpui` cask are retired in Wave 7: leave them alone.
+     and never touches a managed core.
    - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
      unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
      `collie pair` on the phone.

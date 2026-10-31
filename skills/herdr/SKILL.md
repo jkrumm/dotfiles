@@ -7,7 +7,7 @@ description: "Run and steer terminals and agents through herdr-core (`hc`) and s
 
 Two binaries, one vendor. **`hc`** owns the terminals: persistent PTYs that outlive every viewer, parent/child agents,
 labels, an event stream, other machines. **`herdr-app`** is the native window on top (spaces, tabs, panes, layouts,
-mods). The classic `herdr` TUI is being retired (`docs/waves/PLAN.md` Wave 7); this skill is the hc world.
+mods).
 
 ## First step, every time
 
