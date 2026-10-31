@@ -389,36 +389,7 @@ else
   echo "  · colima brew service not registered here — skipping boot-path assertion"
 fi
 
-# TODO(Wave 7): drop classic — this herdr block goes with the brew service.
-# herdr, same trap in a different plist: `brew upgrade herdr` regenerates
-# herdr's brew-service plist from the formula and strips the session-leader
-# wrapper. Nothing errors — the server comes up fine and only the next `desk`
-# launch starts asking "restart the remote server now? [y/N]" again, which
-# reads as a herdr quirk rather than as a reverted config. Asserted wherever
-# the service is registered, gated on the plist like colima's.
-HERDR_PLIST=$(brew_service_plist herdr) || HERDR_PLIST=""
-HERDR_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/herdr/herdr-server-start.py"
-if [[ -z "$HERDR_PLIST" ]] && brew services info herdr --json 2>/dev/null | grep -q '"loaded": *true'; then
-  echo "  ✗ herdr: brew service is loaded but has NO plist under either name (sh.brew.herdr / homebrew.mxcl.herdr) — boot path unassertable (fix: brew services start herdr && make _herdr-supervise)"
-  assertion_failed=1
-elif [[ -n "$HERDR_PLIST" ]]; then
-  program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$HERDR_PLIST" 2>/dev/null) || program=""
-  loaded=$(launchctl print "$(brew_service_launchctl_target herdr 2>/dev/null)" 2>/dev/null \
-    | awk -F' = ' '/^[[:space:]]*program = /{ print $2; exit }') || loaded=""
-  if [[ "$program" == "$HERDR_WRAPPER" && ( -z "$loaded" || "$loaded" == "$HERDR_WRAPPER" ) ]]; then
-    echo "  ✓ herdr: session-leader boot path intact"
-  elif [[ "$program" == "$HERDR_WRAPPER" ]]; then
-    echo "  ✗ herdr: file converged but launchd still runs '$loaded' (fix: make herdr-restart YES=1)"
-    assertion_failed=1
-  else
-    echo "  ✗ herdr: boot path reverted by the upgrade — ProgramArguments:0='${program:-unreadable}' (fix: make _herdr-supervise, then make herdr-restart YES=1)"
-    assertion_failed=1
-  fi
-else
-  echo "  · herdr brew service not registered here — skipping boot-path assertion"
-fi
-
-# herdr-core: the invariants that replace the classic herdr ones above at Wave 7. The job
+# herdr-core: the invariants an upgrade can break. The job
 # is OUR plist (com.jkrumm.herdr-core, not a brew-service one), so brew cannot rewrite it;
 # what an upgrade can break is the chain under it. The program must stay the stable
 # launcher (the Full Disk Access holder — a new build needs a new grant, docs/tcc.md), the
