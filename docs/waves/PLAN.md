@@ -214,8 +214,9 @@ Role `wave`.
   `Last-Modified` of `core/<v>/manifest.json` (or the GitHub tag date), in the spirit of `config/bunfig.toml`'s
   `minimumReleaseAge`. It bumps the pin, upgrades both machines, kickstarts each core and asserts terminals
   survived and versions match. No idle-gating. `make herdr-core-upgrade-dry` previews.
-- [ ] App auto-update: no off switch exists (herdr-app #207, open), so accept it (the window only updates, and
-  the managed core stays pinned). The heartbeat flags a core version the pin doesn't own and an app whose
+- [ ] App auto-update: **accepted (owner decision 2026-10-31, option a)**, nothing left to decide, apply it. The
+  window updates itself (no off switch exists anyway, herdr-app #207); the core is pinned as a managed install in
+  `jkrumm/tap`, so the app never replaces it. No app-side pin. The heartbeat flags a core version the pin doesn't own and an app whose
   `core_min` (`app/latest.json`) is above the pin.
 - [ ] Fold it into `skills/upgrade-deps` machine mode and `docs/homebrew.md`.
 
@@ -223,11 +224,11 @@ Role `wave`.
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
 note).
 
-- [ ] `make brew-upgrade` (mini, then MacBook); Colima 12 → 6 GiB (Makefile default + AGENTS.md line,
+- [ ] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31); Colima 12 → 6 GiB (Makefile default + AGENTS.md line,
   `make colima-restart`); teamchat 6 → 3 GiB in IuRoot `chat` (work repo: a branch, the owner opens the MR).
 - [ ] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
   `make claude-accounts-verify`; me2's stale quota sample. Fix photoflow's architecture-map entry.
-- [ ] `make mini-macos-update` on 26.x (**never 27**), last, after the close-out commit, from the MacBook
+- [ ] `make mini-macos-update` staying on 26.x (**never 27**, owner-confirmed 2026-10-31), last, after the close-out commit, from the MacBook
   (`ask-human` push, it reboots the mini). After the reboot: cores up, `hc-resume` restored the sessions,
   `make doctor` green on both machines.
 - [ ] Final report into Left behind: everything ported, retired or deferred (one line each), anything still
