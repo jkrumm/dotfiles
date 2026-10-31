@@ -3,7 +3,7 @@
 // Click a machine or the usage for jk-details (history, top processes, quota resets).
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, run, window, exec, hc, setShared, openOverlay } from "herdr";
+import { spaces, agents, theme, run, window, exec, hc, shared, setShared, openOverlay } from "herdr";
 
 // macOS: "<cpu %> <used GiB> <total GiB>", one decimal each. Used = active + wired +
 // compressed, the figure Activity Monitor calls memory used; the file cache is left out.
@@ -27,6 +27,15 @@ const HISTORY = 180; // samples per machine: 15 min at STATS_MS
 const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// One popup spec, duplicated in jk-details (mods can't import each other; keep in step): frameless (the card draws
+// its own frame, so the measured card is the popup), bottom edge 10 px above the anchor.
+function popupSpec(props, height) {
+  const { anchor, width } = props;
+  return { mod: "jk-details", kind: "popup", frame: "none", width, height,
+    at: { x: Math.max(8, Math.round(anchor.x - width / 2)), y: Math.max(8, Math.round(anchor.y - height - 10)) },
+    props: { ...props, height } };
+}
 // Whole numbers in fixed-width cells: the bar doesn't jump when a value crosses 10.
 const pct = (v) => `${Math.round(v)}%`;
 
@@ -96,31 +105,23 @@ export default class JkStatus extends View {
     });
   }
 
-  // jk-details' usage view, measured in a screenshot (3 accounts, 2 issues = 397 px):
-  // 110 for padding, title and close; 71 per account, 14 between, 24 per health issue.
-  usageHeight() {
-    const n = this.usage.length;
-    return 110 + n * 71 + Math.max(0, n - 1) * 14 + this.issues.length * 24;
-  }
-
   track(key, e) {
     if (e?.bounds) (this.bounds ??= {})[key] = e.bounds;
   }
 
-  // Centered over the clicked field, just above the bar; at the pointer if the
-  // field's bounds aren't known yet (not painted).
+  // The popup ends 10 px above the clicked field (anchor = its top center). Its height is
+  // jk-details' own last measurement for this kind (shared "jk.h.<kind>"); a first open
+  // guesses high and jk-details re-places itself once with the measured height.
   details(props, event, key) {
-    const width = props.kind === "usage" ? 460 : 400, height = props.kind === "usage" ? this.usageHeight() : 540;
     // The field's bounds (from the click, else the hover record); only trusted when they
     // are bar-sized, since a press can report a child's or an outer element's bounds.
     const b = [event?.bounds, this.bounds?.[key]].find((x) => x && x.height <= 40);
     const p = event?.position;
-    const cx0 = b ? b.x + b.width / 2 : p?.x;
-    const top = b ? b.y : p ? p.y - 14 : null;
-    const at = cx0 != null && top != null ? { x: Math.max(8, Math.round(cx0 - width / 2)), y: Math.max(8, Math.round(top - height - 10)) } : "pointer";
-    // A popup shrinks to its content; jk-details pins its root to this height, so the
-    // position computed from it is where the popup really ends up.
-    openOverlay({ mod: "jk-details", kind: "popup", width, height, at, props: { ...props, height } });
+    const anchor = b ? { x: b.x + b.width / 2, y: b.y } : p ? { x: p.x, y: p.y - 14 } : null;
+    if (!anchor) return openOverlay({ mod: "jk-details", kind: "popup", props });
+    const width = props.kind === "usage" ? 460 : 400;
+    const height = shared(`jk.h.${props.kind}`) ?? 640;
+    openOverlay(popupSpec({ ...props, anchor, width }, height));
   }
 
   machine(t, name, stats) {

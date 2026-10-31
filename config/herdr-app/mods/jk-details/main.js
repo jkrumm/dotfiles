@@ -4,7 +4,15 @@
 //   "usage"   — every Claude account: 5-hour and 7-day %, when each window resets.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props as rawProps, theme, exec, shared, closeOverlay } from "herdr";
+import { props as rawProps, theme, exec, shared, setShared, openOverlay, closeOverlay } from "herdr";
+
+// Same as jk-status' popupSpec (mods can't import each other; keep the two in step).
+function popupSpec(props, height) {
+  const { anchor, width } = props;
+  return { mod: "jk-details", kind: "popup", frame: "none", width, height,
+    at: { x: Math.max(8, Math.round(anchor.x - width / 2)), y: Math.max(8, Math.round(anchor.y - height - 10)) },
+    props: { ...props, height } };
+}
 
 // pcpu, rss (KiB), full command; sorted by CPU, header dropped.
 const TOP_ROWS = 10;
@@ -131,9 +139,23 @@ export default class JkDetails extends View {
       .when(!accounts.length, (el) => el.child(div().text_color(t.dim).child("no usage data yet")));
   }
 
+  // The card is the popup (jk-status opens it frameless). Once laid out it knows its real
+  // height: it remembers it for the next open, and when the open guessed wrong it re-places
+  // itself once so its bottom edge sits 10 px above the clicked field.
+  fit(size) {
+    const { kind, anchor, height, refit } = props();
+    const h = Math.ceil(size.height);
+    if (!kind || !anchor || !h) return;
+    setShared(`jk.h.${kind}`, h);
+    if (refit || Math.abs(h - height) <= 2) return;
+    closeOverlay(props().overlay);
+    openOverlay(popupSpec({ ...props(), refit: true }, h));
+  }
+
   render() {
     const t = theme();
-    return v_flex().id("jk-details").w_full().h(props().height ?? 540).p(16).gap(8).bg(t.popover).text_color(t.foreground).overflow_y_scrollbar()
+    return v_flex().id("jk-details").w_full().p(16).gap(8).rounded(10).border_1().border_color(t.border).bg(t.popover).text_color(t.foreground)
+      .on_size_change((size) => this.fit(size))
       .on_mouse_down("left", () => {})
       .child(props().kind === "usage" ? this.usage(t) : this.machine(t))
       .child(div().id("close").mt(6).text_size(11).text_color(t.dim).cursor_pointer().hover((s) => s.text_color(t.foreground))
