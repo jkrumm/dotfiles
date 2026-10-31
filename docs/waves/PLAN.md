@@ -372,8 +372,13 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
 note).
 
-- [ ] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31); Colima 12 → 6 GiB (Makefile default + AGENTS.md line,
-  `make colima-restart`); teamchat 6 → 3 GiB in IuRoot `chat` (work repo: a branch, the owner opens the MR).
+- [ ] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31). Colima memory cuts as
+  **config only, no live restart** (owner 2026-10-31: the Athena teamchat orchestrator runs overnight on the teamchat
+  VM and the default VM's VPN sidecar): default 12 → 6 GiB (Makefile `COLIMA_MEMORY` default + the AGENTS.md
+  "mini 4/12/60" line), teamchat 6 → 3 GiB in IuRoot `chat` (work repo: an `EP-XX`-style branch committed locally, the
+  owner opens the MR). Both restarts (`make colima-restart`, and the teamchat profile's own restart target) move into
+  the owner-timed reboot window (Wave 10's queued macOS update). If `brew upgrade` itself wants to restart colima, hold
+  colima out of the upgrade (`brew upgrade --formula` minus colima) and note it.
 - [ ] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
   `make claude-accounts-verify`; me2's stale quota sample. (photoflow's architecture-map entry: already retired
   in `1190896`.)
@@ -392,6 +397,8 @@ so nothing here waits for it.
   staying on 26.x (never 27). Reboots the mini; the agents come back through hc-resume." --cmd "make -C
   ~/SourceRoot/dotfiles mini-macos-update"`. Write the after-reboot checklist into Left behind: both cores up
   (launcher, managed version, versions match), factory healthy, `hc-resume` brought the Claude sessions back
-  (labels `jk.claude.*`), `make doctor` green on both machines, `make tcc-probe` on the mini.
+  (labels `jk.claude.*`), `make doctor` green on both machines, `make tcc-probe` on the mini. Before the reboot, in the same
+  window: `make colima-restart` (default VM to 6 GiB) and the teamchat profile restart at 3 GiB, once the `chat` MR is
+  merged; after it, check that the VPN sidecar and teamchat are up.
 - [ ] Final report into Left behind (the Wave 9 report plus the two spawned agents), and update the memory note
   `mini-maintenance-window.md`: only the macOS update is left, owner-timed.
