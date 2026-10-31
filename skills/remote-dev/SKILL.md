@@ -1,13 +1,13 @@
 ---
 name: remote-dev
-description: Operate the Mac mini remote dev host — connecting from the MacBook over herdr --remote, running, waiting on and closing Claude Code / OpenCode agents (`rd wave`, wave tabs, orchestrated waves), herdr workspaces/panes and its socket API, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
+description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and closing Claude Code agents (`rd wave`, wave tabs, orchestrated waves) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
 ---
 
 # Remote dev — the mini as dev host
 
 **Orientation first.** The SessionStart hook says which machine you're on:
 `Backend: cache` = the mini, `Backend: op` = the MacBook. The model behind every
-command below (why three layers, why herdr crashes are survivable, why ssh
+command below (why three layers, why a core restart is survivable, why ssh
 can't reach the keychain) lives in `dotfiles/docs/remote-dev.md` and
 `dotfiles/AGENTS.md` §Machines & remote dev — this file is the command
 reference and the troubleshooting table, not the rationale.
@@ -19,18 +19,18 @@ a path:
 
 ```bash
 repos [filter]                    # what's on the dev host, with branch + dirty count
-work <repo>                       # herdr workspace + claude for that repo (idempotent)
+work <repo>                       # a tab with claude in the repo's space (idempotent)
 rd wave <repo> '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
 rd close <agent>                  # close a finished wave tab (clean + pushed only)
-rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + Claude tab per brief file
-rd fan --clean <repo>             # reclaim clean, merged worktrees rd fan made + their tabs (--all: any worktree)
+rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + hidden Claude child per brief file
+rd fan --clean <repo>             # reclaim clean, merged worktrees rd fan made + their terminals (--all: any worktree)
 rd merge <repo> [--check cmd] <branch…>   # merge train: rebase, check, merge by rebase (GitHub only)
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
-rd say <agent> "…"                # send a prompt; verifies the agent picked it up, dismisses known modals
+rd say <agent> "…"                # hc send: refuses a blocked agent, queues for a working one
 ```
 
-Herdr agents run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL`
+Agents `rd` starts run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL`
 overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
@@ -42,55 +42,41 @@ for N independent changes). `agent-dispatch` and
 
 `/wave` owns the contract (chain vs orchestrated mode, the green gate). The
 mechanics this skill owns: `rd wave` adds a tab labelled `wave <n>` to the repo's
-workspace and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, in `fan <branch>` tabs. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand:
+space and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). Prompts are delivery-checked: no `working` within 30 s means one re-send. `rd fan` does the same per brief, as hidden children of the orchestrator. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
+for helpers; `hc wait --help`). A wake can mean `blocked` (an approval/question UI): read it before answering.
 
-```bash
-herdr agent wait <agent> --until working --timeout 60000   # prompt landed
-herdr agent wait <agent> --until idle --until done --until blocked
-```
+### Scripting hc directly (stack rules on top of the `herdr` skill)
 
-**Wait on all three settled states, never `--until done` alone.** `done` is idle
-*plus* unseen — if you are looking at the wave's tab it reports `idle`, and a
-`done`-only wait never returns. `blocked` means an approval/question UI: read
-the pane (`rd read`) before answering it.
+The global `herdr` skill is the reference: `hc` run/read/send/wait/labels/machines, placing a terminal in a space and tab, the
+API. Read `hc --skill` before a flag. What it does not know about this stack:
 
-### Scripting herdr directly (stack rules on top of the `herdr` skill)
+- **The account is chosen on the command** (`env CLAUDE_CONFIG_DIR=… claude`, none = `iu`), never inherited: a core's env is
+  every terminal's. `rd` and the factory do it for you.
+- **launchd owns the core** (`com.jkrumm.herdr-core`). The only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`;
+  never `hc update`, `hc server restart|stop` or `hc machine update` on the mini, and never start a core from ssh (no keychain).
+- **Never `ssh mini 'claude …'`** (below). Reach a terminal through `rd` or the app.
+- **Placement is labels** (`herdr.space`, `herdr.tab`), set by `rd`/the factory; the app adopts them. A worker is an unlabelled child.
+- Address agents by name or terminal id, never by what the owner has focused. A non-empty input line in a terminal is the owner's
+  unsent draft: never press Enter on it or re-send it through `hc send`; name it in the report, or relay the authorized next step in
+  your own words. Pass the owner's brief verbatim when steering.
+- After steering an agent in a repo whose files are symlinked live (dotfiles, hermes-agent), restore its branch
+  (`git -C <repo> switch master`): the branch *is* the running configuration.
+- Never close a terminal, tab or space you did not create. `rd close` enforces it for agents.
 
-The `herdr` skill is the raw CLI reference — syntax, ids, `agent`/`pane`/`tab`
-groups. What it does not know about this stack:
+## Go look at the mini
 
-- Address agents by **name or pane id** (`wR:pK`), never by focus — the focused
-  pane is the owner's. `HERDR_PANE_ID` is your own.
-- `herdr agent prompt` and `agent wait` exit 0 on some failures — read the JSON
-  body for `"error"`.
-- A non-empty **input line** in a pane is usually the owner's unsent draft. Never press Enter on it or re-send it through `agent prompt`; name it in the report. If the next step is already authorized, relay it in your own words instead. Pass the owner's brief verbatim when steering.
-- After steering a pane agent in a repo whose files are symlinked live (dotfiles, hermes-agent), restore its branch (`git -C <repo> switch master`): the branch *is* the running configuration.
-- Integrations: `herdr integration status` separates *lifecycle* integrations (herdr sees the agent start/stop) from *identity* ones (it only recognises the process); a pane with the wrong kind reports `unknown` and `wait` never settles.
-- Never close a workspace, tab or pane you did not create. `rd close` enforces it
-  for wave tabs.
-- Never `herdr server stop` or kill the herdr process: every pane dies with it.
-  Server changes are `make herdr-restart YES=1` / `make herdr-upgrade`, human-timed.
-- If every pane reports `agent_status: "unknown"`, run `make herdr-setup`
-  (installs herdr's Claude Code integration hook; per machine, not in `make setup`).
+Open the Herdr app on the MacBook: it links the mini's core as machine `mini`, so its spaces and terminals show next to yours
+(`hc machine ls` says whether the link is up). Terminal only: `ssh -t mini hc` (pick a terminal, Ctrl+\ detaches).
 
-## Go look at the mini (a terminal)
-
-```bash
-desk [session]                 # herdr --remote mini — client here, server+panes there
-herdr session list|attach|stop
-herdr status                   # client + server state
-```
-
-A roam or lid-close ends the ssh/TCP attach only — re-run `desk`, nothing is
-lost. `herdr attach` is **not** a command.
+A roam or lid-close ends the link only — reopen, nothing is lost.
 
 ## Durable work
 
-A herdr restart restores the layout and resumes Claude panes
-(`claude --resume`), but shells, dev servers and loops die and a resumed agent
-lost its in-flight turn. Do not leave work that must not be interrupted in a bare pane. **Never `ssh mini 'claude …'`**: the session comes up
+A core restart (kickstart) keeps every terminal and its programs. A *lost* program (crash, `kill -9`) is replaced by a shell:
+`com.jkrumm.hc-resume` types `claude --resume` into a Claude terminal, but shells, dev servers and loops are gone and a resumed
+agent lost its in-flight turn. Do not leave work that must not be interrupted in a bare shell. **Never `ssh mini 'claude …'`**: the session comes up
 logged out of Max and silently bills API credits while still looking healthy —
-a pane spawned by herdr (`rd wave`/`rd work`) inherits the keychain.
+a terminal spawned by the launchd core (`rd wave`/`rd work`) inherits the keychain.
 
 ## Reaching a dev server on the mini
 
@@ -168,15 +154,17 @@ When something is red, in order:
 
 | Symptom | Cause |
 |-|-|
-| `herdr --remote mini` asks to restart the remote server, warning about SSH loss | **Answer `N`.** False positive — the server is the brew service (PPID 1), no ssh disconnect reaches it. `y` restarts it outside supervision *and* kills every pane |
 | `launchctl print … sshd` says `state = not running` | Socket-activation idle, not a fault. Check `netstat -an \| grep '\.22 .*LISTEN'` |
 | `ssh localhost` fails on the mini | By design — the mini has no key for itself. Verify inbound auth from the MacBook |
 | A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run` |
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
-| Agent died when the lid closed | It did not — the lid ends the ssh/TCP attach only. A herdr *restart* resumes Claude panes and loses shells and the in-flight turn |
-| An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through a herdr pane (`rd wave`/`rd work`) — never `ssh mini 'claude …'` |
-| `rd` says "herdr server is not running" | `make herdr-restart YES=1` on the mini (kills every pane — human-timed) |
-| Workspace came back but the work is gone | herdr server restarted — layout persists, processes don't |
+| Agent died when the lid closed | It did not — the lid ends the link only. A *lost* program (not a core kickstart) is replaced by a shell; `hc-resume` brings Claude back, not shells or the in-flight turn |
+| An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd wave`/`rd work`) — never `ssh mini 'claude …'` |
+| `rd` says "herdr-core is not running" | `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` on the mini (terminals survive), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core |
+| A `claude` in a core terminal has no transcript / `--resume` finds nothing | The core was started from inside a Claude session and passed `CLAUDECODE` to every terminal; launchd's clean env is the fix, so restart through launchd |
+| A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: the launcher lost its Full Disk Access (a rebuilt launcher is a new identity). `make tcc-probe`, `docs/tcc.md` |
+| A Claude terminal came back as a bare shell | Its program was lost and `hc-resume` has not typed yet (or the terminal had no `jk.claude.session` label). `hc read <t>`, `make hc-resume-status` |
+| The app shows no tab for an `rd` spawn | Placement is by label and adopted when the app next sees the core: `hc get <t>` for `herdr.space`/`herdr.tab`; a worker has none by design (listed under its parent) |
 | `claude: command not found` over non-interactive ssh | `make setup`'s `_setup-zshenv` puts Homebrew + `~/.local/bin` on the non-interactive PATH — re-run `make setup` if missing |
 | `ssh mini` fails `signing failed … agent refused` → `Permission denied (publickey)` | 1Password is locked. Unlock it |
 | A mini service accepts the connection then never answers, though its own log says it's listening | Application Firewall keys on the binary — `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add <binary> && … --unblockapp <binary>` |
@@ -185,15 +173,13 @@ When something is red, in order:
 
 ## Rules
 
-- Manage the herdr server with `make herdr-restart` / `make herdr-upgrade`,
-  never a bare `herdr server stop` or `kickstart -k`.
-- **Never run `herdr update`** — it breaks the Brewfile's supply-chain audit
-  trail. A version bump is `make herdr-upgrade`.
+- Restart the core only through launchd (`kickstart -k`); upgrades are the daily `com.jkrumm.herdr-core-update` job, never `hc update`.
+  A change to the job's program is `make herdr-core-setup YES=1` and ends every live terminal: human-timed.
 - Never run a validation loop or an edit over files a running `@implementer`
-  subagent owns — applies across panes too.
+  subagent owns — applies across terminals too.
 - Do not add `tailscale serve` bindings for dev servers; use Caddy.
 - The `:8443` Funnel row is the IU dashboard, public **by design** — don't
   "clean it up".
 
-Full model and rationale: `dotfiles/docs/remote-dev.md`.
+Full model and rationale: `dotfiles/docs/remote-dev.md`; the core, spawn contract and facts: `dotfiles/docs/herdr-core.md`.
 Access/auth model: `dotfiles-private/docs/access-model.md`.
