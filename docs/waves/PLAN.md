@@ -163,7 +163,7 @@ Role `lead`. Design and verification only: no consumer code. The MacBook is reac
   until Wave 8.
 - Gate: `make check` green on the mini (timings above); AGENTS.md untouched (42.1k).
 
-## Wave 2 — software-factory on hc            <!-- status: active -->
+## Wave 2 — software-factory on hc            <!-- status: done -->
 Role `lead`. Repo `~/SourceRoot/software-factory`, in a worktree (its program lead commits on master): read its
 `AGENTS.md`, `docs/design.md` and `docs/decisions.md` first. Its runner, witness and FL6 space rules are the
 contract to keep.
@@ -181,7 +181,7 @@ contract to keep.
 - [x] A fake hc for the tests replaces `fake-herdr.ts`. Delete `HerdrRunner` once `HcRunner` is green: no
   dual-runner flag remains. Roll out only when `factory status` shows no live session on the classic runner
   (they lose their witness otherwise); else write `stopped: <sessions>` and stop.
-- [ ] Roll it out with software-factory's own release procedure (`~/.software-factory/releases/<sha>`, the
+- [x] Roll it out with software-factory's own release procedure (`~/.software-factory/releases/<sha>`, the
   LaunchAgent). Then prove it: one throwaway spawn lands as a named tab in the right space on the mini core and
   shows up in the app on the MacBook.
 **Left behind:**
@@ -206,8 +206,17 @@ contract to keep.
 - One commit for both halves (runner and witness share `main.ts`, the fake and `AGENTS.md`). Worktree
   `~/SourceRoot/software-factory-w2` (branch `dotfiles-w2-hc`) is merged; remove it with `git worktree remove` after the rollout.
 - dotfiles gate: docs only (`docs/herdr-core.md`, this file); AGENTS.md untouched (42.1k).
+- **Rollout done by the owner's session (2026-10-31 16:25):** the classic factory sessions were closed first (P1-P4,
+  Wave 1/2, iris w19, software-factory W4/F1, argo-w7), then `make deploy` in software-factory: `437a4ea` healthy, rollback
+  release `dd9b001`. Proof: `factory spawn create hc-proof-1` (role mechanical) landed as `mini/t1m` with labels
+  `herdr.space=sp1a1c873f…` (the dotfiles space) + `herdr.tab=tb-7ebc48849fd7`; `herdr-app ls` on the MacBook shows the tab
+  **named `hc-proof-1`** in that space (adoption and naming work, the guessed doc shape holds); Claude ran on Max `iu`,
+  status `done`, and its transcript persisted (a normal session, `--resume`-able). Proof terminal killed and removed.
+- Same session: the mini core now runs from the P1 launcher (`make herdr-core-setup YES=1`, managed core 0.1.15,
+  `installed_by: homebrew`); **all 22 mini terminals survived the bootout**. The MacBook link went `needs_login` (the
+  1Password agent refuses a background requester) and was re-logged by the owner; a dedicated link key follows.
 
-## Wave 3 — rd, waves and resume on hc            <!-- status: pending -->
+## Wave 3 — rd, waves and resume on hc            <!-- status: active -->
 Role `lead`. dotfiles.
 
 - [ ] `scripts/remote-dev.sh`: every subcommand on hc (§Port design), the classic paths deleted, `factory`
