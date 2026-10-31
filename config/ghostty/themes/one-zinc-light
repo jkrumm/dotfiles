@@ -7,11 +7,9 @@
 # pure white: #ffffff and #fafafa both read as glare next to the zinc chrome,
 # and this file deliberately sits a step below them.
 #
-# herdr's one-light paints its focused sidebar row at #F5F5F6 and leaves the
-# sidebar transparent, so that row lands on this background — separation 1.03.
-# As in the dark member that is not the only cue: herdr renders the focused row
-# bold in #383A42 against #686B77 for unfocused rows. Subtle-by-design; a light
-# UI whose selected row shouts is a light UI done wrong.
+# A focused row that lands on this background separates by only ~1.03. That is
+# subtle-by-design and never the only cue (bold text carries it too); a light UI
+# whose selected row shouts is a light UI done wrong.
 #
 # Bright means DEEPER here, not lighter — that is what reads as emphasis on a
 # light surface. Themes that copy the dark member's lifted pastels into slots

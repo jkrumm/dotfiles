@@ -8,11 +8,9 @@
 # zinc-900 #18181b (its BP.black canvas) and zinc-800 #27272a (its
 # --vx-surface-bg). Never black: #09090b was tried and is oppressive.
 #
-# herdr paints its focused sidebar row at #282C34 and leaves the sidebar
-# transparent, so that row lands on this background — separation here is 1.17.
-# That is intentionally subtle and NOT the only focus cue: herdr also renders
-# the focused row bold and in #ABB2BF against #969CA8 for unfocused rows
-# (measured in a pty capture). Three cues, so the background does not have to
+# A focused row (#282C34) that lands on this background separates by only 1.17.
+# That is intentionally subtle and NOT the only focus cue: the row is also bold
+# and brighter (#ABB2BF against #969CA8), so the background does not have to
 # shout. An earlier revision drove this file to near-black chasing that one
 # ratio alone — do not repeat it.
 #
@@ -31,19 +29,14 @@ selection-foreground = #e5e5e9
 # palette 0 is a dark fill (1.45), not text, so the contrast floor exempts it.
 #
 # BLUE IS THE DELIBERATE EXCEPTION: #61afef is Atom One's blue unmuted, which is
-# also exactly the colour herdr renders its `accent` in (the focused tab). Muted
-# to 59% saturation it sat at the same hue and lightness as herdr's 82% — and a
+# also exactly the colour the Herdr app renders its `accent` in (the focused tab). Muted
+# to 59% saturation it sat at the same hue and lightness as the app's 82% — and a
 # dull blue directly beside a saturated one of the identical hue reads as wrong
-# rather than as calm. Matching herdr exactly is what fixes it; the terminal's
-# blue text and herdr's highlight are now the same blue.
+# rather than as calm. Matching the app exactly is what fixes it; the terminal's
+# blue text and the app's highlight are now the same blue.
 #
 # CYAN IS SHIFTED OFF ATOM ONE'S HUE — 187 -> 197, sky blue rather than
-# turquoise. That is a taste call, but it is not only a terminal one: herdr
-# paints parts of its own chrome with the INDEXED ANSI colours rather than its
-# truecolor theme (measured in a pty capture — `[preview]` and the footer render
-# as `38;5;6`, and no teal token appears anywhere in the chrome). So palette 6 is
-# the single knob for both programs; there is no herdr-side `teal` override to
-# make, and adding one would do nothing.
+# turquoise. That is a taste call; palette 6 is the one knob for it.
 #
 # 197 is chosen, not rounded to: it lands within 1.5 degrees of the light theme's
 # cyan, which was already at 198, so the two modes now agree. It also keeps 10

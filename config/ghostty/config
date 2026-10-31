@@ -16,8 +16,7 @@ macos-option-as-alt = left
 #
 # The backgrounds are middle-ground on purpose: #1f1f23 dark (between basalt's
 # zinc-900 and zinc-800), #f2f2f5 light (basalt's own --vx-surface-bg). Never
-# black, never white. The theme file headers keep the contrast measurements taken
-# against classic herdr's sidebar (history, retiring with it).
+# black, never white. The theme file headers keep the contrast reasoning.
 theme = dark:one-zinc-dark,light:one-zinc-light
 
 # ── Font ─────────────────────────────────────────────────────────────────────
