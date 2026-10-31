@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# remote-dev-factory-env.test — every rd spawn (work, wave, fan) puts FACTORY_SESSION=<the agent name it
-# gives the pane> into the pane at creation, through herdr's `--env` (the CLAUDE_CONFIG_DIR path), for both
-# a new space and a new tab in an existing one. herdr is a stub that records each call; whatever happens
-# after the create call (prompt delivery) is out of scope here, so the exit code is not asserted.
-# The last section covers `--role` (the factory role table): a stub `factory` on the host PATH answers
-# `role get`, and the recorded `agent start` call shows the model and effort the spawn used.
+# remote-dev-factory-env.test — every hc-direct rd spawn (work, wave, fan) puts FACTORY_SESSION=<the agent name it gives
+# the terminal> into the terminal's `env` at creation (the account-wide Claude hooks key off it), for a tab (work, wave)
+# and for a hidden child (fan). hc is a fake that records each terminal.run; whatever happens after the spawn is out of
+# scope here, so the exit code is not asserted. The last section covers `--role` (the factory role table): a stub
+# `factory` on the host PATH answers `role get`, and the recorded terminal.run's argv shows the model and effort used.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/rd-factory-env-test.XXXXXX") || exit 1
@@ -22,72 +21,87 @@ printf '#!/usr/bin/env python3\n' >"$S/dotfiles/scripts/wave-gate.py"
 printf '#!/usr/bin/env bash\necho "%s/myrepo-wt"\necho origin/master\necho abc1234\n' "$S" >"$S/dotfiles/scripts/fan-worktree.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/fan-list.sh"
 printf '#!/usr/bin/env bash\necho "unset CLAUDE_CONFIG_DIR"\n' >"$TMP/home/.local/bin/claude-account"
-cat >"$TMP/bin/herdr" <<'STUB'
-#!/usr/bin/env bash
-echo "$*" >>"$STATE/calls"
-case "$1 $2" in
-  "status ") echo "status: running" ;;
-  "agent list") echo '{"result":{"agents":[]}}' ;;
-  "tab list") echo '{"result":{"tabs":[]}}' ;;
-  "workspace list") cat "$STATE/workspaces.json" ;;
-  "tab create"|"workspace create")
-    echo '{"result":{"workspace":{"workspace_id":"w1"},"root_pane":{"pane_id":"w1:1","tab_id":"t1"}}}' ;;
-  "agent start") echo '{"type":"agent_started"}' ;;
-  *) echo '{}' ;;
-esac
-STUB
-chmod +x "$TMP/bin/herdr" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
+printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
+cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
+printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
+printf '#!/usr/bin/env bash\ncase "$1 $2" in "agent list") echo "{\\"result\\":{\\"agents\\":[]}}" ;; esac\n' >"$TMP/bin/herdr"
+chmod +x "$TMP/bin/herdr" "$TMP/bin/launchctl" "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
 export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
   RD_DELIVER_WAIT_S=0 RD_POLL_S=0
-unset RD_DRY_RUN FACTORY_SESSION
+unset RD_DRY_RUN FACTORY_SESSION HC_SESSION HC_TERMINAL_ID
 printf 'Branch: feat/some-change\n\nDo the thing.\n' >"$TMP/brief.md"
 
-# fsess: the FACTORY_SESSION value on the recorded create call (herdr sees it with the quotes already stripped)
-fsess() { sed -n 's/.*--env FACTORY_SESSION=\([^ ]*\).*/\1/p' <<<"$create"; }
+# fsess: the FACTORY_SESSION value in the recorded terminal.run (env)
+fsess() { jq -r '.env.FACTORY_SESSION // empty' <<<"$create"; }
 is() { [ "$2" = "$3" ] && ok "$1" || bad "$1 — expected '$3', got '$2'"; }
 
-# run <rd args…>: the create call herdr saw (tab/workspace create), with an empty or one-space roster
-run() { # $1 = no-space|space, rest = rd args
-  local shape=$1; shift
-  : >"$STATE/calls"
-  if [[ $shape == space ]]; then echo '{"result":{"workspaces":[{"workspace_id":"w1","label":"myrepo"}]}}' >"$STATE/workspaces.json"
-  else echo '{"result":{"workspaces":[]}}' >"$STATE/workspaces.json"; fi
+# run <rd args…>: the first terminal.run the fake hc saw ($create; empty when none was made), with an empty roster
+run() {
+  rm -rf "${STATE:?}"/*
   timeout 60 bash "$HERE/remote-dev.sh" "$@" >/dev/null 2>&1 </dev/null
-  create=$(grep -E '^(tab|workspace) create' "$STATE/calls" | head -1)
+  create=$(sed -n 1p "$STATE/runs.jsonl" 2>/dev/null)
 }
 
 echo "work"
-run no-space work myrepo
-is "workspace create carries FACTORY_SESSION=<agent>" "$(fsess)" "myrepo"
+run work myrepo
+is "terminal.run carries FACTORY_SESSION=<agent>" "$(fsess)" "myrepo"
+is "a tab: labelled" "$(jq -r '.labels | has("herdr.tab")' <<<"$create")" "true"
+is "no FACTORY_ROLE without --role" "$(jq -r '.env | has("FACTORY_ROLE")' <<<"$create")" "false"
 
 echo "wave"
-run no-space wave myrepo "adhoc task"
-has "new space: workspace create" "$create" "workspace create"
-is "new space: FACTORY_SESSION is the wave agent name" "$(fsess)" "myrepo-w1"
-run space wave myrepo "Execute the active wave (Wave 4)"
-has "existing space: tab create" "$create" "tab create"
-is "existing space: FACTORY_SESSION is the plan's wave agent name" "$(fsess)" "myrepo-w4"
+run wave myrepo "adhoc task"
+is "FACTORY_SESSION is the wave agent name" "$(fsess)" "myrepo-w1"
+is "FACTORY_ROLE defaults to wave" "$(jq -r .env.FACTORY_ROLE <<<"$create")" "wave"
+run wave myrepo "Execute the active wave (Wave 4)"
+is "FACTORY_SESSION is the plan's wave agent name" "$(fsess)" "myrepo-w4"
 
 echo "fan"
-run no-space fan myrepo "$TMP/brief.md"
-is "new space: FACTORY_SESSION is <repo>-<branch leaf>" "$(fsess)" "myrepo-some-change"
-run space fan myrepo "$TMP/brief.md"
-has "existing space: tab create" "$create" "tab create"
-is "existing space: FACTORY_SESSION is <repo>-<branch leaf>" "$(fsess)" "myrepo-some-change"
+run fan myrepo "$TMP/brief.md"
+is "FACTORY_SESSION is <repo>-<branch leaf>" "$(fsess)" "myrepo-some-change"
+is "FACTORY_ROLE defaults to worker" "$(jq -r .env.FACTORY_ROLE <<<"$create")" "worker"
+is "cwd is the worktree" "$(jq -r .cwd <<<"$create")" "$S/myrepo-wt"
+is "no calling terminal on the dev host: a tab of the repo's space" "$(jq -r '.labels | has("herdr.tab")' <<<"$create")" "true"
+HC_TERMINAL_ID=t4 run fan myrepo "$TMP/brief.md"
+is "a calling terminal: the worker is its hidden child" "$(jq -r .parent <<<"$create")" "t4"
+is "hidden child: no labels" "$(jq -r '.labels | length' <<<"$create")" "0"
+is "hidden child: not no_parent" "$(jq -r 'has("no_parent")' <<<"$create")" "false"
+is "hidden child: outlive_parent, so losing the orchestrator keeps the worker's uncommitted work" "$(jq -r .outlive_parent <<<"$create")" "true"
+is "the prompt carries the fetched base and the brief" "$(jq -r '.argv[-1]' <<<"$create" | head -1)" "Base: origin/master @ abc1234 (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."
+is "the prompt is the last word of argv" "$(jq -r '.argv[-1]' <<<"$create" | tail -1)" "Do the thing."
+is "claude is the program" "$(jq -r '.argv[0]' <<<"$create")" "claude"
 
-echo "the agent that is started carries the same name"
-start=$(grep -E '^agent start' "$STATE/calls" | head -1)
-has "agent start uses the fan agent name" "$start" "agent start myrepo-some-change"
+echo "fan: one refused spawn is reported, the next brief still goes, the exit code says so"
+printf 'Branch: feat/second\n\nDo two.\n' >"$TMP/brief2.md"
+rm -rf "${STATE:?}"/*; echo 1 >"$STATE/run_fail_first"
+out=$(HC_TERMINAL_ID=t4 timeout 60 bash "$HERE/remote-dev.sh" fan myrepo "$TMP/brief.md" "$TMP/brief2.md" 2>&1 </dev/null); rc=$?
+[ "$rc" -ne 0 ] && ok "non-zero exit at the end" || bad "exit 0 with a failed spawn"
+is "both briefs were attempted" "$(wc -l <"$STATE/runs.jsonl" | tr -d ' ')" "2"
+has "the first failure is reported" "$out" "hc could not start 'myrepo-some-change'"
+has "the second brief started" "$out" "fan: claude 'myrepo-second'"
+has "says the worktree is kept" "$out" "worktree kept"
+
+echo "paths with spaces and quotes reach the host's scripts as one word"
+WT="$S/my wt's"
+printf '#!/usr/bin/env bash\necho "%s"\necho origin/master\necho abc1234\n' "$WT" >"$S/dotfiles/scripts/fan-worktree.sh"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >>"$STATE/fanlist-args"\nexit 0\n' >"$S/dotfiles/scripts/fan-list.sh"
+run fan myrepo "$TMP/brief.md"
+is "the worktree is the spawn's cwd" "$(jq -r .cwd <<<"$create")" "$WT"
+is "fan-list --mark got the worktree as one argument" "$(grep -cxF -- "$WT" "$STATE/fanlist-args")" "1"
+printf '#!/usr/bin/env bash\necho "%s/myrepo-wt"\necho origin/master\necho abc1234\n' "$S" >"$S/dotfiles/scripts/fan-worktree.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/fan-list.sh"
+
+echo "the same name names the terminal"
+is "terminal name = the fan agent name" "$(jq -r .name <<<"$create")" "myrepo-some-change"
 
 # --- role table (FL4) ---------------------------------------------------------------------------------
 # The scratch ~/.local/bin holds the stub `factory` (the PATH above carries no real one).
 # factory stub: replies from $STATE/factory-reply with exit code $STATE/factory-rc; "sleep" hangs it.
 cat >"$TMP/home/.local/bin/factory" <<'STUB'
 #!/usr/bin/env bash
-# `health` is not answering here (rd then takes the herdr path this suite inspects); the factory path has its own suite.
+# `health` is not answering here (rd then spawns on hc directly, which this suite inspects); the factory path has its own suite.
 [ "$1" = health ] && exit 1
 echo "$*" >>"$STATE/factory-calls"
 [ -f "$STATE/factory-sleep" ] && sleep 30
@@ -100,11 +114,11 @@ reply() { # <rc> <stdout…>
 }
 role_json() { printf '{"role":"%s","tier":"%s","effort":"%s"}' "$1" "$2" "$3"; }
 
-# spawn <rd args…>: combined output + exit code + the recorded agent-start call (empty when none)
+# spawn <rd args…>: combined output + exit code + the first spawned argv, joined (empty when none)
 spawn() {
-  : >"$STATE/calls"; : >"$STATE/factory-calls"; echo '{"result":{"workspaces":[]}}' >"$STATE/workspaces.json"
+  rm -f "$STATE"/runs.jsonl "$STATE"/calls.log; : >"$STATE/factory-calls"
   out=$(timeout 60 bash "$HERE/remote-dev.sh" "$@" 2>&1 </dev/null); rc=$?
-  start=$(grep -E '^agent start' "$STATE/calls" | head -1)
+  start=$(jq -r '.argv | join(" ")' < <(sed -n 1p "$STATE/runs.jsonl" 2>/dev/null) 2>/dev/null)
   asked=$(cat "$STATE/factory-calls" 2>/dev/null)
 }
 lacks() { grep -qF -- "$3" <<<"$2" && bad "$1 — '$3' unexpectedly in: $2" || ok "$1"; }
@@ -121,7 +135,7 @@ has "wave --role mechanical: tier" "$start" "--model haiku"
 has "wave --role mechanical: effort" "$start" "--effort low"
 reply 0 "$(role_json lead opus high)"
 spawn work myrepo --role=lead
-has "work --role=lead: tier and effort ride after --" "$start" "--pane w1:1 -- --model opus --effort high"
+has "work --role=lead: tier and effort ride in argv" "$start" "claude --model opus --effort high"
 
 echo "role: verb defaults"
 reply 0 "$(role_json wave opus max)"
@@ -136,7 +150,7 @@ reply 0 "$(role_json wave opus max)"
 spawn work myrepo
 is "work without --role never asks the factory" "$asked" ""
 lacks "work without --role starts bare (no model, no effort)" "$start" "--model"
-lacks "work without --role has no flags after the pane" "$start" " -- "
+is "work without --role: bare claude" "$start" "claude"
 
 echo "role: explicit env beats the role"
 reply 0 "$(role_json worker opus xhigh)"
@@ -196,11 +210,11 @@ spawn fan myrepo --role nope "$TMP/brief.md"
 is "factory answers not_found: exit 2" "$rc" "2"
 has "factory answers not_found: names the role" "$out" "unknown role 'nope'"
 is "factory answers not_found: nothing was started" "$start" ""
-lacks "factory answers not_found: no worktree/tab created" "$(cat "$STATE/calls")" "tab create"
+is "factory answers not_found: no terminal run" "$([ -e "$STATE/runs.jsonl" ] && echo ran)" ""
 reply 2 '{"error":{"kind":"usage","message":"Unknown role: nope"}}'
 spawn work myrepo --role nope
 is "message says unknown role: exit 2" "$rc" "2"
-lacks "work with an unknown role created no workspace" "$(cat "$STATE/calls")" "workspace create"
+is "work with an unknown role ran nothing" "$([ -e "$STATE/runs.jsonl" ] && echo ran)" ""
 reply 2 '{"error":{"kind":"usage","message":"unknown command: role get nope"}}'
 spawn wave myrepo --role nope "adhoc task"
 is "a factory that does not know the verb is NOT an unknown role: spawns" "$rc" "0"

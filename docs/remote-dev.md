@@ -156,25 +156,70 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | Command | Does |
 |-|-|
 | `repos [filter]` | repos on the host, branch + dirty count |
-| `work <repo>` | herdr workspace + claude, **idempotent** (refocuses, never stacks) |
-| `agents` | both lanes, deduped on Claude session id |
-| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching; `say` verifies delivery (see below) |
+| `work <repo>` | labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks) |
+| `wave <repo> '<prompt>'` | tab + solo claude, the prompt as its argument; `fan <repo> <brief…>`: worktree + hidden child per brief |
+| `agents` | every roster, one line per agent (`SOURCE NAME STATUS CWD ID`), deduped on Claude session id |
+| `rd read <agent>` / `rd say <agent> '…'` / `rd close <agent>` | watch / steer / end without attaching; all take an address, a terminal name, a repo name or a cwd |
 
-`say` does not trust herdr's `agent_prompted`: a Claude Code modal (the "compact earlier"
-prompt) can swallow the text. It snapshots the target's state (`state_change_seq`,
-`completion_seq`, status) before the send and counts any change afterwards as delivered —
-`working`, `blocked` or a fresh `done`. `deliver_prompt` (`wave`/`fan`) uses the same primitive.
-If nothing changes, `say` reads the bottom of the pane, dismisses a known modal
-(`RD_SAY_MODALS` in `scripts/remote-dev.sh`) with `esc` and re-sends once. Output is one of
-`delivered`, `delivered after dismissing <modal>`, `queued: agent busy` (target was already
-working, exit 0) or `NOT delivered: …` (exit 1, hint `rd read <agent>`; no blind re-send; an
-unreadable state or a transport failure also fail before or without a re-send).
-`RD_SAY_WAIT_S` bounds the wait (default 20 s). The target's state is read by agent name, or by pane id for a hand-started agent that has none (`herdr agent get` takes either). `wave`/`fan` report a transport failure or unreadable state as *delivery unconfirmed* and advise `rd read` before any re-send. Hermetic suite: `make fan-test`.
+**On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract); the factory
+is tried first and hc-direct is the fallback (below). Four rules hold:
+
+- **`rd` never starts a core.** Any `hc` call, `hc connect` included, auto-starts one when none runs, and a core born in
+  an ssh session has no keychain. So every verb that touches terminals first asks `launchctl print gui/<uid>/com.jkrumm.herdr-core` and stops
+  with `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` in the error when launchd has no running core. No verb
+  calls `hc update` or `hc server restart|stop`. `HC_SESSION` (a scratch core in tests) skips the launchd check.
+- **A spawn goes over the API** (`hc connect`, `terminal.run`), because the CLI's `hc run` cannot pass `env` and a core's
+  own environment is every terminal's. It always sets `cwd`, `keep`, a `name` (the agent name; `f-<hash>-…` when it would
+  read like an address, `t7`), argv `["claude", flags…, "<prompt>"]` (the prompt is the last argument, nothing is typed
+  later; a prompt starting with `-` is refused) and `env`: `FACTORY_SESSION`, `FACTORY_ROLE` (when there is a role),
+  `USAGE_LANE`, and the pick: `CLAUDE_CONFIG_DIR` for a Claude account, **absent for `iu`**, never empty, never
+  inherited, plus the `CLAUDE_ACCOUNT_PICKED` marker.
+- **Tabs and workers.** `work` and `wave` (a chain's next wave included) are tabs: labels `herdr.space=<id>` +
+  `herdr.tab=tb-<hash of the agent name>` and `no_parent`, so the terminal outlives whoever spawned it; the tab is then
+  named by compare-and-set `doc.set` on the `herdr-app` doc (retried on `conflict`, best effort). The space is the doc
+  entry whose `folder` is the repo root, else `sp-<repo>-<hash of the full root>` — HcRunner's rule, so a factory spawn
+  and an `rd` spawn land in the same space. `RD_ORCHESTRATED=1 rd wave` keeps the calling terminal as `parent`
+  (labelled tab, so the lead's notes and `hc wait --children` see it). `fan` workers are hidden children: `parent` =
+  `$HC_TERMINAL_ID`, no labels (the app lists them as the orchestrator's sub-agents), and `outlive_parent: true` like the
+  orchestrated wave's tab, so losing or closing the orchestrator never kills a working child and its uncommitted work. Without a calling terminal on the dev host (a MacBook shell) a worker is a tab.
+- **Bounded, and only ours.** Every `hc` call runs under the host's `timeout`/`gtimeout` (`RD_HC_TIMEOUT_S`, 30 s). A
+  spawn that gets no answer reports `uncertain` and points at `rd agents`; it is never retried. `close`, `read`, `say`
+  and the `wave` checks see only the dev host's own terminals (a linked machine's `mini/t3` is dropped; `rd agents`
+  lists them all). `close` and `fan --clean` treat only a known `idle`/`done` status as finished (`fan --clean` judges
+  every agent in the worktree and keeps it unless every terminal was ended). One refused `fan` spawn is reported and
+  the next brief still goes; the exit code is non-zero at the end. A `fan` from the owner's own terminal on the dev host
+  (`HC_TERMINAL_ID` set, no `FACTORY_SESSION`) goes hc-direct, so the workers are its children.
+- **Waiting.** hc types a note into the parent when a child finishes, blocks or exits, and `hc wait --children all|any`
+  waits for them. Factory spawns keep `factory session wait --on workers` (a held spawn has no terminal yet).
+
+`rd agents` prints one line per agent: `SOURCE  NAME  STATUS  CWD  ID`, the status being hc's own word (`working`,
+`idle`, `done`, `blocked`). **That text is a contract**: iris' `mother-watch.sh` greps it for `iris-w<n>` and `blocked`
+(pinned by `scripts/remote-dev-wave.test.sh`). Sources: `hc` (an agent terminal: it reports a status or runs `claude`
+itself — a plain shell is not one), `herdr` (classic, until Wave 7), `bg` and `interactive` (`claude agents --json`).
+
+`say` on an hc terminal is `hc send`: it pastes the text and presses Enter once nobody is typing. A **blocked** agent is
+refused (`NOT delivered: … blocked on a dialog`; the text would answer its dialog; `rd read` it and answer by hand),
+and a working one queues the message (`queued: agent busy`). `close` is `hc kill` + `hc rm` after the existing checks
+(agent not working or blocked, checkout clean, nothing unpushed) and one more: the terminal's own program must be
+`claude`, i.e. rd or the factory started it. `read` is `hc read --lines N` (`[src]`: a line count, `visible` for the
+screen). Names resolve against the live agents' address, terminal name, `factory.key` label, cwd and the cwd's
+basename; two matches stop with the candidates listed.
+
+**Classic fallback (until Wave 7).** A token hc does not know falls through to classic herdr: `read`, `say` and `close`
+keep their old paths for a classic agent, `agents` lists both rosters, and `wave`/`work`/`fan --clean` also look at
+classic agents when they check for a second editor. `say` there does not trust herdr's `agent_prompted`: a Claude Code
+modal (the "compact earlier" prompt) can swallow the text. It snapshots the target's state (`state_change_seq`,
+`completion_seq`, status) before the send and counts any change afterwards as delivered — `working`, `blocked` or a fresh
+`done`; if nothing changes it reads the bottom of the pane, dismisses a known modal (`RD_SAY_MODALS` in
+`scripts/remote-dev.sh`) with `esc` and re-sends once. Output is one of `delivered`, `delivered after dismissing
+<modal>`, `queued: agent busy` or `NOT delivered: …` (exit 1, hint `rd read <agent>`; no blind re-send). `RD_SAY_WAIT_S`
+bounds the wait (default 20 s). Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against
+`scripts/remote-dev-fake-hc.sh` (a fake core; never a real one).
 
 `work` is idempotent because two agents in one checkout is the file-ownership
-hazard, except across panes where you cannot see it happen. `agents` dedupes on
-the Claude session id (herdr exposes `agent_session.value`, the daemon
-`sessionId`) — otherwise one Claude in a pane reads as two agents racing a tree.
+hazard, except across terminals where you cannot see it happen. `agents` dedupes on
+the Claude session id (hc: the `jk.claude.session` label; classic herdr: `agent_session.value`; the daemon:
+`sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
 Two lanes start agent work (`docs/agent-platform.md`): `@implementer` and an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
 `rd bg` were removed 2026-10-04.
@@ -182,8 +227,8 @@ Two lanes start agent work (`docs/agent-platform.md`): `@implementer` and an `rd
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
 **login keychain**, unreachable from an ssh session, so that spelling comes up
 `Not logged in`, silently falls back to API billing, and still looks healthy in
-`claude agents`. The herdr server is a brew service inside the GUI session, so
-anything it spawns (panes, `rd wave`/`rd work`) inherits keychain access, and the mini's
+`claude agents`. The core is a LaunchAgent inside the GUI session, so
+anything it spawns (terminals, `rd wave`/`rd work`) has keychain access, and the mini's
 auto-login brings the keychain up unlocked at boot.
 
 **`config/zsh/claude-auth.zsh` is an armed fallback** (inside the one `claude()` zsh function, which also picks the account — `docs/claude-accounts.md`): it resolves `op://mini/claude/oauth-token` via `secrets-run` into
@@ -200,16 +245,15 @@ revocation. The token applies to the **default account only**
 (`CLAUDE_CONFIG_DIR` unset = `iu`); a non-default account dir never gets it, a dead
 login there just prints a `/login` hint.
 
-**Accounts on spawn** (`docs/claude-accounts.md`): `rd wave` and `rd fan` run
-`claude-account pick --lane wave|fan` on the host before creating the tab and pass the
-result as herdr `--env CLAUDE_CONFIG_DIR=…` at tab/workspace creation; the output line
+**Accounts on spawn** (`docs/claude-accounts.md`): `rd work`, `rd wave` and `rd fan` run
+`claude-account pick --lane interactive|wave|fan` on the host before creating the terminal and pass the
+result as `CLAUDE_CONFIG_DIR` in the spawn's `env` (absent for `iu`); the output line
 carries the pick reason. No Claude account with room pauses the spawn (`rd` refuses to spill to IU;
 `--kind opencode` is rejected). `rd agents` / `rd read` merge `claude agents --json` across every
 enabled account.
 
-**Factory session key.** `rd work`, `rd wave` and `rd fan` also pass `--env FACTORY_SESSION=<agent name>` at
-tab/workspace creation (`factory_env` in `scripts/remote-dev.sh`; the name is the herdr agent name the pane
-gets, e.g. `myrepo-w4`). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
+**Factory session key.** `rd work`, `rd wave` and `rd fan` also pass `FACTORY_SESSION=<agent name>` in the spawn's `env`
+(`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name, e.g. `myrepo-w4`). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
 only when it is set, so the owner's own sessions never report. Covered by `scripts/remote-dev-factory-env.test.sh`.
 
 **Role table (`--role`).** `rd wave|fan|work --role <role>` (`mother|lead|wave|worker|mechanical`) takes the
@@ -228,28 +272,28 @@ raised before anything is created. One lookup per `rd fan`, not per brief. Cover
 
 **`rd` and the factory (which path, when).** `wave`, `fan`, `say` and `close` ask `factory health` first
 (`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it; a host with no `timeout`/`gtimeout` has no factory path, since an unbounded call could stall the repair). Answers → the factory path; anything else (not
-installed, down, slow, non-zero) → the herdr path above, unchanged, and every pane it makes carries
+installed, down, slow, non-zero) → hc directly (above), and every terminal it makes carries
 `FACTORY_ROLE=<role>` next to `FACTORY_SESSION` (`rd work` only when `--role` is given). A dead factory
 never stops the waves that would repair it: every call is bounded and every failure before a spawn exists
 falls back. `RD_DRY_RUN=1` never probes.
 
-| Verb | Factory answers | Falls back to herdr when |
+| Verb | Factory answers | Falls back to hc when |
 |-|-|-|
-| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **certainly**: the call never ran (no `factory`, no `timeout` binary) or the factory answered with an `error` object. A silent failure (a dropped hop, a timeout) may come after the factory recorded the spawn: `spawn get` showing it is followed, anything else is an error (look at `factory spawn get <key>` before re-running), never a second pane under the same name |
+| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **certainly**: the call never ran (no `factory`, no `timeout` binary) or the factory answered with an `error` object. A silent failure (a dropped hop, a timeout) may come after the factory recorded the spawn: `spawn get` showing it is followed, anything else is an error (look at `factory spawn get <key>` before re-running), never a second terminal under the same name |
 | `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
-| `close` | tab = the tab of `factory session get <agent>` (pane and tab must match herdr's, else a stale record is refused), so a fan tab or a tab named `1` closes | the factory has no such session: the tab must be labelled `wave <n>` |
+| `close` | none on an hc terminal (`hc kill` + `hc rm` after the safety checks); a classic herdr agent still asks `factory session get` for its tab | classic only: the factory has no such session, so the tab must be labelled `wave <n>` |
 
 Spawn outcomes, from `factory spawn get` `.status`: `started` (`.pane`, `.tab`, `.workspace` set) prints today's
 line plus `via the factory` and the account; `queued` with `.hold` set (`drain|pace|wave`) prints `queued: <hold>`
 and `waiting` (no capacity) prints `queued: no capacity until <resumeAt>`, both exit 0 (the factory starts it later;
-the herdr path dies with "paused"); a `queued` spawn without a hold is waited on like `starting` (claimed) until the
+the hc path dies with "paused"); a `queued` spawn without a hold is waited on like `starting` (claimed) until the
 wait ends, then reports `queued: not claimed yet`; `failed` exits non-zero with `.error`. An empty or unknown status
 after an answered create is an error. A spawn that
-fails after it exists never falls back to herdr (two sessions on one name). `rd fan` keeps going after a
+fails after it exists never falls back to hc (two sessions on one name). `rd fan` keeps going after a
 failed or queued brief and exits non-zero at the end if any failed. On the factory path the factory picks
 the account and the model: `rd` runs no `claude-account pick`, and `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` do
 not reach the spawn (one stderr line says so). `close` keeps its refusals on both paths (agent working,
-checkout dirty, anything unpushed) and adds one: another agent in the same tab. Under a `drain` the factory holds the
+checkout dirty, anything unpushed). Under a `drain` the factory holds the
 spawn (`queued: drain`) and starts it when the drain lifts; `wave-gate.py` no longer asks the factory, so
 `rd wave` exits 0 and a chain wave counts it as its successor spawned. Covered by
 `scripts/remote-dev-factory.test.sh` and `scripts/wave-gate.test.py`.

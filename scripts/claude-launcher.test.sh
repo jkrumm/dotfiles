@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # claude-launcher.test.sh — regression harness for the `claude` shell function and the account
-# marker contract (config/zsh/claude-auth.zsh + claude.zsh, remote-dev.sh pick_account + herdr --env).
+# marker contract (config/zsh/claude-auth.zsh + claude.zsh, remote-dev.sh pick_account + the hc spawn env).
 #
 # Hermetic: HOME/XDG_CONFIG_HOME are scratch dirs, `claude`, `claude-account`, `secrets-run` and
-# `herdr` are stubs on PATH. The stub `claude-account pick` appends one line per call to a pick
+# `herdr`, `launchctl` and (for rd) a fake `hc` are stubs. The stub `claude-account pick` appends one line per call to a pick
 # log, so "one pick-log line per spawn" is counted, not argued. Never starts a real agent.
 #
 # Usage: scripts/claude-launcher.test.sh   (exit 0 = all pass)
@@ -210,29 +210,46 @@ case $out in *"picker failed"*) bad "spill is an answer, not a failure" "$out" ;
 reset; out=$(CLAUDE_CODE_OAUTH_TOKEN=leak STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'c')
 case $out in *tok=set*) bad "me pick must not inherit the IU token" "$out" ;; *) ok "me pick strips CLAUDE_CODE_OAUTH_TOKEN" ;; esac
 
-echo "rd spawn: one pick-log line (pick_account + herdr --env + agent_pane_setup, then the pane's claude)"
-extract() { awk -v n="$1" '$0 ~ "^" n "\\(\\) \\{" {p=1} p {print} p && /^}/ {exit}' "$RD"; }
-rd_spawn() { # $1 = pick line, $2 = id; simulates cmd_wave's pick + pane setup against the real functions
+echo "rd spawn: one pick-log line (rd wave -> pick_account -> hc terminal.run env -> the agent's claude)"
+# The real `rd wave` against a fake hc (remote-dev-fake-hc.sh: a fake core, never a real one). The core starts the argv's
+# claude directly, with exactly the spawn's `env`, so the replay runs the stub binary with that env and nothing else.
+S="$TMP/home/SourceRoot"; HCSTATE="$TMP/hcstate"
+mkdir -p "$S/dotfiles/scripts" "$S/myrepo/.git" "$TMP/home/.local/bin" "$HCSTATE"
+printf '#!/usr/bin/env python3\n' > "$S/dotfiles/scripts/wave-gate.py"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$S/dotfiles/scripts/claude-pretrust.sh"
+cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
+printf '#!/usr/bin/env bash\necho "state = running"\n' > "$TMP/bin/launchctl"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/bin/herdr"
+chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc" "$TMP/bin/launchctl" "$TMP/bin/herdr"
+rd_spawn() { # $1 = pick line, $2 = id
   reset
+  rm -rf "${HCSTATE:?}"/*; echo '[]' > "$HCSTATE/terminals.json"
   echo cache > "$TMP/xdg/secrets/backend"
-  HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" STUB_PICK_LINE="$1" STUB_PICK_ID="$2" \
-    bash -c "$(extract on_dev_host; extract host_run; extract pick_account; extract agent_pane_setup)
-      pick_account wave; eval \"herdr workspace create --cwd /tmp \$PICK_ENV\"; agent_pane_setup %1 wave" >/dev/null 2>&1
+  HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" STATE="$HCSTATE" RD_NO_FACTORY=1 \
+    STUB_PICK_LINE="$1" STUB_PICK_ID="$2" bash "$RD" wave myrepo "task" >/dev/null 2>&1
   echo "not-cache" > "$TMP/xdg/secrets/backend"
 }
 for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; do
   line=${case_%:*}; id=${case_##*:}
   rd_spawn "$line" "$id"
-  assert_contains "herdr gets the marker at spawn time ($id)" "CLAUDE_ACCOUNT_PICKED=$id" "$(cat "$STUB_ENVS")"
-  assert_contains "herdr gets the routing reason at spawn time ($id)" "CLAUDE_ACCOUNT_REASON=test" "$(cat "$STUB_ENVS")"
-  assert_eq "pane setup types only the lane tag ($id)" "export USAGE_LANE=wave" "$(cat "$STUB_PANE")"
-  # the pane: herdr's spawn-time --env, then the typed setup line and the agent command
+  spawn_env=$(sed -n 1p "$HCSTATE/runs.jsonl" | jq -r '.env')
+  assert_eq "the spawn env carries the marker ($id)" "$id" "$(jq -r '.CLAUDE_ACCOUNT_PICKED // "missing"' <<<"$spawn_env")"
+  assert_eq "the spawn env carries the routing reason ($id)" test "$(jq -r '.CLAUDE_ACCOUNT_REASON // "missing"' <<<"$spawn_env")"
+  assert_eq "the spawn env carries the lane tag ($id)" wave "$(jq -r '.USAGE_LANE // "missing"' <<<"$spawn_env")"
+  if [[ $id == iu ]]; then
+    assert_eq "iu: CLAUDE_CONFIG_DIR absent from the spawn env, not empty" false "$(jq -r 'has("CLAUDE_CONFIG_DIR")' <<<"$spawn_env")"
+  else
+    assert_eq "$id: CLAUDE_CONFIG_DIR is the account's dir" "$ME" "$(jq -r '.CLAUDE_CONFIG_DIR // "missing"' <<<"$spawn_env")"
+  fi
+  # the core's terminal: the argv's claude, the spawn's env, nothing inherited from a picked session
   # shellcheck disable=SC2046
-  out=$(cd "$TMP/work" && env $(cat "$STUB_ENVS") HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
-    zsh -fic "source '$AUTH'; source '$LAUNCH'; $(cat "$STUB_PANE"); claude --dangerously-skip-permissions --model sonnet" 2>&1)
-  assert_contains "rd pane ($id): agent runs on the rd account" "picked=$id" "$out"
-  assert_contains "rd pane ($id): agent sees the reason" "reason=test" "$out"
-  assert_eq "rd pane ($id): exactly ONE pick-log line (rd's), none from the wrapper" 1 "$(picks)"
+  out=$(cd "$TMP/work" && env -i HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
+    $(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$spawn_env") claude --dangerously-skip-permissions --model sonnet 2>&1)
+  assert_contains "rd terminal ($id): agent runs on the rd account" "picked=$id" "$out"
+  assert_contains "rd terminal ($id): agent sees the reason" "reason=test" "$out"
+  if [[ $id == iu ]]; then assert_contains "rd terminal ($id): no config dir" "cfg=unset" "$out"
+  else assert_contains "rd terminal ($id): the account's config dir" "cfg=$ME" "$out"; fi
+  assert_eq "rd terminal ($id): exactly ONE pick-log line (rd's), none from a wrapper" 1 "$(picks)"
   assert_eq "rd pick lane" wave "$(head -1 "$PICKS")"
 done
 
