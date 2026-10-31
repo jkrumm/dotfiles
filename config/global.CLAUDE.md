@@ -63,7 +63,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
 | N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
-| Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a herdr tab; `/wave` owns the contract |
+| Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a tab in the Herdr app; `/wave` owns the contract |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
@@ -118,8 +118,8 @@ inline.
 
 The mini is the dev host; the MacBook and iPhone are clients — agents run on the
 mini and outlive the MacBook. Map: `docs/architecture.md`; reach table, traps
-(herdr crash, never `ssh mini 'claude …'`), human-queue: `AGENTS.md` §Machines &
-remote dev. `desk [session]` puts a terminal on the mini; `rd` puts work on it.
+(core restart, never `ssh mini 'claude …'`), human-queue: `AGENTS.md` §Machines &
+remote dev. The Herdr app (MacBook) shows the mini's terminals; `rd` puts work on it.
 `/remote-dev` for this stack, `make doctor` when it's broken.
 
 ## Secrets

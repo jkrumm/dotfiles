@@ -6,9 +6,9 @@ VCS source of truth for Johannes's Claude Code setup and both Macs' bootstrap.
 Everything is symlinked outward — edit at either end, git always sees the change
 here. **After any edit: commit here.**
 
-**MacBook (`iumac`) = thin client** (editing, `desk`, biometric 1Password, a few
+**MacBook (`iumac`) = thin client** (editing, the Herdr app, biometric 1Password, a few
 Mac-only apps and repos). **Mac mini = always-on dev host** (agents, LaunchAgents,
-Docker, dev servers), reached with `desk`/`rd`.
+Docker, dev servers), reached through the Herdr app and `rd`.
 
 **`docs/architecture.md` is the map** — every machine, every repo on it, every
 launchd job and its owner repo, every inbound door, the secrets flow, what
@@ -30,10 +30,10 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/codex/AGENTS.md` | `~/.codex/AGENTS.md` | Codex's global brief — environment facts only, deliberately **not** the Claude method |
 | `config/opencode/opencode.json` | `~/.config/opencode/opencode.json` | The **file** only — the dir holds opencode's plugin `node_modules`. Rules via `instructions`, IU provider via `{env:IU_*}`, yolo via `permission` |
 | `config/opencode/tui.json` | `~/.config/opencode/tui.json` | TUI-only keys. `theme` lives **here**, not in `opencode.json` |
-| `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + herdr |
-| `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file** — herdr owns a sibling) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
+| `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
+| `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**; another tool may own a sibling) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
-| `config/herdr/config.toml` | `~/.config/herdr/config.toml` | The **file** only — the same dir holds herdr's sockets and logs |
+| `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | The Herdr app's layout `jk`, mods, themes `one-zinc-*` and `groups.json`; the same dir holds the app's own generated guide and shipped mods, so never the directory |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
 | `config/pr-required-repos.json` | `~/.claude/pr-required-repos.json` | Source of truth for PR-required repos — read by `protect-branches.ts` **and** `scripts/github-config.sh` |
@@ -88,7 +88,7 @@ endpoint and diffs the live catalog against `models.txt`.
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map
 assertion, the brew report, a worktree-audit nudge. **Mini** adds drift (no push)
 and names the heartbeat rather than running it (it always pushes). **MacBook** adds the remote path
-(Tailscale, ssh, ControlMaster reuse, agent-free `mini` + `mini-fwd`, herdr `--remote`, GitHub
+(Tailscale, ssh, ControlMaster reuse, agent-free `mini` + `mini-fwd`, the core link `hc machine ls`, GitHub
 credential + `git push --dry-run`), Kuma monitor states, then recurses into the
 mini's doctor over ssh — `--local` skips that. Read-only by construction.
 
@@ -100,7 +100,7 @@ logs, missing programs and plaintext credentials.
 
 **settings.json merge:** the template wins on structural keys (hooks, statusLine,
 plugins, env) and on `permissions.deny` + `permissions.defaultMode`
-(`bypassPermissions`, so herdr's `claude --resume` and `rd work` panes come back
+(`bypassPermissions`, so `hc-resume`'s `claude --resume` and `rd work` terminals come back
 in bypass, not manual); `permissions.allow` and
 `model`/`effortLevel`/`alwaysThinkingEnabled` are preserved from the live file.
 
@@ -152,7 +152,7 @@ health URL and no OTel `service.name` — this repo runs no service. Kuma:
 
 - Symlinks: edit at either end, but **never the live `~/.claude/settings.json`** (merged).
 - Every always-on rule also needs adding to `config/opencode/opencode.json` `instructions`.
-- herdr restart/upgrade, TCC grants, `ssh mini 'claude …'`, `ssh iumac` identity → *Machines & remote dev*.
+- Core restart/update, TCC grants, `ssh mini 'claude …'`, `ssh iumac` identity → *Machines & remote dev*.
 - `op read`/`op run` on the mini hangs; use `secrets-run` → *Secrets*.
 - Logs live in `~/Library/Logs`, never `/tmp` → *Odds and ends*.
 - `docs/architecture.md` must list everything that runs, or `make doctor` exits 1.
@@ -160,7 +160,7 @@ health URL and no OTel `service.name` — this repo runs no service. Kuma:
 ## Machines & remote dev
 
 Agents run on the mini and outlive the MacBook. Stack: Tailscale (reachability) →
-herdr on the mini (persistence + UI) → Caddy (service exposure). **No layer
+herdr-core on the mini (persistence; the Herdr app is the UI) → Caddy (service exposure). **No layer
 substitutes for another.**
 
 **Two lanes start agent work** (spec: `docs/agent-platform.md` §Two lanes):
@@ -168,27 +168,25 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's existing herdr workspace (a workspace only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave|fan` queue a spawn there (no room or a `drain` prints `queued: <reason>` and the factory starts it later), `rd say` becomes a held `factory session note`; without it, today's path (no room pauses). `rd close <agent>` closes a finished agent's tab (clean + pushed only), found through the factory's session, else only a `wave <n>` tab; `/wave` owns the contract (chain or orchestrated) and the green gate. The spawner waits with `factory session wait --on workers` and ends its turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn counts as a worker. No watcher script polls |
+| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app (a space only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave|fan` queue a spawn there (no room or a `drain` prints `queued: <reason>` and the factory starts it later), `rd say` becomes a held `factory session note`; without it, today's path (no room pauses). `rd close <agent>` closes a finished agent's tab (clean + pushed only), found through the factory's session, else only a `wave <n>` tab; `/wave` owns the contract (chain or orchestrated) and the green gate. The spawner waits with `factory session wait --on workers` and ends its turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn counts as a worker. No watcher script polls |
 
 | Want | Command |
 |-|-|
-| A terminal *on* the mini | `desk [session]` = `herdr --remote mini`. Client runs here (local keybindings, image paste); server and panes on the mini. TCP — a roam or lid-close ends the *connection*, re-run it. |
+| A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` picks a terminal and attaches (Ctrl+\ detaches). Terminals live in the mini's core, so a roam or lid-close ends only the view. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min; classic `herdr-reap` beside it until Wave 7): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/hc-reap.log` |
-| The raw record | `com.jkrumm.hc-events` (`scripts/hc-events.ts`, `events.subscribe`; classic `herdr-events` beside it until Wave 7) appends every event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make hc-events-status` |
-| What every agent is doing | the app's sidebar; `agw agents` (hc + classic) is the one producer for Hermes, brain and Argo. |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h. Log: `~/Library/Logs/hc-reap.log` |
+| The raw record | `com.jkrumm.hc-events` (`scripts/hc-events.ts`, `events.subscribe`) appends every event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` — data, never rotated; `recorder.gap` marks holes. `make hc-events-status` |
+| What every agent is doing | the app's sidebar; `agw agents` is the one producer for Hermes, brain and Argo. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 
-Five facts to hold:
+Facts to hold:
 
-- **A herdr restart restores the layout and loses the processes in it** (new
-  `terminal_id`) — but **not the Claude panes**: herdr's native agent session
-  restore brings each one back with `claude --resume <id>`, which needs
-  integration version 6+ (this machine reports 8) and
-  `[session].resume_agents_on_restore`, true by default. Shells, dev servers and
-  `bun` loops still die, and a resumed agent still lost whatever turn was in
-  flight, so don't leave work that must not be *interrupted* in a pane.
+- **A core restart keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
+  shells, and `com.jkrumm.hc-resume` types `claude --resume <id>` under the right account from the
+  `jk.claude.*` labels (model and effort are not restored; a turn in flight is lost).
+  Shells, dev servers and `bun` loops still die. Never `hc server restart|stop`, `hc update` or `hc machine
+  update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied
@@ -196,37 +194,20 @@ Five facts to hold:
   (loaded from `~/.zshenv`, gated on the `op` backend) fixes it; the gate is the
   backend and **not** the socket's existence, because the same socket path
   exists on the mini, where exporting it hangs.
-- **Never `ssh mini 'claude …'`.** The Max credential lives in the login keychain,
-  unreachable from an ssh session: the daemon comes up `Not logged in`, silently
-  falls back to API billing, and still looks healthy in `claude agents`. `rd wave`
-  spawns *through* a herdr pane (a GUI-session child) precisely to avoid this.
-- **`herdr attach` is not a command** — `herdr --session <name>`,
-  `herdr session list|attach|stop`. Apply a fix to the live server with
-  `make herdr-restart YES=1` (bootout + bootstrap; `kickstart -k` re-reads
-  launchd's *cache*) — it kills every pane, so it is human-timed. A version
-  bump is **`make herdr-upgrade`**, which owns the whole sequence: it refuses to
-  run inside a herdr pane (the shell it would kill mid-sequence), writes a
-  restore inventory with each agent's resume id, gates on working/blocked
-  agents, converges the plist `brew upgrade herdr` silently reverts, then
-  asserts the server, the config and the groups. **`bootout` does not stop the
-  server** — since 0.9.0 it is a detached daemon holding the socket until it
-  exits itself, so both targets wait on
-  `scripts/lib/herdr-ready.sh` (running + protocol-compatible + expected
-  version) rather than sleeping. A `sleep 2` there is what made the 0.8.2 →
-  0.9.0 run talk to a protocol-20 server and fail a green upgrade.
-- **herdr needs Full Disk Access, and loses it on every version bump.** A pane
-  process's TCC requests are attributed to herdr, and the grant is keyed to the
-  resolved `/opt/homebrew/Cellar/herdr/<version>/bin/herdr`. Ungranted, the first
-  agent that opens `~/Documents`, `~/Desktop`, `~/Downloads` or iCloud Drive
-  raises a consent dialog on the headless screen and the `openat()` blocks until
-  someone clicks — the whole Claude process freezes, subagents included, at 0%
-  CPU with no error. Diagnose with `sample <pid>` (main thread in `openat`) and
-  `/usr/bin/log show --predicate 'process == "tccd"'`; answering the dialog over
-  screen share unfreezes it in place. `make herdr-upgrade` prints the path to
-  re-grant.
+- **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
+  keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
+  billing, and still looks healthy in `claude agents`. `rd wave` spawns *through* the launchd core (a GUI-session
+  child) precisely to avoid this.
+- **A core's env is every terminal's env**, and `hc run` forwards nothing: choose the Claude account on the
+  command (`CLAUDE_CONFIG_DIR`, unset = `iu`), never by inheritance.
+- **Full Disk Access sits on the core launcher, not on the core.** A new core build keeps the grant
+  (`~/.local/libexec/herdr-core-launcher`); a terminal born before a cutover keeps the old identity until it
+  ends. Frozen agent at 0 % CPU on `openat` = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
+  The core updates itself daily with a 24 h cooldown (`com.jkrumm.herdr-core-update`, `make herdr-core-update-check`);
+  the app auto-updates and never touches the managed core.
 
 **Sidebar groups** — `config/herdr-app/groups.json` is the taxonomy the `jk-spaces`
-mod reads (a repo is one line); `make herdr-app-setup` links it. `docs/remote-dev.md` §Sidebar groups.
+mod reads (a repo is one line); `make herdr-app-setup` links it. `docs/remote-dev.md`.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
@@ -245,7 +226,7 @@ gate next to the typed-yes TTY gate, not a bypass of it.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
-**herdr-core (`hc`) + Herdr app** run beside classic herdr (app on the MacBook, core on the mini). See `docs/herdr-core.md` and the `herdr-core` skill. The core runs behind a launcher that holds Full Disk Access and updates itself daily (`docs/tcc.md`, `make tcc-check`).
+**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a core under launchd on each machine). Design, verified facts and updates: `docs/herdr-core.md`; the global `herdr` skill drives them. The retired classic `herdr` TUI left one line each in the docs it touched.
 
 ## Dev-server doors
 
@@ -300,9 +281,9 @@ the whole install), plus `NO_INSECURE_REDIRECT` / `NO_ANALYTICS`. Auto-*update*
 **Auto-upgrade stays off because of silent config revert, not npm-style supply
 chain** — a homebrew/core formula is a reviewed PR built by Homebrew's CI.
 `make brew-upgrade` asserts rather than assumes: caddy's DNS module, colima's
-plist, herdr's setsid wrapper and op's TCC grant each silently revert on an
+plist and op's TCC grant each silently revert on an
 unrelated brew upgrade, invisible until the failure mode it caused (cert
-renewal, a dirty shutdown, the next `desk`, a macOS dialog mid-reseal).
+renewal, a dirty shutdown, a macOS dialog mid-reseal).
 **`caddy` is the only pin, and a pin needs its dependencies pinned too or it
 rots** (mosh is why that rule is written down —
 deleted, not re-pinned). `colima` is deliberately unpinned (pinning the Docker
@@ -322,7 +303,7 @@ through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`
 
 `scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
 `MacMini Dev Host - Push` is the composite over **20 components**: tailscale,
-sshd, herdr + core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
+sshd, core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
 services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
 jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
 the jobs push, no ACL grant runs `tag:homelab → tag:mac`; service health is the
@@ -451,12 +432,12 @@ startup — `source ~/.zshrc` after editing.
 
 | Command | Backend | Model |
 |-|-|-|
-| `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what `herdr agent start` types into a pane; `-p`, subcommands and non-interactive shells never pick |
+| `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what the resume hook types into a terminal; `-p`, subcommands and non-interactive shells never pick |
 | `c` | Max subscription | whatever `/model` last left it on |
 | `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
 | `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
-| `rd wave` | Max, via herdr keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
+| `rd wave` | Max, via the core's keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
@@ -478,8 +459,8 @@ to API credits. It probes the keychain credential first and **uncached** (a cach
 verdict once suppressed the fallback for an hour while `claude` ran with no
 credential at all), and passes the token by prefix assignment, not `env VAR=…`
 (which leaks into `ps auxww`). Only keychain-dead *and* token-dead fails the
-heartbeat. **Restore the keychain credential with `/login` in a herdr pane on the
-mini** rather than minting a token — that token is a one-year credential with no
+heartbeat. **Restore the keychain credential with `/login` in a core terminal on the
+mini** (`ssh -t mini hc run claude`) rather than minting a token — that token is a one-year credential with no
 refresh and no reliable revocation.
 
 ## Codex, OpenCode, tailnet
@@ -552,12 +533,11 @@ nfsmount`, verified 2026-10-20 — the first run from a Terminal needs macOS's
 **Network Volumes** grant; a headless run (ssh, ask-human) fails with "Operation not
 permitted". Buckets, keys and policies: `~/SourceRoot/homelab/docs/s3.md`.
 
-**The look** — `make theme` applies the terminal + herdr layers (run it on both
+**The look** — `make theme` applies the terminal + Herdr app layers (run it on both
 machines); opencode is file-based (`config/opencode/themes/one-zinc.json`, `/theme`
 on **Auto**). Layers and files: `docs/theme.md`. **Never black, never white** —
 middle-ground zinc (`#1f1f23` / `#f2f2f5`); font is `JetBrainsMono Nerd Font Mono`;
-`herdr config check` exits 0 even on `issues found`, so `make theme` asserts the
-theme files instead.
+`make theme` asserts the theme files rather than trusting a config check's exit code.
 
 **Obsidian must keep running on the mini** (`make obsidian-autostart` — `open -a
 Obsidian`, deliberately no `KeepAlive`, or it respawns the instant a human quits
