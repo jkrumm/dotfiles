@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createResumer, isLoginShell, isSubscribeError, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { NotConnecting, createResumer, isLoginShell, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -179,18 +179,18 @@ async function withFake(env: Record<string, string>, fn: (log: () => string[]) =
 
 test("sendHc revalidates: still a login shell with the same session -> sends", async () => {
   await withFake({ FAKE_TERMINAL: JSON.stringify(fg(term())) }, async (log) => {
-    await sendHc("t1", "line", ID)
+    await sendHc("t1", "line", ID, 5000, () => true)
     expect(log()).toEqual(["terminal.get", "terminal.send"])
   })
 })
 
 test("sendHc skips when the session label changed or the shell is gone", async () => {
   await withFake({ FAKE_TERMINAL: JSON.stringify(fg(term({ labels: { "jk.claude.session": ID2 } }))) }, async (log) => {
-    await expect(sendHc("t1", "line", ID)).rejects.toThrow("no longer carries session")
+    await expect(sendHc("t1", "line", ID, 5000, () => true)).rejects.toThrow("no longer carries session")
     expect(log()).toEqual(["terminal.get"])
   })
   await withFake({ FAKE_TERMINAL: JSON.stringify({ ...term(), foreground: { argv: ["claude"] } }) }, async (log) => {
-    await expect(sendHc("t1", "line", ID)).rejects.toThrow("no longer at a login shell")
+    await expect(sendHc("t1", "line", ID, 5000, () => true)).rejects.toThrow("no longer at a login shell")
     expect(log()).toEqual(["terminal.get"])
   })
 })
@@ -198,7 +198,37 @@ test("sendHc skips when the session label changed or the shell is gone", async (
 test("sendHc has a hard deadline: an unanswered connection is killed and rejects", async () => {
   await withFake({ FAKE_TERMINAL: "{}", FAKE_HANG: "1" }, async () => {
     const t0 = Date.now()
-    await expect(sendHc("t1", "line", ID, 300)).rejects.toThrow("timed out")
+    await expect(sendHc("t1", "line", ID, 300, () => true)).rejects.toThrow("timed out")
     expect(Date.now() - t0).toBeLessThan(3000)
   })
+})
+
+test("coreAvailable: scratch HC_SESSION skips the check; else the launchd core must be running", () => {
+  const never = () => { throw new Error("launchctl must not run") }
+  expect(coreAvailable({ HC_SESSION: "scr1" }, never)).toBe(true)
+  expect(coreAvailable({}, () => "gui/501/com.jkrumm.herdr-core = {\n\tstate = running\n\tpid = 4\n}")).toBe(true)
+  expect(coreAvailable({}, () => "{\n\tstate = waiting\n}")).toBe(false)
+  expect(coreAvailable({}, () => "")).toBe(false)
+  expect(coreAvailable({}, never)).toBe(false)
+})
+
+test("a core that is down: openHc and sendHc never spawn hc", async () => {
+  await withFake({ FAKE_TERMINAL: JSON.stringify(fg(term())) }, async (log) => {
+    await expect(openHc(() => false)).rejects.toThrow("not connecting")
+    await expect(sendHc("t1", "line", ID, 1000, () => false)).rejects.toThrow("not connecting")
+    await Bun.sleep(100)
+    expect(log()).toEqual([])
+  })
+})
+
+test("a send refused by the core guard does not count as an attempt; skipped and real errors do", async () => {
+  for (const [err, retried] of [[new NotConnecting("down"), true], [new Error("skipped: changed"), false], [new Error("boom"), false]] as const) {
+    let n = 0
+    const r = createResumer(async () => { n++; throw err })
+    r.handle(snap(term()))
+    await r.settled()
+    r.handle(snap(term()))
+    await r.settled()
+    expect(n).toBe(retried ? 2 : 1)
+  }
 })

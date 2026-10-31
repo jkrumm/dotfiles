@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.jkrumm.hc-resume</string>
   <!-- Restores Claude sessions into kept herdr-core terminals whose program was lost: subscribes to the
-       core (`hc connect`, never starts one) and types `claude --resume <id>` into the login shell that
+       core (`hc connect`, only while the launchd core runs: hc would start one) and types `claude --resume <id>` into the login shell that
        replaced it. See scripts/hc-resume.ts and docs/herdr-core.md. -->
   <key>ProgramArguments</key>
   <array>

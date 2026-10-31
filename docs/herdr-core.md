@@ -180,7 +180,7 @@ valid, but `--resume` takes an optional value, so an id must always be passed or
 `doc.set` of a `herdr-app` space+tab entry before any terminal exists is accepted (version 0 → 1, stale version →
 `conflict`); whether the app adopts a pre-written tab entry is **not** verified (no app on the mini), and the doc's shape
 (`spaces[].{id,folder,tabs[].{id,name}}`) is a guess: software-factory reads it defensively and falls back to a stable
-`sp-<dir>-<hash>` id. `hc connect` exits 2 when no core runs and does not start one (launchd owns the core). hc refuses
+`sp-<dir>-<hash>` id. `hc connect` STARTS a core when none runs (a `hello` on a fresh `HC_SESSION` did), so a subscriber must check that launchd's `com.jkrumm.herdr-core` is running before it connects (corrected 2026-10-31; an earlier note said it exits 2). hc refuses
 a terminal name that can read as an address (`t7`). Verify the doc shape against the app on the MacBook before
 trusting tab names.
 
@@ -208,7 +208,7 @@ hc server stop; hc server start       → "stream ended, reconnecting"; the park
 SessionEnd clears the label only for `reason` `prompt_input_exit` or `logout` (SIGTERM fires `other`, which must stay
 resumable). A `restarted` event resets the per-terminal attempt (a new loss resumes again); snapshots need the foreground
 fact; each send re-reads the terminal (`terminal.get`) and skips unless it is still a login shell with the same session
-label, under a 15 s deadline. `hc connect` exits 2 with no core, so a stopped core means backoff retries, never an auto-start. Not mirrored on resume:
+label, under a 15 s deadline. `hc connect` would start a core, so hc-resume checks `launchctl print gui/<uid>/com.jkrumm.herdr-core` for `state = running` before every connect (skipped when `HC_SESSION` is set): a stopped core means backoff retries, never an auto-start. Not mirrored on resume:
 model/effort flags and the `c` launcher's env (`ENABLE_TOOL_SEARCH`, lane vars). A terminal sitting at a shell prompt
 that carries a session label (the claude exited without SessionEnd, e.g. the shell was reused) is resumed too, once.
 

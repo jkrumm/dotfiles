@@ -8,7 +8,9 @@
 // `restarted` event, a `missed` snapshot. Rules: one attempt at a time per terminal, at most one
 // attempt per (terminal, session id), only into a login shell.
 //
-// Never starts a core: `hc connect` exits 2 with none running, so it retries with backoff.
+// Never starts a core: `hc connect` STARTS one when none runs, so before every connect (with HC_SESSION
+// unset, i.e. the real core) com.jkrumm.herdr-core must be `state = running` in launchd; otherwise it counts
+// as "no core" and retries with backoff.
 // Runs under launchd KeepAlive: com.jkrumm.hc-resume.
 import { splitLines } from "./herdr-events"
 
@@ -78,7 +80,11 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     attempted.set(t.address, id)
     const p = send(t.address, line, id)
       .then(() => log(`resume ${t.address} ${id} (${labels[CONFIG] || "iu"})`))
-      .catch((e) => log(`resume ${t.address} failed: ${(e as Error).message}`))
+      .catch((e) => {
+        // Nothing was typed: let the next snapshot try again. "skipped" and real send errors keep the attempt.
+        if (e instanceof NotConnecting && attempted.get(t.address) === id) attempted.delete(t.address)
+        log(`resume ${t.address} failed: ${(e as Error).message}`)
+      })
       .finally(() => { inflight.delete(t.address); pending.delete(p) })
     pending.add(p)
   }
@@ -140,7 +146,23 @@ export function isSubscribeError(line: string): boolean {
   try { const o = JSON.parse(line) as Json; return o.id === 1 && o.error !== undefined } catch { return false }
 }
 
-function spawnConnect() {
+/** The core guard refused before anything was typed: the attempt does not count. */
+export class NotConnecting extends Error {}
+
+export const CORE_LABEL = "com.jkrumm.herdr-core"
+
+/** True when it is safe to `hc connect`: a scratch HC_SESSION, or the launchd core is running. */
+export function coreAvailable(
+  env: Record<string, string | undefined> = process.env,
+  launchctl: (label: string) => string = (label) =>
+    Bun.spawnSync(["launchctl", "print", `gui/${process.getuid?.() ?? 501}/${label}`], { stdout: "pipe", stderr: "ignore" }).stdout.toString()
+): boolean {
+  if (env.HC_SESSION) return true
+  try { return /^\s*state = running$/m.test(launchctl(CORE_LABEL)) } catch { return false }
+}
+
+function spawnConnect(guard: () => boolean) {
+  if (!guard()) throw new NotConnecting(`${CORE_LABEL} is not running: not connecting (hc would start a core)`)
   return Bun.spawn([process.env.HC_BIN || "hc", "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: process.env })
 }
 
@@ -154,8 +176,8 @@ async function* lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string
   }
 }
 
-export async function openHc(): Promise<Link> {
-  const proc = spawnConnect()
+export async function openHc(guard: () => boolean = coreAvailable): Promise<Link> {
+  const proc = spawnConnect(guard)
   proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "events.subscribe", params: {} }) + "\n")
   proc.stdin.flush()
   const minSeq = { n: 0 }
@@ -173,7 +195,7 @@ export async function openHc(): Promise<Link> {
 export const SEND_DEADLINE_MS = 15000
 
 /** One request/response on a connection; the lines iterator is shared so the next call continues the stream. */
-async function call(proc: ReturnType<typeof spawnConnect>, it: AsyncGenerator<string>, id: number, method: string, params: Json): Promise<Json> {
+async function call(proc: ReturnType<typeof Bun.spawn>, it: AsyncGenerator<string>, id: number, method: string, params: Json): Promise<Json> {
   proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n")
   proc.stdin.flush()
   for (;;) {
@@ -192,8 +214,8 @@ async function call(proc: ReturnType<typeof spawnConnect>, it: AsyncGenerator<st
  * the same session label (the subscribed connection answers no requests). A hard deadline kills the
  * connect process and rejects, so the caller's `inflight` always clears.
  */
-export async function sendHc(address: string, text: string, session: string, deadlineMs = SEND_DEADLINE_MS): Promise<void> {
-  const proc = spawnConnect()
+export async function sendHc(address: string, text: string, session: string, deadlineMs = SEND_DEADLINE_MS, guard: () => boolean = coreAvailable): Promise<void> {
+  const proc = spawnConnect(guard)
   let timedOut = false
   const timer = setTimeout(() => { timedOut = true; proc.kill() }, deadlineMs)
   try {
