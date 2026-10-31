@@ -108,7 +108,7 @@ costs nothing. Classic's separator-workspace headers (`make herdr-groups`) are g
 
 ## Putting work on the mini
 
-`desk` answers "how do I go look at the mini". The commoner question is "how do I
+The app answers "how do I go look at the mini". The commoner question is "how do I
 put work there and check on it", which needs no terminal.
 
 `scripts/remote-dev.sh` (`rd`) routes off the `~/.config/secrets/backend` marker
@@ -817,8 +817,8 @@ pointed at a read-only token, and only the dry-run saw it.
 ## Fan-out and the merge train
 
 `rd fan <repo> <brief…>` cuts one worktree per brief from **fetched** `origin/<default>`
-(`scripts/fan-worktree.sh`; the repo's `.wtp.yml` hooks run when it has one), opens a
-`fan <branch>` tab for each in the repo's existing workspace, starts Claude and delivers
+(`scripts/fan-worktree.sh`; the repo's `.wtp.yml` hooks run when it has one), starts a
+hidden Claude child per brief in it (the spawn contract above) and delivers
 the brief with a `Base: origin/<default> @ <sha>` line prepended. Each brief names its
 branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.sh`) rebases
 each onto the current origin default, installs from the lockfile present (`bun.lock`/`bun.lockb`,
@@ -833,7 +833,7 @@ after the push, measured over 11 pushes) has passed since the push, and needs on
 check, so a partial or skipping-only list cannot merge early. None or skipping-only after the
 grace merges as no-CI; pending past `RD_CI_TIMEOUT` (1200 s) dies; `--no-ci` skips the gate.
 Needs `jq`. `rd fan --clean <repo>` removes
-clean, fully merged worktrees and their tabs, but only those `rd fan` created (a `rd-fan` marker in the worktree's git dir;
+clean, fully merged worktrees and their terminals, but only those `rd fan` created (a `rd-fan` marker in the worktree's git dir;
 others, and ones made before the marker, are kept); `--all` judges every extra worktree. A `rd wave` without `(Wave <n>)` takes the next
 free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
 name is live is refused. Hermetic suites: `make fan-test`.
