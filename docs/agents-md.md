@@ -4,7 +4,7 @@ One instruction file per directory that Claude Code, OpenCode and Codex all read
 without losing anything Claude Code has today. Proven 2026-09-23 on Claude Code
 2.1.280, OpenCode 1.18.30, Codex 0.155.1 with a canary repo (a unique marker per
 file, each agent asked which markers are in its context), plus an interactive
-`/memory` check in a herdr pane.
+`/memory` check in a core terminal.
 
 ## The pattern
 

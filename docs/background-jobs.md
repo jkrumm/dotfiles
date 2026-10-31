@@ -45,7 +45,7 @@ purpose: the heartbeat and Kuma pushers must stay dumb. (The archived inventory 
 Job state dir, grading and the heartbeat `jobs` component: see Pattern below.
 
 **Open owner actions (MacBook installs, not closed by any wave):**
-- netgear-watchdog launchd install: ask `20261016T190047-10176` (the `macbook-installs` herdr agent). Until it lands the watchdog does not run.
+- netgear-watchdog launchd install: ask `20261016T190047-10176` (the `macbook-installs` agent). Until it lands the watchdog does not run.
 - van-sampler install, gated on the Bluetooth TCC spike (`make van-sampler-spike`): ask `20261016T193742-5588`.
 
 ## Pattern

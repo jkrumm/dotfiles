@@ -37,7 +37,7 @@ worth building.
 - **The TUI probes the terminal background once, at startup**, and picks its
   colours from that (`terminal_bg` → a syntect theme, set through a `OnceLock`).
   It does not re-probe, and there is no documented `[tui]` theme key — so after
-  `make theme` or an automatic light/dark flip, restart codex. herdr and Claude
+  `make theme` or an automatic light/dark flip, restart codex. The Herdr app and Claude
   Code both switch live; this one doesn't.
 - **`~/.codex/AGENTS.md` loads on every run** (verified: a marker planted in a
   scratch `CODEX_HOME` came back without any file read). It points codex at
