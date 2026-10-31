@@ -24,13 +24,11 @@ printf '#!/usr/bin/env bash\necho "unset CLAUDE_CONFIG_DIR"\n' >"$TMP/home/.loca
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
-printf '#!/usr/bin/env bash\ncase "$1 $2" in "agent list") echo "{\\"result\\":{\\"agents\\":[]}}" ;; esac\n' >"$TMP/bin/herdr"
-chmod +x "$TMP/bin/herdr" "$TMP/bin/launchctl" "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
+chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
-export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
-  RD_DELIVER_WAIT_S=0 RD_POLL_S=0
+export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg"
 unset RD_DRY_RUN FACTORY_SESSION HC_SESSION HC_TERMINAL_ID
 printf 'Branch: feat/some-change\n\nDo the thing.\n' >"$TMP/brief.md"
 

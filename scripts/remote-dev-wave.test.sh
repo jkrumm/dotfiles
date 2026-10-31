@@ -27,15 +27,11 @@ echo cache >"$TMP/xdg/secrets/backend"
 printf '#!/usr/bin/env python3\n' >"$S/dotfiles/scripts/wave-gate.py"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
-# launchd answers for the core unless $STATE/no_core exists; the classic herdr has no agents.
+# launchd answers for the core unless $STATE/no_core exists.
 cat >"$TMP/bin/launchctl" <<'STUB'
 #!/usr/bin/env bash
 [ -f "$STATE/no_core" ] && { echo "Could not find service" >&2; exit 113; }
 echo "state = running"
-STUB
-cat >"$TMP/bin/herdr" <<'STUB'
-#!/usr/bin/env bash
-case "$1 $2" in "agent list") cat "$STATE/classic.json" 2>/dev/null || echo '{"result":{"agents":[]}}' ;; esac
 STUB
 # a MacBook's rd reaches the dev host over ssh; the stub runs the command locally
 printf '#!/usr/bin/env bash\nshift\nbash -c "$1"\n' >"$TMP/bin/ssh"
@@ -48,7 +44,7 @@ else
   echo "unset CLAUDE_CONFIG_DIR"; echo "# picked=iu reason=default stale=false"
 fi
 STUB
-chmod +x "$TMP/bin/herdr" "$TMP/bin/ssh" "$TMP/bin/launchctl" "$TMP/home/.local/bin/"* "$S/dotfiles/scripts/"*.sh
+chmod +x "$TMP/bin/ssh" "$TMP/bin/launchctl" "$TMP/home/.local/bin/"* "$S/dotfiles/scripts/"*.sh
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
@@ -140,15 +136,6 @@ HC_SESSION=scratch wave "adhoc task"
 [ "$rc" -ne 0 ] && ok "off the dev host, HC_SESSION is not forwarded: launchd is asked and says no" || bad "skipped the check: $out"
 has "names the fix" "$out" "launchctl kickstart"
 echo cache >"$TMP/xdg/secrets/backend"
-
-echo "classic agent names count until Wave 7: an idle classic iris-w3 gets no twin"
-reset
-echo '{"result":{"agents":[{"name":"myrepo-w3","pane_id":"p-1","cwd":"/elsewhere","agent_status":"idle"}]}}' >"$STATE/classic.json"
-wave "Execute the active wave (Wave 3)"
-[ "$rc" -ne 0 ] && ok "explicit number of a live classic agent: refused" || bad "twin accepted: $out"
-has "says which" "$out" "agent 'myrepo-w3' is already live"
-wave "adhoc task"
-has "the counter skips past it" "$out" "agent 'myrepo-w4'"
 
 echo "RD_WAVE_MAX counts a repo whose terminal names hc escapes (t<digit>…)"
 reset; mkdir -p "$S/t7app/.git"

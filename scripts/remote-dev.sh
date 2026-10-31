@@ -6,7 +6,7 @@ set -uo pipefail
 # The three-layer model (Tailscale / herdr-core / Caddy) is about *getting a
 # terminal*. This script is the layer above it: preparing and steering the work
 # itself, without needing a terminal at all. That distinction is the whole point
-# — `desk` is how you go and look; everything here you can do from
+# — the Herdr app is how you go and look; everything here you can do from
 # the MacBook while attached to nothing.
 #
 # Routing is deliberate and invisible: every subcommand runs on the dev host,
@@ -462,7 +462,7 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
   out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
     ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
   if (( rc != 0 )); then
-    # Herdr takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
+    # hc takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
     # answered with a structured error. A dropped hop or a timeout may come after the factory recorded the spawn
     # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
     # name is worse than a visible error.
@@ -520,46 +520,21 @@ factory_spawn_report() {
 # --- agent resolution ----------------------------------------------------------
 #
 # A token (address, name, repo name, cwd, factory key) resolves to exactly one agent, or the command stops: steering the
-# wrong one silently is worse than asking which. hc's roster is asked first; a token hc does not know falls through to
-# classic herdr until Wave 7 retires it. Three states stay distinguishable from the error text alone:
+# wrong one silently is worse than asking which. A token hc does not know is an error, never a guess. Three states stay
+# distinguishable from the error text alone:
 #
 #   core unreachable        → `require_core` / `hc_roster`, which name the core
 #   up, but token unknown   → `die_no_agent`, which prints the roster
 #   token matches several   → `resolve_target`, which lists the candidates
 
-# TODO(Wave 7): drop classic. Classic herdr's agent roster as JSON; prints nothing when no classic server answers.
-classic_roster() {
-  local json
-  json=$(host_run 'herdr agent list' 2>/dev/null) || return 0
-  jq -e '.result.agents | arrays' <<<"$json" >/dev/null 2>&1 || return 0
-  printf '%s' "$json"
-}
-
-# TODO(Wave 7): drop classic. Pane ids of the classic agents a token names: a pane id (wG:p6), an agent name, a repo
-# name (the basename of the agent's cwd) or a full cwd path. $1 token  $2 roster JSON (may be empty).
-herdr_match() {
-  [[ -n $2 ]] || return 0
-  jq -r --arg t "$1" '.result.agents[] | select(.pane_id == $t or .name == $t or .cwd == $t or ((.cwd // "") | split("/") | last) == $t) | .pane_id // empty' <<<"$2" 2>/dev/null
-}
-
-# TODO(Wave 7): drop classic. The classic roster an error message prints: pane id, repo name, task title. $2 restricts it to pane ids.
-herdr_roster() {
-  [[ -n $1 ]] || return 0
-  jq -r --arg only "${2:-}" '($only | split(" ") | map(select(length > 0))) as $o
-    | .result.agents[] | select(($o | length) == 0 or (.pane_id as $p | $o | index($p)))
-    | "    \(.pane_id // "?")  \((.cwd // "") | split("/") | last)  \(.name // .terminal_title_stripped // "?")"' <<<"$1" 2>/dev/null
-}
-
-die_no_agent() { # <token> — the rosters of both worlds
-  local token=$1 hc classic
+die_no_agent() { # <token>
+  local token=$1 hc
   hc=$(hc_roster_text "$HC_ROSTER")
-  classic=$(herdr_roster "${CLASSIC_ROSTER:-}")
   {
     printf '\033[31merror:\033[0m no agent matches '\''%s'\''\n' "$token"
-    if [[ -n $hc$classic ]]; then
+    if [[ -n $hc ]]; then
       printf '  address one by id or repo name:\n'
-      [[ -z $hc ]] || printf '%s\n' "$hc"
-      [[ -z $classic ]] || printf '%s\n' "$classic"
+      printf '%s\n' "$hc"
     else
       printf "  herdr-core is running on %s with no agents at all — 'rd work <repo>' starts one\n" "$HOST"
     fi
@@ -567,28 +542,16 @@ die_no_agent() { # <token> — the rosters of both worlds
   exit 1
 }
 
-# Resolve to exactly one agent or exit. Sets TARGET_SRC (hc | herdr) and TARGET (an hc address, or a classic pane id),
-# and leaves HC_ROSTER / CLASSIC_ROSTER behind for the caller.
+# Resolve to exactly one hc agent or exit. Sets TARGET (an hc address) and leaves HC_ROSTER behind for the caller.
 resolve_target() { # <token>
   local token=$1 hits n
-  CLASSIC_ROSTER=""
   hc_roster
   hits=$(hc_match "$token" "$HC_ROSTER")
   n=$(printf '%s\n' "$hits" | grep -c . || true)
-  if (( n == 1 )); then TARGET_SRC=hc; TARGET=$hits; return 0; fi
+  if (( n == 1 )); then TARGET=$hits; return 0; fi
   if (( n > 1 )); then
     { printf '\033[31merror:\033[0m '\''%s'\'' matches %s agents — address one by id:\n' "$token" "$n"
       hc_roster_text "$HC_ROSTER" $hits; } >&2
-    exit 1
-  fi
-  # TODO(Wave 7): drop classic
-  CLASSIC_ROSTER=$(classic_roster)
-  hits=$(herdr_match "$token" "$CLASSIC_ROSTER")
-  n=$(printf '%s\n' "$hits" | grep -c . || true)
-  if (( n == 1 )); then TARGET_SRC=herdr; TARGET=$hits; return 0; fi
-  if (( n > 1 )); then
-    { printf '\033[31merror:\033[0m '\''%s'\'' matches %s agents — address one by pane id:\n' "$token" "$n"
-      herdr_roster "$CLASSIC_ROSTER" $hits; } >&2
     exit 1
   fi
   die_no_agent "$token"
@@ -697,12 +660,10 @@ cmd_work() {
   local existing
   hc_roster
   existing=$(hc_match "$path" "$HC_ROSTER" | head -1)
-  # TODO(Wave 7): drop classic
-  [[ -n $existing ]] || existing=$(herdr_match "$path" "$(classic_roster)" | head -1)
 
   if [[ -n $existing ]]; then
     echo "→ already running: agent $existing  ($path)"
-    note "   'rd read $existing' to see it, 'desk' to attach"
+    note "   'rd read $existing' to see it, or open the Herdr app"
     return 0
   fi
 
@@ -719,91 +680,7 @@ cmd_work() {
   (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; work never spills to IU API tokens"
   hc_start_agent "$agent" "$path" "$ROLE" "" 0 "" tab "$path" || die "$HC_START_ERR"
   echo "→ started $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
-  note "   'desk' to attach · 'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
-}
-
-# TODO(Wave 7): drop classic — send_prompt, agent_snapshot, wait_state_change and prompt_attempt are the classic
-# `rd say` delivery proof.
-# Hand a prompt to `herdr agent prompt`; prints herdr's body. Returns 0 sent, 2 herdr answered
-# with an error body, 3 the transport failed (ssh/herdr exited non-zero — nothing says whether the
-# text arrived). base64 carries the text across the ssh hop and herdr's argv handling
-# byte-identical (quotes, newlines, a literal `$(...)`); a trailing sentinel keeps `$(…)` from
-# stripping trailing newlines and is cut off again on the host. `herdr agent prompt` EXITS 0 ON FAILURE
-# and reports it in the body (`{"error":{"code":"agent_not_found",…}}`), so for herdr's own
-# answer the body is the signal; a non-zero exit is therefore the hop, not herdr.
-# $1 pane  $2 prompt.
-send_prompt() {
-  local b64 sent rc
-  b64=$(printf %sx "$2" | base64 | tr -d '\n')
-  sent=$(host_run "rd_p=\$(echo '$b64' | base64 -d); herdr agent prompt '$1' \"\${rd_p%x}\"" 2>&1); rc=$?
-  printf '%s' "$sent"
-  (( rc == 0 )) || return 3
-  grep -q '"error"' <<<"$sent" && return 2
-  return 0
-}
-
-# "<status> <state_change_seq> <completion_seq>" for an agent, by NAME — the id `herdr agent get`
-# is proven with (deliver_prompt has always addressed agents by name; pane ids churn). Returns 1
-# when herdr did not answer or the answer carries no status: an unreadable state must never be
-# read as idle.
-agent_snapshot() {
-  local out
-  out=$(host_run "herdr agent get '$1'" 2>/dev/null) || return 1
-  python3 -c '
-import json, sys
-try:
-    r = json.load(sys.stdin)["result"]
-    a = r["agent"] if isinstance(r.get("agent"), dict) else r
-    status = a["agent_status"]
-    assert isinstance(status, str) and status
-    print(status, int(a.get("state_change_seq", 0)), int(a.get("completion_seq", 0)))
-except Exception:
-    sys.exit(1)
-' <<<"$out" 2>/dev/null
-}
-
-# Delivery signal: ANY state change after the send. A prompt answered fast lands in `blocked`
-# (a question) or a fresh `done` (completion_seq bumps) without a poll ever seeing `working`, and
-# waiting for `working` alone calls that a loss and invites a duplicate.
-# $1 agent id  $2 snapshot taken before the send  $3 window in seconds. Polls every RD_POLL_S
-# (whole seconds, default 1); there is no sleep after the last poll.
-# Returns 0 changed · 1 ran and saw no change · 2 the last snapshot failed — "no change" is then
-# not an observation, and the caller must not treat it as one.
-wait_state_change() {
-  local now i seen=0 step=${RD_POLL_S:-1} polls=$3
-  (( step > 0 )) && polls=$(( ($3 + step - 1) / step ))
-  for ((i = 0; i < polls; i++)); do
-    if now=$(agent_snapshot "$1"); then
-      seen=1
-      [[ $now != "$2" ]] && return 0
-    else
-      seen=0
-    fi
-    (( i < polls - 1 )) && sleep "$step"
-  done
-  (( seen )) && return 1
-  return 2
-}
-
-# THE delivery primitive — `deliver_prompt` and `cmd_say` both go through it, so what counts as
-# "delivered" cannot diverge between them. Snapshot, send, wait for a state change.
-# $1 pane  $2 agent name  $3 prompt  $4 wait in seconds.
-# Returns 0 picked up · 1 never picked up · 2 rejected · 3 transport failure (2 and 3 leave the
-# reason in the global DELIVER_ERR) · 4 state unreadable BEFORE the send, nothing sent · 5 the
-# agent was already working, so the prompt is queued behind its turn and cannot be proven · 6 sent,
-# but the state became unreadable, so delivery is unconfirmed (a re-send could duplicate it).
-prompt_attempt() {
-  local base sent rc
-  base=$(agent_snapshot "$2") || return 4
-  sent=$(send_prompt "$1" "$3"); rc=$?
-  case $rc in
-    2) DELIVER_ERR="herdr rejected the prompt: $sent"; return 2 ;;
-    3) DELIVER_ERR="transport failure — the text may or may not have arrived: $sent"; return 3 ;;
-  esac
-  [[ $base == working\ * ]] && return 5
-  wait_state_change "$2" "$base" "$4"; rc=$?
-  (( rc == 2 )) && return 6
-  return "$rc"
+  note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
 }
 
 # The wave-chaining lane: near-twin of `work`, for an agent that has just
@@ -864,23 +741,18 @@ cmd_wave() {
 
   # Wave numbers in use = live terminals whose name is the one `<repo>-w<n>` would get. Each candidate number is turned
   # into its terminal name (hc_terminal_name hashes the FULL key, so a repo starting `t<digit>`, whose name hc makes
-  # unrecognisable, is still counted) and looked up among the live names, instead of parsing names back. Classic herdr
-  # names count too until Wave 7: an idle classic `iris-w3` must not get a twin. depth (what RD_WAVE_MAX bounds) = the
-  # numbers in use + 1; n = the next free one. Numbers above 99 are not looked at.
+  # unrecognisable, is still counted) and looked up among the live names, instead of parsing names back. depth (what
+  # RD_WAVE_MAX bounds) = the numbers in use + 1; n = the next free one. Numbers above 99 are not looked at.
   wave_agent_name() { # <n> — `agent_name` clips at 32 (the terminal name cap); the wave suffix is clipped for first
     local s="-w$1"
     printf '%s' "${WAVE_BASE:0:$((32 - ${#s}))}${s}"
   }
   WAVE_BASE="$(agent_name "$name")"
-  wave_live() { # <n> — is that wave's terminal name (or, classic, its plain name) a live one? (live_names: dynamic scope)
-    local a
-    a=$(wave_agent_name "$1")
-    grep -qxF "$(hc_terminal_name "$a")" <<<"$live_names" || grep -qxF "$a" <<<"$live_names"
+  wave_live() { # <n> — is that wave's terminal name a live one? (live_names: dynamic scope)
+    grep -qxF "$(hc_terminal_name "$(wave_agent_name "$1")")" <<<"$live_names"
   }
   local live_names num depth=1 n=1 max=0
   live_names=$(jq -r '.[] | .name // empty' <<<"$HC_ROSTER")
-  # TODO(Wave 7): drop classic
-  live_names+=$'\n'$(classic_roster | jq -r '.result.agents[]? | .name // empty' 2>/dev/null)
   for num in $(seq 1 99); do
     wave_live "$num" || continue
     depth=$((depth + 1)); max=$num
@@ -908,15 +780,10 @@ cmd_wave() {
   # operator, not a second editor). Any OTHER live agent in that checkout is still a
   # hard stop; an idle or done predecessor is what a finished wave looks like.
   local busy
-  local self_hc="" self_pane=""
-  if on_dev_host; then self_hc=${HC_TERMINAL_ID:-}; self_pane=${HERDR_PANE_ID:-}; fi # another machine's ids are not ours
+  local self_hc=""
+  if on_dev_host; then self_hc=${HC_TERMINAL_ID:-}; fi # another machine's ids are not ours
   busy=$(jq -r --arg cwd "$path" --arg self "$self_hc" "$HC_JQ_DEFS"'[.[] | select(agent and .cwd == $cwd and .address != $self
       and ((.status.state // "") | IN("idle", "done") | not))] | .[0] | select(. != null) | "\(.address) \(.status.state // "unknown")"' <<<"$HC_ROSTER" 2>/dev/null)
-  # TODO(Wave 7): drop classic
-  [[ -n $busy ]] || busy=$(jq -r --arg cwd "$path" --arg self "$self_pane" '.result.agents
-      | ((map(select(.pane_id == $self)) | .[0].tab_id) // null) as $st
-      | [.[] | select(.cwd == $cwd and .pane_id != $self and ($st == null or .tab_id != $st)
-          and (.agent_status | IN("working", "blocked")))] | .[0] | select(. != null) | "\(.pane_id) \(.agent_status)"' <<<"$(classic_roster)" 2>/dev/null)
   [[ -z $busy ]] \
     || die "another agent in $path is ${busy#* } (${busy%% *}) — two agents editing one checkout race each other"
 
@@ -1123,8 +990,7 @@ fan_clean() {
   local path
   path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
   hc_roster
-  local classic rows wt br addr st prog qwt qbr verb reason cpane cst
-  classic=$(classic_roster) # TODO(Wave 7): drop classic
+  local rows wt br addr st prog qwt qbr verb reason
   rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" $all $(printf '%q' "$path")" 2>&1) \
     || die "could not list worktrees of $path: $rows"
   [[ -n $rows ]] || { echo "no extra worktrees for $name"; return 0; }
@@ -1134,7 +1000,7 @@ fan_clean() {
     if [[ $verb == keep ]]; then echo "keep  $br ($reason)  $wt"; continue; fi
     # EVERY agent in the worktree is judged, not the first one: finished means a known idle/done status. Null, unknown,
     # starting, working and blocked all keep the worktree.
-    local -a addrs=() tabs=()
+    local -a addrs=()
     local unfinished="" killfail=0
     local rec
     while IFS= read -r rec; do
@@ -1147,14 +1013,6 @@ fan_clean() {
       is_finished_status "$st" || unfinished+="${unfinished:+, }$addr $st"
       addrs+=("$addr")
     done < <(jq -c --arg wt "$wt" '.[] | select(.cwd == $wt)' <<<"$HC_ROSTER" 2>/dev/null)
-    # TODO(Wave 7): drop classic
-    if [[ -n $classic ]]; then
-      while read -r cpane cst; do
-        [[ -n $cpane ]] || continue
-        is_finished_status "$cst" || unfinished+="${unfinished:+, }$cpane $cst"
-        tabs+=("$cpane")
-      done < <(jq -r --arg wt "$wt" '.result.agents[]? | select(.cwd == $wt) | "\(.tab_id // "-") \(.agent_status // "unknown")"' <<<"$classic" 2>/dev/null)
-    fi
     if [[ -n $unfinished ]]; then echo "keep  $br (agent not finished: $unfinished)  $wt"; continue; fi
     [[ -n ${RD_DRY_RUN:-} ]] && { echo "would remove $br  $wt"; continue; }
     # The worktree goes only once every terminal in it is gone: an already-finished one may refuse the kill, but its rm must work.
@@ -1163,9 +1021,6 @@ fan_clean() {
       hc_host rm -- "$addr" >/dev/null 2>&1 || killfail=1
     done
     if (( killfail )); then echo "keep  $br (could not end every terminal in it — 'rd agents')  $wt"; continue; fi
-    for cpane in ${tabs[@]+"${tabs[@]}"}; do
-      [[ $cpane != - ]] && host_run "herdr tab close '$cpane'" >/dev/null 2>&1 # TODO(Wave 7): drop classic
-    done
     qwt=$(printf '%q' "$wt"); qbr=$(printf '%q' "$br")
     host_run "git -C $(printf '%q' "$path") worktree remove $qwt && git -C $(printf '%q' "$path") branch -D $qbr" >/dev/null 2>&1 \
       && echo "removed $br  $wt" || echo "keep  $br (remove failed)  $wt"
@@ -1191,8 +1046,6 @@ cmd_close() {
   [[ -n $name ]] || die "usage: close <agent>   (a finished wave's terminal)"
   require_core
   resolve_target "$name"
-  # TODO(Wave 7): drop classic
-  if [[ $TARGET_SRC == herdr ]]; then close_classic "$TARGET" "$CLASSIC_ROSTER"; return; fi
 
   local rec status cwd program
   rec=$(jq -c --arg a "$TARGET" '.[] | select(.address == $a)' <<<"$HC_ROSTER")
@@ -1220,86 +1073,6 @@ cmd_close() {
   out=$(hc_host kill -- "$TARGET" 2>&1) || die "hc kill $TARGET failed: $out"
   out=$(hc_host rm -- "$TARGET" 2>&1) || die "hc rm $TARGET failed (still live after the kill?): $out"
   echo "→ closed $(jq -r '.name // .address' <<<"$rec") ($TARGET)"
-}
-
-# TODO(Wave 7): drop classic. Close a finished wave's tab in classic herdr: a `wave <n>` tab (or one the factory
-# owns), agent not working/blocked, checkout clean, nothing unpushed. The tab, never the workspace.
-close_classic() { # <pane> <classic roster JSON>
-  local pane=$1 roster=$2
-
-  local info tab status cwd label
-  info=$(PANE="$pane" python3 -c '
-import json, os, sys
-for a in json.load(sys.stdin)["result"]["agents"]:
-    if a.get("pane_id") == os.environ["PANE"]:
-        print(a.get("tab_id") or "", a.get("agent_status") or "", a.get("cwd") or "", sep="\t"); break
-' <<<"$roster" 2>/dev/null)
-  IFS=$'\t' read -r tab status cwd <<<"$info"
-  [[ -n $tab ]] || die "could not resolve the tab of $pane"
-
-  # Through the factory the tab is the one holding the session's pane, so a fan tab or a first tab named `1`
-  # closes like a `wave <n>` tab. Without a factory answer, or without a session of that name, the tab must
-  # be labelled `wave <n>` (today's rule).
-  local sname fsess="" fpane ftab fstate via_factory=0
-  sname=$(PANE="$pane" python3 -c '
-import json, os, sys
-for a in json.load(sys.stdin)["result"]["agents"]:
-    if a.get("pane_id") == os.environ["PANE"]:
-        print(a.get("name") or ""); break
-' <<<"$roster" 2>/dev/null)
-  if [[ -n $sname ]] && factory_up; then
-    fsess=$(factory_host "$FACTORY_CALL_S" session get "$sname" --format json 2>/dev/null) || fsess=""
-    ftab=$(factory_field "$fsess" '(.tab // empty) | s')
-    if [[ -n $ftab ]]; then
-      fpane=$(factory_field "$fsess" '(.pane // empty) | s')
-      fstate=$(factory_field "$fsess" '.state // empty')
-      [[ -z $fpane || $fpane == "$pane" ]] \
-        || die "the factory has '$sname' in pane $fpane, herdr in $pane — a stale record; refusing to close"
-      [[ $fstate == working || $fstate == blocked ]] && die "session $sname is $fstate — not finished"
-      # Closing a tab closes every pane in it: another agent there is not ours to close.
-      local others
-      others=$(TAB="$tab" PANE="$pane" python3 -c '
-import json, os, sys
-for a in json.load(sys.stdin)["result"]["agents"]:
-    if a.get("tab_id") == os.environ["TAB"] and a.get("pane_id") != os.environ["PANE"]:
-        print(a.get("name") or a.get("pane_id") or "?")
-' <<<"$roster" 2>/dev/null)
-      [[ -z $others ]] || die "tab $tab also holds $(tr '\n' ' ' <<<"$others")— closing it would close them too"
-      [[ $ftab == "$tab" ]] \
-        || die "the factory has '$sname' in tab $ftab, herdr has pane $pane in tab $tab — a stale record; refusing to close"
-      via_factory=1
-    else
-      echo "rd: the factory has no session '$sname' - resolving the tab through herdr" >&2
-    fi
-  fi
-
-  label=$(host_run "herdr tab get '$tab'" 2>/dev/null | python3 -c '
-import json, sys
-try:
-    print((json.load(sys.stdin)["result"]["tab"].get("label") or "").strip())
-except Exception:
-    pass
-' 2>/dev/null)
-  if (( ! via_factory )); then
-    [[ $label =~ ^wave\ [0-9]+$ ]] || die "tab $tab is '${label:-unlabelled}', not a 'wave <n>' tab — refusing to close it"
-  fi
-  [[ $status == working || $status == blocked ]] && die "agent $pane is $status — not finished"
-
-  # Fail closed: an unreadable checkout (ssh failure, no cwd) is not a clean one.
-  [[ -n $cwd ]] || die "agent $pane reports no cwd — cannot verify the checkout is clean, refusing to close"
-  local dirty unpushed status_out
-  status_out=$(host_run "git -C $(printf '%q' "$cwd") status --porcelain") \
-    || die "could not read git status of $cwd — refusing to close"
-  dirty=$(printf '%s' "$status_out" | grep -c . || true)
-  (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the wave's work is not committed"
-  unpushed=$(host_run "git -C $(printf '%q' "$cwd") rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
-  [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing the wave tab"
-
-  local closed
-  closed=$(host_run "herdr tab close '$tab'" 2>&1) || die "herdr tab close failed: $closed"
-  # herdr reports failure in the body and exits 0 (same trap as `agent prompt`).
-  echo "$closed" | grep -q '"error"' && die "herdr tab close rejected: $closed"
-  echo "→ closed ${label:-tab} ($tab)"
 }
 
 # `claude agents --json` across every enabled Claude account, merged into one JSON array: a background
@@ -1340,13 +1113,12 @@ PY'
 # agent names and the word `blocked`), so the shape is a contract: tests pin it.
 cmd_agents() {
   require_core
-  local hc_json herdr_json claude_json
+  local hc_json claude_json
   hc_roster
   hc_json=$HC_ROSTER_ALL # the listing includes linked machines (`mini/t3`); every verb that acts does not
-  herdr_json=$(classic_roster) # TODO(Wave 7): drop classic
   claude_json=$(claude_agents_json)
 
-  HC_JSON="$hc_json" HERDR_JSON="$herdr_json" CLAUDE_JSON="$claude_json" python3 <<'PY'
+  HC_JSON="$hc_json" CLAUDE_JSON="$claude_json" python3 <<'PY'
 import json, os, datetime
 
 def load(raw, path):
@@ -1359,7 +1131,6 @@ def load(raw, path):
         return []
 
 hc = load(os.environ.get("HC_JSON", ""), [])
-herdr = load(os.environ.get("HERDR_JSON", ""), ["result", "agents"])
 claude = load(os.environ.get("CLAUDE_JSON", ""), [])
 
 def short(p):
@@ -1375,11 +1146,10 @@ def is_agent(t):
     argv = (t.get("foreground") or {}).get("argv") or t.get("argv") or [""]
     return t.get("status") is not None or os.path.basename(argv[0] or "") == "claude"
 
-# A Claude running in a hc terminal or herdr pane is ONE process that several lanes report. Deduping on the session
-# id (hc: the jk.claude.session label the SessionStart hook sets; classic herdr: agent_session.value) keeps it
-# from looking like two agents fighting over one checkout, which is a scary thing to see and a wrong thing to believe.
+# A Claude running in a hc terminal is ONE process that several lanes report. Deduping on the session id (the
+# jk.claude.session label the SessionStart hook sets) keeps it from looking like two agents fighting over one
+# checkout, which is a scary thing to see and a wrong thing to believe.
 seen = {t.get("labels", {}).get("jk.claude.session") for t in hc}
-seen |= {a.get("agent_session", {}).get("value") for a in herdr}
 seen.discard(None)
 
 rows = []
@@ -1389,12 +1159,6 @@ for t in hc:
     status = (t.get("status") or {}).get("state") or ("done" if t.get("turn") else "?")
     rows.append(("hc", clip(t.get("name") or t.get("title") or t.get("address"), 24), status,
                  short(t.get("cwd")), t.get("address", "")))
-
-# TODO(Wave 7): drop classic. herdr's list carries no `name` unless the agent was started BY name; its task title is
-# the better column then. Pane id last so the column is never empty.
-for a in herdr:
-    name = a.get("name") or a.get("terminal_title_stripped") or a.get("pane_id")
-    rows.append(("herdr", clip(name, 24), a.get("agent_status", "?"), short(a.get("cwd")), a.get("pane_id", "")))
 
 for a in claude:
     if a.get("sessionId") in seen:
@@ -1429,9 +1193,8 @@ cmd_read() {
 
   # The two lanes need completely different read paths, and getting this wrong
   # was actively misleading: a `claude --bg` daemon hands you a session id, but that id is not
-  # a herdr agent — the launcher pane is closed the moment the daemon exists —
-  # so the socket API answered `agent_not_found` for an agent that was running
-  # perfectly well.
+  # an hc terminal — the launcher terminal is gone the moment the daemon exists —
+  # so the core answered not-found for an agent that was running perfectly well.
   #
   # `claude logs` is not the alternative. It attaches a full-screen TUI, so it
   # cannot be piped, read from another machine, or used by an agent. The
@@ -1473,17 +1236,13 @@ print("\n\n".join(out[-12:]) if out else "  (no assistant output yet)")
   fi
 
   # Not a bg session, so it is an hc terminal — addressable by repo name here for the same reason `work` is: repo
-  # names are what you remember, addresses churn. (A classic herdr pane still resolves until Wave 7.)
+  # names are what you remember, addresses churn.
   #
   # Resolved only once the bg lane has come up empty: a `--bg` daemon is readable with the core flat on its face (it
   # reparented to PID 1 and its transcript is a file), so gating the whole subcommand on the core would break the
   # one lane built to outlive it.
   require_core
   resolve_target "$name"
-  if [[ $TARGET_SRC == herdr ]]; then
-    host_run "herdr agent read '$TARGET' --source ${2:-recent}" # TODO(Wave 7): drop classic
-    return
-  fi
   # [src]: a number of history lines above the screen, `visible` for the screen alone, else a default.
   local lines=200
   case ${2:-recent} in
@@ -1494,57 +1253,14 @@ print("\n\n".join(out[-12:]) if out else "  (no assistant output yet)")
   hc_host read --lines "$lines" -- "$TARGET"
 }
 
-# Claude Code modals that swallow a typed prompt while `herdr agent prompt` still answers
-# `agent_prompted`. One "label|regex" per entry, regex matched case-insensitively against the
-# visible pane. Only a modal whose text has been seen belongs here.
-#   - compact earlier: agent-workflows Wave 2 — it swallowed four `rd say` messages; the lead
-#     recovered with `herdr pane send-keys <pane> esc`
-#     (agent-workflows docs/waves/handoff/lead.md, item 8).
-RD_SAY_MODALS=(
-  'the "compact earlier" prompt|compact earlier'
-)
-
-# Print the label of the first known modal showing in the pane; return 1 when none is. Only the
-# bottom lines of the visible screen are searched (blank rows dropped): that is where Claude Code
-# draws a modal, and the same words in the transcript above must not trigger a dismissal.
-say_modal() {
-  local text entry
-  text=$(host_run "herdr pane read '$1' --source visible" 2>/dev/null \
-    | grep -v '^[[:space:]]*$' | tail -n "${RD_SAY_MODAL_LINES:-12}")
-  for entry in "${RD_SAY_MODALS[@]}"; do
-    if grep -qiE -- "${entry#*|}" <<<"$text"; then
-      printf '%s' "${entry%%|*}"; return 0
-    fi
-  done
-  return 1
-}
-
 say_fail() { # $1 agent  $2 reason
   printf '\033[31mNOT delivered:\033[0m %s — check with: rd read %s\n' "$2" "$1" >&2
   exit 1
 }
 
-# One delivery attempt for `say`; exits on every outcome that is not a plain yes/no.
-# $1 pane  $2 agent id  $3 text  $4 "1" when an earlier attempt already sent this text.
-# Returns 0 picked up · 1 never picked up · 5 queued behind a turn.
-say_attempt() {
-  local rc
-  prompt_attempt "$1" "$2" "$3" "${RD_SAY_WAIT_S:-20}"; rc=$?
-  case $rc in
-    2|3) say_fail "$2" "$DELIVER_ERR" ;;
-    4) if [[ ${4:-} == 1 ]]; then
-         say_fail "$2" "delivery unconfirmed: the first send went out, and its state was unreadable before the re-send (not re-sent)"
-       fi
-       say_fail "$2" "could not read its state from herdr, so nothing was sent" ;;
-    6) say_fail "$2" "the text was sent, but its state became unreadable, so delivery is unconfirmed (not re-sent)" ;;
-  esac
-  return "$rc"
-}
-
 # Steer a running agent without attaching. For an hc terminal the text goes in with `hc send`, which pastes it and
 # presses Enter once nobody is typing; a blocked program is refused, because the text would answer its dialog instead
-# of reaching the agent. A working agent takes the text as a queued message. A classic herdr agent keeps its delivery
-# proof (below) until Wave 7.
+# of reaching the agent. A working agent takes the text as a queued message.
 cmd_say() {
   local name="${1:-}"; shift || true
   local text="${*:-}"
@@ -1559,34 +1275,24 @@ cmd_say() {
   # resolver gets exercised without steering a running agent.
   [[ -n ${RD_DRY_RUN:-} ]] && { echo "$TARGET"; return 0; }
 
-  local agent key rec status=""
-  if [[ $TARGET_SRC == hc ]]; then
-    rec=$(jq -c --arg a "$TARGET" '.[] | select(.address == $a)' <<<"$HC_ROSTER")
-    agent=$(jq -r '.name // .address' <<<"$rec")
-    key=$(jq -r '.labels["factory.key"] // .name // ""' <<<"$rec")
-    status=$(jq -r '.status.state // ""' <<<"$rec")
-  else
-    agent=$(jq -r --arg p "$TARGET" '.result.agents[] | select(.pane_id == $p) | .name // empty' <<<"$CLASSIC_ROSTER" 2>/dev/null | head -1)
-    # A hand-started agent has no name, only a pane id — `herdr agent get|prompt` take either.
-    key=$agent
-    [[ -n $agent ]] || agent=$TARGET
-  fi
+  local agent key rec status program
+  rec=$(jq -c --arg a "$TARGET" '.[] | select(.address == $a)' <<<"$HC_ROSTER")
+  agent=$(jq -r '.name // .address' <<<"$rec")
+  key=$(jq -r '.labels["factory.key"] // .name // ""' <<<"$rec")
+  status=$(jq -r '.status.state // ""' <<<"$rec")
 
   # The state is checked BEFORE either delivery path (the factory note or hc send): a blocked program would read the text
   # as the answer to its dialog, and one that has not reported is not at a prompt yet. No --force, ever.
-  if [[ $TARGET_SRC == hc ]]; then
-    local program
-    program=$(jq -r "$HC_JQ_DEFS"'prog' <<<"$rec")
-    [[ $program == claude ]] \
-      || say_fail "$agent" "$TARGET runs '${program:-nothing}', not claude — rd never types prompt text into a shell"
-    if [[ $status == blocked ]]; then
-      say_fail "$agent" "it is blocked on a dialog, and the text would answer the dialog - 'rd read $agent', answer it by hand"
-    fi
-    case $status in
-      idle|done|working) ;;
-      *) say_fail "$agent" "not at a prompt yet (status '${status:-none}') — 'rd read $agent', then say it again" ;;
-    esac
+  program=$(jq -r "$HC_JQ_DEFS"'prog' <<<"$rec")
+  [[ $program == claude ]] \
+    || say_fail "$agent" "$TARGET runs '${program:-nothing}', not claude — rd never types prompt text into a shell"
+  if [[ $status == blocked ]]; then
+    say_fail "$agent" "it is blocked on a dialog, and the text would answer the dialog - 'rd read $agent', answer it by hand"
   fi
+  case $status in
+    idle|done|working) ;;
+    *) say_fail "$agent" "not at a prompt yet (status '${status:-none}') — 'rd read $agent', then say it again" ;;
+  esac
 
   # The factory holds a note while the agent works, types it at its next prompt and confirms it by the next
   # turn, which is what the direct path below can only approximate. An agent without a name is no factory session.
@@ -1603,8 +1309,6 @@ cmd_say() {
     fi
     echo "rd: the factory has no session '$key' - sending directly" >&2
   fi
-
-  if [[ $TARGET_SRC == herdr ]]; then say_classic "$TARGET" "$agent" "$text"; return; fi
 
   local out hrc=0
   out=$(hc_host send -- "$TARGET" "$text" 2>&1) || hrc=$?
@@ -1628,38 +1332,8 @@ cmd_say() {
   fi
 }
 
-# TODO(Wave 7): drop classic. `agent_prompted` only means herdr typed the text — a modal on screen can swallow it — so
-# delivery is proven by the shared prompt_attempt: the agent's state must change after the send. An agent that was
-# already working is a queued message and cannot be proven. An idle one that stays idle gets its pane read: a known
-# modal is dismissed and the text re-sent once, anything else fails loudly rather than re-sending blind (a duplicate
-# prompt is worse than a visible miss).
-say_classic() { # <pane> <agent> <text>
-  local pane=$1 agent=$2 text=$3 rc modal keys
-  say_attempt "$pane" "$agent" "$text"; rc=$?
-  case $rc in
-    0) echo "delivered"; return 0 ;;
-    5) echo "queued: agent busy — $agent was working, the message waits behind its turn"; return 0 ;;
-  esac
-
-  modal=$(say_modal "$pane") \
-    || say_fail "$agent" "it never changed state after the send and no known modal is blocking it"
-  # Like `agent prompt`, herdr may answer an error body with exit 0 — check both.
-  if ! keys=$(host_run "herdr pane send-keys '$pane' esc" 2>&1) || grep -q '"error"' <<<"$keys"; then
-    say_fail "$agent" "$modal is blocking it and dismissing it failed: $keys"
-  fi
-  sleep "${RD_SAY_SETTLE:-1}"
-  say_attempt "$pane" "$agent" "$text" 1; rc=$?
-  case $rc in
-    0) echo "delivered after dismissing $modal" ;;
-    5) echo "queued after dismissing $modal — $agent was working, the message waits behind its turn" ;;
-    *) say_fail "$agent" "dismissed $modal and re-sent, but it still never changed state" ;;
-  esac
-}
-
 # The janitor: closes finished, clean, pushed terminals; messages dirty ones. All logic lives in
-# hc-reap.py (also what com.jkrumm.hc-reap runs); this is the routing hop. Classic herdr's tabs are
-# still reaped by herdr-reap.py beside it.
-# TODO(Wave 7): drop classic (the herdr-reap.py leg)
+# hc-reap.py (also what com.jkrumm.hc-reap runs); this is the routing hop.
 cmd_reap() {
   local args="" a
   for a in "$@"; do
@@ -1669,10 +1343,8 @@ cmd_reap() {
     esac
   done
   # shellcheck disable=SC2016  # $HOME expands on the host
-  host_run "d=\"\$HOME/SourceRoot/dotfiles/scripts\"; export REAP_IDLE_H='${REAP_IDLE_H:-12}'; rc=0; \
-    if [ -x \"\$d/hc-reap.py\" ]; then python3 \"\$d/hc-reap.py\"$args || rc=\$?; fi; \
-    if [ -x \"\$d/herdr-reap.py\" ] && command -v herdr >/dev/null 2>&1; then python3 \"\$d/herdr-reap.py\"$args || rc=\$?; fi; \
-    exit \$rc"
+  host_run "d=\"\$HOME/SourceRoot/dotfiles/scripts\"; export REAP_IDLE_H='${REAP_IDLE_H:-12}'; \
+    python3 \"\$d/hc-reap.py\"$args"
 }
 
 usage() {
@@ -1691,12 +1363,12 @@ usage() {
     rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          end a finished agent's terminal (clean + pushed only)
     rd reap [--dry-run]       janitor: close finished clean+pushed tabs (idle > REAP_IDLE_H, default 12; a merged fan tab at once), message dirty ones
-    rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, herdr, bg, interactive)
+    rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
     rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
     rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)
 
-  <agent> is a repo name, an hc address or terminal name (t7, iris-w3), a classic pane id (wG:p6)
-  or a bg session id prefix — whichever of them 'agents' put in front of you.
+  <agent> is a repo name, an hc address or terminal name (t7, iris-w3) or a bg session id prefix —
+  whichever of them 'agents' put in front of you. A name hc does not know is an error.
 
   Workers started by 'rd fan' are children of the calling terminal: 'hc wait --children all' waits for them
   and their notes arrive as input. A 'rd wave' tab has no parent (a chain's next wave must outlive its

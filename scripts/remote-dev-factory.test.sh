@@ -7,7 +7,6 @@
 #            session get / session note  reply + rc from $STATE/session-reply · session-rc, $STATE/note-rc
 #            role get <r>  a valid role answer
 #   hc       remote-dev-fake-hc.sh: the roster is $STATE/terminals.json, every terminal.run lands in $STATE/runs.jsonl
-#   herdr    only for the classic fallback (TODO(Wave 7): drop classic): the roster is $STATE/agents.json, calls in herdr-calls
 # No real `factory` may answer: PATH is scrubbed of any and the scratch ~/.local/bin holds the stub.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,16 +36,6 @@ echo a >"$TMP/co/f"; g -C "$TMP/co" add f; g -C "$TMP/co" commit -qm one; g -C "
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
-cat >"$TMP/bin/herdr" <<'STUB'
-#!/usr/bin/env bash
-echo "$*" >>"$STATE/herdr-calls"
-case "$1 $2" in
-  "agent list") cat "$STATE/agents.json" 2>/dev/null || echo '{"result":{"agents":[]}}' ;;
-  "tab get") echo "{\"result\":{\"tab\":{\"label\":\"$(cat "$STATE/tab-label" 2>/dev/null)\"}}}" ;;
-  "tab close") echo '{"result":{}}' ;;
-  *) echo '{}' ;;
-esac
-STUB
 cat >"$TMP/home/.local/bin/factory" <<'STUB'
 #!/usr/bin/env bash
 if [ "$1" = health ]; then
@@ -71,20 +60,19 @@ case "$1 $2" in
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
-chmod +x "$TMP/bin/herdr" "$TMP/bin/launchctl" "$TMP/home/.local/bin/hc" "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
+chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/hc" "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
 export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
-  RD_DELIVER_WAIT_S=0 RD_POLL_S=0 RD_FACTORY_POLL_S=0 RD_SAY_SETTLE=0 RD_SAY_WAIT_S=3
+  RD_FACTORY_POLL_S=0
 unset RD_DRY_RUN RD_NO_FACTORY FACTORY_SESSION HC_TERMINAL_ID HC_SESSION RD_WAVE_MODEL RD_WAVE_EFFORT
 export CLAUDE_EFFORT_TABLE="$HERE/../config/claude-effort.json"
 printf 'Branch: feat/one\n\nDo one.\n' >"$TMP/brief1.md"
 printf 'Branch: feat/two\n\nDo two.\n' >"$TMP/brief2.md"
 
-reset() { rm -f "$STATE"/* ; : >"$STATE/calls.log"; : >"$STATE/factory-calls"; echo '[]' >"$STATE/terminals.json"; echo '{"result":{"agents":[]}}' >"$STATE/agents.json"; }
+reset() { rm -f "$STATE"/* ; : >"$STATE/calls.log"; : >"$STATE/factory-calls"; echo '[]' >"$STATE/terminals.json"; }
 rd() { out=$(timeout 90 bash "$HERE/remote-dev.sh" "$@" 2>&1 </dev/null); rc=$?
-       hcalls=$(cat "$STATE/calls.log"); fcalls=$(cat "$STATE/factory-calls"); hruns=$(cat "$STATE/runs.jsonl" 2>/dev/null)
-       hclassic=$(cat "$STATE/herdr-calls" 2>/dev/null); }
+       hcalls=$(cat "$STATE/calls.log"); fcalls=$(cat "$STATE/factory-calls"); hruns=$(cat "$STATE/runs.jsonl" 2>/dev/null); }
 reply() { printf '%s\n' "$2" >"$STATE/get-$1"; }   # reply <key|default> <line…>
 hc_ran() { [ -s "$STATE/runs.jsonl" ]; }
 no_hc_spawn() { hc_ran && bad "$1 — hc started a terminal: $hruns" || ok "$1"; }
@@ -336,10 +324,13 @@ reset; echo "[{\"address\":\"t5\",\"name\":null,\"cwd\":\"/x\",\"argv\":[\"claud
 rd say t5 "go on"
 lacks "no note attempted" "$fcalls" "session note"
 has "typed through hc" "$hcalls" "send -- t5 go on"
-echo "say: a classic herdr agent (hc does not know it) still takes a note"
-reset; echo '{"result":{"agents":[{"name":"classic","pane_id":"p-1","cwd":"x","agent_status":"idle"}]}}' >"$STATE/agents.json"
-rd say classic "go on"
-has "noted" "$out" "noted: the factory holds it while classic works"
+echo "say: a target hc does not know is an error, not a fallback"
+reset; agents_json; echo 1 >"$STATE/health-rc"
+rd say ghost "go on"
+[ "$rc" -ne 0 ] && ok "exit non-zero" || bad "unknown target accepted: $out"
+has "says no agent matches" "$out" "no agent matches 'ghost'"
+lacks "nothing typed" "$hcalls" "send "
+lacks "no note attempted" "$fcalls" "session note"
 
 # --- close --------------------------------------------------------------------------------------------
 closed() { grep -q '^kill ' <<<"$hcalls" && grep -q '^rm ' <<<"$hcalls"; }
@@ -375,22 +366,11 @@ reset; agents_json; touch "$STATE/rm_fail"
 rd close worker
 [ "$rc" -ne 0 ] && ok "hc rm failing is an error" || bad "reported success: $out"
 
-echo "close: a classic herdr agent keeps the tab-name rule (TODO(Wave 7): drop classic)"
-classic_agent() { echo "{\"result\":{\"agents\":[{\"name\":\"classic\",\"pane_id\":\"p-1\",\"tab_id\":\"t9\",\"cwd\":\"$TMP/co\",\"agent_status\":\"idle\"}]}}" >"$STATE/agents.json"; }
-SESSION='{"id":"classic","state":"idle","wait":null,"turn":1,"spawn":null,"pane":"p-1","tab":"t9","role":"wave","account":"iu","parent":null}'
-cclosed() { grep -q '^tab close' <<<"$hclassic"; }
-reset; classic_agent; echo "1" >"$STATE/tab-label"; echo 1 >"$STATE/health-rc"
-rd close classic
-[ "$rc" -ne 0 ] && ! cclosed && ok "tab '1': refused as before" || bad "closed tab '1': $out"
-has "says why" "$out" "not a 'wave <n>' tab"
-echo "wave 1" >"$STATE/tab-label"
-rd close classic
-cclosed && ok "wave tab: closed" || bad "wave 1 not closed: $out"
-lacks "hc was not asked to kill anything" "$hcalls" "kill "
-reset; classic_agent; echo "fan feat-x" >"$STATE/tab-label"; echo "$SESSION" >"$STATE/session-reply"
-rd close classic
-cclosed && ok "the factory owns the session: its tab closes whatever its name" || bad "not closed: $out"
-has "asked the factory for the session" "$fcalls" "session get classic --format json"
+echo "close: a target hc does not know is an error"
+reset; agents_json
+rd close ghost
+[ "$rc" -ne 0 ] && ! closed && ok "unknown target: refused" || bad "closed something: $out"
+has "says no agent matches" "$out" "no agent matches 'ghost'"
 
 echo "close: only a known idle/done status counts as finished"
 for st in starting unknown; do
