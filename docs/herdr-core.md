@@ -37,3 +37,17 @@ Status 2026-10-31: **evaluation on the MacBook only** (core 0.1.15, app 0.1.10).
 3. **Move the mini to core only when** (a) core resumes Claude sessions, or we accept a scripted `claude --resume` rebuild per account; (b) quitting the app provably leaves core running; (c) core runs under a LaunchAgent on the mini and survives a reboot. Then port the consumers listed above as a `/wave`.
 
 Sources: the herdr-core and herdr-app READMEs, CHANGELOGs and issues cited above; agw research run `01a19101-d7ba-7122-98db-6230df648a9f` (deep, 41/42 citations grounded).
+
+## Desktop layout (MacBook)
+
+`make herdr-app-setup` converges the app onto `config/herdr-app/`. It's idempotent and needs the window open to switch the layout and open spaces.
+
+| Piece | Source | How it lands |
+|-|-|-|
+| `jk` layout: the shipped `main` with space folders, the agents list removed, and `jk-status` as the status bar | `config/herdr-app/layouts/jk.json` | symlink into `~/.config/herdr-app/layouts/` |
+| `jk-status`: the shipped status bar plus CPU % and memory used (active + wired + compressed), polled every 5 s on the **active space's machine** (a mini space shows the mini) | `config/herdr-app/mods/jk-status/` | symlink |
+| `space-folders`: folders in the spaces list, smart rules by path | [jankeesvw/herdr-space-folders](https://github.com/jankeesvw/herdr-space-folders), **unlicensed**, pinned commit in `scripts/herdr-app-setup.sh` | cloned to `~/.local/share/herdr-app-vendor/`, mod symlinked. Read the `main.js` diff before bumping the pin |
+| Folders Shutterflow / Tooling / Personal | `config/herdr-app/space-folders.json` | **copied** once to `~/.config/herdr-space-folders.json` (the mod rewrites the file with tmp+mv, so a symlink wouldn't survive). After that the live file wins |
+| Spaces shutterflow, ShutterflowOps, tinycast-extensions, finances, dotfiles | `SPACES` in the script | `herdr-app do space.new`, skipped when a space already works in that folder |
+
+The app doesn't notice edits inside a symlinked mod folder. After changing `jk-status`, run `herdr-app check ~/.config/herdr-app/mods/jk-status` and switch layouts (or restart the app). Revert with `herdr-app do layout.switch --name main`.

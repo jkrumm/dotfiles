@@ -2765,6 +2765,10 @@ herdr-upgrade:
 herdr-groups:
 	@/usr/bin/python3 $(DOTFILES_DIR)/scripts/herdr-groups.py apply
 
+.PHONY: herdr-app-setup
+herdr-app-setup:
+	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
+
 .PHONY: herdr-groups-check
 herdr-groups-check:
 	@/usr/bin/python3 $(DOTFILES_DIR)/scripts/herdr-groups.py check
@@ -3608,6 +3612,7 @@ help:
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
+	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
 	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"
 	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane), then re-run agent-overview"
