@@ -93,7 +93,8 @@ export default class JkDetails extends View {
   // else is shown, never run.
   fix(row, cx) {
     if (!/^claude-relogin [\w.-]+ --machine (macbook|mini)$/.test(row.fix ?? "")) return;
-    this.started = { ...(this.started ?? {}), [`${row.id}/${row.machine}/${row.check}`]: true };
+    // jk-status watches this: it re-polls health ~60 s after the start and every minute until the row is gone.
+    setShared("jk.relogin", { at: Date.now(), key: `${row.id}/${row.machine}/${row.check}` });
     exec("sh", ["-c", `PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" nohup ${row.fix} >/dev/null 2>&1 &`]).catch(() => null);
     cx.notify();
   }
@@ -107,7 +108,7 @@ export default class JkDetails extends View {
         .child(div().w(34).flex_none().text_color(t.dim).child(x.check))
         .child(div().flex_1().min_w(0).truncate().text_color(x.state === "fail" ? t.blocked : t.ansi3)
           .child(`${x.machine === "macbook" ? "MacBook" : x.machine}: ${x.detail}`))
-        .when(runnable, (el) => el.child(this.started?.[key]
+        .when(runnable, (el) => el.child(shared("jk.relogin")?.key === key
           ? div().flex_none().text_color(t.dim).child("approve in browser")
           : div().id(`fix-${key}`).flex_none().px(6).rounded(4).bg(t.accent).text_color(t.accent_foreground).cursor_pointer()
               .on_click((_e, cx) => this.fix(x, cx)).child("Re-login")));

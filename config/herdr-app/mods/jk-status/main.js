@@ -17,9 +17,16 @@ const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" cl
 
 // Login, quota and pending-ask health of this machine and its peer, each problem with its
 // fix command: claude-account's own verdict (docs/claude-accounts.md), the one source the
-// statusline-adjacent tools share. ~1 s (it asks the peer over ssh).
+// statusline-adjacent tools share. ~1 s (it asks the peer through its herdr-core).
 const HEALTH = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" claude-account health --json';
 const HEALTH_MS = 5 * 60000;
+// A Re-login started from jk-details (shared "jk.relogin" = { at, key }): look again once a minute, from 60 s after
+// it started until its row is gone or 15 min have passed, so the ⚠ chip clears when the login lands instead of up to
+// 5 min later. Cheap to tick every 15 s: it only reads shared state until a poll is due.
+const RELOGIN_TICK_MS = 15000;
+const RELOGIN_POLL_MS = 60000;
+const RELOGIN_WATCH_MS = 15 * 60000;
+const healthKey = (x) => `${x.id}/${x.machine}/${x.check}`;
 
 // Uptime Kuma through Argo's live snapshot, read on the mini (the token is piped to curl, never
 // in argv). Same call as jk-board's Uptime tab; groups and paused monitors don't count.
@@ -71,10 +78,21 @@ export default class JkStatus extends View {
     cx.timer.every(KUMA_MS, (cx) => this.refreshKuma(cx));
     this.refreshKuma(cx);
     cx.timer.every(HEALTH_MS, (cx) => this.refreshHealth(cx));
+    cx.timer.every(RELOGIN_TICK_MS, (cx) => this.reloginTick(cx));
     cx.timer.every(STATS_MS, (cx) => this.refreshStats(cx));
     cx.timer.every(USAGE_MS, (cx) => this.refreshUsage(cx));
     this.refreshStats(cx);
     this.refreshUsage(cx);
+    this.refreshHealth(cx);
+  }
+
+  reloginTick(cx) {
+    const w = shared("jk.relogin");
+    if (!w?.at) return;
+    const age = Date.now() - w.at;
+    if (age > RELOGIN_WATCH_MS) { setShared("jk.relogin", null); cx.notify(); return; }
+    if (age < RELOGIN_POLL_MS || Date.now() - (this.reloginPolled ?? 0) < RELOGIN_POLL_MS) return;
+    this.reloginPolled = Date.now();
     this.refreshHealth(cx);
   }
 
@@ -85,6 +103,8 @@ export default class JkStatus extends View {
       try { rows = JSON.parse(r?.stdout ?? "").rows ?? []; } catch { return; }
       const next = rows.filter((x) => x.state !== "ok");
       setShared("jk.health", next);
+      const w = shared("jk.relogin");
+      if (w?.key && !next.some((x) => healthKey(x) === w.key)) setShared("jk.relogin", null); // fixed: stop watching
       if (same(next, this.issues)) return;
       this.issues = next;
       cx.notify();

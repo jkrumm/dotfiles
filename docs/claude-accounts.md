@@ -384,6 +384,9 @@ waiting for a click). `--wake`, run 30 s after wake by `scripts/wakeup.sh` (slee
 pending re-login dialogs younger than 24 h (a push that failed while this Mac slept is not retried by anything else:
 2026-10-27 the `iu` ask sat 8 h) and posts one notification, repeated only when the set of bad rows changes or after 12 h.
 Tinycast's Claude usage view reads `health --json` and offers each row's `fix`.
+The Herdr app's `jk-status` polls `health --json` every 5 min for its ⚠ chip. A Re-login started from the chip in `jk-details`
+sets `shared("jk.relogin")`; `jk-status` then re-polls from 60 s after the start, once a minute, until that row is gone or 15 min
+have passed (the chip's "approve in browser" label follows the same key), so the chip clears when the login lands.
 
 **After a Claude Code update.** The heartbeat shows `unverified Claude Code version`. Run `make claude-accounts-verify` (or `make claude-accounts-stamp`, which verifies and then stamps):
 
