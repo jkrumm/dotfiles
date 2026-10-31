@@ -28,7 +28,12 @@ sat dark forever. `scripts/claude-appearance.sh` therefore sends the
 the mode from both colour answers together — to every `claude` **and** `opencode`
 pane when the Mac's appearance changes, and the `oc` wrapper replays it into its
 own pane at 0.4 s so it beats opencode's first paint. The push runs both locally
-(this machine's own herdr panes run opencode too) and on the mini. A `/theme` pick
+(this machine's own herdr panes run opencode too) and on the mini.
+herdr-core does not make it obsolete (re-checked on core 0.1.15, `docs/herdr-core.md`
+fact 6): an unattached terminal still answers OSC 10/11 with fixed dark colours and
+a running program gets no `?997` on a switch. On hc the same bytes go in as raw
+input over `terminal.attach` (`scripts/hc-raw-input.ts`), to live terminals running
+`claude` or `opencode`; the classic path runs beside it until Wave 7. A `/theme` pick
 still persists into `theme_mode_lock` and wins over the push, so leave opencode's
 theme on **Auto**. `make theme` still does not touch it (nothing to copy).
 

@@ -17,11 +17,19 @@
 # Claude is unaffected by the extra OSC 10. Neither half works alone, and editing
 # ~/.claude.json does nothing to a running session.
 #
+# herdr-core (hc) is no better (docs/herdr-core.md fact 6, re-verified on core 0.1.15):
+# a terminal nobody is attached to answers OSC 10/11 with fixed dark colours, and a
+# running program gets no `?997` on a switch. The same bytes therefore go in as raw
+# input over `terminal.attach` (scripts/hc-raw-input.ts; `hc send` always adds Enter).
+# The classic herdr path stays beside it until Wave 7.
+#
 # Applied by scripts/appearance-sync.sh both locally (this machine's own herdr
 # panes, which run opencode too) and on the mini over `ssh mini`.
 
 set -euo pipefail
-export PATH="/opt/homebrew/bin:$PATH"
+export PATH="/opt/homebrew/bin:$HOME/.bun/bin:$PATH"
+
+HC_INPUT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hc-raw-input.ts"
 
 STATE="$HOME/.local/state/claude-appearance"
 
@@ -41,30 +49,44 @@ case "${1:-}" in
   light|dark)
     mkdir -p "$(dirname "$STATE")"
     echo "$1" > "$STATE"
-    # Only agent panes: a plain shell would take the bytes as typed input.
-    # opencode self-reports through herdr's opencode integration, so both
-    # renderers are targetable by agent id.
-    herdr agent list 2>/dev/null \
+    # Only agent terminals: a plain shell would take the bytes as typed input.
+    # hc-raw-input --agents picks live terminals running claude or opencode and
+    # refuses to start a core (no-op when launchd's herdr-core is not running).
+    report "$1" | bun "$HC_INPUT" --agents >/dev/null 2>&1 || true
+    # TODO(Wave 7): drop classic. opencode self-reports through herdr's opencode
+    # integration, so both renderers are targetable by agent id.
+    { herdr agent list 2>/dev/null \
       | jq -r '.result.agents[] | select(.agent == "claude" or .agent == "opencode") | .pane_id' \
       | while read -r pane; do
           herdr pane send-text "$pane" "$(report "$1")" >/dev/null 2>&1 || true
-        done
+        done; } || true
     ;;
   session)
-    # No-op outside a herdr pane, and on any host no push has ever reached.
-    [ -n "${HERDR_PANE_ID:-}" ] && [ -f "$STATE" ] || exit 0
+    # No-op outside a herdr pane / hc terminal, and on any host no push has ever reached.
+    [ -n "${HERDR_PANE_ID:-}${HC_TERMINAL_ID:-}" ] && [ -f "$STATE" ] || exit 0
     # Detached, and the first send must beat OpenCode's first paint: it resolves
     # its mode before `waitForThemeMode` gives up (measured ~1.5 s to first paint,
     # >0.3 s of raw mode), so the old single 3 s send always arrived late and the
     # pane started dark. The later sends cover a slow start and Claude, whose
     # SessionStart hook runs this with its TUI already up. The hook itself must
     # return at once.
-    # shellcheck disable=SC2016  # $0/$1 expand in the child bash, by design
-    nohup bash -c '
-      sleep 0.4; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
-      sleep 0.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
-      sleep 1.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
-    ' "$HERDR_PANE_ID" "$(report "$(cat "$STATE")")" >/dev/null 2>&1 &
+    if [ -n "${HC_TERMINAL_ID:-}" ]; then
+      # shellcheck disable=SC2016  # $0/$1 expand in the child bash, by design
+      nohup bash -c '
+        for d in 0.4 0.8 1.8; do
+          sleep "$d"; printf "%s" "$1" | bun "$0" --self >/dev/null 2>&1 || true
+        done
+      ' "$HC_INPUT" "$(report "$(cat "$STATE")")" >/dev/null 2>&1 &
+    fi
+    # TODO(Wave 7): drop classic.
+    if [ -n "${HERDR_PANE_ID:-}" ]; then
+      # shellcheck disable=SC2016  # $0/$1 expand in the child bash, by design
+      nohup bash -c '
+        sleep 0.4; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+        sleep 0.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+        sleep 1.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+      ' "$HERDR_PANE_ID" "$(report "$(cat "$STATE")")" >/dev/null 2>&1 &
+    fi
     ;;
   *)
     echo "usage: $(basename "$0") light|dark|session" >&2

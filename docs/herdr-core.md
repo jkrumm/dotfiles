@@ -49,7 +49,7 @@ Decided 2026-10-31 (Wave 1). Every classic consumer has one fate. The wave that 
 | collie + ACL/serve rows | **port** | upstream ColliePWA runs on herdr-core with `COLLIE_MUX=herdr-core` (experimental, core ≥ 0.1.14). Bump `COLLIE_REF`, run it standalone (not a herdr plugin), and keep the `:8787/:8788` rows. If its behavioural check fails on hc, collie retires and the rows go. Shepherdr (`eliasstravik/shepherdr`) is the alternative, not adopted |
 | `desk` (`herdr --remote mini`) | replace | the app (MacBook); terminal-only fallback `ssh -t mini hc` |
 | `claude-relogin.sh --machine mini` | port | `hc run --on mini` labelled into a `relogin` tab. The mini core is a launchd GUI-session child with the keychain |
-| `claude-appearance.sh` / `appearance-sync.sh` | **port** | still needed (fact 6): an unattached terminal gets fixed dark answers, and a running program gets no push on a switch. The push moves from `herdr pane send-text` to raw input over `terminal.attach` (`hc send` always adds Enter). Drop it only when a core release does both: unattached terminals answer from the Mac's appearance, and running programs get `?997` on a switch |
+| `claude-appearance.sh` / `appearance-sync.sh` | **port** (Wave 4, `scripts/hc-raw-input.ts`) | still needed (fact 6): an unattached terminal gets fixed dark answers, and a running program gets no push on a switch. The push moves from `herdr pane send-text` to raw input over `terminal.attach` (`hc send` always adds Enter). Drop it only when a core release does both: unattached terminals answer from the Mac's appearance, and running programs get `?997` on a switch |
 | `brain-note.sh` (prefix+e popup) | port | a small mod: `keys.json` `"<key>": "jk-keys.brain-note"` reaches the mod's `nextCommand()`, which starts the script with `hc run --bg` and shows it with `terminal.peek` (fact 8) |
 | `herdr-agent-state.sh` SessionStart hook | retire (Wave 7) | Claude reports to the core natively over OSC 7501 (fact 7); the classic agents still need it until they are gone |
 | `herdr-server-start.py`, `_herdr-supervise`, `lib/herdr-ready.sh`, `herdr-upgrade.sh`, `herdr-wait-quiet.sh`, `herdr-skill-sync.sh`, `make herdr-{setup,upgrade,restart,status,launchd-status,server-start-test}` | retire | `com.jkrumm.herdr-core` + the Wave 8 upgrade target |
@@ -145,6 +145,15 @@ the core binary, and its identifier is the ad-hoc one, so the grant is keyed to 
 The viewer's colours reach the core at attach (`terminal.attach` `display`). The core answers queries itself, so
 mode 2031 reads `2` (reset), and no change is pushed. The mini's agents mostly run unattached, so they always see
 dark.
+
+Re-checked in Wave 4 on core 0.1.15 (scratch core): a probe in an unattached `hc run --bg` terminal read
+`OSC11 rgb:2828/2c2c/3434`, `OSC10 rgb:ffff/ffff/ffff`, `DSR996 ?997;1n`, so the first half of the retirement test
+still fails and the push stays. It now goes in as raw input: `scripts/hc-raw-input.ts` opens `hc connect`, sends `hello
+{framed: true}`, attaches with the terminal's own size (no resize, no `display`) and writes the bytes as a type-0 frame
+on the attach channel. Frames (read off `hc attach` through a socket proxy; the schema names them without a layout):
+`u32le channel | u8 type | u32le length | payload`, channel 0 = JSON-RPC (type 0), types 0 data / 1 credit / 2 close.
+No credit frame is needed for input to land. `claude-appearance.sh dark|light|session` uses it for terminals whose status
+app or foreground program is claude/opencode.
 
 **7. Events and status.** `hc events --json` lines are JSON-RPC notifications:
 `{"method":"event","params":{"seq":N,"terminal":"t5","type":…,"data":…}}`, plus `{"method":"heartbeat","params":{"seq":N}}`
