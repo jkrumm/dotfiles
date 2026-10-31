@@ -6,12 +6,15 @@
 # 1. Herdr GPUI takes a single `theme` name and has no system-appearance
 #    handling (checked against its source, 2026-09-26). It reloads
 #    config-gpui.local.toml on save, so rewriting the one line is enough.
-# 2. Claude Code and OpenCode in herdr panes on the mini only follow the Mac
-#    when a Ghostty client reports the appearance; Herdr GPUI never does. So push
-#    the mode to the mini, where scripts/claude-appearance.sh re-themes every
-#    Claude and OpenCode pane.
+# 2. Claude Code and OpenCode in herdr panes follow neither the GPUI client nor
+#    the macOS appearance; a Ghostty client would report it, Herdr never does.
+#    So re-theme every Claude and OpenCode pane here, and push the mode to the
+#    mini, where the same panes run.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_STATE="$HOME/.local/state/claude-appearance"
 
 GPUI_CONFIG="$HOME/.config/herdr/config-gpui.local.toml"
 GPUI_LIGHT="basalt-ui-light"
@@ -57,5 +60,17 @@ sync_mini() {
   fi
 }
 
+# The same mode, applied locally: this machine's own herdr panes run Claude and
+# OpenCode too, and get no terminal answer for the same reason. This also writes
+# ~/.local/state/claude-appearance, which the SessionStart hook and the `oc`
+# wrapper replay into each new pane. Without it the Mac's own panes never hear a
+# push (it was mini-only), so they started dark.
+sync_local() {
+  [ "$(cat "$LOCAL_STATE" 2>/dev/null || true)" = "$mode" ] && return 0
+  "$SCRIPT_DIR/claude-appearance.sh" "$mode" || true
+  echo "$(date '+%F %T') $mode → local Claude/OpenCode panes"
+}
+
 sync_gpui
+sync_local || true
 sync_mini || true

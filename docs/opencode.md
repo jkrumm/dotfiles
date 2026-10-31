@@ -102,13 +102,16 @@ lifted panel is invisible and a white one glares — why this repo never uses
 `#ffffff`.
 
 **It follows the system appearance — via the same push Claude Code uses.** The
-dual mode only selects when opencode hears the terminal's mode; herdr answers
-neither DEC mode 2031 nor OSC 11 for a pane, so on the mini it sat dark forever.
-`scripts/claude-appearance.sh` now pushes the `CSI ?997;Nn` report (plus the
-OSC 11 answer) to every `claude` **and** `opencode` pane, and `oc` re-themes its
-own pane on launch — so a new pane starts in the MacBook's current mode. A
-`/theme` Dark/Light/Auto pick still persists into `theme_mode_lock` and wins, so
-leave it on **Auto** to follow the host.
+dual mode only selects when opencode hears the terminal's mode; herdr answers none
+of those queries for a pane, so it sat dark forever. opentui ignores the
+`CSI ?997;Nn` report on its own — it only re-queries, and then needs **both** the
+OSC 11 (background) and OSC 10 (foreground) answers to infer a mode, so sending
+OSC 11 alone (the old form) still left it dark. `scripts/claude-appearance.sh`
+sends all three to every `claude` **and** `opencode` pane, and `oc` replays it into
+its own pane at 0.4 s — early enough to beat opencode's first paint, unlike the
+old 3 s send. The push applies both locally (this machine's own herdr panes run
+opencode too) and on the mini. A `/theme` Dark/Light/Auto pick still persists into
+`theme_mode_lock` and wins, so leave it on **Auto** to follow the host.
 
 **A missing `opencode.json` is a silent failure, not an error** — 2026-09-30: the
 symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started

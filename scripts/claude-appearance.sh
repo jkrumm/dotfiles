@@ -1,5 +1,5 @@
 #!/bin/bash
-# Make Claude Code (and OpenCode) in herdr panes follow the MacBook's light/dark
+# Make Claude Code (and OpenCode) in herdr panes follow the Mac's light/dark
 # appearance when no Ghostty client is there to report it (Herdr GPUI sends
 # nothing).
 #
@@ -8,27 +8,32 @@
 #
 # Claude Code on `theme: auto` enables DEC mode 2031 and, on a `CSI ?997;Nn`
 # report, re-queries the background with OSC 11. OpenCode's opentui renderer
-# reads the same `CSI ?997;Nn` report (packages/tui/src/context/theme.tsx) and
-# flips its mode from it. herdr answers neither for panes, so this sends the
-# report AND the OSC 11 answer, as a terminal would. Measured 2026-09-27: a
-# running Claude flips live, no redraw, nothing lands in the prompt. Neither
-# half works alone, and editing ~/.claude.json does nothing to a running
-# session.
+# handles the same report differently: `RendererThemeMode.handleSequence` only
+# calls `requestThemeOscColors()` on it and then infers the mode from the pair of
+# OSC 11 (background) and OSC 10 (foreground) answers — with either one missing it
+# never commits, and without the report it never re-queries. So all three go out.
+# herdr answers none of them for panes. Measured in a pty, 2026-09-30: the OSC 11
+# answer alone leaves OpenCode dark (its old form), OSC 11 + OSC 10 flips it.
+# Claude is unaffected by the extra OSC 10. Neither half works alone, and editing
+# ~/.claude.json does nothing to a running session.
 #
-# Pushed from the MacBook by scripts/appearance-sync.sh over `ssh mini`.
+# Applied by scripts/appearance-sync.sh both locally (this machine's own herdr
+# panes, which run opencode too) and on the mini over `ssh mini`.
 
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 
 STATE="$HOME/.local/state/claude-appearance"
 
-# The OSC 11 colours are the One Zinc terminal backgrounds (docs/theme.md).
+# The OSC 11 (background) and OSC 10 (foreground) colours are the One Zinc
+# terminal pair (docs/theme.md). Both are required: opentui infers the mode from
+# the two together, and Claude Code re-queries OSC 11 on the `?997` report.
 # shellcheck disable=SC1003  # the trailing \\ is the ST terminator, not a quote escape
 report() {
   if [ "$1" = light ]; then
-    printf '\033[?997;2n\033]11;rgb:f2f2/f2f2/f5f5\033\\'
+    printf '\033[?997;2n\033]11;rgb:f2f2/f2f2/f5f5\033\\\033]10;rgb:2626/2626/2929\033\\'
   else
-    printf '\033[?997;1n\033]11;rgb:1f1f/1f1f/2323\033\\'
+    printf '\033[?997;1n\033]11;rgb:1f1f/1f1f/2323\033\\\033]10;rgb:d4d4/d4d4/d8d8\033\\'
   fi
 }
 
@@ -48,11 +53,18 @@ case "${1:-}" in
   session)
     # No-op outside a herdr pane, and on any host no push has ever reached.
     [ -n "${HERDR_PANE_ID:-}" ] && [ -f "$STATE" ] || exit 0
-    # Detached, and late enough for the TUI to have enabled mode 2031 — the
-    # hook itself must return at once.
+    # Detached, and the first send must beat OpenCode's first paint: it resolves
+    # its mode before `waitForThemeMode` gives up (measured ~1.5 s to first paint,
+    # >0.3 s of raw mode), so the old single 3 s send always arrived late and the
+    # pane started dark. The later sends cover a slow start and Claude, whose
+    # SessionStart hook runs this with its TUI already up. The hook itself must
+    # return at once.
     # shellcheck disable=SC2016  # $0/$1 expand in the child bash, by design
-    nohup bash -c 'sleep 3; herdr pane send-text "$0" "$1"' \
-      "$HERDR_PANE_ID" "$(report "$(cat "$STATE")")" >/dev/null 2>&1 &
+    nohup bash -c '
+      sleep 0.4; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+      sleep 0.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+      sleep 1.8; herdr pane send-text "$0" "$1" >/dev/null 2>&1 || true
+    ' "$HERDR_PANE_ID" "$(report "$(cat "$STATE")")" >/dev/null 2>&1 &
     ;;
   *)
     echo "usage: $(basename "$0") light|dark|session" >&2

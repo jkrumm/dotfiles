@@ -80,16 +80,20 @@ also fires on unrelated preference writes (no-ops) and lags a flip by ~7–10 s
 (cfprefsd flush + launchd throttle). Installed by `make setup`, skipped on the
 mini.
 
-**Claude and OpenCode panes on the mini follow too.** Claude Code on `theme:
-auto` flips on a DEC 2031 report plus the OSC 11 background answer it re-queries
-— which only a Ghostty (`desk`) client supplies; Herdr GPUI never sends either.
-OpenCode's opentui renderer reads the same 2031 report. So on a change the agent
-also runs `ssh mini scripts/claude-appearance.sh light|dark` (BatchMode, riding
-the ControlMaster a connected GUI keeps open; a failed push retries on the next
-preferences write), which sends both halves to every `claude` and `opencode`
-pane and records the mode in `~/.local/state/claude-appearance`. A SessionStart
-hook replays that mode into each new Claude session ~3 s after start; the `oc`
-wrapper does the same for a new OpenCode pane. Measured: live flip, no redraw,
+**Claude and OpenCode panes follow too — here and on the mini.** Claude Code on
+`theme: auto` flips on a DEC 2031 report plus the OSC 11 background answer it
+re-queries — which only a Ghostty client supplies; Herdr GPUI never sends either.
+OpenCode's opentui renderer needs that report **and both** the OSC 11 (background)
+and OSC 10 (foreground) answers: the report alone only makes it re-query, and a
+missing colour leaves it dark. So on a change the agent re-themes every `claude`
+and `opencode` pane on this machine with `scripts/claude-appearance.sh light|dark`,
+then does the same on the mini over `ssh mini … claude-appearance.sh light|dark`
+(BatchMode, riding the ControlMaster a connected GUI keeps open; a failed push
+retries on the next preferences write). Both paths record the mode in
+`~/.local/state/claude-appearance`. The `oc` wrapper replays it into a new OpenCode
+pane at 0.4 s — early enough to beat opencode's first paint, unlike the old single
+3 s send — as does Claude's SessionStart hook ~3 s after start. Measured in a pty:
+OSC 11 alone leaves OpenCode dark, OSC 11 + OSC 10 flips it. Live flip, no redraw,
 nothing typed into the prompt. Either half alone, or editing `~/.claude.json`,
 does nothing to a running session.
 

@@ -20,14 +20,17 @@ Applying only one layer is how they drift apart.
 | opencode | `config/opencode/tui.json` → `config/opencode/themes/one-zinc.json` | `theme = "one-zinc"`; one file, `{dark, light}` per token |
 
 opencode is the one layer with no terminal-independent switch of its own: its
-`one-zinc` theme picks dark/light from the mode the **terminal** reports (DEC mode
-2031), and herdr answers neither 2031 nor OSC 11 for a pane, so on the mini it sat
-dark forever. `scripts/claude-appearance.sh` therefore pushes the `CSI ?997;Nn`
-report to every `claude` **and** `opencode` pane when the Mac's appearance changes,
-and the `oc` wrapper re-themes its own pane on launch — the same bytes Claude Code
-already consumes. A `/theme` pick still persists into `theme_mode_lock` and wins
-over the push, so leave opencode's theme on **Auto**. `make theme` still does not
-touch it (nothing to copy).
+`one-zinc` theme picks dark/light from the mode the **terminal** reports, and
+herdr answers none of those queries for a pane (no DEC 2031, no OSC 10/11), so it
+sat dark forever. `scripts/claude-appearance.sh` therefore sends the
+`CSI ?997;Nn` report plus the OSC 11 **and** OSC 10 answers — opentui's
+`RendererThemeMode` ignores the report on its own (it only re-queries) and infers
+the mode from both colour answers together — to every `claude` **and** `opencode`
+pane when the Mac's appearance changes, and the `oc` wrapper replays it into its
+own pane at 0.4 s so it beats opencode's first paint. The push runs both locally
+(this machine's own herdr panes run opencode too) and on the mini. A `/theme` pick
+still persists into `theme_mode_lock` and wins over the push, so leave opencode's
+theme on **Auto**. `make theme` still does not touch it (nothing to copy).
 
 **One Zinc = Atom One's hues, muted to ~72% saturation, on basalt-ui's zinc
 surfaces.** Two design systems used for what each is good at: basalt-ui's zinc
