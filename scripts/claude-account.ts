@@ -12,7 +12,7 @@
 //   claude-account env <id>                shell line forcing an enabled account (c --account me); exit 2 if unknown or disabled
 //   claude-account session <sessionId>     registry id the session ran on (hook log); exit 1 if unknown or disabled — `c --resume` pins to it
 //   claude-account latest [dir]            id of the newest session transcript for dir (default cwd) — what `c --continue` pins to; exit 1 if none
-//   claude-account health [--json] [--wake]   login / quota / waiting-ask health of this machine and its peer (MacBook <-> mini over ssh); exit 1 on any fail. --wake: notify (MacBook, only when the picture changed) and re-push the peer's pending ask dialogs younger than 24 h — what sleepwatcher's wakeup.sh runs
+//   claude-account health [--json] [--wake]   login / quota / waiting-ask health of this machine and its peer (MacBook <-> mini; the peer is read through its herdr-core, plain ssh only when no core answers, with a NOTE line); exit 1 on any fail. --wake: notify (MacBook, only when the picture changed) and re-push the peer's pending ask dialogs younger than 24 h — what sleepwatcher's wakeup.sh runs
 //   claude-account exhausted --account <id> --until <epoch>   limit-event mark, honoured until then
 //
 // Idle-account samples: one read-only GET of api.anthropic.com/api/oauth/usage with the account's own Keychain token
@@ -209,10 +209,13 @@ function pendingFrom(text: string, nowMs: number): PendingAsk[] {
 }
 const hcBin = () => process.env.CLAUDE_ACCOUNTS_HC ?? "hc" // test seam, like CLAUDE_ACCOUNTS_SSH
 const hcOk = (args: string[]) => spawnSync(hcBin(), args, { encoding: "utf8", timeout: 5_000 })
+const shq = (v: string) => `'${v.replaceAll("'", `'\\''`)}'`
+const CORE_LABEL = "com.jkrumm.herdr-core"
 /**
- * The peer's herdr-core, when this machine's core is already running and lists the peer connected. Never starts a core
- * (`server status` only inspects). Why: an ssh session cannot read the mini's login Keychain (rc=36), the core runs in
- * the GUI session and can.
+ * Why a core and not ssh: an ssh session cannot read the mini's login Keychain (rc=36); the core is a launchd GUI-session
+ * child and can. Two ways to reach the peer's: (1) this machine's core lists the peer connected (`hc exec --on`), else
+ * (2) one ssh hop to the peer and that machine's own core (`hc exec` there). Neither ever starts a core: (1) asks
+ * `server status` first, (2) checks launchd on the peer before it runs `hc` (an `hc` call starts a stray core otherwise).
  */
 function peerViaCore(name: string, nowMs: number) {
   const status = hcOk(["server", "status", "--json"])
@@ -226,6 +229,14 @@ function peerViaCore(name: string, nowMs: number) {
   if (r.error || !r.stdout.includes("@@\n")) return null
   return parseSnapshot(r.stdout, nowMs)
 }
+/** (2) of the above: ssh to the peer, then its own core. null when the hop, the core (not running under launchd) or the read fails. */
+function peerViaItsCore(ssh: string[], nowMs: number) {
+  const script = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; ${PEER_SCRIPT}`
+  const remote = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; launchctl print "gui/$(id -u)/${CORE_LABEL}" 2>/dev/null | grep -q "state = running" || exit 99; hc exec --timeout 30 sh -c ${shq(script)}`
+  const r = spawnSync(sshBin(), [...SSH_OPTS, ...ssh, remote], { encoding: "utf8", timeout: 40_000 })
+  if (r.error || r.status !== 0 || !r.stdout.includes("@@\n")) return null
+  return parseSnapshot(r.stdout, nowMs)
+}
 function parseSnapshot(stdout: string, nowMs: number) {
   const [u = "", e = "", q = ""] = stdout.split("@@\n")
   const pending = pendingFrom(q, nowMs)
@@ -237,7 +248,7 @@ function machineSnapshot(argv: string[] | null, nowMs: number, peerName?: string
     const r = spawnSync("sh", ["-c", PEER_SCRIPT.replaceAll(HOME_BIN, `"${process.execPath}" "${process.argv[1]}"`)], { encoding: "utf8", timeout: 30_000 })
     return r.status !== 0 && !r.stdout ? { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[] } : parseSnapshot(r.stdout, nowMs)
   }
-  const viaCore = peerName ? peerViaCore(peerName, nowMs) : null
+  const viaCore = peerName ? (peerViaCore(peerName, nowMs) ?? peerViaItsCore(argv, nowMs)) : null
   if (viaCore) return { ...viaCore, via: "core" }
   const r = spawnSync(sshBin(), [...SSH_OPTS, ...argv, PEER_SCRIPT], { encoding: "utf8", timeout: 30_000 })
   if (r.status !== 0 && !r.stdout) return { usage: null, expiry: null, pending: null, pendingIds: [] as PendingAsk[], via: "ssh" }
@@ -253,6 +264,12 @@ async function health(argv: string[]): Promise<number> {
     ...gradeMachine(local, mine),
     ...gradeMachine(peer.name, theirs),
   ]
+  // The plain-ssh read cannot see the peer's Keychain: say so, whatever the format (stderr keeps --json parseable).
+  if (theirs.via === "ssh") {
+    const note = `NOTE ${peer.name}: its herdr-core was not reachable, so this read went over plain ssh; Keychain logins may show as unreadable here`
+    if (argv.includes("--json")) console.error(note)
+    else console.log(note)
+  }
   if (argv.includes("--json")) console.log(JSON.stringify({ state: worst(rows), rows }, null, 2))
   else for (const r of rows) console.log(`${r.state.toUpperCase().padEnd(4)} ${r.machine}/${r.id} ${r.check}: ${r.detail}${r.fix ? `  -> ${r.fix}` : ""}`)
   if (argv.includes("--wake")) {

@@ -368,11 +368,16 @@ claim), so a machine in active use is fresher than hourly. Log: `~/Library/Logs/
 
 **Health on wake.** `claude-account health [--json] [--wake]` grades this machine and its peer (MacBook reaches the mini over
 `ssh mini`, the mini the MacBook over `ssh iumac`; both unauthenticated reads: `usage --json`, `expiry --json`, the human-queue).
-**Transport:** the peer is read through its herdr-core first (`hc exec --on <peer>`, only when this machine's core already runs
-per `hc server status` and `hc machine ls` shows the peer `connected`; nothing is ever started), else over ssh. Why: an ssh
-session on the mini cannot read the login Keychain (`security` rc=36), so over ssh every login expiry is unreadable; the
-core runs in the GUI session and reads it. Every peer row carries `via: "core"|"ssh"` (unreadable details end `(via ssh)`).
-A login with no readable expiry is `warn` (`login expiry unreadable`), never `ok`. Test seam: `CLAUDE_ACCOUNTS_HC` (the hc binary).
+**Transport:** the peer is read through a herdr-core, never a plain ssh shell. Why: an ssh session on the mini cannot read
+the login Keychain (`security` rc=36), so over ssh every login expiry is unreadable (2026-10-31: the app's chip said ok
+while `me`/`me2` were logged out on the mini); the core is a launchd GUI-session child and reads it. Two routes, in order:
+(1) this machine's core lists the peer `connected` (`hc exec --on <peer>`; only when `hc server status` says the core runs),
+(2) one ssh hop to the peer and *its own* core (`launchctl print` first, then `hc exec` there). Neither starts a core: an
+`hc` call auto-starts a stray one when none runs, so both check first. Only when no core answers does it read over plain
+ssh, and then says so: a `NOTE <peer>: its herdr-core was not reachable…` line (stdout in text mode, stderr under `--json`
+so the JSON stays parseable). Every peer row carries `via: "core"|"ssh"` (unreadable details end `(via ssh)`). Exit codes
+and the JSON shape are unchanged.
+A login with no readable expiry is `warn` (`login expiry unreadable`), never `ok`. Test seams: `CLAUDE_ACCOUNTS_HC` (the hc binary), `CLAUDE_ACCOUNTS_SSH`.
 Rows: `login` (logged out = FAIL for `iu`, WARN otherwise; login ending <= 7 d = WARN), `quota` (logged in but no sample for
 > 6 h: the usage endpoint is rejecting the token, the failure `auth status` alone cannot see), `queue` (re-login asks
 waiting for a click). `--wake`, run 30 s after wake by `scripts/wakeup.sh` (sleepwatcher, MacBook), re-pushes the mini's

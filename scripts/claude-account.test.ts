@@ -1238,7 +1238,7 @@ describe("CLI (isolated HOME)", () => {
     expect(dead.err).toContain("no fresh sample and no auth verdict for iu")
   })
 
-  test("health reads the peer through its core when connected, falls back to ssh, and never grades an unreadable login ok", () => {
+  test("health reads the peer through its core (linked, else its own over ssh), falls back to plain ssh with a NOTE, and never grades an unreadable login ok", () => {
     const usageJson = JSON.stringify({ default_account: "iu", accounts: [{ id: "iu", auth_ok: true, age_s: 30 }] })
     const exp = (severity: string, days: number | null) => JSON.stringify({ accounts: [{ id: "iu", severity, days_left: days, expired: false, refresh_expires_at: days === null ? null : 1 }] })
     const payload = (e: string) => `${usageJson}\n@@\n${e}\n@@\n`
@@ -1250,14 +1250,32 @@ describe("CLI (isolated HOME)", () => {
     const machines = JSON.stringify({ machines: [{ name: "mini", state: "connected" }, { name: "macbook", state: "connected" }] })
     writeFileSync(hcStub, `#!/bin/sh\ncase "$1" in\n server) exit 0;;\n machine) echo '${machines}';;\n exec) cat "${okOut}";;\nesac\n`)
     chmodSync(hcStub, 0o755)
-    const sshStub = join(bin, "ssh-unreadable")
-    writeFileSync(sshStub, `#!/bin/sh\ncat "${unreadableOut}"\n`)
+    // ssh: the remote command names `hc exec` when it goes through the peer's own core (ok payload unless STUB_PEER_CORE=down:
+    // launchd says the core is not running, exit 99); a plain script read answers the unreadable payload (no Keychain over ssh).
+    const sshStub = join(bin, "ssh-peer")
+    writeFileSync(sshStub, `#!/bin/sh\ncase "$*" in\n *"hc exec"*) [ "$STUB_PEER_CORE" = down ] && exit 99; cat "${okOut}";;\n *) cat "${unreadableOut}";;\nesac\n`)
     chmodSync(sshStub, 0o755)
-    const peerRows = (env: Record<string, string>) => (JSON.parse(cli(["health", "--json"], env).out).rows as { machine: string; check: string; state: string; detail: string; via?: string }[]).filter((r) => r.via && r.check === "login")
-    const viaCore = peerRows({ CLAUDE_ACCOUNTS_HC: hcStub, CLAUDE_ACCOUNTS_SSH: sshStub })
-    expect(viaCore).toMatchObject([{ state: "ok", detail: "12 d left", via: "core" }])
-    const fallback = peerRows({ CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub })
-    expect(fallback).toMatchObject([{ state: "warn", detail: "login expiry unreadable (via ssh)", via: "ssh" }])
+    const run = (env: Record<string, string>) => {
+      const r = cli(["health", "--json"], env)
+      const rows = (JSON.parse(r.out).rows as { machine: string; check: string; state: string; detail: string; via?: string }[]).filter((x) => x.via && x.check === "login")
+      return { rows, err: r.err, text: cli(["health"], env).out }
+    }
+    // (1) this machine's core lists the peer connected
+    const linked = run({ CLAUDE_ACCOUNTS_HC: hcStub, CLAUDE_ACCOUNTS_SSH: sshStub, STUB_PEER_CORE: "down" })
+    expect(linked.rows).toMatchObject([{ state: "ok", detail: "12 d left", via: "core" }])
+    expect(linked.err).not.toContain("NOTE")
+    // (2) not linked here: one ssh hop, then the peer's own core
+    const itsCore = run({ CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub })
+    expect(itsCore.rows).toMatchObject([{ state: "ok", detail: "12 d left", via: "core" }])
+    expect(itsCore.err).not.toContain("NOTE")
+    // (3) no core answers anywhere: plain ssh, flagged in the output (stderr under --json, a line in text), and not ok
+    const fallback = run({ CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub, STUB_PEER_CORE: "down" })
+    expect(fallback.rows).toMatchObject([{ state: "warn", detail: "login expiry unreadable (via ssh)", via: "ssh" }])
+    expect(fallback.err).toContain("NOTE")
+    expect(fallback.err).toContain("plain ssh")
+    expect(fallback.text).toMatch(/^NOTE .*plain ssh/m)
+    // the stderr note never reaches the JSON on stdout
+    expect(() => JSON.parse(cli(["health", "--json"], { CLAUDE_ACCOUNTS_HC: "/usr/bin/false", CLAUDE_ACCOUNTS_SSH: sshStub, STUB_PEER_CORE: "down" }).out)).not.toThrow()
   })
 
   test("refresh --all asks for a re-login of a dead login once per 24 h (stub dialog script)", async () => {
