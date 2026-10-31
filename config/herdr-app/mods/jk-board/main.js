@@ -6,7 +6,7 @@
 // and spawn queue) and every repo's docs/waves/PLAN.md headings. A repo shows while a
 // live session runs in it or a spawn is queued; an active plan nobody works on waits in a
 // collapsed "Paused" section, one with only pending waves in "Planned", finished plans are hidden. Repos sit under
-// the left sidebar's folders (config/herdr/groups.json). Click a card to open it.
+// the left sidebar's folders (config/herdr-app/groups.json). Click a card to open it.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, home, machines, shared, setShared } from "herdr";

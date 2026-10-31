@@ -132,7 +132,7 @@ make -C "$DOTFILES_DIR" --no-print-directory herdr-restart YES=1
 # --- assert ------------------------------------------------------------------
 
 # The gate, not a guess. `make herdr-restart` already waited for a compatible
-# server before it ran agent-overview; this waits for the RIGHT ONE — a server
+# server; this waits for the RIGHT ONE — a server
 # that is up, protocol-compatible AND reporting the version brew just poured.
 # The old probe here grepped `herdr status server` for "status: running" and
 # called a healthy 0.9.0 server dead: it ran while the detached 0.8.2 daemon
@@ -144,10 +144,6 @@ bash "$DOTFILES_DIR/scripts/lib/herdr-ready.sh" --timeout 120 --version "$LATEST
 # A new herdr can reject a key the old one accepted, and a rejected config is
 # silently the default rather than an error at startup.
 herdr config check || die "config.toml is not valid for herdr $LATEST — fix it, then: herdr server reload-config"
-
-# Spaces come back from session.json, but a restored space that was opened after
-# the last run lands under OTHER until this re-asserts the declared order.
-make -C "$DOTFILES_DIR" --no-print-directory herdr-groups
 
 # Full Disk Access is granted to the resolved Cellar path, so a new version is a
 # new, ungranted binary. Without it the first agent that touches ~/Documents,

@@ -2904,21 +2904,7 @@ herdr-setup:
 	@herdr server reload-config >/dev/null 2>&1 \
 		&& echo "    ✓ config.toml reloaded into the running server" \
 		|| echo "    · no running server to reload (config applies on next launch)"
-	@# Section headers are workspaces, so applying them is one call with nothing
-	@# to install — it prints and exits 0 when no server is running.
-	@$(MAKE) --no-print-directory herdr-groups
 
-# Apply the declared sidebar grouping in config/herdr/groups.json: one separator
-# WORKSPACE per group, whose label is the header rule, ordered above its members.
-# Idempotent, and safe with no server (it says so and exits 0).
-#
-# NOTHING RE-APPLIES THIS AND NOTHING HAS TO: both halves are workspace state,
-# which herdr persists in session.json — the order, and the separator spaces
-# whose labels ARE the headers. Run it by hand after opening a new space, which
-# lands at the end under OTHER until you do.
-#
-# `clear` is the undo: it closes every separator space and drops the metadata
-# token an earlier design rendered headers with.
 # The herdr upgrade, with the two ways it goes wrong taken away: it refuses to
 # run inside a herdr pane (the shell it would kill mid-sequence) and it
 # converges the plist brew silently reverts. Writes a restore inventory first,
@@ -2929,17 +2915,9 @@ herdr-setup:
 herdr-upgrade:
 	@bash $(DOTFILES_DIR)/scripts/herdr-upgrade.sh
 
-.PHONY: herdr-groups
-herdr-groups:
-	@/usr/bin/python3 $(DOTFILES_DIR)/scripts/herdr-groups.py apply
-
 .PHONY: herdr-app-setup
 herdr-app-setup:
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
-
-.PHONY: herdr-groups-check
-herdr-groups-check:
-	@/usr/bin/python3 $(DOTFILES_DIR)/scripts/herdr-groups.py check
 
 # Converge herdr's brew-service plist so the server starts as a SESSION LEADER.
 # Same shape, same trap and same reason as _colima-supervise: BREW REGENERATES
@@ -3048,34 +3026,6 @@ herdr-status:
 		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _herdr-supervise"; \
 	fi
 
-AGENT_OVERVIEW_COLS ?= 80
-.PHONY: agent-overview
-agent-overview:
-	@# Dev host only: the agent overview pane — a herdr workspace labelled
-	@# `overview` running `watch` over `agw agents --text` (the host's pane render), so herdr
-	@# and Collie show every Claude pane's state without a second data source.
-	@# Idempotent: reuses the workspace if it exists, (re)starts the loop in its
-	@# first pane. Re-run after a herdr restart (panes survive, processes don't).
-	@command -v herdr >/dev/null || { echo "  ✗ herdr not installed"; exit 1; }
-	@command -v agw >/dev/null || { echo "  ✗ agw not installed"; exit 1; }
-	@agw agents --text --format plain >/dev/null || { echo "  ✗ agw agents failed — is the agent-workflows host up?"; exit 1; }
-	@WS=$$(herdr workspace list 2>/dev/null | jq -r '.result.workspaces[] | select(.label=="overview") | .workspace_id' | head -1); \
-	if [ -z "$$WS" ]; then \
-		OUT=$$(herdr workspace create --cwd "$$HOME" --label overview --no-focus 2>&1); \
-		WS=$$(printf '%s' "$$OUT" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null); \
-		[ -n "$$WS" ] || { \
-			echo "  ✗ workspace create failed: $$(printf '%s' "$$OUT" | jq -r '.error.message // .' 2>/dev/null | head -2)"; \
-			exit 1; \
-		}; \
-		echo "  created herdr workspace overview ($$WS)"; \
-	fi; \
-	PANE=$$(herdr pane list 2>/dev/null | jq -r --arg ws "$$WS" '.result.panes[] | select(.workspace_id==$$ws) | .pane_id' | head -1); \
-	[ -n "$$PANE" ] || { echo "  ✗ no pane in workspace $$WS"; exit 1; }; \
-	pkill -f 'watch --color -t -n 30 agw agents --text' 2>/dev/null || true; \
-	herdr pane send-keys "$$PANE" C-c >/dev/null 2>&1 || true; sleep 1; \
-	herdr pane run "$$PANE" watch --color -t -n 30 'agw agents --text --color --cols $(AGENT_OVERVIEW_COLS) --format plain || echo agw host unreachable' >/dev/null; \
-	echo "  ✓ overview loop running in $$PANE (workspace $$WS)"
-
 .PHONY: herdr-launchd-status
 herdr-launchd-status: ## Read-only: is the running herdr server launchd-supervised, and is the plist ready for the cutover?
 	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
@@ -3137,14 +3087,14 @@ herdr-restart:
 	@# WAIT, DO NOT SLEEP. `bootout` retires the launchd job but does not stop the
 	@# server — since 0.9.0 it is a detached daemon and holds the socket until it
 	@# exits itself, so for a moment the OLD binary still answers. A `sleep 2`
-	@# here is what made the 0.8.2 → 0.9.0 upgrade run agent-overview against a
-	@# protocol-20 server and die with `no pane in workspace `.
+	@# here is what made the 0.8.2 → 0.9.0 upgrade run a follow-up herdr command
+	@# against a protocol-20 server and die with `no pane in workspace `.
 	@#
 	@# AND WAIT FOR THE VERSION, not just for "a server". Without --version the
 	@# gate passes on running+compatible alone, and across a PATCH bump both
 	@# binaries speak the same protocol — so the old daemon, still shutting down,
 	@# satisfies it. Measured on 0.9.0 → 0.9.1 (2026-09-20): the gate printed
-	@# `✓ herdr server 0.9.0 ready (protocol 22)` and agent-overview then failed
+	@# `✓ herdr server 0.9.0 ready (protocol 22)` and the next herdr command then failed
 	@# with `workspace create failed: server is shutting down`. The version comes
 	@# from the CLI because brew has already relinked it — client and server are
 	@# the same bottle, so the client IS the expected server version.
@@ -3153,10 +3103,6 @@ herdr-restart:
 		|| { echo "    ↳ brew services info herdr --json"; exit 1; }
 	@herdr status --json 2>/dev/null | jq -r '"    · detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring) + " (false still prompts on desk)"' \
 		|| echo "  ! could not read herdr status"
-	@# Panes survive the restart, their processes do not — the overview `watch`
-	@# loop is the one that nobody notices is gone (the heartbeat WARNs on it).
-	@# Only reachable once the readiness gate above passed.
-	@$(MAKE) --no-print-directory agent-overview || echo "  ! agent-overview not restarted — run: make agent-overview"
 
 # Collie — phone web-UI control surface for the herd (herdr plugin + Bun
 # bridge). See AGENTS.md "Collie — the phone control surface" for the full
@@ -3779,14 +3725,11 @@ help:
 	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
-	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
 	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent via the FDA-holding launcher (both machines, clean env)"
 	@echo "  make tcc-check                  flag LaunchAgent programs without a durable file-access grant (docs/tcc.md; in make doctor)"
 	@echo "  make herdr-core-update-check    preview the daily core update (herdr-core-update runs it now)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
-	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
-	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"
-	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane), then re-run agent-overview"
+	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane)"
 	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"

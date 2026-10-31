@@ -1,15 +1,7 @@
 {
-  "$comment": "Declared sidebar grouping for herdr spaces. Applied by scripts/herdr-groups.py (make herdr-groups). Order here IS the sidebar order; the first present member of each group carries the group's header row. Members that are not open are skipped, so listing a repo costs nothing until its space exists.",
-  "source": "dotfiles:herdr-groups",
-  "token": "group",
+  "$comment": "Declared folder taxonomy for the Herdr app's sidebar: the jk-spaces mod files each space under the group naming its repo (worktrees follow their repo), the rest go to `fallback`; jk-board groups its repo cards the same way. Order here IS the sidebar order. Members that are not open are skipped, so listing a repo early costs nothing. `make herdr-app-setup` links this file to ~/.config/herdr-app/groups.json.",
   "fallback": "OTHER",
   "groups": [
-    {
-      "label": "HERD",
-      "members": [
-        "overview"
-      ]
-    },
     {
       "label": "INFRA",
       "members": [

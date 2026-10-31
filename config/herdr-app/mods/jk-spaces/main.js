@@ -1,6 +1,6 @@
 // jk-spaces — derived from Herdr's shipped `spaces` mod (herdr-app, Apache-2.0).
-// Changes: spaces sit in folders taken from dotfiles' config/herdr/groups.json (the
-// taxonomy classic herdr's sidebar uses too), folders fold and still flag a space
+// Changes: spaces sit in folders taken from dotfiles' config/herdr-app/groups.json
+// (linked to ~/.config/herdr-app/groups.json), folders fold and still flag a space
 // that needs you, rows are a status dot and the name (no letter avatar, no folder
 // colors, no git tail), tighter rows; this computer is labelled "MacBook".
 //

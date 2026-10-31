@@ -183,16 +183,13 @@ show_agent_labels_on_pane_borders = true
 # clear both terminal backgrounds (#1f1f23 dark, #f2f2f5 light) — #358a5c was the
 # best worst-case green tried, at 3.86 / 3.80.
 #
-# THE SECTION HEADERS ARE NOT IN THIS FILE, and that is the point. herdr has no
-# folder and no separator primitive, so `make herdr-groups` makes each header a
-# WORKSPACE whose label is the rule (`── TOOLING ───────────`), ordered above
-# its members — see scripts/herdr-groups.py for why a metadata token in a
-# `$group` row lost to it, and what a separator costs.
+# THE SECTION HEADERS ARE NOT IN THIS FILE: classic herdr has no folder
+# primitive, and the separator-workspace tool that faked them is retired (the
+# Herdr app's jk-spaces mod draws folders from config/herdr-app/groups.json).
 #
-# Which means this block stays a plain two-token single row. A second row here
-# would re-introduce exactly the defect the separator spaces removed: herdr
-# indents rows 2+ of an entry, so any entry with two rows pushes its own name
-# out of line with every single-row neighbour.
+# So this block stays a plain two-token single row. A second row here
+# would push the entry's own name out of line: herdr indents rows 2+ of an
+# entry, so any entry with two rows misaligns against every single-row neighbour.
 #
 # ON A 0.9.0 UPGRADE the `workspace` token gains `rules`, and
 #   { token = "workspace", rules = [{ starts_with = "── ", dim = true }] }
