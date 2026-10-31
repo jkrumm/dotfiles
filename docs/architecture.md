@@ -107,7 +107,8 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, OCR sessions > 14 d, stale `$TMPDIR` entries, package caches |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → Slack chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.herdr-events` | KeepAlive | raw herdr event record → `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.started` / `recorder.gap` lines mark restarts; records only, no consumer |
-| `com.jkrumm.herdr-core` | KeepAlive | `hc serve` — the herdr-core server beside classic herdr, in the GUI session (keychain reach for Claude); the MacBook connects as `hc machine` `mini`; `make herdr-core-setup`, `docs/herdr-core.md` |
+| `com.jkrumm.herdr-core` | KeepAlive | `hc serve` — the herdr-core server beside classic herdr, in the GUI session (keychain reach for Claude), started through `~/.local/libexec/herdr-core-launcher` (built once from `scripts/herdr-core-launcher.c`; it holds the Full Disk Access grant, the homebrew-installed core runs as its child); the MacBook connects as `hc machine` `mini`; `make herdr-core-setup`, `docs/herdr-core.md`, `docs/tcc.md` |
+| `com.jkrumm.herdr-core-update` | 04:15 daily (both machines) | `jobrun` job: bumps `jkrumm/tap` `herdr-core` to the newest release ≥ 24 h old, `brew upgrade`, kickstarts the core, asserts terminals kept their pids and `hc machine ls` versions match; `make herdr-core-update-check` previews, `docs/herdr-core.md` §Updates |
 | `com.jkrumm.kuma-door` | KeepAlive | the Kuma door: `GET /h/<name>` on `127.0.0.1:8795` relays the loopback health URLs in `kuma-door/registry.json` for the homelab's Uptime Kuma (log `~/Library/Logs/kuma-door.{out,err}.log`) |
 | `com.jkrumm.herdr-reap` | 1800s | the herdr janitor (`rd reap`): closes tabs of finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12) and, regardless of idle age or an active wave, a fan tab whose branch is merged (PR MERGED/CLOSED or patch-equal to the default) or deleted on origin (never a working agent, a dirty/unpushed tree, or a `wave <n>`/`*-mother`/`*-w<n>` tab), messages dirty ones, stops `claude --bg` leftovers > 24 h; actions in `~/Library/Logs/herdr-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
@@ -217,7 +218,7 @@ rows to the list below (original text: this file's git history), and un-hide the
 `com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
-`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.herdr-core` (KeepAlive `hc serve`, the core behind the Herdr app; clean env, `make herdr-core-setup`) ·
+`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.herdr-core` (KeepAlive `hc serve`, the core behind the Herdr app; clean env, via the FDA-holding launcher, `make herdr-core-setup`) · `com.jkrumm.herdr-core-update` (daily 04:15, `jobrun`) ·
 `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.smb-keepalive` (60 s +
 network change, `jobrun`, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.jkrumm.herdr-core-update</string>
+  <!-- Daily: the newest herdr-core release that is at least 24 h old, through the jkrumm/tap formula
+       (docs/herdr-core.md §Updates). Both machines; the MacBook's run also nudges the mini's. A calendar
+       job, so a MacBook asleep at 04:15 catches up on wake. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.herdr-core-update</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>900</string>
+    <string>--lock</string><string>herdr-core-update</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/herdr-core-update.ts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>4</integer>
+    <key>Minute</key><integer>15</integer>
+  </dict>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/herdr-core-update.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/herdr-core-update.log</string>
+</dict>
+</plist>

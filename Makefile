@@ -2481,14 +2481,39 @@ jobrun-canary-teardown:
 # every terminal (one started from inside Claude made every Claude a non-persisting "child session").
 # bootstrap into gui/<uid> explicitly: a plain `launchctl load` from an ssh session lands outside the
 # GUI session, and a core there spawns Claude without the keychain (the `ssh mini 'claude …'` trap).
-.PHONY: herdr-core-setup herdr-core-teardown herdr-core-status
-herdr-core-setup:
-	@[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — MacBook: the app installer; mini: scp ~/.local/bin/herdr-core mini:.local/bin/"; exit 1; }; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
-	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; \
+LAUNCHER_BIN := $(HOME)/.local/libexec/herdr-core-launcher
+CORE_FORMULA := jkrumm/tap/herdr-core
+.PHONY: herdr-core-setup herdr-core-teardown herdr-core-status herdr-core-launcher herdr-core-update-setup herdr-core-update-teardown herdr-core-update-check herdr-core-update
+# The LaunchAgent's own program (docs/tcc.md): built once, at a stable path, ad-hoc signed with a fixed identifier.
+# Rebuilt ONLY when the source changed, because a new binary is a new code identity and needs a new Full Disk
+# Access grant. The source hash sits beside it.
+herdr-core-launcher:
+	@SRC="$(DOTFILES_DIR)/scripts/herdr-core-launcher.c"; SHA="$$(shasum -a 256 "$$SRC" | cut -d' ' -f1)"; \
+	if [ -x "$(LAUNCHER_BIN)" ] && [ "$$(cat "$(LAUNCHER_BIN).src-sha" 2>/dev/null)" = "$$SHA" ]; then \
+		echo "    · herdr-core-launcher (up to date)"; exit 0; fi; \
+	mkdir -p "$(dir $(LAUNCHER_BIN))"; \
+	cc -O2 -Wall -o "$(LAUNCHER_BIN).new" "$$SRC" && codesign -f -s - --identifier com.jkrumm.herdr-core-launcher "$(LAUNCHER_BIN).new" 2>/dev/null \
+		|| { rm -f "$(LAUNCHER_BIN).new"; echo "    ✗ launcher build failed"; exit 1; }; \
+	mv "$(LAUNCHER_BIN).new" "$(LAUNCHER_BIN)" && echo "$$SHA" > "$(LAUNCHER_BIN).src-sha"; \
+	echo "    ✓ herdr-core-launcher built — it is a NEW code identity: grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md)"
+herdr-core-setup: herdr-core-launcher
+	@command -v brew >/dev/null && brew list --formula herdr-core >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install $(CORE_FORMULA) || { echo "    ✗ brew install $(CORE_FORMULA) failed"; exit 1; }; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/bin"; \
+	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; MARK="$(LAUNCHER_BIN).bootstrapped"; \
 	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
 		&& plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "    ✗ plist render failed"; exit 1; }; \
-	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "$$TARGET" >/dev/null 2>&1; then \
+	LSHA="$$(cat "$(LAUNCHER_BIN).src-sha" 2>/dev/null)"; \
+	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "$$TARGET" >/dev/null 2>&1 && [ "$$(cat "$$MARK" 2>/dev/null)" = "$$LSHA" ]; then NEED_BOOT=0; else NEED_BOOT=1; fi; \
+	if [ "$$NEED_BOOT" = 1 ] && launchctl print "$$TARGET" >/dev/null 2>&1 && [ "$(YES)" != "1" ]; then \
+		LIVE=$$("$(HOME)/.local/bin/hc" server status --json 2>/dev/null | jq -er '.live | select(type == "number")' 2>/dev/null); \
+		case "$$LIVE" in ""|*[!0-9]*) rm -f "$$TMP"; echo "    ✗ cannot tell how many terminals are live (hc server status failed); the job's program or launcher changed, which needs a bootout. Re-run with YES=1 once that is fine"; exit 1;; esac; \
+		if [ "$$LIVE" -gt 0 ]; then rm -f "$$TMP"; echo "    ✗ the job's program or launcher changed, which needs a bootout: that ends $$LIVE live terminal(s) (a kickstart does not). Re-run with YES=1 when that is fine"; exit 1; fi; \
+	fi; \
+	for b in herdr-core hc; do \
+		L="$(HOME)/.local/bin/$$b"; \
+		[ "$$(readlink "$$L")" = "/opt/homebrew/bin/$$b" ] || { rm -f "$$L"; ln -s "/opt/homebrew/bin/$$b" "$$L"; echo "    ✓ ~/.local/bin/$$b -> /opt/homebrew/bin/$$b"; }; \
+	done; \
+	if [ "$$NEED_BOOT" = 0 ]; then \
 		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \
 	else \
 		mv "$$TMP" "$$DST" || { echo "    ✗ could not write $$DST"; exit 1; }; \
@@ -2496,18 +2521,36 @@ herdr-core-setup:
 		i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
 			i=$$((i+1)); [ $$i -gt 120 ] && { echo "    ✗ old herdr-core job never deregistered"; exit 1; }; sleep 0.5; done; \
 		launchctl bootstrap "gui/$$(id -u)" "$$DST" || { echo "    ✗ bootstrap failed — core is DOWN"; exit 1; }; \
+		echo "$$LSHA" > "$$MARK"; \
 		echo "    ✓ com.jkrumm.herdr-core (installed + bootstrapped into gui/$$(id -u))"; \
 	fi; \
 	i=0; until launchctl print "$$TARGET" 2>/dev/null | grep -q "state = running"; do \
 		i=$$((i+1)); [ $$i -gt 40 ] && { echo "    ✗ com.jkrumm.herdr-core not running — ~/Library/Logs/herdr-core.log"; exit 1; }; sleep 0.5; done; \
-	echo "    ↳ running (KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"
-herdr-core-teardown:
+	echo "    ↳ running (KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"; \
+	$(MAKE) --no-print-directory herdr-core-update-setup
+herdr-core-teardown: herdr-core-update-teardown
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
 	echo "  ✓ herdr-core torn down (its terminals end with it; on the MacBook: hc machine rm mini)"
 herdr-core-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
 	"$(HOME)/.local/bin/hc" server status --json
+
+# Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old, via the tap formula.
+herdr-core-update-setup:
+	@chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"; \
+	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
+	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-core-update" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	echo "    ↳ daily 04:15 → newest herdr-core release >= 24 h old; log: ~/Library/Logs/herdr-core-update.log"
+herdr-core-update-teardown:
+	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core-update.plist"; \
+	launchctl unload "$$PLIST" 2>/dev/null || true; \
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-core-update.json"; \
+	echo "  ✓ herdr-core-update torn down (unloaded, plist and jobrun state removed)"
+herdr-core-update-check: ## Preview the core update: candidate, age, sha256 check, what would change (no change made)
+	@bun "$(DOTFILES_DIR)/scripts/herdr-core-update.ts" --dry
+herdr-core-update: ## Run the core update now, recorded like the daily job
+	@jobrun com.jkrumm.herdr-core-update --owner dotfiles --every 86400 --timeout 900 --lock herdr-core-update -- "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"
 
 # The herdr event record (factory Phase 0): every event the server emits, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where
@@ -3645,7 +3688,8 @@ help:
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
-	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent (both machines, clean env)"
+	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent via the FDA-holding launcher (both machines, clean env)"
+	@echo "  make herdr-core-update-check    preview the daily core update (herdr-core-update runs it now)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
 	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"

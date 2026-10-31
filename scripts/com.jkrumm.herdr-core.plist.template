@@ -7,10 +7,15 @@
        Must always be up: any `hc` client call — the MacBook's `hc machine` link arrives
        over ssh — auto-starts a core when none runs, and a core born in an ssh session
        spawns Claude without the keychain (docs/herdr-core.md §Core as a LaunchAgent). Runs beside
-       the classic herdr server; they share nothing. -->
+       the classic herdr server; they share nothing.
+       The job's program is the launcher, not the core: macOS attributes every file access in the core's
+       terminals to the job's program, and the Full Disk Access grant lives on the launcher's stable path.
+       The core (homebrew's herdr-core, versioned Cellar path) runs as its child and is swapped by upgrades
+       without a new grant (docs/tcc.md). -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/.local/bin/herdr-core</string>
+    <string>__HOME__/.local/libexec/herdr-core-launcher</string>
+    <string>/opt/homebrew/opt/herdr-core/bin/herdr-core</string>
     <string>serve</string>
   </array>
   <key>KeepAlive</key><true/>
