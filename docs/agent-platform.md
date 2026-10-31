@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (herdr), two lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
+description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (the Herdr app on herdr-core), two lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
 aliases:
   - agent-estate-model
 tags:
@@ -14,7 +14,7 @@ timestamp: 2026-10-04
 # Agent platform
 
 **Verdict:** one worker engine (agent-workflows), one conversational front door
-(Hermes), one human cockpit (herdr). Every repo describes itself through the same
+(Hermes), one human cockpit (the Herdr app on herdr-core). Every repo describes itself through the same
 four Make targets and four AGENTS.md sections, so no central component holds
 per-repo knowledge. Trust comes from the infrastructure (Tailscale, the owner's
 GitHub account); the only gates left are quality gates. Alerts go to Slack and a
@@ -40,10 +40,10 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 ```
  alerts                                front doors
- Kuma · HyperDX/OTel alerts            herdr: orchestrator tab → wave tabs   (owner drives)
+ Kuma · HyperDX/OTel alerts            Herdr: orchestrator tab → wave tabs   (owner drives)
  jobs-grade (job failures)             Hermes: Slack/Argo chat               (narrate, answer)
         │                                   │
-        ▼                                   │ opens a herdr tab when asked
+        ▼                                   │ opens a Herdr tab when asked
  Slack #alerts → a human reads and acts     ▼
                                        @implementer · rd wave / rd fan
 
@@ -59,8 +59,8 @@ Before-the-rewrite design: [[agent-platform-history]].
 | Component | Does | Never does |
 |-|-|-|
 | **agent-workflows (`agw`)** | `check`, `review`, `prose`, `diagram` and `brain` (`agw check`, `agw review`, `agw prose`, `agw diagram`, `agw brain`) | decide what to work on, merge |
-| **Hermes** | answers, narrates, opens herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
-| **herdr + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and waits on them | run unattended work |
+| **Hermes** | answers, narrates, opens Herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
+| **Herdr app + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and hidden workers, and waits on them | run unattended work |
 | **Argo** | the status surface | hold state of its own |
 
 ## Two lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
@@ -68,8 +68,8 @@ Before-the-rewrite design: [[agent-platform-history]].
 | Lane | When | Engine |
 |-|-|-|
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + Claude tab per change, `rd merge` lands them |
-| `rd wave` tab | long work the owner wants to watch or steer | Claude Code in herdr (`--kind opencode` is rejected) |
+| `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + hidden Claude worker per change (a child of the orchestrator's terminal), `rd merge` lands them |
+| `rd wave` tab | long work the owner wants to watch or steer | Claude Code in a herdr-core terminal, a tab in the repo's space (`--kind opencode` is rejected) |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.
@@ -91,7 +91,7 @@ monitor name, OTel `service.name`) · `## Gotchas`.
 
 ## No headless claude
 
-No script, skill or service runs `claude -p`. Interactive sessions in herdr, native
+No script, skill or service runs `claude -p`. Interactive sessions in herdr-core terminals, native
 subagents and `agw` workflows are the only lanes. Model ids and per-job routing live in
 `agw routes`, never in prose.
 
@@ -104,18 +104,18 @@ The only headless runs, kept on purpose:
 
 ## Hermes — the front door
 
-- Answers and narrates; opens a herdr tab when the owner asks for one.
+- Answers and narrates; opens a Herdr tab when the owner asks for one.
 - Mentions-only in #agents.
 - Skill creation by the background nudge is off; ~20 curated skills.
 
-## herdr — the cockpit
+## Herdr — the cockpit
 
 The orchestrator is always a visible tab. `/wave` has two modes: **chain**
 (each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab,
 declares `factory session wait --on workers` and ends its turn; the factory's wake note
 starts the next one, then it reads `PLAN.md`, decides the next, closes the finished
 tab with `rd close`). Nothing polls: the factory babysits (resume after a quota wall,
-send-back, blocked notes, herdr-restart resume, the wake). One active
+send-back, blocked notes, the wake); `hc-resume` restores Claude sessions after a core restart. One active
 wave per repo; parallel waves only in different repos. A pane-less supervisor
 (`claude --bg` mother) is not a pattern.
 

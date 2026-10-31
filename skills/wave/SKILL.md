@@ -5,14 +5,14 @@ description: Run a long implementation as a chain of fresh agent contexts on the
 
 # Wave — a chain of fresh contexts
 
-**Wave** = one agent context (one pane, one fresh Claude). **Step** = work inside a wave; spawns nothing. Rename plan "round/phase/stage/milestone/iteration" at authoring time.
+**Wave** = one agent context (one terminal, one fresh Claude). **Step** = work inside a wave; spawns nothing. Rename plan "round/phase/stage/milestone/iteration" at authoring time.
 
 ## Pick the shape first
 
 | Shape | Use when | Mechanics |
 |-|-|-|
 | **sequential** (default) | One change stream, or a shared validation resource (app build, e2e lock). | One wave at a time, main checkout. |
-| **fan-out** | N independent changes, disjoint files, cheap independent validation. | Briefs from `roles/worker.md`; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a Claude tab per brief; the orchestrator waits (below), then `rd merge <repo> <branches…>` (`docs/remote-dev.md`). `rd fan --clean <repo>` after. |
+| **fan-out** | N independent changes, disjoint files, cheap independent validation. | Briefs from `roles/worker.md`; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a hidden Claude worker per brief (a child of the orchestrator's terminal: no tab, the app lists it under the orchestrator); the orchestrator waits (below), then `rd merge <repo> <branches…>` (`docs/remote-dev.md`). `rd fan --clean <repo>` after. |
 | **fleet** | Multi-phase work that outlives one context. | **mother** (`roles/mother.md`, never reads code), standing **lead** (`roles/lead.md`, owns review and merge), fresh **worker** per task (`roles/worker.md`). Rotation via `docs/waves/handoff/<name>.md`. |
 
 ### Waiting on workers
@@ -25,7 +25,7 @@ The spawner is the worker's parent (`rd fan`, and `rd wave` with `RD_ORCHESTRATE
 
 - One wake per declaration: **declare `--on workers` again after each new spawn or `rd say` fix, before ending the turn.** A finished child counts as done even with an `rd say` fix note still queued: after a fix, check `factory status` in the foreground (bounded). Note delivered and worker `working`: declare the wait. Idle again after delivery: read its diff, no wait. Note still queued: `rd read`, then escalate.
 - Workers running, no wait declared: the Stop hook sends the turn back once. Declare it then.
-- Not a factory session (an owner's own session, or `rd` fell back to herdr): nothing wakes you. Wait in the foreground: `timeout <s> herdr agent wait <agent> --until idle --until done --until blocked`.
+- Not a factory session (an owner's own session, or `rd` fell back to hc-direct): the factory does not wake you, but hc types a note into the parent when a child's turn ends. Wait in the foreground, bounded: `hc wait --children all --timeout <s>` (`any` for the next news). A held factory spawn has no hc terminal yet, so factory spawns always use `factory session wait --on workers`.
 - A held spawn (`queued: <reason>`) is a worker too: the wake waits for it. A failed spawn does not (`factory status`).
 
 ### Fan-out rules
@@ -56,7 +56,7 @@ Chain mode leaves its tabs open.
 
 ## The plan is the handover
 
-`docs/waves/PLAN.md` in the target repo, committed, so a chain survives a herdr restart.
+`docs/waves/PLAN.md` in the target repo, committed, so a chain survives a core restart.
 
 ```markdown
 # <title>
@@ -98,7 +98,7 @@ Ending the turn is right once a wait is declared; a background shell, monitor or
 **A wave spawns its successor only if its own close-out was green** (`/check` passed, review findings resolved: the wave's own judgment, `rd wave` trusts it). The rest is mechanical, `rd wave` → `scripts/wave-gate.py`:
 
 - An `active` wave with a done, fully-ticked predecessor: spawn it.
-- No `active` wave, or the predecessor isn't `done`/fully ticked: **stop.** Write the failure into the active wave's **Left behind**, commit, leave the pane open.
+- No `active` wave, or the predecessor isn't `done`/fully ticked: **stop.** Write the failure into the active wave's **Left behind**, commit, leave the tab open.
 - Next step outward-facing (merge, publish, release, deploy, ship): stop and hand back to the human; `/ship` is a human's call. The gate matches keywords only; notice subtler cases yourself.
 
 ## Spawning the next wave (chain mode)
