@@ -327,19 +327,51 @@ Role `wave`.
 - Proof of the Wave 3 end-to-end claim: this wave's terminal `t1s` carries `herdr.space=sp1a1c873f…` (the dotfiles space),
   `herdr.tab=tb-99ee0bf7fe6e`, `jk.claude.session`, no parent, and the app's `where` label `dotfiles / dotfiles-w4`.
 
-## Wave 5 — the other repos            <!-- status: active -->
+## Wave 5 — the other repos            <!-- status: done -->
 Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
 
-- [ ] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
+- [x] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
   terminals; the e2e passes. Built by parallel track P3: verify and fill gaps.
-- [ ] hermes-agent skill + SOUL/AGENTS/config; shutterflow `scripts/fleet` + PROTOCOL; sy-serendipity
+- [x] hermes-agent skill + SOUL/AGENTS/config; shutterflow `scripts/fleet` + PROTOCOL; sy-serendipity
   AGENTS.md (both built by parallel track P4: verify); brain live wiki pages (`brain/voice.md` applies); dotfiles-private collie rows only if Wave 4
   retired collie (ACL and serve rows, applied from the MacBook with `make tailscale-acl-diff` first).
-- [ ] IuRoot/prometheus-epx: the port on an `EP-XX` branch, committed locally, not pushed. Name the branch and
+- [x] IuRoot/prometheus-epx: the port on an `EP-XX` branch, committed locally, not pushed. Name the branch and
   the open MR step in Left behind for the owner.
-- [ ] The one-line comment fixes from the port map. List every remaining hit as history.
+- [x] The one-line comment fixes from the port map. List every remaining hit as history.
+**Left behind:**
+- Four `rd fan` workers (hidden children of this wave's terminal) verified and filled P3/P4 and did the rest; everything on
+  master except epx. I read the iris, shutterflow and epx code diffs, re-ran the gates myself (epx ruff + mypy + 124 tests, iris
+  `bun test src/adapters` 351/0, shutterflow `test_hc.py` 9/0 + `bash -n`, hermes `make check` green) and dotfiles `make -k check`
+  exit 0 (log `/private/tmp/w5-check.log`). AGENTS.md untouched (42.36k).
+- **iris** (`a4b2169`, `6d6cca8`): the hc transport now probes the socket with a real connection (a leftover socket file of a dead
+  core made `hc` start a core under iris), docs name herdr-core beside the classic socket. **shutterflow** (`2e57250`, `a78aaac`):
+  workers are unlabelled `--outlive-parent` children, mother/lead are labelled `--no-parent` tabs; `watch.py` keeps an agent's
+  last status while the core cannot be asked (else the mother respawns live agents). **sy-serendipity**: P4's AGENTS.md verified
+  against the `hc` flags, nothing to change. **hermes-agent** (`888f395`, `a658d33`, `1080c54`): `skills/herdr` rewritten for hc
+  with every steering gate kept, `agents-overview.py` reads `agw agents` across hc/classic/claude (+ test), SOUL/AGENTS/README/
+  config/cron refs ported, retired pane/groups/`desk` stated in one line. **brain** (`7cb5509`..`02a9a54`): `wiki/engineering/herdr.md`
+  rewritten (verdict from the split), `agent-overview-loop` shortened (overview pane retired), the Areas cards, `daily-workflow`,
+  `keyboard`, `Projects/dotfiles` and four wiki pages ported; podcasts, Inbox, Excalidraw, dated pages and older log entries untouched.
+  **dotfiles-private** (`cb2975b`): collie stays (ported in Wave 4), so ACL/serve rows stay; only comments and two doc sentences
+  changed, no ACL apply needed. Comment fixes in usage-tracker, linewatch, homelab (one commit each).
+- **Owner step, prometheus-epx (work repo, not pushed):** branch `ep-xxxxx/chat-evals-hc`, worktree
+  `~/IuRoot/prometheus-epx/.claude/worktrees/ep-xxxxx-chat-evals-hc`, commits `9a02bcd3` (feat) + `0c7b1993` (docs) off `main`
+  `898ba930` (main has moved on). To do: rename the branch/commit prefix to the real `EP-XX`, rebase onto `main`, push, open the MR.
+  `HcHerdr` beside `SubprocessHerdr` (`open_herdr` picks hc when `HC_TERMINAL_ID`/`HC_SESSION` is set or launchd reports the core
+  running); 847 lines incl. 451 of tests. `agw review` (`01a19311`): its migration/`floors.json` findings are `main` drift, not this
+  diff. Dismissed on purpose: prompt in argv (spawn contract), core env inheritance (the launchd core has none), hard-coded
+  launchd label, `HC_SESSION` as explicit intent. **Open, not fixed (edge races):** a lost `hc run` reply leaves no address, so teardown
+  cannot reconcile that terminal by name; `close_tab` drops its slot before a confirmed kill.
+- Remaining `herdr` hits, none ported on purpose: **history** (weatherorb PRD/history, basalt-ui handoff, jkrumm.com guide + diagram,
+  tinycast-extensions fixtures, image-gateway/modelpick text, brain podcasts/log/dated pages, shutterflow fleet state/handoffs,
+  usage-tracker migration `0004` comment); **classic fallbacks until Wave 7** (software-factory 61 files' worth in `Herdr*`
+  fallbacks/hook compat, agent-workflows 22, argo 5, iris/shutterflow/epx/sy `TODO(Wave 7)` paths); **dotfiles comments for Wave 6**
+  (`config/ghostty/{config,themes/*}`, `config/starship.toml`, `config/ssh_config`: they describe how the Herdr UI paints, so Wave 6
+  decides per line). The classic `rd agents` roster still lists ~12 idle classic agents on the mini (Wave 7 gate).
+- Not verified: iris `/herd` against the live iris server and the e2e (no dev servers started); hermes `skills/herdr` was not
+  exercised by a live Hermes run.
 
-## Wave 6 — the `herdr` skill and the docs            <!-- status: pending -->
+## Wave 6 — the `herdr` skill and the docs            <!-- status: active -->
 Role `wave`.
 
 - [ ] Write the new global `skills/herdr/SKILL.md` (replaces the classic `herdr` skill and `herdr-core`;
