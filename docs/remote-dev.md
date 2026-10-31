@@ -1,7 +1,7 @@
 # Remote dev — MacBook → Mac mini
 
 The Mac mini is the always-on dev host: agents, LaunchAgents, Docker, dev
-servers. The IU MacBook (`iumac`) is the thin client — editing, `desk`, biometric
+servers. The IU MacBook (`iumac`) is the thin client — editing, the Herdr app, biometric
 1Password. Agents run on the mini and outlive the MacBook.
 
 Inventory of machines, repos, agents and doors: `docs/architecture.md`.
@@ -15,7 +15,7 @@ another.**
 | Layer | Tool | Solves | Cannot solve |
 |-|-|-|-|
 | Reachability | **Tailscale** | Stable address + NAT traversal | Nothing above it |
-| Persistence + UI | **herdr** (on the mini) | Panes stay alive; per-pane agent state | Anything about the network |
+| Persistence + UI | **herdr-core** (`hc`, on the mini) + the Herdr app | Terminals stay alive; per-terminal agent state | Anything about the network |
 | Service exposure | **Caddy** | Dev servers over the tailnet, real HTTPS, working WebSockets | Anything about terminals |
 
 Riding on top, independent of all three: **Claude Remote Control**
@@ -28,16 +28,14 @@ path and the ACL is inert — key-only sshd is the sole boundary there. The
 consequence: **an ACL change cannot be verified from the couch.** Test ACL edits
 off-network, or against the MagicDNS FQDN explicitly.
 
-## Connecting — `desk`
+## Connecting — the Herdr app
 
-```bash
-desk [session]      # = herdr --remote mini
-```
-
-The herdr **client** runs on the MacBook (local keybindings, image paste,
-appearance switch); the **server and every pane** run on the mini. ssh/TCP, so a
-roam or lid-close ends the *connection* — re-run `desk`. Nothing in a pane dies
-with it.
+The Herdr app on the MacBook is the window. It links the mini's core as machine `mini` (`hc machine add mini --name mini`,
+once; ssh config host `mini`), so the mini's spaces and terminals sit next to the MacBook's (`herdr-app --skill`, MacBook
+only, is its manual; the `herdr` skill holds the rules). The core and every terminal run on the mini and the link is
+ssh/TCP, so a roam or lid-close ends the *link*, never a terminal: the app reconnects. Terminal-only fallback, no app:
+`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches). `desk` (classic's `--remote` attach) stays only until
+Wave 7 deletes classic.
 
 - **No ssh to the mini needs a 1Password approval, and plain `ssh mini` never
   touches the 1Password agent.** `Host mini` authenticates with the dedicated
@@ -53,10 +51,10 @@ with it.
   time the mini needs the human key (1Password agent, `ForwardAgent yes`, own
   ControlPath); the mini's git push uses its own credential. `make doctor`
   asserts both (`ssh -G mini`, `ssh-add -l` over `mini-fwd`).
-- **ControlMaster shares one connection across herdr's several.** `Host mini`
+- **ControlMaster shares one connection across the machine link's several.** `Host mini`
   sets `ControlMaster auto` / `ControlPath ~/.ssh/cm/%r@%h:%p` /
   `ControlPersist 10m` (`mini-fwd` uses `~/.ssh/cm/fwd-%r@%h:%p`, so it never
-  reuses the agent-less master); herdr opens several connections. `_setup-ssh`
+  reuses the agent-less master); the link, `rd` and scripts open several. `_setup-ssh`
   creates `~/.ssh/cm` — ssh will not, and connections fail without it.
 - **`~/.zshenv` is the only file a non-interactive `ssh mini -- cmd` sources**
   (macOS runs `path_helper` from the *login* file `/etc/zprofile`). Without the
@@ -65,76 +63,39 @@ with it.
   `imgcli`), and is appended, not symlinked — other installers write to it too.
 - `SetEnv TERM=xterm-256color` on `Host *` pins a universally-present terminfo;
   TERM is the one variable `SetEnv` passes without server-side `AcceptEnv`.
-- Sessions: `herdr --session <name>`, `herdr session list|attach|stop`.
-  `herdr attach` is not a command. tmux stays installed as the fallback only.
 
-## herdr on the mini
+## herdr-core on the mini
 
-A **brew service** (`RunAtLoad` + `KeepAlive`, same mechanism as colima). Manage
-it with `brew services`, never `herdr server stop` — KeepAlive relaunches it.
-`LimitLoadToSessionType` covers `Background`/`System`, so it holds state with no
-client attached (`herdr workspace create …` succeeds with zero clients).
+`com.jkrumm.herdr-core` runs `hc serve` as a KeepAlive **LaunchAgent bootstrapped into `gui/<uid>`** (`make herdr-core-setup`,
+both machines; `make herdr-core-status` prints its state and `hc server status`). It holds state with no viewer attached.
+Design, launcher, updates, verified facts: `docs/herdr-core.md`.
 
-- **The server must start as a session leader.** herdr derives
-  `detached_server_daemon` from `getsid(0) == getpid()`, and a bare launchd job
-  is not one — which made every `desk` launch ask *"restart the remote server?
-  [y/N]"*. Always answer **N**: y restarts it outside brew services and kills
-  every process in every pane. `herdr/herdr-server-start.py` forks and `setsid()`s
-  before exec, `_herdr-supervise` pins it into the brew plist, and
-  `brew-upgrade.sh` asserts it — **`brew upgrade herdr` and any `brew services
-  start|restart` regenerate that plist and strip the wrapper, silently.**
-- **`make herdr-launchd-status`** (read-only) says whether the running server is launchd-supervised
-  and whether the plist is ready for the cutover. Until `herdr-restart` has run once, a server started
-  by hand (parent pid 1, no launchd job) is not restarted by KeepAlive on a crash.
-- **The wrapper exists to stop the respawn loop, not only the prompt.** `herdr
-  server` runs in the foreground, so the wrapper *is* the process launchd tracks:
-  it stays alive while any server answers the socket and exits only when none
-  does, so the plist's unconditional `KeepAlive` never hot-loops. If its own
-  child loses the `AddrInUse` race it adopts the running server instead of dying
-  with it — that race is also what makes a speculative fork safe, since the child
-  cannot take a held socket. An unreadable `herdr status` is UNKNOWN: never an
-  exit for a respawn, and never a second server on a held socket. At startup
-  UNKNOWN therefore still forks — waiting forever for a server nobody had started
-  was the old bug — and a momentarily non-executable binary (a `brew upgrade` in
-  flight) is the same UNKNOWN rather than an `exit 127` respawn loop for the
-  length of the upgrade. A server it adopted is left running on stop.
-  `make herdr-server-start-test` covers the contract.
-- **Apply a fix to the running server with `make herdr-restart YES=1`** (bootout
-  + bootstrap; never `brew services restart`, never `launchctl kickstart -k`). It
-  **kills every pane**, so it is human-timed and not in `make setup`.
-- **`make herdr-setup` wires both integrations**: `herdr integration install
-  claude` writes `~/.claude/hooks/herdr-agent-state.sh` (tells *herdr* about the
-  agent), and `scripts/herdr-skill-sync.sh` regenerates `skills/herdr/SKILL.md`
-  from `herdr --skill` (tells the *agent* about herdr) — **generated from the
-  binary, never hand-written**, but tracked so an upgrade is a reviewable diff.
-  The hook's settings entry lives in `config/settings.template.json` (that is
-  what survives `make setup`) and its command is guarded.
-
-**A herdr crash restores the layout and loses every process in it** — the
-workspace comes back by name with a new `terminal_id`; Claude panes are resumed
-(`claude --resume`) but shells, servers and the in-flight turn are lost.
-
-**Config is tracked**: `config/herdr/config.toml` → `~/.config/herdr/config.toml`
-on both machines, linking the **file** and never the directory (the same dir
-holds the sockets and rotating logs). On `desk` the MacBook's copy renders. Apply
-a change without dropping panes with `herdr server reload-config` (or
-`prefix+shift+R`); `herdr config check` first, but see `docs/theme.md` for what
-it silently misses.
-
-**`HERDR_ENV=1` is how an agent knows it is inside herdr** (plus `HERDR_PANE_ID`
-/ `_TAB_ID` / `_WORKSPACE_ID` / `_SOCKET_PATH` / `_BIN_PATH`), which makes the
-skill inert on the MacBook with no branching. **Vars are inherited at spawn, not
-tracked** — a process that outlives its pane keeps a stale
-`HERDR_PANE_ID`; resolve the live one with `herdr pane current --current`.
-
-**`prefix+e` opens `Projects/<repo>.md`** from `~/SourceRoot/brain` in `$EDITOR`,
-in a herdr **popup** (session-modal; a docked pane would flash the error
-unreadably). `scripts/brain-note.sh` resolves the repo from
-`HERDR_ACTIVE_PANE_CWD` and creates the page if absent (house frontmatter,
-wikilinked from `Projects/Projects.md` — new pages must stay wikilinked or
-`vault-lint` warns). **Per repo, not per workspace.** The popup runs on the
-server, so over `desk` it edits the mini's checkout, where the brain-sync lane
-never commits — the note lands via the nightly `brain-backup` sweep.
+- **Never start a core from ssh.** Any `hc` call, `hc connect` and the MacBook's link included, auto-starts one when none runs,
+  and a core born in an ssh session has no keychain (the `ssh mini 'claude …'` trap, below). Scripts check
+  `launchctl print gui/<uid>/com.jkrumm.herdr-core` first.
+- **A core's environment is every terminal's**, and `hc run` forwards nothing: an account is chosen on the command
+  (`env CLAUDE_CONFIG_DIR=… claude`, none = `iu`), never inherited. launchd's clean env also keeps `CLAUDECODE` out of every terminal.
+- **The only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`**; terminals keep their pids. Never `hc update`,
+  `hc server restart|stop` or `hc machine update mini` on the mini (they restart the core outside launchd's view). Updates are the
+  daily `com.jkrumm.herdr-core-update` job (`docs/herdr-core.md` §Updates); keep both machines on one `hc` version (`hc machine ls`).
+- **The job's program is a launcher** (`~/.local/libexec/herdr-core-launcher`) that holds Full Disk Access once, so no program in a
+  terminal freezes on a TCC dialog nobody sees. Changing the job's program needs a `bootout`, which ends every live terminal:
+  `make herdr-core-setup YES=1`, human-timed, and a rebuilt launcher needs a new grant. `make tcc-probe` proves it (`docs/tcc.md`).
+- **A core restart loses no process; a lost program is replaced by a shell.** `hooks/hc-session-label.ts` labels a Claude terminal
+  (`jk.claude.session`, `jk.claude.config`) and `com.jkrumm.hc-resume` (`make hc-resume-setup`) types `claude --resume <id>`
+  under that account into the kept shell. Model, effort and the `c` launcher's env are not restored; shells, servers and the
+  in-flight turn are lost.
+- **Janitor and recorder.** `com.jkrumm.hc-reap` (`make hc-reap-setup`, every 30 min → `rd reap`, log
+  `~/Library/Logs/hc-reap.log`) closes terminals of finished agents. `com.jkrumm.hc-events` (`make hc-events-setup`) appends the
+  core's event stream to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl`, with a gap marker on `missed` or a core restart. Classic
+  `herdr-reap`/`herdr-events` run beside them until Wave 7.
+- **`HC_TERMINAL_ID` is how an agent knows it is in a core terminal** (`t7`; `mini/t7` from another machine), which makes the
+  `herdr` skill inert on a plain shell. It is inherited at spawn, not tracked: `hc get` is the live state.
+- **cmd-e opens `Projects/<repo>.md`** from `~/SourceRoot/brain` in `$EDITOR`: the `jk-keys` mod runs `scripts/brain-note.sh` for
+  the focused terminal's repo as a peek over the tab (`scripts/herdr-app-keys.sh` binds the key). The script creates the page if
+  absent (house frontmatter, wikilinked from `Projects/Projects.md` — new pages must stay wikilinked or `vault-lint` warns).
+  **Per repo, not per space.** A mini terminal edits the mini's checkout, where the brain-sync lane never commits — the note
+  lands via the nightly `brain-backup` sweep.
 
 ### Sidebar groups
 
@@ -143,8 +104,7 @@ declares the taxonomy (linked to `~/.config/herdr-app/groups.json` by `make
 herdr-app-setup`), a space joins the group naming its repo, the rest land in
 `OTHER`, and `jk-board` files its repo cards under the same folders. Adding a
 repo is one line in the JSON; an unopened space is skipped, so listing one early
-costs nothing. Classic herdr's separator-workspace headers (`make herdr-groups`)
-are retired; its sidebar stays flat until Wave 7 removes it.
+costs nothing. Classic's separator-workspace headers (`make herdr-groups`) are gone: the folders replaced them.
 
 ## Putting work on the mini
 
@@ -208,20 +168,14 @@ and a working one queues the message (`queued: agent busy`). `close` is `hc kill
 screen). Names resolve against the live agents' address, terminal name, `factory.key` label, cwd and the cwd's
 basename; two matches stop with the candidates listed.
 
-**Classic fallback (until Wave 7).** A token hc does not know falls through to classic herdr: `read`, `say` and `close`
-keep their old paths for a classic agent, `agents` lists both rosters, and `wave`/`work`/`fan --clean` also look at
-classic agents when they check for a second editor. `say` there does not trust herdr's `agent_prompted`: a Claude Code
-modal (the "compact earlier" prompt) can swallow the text. It snapshots the target's state (`state_change_seq`,
-`completion_seq`, status) before the send and counts any change afterwards as delivered — `working`, `blocked` or a fresh
-`done`; if nothing changes it reads the bottom of the pane, dismisses a known modal (`RD_SAY_MODALS` in
-`scripts/remote-dev.sh`) with `esc` and re-sends once. Output is one of `delivered`, `delivered after dismissing
-<modal>`, `queued: agent busy` or `NOT delivered: …` (exit 1, hint `rd read <agent>`; no blind re-send). `RD_SAY_WAIT_S`
-bounds the wait (default 20 s). Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against
-`scripts/remote-dev-fake-hc.sh` (a fake core; never a real one).
+**Classic fallback (until Wave 7).** A token hc does not know falls through to classic herdr's old paths for `read`, `say` and `close`;
+`agents` lists both rosters, and `wave`/`work`/`fan --clean` also check classic agents for a second editor. Wave 7 deletes the
+branch. Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against `scripts/remote-dev-fake-hc.sh`
+(a fake core; never a real one).
 
 `work` is idempotent because two agents in one checkout is the file-ownership
 hazard, except across terminals where you cannot see it happen. `agents` dedupes on
-the Claude session id (hc: the `jk.claude.session` label; classic herdr: `agent_session.value`; the daemon:
+the Claude session id (hc: the `jk.claude.session` label; a classic agent: its session value; the daemon:
 `sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
 Two lanes start agent work (`docs/agent-platform.md`): `@implementer` and an `rd wave` tab (also `rd fan` for N independent changes). `agent-dispatch` and
@@ -242,7 +196,7 @@ credential at all). It is a **function**, not a `~/.local/bin` shim (the updater
 rewrites that path), passes the token by **prefix assignment** (not `env VAR=…`,
 which leaks into `ps auxww`), and self-gates on the `cache` backend marker. Only
 the keychain-dead-*and*-token-dead state fails the heartbeat. **Restore the
-keychain credential with `/login` in a herdr pane on the mini** rather than
+keychain credential with `/login` in a core terminal on the mini** rather than
 minting a token: it is a one-year credential with no refresh and no reliable
 revocation. The token applies to the **default account only**
 (`CLAUDE_CONFIG_DIR` unset = `iu`); a non-default account dir never gets it, a dead
@@ -284,7 +238,7 @@ falls back. `RD_DRY_RUN=1` never probes.
 |-|-|-|
 | `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **certainly**: the call never ran (no `factory`, no `timeout` binary) or the factory answered with an `error` object. A silent failure (a dropped hop, a timeout) may come after the factory recorded the spawn: `spawn get` showing it is followed, anything else is an error (look at `factory spawn get <key>` before re-running), never a second terminal under the same name |
 | `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
-| `close` | none on an hc terminal (`hc kill` + `hc rm` after the safety checks); a classic herdr agent still asks `factory session get` for its tab | classic only: the factory has no such session, so the tab must be labelled `wave <n>` |
+| `close` | none on an hc terminal (`hc kill` + `hc rm` after the safety checks); a classic agent still asks `factory session get` for its tab | classic only: the factory has no such session, so the tab must be labelled `wave <n>` |
 
 Spawn outcomes, from `factory spawn get` `.status`: `started` (`.pane`, `.tab`, `.workspace` set) prints today's
 line plus `via the factory` and the account; `queued` with `.hold` set (`drain|pace|wave`) prints `queued: <hold>`
@@ -424,7 +378,7 @@ sshd. Keep the router free of any WAN forward for 22/5900 — that bypasses both
   `could not read Username` — a transport error for a credential problem. The
   cache helper has no session dependency (no login keychain, no GUI session, no
   forwarded agent), so it resolves identically from a LaunchAgent, a `--bg`
-  daemon, a herdr pane and a shell. It is deliberately **not** Hermes's read-only
+  daemon, a core terminal and a shell. It is deliberately **not** Hermes's read-only
   token (403 on push); the split allows independent rotation and contains
   accident, not a compromised agent — anything with `secrets-run` reads every
   cached ref.
@@ -549,7 +503,7 @@ opportunistic case (unsellable, remotely erasable).
 
 **Screen lock ≠ keychain lock.** The keychain re-locks on exactly three events
 ("lock when sleeping", the inactivity timer, logout), so the session keeps
-running in full behind the password prompt — herdr, every agent, SSH, Tailscale.
+running in full behind the password prompt — the core, every agent, SSH, Tailscale.
 That is the point, not a flaw.
 
 | Half | Command | Why |
@@ -685,7 +639,7 @@ by looking fine.
 - **`check_boot_path` asserts, for every KeepAlive job, that the plist exists on
   disk and `launchctl print`'s path matches** — the gap where a job runs only
   from launchd's cache and the next power cut takes it down silently.
-  `make colima-status` / `make herdr-status` assert the same on demand.
+  `make colima-status` asserts the same on demand; `make herdr-core-status` prints the core job's state and pid.
 - **Logs go to `~/Library/Logs/<name>.{log,err}`, never `/tmp`.** macOS deletes
   `/tmp` files untouched for 3+ days and launchd opens its stdio **once, at
   spawn**, so after a sweep a `KeepAlive` agent writes into an unlinked inode and
@@ -844,15 +798,15 @@ printf '%s\n' "$PW" | ssh mini 'read -r pw
 
 | Command | Covers |
 |-|-|
-| `make doctor` | Read-only, self-routing. Both machines: LaunchAgent grading, architecture-map check, brew pins/outdated. Mini: the drift report without pushing. MacBook: the remote path (Tailscale, ssh, ControlMaster reuse, agent forwarding, herdr `--remote`, git push dry-run), Kuma monitor states, then the mini's doctor over ssh |
+| `make doctor` | Read-only, self-routing. Both machines: LaunchAgent grading, core running + managed install + `hc` version parity, architecture-map check, brew pins/outdated. Mini: the drift report without pushing. MacBook: the remote path (Tailscale, ssh, ControlMaster reuse, agent forwarding, git push dry-run), Kuma monitor states, then the mini's doctor over ssh |
 | `make status` | Prerequisites + symlink health, then `doctor --local` |
 | `make devhost-health-check` | One heartbeat run, per-component (`docs/devhost-health.md`) |
-| `make colima-status` / `make herdr-status` | Boot path asserted, not just "the process is up" |
+| `make colima-status` / `make herdr-core-status` | Colima's boot path asserted, not just "the process is up" / the core job's state, pid and `hc server status` |
 | `make tailscale-serve-check` | Serve drift against the declared file |
 | `bash scripts/architecture-check.sh` | Every loaded/on-disk launchd label appears in `docs/architecture.md` |
 
-By hand after a change to this stack: start agents in herdr, close the lid,
-re-run `desk` — all still there.
+By hand after a change to this stack: start agents in the app, close the lid,
+reopen it — all still there.
 
 **The heartbeat asserts the GitHub credential resolves, not that a push
 succeeds** — the real `git push --dry-run` lives in `make doctor`, because at a
@@ -885,4 +839,4 @@ free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave
 name is live is refused. Hermetic suites: `make fan-test`.
 Prompt delivery for `rd wave` and `rd fan`: no `working` state within 30 s re-sends once.
 
-**Waiting on spawned agents.** Nothing polls. The spawner is the worker's parent: `factory session wait --on workers`, then end the turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn is a worker too. One wake per declaration, so declare `--on workers` again after each new spawn or `rd say` fix. A finished child counts as done even while a fix note is still queued, so after `rd say` check `factory status` in the foreground, bounded by `timeout` (a few minutes): note delivered and worker `working` → declare; worker idle again after delivery → read its diff, no wait; note still queued (an idle worker is not proof the fix ran) → `rd read` it, then escalate to the owner. Only `rd fan` and `RD_ORCHESTRATED=1 rd wave` make the caller the parent (a plain chain `rd wave` is parentless by design), and a session without `FACTORY_SESSION`, or an `rd` that fell back to herdr, has no wake: wait with `timeout <s> herdr agent wait <agent> --until idle --until done --until blocked`. `rd read <agent>` and `factory status` are how a woken orchestrator looks.
+**Waiting on spawned agents.** Nothing polls. The spawner is the worker's parent: `factory session wait --on workers`, then end the turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn is a worker too. One wake per declaration, so declare `--on workers` again after each new spawn or `rd say` fix. A finished child counts as done even while a fix note is still queued, so after `rd say` check `factory status` in the foreground, bounded by `timeout` (a few minutes): note delivered and worker `working` → declare; worker idle again after delivery → read its diff, no wait; note still queued (an idle worker is not proof the fix ran) → `rd read` it, then escalate to the owner. Only `rd fan` and `RD_ORCHESTRATED=1 rd wave` make the caller the parent (a plain chain `rd wave` is parentless by design), and a session without `FACTORY_SESSION`, or an `rd` that fell back to hc direct, has no factory wake: wait with `timeout <s> hc wait --children all` (`any` for the next news; it returns early on a note, then wait again). `rd read <agent>` and `factory status` are how a woken orchestrator looks.
