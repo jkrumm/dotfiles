@@ -20,5 +20,18 @@
     "#694470",
     "#185772",
     "#ffffff"
-  ]
+  ],
+  "colors": {
+    "canvas": "#f1f2f4",
+    "chrome": "#f4f3f1",
+    "surface": "#fafaf9",
+    "popover": "#fcfcfa",
+    "raised": "#e6e8eb",
+    "hover": "#eaecee",
+    "selected": "#e2e7eb",
+    "border": "#d4d6d9",
+    "input": "#e6e8eb",
+    "accent": "#517599",
+    "accent_foreground": "#fcfcfa"
+  }
 }

@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status)
+MODS=(jk-spaces jk-status jk-details)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -58,3 +58,20 @@ for entry in "${SPACES[@]}"; do
   if grep -qxF "$folder" <<<"$open_folders"; then say "· space $name (open)"; continue; fi
   herdr-app "do" space.new --name "$name" --folder "$folder" >/dev/null && say "✓ space $name"
 done
+
+# The mini: one space per repo classic herdr has open there, so the core mirrors the
+# working set; jk-spaces files them into groups.json's folders. Spaces only — every
+# agent stays in classic herdr until the move (docs/herdr-core.md §Decision).
+if ! hc machine ls --json 2>/dev/null | /usr/bin/python3 -c 'import json,sys; sys.exit(not any(m["name"] == "mini" and m["state"] == "connected" for m in json.load(sys.stdin)["machines"]))'; then
+  say "- mini not connected (hc machine ls) — mini spaces skipped"; exit 0
+fi
+mini_open=$(herdr-app ls | /usr/bin/python3 -c 'import json,sys; [print(s["folder"]) for s in json.load(sys.stdin)["spaces"] if s.get("machine") == "mini"]')
+# label<TAB>path for each classic workspace that is a repo under ~/SourceRoot or ~/IuRoot.
+mini_repos=$(ssh -o BatchMode=yes mini 'herdr workspace list' | /usr/bin/python3 -c 'import json,sys; [print(w["label"]) for w in json.load(sys.stdin)["result"]["workspaces"] if not w["label"].startswith("──")]' \
+  | ssh -o BatchMode=yes mini 'while read -r l; do for r in "$HOME/SourceRoot" "$HOME/IuRoot"; do if [ -d "$r/$l/.git" ]; then printf "%s\t%s\n" "$l" "$r/$l"; break; fi; done; done')
+while IFS=$'\t' read -r name folder; do
+  [ -n "$name" ] || continue
+  if grep -qxF "$folder" <<<"$mini_open"; then say "· mini space $name (open)"; continue; fi
+  herdr-app "do" space.new --name "$name" --machine mini --folder "$folder" >/dev/null && say "✓ mini space $name"
+done <<<"$mini_repos"
+

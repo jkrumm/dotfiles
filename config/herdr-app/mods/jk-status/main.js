@@ -1,14 +1,15 @@
 // The status bar: CPU and memory of this computer and of every connected machine (the
 // mini), Claude Max usage per account, then branch, "needs you" and the palette hint.
+// Click a machine or the usage for jk-details (history, top processes, quota resets).
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, run, window, exec, hc } from "herdr";
+import { spaces, agents, theme, run, window, exec, hc, setShared, openOverlay } from "herdr";
 
-// macOS: "<cpu %> <used GiB×10> <total GiB×10>". Used = active + wired + compressed,
-// the figure Activity Monitor calls memory used; the file cache is left out.
-const STATS = `cpu=$(ps -A -o %cpu= | awk -v n="$(sysctl -n hw.ncpu)" '{s+=$1} END{printf "%d", s/n}')
-used=$(vm_stat | awk '/page size of/{ps=$8} /Pages active/{a=$3} /Pages wired/{w=$4} /occupied by compressor/{c=$5} END{printf "%d", (a+w+c)*ps/107374182.4}')
-echo "$cpu $used $(($(sysctl -n hw.memsize) / 107374182))"`;
+// macOS: "<cpu %> <used GiB> <total GiB>", one decimal each. Used = active + wired +
+// compressed, the figure Activity Monitor calls memory used; the file cache is left out.
+const STATS = `cpu=$(ps -A -o %cpu= | awk -v n="$(sysctl -n hw.ncpu)" '{s+=$1} END{printf "%.1f", s/n}')
+used=$(vm_stat | awk '/page size of/{ps=$8} /Pages active/{a=$3} /Pages wired/{w=$4} /occupied by compressor/{c=$5} END{printf "%.1f", (a+w+c)*ps/1073741824}')
+echo "$cpu $used $(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1073741824}')"`;
 
 // claude-account reads only its local quota cache (the MacBook's includes the mini's
 // samples, imported as source "peer"): no API call, ~20 ms. docs/claude-accounts.md.
@@ -16,13 +17,17 @@ const USAGE = 'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" cl
 
 const STATS_MS = 5000;
 const USAGE_MS = 60000;
+const HISTORY = 180; // samples per machine: 15 min at STATS_MS
 const STALE_S = 3 * 3600;
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Fixed width, one decimal: the bar doesn't jump when a value crosses 10.
+const pct = (v) => `${v.toFixed(1)}%`;
 
 export default class JkStatus extends View {
   init(_props, cx) {
     this.stats = {}; // machine ("" = this computer) -> { cpu, used, total } | null
+    this.history = {}; // machine -> [{ t, cpu, mem }] (mem in %), newest last
     this.remotes = [];
     this.pending = new Set(); // machines whose stats call is still out
     this.usage = [];
@@ -48,9 +53,11 @@ export default class JkStatus extends View {
         const r = await exec("sh", ["-c", STATS], { on: machine }).catch(() => null);
         this.pending.delete(key);
         const [cpu, used, total] = (r?.stdout ?? "").trim().split(" ").map(Number);
-        const next = Number.isFinite(total) && total > 0 ? { cpu, used: used / 10, total: total / 10 } : null;
+        const next = Number.isFinite(total) && total > 0 ? { cpu, used, total } : null;
+        if (next) this.history[key] = [...(this.history[key] ?? []), { t: Date.now(), cpu, mem: (used / total) * 100 }].slice(-HISTORY);
         if (!same(this.stats[key], next)) { this.stats[key] = next; changed = true; }
       }));
+      setShared("jk.history", this.history);
       if (changed) cx.notify();
     });
   }
@@ -60,20 +67,27 @@ export default class JkStatus extends View {
       const r = await exec("sh", ["-c", USAGE]).catch(() => null);
       let next = [];
       try { next = (JSON.parse(r?.stdout ?? "").accounts ?? []).filter((a) => a.enabled); } catch {}
+      setShared("jk.usage", { at: Date.now(), accounts: next });
       if (same(next, this.usage)) return;
       this.usage = next;
       cx.notify();
     });
   }
 
+  details(props) {
+    openOverlay({ mod: "jk-details", kind: "popup", width: 400, height: 540, props });
+  }
+
   machine(t, name, stats) {
-    const hot = (pct) => (pct >= 85 ? t.blocked : t.muted);
-    return h_flex().gap(8).items_center()
+    const hot = (v) => (v >= 85 ? t.blocked : t.muted);
+    const num = (w, text, color) => div().w(w).flex_none().text_right().text_color(color).child(text);
+    return h_flex().id(`stats-${name ?? "local"}`).gap(6).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click(() => this.details({ kind: "machine", machine: name }))
       .child(svg(`mods/workspace-chrome/${name ? "server" : "monitor"}.svg`).size(13))
       .child(div().child(name ?? "MacBook"))
       .when(Boolean(stats), (el) => el
-        .child(div().text_color(hot(stats.cpu)).child(`${stats.cpu}%`))
-        .child(div().text_color(hot((stats.used / stats.total) * 100)).child(`${stats.used.toFixed(1)}/${stats.total.toFixed(0)}G`)))
+        .child(num(42, pct(stats.cpu), hot(stats.cpu)))
+        .child(num(64, `${stats.used.toFixed(1)}/${stats.total}G`, hot((stats.used / stats.total) * 100))))
       .when(!stats, (el) => el.child(div().text_color(t.dim).child("…")));
   }
 
@@ -83,7 +97,7 @@ export default class JkStatus extends View {
     const stale = (a.age_s ?? 0) > STALE_S;
     const color = bad ? t.blocked : stale ? t.dim : Math.max(a.five_hour ?? 0, a.seven_day ?? 0) >= 90 ? t.blocked : t.muted;
     const text = bad ? `${a.id} login` : `${a.id} ${a.five_hour ?? "?"}/${a.seven_day ?? "?"}`;
-    return div().id(`usage-${a.id}`).text_color(color).child(text);
+    return div().text_color(color).child(text);
   }
 
   render() {
@@ -91,14 +105,16 @@ export default class JkStatus extends View {
     const space = spaces().find((s) => s.active);
     const needs = agents().filter((a) => a.status === "blocked").length;
     const sep = () => div().w(1).h(12).bg(t.border);
-    return h_flex().size_full().px(14).gap(14).items_center().bg(t.chrome).border_t(1).border_color(t.border).text_size(11.8).text_color(t.muted)
+    return h_flex().size_full().px(8).gap(10).items_center().bg(t.chrome).border_t(1).border_color(t.border).text_size(11.8).text_color(t.muted)
       .child(this.machine(t, null, this.stats[""]))
       .children(this.remotes.map((m) => this.machine(t, m, this.stats[m])))
       .when(this.usage.length > 0, (el) => el.child(sep())
-        .child(h_flex().gap(10).items_center().child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))))
+        .child(h_flex().id("usage").gap(10).items_center().px(6).rounded(5).cursor_pointer().hover((s) => s.bg(t.hover))
+          .on_click(() => this.details({ kind: "usage" }))
+          .child(svg("mods/workspace-chrome/clock.svg").size(12)).children(this.usage.map((a) => this.account(t, a)))))
       .when(Boolean(space?.branch), (el) => el.child(sep()).child(h_flex().gap(6).items_center().child(svg("mods/workspace-chrome/branch.svg").size(13)).child(space.branch)))
       .when(needs > 0, (el) => el.child(div().text_color(t.blocked).child(`${needs} needs you`)))
       .child(div().flex_1())
-      .child(div().id("palette").text_color(t.dim).on_click(() => run("app.palette")).child(`${window()?.platform === "macos" ? "⌘" : "Ctrl"} Shift P`));
+      .child(div().id("palette").px(6).text_color(t.dim).on_click(() => run("app.palette")).child(`${window()?.platform === "macos" ? "⌘" : "Ctrl"} Shift P`));
   }
 }
