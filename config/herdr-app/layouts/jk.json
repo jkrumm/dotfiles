@@ -167,6 +167,20 @@
           }
         }
       ]
+    },
+    {
+      "id": "waves",
+      "type": "block",
+      "size": {
+        "px": 260
+      },
+      "min": 200,
+      "max": 420,
+      "background": "chrome",
+      "resizable": true,
+      "content": {
+        "mod": "jk-waves"
+      }
     }
   ],
   "theme": {

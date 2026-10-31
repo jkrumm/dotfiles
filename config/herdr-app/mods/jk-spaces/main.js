@@ -8,6 +8,11 @@
 // grouped by machine when more than one is known. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
+//
+// Status dot: herdr-core's terminal status, merged with classic herdr's agents. The
+// real agents on `mini` run in classic herdr, which core can't see, so `agw agents`
+// is polled there every 10 s and each project is matched to the mini space whose
+// folder is the longest prefix of its cwd. The most urgent state wins.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -45,6 +50,12 @@ const FALLBACK = 60000;
 const GROUPS = ".config/herdr-app/groups.json";
 const URGENT = (status) => status === "blocked" || status === "done";
 
+// Most urgent first; anything else is unknown and ignored.
+const RANK = ["blocked", "done", "working", "idle"];
+const worst = (states) => RANK.find((s) => states.includes(s)) ?? null;
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const AGENTS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH" agw agents | jq -c '[.data.projects[] | {cwd, states: [.agents[].state]}]'`;
+
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
@@ -74,9 +85,14 @@ export default class Spaces extends View {
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
     this.foldersFolded = new Set(JSON.parse(localStorage.getItem("folders.folded") ?? "[]"));
     this.groups = { list: [], fallback: "OTHER" };
+    this.projects = []; // classic herdr's agents on mini: [{ cwd, states }]
+    this.mini = {}; // space -> the status of its agents on mini
+    this.polling = false;
     this.loadGroups(cx);
     cx.timer.every(60000, (cx) => this.loadGroups(cx));
     this.refreshMachines(cx);
+    this.refreshAgents(cx);
+    cx.timer.every(10000, (cx) => this.refreshAgents(cx));
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
     // only when its answer could have changed (see `due`).
@@ -150,6 +166,38 @@ export default class Spaces extends View {
     });
   }
 
+  refreshAgents(cx) {
+    const mini = machines().find((m) => m.name === "mini");
+    if (this.polling || mini?.layout !== "ready") return;
+    this.polling = true;
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", AGENTS], { on: "mini" }).catch(() => null);
+      this.polling = false;
+      let next;
+      try { next = JSON.parse(r?.stdout ?? ""); } catch { return; }
+      if (!Array.isArray(next) || same(next, this.projects)) return;
+      this.projects = next;
+      cx.notify();
+    });
+  }
+
+  // Each mini space's agents' status: a project belongs to the space whose folder is
+  // the longest prefix of its cwd.
+  miniStatus(sp) {
+    const mine = sp.filter((s) => s.machine === "mini" && s.folder).map((s) => ({ id: s.id, folder: s.folder.replace(/\/+$/, "") }));
+    const states = {};
+    for (const { cwd, states: list } of this.projects) {
+      const owner = mine.filter((s) => cwd === s.folder || cwd?.startsWith(`${s.folder}/`)).sort((a, b) => b.folder.length - a.folder.length)[0];
+      if (owner) (states[owner.id] ??= []).push(...list);
+    }
+    return Object.fromEntries(Object.entries(states).map(([id, list]) => [id, worst(list)]).filter(([, status]) => status));
+  }
+
+  // core's status for the space merged with its agents on mini.
+  statusOf(w) {
+    return worst([w.status, this.mini[w.id]].filter(Boolean));
+  }
+
   // The folder a row belongs to: its repo's name, else its folder's name.
   folderOf(r, ps) {
     const name = r.g?.name ?? base(place(r.w, ps) ?? "");
@@ -172,7 +220,7 @@ export default class Spaces extends View {
       const { rows } = buckets.get(label);
       const key = `${m ?? ""}/${label}`;
       const folded = this.foldersFolded.has(key);
-      const urgent = rows.find((r) => URGENT(r.w.status))?.w.status;
+      const urgent = rows.map((r) => this.statusOf(r.w)).find(URGENT);
       const head = h_flex().id(`folder-${key}`).h(20).mt(4).flex_none().px(8).gap(7).items_center().rounded(6)
         .text_size(10.5).font_bold().text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => {
@@ -334,9 +382,11 @@ export default class Spaces extends View {
   row({ w, i, g, tree }, t) {
     const on = w.active;
     // No avatar: a dot in the space's agent-status color while an agent works, needs
-    // you or just finished; an empty slot of the same width otherwise.
-    const live = w.status && w.status !== "idle";
-    const fill = live ? tone(t, w.status) : null;
+    // you or just finished, a dim ring while its agents are all idle; an empty slot
+    // of the same width otherwise.
+    const status = this.statusOf(w);
+    const live = status && status !== "idle";
+    const fill = live ? tone(t, status) : null;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -380,7 +430,7 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(div().size(7).flex_none().rounded(4).when(live, (d) => d.bg(fill))))
+          .when(!tree, el => el.child(div().size(7).flex_none().rounded(4).when(live, (d) => d.bg(fill)).when(status === "idle", (d) => d.border_1().border_color(t.dim))))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
           .child(div().flex_1()),
       );
@@ -397,7 +447,7 @@ export default class Spaces extends View {
       .hover((s) => s.bg(t.hover))
       .on_click(() => run("space.select", { id: w.id }))
       .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
-      .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
+      .child(div().text_color(tone(t, this.statusOf(w))).child(glyph(this.statusOf(w))));
   }
 
   render() {
@@ -405,6 +455,7 @@ export default class Spaces extends View {
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
+    this.mini = this.miniStatus(sp);
     const ids = new Set(sp.map(p => p.id));
     const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
     let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;

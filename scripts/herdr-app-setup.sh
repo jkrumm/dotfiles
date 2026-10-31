@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details)
+MODS=(jk-spaces jk-status jk-details jk-waves)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -35,6 +35,15 @@ for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
 link "$DOTFILES_DIR/config/herdr/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
+
+# keys.json is the app's own file (not tracked): add the one key that toggles the waves
+# column, never overwrite an existing binding.
+KEYS="$HOME_DIR/keys.json"
+if [ -f "$KEYS" ]; then
+  if [ "$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")" = "layout.toggle:waves" ]; then say "· key cmd-shift-b (ok)"
+  elif [ -n "$(jq -r '.global["cmd-shift-b"] // ""' "$KEYS")" ]; then say "- cmd-shift-b is taken ($(jq -r '.global["cmd-shift-b"]' "$KEYS")), waves toggle not bound"
+  else jq '.global["cmd-shift-b"] = "layout.toggle:waves"' "$KEYS" > "$KEYS.tmp" && mv "$KEYS.tmp" "$KEYS" && say "✓ key cmd-shift-b → layout.toggle:waves"; fi
+fi
 
 for mod in "${MODS[@]}"; do
   herdr-app check "$HOME_DIR/mods/$mod" >/dev/null || { echo "✗ herdr-app check $mod failed:"; herdr-app check "$HOME_DIR/mods/$mod"; exit 1; }
