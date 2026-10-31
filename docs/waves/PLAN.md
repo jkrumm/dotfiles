@@ -9,8 +9,8 @@ never touches the pinned core. The mini maintenance window has run.
 ones); `/review` on every non-trivial diff, with findings fixed; one commit per concern; every other repo's own gate
 and conventions apply (PR-required list: `config/pr-required-repos.json`; IuRoot: `EP-XX` branches, MR to `main`).
 The plan is pushed before a wave spawns the next one.
-Baseline 2026-10-31 (MacBook): `make -k check` is red only on `architecture-check` (`com.jkrumm.photoflow`, MacBook
-only, fixed in Wave 9). It took 40 min of wall time at 5 % CPU, so a suite sleeps or waits on the network
+Baseline 2026-10-31 (MacBook): `make -k check` was red only on `architecture-check` (`com.jkrumm.photoflow`, MacBook
+only; retired in `1190896`, so the baseline is green). It took 40 min of wall time at 5 % CPU, so a suite sleeps or waits on the network
 (`fan-test` was running when a 10-min timeout hit). Run it in the background with a log.
 Mini 2026-10-31 (Wave 1, each suite timed alone): all 17 green in ~6.5 min; the slow ones are `fan-test` (156 s) and
 `claude-launcher-test` (121 s), then `herdr-reap-test` (55 s). The MacBook's 40 min was not reproduced (it was offline).
@@ -40,6 +40,71 @@ this file. Chain mode. A wave that cannot finish writes `stopped: <reason>` into
 Decided in Wave 1: `docs/herdr-core.md` §Port design (every consumer's fate and replacement, and the spawn contract),
 resting on §Verified facts. That page is the contract for Waves 2–9. The seeded table that was here is in git history
 (`b387732`).
+
+## Parallel track (started 2026-10-31 by the owner's session, beside the chain)
+
+Independent of Waves 2–3 (it needs neither the factory nor `rd` on hc), so it runs now, one agent per item, each
+in its own checkout. **Rules for a P agent:** read this plan and `docs/herdr-core.md` from
+`git -C ~/SourceRoot/dotfiles show origin/master:<path>` (never edit dotfiles' `PLAN.md`: the chain owns it);
+spawn no waves and no other agents beyond `@implementer`; the repo's own gate, `/review`, one commit per concern,
+push to the repo's default branch (dotfiles: rebase the fan branch onto `origin/master` and push to master).
+Classic herdr is still live until Wave 7: a consumer that has both worlds keeps the classic path working beside
+the hc one, and leaves a one-line `TODO(Wave 7): drop classic` where the classic path goes. End with a short
+report (done / deferred, one line each). The chain's Waves 4, 5 and 8 verify these and only do what is missing.
+
+- **P1 — dotfiles, `rd fan` worktree, role `lead`: automatic core updates and durable Full Disk Access.**
+  - **TCC model** (research run above): an FDA row for a CLI is keyed by its **resolved path** plus a designated
+    requirement. An ad-hoc signature's requirement is its cdhash, so every new build fails it silently. TCC judges
+    the **responsible process**: for a LaunchAgent, the job's own program, inherited by every descendant unless a
+    child disclaims. No user-installed PPPC profile on an unmanaged Mac; no scripted FDA grant.
+  - **Design to verify first, in a scratch core:** a tiny native Mach-O supervisor (Swift or C, built once,
+    in the repo, at a stable path such as `~/.local/libexec/herdr-core-launcher`) becomes the LaunchAgent's
+    `Program`. It `posix_spawn`s the core **as a child (never `exec`)** without disclaiming, forwards signals
+    and exits with it. FDA is granted once to the launcher. Prove that `ls ~/Documents` from a terminal of a
+    launcher-parented scratch core neither prompts nor freezes **after swapping the core binary for another
+    build**. If the core's holders disclaim responsibility (the grant then fails to cover them), fall back to
+    re-signing each core build with one stable self-signed code-signing identity and an explicit
+    `--identifier` at a stable path (then `bootout` + `bootstrap`, because launchd pins the code identity at
+    bootstrap). Record which design held, with the evidence, in `docs/herdr-core.md`.
+  - **Managed core:** the app must never replace the core. The core reports `installed_by` from its own path
+    (fact 4). Pick a layout that reports non-null and keeps the launcher path stable: a `jkrumm/tap`
+    formula (versioned `/Cellar/` path, fine once the grant lives on the launcher) is the default. The
+    heartbeat fails on `installed_by: null` or a core version the job didn't install.
+  - **The job:** `com.jkrumm.herdr-core-update` under `jobrun` (`docs/background-jobs.md` §Pattern), daily,
+    both machines. Steps:
+    1. Take the newest release whose publish time (HTTP `Last-Modified` of `core/<v>/manifest.json`, or the
+       GitHub tag date) is ≥ 24 h old. Verify its sha256 against the index.
+    2. Bump and install it (formula bump commit in `jkrumm/tap`, or the chosen layout).
+    3. `launchctl kickstart -k` the core.
+    4. Assert that terminals survived (pids before = after) and that `hc machine ls` versions match on both
+       machines.
+
+    The MacBook runs first, the mini follows on its next run (or in the same run over `hc exec --on mini`).
+    No idle-gating. A failed step leaves the old core running and grades the job red. `make
+    herdr-core-update-check` previews (dry), `make herdr-core-update` runs it now.
+  - Docs in the same commits: `docs/herdr-core.md` §Updates, `docs/architecture.md` rows (launcher, job),
+    `AGENTS.md` one line (no growth), `docs/background-jobs.md`.
+  - **1Password (`op`, owner pain, same mechanism):** the AppData prompt comes back after every `brew upgrade`
+    because the cask path is versioned. Recipes, cheapest first:
+    1. `OP_LOAD_DESKTOP_APP_SETTINGS=false` + `OP_CACHE=false` in headless contexts (undocumented, so verify
+       it).
+    2. Run `make secrets-seed` from a core terminal once the launcher holds FDA (op inherits it).
+    3. A stable-path copy of `op` with its own FDA grant, refreshed after each upgrade.
+
+    Verify which works without breaking biometric `op` on the MacBook. Wire the winner into
+    `secrets-seed`/`brew-upgrade.sh` and drop the FDA-on-Caskroom-path assertion. Never touch `secrets-run`
+    without its full guardrail (`AGENTS.md` §Secrets); if the fix needs it, stop and report instead.
+- **P2 — agent-workflows (+ argo), role `wave`:** `agw agents` collects from hc (`hc ls --json` on each
+  machine through the MacBook's `hc machine` links or per-host collection; fields per `docs/herdr-core.md`
+  §Verified facts) **beside** classic `herdr agent list` until Wave 7. Status, session id (from the resume
+  labels), project (space name from the `herdr-app` doc), `source: hc`. argo's agents API and dashboard accept
+  the new source; keep `herdrStatus` as a runner-neutral status field or rename it in both repos in one pass.
+- **P3 — iris, role `wave`:** an hc destination adapter (`hc connect`: `terminal.list` by labels,
+  `terminal.send`) beside the classic socket adapter, preferred when a matching hc terminal exists; `/herd` lists
+  both worlds; the destination value stays `"herdr"` (no Swift change); unit tests plus the e2e.
+- **P4 — shutterflow + sy-serendipity, role `wave`:** shutterflow `scripts/fleet/{spawn,retire}.sh`,
+  `watch.py` and `fleet/PROTOCOL.md`/roles on hc (labels into the shutterflow space, `hc send`, `hc ls`,
+  `hc kill`); sy-serendipity `AGENTS.md` dev-server instructions on `hc run --bg --name dev` + `hc wait --output`.
 
 ## Wave 1 — Facts and port design            <!-- status: done -->
 Role `lead`. Design and verification only: no consumer code. The MacBook is reachable from the mini as `ssh iumac`
@@ -147,16 +212,17 @@ Role `wave`.
 - [ ] dotfiles health: heartbeat herdr component → core component (+ version parity),
   `doctor.sh`, `brew-upgrade.sh`, `architecture-check.sh`, `log-rotate.sh`, `mini-macos-update.sh`, and the
   `docs/architecture.md` rows.
-- [ ] agent-workflows `agw agents` collectors on hc (+ fixtures, README), and argo's `herdrStatus` follows.
+- [ ] agent-workflows `agw agents` collectors on hc (+ fixtures, README), and argo's `herdrStatus` follows:
+  built by parallel track P2, verify it landed and fill gaps.
 - [ ] Each repo: its gate, `/review`, commit, push.
 
 ## Wave 5 — the other repos            <!-- status: pending -->
 Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
 
 - [ ] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
-  terminals; the e2e passes.
+  terminals; the e2e passes. Built by parallel track P3: verify and fill gaps.
 - [ ] hermes-agent skill + SOUL/AGENTS/config; shutterflow `scripts/fleet` + PROTOCOL; sy-serendipity
-  AGENTS.md; brain live wiki pages (`brain/voice.md` applies); dotfiles-private collie rows only if Wave 4
+  AGENTS.md (both built by parallel track P4: verify); brain live wiki pages (`brain/voice.md` applies); dotfiles-private collie rows only if Wave 4
   retired collie (ACL and serve rows, applied from the MacBook with `make tailscale-acl-diff` first).
 - [ ] IuRoot/prometheus-epx: the port on an `EP-XX` branch, committed locally, not pushed. Name the branch and
   the open MR step in Left behind for the owner.
@@ -198,27 +264,16 @@ Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `work
   Makefile targets, the Brewfile lines and the settings-template hook (`herdr-agent-state.sh`). `make setup` + `make doctor` on both machines are green.
 - [ ] `make check`, `/review`, and one commit per concern, each naming what was retired and why.
 
-## Wave 8 — updates with a cooldown            <!-- status: pending -->
-Role `wave`.
+## Wave 8 — automatic core updates, durable Full Disk Access            <!-- status: pending -->
+Role `wave`. Built by parallel track **P1** (below); this wave only verifies that P1 landed on master and fixes
+what is missing. Owner decisions 2026-10-31: the core updates **automatically, daily, with a 1-day cooldown**,
+through our own launchd job (never the app's updater, never `hc update`); the app's window auto-update stays
+(option a); Full Disk Access must survive updates. Research run `01a1923f-c23e-7789-a684-4d96b8f41f42` (deep,
+29/29 citations grounded) is the basis for the TCC design.
 
-- [ ] Pin the core as a managed install, so the app's auto-update never replaces it: a formula in
-  `jkrumm/tap` (hc + herdr-core from `releases.herdr.dev`, sha256 pinned, Brewfile entry). A `/Cellar/` path
-  makes the core report `installed_by: homebrew`, the app stop offering updates and `hc update` refuse (fact 4).
-  The LaunchAgent runs the pinned binary (the stable `opt` link, resolved under `/Cellar/`) on both machines;
-  `~/.local/bin/{hc,herdr-core}` go away.
-- [ ] FDA (fact 5): the grant is keyed to the ad-hoc build, so every core upgrade loses it on the mini. The
-  upgrade target queues the re-grant with `ask-human` (the new resolved path) and reports the mini upgrade as
-  incomplete until the grant is confirmed; it never probes a protected folder from the core (the probe itself
-  raises a dialog nobody sees).
-- [ ] `make herdr-core-upgrade`: only a release ≥ 3 days old. The manifests carry no date: take the HTTP
-  `Last-Modified` of `core/<v>/manifest.json` (or the GitHub tag date), in the spirit of `config/bunfig.toml`'s
-  `minimumReleaseAge`. It bumps the pin, upgrades both machines, kickstarts each core and asserts terminals
-  survived and versions match. No idle-gating. `make herdr-core-upgrade-dry` previews.
-- [ ] App auto-update: **accepted (owner decision 2026-10-31, option a)**, nothing left to decide, apply it. The
-  window updates itself (no off switch exists anyway, herdr-app #207); the core is pinned as a managed install in
-  `jkrumm/tap`, so the app never replaces it. No app-side pin. The heartbeat flags a core version the pin doesn't own and an app whose
-  `core_min` (`app/latest.json`) is above the pin.
-- [ ] Fold it into `skills/upgrade-deps` machine mode and `docs/homebrew.md`.
+- [ ] P1 is merged: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
+  and `make doctor` are green; one real automatic update has run (or a forced dry run with a fake newer release).
+- [ ] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
 
 ## Wave 9 — the mini maintenance window            <!-- status: pending -->
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
@@ -227,7 +282,8 @@ note).
 - [ ] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31); Colima 12 → 6 GiB (Makefile default + AGENTS.md line,
   `make colima-restart`); teamchat 6 → 3 GiB in IuRoot `chat` (work repo: a branch, the owner opens the MR).
 - [ ] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
-  `make claude-accounts-verify`; me2's stale quota sample. Fix photoflow's architecture-map entry.
+  `make claude-accounts-verify`; me2's stale quota sample. (photoflow's architecture-map entry: already retired
+  in `1190896`.)
 - [ ] `make mini-macos-update` staying on 26.x (**never 27**, owner-confirmed 2026-10-31), last, after the close-out commit, from the MacBook
   (`ask-human` push, it reboots the mini). After the reboot: cores up, `hc-resume` restored the sessions,
   `make doctor` green on both machines.
