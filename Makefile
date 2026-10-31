@@ -38,7 +38,7 @@ endif
 
 # Collie — phone web-UI control surface for the herd: upstream's compiled Bun
 # bridge, standalone under its own LaunchAgent, driving herdr-core
-# (COLLIE_MUX=herdr-core; no herdr plugin). Installed by `make collie-setup`.
+# (COLLIE_MUX=herdr-core). Installed by `make collie-setup`.
 # Pinned to a COMMIT, never a tag: tags move, and collie-setup builds whatever
 # the pin resolves to on a host that runs every agent, so an upgrade has to be a
 # reviewed diff of this pin (`make collie-upgrade`).
@@ -115,10 +115,8 @@ setup:
 	@$(MAKE) --no-print-directory _setup-usage-tracker
 	@$(MAKE) --no-print-directory jobrun-canary-setup
 	@$(MAKE) --no-print-directory disk-sweep-setup
-	@$(MAKE) --no-print-directory herdr-events-setup
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
-	@$(MAKE) --no-print-directory herdr-reap-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
@@ -223,15 +221,6 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/starship.toml" \
 		DST="$(HOME)/.config/starship.toml"
-	@# herdr: link the FILE, never the directory — ~/.config/herdr also holds
-	@# herdr.sock, herdr-client.sock and the rotating logs, which are
-	@# machine-local runtime state. Linked here rather than in the opt-in
-	@# `herdr-setup` because the config governs the client too, and the
-	@# MacBook runs a client (desk path) without ever running a server.
-	@mkdir -p $(HOME)/.config/herdr
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/herdr/config.toml" \
-		DST="$(HOME)/.config/herdr/config.toml"
 	@# opencode: link the FILES, never the config directory itself — opencode
 	@# installs its plugin node_modules/package.json next to them there,
 	@# machine-local state. The themes/ SUBDIRECTORY is linked as a dir
@@ -247,7 +236,7 @@ _setup-config:
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/opencode/themes" \
 		DST="$(HOME)/.config/opencode/themes"
-	@# plugins/: link our FILE only — herdr owns herdr-agent-state.js in the same dir.
+	@# plugins/: link our FILE only.
 	@mkdir -p $(HOME)/.config/opencode/plugins
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/opencode/plugins/protect-branches.js" \
@@ -577,11 +566,11 @@ tinycast-check:
 	@python3 "$(DOTFILES_DIR)/scripts/tinycast-config.py" check
 
 .PHONY: _setup-appearance-sync
-# com.jkrumm.appearance-sync: flips Herdr GPUI's single `theme` between the
-# basalt-ui light/dark pair on every macOS appearance change (the app has no
-# system-appearance support). Client-side only — skipped on the mini.
+# com.jkrumm.appearance-sync: pushes every macOS appearance change into the Claude Code
+# and OpenCode sessions (apps with no system-appearance support). Client-side only —
+# skipped on the mini.
 _setup-appearance-sync:
-	@echo "  Appearance sync (Herdr GPUI light/dark)..."
+	@echo "  Appearance sync (light/dark)..."
 	@if [ "$(SECRETS_BACKEND)" = "cache" ]; then \
 		echo "    - dev host (cache backend), skipping"; \
 	else \
@@ -803,7 +792,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test herdr-reap-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -1266,7 +1255,7 @@ _setup-scripts:
 # ~/.zshenv is the ONLY startup file zsh reads for a non-interactive,
 # non-login shell — which is exactly what `ssh host -- <cmd>` gets. macOS runs
 # path_helper from /etc/zprofile, but that is a LOGIN file, so a bare
-# `ssh mini 'herdr …'` lands with PATH=/usr/bin:/bin:/usr/sbin:/sbin and no
+# `ssh mini 'hc …'` lands with PATH=/usr/bin:/bin:/usr/sbin:/sbin and no
 # Homebrew at all — silently forcing every remote automation to hand-prefix
 # the PATH.
 #
@@ -1435,7 +1424,7 @@ claude-accounts-setup: ## Create/refresh extra Claude account dirs (symlinks to 
 		done; \
 		$(MAKE) --no-print-directory _render-settings SETTINGS_DIR="$$dir" || exit 1; \
 	done
-	@# A fresh account dir asks "trust this folder?" on first start in $$HOME and that blocks `herdr agent start`.
+	@# A fresh account dir asks "trust this folder?" on first start in $$HOME and that blocks a headless `claude` start.
 	@bash $(DOTFILES_DIR)/scripts/claude-pretrust.sh "$(HOME)" || echo "    ✗ could not pre-trust $(HOME) in every account's .claude.json"
 	@# ...and so does every other folder the default account already trusts (never loosens; skips accounts not logged in yet).
 	@bash $(DOTFILES_DIR)/scripts/claude-trust-sync.sh || echo "    ✗ could not sync folder trust into every account's .claude.json"
@@ -1508,8 +1497,6 @@ _setup-ghostty:
 	@# Retire superseded theme files an earlier `make setup` installed. Both the
 	@# hand-authored one-{dark,light} and the zinc-{dark,light} pair (whose
 	@# near-black #09090b background this replaces) are gone as of 2026-07-27.
-	@# herdr still uses its BUILT-IN one-dark for chrome — that is herdr's own,
-	@# not a file here, so nothing below affects it.
 	@for old in ayu-mirage basalt-ui one-dark one-light zinc-dark zinc-light; do \
 		if [ -f "$(HOME)/.config/ghostty/themes/$$old" ] && [ ! -L "$(HOME)/.config/ghostty/themes/$$old" ]; then \
 			mv "$(HOME)/.config/ghostty/themes/$$old" "$(HOME)/.config/ghostty/themes/$$old.bak"; \
@@ -1692,7 +1679,6 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig-personal"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.gitconfig-work"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/starship.toml"
-	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/herdr/config.toml"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/opencode.json"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/tui.json"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.config/opencode/themes"
@@ -2307,7 +2293,7 @@ fan-test:
 	@python3 -I $(DOTFILES_DIR)/scripts/wave-gate.test.py
 	@/bin/bash $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 
-# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / herdr), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
+# Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / hc), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
 .PHONY: claude-launcher-test
 claude-launcher-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh $(DOTFILES_DIR)/scripts/statusline.sh $(DOTFILES_DIR)/scripts/statusline.test.sh
@@ -2582,28 +2568,7 @@ herdr-core-update-check: ## Preview the core update: candidate, age, sha256 chec
 herdr-core-update: ## Run the core update now, recorded like the daily job
 	@jobrun com.jkrumm.herdr-core-update --owner dotfiles --every 86400 --timeout 900 --lock herdr-core-update -- "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"
 
-# TODO(Wave 7): drop classic (herdr-events, herdr-reap and their targets); hc-events / hc-reap carry on.
-# The herdr event record (factory Phase 0): every event the server emits, appended raw to
-# ~/.local/share/herdr-events/YYYY-MM-DD.jsonl. Data, never rotated. Dev host only — that is where
-# the herdr server runs. Records only; no consumer.
-.PHONY: herdr-events-setup herdr-events-teardown herdr-events-status
-herdr-events-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-events skipped"; exit 0; fi; \
-	chmod +x "$(DOTFILES_DIR)/scripts/herdr-events.ts"; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/share/herdr-events"; \
-	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-events" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
-	echo "    ↳ KeepAlive → ~/.local/share/herdr-events/YYYY-MM-DD.jsonl; log: ~/Library/Logs/herdr-events.log"
-herdr-events-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-events.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; rm -f "$$PLIST"; \
-	echo "  ✓ herdr-events torn down (unloaded; the recorded data is kept)"
-herdr-events-status:
-	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-events" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
-	ls -l "$(HOME)/.local/share/herdr-events/" 2>/dev/null | tail -3
-
-# The herdr-core event record: `events.subscribe` over `hc connect`, appended raw to the same
+# The herdr-core event record: `events.subscribe` over `hc connect`, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl (data, never rotated). Dev host only; never starts a core.
 .PHONY: hc-events-setup hc-events-teardown hc-events-status
 hc-events-setup:
@@ -2641,27 +2606,6 @@ hc-resume-teardown:
 hc-resume-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.hc-resume" 2>/dev/null | grep -E "state =|pid =|runs =" || echo "  not loaded"; \
 	tail -3 "$(HOME)/Library/Logs/hc-resume.log" 2>/dev/null
-
-.PHONY: herdr-reap-test
-herdr-reap-test: ## Hermetic suite for herdr-reap.py (fake herdr/claude, real throwaway git repos)
-	@python3 -W ignore $(DOTFILES_DIR)/scripts/herdr-reap.test.py
-
-# The herdr janitor (`rd reap`), every 30 min under jobrun. Dev host only. Teardown removes the
-# jobrun state file too, or jobs-grade would grade the retired label `unloaded` forever.
-.PHONY: herdr-reap-setup herdr-reap-teardown
-herdr-reap-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-reap skipped"; exit 0; fi; \
-	chmod +x "$(DOTFILES_DIR)/scripts/herdr-reap.py"; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
-	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-reap" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
-	echo "    ↳ every 30 min → rd reap; actions: ~/Library/Logs/herdr-reap.log"
-herdr-reap-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-reap.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-reap.json"; \
-	echo "  ✓ herdr-reap torn down (unloaded, plist and jobrun state removed)"
 
 .PHONY: hc-reap-test
 hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/launchctl/claude/gh, real throwaway git repos)
@@ -2845,73 +2789,6 @@ obsidian-autostart-teardown:
 	rm -f "$$PLIST"; \
 	echo "  ✓ obsidian-autostart torn down (unloaded + plist removed; the app is left running)"
 
-# herdr wiring. Two halves with different scopes:
-#   - the Claude Code agent-state hook, which makes a pane report real agent
-#     status instead of "unknown". Harmless everywhere (it exits 0 unless
-#     HERDR_ENV/HERDR_SOCKET_PATH/HERDR_PANE_ID are set), so install it on any
-#     machine. Its settings.json entry lives in config/settings.template.json —
-#     `make setup` merges with the template winning on `hooks`, so an entry only
-#     added by `herdr integration install` would be deleted on the next run.
-#   - the herdr *server*, which belongs only on the dev host. Detected the same
-#     way as git-headless: the cache backend marker means this is the mini.
-#   - a one-shot migration off the herdr-notes plugin, retired 2026-08-04. Its
-#     prefix+e now runs scripts/brain-note.sh, which opens the pane's repo page
-#     in the brain vault — a store that syncs, backs up and outlives a workspace
-#     id. Nothing to install for that: it is a plain `popup` command, which is
-#     also why the keybinding is no longer machine-dependent.
-.PHONY: herdr-setup
-herdr-setup:
-	@command -v herdr >/dev/null 2>&1 || { echo "  ✗ herdr not installed — run: brew bundle install"; exit 1; }
-	@herdr integration install claude
-	@# The agent skill is hand-written for herdr-core now (skills/herdr); the generator that
-	@# overwrote it from `herdr --skill` is no longer called. Wave 7 deletes the script.
-	@$(MAKE) --no-print-directory _setup-settings
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" = "cache" ]; then \
-		brew services start herdr >/dev/null 2>&1 || true; \
-		echo "    ✓ herdr server registered (brew services — RunAtLoad + KeepAlive)"; \
-	else \
-		echo "    · thin client (backend=$${BACKEND:-unset}) — hook installed, server not started"; \
-	fi
-	@$(MAKE) --no-print-directory _herdr-supervise
-	@# One-shot migration off herdr-notes (retired 2026-08-04). Idempotent and
-	@# self-deleting: once the plugin is gone this is a single `plugin list` that
-	@# prints nothing, exactly like the collie legacy-agent migration above it.
-	@# Its notes are NOT migrated — they were per-workspace scratch in herdr's
-	@# plugin state dir, and anything worth keeping was always meant to go to the
-	@# vault. The state dir is left on disk rather than deleted; reading it back
-	@# is `herdr plugin config-dir`'s sibling path, and destroying data on a
-	@# `make setup` is not this target's call.
-	@if command -v herdr >/dev/null 2>&1 && herdr plugin list --json 2>/dev/null | jq -e '.result.plugins[]? | select(.plugin_id=="herdr-notes")' >/dev/null 2>&1; then \
-		herdr plugin uninstall herdr-notes >/dev/null 2>&1 \
-			&& echo "    ✓ herdr-notes uninstalled (prefix+e now opens the vault project note)" \
-			|| echo "    · herdr-notes uninstall failed — remove it with: herdr plugin uninstall herdr-notes"; \
-	fi
-	@# The replacement is a plain script, so the only thing to verify is that it
-	@# is where the keybinding says it is. A popup that dies with "no such file"
-	@# closes instantly and looks exactly like a dead keybinding.
-	@if [ -x "$(DOTFILES_DIR)/scripts/brain-note.sh" ]; then \
-		echo "    ✓ project note wired (prefix+e → brain vault Projects/<repo>.md)"; \
-	else \
-		echo "  ✗ scripts/brain-note.sh missing or not executable"; exit 1; \
-	fi
-	@# Pick up config/herdr/config.toml (linked by `make setup`) without dropping
-	@# panes. Silent no-op when no server is running — the MacBook usually has none.
-	@herdr config check
-	@herdr server reload-config >/dev/null 2>&1 \
-		&& echo "    ✓ config.toml reloaded into the running server" \
-		|| echo "    · no running server to reload (config applies on next launch)"
-
-# The herdr upgrade, with the two ways it goes wrong taken away: it refuses to
-# run inside a herdr pane (the shell it would kill mid-sequence) and it
-# converges the plist brew silently reverts. Writes a restore inventory first,
-# and gates on agents that are working or blocked. Full reasoning, including
-# where live handoff goes when herdr supports it from a brew install:
-# scripts/herdr-upgrade.sh.
-.PHONY: herdr-upgrade
-herdr-upgrade:
-	@bash $(DOTFILES_DIR)/scripts/herdr-upgrade.sh
-
 .PHONY: herdr-app-setup
 herdr-app-setup:
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-setup.sh
@@ -2920,197 +2797,12 @@ herdr-app-setup:
 herdr-app-keys-test: ## Hermetic test for herdr-app-keys.sh (jq merge into a temp keys.json)
 	@bash $(DOTFILES_DIR)/scripts/herdr-app-keys.test.sh
 
-# Converge herdr's brew-service plist so the server starts as a SESSION LEADER.
-# Same shape, same trap and same reason as _colima-supervise: BREW REGENERATES
-# THIS PLIST on every `brew services start/restart` and every `brew upgrade
-# herdr`, silently — and it now regenerates it under a DIFFERENT NAME
-# (`sh.brew.herdr.plist`, Homebrew 6), so the file is resolved by service name
-# through scripts/lib/brew-service.sh rather than spelled.
-#
-# WHAT IT FIXES. Every `desk` launch asked "restart the remote server now?
-# [y/N]" — and the only correct answer was N, forever, because y restarts the
-# server outside brew services and kills every pane. herdr reports
-# `detached_server_daemon` from `getsid(0) == getpid()`, and a launchd job is
-# not a session leader (measured on the mini: pid 671, pgid 671, **sid 1**), so
-# the remote client refuses to attach quietly. The warning is true as asked and
-# false as meant: launchd owns the job and no ssh disconnect can reach it.
-#
-# The wrapper forks and calls setsid() in the child because setsid(2) fails
-# with EPERM for a process-group leader, which is exactly what launchd hands
-# over — full reasoning in herdr/herdr-server-start.py. Proven by A/B against
-# an isolated server started in the launchd process shape:
-# `detached_server_daemon` false without it, true with it.
-#
-# AND IT IS ALSO WHY THE BARE KeepAlive DOES NOT HOT-LOOP. `herdr server` exits
-# non-zero when another server already holds the socket, so a wrapper that
-# forwarded its child's status turned every launch into a ~10s respawn loop.
-# This one stays alive as long as any server answers the socket, adopts a server
-# its own child lost the AddrInUse race to, and treats an unreadable `herdr
-# status` as "assume up" rather than "start another" — long form in the file's
-# docstring.
-#
-# Deliberately does NOT restart the service, for a harder reason than colima's:
-# restarting herdr does not bounce a VM, it DESTROYS every pane and every agent
-# running in one. A `make setup` may never do that on its own.
-.PHONY: _herdr-supervise
-_herdr-supervise:
-	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
-	WRAP="$(DOTFILES_DIR)/herdr/herdr-server-start.py"; \
-	if [ -z "$$PLIST" ]; then \
-		if brew services info herdr --json 2>/dev/null | grep -q '"loaded": *true'; then \
-			echo "  ✗ herdr is a LOADED brew service with NO plist under either name"; \
-			echo "    looked for: $(LAUNCHAGENTS)/sh.brew.herdr.plist"; \
-			echo "                $(LAUNCHAGENTS)/homebrew.mxcl.herdr.plist"; \
-			echo "    The boot path cannot be converged, so it is DISARMED — never report this green."; \
-			echo "    ↳ brew services info herdr --json"; \
-			exit 1; \
-		fi; \
-		echo "    · herdr brew service not registered here — nothing to supervise"; \
-	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ] \
-	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
-		echo "    · herdr session-leader boot path (ok)"; \
-	else \
-		chmod +x "$$WRAP"; \
-		/usr/libexec/PlistBuddy -c 'Delete :KeepAlive' "$$PLIST" >/dev/null 2>&1 || true; \
-		/usr/libexec/PlistBuddy -c 'Add :KeepAlive bool true' "$$PLIST" >/dev/null; \
-		/usr/libexec/PlistBuddy -c 'Delete :ProgramArguments' "$$PLIST" >/dev/null 2>&1 || true; \
-		/usr/libexec/PlistBuddy -c 'Add :ProgramArguments array' "$$PLIST" >/dev/null; \
-		/usr/libexec/PlistBuddy -c "Add :ProgramArguments:0 string $$WRAP" "$$PLIST" >/dev/null; \
-		plutil -lint "$$PLIST" >/dev/null || { echo "  ✗ herdr plist is malformed after edit"; exit 1; }; \
-		echo "    ✓ herdr session-leader boot path pinned (no more desk [y/N] prompt)"; \
-		echo "      ↳ active at the next boot, or now with: make herdr-restart (KILLS EVERY PANE)"; \
-	fi
-
-# Regression suite for `herdr/herdr-server-start.py` — the wrapper the boot path
-# depends on, and the one file where a wrong branch is invisible: under
-# unconditional KeepAlive a wrong exit is a hot respawn loop, and a wrong
-# `supervise()` is a live-looking job with no server behind it. Covers the
-# UNREADABLE contract (never exit for a respawn, never put a second server on a
-# held socket, never stay alive with no server ever started), the momentarily
-# non-executable binary, the child's SIG_DFL reset in the fork-to-exec window,
-# and the stop relay that kills a wrapper-owned server. Hermetic — a fake herdr
-# over a scratch dir, never a live server, socket, plist or LaunchAgent. Runs on
-# either machine.
-.PHONY: herdr-server-start-test
-herdr-server-start-test:
-	@/usr/bin/python3 $(DOTFILES_DIR)/herdr/herdr-server-start.test.py
-
-# The one command that applies a pinned boot path (or a herdr upgrade) to the
-# RUNNING server. Separate from herdr-setup and loudly named because it is
-# destructive in a way no other brew service here is: a herdr restart loses
-# every process in every pane — see AGENTS.md "a herdr crash restores the
-# layout and loses every process running in it".
-#
-# NOT `brew services restart`, and not `launchctl kickstart -k`. Both would
-# come back on the OLD job definition: brew REGENERATES the plist as part of
-# restart (so the wrapper is stripped again on the way up), and kickstart
-# restarts from launchd's CACHED definition without re-reading the file at all
-# — the trap this repo already paid for with ai.hermes.gateway. Only
-# bootout + bootstrap reloads the file, and bootstrap fails with `Input/output
-# error` while the old job is still SIGTERMed, hence the wait loop.
-.PHONY: herdr-status
-herdr-status:
-	@# Read-only sibling of colima-status: the server, the brew registration and
-	@# the SUPERVISED boot path, which liveness alone cannot see (brew regenerates
-	@# this plist on every upgrade/start/restart and nothing errors when it does —
-	@# same silent-config-revert class as colima's).
-	@herdr status --json 2>/dev/null | jq -r '"  server: v" + .server.version + " running=" + (.server.running|tostring) + " detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring)' \
-		|| echo "  ✗ herdr server not answering"
-	@brew services list | grep -E '^herdr' || echo "  herdr service: not registered"
-	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
-	if [ -z "$$PLIST" ]; then \
-		echo "  ✗ boot path UNRESOLVABLE — no sh.brew.herdr/homebrew.mxcl.herdr plist on disk"; \
-	elif [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$(DOTFILES_DIR)/herdr/herdr-server-start.py" ] \
-	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ]; then \
-		echo "  ✓ boot path supervised (bare KeepAlive + setsid wrapper) — $${PLIST##*/}"; \
-	else \
-		echo "  ✗ boot path NOT supervised — brew regenerated $${PLIST##*/}; run: make _herdr-supervise"; \
-	fi
-
-.PHONY: herdr-launchd-status
-herdr-launchd-status: ## Read-only: is the running herdr server launchd-supervised, and is the plist ready for the cutover?
-	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
-	WRAP="$(DOTFILES_DIR)/herdr/herdr-server-start.py"; \
-	[ -n "$$PLIST" ] || { echo "  ✗ no herdr plist under either name — run: make herdr-setup"; exit 1; }; \
-	if [ "$$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$$PLIST" 2>/dev/null)" = "$$WRAP" ] \
-	  && [ "$$(/usr/libexec/PlistBuddy -c 'Print :KeepAlive' "$$PLIST" 2>/dev/null)" = "true" ] \
-	  && [ -x "$$WRAP" ]; then echo "  ✓ plist ready: $$PLIST (session-leader wrapper, KeepAlive)"; \
-	else echo "  ✗ plist not converged — run: make _herdr-supervise"; exit 1; fi; \
-	TARGET=$$($(BREW_SERVICE) target herdr 2>/dev/null); \
-	if launchctl print "$$TARGET" >/dev/null 2>&1; then echo "  ✓ job loaded in launchd ($$TARGET)"; \
-	else echo "  · job NOT loaded: the running server is not supervised — a crash loses every pane"; \
-	     echo "    cutover (kills every pane, human-timed):  rd agents  &&  make herdr-restart YES=1"; fi
-
-.PHONY: herdr-restart
-herdr-restart:
-	@if [ "$(YES)" != "1" ]; then \
-		echo "  This KILLS every pane and every agent running in one."; \
-		echo "  Check first:  rd agents"; \
-		echo "  Then run:     make herdr-restart YES=1"; \
-		exit 1; \
-	fi
-	@brew services start herdr >/dev/null 2>&1 || true
-	@$(MAKE) --no-print-directory _herdr-supervise
-	@# 60s of slack, not 15s. bootout SIGTERMs the wrapper, whose own shutdown can
-	@# block in a `herdr status --json` probe (STATUS_TIMEOUT_SECONDS, 15s) and
-	@# then in the stop grace for a child that ignores the relay
-	@# (STOP_GRACE_SECONDS, 10s) — up to ~25s when a stop lands mid-probe, which
-	@# is exactly the wedged-herdr case this target exists for. A 15s wait
-	@# spuriously declared the job stuck and exited 1 before `launchctl
-	@# bootstrap`, leaving the old job mid-deregistration and the new plist never
-	@# bootstrapped. 120×0.5s covers that worst case with margin.
-	@PLIST=$$($(BREW_SERVICE) plist herdr 2>/dev/null); \
-	TARGET=$$($(BREW_SERVICE) target herdr 2>/dev/null); \
-	if [ -z "$$PLIST" ] || [ -z "$$TARGET" ]; then \
-		echo "  ✗ no herdr plist under either name (sh.brew.herdr / homebrew.mxcl.herdr) — nothing to bootstrap"; \
-		echo "    ↳ brew services info herdr --json"; exit 1; \
-	fi; \
-	U=$$(id -u); \
-	launchctl bootout "$$TARGET" 2>/dev/null || true; \
-	i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
-		i=$$((i+1)); [ $$i -gt 120 ] && { echo "  ✗ old herdr job never went away"; exit 1; }; \
-		sleep 0.5; \
-	done; \
-	if pgrep -f 'bin/herdr server$$' >/dev/null; then \
-		herdr server stop >/dev/null 2>&1 || true; \
-		i=0; while pgrep -f 'bin/herdr server$$' >/dev/null; do \
-			i=$$((i+1)); [ $$i -gt 120 ] && { echo "  ✗ old herdr server never exited — bootstrap would flap on 'already running'"; exit 1; }; \
-			sleep 0.5; \
-		done; \
-		echo "  ✓ old herdr server stopped"; \
-	fi; \
-	launchctl bootstrap "gui/$$U" "$$PLIST" || { echo "  ✗ bootstrap failed"; exit 1; }
-	@# STOP THE DAEMON EXPLICITLY. `bootout` never stops it, and it does not exit
-	@# on its own: on 2026-10-11 a restart left the Oct-1 server running, the
-	@# version gate passed on the OLD process (same 0.9.3), and the freshly
-	@# bootstrapped job flapped on "herdr server is already running" — a silent
-	@# no-op restart. `herdr server stop` + wait-for-exit happens before bootstrap.
-	@# WAIT, DO NOT SLEEP. `bootout` retires the launchd job but does not stop the
-	@# server — since 0.9.0 it is a detached daemon and holds the socket until it
-	@# exits itself, so for a moment the OLD binary still answers. A `sleep 2`
-	@# here is what made the 0.8.2 → 0.9.0 upgrade run a follow-up herdr command
-	@# against a protocol-20 server and die with `no pane in workspace `.
-	@#
-	@# AND WAIT FOR THE VERSION, not just for "a server". Without --version the
-	@# gate passes on running+compatible alone, and across a PATCH bump both
-	@# binaries speak the same protocol — so the old daemon, still shutting down,
-	@# satisfies it. Measured on 0.9.0 → 0.9.1 (2026-09-20): the gate printed
-	@# `✓ herdr server 0.9.0 ready (protocol 22)` and the next herdr command then failed
-	@# with `workspace create failed: server is shutting down`. The version comes
-	@# from the CLI because brew has already relinked it — client and server are
-	@# the same bottle, so the client IS the expected server version.
-	@bash $(DOTFILES_DIR)/scripts/lib/herdr-ready.sh --timeout 60 \
-		--version "$$(herdr --version | awk '{print $$2}')" \
-		|| { echo "    ↳ brew services info herdr --json"; exit 1; }
-	@herdr status --json 2>/dev/null | jq -r '"    · detached_server_daemon=" + (.server.capabilities.detached_server_daemon|tostring) + " (false still prompts on desk)"' \
-		|| echo "  ! could not read herdr status"
-
 # Collie — phone web-UI control surface for the herd, standalone on herdr-core.
 # See docs/collie.md for the full model: what it is, the ACL gate, why
 # COLLIE_SKIP_SERVE=1 is mandatory here, why the install is not a git checkout.
 # Opt-in per machine, NOT in the default `setup` chain — same policy as
 # remote-access/devhost-health-setup/batt-setup. Gated on the dev-host marker
-# (same signal herdr-setup and git-headless use) because Collie only makes
+# (same signal git-headless uses) because Collie only makes
 # sense pointed at the mini's core. The logic lives in scripts/collie-setup.sh
 # (setup | status | teardown) and scripts/collie-check.sh (the behavioural check).
 .PHONY: collie-setup collie-upgrade collie-status collie-teardown collie-pair collie-hc-proof
@@ -3126,7 +2818,7 @@ collie-upgrade:
 	@bash $(DOTFILES_DIR)/scripts/collie-upgrade.sh
 
 # Clone the pinned commit, build it, render com.jkrumm.collie, bootstrap it,
-# retire the classic herdr.collie plugin, then ASSERT: bridge up, spoofed Host
+# then ASSERT: bridge up, spoofed Host
 # 403, bridge connected to the core. Launchd-first — it refuses while
 # com.jkrumm.herdr-core is not running, and the bridge never starts a core.
 collie-setup:
@@ -3154,7 +2846,7 @@ collie-hc-proof:
 
 # The look: one command, both machines. Three programs paint one screen and none
 # of them can see the other two — the terminal paints pane content from its ANSI
-# palette, herdr paints its own chrome, starship paints the prompt inside that.
+# palette, the Herdr app paints its own chrome, starship paints the prompt inside that.
 # Applying the theme therefore means touching all three, and forgetting one is
 # how they drift apart. `make theme` is the canonical verb for that; it is a
 # subset of `make setup` and safe to run repeatedly on either machine.
@@ -3165,23 +2857,9 @@ collie-hc-proof:
 .PHONY: theme
 theme:
 	@echo ""
-	@echo "  Applying One Zinc (terminal) + One Dark/One Light (herdr chrome)"
+	@echo "  Applying One Zinc (terminal)"
 	@echo ""
 	@$(MAKE) --no-print-directory _setup-ghostty
-	@# herdr's config.toml is symlinked, so the file is already current — this
-	@# only needs to push it into a running server.
-	@mkdir -p $(HOME)/.config/herdr
-	@$(MAKE) --no-print-directory _link \
-		SRC="$(DOTFILES_DIR)/config/herdr/config.toml" \
-		DST="$(HOME)/.config/herdr/config.toml"
-	@if command -v herdr >/dev/null 2>&1; then \
-		herdr config check || exit 1; \
-		herdr server reload-config >/dev/null 2>&1 \
-			&& echo "    ✓ herdr reloaded live (panes kept)" \
-			|| echo "    · no running herdr server (applies on next launch)"; \
-	else \
-		echo "    · herdr not installed here — skipped"; \
-	fi
 	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/config/starship.toml" \
 		DST="$(HOME)/.config/starship.toml"
@@ -3208,7 +2886,7 @@ theme:
 	@echo "  Done. Reload Ghostty to pick up the terminal palette."
 	@echo ""
 
-# Remote-dev readiness heartbeat (herdr + sshd + tailscaled) pushed to
+# Remote-dev readiness heartbeat (herdr-core + sshd + tailscaled) pushed to
 # Uptime Kuma every 5 minutes. Opt-in per machine like `remote-access` — this
 # belongs on the dev host (the mini), not on a laptop that is meant to be
 # closed half the day and would just page about itself.
@@ -3246,7 +2924,7 @@ devhost-health-setup:
 	fi
 	@mkdir -p "$(LAUNCHAGENTS)"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.devhost-health" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ every 5 min → push herdr/sshd/tailscale readiness to Uptime Kuma"
+	@echo "    ↳ every 5 min → push herdr-core/sshd/tailscale readiness to Uptime Kuma"
 devhost-health-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.devhost-health.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -3290,7 +2968,7 @@ human-queue-deny:
 # ----------------------------------------------------------------------------
 # Drift check (dev host only)
 #
-# Reports what has fallen behind upstream — the commit-pinned herdr plugins, the
+# Reports what has fallen behind upstream — the commit-pinned collie build, the
 # xcaddy/caddy-dns modules built into caddy, brew-upgrade recency, pending macOS
 # updates. It NEVER upgrades anything; the full argument for that restraint is
 # scripts/drift-check.sh's header, and it is the same one that keeps the runaway
@@ -3613,16 +3291,12 @@ help:
 	@echo "  make db-tunnel-setup            MacBook: KeepAlive ssh -L forwards into the mini's databases (dbtunnel/tunnels.conf)"
 	@echo "  make db-tunnel-status           MacBook: tunnel agent + listening ports (read-only)"
 	@echo "  make db-tunnel-teardown         MacBook: unload + remove the tunnel agent"
-	@echo "  make theme                      Apply the look (terminal + herdr + prompt) and reload live — run on BOTH machines"
-	@echo "  make herdr-setup                Claude agent-state hook + project-note keybinding (+ server on the dev host)"
-	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
-	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
+	@echo "  make theme                      Apply the look (terminal + prompt) and reload live — run on BOTH machines"
 	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent via the FDA-holding launcher (both machines, clean env)"
 	@echo "  make tcc-check                  flag LaunchAgent programs without a durable file-access grant (docs/tcc.md; in make doctor)"
 	@echo "  make herdr-core-update-check    preview the daily core update (herdr-core-update runs it now)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
-	@echo "  make herdr-restart YES=1        Dev host: bootout + bootstrap the herdr server (kills every pane)"
-	@echo "  make devhost-health-setup       Load the 5-min herdr/sshd/tailscale heartbeat → Uptime Kuma"
+	@echo "  make devhost-health-setup       Load the 5-min herdr-core/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"
 	@echo "  make devhost-health-teardown    Unload + remove the heartbeat agent"
 	@echo "  make human-queue                MacBook: walk the mini's pending present-human requests (run/deny each)"
@@ -3642,9 +3316,7 @@ help:
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"
 	@echo "  make disk-sweep-run             Run the sweep once now (deletes; every step, docker included)"
 	@echo "  make disk-sweep-teardown        Unload + remove the disk-sweep agent"
-	@echo "  make herdr-events-setup         Dev-host only: load the herdr event recorder (-status / -teardown)"
 	@echo "  make hc-resume-setup            Dev-host only: load the Claude session resume for herdr-core (-status / -teardown)"
-	@echo "  make herdr-reap-setup           Dev-host only: load the 30 min classic-herdr janitor (-teardown)"
 	@echo "  make hc-reap-setup              Dev-host only: load the 30 min herdr-core janitor (-teardown); run once: rd reap [--dry-run]"
 	@echo "  make hc-events-setup            Dev-host only: load the herdr-core event recorder (-status / -teardown)"
 	@echo "  make kuma-door-setup           Dev-host only: load the Kuma door (:8795, KeepAlive); -restart / -teardown / -gen (monitors for homelab) / -check / -test"
