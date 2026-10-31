@@ -217,7 +217,7 @@ rows to the list below (original text: this file's git history), and un-hide the
 `com.jkrumm.appearance-sync` (WatchPaths, Herdr GPUI light/dark) ·
 `com.jkrumm.batt-reset` (09:00) · `com.jkrumm.brain-sync` (5 min) ·
 `com.jkrumm.claude-accounts-keepalive` (hourly, `jobrun`, the same job as on the mini) ·
-`com.jkrumm.db-tunnel` (KeepAlive) ·
+`com.jkrumm.db-tunnel` (KeepAlive) · `com.jkrumm.herdr-core` (KeepAlive `hc serve`, the core behind the Herdr app; clean env, `make herdr-core-setup`) ·
 `com.jkrumm.opbackup` (hourly guard) ·
 `com.jkrumm.photoflow` (logs to `/tmp`, known) · `com.jkrumm.smb-keepalive` (60 s +
 network change, `jobrun`, remounts a stale HomeLab Samba share) · `com.jkrumm.tailnet-sshd`

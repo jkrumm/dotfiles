@@ -2476,15 +2476,14 @@ jobrun-canary-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.jobrun-canary.json"; \
 	echo "  ✓ jobrun-canary torn down (unloaded, plist and jobrun state removed)"
 
-# herdr-core (`hc`) server beside the classic herdr — docs/herdr-core.md §Mini core. Dev host only.
+# herdr-core (`hc`) server as a LaunchAgent, on both machines — docs/herdr-core.md §Core as a LaunchAgent.
+# launchd gives it a clean environment: a core started by any other process passes that process's env to
+# every terminal (one started from inside Claude made every Claude a non-persisting "child session").
 # bootstrap into gui/<uid> explicitly: a plain `launchctl load` from an ssh session lands outside the
 # GUI session, and a core there spawns Claude without the keychain (the `ssh mini 'claude …'` trap).
 .PHONY: herdr-core-setup herdr-core-teardown herdr-core-status
 herdr-core-setup:
-	@BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
-	if [ "$$BACKEND" != "cache" ]; then \
-		echo "    · not the dev host (backend=$${BACKEND:-unset}) — herdr-core skipped"; exit 0; fi; \
-	[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — from the MacBook: scp ~/.local/bin/herdr-core mini:.local/bin/ (docs/herdr-core.md §Mini core)"; exit 1; }; \
+	@[ -x "$(HOME)/.local/bin/herdr-core" ] || { echo "    ✗ ~/.local/bin/herdr-core missing — MacBook: the app installer; mini: scp ~/.local/bin/herdr-core mini:.local/bin/"; exit 1; }; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; \
 	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
@@ -3646,7 +3645,7 @@ help:
 	@echo "  make herdr-status               Server + brew registration + supervised boot path (read-only)"
 	@echo "  make herdr-upgrade              Upgrade herdr: inventory + agent gate + plist convergence + restart + assert"
 	@echo "  make herdr-groups               Apply config/herdr/groups.json — reorder spaces + section headers"
-	@echo "  make herdr-core-setup           Dev host: hc serve as a GUI-session LaunchAgent beside classic herdr"
+	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent (both machines, clean env)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make herdr-groups-check         Print the grouping the sidebar would get (read-only)"
 	@echo "  make agent-overview             Dev host: herdr workspace overview watching agw agents --text (idempotent)"

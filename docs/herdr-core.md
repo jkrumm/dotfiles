@@ -38,9 +38,11 @@ Status 2026-10-31: **running in parallel** (core 0.1.15, app 0.1.10). The MacBoo
 
 Sources: the herdr-core and herdr-app READMEs, CHANGELOGs and issues cited above; agw research run `01a19101-d7ba-7122-98db-6230df648a9f` (deep, 41/42 citations grounded).
 
-## Mini core
+## Core as a LaunchAgent
 
-`com.jkrumm.herdr-core` (`make herdr-core-setup`, dev host only) runs `hc serve` as a KeepAlive LaunchAgent, **bootstrapped into `gui/<uid>`**. The MacBook links it with `hc machine add mini --name mini` (once; ssh config host `mini`).
+`com.jkrumm.herdr-core` (`make herdr-core-setup`, **both machines**) runs `hc serve` as a KeepAlive LaunchAgent, **bootstrapped into `gui/<uid>`**. The MacBook links the mini's with `hc machine add mini --name mini` (once; ssh config host `mini`).
+
+- **A core's environment is every terminal's environment.** `hc run` does not pass the caller's env on (verified 2026-10-31): terminals get the core's. A core started by hand from inside Claude passed `CLAUDECODE`/`CLAUDE_CODE_CHILD_SESSION` to every terminal, and every Claude in it ran as a non-persisting child session (no transcript, no `--resume`). launchd's clean env is the fix. Corollary: an account is chosen on the command (`env CLAUDE_CONFIG_DIR=… claude`), never inherited.
 
 - **Always up, on purpose.** Any `hc` client call auto-starts a core when none runs, including the MacBook's link arriving over ssh. A core born in an ssh session spawns Claude without the login keychain (the `ssh mini 'claude …'` trap). Under launchd, a terminal in the core reaches the keychain (verified 2026-10-31).
 - **Restart = `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.** Terminals survive: a `sleep` kept its pid across the kickstart (verified). Don't use `hc server restart`, `hc update` or `hc machine update mini` on the mini. They restart the core outside launchd's view, and that combination is untested.
