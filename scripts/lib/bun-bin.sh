@@ -1,12 +1,10 @@
 # shellcheck shell=bash
 # bun-bin.sh — resolve the directory holding bun (and its bunx shim) without
 # trusting the caller's PATH. A non-login make (launchd, an agent dispatch, a
-# herdr pane) inherits no login shell's PATH, and the bun official installer
-# puts the binaries in ~/.bun/bin — a directory nothing in this repo's
-# non-interactive PATH block (~/.zshenv) covers. Collie's plugin rebuild runs
-# `bun`/`bunx` from the plugin's own scripts, so whatever PATH collie-setup
-# hands `herdr plugin install` is what the rebuild gets; resolving here and
-# prepending it there is the same treatment collie-ctl.sh gives the bridge.
+# herdr-core terminal) inherits no login shell's PATH, and the bun official
+# installer puts the binaries in ~/.bun/bin — a directory nothing in this
+# repo's non-interactive PATH block (~/.zshenv) covers. Callers resolve it
+# here rather than trusting PATH.
 #
 # bun_bin_dir prints the first directory holding an executable `bun` and
 # returns 0, or returns 1 with no output when none does. Candidate order

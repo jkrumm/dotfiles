@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.jkrumm.appearance-sync</string>
   <!-- Push the macOS light/dark appearance into apps without their own switch
-       (Herdr GPUI). cfprefsd writes AppleInterfaceStyle to the global plist
+       (Claude Code, OpenCode). cfprefsd writes AppleInterfaceStyle to the global plist
        on every appearance change, so watching that file IS the change event;
        it also fires on unrelated preference writes, which the script ignores. -->
   <key>ProgramArguments</key>

@@ -14,8 +14,8 @@
 # globs `{homebrew.*,sh.brew.*}` (Homebrew/services/cli.rb).
 #
 # Every consumer here hardcoded the old path, and the failure is the silent kind
-# this repo keeps paying for: the converge steps (`_colima-supervise`,
-# `_herdr-supervise`) test `[ -f "$PLIST" ]` first and print "plist absent —
+# this repo keeps paying for: the converge step (`_colima-supervise`)
+# tests `[ -f "$PLIST" ]` first and prints "plist absent —
 # nothing to supervise", exit 0, GREEN — while the freshly written stock plist
 # carries exactly the inverted `KeepAlive { SuccessfulExit = true }` and the
 # stock `colima start -f` those steps exist to repair. Reproduced on the MacBook
@@ -37,7 +37,7 @@
 #   bash scripts/lib/brew-service.sh plist    colima
 #   bash scripts/lib/brew-service.sh label    colima
 #   bash scripts/lib/brew-service.sh expected colima
-#   bash scripts/lib/brew-service.sh target   herdr
+#   bash scripts/lib/brew-service.sh target   caddy
 #
 # Domain is `gui` (default, LaunchAgents) or `system` (LaunchDaemons).
 # Every lookup exits 1 and prints NOTHING when no plist exists under either

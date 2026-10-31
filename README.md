@@ -8,8 +8,8 @@ either end; git always sees the change here.
 ## Two machines
 
 The Mac mini is the always-on dev host — agents run there and outlive any
-client. The MacBook is a thin client: `desk` attaches to the mini's herdr
-session over ssh, `rd` puts work on the mini with no terminal
+client. The MacBook is a thin client: the Herdr app shows the mini's
+herdr-core terminals over ssh, `rd` puts work on the mini with no terminal
 needed at all. Full model, including the reverse `mini → iumac` leg and the
 secrets/access split between the two: `docs/architecture.md`.
 
@@ -31,7 +31,7 @@ auth, Keychain API-key caching, MCP registration, `settings.json` merge.
 | `make setup` | Converge this machine onto the tracked config. Idempotent. |
 | `make status` | Read-only snapshot of this machine's state. |
 | `make doctor` | Read-only health check — self-routes: on the MacBook it also runs the mini's doctor over ssh. |
-| `make theme` | Apply the terminal/herdr/prompt theme and reload live. |
+| `make theme` | Apply the terminal/prompt theme and reload live. |
 
 Machine-specific setup (remote access, battery limiter, backups, etc.) is
 opt-in per target — see `AGENTS.md` for the full list.

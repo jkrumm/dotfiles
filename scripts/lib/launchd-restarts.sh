@@ -22,8 +22,8 @@
 #
 # No live restart path in this repo writes a marker today. A path that does must
 # inline that line rather than source this file — a deploy script must not depend
-# on a dotfiles checkout path. `bootout` + `bootstrap` (herdr-restart,
-# colima-restart, hermes) needs no marker: a freshly loaded job starts again at
+# on a dotfiles checkout path. `bootout` + `bootstrap` (colima-restart,
+# hermes) needs no marker: a freshly loaded job starts again at
 # `runs = 1`, which is never a bump.
 #
 # One marker line excuses one bump inside the window, and exactly that many
@@ -71,13 +71,13 @@ check_launchd_restarts() {
   # KeepAlive makes a crash-looping service look EXACTLY like a healthy one:
   # launchd restarts it, the port comes back, every liveness check goes green.
   # The evidence is already sitting in `launchctl print` and nothing read it —
-  # herdr is at `runs = 2` with `last terminating signal = Killed: 9`, the OOM
-  # kill that silently emptied its panes.
+  # the herdr-core job at `runs = 2` with `last terminating signal = Killed: 9`, the OOM
+  # kill that silently emptied its terminals.
   #
   # This is a DELTA, not a threshold on `runs`. `runs` is cumulative since load,
   # so failing on runs > 1 would page forever over an event from weeks ago; the
   # alertable fact is "a service restarted since the last 5-minute check", which
-  # for herdr means every pane's processes are gone RIGHT NOW. It pages for one
+  # for herdr-core means every terminal's processes are gone RIGHT NOW. It pages for one
   # cycle and clears, which is the correct shape for an edge.
   #
   # StartInterval agents (this one included, at runs = 1333) are deliberately
@@ -96,7 +96,7 @@ check_launchd_restarts() {
   #      DOWN alerts between 2026-06-14 and 2026-09-07 were `make hermes-restart`
   #      and friends.
   #
-  # Everything else pages: `Killed: 9` (jetsam/OOM — the herdr case it was
+  # Everything else pages: `Killed: 9` (jetsam/OOM — the herdr-core case it was
   # written for), `Abort trap: 6`, `Segmentation fault: 11`, a crash loop that
   # exits non-zero with no signal, and — deliberately — an UNMARKED clean exit 0,
   # because a daemon that bails on missing config looks exactly like that.

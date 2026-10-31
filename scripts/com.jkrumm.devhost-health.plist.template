@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.devhost-health</string>
-  <!-- Remote-dev readiness heartbeat for the Mac mini (herdr + sshd +
+  <!-- Remote-dev readiness heartbeat for the Mac mini (herdr-core + sshd +
        tailscaled), pushed to the `MacMini Dev Host - Push` monitor.
        Push rather than probe: the ACL has no tag:homelab → tag:mac grant, so
        Uptime Kuma cannot reach the mini. See scripts/devhost-health-check.sh. -->

@@ -14,7 +14,7 @@
        exactly three events: the "Lock when sleeping" setting, the "Lock after
        N minutes" inactivity timer, and logout. Screen lock, screensaver and
        fast user switching are none of them. So the session keeps running fully
-       — herdr, the agents, every LaunchAgent — behind a password prompt.
+       — herdr-core, the agents, every LaunchAgent — behind a password prompt.
        Verified against security(1) and Apple's keychain docs, 2026-08-01. -->
 
   <!-- WHY pmset AND NOT osascript. The obvious "lock now" is a synthesized

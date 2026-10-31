@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.drift-check</string>
-  <!-- Reports what has fallen behind upstream (pinned herdr plugins, the
+  <!-- Reports what has fallen behind upstream (the pinned collie build, the
        xcaddy/caddy-dns modules, brew-upgrade recency, pending macOS updates)
        to its own Uptime Kuma push monitor. Reports only — nothing here
        upgrades anything. Rationale: scripts/drift-check.sh header. -->

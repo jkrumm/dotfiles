@@ -4,7 +4,7 @@
 # pin drift) and scripts/collie-upgrade.sh (which applies it).
 #
 # WHY THIS IS A LIB AND NOT COPIED INTO BOTH. tag_commit's annotated-tag peel is
-# the subtle part: `herdr plugin install --ref` pins the DEREFERENCED commit, so
+# the subtle part: a commit pin is the DEREFERENCED commit, so
 # reading the tag object's own sha instead reports drift that can never be
 # resolved — the pin would disagree with upstream forever, at every version. A
 # second implementation of that is a second chance to get it backwards, in the
@@ -33,7 +33,7 @@ makefile_var() {
 # --- Remote tag resolution ---------------------------------------------------
 # One ls-remote per repo, cached to a temp file so the tag name and its commit
 # come from ONE view of the remote. `^{}` rows are the dereferenced commit of an
-# annotated tag — the thing `herdr plugin install --ref` actually pins — so they
+# annotated tag — the commit a pin names — so they
 # are the rows we want the sha from, while the tag NAME comes from the plain row.
 #
 # A network failure returns 1 and the caller decides. It must never read as
