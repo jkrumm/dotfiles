@@ -42,7 +42,7 @@ EOS
 
 run() { # $1 = backend
   echo "$1" > "$TMP/backend"
-  DOTFILES_DIR="$TMP" BACKEND_FILE="$TMP/backend" LAUNCHCTL_BIN="$TMP/launchctl" \
+  DOTFILES_DIR="$TMP" BACKEND_FILE="$TMP/backend" LAUNCHCTL_BIN="${FAKE_LAUNCHCTL:-$TMP/launchctl}" \
     LAUNCHD_AGENT_DIRS="$TMP/agents $TMP/daemons" bash "$CHECK" 2>&1
 }
 
@@ -70,6 +70,39 @@ out=$(run op); expect "MacBook label absent here fails on the MacBook backend" 1
 write_map "" ""
 out=$(run cache); expect "on-disk label missing from the map still fails" 1 "on-disk-but-unmapped: com.jkrumm.beta" $? "$out"
 rm "$TMP/agents/com.jkrumm.beta.plist"
+
+# Wave 4: the herdr-core world (com.jkrumm.herdr-core, hc-*) lives beside the classic herdr until Wave 7.
+# Both generations mapped and live pass; a mapped core with the classic plist already gone passes too (the
+# check must not demand either generation to be absent or present beyond the map).
+cat > "$TMP/launchctl-core" <<'EOS'
+#!/bin/sh
+printf 'PID\tStatus\tLabel\n'
+printf -- '-\t0\tcom.jkrumm.alpha\n'
+printf -- '-\t0\tcom.jkrumm.herdr-core\n'
+printf -- '-\t0\tcom.jkrumm.hc-resume\n'
+printf -- '-\t0\tsh.brew.herdr\n'
+EOS
+chmod +x "$TMP/launchctl-core"
+: > "$TMP/agents/com.jkrumm.herdr-core.plist"; : > "$TMP/agents/com.jkrumm.hc-resume.plist"; : > "$TMP/agents/sh.brew.herdr.plist"
+write_map '| `com.jkrumm.herdr-core` | core |
+| `com.jkrumm.hc-resume` | resume |
+| `sh.brew.herdr` | classic |' ""
+out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "core and classic herdr both mapped and live pass" 0 "mapped mini labels exist" $? "$out"
+rm "$TMP/agents/sh.brew.herdr.plist"
+cat > "$TMP/launchctl-core" <<'EOS'
+#!/bin/sh
+printf 'PID\tStatus\tLabel\n'
+printf -- '-\t0\tcom.jkrumm.alpha\n'
+printf -- '-\t0\tcom.jkrumm.herdr-core\n'
+printf -- '-\t0\tcom.jkrumm.hc-resume\n'
+EOS
+write_map '| `com.jkrumm.herdr-core` | core |
+| `com.jkrumm.hc-resume` | resume |' ""
+out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "core mapped with the classic generation gone passes" 0 "mapped mini labels exist" $? "$out"
+write_map '| `com.jkrumm.hc-resume` | resume |' ""
+out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "an unmapped core label still fails" 1 "com.jkrumm.herdr-core" $? "$out"
+rm "$TMP/agents/com.jkrumm.herdr-core.plist" "$TMP/agents/com.jkrumm.hc-resume.plist"
+write_map "" ""
 
 # Fail closed: a renamed section heading must not read as a green pass.
 sed -i '' 's/^## LaunchAgents — mini/## Agents — mini/' "$TMP/docs/architecture.md"
