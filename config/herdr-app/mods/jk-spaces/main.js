@@ -1,8 +1,8 @@
 // jk-spaces — derived from Herdr's shipped `spaces` mod (herdr-app, Apache-2.0).
 // Changes: spaces sit in folders taken from dotfiles' config/herdr/groups.json (the
 // taxonomy classic herdr's sidebar uses too), folders fold and still flag a space
-// that needs you, the avatar shows the space's agent status instead of a color, no
-// git tail after the name, tighter rows.
+// that needs you, rows are a status dot and the name (no letter avatar, no folder
+// colors, no git tail), tighter rows; this computer is labelled "MacBook".
 //
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
@@ -39,11 +39,10 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 const FALLBACK = 60000;
 
 
-// Folders: groups.json's groups in order, each a hue from the theme; a space joins the
+// Folders: groups.json's groups in order; a space joins the
 // group naming its repo (worktrees follow their repo), the rest land in the fallback.
 // Linked into the app home by make herdr-app-setup.
 const GROUPS = ".config/herdr-app/groups.json";
-const HUES = ["ansi4", "ansi6", "ansi5", "ansi3", "ansi2", "ansi1"];
 const URGENT = (status) => status === "blocked" || status === "done";
 
 // A space speaks up only when something in it needs you.
@@ -139,7 +138,7 @@ export default class Spaces extends View {
         const r = await exec("cat", [`${home()}/${GROUPS}`]);
         if (r.code !== 0) throw new Error(r.stderr);
         const d = JSON.parse(r.stdout);
-        const list = (d.groups ?? []).map((g, n) => ({ label: g.label, members: new Set(g.members ?? []), hue: HUES[n % HUES.length] }));
+        const list = (d.groups ?? []).map((g) => ({ label: g.label, members: new Set(g.members ?? []) }));
         const next = { list, fallback: d.fallback ?? "OTHER" };
         if (JSON.stringify(next, (_k, v) => (v instanceof Set ? [...v] : v)) === JSON.stringify(this.groups, (_k, v) => (v instanceof Set ? [...v] : v))) return;
         this.groups = next;
@@ -165,12 +164,12 @@ export default class Spaces extends View {
     for (const r of mine) {
       const f = this.folderOf(r, ps);
       const label = f?.label ?? this.groups.fallback;
-      if (!buckets.has(label)) buckets.set(label, { hue: f?.hue ?? null, rows: [] });
+      if (!buckets.has(label)) buckets.set(label, { rows: [] });
       buckets.get(label).rows.push(r);
     }
     const order = [...this.groups.list.map((g) => g.label), this.groups.fallback];
     return order.filter((l) => buckets.has(l)).flatMap((label) => {
-      const { hue, rows } = buckets.get(label);
+      const { rows } = buckets.get(label);
       const key = `${m ?? ""}/${label}`;
       const folded = this.foldersFolded.has(key);
       const urgent = rows.find((r) => URGENT(r.w.status))?.w.status;
@@ -181,7 +180,6 @@ export default class Spaces extends View {
           localStorage.setItem("folders.folded", JSON.stringify([...this.foldersFolded]));
           cx.notify();
         })
-        .child(div().size(7).rounded(2).flex_none().bg(hue ? t[hue] : t.dim))
         .child(div().flex_1().truncate().child(label))
         .when(folded && Boolean(urgent), (el) => el.child(div().flex_none().text_color(tone(t, urgent)).child("●")))
         .child(div().flex_none().child(String(rows.length)))
@@ -319,7 +317,7 @@ export default class Spaces extends View {
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
-        .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
+        .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "MacBook"))
           .when(!connected, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
           .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", m ? { machine: m } : {}); }).child("+")))
@@ -335,10 +333,10 @@ export default class Spaces extends View {
 
   row({ w, i, g, tree }, t) {
     const on = w.active;
-    // The avatar is the space's agent status: filled while an agent works, needs you or
-    // just finished; a quiet tile otherwise. The folder header carries the color.
+    // No avatar: a dot in the space's agent-status color while an agent works, needs
+    // you or just finished; an empty slot of the same width otherwise.
     const live = w.status && w.status !== "idle";
-    const fill = live ? tone(t, w.status) : t.raised;
+    const fill = live ? tone(t, w.status) : null;
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -382,7 +380,7 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color(live ? "#ffffff" : t.muted).child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(!tree, el => el.child(div().size(7).flex_none().rounded(4).when(live, (d) => d.bg(fill))))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
           .child(div().flex_1()),
       );
