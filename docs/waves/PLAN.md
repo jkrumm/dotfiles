@@ -94,6 +94,17 @@ report (done / deferred, one line each). The chain's Waves 4, 5 and 8 verify the
     Verify which works without breaking biometric `op` on the MacBook. Wire the winner into
     `secrets-seed`/`brew-upgrade.sh` and drop the FDA-on-Caskroom-path assertion. Never touch `secrets-run`
     without its full guardrail (`AGENTS.md` §Secrets); if the fix needs it, stop and report instead.
+  - **Holistic, not per tool (owner, 2026-10-31):** the same TCC failure bites more than core and `op`.
+    Start from an inventory on both machines: every FDA / Files-and-Folders / AppData grant (System Settings
+    lists; `tccutil` cannot list on 26, so read what the panel shows or what `sqlite3` on the user DB allows
+    without SIP changes), every LaunchAgent `Program`, every binary under a versioned path (Caskroom, Cellar,
+    `~/.local/share/claude/versions/<v>`) or ad-hoc signed (`codesign -d -r-`), and every TCC dialog in the
+    unified log (`log show --predicate 'process == "tccd"' --last 7d`). Classify each one: covered by the
+    launcher's grant (runs in a core terminal), needs the stable-path or stable-signature pattern, or needs no
+    grant at all (`op`'s env switch, moving data out of protected folders). Write it up as `docs/tcc.md`:
+    the model, the three patterns, the per-binary table, and the one-time grant list for each machine. Add a
+    `make tcc-check` (read-only, in `make doctor`) that flags a LaunchAgent whose program is ad-hoc signed or
+    versioned-path and not covered. Queue every one-time grant with `ask-human` in one batch per machine.
 - **P2 — agent-workflows (+ argo), role `wave`:** `agw agents` collects from hc (`hc ls --json` on each
   machine through the MacBook's `hc machine` links or per-host collection; fields per `docs/herdr-core.md`
   §Verified facts) **beside** classic `herdr agent list` until Wave 7. Status, session id (from the resume
@@ -209,6 +220,9 @@ Role `wave`.
   Mac's appearance, running programs get `?997` on a switch); else move it to raw input over
   `terminal.attach` (`hc send` adds Enter). Brain-note: a `jk-keys` mod whose command
   runs the script with `hc run --bg` and shows it with `terminal.peek`, bound in `keys.json` (MacBook).
+- [ ] `claude-account health` reads the peer's logins through its core (`hc exec --on mini`), not ssh: over
+  ssh the mini's keychain is invisible, so the app's ⚠ chip said ok while `me`/`me2` were logged out on the mini
+  (2026-10-31). Re-poll ~60 s after a Re-login starts.
 - [ ] dotfiles health: heartbeat herdr component → core component (+ version parity),
   `doctor.sh`, `brew-upgrade.sh`, `architecture-check.sh`, `log-rotate.sh`, `mini-macos-update.sh`, and the
   `docs/architecture.md` rows.
