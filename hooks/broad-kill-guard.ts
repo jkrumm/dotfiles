@@ -87,18 +87,12 @@ const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 
 const basename = (token: string): string => token.split("/").pop() ?? token;
 
-/** A command with the scripts handed to it as option values (`env -S '<cmd>'`). */
-interface Resolved {
-  inv: Invocation | null;
-  scripts: string[];
-}
-
 /** `>file`, `2>`, `<in` at the start of a command: not the executable. */
 const REDIRECT = /^\d*(?:>>?|<)/;
 
 /** Skip keywords, redirections, env assignments and wrappers; return the command proper. */
-function resolve(tokens: string[]): Resolved {
-  const scripts: string[] = [];
+function resolve(input: string[]): Invocation | null {
+  let tokens = input;
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
@@ -106,8 +100,8 @@ function resolve(tokens: string[]): Resolved {
       i++;
       continue;
     }
-    // `>/dev/null cmd`, `> out cmd`; `2>&1 cmd` arrives as `2>` then `1`.
-    if (REDIRECT.test(t) || /^\d+$/.test(t)) {
+    // `>/dev/null cmd`, `> out cmd`; `2>&1 cmd` / `2>&- cmd` arrive as `2>` then `1` / `-`.
+    if (REDIRECT.test(t) || /^[\d-]+$/.test(t)) {
       i += /^\d*(?:>>?|<)$/.test(t) ? 2 : 1;
       continue;
     }
@@ -118,18 +112,25 @@ function resolve(tokens: string[]): Resolved {
     while (i < tokens.length && tokens[i].startsWith("-")) {
       const flag = tokens[i++];
       if (flag === "--") break;
-      if (name === "env" && (flag === "-S" || flag === "--split-string")) {
-        if (i < tokens.length) scripts.push(tokens[i++]);
-      } else if (name === "env" && flag.startsWith("--split-string=")) {
-        scripts.push(flag.slice("--split-string=".length));
-      } else if (spec.valueFlags.has(flag)) {
+      // `env -S 'cmd args'`: the string becomes the command's leading words.
+      const split =
+        name === "env" && (flag === "-S" || flag === "--split-string")
+          ? tokens[i++]
+          : name === "env" && flag.startsWith("--split-string=")
+            ? flag.slice("--split-string=".length)
+            : undefined;
+      if (split !== undefined) {
+        tokens = [...tokens.slice(0, i), ...split.split(/\s+/).filter(Boolean), ...tokens.slice(i)];
+        break;
+      }
+      if (spec.valueFlags.has(flag)) {
         i++;
       }
     }
     i += spec.positionals;
   }
-  if (i >= tokens.length) return { inv: null, scripts };
-  return { inv: { name: basename(tokens[i]), args: tokens.slice(i + 1) }, scripts };
+  if (i >= tokens.length) return null;
+  return { name: basename(tokens[i]), args: tokens.slice(i + 1) };
 }
 
 const XARGS_VALUE_FLAGS = new Set(["-n", "-I", "-P", "-L", "-s", "-d", "-E", "-a", "-J", "-R", "-S"]);
@@ -169,12 +170,11 @@ function collect(command: string, depth = 0): Invocation[] {
   const out: Invocation[] = [];
   if (depth > 4) return out;
 
-  const add = ({ inv, scripts }: Resolved) => {
-    for (const script of scripts) out.push(...collect(script, depth + 1));
+  const add = (inv: Invocation | null) => {
     if (!inv) return;
     if (inv.name === "xargs") {
       const inner = resolve(stripXargsFlags(inv.args));
-      add({ inv: inner.inv && { ...inner.inv, stdin: true }, scripts: inner.scripts });
+      if (inner) add({ ...inner, stdin: true });
       return;
     }
     if (SHELLS.has(inv.name)) {
@@ -192,7 +192,11 @@ function collect(command: string, depth = 0): Invocation[] {
   // The tokenizer drops heredoc bodies (data for most commands); a body fed to
   // a shell is a script.
   for (const body of shellHeredocBodies(command)) out.push(...collect(body, depth + 1));
-  for (const tokens of splitIntoCommands(command)) add(resolve(tokens));
+  // `{}` is an xargs/find replacement operand; the tokenizer would split on the
+  // braces and detach `kill {}` from its `xargs -I{}`.
+  for (const tokens of splitIntoCommands(command.replaceAll("{}", "__BRACES__"))) {
+    add(resolve(tokens));
+  }
   return out;
 }
 
@@ -201,11 +205,14 @@ function collect(command: string, depth = 0): Invocation[] {
  * `bash <<< 'script'`. (The tokenizer reads `<<<` as a heredoc and drops it.)
  */
 function shellHeredocBodies(command: string): string[] {
-  const herestring = /\b(?:bash|sh|zsh|dash|ksh)\b[^\n|;&]*?<<<[ \t]*(?:'([^']*)'|"([^"]*)"|(\S+))/g;
+  const shell = String.raw`(?:^|[;&|\n(\x60]|\$\()[ \t]*(?:[A-Za-z_]\w*=\S*[ \t]+)*(?:(?:sudo|env|nohup|time|exec|command)[ \t]+(?:-\S+[ \t]+)*)*(?:\S*/)?(?:bash|sh|zsh|dash|ksh)\b`;
+  const herestring = new RegExp(String.raw`${shell}[^\n|;&]*?<<<[ \t]*(?:'([^']*)'|"([^"]*)"|(\S+))`, "g");
   const strings = [...command.matchAll(herestring)].map((m) => m[1] ?? m[2] ?? m[3]);
-  const re =
-    /\b(?:bash|sh|zsh|dash|ksh)\b[^\n|;&]*?<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?:\n|$)/g;
-  return [...strings, ...[...command.matchAll(re)].map((m) => m[3])];
+  const heredoc = new RegExp(
+    String.raw`${shell}[^\n|;&]*?<<-?[ \t]*(['"]?)([^\s'"<>;&|]+)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?:\n|$)`,
+    "g",
+  );
+  return [...strings, ...[...command.matchAll(heredoc)].map((m) => m[3])];
 }
 
 // ── pgrep / pkill arguments ──────────────────────────────────────────────────

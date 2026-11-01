@@ -95,11 +95,16 @@ describe("deny", () => {
     denied("bash <<'EOF'\npkill -f gate.sh\nEOF");
     denied("bash <<EOF\nkillall node\nEOF");
     denied("sh <<< 'pkill -f gate.sh'");
+    denied("bash <<'END-SCRIPT'\npkill -f gate.sh\nEND-SCRIPT");
+    denied("2>&- pkill -f gate.sh");
+    denied("env -S 'pkill -P 123' -f gate.sh");
+    denied("sudo -n bash <<EOF\nkillall node\nEOF");
   });
 
   test("xargs -I{} replacement operands do not hide the kill", () => {
     denied("pgrep -f gate.sh | xargs -I{} kill {}");
     denied("pgrep -f gate.sh | xargs -I{} pkill -P {}");
+    denied("pgrep -f gate.sh | xargs -I{} kill 1234 {}");
   });
 });
 
@@ -169,6 +174,8 @@ describe("allow", () => {
     allowed("make hooks-test");
     allowed("bash <<'EOF'\necho hi\nEOF");
     allowed(">/dev/null kill 1234");
+    allowed(`echo "sh <<< 'pkill -f gate.sh'"`);
+    allowed("env -S 'echo hello; killall node'");
     allowed("sudo --user root kill 1234");
   });
 });
