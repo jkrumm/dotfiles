@@ -194,11 +194,11 @@ mod waits until `terminals()` lists the address first. With `--rm`, the terminal
 (the parent killed, the child with the flag stayed live, the one without was killed). `claude --resume <id> "<prompt>"` is
 valid, but `--resume` takes an optional value, so an id must always be passed or the prompt is read as the id. A
 `doc.set` of a `herdr-app` space+tab entry before any terminal exists is accepted (version 0 → 1, stale version →
-`conflict`); whether the app adopts a pre-written tab entry is **not** verified (no app on the mini), and the doc's shape
-(`spaces[].{id,folder,tabs[].{id,name}}`) is a guess: software-factory reads it defensively and falls back to a stable
-`sp-<dir>-<hash>` id. `hc connect` STARTS a core when none runs (a `hello` on a fresh `HC_SESSION` did), so a subscriber must check that launchd's `com.jkrumm.herdr-core` is running before it connects (corrected 2026-10-31; an earlier note said it exits 2). hc refuses
-a terminal name that can read as an address (`t7`). Verify the doc shape against the app on the MacBook before
-trusting tab names.
+`conflict`); whether the app adopts a pre-written tab entry is **not** verified (no app on the mini). The doc's shape is
+verified against the live doc (2026-11-01, version 86, read with `doc.get {name: "herdr-app"}` over `hc connect`): the
+value is `{spaces: [{id, name, folder, tabs: [{id, name, root}]}]}`. software-factory still reads it defensively and
+falls back to a stable `sp-<dir>-<hash>` id. `hc connect` STARTS a core when none runs (a `hello` on a fresh `HC_SESSION` did), so a subscriber must check that launchd's `com.jkrumm.herdr-core` is running before it connects (corrected 2026-10-31; an earlier note said it exits 2). hc refuses
+a terminal name that can read as an address (`t7`).
 
 **10. Resume (Wave 3).** `hooks/hc-session-label.ts` labels its own terminal on SessionStart
 (`jk.claude.session=<id>`, `jk.claude.config=<CLAUDE_CONFIG_DIR>`, empty for `iu`) and clears the session label on
