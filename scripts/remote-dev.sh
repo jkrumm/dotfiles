@@ -453,23 +453,28 @@ factory_error() { # <json>
 # The next key after a spent one: `<key>-r2`, `-r3`, … clipped at 32 like the terminal name (`wave_agent_name`), so the
 # agent name, which follows the key, still fits.
 spawn_retry_key() { # <key> <n>
-  local s="-r$2"
-  printf '%s' "${1:0:$((32 - ${#s}))}${s}"
+  local s="-r$2" room
+  room=$((32 - ${#s}))
+  (( ${#1} <= room )) && { printf '%s' "$1$s"; return; }
+  # Clipped: two long keys that differ only in their tail (…-w1, …-w2) must not share a retry key, so a digest of the whole key goes in.
+  printf '%s' "${1:0:$((room - 5))}-$(sha12 "$1" | cut -c1-4)$s"
 }
 
 # Create a spawn through the factory (idempotent by key while the key is live) and wait, bounded by RD_FACTORY_WAIT_S
 # (120 s), until it has started. The factory picks the account and starts the pane; it also delivers the prompt.
 # A key whose agent has ended is spent: the factory answers 409 `key_spent` and never revives the row, so the next key is
-# `<key>-r2`, `-r3`, … and FSPAWN_KEY says which one was used (the agent name follows it). A factory from before that
-# answers the old row (200) instead; the first look at it, right after the create, tells a spent one from a fresh spawn
-# (`ended`, or `started` with a dead session: a spawn this call just made is still queued or starting).
+# `<key>-r2`, `-r3`, … and FSPAWN_KEY says which one was used (the agent name follows it). A spawn this call makes is
+# `queued` or `waiting` in the create's own answer; any other status is a row that already existed. A factory from before
+# key_spent answers such a row with 200 instead of 409: `ended`, or `started` with a dead session, is spent too. A retry
+# key that already has a row (a live `-r2` from an earlier call, a failed one) is passed over, never replayed: its prompt
+# was not this call's. Once a key was spent, an error from the create is an error, not a fallback to hc under the old name.
 #   return 0  handled — FSPAWN_STATE = started | queued (held: FSPAWN_REASON) | starting (claimed, not
 #             started within the wait); FSPAWN_PANE / FSPAWN_ACCOUNT filled when the factory reports them
 #   return 1  the spawn failed (FSPAWN_ERR), ended, or the factory went silent after creating it
 #   return 2  the factory could not create the spawn: the caller falls back to hc directly (never for `key_spent`)
 factory_spawn() { # <key> <repo> <prompt> <role> [space]
   local key0=$1 repo=$2 prompt=$3 role=$4 space=${5:-} out rc get="" state key n=1 tries=${RD_FACTORY_KEY_TRIES:-50}
-  local first spent sess deadline
+  local spent cstate sess deadline
   local -a extra=()
   [[ -n $space ]] && extra=(--space "$space")
   FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""; FSPAWN_KEY=$key0
@@ -486,6 +491,10 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
       # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
       # name is worse than a visible error.
       if (( rc == 126 || rc == 127 )) || jq -e '.error | objects' <<<"$out" >/dev/null 2>&1; then
+        if (( n > 1 )); then
+          FSPAWN_ERR="'$key0' is spent and the create under '$key' failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - not starting an agent outside the factory under the old name"
+          return 1
+        fi
         echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using hc directly" >&2
         return 2
       fi
@@ -495,23 +504,26 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
         FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
         return 1
       fi
+    else
+      cstate=$(factory_field "$out" '.status // empty')
+      case $cstate in
+        ended) spent=1 ;;
+        started)
+          sess=$(factory_host "$FACTORY_CALL_S" session get "$key" --format json 2>/dev/null) || sess=""
+          case $(factory_field "$sess" '.state // empty') in
+            dead) spent=1 ;;
+            "") echo "rd: could not tell whether the existing spawn '$key' is live - taking it as it is" >&2 ;;
+          esac ;;
+      esac
+      # A row that existed before this call is no spawn of ours on a retry key.
+      case $cstate in started|failed|starting) (( n > 1 )) && spent=1 ;; esac
     fi
 
     if (( ! spent )); then
       deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
-      first=1
       while :; do
         get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
         state=$(factory_field "$get" '.status // empty')
-        if (( first )); then
-          first=0
-          [[ $state == ended ]] && spent=1
-          if [[ $state == started ]]; then
-            sess=$(factory_host "$FACTORY_CALL_S" session get "$key" --format json 2>/dev/null) || sess=""
-            [[ $(factory_field "$sess" '.state // empty') == dead ]] && spent=1
-          fi
-          (( spent )) && break
-        fi
         case $state in
           started|ended|failed|waiting) break ;;
           queued) [[ -z $(factory_field "$get" '.hold // empty') ]] || break ;; # held; a plain queued spawn is claimed on the next tick

@@ -151,24 +151,43 @@ has "twice spent: -r3" "$out" "claude 'myrepo-w1-r3'"
 no_hc_spawn "still no hc"
 
 echo "wave: a factory from before key_spent answers the old row (200); rd tells a spent one from a fresh spawn"
-reset; reply myrepo-w1 '{"status":"ended","pane":"w4V:p3J"}'; reply myrepo-w1-r2 "$LIVE"
+creply() { printf '%s\n' "$2" >"$STATE/create-reply-$1"; }   # creply <key> <json> — what the create answers for that key
+reset; creply myrepo-w1 '{"status":"ended","pane":"w4V:p3J"}'; reply myrepo-w1-r2 "$LIVE"
 rd wave myrepo "adhoc task"
 has "ended: the next key" "$fcalls" "spawn create myrepo-w1-r2"
 has "ended: the started line is the new agent's" "$out" "claude 'myrepo-w1-r2'"
 lacks "ended: not the old pane" "$out" "w4V:p3J"
-reset; reply myrepo-w1 '{"status":"started","pane":"w4V:p3J"}'; echo '{"state":"dead"}' >"$STATE/session-reply-myrepo-w1"; reply myrepo-w1-r2 "$LIVE"
+reset; creply myrepo-w1 '{"status":"started","pane":"w4V:p3J"}'; echo '{"state":"dead"}' >"$STATE/session-reply-myrepo-w1"; reply myrepo-w1-r2 "$LIVE"
 rd wave myrepo "adhoc task"
 has "started with a dead session: the next key" "$fcalls" "spawn create myrepo-w1-r2"
 lacks "started with a dead session: not the old pane" "$out" "w4V:p3J"
-reset; reply default "$LIVE"; echo '{"state":"idle"}' >"$STATE/session-reply-myrepo-w1"
+reset; creply myrepo-w1 "$LIVE"; echo '{"state":"idle"}' >"$STATE/session-reply-myrepo-w1"; reply default "$LIVE"
 rd wave myrepo "adhoc task"
-lacks "a live session keeps its key" "$fcalls" "myrepo-w1-r2"
+lacks "a replay of a live session keeps its key" "$fcalls" "myrepo-w1-r2"
 has "and is reported started" "$out" "claude 'myrepo-w1'"
+reset; creply myrepo-w1 "$LIVE"; : >"$STATE/session-reply-myrepo-w1"; reply default "$LIVE"
+rd wave myrepo "adhoc task"
+has "a session lookup that says nothing is said, and the row is taken as it is" "$out" "could not tell whether the existing spawn 'myrepo-w1' is live"
+lacks "no second key" "$fcalls" "-r2"
 reset; printf '%s\n' '{"status":"starting"}' '{"status":"ended"}' >"$STATE/get-default"
 rd wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "a spawn that ends while rd waits is an error, not a retry" || bad "exit 0: $out"
 has "says it ended" "$out" "ended before it was seen running"
 lacks "no second key" "$fcalls" "-r2"
+reset; creply myrepo-w1 '{"status":"queued"}'; printf '%s\n' '{"status":"ended"}' >"$STATE/get-default"
+rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "a spawn this call made that already ended is an error, never a second run of the prompt" || bad "exit 0: $out"
+lacks "no second key" "$fcalls" "-r2"
+
+echo "wave: a retry key that already has a row is passed over, and a failing retry never falls back to hc"
+reset; creply myrepo-w1 "$SPENT"; echo 5 >"$STATE/create-rc-myrepo-w1"; creply myrepo-w1-r2 "$LIVE"; reply myrepo-w1-r3 "$LIVE"
+rd wave myrepo "adhoc task"
+has "a live -r2 of an earlier call is not replayed: -r3" "$out" "claude 'myrepo-w1-r3'"
+reset; creply myrepo-w1 "$SPENT"; echo 5 >"$STATE/create-rc-myrepo-w1"; creply myrepo-w1-r2 '{"error":{"kind":"internal","message":"boom"}}'; echo 1 >"$STATE/create-rc-myrepo-w1-r2"
+rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "a structured error on the retry is an error" || bad "exit 0: $out"
+has "says the key was spent and nothing started outside the factory" "$out" "not starting an agent outside the factory"
+no_hc_spawn "no hc under the spent name"
 
 echo "wave: every key spent -> a visible error, bounded"
 reset; echo "$SPENT" >"$STATE/create-reply"; echo 5 >"$STATE/create-rc"
@@ -178,14 +197,16 @@ has "says all keys are spent" "$out" "are all spent"
 is "three creates, then it stops" "$(grep -c '^spawn create' <<<"$fcalls")" "3"
 no_hc_spawn "no hc fallback"
 
-echo "wave: a retry key is clipped like the terminal name"
-reset; LONG=averyveryverylongrepositoryname
+echo "wave: a retry key is clipped like the terminal name, and two long keys differing in their tail keep different retry keys"
+LONG=averyveryverylongrepositoryname
 mkdir -p "$S/$LONG/.git"
-echo "$SPENT" >"$STATE/create-reply"; echo 5 >"$STATE/create-rc"
-RD_FACTORY_KEY_TRIES=2 rd wave "$LONG" "adhoc task"
-key2=$(grep -o '^spawn create [^ ]*' <<<"$fcalls" | sed -n 2p | cut -d' ' -f3)
-[ -n "$key2" ] && [ "${#key2}" -le 32 ] && ok "the second key fits 32 characters ($key2)" || bad "second key '$key2' (${#key2})"
-case $key2 in *-r2) ok "and ends in -r2" ;; *) bad "second key '$key2' does not end in -r2" ;; esac
+retry_key() { reset; echo "$SPENT" >"$STATE/create-reply"; echo 5 >"$STATE/create-rc"
+  RD_FACTORY_KEY_TRIES=2 rd wave "$LONG" "(Wave $1) task"
+  grep -o '^spawn create [^ ]*' <<<"$fcalls" | sed -n 2p | cut -d' ' -f3; }
+key2=$(retry_key 1); key3=$(retry_key 2)
+[ -n "$key2" ] && [ "${#key2}" -le 32 ] && ok "the retry key fits 32 characters ($key2)" || bad "retry key '$key2' (${#key2})"
+case $key2 in *-r2) ok "and ends in -r2" ;; *) bad "retry key '$key2' does not end in -r2" ;; esac
+[ -n "$key3" ] && [ "$key2" != "$key3" ] && ok "wave 1 and wave 2 do not share a retry key ($key2, $key3)" || bad "retry keys collide: '$key2' '$key3'"
 
 echo "wave: an answered create never falls back, whatever the status is"
 for body in '{}' '{"status":""}' '{"status":null}' '{"status":"melting"}' '{"state":"started","pane":"w1:1"}'; do
