@@ -29,12 +29,19 @@ if [ -x "$BIN" ] && [ "$(cat "$BIN.src-sha" 2>/dev/null)" = "$marker" ]; then
 fi
 
 mkdir -p "$(dirname "$BIN")"
-{ cc -O2 -Wall -o "$BIN.new" "$SRC" && codesign -f -s - --identifier "$IDENT" -r="$DR" "$BIN.new" 2>/dev/null; } \
-  || { rm -f "$BIN.new"; echo "    ✗ launcher build failed"; exit 1; }
+NEW="$BIN.new.$$"   # unique per invocation; removed on every exit path (a successful mv leaves nothing)
+trap 'rm -f "$NEW"' EXIT
+{ cc -O2 -Wall -o "$NEW" "$SRC" && codesign -f -s - --identifier "$IDENT" -r="$DR" "$NEW" 2>/dev/null; } \
+  || { echo "    ✗ launcher build failed"; exit 1; }
 
-new_dr=$(dr_of "$BIN.new")
+install_new() {
+  mv "$NEW" "$BIN" && echo "$marker" > "$BIN.src-sha" \
+    || { echo "    ✗ could not install the launcher at $BIN (mv or marker write failed)"; exit 1; }
+}
+
+new_dr=$(dr_of "$NEW")
 if [ -x "$BIN" ] && [ -n "$new_dr" ] && [ "$(dr_of "$BIN")" = "$new_dr" ]; then
-  mv "$BIN.new" "$BIN" && echo "$marker" > "$BIN.src-sha"
+  install_new
   echo "    ✓ herdr-core-launcher rebuilt — same code requirement ($new_dr): the Full Disk Access grant holds; run make tcc-probe"
   exit 0
 fi
@@ -42,9 +49,8 @@ fi
 # New code requirement (first build, or the cdhash-bound ad-hoc launcher being migrated): a re-grant is due.
 msg="herdr-core launcher was rebuilt/re-signed and needs a one-time Full Disk Access grant on THIS machine: System Settings > Privacy & Security > Full Disk Access > add $BIN. Afterwards, in a fresh terminal: make tcc-probe (docs/tcc.md)."
 if ! "$ASK" ask "$msg" >/dev/null 2>&1 && ! "$ASK" ask "$msg" --no-push >/dev/null 2>&1; then
-  rm -f "$BIN.new"
   echo "    ✗ launcher needs a new Full Disk Access grant and the re-grant could not be queued ($ASK ask failed): not swapped in. Fix ask-human, re-run"
   exit 1
 fi
-mv "$BIN.new" "$BIN" && echo "$marker" > "$BIN.src-sha"
+install_new
 echo "    ✓ herdr-core-launcher built (${new_dr:-no requirement}) — NEW code requirement: Full Disk Access re-grant queued with ask-human for $BIN; then make tcc-probe (docs/tcc.md)"

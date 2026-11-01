@@ -6,8 +6,8 @@
 # when none answers, and a core born outside the LaunchAgent has no launcher (no Full Disk Access) and,
 # from ssh, no keychain.
 #
-# Exempt: help/version/skill/schema (never touch a core) and any scratch session (HC_SESSION other than
-# "default", or --session). Everything else waits (HC_GUARD_WAIT s, default 5) for the job to be
+# Exempt: help/version/skill/schema (never touch a core) and any scratch session (HC_SESSION or a leading --session,
+# other than "default"). Everything else waits (HC_GUARD_WAIT s, default 5) for the job to be
 # `state = running` AND its socket to accept a connection, then execs the real, Cellar-resolved binary
 # (the core reports installed_by from its own exe path). Else it refuses: exit 75, nothing started.
 # The LaunchAgent's launcher spawns the real binary directly, so only non-launchd callers pass through here.
@@ -31,8 +31,18 @@ passthrough() {
   case "${2:-}" in -h | --help) return 0 ;; esac
   case "${1:-}" in server | machine | file) case "${3:-}" in -h | --help) return 0 ;; esac ;; esac
   [[ -n "${HC_SESSION:-}" && "$HC_SESSION" != default ]] && return 0
-  local a
-  for a in "$@"; do case "$a" in --session | --session=*) return 0 ;; esac; done
+  # --session only counts before the subcommand (after it, it belongs to e.g. an `hc run <cmd>` command line)
+  local a want=0
+  for a in "$@"; do
+    if [[ $want == 1 ]]; then [[ "$a" != default ]] && return 0; want=0; continue; fi
+    case "$a" in
+      --session) want=1 ;;
+      --session=default) ;;
+      --session=?*) return 0 ;;
+      -*) ;;
+      *) break ;;
+    esac
+  done
   return 1
 }
 passthrough "$@" && exec "$real" "$@"

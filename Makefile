@@ -2511,7 +2511,7 @@ herdr-core-setup: herdr-core-launcher
 	chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
 	for b in herdr-core hc; do \
 		L="$(HOME)/.local/bin/$$b"; G="$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
-		[ "$$(readlink "$$L")" = "$$G" ] || { ln -s "$$G" "$$L.new.$$$$" && mv -f "$$L.new.$$$$" "$$L"; echo "    ✓ ~/.local/bin/$$b -> scripts/herdr-core-guard.sh (refuses a core start outside launchd; atomic swap, safe live)"; }; \
+		[ "$$(readlink "$$L")" = "$$G" ] || { ln -s "$$G" "$$L.new.$$$$" && mv -f "$$L.new.$$$$" "$$L" || { rm -f "$$L.new.$$$$"; echo "    ✗ could not link $$L"; exit 1; }; echo "    ✓ ~/.local/bin/$$b -> scripts/herdr-core-guard.sh (refuses a core start outside launchd; atomic swap, safe live)"; }; \
 	done; \
 	if [ "$$NEED_BOOT" = 0 ]; then \
 		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \

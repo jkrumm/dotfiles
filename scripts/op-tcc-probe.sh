@@ -38,7 +38,10 @@ if [ -z "$ONLY_CHECK" ] && [ -z "${OP_TCC_PROBE_FRESH:-}" ]; then
   launchctl print "$DOMAIN" 2>/dev/null | grep -q "state = running" || die "$LABEL is not running (make herdr-core-setup): not starting a core for a probe"
   q=$(printf '%q' "$DOTFILES_DIR/scripts/op-tcc-probe.sh")
   echo "  · re-running in a fresh core terminal (hc run)"
-  exec hc run --timeout 900 "env OP_TCC_PROBE_FRESH=1 bash $q $*"
+  # hc run starts in /, and the account is chosen from cwd: carry the caller's cwd and OP_PROBE_REF over
+  qcwd=$(printf '%q' "$PWD")
+  qref=""; [ -z "${OP_PROBE_REF:-}" ] || qref="OP_PROBE_REF=$(printf '%q' "$OP_PROBE_REF") "
+  exec hc run --timeout 900 "cd $qcwd && env ${qref}OP_TCC_PROBE_FRESH=1 bash $q $*"
 fi
 [ -n "${HC_TERMINAL_ID:-}" ] || die "not in a core terminal (HC_TERMINAL_ID unset): run it as  hc run --timeout 900 'make op-tcc-probe'"
 command -v op >/dev/null || die "op not on PATH"

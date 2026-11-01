@@ -73,8 +73,14 @@ wait
 # scratch session exempt (env and flag), even with the job down
 reset
 HC_SESSION=scr1 hc ls || fail "HC_SESSION=scr1 must be exempt"
-hc connect --session scr1 || fail "--session must be exempt"
+hc --session scr1 connect || fail "--session must be exempt"
+hc --session scr1 ls || fail "leading --session scr1 must be exempt"
+hc --session=scr1 ls || fail "--session=scr1 must be exempt"
 HC_SESSION=default hc ls 2>/dev/null && fail "HC_SESSION=default is not a scratch session"
+hc --session default ls 2>/dev/null && fail "--session default is not a scratch session"
+hc --session=default ls 2>/dev/null && fail "--session=default is not a scratch session"
+hc run "x --session scr1" 2>/dev/null && fail "--session inside a command string must not exempt"
+hc run ls --session scr1 2>/dev/null && fail "--session after the subcommand must not exempt"
 
 # help/version/skill/schema passthrough with the job down
 reset

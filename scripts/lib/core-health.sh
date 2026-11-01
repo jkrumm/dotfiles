@@ -44,7 +44,7 @@ core_strays() {
   while read -r pid ppid parent; do
     env=$("$ps" -E -ww -p "$pid" -o command= 2>/dev/null | tr ' ' '\n' | /usr/bin/grep -E '^HC_SESSION=.' | head -1) || env=""
     [[ -z "$env" || "$env" == HC_SESSION=default ]] && echo "$pid $ppid $parent"
-  done < <("$ps" -axww -o pid=,ppid=,command= 2>/dev/null | /usr/bin/awk -v launcher="$launcher" '
+  done < <("$ps" -U "$(id -u)" -xww -o pid=,ppid=,command= 2>/dev/null | /usr/bin/awk -v launcher="$launcher" '
     { pid=$1; ppid=$2; cmd0[pid]=$3; arg1[pid]=$4; par[pid]=ppid; ord[++n]=pid }
     END { for (i=1;i<=n;i++) { p=ord[i]; c=cmd0[p]; sub(".*/", "", c)
       if ((c != "hc" && c != "herdr-core") || arg1[p] != "serve") continue

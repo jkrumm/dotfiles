@@ -289,7 +289,7 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
   heartbeat `core` FAIL when a default-session `herdr-core serve` has a parent other than the launcher (pid and fix named).
   Incidents 2026-11-01: (a) after the MacBook rebooted, the Herdr app's `herdr-core connect` started a core (no launcher, no
   Full Disk Access) before the LaunchAgent ran, and the job looped `runs = 42` on an empty log, unable to take the socket;
-  (b) after the mini's macOS update the MacBook's machine link (`ssh mini … herdr-core connect`) started
+  (b) after the mini's macOS update the MacBook's machine link (`ssh <peer-host> … herdr-core connect`) started
   `~/.local/bin/herdr-core serve` while launchd still held the job as `pended nondemand spawn = speculative`: a keychain-less core.
   Both were fixed by hand (stop stray core and holder, `kickstart`). **Boot race:** `ProcessType Interactive` in the plist is the
   only key with an observable effect (`launchctl print` of a scratch label: `spawn type = interactive (4)` instead of `daemon (3)`;

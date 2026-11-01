@@ -116,7 +116,7 @@ terminal app that has its own grant. `op`'s own path stops mattering.
 | `ask-human --cmd` / `make human-queue` commands (arrive over ssh) | sshd | **not covered**: wrap the command as `hc run --timeout 900 '<cmd>'`. The mini's `secrets-seed` guidance (SessionStart hook) already does |
 | `com.jkrumm.opbackup` LaunchAgent (backup + the secrets reseed guard) | its program | the plist's program is the launcher, which spawns bash; `make opbackup-setup` builds the launcher first, `make tcc-check` fails otherwise |
 | Ghostty (login shells, Claude Code started there) | Ghostty.app | Full Disk Access on Ghostty.app: a Developer-ID-signed app, so the row survives updates. One-time grant, a broad one: it covers every program in every Ghostty tab |
-| `ssh iumac '… op …'` from the mini | sshd | **not covered**: use `ask-human` with the `hc run` wrapper |
+| `ssh <peer-host> '… op …'` from the mini | sshd | **not covered**: use `ask-human` with the `hc run` wrapper |
 | Anything else that launches `op` (a new LaunchAgent, a cron-like job) | its program | run it through the launcher: `ProgramArguments` = launcher, then the real program; add the label to `OP_JOBS` in `scripts/tcc-check.sh` |
 
 **Why a core swap keeps the grant:** the key is the launcher (stable path, identifier `com.jkrumm.herdr-core-launcher`),

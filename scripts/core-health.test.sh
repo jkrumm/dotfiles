@@ -21,7 +21,8 @@ cat > "$T/bin/ps" <<'S'
 if [ "$1" = "-E" ]; then
   pid="$4"; echo "/x/herdr-core serve $(grep "^$pid=" "$PS_ENV" | cut -d= -f2-)"
 else
-  cat "$PS_TABLE"
+  # -U <uid>: lines marked "#other" belong to another user and are dropped; the marker is stripped
+  if [ "$1" = "-U" ]; then grep -v '#other$' "$PS_TABLE"; else sed 's/ #other$//' "$PS_TABLE"; fi
 fi
 S
 chmod +x "$T/bin/"*
@@ -62,5 +63,9 @@ check; [ "$rc" = 1 ] || fail "HC_SESSION=default is a stray: rc=$rc $msg"
 # 5. an hc client (not serve) is never a stray
 printf '  900     1 /Users/x/.local/bin/herdr-core connect\n' > "$T/table"; : > "$T/env"
 check; [ "$rc" = 0 ] || fail "connect client must not be flagged: rc=$rc $msg"
+
+# 6. another user's serve process is not ours to report (ps is restricted to the current uid)
+printf '  900     1 /Users/x/.local/bin/herdr-core serve #other\n' > "$T/table"; : > "$T/env"
+check; [ "$rc" = 0 ] || fail "another user's serve must not be reported: rc=$rc $msg"
 
 echo "core-health.test.sh: ok"

@@ -36,10 +36,17 @@ cc -o "$T/lib/launcher" "$T/repo/scripts/herdr-core-launcher.c"; codesign -f -s 
 echo "deadbeef" > "$T/lib/launcher.src-sha"
 if out=$(build "$T/ask-bad"); then fail "migration without a queued re-grant must refuse"; fi
 case "$out" in *"could not be queued"*) ;; *) fail "refusal message: $out" ;; esac
-[ ! -e "$T/lib/launcher.new" ] || fail "refused build must clean up"
+[ -z "$(ls "$T"/lib/launcher.new* 2>/dev/null)" ] || fail "refused build must clean up"
 codesign -dr- "$T/lib/launcher" 2>&1 | grep -q cdhash || fail "refusal must leave the old launcher in place"
 : > "$T/asks"
 build "$T/ask-ok" >/dev/null || fail "migration with a queued re-grant must install"
 [ -s "$T/asks" ] || fail "migration must queue"
 [ "$(dr)" = 'identifier "com.jkrumm.herdr-core-launcher"' ] || fail "migrated DR"
+[ -z "$(ls "$T"/lib/launcher.new* 2>/dev/null)" ] || fail "successful build must leave no temp file"
+# 5. a failing install (marker cannot be written) exits 1 with a message
+rm -rf "$T/lib/launcher.src-sha"; mkdir "$T/lib/launcher.src-sha"
+echo 'const char herdr_touched2[] = "y";' >>"$T/repo/scripts/herdr-core-launcher.c"
+if out=$(build "$T/ask-ok" 2>&1); then fail "marker write failure must exit non-zero"; fi
+case "$out" in *"could not install"*) ;; *) fail "install failure message: $out" ;; esac
+[ -z "$(ls "$T"/lib/launcher.new* 2>/dev/null)" ] || fail "failed install must clean up"
 echo "herdr-core-launcher-build.test.sh: ok"
