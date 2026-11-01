@@ -137,6 +137,9 @@ brew "uv"
 brew "watch"
 # Generate Xcode projects from a YAML spec (iris `apple/project.yml`; .xcodeproj is gitignored)
 brew "xcodegen"
+# Mac cleaner + app uninstaller (the free GPL CLI behind mole.fit, not the paid
+# GUI app): `mo clean --dry-run`, `mo uninstall <app>`. Replaces AppCleaner.
+brew "mole"
 # Shell extension to navigate your filesystem faster
 brew "zoxide"
 # Incredibly fast JavaScript runtime, bundler, transpiler and package manager - all in one.
@@ -178,6 +181,8 @@ cask "free-ruler"
 cask "jiggler"
 # Music streaming service
 cask "spotify"
+# Menu-bar system monitor (CPU, memory, network, sensors)
+cask "stats"
 # The launcher (Raycast's replacement since 2026-09-26): native SwiftUI, runs
 # Raycast extensions in JavaScriptCore, AGPL-3.0, single maintainer, third-party
 # tap (trusted by `_setup-packages` like the others). Settings are tracked in

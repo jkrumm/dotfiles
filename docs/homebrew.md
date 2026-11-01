@@ -120,3 +120,12 @@ module directly (dev-host-gated on the `cache` backend marker, the same gate
 mutates machine state is the surprise `makefile-conventions.md` exists to
 prevent, and it is the command you reach for precisely because you are not ready
 to touch anything.
+
+## Mac upkeep — `mole` and `stats`
+
+`mole` is the free GPL CLI behind mole.fit, not the paid $19 GUI app, and it
+replaces AppCleaner. `mo uninstall <app>` removes an app with its leftovers;
+`mo clean --dry-run` previews cache and leftover cleanup (run it without `-n`
+only after reading the preview); `mo analyze` is the disk treemap. `stats` stays
+the menu-bar monitor — `mo status` is a TUI, so it is an alternative to opening
+Stats, not a replacement for the bar.

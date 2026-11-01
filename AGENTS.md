@@ -284,7 +284,7 @@ rots** (mosh is why that rule is written down —
 deleted, not re-pinned). `colima` is deliberately unpinned (pinning the Docker
 runtime means an unpatched hypervisor) and asserted + health-checked instead.
 Casks and third-party taps are reported, never auto-upgraded — route them
-through `/upgrade-deps`. Full invariants table and rationale: `docs/homebrew.md`.
+through `/upgrade-deps`. App removal: `mo uninstall`, `mo clean -n` (`docs/homebrew.md`). Full invariants table and rationale: `docs/homebrew.md`.
 
 ## Heartbeat, drift, doctor (mini only)
 
