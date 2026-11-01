@@ -24,7 +24,7 @@ import { dirname, join } from "node:path"
 import { type HealthRow, type PendingAsk, gradeMachine, healthSignature, worst } from "./lib/claude-health.ts"
 import {
   type Cache, type RefreshResult, type Registry, type Sample, type HttpGet, type Spawner, accountFromConfigDir, cacheDir, askRelogins, latestSessionId, claimRefresh, defaultAccountId, claudeJsonPath, keepaliveLogPath, loadCache, loadRegistry, markExhausted,
-  mergeSample, newestAge, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL,
+  hasSessionLimit, mergeSample, newestAge, planTier, pick, pickLine, picksPath, readLoginExpiry, recordSample, refreshBeforePick, runRefresh, sampleFromClaudeJson, sessionAccount, shellLine, SPILL, withoutSessionWindows,
 } from "./lib/claude-accounts.ts"
 
 const SPILL_EXIT = 3
@@ -65,7 +65,7 @@ function readClaudeJson(reg: Registry, cache: Cache): Cache {
     const s = readSample(reg, id)
     if (s) cache = { ...cache, samples: { ...cache.samples, [id]: mergeSample(cache.samples[id] ?? null, s) } }
   }
-  return cache
+  return withoutSessionWindows(reg, cache) // a plan without a 5 h window never shows or judges a leftover session half
 }
 
 const claudeBin = () => Bun.which("claude") ?? join(homedir(), ".local", "bin", "claude")
@@ -158,7 +158,7 @@ function usage(reg: Registry, json: boolean): void {
     const x = cache.samples[id]
     const until = cache.exhausted[id]
     return {
-      id, plan: a.plan, enabled: a.enabled,
+      id, plan: planTier(a.plan), session_limit: hasSessionLimit(a), enabled: a.enabled,
       five_hour: x?.s ?? null, seven_day: x?.w ?? null, five_hour_resets_at: x?.s_reset ?? null, seven_day_resets_at: x?.w_reset ?? null,
       age_s: x ? Math.round(newestAge(x, now) / 1000) : null,
       five_hour_age_s: x && x.s !== null && x.s_ts !== null ? Math.round((now - x.s_ts) / 1000) : null,
@@ -169,7 +169,7 @@ function usage(reg: Registry, json: boolean): void {
   if (json) return void console.log(JSON.stringify({ default_account: defaultAccountId(reg), accounts: rows }, null, 2))
   const reset = (e: number | null) => (e ? new Date(e * 1000).toISOString().slice(5, 16).replace("T", " ") : "-")
   for (const r of rows) {
-    console.log(`${r.id} ${r.plan}${r.enabled ? "" : " (disabled)"}  5h ${r.five_hour ?? "-"}% ↺${reset(r.five_hour_resets_at)}  7d ${r.seven_day ?? "-"}% ↺${reset(r.seven_day_resets_at)}  age ${r.age_s ?? "-"}s  auth ${r.auth_ok ? "ok" : "FAILED"}${r.exhausted_until ? "  EXHAUSTED" : ""}`)
+    console.log(`${r.id} ${r.plan}${r.enabled ? "" : " (disabled)"}  ${r.session_limit ? `5h ${r.five_hour ?? "-"}% ↺${reset(r.five_hour_resets_at)}  ` : ""}7d ${r.seven_day ?? "-"}% ↺${reset(r.seven_day_resets_at)}  age ${r.age_s ?? "-"}s  auth ${r.auth_ok ? "ok" : "FAILED"}${r.exhausted_until ? "  EXHAUSTED" : ""}`)
   }
 }
 
@@ -372,7 +372,7 @@ async function main(argv: string[]): Promise<number> {
     case "record": {
       const id = account(reg, rest)
       const part = { s: num(rest, "--s"), w: num(rest, "--w"), s_reset: num(rest, "--s-reset"), w_reset: num(rest, "--w-reset") }
-      recordSample(id, part, Date.now())
+      recordSample(id, part, Date.now(), undefined, hasSessionLimit(reg.accounts[id]))
       return 0
     }
     case "account": {

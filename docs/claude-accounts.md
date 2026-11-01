@@ -40,9 +40,9 @@ paid for it.
 
 | Id | Plan | Config dir | Keychain service | Capacity units (session / weekly) |
 |-|-|-|-|-|
-| `iu` | Max 20x | `~/.claude` (env unset) | `Claude Code-credentials` | 4 / 2 |
-| `me` | Max 5x | `~/.claude-me` | `Claude Code-credentials-<sha256("~/.claude-me" abs)[:8]>` (`-7253dcbc`) | 1 / 1 |
-| `me2` | Max 5x | `~/.claude-me2` | `Claude Code-credentials-<sha256("~/.claude-me2" abs)[:8]>` (`-a3d9de83`) | 1 / 1 |
+| `iu` | Ultra | `~/.claude` (env unset) | `Claude Code-credentials` | 4 / 2 |
+| `me` | Max | `~/.claude-me` | `Claude Code-credentials-<sha256("~/.claude-me" abs)[:8]>` (`-7253dcbc`) | 1 / 1 |
+| `me2` | Max | `~/.claude-me2` | `Claude Code-credentials-<sha256("~/.claude-me2" abs)[:8]>` (`-a3d9de83`) | 1 / 1 |
 
 The suffixes above are the mini's: the hash covers the absolute dir, so it differs per machine whenever `$HOME` does
 (`printf %s "$HOME/.claude-me2" | shasum -a 256 | cut -c1-8` prints this machine's). `me2` shares the bulk lanes with `me`.
@@ -51,8 +51,16 @@ The Keychain naming is verified in the 2.1.310 binary (`Jj()`: suffix =
 first 8 hex of sha256 of the config dir). The capacity units come from measured
 ratios: 20x/5x ≈ 3.7× per session and ≈ 2.0× per week (mulletiq regression).
 
+**Plans: Max and Ultra.** Max has a 5 h session window and a weekly one; Ultra has only the weekly one (the usage
+endpoint stops reporting `five_hour` for it). `plan` in the registry is `max` or `ultra`. The old `max5x` / `max20x`
+still load and mean a Max with a session window (units from the multiple), so an old registry keeps routing the same;
+the `plan/<id>` row flags the mismatch against the Keychain tier. For an Ultra account the session dimension does not
+exist: the picker ignores any 5 h value (no `SESSION_MAX` block, no `SESSION_SOFT_MAX` demotion, no session move),
+the quota cache never stores one (a leftover is dropped on the next write and ignored on every read), and `usage`
+prints and returns `five_hour: null` with `session_limit: false`.
+
 Registry: `config/claude-accounts.json` is the single source (id, dir, plan, optional
-units, home lanes, `loginBrowser`, enabled flag). `units` defaults from `plan` (`max20x` 4 / 2, anything else 1 / 1);
+units, home lanes, `loginBrowser`, enabled flag). `units` defaults from `plan` (`ultra` 4 / 2, `max` 1 / 1; legacy `maxNx` by its multiple);
 a present block is still validated. `enabled` stays false until an account's login
 exists, so a new account ships dark (§Adding an account).
 
@@ -88,12 +96,12 @@ same pattern as `jobrun`):
 
 ```
 claude-account pick --lane <lane>   # prints "export CLAUDE_CONFIG_DIR=…" or "unset CLAUDE_CONFIG_DIR"; no headroom: prints "spill", exit 3
-claude-account usage [--json]       # every account: 5h %, 7d %, resets, auth ok
+claude-account usage [--json]       # every account: 5h % (not for Ultra), 7d %, resets, auth ok
 claude-account env <id>             # force an account (c --account b)
 claude-account expiry [--json] [--ids a,b]   # when each enabled login ends (refresh token), graded PASS / WARN / FAIL; --ids names accounts, disabled ones included
 ```
 
-`expiry` rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (the account owns `~/.claude`) and `severity` (the grade, but a non-default account never exceeds WARN, as with `auth/<id>`); verify and the heartbeat act on `severity`. They also carry `tier` (the item's raw `claudeAiOauth.rateLimitTier`, e.g. `default_claude_max_5x`, or null) and `plan_detected` (`max20x` / `max5x` parsed from `/max_(\d+)x/`, else null); the tier is not a secret and no token field is ever read or exposed. `--ids` includes disabled accounts because a re-login must read a first login. `usage` stays a pure file read (the statusline calls it): no Keychain access, no login fields; `expiry` is the only reader of the Keychain item's timestamps and tier.
+`expiry` rows carry `grade` (PASS > 7 d, WARN <= 7 d or unreadable, FAIL <= 2 d or past), `default` (the account owns `~/.claude`) and `severity` (the grade, but a non-default account never exceeds WARN, as with `auth/<id>`); verify and the heartbeat act on `severity`. They also carry `tier` (the item's raw `claudeAiOauth.rateLimitTier`, e.g. `default_claude_max_5x`, or null) and `plan_detected` (`ultra` for a `max_20x`-or-larger tier or one naming `ultra`, `max` for a smaller `max_Nx`, else null); the tier is not a secret and no token field is ever read or exposed. `--ids` includes disabled accounts because a re-login must read a first login. `usage` stays a pure file read (the statusline calls it): no Keychain access, no login fields; `expiry` is the only reader of the Keychain item's timestamps and tier.
 
 **Quota sources: read-only use of the account's own token for one GET, plus a peer import.** Four feeds, freshest wins, all
 written into `~/.cache/claude-accounts/` as one small file per account and kind (`<id>.sample.json`, `<id>.exhausted.json`, `<id>.auth.json`, `<id>.refresh.claim`; no lock, each writer replaces only its own file atomically, windows carry their own timestamps):
@@ -131,7 +139,7 @@ written into `~/.cache/claude-accounts/` as one small file per account and kind 
    --json` once (mini -> `ssh iumac`, MacBook -> `ssh mini`, the same peer resolution as `health`; BatchMode,
    ConnectTimeout 5, 20 s cap) and turns each row of a locally registered, enabled account into a sample (`src: peer`).
    Each window's timestamp is rebuilt from the row's age (now minus `*_age_s`; null age, null timestamp), so an old
-   number is never laundered into a fresh one, and `mergeSample` keeps the newer window. A future `exhausted_until`
+   number is never laundered into a fresh one, and `mergeSample` keeps the newer window. A full endpoint answer (`src: oauth`) with a weekly window but no `five_hour` drops the stored session half instead of keeping it frozen; the other feeds only omit. A future `exhausted_until`
    is imported as a mark. **Auth state is never imported** (logins are per machine): an account served from the peer still
    gets its own `claude auth status` verdict. An account whose merged sample is now younger than 10 min skips the
    endpoint GET for that run and counts as `fresh` only when this machine's verdict says logged in (no verdict:
@@ -154,8 +162,10 @@ eligible(x) = enabled ∧ auth_ok ∧ not exhausted ∧ session% < 90 ∧ weekly
                The pick log carries `stale: true`)
 pace(x)     = 100 × elapsed share of x's 7-day window (seven_day_resets_at, clamped 0..1)
 overPace(x) = eligible(x) ∧ weekly%(x) > pace(x) + 15      # PACE_MARGIN; no weekly reset → never over pace
-units(x)    = registry units, else from the plan "maxNx": k = max(1, N/5) → {session k, weekly 1 + (k−1)/3}
+units(x)    = registry units, else from the plan: ultra {4, 2}, max {1, 1}; legacy "maxNx": k = max(1, N/5) → {session k, weekly 1 + (k−1)/3}
               (max5x {1,1}, max10x {2, 1.33}, max20x {4, 2}); any other plan → {1, 1}
+session%(x) = x's 5 h percent when its plan has a session window and the sample is < 6 h old, else absent
+              (Ultra: always absent; every session% term below is then skipped: no block, no demotion, no session move)
 spare(x)    = (weeklyMax(x) − weekly%(x)) × units(x).weekly     # no weekly window → WEEKLY_MAX × units.weekly
 weight(x)   = spare(x) / hoursToWeeklyReset(x)^1.5    # URGENCY_EXP; ≥ 1 h; no weekly reset → a full week
 best(S)     = the member of S with the highest weight (registry order breaks ties)
@@ -494,7 +504,7 @@ human queue and its Slack notification, as every `ask-human` request does.
 | `claude-relogin` prints the URL and a paste hint | no loopback port in the URL, the reverse forward was refused (port taken on the MacBook, `iumac` sshd down) or `open` failed there | open the URL in the account's browser yourself and paste the code at the CLI prompt |
 | no notification after a re-login, no window either | the windowless MacBook login is still waiting for your approval, or failed | `~/Library/Logs/claude-relogin.log` says which; a stuck one falls back to a Terminal window after 10 minutes without output, or run `claude-relogin <id> --visible` |
 | the re-login dialog never appears | MacBook asleep or unreachable | the request stays in the human queue (`make human-queue` on the MacBook) and Slack; or run `claude-relogin <id>` there |
-| `plan/<id>` WARN "Keychain tier … says max20x, registry says 'max5x'" | the account was upgraded or the registry plan is wrong | set `"plan"` in `config/claude-accounts.json` (the default units follow it) |
+| `plan/<id>` WARN "Keychain tier … says ultra, registry says 'max'" | the account was upgraded or the registry plan is wrong | set `"plan"` in `config/claude-accounts.json` (the default units follow it) |
 | `plan/<id>` WARN "not detectable" | Keychain item unreadable (locked) or without `rateLimitTier` | unlock the GUI session and rerun; `claude-account expiry --json` shows `tier` |
 | a stale expiry or 401 right after a fresh login, `security find-generic-password -s 'Claude Code-credentials…'` without `-a` shows `"acct"<blob>="unknown"` | a Keychain twin: a process that ran without `USER` filed a second item under acct `unknown` next to the real one (acct = `$USER`) | lookups here pass `-a $USER`; delete the twin: `security delete-generic-password -s 'Claude Code-credentials' -a unknown` (add the `-<hash>` suffix for a non-default account) |
 | notification `login finished but the Keychain login did not change` | the CLI exited 0 but the item the reader sees was not rewritten (Keychain twin above, a locked Keychain, a login in the wrong browser profile) | check the twin row above, then `claude-relogin <id> --visible` |

@@ -3,7 +3,7 @@
   "accounts": {
     "iu": {
       "dir": null,
-      "plan": "max20x",
+      "plan": "ultra",
       "units": {
         "session": 4,
         "weekly": 2
@@ -17,7 +17,7 @@
     },
     "me": {
       "dir": "~/.claude-me",
-      "plan": "max5x",
+      "plan": "max",
       "units": {
         "session": 1,
         "weekly": 1
@@ -31,7 +31,7 @@
     },
     "me2": {
       "dir": "~/.claude-me2",
-      "plan": "max5x",
+      "plan": "max",
       "homeLanes": [
         "wave",
         "fan"

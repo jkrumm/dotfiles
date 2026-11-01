@@ -115,14 +115,29 @@ export function loadRegistry(path = registryPath()): Registry {
   return { accounts: raw.accounts }
 }
 
-/** Capacity units of an account: the registry's own, else from the plan (maxNx: session N/5, weekly 1 + (N/5 - 1)/3, so max20x is 4 / 2; any other plan 1 / 1; measured ratios, docs/claude-accounts.md). */
+/**
+ * Canonical plan tier. Anthropic sells Max (5 h session + weekly limit) and Ultra (weekly limit only). The registry
+ * used to name the Max multiples (`max5x`, `max20x`); those keep their meaning, a Max with a session window, and read
+ * as `max`. Only an explicit `ultra` drops the session dimension. Anything else passes through lowercased.
+ */
+export function planTier(plan: string): string {
+  const p = plan.trim().toLowerCase()
+  return /^max\s*\d+x$/.test(p) ? "max" : p
+}
+
+/** False for a plan without a 5 h session limit (Ultra): its session window is never judged, shown or kept. */
+export const hasSessionLimit = (a: Account): boolean => planTier(a.plan) !== "ultra"
+
+/** Capacity units of an account: the registry's own, else from the plan (ultra 4 / 2, max 1 / 1; legacy maxNx: session N/5, weekly 1 + (N/5 - 1)/3, so max20x is 4 / 2; measured ratios, docs/claude-accounts.md). */
 export const accountUnits = (a: Account): { session: number; weekly: number } => {
   if (a.units) return a.units
-  // maxNx: the 5h window scales with N/5; the weekly one grows slower (20x measured at 2x a 5x), interpolated linearly between
+  // legacy maxNx: the 5h window scales with N/5; the weekly one grows slower (20x measured at 2x a 5x), interpolated linearly between
   const n = /^max\s*(\d+)x$/.exec(a.plan.trim().toLowerCase())?.[1]
-  if (!n) return { session: 1, weekly: 1 }
-  const k = Math.max(1, Number(n) / 5)
-  return { session: k, weekly: 1 + (k - 1) / 3 }
+  if (n) {
+    const k = Math.max(1, Number(n) / 5)
+    return { session: k, weekly: 1 + (k - 1) / 3 }
+  }
+  return planTier(a.plan) === "ultra" ? { session: 4, weekly: 2 } : { session: 1, weekly: 1 }
 }
 
 /** Absolute config dir of an account; null = default ~/.claude (env unset). */
@@ -213,22 +228,36 @@ const hasW = (x: Sample) => x.w !== null
 
 /**
  * Field-wise merge, per window: an incoming window that is absent (null) keeps what we know; a present one wins
- * unless the stored one has a newer timestamp.
+ * unless the stored one has a newer timestamp. Exception: a full endpoint answer (`src: "oauth"`) that carries a
+ * weekly window but no 5 h one means the account has no session window now (Ultra, or an idle Max), so the stored
+ * session value is dropped instead of living on frozen.
  */
 export function mergeSample(prev: Sample | null, inc: Sample): Sample {
   if (!prev) return inc
   const takeS = hasS(inc) && !(hasS(prev) && (prev.s_ts ?? 0) > (inc.s_ts ?? 0))
   const takeW = hasW(inc) && !(hasW(prev) && (prev.w_ts ?? 0) > (inc.w_ts ?? 0))
+  const dropS = inc.src === "oauth" && !hasS(inc) && hasW(inc)
   return {
-    s: takeS ? inc.s : prev.s, s_reset: takeS ? inc.s_reset : prev.s_reset, s_ts: takeS ? inc.s_ts : prev.s_ts,
+    s: takeS ? inc.s : dropS ? null : prev.s, s_reset: takeS ? inc.s_reset : dropS ? null : prev.s_reset, s_ts: takeS ? inc.s_ts : dropS ? null : prev.s_ts,
     w: takeW ? inc.w : prev.w, w_reset: takeW ? inc.w_reset : prev.w_reset, w_ts: takeW ? inc.w_ts : prev.w_ts,
     src: takeS || takeW ? inc.src : prev.src,
   }
 }
 
-export function saveSample(id: string, inc: Sample, dir = cacheDir()): void {
+const noSession = (x: Sample): Sample => ({ ...x, s: null, s_reset: null, s_ts: null })
+
+/** The cache as the picker must see it: a plan without a 5 h window carries no session half, whatever an older file or feed left behind. */
+export function withoutSessionWindows(reg: Registry, cache: Cache): Cache {
+  const stale = Object.entries(cache.samples).filter(([id, x]) => Object.hasOwn(reg.accounts, id) && !hasSessionLimit(reg.accounts[id]) && hasS(x))
+  return stale.length ? { ...cache, samples: { ...cache.samples, ...Object.fromEntries(stale.map(([id, x]) => [id, noSession(x)])) } } : cache
+}
+
+/** `sessionLimit` false (a plan without a 5 h window): the session half of both the incoming and the stored sample is discarded. */
+export function saveSample(id: string, inc: Sample, dir = cacheDir(), sessionLimit = true): void {
   const path = file(dir, id, "sample.json")
-  writeAtomic(path, JSON.stringify(mergeSample(readJson(path) as Sample | null, inc)))
+  const prev = readJson(path) as Sample | null
+  const merged = mergeSample(sessionLimit || !prev ? prev : noSession(prev), sessionLimit ? inc : noSession(inc))
+  writeAtomic(path, JSON.stringify(merged))
 }
 
 export function markExhausted(id: string, untilS: number, dir = cacheDir()): void {
@@ -249,13 +278,13 @@ export function setAuthFailed(id: string, failed: boolean, nowMs: number, dir = 
  * Statusline feed: a window the payload omits keeps its previous value and timestamp (so it is never presented as
  * fresh). A live statusline proves the login works, so it also clears a recorded auth failure.
  */
-export function recordSample(id: string, part: { s?: number | null; w?: number | null; s_reset?: number | null; w_reset?: number | null }, nowMs: number, dir = cacheDir()): void {
+export function recordSample(id: string, part: { s?: number | null; w?: number | null; s_reset?: number | null; w_reset?: number | null }, nowMs: number, dir = cacheDir(), sessionLimit = true): void {
   const has = (v: number | null | undefined): v is number => typeof v === "number"
   saveSample(id, {
     s: part.s ?? null, s_reset: has(part.s) ? (part.s_reset ?? null) : null, s_ts: has(part.s) ? nowMs : null,
     w: part.w ?? null, w_reset: has(part.w) ? (part.w_reset ?? null) : null, w_ts: has(part.w) ? nowMs : null,
     src: "statusline",
-  }, dir)
+  }, dir, sessionLimit)
   setAuthFailed(id, false, nowMs, dir)
   // The sample's `src` flips to "oauth" when a refresh lands later, so the verify suite reads this stamp for "a statusline fed it".
   writeAtomic(file(dir, id, "statusline.json"), JSON.stringify({ ts: nowMs }))
@@ -352,10 +381,12 @@ export function tierFromCredentials(raw: string): string | null {
   }
 }
 
-/** `default_claude_max_20x` -> `max20x`; null when the tier carries no Max multiple. */
+/** `default_claude_max_20x` -> `ultra`, `default_claude_max_5x` -> `max` (the registry's plan names); null when the tier names neither. */
 export function planFromTier(tier: string | null): string | null {
-  const m = tier ? /max_(\d+)x/.exec(tier) : null
-  return m ? `max${m[1]}x` : null
+  if (!tier) return null
+  if (/ultra/i.test(tier)) return "ultra"
+  const m = /max_(\d+)x/.exec(tier)
+  return m ? (Number(m[1]) >= 20 ? "ultra" : "max") : null // the 20x tier is the Ultra account
 }
 
 export type LoginGrade = "PASS" | "WARN" | "FAIL"
@@ -383,7 +414,7 @@ export interface LoginRow {
   access_expires_at: number | null
   /** the Keychain item's raw rateLimitTier, null when absent or unreadable */
   tier: string | null
-  /** plan parsed from the tier (`max20x` / `max5x`), null when undetectable */
+  /** plan parsed from the tier (`ultra` / `max`), null when undetectable */
   plan_detected: string | null
   days_left: number | null
   expired: boolean
@@ -578,13 +609,23 @@ export const isStaleOk = (cache: Cache, id: string, nowMs: number) => usable(cac
 
 const weeklyMax = (x: Sample, nowMs: number) => (x.w_reset !== null && x.w_reset * 1000 - nowMs > 0 && x.w_reset * 1000 - nowMs < EXPIRING_S * 1000 ? WEEKLY_MAX_EXPIRING : WEEKLY_MAX)
 
+/**
+ * The account's 5 h percent when it can be judged: the plan has a session limit and the window is younger than
+ * STALE_OK_MS. Null otherwise: a plan without a session window (Ultra) is never limited by a leftover sample.
+ */
+function sessionPct(reg: Registry, cache: Cache, id: string, nowMs: number): number | null {
+  const x = cache.samples[id]
+  const a = Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined
+  return a && hasSessionLimit(a) && x && hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS ? x.s : null
+}
+
 /** Enabled, logged in, not exhausted, and every window young enough to judge (< 6 h) is below its threshold. Each window is judged by its own timestamp. */
 export function eligible(reg: Registry, cache: Cache, id: string, nowMs: number): boolean {
   const a = Object.hasOwn(reg.accounts, id) ? reg.accounts[id] : undefined
   if (!a?.enabled || cache.auth_failed[id]) return false
   const x = cache.samples[id]
   if (!x || !usable(x, nowMs)) return false
-  if (hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS && x.s! >= SESSION_MAX) return false
+  if ((sessionPct(reg, cache, id, nowMs) ?? 0) >= SESSION_MAX) return false
   if (hasW(x) && nowMs - (x.w_ts ?? 0) < STALE_OK_MS && x.w! >= weeklyMax(x, nowMs)) return false
   const until = cache.exhausted[id]
   if (until && until * 1000 > nowMs) return false
@@ -609,7 +650,8 @@ export function overPace(reg: Registry, cache: Cache, id: string, nowMs: number)
  * Rule v1.5 (docs/claude-accounts.md §The picker). Among several candidates the highest weight wins (ties follow
  * registry order); with `rng` the candidates share the work in proportion to their weights instead.
  */
-export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): PickResult {
+export function pick(reg: Registry, cache0: Cache, lane: string, nowMs: number, rng?: () => number): PickResult {
+  const cache = withoutSessionWindows(reg, cache0)
   const r = pickRaw(reg, cache, lane, nowMs, rng)
   return { ...r, stale: r.reason !== "interactive-fallback" && r.picked !== SPILL && isStaleOk(cache, r.picked, nowMs) }
 }
@@ -617,10 +659,7 @@ export function pick(reg: Registry, cache: Cache, lane: string, nowMs: number, r
 function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?: () => number): Omit<PickResult, "stale"> {
   const ids = Object.keys(reg.accounts)
   const eligibleIds = ids.filter((id) => eligible(reg, cache, id, nowMs))
-  const hot = (id: string) => {
-    const x = cache.samples[id]
-    return hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS && x.s! >= SESSION_SOFT_MAX
-  }
+  const hot = (id: string) => (sessionPct(reg, cache, id, nowMs) ?? 0) >= SESSION_SOFT_MAX
   // an account near the end of its 5h window is the last choice, not an excluded one
   const cool = eligibleIds.filter((id) => !hot(id))
   const ok = cool.length ? cool : eligibleIds
@@ -660,17 +699,16 @@ function pickRaw(reg: Registry, cache: Cache, lane: string, nowMs: number, rng?:
     if (calm) return { picked: calm, reason: "pace" }
   }
   if (home) {
-    const hs = cache.samples[home]
-    const freshS = (x: Sample) => hasS(x) && nowMs - (x.s_ts ?? 0) < STALE_OK_MS
+    const hs = sessionPct(reg, cache, home, nowMs)
     const movable = ok.filter((id) => {
-      const x = cache.samples[id]
-      return id !== home && freshS(x) && freshS(hs) && (hs.s! >= SESSION_PRESSURE || !overPace(reg, cache, id, nowMs)) && hs.s! - x.s! > SESSION_MARGIN
+      const xs = sessionPct(reg, cache, id, nowMs)
+      return id !== home && xs !== null && hs !== null && (hs >= SESSION_PRESSURE || !overPace(reg, cache, id, nowMs)) && hs - xs > SESSION_MARGIN
     })
     // a sibling that shares the lane beats an outsider (iu keeps its room for interactive work)
     const siblings = movable.filter((id) => homes.includes(id))
     const emptier = (siblings.length ? siblings : movable).reduce<string | undefined>((best, id) => {
       if (best === undefined) return id
-      const d = cache.samples[id].s! - cache.samples[best].s!
+      const d = sessionPct(reg, cache, id, nowMs)! - sessionPct(reg, cache, best, nowMs)!
       return d < 0 || (d === 0 && weight(id) > weight(best)) ? id : best
     }, undefined)
     if (emptier) return { picked: emptier, reason: "session" }
@@ -707,7 +745,8 @@ export function shellLine(reg: Registry, p: PickResult): string | null {
 }
 
 /** Enabled accounts whose sample is missing or has a window older than 10 min (the budget is checked at claim time). */
-export function dueIds(reg: Registry, cache: Cache, nowMs: number, ignoreAuthMark = false): string[] {
+export function dueIds(reg: Registry, cache0: Cache, nowMs: number, ignoreAuthMark = false): string[] {
+  const cache = withoutSessionWindows(reg, cache0)
   // An auth-failed account is re-probed only after AUTH_RETRY_MS (a dead login must not be hammered every pick);
   // a successful refresh or a statusline record clears the mark. `refresh --ids` bypasses it (manual retry).
   const authBlocked = (id: string) => !ignoreAuthMark && cache.auth_failed[id] && nowMs - (cache.auth_failed_at[id] ?? 0) <= AUTH_RETRY_MS
@@ -915,7 +954,7 @@ async function importPeerSamples(d: RefreshDeps): Promise<Set<string>> {
     const s = win(r.five_hour, r.five_hour_resets_at, r.five_hour_age_s)
     const w = win(r.seven_day, r.seven_day_resets_at, r.seven_day_age_s)
     if (s.v !== null || w.v !== null) {
-      saveSample(id, { s: s.v, s_reset: s.reset, s_ts: s.ts, w: w.v, w_reset: w.reset, w_ts: w.ts, src: "peer" }, d.dir)
+      saveSample(id, { s: s.v, s_reset: s.reset, s_ts: s.ts, w: w.v, w_reset: w.reset, w_ts: w.ts, src: "peer" }, d.dir, hasSessionLimit(d.reg.accounts[id]))
       imported.add(id)
     }
     if (isNum(r.exhausted_until) && r.exhausted_until * 1000 > now) markExhausted(id, r.exhausted_until, d.dir)
@@ -944,7 +983,7 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
     }
     const sample = await oauthSample(d, id, status)
     if (sample) {
-      saveSample(id, sample, d.dir)
+      saveSample(id, sample, d.dir, hasSessionLimit(d.reg.accounts[id]))
       setAuthFailed(id, false, d.now(), d.dir)
       results[id] = "fresh"
       continue

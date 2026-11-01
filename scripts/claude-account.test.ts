@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   type Cache, type HttpGet, type Registry, type Sample, type SpawnResult, type Spawner, accountFromConfigDir, claimRefresh, dueIds, emptyCache, homeIds, loadCache, markExhausted,
-  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
+  mergeSample, newestAge, pick, sessionAccount, pickLine, recordSample, refreshBeforePick, refreshEnv, releaseClaim, runRefresh, isSample, loadRegistry, sampleFromClaudeJson, sampleFromOAuthUsage, saveSample, setAuthFailed, shellLine, keychainService, tokenFromCredentials, oauthUsageHeaders, latestSessionId, expiryFromCredentials, tierFromCredentials, planFromTier, accountUnits, hasSessionLimit, planTier, withoutSessionWindows, SESSION_MAX, SESSION_SOFT_MAX, gradeLogin, readLoginExpiry, askRelogins, reloginCandidates, RELOGIN_ASK_INTERVAL_MS, RELOGIN_CAP_INTERVAL_MS, type LoginRow, type RefreshResult,
 } from "./lib/claude-accounts.ts"
 
 const NOW = 1_800_000_000_000
@@ -281,8 +281,8 @@ describe("login expiry", () => {
   const tiered = (tier: unknown, refresh: number | null = NOW + 20 * D) =>
     JSON.stringify({ claudeAiOauth: { accessToken: "SECRET-A", refreshToken: "SECRET-R", expiresAt: NOW + H * 1000, ...(refresh === null ? {} : { refreshTokenExpiresAt: refresh }), rateLimitTier: tier } })
   test("planFromTier parses the Max multiple; anything else is null", () => {
-    expect(planFromTier("default_claude_max_20x")).toBe("max20x")
-    expect(planFromTier("default_claude_max_5x")).toBe("max5x")
+    expect(planFromTier("default_claude_max_20x")).toBe("ultra")
+    expect(planFromTier("default_claude_max_5x")).toBe("max")
     expect(planFromTier("default_claude_pro")).toBeNull()
     expect(planFromTier("default_raven")).toBeNull()
     expect(planFromTier(null)).toBeNull()
@@ -294,11 +294,11 @@ describe("login expiry", () => {
   })
   test("rows carry the raw tier and the detected plan, never a token field", () => {
     const r = rows(ok(tiered("default_claude_max_20x")), ok(tiered("default_claude_max_5x")))
-    expect(r.map((x) => [x.id, x.tier, x.plan_detected])).toEqual([["iu", "default_claude_max_20x", "max20x"], ["me", "default_claude_max_5x", "max5x"]])
+    expect(r.map((x) => [x.id, x.tier, x.plan_detected])).toEqual([["iu", "default_claude_max_20x", "ultra"], ["me", "default_claude_max_5x", "max"]])
     expect(JSON.stringify(r)).not.toContain("SECRET")
     expect(rows(ok(item(NOW + 3 * D)))[0]).toMatchObject({ tier: null, plan_detected: null }) // no tier -> undetectable
     expect(rows(ok(tiered("default_claude_pro")))[0]).toMatchObject({ tier: "default_claude_pro", plan_detected: null })
-    expect(rows(ok(tiered("default_claude_max_5x", null)))[0]).toMatchObject({ grade: "WARN", refresh_expires_at: null, plan_detected: "max5x" }) // unreadable expiry, plan still known
+    expect(rows(ok(tiered("default_claude_max_5x", null)))[0]).toMatchObject({ grade: "WARN", refresh_expires_at: null, plan_detected: "max" }) // unreadable expiry, plan still known
     expect(rows({ status: 44, stdout: "", stderr: "x" })[0]).toMatchObject({ tier: null, plan_detected: null })
   })
   test("ids select accounts even when disabled (a first login), instead of the enabled set", () => {
@@ -1202,7 +1202,7 @@ describe("CLI (isolated HOME)", () => {
     const env = { CLAUDE_ACCOUNTS_SECURITY_BIN: stub }
     const only = cli(["expiry", "--json", "--ids", "me"], env) // me is disabled in the default registry
     expect(only.rc).toBe(0)
-    expect(JSON.parse(only.out).accounts.map((a: { id: string; plan_detected: string; tier: string; grade: string }) => [a.id, a.plan_detected, a.tier, a.grade])).toEqual([["me", "max5x", "default_claude_max_5x", "PASS"]])
+    expect(JSON.parse(only.out).accounts.map((a: { id: string; plan_detected: string; tier: string; grade: string }) => [a.id, a.plan_detected, a.tier, a.grade])).toEqual([["me", "max", "default_claude_max_5x", "PASS"]])
     expect(only.out + only.err).not.toContain("SECRET")
     expect(JSON.parse(cli(["expiry", "--json"], env).out).accounts.map((a: { id: string }) => a.id)).toEqual(["iu"]) // without --ids the disabled account stays out
     const bad = cli(["expiry", "--ids", "nope"], env)
@@ -1362,7 +1362,7 @@ describe("CLI (isolated HOME)", () => {
     seed(60_000)
     const j = JSON.parse(cli(["usage", "--json"]).out)
     expect(Object.keys(j.accounts[0]).sort()).toEqual(
-      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "plan", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
+      ["age_s", "auth_ok", "enabled", "exhausted_until", "five_hour", "five_hour_age_s", "five_hour_resets_at", "id", "plan", "session_limit", "seven_day", "seven_day_age_s", "seven_day_resets_at", "source"].sort(),
     )
     expect(j.default_account).toBe("iu")
     expect(j.accounts[0]).toMatchObject({ id: "iu", five_hour: 5, seven_day: 5, auth_ok: true })
@@ -1490,5 +1490,84 @@ describe("expiring weekly ceiling", () => {
   })
   test("93% weekly with the reset days away is out", () => {
     expect(pick(reg(), cacheOf(sample(1, 93, { wReset: NOW / 1000 + 60 * H }), meCalm), "interactive", NOW)).toMatchObject({ picked: "me" })
+  })
+})
+
+// ── plans without a 5 h session window (Ultra) ─────────────────────────────────────────────────────────────────
+describe("plan tiers: Max has a 5 h window, Ultra only a weekly one", () => {
+  const ultraReg = (): Registry => ({
+    accounts: {
+      iu: { dir: null, plan: "ultra", homeLanes: ["interactive", "headless"], enabled: true },
+      me: { dir: "/home/x/.claude-me", plan: "max", homeLanes: ["wave", "fan"], enabled: true },
+    },
+  })
+  const acct = (plan: string) => ({ dir: null, plan, homeLanes: [], enabled: true })
+
+  test("plan names: max/ultra, the legacy maxNx still reads (as a Max with a session window)", () => {
+    expect(planTier("max5x")).toBe("max")
+    expect(planTier(" MAX20x ")).toBe("max")
+    expect(planTier("ultra")).toBe("ultra")
+    expect(hasSessionLimit(acct("ultra"))).toBe(false)
+    for (const p of ["max", "max5x", "max20x", "pro"]) expect(hasSessionLimit(acct(p))).toBe(true)
+    expect(accountUnits(acct("ultra"))).toEqual({ session: 4, weekly: 2 })
+    expect(accountUnits(acct("max"))).toEqual({ session: 1, weekly: 1 })
+    expect(accountUnits(acct("max20x"))).toEqual({ session: 4, weekly: 2 })
+  })
+  test("the shipped registry names the real tiers", () => {
+    const r = loadRegistry(join(import.meta.dir, "..", "config", "claude-accounts.json"))
+    expect(Object.values(r.accounts).every((a) => ["max", "ultra"].includes(a.plan))).toBe(true)
+    expect(r.accounts.iu.plan).toBe("ultra")
+  })
+  test("Ultra is never blocked or demoted by a stale 5 h sample; the same sample blocks a Max", () => {
+    const frozen = { ...sample(97, 10), s_ts: NOW - 60_000 } // a leftover 97% session half, young enough to be judged
+    expect(pick(ultraReg(), cacheOf(frozen, sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
+    const hot = { ...sample(85, 10) } // above SESSION_SOFT_MAX: a Max is the last choice, Ultra is not
+    expect(pick(ultraReg(), cacheOf(hot, sample(10, 10)), "interactive", NOW).picked).toBe("iu")
+    const maxReg = ultraReg()
+    maxReg.accounts.iu.plan = "max"
+    expect(pick(maxReg, cacheOf(frozen, sample(10, 10)), "interactive", NOW).picked).toBe("me")
+    expect(pick(maxReg, cacheOf(hot, sample(10, 10)), "interactive", NOW).picked).toBe("me")
+  })
+  test("Max keeps the 5 h logic: SESSION_MAX blocks, SESSION_SOFT_MAX demotes, the emptier window wins", () => {
+    const r = ultraReg()
+    r.accounts.iu.plan = "max"
+    expect(pick(r, cacheOf(sample(SESSION_MAX, 10), sample(10, 10)), "interactive", NOW).picked).toBe("me")
+    expect(pick(r, cacheOf(sample(SESSION_SOFT_MAX, 10), sample(10, 10)), "interactive", NOW).picked).toBe("me")
+    expect(pick(r, cacheOf(sample(70, 10), sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
+  })
+  test("Ultra takes no part in the session move, as home or as the alternative", () => {
+    const meFull = sample(75, 10)
+    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "wave", NOW).picked).not.toBe("iu") // me is home for wave, iu's 5% is no emptier window
+    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "wave", NOW).reason).not.toBe("session")
+  })
+  test("withoutSessionWindows strips only the plans without a session limit", () => {
+    const c = withoutSessionWindows(ultraReg(), cacheOf(sample(50, 20), sample(50, 20)))
+    expect(c.samples.iu).toMatchObject({ s: null, s_reset: null, s_ts: null, w: 20 })
+    expect(c.samples.me).toMatchObject({ s: 50, w: 20 })
+  })
+  test("mergeSample drops a stored session half when the endpoint answers with a weekly window only", () => {
+    const prev = { ...sample(88, 30), s_ts: NOW - 3 * 3600_000, w_ts: NOW - 3 * 3600_000 }
+    const inc: Sample = { s: null, s_reset: null, s_ts: null, w: 31, w_reset: NOW / 1000 + 100 * H, w_ts: NOW, src: "oauth" }
+    expect(mergeSample(prev, inc)).toMatchObject({ s: null, s_reset: null, s_ts: null, w: 31, w_ts: NOW })
+    // a feed that merely omits the window (statusline, peer) still keeps what we know
+    expect(mergeSample(prev, { ...inc, src: "statusline" })).toMatchObject({ s: 88 })
+    // an endpoint answer with nothing at all is no evidence
+    expect(mergeSample(prev, { ...inc, w: null, w_reset: null, w_ts: null })).toMatchObject({ s: 88 })
+  })
+  test("saveSample for a plan without a session limit never stores or keeps a session half", () => {
+    const d = tmp()
+    saveSample("iu", { ...sample(88, 30), src: "statusline" }, d) // a leftover from before the plan was known
+    saveSample("iu", { s: 90, s_reset: NOW / 1000, s_ts: NOW, w: 31, w_reset: NOW / 1000 + 100 * H, w_ts: NOW, src: "statusline" }, d, false)
+    expect(loadCache(d).samples.iu).toMatchObject({ s: null, s_reset: null, s_ts: null, w: 31 })
+    recordSample("iu", { s: 77, w: 32 }, NOW, d, false)
+    expect(loadCache(d).samples.iu).toMatchObject({ s: null, w: 32 })
+    rmSync(d, { recursive: true })
+  })
+  test("dueIds ignores a leftover session timestamp: an Ultra with a fresh weekly window is not due", () => {
+    const old = { ...sample(88, 30), s_ts: NOW - 20 * 60_000 } // weekly fresh (1 min), session 20 min old
+    expect(dueIds(ultraReg(), cacheOf(old, sample(1, 1)), NOW)).toEqual([])
+    const maxReg = ultraReg()
+    maxReg.accounts.iu.plan = "max"
+    expect(dueIds(maxReg, cacheOf(old, sample(1, 1)), NOW)).toEqual(["iu"])
   })
 })
