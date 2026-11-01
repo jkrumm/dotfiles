@@ -18,17 +18,42 @@ description: How macOS TCC (Full Disk Access, Files and Folders, AppData) bites 
 | Pattern | Use when | How |
 |-|-|-|
 | **Launcher** | a long-lived job spawns many programs that may touch protected folders (the herdr-core and every terminal in it) | A tiny native Mach-O at a stable path is the LaunchAgent's `Program`; it `posix_spawn`s the real program as a child. The grant goes to the launcher once. Used: `~/.local/libexec/herdr-core-launcher` |
-| **Stable path or signature** | one binary needs its own grant and cannot run under a launcher | A copy at an unversioned path, or re-signed with one stable self-signed identity and an explicit `--identifier`, then `bootout` + `bootstrap` (launchd pins the code identity at bootstrap). Fallback only; not needed so far |
+| **Stable path or signature** | one binary needs its own grant and cannot run under a launcher | A copy at an unversioned path, or a signature whose designated requirement does not carry the cdhash (`--identifier` plus an explicit `-r='designated => identifier "…"'`), then `bootout` + `bootstrap` (launchd pins the code identity at bootstrap). **Used for the launcher itself** (§The launcher) |
 | **No grant** | the job only touches `~/SourceRoot`, `~/IuRoot`, `/opt/homebrew`, `~/.local`, `/tmp` | Nothing to do. Listed in `config/tcc-programs.json` so the check stays quiet on purpose |
 
 ## The launcher (design verified 2026-10-31)
 
-`scripts/herdr-core-launcher.c` → `make herdr-core-setup` builds it to `~/.local/libexec/herdr-core-launcher`, ad-hoc signed
-with the fixed identifier `com.jkrumm.herdr-core-launcher`. It rebuilds **only when the source hash changes**, because a
-new binary is a new code identity and the grant is lost once. Evidence (attribution, swap, what is still unproven):
-`docs/herdr-core.md` §Launcher evidence. The check that proves the grant is `make tcc-probe` (a core terminal runs `ls`
-on Documents, Desktop and Downloads; blocked means no grant). Do not run it without the grant on a screen nobody
+`scripts/herdr-core-launcher.c` → `make herdr-core-setup` (via `scripts/herdr-core-launcher-build.sh`) builds it to
+`~/.local/libexec/herdr-core-launcher`, signed with the identifier `com.jkrumm.herdr-core-launcher` and an explicit
+designated requirement `identifier "com.jkrumm.herdr-core-launcher"`. An ordinary ad-hoc signature's requirement is its
+cdhash, so every rebuild lost the grant (`tccd: Failed to match existing code requirement`); this one is identical across
+rebuilds (proven 2026-11-01: two different binaries, `codesign -dr-` identical, `codesign -v -R=<one's DR> <other>` passes,
+a different identifier fails). The build reruns when the source hash **or the signing mode** changes (both in
+`.src-sha`).
+
+**Why not a self-signed certificate (researched 2026-11-01, macOS 26):** an openssl self-signed cert with the code-signing
+EKU imports into a dedicated keychain and `set-key-partition-list` works headless, but `codesign -s` refuses it:
+`no identity found`, `CSSMERR_TP_NOT_TRUSTED`, by name or SHA-1. Trusting it (`security add-trusted-cert -p codeSign`)
+raises a SecurityAgent authorization dialog, so it is not scriptable over ssh. The identifier-only requirement gives the
+same durability; it is no weaker in practice (the file is user-writable either way, and the grant stays keyed on the path).
+Not yet observed: tccd honouring the explicit requirement after a rebuild; the first rebuild after the migration re-grant
+is the proof (`make tcc-probe` must stay green with no new grant).
+
+**Every launcher change ends with `make tcc-probe`** (a fresh `hc run` terminal runs `ls` on Documents, Desktop and
+Downloads; blocked means no grant). `make herdr-core-setup` never swaps in a launcher with a *changed* requirement
+without queueing the re-grant through `ask-human` (it names the exact path and the probe); an unchanged requirement
+swaps silently and keeps the grant. **One-time migration per machine:** the launcher that is still ad-hoc with a cdhash
+requirement (`make tcc-check` WARNs "re-sign pending") needs one `make herdr-core-launcher`, one Full Disk Access
+re-grant on that path (remove the stale entry first), and a core restart through `make herdr-core-setup` when no terminal
+is live (or `YES=1`). Evidence (attribution, swap, what is still unproven):
+`docs/herdr-core.md` §Launcher evidence. Do not run `make tcc-probe` without the grant on a screen nobody
 watches without dismissing the dialog afterwards.
+
+**Terminals born before a cutover keep the old identity.** A terminal created before a launcher cutover hangs off the
+pre-cutover holder and keeps the OLD TCC identity; only terminals created after it inherit the launcher. Never judge a
+grant from a pre-existing terminal (it produced a false "cannot read the unified log … no Full Disk Access" verdict).
+`make tcc-probe` runs in a fresh `hc run` terminal by itself, and `scripts/op-tcc-probe.sh` re-execs itself through
+`hc run` when started anywhere else (and refuses when the core job is not running: it never lets `hc` start a core).
 
 ## Per-program classification
 
@@ -63,7 +88,7 @@ MacBook (different user home): LaunchAgent programs were read over ssh; the TCC 
 
 | Machine | Grant | Why |
 |-|-|-|
-| mini | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | every program in a core terminal; survives core upgrades |
+| mini | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | every program in a core terminal; survives core upgrades and launcher rebuilds (stable requirement); re-grant once for the migration |
 | MacBook | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | same; the app's terminals run in that core, and it is what spares `op` the AppData dialog (§1Password) |
 | MacBook | Full Disk Access → Ghostty.app (optional) | `op` and everything else started from a plain Ghostty tab |
 
@@ -107,7 +132,7 @@ exercised by the probe below.
 hc run --timeout 900 'make op-tcc-probe SWAP=1'
 ```
 
-It reads one ref from `dotfiles-private/headless.refs` (value discarded), then searches the unified log for an
+It reads one ref from `dotfiles-private/headless.refs` (value discarded; via `op_run`, so the account follows the workspace), then searches the unified log for an
 `AUTHREQ_PROMPTING … kTCCServiceSystemPolicyAppData` since the read began; PASS means the read worked and none was raised.
 `SWAP=1` repeats the check from the same terminal and from a fresh one after pointing the core at a differently signed
 copy and kickstarting it (the original build is restored on exit). "Exactly one Touch ID prompt" is the half only the

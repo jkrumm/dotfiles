@@ -73,8 +73,18 @@ for opjob in $OP_JOBS; do
   fi
 done
 
+# The launcher's code requirement must not carry its cdhash (the old ad-hoc state: every rebuild drops the grant).
+# WARN only, on the same line as the verdict (doctor prints the line verbatim): the fix is a rebuild plus a one-time re-grant.
+warn=""
+if [ -x "$LAUNCHER" ]; then
+  ldr=$(codesign -dr- "$LAUNCHER" 2>/dev/null | sed -n 's/^# designated => //p; s/^designated => //p' | head -1)
+  case "$ldr" in
+    *cdhash*) warn="; WARN launcher is still ad-hoc with a cdhash requirement (old state): re-sign pending (make herdr-core-launcher, then re-grant FDA and make tcc-probe; docs/tcc.md)" ;;
+  esac
+fi
+
 if [ "$fail" -eq 0 ]; then
-  printf '  ✓ tcc: %s LaunchAgent programs checked, %s flagged and all classified\n' "$checked" "$flagged"
+  printf '  ✓ tcc: %s LaunchAgent programs checked, %s flagged and all classified%s\n' "$checked" "$flagged" "$warn"
   exit 0
 fi
 exit 1

@@ -2487,20 +2487,16 @@ jobrun-canary-teardown:
 LAUNCHER_BIN := $(HOME)/.local/libexec/herdr-core-launcher
 CORE_FORMULA := jkrumm/tap/herdr-core
 .PHONY: herdr-core-setup herdr-core-teardown herdr-core-status herdr-core-launcher herdr-core-update-setup herdr-core-update-teardown herdr-core-update-check herdr-core-update
-# The LaunchAgent's own program (docs/tcc.md): built once, at a stable path, ad-hoc signed with a fixed identifier.
-# Rebuilt ONLY when the source changed, because a new binary is a new code identity and needs a new Full Disk
-# Access grant. The source hash sits beside it.
+# The LaunchAgent's own program (docs/tcc.md): ad-hoc signed with a fixed identifier and an explicit identifier-only
+# designated requirement, so a rebuild keeps its Full Disk Access grant. Rebuilt when the source hash or the signing
+# mode changes; a changed requirement queues the re-grant with ask-human before the swap. Afterwards: make tcc-probe.
 herdr-core-launcher:
-	@SRC="$(DOTFILES_DIR)/scripts/herdr-core-launcher.c"; SHA="$$(shasum -a 256 "$$SRC" | cut -d' ' -f1)"; \
-	if [ -x "$(LAUNCHER_BIN)" ] && [ "$$(cat "$(LAUNCHER_BIN).src-sha" 2>/dev/null)" = "$$SHA" ]; then \
-		echo "    · herdr-core-launcher (up to date)"; exit 0; fi; \
-	mkdir -p "$(dir $(LAUNCHER_BIN))"; \
-	cc -O2 -Wall -o "$(LAUNCHER_BIN).new" "$$SRC" && codesign -f -s - --identifier com.jkrumm.herdr-core-launcher "$(LAUNCHER_BIN).new" 2>/dev/null \
-		|| { rm -f "$(LAUNCHER_BIN).new"; echo "    ✗ launcher build failed"; exit 1; }; \
-	mv "$(LAUNCHER_BIN).new" "$(LAUNCHER_BIN)" && echo "$$SHA" > "$(LAUNCHER_BIN).src-sha"; \
-	echo "    ✓ herdr-core-launcher built — it is a NEW code identity: grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md)"
+	@LAUNCHER_BIN="$(LAUNCHER_BIN)" DOTFILES_DIR="$(DOTFILES_DIR)" bash "$(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh"
 herdr-core-setup: herdr-core-launcher
-	@command -v brew >/dev/null && brew list --formula herdr-core >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install $(CORE_FORMULA) || { echo "    ✗ brew install $(CORE_FORMULA) failed"; exit 1; }; \
+	@if ! { command -v brew >/dev/null && brew list --formula herdr-core >/dev/null 2>&1; }; then \
+		command -v brew >/dev/null && { git -C "$$(brew --repo jkrumm/tap)" pull --ff-only -q 2>/dev/null || echo "    · tap not refreshed (offline or diverged); installing from the local copy"; }; \
+		HOMEBREW_NO_AUTO_UPDATE=1 brew install $(CORE_FORMULA) || { echo "    ✗ brew install $(CORE_FORMULA) failed"; exit 1; }; \
+	fi; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/bin"; \
 	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; MARK="$(LAUNCHER_BIN).bootstrapped"; \
 	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
@@ -2542,15 +2538,16 @@ herdr-core-status:
 .PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
 tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.sh
-tcc-probe: ## Live proof that a core terminal reaches Documents/Desktop/Downloads (raises the dialog if the launcher has no grant)
+tcc-probe: ## Live proof (fresh hc run terminal) that the launcher's grant holds; the step after EVERY launcher change (raises the dialog if it has none)
 	@out=$$(hc run --timeout 15 'ls ~/Documents ~/Desktop ~/Downloads >/dev/null && echo FDA_O""K' 2>&1); \
 	case "$$out" in *FDA_OK*) echo "  ✓ a core terminal reaches the protected folders (a Full Disk Access grant holds)";; \
-	*) echo "  ✗ blocked or failed: $$out"; echo "    grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md), then dismiss the dialog on the screen"; exit 1;; esac
+	*) echo "  ✗ blocked or failed: $$out"; echo "    grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md), then dismiss the dialog on the screen. The probe runs in a fresh terminal (hc run); a terminal born before a launcher cutover keeps the old identity"; exit 1;; esac
 op-tcc-probe: ## MacBook acceptance check: op read in a core terminal raises no AppData dialog (SWAP=1: also after a core swap). Run: hc run --timeout 900 'make op-tcc-probe SWAP=1'
 	@bash $(DOTFILES_DIR)/scripts/op-tcc-probe.sh $(if $(SWAP),--swap,)
 tcc-check-test: ## Hermetic test for tcc-check
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.test.sh
+	@bash $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 
 # Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old, via the tap formula.
 herdr-core-update-setup:
