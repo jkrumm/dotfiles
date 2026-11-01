@@ -207,8 +207,8 @@ step_pkg-caches() {
     if [ "$uvrc" -eq 0 ]; then
       parts+="uv pruned, "
     elif grep -q 'when waiting for lock' <<<"$uvout"; then
-      lockfile="$(uv cache dir 2>/dev/null || true)/.lock"
-      holder=$("$LSOF" -t -- "$lockfile" 2>/dev/null | head -n 1 || true)
+      lockfile="$(with_timeout 10 uv cache dir 2>/dev/null || true)/.lock"
+      holder=$(with_timeout 10 "$LSOF" -t -- "$lockfile" 2>/dev/null | head -n 1 || true)
       parts+="uv prune skipped: cache lock held by pid ${holder:-unknown}, "
     else
       parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1
