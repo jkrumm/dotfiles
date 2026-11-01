@@ -498,12 +498,12 @@ human queue and its Slack notification, as every `ask-human` request does.
 
 Each account may carry a `platform` block: the API credit its subscription grants, read by the agent-workflows inference gateway (Wave 2; `agent-workflows/docs/gateway.md` §Picking a pool). The picker, launchers and statusline ignore it.
 
-The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), granted to one linked Console organization, expiring at the end of that subscription's billing cycle (no rollover). It pays API keys of the linked org only (Messages, Batches, Agent SDK), never interactive Claude Code, which stays on the subscription. No API returns the balance, so the gateway meters itself.
+The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), granted to one linked Console organization, expiring at the end of that subscription's billing cycle (no rollover). It pays API keys of the linked org only (Messages, Batches, Agent SDK), never interactive Claude Code, which stays on the subscription. No API returns the balance, so the gateway meters itself. All three Console orgs carry no payment method and a monthly spend limit equal to the credit, so a drained pool refuses and never bills.
 
 | Field | Meaning |
 |-|-|
 | `creditUsd` | monthly credit of the plan (200 / 100) |
-| `cycleDay` | the subscription's billing day (1–31), where the credit expires and the meter resets. `null` = unknown: the gateway meters a rolling 31-day window (the sum of the pool's own rows over the last 31 days), which can never under-count the real cycle, until you fill it (claude.ai Settings → Billing); the pool stays usable |
+| `cycleDay` | the credit's **expiry** day (1–31) from Console → Billing, not the subscription's payment day. The cycle runs from the expiry day of the previous month to the expiry day, and the meter resets there. `null` = unknown: the gateway meters a rolling 31-day window (the sum of the pool's own rows over the last 31 days), which can never under-count the real cycle; the pool stays usable |
 | `headroomUsd` | a pool counts as full at `meter + headroom ≥ credit`: a buffer against a mid-session "credit balance is too low" refusal, not a guarantee (concurrent requests can overrun it). The hard stop is the org's own refusal, because no payment method is on file |
 | `enabled` | pool switch, independent of the account's own `enabled` |
 | `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
@@ -514,10 +514,8 @@ The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), grante
 **Enable `me2` (owner steps):**
 
 1. Replace the placeholder `API_KEY_ME2` / `ADMIN_KEY_ME2` in `op://mini/claude-platform/` with the real keys of the linked Console org (no payment method on file: a drained org then refuses instead of billing), then `make secrets-seed`.
-2. Fill `cycleDay`.
+2. Fill `cycleDay` with the credit's expiry day from Console → Billing.
 3. Set `platform.enabled` to `true`.
-
-`cycleDay` is still `null` on `iu` and `me` too; fill it the same way.
 
 **Troubleshooting**
 
