@@ -264,10 +264,16 @@ hc_roster_text() { # <roster> [addresses…]
 # the factory's land in the same one: the app's own `herdr-app` doc entry whose folder is the repo root, else a stable
 # id from the full root (so ~/SourceRoot/x and ~/IuRoot/x differ). Dies when the doc cannot be read: a space is never
 # made up on the strength of a call that told nothing.
+hc_main_root() { # <path>: the main checkout root, never a linked worktree (a worktree's git common dir is the main .git)
+  local root
+  root=$(host_run "cd $(printf '%q' "$1") 2>/dev/null && { c=\$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ \"\${c##*/}\" = .git ] && printf %s \"\${c%/.git}\" || pwd -P; }") || root=""
+  [[ -n $root ]] || root=$1
+  printf %s "$root"
+}
+
 hc_space_id() { # <repo path>
   local root doc id
-  root=$(host_run "cd $(printf '%q' "$1") 2>/dev/null && pwd -P") || root=""
-  [[ -n $root ]] || root=$1
+  root=$(hc_main_root "$1")
   if ! doc=$(hc_rpc doc.get "$(jq -nc --arg n "$APP_DOC" '{name:$n}')"); then
     die "could not read the $APP_DOC document from $HOST — refusing to guess a space"
   fi
@@ -278,6 +284,30 @@ hc_space_id() { # <repo path>
     | map(select(type == "object" and ((.folder // "") | . == $a or . == $b))) | .[0].id // empty' <<<"$doc" 2>/dev/null)
   if [[ -n $id ]]; then printf %s "$id"; return 0; fi
   printf 'sp-%s-%s' "$(basename "$root")" "$(sha12 "$root")"
+}
+
+# Give a space we are about to create its doc entry (id, name = the main checkout's basename, folder = the main checkout
+# root): left alone, the app adopts the first terminal's cwd as the folder and names nothing, so a spawn from a worktree
+# showed up as a space called after the worktree. No-op when the space exists or the doc is not a {spaces: [...]} object.
+# Compare-and-set, retried on `conflict`; best effort, never failing the spawn.
+hc_seed_space() { # <space id> <repo path>
+  local doc version value resp root
+  root=$(hc_main_root "$2")
+  for _ in 1 2 3; do
+    doc=$(hc_rpc doc.get "$(jq -nc --arg n "$APP_DOC" '{name:$n}')") || return 0
+    [[ -z $(rpc_kind "$doc") ]] || return 0
+    version=$(jq -r '.result.version // empty' <<<"$doc")
+    [[ -n $version ]] || return 0
+    value=$(jq -c --arg id "$1" --arg name "$(basename "$root")" --arg folder "$root" '.result.value
+      | if type == "object" and ((.spaces | type) == "array") and ((.spaces | map(select(type == "object" and .id == $id)) | length) == 0)
+        then .spaces += [{id: $id, name: $name, folder: $folder, tabs: []}]
+        else empty end' <<<"$doc" 2>/dev/null)
+    [[ -n $value ]] || return 0
+    resp=$(hc_rpc doc.set "$(jq -nc --arg n "$APP_DOC" --argjson v "$value" --argjson ver "$version" '{name:$n,version:$ver,value:$v}')") || return 0
+    [[ -n $(rpc_kind "$resp") ]] || return 0
+    [[ $(rpc_kind "$resp") == conflict ]] || return 0
+  done
+  return 0
 }
 
 # Name a tab we made once the app has an entry for it: compare-and-set on the doc, retried on `conflict`. Best effort,
@@ -354,6 +384,7 @@ hc_start_agent() {
       labels='{}'; place=$(jq -nc --arg p "$parent" '{parent:$p,outlive_parent:true}')
     else
       SPAWNED_SPACE=$(hc_space_id "$spath") || { HC_START_ERR="could not resolve the space of $spath (above)"; return 1; }
+      hc_seed_space "$SPAWNED_SPACE" "$spath"
       tab="tb-$(sha12 "$agent")"
       labels=$(jq -nc --arg s "$SPAWNED_SPACE" --arg t "$tab" '{"herdr.space":$s,"herdr.tab":$t}')
       place='{"no_parent":true}'

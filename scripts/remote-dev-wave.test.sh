@@ -241,7 +241,25 @@ is "and lands" "$(jq -r '.spaces[0].tabs[0].name' < <(jq -c .value "$STATE/doc.j
 reset
 echo '{"version":1,"value":{"spaces":[]}}' >"$STATE/doc.json"
 real wave myrepo "adhoc task"
-is "no tab entry yet: nothing written, the spawn still succeeds" "$rc$([ -e "$STATE/sets.jsonl" ] && echo set)" "0"
+is "a repo with no space yet: the spawn still succeeds" "$rc" "0"
+newid="sp-myrepo-$(printf %s "$(cd "$S/myrepo" && pwd -P)" | shasum -a 256 | cut -c1-12)"
+is "the new space is labelled with the fallback id" "$(jqrun '.labels["herdr.space"]')" "$newid"
+is "its entry is seeded before the app adopts it (one doc.set)" "$(wc -l <"$STATE/sets.jsonl" | tr -d ' ')" "1"
+is "seeded with the id" "$(jq -r '.value.spaces[0].id' "$STATE/sets.jsonl")" "$newid"
+is "named after the repo" "$(jq -r '.value.spaces[0].name' "$STATE/sets.jsonl")" "myrepo"
+is "folder = the repo root" "$(jq -r '.value.spaces[0].folder' "$STATE/sets.jsonl")" "$(cd "$S/myrepo" && pwd -P)"
+reset
+echo "{\"version\":1,\"value\":{\"spaces\":[{\"id\":\"$newid\",\"name\":\"mine\",\"folder\":\"/elsewhere\",\"tabs\":[]}]}}" >"$STATE/doc.json"
+real wave myrepo "adhoc task"
+lacks "a space the doc already has is not seeded again" "$(cat "$STATE/sets.jsonl" 2>/dev/null)" "$S/myrepo"
+
+echo "space root: a linked worktree resolves to the main checkout, never to itself"
+git init -q "$TMP/mainrepo" && git -C "$TMP/mainrepo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$TMP/mainrepo" worktree add -q "$TMP/mainrepo/.claude/worktrees/w9-x" -b w9-x
+awk '/^on_dev_host\(\)/,/^}/; /^host_run\(\)/,/^}/; /^hc_main_root\(\)/,/^}/' "$HERE/remote-dev.sh" >"$TMP/fn.sh"
+wtroot=$(HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" bash -c 'source "$1"; hc_main_root "$2"' _ "$TMP/fn.sh" "$TMP/mainrepo/.claude/worktrees/w9-x")
+is "worktree -> main checkout root" "$wtroot" "$(cd "$TMP/mainrepo" && pwd -P)"
+is "main checkout -> itself" "$(HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" bash -c 'source "$1"; hc_main_root "$2"' _ "$TMP/fn.sh" "$TMP/mainrepo")" "$(cd "$TMP/mainrepo" && pwd -P)"
 reset; echo unavailable >"$STATE/doc_error"
 real wave myrepo "adhoc task"
 [ "$rc" -ne 0 ] && ok "an unreadable app doc refuses to guess a space" || bad "spawned into a guessed space"

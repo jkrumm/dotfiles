@@ -146,9 +146,9 @@ is tried first and hc-direct is the fallback (below). Four rules hold:
   `herdr.tab=tb-<hash of the agent name>` and `no_parent`, so the terminal outlives whoever spawned it; the tab is then
   named by compare-and-set `doc.set` on the `herdr-app` doc (retried on `conflict`, best effort). The space is the doc
   entry whose `folder` is the repo root, else `sp-<repo>-<hash of the full root>` — HcRunner's rule, so a factory spawn
-  and an `rd` spawn land in the same space. `RD_ORCHESTRATED=1 rd wave` keeps the calling terminal as `parent`
+  and an `rd` spawn land in the same space. A fallback id is a new space: `rd` first seeds its doc entry (`name` = the main checkout's basename, `folder` = the main checkout root, never a linked worktree: git's common dir) by compare-and-set, because the app would otherwise adopt it with no name and the first terminal's cwd as the folder (a fan worker's worktree). `RD_ORCHESTRATED=1 rd wave` keeps the calling terminal as `parent`
   (labelled tab, so the lead's notes and `hc wait --children` see it). `fan` workers are hidden children: `parent` =
-  `$HC_TERMINAL_ID`, no labels (the app lists them as the orchestrator's sub-agents), and `outlive_parent: true` like the
+  `$HC_TERMINAL_ID`, no labels (the app shows them nowhere: `rd agents` / `hc ls --json` list them), and `outlive_parent: true` like the
   orchestrated wave's tab, so losing or closing the orchestrator never kills a working child and its uncommitted work. Without a calling terminal on the dev host (a MacBook shell) a worker is a tab.
 - **Bounded, and only ours.** Every `hc` call runs under the host's `timeout`/`gtimeout` (`RD_HC_TIMEOUT_S`, 30 s). A
   spawn that gets no answer reports `uncertain` and points at `rd agents`; it is never retried. `close`, `read`, `say`
