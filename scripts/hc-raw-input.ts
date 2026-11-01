@@ -80,7 +80,7 @@ export function coreIsRunning(env = process.env): boolean {
 
 /** One framed hc connection. */
 async function open(timeoutMs: number) {
-  const proc = Bun.spawn(["hc", "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" })
+  const proc = Bun.spawn([process.env.HC_BIN ?? "hc", "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" })
   const reader = proc.stdout.getReader()
   const parse = createFrameParser()
   const queue: Frame[] = []
@@ -146,16 +146,27 @@ async function open(timeoutMs: number) {
   }
 }
 
-/** Types `bytes` into each address. Returns the addresses it reached; failures are listed, not thrown. */
-export async function typeInto(addresses: string[], bytes: Buffer, timeoutMs = 8000) {
+/**
+ * Types `bytes` into each address. Returns the addresses it reached; failures are listed, not thrown.
+ * `agentsOnly` re-checks right before sending that the terminal is still an agent (a selection made earlier can go
+ * stale: claude exits, a shell takes over) and lists it under `skipped` instead of typing escape sequences into a shell.
+ */
+export async function typeInto({ addresses, bytes, agentsOnly = false, timeoutMs = 8000 }: {
+  addresses: string[]
+  bytes: Buffer
+  agentsOnly?: boolean
+  timeoutMs?: number
+}) {
   const conn = await open(timeoutMs)
   const reached: string[] = []
   const failed: string[] = []
+  const skipped: string[] = []
   try {
     for (const address of addresses) {
       try {
         const t = (await conn.call("terminal.get", { terminal: address })) as unknown as Terminal
         if (t.state !== "live") { failed.push(`${address}: not live`); continue }
+        if (agentsOnly && !isAgent(t)) { skipped.push(`${address}: no longer an agent`); continue }
         const att = (await conn.call("terminal.attach", { terminal: address, cols: t.cols, rows: t.rows })) as { channel: number }
         const ch = att.channel
         // No CREDIT frame: nothing here wants the output, so the core sends none (checked: input still lands).
@@ -170,7 +181,7 @@ export async function typeInto(addresses: string[], bytes: Buffer, timeoutMs = 8
   } finally {
     conn.close()
   }
-  return { reached, failed }
+  return { reached, failed, skipped }
 }
 
 /** Addresses of live claude / opencode terminals on this core (linked machines come back as `machine/tN`). */
@@ -203,14 +214,16 @@ if (import.meta.main) {
   const bytes = await readStdin()
   if (!bytes.length) process.exit(0)
   let targets: string[]
-  if (args[0] === "--agents") targets = await agentAddresses()
+  const agentsOnly = args[0] === "--agents"
+  if (agentsOnly) targets = await agentAddresses()
   else if (args[0] === "--self") {
     const self = process.env.HC_TERMINAL_ID
     if (!self) { console.error("hc-raw-input: HC_TERMINAL_ID is not set"); process.exit(2) }
     targets = [self]
   } else targets = args
   if (!targets.length) process.exit(0)
-  const { reached, failed } = await typeInto(targets, bytes)
+  const { reached, failed, skipped } = await typeInto({ addresses: targets, bytes, agentsOnly })
+  for (const k of skipped) console.error(`hc-raw-input: skipped ${k}`)
   for (const f of failed) console.error(`hc-raw-input: ${f}`)
   if (reached.length) console.log(reached.join(" "))
   process.exit(failed.length && !reached.length ? 1 : 0)
