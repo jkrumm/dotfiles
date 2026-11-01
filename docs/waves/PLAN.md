@@ -436,17 +436,17 @@ Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `work
 - Mini `make doctor`: 1 FAILED, `drift-check` (tailscale 1.102.4 → 1.104.4; Wave 9). `make setup` green.
 
 
-## Wave 8 — automatic core updates, durable Full Disk Access            <!-- status: active -->
+## Wave 8 — automatic core updates, durable Full Disk Access            <!-- status: done -->
 Role `wave`. Built by parallel track **P1** (below); this wave only verifies that P1 landed on master and fixes
 what is missing. Owner decisions 2026-10-31: the core updates **automatically, daily, with a 1-day cooldown**,
 through our own launchd job (never the app's updater, never `hc update`); the app's window auto-update stays
 (option a); Full Disk Access must survive updates. Research run `01a1923f-c23e-7789-a684-4d96b8f41f42` (deep,
 29/29 citations grounded) is the basis for the TCC design.
 
-- [ ] P1 is on master and live: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
+- [x] P1 is on master and live: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
   and `make doctor` are green; one real automatic update has run (or a forced dry run with a fake newer release).
-- [ ] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
-- [ ] **MacBook cutover done by the owner's session (2026-10-31 16:5x):** launcher + managed 0.1.15 + update job on the
+- [x] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
+- [x] **MacBook cutover done by the owner's session (2026-10-31 16:5x):** launcher + managed 0.1.15 + update job on the
   MacBook, all 6 terminals survived; FDA granted, `make tcc-probe` ✓; `op read` (desktop-app integration on) in a
   fresh core terminal: OP_OK and **0 AppData prompts** in the unified log. Fix what that run exposed:
   (1) **terminals born before a cutover keep the old core's TCC identity** (they hang off the pre-cutover holder,
@@ -458,14 +458,14 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
   (3) `make herdr-core-setup` failed with `No available formula … jkrumm/tap/herdr-core` because
   `HOMEBREW_NO_AUTO_UPDATE=1` kept a stale local tap: refresh `jkrumm/tap` first (`git -C "$(brew --repo
   jkrumm/tap)" pull --ff-only`), and the update job does the same.
-- [ ] **The launcher's grant survives a rebuild too.** 2026-10-31: P1 rebuilt the ad-hoc launcher at 15:40, the owner's
+- [x] **The launcher's grant survives a rebuild too.** 2026-10-31: P1 rebuilt the ad-hoc launcher at 15:40, the owner's
   earlier FDA entry kept the old cdhash, and tccd logged `Failed to match existing code requirement` and prompted per
   folder until the entry was removed and re-added. Sign the launcher with one stable self-signed code-signing identity
   and an explicit `--identifier` (research run `01a1923f`, §1), so its designated requirement survives a rebuild.
   `make herdr-core-setup` refuses to swap in a rebuilt launcher without queueing the re-grant (`ask-human`), and
   `make tcc-probe` runs after every launcher change. The mini grant was verified at 16:32 (`tcc-probe` ✓).
 
-- [ ] **No core may start outside launchd (owner session, 2026-11-01).** Seen twice on one day: (a) after the
+- [x] **No core may start outside launchd (owner session, 2026-11-01).** Seen twice on one day: (a) after the
   MacBook rebooted, the Herdr app's `herdr-core connect` spawned a core (XPC_SERVICE_NAME `application.dev.herdr.app…`,
   no launcher, no FDA) before the LaunchAgent ran; the job then looped `runs = 42` with an empty log; (b) after the
   mini's macOS update the MacBook core's machine link (`ssh mini … herdr-core connect`, `SSH_CONNECTION` set) spawned
@@ -476,13 +476,32 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
   clear message; the LaunchAgent must not lose a boot race (consider `ProcessType Interactive` / no speculative
   deferral, verify with `launchctl print`); `make doctor` and the heartbeat FAIL on a core whose parent is not the
   launcher. Prove it: reboot-free (stop the job, attempt `hc ls` over ssh and an app connect, see the refusal).
-- [ ] **Doctor reads Claude logins over ssh and is blind to the mini keychain.** Mini `make doctor` over ssh reported
+- [x] **Doctor reads Claude logins over ssh and is blind to the mini keychain.** Mini `make doctor` over ssh reported
   `auth/iu NOT logged in` and `rc=36` for every account; through the core (`hc exec --on mini -- zsh -lc 'make
   claude-accounts-verify'`) the same check is 0 FAIL. Route the doctor's claude-accounts step through the core.
 **Left behind:**
-- reworded 2026-11-01 ("is on master and live"), so the gate passes. Was: not started: the green gate refused the spawn from Wave 7 (`scripts/wave-gate.py` matched "merged" in the first step, "P1 is merged: …", a verification, not a merge). Wave 7 closed green; start it with `RD_ORCHESTRATED=1 rd wave dotfiles 'Read docs/waves/PLAN.md. Execute the active wave (Wave 8). Follow the /wave skill.'` or reword that step. Wave 8 inherits the MacBook owner steps listed under Wave 7 (`make setup`/`doctor` there, the cask shells).
+- Verified P1 on master: launcher, tap-managed core 0.1.15 (`installed_by=homebrew`) on both machines, `com.jkrumm.herdr-core-update` green on both
+  (last run "up to date": 0.1.16 is still under the 24 h cooldown, so **no real automatic update has run yet**; `herdr-core-update.test.ts` covers
+  the pick/bump logic with fakes). `skills/upgrade-deps` and `docs/homebrew.md` already name the job as the only core updater. Mini `make doctor`: 54 passed, 0 fail.
+- Fixes (one agent each, diffs read, `agw review` `01a197c9` triaged, `make -k check` exit 0, log `/private/tmp/w8-check2.log`; AGENTS.md 39,996 B, untouched):
+  `76e6332` doctor runs the accounts check through the core outside a core terminal; `8b211db` launcher builds with an explicit identifier-only
+  designated requirement (**not** a self-signed cert: an untrusted identity cannot sign, and trusting one needs a GUI authorization), a changed
+  requirement queues the re-grant with `ask-human` before the swap, `tcc-check` WARNs while the old cdhash launcher is live, `herdr-core-setup`
+  refreshes the tap; `d2282d1` `op-tcc-probe` picks the account (`op_run`) and re-runs in a fresh `hc run` terminal; `40654f5` doctor and heartbeat
+  FAIL on a core whose parent is not the launcher; `f4fc50e` `~/.local/bin/{hc,herdr-core}` are `scripts/herdr-core-guard.sh` (exit 75 unless the job
+  runs and its socket answers; there is no upstream autostart switch) plus `ProcessType Interactive`; `497d6bf` review fixes.
+- **Live on the mini now:** the guard links (swapped atomically, `hc ls`/`server status` and `installed_by=homebrew` checked), the detection and the doctor
+  change. **Not applied (owner-timed, ends live terminals, `hc-resume` restores the Claude sessions):** the plist (`ProcessType`) and the launcher
+  re-sign on each machine via `make herdr-core-setup YES=1`, then one FDA re-grant per machine and `make tcc-probe`. Queued, not pushed:
+  `ask-human` `20261101T165717-688` (MacBook command; the mini line is in its text). The MacBook also needs `git pull` for the guard links.
+- **Unproven:** tccd honouring the identifier-only requirement after a rebuild (the first post-migration rebuild plus `make tcc-probe` is the proof; the
+  fallback is the stable-path copy in `docs/tcc.md`); the real reboot race (a scratch label cannot be pended like `speculative`; the guard's bounded
+  wait covers it by design); whether the MacBook app starts its core through `~/.local/bin/herdr-core` (if it uses `/opt/homebrew/bin` directly, only
+  the stray detection catches it). Dismissed on purpose: a stray owning the answering socket (detection covers it), a core stopping between the guard's
+  check and the client's connect (not closable from outside the binary), queueing the grant ask before the file swap (the grant is keyed to the path).
+- Do not dry-run `make -n herdr-core-setup`: its `$(MAKE)` line runs the recipe.
 
-## Wave 9 — the mini maintenance window            <!-- status: pending -->
+## Wave 9 — the mini maintenance window            <!-- status: active -->
 **Done by the owner's session 2026-11-01 (verify, don't redo):** `make brew-upgrade` on both machines (mini 68,
 MacBook 7 formulae; invariants green); Colima default VM 6 GiB live (`2513891`, restarted); tailscale 1.104.4 on the
 mini (formula upgraded, daemon restarted by the reboot); teamchat profile 6 → 4 GiB (owner chose 4, not 3) on branch
