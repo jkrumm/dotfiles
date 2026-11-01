@@ -71,7 +71,7 @@ rd_role_resolve() { # <role>
   efile=$(mktemp "${TMPDIR:-/tmp}/rd-role.XXXXXX") || efile=/dev/null
   # The timeout binary is resolved on the host (coreutils is `timeout` or Homebrew's `gtimeout`); without one the
   # lookup runs unbounded rather than failing.
-  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=\$(command -v timeout || command -v gtimeout); \${t:+\$t $ROLE_TIMEOUT_S} factory role get '$role' --format json" 2>"$efile") || rc=$?
+  out=$(host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=\$(command -v timeout || command -v gtimeout); \${t:+\"\$t\"} \${t:+$ROLE_TIMEOUT_S} factory role get '$role' --format json" 2>"$efile") || rc=$?
   err=$(cat "$efile" 2>/dev/null); [[ $efile == /dev/null ]] || rm -f "$efile"
 
   if (( rc == 0 )); then
@@ -156,7 +156,9 @@ CORE_OK=""
 hc_host() {
   local args="" a
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  host_run "$HC_PRE t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; \${t:+\$t ${RD_HC_TIMEOUT_S:-30}} hc$args"
+  # Two one-word expansions, not \${t:+\$t 30}: over ssh this runs in the mini's login shell (zsh), which does not
+  # word-split an unquoted expansion, so "timeout 30" would be looked up as one command name (rc 127).
+  host_run "$HC_PRE t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; \${t:+\"\$t\"} \${t:+${RD_HC_TIMEOUT_S:-30}} hc$args"
 }
 
 # Die unless launchd has the core running. HC_SESSION names another core (a scratch one in tests): the caller owns it,
