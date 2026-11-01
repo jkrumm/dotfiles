@@ -319,7 +319,7 @@ subagents pin their own (`agents/*.md` `effort: high`). A mid-session `/model` s
 ## Operate
 
 **Verify (read-only, no tokens).** `make claude-accounts-verify` prints one `PASS|WARN|FAIL` line per check and
-exits 1 on any FAIL; `make doctor` runs it on the mini.
+exits 1 on any FAIL; `make doctor` runs it on the mini. Over plain ssh the login keychain is invisible (every account "NOT logged in"), so doctor outside a core terminal (no `HC_TERMINAL_ID`) runs it through the running herdr-core (`hc exec`), never starting one.
 
 | Check | What it proves | FAIL means |
 |-|-|-|

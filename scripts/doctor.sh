@@ -223,7 +223,14 @@ section_devhost_heartbeat() {
 section_claude_accounts() {
   hdr "Claude accounts (claude-accounts-verify)"
   local out rc=0
-  out=$(/bin/bash "$DOTFILES_DIR/scripts/claude-accounts-verify.sh" 2>&1) || rc=$?
+  # Over ssh the login keychain is invisible (every account reads "NOT logged in"). Outside a core terminal, run the
+  # verify through the running herdr-core, whose children see the keychain. Never `hc` when no core runs: it would start a stray one.
+  if [ -z "${HC_TERMINAL_ID:-}" ] && command -v hc >/dev/null 2>&1 \
+    && launchctl print "gui/$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -q "state = running"; then
+    out=$(hc exec --timeout 120 /bin/bash "$DOTFILES_DIR/scripts/claude-accounts-verify.sh" 2>&1) || rc=$?
+  else
+    out=$(/bin/bash "$DOTFILES_DIR/scripts/claude-accounts-verify.sh" 2>&1) || rc=$?
+  fi
   printf '%s\n' "$out" | sed 's/^/    /'
   if [ "$rc" -eq 0 ]; then
     ok "claude accounts" "$(printf '%s\n' "$out" | tail -n 1)"
