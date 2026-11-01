@@ -17,11 +17,13 @@ const FACTORY = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH";
 const PLANS = `for f in ~/SourceRoot/*/docs/waves/PLAN.md ~/IuRoot/*/docs/waves/PLAN.md; do [ -f "$f" ] && { echo "== $f"; grep -E '^# |^## Wave'; } < "$f"; done`;
 const MARK = "@@PLANS@@";
 const HC_MARK = "@@HC@@";
-const HC_LS = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; hc ls --json`;
-const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${HC_MARK}'; { ${HC_LS}; } 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
+// hc starts a stray core (no keychain) when none runs: ask launchd first, as rd's require_core does. Bounded when the host has a timeout.
+const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; launchctl print "gui/$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -q 'state = running' || exit 1; t=$(command -v timeout || command -v gtimeout)`;
+const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
+const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
 const PEEK_LINES = 8;
-const peekCmd = (addr) => `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; hc read ${addr} 2>&1 | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
+const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${addr} 2>&1) || { echo "(hc read failed)"; exit 1; }; printf '%s\\n' "$out" | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
 
 // Argo's live Kuma snapshot. The token is read on the mini and piped to curl as a header file.
 const UPTIME = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
@@ -152,14 +154,20 @@ function assemble(data) {
   const get = (name) => (repos[name] ??= { name, plan: null, sessions: [], all: [], spawns: [] });
   for (const [name, plan] of Object.entries(data.plans)) get(name).plan = plan;
   const live = (data.factory?.sessions ?? []).filter((s) => s.state !== "dead");
-  const nested = nestedPanes(live.map((s) => s.pane).filter(Boolean), data.hc);
+  // Nested only under a parent in the same repo's card; a child of another repo's session keeps its own card too.
+  const byRepo = new Map();
+  for (const s of live) {
+    const name = repoOf(s.cwd, s.id);
+    if (name && s.pane) byRepo.set(name, [...(byRepo.get(name) ?? []), s.pane]);
+  }
+  const nestedIn = new Map([...byRepo].map(([name, panes]) => [name, nestedPanes(panes, data.hc)]));
   for (const s of live) {
     const name = repoOf(s.cwd, s.id);
     if (!name) continue;
     const session = { ...s, kind: sessionKind(s) };
     const r = get(name);
     r.all.push(session); // the repo's dot and count see every session, nested or not
-    if (!nested.has(s.pane)) r.sessions.push(session);
+    if (!nestedIn.get(name)?.has(s.pane)) r.sessions.push(session);
   }
   const spawns = data.factory?.queue?.spawns ?? [];
   for (const q of Array.isArray(spawns) ? spawns : []) {
@@ -198,6 +206,7 @@ export default class Board extends View {
     this.data = null; // last good parse
     this.at = 0; // when it was read
     this.polling = false;
+    this.hcAt = 0; // when hc last answered: children of an old answer are not shown
     this.peeks = new Map(); // child address -> { lines, at } once opened; absent = closed
     this.sessionByPane = new Map(); // pane -> factory session, for the names and roles in a tree
     this.tab = localStorage.getItem("board.tab") === "uptime" ? "uptime" : "waves";
@@ -259,11 +268,11 @@ export default class Board extends View {
       this.polling = false;
       const next = r?.stdout ? parse(r.stdout) : null;
       // Keep the last good data; a missing factory answer keeps the old sessions.
-      if (next?.factory || (next && Object.keys(next.plans).length)) {
+      if (next?.factory || next?.hc || (next && Object.keys(next.plans).length)) {
         // hc and the factory are separate answers: each keeps its last good one.
         this.data = { factory: next.factory ?? this.data?.factory ?? null, hc: next.hc ?? this.data?.hc ?? null, plans: next.plans };
         if (next.factory) this.at = Date.now();
-        this.kids = childMap(this.data.hc);
+        if (next.hc) this.hcAt = Date.now();
       }
       for (const addr of this.peeks.keys()) this.readPeek(addr, cx);
       cx.notify();
@@ -273,17 +282,20 @@ export default class Board extends View {
   // The last lines of a child, read on the mini. Kept while the row stays open, refreshed with every poll.
   readPeek(addr, cx) {
     if (!ADDR.test(addr)) return;
+    const ticket = (this.peekTicket = (this.peekTicket ?? 0) + 1);
+    this.peeks.set(addr, { ...(this.peeks.get(addr) ?? { lines: null }), ticket });
     cx.spawn(async (cx) => {
       const r = await exec("sh", ["-c", peekCmd(addr)], { on: "mini" }).catch(() => null);
-      if (!this.peeks.has(addr)) return; // closed meanwhile
-      this.peeks.set(addr, { lines: r?.code === 0 ? r.stdout.trimEnd().split("\n") : ["(could not read it)"], at: Date.now() });
+      if (this.peeks.get(addr)?.ticket !== ticket) return; // closed, or a newer read is on its way
+      const lines = r?.stdout?.trim() ? r.stdout.trimEnd().split("\n") : ["(could not read it)"];
+      this.peeks.set(addr, { lines, ticket });
       cx.notify();
     });
   }
 
   togglePeek(addr, cx) {
     if (this.peeks.has(addr)) this.peeks.delete(addr);
-    else { this.peeks.set(addr, { lines: null, at: 0 }); this.readPeek(addr, cx); }
+    else this.readPeek(addr, cx);
     cx.notify();
   }
 
@@ -324,7 +336,8 @@ export default class Board extends View {
     const peek = this.peeks.get(c.address);
     const row = h_flex().id(`wv-c-${c.address}`).h(18).flex_none().gap(6).items_center().pl(10 + 12 * depth).text_size(11).cursor_pointer()
       .hover((e) => e.bg(t.hover))
-      .on_click((_e, cx) => this.togglePeek(c.address, cx))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.togglePeek(c.address, cx); })
       .tooltip("Click for its last lines")
       .child(this.dot(t, kind, 5))
       .when(Boolean(s?.role), (el) => el.child(div().flex_shrink(0).text_color(t.muted).child(s.role)))
@@ -459,7 +472,10 @@ export default class Board extends View {
   wavesView(t) {
     const stale = this.at && Date.now() - this.at > STALE_MS;
     const factory = this.data?.factory;
-    const { shown, paused, planned } = this.data ? assemble(this.data) : { shown: [], paused: [], planned: [] };
+    const fresh = this.hcAt && Date.now() - this.hcAt <= STALE_MS;
+    this.kids = childMap(fresh ? this.data?.hc : []);
+    const view = this.data ? { ...this.data, hc: fresh ? this.data.hc : [] } : null;
+    const { shown, paused, planned } = view ? assemble(view) : { shown: [], paused: [], planned: [] };
     this.sessionByPane = new Map((factory?.sessions ?? []).filter((x) => x.pane).map((x) => [x.pane, { ...x }]));
     const attention = factory?.attention?.length ?? 0;
     return v_flex().flex_1().min_h(0).text_size(13)
