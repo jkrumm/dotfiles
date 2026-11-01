@@ -49,7 +49,7 @@ PLAN.md is the state; the orchestrator holds none.
 1. Spawn: `RD_ORCHESTRATED=1 rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'` `RD_ORCHESTRATED=1` skips only the gate's outward-facing keyword stop and keeps you the parent. The caller's own tab does not block the spawn; any other working agent in the checkout does.
 2. Wait (above). `blocked` → `rd read` it before answering.
 3. Review the close-out: PLAN.md (**Left behind**, status flips), `git log`, the diff; the report is a claim, the diff the proof. Re-run `/check` if the gate result is not in Left behind.
-4. Red or incomplete → fix inline or `rd say` the wave. Green → `rd close <repo>-w<n>` (refuses unless a clean, pushed `wave <n>` tab with no working agent), then spawn the next. An outward-facing next step (merge, publish, release, deploy) stops at the owner.
+4. Red or incomplete → fix inline or `rd say` the wave. Green → `rd close <repo>-w<n>` (refuses unless the terminal runs claude itself, carries an rd/factory ownership marker, is idle or done, and its checkout is clean and pushed), then spawn the next. An outward-facing next step (merge, publish, release, deploy) stops at the owner.
 5. One active wave per repo; parallel only across repos.
 
 Chain mode leaves its tabs open.
