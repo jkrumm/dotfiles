@@ -428,20 +428,18 @@ startup — `source ~/.zshrc` after editing.
 | Command | Backend | Model |
 |-|-|-|
 | `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what the resume hook types into a terminal; `-p`, subcommands and non-interactive shells never pick |
-| `c` | Max subscription | whatever `/model` last left it on |
-| `cs` / `cf` | Max subscription | pinned to Sonnet / Fable for this session |
+| `c` / `ch` | Max subscription | Opus, effort medium / high |
+| `cs` / `cf` | Max subscription | Sonnet high / Fable medium; the four fill the app's + menu |
 | `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
 | `rd wave` | Max, via the core's keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 
-`CLAUDE_ACCOUNT_PICKED=<id>` marks "account already chosen" (set by `c`/`cs`/`cf` and `rd`, inherited by children;
+`CLAUDE_ACCOUNT_PICKED=<id>` marks "account already chosen" (set by `c`/`ch`/`cs`/`cf` and `rd`, inherited by children;
 iu is `unset CLAUDE_CONFIG_DIR`, so the marker says it was decided; it only counts while it agrees with `CLAUDE_CONFIG_DIR`): one pick-log line per spawn. `CLAUDE_ACCOUNT_REASON` (the picker's reason, display-only) travels with it for the statusline.
 `make claude-accounts-setup` pre-trusts `$HOME` in every account's `.claude.json` (`scripts/claude-pretrust.sh`) and copies the default account's trusted folders into the extra ones (`scripts/claude-trust-sync.sh`, never loosens).
 Contract and tests: `docs/claude-accounts.md` §Spawn integration, `make claude-launcher-test`.
-
-`ca`, `cap`, `cdf` and `cdp` were removed 2026-10-24: development never runs on IU API tokens.
 
 A `[claude-code:unrecognized_model]` line on stderr for gateway ids is expected
 telemetry. `usage-tracker` bills every launcher correctly because the SessionStart

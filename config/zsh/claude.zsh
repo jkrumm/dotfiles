@@ -153,19 +153,21 @@ _claude_launch() {
   )
 }
 
+# The four launchers (also the Herdr app's + menu, config/herdr-app/programs.json). Effort comes
+# from config/claude-effort.json unless the args carry --effort: c Opus medium, ch Opus high,
+# cs Sonnet high, cf Fable medium.
 c() {
-  _claude_launch "" "$@"
+  _claude_launch "opus" "$@"
 }
 
-# Same as `c` (Max subscription, same config dir) but starts on Fable instead
-# of whatever /model last left the session on.
+ch() {
+  _claude_launch "opus" --effort high "$@"
+}
+
 cf() {
   _claude_launch "fable" "$@"
 }
 
-# Same as `c` (Max subscription, same config dir) but starts on Sonnet instead
-# of whatever /model last left the session on — for when Opus is the default
-# and this particular chat doesn't need it. `cs --model opus` overrides back.
 cs() {
   _claude_launch "sonnet" "$@"
 }

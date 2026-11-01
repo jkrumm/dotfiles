@@ -2,7 +2,7 @@
 
 Status: **W2 done** (2026-10-24); rule v1.4 (N accounts), the peer sample import and plan detection shipped 2026-10-27; W3 = tune from picks.jsonl and `quota_sample` after 2 weeks, and decide a 20x upgrade for `me` if its weekly stays > 80 %. Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled, plus `me2` (second personal Max 5x at `~/.claude-me2`, Safari), registered dark (`enabled: false`) until its logins exist. Shipped in W1: ids renamed from
-`a`/`b`, `c`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
+`a`/`b`, `c`/`ch`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
 `CLAUDE_CONFIG_DIR` through the spawn's `env` (no room pauses the spawn, never
 IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
@@ -249,7 +249,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 | Spawner | Today | Change |
 |-|-|-|
 | bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
-| `c` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
+| `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
 | `rd wave` / `rd fan` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `hc-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
@@ -267,7 +267,7 @@ A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn a
 **Account marker (`CLAUDE_ACCOUNT_PICKED=<id>`).** An iu pick is `unset CLAUDE_CONFIG_DIR`, indistinguishable
 from "nobody chose", so the decision travels in this variable instead:
 
-- every chooser sets it: `c`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
+- every chooser sets it: `c`/`ch`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
   (the spawn's `env`, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
 - the routing reason rides with it as `CLAUDE_ACCOUNT_REASON=<reason>` (the picker's `reason=`, `forced` for `--account`, `resume`
   for a session pin; unset when unknown), set and unset together with the marker by `_claude_enter_account` and by `pick_account`'s
@@ -320,7 +320,7 @@ Known gaps:
 Claude Code has one global `effortLevel` and no per-model default, so every launch we control adds `--effort` from
 `config/claude-effort.json` (decided 2026-10-27): **Sonnet high, Opus medium, Fable medium**, no `--model` = `default`
 (the account's default model, Opus or Fable) = medium. It applies on every account because it rides the launch, not
-the config dir: `c`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
+the config dir: `c`/`ch`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
 `rd wave`/`rd fan` (`rd_effort_flag` in `remote-dev.sh`, `RD_WAVE_EFFORT` overrides). An explicit `--effort` always
 wins; an unlisted family (Haiku) gets no flag. `settings.json` `effortLevel` stays `high` in all three accounts on
 purpose: it is what a spawn without the flag runs at, and those are the headless runs (the e2e). Custom
