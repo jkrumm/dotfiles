@@ -450,52 +450,94 @@ factory_error() { # <json>
   factory_field "$1" '(.error | strings) // (.error | objects | .message) // "no reason given"'
 }
 
-# Create a spawn through the factory (idempotent by key) and wait, bounded by RD_FACTORY_WAIT_S (120 s), until
-# it has started. The factory picks the account and starts the pane; it also delivers the prompt.
+# The next key after a spent one: `<key>-r2`, `-r3`, … clipped at 32 like the terminal name (`wave_agent_name`), so the
+# agent name, which follows the key, still fits.
+spawn_retry_key() { # <key> <n>
+  local s="-r$2"
+  printf '%s' "${1:0:$((32 - ${#s}))}${s}"
+}
+
+# Create a spawn through the factory (idempotent by key while the key is live) and wait, bounded by RD_FACTORY_WAIT_S
+# (120 s), until it has started. The factory picks the account and starts the pane; it also delivers the prompt.
+# A key whose agent has ended is spent: the factory answers 409 `key_spent` and never revives the row, so the next key is
+# `<key>-r2`, `-r3`, … and FSPAWN_KEY says which one was used (the agent name follows it). A factory from before that
+# answers the old row (200) instead; the first look at it, right after the create, tells a spent one from a fresh spawn
+# (`ended`, or `started` with a dead session: a spawn this call just made is still queued or starting).
 #   return 0  handled — FSPAWN_STATE = started | queued (held: FSPAWN_REASON) | starting (claimed, not
 #             started within the wait); FSPAWN_PANE / FSPAWN_ACCOUNT filled when the factory reports them
-#   return 1  the spawn failed (FSPAWN_ERR), or the factory went silent after creating it
-#   return 2  the factory could not create the spawn: the caller falls back to hc directly
+#   return 1  the spawn failed (FSPAWN_ERR), ended, or the factory went silent after creating it
+#   return 2  the factory could not create the spawn: the caller falls back to hc directly (never for `key_spent`)
 factory_spawn() { # <key> <repo> <prompt> <role> [space]
-  local key=$1 repo=$2 prompt=$3 role=$4 space=${5:-} out rc=0 get="" state
+  local key0=$1 repo=$2 prompt=$3 role=$4 space=${5:-} out rc get="" state key n=1 tries=${RD_FACTORY_KEY_TRIES:-50}
+  local first spent sess deadline
   local -a extra=()
   [[ -n $space ]] && extra=(--space "$space")
-  FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""
-  out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
-    ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
-  if (( rc != 0 )); then
-    # hc takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
-    # answered with a structured error. A dropped hop or a timeout may come after the factory recorded the spawn
-    # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
-    # name is worse than a visible error.
-    if (( rc == 126 || rc == 127 )) || jq -e '.error | objects' <<<"$out" >/dev/null 2>&1; then
-      echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using hc directly" >&2
-      return 2
+  FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""; FSPAWN_KEY=$key0
+  key=$key0
+  while :; do
+    rc=0; spent=0
+    out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
+      ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
+    if (( rc != 0 )) && jq -e '.error.code == "key_spent"' <<<"$out" >/dev/null 2>&1; then
+      spent=1
+    elif (( rc != 0 )); then
+      # hc takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
+      # answered with a structured error. A dropped hop or a timeout may come after the factory recorded the spawn
+      # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
+      # name is worse than a visible error.
+      if (( rc == 126 || rc == 127 )) || jq -e '.error | objects' <<<"$out" >/dev/null 2>&1; then
+        echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using hc directly" >&2
+        return 2
+      fi
+      local gout
+      gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
+      if [[ -z $(factory_field "$gout" '.status // empty') ]]; then
+        FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
+        return 1
+      fi
     fi
-    local gout
-    gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
-    if [[ -z $(factory_field "$gout" '.status // empty') ]]; then
-      FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
+
+    if (( ! spent )); then
+      deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
+      first=1
+      while :; do
+        get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
+        state=$(factory_field "$get" '.status // empty')
+        if (( first )); then
+          first=0
+          [[ $state == ended ]] && spent=1
+          if [[ $state == started ]]; then
+            sess=$(factory_host "$FACTORY_CALL_S" session get "$key" --format json 2>/dev/null) || sess=""
+            [[ $(factory_field "$sess" '.state // empty') == dead ]] && spent=1
+          fi
+          (( spent )) && break
+        fi
+        case $state in
+          started|ended|failed|waiting) break ;;
+          queued) [[ -z $(factory_field "$get" '.hold // empty') ]] || break ;; # held; a plain queued spawn is claimed on the next tick
+        esac
+        (( SECONDS >= deadline )) && break
+        sleep "${RD_FACTORY_POLL_S:-2}"
+      done
+    fi
+
+    (( spent )) || break
+    # The key belongs to an ended agent: a rerun of a wave number, or a counter that only sees live terminals.
+    n=$((n + 1))
+    if (( n > tries )); then
+      FSPAWN_ERR="the keys '$key0' to '$key' are all spent (RD_FACTORY_KEY_TRIES=$tries) - 'factory spawn list' shows them"
       return 1
     fi
-  fi
-
-  local deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
-  while :; do
-    get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
-    state=$(factory_field "$get" '.status // empty')
-    case $state in
-      started|failed|waiting) break ;;
-      queued) [[ -z $(factory_field "$get" '.hold // empty') ]] || break ;; # held; a plain queued spawn is claimed on the next tick
-    esac
-    (( SECONDS >= deadline )) && break
-    sleep "${RD_FACTORY_POLL_S:-2}"
+    key=$(spawn_retry_key "$key0" "$n"); FSPAWN_KEY=$key
+    echo "rd: the previous key is spent (its agent ended) - using '$key'" >&2
   done
+
   FSPAWN_PANE=$(factory_field "$get" '(.pane // empty) | s')
   FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')
   # Past this point the spawn exists: nothing below falls back to hc, whatever the status is.
   case $state in
     started) FSPAWN_STATE=started ;;
+    ended) FSPAWN_ERR="spawn '$key' ended before it was seen running - 'factory spawn get $key' and 'rd read' show what became of it"; return 1 ;;
     queued) FSPAWN_STATE=queued; FSPAWN_REASON=$(factory_field "$get" '.hold // empty'); FSPAWN_REASON=${FSPAWN_REASON:-not claimed yet} ;;
     waiting) FSPAWN_STATE=queued
              FSPAWN_REASON="no capacity$(factory_field "$get" '(.resumeAt // empty) | tostring | " until " + .')" ;;
@@ -509,7 +551,7 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
 
 # One line for a handled spawn. $1 = what started ("wave 4" / "fan <branch>"), $2 agent, $3 space, $4 path.
 factory_spawn_report() {
-  local what=$1 agent=$2 space=$3 path=$4
+  local what=$1 agent=${FSPAWN_KEY:-$2} space=$3 path=$4
   case $FSPAWN_STATE in
     started) echo "→ $what started: claude '$agent' via the factory, space $space${FSPAWN_PANE:+, pane $FSPAWN_PANE}  ($path)${FSPAWN_ACCOUNT:+  [account $FSPAWN_ACCOUNT]}" ;;
     queued) echo "queued: $FSPAWN_REASON"
@@ -836,7 +878,7 @@ cmd_wave() {
     FACTORY_NO_PARENT=$no_parent factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" || frc=$?
     case $frc in
       0) factory_spawn_report "wave $wnum" "$agent" "$path" "$path"; return 0 ;;
-      1) die "factory spawn '$agent' failed: $FSPAWN_ERR" ;;
+      1) die "factory spawn '$FSPAWN_KEY' failed: $FSPAWN_ERR" ;;
     esac
     # The factory could not take it: hc directly, with the pick the factory would have made.
     if [[ $AGENT_KIND == claude ]]; then pick_account wave; fi
@@ -943,7 +985,7 @@ cmd_fan() {
       factory_spawn "$agent" "$wt" "$prompt" "${ROLE:-worker}" "$path" || frc=$?
       case $frc in
         0) factory_spawn_report "fan $branch" "$agent" "$path" "$wt"; n_factory=$((n_factory + 1)); continue ;;
-        1) note "   factory spawn '$agent' failed: $FSPAWN_ERR (worktree kept — 'factory spawn get $agent' first, then 'rd fan --clean $name' reclaims it)"
+        1) note "   factory spawn '$FSPAWN_KEY' failed: $FSPAWN_ERR (worktree kept — 'factory spawn get $FSPAWN_KEY' first, then 'rd fan --clean $name' reclaims it)"
            fan_failed=1; continue ;;
       esac
       pick_account fan

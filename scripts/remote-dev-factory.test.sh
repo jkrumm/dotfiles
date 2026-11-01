@@ -2,9 +2,9 @@
 # remote-dev-factory.test — which path `rd wave|fan|say|close` takes when the factory answers, holds, fails or
 # is absent (docs/remote-dev.md §rd and the factory). hc and `factory` are stubs that record every call:
 #   factory  health  rc from $STATE/health-rc (default 0) · "health-hang" makes it sleep
-#            spawn create  rc from $STATE/create-rc, recorded
+#            spawn create  reply + rc from $STATE/create-reply · create-rc (or -<key> for one key), recorded
 #            spawn get <key>  line n of $STATE/get-<key> (or get-default); the last line repeats; rc $STATE/get-rc
-#            session get / session note  reply + rc from $STATE/session-reply · session-rc, $STATE/note-rc
+#            session get / session note  reply + rc from $STATE/session-reply (or -<key>) · session-rc, $STATE/note-rc
 #            role get <r>  a valid role answer
 #   hc       remote-dev-fake-hc.sh: the roster is $STATE/terminals.json, every terminal.run lands in $STATE/runs.jsonl
 # No real `factory` may answer: PATH is scrubbed of any and the scratch ~/.local/bin holds the stub.
@@ -48,7 +48,9 @@ echo "$*" >>"$STATE/factory-calls"
 [ "$1 $2" = "spawn create" ] && echo "parent-env=${FACTORY_SESSION-unset}" >>"$STATE/factory-calls"
 case "$1 $2" in
   "role get") printf '{"role":"%s","tier":"sonnet","effort":"high"}\n' "$3" ;;
-  "spawn create") cat "$STATE/create-reply" 2>/dev/null || echo '{"error":{"kind":"internal","message":"boom"}}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
+  "spawn create")
+    if [ -f "$STATE/create-reply-$3" ]; then cat "$STATE/create-reply-$3"; exit "$(cat "$STATE/create-rc-$3" 2>/dev/null || echo 0)"; fi
+    cat "$STATE/create-reply" 2>/dev/null || echo '{"error":{"kind":"internal","message":"boom"}}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
   "spawn get")
     [ -f "$STATE/get-rc" ] && exit "$(cat "$STATE/get-rc")"
     f="$STATE/get-$3"; [ -f "$f" ] || f="$STATE/get-default"
@@ -56,7 +58,7 @@ case "$1 $2" in
     n=$(( $(cat "$f.n" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$f.n"
     total=$(wc -l <"$f"); [ "$n" -gt "$total" ] && n=$total
     sed -n "${n}p" "$f" ;;
-  "session get") cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
+  "session get") if [ -f "$STATE/session-reply-$3" ]; then cat "$STATE/session-reply-$3"; exit 0; fi; cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
@@ -130,6 +132,60 @@ no_hc_spawn "no hc fallback after a failed spawn"
 reset; reply default '{"status":"failed","error":{"kind":"start","message":"hc refused the tab"}}'
 rd wave myrepo "adhoc task"
 has "an error object: its message" "$out" "hc refused the tab"
+
+echo "wave: a spent key (its agent ended) takes the next key, never hc and never the old row"
+SPENT='{"error":{"kind":"conflict","code":"key_spent","message":"spawn key myrepo-w1 is spent: its agent ended; create again under another key","hint":"","details":{"status":409}}}'
+LIVE='{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"t1","pane":"t1","tab":"tb-1","workspace":"sp-1","error":null}'
+reset; echo "$SPENT" >"$STATE/create-reply-myrepo-w1"; echo 5 >"$STATE/create-rc-myrepo-w1"; reply myrepo-w1-r2 "$LIVE"
+rd wave myrepo "adhoc task"
+is "exit 0" "$rc" "0"
+has "the next key is asked for" "$fcalls" "spawn create myrepo-w1-r2 --repo $S/myrepo --prompt adhoc task --role wave"
+has "the line names the agent of the new key" "$out" "claude 'myrepo-w1-r2'"
+has "says the key was spent" "$out" "the previous key is spent"
+no_hc_spawn "key_spent is not a structured error that falls back to hc"
+[ ! -e "$STATE/picked" ] && ok "no account pick" || bad "rd picked an account"
+
+reset; for k in myrepo-w1 myrepo-w1-r2; do echo "$SPENT" >"$STATE/create-reply-$k"; echo 5 >"$STATE/create-rc-$k"; done; reply myrepo-w1-r3 "$LIVE"
+rd wave myrepo "adhoc task"
+has "twice spent: -r3" "$out" "claude 'myrepo-w1-r3'"
+no_hc_spawn "still no hc"
+
+echo "wave: a factory from before key_spent answers the old row (200); rd tells a spent one from a fresh spawn"
+reset; reply myrepo-w1 '{"status":"ended","pane":"w4V:p3J"}'; reply myrepo-w1-r2 "$LIVE"
+rd wave myrepo "adhoc task"
+has "ended: the next key" "$fcalls" "spawn create myrepo-w1-r2"
+has "ended: the started line is the new agent's" "$out" "claude 'myrepo-w1-r2'"
+lacks "ended: not the old pane" "$out" "w4V:p3J"
+reset; reply myrepo-w1 '{"status":"started","pane":"w4V:p3J"}'; echo '{"state":"dead"}' >"$STATE/session-reply-myrepo-w1"; reply myrepo-w1-r2 "$LIVE"
+rd wave myrepo "adhoc task"
+has "started with a dead session: the next key" "$fcalls" "spawn create myrepo-w1-r2"
+lacks "started with a dead session: not the old pane" "$out" "w4V:p3J"
+reset; reply default "$LIVE"; echo '{"state":"idle"}' >"$STATE/session-reply-myrepo-w1"
+rd wave myrepo "adhoc task"
+lacks "a live session keeps its key" "$fcalls" "myrepo-w1-r2"
+has "and is reported started" "$out" "claude 'myrepo-w1'"
+reset; printf '%s\n' '{"status":"starting"}' '{"status":"ended"}' >"$STATE/get-default"
+rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "a spawn that ends while rd waits is an error, not a retry" || bad "exit 0: $out"
+has "says it ended" "$out" "ended before it was seen running"
+lacks "no second key" "$fcalls" "-r2"
+
+echo "wave: every key spent -> a visible error, bounded"
+reset; echo "$SPENT" >"$STATE/create-reply"; echo 5 >"$STATE/create-rc"
+RD_FACTORY_KEY_TRIES=3 rd wave myrepo "adhoc task"
+[ "$rc" -ne 0 ] && ok "non-zero exit" || bad "exit 0: $out"
+has "says all keys are spent" "$out" "are all spent"
+is "three creates, then it stops" "$(grep -c '^spawn create' <<<"$fcalls")" "3"
+no_hc_spawn "no hc fallback"
+
+echo "wave: a retry key is clipped like the terminal name"
+reset; LONG=averyveryverylongrepositoryname
+mkdir -p "$S/$LONG/.git"
+echo "$SPENT" >"$STATE/create-reply"; echo 5 >"$STATE/create-rc"
+RD_FACTORY_KEY_TRIES=2 rd wave "$LONG" "adhoc task"
+key2=$(grep -o '^spawn create [^ ]*' <<<"$fcalls" | sed -n 2p | cut -d' ' -f3)
+[ -n "$key2" ] && [ "${#key2}" -le 32 ] && ok "the second key fits 32 characters ($key2)" || bad "second key '$key2' (${#key2})"
+case $key2 in *-r2) ok "and ends in -r2" ;; *) bad "second key '$key2' does not end in -r2" ;; esac
 
 echo "wave: an answered create never falls back, whatever the status is"
 for body in '{}' '{"status":""}' '{"status":null}' '{"status":"melting"}' '{"state":"started","pane":"w1:1"}'; do
