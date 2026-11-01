@@ -278,6 +278,21 @@ is "a chain's next wave has no parent even with a caller" "$(jqrun 'has("parent"
 is "it is no_parent" "$(jqrun '.no_parent')" "true"
 is "and has no outlive_parent (nothing to outlive)" "$(jqrun 'has("outlive_parent")')" "false"
 
+echo "wave --child: a hidden child of the caller, no labels"
+reset
+HC_TERMINAL_ID=t5 real wave --child myrepo "adhoc task"
+is "parent = the orchestrator's terminal" "$(jqrun .parent)" "t5"
+is "outlive_parent" "$(jqrun .outlive_parent)" "true"
+is "no tab labels" "$(jqrun '.labels | has("herdr.tab")')" "false"
+is "not no_parent" "$(jqrun 'has("no_parent")')" "false"
+reset
+real wave --child myrepo "adhoc task"
+is "no calling terminal: a tab" "$(jqrun '.no_parent')" "true"
+has "and it says so" "$out" "wave is a tab"
+reset
+HC_TERMINAL_ID=t5 real work myrepo --child
+[ "$rc" -ne 0 ] && ok "work refuses --child" || bad "work accepted --child"
+
 echo "a refused spawn is an error"
 reset; echo name_taken >"$STATE/run_error"
 real wave myrepo "adhoc task"

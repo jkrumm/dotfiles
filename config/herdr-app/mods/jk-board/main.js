@@ -7,6 +7,8 @@
 // live session runs in it or a spawn is queued; an active plan nobody works on waits in a
 // collapsed "Paused" section, one with only pending waves in "Planned", finished plans are hidden. Repos sit under
 // the left sidebar's folders (config/herdr-app/groups.json). Click a card to open it.
+// Hidden children: a tab row lists the terminals that hang under it (hc's `parent`, one `hc ls` per
+// poll) as a tree: name, status, turn. Click a child for its last lines (`hc read`, on demand).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, home, machines, shared, setShared } from "herdr";
@@ -14,7 +16,12 @@ import { exec, theme, home, machines, shared, setShared } from "herdr";
 const FACTORY = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory --format json status`;
 const PLANS = `for f in ~/SourceRoot/*/docs/waves/PLAN.md ~/IuRoot/*/docs/waves/PLAN.md; do [ -f "$f" ] && { echo "== $f"; grep -E '^# |^## Wave'; } < "$f"; done`;
 const MARK = "@@PLANS@@";
-const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
+const HC_MARK = "@@HC@@";
+const HC_LS = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; hc ls --json`;
+const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${HC_MARK}'; { ${HC_LS}; } 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
+// A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
+const PEEK_LINES = 8;
+const peekCmd = (addr) => `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; hc read ${addr} 2>&1 | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
 
 // Argo's live Kuma snapshot. The token is read on the mini and piped to curl as a header file.
 const UPTIME = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
@@ -50,14 +57,84 @@ function parsePlans(text) {
   return plans;
 }
 
+// <tree> pure helpers (scripts/jk-board-tree.test.ts runs this block on its own: no imports, no gpui)
+const ADDR = /^t[0-9a-z]+$/;
+
+// `hc ls --json` -> the terminals, or null when it is not that.
+function parseHc(text) {
+  try {
+    const d = JSON.parse(text);
+    return Array.isArray(d?.terminals) ? d.terminals.filter((t) => t && ADDR.test(String(t.address))) : null;
+  } catch {
+    return null;
+  }
+}
+
+// parent address -> its children, by name then address.
+function childMap(terminals) {
+  const kids = new Map();
+  for (const t of terminals ?? []) {
+    if (!t.parent) continue;
+    if (!kids.has(t.parent)) kids.set(t.parent, []);
+    kids.get(t.parent).push(t);
+  }
+  const key = (t) => String(t.name ?? t.address);
+  for (const list of kids.values()) list.sort((a, b) => key(a).localeCompare(key(b)) || a.address.localeCompare(b.address));
+  return kids;
+}
+
+// The descendants of `root`, depth first: [{ t, depth }] with depth 1 for a direct child. hc's parents form a tree; a cycle
+// (never seen) stops at the first repeat.
+function treeRows(kids, root) {
+  const rows = [];
+  const seen = new Set([root]);
+  const walk = (addr, depth) => {
+    for (const t of kids.get(addr) ?? []) {
+      if (seen.has(t.address)) continue;
+      seen.add(t.address);
+      rows.push({ t, depth });
+      walk(t.address, depth + 1);
+    }
+  };
+  walk(root, 1);
+  return rows;
+}
+
+// The panes of listed sessions that hang under another listed session: they show in its tree, not beside it. A pane in a
+// cycle (never seen) stays beside the others, so it cannot vanish.
+function nestedPanes(panes, terminals) {
+  const listed = new Set(panes);
+  const parentOf = new Map((terminals ?? []).map((t) => [t.address, t.parent]));
+  const nested = new Set();
+  for (const pane of listed) {
+    const seen = new Set([pane]);
+    let under = false;
+    let up = parentOf.get(pane);
+    for (; up && !seen.has(up); up = parentOf.get(up)) {
+      under ||= listed.has(up);
+      seen.add(up);
+    }
+    if (under && up !== pane) nested.add(pane);
+  }
+  return nested;
+}
+
+// A terminal's own state as a row kind: hc knows working / blocked, everything else rests.
+function hcKind(t) {
+  if (t.status === "blocked") return "needs";
+  return t.status === "working" ? "working" : "idle";
+}
+// </tree>
+
 function parse(stdout) {
   const [head, tail = ""] = stdout.split(MARK);
+  const [factoryText, hcText = ""] = head.split(HC_MARK);
   let factory = null;
   try {
-    const f = JSON.parse(head);
+    const f = JSON.parse(factoryText);
     if (f && Array.isArray(f.sessions)) factory = f;
   } catch {}
-  return { factory, plans: parsePlans(tail) };
+  return { factory, hc: parseHc(hcText), plans: parsePlans(tail) };
 }
 
 // Most urgent first. wait=owner means the session needs a person.
@@ -72,12 +149,17 @@ function sessionKind(s) {
 // repo -> { plan, sessions, spawns }, then the shown ones and the planned ones.
 function assemble(data) {
   const repos = {};
-  const get = (name) => (repos[name] ??= { name, plan: null, sessions: [], spawns: [] });
+  const get = (name) => (repos[name] ??= { name, plan: null, sessions: [], all: [], spawns: [] });
   for (const [name, plan] of Object.entries(data.plans)) get(name).plan = plan;
-  for (const s of data.factory?.sessions ?? []) {
-    if (s.state === "dead") continue;
+  const live = (data.factory?.sessions ?? []).filter((s) => s.state !== "dead");
+  const nested = nestedPanes(live.map((s) => s.pane).filter(Boolean), data.hc);
+  for (const s of live) {
     const name = repoOf(s.cwd, s.id);
-    if (name) get(name).sessions.push({ ...s, kind: sessionKind(s) });
+    if (!name) continue;
+    const session = { ...s, kind: sessionKind(s) };
+    const r = get(name);
+    r.all.push(session); // the repo's dot and count see every session, nested or not
+    if (!nested.has(s.pane)) r.sessions.push(session);
   }
   const spawns = data.factory?.queue?.spawns ?? [];
   for (const q of Array.isArray(spawns) ? spawns : []) {
@@ -90,8 +172,9 @@ function assemble(data) {
     r.active = waves.find((w) => w.status === "active") ?? null;
     r.done = waves.filter((w) => w.status === "done").length;
     r.sessions.sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));
-    r.kind = r.sessions[0]?.kind ?? null;
-    if (r.sessions.length || r.spawns.length) shown.push(r);
+    r.all.sort((a, b) => RANK[a.kind] - RANK[b.kind]);
+    r.kind = r.all[0]?.kind ?? null;
+    if (r.all.length || r.spawns.length) shown.push(r);
     else if (r.active) paused.push(r);
     else if (waves.some((w) => w.status === "pending")) planned.push(r);
   }
@@ -115,6 +198,8 @@ export default class Board extends View {
     this.data = null; // last good parse
     this.at = 0; // when it was read
     this.polling = false;
+    this.peeks = new Map(); // child address -> { lines, at } once opened; absent = closed
+    this.sessionByPane = new Map(); // pane -> factory session, for the names and roles in a tree
     this.tab = localStorage.getItem("board.tab") === "uptime" ? "uptime" : "waves";
     this.seenTab = null; // last shared("jk.board.tab") adopted
     this.uptime = null; // last good Argo answer
@@ -175,11 +260,31 @@ export default class Board extends View {
       const next = r?.stdout ? parse(r.stdout) : null;
       // Keep the last good data; a missing factory answer keeps the old sessions.
       if (next?.factory || (next && Object.keys(next.plans).length)) {
-        this.data = { factory: next.factory ?? this.data?.factory ?? null, plans: next.plans };
+        // hc and the factory are separate answers: each keeps its last good one.
+        this.data = { factory: next.factory ?? this.data?.factory ?? null, hc: next.hc ?? this.data?.hc ?? null, plans: next.plans };
         if (next.factory) this.at = Date.now();
+        this.kids = childMap(this.data.hc);
       }
+      for (const addr of this.peeks.keys()) this.readPeek(addr, cx);
       cx.notify();
     });
+  }
+
+  // The last lines of a child, read on the mini. Kept while the row stays open, refreshed with every poll.
+  readPeek(addr, cx) {
+    if (!ADDR.test(addr)) return;
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", peekCmd(addr)], { on: "mini" }).catch(() => null);
+      if (!this.peeks.has(addr)) return; // closed meanwhile
+      this.peeks.set(addr, { lines: r?.code === 0 ? r.stdout.trimEnd().split("\n") : ["(could not read it)"], at: Date.now() });
+      cx.notify();
+    });
+  }
+
+  togglePeek(addr, cx) {
+    if (this.peeks.has(addr)) this.peeks.delete(addr);
+    else { this.peeks.set(addr, { lines: null, at: 0 }); this.readPeek(addr, cx); }
+    cx.notify();
   }
 
   toggle(set, key, store, cx) {
@@ -210,6 +315,27 @@ export default class Board extends View {
       .when(Boolean(s.account), (el) => el.child(div().flex_none().text_color(t.dim).child(s.account)));
   }
 
+  // A hidden child under its tab row: name, status, turn. Its name and role come from the factory when it knows the pane.
+  childRow(t, { t: c, depth }) {
+    const s = this.sessionByPane.get(c.address);
+    const kind = s ? sessionKind(s) : hcKind(c);
+    const name = s ? s.id : c.name ?? c.address;
+    const what = `${c.status ?? c.state}${c.turn ? ` · t${c.turn}` : ""}`;
+    const peek = this.peeks.get(c.address);
+    const row = h_flex().id(`wv-c-${c.address}`).h(18).flex_none().gap(6).items_center().pl(10 + 12 * depth).text_size(11).cursor_pointer()
+      .hover((e) => e.bg(t.hover))
+      .on_click((_e, cx) => this.togglePeek(c.address, cx))
+      .tooltip("Click for its last lines")
+      .child(this.dot(t, kind, 5))
+      .when(Boolean(s?.role), (el) => el.child(div().flex_shrink(0).text_color(t.muted).child(s.role)))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(name))
+      .child(div().flex_none().text_color(kind === "needs" ? this.tone(t, "needs") : t.dim).child(what));
+    if (!peek) return [row];
+    const lines = peek.lines ?? ["…"];
+    return [row, v_flex().id(`wv-cp-${c.address}`).flex_none().pl(10 + 12 * depth + 11).pr(4).py(2)
+      .children(lines.map((l, i) => div().id(`wv-cp-${c.address}-${i}`).truncate().text_size(10.5).text_color(t.dim).child(l)))];
+  }
+
   spawnRow(t, q) {
     const id = q.id ?? q.spawn ?? q.name ?? "spawn";
     const why = q.hold ?? q.status ?? "queued";
@@ -232,14 +358,15 @@ export default class Board extends View {
         .child(this.dot(t, r.kind))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).font_semibold().child(r.name))
         .when(total > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`Wave ${current}/${total}`)))
-        .when(total === 0 && r.sessions.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${r.sessions.length} sessions`))))
+        .when(total === 0 && r.all.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${r.all.length} sessions`))))
       .when(Boolean(r.plan?.title), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(r.plan.title)))
       .when(total > 0, (el) => el.child(div().ml(14).h(3).rounded(2).bg(t.hover).overflow_hidden()
         .child(div().h(3).rounded(2).bg(t.accent).w(`${Math.round((r.done / total) * 100)}%`))))
       .when(Boolean(r.active), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.muted).child(r.active.name)))
       .when(open, (el) => el.child(v_flex().mt(3).gap(1)
         .children(pending.slice(0, 4).map((w) => div().id(`wv-w-${r.name}-${w.n}`).pl(10).truncate().text_size(11).text_color(t.dim).child(`${w.n} · ${w.name}`)))
-        .children(r.sessions.map((s) => this.sessionRow(t, r, s)))
+        .children(r.sessions.flatMap((s) => [this.sessionRow(t, r, s),
+          ...treeRows(this.kids ?? new Map(), s.pane).flatMap((row) => this.childRow(t, row))]))
         .children(r.spawns.map((q) => this.spawnRow(t, q)))));
   }
 
@@ -333,6 +460,7 @@ export default class Board extends View {
     const stale = this.at && Date.now() - this.at > STALE_MS;
     const factory = this.data?.factory;
     const { shown, paused, planned } = this.data ? assemble(this.data) : { shown: [], paused: [], planned: [] };
+    this.sessionByPane = new Map((factory?.sessions ?? []).filter((x) => x.pane).map((x) => [x.pane, { ...x }]));
     const attention = factory?.attention?.length ?? 0;
     return v_flex().flex_1().min_h(0).text_size(13)
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
