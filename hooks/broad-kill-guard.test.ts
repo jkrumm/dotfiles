@@ -33,7 +33,7 @@ describe("deny", () => {
     denied("pkill gate.sh");
     denied("pkill -TERM claude");
     denied("pkill -9 -x bun");
-    denied("pkill -u jkrumm");
+    denied("pkill -u someuser");
   });
 
   test("a signal named -PIPE does not count as -P scope", () => {
@@ -82,6 +82,24 @@ describe("deny", () => {
     denied(`sh -lc "killall node"`);
     denied(`eval "pkill -f gate.sh"`);
     denied("xargs pkill < list");
+  });
+
+  test("redirections, long wrapper options, env -S and shell stdin do not hide the call", () => {
+    denied(">/dev/null pkill -f gate.sh");
+    denied("2>&1 pkill -f gate.sh");
+    denied("> /dev/null killall node");
+    denied("sudo --user root pkill -f gate.sh");
+    denied("sudo --user=root pkill -f gate.sh");
+    denied("env -S 'pkill -f gate.sh'");
+    denied("env --split-string='killall node'");
+    denied("bash <<'EOF'\npkill -f gate.sh\nEOF");
+    denied("bash <<EOF\nkillall node\nEOF");
+    denied("sh <<< 'pkill -f gate.sh'");
+  });
+
+  test("xargs -I{} replacement operands do not hide the kill", () => {
+    denied("pgrep -f gate.sh | xargs -I{} kill {}");
+    denied("pgrep -f gate.sh | xargs -I{} pkill -P {}");
   });
 });
 
@@ -149,6 +167,9 @@ describe("allow", () => {
     allowed("ls -la");
     allowed("bash -c 'echo hi'");
     allowed("make hooks-test");
+    allowed("bash <<'EOF'\necho hi\nEOF");
+    allowed(">/dev/null kill 1234");
+    allowed("sudo --user root kill 1234");
   });
 });
 

@@ -64,12 +64,15 @@ const wrapper = (flags: string[] = [], positionals = 0): WrapperSpec => ({
 
 /** Prefixes that run another command; `sudo -n` must not eat the command. */
 const WRAPPERS: Record<string, WrapperSpec> = {
-  sudo: wrapper(["-u", "-g", "-C", "-U", "-h", "-p", "-r", "-t"]),
+  sudo: wrapper([
+    "-u", "-g", "-C", "-U", "-h", "-p", "-r", "-t",
+    "--user", "--group", "--chdir", "--host", "--prompt", "--role", "--type", "--other-user",
+  ]),
   doas: wrapper(["-u", "-C"]),
-  env: wrapper(["-u", "-C", "-S"]),
-  nice: wrapper(["-n"]),
-  timeout: wrapper(["-s", "-k"], 1),
-  stdbuf: wrapper(["-i", "-o", "-e"]),
+  env: wrapper(["-u", "-C", "--unset", "--chdir"]),
+  nice: wrapper(["-n", "--adjustment"]),
+  timeout: wrapper(["-s", "-k", "--signal", "--kill-after"], 1),
+  stdbuf: wrapper(["-i", "-o", "-e", "--input", "--output", "--error"]),
   command: wrapper(),
   builtin: wrapper(),
   exec: wrapper(),
@@ -84,8 +87,18 @@ const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 
 const basename = (token: string): string => token.split("/").pop() ?? token;
 
-/** Skip keywords, env assignments and wrappers; return the command proper. */
-function resolve(tokens: string[]): Invocation | null {
+/** A command with the scripts handed to it as option values (`env -S '<cmd>'`). */
+interface Resolved {
+  inv: Invocation | null;
+  scripts: string[];
+}
+
+/** `>file`, `2>`, `<in` at the start of a command: not the executable. */
+const REDIRECT = /^\d*(?:>>?|<)/;
+
+/** Skip keywords, redirections, env assignments and wrappers; return the command proper. */
+function resolve(tokens: string[]): Resolved {
+  const scripts: string[] = [];
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
@@ -93,18 +106,30 @@ function resolve(tokens: string[]): Invocation | null {
       i++;
       continue;
     }
-    const spec = WRAPPERS[basename(t)];
+    // `>/dev/null cmd`, `> out cmd`; `2>&1 cmd` arrives as `2>` then `1`.
+    if (REDIRECT.test(t) || /^\d+$/.test(t)) {
+      i += /^\d*(?:>>?|<)$/.test(t) ? 2 : 1;
+      continue;
+    }
+    const name = basename(t);
+    const spec = WRAPPERS[name];
     if (!spec) break;
     i++;
     while (i < tokens.length && tokens[i].startsWith("-")) {
       const flag = tokens[i++];
       if (flag === "--") break;
-      if (spec.valueFlags.has(flag)) i++;
+      if (name === "env" && (flag === "-S" || flag === "--split-string")) {
+        if (i < tokens.length) scripts.push(tokens[i++]);
+      } else if (name === "env" && flag.startsWith("--split-string=")) {
+        scripts.push(flag.slice("--split-string=".length));
+      } else if (spec.valueFlags.has(flag)) {
+        i++;
+      }
     }
     i += spec.positionals;
   }
-  if (i >= tokens.length) return null;
-  return { name: basename(tokens[i]), args: tokens.slice(i + 1) };
+  if (i >= tokens.length) return { inv: null, scripts };
+  return { inv: { name: basename(tokens[i]), args: tokens.slice(i + 1) }, scripts };
 }
 
 const XARGS_VALUE_FLAGS = new Set(["-n", "-I", "-P", "-L", "-s", "-d", "-E", "-a", "-J", "-R", "-S"]);
@@ -144,11 +169,12 @@ function collect(command: string, depth = 0): Invocation[] {
   const out: Invocation[] = [];
   if (depth > 4) return out;
 
-  const add = (inv: Invocation | null) => {
+  const add = ({ inv, scripts }: Resolved) => {
+    for (const script of scripts) out.push(...collect(script, depth + 1));
     if (!inv) return;
     if (inv.name === "xargs") {
       const inner = resolve(stripXargsFlags(inv.args));
-      if (inner) add({ ...inner, stdin: true });
+      add({ inv: inner.inv && { ...inner.inv, stdin: true }, scripts: inner.scripts });
       return;
     }
     if (SHELLS.has(inv.name)) {
@@ -163,8 +189,23 @@ function collect(command: string, depth = 0): Invocation[] {
     out.push(inv);
   };
 
+  // The tokenizer drops heredoc bodies (data for most commands); a body fed to
+  // a shell is a script.
+  for (const body of shellHeredocBodies(command)) out.push(...collect(body, depth + 1));
   for (const tokens of splitIntoCommands(command)) add(resolve(tokens));
   return out;
+}
+
+/**
+ * Scripts fed to a shell on stdin: `bash <<EOF … EOF`, `sh <<-'EOF' … EOF`,
+ * `bash <<< 'script'`. (The tokenizer reads `<<<` as a heredoc and drops it.)
+ */
+function shellHeredocBodies(command: string): string[] {
+  const herestring = /\b(?:bash|sh|zsh|dash|ksh)\b[^\n|;&]*?<<<[ \t]*(?:'([^']*)'|"([^"]*)"|(\S+))/g;
+  const strings = [...command.matchAll(herestring)].map((m) => m[1] ?? m[2] ?? m[3]);
+  const re =
+    /\b(?:bash|sh|zsh|dash|ksh)\b[^\n|;&]*?<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?:\n|$)/g;
+  return [...strings, ...[...command.matchAll(re)].map((m) => m[3])];
 }
 
 // ── pgrep / pkill arguments ──────────────────────────────────────────────────
@@ -275,7 +316,9 @@ export function findViolation(command: string): string | null {
 
     if (inv.name === "kill" && usesPgrepFull) {
       const targets = killTargets(inv.args);
-      if (inv.stdin || targets.some((t) => !isLiteralKillTarget(t))) {
+      // No visible target means it arrives some other way (stdin, or `xargs -I{}`
+      // whose braces the tokenizer split away).
+      if (inv.stdin || targets.length === 0 || targets.some((t) => !isLiteralKillTarget(t))) {
         return `\`kill\` fed by \`pgrep -f\` reaches whatever \`pgrep -f\` matched. ${REASON}`;
       }
     }

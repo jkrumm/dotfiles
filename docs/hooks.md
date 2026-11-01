@@ -23,7 +23,7 @@ persistent change.
 The hook receives a JSON payload on stdin describing the event and its context.
 
 The template registers seven more of this repo's hooks alongside it — symlinked
-live from `dotfiles/hooks/`, so an edit takes effect on the next tool call:
+live from `dotfiles/hooks/`, so an edit takes effect on the next tool call (a *new* hook needs one `make setup` to link it and merge its template entry into `settings.json`):
 
 | Hook | Event | Does |
 |-|-|-|
