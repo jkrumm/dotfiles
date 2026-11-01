@@ -590,8 +590,12 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space] [placement]
     echo "rd: the previous key is spent (its agent ended) - using '$key'" >&2
   done
 
-  if [[ -n $placement ]] && [[ -n $get ]] && ! jq -e 'has("placement")' <<<"$get" >/dev/null 2>&1; then
-    echo "rd: the factory server predates placement - '$key' is a tab, not a hidden child" >&2
+  if [[ -n $placement && -n $get ]]; then
+    if ! jq -e 'has("placement")' <<<"$get" >/dev/null 2>&1; then
+      echo "rd: the factory server predates placement - '$key' is a tab, not a hidden child" >&2
+    elif ! jq -e --arg p "$placement" '.placement == $p' <<<"$get" >/dev/null 2>&1; then
+      echo "rd: '$key' already existed with placement $(factory_field "$get" '.placement // "none (the role default)"') - not the $placement asked for" >&2
+    fi
   fi
   FSPAWN_PANE=$(factory_field "$get" '(.pane // empty) | s')
   FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')

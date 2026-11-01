@@ -327,6 +327,12 @@ reset; reply default "$STARTED"
 FACTORY_SESSION=lead-1 rd wave myrepo "a successor"
 lacks "a chain successor asks for none either" "$fcalls" "--placement"
 
+echo "wave --child on a key that already exists as a tab"
+reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null,"parent":"lead-1","placement":null}'
+FACTORY_SESSION=lead-1 rd wave --child myrepo "adhoc task"
+has "says the existing spawn is not a child" "$out" "already existed with placement none"
+lacks "and does not blame the server" "$out" "predates"
+
 echo "wave --child against an older factory"
 reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
 FACTORY_SESSION=lead-1 rd wave --child myrepo "adhoc task"
