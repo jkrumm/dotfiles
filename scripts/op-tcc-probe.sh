@@ -33,8 +33,17 @@ done
 die() { echo "  ✗ $*" >&2; exit 1; }
 
 [ "$BACKEND" = "op" ] || die "secrets backend is '${BACKEND:-unset}', not 'op': this probe is for the MacBook (the mini has no desktop app)"
-[ -n "${HC_TERMINAL_ID:-}" ] || die "not in a core terminal (HC_TERMINAL_ID unset): run it as  hc run --timeout 900 'make op-tcc-probe'  or in a Herdr app terminal"
+if [ -z "$ONLY_CHECK" ] && [ -z "${OP_TCC_PROBE_FRESH:-}" ]; then
+  # never `hc` without a running job: it would auto-start a core outside launchd
+  launchctl print "$DOMAIN" 2>/dev/null | grep -q "state = running" || die "$LABEL is not running (make herdr-core-setup): not starting a core for a probe"
+  q=$(printf '%q' "$DOTFILES_DIR/scripts/op-tcc-probe.sh")
+  echo "  · re-running in a fresh core terminal (hc run)"
+  exec hc run --timeout 900 "env OP_TCC_PROBE_FRESH=1 bash $q $*"
+fi
+[ -n "${HC_TERMINAL_ID:-}" ] || die "not in a core terminal (HC_TERMINAL_ID unset): run it as  hc run --timeout 900 'make op-tcc-probe'"
 command -v op >/dev/null || die "op not on PATH"
+# the account comes from the workspace helper, never a bare `op` call (config/zsh/secrets.zsh; it guards on an unset SSH_CONNECTION)
+set +u; . "$DOTFILES_DIR/config/zsh/secrets.zsh"; set -u
 # the probe must exercise desktop-app integration with biometric unlock, not a token or a switched-off integration
 for v in OP_SERVICE_ACCOUNT_TOKEN OP_CONNECT_TOKEN OP_CONNECT_HOST OP_SESSION; do
   [ -z "${!v:-}" ] || die "$v is set: that bypasses the desktop-app handshake this probe exists to test (unset it)"
@@ -52,14 +61,14 @@ REF="${OP_PROBE_REF:-$(ref_default)}"
 check() {
   local label="$1" t0 rc=0 prompts logout errf
   t0=$(date +"%Y-%m-%d %H:%M:%S")
-  echo "  · [$label] op read $REF  (approve the Touch ID prompt; anything else that appears is a FAIL)"
-  errf=$(mktemp); op read "$REF" >/dev/null 2>"$errf" || rc=$?
+  echo "  · [$label] op_run read $REF  (approve the Touch ID prompt; anything else that appears is a FAIL)"
+  errf=$(mktemp); op_run read "$REF" >/dev/null 2>"$errf" || rc=$?
   sleep 2   # tccd logs asynchronously
   local lrc=0
   logout=$(/usr/bin/log show --start "$t0" --predicate 'process == "tccd" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"' --style compact 2>&1) || lrc=$?
   case "$logout" in
     *"Operation not permitted"*|*"Could not open"*)
-      echo "  ✗ [$label] cannot read the unified log from here (no Full Disk Access for this terminal): that alone says the launcher has no grant"; rm -f "$errf"; return 1 ;;
+      echo "  ✗ [$label] cannot read the unified log from here (no Full Disk Access for this terminal): the launcher has no grant, unless this terminal predates a launcher cutover (the probe normally runs in a fresh one: docs/tcc.md)"; rm -f "$errf"; return 1 ;;
   esac
   if [ "$lrc" -ne 0 ] || ! printf '%s\n' "$logout" | grep -q '^Timestamp'; then
     echo "  ✗ [$label] the log query did not run cleanly (rc=$lrc): $(printf '%s' "$logout" | head -c 200)"; rm -f "$errf"; return 1
