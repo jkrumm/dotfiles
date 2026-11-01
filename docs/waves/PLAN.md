@@ -520,6 +520,15 @@ behind origin/master (`make deploy` in argo once its owner's work is not mid-fli
   software-factory hook `HERDR_PANE_ID` fallback, prometheus-epx `SubprocessHerdr` (its hc port is on branch
   `ep-xxxxx/chat-evals-hc` `0c7b1993`, not pushed: push, MR, merge). Each repo's own conventions; iris and
   software-factory have live agents from Wave 10, coordinate through `rd say`, don't edit their files under them.
+- more classic-herdr leftovers (software-factory lead's audit, 2026-11-01; verify each before editing, other repos by their own conventions):
+  **live:** agent-workflows `packages/host/src/fleet/collect.ts:521-524` runs `herdr agent list|workspace list` on every `agw agents` read, plus
+  `derive.ts:238-269` `TODO(Wave 7)`; IuRoot prometheus-scripts teamchat `docs/waves/handoff/keepalive.sh` and `mother.md` (herdr pane/tab; the
+  athena orchestrator runs there: coordinate through `rd say`); sy-serendipity `AGENTS.md:27-30`. **Dormant:** iris server `compose.ts` +
+  `adapters/herdr.ts`, shutterflow `scripts/fleet/*`, basalt-ui `.claude/maturation/consumer-loop/watch.sh`, software-factory `cli/hook.ts`
+  `HERDR_PANE_ID` fallback. **Orphans:** `~/.claude/hooks/herdr-agent-state.sh` (plain file), `~/.config/opencode/plugins/herdr-*.js` + `cli.json`
+  `herdr-opencode`, `~/.config/collie/.env` comments. **Stale docs here:** `skills/wave/SKILL.md:52` (`rd close` does not check a "wave <n>" tab
+  name), the claim that hidden workers are listed under the orchestrator in the app (the jk layout replaces the agents mod, so they show nowhere),
+  `docs/herdr-core.md:79-80` and `:197-201` still call the `herdr-app` doc shape a guess (the live doc v76 confirms it).
 - remove the `software-factory-w2` worktree, the dangling mini `~/.local/bin/herdr-app` symlink to `/tmp/w4ak`;
   `hc-raw-input` agent recheck; decide hc-resume for the MacBook.
 
