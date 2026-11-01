@@ -16,7 +16,7 @@ function popupSpec(props, height) {
 
 // pcpu, rss (KiB), full command; sorted by CPU, header dropped.
 const TOP_ROWS = 10;
-const TOP = `ps -Ao pcpu=,rss=,comm= -r | head -${TOP_ROWS}`;
+const TOP = `LC_ALL=C ps -Ao pcpu=,rss=,comm= -r | head -${TOP_ROWS}`;
 const TOP_MS = 3000;
 const BARS = 90;
 const props = () => rawProps() ?? {};

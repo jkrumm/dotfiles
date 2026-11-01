@@ -7,7 +7,8 @@ import { spaces, agents, theme, run, window, exec, hc, shared, setShared, openOv
 
 // macOS: "<cpu %> <used GiB> <total GiB>", one decimal each. Used = active + wired +
 // compressed, the figure Activity Monitor calls memory used; the file cache is left out.
-const STATS = `cpu=$(ps -A -o %cpu= | awk -v n="$(sysctl -n hw.ncpu)" '{s+=$1} END{printf "%.1f", s/n}')
+const STATS = `export LC_ALL=C
+cpu=$(ps -A -o %cpu= | awk -v n="$(sysctl -n hw.ncpu)" '{s+=$1} END{printf "%.1f", s/n}')
 used=$(vm_stat | awk '/page size of/{ps=$8} /Pages active/{a=$3} /Pages wired/{w=$4} /occupied by compressor/{c=$5} END{printf "%.1f", (a+w+c)*ps/1073741824}')
 echo "$cpu $used $(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1073741824}')"`;
 
