@@ -230,13 +230,13 @@ const hasW = (x: Sample) => x.w !== null
  * Field-wise merge, per window: an incoming window that is absent (null) keeps what we know; a present one wins
  * unless the stored one has a newer timestamp. Exception: a full endpoint answer (`src: "oauth"`) that carries a
  * weekly window but no 5 h one means the account has no session window now (Ultra, or an idle Max), so the stored
- * session value is dropped instead of living on frozen.
+ * session value is dropped instead of living on frozen, unless that session reading is newer than the answer (a delayed reply).
  */
 export function mergeSample(prev: Sample | null, inc: Sample): Sample {
   if (!prev) return inc
   const takeS = hasS(inc) && !(hasS(prev) && (prev.s_ts ?? 0) > (inc.s_ts ?? 0))
   const takeW = hasW(inc) && !(hasW(prev) && (prev.w_ts ?? 0) > (inc.w_ts ?? 0))
-  const dropS = inc.src === "oauth" && !hasS(inc) && hasW(inc)
+  const dropS = inc.src === "oauth" && !hasS(inc) && hasW(inc) && (inc.w_ts ?? 0) >= (prev.s_ts ?? 0)
   return {
     s: takeS ? inc.s : dropS ? null : prev.s, s_reset: takeS ? inc.s_reset : dropS ? null : prev.s_reset, s_ts: takeS ? inc.s_ts : dropS ? null : prev.s_ts,
     w: takeW ? inc.w : prev.w, w_reset: takeW ? inc.w_reset : prev.w_reset, w_ts: takeW ? inc.w_ts : prev.w_ts,
@@ -1003,7 +1003,7 @@ export async function runRefresh(d: RefreshDeps): Promise<Record<string, Refresh
       results[id] = "auth-failed"
       continue
     }
-    const age = newestAge(loadCache(d.dir).samples[id], d.now()) // the same "usable" test the picker applies
+    const age = newestAge(withoutSessionWindows(d.reg, loadCache(d.dir)).samples[id], d.now()) // the same "usable" test the picker applies
     results[id] = age >= STALE_OK_MS ? "stale" : "auth-ok"
     if (results[id] === "stale") d.log?.(`refresh ${id}: logged in but the usage endpoint gave no sample and the stored one is ${Number.isFinite(age) ? `${Math.round(age / 3600_000)} h old` : "missing"}`)
   }

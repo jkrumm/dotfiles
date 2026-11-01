@@ -706,7 +706,7 @@ describe("runRefresh", () => {
   const http200: HttpGet = async () => ({ status: 200, json: OAUTH_BODY })
   const loggedIn = (v: boolean): SpawnResult => ({ status: 0, stdout: JSON.stringify({ loggedIn: v }), stderr: "" })
 
-  async function harness(t: Setup, o: { ids?: string[]; preAuthFailed?: string[]; seed?: Sample } = {}) {
+  async function harness(t: Setup, o: { ids?: string[]; preAuthFailed?: string[]; seed?: Sample; registry?: Registry } = {}) {
     const dir = tmp()
     const ids = o.ids ?? ["iu"]
     claimRefresh(reg(), ids, NOW, cacheOf(sample(1, 1, { age: 11 * 60_000 }), sample(1, 1, { age: 11 * 60_000 })), dir) // pre-claimed by the caller
@@ -716,7 +716,7 @@ describe("runRefresh", () => {
     const urls: { url: string; headers: Record<string, string>; timeoutMs: number }[] = []
     const logs: string[] = []
     const results = await runRefresh({
-      reg: reg(), claudeBin: "claude", baseEnv: { PATH: "/bin", USER: "owner" }, now: () => NOW, ids, dir, log: (m) => logs.push(m),
+      reg: o.registry ?? reg(), claudeBin: "claude", baseEnv: { PATH: "/bin", USER: "owner" }, now: () => NOW, ids, dir, log: (m) => logs.push(m),
       spawn: (cmd, args, e) => {
         calls.push({ cmd, args, configDir: e.env.CLAUDE_CONFIG_DIR })
         if (cmd === "/usr/bin/security") return t.keychain ?? kcOk
@@ -804,6 +804,13 @@ describe("runRefresh", () => {
     expect(none.logs.join("\n")).toContain("missing")
     const young = await harness({ http: down, auth: loggedIn(true) }, { seed: sample(1, 1, { age: 5 * H * 1000 }) })
     expect(young.results).toEqual({ iu: "auth-ok" })
+  })
+  test("auth-only fallback ignores a leftover Ultra session value: a stale weekly stays stale", async () => {
+    const down: HttpGet = async () => ({ status: 404, json: null })
+    const ultra: Registry = { accounts: { iu: { dir: null, plan: "ultra", homeLanes: ["interactive"], enabled: true } } }
+    const seed: Sample = { ...sample(50, 20, { age: 7 * H * 1000 }), s_ts: NOW - 60_000 } // fresh session half left over, weekly 7 h old
+    const h = await harness({ http: down, auth: loggedIn(true) }, { seed, registry: ultra })
+    expect(h.results).toEqual({ iu: "stale" })
   })
   test("endpoint failure alone never sets the auth mark", async () => {
     const h = await harness({ http: async () => ({ status: 401, json: null }), auth: { status: 0, stdout: "", stderr: "" } })
@@ -1549,6 +1556,10 @@ describe("plan tiers: Max has a 5 h window, Ultra only a weekly one", () => {
     const prev = { ...sample(88, 30), s_ts: NOW - 3 * 3600_000, w_ts: NOW - 3 * 3600_000 }
     const inc: Sample = { s: null, s_reset: null, s_ts: null, w: 31, w_reset: NOW / 1000 + 100 * H, w_ts: NOW, src: "oauth" }
     expect(mergeSample(prev, inc)).toMatchObject({ s: null, s_reset: null, s_ts: null, w: 31, w_ts: NOW })
+    // a delayed weekly-only answer older than the stored session reading keeps that newer session
+    const newerS = { ...sample(88, 30), s_ts: NOW - 1000, w_ts: NOW - 3 * 3600_000 }
+    expect(mergeSample(newerS, { ...inc, w_ts: NOW - 60_000 })).toMatchObject({ s: 88, s_ts: NOW - 1000, w: 31 })
+    expect(mergeSample(newerS, { ...inc, w_ts: NOW })).toMatchObject({ s: null, s_ts: null, w: 31 })
     // a feed that merely omits the window (statusline, peer) still keeps what we know
     expect(mergeSample(prev, { ...inc, src: "statusline" })).toMatchObject({ s: 88 })
     // an endpoint answer with nothing at all is no evidence

@@ -117,20 +117,23 @@ while IFS=$'\t' read -r id dir; do
   [[ -n "$id" ]] || continue
   if [[ "$dir" == "-" ]]; then cj="$HOME/.claude.json"; else cj="${dir/#\~/$HOME}/.claude.json"; fi
   cu=$(jq -c '.cachedUsageUtilization // empty' "$cj" 2>/dev/null) || cu=""
+  # an Ultra plan has a weekly window only (the plan/$id row reads the same registry field)
+  plan=$(jq -r --arg id "$id" '.accounts[$id].plan // "" | ascii_downcase' "$REGISTRY" 2>/dev/null) || plan=""
+  if [[ "$plan" == "ultra" ]]; then wins='["seven_day"]'; wins_label="seven_day"; else wins='["five_hour","seven_day"]'; wins_label="five_hour/seven_day"; fi
   if [[ -z "$cu" ]]; then
     row WARN "quota/$id" "no cachedUsageUtilization in $cj yet (fix: claude-account refresh --ids $id)"
   else
-    miss=$(jq -r '[ (if (.fetchedAtMs|type) == "number" then empty else "fetchedAtMs" end),
+    miss=$(jq -r --argjson wins "$wins" '[ (if (.fetchedAtMs|type) == "number" then empty else "fetchedAtMs" end),
       (.utilization // {} | to_entries | map(select(.key == "five_hour" or .key == "seven_day")) | map(.key)) as $have
-      | ("five_hour","seven_day") as $w
+      | $wins[] as $w
       | (if ($have | index($w)) == null then "utilization.\($w)" else empty end) ] | join(", ")' <<<"$cu" 2>/dev/null)
-    shape=$(jq -r '[("five_hour","seven_day") as $w | .utilization[$w] // {} |
+    shape=$(jq -r --argjson wins "$wins" '[$wins[] as $w | .utilization[$w] // {} |
       (if (.utilization|type) == "number" and (.resets_at|type) == "string" then empty else "bad" end)] | length' <<<"$cu" 2>/dev/null)
     if [[ -n "$miss" || "$shape" != "0" ]]; then
-      row FAIL "quota/$id" "cachedUsageUtilization lost its shape (${miss:-five_hour/seven_day need utilization+resets_at}) — Claude Code renamed the field"
+      row FAIL "quota/$id" "cachedUsageUtilization lost its shape (${miss:-$wins_label need utilization+resets_at}) — Claude Code renamed the field"
     else
       age=$(jq -r --argjson now "$((now_s * 1000))" '((($now - .fetchedAtMs) / 60000) | floor)' <<<"$cu")
-      row PASS "quota/$id" "five_hour/seven_day utilization+resets_at present (fetched ${age} min ago)"
+      row PASS "quota/$id" "$wins_label utilization+resets_at present (fetched ${age} min ago)"
     fi
   fi
   stamp="$CACHE_DIR/$id.statusline.json"

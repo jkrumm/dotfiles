@@ -21,7 +21,7 @@ const TOP_MS = 3000;
 const BARS = 90;
 const props = () => rawProps() ?? {};
 // Anthropic renamed the tiers on 2026-10-30: Max 5x is "Max", Max 20x is "Ultra".
-const PLAN = { max5x: "Max", max20x: "Ultra" };
+const PLAN = { max: "Max", ultra: "Ultra", max5x: "Max", max20x: "Ultra" };
 // Older than this, the numbers are a past sample, not the current state.
 const STALE_S = 3 * 3600;
 

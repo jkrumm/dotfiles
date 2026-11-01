@@ -345,7 +345,9 @@ if [ "$auth_mode" = "MAX" ]; then
             five: live($v.five_hour.value; $v.five_hour.value_resets_at_epoch),
             wk: (if $id == $own and $ownwk != "" then ($ownwk | tonumber)
                  else live($v.seven_day.value; $v.seven_day.value_resets_at_epoch) end),
-            mult: ([($v.plan // "") | scan("([0-9]+)x"; "i")[0] | tonumber] | .[0]),
+            mult: (($v.plan // "" | ascii_downcase) as $p
+                   | if $p == "ultra" then 20 elif $p == "max" then 5
+                     else ([$p | scan("([0-9]+)x")[0] | tonumber] | .[0]) end),
             stale: (($v.sampled_at // 0) < ($now - 3600)),
             bad: ($v.auth_ok == false) } ] as $acc
       | ($acc | all(.mult != null)) as $weighted

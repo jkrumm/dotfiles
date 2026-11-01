@@ -34,13 +34,20 @@ const KUMA = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run r
 const KUMA_MS = 60000;
 
 // The pool: plan-weighted 7-day use across accounts, the statusline's ∑ (scripts/statusline.sh):
-// weight = the plan's multiple (max20x = 20), all 1 when one is unknown; a window that has
+// weight = the plan's multiple (ultra = 20, max = 5; legacy max20x / max5x read the same), all 1 when one is unknown; a window that has
 // already reset counts as 0. Null below two accounts.
+const planMult = (plan) => {
+  const p = String(plan ?? "").toLowerCase();
+  if (p === "ultra") return 20;
+  if (p === "max") return 5;
+  return Number(/(\d+)x/.exec(p)?.[1]) || null;
+};
+
 export function pool(accounts, now = Date.now() / 1000) {
   if (accounts.length < 2) return null;
   const acc = accounts.map((a) => ({
     wk: a.seven_day == null ? null : (a.seven_day_resets_at ?? Infinity) < now ? 0 : a.seven_day,
-    mult: Number(/(\d+)x/i.exec(a.plan ?? "")?.[1]) || null,
+    mult: planMult(a.plan),
   }));
   const weighted = acc.every((a) => a.mult);
   const known = acc.filter((a) => a.wk != null).map((a) => ({ ...a, w: weighted ? a.mult : 1 }));

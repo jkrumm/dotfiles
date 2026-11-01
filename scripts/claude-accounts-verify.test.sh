@@ -40,7 +40,7 @@ TS
 printf '#!/bin/sh\necho "{\\"loggedIn\\": false}"\n' > "$TMP/bin/claude"; chmod +x "$TMP/bin/claude"
 
 verify() { # [env…] — the verify script against the scratch setup
-  env "$@" DOTFILES_DIR="$TMP/dot" CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json" CLAUDE_BIN="$TMP/bin/claude" CLAUDE_ACCOUNTS_STATE_DIR="$TMP/state" CLAUDE_ACCOUNTS_CACHE_DIR="$TMP/cache" \
+  env "$@" DOTFILES_DIR="$TMP/dot" CLAUDE_ACCOUNTS_REGISTRY="${VREG:-$TMP/registry.json}" CLAUDE_BIN="$TMP/bin/claude" CLAUDE_ACCOUNTS_STATE_DIR="$TMP/state" CLAUDE_ACCOUNTS_CACHE_DIR="$TMP/cache" \
     USAGE_TRACKER_DB="$TMP/none.db" RD_SCRIPT="$TMP/none.sh" CLAUDE_LOG_DIR="$TMP/logs" bash "$HERE/claude-accounts-verify.sh" 2>&1
 }
 out=$(verify IU_SEV=PASS)
@@ -64,6 +64,16 @@ assert_eq "plan/unread: undetectable is WARN" WARN "$(prow unread | awk '{print 
 assert_contains "plan/unread: says so" "not detectable" "$(prow unread)"
 assert_eq "plan/silent: no answer for the account is WARN" WARN "$(prow silent | awk '{print $1}')"
 assert_eq "one plan row per enabled account" 6 "$(grep -cE '^(PASS|WARN|FAIL) +plan/' <<<"$out")"
+
+# quota/<id>: a weekly-only cachedUsageUtilization fails a Max account but passes an Ultra one
+mkdir -p "$TMP/d1"
+printf '{"cachedUsageUtilization":{"fetchedAtMs":%s,"utilization":{"seven_day":{"utilization":10,"resets_at":"2026-11-08T00:00:00Z"}}}}' "$(( $(date +%s) * 1000 ))" > "$TMP/d1/.claude.json"
+qrow() { grep -E "^(PASS|WARN|FAIL) +quota/pass " <<<"$1" | awk '{print $1}'; }
+assert_eq "quota/pass: a Max account without five_hour FAILs" FAIL "$(qrow "$(verify IU_SEV=PASS)")"
+jq '.accounts.pass.plan = "ultra"' "$TMP/registry.json" > "$TMP/registry-ultra.json"
+out_ultra=$(VREG="$TMP/registry-ultra.json" verify IU_SEV=PASS)
+assert_eq "quota/pass: an Ultra account needs only seven_day" PASS "$(qrow "$out_ultra")"
+assert_contains "quota/pass: Ultra row names the weekly window only" "seven_day utilization+resets_at present" "$(grep -E ' quota/pass ' <<<"$out_ultra")"
 
 echo
 if (( fail )); then printf '\033[31m%d failed\033[0m, %d passed\n' "$fail" "$pass"; exit 1; fi

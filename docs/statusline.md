@@ -29,7 +29,7 @@ dotfiles | * master
 - Session duration
 - Accounts, one final segment (Max only): `iu 2/90 · me 41/22 ↺90m · ∑76%` — every enabled
   account as `<id> <5h%>/<wk%>` in registry order, then `∑<pool>%` (weekly use weighted by
-  plan multiple, `max20x` 20 / `max5x` 5, all 1 when one is unknown; the formula of Tinycast's
+  plan multiple, `ultra` 20 / `max` 5 (legacy `max20x` / `max5x` the same), all 1 when one is unknown; the formula of Tinycast's
   `usage/summary.ts`; only with more than one account). Numbers are coloured by the context
   thresholds (green < 50, yellow < 75, red). The session's own account is **bold** and shows
   the live `rate_limits` numbers from stdin; the others come from `usage_accounts.json` and go

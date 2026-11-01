@@ -1073,9 +1073,9 @@ check_quota() {
   local body five seven text usage
   if [[ -x "$CLAUDE_ACCOUNT_BIN" ]]; then
     usage=$(PATH="$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin:$PATH" "$CLAUDE_ACCOUNT_BIN" usage --json 2>/dev/null) || usage=""
-    # Only accounts with a five_hour sample count; none = unavailable, fall through to the host view.
-    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled and .five_hour != null) |
-      "\(.id) 5h \(.five_hour | floor)% · 7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
+    # Only accounts with a five_hour or seven_day sample count (a weekly-only Ultra account has no 5h part); none = unavailable, fall through to the host view.
+    text=$("$JQ_BIN" -r '[.accounts[] | select(.enabled and (.five_hour != null or .seven_day != null)) |
+      "\(.id) \(if .five_hour == null then "" else "5h " + (.five_hour | floor | tostring) + "% · " end)7d \(if .seven_day == null then "?" else (.seven_day | floor | tostring) end)%\(if (.age_s // 0) > 21600 then " (stale " + ((.age_s / 3600) | floor | tostring) + "h)" else "" end)"
       ] | join(" | ")' <<<"$usage" 2>/dev/null) || text=""
     if [[ -n "$text" ]]; then
       if [[ "$("$JQ_BIN" -r --argjson t "$QUOTA_5H_WARN_PCT" '.default_account as $d | [.accounts[] | select(.id == $d and .enabled and .five_hour != null and .five_hour >= $t)] | length > 0' <<<"$usage" 2>/dev/null)" == "true" ]]; then

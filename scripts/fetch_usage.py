@@ -149,9 +149,12 @@ def from_account_cache() -> bool:
         if not row:
             return False
         five, seven = _window(row, "five_hour", now), _window(row, "seven_day", now)
-        if five["utilization"] is None:
+        if five["utilization"] is None and seven["utilization"] is None:
             return False
-        sampled_at = int(now - min(a for a in (five["age_s"], seven["age_s"]) if a is not None))
+        ages = [a for a in (five["age_s"], seven["age_s"]) if a is not None]
+        if not ages:
+            return False
+        sampled_at = int(now - min(ages))
         _write_json(CACHE_FILE, {
             "five_hour": {"utilization": five["utilization"], "resets_at_epoch": five["resets_at_epoch"]},
             "seven_day": {"utilization": seven["utilization"], "resets_at_epoch": seven["resets_at_epoch"]},
@@ -162,9 +165,10 @@ def from_account_cache() -> bool:
             "sampled_at": sampled_at,  # age of the data
             "source": "claude-accounts",
         })
-        reset = five["resets_at_epoch"]
-        mins = round((reset - now) / 60) if reset and reset > now else None
-        _report_quota(five["utilization"], mins, seven["utilization"], data.get("default_account") or DEFAULT_ACCOUNT)
+        if five["utilization"] is not None:  # weekly-only (Ultra) accounts have no 5 h figure to report
+            reset = five["resets_at_epoch"]
+            mins = round((reset - now) / 60) if reset and reset > now else None
+            _report_quota(five["utilization"], mins, seven["utilization"], data.get("default_account") or DEFAULT_ACCOUNT)
         log_event("fetch_usage", "served_from_cache", "info", {"five_hour_pct": five["utilization"], "seven_day_pct": seven["utilization"]})
         return True
     except Exception as e:
