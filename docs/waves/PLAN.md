@@ -556,21 +556,32 @@ note).
 - Gate: `make -k check` exit 0 on the final tree (log `/private/tmp/w9-check2.log`), `make doctor` 54 passed / 0 fail, AGENTS.md 39,996 B (untouched). Mini `jobs` WARN: `disk-sweep` (grade clears with its next run), `usage-tracker` (ages out). Launcher re-sign and the FDA re-grant from Wave 8 are still owner-timed (`tcc` WARN "ad-hoc cdhash").
 - Memory note `mini-maintenance-window` written (the classic upgrade step was never in it).
 
-## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: active -->
+## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: done -->
 **2026-11-01, owner's session:** the macOS update ran (26.7.2) and the after-reboot checklist passed (cores under the launcher after the Wave 8 race fix by hand, factory `make verify` green, `hc-resume` 6/6, logins 0 FAIL through the core). The two prompts are started by the owner's session too; this wave only confirms them and writes the final report.
 
 Role `wave`. The last wave: it spawns no further wave. Owner 2026-10-31: the mini macOS update happens **much later**,
 so nothing here waits for it.
 
-- [ ] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If `rd wave`'s
+- [x] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If `rd wave`'s
   gate refuses a repo's plan state, start the agent with `rd work <repo>` and deliver the prompt as its first message
   instead. Never edit the prompts. (`athena-orchestrator` was already resumed on 2026-10-31 by the owner's session.)
-- [ ] Queue the macOS update for the owner and do not wait for it: `ask-human ask "Mini: make mini-macos-update,
+- [x] Queue the macOS update for the owner and do not wait for it: `ask-human ask "Mini: make mini-macos-update,
   staying on 26.x (never 27). Reboots the mini; the agents come back through hc-resume." --cmd "make -C
   ~/SourceRoot/dotfiles mini-macos-update"`. Write the after-reboot checklist into Left behind: both cores up
   (launcher, managed version, versions match), factory healthy, `hc-resume` brought the Claude sessions back
   (labels `jk.claude.*`), `make doctor` green on both machines, `make tcc-probe` on the mini. Before the reboot, in the same
   window: `make colima-restart` (default VM to 6 GiB) and the teamchat profile restart at 3 GiB, once the `chat` MR is
   merged; after it, check that the VPN sidecar and teamchat are up.
-- [ ] Final report into Left behind (the Wave 9 report plus the two spawned agents), and update the memory note
+- [x] Final report into Left behind (the Wave 9 report plus the two spawned agents), and update the memory note
   `mini-maintenance-window.md`: only the macOS update is left, owner-timed.
+**Left behind:**
+- Verified 2026-11-01, nothing redone. The owner's session started both prompts from `docs/waves/handoff/post-migration/`: `software-factory-w1` (`t34`, lead,
+  `working`) and `iris-mother` (`t36`, `working`); `athena-orchestrator` (`t1r`, prometheus-scripts) is alive. All three are tabs in their repos' spaces on the mini core.
+- The macOS update and the after-reboot checklist were done by the owner's session (26.7.2, cores under the launcher, factory `make verify` green, `hc-resume` 6/6,
+  logins 0 FAIL through the core), so no `ask-human` for `make mini-macos-update` was queued. `make colima-restart` (default VM 6 GiB) ran in Wave 9.
+- **Only owner-timed item left:** the teamchat Colima profile restart at 4 GiB, after prometheus-scripts MR !296 merges (still `open`; the owner does not review, so an approver is needed).
+  Check `rd agents` for the athena orchestrator first; afterwards verify the VPN sidecar and teamchat are up.
+- **Also open from Wave 8, owner-timed:** `make herdr-core-setup YES=1` on each machine (plist `ProcessType`, launcher re-sign), one FDA re-grant per machine, `make tcc-probe`
+  (`ask-human` `20261101T165717-688`). prometheus-epx `ep-xxxxx/chat-evals-hc` stays unpushed until it has a real EP number.
+- Not run this wave: `make check` (docs-only close-out, no code touched; Wave 9's `make -k check` exit 0 is the last full run). Memory note `mini-maintenance-window` updated.
+- The chain ends here; no wave is `active`.
