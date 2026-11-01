@@ -509,15 +509,15 @@ The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), grante
 | `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
 | `adminKeyRef` | `op://` ref of the org's Admin key, for reconciling the meter against the cost API |
 
-**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. `me` and `me2` ship `enabled: false` until their orgs are linked.
+**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. Refs live in `op://mini/claude-platform/` (`API_KEY_<ID>`, `ADMIN_KEY_<ID>`). `iu` and `me` are enabled with real keys. `me2` stays `enabled: false`: its keys are a `REPLACE` placeholder until its claim window opens (about 2026-11-02).
 
-**Enable `me` / `me2` (owner steps):**
+**Enable `me2` (owner steps):**
 
-1. Link the account's Console organization to the subscription, with no payment method on file: a drained org then refuses instead of billing.
-2. Create an API key and an Admin key in that org and store them as `API_KEY_<ID>` / `ADMIN_KEY_<ID>` in `op://common/claude-platform/` (`ME`, `ME2`).
-3. Fill `cycleDay`.
-4. Add the refs to `headless.refs` in dotfiles-private and run `make secrets-seed` (the seed aborts on a ref that does not exist yet, so add them only after step 2).
-5. Set `platform.enabled` to `true`.
+1. Replace the placeholder `API_KEY_ME2` / `ADMIN_KEY_ME2` in `op://mini/claude-platform/` with the real keys of the linked Console org (no payment method on file: a drained org then refuses instead of billing), then `make secrets-seed`.
+2. Fill `cycleDay`.
+3. Set `platform.enabled` to `true`.
+
+`cycleDay` is still `null` on `iu` and `me` too; fill it the same way.
 
 **Troubleshooting**
 

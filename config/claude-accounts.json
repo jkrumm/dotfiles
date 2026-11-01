@@ -19,8 +19,8 @@
         "cycleDay": null,
         "headroomUsd": 2,
         "enabled": true,
-        "apiKeyRef": "op://common/claude-platform/API_KEY_IU",
-        "adminKeyRef": "op://common/claude-platform/ADMIN_KEY_IU"
+        "apiKeyRef": "op://mini/claude-platform/API_KEY_IU",
+        "adminKeyRef": "op://mini/claude-platform/ADMIN_KEY_IU"
       }
     },
     "me": {
@@ -40,9 +40,9 @@
         "creditUsd": 100,
         "cycleDay": null,
         "headroomUsd": 2,
-        "enabled": false,
-        "apiKeyRef": "op://common/claude-platform/API_KEY_ME",
-        "adminKeyRef": "op://common/claude-platform/ADMIN_KEY_ME"
+        "enabled": true,
+        "apiKeyRef": "op://mini/claude-platform/API_KEY_ME",
+        "adminKeyRef": "op://mini/claude-platform/ADMIN_KEY_ME"
       }
     },
     "me2": {
@@ -59,8 +59,8 @@
         "cycleDay": null,
         "headroomUsd": 2,
         "enabled": false,
-        "apiKeyRef": "op://common/claude-platform/API_KEY_ME2",
-        "adminKeyRef": "op://common/claude-platform/ADMIN_KEY_ME2"
+        "apiKeyRef": "op://mini/claude-platform/API_KEY_ME2",
+        "adminKeyRef": "op://mini/claude-platform/ADMIN_KEY_ME2"
       }
     }
   }
