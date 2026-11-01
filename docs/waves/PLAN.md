@@ -501,7 +501,7 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
   check and the client's connect (not closable from outside the binary), queueing the grant ask before the file swap (the grant is keyed to the path).
 - Do not dry-run `make -n herdr-core-setup`: its `$(MAKE)` line runs the recipe.
 
-## Wave 9 — the mini maintenance window            <!-- status: active -->
+## Wave 9 — the mini maintenance window            <!-- status: done -->
 **Done by the owner's session 2026-11-01 (verify, don't redo):** `make brew-upgrade` on both machines (mini 68,
 MacBook 7 formulae; invariants green); Colima default VM 6 GiB live (`2513891`, restarted); tailscale 1.104.4 on the
 mini (formula upgraded, daemon restarted by the reboot); teamchat profile 6 → 4 GiB (owner chose 4, not 3) on branch
@@ -535,21 +535,28 @@ behind origin/master (`make deploy` in argo once its owner's work is not mid-fli
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
 note).
 
-- [ ] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31). Colima memory cuts as
+- [x] `make brew-upgrade` on both machines (mini, then MacBook; owner-confirmed 2026-10-31). Colima memory cuts as
   **config only, no live restart** (owner 2026-10-31: the Athena teamchat orchestrator runs overnight on the teamchat
   VM and the default VM's VPN sidecar): default 12 → 6 GiB (Makefile `COLIMA_MEMORY` default + the AGENTS.md
   "mini 4/12/60" line), teamchat 6 → 3 GiB in IuRoot `chat` (work repo: an `EP-XX`-style branch committed locally, the
   owner opens the MR). Both restarts (`make colima-restart`, and the teamchat profile's own restart target) move into
   the owner-timed reboot window (Wave 10's queued macOS update). If `brew upgrade` itself wants to restart colima, hold
   colima out of the upgrade (`brew upgrade --formula` minus colima) and note it.
-- [ ] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
+- [x] The heartbeat WARNs: read the logs and fix the cause of `disk-sweep`, `drift-check` and `vps-pg-backup`;
   `make claude-accounts-verify`; me2's stale quota sample. (photoflow's architecture-map entry: already retired
   in `1190896`.)
-- [ ] The macOS update moved to Wave 10 (it reboots the mini, and with it this wave's own terminal).
-- [ ] Final report into Left behind: everything ported, retired or deferred (one line each), anything still
+- [x] The macOS update moved to Wave 10 (it reboots the mini, and with it this wave's own terminal).
+- [x] Final report into Left behind: everything ported, retired or deferred (one line each), anything still
   classic, and the verified state of both machines. Update the memory note.
+**Left behind:**
+- Verified done by the owner's session (brew-upgrade both machines, Colima default 6 GiB live, tailscale, macOS 26.7.2, MacBook `make setup`). Teamchat 6 → 4 GiB: branch `chore/teamchat-vm-4g` pushed, **MR !296** open in prometheus-scripts (`not_approved`: the owner does not review, so an approver is needed; the profile restart waits for the merge and is owner-timed). prometheus-epx hc port `ep-xxxxx/chat-evals-hc` (`9a02bcd3`, `0c7b1993`) stays unpushed: it needs the real EP number.
+- Heartbeat WARNs fixed: `drift-check` (re-ran, green), `vps-pg-backup` (dev Postgres recreated with `max_locks_per_transaction=1024`, `vps` `88a1906`, manual run green incl. restore drill; the same `make up ENV=dev` also started the dev `redis` container, which was not running before), `usage-tracker` (the athena-teamchat query follows the new teamchat schema; a kicked run is ok), `disk-sweep` (busy uv lock is a skip, not a failure; **a real run was kicked at close-out, its record decides the grade**), `claude-accounts-keepalive` (recovered 14:47, ages out of "flapping"). Pre-existing: 3 `bun test` failures in usage-tracker (`cadence`, `parseAccountUsage`, `parsePick`) fail identically before this wave's commit.
+- Picker/Ultra (`714e9fd`, `2160c8c`, review follow-ups `c1fae39`): registry plans are `max`/`ultra` (legacy `maxNx` reads as `max`), Ultra (iu, Keychain `max_20x`) has no 5 h window and is never judged or shown on one, the statusline feed fires on a weekly-only payload (that was the `statusline/iu` WARN), `fetch_usage`, the heartbeat quota line, `claude-accounts-verify` and the jk mods follow. `agw review` (`01a197fe`) triaged: fixed the six real ones; **not done:** `agw quota-report` still needs a 5 h figure (a weekly-only report path is agent-workflows work), a malformed 5 h window parses as absent, an older `.claude.json` reading can merge back after a drop, the `hc-raw-input` recheck-to-send race is inherent. `quota/*` WARN "no cachedUsageUtilization" on all three accounts is Claude Code 2.1.316 behaviour, not this wave.
+- Classic herdr leftovers: agent-workflows `agents` collector (`agw agents` no longer calls `herdr`), shutterflow fleet scripts, sy-serendipity `AGENTS.md`, basalt-ui `watch.sh` (git-excluded local file), orphan opencode/Claude hooks (archived in `~/.local/share/herdr-classic-archive/orphans/`), collie `.env` comments, the dangling `herdr-app` symlink, the `software-factory-w2` worktree. Docs fixed: `rd close` preconditions, hidden workers show nowhere in the app, `herdr-app` doc shape verified (v86). `hc-raw-input` rechecks the agent before typing. **Still classic, deliberately:** software-factory `cli/hook.ts` `HERDR_PANE_ID` fallback and iris `compose.ts`/`adapters/herdr*` (live agents in both: coordinate through `rd say` in their own waves), prometheus-scripts teamchat `keepalive.sh`/`mother.md` (the athena orchestrator runs there), argo comments/fixtures (`source: 'herdr'` is an open string). `hc-resume` stays mini-only (the dev host; the MacBook is a client): not changed this wave.
+- Gate: `make -k check` exit 0 on the final tree (log `/private/tmp/w9-check2.log`), `make doctor` 54 passed / 0 fail, AGENTS.md 39,996 B (untouched). Mini `jobs` WARN: `disk-sweep` (grade clears with its next run), `usage-tracker` (ages out). Launcher re-sign and the FDA re-grant from Wave 8 are still owner-timed (`tcc` WARN "ad-hoc cdhash").
+- Memory note `mini-maintenance-window` written (the classic upgrade step was never in it).
 
-## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: pending -->
+## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: active -->
 **2026-11-01, owner's session:** the macOS update ran (26.7.2) and the after-reboot checklist passed (cores under the launcher after the Wave 8 race fix by hand, factory `make verify` green, `hc-resume` 6/6, logins 0 FAIL through the core). The two prompts are started by the owner's session too; this wave only confirms them and writes the final report.
 
 Role `wave`. The last wave: it spawns no further wave. Owner 2026-10-31: the mini macOS update happens **much later**,
