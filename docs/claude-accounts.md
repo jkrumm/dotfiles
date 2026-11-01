@@ -60,7 +60,7 @@ the quota cache never stores one (a leftover is dropped on the next write and ig
 prints and returns `five_hour: null` with `session_limit: false`.
 
 Registry: `config/claude-accounts.json` is the single source (id, dir, plan, optional
-units, home lanes, `loginBrowser`, enabled flag). `units` defaults from `plan` (`ultra` 4 / 2, `max` 1 / 1; legacy `maxNx` by its multiple);
+units, home lanes, `loginBrowser`, enabled flag, optional `platform` block, §Platform (API credit) block). `units` defaults from `plan` (`ultra` 4 / 2, `max` 1 / 1; legacy `maxNx` by its multiple);
 a present block is still validated. `enabled` stays false until an account's login
 exists, so a new account ships dark (§Adding an account).
 
@@ -493,6 +493,31 @@ human queue and its Slack notification, as every `ask-human` request does.
 4. `claude-account expiry --ids <id>` on each machine: `plan_detected` must show the plan you registered.
 5. Set `"enabled": true`.
 6. `make setup` (per-account MCP registration), then `make claude-accounts-verify`.
+
+**Platform (API credit) block**
+
+Each account may carry a `platform` block: the API credit its subscription grants, read by the agent-workflows inference gateway (Wave 2; `agent-workflows/docs/gateway.md` §Picking a pool). The picker, launchers and statusline ignore it.
+
+The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), granted to one linked Console organization, expiring at the end of that subscription's billing cycle (no rollover). It pays API keys of the linked org only (Messages, Batches, Agent SDK), never interactive Claude Code, which stays on the subscription. No API returns the balance, so the gateway meters itself.
+
+| Field | Meaning |
+|-|-|
+| `creditUsd` | monthly credit of the plan (200 / 100) |
+| `cycleDay` | the subscription's billing day (1–31), where the credit expires and the meter resets. `null` = unknown: the gateway treats the cycle as ending at month end until you fill it (claude.ai Settings → Billing) |
+| `headroomUsd` | a pool counts as full at `meter + headroom ≥ credit`, so a request never starts into a mid-session "credit balance is too low" |
+| `enabled` | pool switch, independent of the account's own `enabled` |
+| `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
+| `adminKeyRef` | `op://` ref of the org's Admin key, for reconciling the meter against the cost API |
+
+**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. `me` and `me2` ship `enabled: false` until their orgs are linked.
+
+**Enable `me` / `me2` (owner steps):**
+
+1. Link the account's Console organization to the subscription, with no payment method on file: a drained org then refuses instead of billing.
+2. Create an API key and an Admin key in that org and store them as `API_KEY_<ID>` / `ADMIN_KEY_<ID>` in `op://common/claude-platform/` (`ME`, `ME2`).
+3. Fill `cycleDay`.
+4. Add the refs to `headless.refs` in dotfiles-private and run `make secrets-seed` (the seed aborts on a ref that does not exist yet, so add them only after step 2).
+5. Set `platform.enabled` to `true`.
 
 **Troubleshooting**
 
