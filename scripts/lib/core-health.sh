@@ -5,6 +5,8 @@
 #   core_health_check   prints ONE line; returns 0 healthy, 2 WARN, 1 FAIL
 #
 # FAIL: the LaunchAgent is not loaded/running, or `hc server status` does not answer.
+#       or a default-session `herdr-core serve` is not a child of the launcher (a stray
+#       core started by a client outside launchd: no Full Disk Access, maybe no keychain).
 # WARN: the core is unmanaged (`installed_by` null — the Herdr app could replace it
 #       behind launchd's back) or the other machine runs a different version.
 #
@@ -16,7 +18,7 @@
 #
 # bash 3.2 (launchd hands the heartbeat Apple's /bin/bash): no mapfile, no ${v,,}.
 #
-# Overrides (tests): HC_BIN, LAUNCHCTL_BIN, CORE_LABEL, CORE_PEER_SSH_HOST,
+# Overrides (tests): HC_BIN, PS_BIN, CORE_LAUNCHER, LAUNCHCTL_BIN, CORE_LABEL, CORE_PEER_SSH_HOST,
 # CORE_PEER_CACHE_FILE, CORE_PEER_CACHE_TTL.
 
 CORE_LABEL="${CORE_LABEL:-com.jkrumm.herdr-core}"
@@ -32,6 +34,23 @@ _core_bounded() {
 core_launchd_state() {
   "${LAUNCHCTL_BIN:-/bin/launchctl}" print "gui/$(id -u)/$CORE_LABEL" 2>/dev/null \
     | /usr/bin/awk -F' = ' '/^[[:space:]]*state = /{ print $2; exit }'
+}
+
+# Print "<pid> <parent command>" for every default-session `hc|herdr-core serve` whose parent is not
+# the launcher. ps only, no hc call. Scratch sessions (HC_SESSION other than "default" in the process
+# env, via `ps -E`) are not strays.
+core_strays() {
+  local ps="${PS_BIN:-/bin/ps}" launcher="${CORE_LAUNCHER:-$HOME/.local/libexec/herdr-core-launcher}" pid ppid parent env
+  while read -r pid ppid parent; do
+    env=$("$ps" -E -ww -p "$pid" -o command= 2>/dev/null | tr ' ' '\n' | /usr/bin/grep -E '^HC_SESSION=.' | head -1) || env=""
+    [[ -z "$env" || "$env" == HC_SESSION=default ]] && echo "$pid $ppid $parent"
+  done < <("$ps" -axww -o pid=,ppid=,command= 2>/dev/null | /usr/bin/awk -v launcher="$launcher" '
+    { pid=$1; ppid=$2; cmd0[pid]=$3; arg1[pid]=$4; par[pid]=ppid; ord[++n]=pid }
+    END { for (i=1;i<=n;i++) { p=ord[i]; c=cmd0[p]; sub(".*/", "", c)
+      if ((c != "hc" && c != "herdr-core") || arg1[p] != "serve") continue
+      if (cmd0[par[p]] == launcher) continue
+      print p, par[p], (cmd0[par[p]] == "" ? "?" : cmd0[par[p]]) } }')
+  return 0
 }
 
 # The other machine's core version, empty when it cannot be learned (a sleeping
@@ -72,7 +91,7 @@ for m in json.load(sys.stdin).get("machines",[]):
 }
 
 core_health_check() {
-  local hc="${HC_BIN:-$HOME/.local/bin/hc}" state status version by uptime peer
+  local hc="${HC_BIN:-$HOME/.local/bin/hc}" state status version by uptime peer stray spid sppid sparent
   [[ -x "$hc" ]] || { echo "hc not installed at $hc (fix: make herdr-core-setup)"; return 1; }
 
   state=$(core_launchd_state)
@@ -80,6 +99,13 @@ core_health_check() {
     || { echo "$CORE_LABEL not loaded in launchd (fix: make herdr-core-setup)"; return 1; }
   [[ "$state" == "running" ]] \
     || { echo "$CORE_LABEL is '$state', not running (KeepAlive should restart it; see ~/Library/Logs/herdr-core.log)"; return 1; }
+
+  stray=$(core_strays | head -1)
+  if [[ -n "$stray" ]]; then
+    read -r spid sppid sparent <<<"$stray"
+    echo "core pid $spid runs outside the launcher (parent $sppid: $sparent): a client started it, so it has no Full Disk Access and maybe no keychain (fix: kill $spid, then launchctl kickstart gui/$(id -u)/$CORE_LABEL; docs/herdr-core.md §Core as a LaunchAgent)"
+    return 1
+  fi
 
   status=$(_core_bounded 10 "$hc" server status --json 2>/dev/null) || status=""
   [[ -n "$status" ]] \
