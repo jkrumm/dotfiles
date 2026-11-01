@@ -362,7 +362,7 @@ A snapshot from agw research run `01a19165` (deep, partial: 22/34 citations grou
 | Folders over spaces | jankeesvw/herdr-space-folders (unlicensed), ejklock/herdr-workspaces | Done our way in `jk-spaces`, from `groups.json` |
 | One status bar with machine load and plan usage | DanielFGray/herdr-config, berkeatac/herdr-usage-bar, kvkenyon/herdr-quota | Done in `jk-status`. Ours reads `claude-account`'s cache; theirs read the keychain and call the API |
 | Click-through detail popup | DanielFGray (same mod, `props.panel`) | Done in `jk-details` (a separate mod). None of the public mods shows top processes |
-| Orchestrator visible, workers hidden | Workers as unlabelled children (fact 2) | Built in, no mod needed: Waves 2–3; until then `jk-board` shows leads, waves and workers from the factory's sessions |
+| Orchestrator visible, workers hidden | Workers as unlabelled children (fact 2) | Orchestrator is a tab; workers have none and show nowhere in the app (the jk layout replaces the agents mod). They are visible through `rd agents` / `hc ls --json` (`parent`, `hidden_finished`), and `jk-board` shows leads, waves and workers from the factory's sessions |
 | Light chrome as a design, not a palette | ritiksahni/herdr-linen | Basalt tokens in the theme `colors` |
 | Import classic workspaces into the app | CiprianSpiridon/herdr-migration (claims conversation resume; **unverified**) | Not used: classic sessions are not carried over |
 | Resume after a reboot | herdr-agent-resume stopgap in herdr-core #13 (SessionStart hook → labels, a key types `claude --resume`) | Same idea as ours, triggered by events instead of a key |

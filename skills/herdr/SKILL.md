@@ -30,8 +30,9 @@ name or `machine/tN`.
   long-lived worktree), named so `config/herdr-app/groups.json` files it into the right sidebar folder; a new repo
   gets one line there. The sidebar stays clean.
 - **Orchestrator visible, workers hidden.** An orchestrator or a wave is a labelled tab (visible). A worker is an
-  unlabelled child (`--parent` = the orchestrator, `--outlive-parent` when it must survive it): no tab, listed under
-  its parent in the app. Don't add labels to a background worker.
+  unlabelled child (`--parent` = the orchestrator, `--outlive-parent` when it must survive it): no tab, and the jk
+  layout replaces the agents mod, so it shows nowhere in the app. Find workers with `rd agents` or `hc ls --json`
+  (a `parent` field; finished ones fold into `hidden_finished`). Don't add labels to a background worker.
 - **Lane policy wins over `hc --skill`.** The manual says to delegate through `hc run … claude`. Here only
   `@implementer` and `rd wave` (incl. `rd fan`) start agents (`docs/agent-platform.md`). Use `hc run` for a
   non-agent program (tests, a watcher, a dev server), or for an agent only when the user asks for one.
