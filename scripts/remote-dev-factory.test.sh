@@ -49,6 +49,7 @@ echo "$*" >>"$STATE/factory-calls"
 case "$1 $2" in
   "role get") printf '{"role":"%s","tier":"sonnet","effort":"high"}\n' "$3" ;;
   "spawn create")
+    if [ -f "$STATE/reject-placement" ]; then case "$*" in *--placement*) echo "error: Unknown option '--placement'" >&2; exit 2 ;; esac; fi
     if [ -f "$STATE/create-reply-$3" ]; then cat "$STATE/create-reply-$3"; exit "$(cat "$STATE/create-rc-$3" 2>/dev/null || echo 0)"; fi
     cat "$STATE/create-reply" 2>/dev/null || echo '{"error":{"kind":"internal","message":"boom"}}'; exit "$(cat "$STATE/create-rc" 2>/dev/null || echo 0)" ;;
   "spawn get")
@@ -310,6 +311,34 @@ has "chain: created without FACTORY_SESSION" "$fcalls" "parent-env=unset"
 reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
 FACTORY_SESSION=lead-1 RD_ORCHESTRATED=1 rd wave myrepo "adhoc task"
 has "orchestrated: the caller is the parent" "$fcalls" "parent-env=lead-1"
+
+echo "wave --child: placement child reaches the factory, the caller stays the parent"
+STARTED='{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":null,"workspace":"w1","error":null,"parent":"lead-1","placement":"child"}'
+reset; reply default "$STARTED"
+FACTORY_SESSION=lead-1 rd wave --child myrepo "adhoc task"
+is "exit 0" "$rc" "0"
+has "--placement child" "$fcalls" "--placement child"
+has "the caller is the parent" "$fcalls" "parent-env=lead-1"
+lacks "no warning from a factory that knows placement" "$out" "predates"
+reset; reply default "$STARTED"
+FACTORY_SESSION=lead-1 RD_ORCHESTRATED=1 rd wave myrepo "adhoc task"
+lacks "an orchestrated wave without --child asks for no placement" "$fcalls" "--placement"
+reset; reply default "$STARTED"
+FACTORY_SESSION=lead-1 rd wave myrepo "a successor"
+lacks "a chain successor asks for none either" "$fcalls" "--placement"
+
+echo "wave --child against an older factory"
+reset; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
+FACTORY_SESSION=lead-1 rd wave --child myrepo "adhoc task"
+is "a server that drops the field: exit 0, the spawn exists" "$rc" "0"
+has "and says it is a tab" "$out" "predates placement"
+reset; touch "$STATE/reject-placement"; reply default '{"key":"k","status":"started","hold":null,"account":"max-b","resumeAt":null,"session":"w1:7","pane":"w1:7","tab":"w1:t7","workspace":"w1","error":null}'
+FACTORY_SESSION=lead-1 rd wave --child myrepo "adhoc task"
+is "a CLI that refuses the flag: exit 0" "$rc" "0"
+has "retried without it" "$(grep -c '^spawn create' <<<"$fcalls")" "2"
+is "the second create has no --placement" "$(grep '^spawn create' <<<"$fcalls" | sed -n 2p | grep -c -- --placement)" "0"
+has "and says so" "$out" "predates --placement"
+lacks "and fell back to no hc terminal" "$fcalls" "boom"
 
 # --- fan ----------------------------------------------------------------------------------------------
 echo "fan: the factory answers"

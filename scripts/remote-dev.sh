@@ -49,6 +49,7 @@ rd_effort_flag() { # <model> [role-effort]
 # spawn keeps today's defaults. Only a factory that ANSWERS "no such role" (or a malformed role name)
 # is a usage error, exit 2.
 ROLE=""            # --role given on the command line
+CHILD=""           # --child: `wave` makes the wave a hidden child of the calling terminal (an orchestrator's wave, never a chain successor)
 ROLE_TIER=""       # resolved tier alias (haiku|sonnet|opus), empty when the lookup failed open
 ROLE_EFFORT=""     # resolved effort, empty when the lookup failed open
 ROLE_TIMEOUT_S=2
@@ -504,17 +505,26 @@ spawn_retry_key() { # <key> <n>
 #             started within the wait); FSPAWN_PANE / FSPAWN_ACCOUNT filled when the factory reports them
 #   return 1  the spawn failed (FSPAWN_ERR), ended, or the factory went silent after creating it
 #   return 2  the factory could not create the spawn: the caller falls back to hc directly (never for `key_spent`)
-factory_spawn() { # <key> <repo> <prompt> <role> [space]
-  local key0=$1 repo=$2 prompt=$3 role=$4 space=${5:-} out rc get="" state key n=1 tries=${RD_FACTORY_KEY_TRIES:-50}
+#   placement (optional, `child`): a hidden child of the parent session's terminal, whatever the role. A factory from before
+#   `placement` either drops the field (its answer has none: this says so, the spawn is a tab) or, with an older
+#   CLI, refuses the flag with a usage error (exit 2) before anything is created: this retries once without it.
+factory_spawn() { # <key> <repo> <prompt> <role> [space] [placement]
+  local key0=$1 repo=$2 prompt=$3 role=$4 space=${5:-} placement=${6:-} out rc get="" state key n=1 tries=${RD_FACTORY_KEY_TRIES:-50}
   local spent cstate sess deadline
   local -a extra=()
   [[ -n $space ]] && extra=(--space "$space")
+  [[ -n $placement ]] && extra+=(--placement "$placement")
   FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""; FSPAWN_KEY=$key0
   key=$key0
   while :; do
     rc=0; spent=0
     out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
       ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
+    if (( rc == 2 )) && [[ -n $placement ]] && grep -qi 'placement' <<<"$out"; then
+      echo "rd: this factory CLI predates --placement - the spawn becomes a tab" >&2
+      placement=""; extra=(); [[ -n $space ]] && extra=(--space "$space")
+      continue
+    fi
     if (( rc != 0 )) && jq -e '.error.code == "key_spent"' <<<"$out" >/dev/null 2>&1; then
       spent=1
     elif (( rc != 0 )); then
@@ -580,6 +590,9 @@ factory_spawn() { # <key> <repo> <prompt> <role> [space]
     echo "rd: the previous key is spent (its agent ended) - using '$key'" >&2
   done
 
+  if [[ -n $placement ]] && [[ -n $get ]] && ! jq -e 'has("placement")' <<<"$get" >/dev/null 2>&1; then
+    echo "rd: the factory server predates placement - '$key' is a tab, not a hidden child" >&2
+  fi
   FSPAWN_PANE=$(factory_field "$get" '(.pane // empty) | s')
   FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')
   # Past this point the spawn exists: nothing below falls back to hc, whatever the status is.
@@ -682,6 +695,7 @@ parse_kind_flags() {
       --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       --role)   [[ -n ${2:-} ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; ROLE=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
       --role=*) ROLE=${1#--role=}; [[ -n $ROLE ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
+      --child)  CHILD=1; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       *)        break ;;
     esac
   done
@@ -743,6 +757,7 @@ cmd_work() {
   parse_kind "$@"
   local name="${REST[0]:-}"
   [[ -n $name ]] || die "usage: work <repo> [--kind claude] [--role R]   (see 'repos')"
+  [[ -z $CHILD ]] || die "--child is for 'rd wave' (an orchestrator's waves); 'work' is an owner's own tab"
   require_core
 
   local path
@@ -797,7 +812,7 @@ cmd_wave() {
   parse_kind "$@"
   local name="${REST[0]:-}"
   local prompt="${REST[*]:1}"
-  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] [--role R] <prompt…>"
+  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] [--role R] [--child] <prompt…>"
   require_core
 
   local path
@@ -898,7 +913,9 @@ cmd_wave() {
   # picked once per spawn here, and no room means pause, never IU.
   local use_factory=0
   # An orchestrated wave from an owner's own session goes hc-direct, like fan: the lead must be its child to wait on it.
-  [[ -z ${RD_DRY_RUN:-} ]] && ! { [[ ${RD_ORCHESTRATED:-} == 1 ]] && owner_session; } && factory_up && use_factory=1
+  local orchestrated=""
+  [[ ${RD_ORCHESTRATED:-} == 1 || -n $CHILD ]] && orchestrated=1
+  [[ -z ${RD_DRY_RUN:-} ]] && ! { [[ -n $orchestrated ]] && owner_session; } && factory_up && use_factory=1
   PICK_ENV=(); PICK_NOTE=""; PICK_SPILL=0
   if [[ $AGENT_KIND == claude ]] && (( ! use_factory )); then
     pick_account wave
@@ -922,8 +939,8 @@ cmd_wave() {
     # A chain wave's successor is not its worker: with the caller as parent, the send-back would hold the finishing
     # wave's Stop until its successor ends. Orchestrated waves are the orchestrator's workers and keep the parent.
     local frc=0 no_parent=1
-    [[ ${RD_ORCHESTRATED:-} == 1 ]] && no_parent=""
-    FACTORY_NO_PARENT=$no_parent factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" || frc=$?
+    [[ -n $orchestrated ]] && no_parent=""
+    FACTORY_NO_PARENT=$no_parent factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" "" "${CHILD:+child}" || frc=$?
     case $frc in
       0) factory_spawn_report "wave $wnum" "$agent" "$path" "$path"; return 0 ;;
       1) die "factory spawn '$FSPAWN_KEY' failed: $FSPAWN_ERR" ;;
@@ -937,11 +954,13 @@ cmd_wave() {
   # session on (Fable today), and that is the wrong default exactly where no one is watching. A chain that wants another
   # model says so per chain (`RD_WAVE_MODEL`).
   local where="tab"
-  if [[ ${RD_ORCHESTRATED:-} == 1 ]]; then where="tab-child"; fi
+  if [[ -n $CHILD ]]; then where="child"; elif [[ ${RD_ORCHESTRATED:-} == 1 ]]; then where="tab-child"; fi
   hc_start_agent "$agent" "$path" "${ROLE:-wave}" wave 1 "$prompt" "$where" "$path" || die "$HC_START_ERR"
   echo "→ wave $wnum started: $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
   [[ $where == tab-child ]] && note "   a child of this terminal: its notes arrive as input, 'hc wait --children all' waits for it"
+  [[ -n $CHILD && $SPAWNED_WHERE == child ]] && note "   a hidden child of this terminal (the app lists it under it, 'hc wait --children all' waits for it)"
+  [[ -n $CHILD && $SPAWNED_WHERE == tab ]] && note "   --child: no calling terminal on the dev host (or it is gone), so this wave is a tab"
   return 0
 }
 
