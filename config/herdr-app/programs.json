@@ -1,0 +1,52 @@
+{
+  "programs": {
+    "claude-c": {
+      "name": "Opus",
+      "icon": "icons/claude.svg",
+      "tint": false,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": [
+        "zsh",
+        "-ic",
+        "c"
+      ]
+    },
+    "claude-ch": {
+      "name": "Opus \u00b7 high",
+      "icon": "icons/claude.svg",
+      "tint": false,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": [
+        "zsh",
+        "-ic",
+        "ch"
+      ]
+    },
+    "claude-cs": {
+      "name": "Sonnet",
+      "icon": "icons/claude.svg",
+      "tint": false,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": [
+        "zsh",
+        "-ic",
+        "cs"
+      ]
+    },
+    "claude-cf": {
+      "name": "Fable",
+      "icon": "icons/claude.svg",
+      "tint": false,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": [
+        "zsh",
+        "-ic",
+        "cf"
+      ]
+    }
+  }
+}

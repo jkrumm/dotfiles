@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details jk-board jk-keys)
+MODS=(jk-spaces jk-status jk-details jk-board jk-keys jk-tabs jk-new)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(
@@ -35,6 +35,8 @@ for mod in "${MODS[@]}"; do link "$SRC/mods/$mod" "$HOME_DIR/mods/$mod"; done
 link "$DOTFILES_DIR/config/herdr-app/groups.json" "$HOME_DIR/groups.json"
 for theme in "$SRC"/themes/*.json; do link "$theme" "$HOME_DIR/themes/$(basename "$theme")"; done
 link "$SRC/layouts/jk.json" "$HOME_DIR/layouts/jk.json"
+# The + menu's agents: the four Claude launchers (jk-new shows only these).
+link "$SRC/programs.json" "$HOME_DIR/programs.json"
 
 # keys.json is the app's own file (not tracked): add the one key that toggles the board
 # column, never overwrite an existing binding (the old layout.toggle:waves is migrated).
