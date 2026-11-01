@@ -93,7 +93,7 @@ MacBook (different user home): LaunchAgent programs were read over ssh; the TCC 
 | MacBook | Full Disk Access → Ghostty.app (optional) | `op` and everything else started from a plain Ghostty tab |
 
 Both are queued with `ask-human` (one batch per machine). After a grant: `make tcc-probe`. The grants on
-`~/.local/bin/herdr-core` can stay; they match nothing once the symlink points at the Cellar.
+`~/.local/bin/herdr-core` can stay; they match nothing once `~/.local/bin/herdr-core` is the guard script (it execs the Cellar binary).
 
 ## 1Password (`op`) — the AppData dialog
 

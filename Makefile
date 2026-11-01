@@ -792,7 +792,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
@@ -2508,9 +2508,10 @@ herdr-core-setup: herdr-core-launcher
 		case "$$LIVE" in ""|*[!0-9]*) rm -f "$$TMP"; echo "    ✗ cannot tell how many terminals are live (hc server status failed); the job's program or launcher changed, which needs a bootout. Re-run with YES=1 once that is fine"; exit 1;; esac; \
 		if [ "$$LIVE" -gt 0 ]; then rm -f "$$TMP"; echo "    ✗ the job's program or launcher changed, which needs a bootout: that ends $$LIVE live terminal(s) (a kickstart does not). Re-run with YES=1 when that is fine"; exit 1; fi; \
 	fi; \
+	chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
 	for b in herdr-core hc; do \
-		L="$(HOME)/.local/bin/$$b"; \
-		[ "$$(readlink "$$L")" = "/opt/homebrew/bin/$$b" ] || { rm -f "$$L"; ln -s "/opt/homebrew/bin/$$b" "$$L"; echo "    ✓ ~/.local/bin/$$b -> /opt/homebrew/bin/$$b"; }; \
+		L="$(HOME)/.local/bin/$$b"; G="$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
+		[ "$$(readlink "$$L")" = "$$G" ] || { ln -s "$$G" "$$L.new.$$$$" && mv -f "$$L.new.$$$$" "$$L"; echo "    ✓ ~/.local/bin/$$b -> scripts/herdr-core-guard.sh (refuses a core start outside launchd; atomic swap, safe live)"; }; \
 	done; \
 	if [ "$$NEED_BOOT" = 0 ]; then \
 		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \
@@ -2530,6 +2531,7 @@ herdr-core-setup: herdr-core-launcher
 herdr-core-teardown: herdr-core-update-teardown
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
+	for b in herdr-core hc; do [ "$$(readlink "$(HOME)/.local/bin/$$b")" = "$(DOTFILES_DIR)/scripts/herdr-core-guard.sh" ] && { ln -s "/opt/homebrew/bin/$$b" "$(HOME)/.local/bin/$$b.new.$$$$" && mv -f "$(HOME)/.local/bin/$$b.new.$$$$" "$(HOME)/.local/bin/$$b"; }; done; \
 	echo "  ✓ herdr-core torn down (its terminals end with it; on the MacBook: hc machine rm mini)"
 herdr-core-status:
 	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
@@ -2548,6 +2550,12 @@ tcc-check-test: ## Hermetic test for tcc-check
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.test.sh
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
+
+.PHONY: herdr-core-guard-test
+herdr-core-guard-test: ## Hermetic tests: the client guard (hc/herdr-core refuse outside launchd) and the stray-core detection in core-health
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/herdr-core-guard.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
+	@bash $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh
+	@bash $(DOTFILES_DIR)/scripts/core-health.test.sh
 
 # Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old, via the tap formula.
 herdr-core-update-setup:

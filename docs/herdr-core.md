@@ -273,9 +273,31 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
   resolves `/opt/homebrew/opt/herdr-core/bin/herdr-core` with `realpath()`, `posix_spawn`s it as a child (never
   `exec`, no disclaim), forwards SIGTERM/SIGINT/SIGHUP and exits with it. The core is the `jkrumm/tap` formula
   `herdr-core`: the resolved path contains `/Cellar/`, so the core reports `installed_by: "homebrew"` and the app
-  never updates it. `~/.local/bin/{herdr-core,hc}` are symlinks to `/opt/homebrew/bin`. **Cutover** (once per
+  never updates it. `~/.local/bin/{herdr-core,hc}` are symlinks to `scripts/herdr-core-guard.sh` (next bullet), which execs the Cellar-resolved binary. **Cutover** (once per
   machine): `make herdr-core-setup YES=1`. Changing the job's program needs a `bootout`, and that ends every live
   terminal (a kickstart does not), so the target refuses without `YES=1` while terminals are live.
+- **Client guard: no core outside launchd** (`scripts/herdr-core-guard.sh`, hermetic test `make herdr-core-guard-test`).
+  Research 2026-11-01 (core 0.1.15): no upstream switch. `hc` and `herdr-core` are one multi-call binary (`hc` is a
+  symlink to `herdr-core`), `hc --skill`/`--help`/`schema`, the `config.toml` keys and `strings` show no autostart flag,
+  env var or setting, and a scratch `hc server status` boots a core (`<argv0> serve`, parent pid 1). So the guard is a
+  wrapper at `~/.local/bin/{hc,herdr-core}`: help/version/skill/schema and scratch sessions (`HC_SESSION` other than
+  `default`, or `--session`) pass; everything else waits up to `HC_GUARD_WAIT` s (default 5) for `launchctl print` `state = running`
+  AND a connect to the default socket (`nc -U`, never an `hc` call), then execs the real binary, else exits 75 with what, why and
+  the fix (`launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`, or `make herdr-core-setup` when not loaded). The LaunchAgent's
+  launcher spawns the real binary directly, so only other callers see the guard. A caller that bypasses it
+  (`/opt/homebrew/bin/hc`, a core terminal started before the swap) is still caught by detection: `make doctor` and the
+  heartbeat `core` FAIL when a default-session `herdr-core serve` has a parent other than the launcher (pid and fix named).
+  Incidents 2026-11-01: (a) after the MacBook rebooted, the Herdr app's `herdr-core connect` started a core (no launcher, no
+  Full Disk Access) before the LaunchAgent ran, and the job looped `runs = 42` on an empty log, unable to take the socket;
+  (b) after the mini's macOS update the MacBook's machine link (`ssh mini … herdr-core connect`) started
+  `~/.local/bin/herdr-core serve` while launchd still held the job as `pended nondemand spawn = speculative`: a keychain-less core.
+  Both were fixed by hand (stop stray core and holder, `kickstart`). **Boot race:** `ProcessType Interactive` in the plist is the
+  only key with an observable effect (`launchctl print` of a scratch label: `spawn type = interactive (4)` instead of `daemon (3)`;
+  `immediate reason = speculative` stays whatever is set), so the race is closed by the guard waiting for the job, not by launchd.
+  **Rollout (owner-timed):** the wrapper is a file swap, safe live (`make herdr-core-setup` swaps the symlinks atomically; it
+  also needs the plist bootout, so run it with `YES=1` at a chosen moment, or swap just the links by hand). The plist change needs a
+  `bootout` (ends live terminals); until then the guard works without it. On the MacBook the app must start its core through
+  `~/.local/bin/herdr-core`: confirm after the rollout that the app's connect is refused while the job is stopped.
 - **Upgrades:** §Updates. Keep MacBook and mini on the same `hc` version (`hc machine ls` shows it).
 - State: `~/.local/state/herdr-core/` on the mini. Log: `~/Library/Logs/herdr-core.log`.
 

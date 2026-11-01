@@ -14,7 +14,7 @@ components:
 |-|-|
 | tailscale | daemon state + node-key expiry days |
 | sshd | listener present |
-| core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh` and `brew-upgrade.sh`): `com.jkrumm.herdr-core` `state = running` in launchd, then `hc server status` answers and reports `installed_by` — **FAIL** when the job is not running or `hc` does not answer, **WARN** when the core is unmanaged (`installed_by` null) or the other machine's core version differs (`hc machine ls`, else `ssh iumac hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: launchd is asked first, because any `hc` call auto-starts a stray core |
+| core | the herdr-core (`scripts/lib/core-health.sh`, shared with `doctor.sh` and `brew-upgrade.sh`): `com.jkrumm.herdr-core` `state = running` in launchd, then `hc server status` answers and reports `installed_by` — **FAIL** when the job is not running, `hc` does not answer, or a `herdr-core serve` is not a child of the launcher (a stray core a client started; found with `ps`, names the pid and the fix; `make herdr-core-guard-test`), **WARN** when the core is unmanaged (`installed_by` null) or the other machine's core version differs (`hc machine ls`, else `ssh iumac hc --version` cached 30 min; an unreachable laptop is not a fault). Never starts anything: launchd is asked first, because any `hc` call auto-starts a stray core |
 | git push credential | `op://mini/github/token` resolves (no network call) |
 | dev vhosts | Cloudflare DNS module, wildcard cert days-left, DNS A-record drift, token/include permissions |
 | memory | pressure level + swap as a share of RAM |

@@ -10,13 +10,19 @@
        The job's program is the launcher, not the core: macOS attributes every file access in the core's
        terminals to the job's program, and the Full Disk Access grant lives on the launcher's stable path.
        The core (homebrew's herdr-core, versioned Cellar path) runs as its child and is swapped by upgrades
-       without a new grant (docs/tcc.md). -->
+       without a new grant (docs/tcc.md).
+       ProcessType Interactive: launchd spawns the job as `interactive (4)` instead of `daemon (3)` (the only
+       observable effect of the keys tried, `launchctl print` on a scratch label), so a login-time spawn is not
+       queued behind background work. `immediate reason = speculative` stays: the boot race is closed by the
+       client guard (~/.local/bin/hc, scripts/herdr-core-guard.sh), not by this key.
+       A rendered-plist change needs a bootout (owner-timed, ends live terminals): make herdr-core-setup YES=1. -->
   <key>ProgramArguments</key>
   <array>
     <string>__HOME__/.local/libexec/herdr-core-launcher</string>
     <string>/opt/homebrew/opt/herdr-core/bin/herdr-core</string>
     <string>serve</string>
   </array>
+  <key>ProcessType</key><string>Interactive</string>
   <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
