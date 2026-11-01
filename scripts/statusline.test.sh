@@ -162,6 +162,37 @@ out=$(MODEL="Opus 5.5 $(printf 'x%.0s' {1..75})" line1 | plain)
 assert_lacks "too wide: countdown dropped" "↺" "$out"
 assert_contains "too wide: accounts and pool kept" "iu 43/17 · me 21/19 · ∑17%" "$out"
 
+echo "quota feed: fires on a weekly-only rate_limits (a plan without a 5h window), once per 60 s"
+BIN="$TMP/home/.local/bin"; mkdir -p "$BIN"; REC="$TMP/record.log"
+cat > "$BIN/claude-account" <<STUB
+#!/bin/sh
+case "\$1" in
+  account) [ "\$2" = "--badge" ] && echo IU || echo iu ;;
+  record) echo "\$*" >> "$REC" ;;
+esac
+STUB
+chmod +x "$BIN/claude-account"
+feed() { # feed <rate_limits json>: render with the push stamp removed, wait for the backgrounded record
+  rm -f "$REC" "$SLD/usage_push_default.stamp"
+  printf '%s %s\n' iu IU > "$SLD/account_v2_default"
+  echo "$NOW" > "$SLD/usage_accounts.stamp"
+  jq -nc --argjson rl "$1" '{model: {display_name: "Opus 5.5"}, workspace: {current_dir: "/tmp"}, rate_limits: $rl}' |
+    env -i HOME="$TMP/home" PATH="$PATH" CLAUDE_SL_DIR="$SLD" /bin/bash "$SL" >/dev/null
+  for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$REC" ]] && break; sleep 0.2; done
+  cat "$REC" 2>/dev/null
+}
+rec=$(feed "{\"seven_day\": {\"used_percentage\": 61, \"resets_at\": $((NOW + 302400))}}")
+assert_contains "weekly-only: record fires with --w and --w-reset" "record --account iu --w 61 --w-reset $((NOW + 302400))" "$rec"
+assert_lacks "weekly-only: no --s" "--s" "$rec"
+rec=$(feed "{\"five_hour\": {\"used_percentage\": 43, \"resets_at\": $((NOW + 5430))}, \"seven_day\": {\"used_percentage\": 17, \"resets_at\": $((NOW + 302400))}}")
+assert_contains "both windows: --s and --w as before" "--s 43 --s-reset $((NOW + 5430)) --w 17 --w-reset $((NOW + 302400))" "$rec"
+rec=$(feed '{}')
+[[ -z "$rec" ]] && ok "no rate_limits: no record" || bad "no rate_limits: record fired" "$rec"
+rm -f "$REC"; echo "$NOW" > "$SLD/usage_push_default.stamp"
+jq -nc '{model: {display_name: "Opus 5.5"}, workspace: {current_dir: "/tmp"}, rate_limits: {seven_day: {used_percentage: 5, resets_at: 1}}}' |
+  env -i HOME="$TMP/home" PATH="$PATH" CLAUDE_SL_DIR="$SLD" /bin/bash "$SL" >/dev/null; sleep 0.5
+[[ ! -s "$REC" ]] && ok "60 s throttle holds for a weekly-only feed" || bad "throttle ignored" "$(cat "$REC")"
+
 echo
 echo "statusline: $pass passed, $fail failed"
 (( fail == 0 ))

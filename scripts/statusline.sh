@@ -236,7 +236,9 @@ fi
 # fetch_usage.py reports) — throttled to once a minute, fire-and-forget. ~65 ms per call
 # against ~1.5 ms for a raw curl; both are backgrounded, and the CLI owns the host URL, secret
 # and field names. Absent `agw` (the MacBook) or an absent host: silent no-op.
-if [ -n "$rl_5h" ]; then
+# A plan without a 5 h window (Ultra) sends a weekly-only rate_limits: the feed still fires for it, `record` gets the
+# weekly figures alone and `quota-report` (which requires a 5 h figure) is skipped.
+if [ -n "$rl_5h" ] || [ -n "$rl_wk" ]; then
   _push_stamp="$_SL_DIR/usage_push_${_ca_key//\//_}.stamp"   # per account: one account's sessions must not starve the other's POST
   _pushed_at=$(cat "$_push_stamp" 2>/dev/null)
   if [ $(( _now_s - ${_pushed_at:-0} )) -gt 60 ]; then
@@ -245,7 +247,7 @@ if [ -n "$rl_5h" ]; then
     # dir, anything off-pattern) means no report: never guess iu.
     _acct="${account_id:-}"
     _agw=$(command -v agw 2>/dev/null || echo "$HOME/.local/bin/agw")
-    if [[ "$_acct" =~ ^[a-z][a-z0-9-]{0,15}$ ]] && [ -x "$_agw" ]; then
+    if [ -n "$rl_5h" ] && [[ "$_acct" =~ ^[a-z][a-z0-9-]{0,15}$ ]] && [ -x "$_agw" ]; then
       _rep=(--five-hour-pct "$rl_5h" --account "$_acct")
       [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && [ "$rl_5h_reset" -gt "$_now_s" ] && _rep+=(--five-hour-mins-left $(( (rl_5h_reset - _now_s) / 60 )))
       [ -n "$rl_wk" ] && _rep+=(--seven-day-pct "$rl_wk")
@@ -253,8 +255,9 @@ if [ -n "$rl_5h" ]; then
     fi
     disown 2>/dev/null
     # Same throttle: resolve the account and feed its quota sample (claude-account record, atomic).
-    _rec=(--s "$rl_5h")
-    [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
+    _rec=()
+    [ -n "$rl_5h" ] && _rec+=(--s "$rl_5h")
+    [ -n "$rl_5h" ] && [[ "$rl_5h_reset" =~ ^[0-9]+$ ]] && _rec+=(--s-reset "$rl_5h_reset")
     [ -n "$rl_wk" ] && _rec+=(--w "$rl_wk")
     [[ "$rl_wk_reset" =~ ^[0-9]+$ ]] && _rec+=(--w-reset "$rl_wk_reset")
     ( _ca_resolve record "${_rec[@]}" ) >/dev/null 2>&1 &
