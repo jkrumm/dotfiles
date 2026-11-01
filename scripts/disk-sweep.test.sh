@@ -89,4 +89,32 @@ out7=$(PATH=/usr/bin:/bin DISK_SWEEP_NPM_MAX_GB=0 /bin/bash "$HERE/disk-sweep.sh
 check "pkg-caches: npm cache removed, exit 0" sh -c '[ "$1" -eq 0 ] && [ ! -e "$2/.npm/_cacache" ] && printf "%s" "$3" | grep -q "npm cache removed"' _ "$rc7" "$HOME" "$out7"
 check "pkg-caches: absent tools stay silent" sh -c '! printf "%s" "$1" | grep -qE "uv|brew|bun"' _ "$out7"
 
+# (e) uv prune: a busy cache lock is a skip naming the holder (step ok, rc 0); any other uv error fails the step.
+cat > "$FAKE/uv" <<'UV'
+#!/bin/sh
+case "$1 $2" in
+  "cache dir") echo "$FAKE_UV_DIR" ;;
+  "cache prune")
+    echo "seen UV_LOCK_TIMEOUT=$UV_LOCK_TIMEOUT" >> "$FAKE_UV_LOG"
+    case "$FAKE_UV_MODE" in
+      busy) echo "error: Timeout ($UV_LOCK_TIMEOUT s) when waiting for lock on \`$FAKE_UV_DIR\` at \`$FAKE_UV_DIR/.lock\`, is another uv process running?" >&2; exit 2 ;;
+      error) echo "error: failed to read cache entry" >&2; exit 2 ;;
+      *) echo "Pruning cache at: $FAKE_UV_DIR"; exit 0 ;;
+    esac ;;
+esac
+UV
+printf '#!/bin/sh\necho 4242\necho 4343\n' > "$FAKE/lsof-holder"
+chmod +x "$FAKE/uv" "$FAKE/lsof-holder"
+export FAKE_UV_DIR="$TMP/uvcache" FAKE_UV_LOG="$TMP/uv.log"
+uvsweep() { # $1 = FAKE_UV_MODE
+  PATH="$FAKE:/usr/bin:/bin" FAKE_UV_MODE="$1" DISK_SWEEP_LSOF="$FAKE/lsof-holder" /bin/bash "$HERE/disk-sweep.sh" pkg-caches 2>&1
+}
+out8=$(uvsweep busy); rc8=$?
+check "uv lock busy: skipped with the holder pid, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv prune skipped: cache lock held by pid 4242" && ! printf "%s" "$2" | grep -q FAILED' _ "$rc8" "$out8"
+check "uv lock busy: probes with the short lock timeout" grep -qx "seen UV_LOCK_TIMEOUT=20" "$FAKE_UV_LOG"
+out9=$(uvsweep error); rc9=$?
+check "uv real error: step fails, exit 1" sh -c '[ "$1" -eq 1 ] && printf "%s" "$2" | grep -q "uv prune FAILED: error: failed to read cache entry"' _ "$rc9" "$out9"
+out10=$(uvsweep ok); rc10=$?
+check "uv prune ok: pruned, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "uv pruned"' _ "$rc10" "$out10"
+
 exit "$fail"

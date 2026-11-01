@@ -27,7 +27,7 @@
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
 # OCR_SESSIONS_ROOT, DISK_SWEEP_LSOF, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
-# DISK_SWEEP_BUN_MAX_GB. `make disk-sweep-run` runs every step once, docker included.
+# DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
 
@@ -37,6 +37,7 @@ BUN_MAX_GB="${DISK_SWEEP_BUN_MAX_GB:-5}"
 OCR_ROOT="${OCR_SESSIONS_ROOT:-$HOME/.opencodereview/sessions}"
 LSOF="${DISK_SWEEP_LSOF:-/usr/sbin/lsof}"
 TOOL_TIMEOUT=600
+UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
 STEPS=(ocr-sessions tmpdir pkg-caches simulators docker colima-trim)
@@ -197,11 +198,21 @@ step_pkg-caches() {
   before=$(free_kb "$HOME")
 
   if command -v uv >/dev/null 2>&1; then
-    local uvout
-    # uv's default cache-lock wait is 300s, which another uv process (e.g. statusline's
-    # background `uv run`) can exhaust on its own; UV_LOCK_TIMEOUT=540 leaves 60s of the
-    # TOOL_TIMEOUT bound for the prune itself once the lock clears.
-    if uvout=$(with_timeout "$TOOL_TIMEOUT" env UV_LOCK_TIMEOUT=540 uv cache prune 2>&1); then parts+="uv pruned, "; else parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1; fi
+    local uvout uvrc=0 lockfile holder
+    # A held cache lock is not a failure: another uv process (a long-lived `uv run` or tool; the
+    # lock is held for the process's life) owns it, and waiting out uv's 300s default (or 540s,
+    # as this once did) only burned the sweep's time. Probe with a short wait; on a lock timeout
+    # skip the prune and name the holder. Any other uv error still fails the step.
+    uvout=$(with_timeout "$TOOL_TIMEOUT" env UV_LOCK_TIMEOUT="$UV_LOCK_WAIT" uv cache prune 2>&1) || uvrc=$?
+    if [ "$uvrc" -eq 0 ]; then
+      parts+="uv pruned, "
+    elif grep -q 'when waiting for lock' <<<"$uvout"; then
+      lockfile="$(uv cache dir 2>/dev/null || true)/.lock"
+      holder=$("$LSOF" -t -- "$lockfile" 2>/dev/null | head -n 1 || true)
+      parts+="uv prune skipped: cache lock held by pid ${holder:-unknown}, "
+    else
+      parts+="uv prune FAILED: $(tail -n 1 <<<"$uvout"), "; rc=1
+    fi
   fi
 
   if command -v brew >/dev/null 2>&1; then
