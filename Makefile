@@ -21,7 +21,7 @@ SECRETS_PRIVATE_REPO ?= $(HOME)/SourceRoot/dotfiles-private
 # CPU is time-shared (free when idle). Bump for heavy stacks:
 #   COLIMA_MEMORY=10 make colima-restart
 # Defaults key on the secrets-backend marker, like brew-upgrade.sh: the dev host
-# (cache) runs the real stacks and gets 4/12/60 (16 held ~16 GB resident under pressure — the VM rarely hands memory back); the MacBook (op) rarely runs
+# (cache) runs the real stacks and gets 4/6/60 (16 held ~16 GB resident under pressure and the VM rarely hands memory back; 12 kept swap at 22 %, cut to 6 on 2026-11-01); the MacBook (op) rarely runs
 # Docker and gets 2/4/30. colima-restart writes cpu/memory back into the
 # persisted colima.yaml, so a single machine-agnostic default would silently
 # resize the other machine on its next restart.
@@ -32,7 +32,7 @@ COLIMA_MEMORY ?= 4
 COLIMA_DISK   ?= 30
 else
 COLIMA_CPU    ?= 4
-COLIMA_MEMORY ?= 12
+COLIMA_MEMORY ?= 6
 COLIMA_DISK   ?= 60
 endif
 
