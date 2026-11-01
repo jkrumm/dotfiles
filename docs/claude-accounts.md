@@ -503,8 +503,8 @@ The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), grante
 | Field | Meaning |
 |-|-|
 | `creditUsd` | monthly credit of the plan (200 / 100) |
-| `cycleDay` | the subscription's billing day (1–31), where the credit expires and the meter resets. `null` = unknown: the gateway treats the cycle as ending at month end until you fill it (claude.ai Settings → Billing) |
-| `headroomUsd` | a pool counts as full at `meter + headroom ≥ credit`, so a request never starts into a mid-session "credit balance is too low" |
+| `cycleDay` | the subscription's billing day (1–31), where the credit expires and the meter resets. `null` = unknown: the gateway meters a rolling 31-day window (the sum of the pool's own rows over the last 31 days), which can never under-count the real cycle, until you fill it (claude.ai Settings → Billing); the pool stays usable |
+| `headroomUsd` | a pool counts as full at `meter + headroom ≥ credit`: a buffer against a mid-session "credit balance is too low" refusal, not a guarantee (concurrent requests can overrun it). The hard stop is the org's own refusal, because no payment method is on file |
 | `enabled` | pool switch, independent of the account's own `enabled` |
 | `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
 | `adminKeyRef` | `op://` ref of the org's Admin key, for reconciling the meter against the cost API |
