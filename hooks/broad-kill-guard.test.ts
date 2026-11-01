@@ -98,6 +98,8 @@ describe("deny", () => {
     denied("bash <<'END-SCRIPT'\npkill -f gate.sh\nEND-SCRIPT");
     denied("2>&- pkill -f gate.sh");
     denied("env -S 'pkill -P 123' -f gate.sh");
+    denied(`env -S "'killall' node"`);
+    denied("env -S '-i pkill -f gate.sh'");
     denied("sudo -n bash <<EOF\nkillall node\nEOF");
   });
 

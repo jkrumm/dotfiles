@@ -27,7 +27,9 @@
  * quotes (a grep pattern, a commit message).
  *
  * Not covered (out of scope, same hazard class): `kill $(pgrep <name>)` without
- * `-f`, and `ps | grep | awk | xargs kill`.
+ * `-f`, `ps | grep | awk | xargs kill`, `echo '<cmd>' | bash`, and a heredoc fed
+ * to a shell behind a wrapper option value or a leading redirection
+ * (`sudo -u root bash <<EOF`) — the heredoc scan is a regex, not the tokenizer.
  */
 
 import { splitIntoCommands } from "./docker-makefile.ts";
@@ -120,8 +122,10 @@ function resolve(input: string[]): Invocation | null {
             ? flag.slice("--split-string=".length)
             : undefined;
       if (split !== undefined) {
-        tokens = [...tokens.slice(0, i), ...split.split(/\s+/).filter(Boolean), ...tokens.slice(i)];
-        break;
+        // env splits on whitespace and quotes only, never on `;` or `|`.
+        const words = splitIntoCommands(split)[0] ?? [];
+        tokens = [...tokens.slice(0, i), ...words, ...tokens.slice(i)];
+        continue;
       }
       if (spec.valueFlags.has(flag)) {
         i++;
