@@ -443,7 +443,7 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
 (option a); Full Disk Access must survive updates. Research run `01a1923f-c23e-7789-a684-4d96b8f41f42` (deep,
 29/29 citations grounded) is the basis for the TCC design.
 
-- [ ] P1 is merged: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
+- [ ] P1 is on master and live: every item of §Parallel track P1 is true on both machines; `make herdr-core-update-check`
   and `make doctor` are green; one real automatic update has run (or a forced dry run with a fake newer release).
 - [ ] `skills/upgrade-deps` machine mode and `docs/homebrew.md` describe the job; no other path updates the core.
 - [ ] **MacBook cutover done by the owner's session (2026-10-31 16:5x):** launcher + managed 0.1.15 + update job on the
@@ -465,10 +465,45 @@ through our own launchd job (never the app's updater, never `hc update`); the ap
   `make herdr-core-setup` refuses to swap in a rebuilt launcher without queueing the re-grant (`ask-human`), and
   `make tcc-probe` runs after every launcher change. The mini grant was verified at 16:32 (`tcc-probe` ✓).
 
+- [ ] **No core may start outside launchd (owner session, 2026-11-01).** Seen twice on one day: (a) after the
+  MacBook rebooted, the Herdr app's `herdr-core connect` spawned a core (XPC_SERVICE_NAME `application.dev.herdr.app…`,
+  no launcher, no FDA) before the LaunchAgent ran; the job then looped `runs = 42` with an empty log; (b) after the
+  mini's macOS update the MacBook core's machine link (`ssh mini … herdr-core connect`, `SSH_CONNECTION` set) spawned
+  `~/.local/bin/herdr-core serve` on the mini at 16:19:23 while launchd still held the job as `pended nondemand spawn
+  = speculative` (load 143): a keychain-less core. Fixed by hand both times (stop the stray core and its holder,
+  `launchctl kickstart`; `hc-resume` then resumed all 6 Claude sessions into the right core). Build the guard:
+  `serve`/`connect` (and any client autostart) refuse to start a core unless they run under the launchd job, with a
+  clear message; the LaunchAgent must not lose a boot race (consider `ProcessType Interactive` / no speculative
+  deferral, verify with `launchctl print`); `make doctor` and the heartbeat FAIL on a core whose parent is not the
+  launcher. Prove it: reboot-free (stop the job, attempt `hc ls` over ssh and an app connect, see the refusal).
+- [ ] **Doctor reads Claude logins over ssh and is blind to the mini keychain.** Mini `make doctor` over ssh reported
+  `auth/iu NOT logged in` and `rc=36` for every account; through the core (`hc exec --on mini -- zsh -lc 'make
+  claude-accounts-verify'`) the same check is 0 FAIL. Route the doctor's claude-accounts step through the core.
 **Left behind:**
-- not started: the green gate refused the spawn from Wave 7 (`scripts/wave-gate.py` matched "merged" in the first step, "P1 is merged: …", a verification, not a merge). Wave 7 closed green; start it with `RD_ORCHESTRATED=1 rd wave dotfiles 'Read docs/waves/PLAN.md. Execute the active wave (Wave 8). Follow the /wave skill.'` or reword that step. Wave 8 inherits the MacBook owner steps listed under Wave 7 (`make setup`/`doctor` there, the cask shells).
+- reworded 2026-11-01 ("is on master and live"), so the gate passes. Was: not started: the green gate refused the spawn from Wave 7 (`scripts/wave-gate.py` matched "merged" in the first step, "P1 is merged: …", a verification, not a merge). Wave 7 closed green; start it with `RD_ORCHESTRATED=1 rd wave dotfiles 'Read docs/waves/PLAN.md. Execute the active wave (Wave 8). Follow the /wave skill.'` or reword that step. Wave 8 inherits the MacBook owner steps listed under Wave 7 (`make setup`/`doctor` there, the cask shells).
 
 ## Wave 9 — the mini maintenance window            <!-- status: pending -->
+**Done by the owner's session 2026-11-01 (verify, don't redo):** `make brew-upgrade` on both machines (mini 68,
+MacBook 7 formulae; invariants green); Colima default VM 6 GiB live (`2513891`, restarted); tailscale 1.104.4 on the
+mini (formula upgraded, daemon restarted by the reboot); teamchat profile 6 → 4 GiB (owner chose 4, not 3) on branch
+`chore/teamchat-vm-4g` (`7532964d`, worktree `~/IuRoot/worktrees/teamchat-vm-3g`, not pushed: push it with the EP
+prefix the repo uses, open the MR, review, merge; the owner does not review MRs); macOS 26.7.2 on the mini (the Wave 10
+reboot proof passed: `hc-resume` brought all 6 sessions back); MacBook `make setup` green, opbackup under the launcher,
+classic cask shells and `penso/tap` removed; Claude Code 2.1.316 stamped. Still open here: the heartbeat WARNs
+(disk-sweep, drift-check, vps-pg-backup, usage-tracker failing, claude-accounts-keepalive flapping), `statusline/iu`
+"no statusline sample in 24 h but 18 sessions ran" (check the `fetch_usage.py` → `claude-account record` path), argo
+behind origin/master (`make deploy` in argo once its owner's work is not mid-flight), and these audit findings:
+- the picker applies 5 h logic to the Ultra plan, which has no 5 h limit (`lib/claude-accounts.ts` SESSION_MAX/SOFT_MAX
+  for every account); registry plan names `max20x`/`max5x` vs the new tiers (Max, Ultra); a frozen 5 h sample is kept by
+  `mergeSample`.
+- classic herdr fallbacks still in other repos (dead code calling a removed binary): shutterflow `scripts/fleet/*`,
+  agent-workflows `fleet/collect.ts`, iris `adapters/herdr-worlds.ts` + `compose.ts` (`HERDR_SOCKET`), sy-serendipity,
+  software-factory hook `HERDR_PANE_ID` fallback, prometheus-epx `SubprocessHerdr` (its hc port is on branch
+  `ep-xxxxx/chat-evals-hc` `0c7b1993`, not pushed: push, MR, merge). Each repo's own conventions; iris and
+  software-factory have live agents from Wave 10, coordinate through `rd say`, don't edit their files under them.
+- remove the `software-factory-w2` worktree, the dangling mini `~/.local/bin/herdr-app` symlink to `/tmp/w4ak`;
+  `hc-raw-input` agent recheck; decide hc-resume for the MacBook.
+
 Role `wave`. Memory note `mini-maintenance-window.md`; the classic herdr upgrade step is moot (delete it from the
 note).
 
@@ -487,6 +522,8 @@ note).
   classic, and the verified state of both machines. Update the memory note.
 
 ## Wave 10 — the owner's next work, then the reboot (owner-timed)            <!-- status: pending -->
+**2026-11-01, owner's session:** the macOS update ran (26.7.2) and the after-reboot checklist passed (cores under the launcher after the Wave 8 race fix by hand, factory `make verify` green, `hc-resume` 6/6, logins 0 FAIL through the core). The two prompts are started by the owner's session too; this wave only confirms them and writes the final report.
+
 Role `wave`. The last wave: it spawns no further wave. Owner 2026-10-31: the mini macOS update happens **much later**,
 so nothing here waits for it.
 
