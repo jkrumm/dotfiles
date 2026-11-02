@@ -35,7 +35,7 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 24 : 26);
+const rowHeight = ({ tree }) => (tree ? 20 : 22);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
@@ -447,7 +447,7 @@ export default class Spaces extends View {
   compact({ w, i }, t) {
     return h_flex()
       .id(`space-${w.id}`)
-      .h(26)
+      .h(22)
       .flex_none()
       .justify_center()
       .gap(4)
