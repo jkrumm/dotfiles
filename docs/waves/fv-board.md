@@ -10,7 +10,7 @@ colour cleanup).
 ## Wave 1 — The queue's read and the board on `/fleet`            <!-- status: pending -->
 - [x] `ask-human.sh list --json` (id, text, cmd, askedAt, ageSeconds, state), stable for the factory to read; tested hermetic like the rest
   of `human-queue-test`. Lands first: the factory's FV Wave 1 reads it.
-- [ ] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec; the
+- [ ] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec **with the token** (`secrets-run run --env-file=<the factory's .env.tpl> -- factory fleet`): `/fleet` is token-only, because the socket is every pane's and IuRoot text must not reach an agent's model; the
   `PLAN.md` grep and its parser go. Layout A, repos with plan and sessions, asks on top.
 
 ## Wave 2 — Actions and the away card            <!-- status: pending -->
