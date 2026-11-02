@@ -177,7 +177,7 @@ cs() {
 # stay for `agw`, OpenCode and Hermes (`oc`) — never for development sessions. `claude_iu`
 # (headless `claude -p` on IU) is gone too: no headless claude (docs/agent-platform.md).
 
-# `oc` — OpenCode on the IU endpoint, both routes. The second lane next to `cx`:
+# `oc` — OpenCode, both routes (gateway on the mini, IU direct on the MacBook). The second lane next to `cx`:
 # it reads the same AGENTS.md, ~/.claude/CLAUDE.md and ~/.claude/skills,
 # and gets the always-on rules through `instructions` in config/opencode/opencode.json
 # (→ ~/.config/opencode/opencode.json), which holds only {env:IU_*} placeholders —
@@ -192,10 +192,25 @@ cs() {
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
 # lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
 # so the key never rides argv or an ssh hop.
+#
+# Where the mini has a door token for caller `oc`, OpenCode goes through the local
+# inference gateway (same paths as IU, spends Claude credit first, records every
+# request); the token is read with zsh builtins only, so it never rides an argv.
+# No `oc=` line (the MacBook has no such file) → IU direct, the only working path
+# there until a tailnet door exists.
 _oc_env() {
-  local key base
-  key=$(_codex_secret claude-sdk-api-key op://common/anthropic/API_KEY)
-  base=$(_codex_secret claude-sdk-base-url op://common/anthropic/BASE_URL)
+  local key base line tokens="$HOME/.agent-workflows/data/door-tokens"
+  if [[ -r "$tokens" ]]; then
+    for line in "${(@f)$(<"$tokens")}"; do
+      [[ "$line" == oc=* ]] && key=${line#oc=}
+    done
+  fi
+  if [[ -n "$key" ]]; then
+    base=http://127.0.0.1:7794/anthropic
+  else
+    key=$(_codex_secret claude-sdk-api-key op://common/anthropic/API_KEY)
+    base=$(_codex_secret claude-sdk-base-url op://common/anthropic/BASE_URL)
+  fi
   if [[ -z "$key" || -z "$base" ]]; then
     print -ru2 "oc: IU credentials unresolvable — run 'make setup' in dotfiles"
     return 1

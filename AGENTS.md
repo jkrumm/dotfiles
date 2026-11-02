@@ -410,7 +410,7 @@ declarations) lives in `~/SourceRoot/dotfiles-private`; full model in its
 `docs/{design,runbook,security-review}.md`. Ops via **`/secrets`**.
 
 **Keychain-cached by `make setup`:** `CLAUDE_SDK_API_KEY` + `CLAUDE_SDK_BASE_URL`
-(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `oc`. `ANTHROPIC_API_KEY` is intentionally
+(from `op://common/anthropic/{API_KEY,BASE_URL}`) — the IU creds behind `cx` and, on the MacBook, `oc` (the mini's `oc` uses the gateway door token instead). `ANTHROPIC_API_KEY` is intentionally
 **never exported**: Claude Code falls back to the Max subscription when the key is
 absent, and exporting it bills API credits instead.
 
@@ -430,7 +430,7 @@ startup — `source ~/.zshrc` after editing.
 | `claude` (bare, interactive zsh) | Max subscription, account from `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set | what the resume hook types into a terminal; `-p`, subcommands and non-interactive shells never pick |
 | `c` / `ch` | Max subscription | Opus, effort medium / high |
 | `cs` / `cf` | Max subscription | Sonnet high / Fable medium; the four fill the app's + menu |
-| `oc` | OpenCode on the IU endpoint — OpenAI route (`iu/…`) + Anthropic route (`anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `anthropic/…` id) |
+| `oc` | OpenCode — the local inference gateway on the mini (door token of caller `oc`), IU direct on the MacBook; OpenAI route (`iu/…`, `iu-responses/…`) + Anthropic route (`iu-anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `iu-anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
 | `rd wave` | Max, via the core's keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 

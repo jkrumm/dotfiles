@@ -97,8 +97,8 @@ every turn.
 }
 ```
 
-Provider wiring (verified 2026-09-24): `anthropic` → `{env:IU_ANTHROPIC_BASE}/v1`
-for Claude ids, and `iu` (`"npm": "@ai-sdk/openai-compatible"`) →
+Provider wiring (verified 2026-09-24): `iu-anthropic` → `{env:IU_ANTHROPIC_BASE}/v1`
+for Claude ids (`_oc_env` points that at the local gateway on the mini, IU direct on the MacBook), and `iu` (`"npm": "@ai-sdk/openai-compatible"`) →
 `{env:IU_OPENAI_BASE}` for the default DeepSeek id (per-model
 `options.reasoningEffort` + `variants`). Both keys are `{env:IU_KEY}` — env
 substitution keeps the host out of git. Full block: `config/opencode/opencode.json`.
