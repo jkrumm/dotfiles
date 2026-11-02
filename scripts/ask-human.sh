@@ -270,7 +270,7 @@ push_request() {
 
   if (( rc != 0 )) || [[ -z "$out" ]]; then
     note "push $id: could not reach $MAC_HOST or got no response (ssh rc=$rc) — request stays pending, run 'make human-queue' on the MacBook"
-    # Remembered for `list --json` (state "queued"); cleared when a result lands.
+    # Remembered for `list --json` (state "queued"); cleared when a result lands or a later push reaches the MacBook.
     : > "$QUEUE_DIR/$id.queued" 2>/dev/null || true
     return 69
   fi

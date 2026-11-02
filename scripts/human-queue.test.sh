@@ -288,10 +288,14 @@ else
   # Missing or malformed created: askedAt/ageSeconds fall back to the file's mtime.
   id4="$(bash "$AH" ask "no created" 2>/dev/null)"
   sed -i '' 's/"created":"[^"]*",//' "$QDIR/$id4.req"
+  assert_not_contains "list --json: created really removed for the fallback test" '"created"' "$(cat "$QDIR/$id4.req")"
   touch -t "$(date -v-1H +%Y%m%d%H%M.%S)" "$QDIR/$id4.req"
   out="$(bash "$AH" list --json)"
   assert_eq "list --json: no created -> mtime askedAt is ISO UTC" "true" "$(jq --arg id "$id4" '.[] | select(.id == $id) | .askedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' <<<"$out")"
   assert_eq "list --json: no created -> ageSeconds from mtime (~1h)" "true" "$(jq --arg id "$id4" '.[] | select(.id == $id) | .ageSeconds | (. >= 3600 and . < 3660)' <<<"$out")"
+  sed -i '' 's/"text":/"created":"not-a-date","text":/' "$QDIR/$id4.req"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: malformed created -> mtime askedAt, not the junk" "true" "$(jq --arg id "$id4" '.[] | select(.id == $id) | .askedAt | test("^[0-9]{4}-")' <<<"$out")"
   rm -f "$QDIR/$id4.req"
 
   # A result hides the request, and clears its queued marker.
