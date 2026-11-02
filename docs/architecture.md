@@ -275,12 +275,12 @@ and the reseed trigger: `dotfiles-private/docs/design.md`.
 
 **IU and Anthropic keys.** The personal IU key and the three Claude Console API keys
 (`op://mini/claude-platform/`) resolve through `secrets-run` into the inference gateway's
-process only (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server and `ocr`, Hermes,
+process (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server and `ocr`, Hermes,
 `oc` and modelpick hold no provider key: each reaches every model through the gateway
 (`127.0.0.1:7794`) with its own door token from `~/.agent-workflows/data/door-tokens`
 (mode 0600, a caller per line, never in a repo or a log). `~/.config/agw/iu.env` is no
 longer read. Claude Code (subscription logins) and Athena Teamchat (its own team key)
-never pass through it. Money flow and pool picking: agent-workflows `docs/gateway.md`;
+never pass through it. The Codex lane (`cx`, `cxa`, `astra`) is the other holder of the personal IU key: its launcher (`config/zsh/codex.zsh`) resolves it for codex. Money flow and pool picking: agent-workflows `docs/gateway.md`;
 the registry the pools come from: `docs/claude-accounts.md` §Platform.
 
 ## Monitoring (Uptime Kuma on homelab)
@@ -318,13 +318,13 @@ Every push monitor has `maxretries: 1` with `retry_interval = min(interval, 1 h)
 
 Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
 
-**The inference gateway has no monitor of its own.** agent-workflows' `make verify`
+**The inference gateway has no Kuma monitor of its own.** agent-workflows' `make verify`
 probes it (its `/health` at the deployed build, then real Haiku calls through it with
 their `source='gateway'` rows); `/health` also reports the ledger (unsynced,
-quarantined), each pool's meter and its last reconcile error. Hermes' liveness
-monitor checks the Hermes process and Slack, not the gateway: a gateway outage shows
-there only as failing Hermes turns. Every model call from the mini depends on it; a Kuma door
-entry for `:7794/health` would close the gap.
+quarantined), each pool's meter and its last reconcile error. Hermes' liveness check
+(`scripts/inference-gateway-check.sh`) withholds its heartbeat when the gateway's
+`/health` is not ok or its `hermes` door token is refused, and Hermes' `make verify`
+checks both: a gateway outage turns the `Hermes Agent - Push` monitor red.
 
 ## Pinning policy
 
