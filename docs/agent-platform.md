@@ -104,7 +104,7 @@ The only headless runs, kept on purpose:
 
 ## Where API tokens are spent
 
-One place: the **inference gateway** (`agent-workflows/packages/gateway`, loopback `:7794`, LaunchAgent
+The **inference gateway** (`agent-workflows/packages/gateway`, loopback `:7794`, LaunchAgent
 `com.jkrumm.agent-workflows-gateway`). It holds the personal IU key and one API key per Claude Console org
 (`iu`, `me`, `me2`); `agw`, its OpenCode server and `ocr`, Hermes, dotfiles `oc` and modelpick hold none and reach every model
 through it with their own door token (`~/.agent-workflows/data/door-tokens`). The three subscriptions grant a monthly API
@@ -112,6 +112,9 @@ credit that expires unspent otherwise; a Claude call spends the soonest-expiring
 and Athena Teamchat stay outside it, and a Claude-Code-shaped request never uses a credit org. Every request is one
 `usage.records` row (`source='gateway'`) and one pick row. Design: agent-workflows `docs/gateway.md`; pools and their
 state: `docs/claude-accounts.md` §Platform; where the keys live: `docs/architecture.md` §Secrets flow.
+
+The one exception is the Codex lane (`cx`, `cxa`, `astra`): its launcher still resolves the personal IU key itself
+(`config/zsh/codex.zsh`) and codex calls IU directly.
 
 Development sessions still run on the Max subscriptions only (`rd`, Herdr); the gateway serves workflow steps, review,
 research, Hermes and `oc`.
