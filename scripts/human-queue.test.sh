@@ -280,6 +280,20 @@ else
   assert_eq "list --json: unreachable push -> state queued" "queued" "$(jq -r --arg id "$id1" '.[] | select(.id == $id) | .state' <<<"$out")"
   assert_eq "list --json: an unpushed request stays pending" "pending" "$(jq -r --arg id "$id3" '.[] | select(.id == $id) | .state' <<<"$out")"
 
+  # A later push that reaches the MacBook (even unanswered) is no longer "queued".
+  PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=TIMEOUT bash "$AH" push "$id1" >/dev/null 2>&1
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: a push that reaches the MacBook clears queued" "pending" "$(jq -r --arg id "$id1" '.[] | select(.id == $id) | .state' <<<"$out")"
+
+  # Missing or malformed created: askedAt/ageSeconds fall back to the file's mtime.
+  id4="$(bash "$AH" ask "no created" 2>/dev/null)"
+  sed -i '' 's/"created":"[^"]*",//' "$QDIR/$id4.req"
+  touch -t "$(date -v-1H +%Y%m%d%H%M.%S)" "$QDIR/$id4.req"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: no created -> mtime askedAt is ISO UTC" "true" "$(jq --arg id "$id4" '.[] | select(.id == $id) | .askedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' <<<"$out")"
+  assert_eq "list --json: no created -> ageSeconds from mtime (~1h)" "true" "$(jq --arg id "$id4" '.[] | select(.id == $id) | .ageSeconds | (. >= 3600 and . < 3660)' <<<"$out")"
+  rm -f "$QDIR/$id4.req"
+
   # A result hides the request, and clears its queued marker.
   printf '{"id":%s,"status":"done","exit":0,"ran_at":"2026-09-14T00:00:00Z","output_tail":""}\n' "$(json_escape "$id1")" > "$QDIR/$id1.res"
   out="$(bash "$AH" list --json)"

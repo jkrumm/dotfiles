@@ -271,7 +271,7 @@ push_request() {
   if (( rc != 0 )) || [[ -z "$out" ]]; then
     note "push $id: could not reach $MAC_HOST or got no response (ssh rc=$rc) — request stays pending, run 'make human-queue' on the MacBook"
     # Remembered for `list --json` (state "queued"); cleared when a result lands.
-    : > "$QUEUE_DIR/$id.queued"
+    : > "$QUEUE_DIR/$id.queued" 2>/dev/null || true
     return 69
   fi
 
@@ -283,6 +283,9 @@ push_request() {
     note "push $id: response id mismatch (got '$resp_id') — ignoring, request stays pending"
     return 69
   fi
+
+  # The MacBook answered (even "unanswered"), so it is no longer unreachable.
+  rm -f "$QUEUE_DIR/$id.queued"
 
   case "$resp_status" in
     done|failed|denied)
@@ -325,7 +328,10 @@ iso_to_epoch() {
 # an escape sequence in the text) fails the command instead of dropping a row.
 # askedAt is the request's own `created`; ageSeconds counts from it (the file's
 # mtime stands in when `created` is missing or malformed). state is "queued"
-# once a push found the MacBook unreachable (the .queued marker), else "pending".
+# once a push found the MacBook unreachable (the .queued marker, dropped when
+# any later push reaches it), else "pending"; consumers ignore unknown states.
+# [] is an empty queue; a non-zero exit with empty stdout is a read failure.
+# BSD date/stat only (macOS), like the rest of this script.
 cmd_list_json() {
   ensure_queue_dir
   local f now rows="" sep=""
