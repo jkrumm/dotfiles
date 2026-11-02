@@ -553,6 +553,7 @@ hook only fires when that push could not resolve the request.
 | Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--no-push]` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
 | Inspect own request | `ask-human.sh list [--json]` / `status <id>` | mini |
+| Answer a request without the MacBook (the fleet view's resolve / deny); never runs its command | `ask-human.sh resolve <id> --as done\|denied\|superseded [--note <text>]` | mini |
 | Drain | `make human-queue` (walks each pending request) · `-list` · `-count` · `-show/-run/-deny ID=<id>` | MacBook |
 | Dialog trigger target (not for interactive use) | `human-queue.sh gui-run` (request JSON on stdin) | MacBook, invoked over ssh by `push` |
 

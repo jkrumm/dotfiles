@@ -329,6 +329,84 @@ bash "$AH" list --json --bogus >/dev/null 2>&1
 assert_eq "list --json --bogus: exit 2" "2" "$?"
 
 echo ""
+echo "ask-human.sh resolve — the owner's answer without the MacBook"
+rm -rf "$QDIR"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  (jq missing — skipping resolve assertions)"
+else
+  marker="$TMP/resolve-ran"
+  rid="$(bash "$AH" ask "resolve me" --cmd "touch $marker")"
+  out="$(bash "$AH" resolve "$rid" --as "done" --note "did it by hand" 2>&1)"; rc=$?
+  assert_eq "resolve --as done: rc 0" "0" "$rc"
+  res="$(cat "$QDIR/$rid.res")"
+  assert_eq "resolve done: one-line result" "1" "$(printf '%s\n' "$res" | grep -c .)"
+  assert_eq "resolve done: status done" "done" "$(jq -r .status <<<"$res")"
+  assert_eq "resolve done: exit 0" "0" "$(jq -r .exit <<<"$res")"
+  assert_eq "resolve done: resolvedAs" "done" "$(jq -r .resolvedAs <<<"$res")"
+  assert_eq "resolve done: resolvedNote" "did it by hand" "$(jq -r .resolvedNote <<<"$res")"
+  assert_eq "resolve done: id matches" "$rid" "$(jq -r .id <<<"$res")"
+  assert_eq "resolve done: result mode 600" "600" "$(stat -f %Lp "$QDIR/$rid.res")"
+  assert_eq "resolve: the request's command never ran" "no" "$([[ -e "$marker" ]] && echo yes || echo no)"
+  assert_eq "resolve: no temp file left behind" "0" "$(find "$QDIR" -name '.*res.*' | wc -l | tr -d ' ')"
+  assert_not_contains "resolve: resolved request is out of list" "$rid" "$(bash "$AH" list --json)"
+  assert_contains "status shows resolvedAs" '"resolvedAs":"done"' "$(bash "$AH" status "$rid")"
+  assert_contains "status shows resolvedNote" 'did it by hand' "$(bash "$AH" status "$rid")"
+
+  err="$(bash "$AH" resolve "$rid" --as denied 2>&1)"; rc=$?
+  assert_eq "second resolve: refused with rc 2" "2" "$rc"
+  assert_contains "second resolve: says why in a line" "already has a result" "$err"
+  assert_eq "second resolve: result untouched" "done" "$(jq -r .resolvedAs "$QDIR/$rid.res")"
+
+  for as in denied superseded; do
+    rid="$(bash "$AH" ask "resolve as $as" --cmd "touch $marker")"
+    : > "$QDIR/$rid.queued"
+    bash "$AH" resolve "$rid" --as "$as" >/dev/null 2>&1; rc=$?
+    assert_eq "resolve --as $as: rc 0" "0" "$rc"
+    res="$(cat "$QDIR/$rid.res")"
+    assert_eq "resolve $as: status denied (not run)" "denied" "$(jq -r .status <<<"$res")"
+    assert_eq "resolve $as: resolvedAs" "$as" "$(jq -r .resolvedAs <<<"$res")"
+    assert_eq "resolve $as: no note is null" "null" "$(jq -c .resolvedNote <<<"$res")"
+    assert_eq "resolve $as: queued marker dropped" "no" "$([[ -e "$QDIR/$rid.queued" ]] && echo yes || echo no)"
+    assert_eq "resolve $as: command never ran" "no" "$([[ -e "$marker" ]] && echo yes || echo no)"
+  done
+
+  # A note with quotes/newlines round-trips.
+  rid="$(bash "$AH" ask "tricky note")"
+  tricky=$'said "no" \\ and\nmore'
+  bash "$AH" resolve "$rid" --as superseded --note "$tricky" >/dev/null 2>&1
+  assert_eq "resolve: tricky note round-trips" "$tricky" "$(jq -r .resolvedNote "$QDIR/$rid.res")"
+
+  err="$(bash "$AH" resolve "20260914T000099-1" --as "done" 2>&1)"; rc=$?
+  assert_eq "resolve unknown id: rc 2" "2" "$rc"
+  assert_contains "resolve unknown id: one line naming it" "no such request" "$err"
+  bash "$AH" resolve "not-an-id" --as "done" >/dev/null 2>&1
+  assert_eq "resolve malformed id: rc 2" "2" "$?"
+  rid="$(bash "$AH" ask "bad args")"
+  bash "$AH" resolve "$rid" >/dev/null 2>&1
+  assert_eq "resolve without --as: rc 2" "2" "$?"
+  bash "$AH" resolve "$rid" --as maybe >/dev/null 2>&1
+  assert_eq "resolve --as maybe: rc 2" "2" "$?"
+  bash "$AH" resolve "$rid" --as "done" --bogus >/dev/null 2>&1
+  assert_eq "resolve --bogus: rc 2" "2" "$?"
+  assert_eq "resolve bad args: request still pending" "no" "$([[ -e "$QDIR/$rid.res" ]] && echo yes || echo no)"
+
+  # A waiting `ask --wait` caller sees a denied resolve as not run (rc 1), a done one as rc 0.
+  for pair in "denied:1" "superseded:1" "done:0"; do
+    as="${pair%%:*}"; want="${pair##*:}"
+    outf="$TMP/wait-$as.out"
+    bash "$AH" ask "waiting caller $as" --cmd "touch $marker" --wait 30 > "$outf" 2>&1 &
+    wpid=$!
+    for _ in $(seq 1 50); do [[ -s "$outf" ]] && break; sleep 0.1; done
+    wid="$(head -1 "$outf")"
+    bash "$AH" resolve "$wid" --as "$as" >/dev/null 2>&1
+    wait "$wpid"; wrc=$?
+    assert_eq "waiting ask sees resolve $as as rc $want" "$want" "$wrc"
+    assert_contains "waiting ask prints the result line ($as)" "\"resolvedAs\":\"$as\"" "$(cat "$outf")"
+  done
+  assert_eq "waiting callers: command never ran" "no" "$([[ -e "$marker" ]] && echo yes || echo no)"
+fi
+
+echo ""
 [[ "$fail" -eq 0 ]] \
   && { echo "✓ human-queue: all $pass assertion(s) passed"; exit 0; } \
   || { echo "✗ human-queue: $fail of $((pass + fail)) assertion(s) failed"; exit 1; }

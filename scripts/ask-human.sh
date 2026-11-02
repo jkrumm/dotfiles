@@ -415,6 +415,74 @@ cmd_status() {
   return 0
 }
 
+# The owner's answer to a request without the MacBook (the factory's fleet view
+# calls this; dotfiles stays the queue's only writer). Writes <id>.res the way a
+# real answer is written (temp, chmod, then publish) but NEVER runs the request's
+# command. `done` = satisfied by other means, status done / exit 0. `denied` and
+# `superseded` both read as "not run": status denied, so a waiting `ask --wait`
+# caller gets the refused-request code (1) and human-queue.sh/push read it like
+# a dialog Deny; resolvedAs keeps which of the two it was. Publishing uses a
+# hard link, which fails when <id>.res exists, so two racing resolves (or one
+# racing a real answer) cannot both win. Exit 2 with one line on any refusal.
+cmd_resolve() {
+  local id="" as="" note_text="" have_note=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as)
+        [[ $# -ge 2 ]] || { note "error: --as requires done|denied|superseded"; exit 2; }
+        as="$2"; shift 2 ;;
+      --note)
+        [[ $# -ge 2 ]] || { note "error: --note requires a value"; exit 2; }
+        note_text="$2"; have_note=1; shift 2 ;;
+      --*) note "error: unknown argument to resolve: $1"; exit 2 ;;
+      *)
+        [[ -z "$id" ]] || { note "error: resolve takes one <id> (got extra: $1)"; exit 2; }
+        id="$1"; shift ;;
+    esac
+  done
+  [[ -n "$id" ]] || { note "error: resolve requires <id> --as done|denied|superseded [--note <text>]"; exit 2; }
+  case "$as" in
+    done|denied|superseded) ;;
+    *) note "error: resolve requires --as done|denied|superseded"; exit 2 ;;
+  esac
+  [[ "$id" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] || { note "error: invalid request id: $id"; exit 2; }
+
+  ensure_queue_dir
+  [[ -f "$QUEUE_DIR/$id.req" ]] || { note "error: no such request: $id"; exit 2; }
+  [[ -f "$QUEUE_DIR/$id.res" ]] && { note "error: request $id already has a result"; exit 2; }
+
+  local status="done" exit_json="0" tail_text="resolved as done without running the command"
+  if [[ "$as" != "done" ]]; then
+    status="denied"
+    exit_json="null"
+    tail_text="resolved as $as, the command was not run"
+  fi
+  local note_json="null"
+  (( have_note )) && note_json="$(json_escape "$note_text")"
+
+  local res_file="$QUEUE_DIR/$id.res" tmp_file
+  tmp_file="$(mktemp "$QUEUE_DIR/.${id}.res.XXXXXX")"
+  {
+    printf '{'
+    printf '"id":%s,' "$(json_escape "$id")"
+    printf '"status":"%s",' "$status"
+    printf '"exit":%s,' "$exit_json"
+    printf '"ran_at":%s,' "$(json_escape "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+    printf '"output_tail":%s,' "$(json_escape "$tail_text")"
+    printf '"resolvedAs":"%s",' "$as"
+    printf '"resolvedNote":%s' "$note_json"
+    printf '}\n'
+  } > "$tmp_file"
+  chmod 600 "$tmp_file"
+  if ! ln "$tmp_file" "$res_file" 2>/dev/null; then
+    rm -f "$tmp_file"
+    note "error: request $id already has a result"
+    exit 2
+  fi
+  rm -f "$tmp_file" "$QUEUE_DIR/$id.queued"
+  printf 'resolved %s as %s\n' "$id" "$as"
+}
+
 usage() {
   cat <<'EOF'
 ask-human.sh — enqueue present-human work from the mini (or any machine)
@@ -445,7 +513,15 @@ Usage:
                               ageSeconds, state}; state is "pending", or
                               "queued" once a push found the MacBook
                               unreachable. An unknown flag exits 2.
-  ask-human.sh status <id>    Print a request, and its result if one exists.
+  ask-human.sh status <id>    Print a request, and its result if one exists
+                              (a resolved one carries resolvedAs/resolvedNote).
+  ask-human.sh resolve <id> --as done|denied|superseded [--note <text>]
+                              The owner's answer without the MacBook. Writes the
+                              result; NEVER runs the request's command. done =
+                              satisfied by other means (exit 0); denied and
+                              superseded read as "not run" (a waiting caller
+                              exits 1, like a dialog Deny). Exit 2 and one line
+                              when the id is unknown or already has a result.
   ask-human.sh help           This message.
 
 Queue root: ${XDG_STATE_HOME:-$HOME/.local/state}/human-queue/
@@ -462,6 +538,7 @@ main() {
     push) shift; cmd_push "$@" ;;
     list) shift; cmd_list "$@" ;;
     status) shift; cmd_status "$@" ;;
+    resolve) shift; cmd_resolve "$@" ;;
     help|-h|--help) usage ;;
     *) die "unknown subcommand: $sub (see: ask-human.sh help)" ;;
   esac
