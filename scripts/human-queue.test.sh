@@ -234,6 +234,83 @@ assert_eq "local push, Deny: rc 1" "1" "$rc"
 export HUMAN_QUEUE_PUSH=0
 
 echo ""
+echo "ask-human.sh list --json — the machine read"
+
+# Fresh queue so earlier sections' requests don't leak in.
+QDIR="$STATE/human-queue"
+rm -rf "$QDIR"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  (jq missing — skipping list --json assertions)"
+else
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: empty queue is []" "[]" "$out"
+
+  id1="$(bash "$AH" ask "plain request" --cmd "echo hi")"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: one request, one row" "1" "$(jq 'length' <<<"$out")"
+  assert_eq "list --json: id" "$id1" "$(jq -r '.[0].id' <<<"$out")"
+  assert_eq "list --json: text" "plain request" "$(jq -r '.[0].text' <<<"$out")"
+  assert_eq "list --json: cmd as stored" "echo hi" "$(jq -r '.[0].cmd' <<<"$out")"
+  assert_eq "list --json: state pending" "pending" "$(jq -r '.[0].state' <<<"$out")"
+  assert_eq "list --json: askedAt is ISO 8601 UTC" "true" "$(jq '.[0].askedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' <<<"$out")"
+  assert_eq "list --json: ageSeconds is a small non-negative integer" "true" "$(jq '.[0].ageSeconds | (. >= 0 and . < 60 and . == floor)' <<<"$out")"
+
+  # askedAt is the request's own `created`; age counts from it.
+  past="$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)"
+  sed -i '' "s/\"created\":\"[^\"]*\"/\"created\":\"$past\"/" "$QDIR/$id1.req"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: askedAt echoes created" "$past" "$(jq -r '.[0].askedAt' <<<"$out")"
+  assert_eq "list --json: ageSeconds counts from created (~2h)" "true" "$(jq '.[0].ageSeconds | (. >= 7200 and . < 7260)' <<<"$out")"
+
+  # No cmd -> null; quotes, backslash, newline, tab, control byte round-trip.
+  tricky=$'say "hi" \\ back\nsecond line\ttab \001 ctl'
+  id2="$(bash "$AH" ask "$tricky")"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: tricky text round-trips exactly" "$tricky" "$(jq -r --arg id "$id2" '.[] | select(.id == $id) | .text' <<<"$out")"
+  assert_eq "list --json: no cmd is null" "null" "$(jq -c --arg id "$id2" '.[] | select(.id == $id) | .cmd' <<<"$out")"
+  tricky_cmd=$'printf "%s\\n" \'a\'\necho b'
+  id3="$(bash "$AH" ask "tricky cmd" --cmd "$tricky_cmd")"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: tricky cmd round-trips exactly" "$tricky_cmd" "$(jq -r --arg id "$id3" '.[] | select(.id == $id) | .cmd' <<<"$out")"
+
+  # A push that finds the MacBook unreachable marks the request queued.
+  PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=unreachable-host bash "$AH" push "$id1" >/dev/null 2>&1
+  assert_eq "push to an unreachable MacBook: rc 69" "69" "$?"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: unreachable push -> state queued" "queued" "$(jq -r --arg id "$id1" '.[] | select(.id == $id) | .state' <<<"$out")"
+  assert_eq "list --json: an unpushed request stays pending" "pending" "$(jq -r --arg id "$id3" '.[] | select(.id == $id) | .state' <<<"$out")"
+
+  # A result hides the request, and clears its queued marker.
+  printf '{"id":%s,"status":"done","exit":0,"ran_at":"2026-09-14T00:00:00Z","output_tail":""}\n' "$(json_escape "$id1")" > "$QDIR/$id1.res"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: request with a result is absent" "0" "$(jq --arg id "$id1" '[.[] | select(.id == $id)] | length' <<<"$out")"
+
+  # Mid-write requests (the dotted temp file ask/mv uses) are never seen.
+  printf '{"id":"half","text":"par' > "$QDIR/.20260914T000001-1.req.AbC123"
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json: half-written temp file is absent" "2" "$(jq 'length' <<<"$out")"
+  assert_eq "list --json: output stays valid JSON" "true" "$(jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1 && echo true || echo false)"
+
+  # write_local_result drops the queued marker.
+  : > "$QDIR/$id3.queued"
+  PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" push "$id3" >/dev/null 2>&1
+  assert_eq "result written: queued marker removed" "no" "$([[ -e "$QDIR/$id3.queued" ]] && echo yes || echo no)"
+fi
+
+echo ""
+echo "ask-human.sh list — plain output unchanged, flags validated"
+rm -rf "$QDIR"
+assert_eq "list: empty queue prints the usual line" "no pending requests" "$(bash "$AH" list)"
+id="$(bash "$AH" ask "plain listing")"
+out="$(bash "$AH" list)"
+assert_contains "list: tab row carries the id" "$id" "$out"
+assert_not_contains "list: no JSON in plain output" '{"id"' "$out"
+bash "$AH" list --bogus >/dev/null 2>&1
+assert_eq "list --bogus: exit 2" "2" "$?"
+bash "$AH" list --json --bogus >/dev/null 2>&1
+assert_eq "list --json --bogus: exit 2" "2" "$?"
+
+echo ""
 [[ "$fail" -eq 0 ]] \
   && { echo "✓ human-queue: all $pass assertion(s) passed"; exit 0; } \
   || { echo "✗ human-queue: $fail of $((pass + fail)) assertion(s) failed"; exit 1; }

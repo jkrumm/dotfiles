@@ -8,7 +8,7 @@ colour cleanup).
 **Gate:** `make check` green, `/review` with findings fixed, `make deploy`, the mod reloaded in the app, a screenshot per wave.
 
 ## Wave 1 — The queue's read and the board on `/fleet`            <!-- status: pending -->
-- [ ] `ask-human.sh list --json` (id, title, command, askedAt, state), stable for the factory to read; tested hermetic like the rest
+- [x] `ask-human.sh list --json` (id, text, cmd, askedAt, ageSeconds, state), stable for the factory to read; tested hermetic like the rest
   of `human-queue-test`. Lands first: the factory's FV Wave 1 reads it.
 - [ ] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec; the
   `PLAN.md` grep and its parser go. Layout A, repos with plan and sessions, asks on top.

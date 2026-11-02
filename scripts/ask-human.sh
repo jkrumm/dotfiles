@@ -226,6 +226,7 @@ write_local_result() {
   printf '%s\n' "$result_json" > "$tmp_file"
   chmod 600 "$tmp_file"
   mv "$tmp_file" "$res_file"
+  rm -f "$QUEUE_DIR/$id.queued"
 }
 
 # Triggers the approval itself: ssh to the MacBook (its own dedicated,
@@ -269,6 +270,8 @@ push_request() {
 
   if (( rc != 0 )) || [[ -z "$out" ]]; then
     note "push $id: could not reach $MAC_HOST or got no response (ssh rc=$rc) — request stays pending, run 'make human-queue' on the MacBook"
+    # Remembered for `list --json` (state "queued"); cleared when a result lands.
+    : > "$QUEUE_DIR/$id.queued"
     return 69
   fi
 
@@ -312,7 +315,61 @@ cmd_push() {
   push_request "$id"
 }
 
+# Epoch seconds of an ISO 8601 UTC timestamp (BSD date, like the stat -f below); empty on a malformed one.
+iso_to_epoch() {
+  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || true
+}
+
+# One JSON array on stdout, every request with no result yet. All-or-nothing:
+# the array is assembled first, so a request json_field cannot read (no jq and
+# an escape sequence in the text) fails the command instead of dropping a row.
+# askedAt is the request's own `created`; ageSeconds counts from it (the file's
+# mtime stands in when `created` is missing or malformed). state is "queued"
+# once a push found the MacBook unreachable (the .queued marker), else "pending".
+cmd_list_json() {
+  ensure_queue_dir
+  local f now rows="" sep=""
+  now="$(date +%s)"
+  for f in "$QUEUE_DIR"/*.req; do
+    [[ -e "$f" ]] || continue
+    local id
+    id="$(basename "$f" .req)"
+    [[ -f "$QUEUE_DIR/$id.res" ]] && continue
+    local json text cmd_value created asked_epoch asked_at age state cmd_json="null"
+    json="$(cat "$f")"
+    text="$(json_field "$json" text)" || return 1
+    cmd_value="$(json_field "$json" cmd)" || return 1
+    created="$(json_field "$json" created)" || return 1
+    asked_epoch="$(iso_to_epoch "$created")"
+    if [[ -n "$asked_epoch" ]]; then
+      asked_at="$created"
+    else
+      asked_epoch="$(stat -f %m "$f" 2>/dev/null || echo "$now")"
+      asked_at="$(date -u -r "$asked_epoch" +%Y-%m-%dT%H:%M:%SZ)"
+    fi
+    age=$(( now - asked_epoch ))
+    (( age < 0 )) && age=0
+    state=pending
+    [[ -e "$QUEUE_DIR/$id.queued" ]] && state=queued
+    [[ -n "$cmd_value" ]] && cmd_json="$(json_escape "$cmd_value")"
+    rows+="$sep{\"id\":$(json_escape "$id"),\"text\":$(json_escape "$text"),\"cmd\":$cmd_json,\"askedAt\":$(json_escape "$asked_at"),\"ageSeconds\":$age,\"state\":\"$state\"}"
+    sep=","
+  done
+  printf '[%s]\n' "$rows"
+}
+
 cmd_list() {
+  local as_json=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) as_json=1; shift ;;
+      *) note "error: unknown argument to list: $1 (usage: ask-human.sh list [--json])"; exit 2 ;;
+    esac
+  done
+  if (( as_json )); then
+    cmd_list_json
+    return
+  fi
   ensure_queue_dir
   local f found=0
   for f in "$QUEUE_DIR"/*.req; do
@@ -377,7 +434,11 @@ Usage:
                               timed out or the command was too long to show —
                               request stays pending), 69 on an ssh failure or
                               an unparseable response (also stays pending).
-  ask-human.sh list           List pending requests (no result yet).
+  ask-human.sh list [--json]  List pending requests (no result yet). --json: one
+                              array on stdout of {id, text, cmd, askedAt,
+                              ageSeconds, state}; state is "pending", or
+                              "queued" once a push found the MacBook
+                              unreachable. An unknown flag exits 2.
   ask-human.sh status <id>    Print a request, and its result if one exists.
   ask-human.sh help           This message.
 
