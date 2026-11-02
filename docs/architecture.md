@@ -58,7 +58,7 @@ which validates geometry before it delivers.
 | `argo` | Personal API + dashboard, the agent backbone | hosts the `/agents` overview + narratives feed; runs natively here since 2026-10-30 (`com.jkrumm.argo`, `~/.argo/releases/<sha>`, `make deploy` in the repo), shared Postgres database `shared` (schema `argo`, reads `usage`); still served at `argo.jkrumm.com`. The VPS containers are stopped (rollback kept) |
 | `hermes-agent` | Hermes gateway — the narrate / answer / route front door (`docs/agent-platform.md`); files work as a GitHub issue (nothing works it automatically), 5-job cron layer | see [[agent-platform]] |
 | `warden` | **Switched off 2026-10-27** (agent-workflows P0) — reference only. Was the autonomous triage/remediation loop and the only ledger (`~/.warden/warden.db`, final backup in `homelab:hdd/backups/warden-final/`). No LaunchAgent, no port, no caller; alerts go straight to Slack. Docs: `warden/DESIGN.md`, `warden/STATE.md`. Unattended work is `rd wave` |
-| `agent-workflows` | The agent platform (public repo; concept in its `docs/concept.md`). Two processes from one release dir: the host, HTTP on `127.0.0.1:7791`, and the audio process on `:7792`, unauthenticated `GET /health` (200 `ok` / 503 `degraded`), everything else bearer-gated | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` |
+| `agent-workflows` | The agent platform (public repo; concept in its `docs/concept.md`). Three processes: the host (HTTP on `127.0.0.1:7791`) and the audio process (`:7792`) from one release dir, and the inference gateway (`:7794`, own bundle). `GET /health` is unauthenticated (200 `ok` / 503 `degraded`), everything else bearer-gated. The gateway holds every provider key on the mini; agw itself holds none (§Secrets flow) | runs natively here from a release dir `~/.agent-workflows/releases/<sha>` (`current` symlink; origin/master exported by `make deploy`, never the main checkout) — `com.jkrumm.agent-workflows-host` and `com.jkrumm.agent-workflows-audio` run from it, the host via its `scripts/launch.sh` (zsh wrapper, `secrets-run`, `bun packages/host/src/main.ts`); store is Postgres database `agent_workflows` (journal schema `agw`) on the mini's maintained instance; CLI `~/.local/bin/agw` → `~/.agent-workflows/current/packages/cli/bin/agw.ts` |
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
@@ -176,7 +176,7 @@ the weatherorb session workflow.
 | `com.jkrumm.agent-workflows-host` | agent-workflows | KeepAlive (:7791, loopback) |
 | `com.jkrumm.argo` | argo | KeepAlive (:7737, loopback) — the live Argo since 2026-10-30, from `~/.argo/releases/<sha>`, crons on; Caddy doors `argo-live.test` and `argo.jkrumm.com` (extra FQDN door); health for Kuma through the Kuma door `/h/argo` |
 | `com.jkrumm.agent-workflows-audio` | agent-workflows | KeepAlive (:7792; audio process, same release dir as the host) |
-| `com.jkrumm.agent-workflows-gateway` | agent-workflows | KeepAlive (:7794, loopback) — the inference gateway, same release dir as the host |
+| `com.jkrumm.agent-workflows-gateway` | agent-workflows | KeepAlive (:7794, loopback) — the inference gateway (`packages/gateway`, `gateway/<build>/` under `~/.agent-workflows`, not the release dir; restarted by a deploy only when its build changed). The one process that holds provider keys: the personal IU key and one API key per Claude Console org (`iu`, `me`, `me2`, from `config/claude-accounts.json` `platform` blocks, `docs/claude-accounts.md`). Callers present a door token from `~/.agent-workflows/data/door-tokens`; its own SQLite ledger is the outbox for `usage.records`. Claude Code and Athena Teamchat stay outside it |
 | `com.jkrumm.research-chrome` | agent-workflows | KeepAlive — headed Chrome with DevTools on loopback `:9222` and its own profile under `~/.local/share/research-chrome`; the browser `agw web fetch` falls back to for pages a plain client cannot read (`make research-chrome` in agent-workflows) |
 | `com.jkrumm.iris` | iris | KeepAlive (:7730, loopback) |
 | `com.jkrumm.iris-deploy` | iris | 120s — deploy-on-push poller (CI-green and idle gated) |
@@ -274,6 +274,16 @@ source of truth.
 `secrets-run` resolves `op://` refs at runtime, in memory. Full model, tiering
 and the reseed trigger: `dotfiles-private/docs/design.md`.
 
+**IU and Anthropic keys.** The personal IU key and the three Claude Console API keys
+(`op://mini/claude-platform/`) resolve through `secrets-run` into the inference gateway's
+process only (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server and `ocr`, Hermes,
+`oc` and modelpick hold no provider key: each reaches every model through the gateway
+(`127.0.0.1:7794`) with its own door token from `~/.agent-workflows/data/door-tokens`
+(mode 0600, a caller per line, never in a repo or a log). `~/.config/agw/iu.env` is no
+longer read. Claude Code (subscription logins) and Athena Teamchat (its own team key)
+never pass through it. Money flow and pool picking: agent-workflows `docs/gateway.md`;
+the registry the pools come from: `docs/claude-accounts.md` §Platform.
+
 ## Monitoring (Uptime Kuma on homelab)
 
 Push for the composite and the jobs — the ACL grants `tag:homelab → tag:vps` but
@@ -308,6 +318,14 @@ Uptime Kuma.
 Every push monitor has `maxretries: 1` with `retry_interval = min(interval, 1 h)`, so a flake does not page and time-to-DOWN stays ≈ interval. Backstops (Brain Sync, Collie, Hermes Serve) run at a 4 h interval.
 
 Declarative source: `homelab/uptime-kuma/monitors.yaml` (`make uk-sync`).
+
+**The inference gateway has no monitor of its own.** agent-workflows' `make verify`
+probes it (its `/health` at the deployed build, then real Haiku calls through it with
+their `source='gateway'` rows); `/health` also reports the ledger (unsynced,
+quarantined), each pool's meter and its last reconcile error. Hermes' liveness
+monitor checks the Hermes process and Slack, not the gateway: a gateway outage shows
+there only as failing Hermes turns. Every model call from the mini depends on it; a Kuma door
+entry for `:7794/health` would close the gap.
 
 ## Pinning policy
 

@@ -85,8 +85,8 @@ inline.
   Raise a worker only for novel hard logic, and say why.
 - **Development runs on the Max subscriptions only** — Herdr sessions, `rd work|wave|fan`,
   every implementation session. Near the limit: the picker switches account, else pause
-  (`rd` refuses to spill); never IU API tokens. IU tokens are for `agw`, OpenCode and
-  Hermes; use the launchers, never hand-rolled Keychain creds. No headless `claude -p` anywhere
+  (`rd` refuses to spill); never IU API tokens. IU and Claude API tokens live only in
+  the agw inference gateway; `agw`, OpenCode, Hermes, `oc` and modelpick reach them through it, never hand-rolled Keychain creds. No headless `claude -p` anywhere
   (`docs/agent-platform.md` lists the only two exceptions); `hooks/iu-model-guard.ts` still
   blocks Opus/Fable on any metered endpoint.
 - Don't switch the orchestrator's model mid-session (cache invalidation).

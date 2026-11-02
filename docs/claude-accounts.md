@@ -496,9 +496,17 @@ human queue and its Slack notification, as every `ask-human` request does.
 
 **Platform (API credit) block**
 
-Each account may carry a `platform` block: the API credit its subscription grants, read by the agent-workflows inference gateway (Wave 2; `agent-workflows/docs/gateway.md` §Picking a pool). The picker, launchers and statusline ignore it.
+Each account may carry a `platform` block: the API credit its subscription grants, read by the agent-workflows inference gateway (`agent-workflows/docs/gateway.md` §Picking a pool). The picker, launchers and statusline ignore it.
 
-The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), granted to one linked Console organization, expiring at the end of that subscription's billing cycle (no rollover). It pays API keys of the linked org only (Messages, Batches, Agent SDK), never interactive Claude Code, which stays on the subscription. No API returns the balance, so the gateway meters itself. All three Console orgs carry no payment method and a monthly spend limit equal to the credit, so a drained pool refuses and never bills.
+The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), granted to one linked Console organization, expiring at the end of that subscription's billing cycle (no rollover). It pays API keys of the linked org only (Messages, Batches, Agent SDK), never interactive Claude Code, which stays on the subscription and outside the gateway. No API returns the balance, so the gateway meters itself and reconciles against the Admin API. All three Console orgs carry no payment method and a monthly spend limit equal to the credit, so a drained pool refuses and never bills.
+
+The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one API key per enabled pool plus the personal IU key. A Claude request from agw, its OpenCode server, `ocr`, Hermes, `oc` or modelpick goes to the soonest-expiring eligible pool, else to IU; a Claude-Code-shaped request never goes to a pool. Each request is one `usage.records` row `source='gateway'` (`billing='api_credit'`, `account` = the pool, on credit) plus a `usage.gateway_picks` row. usage-tracker's credit pass fills `usage.platform_cost` from the Admin API and closes `usage.credit_cycles` per cycle (metered, reconciled, unspent); Argo's usage page shows the payers `iu-credit`, `me-credit`, `me2-credit` and a Credits tab.
+
+| Pool | Credit | `cycleDay` | State |
+|-|-|-|-|
+| `iu` | Ultra $200 | 21 | enabled |
+| `me` | Max $100 | 27 | enabled |
+| `me2` | Max $100 | `null` (unknown) | **disabled until its keys are seeded** |
 
 | Field | Meaning |
 |-|-|
@@ -509,13 +517,13 @@ The credit: one per subscription (Ultra $200 `iu`, Max $100 `me`, `me2`), grante
 | `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
 | `adminKeyRef` | `op://` ref of the org's Admin key, for reconciling the meter against the cost API |
 
-**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. Refs live in `op://mini/claude-platform/` (`API_KEY_<ID>`, `ADMIN_KEY_<ID>`). `iu` and `me` are enabled with real keys. `me2` stays `enabled: false`: its keys are a `REPLACE` placeholder until its claim window opens (about 2026-11-02).
+**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. Refs live in `op://mini/claude-platform/` (`API_KEY_<ID>`, `ADMIN_KEY_<ID>`). `iu` and `me` are enabled with real keys. `me2` stays `enabled: false`: its keys are a `REPLACE` placeholder until the owner seeds them. The gateway reads this file only at start, so every edit to it needs `launchctl kickstart -k gui/$(id -u)/com.jkrumm.agent-workflows-gateway` (a gateway deploy does not restart it when its build is unchanged).
 
 **Enable `me2` (owner steps):**
 
 1. Replace the placeholder `API_KEY_ME2` / `ADMIN_KEY_ME2` in `op://mini/claude-platform/` with the real keys of the linked Console org (no payment method on file: a drained org then refuses instead of billing), then `make secrets-seed`.
-2. Fill `cycleDay` with the credit's expiry day from Console → Billing.
-3. Set `platform.enabled` to `true`.
+2. Fill `cycleDay` with the credit's expiry day from Console → Billing (the credit's expiry, not the payment day; `null` meters a rolling 31 days).
+3. Set `platform.enabled` to `true`, then restart the gateway: `launchctl kickstart -k gui/$(id -u)/com.jkrumm.agent-workflows-gateway`. `curl -s 127.0.0.1:7794/health` lists `me2` under `pools` with `eligible: true`.
 
 **Troubleshooting**
 
