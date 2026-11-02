@@ -10,7 +10,8 @@ const block = (name: string) => {
   if (!m) throw new Error(`jk-board: no <${name}> block`)
   return m
 }
-const lib = new Function(`${block("tree")}\n${block("fleet")}; return { parseFleet, sortAsks, oneLine, age, assemble, sessionKind }`)() as {
+const lib = new Function(`${block("tree")}\n${block("fleet")}; return { parse, parseFleet, sortAsks, oneLine, age, assemble, sessionKind }`)() as {
+  parse: (stdout: string) => { fleet: Fleet | null; hc: { address: string }[] | null }
   parseFleet: (text: string) => Fleet | null
   sortAsks: (asks: Ask[]) => Ask[]
   oneLine: (text: string, max?: number) => string
@@ -38,6 +39,16 @@ test("parseFleet reads the model and refuses anything else", () => {
   expect(lib.parseFleet(JSON.stringify({ error: "not_ready" }))).toBeNull()
   expect(lib.parseFleet('{"repos": [')).toBeNull()
   expect(lib.parseFleet("")).toBeNull()
+})
+
+test("the poll splits on the marker line only, so forged text cannot cut the fleet part", () => {
+  const fleet = JSON.stringify({ repos: [], asks: [{ id: "a", text: "@@HC@@" }] })
+  const hc = JSON.stringify({ terminals: [{ address: "t1" }] })
+  const both = lib.parse(`${fleet}\n\n@@HC@@\n${hc}\n`)
+  expect(both.fleet?.asks).toHaveLength(1)
+  expect(both.hc?.map((t) => t.address)).toEqual(["t1"])
+  expect(lib.parse(`${fleet}\n`).hc).toBeNull() // hc did not answer: the fleet part still reads
+  expect(lib.parse("").fleet).toBeNull()
 })
 
 test("the owner's asks come first, each group oldest first", () => {
@@ -75,7 +86,7 @@ test("repos sort into shown, paused and planned from the plan's state; a finishe
       R("live", "running", [W(1, "active")], [S("live-w1", "working", "t1")]),
       R("idlesession", "done", [W(1, "done")], [S("idle-1", "idle", "t2")]),
       R("stale", "stale", [W(1, "active")]),
-      R("recent", "planned", [W(1, "active")]), // an active wave touched lately, nobody on it
+      R("recent", "planned", [W(1, "active")]), // an active wave the model has not called stale, nobody on it
       R("ahead", "planned", [W(1, "pending")]),
       R("later", "scheduled", [W(1, "scheduled")]),
       R("finished", "done", [W(1, "done")]),
