@@ -44,10 +44,10 @@ test("parseFleet reads the model and refuses anything else", () => {
   expect(lib.parseFleet("")).toBeNull()
 })
 
-test("the module's constants load and the command ends with the marker and hc", () => {
+test("the module's constants load and the command reads the fleet, then the marker, then hc", () => {
   expect(lib.CMD).toContain("factory fleet --format json")
-  expect(lib.CMD).toContain("echo '@@HC@@'")
-  expect(lib.CMD).not.toContain("factory --format json status")
+  expect(lib.CMD.indexOf("factory fleet")).toBeLessThan(lib.CMD.indexOf("echo '@@HC@@'"))
+  expect(lib.CMD.indexOf("echo '@@HC@@'")).toBeLessThan(lib.CMD.indexOf("hc ls --json"))
 })
 
 test("the poll splits on the marker line only, so forged text cannot cut the fleet part", () => {
@@ -56,7 +56,10 @@ test("the poll splits on the marker line only, so forged text cannot cut the fle
   const both = lib.parse(`${fleet}\n\n@@HC@@\n${hc}\n`)
   expect(both.fleet?.asks).toHaveLength(1)
   expect(both.hc?.map((t) => t.address)).toEqual(["t1"])
-  expect(lib.parse(`${fleet}\n`).hc).toBeNull() // hc did not answer: the fleet part still reads
+  const alone = lib.parse(`${fleet}\n`) // hc did not answer: the fleet part, with its forged marker text, still reads
+  expect(alone.fleet?.asks).toHaveLength(1)
+  expect(alone.hc).toBeNull()
+  expect(lib.parse(`\n\n@@HC@@\n${hc}\n`).hc).toHaveLength(1) // fleet printed nothing: the marker still splits
   expect(lib.parse("").fleet).toBeNull()
 })
 
