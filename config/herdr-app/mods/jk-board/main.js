@@ -1,26 +1,27 @@
-// jk-board — the right-hand sidebar, two tabs. Waves (default): ongoing wave work across the
-// mini's repos. Uptime: an Uptime Kuma overview from Argo's /uptime-kuma/monitors, read on the
-// mini with secrets-run (the token never reaches argv), grouped by parent group. jk-status
-// switches it to Uptime through shared("jk.board.tab"). Read-only.
-// Waves:  Every 30 s one call on the mini reads software-factory's `status` (sessions
-// and spawn queue) and every repo's docs/waves/PLAN.md headings. A repo shows while a
-// live session runs in it or a spawn is queued; an active plan nobody works on waits in a
-// collapsed "Paused" section, one with only pending waves in "Planned", finished plans are hidden. Repos sit under
-// the left sidebar's folders (config/herdr-app/groups.json). Click a card to open it.
-// Hidden children: a tab row lists the terminals that hang under it (hc's `parent`, one `hc ls` per
-// poll) as a tree: name, status, turn. Click a child for its last lines (`hc read`, on demand).
+// jk-board — the right-hand sidebar, two tabs. Waves (default): the fleet view of the mini's agent work.
+// Uptime: an Uptime Kuma overview from Argo's /uptime-kuma/monitors, read on the mini with secrets-run (the
+// token never reaches argv), grouped by parent group. jk-status switches it to Uptime through
+// shared("jk.board.tab"). Read-only.
+// Waves:  Every 30 s one call on the mini reads software-factory's fleet model (`factory fleet`, token only:
+// the socket never serves it) and hc's turn counts. The model holds the repos with their plan and sessions
+// and everything waiting on the owner; this file collects nothing of its own. Asks sit on top (count in the
+// tab badge; the owner's own first, then by time), then the repos that have a live session or a queued spawn
+// under the left sidebar's folders (config/herdr-app/groups.json). A plan nobody works with an active wave waits in a collapsed
+// "Paused" section, one with only waves ahead in "Planned"; finished plans are hidden. Click a card to
+// open it, an ask or a session to jump to its agent.
+// Hidden children: a tab row lists the terminals that hang under it (the model's `parent`) as a tree: name,
+// state, turn (hc's, one `hc ls` per poll). Click a child for its last lines (`hc read`, on demand).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, home, machines, shared, setShared, run, terminals } from "herdr";
 
-const FACTORY = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory --format json status`;
-const PLANS = `for f in ~/SourceRoot/*/docs/waves/PLAN.md ~/IuRoot/*/docs/waves/PLAN.md; do [ -f "$f" ] && { echo "== $f"; grep -E '^# |^## Wave'; } < "$f"; done`;
-const MARK = "@@PLANS@@";
+// The token comes from the factory's own env template through secrets-run, never argv; `factory fleet` exits 3 without one.
+const FLEET = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory fleet --format json`;
 const HC_MARK = "@@HC@@";
 // hc starts a stray core (no keychain) when none runs: ask launchd first, as rd's require_core does. Bounded when the host has a timeout.
 const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; launchctl print "gui/$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -q 'state = running' || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
-const CMD = `{ ${FACTORY}; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null; echo; echo '${MARK}'; { ${PLANS}; } 2>/dev/null`;
+const CMD = `{ ${FLEET}; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
 const PEEK_LINES = 8;
 const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${addr} 2>&1) || { echo "(hc read failed)"; exit 1; }; printf '%s\\n' "$out" | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
@@ -35,29 +36,6 @@ const POLL_MS = 30000;
 const STALE_MS = 2 * 60000;
 const GROUPS = ".config/herdr-app/groups.json";
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
-
-// The repo a path or a session id belongs to: the folder under SourceRoot/IuRoot, else the
-// id's prefix before its wave suffix ("dotfiles-w1" -> "dotfiles").
-function repoOf(cwd, id) {
-  const m = /\/(?:SourceRoot|IuRoot)\/([^/]+)/.exec(cwd ?? "");
-  if (m) return m[1];
-  return String(id ?? "").replace(/-[wf]\d.*$/, "") || null;
-}
-
-function parsePlans(text) {
-  const plans = {};
-  let repo = null;
-  for (const line of text.split("\n")) {
-    const file = /^== .*\/(?:SourceRoot|IuRoot)\/([^/]+)\/docs\/waves\/PLAN\.md/.exec(line);
-    if (file) { repo = file[1]; plans[repo] = { title: null, waves: [] }; continue; }
-    if (!repo) continue;
-    const plan = plans[repo];
-    const wave = /^## Wave\s+(\d+)\s*[—–-]\s*(.*?)\s*(?:<!--\s*status:\s*(\w+)[^>]*-->)?\s*$/.exec(line);
-    if (wave) plan.waves.push({ n: Number(wave[1]), name: wave[2], status: wave[3] ?? "pending" });
-    else if (line.startsWith("# ") && plan.title === null) plan.title = line.slice(2).trim();
-  }
-  return plans;
-}
 
 // <tree> pure helpers (scripts/jk-board-tree.test.ts runs this block on its own: no imports, no gpui)
 const ADDR = /^t[0-9a-z]+$/;
@@ -120,75 +98,98 @@ function nestedPanes(panes, terminals) {
   }
   return nested;
 }
-
-// A terminal's own state as a row kind: hc knows working / blocked, everything else rests.
-function hcKind(t) {
-  if (t.status === "blocked") return "needs";
-  return t.status === "working" ? "working" : "idle";
-}
 // </tree>
 
-function parse(stdout) {
-  const [head, tail = ""] = stdout.split(MARK);
-  const [factoryText, hcText = ""] = head.split(HC_MARK);
-  let factory = null;
-  try {
-    const f = JSON.parse(factoryText);
-    if (f && Array.isArray(f.sessions)) factory = f;
-  } catch {}
-  return { factory, hc: parseHc(hcText), plans: parsePlans(tail) };
-}
+// <fleet> pure helpers over the fleet model (scripts/jk-board-fleet.test.ts runs this block after the tree block: no imports, no gpui)
+const PENDING_SPAWN = new Set(["queued", "waiting", "starting"]);
 
 // Most urgent first. wait=owner means the session needs a person.
 const RANK = { needs: 0, working: 1, waiting: 2, idle: 3 };
 function sessionKind(s) {
-  if (s.state === "blocked" || s.wait === "owner") return "needs";
-  if (s.state === "working") return "working";
-  if (s.state === "waiting") return "waiting";
+  if (s.state === "blocked" || s.state === "stuck" || s.wait === "owner") return "needs";
+  if (s.state === "working" || s.state === "starting") return "working";
+  if (s.state === "waiting" || s.state === "walled") return "waiting";
   return "idle";
 }
 
-// repo -> { plan, sessions, spawns }, then the shown ones and the planned ones.
-function assemble(data) {
-  const repos = {};
-  const get = (name) => (repos[name] ??= { name, plan: null, sessions: [], all: [], spawns: [] });
-  for (const [name, plan] of Object.entries(data.plans)) get(name).plan = plan;
-  const live = (data.factory?.sessions ?? []).filter((s) => s.state !== "dead");
-  // Nested only under a parent in the same repo's card; a child of another repo's session keeps its own card too.
-  const byRepo = new Map();
-  for (const s of live) {
-    const name = repoOf(s.cwd, s.id);
-    if (name && s.pane) byRepo.set(name, [...(byRepo.get(name) ?? []), s.pane]);
+// `factory fleet --format json` -> the model, or null when it is not that (an error body, a cut line, a 503).
+function parseFleet(text) {
+  try {
+    const d = JSON.parse(text);
+    return d && Array.isArray(d.repos) && Array.isArray(d.asks) ? d : null;
+  } catch {
+    return null;
   }
-  const nestedIn = new Map([...byRepo].map(([name, panes]) => [name, nestedPanes(panes, data.hc)]));
-  for (const s of live) {
-    const name = repoOf(s.cwd, s.id);
-    if (!name) continue;
-    const session = { ...s, kind: sessionKind(s) };
-    const r = get(name);
-    r.all.push(session); // the repo's dot and count see every session, nested or not
-    if (!nestedIn.get(name)?.has(s.pane)) r.sessions.push(session);
-  }
-  const spawns = data.factory?.queue?.spawns ?? [];
-  for (const q of Array.isArray(spawns) ? spawns : []) {
-    const name = repoOf(q.cwd ?? q.repo, q.id ?? q.spawn ?? q.name);
-    if (name) get(name).spawns.push(q);
+}
+
+const isYours = (a) => (a.tier ?? "yours") === "yours";
+const time = (iso) => Date.parse(iso) || 0;
+
+// The owner's own asks first, then the rest; each group by time, oldest first.
+function sortAsks(asks) {
+  return [...asks].sort((a, b) => Number(!isYours(a)) - Number(!isYours(b)) || time(a.at) - time(b.at) || String(a.id).localeCompare(String(b.id)));
+}
+
+// An ask's text on one line.
+function oneLine(text, max = 140) {
+  const flat = String(text ?? "").replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+function age(iso, now = Date.now()) {
+  const ms = now - Date.parse(iso);
+  if (!(ms >= 0)) return "";
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`;
+}
+
+// The model's repos -> cards, in the shown ones (a live session, a queued spawn, a running plan), the paused ones (an active wave
+// nobody works) and the planned ones. A finished plan nobody works is dropped. `hc` is hc's terminal list, for the turn counts only.
+// kids / byTerminal feed the child tree: the model's `parent` names the parent session, hc's addresses link them.
+function assemble(fleet, hc) {
+  const everyone = [...fleet.repos.flatMap((r) => r.sessions ?? []), ...(fleet.unplaced ?? [])];
+  const byId = new Map(everyone.map((s) => [s.id, s]));
+  const turns = new Map((hc ?? []).map((t) => [t.address, t.turn]));
+  const terms = everyone.filter((s) => ADDR.test(String(s.terminal)))
+    .map((s) => ({ address: s.terminal, parent: byId.get(s.parent)?.terminal ?? null, name: s.id, turn: turns.get(s.terminal) }));
+  const byTerminal = new Map(everyone.filter((s) => s.terminal).map((s) => [s.terminal, { ...s, kind: sessionKind(s) }]));
+  const spawns = new Map();
+  for (const q of fleet.queue?.spawns ?? []) {
+    if (PENDING_SPAWN.has(q.status)) spawns.set(q.space, [...(spawns.get(q.space) ?? []), q]);
   }
   const shown = [], paused = [], planned = [];
-  for (const r of Object.values(repos)) {
-    const waves = r.plan?.waves ?? [];
-    r.active = waves.find((w) => w.status === "active") ?? null;
-    r.done = waves.filter((w) => w.status === "done").length;
-    r.sessions.sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));
-    r.all.sort((a, b) => RANK[a.kind] - RANK[b.kind]);
-    r.kind = r.all[0]?.kind ?? null;
-    if (r.all.length || r.spawns.length) shown.push(r);
-    else if (r.active) paused.push(r);
-    else if (waves.some((w) => w.status === "pending")) planned.push(r);
+  for (const repo of fleet.repos) {
+    // Nested only under a parent in the same repo's card; a child of another repo's session keeps its own card too.
+    const all = (repo.sessions ?? []).map((s) => ({ ...s, kind: sessionKind(s) }))
+      .sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));
+    const nested = nestedPanes(all.map((s) => s.terminal).filter(Boolean), terms);
+    const waves = repo.plan?.waves ?? [];
+    const active = waves.find((w) => w.status === "active") ?? null;
+    const r = {
+      name: repo.name, plan: repo.plan, waves, active, all,
+      focus: active ?? waves.find((w) => w.status === "scheduled") ?? null,
+      done: waves.filter((w) => w.status === "done").length,
+      sessions: all.filter((s) => !s.terminal || !nested.has(s.terminal)),
+      spawns: spawns.get(repo.space) ?? [],
+      kind: all[0]?.kind ?? null,
+    };
+    const state = repo.plan?.state;
+    if (all.length || r.spawns.length || state === "running") shown.push(r);
+    else if (state === "stale" || (active && state !== "done")) paused.push(r);
+    else if (state === "planned" || state === "scheduled") planned.push(r);
   }
   const order = (a, b) => (RANK[a.kind] ?? 4) - (RANK[b.kind] ?? 4) || a.name.localeCompare(b.name);
   const byName = (a, b) => a.name.localeCompare(b.name);
-  return { shown: shown.sort(order), paused: paused.sort(byName), planned: planned.sort(byName) };
+  return { shown: shown.sort(order), paused: paused.sort(byName), planned: planned.sort(byName), kids: childMap(terms), byTerminal, bySession: byId };
+}
+// </fleet>
+
+function parse(stdout) {
+  const cut = stdout.lastIndexOf(HC_MARK);
+  return { fleet: parseFleet(cut < 0 ? stdout : stdout.slice(0, cut)), hc: cut < 0 ? null : parseHc(stdout.slice(cut + HC_MARK.length)) };
 }
 
 // Hover text and the footer legend; the left sidebar's dots use the same colors.
@@ -203,12 +204,16 @@ const shortId = (id, repo) => (id.startsWith(repo) ? id.slice(repo.length).repla
 
 export default class Board extends View {
   init(_props, cx) {
-    this.data = null; // last good parse
+    this.fleet = null; // last good fleet model
     this.at = 0; // when it was read
+    this.tried = false; // a poll has ended, good or not
     this.polling = false;
-    this.hcAt = 0; // when hc last answered: children of an old answer are not shown
+    this.hc = null; // hc's terminals, for the turn counts
+    this.hcAt = 0; // when hc last answered: turns of an old answer are not shown
     this.peeks = new Map(); // child address -> { lines, at } once opened; absent = closed
-    this.sessionByPane = new Map(); // pane -> factory session, for the names and roles in a tree
+    this.byTerminal = new Map(); // terminal address -> fleet session, for the names and states in a tree
+    this.bySession = new Map(); // session id -> fleet session, for an ask's jump
+    this.kids = new Map(); // parent terminal -> its children
     this.tab = localStorage.getItem("board.tab") === "uptime" ? "uptime" : "waves";
     this.seenTab = null; // last shared("jk.board.tab") adopted
     this.uptime = null; // last good Argo answer
@@ -266,13 +271,16 @@ export default class Board extends View {
     cx.spawn(async (cx) => {
       const r = await exec("sh", ["-c", CMD], { on: "mini" }).catch(() => null);
       this.polling = false;
+      this.tried = true;
       const next = r?.stdout ? parse(r.stdout) : null;
-      // Keep the last good data; a missing factory answer keeps the old sessions.
-      if (next?.factory || next?.hc || (next && Object.keys(next.plans).length)) {
-        // hc and the factory are separate answers: each keeps its last good one.
-        this.data = { factory: next.factory ?? this.data?.factory ?? null, hc: next.hc ?? this.data?.hc ?? null, plans: next.plans };
-        if (next.factory) this.at = Date.now();
-        if (next.hc) this.hcAt = Date.now();
+      // hc and the fleet model are separate answers: each keeps its last good one.
+      if (next?.fleet) {
+        this.fleet = next.fleet;
+        this.at = Date.now();
+      }
+      if (next?.hc) {
+        this.hc = next.hc;
+        this.hcAt = Date.now();
       }
       for (const addr of this.peeks.keys()) this.readPeek(addr, cx);
       cx.notify();
@@ -309,34 +317,47 @@ export default class Board extends View {
     return { needs: t.blocked, working: t.working, waiting: t.working, idle: t.dim }[kind] ?? t.dim;
   }
 
-  dot(t, kind, size = 7) {
+  dot(t, kind, size = 7, hint = true) {
     // Filled for needs you / working, a ring for waiting (amber: busy through its workers) and idle.
     const live = kind === "needs" || kind === "working";
-    return div().size(size).flex_none().rounded(size / 2).when(Boolean(MEANING[kind]), (d) => d.tooltip(MEANING[kind]))
+    return div().size(size).flex_none().rounded(size / 2).when(hint && Boolean(MEANING[kind]), (d) => d.tooltip(MEANING[kind]))
       .when(live, (d) => d.bg(this.tone(t, kind)))
       .when(!live, (d) => d.border_1().border_color(this.tone(t, kind)));
   }
 
+  // Jump to a session's agent; null while the app does not list its terminal (a row without one is not clickable).
+  jumpTo(s) {
+    const address = s?.terminal ? `mini/${s.terminal}` : null;
+    return address && terminals().some((x) => x.address === address) ? address : null;
+  }
+
+  // The digest's one line of where a session stands; nothing while the model has none (IuRoot's never do).
+  headline(t, s, indent) {
+    if (!s.headline) return [];
+    return [div().id(`wv-h-${s.id}`).pl(indent).pr(4).truncate().text_size(10.5).text_color(t.dim).tooltip(s.headline).child(s.headline)];
+  }
+
+  stateOf(s) {
+    return s.wait ? `${s.state} · ${s.wait}` : s.state;
+  }
+
   sessionRow(t, r, s) {
-    const what = s.wait ? `${s.state} · ${s.wait}` : s.state;
-    const address = s.pane ? `mini/${s.pane}` : null;
-    const reachable = Boolean(address) && terminals().some((x) => x.address === address);
+    const address = this.jumpTo(s);
     return h_flex().id(`wv-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5)
-      .when(reachable, (el) => el.cursor_pointer().hover((st) => st.bg(t.selected)).tooltip("Jump to this agent")
+      .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected)).tooltip("Jump to this agent")
         .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: address }); }))
       .child(this.dot(t, s.kind, 5))
       .child(div().flex_shrink(0).text_color(t.muted).child(s.role ?? "?"))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(shortId(s.id, r.name)))
-      .child(div().flex_none().text_color(s.kind === "needs" ? this.tone(t, "needs") : t.dim).child(what))
+      .child(div().flex_none().text_color(s.kind === "needs" ? this.tone(t, "needs") : t.dim).child(this.stateOf(s)))
       .when(Boolean(s.account), (el) => el.child(div().flex_none().text_color(t.dim).child(s.account)));
   }
 
-  // A hidden child under its tab row: name, status, turn. Its name and role come from the factory when it knows the pane.
+  // A hidden child under its tab row: name, state, turn. The model knows every one of them (its `parent` built the tree).
   childRow(t, { t: c, depth }) {
-    const s = this.sessionByPane.get(c.address);
-    const kind = s ? sessionKind(s) : hcKind(c);
-    const name = s ? s.id : c.name ?? c.address;
-    const what = `${c.status ?? c.state}${c.turn ? ` · t${c.turn}` : ""}`;
+    const s = this.byTerminal.get(c.address);
+    const kind = s ? s.kind : "idle";
+    const what = `${s ? this.stateOf(s) : "?"}${c.turn ? ` · t${c.turn}` : ""}`;
     const peek = this.peeks.get(c.address);
     const row = h_flex().id(`wv-c-${c.address}`).h(18).flex_none().gap(6).items_center().pl(10 + 12 * depth).text_size(11).cursor_pointer()
       .hover((e) => e.bg(t.hover))
@@ -345,46 +366,70 @@ export default class Board extends View {
       .tooltip("Click for its last lines")
       .child(this.dot(t, kind, 5))
       .when(Boolean(s?.role), (el) => el.child(div().flex_shrink(0).text_color(t.muted).child(s.role)))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(name))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(c.name))
       .child(div().flex_none().text_color(kind === "needs" ? this.tone(t, "needs") : t.dim).child(what));
-    if (!peek) return [row];
+    const head = s ? this.headline(t, s, 10 + 12 * depth + 11) : [];
+    if (!peek) return [row, ...head];
     const lines = peek.lines ?? ["…"];
-    return [row, v_flex().id(`wv-cp-${c.address}`).flex_none().pl(10 + 12 * depth + 11).pr(4).py(2)
+    return [row, ...head, v_flex().id(`wv-cp-${c.address}`).flex_none().pl(10 + 12 * depth + 11).pr(4).py(2)
       .children(lines.map((l, i) => div().id(`wv-cp-${c.address}-${i}`).truncate().text_size(10.5).text_color(t.dim).child(l)))];
   }
 
   spawnRow(t, q) {
-    const id = q.id ?? q.spawn ?? q.name ?? "spawn";
-    const why = q.hold ?? q.status ?? "queued";
-    return h_flex().id(`wv-q-${id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11)
+    return h_flex().id(`wv-q-${q.key}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11)
       .child(div().flex_shrink(0).text_color(t.dim).child("queued"))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(id))
-      .child(div().flex_none().text_color(t.dim).child(String(why)));
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(q.key))
+      .child(div().flex_none().text_color(t.dim).child(String(q.hold ?? q.status)));
   }
 
   card(t, r) {
     const open = this.open.has(r.name);
-    const waves = r.plan?.waves ?? [];
-    const total = waves.length;
-    const current = r.active ? waves.indexOf(r.active) + 1 : r.done;
-    const pending = waves.filter((w) => w.status === "pending");
+    const total = r.waves.length;
+    const current = r.active ? r.waves.indexOf(r.active) + 1 : r.done;
+    const pending = r.waves.filter((w) => w.status === "pending");
+    const title = r.plan ? r.plan.short ?? r.plan.title : null;
     return v_flex().id(`wv-${r.name}`).flex_none().px(8).py(5).gap(2).rounded(8).cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => this.toggle(this.open, r.name, "waves.open", cx))
       .child(h_flex().gap(7).items_center()
         .child(this.dot(t, r.kind))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).font_semibold().child(r.name))
+        .when(Boolean(r.plan), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(r.plan.state)))
         .when(total > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`Wave ${current}/${total}`)))
         .when(total === 0 && r.all.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${r.all.length} sessions`))))
-      .when(Boolean(r.plan?.title), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(r.plan.title)))
+      .when(Boolean(title), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(title)))
       .when(total > 0, (el) => el.child(div().ml(14).h(3).rounded(2).bg(t.hover).overflow_hidden()
         .child(div().h(3).rounded(2).bg(t.muted).w(`${Math.round((r.done / total) * 100)}%`))))
-      .when(Boolean(r.active), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.muted).child(r.active.name)))
+      .when(Boolean(r.focus), (el) => el.child(h_flex().pl(14).gap(6).text_size(11)
+        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`${r.focus.n} · ${r.focus.short ?? r.focus.title}`))
+        .child(div().flex_none().text_color(t.dim).child(r.focus.statusDate ? `${r.focus.status} ${r.focus.statusDate}` : r.focus.status))))
       .when(open, (el) => el.child(v_flex().mt(3).gap(1)
-        .children(pending.slice(0, 4).map((w) => div().id(`wv-w-${r.name}-${w.n}`).pl(10).truncate().text_size(11).text_color(t.dim).child(`${w.n} · ${w.name}`)))
-        .children(r.sessions.flatMap((s) => [this.sessionRow(t, r, s),
-          ...treeRows(this.kids ?? new Map(), s.pane).flatMap((row) => this.childRow(t, row))]))
+        .children(pending.slice(0, 4).map((w) => div().id(`wv-w-${r.name}-${w.n}`).pl(10).truncate().text_size(11).text_color(t.dim).child(`${w.n} · ${w.short ?? w.title}`)))
+        .children(r.sessions.flatMap((s) => [this.sessionRow(t, r, s), ...this.headline(t, s, 21),
+          ...treeRows(this.kids, s.terminal).flatMap((row) => this.childRow(t, row))]))
         .children(r.spawns.map((q) => this.spawnRow(t, q)))));
+  }
+
+  // One ask: the owner's own in the blocked tone, the rest muted. Text, repo (or where it came from), age; the tooltip has the rest.
+  askRow(t, a) {
+    const yours = isYours(a);
+    const address = this.jumpTo(this.bySession.get(a.session));
+    const tip = [oneLine(a.text, 600), a.suggestion ? `Suggested: ${a.suggestion.verb} — ${a.suggestion.why} (${a.suggestion.evidence})` : null]
+      .filter(Boolean).join("\n\n");
+    return h_flex().id(`wv-a-${a.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+      .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
+        .on_click((_e, cx) => run("agent.focus", { terminal: address })))
+      .child(this.dot(t, yours ? "needs" : "idle", 5, false))
+      .child(div().flex_1().min_w(0).truncate().text_color(yours ? t.foreground : t.muted).child(oneLine(a.short ?? a.text)))
+      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(a.repo ?? a.source))
+      .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(a.at)));
+  }
+
+  asks(t, asks) {
+    if (!asks.length) return [];
+    const folded = this.folded.has("asks");
+    const urgent = asks.some(isYours) ? "needs" : null;
+    return [this.header(t, "asks", "ASKS", asks.length, folded, urgent), ...(folded ? [] : asks.map((a) => this.askRow(t, a)))];
   }
 
   header(t, id, label, count, folded, urgent) {
@@ -416,12 +461,12 @@ export default class Board extends View {
     });
   }
 
-  summary(sessions, queue) {
-    const live = sessions.filter((s) => s.state !== "dead");
-    const running = live.filter((s) => s.state === "working").length;
-    const parts = [`${running} running`, `${live.length} live`];
-    if (queue?.spawns?.length) parts.push(`${queue.spawns.length} queued`);
-    if (queue?.effective) parts.push(`queue: ${queue.effective}`);
+  summary(fleet) {
+    const n = fleet.summary ?? {};
+    const queued = (fleet.queue?.spawns ?? []).filter((q) => PENDING_SPAWN.has(q.status)).length;
+    const parts = [`${n.working ?? 0} working`, `${(n.working ?? 0) + (n.idle ?? 0) + (n.done ?? 0)} live`];
+    if (queued) parts.push(`${queued} queued`);
+    if (fleet.queue?.effective) parts.push(`queue: ${fleet.queue.effective}`);
     return parts.join(" · ");
   }
 
@@ -451,6 +496,8 @@ export default class Board extends View {
 
   tabs(t) {
     const down = this.upStats().down.length;
+    const asks = this.fleet?.asks ?? [];
+    const urgent = asks.some(isYours);
     return h_flex().flex_none().px(8).pt(8).pb(2)
       .child(h_flex().flex_1().gap(2).p(2).rounded(8).bg(t.hover)
         .children(TABS.map(([id, label]) => {
@@ -461,7 +508,8 @@ export default class Board extends View {
             .when(!on, (el) => el.hover((s) => s.bg(t.selected)))
             .on_click((_e, cx) => this.setTab(id, cx))
             .child(label)
-            .when(id === "uptime" && down > 0, (el) => el.child(div().text_color(t.blocked).child(String(down))));
+            .when(id === "uptime" && down > 0, (el) => el.child(div().text_color(t.blocked).child(String(down))))
+            .when(id === "waves" && asks.length > 0, (el) => el.child(div().text_color(urgent ? t.blocked : t.dim).child(String(asks.length))));
         })));
   }
 
@@ -474,24 +522,30 @@ export default class Board extends View {
   }
 
   wavesView(t) {
-    const stale = this.at && Date.now() - this.at > STALE_MS;
-    const factory = this.data?.factory;
+    const fleet = this.fleet;
+    // Stale after STALE_MS without a good poll, or when the factory's own snapshot is that old.
+    const since = fleet ? Math.max(Date.now() - this.at, Date.now() - (Date.parse(fleet.builtAt) || this.at)) : 0;
+    const stale = fleet && since > STALE_MS;
     const fresh = this.hcAt && Date.now() - this.hcAt <= STALE_MS;
-    this.kids = childMap(fresh ? this.data?.hc : []);
-    const view = this.data ? { ...this.data, hc: fresh ? this.data.hc : [] } : null;
-    const { shown, paused, planned } = view ? assemble(view) : { shown: [], paused: [], planned: [] };
-    this.sessionByPane = new Map((factory?.sessions ?? []).filter((x) => x.pane).map((x) => [x.pane, { ...x }]));
-    const attention = factory?.attention?.length ?? 0;
+    const { shown, paused, planned, kids, byTerminal, bySession } = fleet
+      ? assemble(fleet, fresh ? this.hc : [])
+      : { shown: [], paused: [], planned: [], kids: new Map(), byTerminal: new Map(), bySession: new Map() };
+    this.kids = kids;
+    this.byTerminal = byTerminal;
+    this.bySession = bySession;
+    const asks = fleet ? sortAsks(fleet.asks) : [];
+    const errors = fleet?.errors ?? [];
+    const note = errors.length ? `fleet: ${oneLine(errors[0], 90)}${errors.length > 1 ? ` (+${errors.length - 1})` : ""}` : null;
     return v_flex().flex_1().min_h(0).text_size(13)
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
-        .child(h_flex().items_center().gap(8).text_size(11.5).text_color(t.dim)
-          .child(div().flex_1().child("Waves"))
-          .when(attention > 0, (el) => el.child(div().flex_none().text_color(t.blocked).child(`${attention} need you`))))
-        .when(Boolean(factory), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(this.summary(factory.sessions, factory.queue)))))
+        .child(div().text_size(11.5).text_color(t.dim).child("Waves"))
+        .when(Boolean(fleet), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(this.summary(fleet))))
+        .when(Boolean(note), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).tooltip(errors.map((e) => oneLine(e, 300)).join("\n")).child(note))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .when(Boolean(stale), (el) => el.opacity(0.5))
-        .when(!this.data, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("Loading…")))
-        .when(Boolean(this.data) && !shown.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No waves running")))
+        .when(!fleet, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.tried ? "No answer from the factory" : "Loading…")))
+        .when(Boolean(fleet) && !shown.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No waves running")))
+        .children(this.asks(t, asks))
         .children(this.folders(t, shown))
         .children(this.parked(t, "PAUSED", paused))
         .children(this.parked(t, "PLANNED", planned)))
@@ -503,7 +557,6 @@ export default class Board extends View {
     return this.legendRow(t, "wv", [
       ["working", t.working, "working", "Agent working"],
       ["blocked", t.blocked, "needs you", "Blocked, or waiting on the owner"],
-      ["done", t.done, "done", "Finished, not looked at yet (left sidebar)"],
       ["waiting", t.working, "waiting", "Waiting on its workers or a deploy", true],
       ["idle", t.dim, "idle", "Agent there, idle", true],
     ]);

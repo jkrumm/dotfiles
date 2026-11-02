@@ -7,12 +7,11 @@ import { join } from "node:path"
 const src = readFileSync(join(import.meta.dir, "../config/herdr-app/mods/jk-board/main.js"), "utf8")
 const block = /\/\/ <tree>[^\n]*\n([\s\S]*?)\/\/ <\/tree>/.exec(src)?.[1]
 if (!block) throw new Error("jk-board: no <tree> block")
-const tree = new Function(`${block}; return { parseHc, childMap, treeRows, nestedPanes, hcKind }`)() as {
+const tree = new Function(`${block}; return { parseHc, childMap, treeRows, nestedPanes }`)() as {
   parseHc: (text: string) => Term[] | null
   childMap: (terminals: Term[]) => Map<string, Term[]>
   treeRows: (kids: Map<string, Term[]>, root: string) => { t: Term; depth: number }[]
   nestedPanes: (panes: string[], terminals: Term[]) => Set<string>
-  hcKind: (t: Term) => string
 }
 
 interface Term { address: string; name?: string; parent?: string; status?: string; turn?: number }
@@ -52,11 +51,4 @@ test("every nested session is reachable from a tab row, and a cycle hides nobody
   const panes = ["t0", ...chain.map((t) => t.address)]
   for (const addr of tree.nestedPanes(panes, chain)) expect(shown.has(addr)).toBe(true)
   expect([...tree.nestedPanes(["a", "b"], [T("a", "b"), T("b", "a")])]).toEqual([])
-})
-
-test("hc's status becomes a row kind", () => {
-  expect(tree.hcKind(T("t1", undefined, { status: "working" }))).toBe("working")
-  expect(tree.hcKind(T("t1", undefined, { status: "blocked" }))).toBe("needs")
-  expect(tree.hcKind(T("t1", undefined, { status: "done" }))).toBe("idle")
-  expect(tree.hcKind(T("t1"))).toBe("idle")
 })
