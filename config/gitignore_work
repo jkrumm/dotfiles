@@ -1,0 +1,32 @@
+# ~/IuRoot repos: core.excludesfile from gitconfig-work. Git reads ONE excludes file, so this is
+# gitignore_global plus the work-only lines at the end; keep the first part equal to gitignore_global.
+
+# Claude Code per-repo AI files — never commit these
+sc-note.md
+sc-queue.md
+
+# temp file from an atomic sc-note.md write
+.sc-note.md.tmp
+
+# macOS
+.DS_Store
+
+# Claude Code runtime state (per-machine)
+.claude/worktrees/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# CLAUDE.local.md — Claude Code's officially-supported local override file (per-machine, not committed)
+CLAUDE.local.md
+
+# Editor
+.idea/
+*.iml
+.vscode/
+
+# Misc
+*.log
+.env.local
+
+# Work only: personal planning artifacts (rd wave plans) stay on disk, never in team repos.
+docs/waves/

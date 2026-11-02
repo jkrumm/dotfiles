@@ -1,5 +1,6 @@
 [core]
     autocrlf = input
+    excludesfile = ~/SourceRoot/dotfiles/config/gitignore_work
 [user]
     name = Johannes Krumm
     email = johannes.krumm@iu.org
