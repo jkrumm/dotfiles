@@ -17,6 +17,8 @@ import { exec, theme, home, machines, shared, setShared, run, terminals } from "
 
 // The token comes from the factory's own env template through secrets-run, never argv; `factory fleet` exits 3 without one.
 const FLEET = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory fleet --format json`;
+const HC_MARK = "@@HC@@";
+const HC_SPLIT = `\n${HC_MARK}\n`;
 // hc starts a stray core (no keychain) when none runs: ask launchd first, as rd's require_core does. Bounded when the host has a timeout.
 const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; launchctl print "gui/$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -q 'state = running' || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
@@ -185,12 +187,11 @@ function assemble(fleet, hc) {
   return { shown: shown.sort(order), paused: paused.sort(byName), planned: planned.sort(byName), kids: childMap(terms), byTerminal, bySession: byId };
 }
 
-// The poll's stdout: the fleet JSON, then hc's list behind a marker line. JSON text has no raw newline, so no ask text or hc name can
-// forge the marker line inside the fleet part.
-const HC_MARK = "@@HC@@";
+// The poll's stdout: the fleet JSON, then hc's list behind a marker line. A JSON string cannot hold a raw newline, so no line of the
+// fleet part (an ask's text, a session title) can equal the marker line.
 function parse(stdout) {
-  const cut = stdout.indexOf(`\n${HC_MARK}\n`);
-  return { fleet: parseFleet(cut < 0 ? stdout : stdout.slice(0, cut)), hc: cut < 0 ? null : parseHc(stdout.slice(cut + HC_MARK.length + 2)) };
+  const cut = stdout.indexOf(HC_SPLIT);
+  return { fleet: parseFleet(cut < 0 ? stdout : stdout.slice(0, cut)), hc: cut < 0 ? null : parseHc(stdout.slice(cut + HC_SPLIT.length)) };
 }
 // </fleet>
 
@@ -465,9 +466,8 @@ export default class Board extends View {
 
   summary(fleet) {
     const n = fleet.summary;
-    if (!n) return "no summary";
     const queued = (fleet.queue?.spawns ?? []).filter((q) => PENDING_SPAWN.has(q.status)).length;
-    const parts = [`${n.working} working`, `${n.working + n.idle + n.done} live`];
+    const parts = n ? [`${n.working ?? 0} working`, `${(n.working ?? 0) + (n.idle ?? 0) + (n.done ?? 0)} live`] : ["no summary"];
     if (queued) parts.push(`${queued} queued`);
     if (fleet.queue?.effective) parts.push(`queue: ${fleet.queue.effective}`);
     return parts.join(" · ");
