@@ -1,6 +1,6 @@
 # OpenCode — the third lane
 
-`oc` = OpenCode on the IU endpoint, re-added 2026-09-23 after
+`oc` = OpenCode (the local inference gateway on the mini, IU direct on the MacBook), re-added 2026-09-23 after
 the 2026-09-04 subtraction because AGENTS.md made it a zero-maintenance reader
 of the same instructions. It loads `<repo>/AGENTS.md` (nested lazily),
 `~/.claude/CLAUDE.md` and every skill natively; the always-on rules come from
@@ -9,14 +9,20 @@ without `paths:`; the per-repo `.claude/rules/*.md` glob is a known tradeoff
 (OpenCode ignores `paths:`, so a repo's lazy rules load on every turn there).
 Adding an always-on global rule means adding it to that list too. `@imports`
 do **not** resolve there.
-Creds resolve per call like `cx`. Matrix: `docs/agents-md.md`.
+Creds resolve per call. `_oc_env` (claude.zsh) reads the `oc=` line of
+`~/.agent-workflows/data/door-tokens` first: present (the mini) → that token and
+`http://127.0.0.1:7794/anthropic` as base — the local inference gateway, same
+paths as IU, which spends Claude credit first and records every request; absent
+(the MacBook has no such file) → the Keychain IU creds like `cx`, IU direct, the
+only working path there until a tailnet door exists. The token is read with zsh
+builtins, never on an argv. Matrix: `docs/agents-md.md`.
 
 Three providers: `iu` = `@ai-sdk/openai-compatible` (Chat Completions) on
-`{env:IU_OPENAI_BASE}` (`oc` derives it from the Keychain base, `/anthropic` →
+`{env:IU_OPENAI_BASE}` (`oc` derives it from the Anthropic base, `/anthropic` →
 `/openai/v1`); `iu-responses` = `@ai-sdk/openai` (the **Responses** wire) on the
 same base, carrying every GPT id — they are Responses-only for agent loops
 (reasoning items must survive tool calls), so `-m iu-responses/<gpt id>` (ids: `agw routes`), not
-`iu/…`; and `anthropic` = the Anthropic route for Claude ids. Names and the
+`iu/…`; and `iu-anthropic` = the Anthropic route for Claude ids (`claude-haiku-5-5`, its only model). Names and the
 wire split follow agent-workflows' route table (`wire` per route). **This file's rows are
 hand-written and can drift from it** — `agw routes` owns ids, limits and rates; re-check there
 before editing a row. `iu` declares the rest of the
@@ -118,4 +124,4 @@ symlink was gone, `opencode.jsonc` held only `$schema`, and opencode started
 happily with no model, no provider, no rules. `make status` lists all three
 opencode links for exactly this; run it when `oc` looks unconfigured.
 
-**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is hand-maintained against `agw routes`. `iu-anthropic` (Haiku 5.5 EU, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
+**v2 schema (2026-10-14).** `opencode.json` uses the v2 keys (`providers` with `package`/`settings`, model `cost.cache.read`, variants as an array, `mcp.servers`, `agents.title`). The `providers` block is hand-maintained against `agw routes`. `iu-anthropic` (Haiku 5.5, native `/anthropic` leg) appends `/v1` to the `IU_ANTHROPIC_BASE` that `_oc_env` exports.
