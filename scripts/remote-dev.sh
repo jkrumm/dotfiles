@@ -793,6 +793,10 @@ cmd_work() {
   # argument, its first message (as in `wave`).
   pick_account interactive
   (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; work never spills to IU API tokens"
+  if [[ -n ${RD_DRY_RUN:-} ]]; then
+    echo "would start $AGENT_KIND '$agent' in a new tab of the space for $path${PICK_NOTE:+  [$PICK_NOTE]}"
+    return 0
+  fi
   hc_start_agent "$agent" "$path" "$ROLE" "" 0 "$prompt" tab "$path" || die "$HC_START_ERR"
   echo "→ started $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
@@ -1227,6 +1231,8 @@ cmd_close() {
     unpushed=$(host_run "git -C $qcwd rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
     [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing"
   fi
+
+  [[ -n ${RD_DRY_RUN:-} ]] && { echo "would close $(jq -r '.name // .address' <<<"$rec") ($TARGET)"; return 0; }
 
   local out
   out=$(hc_host kill -- "$TARGET" 2>&1) || die "hc kill $TARGET failed: $out"

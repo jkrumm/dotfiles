@@ -371,4 +371,22 @@ has "a source column" "$out" "SOURCE"
 has "the hc rows say hc" "$l1" "hc "
 rm -f "$TMP/bin/claude"
 
+echo "dry run: work and close print the plan and start/kill nothing, factory present or not"
+printf '#!/usr/bin/env bash\necho "$*" >>"$STATE/factory.log"\necho "{}"\n' >"$TMP/bin/factory"; chmod +x "$TMP/bin/factory"
+reset
+out=$(bash "$HERE/remote-dev.sh" work myrepo "do it" 2>&1); rc=$?
+is "work exits 0" "$rc" 0
+has "work prints the plan" "$out" "would start"
+[ ! -s "$STATE/runs.jsonl" ] && ok "work: no terminal.run" || bad "work started a terminal"
+[ ! -e "$STATE/factory.log" ] && ok "work: factory not called" || bad "work called the factory: $(cat "$STATE/factory.log")"
+reset
+git init -q --bare "$TMP/origin.git"; git init -q "$TMP/clean"
+git -C "$TMP/clean" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+git -C "$TMP/clean" remote add origin "$TMP/origin.git"; git -C "$TMP/clean" push -q -u origin HEAD 2>/dev/null
+echo "[{\"address\":\"t9\",\"name\":\"myrepo\",\"cwd\":\"$TMP/clean\",\"argv\":[\"claude\"],\"status\":{\"state\":\"done\"},\"labels\":{\"factory.key\":\"k\"}}]" >"$STATE/terminals.json"
+out=$(bash "$HERE/remote-dev.sh" close t9 2>&1); rc=$?
+has "close prints the plan" "$out" "would close"
+lacks "close killed nothing" "$(cat "$STATE/calls.log" 2>/dev/null)" "kill"
+rm -f "$TMP/bin/factory"
+
 echo; [ "$fails" -eq 0 ] && echo "remote-dev-wave: all passed" || { echo "remote-dev-wave: $fails failed"; exit 1; }
