@@ -102,9 +102,24 @@ The only headless runs, kept on purpose:
 - modelpick's bench (`modelpick/src/server/bench/`) — it measures the Claude Code harness,
   so it has to drive the real binary.
 
+## Where API tokens are spent
+
+One place: the **inference gateway** (`agent-workflows/packages/gateway`, loopback `:7794`, LaunchAgent
+`com.jkrumm.agent-workflows-gateway`). It holds the personal IU key and one API key per Claude Console org
+(`iu`, `me`, `me2`); `agw`, its OpenCode server and `ocr`, Hermes, dotfiles `oc` and modelpick hold none and reach every model
+through it with their own door token (`~/.agent-workflows/data/door-tokens`). The three subscriptions grant a monthly API
+credit that expires unspent otherwise; a Claude call spends the soonest-expiring org's credit first, then IU. Claude Code
+and Athena Teamchat stay outside it, and a Claude-Code-shaped request never uses a credit org. Every request is one
+`usage.records` row (`source='gateway'`) and one pick row. Design: agent-workflows `docs/gateway.md`; pools and their
+state: `docs/claude-accounts.md` §Platform; where the keys live: `docs/architecture.md` §Secrets flow.
+
+Development sessions still run on the Max subscriptions only (`rd`, Herdr); the gateway serves workflow steps, review,
+research, Hermes and `oc`.
+
 ## Hermes — the front door
 
 - Answers and narrates; opens a Herdr tab when the owner asks for one.
+- Reaches its models through the inference gateway, with its own door token.
 - Mentions-only in #agents.
 - Skill creation by the background nudge is off; ~20 curated skills.
 
