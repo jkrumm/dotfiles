@@ -336,7 +336,7 @@ if ! command -v jq >/dev/null 2>&1; then
 else
   marker="$TMP/resolve-ran"
   rid="$(bash "$AH" ask "resolve me" --cmd "touch $marker")"
-  out="$(bash "$AH" resolve "$rid" --as "done" --note "did it by hand" 2>&1)"; rc=$?
+  bash "$AH" resolve "$rid" --as "done" --note "did it by hand" >/dev/null 2>&1; rc=$?
   assert_eq "resolve --as done: rc 0" "0" "$rc"
   res="$(cat "$QDIR/$rid.res")"
   assert_eq "resolve done: one-line result" "1" "$(printf '%s\n' "$res" | grep -c .)"
@@ -398,6 +398,11 @@ else
     wpid=$!
     for _ in $(seq 1 50); do [[ -s "$outf" ]] && break; sleep 0.1; done
     wid="$(head -1 "$outf")"
+    if [[ -z "$wid" ]]; then
+      kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
+      bad "waiting ask ($as): no request id printed"
+      continue
+    fi
     bash "$AH" resolve "$wid" --as "$as" >/dev/null 2>&1
     wait "$wpid"; wrc=$?
     assert_eq "waiting ask sees resolve $as as rc $want" "$want" "$wrc"

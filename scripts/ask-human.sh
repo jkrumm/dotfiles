@@ -422,8 +422,10 @@ cmd_status() {
 # `superseded` both read as "not run": status denied, so a waiting `ask --wait`
 # caller gets the refused-request code (1) and human-queue.sh/push read it like
 # a dialog Deny; resolvedAs keeps which of the two it was. Publishing uses a
-# hard link, which fails when <id>.res exists, so two racing resolves (or one
-# racing a real answer) cannot both win. Exit 2 with one line on any refusal.
+# hard link, which fails when <id>.res exists, so two racing resolves cannot
+# both win. A real answer (write_local_result, human-queue.sh) still overwrites
+# silently: an owner who clicks Run while a resolve lands can have the command
+# run and replace the resolve's result. Exit 2 with one line on any refusal.
 cmd_resolve() {
   local id="" as="" note_text="" have_note=0
   while [[ $# -gt 0 ]]; do
@@ -460,8 +462,11 @@ cmd_resolve() {
   local note_json="null"
   (( have_note )) && note_json="$(json_escape "$note_text")"
 
-  local res_file="$QUEUE_DIR/$id.res" tmp_file
+  local res_file="$QUEUE_DIR/$id.res"
+  # Global, not local: the EXIT trap runs after this function has returned.
+  tmp_file=""
   tmp_file="$(mktemp "$QUEUE_DIR/.${id}.res.XXXXXX")"
+  trap 'rm -f "${tmp_file:-}"' EXIT
   {
     printf '{'
     printf '"id":%s,' "$(json_escape "$id")"
@@ -475,11 +480,10 @@ cmd_resolve() {
   } > "$tmp_file"
   chmod 600 "$tmp_file"
   if ! ln "$tmp_file" "$res_file" 2>/dev/null; then
-    rm -f "$tmp_file"
     note "error: request $id already has a result"
     exit 2
   fi
-  rm -f "$tmp_file" "$QUEUE_DIR/$id.queued"
+  rm -f "$QUEUE_DIR/$id.queued"
   printf 'resolved %s as %s\n' "$id" "$as"
 }
 
