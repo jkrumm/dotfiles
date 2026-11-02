@@ -20,7 +20,6 @@
         "hermes-agent",
         "modelpick",
         "linewatch",
-        "home",
         "usage-tracker",
         "rb",
         "dispatch-scratch",
@@ -36,7 +35,8 @@
         "iris",
         "brain",
         "basalt-ui-obsidian",
-        "finances"
+        "finances",
+        "home"
       ]
     },
     {
