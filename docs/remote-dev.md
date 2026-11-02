@@ -127,7 +127,7 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | `work <repo>` | labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks) |
 | `wave <repo> '<prompt>'` | tab + solo claude, the prompt as its argument; `fan <repo> <brief…>`: worktree + hidden child per brief |
 | `agents` | every roster, one line per agent (`SOURCE NAME STATUS CWD ID`), deduped on Claude session id |
-| `rd read <agent>` / `rd say <agent> '…'` / `rd close <agent>` | watch / steer / end without attaching; all take an address, a terminal name, a repo name or a cwd |
+| `rd read <agent>` / `rd say <agent> '…'` / `rd close <agent>` | watch / steer / end without attaching; all take an address, a terminal name, a repo name or a cwd; `close` also ends a terminal whose worktree a merge already removed, unless that worktree's branch still holds unmerged commits |
 
 **On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract); the factory
 is tried first and hc-direct is the fallback (below). Four rules hold:

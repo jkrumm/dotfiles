@@ -1156,6 +1156,34 @@ cmd_merge() {
 # finished: started by rd or the factory (claude is the terminal's own program, not something typed into a shell), not
 # working/blocked, checkout clean, and nothing unpushed (a branch with no upstream counts as unpushed — the commits would
 # exist only in that checkout). Then `hc kill` + `hc rm`: the terminal goes, the repo's other terminals stay.
+# Host-side: what became of the branch of a worktree whose directory is gone. Finds the repo from the nearest existing
+# ancestor, the branch from the worktree's admin entry (not yet pruned) or else from a local branch named like the
+# directory (/ → -). Prints "merged <b>", "gone", "unmerged <b>" or "unknown".
+GONE_WORKTREE_SH='
+wt=$1; d=$wt
+while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+real="$(cd "$d" && pwd -P)${wt#"$d"}"
+common=$(git -C "$d" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { echo unknown; exit 0; }
+br=""
+for a in "$common"/worktrees/*/; do
+  [ -f "${a}gitdir" ] || continue
+  g=$(cat "${a}gitdir"); [ "$g" = "$wt/.git" ] || [ "$g" = "$real/.git" ] || continue
+  br=$(sed -n "s|^ref: refs/heads/||p" "${a}HEAD")
+done
+if [ -z "$br" ]; then
+  base=$(basename "$wt")
+  br=$(git --git-dir="$common" for-each-ref --format="%(refname:short)" refs/heads | while read -r b; do [ "${b//\//-}" = "$base" ] && echo "$b"; done | head -1)
+fi
+[ -n "$br" ] && git --git-dir="$common" show-ref --verify --quiet "refs/heads/$br" || { echo gone; exit 0; }
+def=$(git --git-dir="$common" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)
+for c in "$def" origin/master origin/main; do
+  [ -n "$c" ] && git --git-dir="$common" rev-parse --verify --quiet "$c" >/dev/null || continue
+  git --git-dir="$common" merge-base --is-ancestor "refs/heads/$br" "$c" && echo "merged $br" || echo "unmerged $br"
+  exit 0
+done
+echo "unmerged $br"
+'
+
 cmd_close() {
   local name="${1:-}"
   [[ -n $name ]] || die "usage: close <agent>   (a finished wave's terminal)"
@@ -1177,12 +1205,23 @@ cmd_close() {
   local dirty unpushed status_out
   local qcwd
   qcwd=$(printf '%q' "$cwd")
-  status_out=$(host_run "git -C $qcwd status --porcelain") \
-    || die "could not read git status of $cwd — refusing to close"
-  dirty=$(printf '%s' "$status_out" | grep -c . || true)
-  (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the agent's work is not committed"
-  unpushed=$(host_run "git -C $qcwd rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
-  [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing"
+  if [[ $(host_run "[ -d $qcwd ] && echo yes || echo no") == no ]]; then
+    # The merge removed the worktree (gh pr merge --delete-branch): a missing directory holds no uncommitted work.
+    local verdict
+    verdict=$(host_run "bash -c $(printf '%q' "$GONE_WORKTREE_SH") _ $qcwd" 2>/dev/null) || verdict=unknown
+    case $verdict in
+      merged*|gone*) echo "→ $cwd is already gone and its branch is ${verdict%% *} — closing the terminal" ;;
+      unmerged*) die "$cwd is gone but its branch still holds unmerged commits (${verdict#unmerged }) — refusing to close" ;;
+      *) die "could not read git status of $cwd (directory gone, branch state unknown) — refusing to close" ;;
+    esac
+  else
+    status_out=$(host_run "git -C $qcwd status --porcelain") \
+      || die "could not read git status of $cwd — refusing to close"
+    dirty=$(printf '%s' "$status_out" | grep -c . || true)
+    (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the agent's work is not committed"
+    unpushed=$(host_run "git -C $qcwd rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
+    [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing"
+  fi
 
   local out
   out=$(hc_host kill -- "$TARGET" 2>&1) || die "hc kill $TARGET failed: $out"

@@ -481,6 +481,27 @@ reset; agents_json; touch "$STATE/rm_fail"
 rd close worker
 [ "$rc" -ne 0 ] && ok "hc rm failing is an error" || bad "reported success: $out"
 
+echo "close: a worktree the merge removed holds no work"
+gwt() { echo "[{\"address\":\"t5\",\"name\":\"worker\",\"cwd\":\"$TMP/co/.claude/worktrees/wt-gone\",\"argv\":[\"claude\"],\"status\":{\"app\":\"claude-code\",\"state\":\"idle\"},\"labels\":{\"factory.key\":\"worker\"}}]" >"$STATE/terminals.json"; }
+mkdir -p "$TMP/co/.claude/worktrees"; g -C "$TMP/co" worktree add -q -b feat/gone "$TMP/co/.claude/worktrees/wt-gone" 2>/dev/null
+g -C "$TMP/co/.claude/worktrees/wt-gone" commit -q --allow-empty -m wip
+rm -rf "$TMP/co/.claude/worktrees/wt-gone"   # directory gone, admin entry and unmerged branch remain
+reset; gwt
+rd close worker
+[ "$rc" -ne 0 ] && ! closed && ok "gone dir, unmerged branch: refused" || bad "closed over unmerged commits: $out"
+has "names the branch" "$out" "feat/gone"
+g -C "$TMP/co" merge -q --ff-only feat/gone; g -C "$TMP/co" push -q origin master 2>/dev/null
+reset; gwt
+rd close worker
+closed && ok "gone dir, merged branch: closes" || bad "not closed: $out"
+has "says what happened" "$out" "already gone"
+g -C "$TMP/co" worktree prune; g -C "$TMP/co" branch -q -D feat/gone
+reset; gwt
+rd close worker
+closed && ok "gone dir, branch gone: closes" || bad "not closed: $out"
+reset; echo "[{\"address\":\"t5\",\"name\":\"worker\",\"cwd\":\"$TMP/nowhere/x\",\"argv\":[\"claude\"],\"status\":{\"state\":\"idle\"},\"labels\":{\"factory.key\":\"worker\"}}]" >"$STATE/terminals.json"
+rd close worker
+[ "$rc" -ne 0 ] && ! closed && ok "gone dir, no repo found: refused" || bad "closed blind: $out"
 echo "close: a target hc does not know is an error"
 reset; agents_json
 rd close ghost
