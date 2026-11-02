@@ -24,7 +24,8 @@
         "rb",
         "dispatch-scratch",
         "tinycast-extensions",
-        "email-gateway"
+        "email-gateway",
+        "ntfy-mac"
       ]
     },
     {
