@@ -317,6 +317,33 @@ real work myrepo
 has "an agent already in the checkout is reported, not stacked" "$out" "already running: agent t3"
 is "no spawn" "$([ -e "$STATE/runs.jsonl" ] && echo ran)" ""
 
+echo "work: an optional prompt is claude's last argument, no solo flag"
+reset
+real work myrepo "fix the \"login\" bug
+second line"
+is "exit 0" "$rc" "0"
+is "prompt last, no solo flag" "$(jqrun '.argv | join("|")')" $'claude|fix the "login" bug\nsecond line'
+reset
+real work myrepo three words here
+is "several words join into one prompt" "$(jqrun '.argv[-1]')" "three words here"
+reset
+real work myrepo --role lead "do it"
+is "flags before the prompt still parse" "$(jqrun .env.FACTORY_ROLE)" "lead"
+is "and the prompt is last" "$(jqrun '.argv[-1]')" "do it"
+reset
+real work myrepo -- "-dangerous"
+[ "$rc" -ne 0 ] && ok "work refuses a prompt that starts with '-'" || bad "accepted: $out"
+
+echo "no silent drop: a verb that takes no more arguments exits 2 and starts nothing"
+for sub in "agents extra" "repos a b" "close a b" "read a b c" "reap --bogus" "reap extra"; do
+  reset
+  # shellcheck disable=SC2086  # word splitting is the point
+  out=$(bash "$HERE/remote-dev.sh" $sub 2>&1); rc=$?
+  is "rd $sub: exit 2" "$rc" "2"
+  has "rd $sub: says usage" "$out" "usage:"
+  is "rd $sub: nothing started" "$([ -e "$STATE/runs.jsonl" ] && echo ran)" ""
+done
+
 echo "rd agents: one line per agent with its name and status word (iris' mother-watch.sh greps these)"
 cat >"$TMP/bin/claude" <<'STUB'
 #!/usr/bin/env bash

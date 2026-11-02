@@ -124,10 +124,12 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | Command | Does |
 |-|-|
 | `repos [filter]` | repos on the host, branch + dirty count |
-| `work <repo>` | labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks) |
+| `work <repo> [<prompt…>]` | labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks); an optional prompt is claude's first message, as in `wave` (human-attended: no solo flag) |
 | `wave <repo> '<prompt>'` | tab + solo claude, the prompt as its argument; `fan <repo> <brief…>`: worktree + hidden child per brief |
 | `agents` | every roster, one line per agent (`SOURCE NAME STATUS CWD ID`), deduped on Claude session id |
 | `rd read <agent>` / `rd say <agent> '…'` / `rd close <agent>` | watch / steer / end without attaching; all take an address, a terminal name, a repo name or a cwd; `close` also ends a terminal whose worktree a merge already removed, unless that worktree's branch still holds unmerged commits |
+
+**No silent drop.** A verb that takes no (more) arguments and gets extras (`repos a b`, `agents x`, `close a b`, `read a b c`, `reap x`) exits 2 with a `usage:` line and starts nothing. Covered by `scripts/remote-dev-wave.test.sh`.
 
 **On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract); the factory
 is tried first and hc-direct is the fallback (below). Four rules hold:

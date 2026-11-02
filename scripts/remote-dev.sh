@@ -21,6 +21,7 @@ set -uo pipefail
 
 HOST="${REMOTE_DEV_HOST:-mini}"
 
+usage_die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 2; } # a malformed command line: exit 2, nothing started
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 note() { printf '\033[2m%s\033[0m\n' "$*"; }
 # " --effort '<level>'" for a spawned agent: RD_WAVE_EFFORT wins, then the factory role's effort ($2),
@@ -669,6 +670,7 @@ resolve_target() { # <token>
 # --- subcommands -------------------------------------------------------------
 
 cmd_repos() {
+  (( $# <= 1 )) || usage_die "usage: repos [filter]   (got $# arguments)"
   local filter="${1:-}"
   # shellcheck disable=SC2016  # $HOME/$d/$n expand on the dev host, not here
   host_run 'for r in "$HOME/SourceRoot" "$HOME/IuRoot"; do
@@ -760,7 +762,8 @@ pick_account() {
 cmd_work() {
   parse_kind "$@"
   local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: work <repo> [--kind claude] [--role R]   (see 'repos')"
+  local prompt="${REST[*]:1}"
+  [[ -n $name ]] || die "usage: work <repo> [--kind claude] [--role R] [<prompt…>]   (see 'repos')"
   [[ -z $CHILD ]] || die "--child is for 'rd wave' (an orchestrator's waves); 'work' is an owner's own tab"
   require_core
 
@@ -786,10 +789,11 @@ cmd_work() {
   # before anything is created: an unknown role is a usage error, not a half-made terminal.
   if [[ -n $ROLE ]]; then rd_spawn_flags "" ""; fi
 
-  # A human sits in front of this one, so no --dangerously-skip-permissions and no prompt.
+  # A human sits in front of this one, so no --dangerously-skip-permissions. An optional prompt is claude's last
+  # argument, its first message (as in `wave`).
   pick_account interactive
   (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; work never spills to IU API tokens"
-  hc_start_agent "$agent" "$path" "$ROLE" "" 0 "" tab "$path" || die "$HC_START_ERR"
+  hc_start_agent "$agent" "$path" "$ROLE" "" 0 "$prompt" tab "$path" || die "$HC_START_ERR"
   echo "→ started $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
 }
@@ -1185,6 +1189,7 @@ echo "unmerged $br"
 '
 
 cmd_close() {
+  (( $# <= 1 )) || usage_die "usage: close <agent>   (one agent; got $# arguments)"
   local name="${1:-}"
   [[ -n $name ]] || die "usage: close <agent>   (a finished wave's terminal)"
   require_core
@@ -1266,6 +1271,7 @@ PY'
 # (`working`, `idle`, `done`, `blocked`, …). Tooling greps this text (iris' mother-watch.sh looks for the
 # agent names and the word `blocked`), so the shape is a contract: tests pin it.
 cmd_agents() {
+  (( $# == 0 )) || usage_die "usage: agents   (takes no arguments; got '$*')"
   require_core
   local hc_json claude_json
   hc_roster
@@ -1342,6 +1348,7 @@ PY
 # Watch without attaching — the reason the socket API matters. Reading an agent
 # from the MacBook costs nothing and does not disturb the pane.
 cmd_read() {
+  (( $# <= 2 )) || usage_die "usage: read <agent> [src]   (got $# arguments)"
   local name="${1:-}"
   [[ -n $name ]] || die "usage: read <agent>   (see 'agents')"
 
@@ -1493,7 +1500,7 @@ cmd_reap() {
   for a in "$@"; do
     case $a in
       --dry-run|-n) args+=" --dry-run" ;;
-      *) die "usage: reap [--dry-run]   (REAP_IDLE_H=<hours> overrides the 12 h idle threshold)" ;;
+      *) usage_die "usage: reap [--dry-run]   (REAP_IDLE_H=<hours> overrides the 12 h idle threshold)" ;;
     esac
   done
   # shellcheck disable=SC2016  # $HOME expands on the host
@@ -1507,7 +1514,9 @@ usage() {
   rd — drive the mini's herdr-core agents from anywhere
 
     rd repos [filter]         repos on the dev host, with branch + dirty count
-    rd work <repo> [--kind K] [--role R]   labelled tab + claude for that repo (idempotent)
+    rd work <repo> [--kind K] [--role R] [<prompt…>]   labelled tab + claude for that repo (idempotent);
+                              an optional prompt is claude's first message
+                              (a verb that takes no more arguments exits 2 on extras)
     rd wave <repo> [--kind K] [--role R] <prompt…>
                               fresh tab + solo agent, the prompt as claude's argument — claude
     rd fan <repo> [--role R] <brief…>   worktree + hidden child terminal + Claude per brief file (fan-out)
