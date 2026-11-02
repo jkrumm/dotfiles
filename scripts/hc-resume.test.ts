@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { NotConnecting, createResumer, isLoginShell, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { NotConnecting, createResumer, isLoginShell, modelFlags, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -36,6 +36,22 @@ test("resume line: account dir quoted, iu uses env -u", () => {
   expect(resumeLine(term().labels!)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --resume ${ID}`)
   expect(resumeLine({ "jk.claude.session": ID })).toBe(`env -u CLAUDE_CONFIG_DIR claude --dangerously-skip-permissions --resume ${ID}`)
   expect(resumeLine({ "jk.claude.session": "x; rm -rf ~" })).toBeNull()
+})
+
+test("resume line keeps --model and --effort from the terminal argv; none stays as is", () => {
+  const labels = term().labels!
+  const argv = ["claude", "--dangerously-skip-permissions", "--model", "claude-opus-5-5[1m]", "--effort=high"]
+  expect(resumeLine(labels, argv)).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --model 'claude-opus-5-5[1m]' --effort 'high' --resume ${ID}`)
+  expect(resumeLine(labels, ["claude", "--model", "sonnet"])).toBe(`env CLAUDE_CONFIG_DIR='/h/.claude-me' claude --dangerously-skip-permissions --model 'sonnet' --resume ${ID}`)
+  expect(resumeLine(labels, shell)).toBe(resumeLine(labels))
+  expect(modelFlags(["claude", "--model", "x; rm -rf ~", "--effort"])).toEqual([])
+})
+
+test("createResumer passes the terminal argv flags into the typed line", async () => {
+  const { sent, r } = harness()
+  r.handle(restarted(term({ argv: ["-zsh", "--model", "opus", "--effort", "max"] })))
+  await r.settled()
+  expect(sent[0][1]).toContain("--model 'opus' --effort 'max' --resume")
 })
 
 test("an account change on a reused terminal uses the new labels (me -> iu)", async () => {

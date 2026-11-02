@@ -55,13 +55,28 @@ export function isLoginShell(t: Terminal, argvFallback = false): boolean {
 
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
 
+/** `--model` / `--effort` from the terminal's own argv, so a resumed session keeps what it ran on. */
+export function modelFlags(argv: string[] = []): string[] {
+  const out: string[] = []
+  for (const flag of ["--model", "--effort"]) {
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i]
+      const v = a === flag ? argv[i + 1] : a.startsWith(`${flag}=`) ? a.slice(flag.length + 1) : undefined
+      if (v === undefined) continue
+      if (/^[\w.\-:[\]]+$/.test(v)) out.push(flag, quote(v))
+      break
+    }
+  }
+  return out
+}
+
 /** The line typed into the shell; null when the labels carry no usable session id. */
-export function resumeLine(labels: Record<string, string>): string | null {
+export function resumeLine(labels: Record<string, string>, argv?: string[]): string | null {
   const id = labels[SESSION]
   if (!id || !/^[0-9a-f-]{8,64}$/i.test(id)) return null
   const dir = labels[CONFIG]
   const env = dir ? `env CLAUDE_CONFIG_DIR=${quote(dir)}` : "env -u CLAUDE_CONFIG_DIR"
-  return `${env} claude --dangerously-skip-permissions --resume ${id}`
+  return [env, "claude", "--dangerously-skip-permissions", ...modelFlags(argv), "--resume", id].join(" ")
 }
 
 export function createResumer(send: Deps["send"], log: (l: string) => void = () => {}) {
@@ -74,7 +89,7 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     const id = labels[SESSION]
     if (!id || !isLoginShell(t, argvFallback)) return
     if (inflight.has(t.address) || attempted.get(t.address) === id) return
-    const line = resumeLine(labels)
+    const line = resumeLine(labels, t.argv)
     if (!line) { log(`skip ${t.address}: unusable session label`); return }
     inflight.add(t.address)
     attempted.set(t.address, id)
