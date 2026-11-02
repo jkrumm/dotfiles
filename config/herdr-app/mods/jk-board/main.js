@@ -11,7 +11,7 @@
 // poll) as a tree: name, status, turn. Click a child for its last lines (`hc read`, on demand).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, home, machines, shared, setShared } from "herdr";
+import { exec, theme, home, machines, shared, setShared, run, terminals } from "herdr";
 
 const FACTORY = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory --format json status`;
 const PLANS = `for f in ~/SourceRoot/*/docs/waves/PLAN.md ~/IuRoot/*/docs/waves/PLAN.md; do [ -f "$f" ] && { echo "== $f"; grep -E '^# |^## Wave'; } < "$f"; done`;
@@ -52,7 +52,7 @@ function parsePlans(text) {
     if (file) { repo = file[1]; plans[repo] = { title: null, waves: [] }; continue; }
     if (!repo) continue;
     const plan = plans[repo];
-    const wave = /^## Wave\s+(\d+)\s*[—–-]\s*(.*?)\s*(?:<!--\s*status:\s*(\w+)\s*-->)?\s*$/.exec(line);
+    const wave = /^## Wave\s+(\d+)\s*[—–-]\s*(.*?)\s*(?:<!--\s*status:\s*(\w+)[^>]*-->)?\s*$/.exec(line);
     if (wave) plan.waves.push({ n: Number(wave[1]), name: wave[2], status: wave[3] ?? "pending" });
     else if (line.startsWith("# ") && plan.title === null) plan.title = line.slice(2).trim();
   }
@@ -319,7 +319,11 @@ export default class Board extends View {
 
   sessionRow(t, r, s) {
     const what = s.wait ? `${s.state} · ${s.wait}` : s.state;
-    return h_flex().id(`wv-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11)
+    const address = s.pane ? `mini/${s.pane}` : null;
+    const reachable = Boolean(address) && terminals().some((x) => x.address === address);
+    return h_flex().id(`wv-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5)
+      .when(reachable, (el) => el.cursor_pointer().hover((st) => st.bg(t.selected)).tooltip("Jump to this agent")
+        .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: address }); }))
       .child(this.dot(t, s.kind, 5))
       .child(div().flex_shrink(0).text_color(t.muted).child(s.role ?? "?"))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(shortId(s.id, r.name)))
@@ -374,7 +378,7 @@ export default class Board extends View {
         .when(total === 0 && r.all.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${r.all.length} sessions`))))
       .when(Boolean(r.plan?.title), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(r.plan.title)))
       .when(total > 0, (el) => el.child(div().ml(14).h(3).rounded(2).bg(t.hover).overflow_hidden()
-        .child(div().h(3).rounded(2).bg(t.accent).w(`${Math.round((r.done / total) * 100)}%`))))
+        .child(div().h(3).rounded(2).bg(t.muted).w(`${Math.round((r.done / total) * 100)}%`))))
       .when(Boolean(r.active), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.muted).child(r.active.name)))
       .when(open, (el) => el.child(v_flex().mt(3).gap(1)
         .children(pending.slice(0, 4).map((w) => div().id(`wv-w-${r.name}-${w.n}`).pl(10).truncate().text_size(11).text_color(t.dim).child(`${w.n} · ${w.name}`)))
@@ -482,7 +486,7 @@ export default class Board extends View {
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
         .child(h_flex().items_center().gap(8).text_size(11.5).text_color(t.dim)
           .child(div().flex_1().child("Waves"))
-          .when(attention > 0, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`${attention} need you`))))
+          .when(attention > 0, (el) => el.child(div().flex_none().text_color(t.blocked).child(`${attention} need you`))))
         .when(Boolean(factory), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(this.summary(factory.sessions, factory.queue)))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .when(Boolean(stale), (el) => el.opacity(0.5))
