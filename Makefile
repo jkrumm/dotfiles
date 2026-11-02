@@ -794,6 +794,9 @@ _setup-git-headless:
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
 check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
+version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
+	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
+
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
 logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
