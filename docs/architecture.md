@@ -62,6 +62,7 @@ which validates geometry before it delivers.
 | `iris` | Voice-memo server: a phone memo is uploaded as segments, transcribed, routed to Hermes, summarized and notified. Swift apps follow under `apple/` | runs natively here (`com.jkrumm.iris{,-deploy}`, deploy clone `~/.iris/app`, data `~/.iris/data`, `iris.mini.jkrumm.com`) |
 | `email-gateway` | The gateway for all personal mail — Proton via the homelab's Bridge, Resend, later Gmail; send, sync, classify, read. Renamed from `bun-email-api` 2026-09-27; target in its `docs/vision.md` | container on the VPS (RollHook) |
 | `basalt-ui-obsidian` | Obsidian plugin building the brain reader | |
+| `home` | Apple Home control + diagnostics: HomeClaw (App Store Catalyst app, must run in the GUI session) and its `homeclaw-cli`, wrapped for agents and Tinycast | HomeClaw in `/Applications`; MacBook reaches it over SSH |
 | `free-planning-poker`, `jkrumm.com`, `kobo-mods`, `rollhook`, `rollhook-action`, `modelpick`, `rb`, `usage-tracker`, `king-smith-walkingpad-mac`, `linewatch` | see each repo's own `AGENTS.md` | |
 | `weatherorb` | weather/wave service, 11 templated LaunchAgents + 2 mother agents (legacy pattern, retired at weatherorb's next wave boundary) | the 11 are templated in `weatherorb/ops`, `make launchd-install` (idempotent; `FORCE=1` bounces all) |
 | `dispatch-scratch` | disposable dispatch test target | by design |
