@@ -68,7 +68,9 @@ out=$(run op); expect "MacBook label absent here fails on the MacBook backend" 1
 
 : > "$TMP/agents/com.jkrumm.beta.plist"
 write_map "" ""
-out=$(run cache); expect "on-disk label missing from the map still fails" 1 "on-disk-but-unmapped: com.jkrumm.beta" $? "$out"
+out=$(run cache); expect "fresh unmapped on-disk label is a WARN, still listed" 0 "com.jkrumm.beta (new, <24h)" $? "$out"
+touch -t 202001010000 "$TMP/agents/com.jkrumm.beta.plist"
+out=$(run cache); expect "old on-disk label missing from the map fails" 1 "on-disk-but-unmapped: com.jkrumm.beta" $? "$out"
 rm "$TMP/agents/com.jkrumm.beta.plist"
 
 # The herdr-core world (com.jkrumm.herdr-core, hc-*) is mapped and live: pass; an unmapped core label still fails.
@@ -85,7 +87,10 @@ write_map '| `com.jkrumm.herdr-core` | core |
 | `com.jkrumm.hc-resume` | resume |' ""
 out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "core and hc-resume mapped and live pass" 0 "mapped mini labels exist" $? "$out"
 write_map '| `com.jkrumm.hc-resume` | resume |' ""
-out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "an unmapped core label still fails" 1 "com.jkrumm.herdr-core" $? "$out"
+touch -t 202001010000 "$TMP/agents/com.jkrumm.herdr-core.plist"
+out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "an old unmapped core label still fails" 1 "com.jkrumm.herdr-core" $? "$out"
+touch "$TMP/agents/com.jkrumm.herdr-core.plist"
+out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "a fresh unmapped loaded label only warns" 0 "loaded-but-unmapped: com.jkrumm.herdr-core (new" $? "$out"
 rm "$TMP/agents/com.jkrumm.herdr-core.plist" "$TMP/agents/com.jkrumm.hc-resume.plist"
 write_map "" ""
 

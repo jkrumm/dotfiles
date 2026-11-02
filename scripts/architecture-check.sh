@@ -16,6 +16,10 @@
 #      exists to prevent. /Library/LaunchAgents is where a dead vendor stub
 #      crash-loops at exit 78 for every login with nothing reporting it.
 #
+# An unmapped label whose plist is younger than 24 h (ARCH_RECENT_SECS) is a WARN,
+# listed but exit 0 — another session's fresh install must not turn every hold
+# red. Older, or undatable, fails; mapped-but-absent rows always fail.
+#
 # Exit 1 lists the unmapped labels. Adding a legit new agent = add a row to the
 # map in the same change; that friction IS the point.
 #
@@ -61,6 +65,25 @@ loaded=$($LAUNCHCTL list 2>/dev/null | /usr/bin/awk 'NR>1 {print $3}')
 [[ -n "$loaded" ]] || { echo "✗ launchctl list returned nothing — no GUI session to assert against"; exit 1; }
 
 unmapped=""
+warned=""
+# A label whose plist is younger than this is another session's fresh install:
+# listed as a WARN, not a FAIL. Older, or with no plist to date it, fails.
+RECENT_SECS="${ARCH_RECENT_SECS:-86400}"
+recent() { # $1 = plist path
+  local m
+  [[ -n "$1" && -e "$1" ]] || return 1
+  m=$(/usr/bin/stat -f %m "$1" 2>/dev/null) || return 1
+  (( $(date +%s) - m < RECENT_SECS ))
+}
+note_unmapped() { # $1 = kind, $2 = label, $3 = plist path (may be empty)
+  if recent "$3"; then
+    warned="${warned}  $1: $2 (new, <24h)
+"
+  else
+    unmapped="${unmapped}  $1: $2${3:+ ($3)}
+"
+  fi
+}
 
 # Is this label in the map? For a Homebrew service, strip whichever generation
 # prefix it carries and accept a row written with EITHER — one service, one row,
@@ -78,21 +101,11 @@ mapped() {
   fi
 }
 
-# 1. loaded labels (gui domain)
-while IFS= read -r label; do
-  [[ -n "$label" && "$label" != "Label" ]] || continue
-  [[ "$label" =~ $allowlist_regex ]] && continue
-  [[ "$label" =~ $owned_regex ]] || continue
-  if ! mapped "$label"; then
-    unmapped="${unmapped}  loaded-but-unmapped: $label
-"
-  fi
-done <<<"$loaded"
-
 # 2. plists on disk, un-loaded or not. Also collect their Label keys: launchd
 # does not require the filename to match, and the reverse check wants the same
 # definition of "exists on disk".
 disk_labels=""
+disk_paths=""
 # shellcheck disable=SC2068
 for dir in ${LAUNCHD_DIRS[@]}; do
   [[ -d "$dir" ]] || continue
@@ -102,14 +115,26 @@ for dir in ${LAUNCHD_DIRS[@]}; do
     [[ -n "$label" ]] || label=$(basename "$plist" .plist)
     disk_labels="${disk_labels}${label}
 "
+    disk_paths="${disk_paths}${label}	${plist}
+"
     [[ "$label" =~ $allowlist_regex ]] && continue
     [[ "$label" =~ $owned_regex ]] || continue
     if ! mapped "$label"; then
-      unmapped="${unmapped}  on-disk-but-unmapped: $label ($plist)
-"
+      note_unmapped on-disk-but-unmapped "$label" "$plist"
     fi
   done
 done
+
+# 1. loaded labels (gui domain)
+while IFS= read -r label; do
+  [[ -n "$label" && "$label" != "Label" ]] || continue
+  [[ "$label" =~ $allowlist_regex ]] && continue
+  [[ "$label" =~ $owned_regex ]] || continue
+  if ! mapped "$label"; then
+    path=$(/usr/bin/awk -F'\t' -v l="$label" '$1==l {print $2; exit}' <<<"$disk_paths")
+    note_unmapped loaded-but-unmapped "$label" "$path"
+  fi
+done <<<"$loaded"
 
 # 3. The reverse: every label the map lists for THIS machine must still exist
 # here — loaded, or a plist on disk (root daemons never show in the user's
@@ -160,6 +185,10 @@ if [[ $checked -eq 0 ]]; then
 fi
 fi
 
+if [[ -n "$warned" ]]; then
+  echo "⚠ new launchd labels not yet in docs/architecture.md (fail after 24 h) — add a row:"
+  printf '%s' "$warned"
+fi
 if [[ -n "$unmapped" || -n "$stale" ]]; then
   if [[ -n "$unmapped" ]]; then
     echo "✗ launchd labels not in docs/architecture.md — add a row or delete the agent:"
