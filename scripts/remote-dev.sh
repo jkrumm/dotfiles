@@ -446,9 +446,9 @@ agent_name() {
 
 # --- the factory ---------------------------------------------------------------
 #
-# `wave`, `fan`, `say` and `close` go through the software factory when it answers, and spawn onto hc directly
+# `wave`, `fan` and `say` go through the software factory when it answers, and spawn onto hc directly
 # when it does not (docs/remote-dev.md §rd and the factory). A dead factory must never stop the waves
-# that would repair it, so every call is bounded and every failure before a spawn exists falls back.
+# that would repair it, so every call is bounded and a spawn falls back only when the create certainly did not happen.
 FACTORY_HEALTH_S=3
 FACTORY_CALL_S=15
 FACTORY_UP=""

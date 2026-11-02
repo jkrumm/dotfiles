@@ -230,12 +230,14 @@ today's defaults — a dead factory never stops a spawn. Only a factory that ans
 raised before anything is created. One lookup per `rd fan`, not per brief. Covered by
 `scripts/remote-dev-factory-env.test.sh`.
 
-**`rd` and the factory (which path, when).** `wave`, `fan`, `say` and `close` ask `factory health` first
+**`rd` and the factory (which path, when).** `wave`, `fan` and `say` ask `factory health` first
 (`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it; a host with no `timeout`/`gtimeout` has no factory path, since an unbounded call could stall the repair). Answers → the factory path; anything else (not
 installed, down, slow, non-zero) → hc directly (above), and every terminal it makes carries
 `FACTORY_ROLE=<role>` next to `FACTORY_SESSION` (`rd work` only when `--role` is given). A dead factory
-never stops the waves that would repair it: every call is bounded and every failure before a spawn exists
-falls back. `RD_DRY_RUN=1` never probes.
+never stops the waves that would repair it: every call is bounded, and a spawn falls back to hc only when the
+`create` certainly did not happen (table below); any other failure is an error, never a second terminal. An orchestrated
+wave (`--child`, `RD_ORCHESTRATED=1`) and every `fan` called from an owner's own session (no `FACTORY_SESSION`) skip the
+factory and go hc-direct, so the workers are the caller's children. `close` never asks the factory. `RD_DRY_RUN=1` never probes.
 
 | Verb | Factory answers | Falls back to hc when |
 |-|-|-|
