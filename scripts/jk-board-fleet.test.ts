@@ -10,7 +10,10 @@ const block = (name: string) => {
   if (!m) throw new Error(`jk-board: no <${name}> block`)
   return m
 }
-const lib = new Function(`${block("tree")}\n${block("fleet")}; return { parse, parseFleet, sortAsks, oneLine, age, assemble, sessionKind }`)() as {
+// The constants above the blocks (CMD reads HC_MARK at load) run first, so a misordered declaration throws here as it would in the app.
+const head = src.slice(src.indexOf('from "herdr";\n') + 'from "herdr";\n'.length, src.indexOf("// <tree>"))
+const lib = new Function(`${head}\n${block("tree")}\n${block("fleet")}; return { CMD, parse, parseFleet, sortAsks, oneLine, age, assemble, sessionKind }`)() as {
+  CMD: string
   parse: (stdout: string) => { fleet: Fleet | null; hc: { address: string }[] | null }
   parseFleet: (text: string) => Fleet | null
   sortAsks: (asks: Ask[]) => Ask[]
@@ -39,6 +42,12 @@ test("parseFleet reads the model and refuses anything else", () => {
   expect(lib.parseFleet(JSON.stringify({ error: "not_ready" }))).toBeNull()
   expect(lib.parseFleet('{"repos": [')).toBeNull()
   expect(lib.parseFleet("")).toBeNull()
+})
+
+test("the module's constants load and the command ends with the marker and hc", () => {
+  expect(lib.CMD).toContain("factory fleet --format json")
+  expect(lib.CMD).toContain("echo '@@HC@@'")
+  expect(lib.CMD).not.toContain("factory --format json status")
 })
 
 test("the poll splits on the marker line only, so forged text cannot cut the fleet part", () => {
