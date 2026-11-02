@@ -140,6 +140,9 @@ guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 
 `make deploy` = `make setup` (idempotent; run on **both** machines). No CI, no
 release: a merged commit is live once symlinked. Commit here after every edit.
+`make setup` also restarts a loaded `hc-events`/`hc-resume` whose script changed after the
+process started (`scripts/agent-refresh.sh`, `kickstart -k` + deliberate-restart marker; never
+the herdr-core agent). A new KeepAlive script agent calls it from its `*-setup`.
 
 ## Verify & Monitor
 

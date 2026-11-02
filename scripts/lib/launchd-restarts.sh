@@ -20,7 +20,7 @@
 #
 #     d="$HOME/.local/state/devhost/deliberate-restart"; mkdir -p "$d" && date +%s >> "$d/<label>"
 #
-# No live restart path in this repo writes a marker today. A path that does must
+# scripts/agent-refresh.sh (make hc-events-setup / hc-resume-setup) writes one. A path that does must
 # inline that line rather than source this file — a deploy script must not depend
 # on a dotfiles checkout path. `bootout` + `bootstrap` (colima-restart,
 # hermes) needs no marker: a freshly loaded job starts again at

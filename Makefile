@@ -792,7 +792,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -2333,6 +2333,11 @@ caddy-tailnet-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/caddy-tailnet.test.sh
 
+.PHONY: agent-refresh-test
+agent-refresh-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/agent-refresh.sh $(DOTFILES_DIR)/scripts/agent-refresh.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/agent-refresh.test.sh
+
 .PHONY: launchd-restarts-test
 launchd-restarts-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/launchd-restarts.sh $(DOTFILES_DIR)/scripts/launchd-restarts.test.sh
@@ -2590,6 +2595,7 @@ hc-events-setup:
 	chmod +x "$(DOTFILES_DIR)/scripts/hc-events.ts"; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/share/herdr-events"; \
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.hc-events" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	bash "$(DOTFILES_DIR)/scripts/agent-refresh.sh" com.jkrumm.hc-events "$(DOTFILES_DIR)/scripts/hc-events.ts" || exit 1; \
 	echo "    ↳ KeepAlive → ~/.local/share/herdr-events/YYYY-MM-DD.jsonl; log: ~/Library/Logs/hc-events.log"
 hc-events-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.hc-events.plist"; \
@@ -2610,6 +2616,7 @@ hc-resume-setup:
 	chmod +x "$(DOTFILES_DIR)/scripts/hc-resume.ts"; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
 	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.hc-resume" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
+	bash "$(DOTFILES_DIR)/scripts/agent-refresh.sh" com.jkrumm.hc-resume "$(DOTFILES_DIR)/scripts/hc-resume.ts" "$(DOTFILES_DIR)/scripts/hc-events.ts" || exit 1; \
 	echo "    ↳ KeepAlive; log: ~/Library/Logs/hc-resume.log"
 hc-resume-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.hc-resume.plist"; \
@@ -3262,6 +3269,7 @@ help:
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
 	@echo "  make fan-test           rd fan / merge-train worktree + base-from-origin suite"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
+	@echo "  make agent-refresh-test    Hermetic suite for the restart-if-program-changed helper"
 	@echo "  make caddy-registry-test   Hermetic Caddyfile registry suite (port rows, path restrictions, refusals)"
 	@echo "  make caddy-tailnet-test    Hermetic tailnet generator suite (extra FQDN doors, refusals, missing file)"
 	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
