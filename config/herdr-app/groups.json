@@ -60,20 +60,18 @@
     {
       "label": "WORK",
       "members": [
+        "IuRoot",
+        "epos-tool-athena",
+        "epos-ai-teamchat-athena",
+        "epos-knowledge-athena",
         "prometheus-scripts",
+        "prometheus-epx",
+        "epos-studentenrolment-backend",
         "epos.student-enrolment",
-        "epos_fe.academic-profile",
-        "epos_fe.booking",
-        "epos_fe.spa-orchestrator",
-        "epos.crm-bridge",
+        "epos-dam-backend",
         "epos.dam",
-        "epos.exam",
-        "epos.finance-bridge",
-        "epos.iam",
-        "epos.study-progress",
-        "crm-bridge-retry-tool",
-        "cfn-kafka",
-        "terraform-monitoring"
+        "infra-pilot",
+        "epos-otf-workspaces"
       ]
     }
   ]
