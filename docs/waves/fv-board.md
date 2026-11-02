@@ -7,7 +7,7 @@ only hues), presence from navigation never from prompts or input idle. Already l
 colour cleanup).
 **Gate:** `make check` green, `/review` with findings fixed, `make deploy`, the mod reloaded in the app, a screenshot per wave.
 
-## Wave 1 — The queue's read and the board on `/fleet`            <!-- status: active -->
+## Wave 1 — The queue's read and the board on `/fleet`            <!-- status: done 2026-11-02 -->
 - [x] `ask-human.sh list --json` (id, text, cmd, askedAt, ageSeconds, state), stable for the factory to read; tested hermetic like the rest
   of `human-queue-test`. Lands first: the factory's FV Wave 1 reads it.
 - [x] `ask-human.sh resolve <id> --as done|denied|superseded [--note]`: the owner's answer without the MacBook (the factory's FV Wave 3
@@ -15,6 +15,8 @@ colour cleanup).
   `resolvedAs`/`resolvedNote` show in `status <id>`.
 - [x] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec **with the token** (`secrets-run run --env-file=<the factory's .env.tpl> -- factory fleet`): `/fleet` is token-only, because the socket is every pane's and IuRoot text must not reach an agent's model; the
   `PLAN.md` grep and its parser go. Layout A, repos with plan and sessions, asks on top.
+
+Landed `753af8b` (PR #60), reloaded and checked on screen 2026-11-02: asks on top, plans and the session tree from `/fleet`. Left for Wave 2: an ask whose repo is a path shows the path, not the repo's name.
 
 ## Wave 2 — Actions and the away card            <!-- status: pending -->
 - [ ] After FV Waves 3 and 4: C inline actions on each ask (the intents the model lists, nothing hardcoded), "Apply all" for the
