@@ -788,7 +788,7 @@ _setup-git-headless:
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
-.PHONY: check verify logs deploy
+.PHONY: check verify logs deploy version
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
