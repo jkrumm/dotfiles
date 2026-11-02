@@ -189,6 +189,7 @@ the weatherorb session workflow.
 | `com.iu.prometheus-vpn-watcher` | IuRoot | KeepAlive |
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
+| `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
 | `com.iu.athena-postgres` | IuRoot (chat) | KeepAlive — Athena's own Postgres 18 for teamchat, Unix socket only (no TCP), data under `~/.local/state/athena`; rendered by `make -C chat pg-setup` |
 | `com.iu.teamchat-profile` | IuRoot (chat) | RunAtLoad — `teamchat-autostart.sh`, the profile's session autostart |
