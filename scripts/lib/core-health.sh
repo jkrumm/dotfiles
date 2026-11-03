@@ -68,7 +68,7 @@ for m in json.load(sys.stdin).get("machines",[]):
 
   host="${CORE_PEER_SSH_HOST:-}"
   if [[ -z "$host" ]]; then
-    case "$(tr -d '[:space:]' < "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null)" in
+    case "$(tr -d '[:space:]' 2>/dev/null < "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend")" in
       cache) host=iumac ;;
       op)    host=mini ;;
     esac

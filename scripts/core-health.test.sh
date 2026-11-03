@@ -26,7 +26,7 @@ else
 fi
 S
 chmod +x "$T/bin/"*
-export LAUNCHCTL_BIN="$T/bin/launchctl" HC_BIN="$T/bin/hc" PS_BIN="$T/bin/ps" CORE_LAUNCHER=/h/launcher CORE_PEER_SSH_HOST='' PS_TABLE="$T/table" PS_ENV="$T/env"
+export LAUNCHCTL_BIN="$T/bin/launchctl" HC_BIN="$T/bin/hc" PS_BIN="$T/bin/ps" CORE_LAUNCHER=/h/launcher CORE_PEER_SSH_HOST='' XDG_CONFIG_HOME="$T/config" PS_TABLE="$T/table" PS_ENV="$T/env"
 : > "$T/env"
 # shellcheck source=lib/core-health.sh
 source "$HERE/lib/core-health.sh"
