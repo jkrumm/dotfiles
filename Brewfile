@@ -15,6 +15,7 @@ tap "oven-sh/bun"
 tap "satococoa/tap"
 tap "abue-ammar/tinycast"
 tap "jkrumm/tap"
+tap "openselena/tap"
 # Simple, modern, secure file encryption
 brew "age"
 # Editor of encrypted files (paired with age for the headless secrets cache)
@@ -197,5 +198,7 @@ cask "stats"
 # extension views more room (stable 0.11.3 does neither) — separate app, own
 # com.tinycast.app.beta domain, self-updates within the beta channel.
 cask "abue-ammar/tinycast/tinycast@beta"
+# Universal downloader (YouTube, courses, 1,800+ sites); Tauri app, third-party tap
+cask "openselena/tap/omniget"
 # Multimedia player
 cask "vlc"
