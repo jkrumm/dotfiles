@@ -45,7 +45,7 @@ Decided 2026-10-31 (Wave 1); all of it is done and classic herdr is gone (§Remo
 | `herdr-reap.py` + `com.jkrumm.herdr-reap` | port | same rules over `terminal.list {all}` / `kill` / `rm` / `send` |
 | `herdr-events.ts` + `com.jkrumm.herdr-events` | port | `events.subscribe` recorder, same JSONL dir; gap markers from `missed`, from stream EOF (core restart) and from an unparseable line |
 | `herdr-groups.py`, `make herdr-groups*` | retire | `jk-spaces` folders; `groups.json` moved to `config/herdr-app/` (Wave 4) |
-| `make agent-overview` pane + heartbeat `overview pane` component | **retire** | the app's sidebar status dots and agents list. `agw agents` stays the JSON producer, ported to hc |
+| `make agent-overview` pane + heartbeat `overview pane` component | **retire** | the app's sidebar status dots and agents list. Agent state comes from the factory's fleet view (software-factory, `factory fleet`), the one producer; `agw agents` is its client (agent-workflows Wave 8) |
 | collie + ACL/serve rows | **port** | upstream ColliePWA runs on herdr-core with `COLLIE_MUX=herdr-core` (experimental, core ≥ 0.1.14). Bump `COLLIE_REF`, run it standalone (not a herdr plugin), and keep the `:8787/:8788` rows. If its behavioural check fails on hc, collie retires and the rows go. Shepherdr (`eliasstravik/shepherdr`) is the alternative, not adopted |
 | `desk` (`herdr --remote mini`) | replace | the app (MacBook); terminal-only fallback `ssh -t mini hc` |
 | `claude-relogin.sh --machine mini` | port | `hc run --on mini` labelled into a `relogin` tab. The mini core is a launchd GUI-session child with the keychain |
@@ -55,7 +55,7 @@ Decided 2026-10-31 (Wave 1); all of it is done and classic herdr is gone (§Remo
 | `herdr-server-start.py`, `_herdr-supervise`, `lib/herdr-ready.sh`, `herdr-upgrade.sh`, `herdr-wait-quiet.sh`, `herdr-skill-sync.sh`, `make herdr-{setup,upgrade,restart,status,launchd-status,server-start-test}` | retire | `com.jkrumm.herdr-core` + the Wave 8 upgrade target |
 | heartbeat herdr component, `doctor.sh`, `brew-upgrade.sh`, `architecture-check` `herdr.*` regex, `log-rotate` collie log, `mini-macos-update` pane snapshot | port | core LaunchAgent running + `hc server status` + MacBook/mini version parity; the resume labels are the pre-reboot snapshot |
 | `Brewfile` `herdr`, cask `penso/tap/herdr-gpui`, tinycast `so.pen.herdr-gpui` hotkey, `config/herdr/config.toml`, `config-gpui.local.toml` | retire | Herdr.app, bundle id `dev.herdr.app` (its `Info.plist`) |
-| agent-workflows `agw agents` collectors (+ argo `herdrStatus`) | port | `terminal.list` over `hc connect` (full records: labels, parent, status), which already includes linked machines as `machine/tN`. `hc ls --json` is a compact view without labels or parent |
+| agent-workflows `agw agents` collectors (+ argo `herdrStatus`) | **retired** | the factory reads hc and is the one producer of agent state; `agw agents` reads `factory fleet --format json` and adds only recommendations and the Max quota (agent-workflows Wave 8). argo's `herdrStatus` carries hc's word through the factory |
 | iris herdr destination (raw `herdr.sock`) | port | `terminal.list` (labels) + `terminal.send` over `hc connect`; the destination value stays `"herdr"` |
 | hermes-agent `skills/herdr`, SOUL/AGENTS/config refs | port | hc-world skill text |
 | shutterflow `scripts/fleet/*` + PROTOCOL | port | `hc run`/`send`/`ls`/`kill` |

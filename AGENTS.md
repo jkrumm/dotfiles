@@ -179,7 +179,7 @@ substitutes for another.**
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
 | Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree or mother/lead/wave tab; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
-| What every agent is doing | the app's sidebar; `agw agents` is the one producer for Hermes, brain and Argo. |
+| What every agent is doing | the app's sidebar; the factory (software-factory, `factory fleet`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
 
 Commands take a repo **name, never a path** — resolution happens on the host.
 
