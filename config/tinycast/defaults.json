@@ -1,19 +1,23 @@
 {
   "aiDefaultModel": {
     "$json": {
-      "appleIntelligence": {}
+      "api": {
+        "effort": "default",
+        "model": "deepseek-v4.1-flash",
+        "connection": "6BC3C822-AAE3-47D0-9DA3-6783270DF70B"
+      }
     }
   },
   "boundAppBundleIDs": [
+    "com.google.Chrome",
     "com.TickTick.task.mac",
+    "com.goodsnooze.MacWhisper",
     "md.obsidian",
     "com.spotify.client",
-    "com.microsoft.teams2",
+    "dev.zed.Zed",
     "com.google.Chrome.app.ipgbpdjppgpdehhlenhcpcmonofgmkip",
-    "com.goodsnooze.MacWhisper",
-    "com.google.Chrome",
-    "net.imput.helium",
-    "dev.zed.Zed"
+    "com.microsoft.teams2",
+    "net.imput.helium"
   ],
   "boundCustomCommandIDs": [],
   "boundCustomWindowSizeIDs": [],
@@ -41,10 +45,8 @@
     "extension:jkrumm/my-tasks",
     "extension:jkrumm/quick-add",
     "extension:jkrumm/claude-usage",
-    "extension:jkrumm/netgear",
     "extension:jkrumm/speed-test",
     "extension:jkrumm/battery",
-    "extension:jkrumm/van-power",
     "extension:jkrumm/shortcuts",
     "extension:jkrumm/home",
     "extension:jkrumm/spotify"
