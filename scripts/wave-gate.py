@@ -29,6 +29,13 @@ the wave's own work is what gets checked. Not found, `agw` missing or failing,
 or any uncovered commit stops the chain (fail closed). The first wave has no
 predecessor and skips the check.
 
+A wave section may carry `**Repos:** software-factory, dotfiles` (comma-separated; a bare name is
+`~/SourceRoot/<name>`, an absolute or `~` path is taken as is). The plan repo is always checked; each other
+named repo is checked the same way over `<start>..HEAD`, where its start is the newest commit at or before the
+committer time of the plan repo's wave-start commit (`git rev-list -1 --before=<ts> HEAD`). A repo that is not
+a git repo, has no commit before that time, or fails/uncovers in agw fails closed, naming the repo. Coverage
+only: no clean-tree check there (other fleets may work in it).
+
 Usage: wave-gate.py <repo-path> <plan-path-or-relative-plan-ref>
 
 Exit 0 and silent on pass. Exit 1 with a reason on stderr on any gate failure
@@ -47,6 +54,7 @@ WAVE_RE = re.compile(r"(Wave \d+) — .*?<!--\s*status:\s*(\w+)[^>]*-->")
 BULLET_RE = re.compile(r"^- \[( |x)\] (.+)$")
 LEFT_BEHIND_MARKER = "**Left behind:**"
 LEFT_BEHIND_RE = re.compile(r"\*\*Left behind:\*\*\s*(.*)")
+REPOS_RE = re.compile(r"\*\*Repos:\*\*[ \t]*(.*)")
 OUTWARD_RE = re.compile(r"\b(merge|publish|release|deploy|ship)\b", re.I)
 
 
@@ -117,7 +125,7 @@ def wave_start(plan_repo: str, plan_path: str, wave_name: str) -> str | None:
     return start
 
 
-def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> None:
+def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str, repos: list[str]) -> None:
     start = wave_start(plan_repo, plan_path, wave_name)
     if not start:
         fail(
@@ -125,25 +133,59 @@ def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> Non
             "review coverage of the finished wave cannot be checked; stop and run "
             "`agw review covered --cwd <repo> --range <wave start>..HEAD` by hand"
         )
+    assert_covered(plan_repo, start, wave_name)
+    for repo in repos:
+        check_other_repo(repo, plan_repo, start, wave_name)
+
+
+def resolve_repo(name: str) -> str:
+    expanded = os.path.expanduser(name)
+    if os.path.isabs(expanded):
+        return expanded
+    return os.path.expanduser(f"~/SourceRoot/{name}")
+
+
+def check_other_repo(name: str, plan_repo: str, plan_start: str, wave_name: str) -> None:
+    """Coverage of a repo the wave also touched: its start is the newest commit at or before the plan
+    repo's wave-start timestamp. No clean-tree check — other fleets may work there."""
+    repo = resolve_repo(name)
+    if os.path.realpath(repo) == os.path.realpath(plan_repo):
+        return
+    ts = subprocess.run(
+        ["git", "-C", plan_repo, "show", "-s", "--format=%ct", plan_start], capture_output=True, text=True
+    ).stdout.strip()
+    top = subprocess.run(["git", "-C", repo, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode != 0 or not ts:
+        fail(f"{wave_name} names repo {name} ({repo}) but it is not a git repo — its review coverage cannot be checked")
+    base = subprocess.run(
+        ["git", "-C", repo, "rev-list", "-1", f"--before={ts}", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    if not base:
+        fail(f"{wave_name} names repo {name} ({repo}) but it has no commit before the wave start — cannot derive a range")
+    assert_covered(repo, base, wave_name, label=name)
+
+
+def assert_covered(repo: str, start: str, wave_name: str, label: str = "") -> None:
+    where = f" in {label} ({repo})" if label else ""
     # host_run gives no PATH prefix: fall back to the install location.
     agw = shutil.which("agw") or os.path.expanduser("~/.local/bin/agw")
     try:
         result = subprocess.run(
-            [agw, "review", "covered", "--cwd", plan_repo, "--range", f"{start}..HEAD", "--format", "json"],
+            [agw, "review", "covered", "--cwd", repo, "--range", f"{start}..HEAD", "--format", "json"],
             capture_output=True,
             text=True,
         )
     except OSError as e:
-        fail(f"agw is not runnable ({e}) — review coverage of {wave_name} cannot be checked")
+        fail(f"agw is not runnable ({e}) — review coverage of {wave_name}{where} cannot be checked")
     if result.returncode != 0:
-        fail(f"agw review covered failed (exit {result.returncode}): {(result.stderr or result.stdout).strip()}")
+        fail(f"agw review covered failed{where} (exit {result.returncode}): {(result.stderr or result.stdout).strip()}")
     try:
         answer = json.loads(result.stdout)
         covered = answer["covered"]
         commits = answer.get("commits", [])
         uncovered = answer.get("uncovered", [])
     except (ValueError, KeyError, TypeError, AttributeError):
-        fail(f"agw review covered answered something unreadable: {result.stdout.strip()[:300]}")
+        fail(f"agw review covered answered something unreadable{where}: {result.stdout.strip()[:300]}")
     if covered is True:
         return
     by_sha = {c.get("sha"): c for c in commits if isinstance(c, dict)}
@@ -153,7 +195,7 @@ def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> Non
         why = f"; open important {', '.join(c.get('findings') or [])}" if c.get("reason") == "open-important" else ""
         lines.append(f"  {str(sha)[:9]} {c.get('subject', '?')} (needs {c.get('required', '?')}: {c.get('rule', '?')}{why})")
     fail(
-        f"{wave_name} is not fully reviewed ({start[:9]}..HEAD): uncovered commits —\n"
+        f"{wave_name} is not fully reviewed{where} ({start[:9]}..HEAD): uncovered commits —\n"
         + "\n".join(lines or ["  (agw named none)"])
         + "\nrun `/review` over the range (and dispose open findings), then retry"
     )
@@ -214,6 +256,7 @@ def parse_waves(text: str) -> list[dict]:
         name, status = m.group(1), m.group(2)
         steps = parse_steps(body)
         left = LEFT_BEHIND_RE.search(body)
+        repos_line = REPOS_RE.search(body)
         waves.append(
             {
                 "name": name,
@@ -224,6 +267,7 @@ def parse_waves(text: str) -> list[dict]:
                 # this check exists to catch, not a pass.
                 "all_checked": bool(steps) and all(c == "x" for c, _ in steps),
                 "left_behind": left.group(1).strip() if left else "",
+                "repos": [r.strip() for r in repos_line.group(1).split(",") if r.strip()] if repos_line else [],
             }
         )
     return waves
@@ -281,7 +325,7 @@ def main() -> None:
             fail(f"{prev['name']} is marked done but {reason}")
         if not prev["left_behind"]:
             fail(f"{prev['name']} has no Left behind — a finished wave must say what the next one inherits")
-        check_review_coverage(plan_repo, plan_path, prev["name"])
+        check_review_coverage(plan_repo, plan_path, prev["name"], prev["repos"])
 
     hit = None if orchestrated else outward_next_step(active_wave["unchecked"])
     if hit:

@@ -110,6 +110,13 @@ class ParseWaves(unittest.TestCase):
         wave1 = next(w for w in self.waves if w["name"] == "Wave 1")
         self.assertEqual(wave1["left_behind"], "branch feat/x, nothing outstanding")
 
+    def test_repos_line_is_parsed_into_a_list(self):
+        plan = "## Wave 1 — x <!-- status: done -->\n- [x] a\n**Repos:** software-factory, ~/x/dotfiles ,\n**Left behind:** n\n"
+        self.assertEqual(wave_gate.parse_waves(plan)[0]["repos"], ["software-factory", "~/x/dotfiles"])
+
+    def test_repos_empty_when_absent(self):
+        self.assertEqual(self.waves[0]["repos"], [])
+
 
 class ResolvePlanPath(unittest.TestCase):
     def test_relative_ref_joins_the_repo_path(self):
@@ -269,6 +276,64 @@ class ReviewCoverage(unittest.TestCase):
         r = self.run_gate()
         self.assertEqual(r.returncode, 1)
         self.assertIn("cannot find the commit where Wave 1 became `active`", r.stderr)
+
+    def other_repo(self, name="other"):
+        """A second repo with one commit long before the wave start and one after."""
+        path = os.path.join(self.tmp.name, name)
+        os.makedirs(path)
+        _git(path, "init", "-q")
+        old = {"GIT_COMMITTER_DATE": "2000-01-01T00:00:00", "GIT_AUTHOR_DATE": "2000-01-01T00:00:00"}
+        subprocess.run(
+            ["git", "-C", path, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "old"],
+            check=True, capture_output=True, env={**os.environ, **old},
+        )
+        new = {"GIT_COMMITTER_DATE": "2090-01-01T00:00:00", "GIT_AUTHOR_DATE": "2090-01-01T00:00:00"}
+        subprocess.run(
+            ["git", "-C", path, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "new work"],
+            check=True, capture_output=True, env={**os.environ, **new},
+        )
+        return path
+
+    def history_with_repos(self, repos):
+        self.commit_plan("pending", "pending", "before")
+        for w1, w2, msg in (("active", "pending", "wave 1 starts"), ("done", "active", "close wave 1")):
+            with open(self.plan, "w") as f:
+                f.write(_plan(w1, w2).replace("- [x] a", f"- [x] a\n**Repos:** {repos}"))
+            _git(self.repo, "add", "-A")
+            _git(self.repo, "commit", "-qm", msg)
+
+    AGW_BY_CWD = """case "$4" in
+  *other) echo "$@" >> "$HOME/other-args"; echo '%s' ;;
+  *) echo '{"covered":true,"commits":[],"uncovered":[]}' ;;
+esac
+"""
+
+    def test_second_repo_uncovered_fails_naming_it(self):
+        other = self.other_repo()
+        self.history_with_repos(other)
+        self.fake_agw(self.AGW_BY_CWD % '{"covered":false,"commits":[{"sha":"feedbeef1234","subject":"feat: y","required":"standard","rule":"default"}],"uncovered":["feedbeef1234"]}')
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("other", r.stderr)
+        self.assertIn("feedbeef1 feat: y", r.stderr)
+
+    def test_second_repo_covered_passes_with_range_from_before_the_wave_start(self):
+        other = self.other_repo()
+        self.history_with_repos(other)
+        self.fake_agw(self.AGW_BY_CWD % '{"covered":true,"commits":[],"uncovered":[]}')
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        old = subprocess.run(["git", "-C", other, "rev-list", "--max-parents=0", "HEAD"], capture_output=True, text=True).stdout.strip()
+        with open(os.path.join(self.tmp.name, "other-args")) as f:
+            self.assertIn(f"--range {old}..HEAD", f.read())
+
+    def test_missing_second_repo_fails_closed(self):
+        self.history_with_repos(os.path.join(self.tmp.name, "nope"))
+        self.fake_agw(self.AGW_BY_CWD % '{"covered":true,"commits":[],"uncovered":[]}')
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("nope", r.stderr)
+        self.assertIn("not a git repo", r.stderr)
 
 
 if __name__ == "__main__":
