@@ -45,7 +45,9 @@
     "extension:jkrumm/speed-test",
     "extension:jkrumm/battery",
     "extension:jkrumm/van-power",
-    "extension:jkrumm/shortcuts"
+    "extension:jkrumm/shortcuts",
+    "extension:jkrumm/home",
+    "extension:jkrumm/spotify"
   ],
   "hotkey.app.com.TickTick.task.mac": {
     "$jsonString": {
@@ -219,7 +221,79 @@
     "extension:jkrumm/quick-add": "ta",
     "extension:jkrumm/shortcuts": "sc",
     "extension:jkrumm/speed-test": "st",
-    "extension:jkrumm/van-power": "vp"
+    "extension:jkrumm/van-power": "vp",
+    "extension:jkrumm/home": "hm",
+    "extension:jkrumm/spotify": "sp"
   },
-  "showInMenuBar": true
+  "showInMenuBar": true,
+  "hotkey.extensionCommand.extension:jkrumm/home": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 14
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 35
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-play-pause": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 49
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-next": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 124
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-previous": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 123
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-louder": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 126
+        }
+      }
+    }
+  },
+  "hotkey.extensionCommand.extension:jkrumm/spotify-quieter": {
+    "$jsonString": {
+      "combo": {
+        "_0": {
+          "carbonModifiers": 6400,
+          "carbonKeyCode": 125
+        }
+      }
+    }
+  }
 }
