@@ -147,11 +147,12 @@ def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> Non
     lines = []
     for sha in uncovered:
         c = by_sha.get(sha, {})
-        lines.append(f"  {str(sha)[:9]} {c.get('subject', '?')} (needs {c.get('required', '?')}: {c.get('rule', '?')})")
+        why = f"; open important {', '.join(c.get('findings') or [])}" if c.get("reason") == "open-important" else ""
+        lines.append(f"  {str(sha)[:9]} {c.get('subject', '?')} (needs {c.get('required', '?')}: {c.get('rule', '?')}{why})")
     fail(
         f"{wave_name} is not fully reviewed ({start[:9]}..HEAD): uncovered commits —\n"
         + "\n".join(lines or ["  (agw named none)"])
-        + "\nrun `/review` over the range, then retry"
+        + "\nrun `/review` over the range (and dispose open findings), then retry"
     )
 
 
