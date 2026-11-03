@@ -16,7 +16,7 @@ colour cleanup).
 - [x] After software-factory FV Wave 1 is live: the board reads `factory fleet --format json` over the existing ssh exec **with the token** (`secrets-run run --env-file=<the factory's .env.tpl> -- factory fleet`): `/fleet` is token-only, because the socket is every pane's and IuRoot text must not reach an agent's model; the
   `PLAN.md` grep and its parser go. Layout A, repos with plan and sessions, asks on top.
 
-Landed `753af8b` (PR #60), reloaded and checked on screen 2026-11-02: asks on top, plans and the session tree from `/fleet`. Left for Wave 2: an ask whose repo is a path shows the path, not the repo's name.
+Landed `753af8b` (PR #60), reloaded and checked on screen 2026-11-02: asks on top, plans and the session tree from `/fleet`. The path-instead-of-name ask label was fixed in `27e3fa9`.
 
 ## Wave 2 — Actions and the away card            <!-- status: pending -->
 - [ ] After FV Waves 3 and 4: C inline actions on each ask (the intents the model lists, nothing hardcoded), "Apply all" for the
