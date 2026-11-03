@@ -424,7 +424,7 @@ export default class Board extends View {
         .on_click((_e, cx) => run("agent.focus", { terminal: address })))
       .child(this.dot(t, yours ? "needs" : "idle", 5, false))
       .child(div().flex_1().min_w(0).truncate().text_color(yours ? t.foreground : t.muted).child(oneLine(a.short ?? a.text)))
-      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(a.repo ?? a.source))
+      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(a.repo ? base(a.repo) : a.source))
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(a.at)));
   }
 
