@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.jkrumm.disk-sweep</string>
   <!-- Daily sweep of what regrows on disk: Docker build cache and dangling images, the Colima
-       data disk (fstrim), OCR session logs, stale $TMPDIR entries, package-manager caches,
+       data disk (fstrim), stale $TMPDIR entries, package-manager caches,
        unavailable simulators. Every step self-skips when its tool is missing, so this runs on
        both machines. See scripts/disk-sweep.sh for what each step removes and what it refuses
        to touch. -->

@@ -90,7 +90,7 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
      unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
      `collie pair` on the phone.
-   - **Pinned npm/binary tools** (`FALLOW_VERSION`, `OCR_VERSION` in the
+   - **Pinned npm/binary tools** (`FALLOW_VERSION` in the
      Makefile): bump the pin, `make _setup-tools` on the mini, install the
      same version on the MacBook.
    - **Bun services:** agent-workflows `make install-opencode` (pinned OpenCode), then `make deploy` (rolls both LaunchAgents to the new release).

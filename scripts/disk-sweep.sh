@@ -5,7 +5,7 @@
 #
 # WHY THIS EXISTS. The mini ran short of disk (2026-10-20) and every large consumer turned out
 # to be an unbounded cache or leak that nothing swept: Docker build cache and dangling images,
-# the Colima data disk (a sparse file that never shrinks on its own), OCR session logs (11 GB),
+# the Colima data disk (a sparse file that never shrinks on its own),
 # $TMPDIR (300k+ entries — test suites leaked tmp dirs) and the
 # package-manager caches. Each step is one bounded rule; none touches anything that holds state.
 #
@@ -26,7 +26,7 @@
 # run. A step also reports FAILED when it removes less than it set out to, or when it cannot tell
 # what is safe to remove (tmpdir with no lsof answer removes nothing). Every external tool runs
 # under with_timeout. Overrides (also what the test suite uses): DISK_SWEEP_TMPDIR,
-# OCR_SESSIONS_ROOT, DISK_SWEEP_LSOF, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
+# DISK_SWEEP_LSOF, DISK_SWEEP_BUILDCACHE_MAX, DISK_SWEEP_NPM_MAX_GB,
 # DISK_SWEEP_BUN_MAX_GB, DISK_SWEEP_UV_LOCK_TIMEOUT. `make disk-sweep-run` runs every step once, docker included.
 
 set -euo pipefail
@@ -34,13 +34,12 @@ set -euo pipefail
 BUILDCACHE_MAX="${DISK_SWEEP_BUILDCACHE_MAX:-15GB}"
 NPM_MAX_GB="${DISK_SWEEP_NPM_MAX_GB:-3}"
 BUN_MAX_GB="${DISK_SWEEP_BUN_MAX_GB:-5}"
-OCR_ROOT="${OCR_SESSIONS_ROOT:-$HOME/.opencodereview/sessions}"
 LSOF="${DISK_SWEEP_LSOF:-/usr/sbin/lsof}"
 TOOL_TIMEOUT=600
 UV_LOCK_WAIT="${DISK_SWEEP_UV_LOCK_TIMEOUT:-20}"
 
 # Cheap independent steps first, so a wedged Docker daemon cannot starve them of the job timeout.
-STEPS=(ocr-sessions tmpdir pkg-caches simulators docker colima-trim)
+STEPS=(tmpdir pkg-caches simulators docker colima-trim)
 
 # Free KB on the volume holding $1; 0 when df cannot say, so the arithmetic below never breaks.
 free_kb() {
@@ -100,37 +99,6 @@ step_colima-trim() {
   # The data disk is the mount the VM names lima-colima; fall back to every line if the name moves.
   summary=$(grep 'lima-colima' <<<"$out" || printf '%s' "$out")
   echo "colima-trim: $(tr '\n' ';' <<<"$summary" | sed 's/;$//'), $(delta "$before" "$after")"
-}
-
-# `agw review` (workflows/review/ocr.ts) still writes these; it reads only the session logs of the
-# attempt that just failed, so anything older than two weeks is dead weight. Counts are what is confirmed gone afterwards.
-step_ocr-sessions() {
-  [ -d "$OCR_ROOT" ] || { skip ocr-sessions "no sessions dir at $OCR_ROOT"; return 0; }
-  local before after files_list dirs_list total files dirs left
-  before=$(free_kb "$OCR_ROOT")
-  files_list=$(mktemp) || { echo "ocr-sessions: FAILED: mktemp"; return 1; }
-  dirs_list=$(mktemp) || { rm -f "$files_list"; echo "ocr-sessions: FAILED: mktemp"; return 1; }
-  if ! find "$OCR_ROOT" -type f -mtime +14 -print0 > "$files_list"; then
-    rm -f "$files_list" "$dirs_list"; echo "ocr-sessions: FAILED: find over $OCR_ROOT"; return 1
-  fi
-  total=$(count_listed "$files_list")
-  xargs -0 rm -f -- < "$files_list" || true # judged by the re-test below, not by rm's exit
-  files=$(count_gone "$files_list")
-  # Deepest first, so a parent emptied by its children goes in the same pass. rmdir refuses
-  # non-empty dirs, which is the expected outcome for most of them.
-  if ! find "$OCR_ROOT" -mindepth 1 -depth -type d -print0 > "$dirs_list"; then
-    rm -f "$files_list" "$dirs_list"; echo "ocr-sessions: FAILED: find over $OCR_ROOT"; return 1
-  fi
-  xargs -0 rmdir < "$dirs_list" 2>/dev/null || true
-  dirs=$(count_gone "$dirs_list")
-  rm -f "$files_list" "$dirs_list"
-  after=$(free_kb "$OCR_ROOT")
-  left=$((total - files))
-  if [ "$left" -gt 0 ]; then
-    echo "ocr-sessions: FAILED: $files of $total files older than 14 days removed from $OCR_ROOT ($left could not be), $dirs empty dirs removed, $(delta "$before" "$after")"
-    return 1
-  fi
-  echo "ocr-sessions: $files files older than 14 days and $dirs empty dirs removed from $OCR_ROOT, $(delta "$before" "$after")"
 }
 
 # Top-level entries only, older than 3 days, with nothing recent beneath them, not currently open.

@@ -25,7 +25,6 @@ Measured 2026-10-20 after the cleanup, `du -xk`, GiB. Used ≈ 480 GiB.
 | `~/IuRoot` | 13 | IU repos. `prometheus-scripts/analysis` 4.6 (`kafka-snapshots` 3.4) | ask owner (IU data, below) |
 | `/private/tmp` | 12 | agent scratch (`basalt-briefs`, `pytest-of-root`, wave logs) | macOS periodic cleanup |
 | `/Applications` | 11 | apps | needed |
-| `~/.opencodereview` | 8 | OCR session logs | swept (14 days) |
 | `/Library` | 7.5 | system-wide | needed |
 | `~/.hermes` | 7.2 | Hermes agent: install, `state.db` 1.6 | needed |
 | `~/.cache` | 4.5 | uv 2.3, puppeteer, … | swept |
@@ -46,13 +45,13 @@ the Data volume.
 | bun, npm, uv, Homebrew caches | 19 GiB | package caches |
 | Docker build cache and stale images (> 14 days) | ~13 GiB in the VM | regenerable |
 | Personal media moved to the HomeLab (table below) | 7.6 GiB | copied, verified, then deleted |
-| `$TMPDIR` test leftovers, OCR sessions > 14 days | 4 GiB | 239k leaked tmp dirs (test suites) |
+| `$TMPDIR` test leftovers | 4 GiB | 239k leaked tmp dirs (test suites) |
 
 ## Sweeps: what keeps it this way
 
 | Job | Cadence | Bounds |
 |-|-|-|
-| `com.jkrumm.disk-sweep` (`scripts/disk-sweep.sh`) | 04:40 daily | Docker build cache LRU-capped at 15 GB and dangling images removed (never tagged images, volumes or containers), `colima ssh -- sudo fstrim -a`, OCR sessions > 14 days, `$TMPDIR` top-level entries > 3 days that nothing holds open, `uv cache prune` (probes the cache lock for 20 s; a lock held by another uv process logs `uv prune skipped: cache lock held by pid N` and is not a failure) and `brew cleanup -s`, npm and bun caches over 3 / 5 GB, unavailable simulators |
+| `com.jkrumm.disk-sweep` (`scripts/disk-sweep.sh`) | 04:40 daily | Docker build cache LRU-capped at 15 GB and dangling images removed (never tagged images, volumes or containers), `colima ssh -- sudo fstrim -a`, `$TMPDIR` top-level entries > 3 days that nothing holds open, `uv cache prune` (probes the cache lock for 20 s; a lock held by another uv process logs `uv prune skipped: cache lock held by pid N` and is not a failure) and `brew cleanup -s`, npm and bun caches over 3 / 5 GB, unavailable simulators |
 | `com.jkrumm.log-rotate` | hourly | owned logs at 16 MB, Chrome `code_sign_clone` dirs > 24 h |
 
 Each step writes one `free space +N MB` line to `~/Library/Logs/disk-sweep.log`. Run it once

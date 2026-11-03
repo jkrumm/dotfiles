@@ -104,7 +104,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
-| `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, OCR sessions > 14 d, stale `$TMPDIR` entries, package caches |
+| `com.jkrumm.disk-sweep` | 04:40 daily | bounds what regrows: Docker build cache (15 GB cap) + dangling images, Colima fstrim, stale `$TMPDIR` entries, package caches |
 | `com.jkrumm.jobrun-canary` | 300s | end-to-end probe for the job → Slack chain; exits 1 unless `config/jobrun-canary.json` is healthy |
 | `com.jkrumm.hc-events` | KeepAlive | the herdr-core event record: `events.subscribe` via `hc connect` (only while `com.jkrumm.herdr-core` runs: `hc connect` would start a core) into the same `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data: never rotated); `recorder.snapshot` lines carry the terminal roster, `recorder.gap` lines (stream ended, `missed`, unparseable line, silence) mark holes; records only; `make hc-events-setup`, log `~/Library/Logs/hc-events.log` |
 | `com.jkrumm.hc-resume` | KeepAlive | Claude session resume on herdr-core: subscribes via `hc connect` (only while `com.jkrumm.herdr-core` runs: `hc connect` would start a core) and types `claude --resume <id>` into the login shell of a kept terminal whose program was lost, from the `jk.claude.*` labels `hooks/hc-session-label.ts` sets; `make hc-resume-setup`, log `~/Library/Logs/hc-resume.log`, `docs/herdr-core.md` §Resume |
@@ -277,7 +277,7 @@ and the reseed trigger: `dotfiles-private/docs/design.md`.
 
 **IU and Anthropic keys.** The personal IU key and the three Claude Console API keys
 (`op://mini/claude-platform/`) resolve through `secrets-run` into the inference gateway's
-process (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server and `ocr`, Hermes,
+process (agent-workflows' `scripts/launch-gateway.sh`). agw, its OpenCode server, Hermes,
 `oc` and modelpick hold no provider key: each reaches every model through the gateway
 (`127.0.0.1:7794`) with its own door token from `~/.agent-workflows/data/door-tokens`
 (mode 0600, a caller per line, never in a repo or a log). `~/.config/agw/iu.env` is no

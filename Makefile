@@ -55,17 +55,11 @@ XCADDY_VERSION           ?= v0.4.7
 CADDY_DNS_MODULE         ?= github.com/caddy-dns/cloudflare
 CADDY_DNS_MODULE_VERSION ?= v0.2.4
 
-# fallow — the static analyzer behind /analyze and agw's check/review
+# fallow — the static analyzer behind /analyze and agw's check
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
 FALLOW_VERSION := 3.33.1
-
-# ocr — alibaba/open-code-review, one input to agw's review pipeline. A
-# GitHub-release Go binary (the npm package only wraps it behind a postinstall
-# download), checksum-verified against the release's sha256sum.txt; pinned for
-# the same reason as fallow.
-OCR_VERSION := 1.13.3
 
 # pymobiledevice3 — physical-iPhone screenshots/syslog without Xcode's GUI (`developer
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
@@ -285,19 +279,6 @@ _setup-tools:
 		uv tool install --force "pymobiledevice3==$(PYMOBILEDEVICE3_VERSION)" >/dev/null 2>&1 \
 			&& echo "    ✓ pymobiledevice3 $(PYMOBILEDEVICE3_VERSION) installed" \
 			|| echo "    ✗ pymobiledevice3 install failed — uv tool install pymobiledevice3==$(PYMOBILEDEVICE3_VERSION)"; \
-	fi
-	@if [ "$$(ocr version 2>/dev/null | head -1 | awk '{print $$2}')" = "v$(OCR_VERSION)" ]; then \
-		echo "    · ocr $(OCR_VERSION) (ok)"; \
-	else \
-		arch=$$(uname -m | sed 's/x86_64/amd64/'); os=$$(uname -s | tr A-Z a-z); \
-		asset="opencodereview-$$os-$$arch"; tmp=$$(mktemp -d); \
-		if gh release download "v$(OCR_VERSION)" -R alibaba/open-code-review -D "$$tmp" -p "$$asset" -p sha256sum.txt >/dev/null 2>&1 \
-			&& (cd "$$tmp" && grep " $$asset$$" sha256sum.txt | shasum -a 256 -c - >/dev/null 2>&1); then \
-			install -m 0755 "$$tmp/$$asset" "$(HOME)/.local/bin/ocr" && echo "    ✓ ocr $(OCR_VERSION) installed"; \
-		else \
-			echo "    ✗ ocr install failed (download or checksum) — v$(OCR_VERSION) $$asset"; \
-		fi; \
-		rm -rf "$$tmp"; \
 	fi
 
 .PHONY: _setup-caddy
@@ -2452,7 +2433,7 @@ log-rotate-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/log-rotate.sh $(DOTFILES_DIR)/scripts/log-rotate.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/log-rotate.test.sh
 
-# Daily sweep of what regrows on disk (Docker build cache, Colima fstrim, OCR sessions, $TMPDIR,
+# Daily sweep of what regrows on disk (Docker build cache, Colima fstrim, $TMPDIR,
 # package caches, simulators). Both machines — every step self-skips when its tool is missing.
 # Converged by `make setup`. Teardown removes the jobrun state file too, or jobs-grade would
 # grade the retired label `unloaded` forever. `disk-sweep-run` runs every step once, docker
@@ -2461,7 +2442,7 @@ log-rotate-test:
 disk-sweep-setup:
 	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"
 	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.disk-sweep" PLIST_DIR="$(DOTFILES_DIR)/scripts"
-	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale OCR sessions/tmp entries, package caches; log: ~/Library/Logs/disk-sweep.log"
+	@echo "    ↳ daily at 04:40 → prune build cache + dangling images, fstrim colima, stale tmp entries, package caches; log: ~/Library/Logs/disk-sweep.log"
 disk-sweep-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.disk-sweep.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
@@ -3257,7 +3238,7 @@ help:
 	@echo "  make architecture-check-test Hermetic suite for the above (fake launchctl + map)"
 	@echo "  make jobs-test          bun test jobrun + jobs-grade + the canary"
 	@echo "  make log-rotate-test    Hermetic suite for log-rotate.sh (list derived from plists)"
-	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir + ocr-sessions steps)"
+	@echo "  make disk-sweep-test    Hermetic suite for disk-sweep.sh (tmpdir step)"
 	@echo "  make jobrun-canary-setup     Dev-host only: load the 300s canary job (exits 1 unless config/jobrun-canary.json is healthy)"
 	@echo "  make hooks-test         bun test hooks/ — run after any hook edit"
 	@echo "  make worktree-audit     List stale git worktrees across SourceRoot + IuRoot (read-only)"
@@ -3330,7 +3311,7 @@ help:
 	@echo "  make log-rotate-setup           Load the hourly copytruncate rotation for this repo's LaunchAgent logs"
 	@echo "  make log-rotate-check           Run the rotation once on demand (for testing)"
 	@echo "  make log-rotate-teardown        Unload + remove the rotation agent"
-	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, OCR sessions, tmp, package caches)"
+	@echo "  make disk-sweep-setup           Load the daily 04:40 disk sweep (build cache, colima fstrim, tmp, package caches)"
 	@echo "  make claude-accounts-verify     Read-only proof every launcher/spawner lands on the intended Claude account"
 	@echo "  make claude-accounts-stamp      Run verify and, with no FAIL, record the Claude Code version as verified"
 	@echo "  make claude-accounts-e2e        Real per-account claude -p + ingest + break tests (a few Haiku tokens; ARGS=--subagent)"

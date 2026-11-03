@@ -7,10 +7,8 @@ trap 'chflags -R nouchg "$TMP" 2>/dev/null; rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export DISK_SWEEP_TMPDIR="$TMP/tmproot"
-export OCR_SESSIONS_ROOT="$TMP/ocr"
 T="$DISK_SWEEP_TMPDIR"
-O="$OCR_SESSIONS_ROOT"
-mkdir -p "$T" "$O"
+mkdir -p "$T"
 FAKE="$TMP/fake"
 mkdir -p "$FAKE"
 
@@ -32,12 +30,7 @@ old 5 "$T/old-dir/f" "$T/old-dir" "$T/old-file" "$T/held" "$T/com.apple.keep"
 sleep 60 > "$T/held/f" &
 holder=$!
 
-# ocr-sessions: old files go, fresh stay, dirs left empty go (nested too), the root stays.
-mkdir -p "$O/a/b" "$O/fresh" "$O/emptyfromstart"
-echo x > "$O/a/b/old.jsonl"; echo x > "$O/fresh/new.jsonl"
-old 20 "$O/a/b/old.jsonl"
-
-out=$(bash "$HERE/disk-sweep.sh" tmpdir ocr-sessions 2>&1); rc=$?
+out=$(bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc=$?
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 printf '%s\n' "$out" | sed 's/^/    | /'
 
@@ -49,15 +42,7 @@ check "fresh tmp file kept" test -f "$T/fresh-file"
 check "old tmp dir with an open file kept" test -f "$T/held/f"
 check "Apple-owned tmp entry kept" test -d "$T/com.apple.keep"
 check "old tmp dir holding a fresh file kept" test -f "$T/old-dir-fresh-child/new"
-check "old ocr session removed" test ! -e "$O/a/b/old.jsonl"
-check "emptied ocr dirs removed" test ! -e "$O/a"
-check "empty ocr dir removed" test ! -e "$O/emptyfromstart"
-check "fresh ocr session kept" test -f "$O/fresh/new.jsonl"
-check "ocr root kept" test -d "$O"
-check "every step prints a size line" sh -c 'printf "%s\n" "$1" | grep -c "free space +" | grep -qx 3' _ "$out"
-
-out2=$(OCR_SESSIONS_ROOT="$TMP/absent" bash "$HERE/disk-sweep.sh" ocr-sessions 2>&1); rc2=$?
-check "missing ocr root is a skip, exit 0" sh -c '[ "$1" -eq 0 ] && printf "%s" "$2" | grep -q "ocr-sessions: skipped"' _ "$rc2" "$out2"
+check "every step prints a size line" sh -c 'printf "%s\n" "$1" | grep -c "free space +" | grep -qx 2' _ "$out"
 
 bash "$HERE/disk-sweep.sh" nonsense >/dev/null 2>&1; rc3=$?
 check "unknown step exits 2" test "$rc3" -eq 2
