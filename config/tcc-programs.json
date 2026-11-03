@@ -14,6 +14,6 @@
     "com.jkrumm.weatherorb.worker-round": { "class": "no-grant", "why": "uv python; ~/SourceRoot only" },
     "com.jkrumm.collie": { "class": "no-grant", "why": "compiled bridge under ~/.local/share/collie; touches only its own config, state and log" },
     "homebrew.mxcl.sleepwatcher": { "class": "no-grant", "why": "runs ~/.sleep and ~/.wakeup, which touch nothing protected" },
-    "homebrew.mxcl.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
+    "sh.brew.ntfy-mac": { "class": "no-grant", "why": "notification relay; no file access outside its own state" }
   }
 }

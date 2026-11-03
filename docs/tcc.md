@@ -81,7 +81,7 @@ by the launcher's grant; run from a plain Ghostty shell they are not.
 
 MacBook (different user home): LaunchAgent programs were read over ssh; the TCC log is not readable from an ssh session
 (`Could not open local log store`), so the MacBook's prompt history is part of its grant batch. Flagged there:
-`com.jkrumm.herdr-core` (launcher), `com.iu.prometheus-vpn-watcher` (uv python), `homebrew.mxcl.ntfy-mac` and
+`com.jkrumm.herdr-core` (launcher), `com.iu.prometheus-vpn-watcher` (uv python), `sh.brew.ntfy-mac` (was `homebrew.mxcl.`; brew renamed its service labels) and
 `homebrew.mxcl.sleepwatcher` (Cellar, ad-hoc). The last three need no grant.
 
 ## One-time grants
