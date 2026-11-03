@@ -18,6 +18,17 @@ turns it into a keyword heuristic on the exact verbs the skill already names
 is a heuristic, not a proof — a wave that must stop for a subtler
 outward-facing reason still has to notice that itself.
 
+The sixth check is review coverage of the finished wave: `agw review covered
+--cwd <plan repo> --range <wave start>..HEAD --format json` must answer
+`covered: true`. Wave start is the commit that flipped the finished wave to
+`active` in `docs/waves/PLAN.md`: the plan's history is walked newest first,
+the wave's status read in each version, and the oldest commit of the newest
+unbroken run of `active` is the start (a wave that was `active` since the
+plan's first commit starts there). The range is exclusive of that commit, so
+the wave's own work is what gets checked. Not found, `agw` missing or failing,
+or any uncovered commit stops the chain (fail closed). The first wave has no
+predecessor and skips the check.
+
 Usage: wave-gate.py <repo-path> <plan-path-or-relative-plan-ref>
 
 Exit 0 and silent on pass. Exit 1 with a reason on stderr on any gate failure
@@ -25,6 +36,7 @@ Exit 0 and silent on pass. Exit 1 with a reason on stderr on any gate failure
 own "Stop. Do not spawn."
 """
 
+import json
 import os
 import re
 import subprocess
@@ -76,6 +88,71 @@ def check_clean(repo: str) -> None:
             f"uncommitted changes in {repo} — commit the wave close-out "
             "(plan update included) before spawning the next wave"
         )
+
+
+def wave_start(plan_repo: str, plan_path: str, wave_name: str) -> str | None:
+    """The commit that made `wave_name` `active` in the plan's git history, else None."""
+    rel = os.path.relpath(os.path.realpath(plan_path), os.path.realpath(plan_repo))
+    log = subprocess.run(
+        ["git", "-C", plan_repo, "log", "--format=%H", "--", rel],
+        capture_output=True,
+        text=True,
+    )
+    if log.returncode != 0:
+        return None
+    start = None
+    in_run = False
+    for sha in log.stdout.split():  # newest first
+        show = subprocess.run(
+            ["git", "-C", plan_repo, "show", f"{sha}:{rel}"], capture_output=True, text=True
+        )
+        status = None
+        if show.returncode == 0:
+            status = next((w["status"] for w in parse_waves(show.stdout) if w["name"] == wave_name), None)
+        if status == "active":
+            in_run, start = True, sha
+        elif in_run:
+            break
+    return start
+
+
+def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> None:
+    start = wave_start(plan_repo, plan_path, wave_name)
+    if not start:
+        fail(
+            f"cannot find the commit where {wave_name} became `active` in the git history of {plan_path} — "
+            "review coverage of the finished wave cannot be checked; stop and run "
+            "`agw review covered --cwd <repo> --range <wave start>..HEAD` by hand"
+        )
+    try:
+        result = subprocess.run(
+            ["agw", "review", "covered", "--cwd", plan_repo, "--range", f"{start}..HEAD", "--format", "json"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError as e:
+        fail(f"agw is not runnable ({e}) — review coverage of {wave_name} cannot be checked")
+    if result.returncode != 0:
+        fail(f"agw review covered failed (exit {result.returncode}): {(result.stderr or result.stdout).strip()}")
+    try:
+        answer = json.loads(result.stdout)
+        covered = answer["covered"]
+        commits = answer.get("commits", [])
+        uncovered = answer.get("uncovered", [])
+    except (ValueError, KeyError, TypeError, AttributeError):
+        fail(f"agw review covered answered something unreadable: {result.stdout.strip()[:300]}")
+    if covered is True:
+        return
+    by_sha = {c.get("sha"): c for c in commits if isinstance(c, dict)}
+    lines = []
+    for sha in uncovered:
+        c = by_sha.get(sha, {})
+        lines.append(f"  {str(sha)[:9]} {c.get('subject', '?')} (needs {c.get('required', '?')}: {c.get('rule', '?')})")
+    fail(
+        f"{wave_name} is not fully reviewed ({start[:9]}..HEAD): uncovered commits —\n"
+        + "\n".join(lines or ["  (agw named none)"])
+        + "\nrun `/review` over the range, then retry"
+    )
 
 
 def outward_next_step(unchecked: list[str]) -> str | None:
@@ -200,6 +277,7 @@ def main() -> None:
             fail(f"{prev['name']} is marked done but {reason}")
         if not prev["left_behind"]:
             fail(f"{prev['name']} has no Left behind — a finished wave must say what the next one inherits")
+        check_review_coverage(plan_repo, plan_path, prev["name"])
 
     hit = None if orchestrated else outward_next_step(active_wave["unchecked"])
     if hit:

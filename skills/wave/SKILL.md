@@ -99,6 +99,7 @@ Ending the turn is right once a wait is declared; a background shell, monitor or
 
 - An `active` wave with a done, fully-ticked predecessor: spawn it.
 - No `active` wave, or the predecessor isn't `done`/fully ticked: **stop.** Write the failure into the active wave's **Left behind**, commit, leave the tab open.
+- The finished wave's commits are not all reviewed at their required tier (`agw review covered` over wave start..HEAD, start = the commit that flipped the wave to `active` in PLAN.md's git history), or `agw` fails: **stop**, fail closed. Run `/review` over the range, then retry.
 - Next step outward-facing (merge, publish, release, deploy, ship): stop and hand back to the human; `/ship` is a human's call. The gate matches keywords only; notice subtler cases yourself.
 
 ## Spawning the next wave (chain mode)

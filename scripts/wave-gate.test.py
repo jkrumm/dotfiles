@@ -157,5 +157,119 @@ echo '{"scope":{"project":"/x/dotfiles"},"state":"run","effective":"drain","scop
             self.assertFalse(os.path.exists(os.path.join(tmp, "calls")), "the gate must not ask the factory")
 
 
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _plan(w1, w2):
+    return f"""# P
+
+## Wave 1 — one   <!-- status: {w1} -->
+- [x] a
+**Left behind:** nothing
+
+## Wave 2 — two   <!-- status: {w2} -->
+- [ ] b
+**Left behind:**
+"""
+
+
+class ReviewCoverage(unittest.TestCase):
+    """Wave start is derived from the plan's git history; coverage comes from `agw review covered`
+    (a fake `agw` on PATH). The gate fails closed on anything but `covered: true`."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = os.path.join(self.tmp.name, "repo")
+        self.bin = os.path.join(self.tmp.name, "bin")
+        os.makedirs(os.path.join(self.repo, "docs/waves"))
+        os.makedirs(self.bin)
+        self.plan = os.path.join(self.repo, "docs/waves/PLAN.md")
+        _git(self.repo, "init", "-q")
+
+    def commit_plan(self, w1, w2, msg):
+        with open(self.plan, "w") as f:
+            f.write(_plan(w1, w2) + f"\n<!-- {msg} -->\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", msg)
+        return subprocess.run(
+            ["git", "-C", self.repo, "rev-parse", "HEAD"], capture_output=True, text=True
+        ).stdout.strip()
+
+    def fake_agw(self, body):
+        path = os.path.join(self.bin, "agw")
+        with open(path, "w") as f:
+            f.write("#!/bin/sh\n" + body)
+        os.chmod(path, 0o755)
+
+    def run_gate(self):
+        return subprocess.run(
+            [sys.executable, "-I", os.path.join(os.path.dirname(__file__), "wave-gate.py"), self.repo, "docs/waves/PLAN.md"],
+            capture_output=True,
+            text=True,
+            env={"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": self.tmp.name},
+        )
+
+    def history(self):
+        self.commit_plan("pending", "pending", "before")
+        start = self.commit_plan("active", "pending", "wave 1 starts")
+        self.commit_plan("active", "pending", "touch plan mid-wave")
+        _git(self.repo, "commit", "-q", "--allow-empty", "-m", "work")
+        self.commit_plan("done", "active", "close wave 1")
+        return start
+
+    def test_wave_start_is_the_oldest_commit_of_the_latest_active_run(self):
+        start = self.history()
+        self.assertEqual(wave_gate.wave_start(self.repo, self.plan, "Wave 1"), start)
+
+    def test_wave_start_none_when_the_wave_was_never_active(self):
+        self.commit_plan("done", "active", "plan")
+        self.assertIsNone(wave_gate.wave_start(self.repo, self.plan, "Wave 1"))
+
+    def test_covered_range_passes_and_the_range_starts_at_the_wave_start(self):
+        start = self.history()
+        self.fake_agw('echo "$@" > "$HOME/args"\necho \'{"covered":true,"commits":[],"uncovered":[]}\'\n')
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with open(os.path.join(self.tmp.name, "args")) as f:
+            args = f.read()
+        self.assertIn(f"--range {start}..HEAD", args)
+        self.assertIn(f"--cwd {os.path.realpath(self.repo)}", args)
+
+    def test_uncovered_commits_stop_the_chain_naming_them_and_their_tier(self):
+        self.history()
+        self.fake_agw(
+            """echo '{"covered":false,"commits":[{"sha":"abcdef1234567","subject":"feat: x","required":"standard","rule":"default","coveredBy":null}],"uncovered":["abcdef1234567"]}'\n"""
+        )
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("abcdef123 feat: x (needs standard", r.stderr)
+
+    def test_agw_failing_stops_with_its_error(self):
+        self.history()
+        self.fake_agw("echo boom >&2\nexit 3\n")
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("boom", r.stderr)
+
+    def test_agw_missing_stops(self):
+        self.history()
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("agw", r.stderr)
+
+    def test_unfindable_wave_start_stops_with_a_clear_message(self):
+        self.commit_plan("done", "active", "plan")
+        self.fake_agw("echo '{\"covered\":true,\"commits\":[],\"uncovered\":[]}'\n")
+        r = self.run_gate()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("cannot find the commit where Wave 1 became `active`", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
