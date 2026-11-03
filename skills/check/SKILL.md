@@ -5,7 +5,7 @@ description: Run validation (format, lint, tsc, test) via the agw CLI (agent-wor
 
 # Check — via `agw`
 
-1. Run `agw check --cwd <repo root> --format json` via Bash. Add `--commands '["cmd1","cmd2"]'` (JSON array, run verbatim) only when the caller names commands; otherwise it runs `make check`, else discovers format/lint/typecheck/test.
+1. Run `agw check --cwd <repo root> --format json` (a relative `--cwd` resolves against the shell's directory) via Bash. Add `--commands '["cmd1","cmd2"]'` (JSON array, run verbatim) only when the caller names commands; otherwise it runs `make check`, else discovers format/lint/typecheck/test.
 2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
 3. Exit 0 = the run finished, **not** that validation passed. Read `output.passed` first; if false, inspect `output.steps[n].errors`. `output.summary` is the one-liner.
 

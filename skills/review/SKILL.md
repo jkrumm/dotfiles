@@ -5,11 +5,11 @@ description: Code review via agw review v4 (prepare/submit host commands, no LLM
 
 # Review
 
-Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B] [--min light|standard|deep] [--context '<intent>'] [--thread <key>]`. `--pr`/`--branch` review a throwaway clone and never touch the main checkout; they exclude a scope. Every `agw review` call below passes `--cwd "$(git rev-parse --show-toplevel)"`. A bare `<ref>` means `merge-base(ref, HEAD)..HEAD`, not the single commit.
+Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B] [--min light|standard|deep] [--context '<intent>'] [--thread <key>]`. `--pr`/`--branch` review a throwaway clone and never touch the main checkout; they exclude a scope. The scope always goes to `agw review prepare` as `--scope <scope>`, never positional. `--thread` takes the thread key or the thread id `status` prints. Every `agw review` call below passes `--cwd "$(git rev-parse --show-toplevel)"`. A bare `<ref>` means `merge-base(ref, HEAD)..HEAD`, not the single commit.
 
 ## Flow
 
-1. **Prepare:** `agw review prepare --cwd "$(git rev-parse --show-toplevel)" [scope/--pr/--branch] [--min …] [--context '…'] [--thread …] --account "$(claude-account account)" --commit --format json`. Pass `--context` with the intent (the brief, plan step, PR body) whenever you have it. Without `--account` the ceiling is `unjudged`.
+1. **Prepare:** `agw review prepare --cwd "$(git rev-parse --show-toplevel)" [--scope <scope> | --pr N | --branch B] [--min …] [--context '…'] [--thread …] --account "$(claude-account account)" --commit --format json`. Pass `--context` with the intent (the brief, plan step, PR body) whenever you have it. Without `--account` the ceiling is `unjudged`.
 2. **By `status`:**
    - `skipped`: tier none. Report the `rule`; nothing to review.
    - `held`: the ceiling or the deep cap. Report `reason`, never lower the tier, stop. The review waits; re-run later.
@@ -34,6 +34,7 @@ Every finding gets a disposition. Fix it, then `agw review dispose <jobId> <find
 ## Status and coverage
 
 - `agw review status --cwd <dir>` shows a running review and the newest jobs; with a `jobId` its thread findings.
+- `agw review cancel <jobId> --commit` abandons a `prepared` job nobody will submit: an in-session one at once; a hidden one only if the factory has not started it.
 - `agw review covered --cwd <dir> --range a..b --format json`: is every first-parent commit of the range reviewed at its required tier with no open important finding. `uncovered` lists the shas.
 
 ## What the gates cannot catch — check these yourself
