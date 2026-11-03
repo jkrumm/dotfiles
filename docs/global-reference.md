@@ -17,7 +17,7 @@ detail it points at. Repo descriptions live only in `docs/architecture.md`
 
 ## Async-job contract
 
-- `/check`, `/review`, `/research` and `/otel` are not jobs you poll: `agw check` / `agw review` /
+- `/check`, `/research` and `/otel` are not jobs you poll (`/review` is host commands plus an in-session agent, no run to wait on): `agw check` /
   `agw research` / `agw otel` block up to `AGW_WAIT_BUDGET_S` (default 110 s), then exit 10
   naming the run; resume with `agw run wait <runId>` until the exit is not 10.
 
@@ -37,7 +37,7 @@ Everything routed through `agw` exists only on the mini.
 
 | Mode | Skills |
 |-|-|
-| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`--deep` adds correctness + security) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
+| `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
 | MCP · subagent | `/browse` (chrome-devtools, haiku) · `/analyze` (fallow in a native subagent) |
 | inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
 | inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |

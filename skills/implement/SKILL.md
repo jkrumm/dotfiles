@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration, while keeping the main agent's context window lean.
 
-> **Delegation lanes.** `/check`, `/review` and `/research` run on `agw`, synchronous with the exit-10 resume (`agw run wait <runId>`). Changes in a repo you are NOT working in, and N independent changes in ONE repo (disjoint files), go through `/wave` fan-out (`rd fan` / `rd merge`: a worktree + Claude tab per change; `rd wave <repo>` for a single change you want to watch). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. See the async-job contract in global CLAUDE.md.
+> **Delegation lanes.** `/check` and `/research` run on `agw`, synchronous with the exit-10 resume (`agw run wait <runId>`); `/review` runs `agw review` host commands around one reviewer agent on this session. Changes in a repo you are NOT working in, and N independent changes in ONE repo (disjoint files), go through `/wave` fan-out (`rd fan` / `rd merge`: a worktree + Claude tab per change; `rd wave <repo>` for a single change you want to watch). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 
