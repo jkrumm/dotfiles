@@ -20,6 +20,6 @@ Applies to any document an agent consumes. Prose for humans is `brain/voice.md`;
 ## Skills
 
 - **Model-invoked** skills carry a description that stays loaded: permanent context load for autonomous reach and reach from other skills. **User-invoked** (`disable-model-invocation: true`) cost no context and spend cognitive load: a one-line human summary replaces the trigger list.
-- A skill that only ever fires by hand is user-invoked. Split off a model-invoked skill only for a trigger word actually used in prompts, or because another skill must reach it.
+- A skill that only ever fires by hand is user-invoked. Johannes never types skill names himself, so here almost none qualifies: `disable-model-invocation` on a skill the agents need makes it unreachable. Split off a model-invoked skill only for a trigger word actually used in prompts, or because another skill must reach it.
 - Reference two skills share lives in a plain file both point at, not in either skill.
 - A pile of user-invoked skills too large to remember gets one router skill that names them and when to reach for each. It can hint, never fire.
