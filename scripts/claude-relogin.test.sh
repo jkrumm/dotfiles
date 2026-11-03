@@ -535,12 +535,12 @@ assert_contains "...with the unchanged notification" "osascript:notify[-][Claude
 echo "the login owner kills the tunnel on exit"
 as mini; reset
 export STUB_URL="$URL"
-STUB_CLAUDE_BROWSER=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
+TMPDIR="$TMP" STUB_CLAUDE_BROWSER=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null; rc=$?
 tp=$(cat "$TMP/tunnel.pid" 2>/dev/null)
 sleep 0.2   # the watchdog polls only every second: a dead tunnel this early is the trap's doing
 assert_eq "login finished: rc 0" 0 "$rc"
 [[ -n "$tp" ]] && ! kill -0 "$tp" 2>/dev/null && ok "tunnel gone as soon as the owner returned" || bad "tunnel gone as soon as the owner returned" "pid [$tp]"
-assert_eq "pid file removed" "0" "$(ls "${TMPDIR:-/tmp}"/claude-relogin-tunnel.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "pid file removed" "0" "$(ls "$TMP"/claude-relogin-tunnel.* 2>/dev/null | wc -l | tr -d ' ')"
 reset
 STUB_CLAUDE_BROWSER=1 STUB_LOGIN_RC=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1 bash "$RELOGIN" me --machine mini --in-pane >/dev/null 2>&1; rc=$?
 tp=$(cat "$TMP/tunnel.pid" 2>/dev/null); sleep 0.2
