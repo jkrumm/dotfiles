@@ -39,6 +39,7 @@ own "Stop. Do not spawn."
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -124,9 +125,11 @@ def check_review_coverage(plan_repo: str, plan_path: str, wave_name: str) -> Non
             "review coverage of the finished wave cannot be checked; stop and run "
             "`agw review covered --cwd <repo> --range <wave start>..HEAD` by hand"
         )
+    # host_run gives no PATH prefix: fall back to the install location.
+    agw = shutil.which("agw") or os.path.expanduser("~/.local/bin/agw")
     try:
         result = subprocess.run(
-            ["agw", "review", "covered", "--cwd", plan_repo, "--range", f"{start}..HEAD", "--format", "json"],
+            [agw, "review", "covered", "--cwd", plan_repo, "--range", f"{start}..HEAD", "--format", "json"],
             capture_output=True,
             text=True,
         )

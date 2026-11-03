@@ -15,6 +15,8 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "agents"
 DST = Path.home() / ".config" / "opencode" / "agent"
+# Claude Code only (Agent tool, review-job protocol): never rendered, and pruned if an earlier run did.
+SKIP = {"reviewer.md", "review-verifier.md"}
 MARK = "<!-- rendered from dotfiles/agents by scripts/opencode-agents.py — edit the source -->"
 
 
@@ -41,6 +43,8 @@ def main() -> int:
     rendered: dict[Path, str] = {}
     errors: list[str] = []
     for src in sorted(SRC.glob("*.md")):
+        if src.name in SKIP:
+            continue
         try:
             rendered[src] = render(src.read_text(), str(src))
         except ValueError as e:
@@ -58,7 +62,7 @@ def main() -> int:
         dst.write_text(text)
         print(f"    ✓ {dst}")
     for stale in DST.glob("*.md"):
-        if not (SRC / stale.name).exists() and MARK in stale.read_text():
+        if (stale.name in SKIP or not (SRC / stale.name).exists()) and MARK in stale.read_text():
             stale.unlink()
             print(f"    − removed {stale}")
     return 0
