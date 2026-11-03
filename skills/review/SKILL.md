@@ -1,56 +1,40 @@
 ---
 name: review
-description: Multi-angle code review via the agw CLI (agent-workflows). Add --deep to also run Anthropic's native correctness + security review on the orchestrator's Max model.
+description: Code review via agw review v4 (prepare/submit host commands, no LLM in agw) with one reviewer agent on this session's Max. Rounds converge by disposition; `covered` proves a range was reviewed.
 ---
 
 # Review
 
-## Default — `agw review`
+Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B] [--min light|standard|deep] [--context '<intent>'] [--thread <key>]`. `--pr`/`--branch` review a throwaway clone and never touch the main checkout; they exclude a scope. Every `agw review` call below passes `--cwd "$(git rev-parse --show-toplevel)"`. A bare `<ref>` means `merge-base(ref, HEAD)..HEAD`, not the single commit.
 
-1. Run `agw review --cwd <repo root> [--scope <scope> | --pr N | --branch B] --format json` via Bash. Parse args for the scope (default `uncommitted`): e.g. `head` (last commit only), `HEAD~3` (a bare ref = the range up to HEAD, i.e. the **last 3 commits** — not the single commit), `main..HEAD` (explicit range), `path/to/file.ts`. Strip any leading flags (like `--deep`) before extracting the scope. `--pr` and `--branch` review a throwaway clone and exclude `--scope`. Pass `--depth light|standard|deep` or `--context '<intent>'` through only when the caller gave one; otherwise the router picks the depth.
-2. Exit 10 = still running (wait budget `AGW_WAIT_BUDGET_S`, default 110 s). The JSON names the run: run `agw run wait <runId> --format json`, repeat until the exit is not 10. Never wrap it in a short timeout.
-3. Read `output` (REVIEW_OUTPUT, `schemaVersion: 2`; fields per `agw schema review` and the review workflow's `schema.ts`): `outcome` (`clean` / `actionable` / `needs-human`), `blocking`, `discussions`, `improvements` (findings: `file`, `line?`, `message`, `angle`), `testGaps` (strings), `escalationCategory?`, `summary`, `degraded?`. Failure: exit 1 with `status: "failed"` and `error: { kind, message }`.
+## Flow
 
-This runs the deterministic floor (architect and senior-dev angles) plus a router that adds content-driven angles — security, performance, concurrency, data-migration, api-contract, resilience, and others — and an adversary pass when the diff warrants them.
+1. **Prepare:** `agw review prepare --cwd "$(git rev-parse --show-toplevel)" [scope/--pr/--branch] [--min …] [--context '…'] [--thread …] --account "$(claude-account account)" --commit --format json`. Pass `--context` with the intent (the brief, plan step, PR body) whenever you have it. Without `--account` the ceiling is `unjudged`.
+2. **By `status`:**
+   - `skipped`: tier none. Report the `rule`; nothing to review.
+   - `held`: the ceiling or the deep cap. Report `reason`, never lower the tier, stop. The review waits; re-run later.
+   - `needs-human`: the 4th round on the thread is refused. Step back (below).
+   - `ready`: Agent tool, `subagent_type: reviewer`, `model` = `seat.model`, `effort` = `seat.effort`, `prompt` = prepare's `prompt` verbatim, foreground.
+3. **Submit the reply verbatim**, byte for byte, never shortened, reformatted or edited (a Wave 9 lesson):
+   ```
+   agw review submit <jobId> --attempt 1 --commit --format json <<'REVIEW_REPLY_EOF'
+   <the agent's reply>
+   REVIEW_REPLY_EOF
+   ```
+   Refused (bad JSON, schema, `files` differs from stat.txt): run the agent once more with the error appended to the prompt, submit with `--attempt 2`. Refused again: stop, needs-human.
+4. **Present REVIEW_OUTPUT v4** (`agw schema review`): `outcome` (`clean` / `actionable` / `needs-human`), `summary`, `tier` and `rule`, then `findings` by tag (`important`, `nit`, `pre-existing`) with `id`, `file:line`, `class`, `message`, `failureScenario`, `fix`, `votes`; `checked` when it explains a clean result; `stepBack` if set. Synthesize; don't echo raw JSON.
 
-## `--deep` — add native correctness + security (on the orchestrator's Max model)
+## Fix loop
 
-When the args contain `--deep`, ALSO run Anthropic's native reviewers and merge
-them with the `agw review` result. These run on the orchestrator's Max model and are
-tuned for real correctness bugs — complementary to the angle reviewers'
-architecture / framework / style view. **Reserve `--deep` for pre-ship gates or risky changes**,
-not routine reviews — it spends Max. `--deep` does not map to `--depth deep`.
+Every finding gets a disposition. Fix it, then `agw review dispose <jobId> <findingId> fixed|wrong|intentional|irrelevant [--reason '…'] --commit`. `wrong`, `intentional` and `irrelevant` need a reason you would defend; `pre-existing` never blocks. Then re-run `/review` on the same scope (same thread: round 2 reviews only what changed since the last reviewed head). Clean: done.
 
-1. Run `agw review` (as above).
-2. Invoke the native **`code-review`** skill at high effort over the same scope
-   (Skill tool, `args: "high"`). It targets correctness bugs the angle reviewers
-   may miss.
-3. **Conditionally** invoke the native **`security-review`** skill if the diff
-   touches security-sensitive surface — auth/authz, secrets or credentials,
-   crypto, SQL/command/path construction from input, file uploads, shelling out,
-   or env-var handling. Skip it otherwise.
-4. Merge all findings into one verdict, deduplicated against the `agw review`
-   findings. Map native **Important** → blocking, **Nit** → improvements. Keep
-   the review's outcome classification (`clean` / `actionable` / `needs-human`); if
-   the native pass surfaces a blocking bug, the merged outcome is at least
-   `actionable`.
+- Round 3 with `important` left: `stepBack` is set. Stop fixing, reconsider the approach, report it.
+- Round 4 is refused (`needs-human`).
 
-## Provider-balance failure — degrade to in-session `/code-review`
+## Status and coverage
 
-Trigger: `output.degraded === "provider_balance"` (outcome `needs-human`, `escalationCategory: spend`: the IU provider is out of balance even after the fallback), or a non-zero exit whose error message names a provider balance (402, "Insufficient Balance", "PaymentRequired").
-
-- **Never retry or resubmit** the review.
-- Say in one line that `agw review` is degraded by provider balance, then run `/code-review high <target>` (Skill tool) over the same scope on this session's own Claude (Max).
-- Record the review step as "agw review degraded (provider balance) → in-session /code-review".
-- **Partial** (`needs-human` because only some reviewers failed — `discussions` entries with angle `(review pipeline)` naming a balance failure — while the rest returned findings): keep those findings, still run `/code-review high <target>` for the missing view, and say so.
-- A balance-degraded `needs-human` is **not** an owner escalation — the in-session verdict decides the outcome.
-- With `--deep`, the native `code-review` pass already covers this; don't run it twice.
-
-## Output
-
-Present one consolidated verdict — outcome, blocking, improvements, discussions,
-testGaps, summary — noting the catching reviewer per finding. Don't echo each
-tool's raw output; synthesize.
+- `agw review status --cwd <dir>` shows a running review and the newest jobs; with a `jobId` its thread findings.
+- `agw review covered --cwd <dir> --range a..b --format json`: is every first-parent commit of the range reviewed at its required tier with no open important finding. `uncovered` lists the shas.
 
 ## What the gates cannot catch — check these yourself
 
@@ -81,5 +65,5 @@ regardless of what happened.
 
 **Worker caveats when consuming findings:**
 - **Line numbers are unreliable** — the worker often cites lines that don't exist (e.g. L688 in a 600-line file). The *substance* is usually accurate; the location isn't. Before reporting or acting on a finding, **grep for the symbol/code, not the cited line.**
-- **Angle reviewers explore the live tree**, not just the diff (they have Bash/Read/Grep). A finding may reference current code outside the reviewed scope — useful, but verify it's in-scope before treating it as introduced by the change.
+- A finding may reference code outside the reviewed scope: verify it is in-scope before treating it as introduced by the change (`pre-existing` findings never block).
 - Before claiming a finding is wrong, verify it in the actual code — don't dismiss it on the bad line number alone.
