@@ -56,7 +56,7 @@
       "enabled": true,
       "platform": {
         "creditUsd": 100,
-        "cycleDay": null,
+        "cycleDay": 30,
         "headroomUsd": 2,
         "enabled": true,
         "apiKeyRef": "op://mini/claude-platform/API_KEY_ME2",

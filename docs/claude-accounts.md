@@ -506,7 +506,7 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 |-|-|-|-|
 | `iu` | Ultra $200 | 21 | enabled |
 | `me` | Max $100 | 27 | enabled |
-| `me2` | Max $100 | `null` (unknown, rolling 31 days) | enabled |
+| `me2` | Max $100 | 30 | enabled |
 
 | Field | Meaning |
 |-|-|
@@ -517,7 +517,7 @@ The gateway (`127.0.0.1:7794`, `com.jkrumm.agent-workflows-gateway`) holds one A
 | `apiKeyRef` | `op://` ref of the org's API key; the gateway resolves it through `secrets-run` |
 | `adminKeyRef` | `op://` ref of the org's Admin key, for reconciling the meter against the cost API |
 
-**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. Refs live in `op://mini/claude-platform/` (`API_KEY_<ID>`, `ADMIN_KEY_<ID>`). `iu` and `me` are enabled with real keys. `me2` is enabled since 2026-11-04 (keys seeded, `cycleDay` still unknown). The gateway reads this file only at start, so every edit to it needs `launchctl kickstart -k gui/$(id -u)/com.jkrumm.agent-workflows-gateway` (a gateway deploy does not restart it when its build is unchanged).
+**Enable rule.** A pool is used only when `platform.enabled` is true and its `apiKeyRef` resolves through `secrets-run` (so the ref must also be in the mini's `headless.refs`, sealed by `make secrets-seed`). A ref that does not resolve disables that pool and logs why; the gateway still starts. Refs live in `op://mini/claude-platform/` (`API_KEY_<ID>`, `ADMIN_KEY_<ID>`). `iu` and `me` are enabled with real keys. `me2` is enabled since 2026-11-04 (keys seeded, `cycleDay` 30). The gateway reads this file only at start, so every edit to it needs `launchctl kickstart -k gui/$(id -u)/com.jkrumm.agent-workflows-gateway` (a gateway deploy does not restart it when its build is unchanged).
 
 **Enable `me2` (owner steps):**
 
