@@ -2479,7 +2479,7 @@ jobrun-canary-teardown:
 # GUI session, and a core there spawns Claude without the keychain (the `ssh mini 'claude …'` trap).
 LAUNCHER_BIN := $(HOME)/.local/libexec/herdr-core-launcher
 CORE_FORMULA := jkrumm/tap/herdr-core
-.PHONY: herdr-core-setup herdr-core-teardown herdr-core-status herdr-core-launcher herdr-core-update-setup herdr-core-update-teardown herdr-core-update-check herdr-core-update
+.PHONY: herdr-core-setup herdr-core-relaunch herdr-core-teardown herdr-core-status herdr-core-launcher herdr-core-update-setup herdr-core-update-teardown herdr-core-update-check herdr-core-update
 # The LaunchAgent's own program (docs/tcc.md): ad-hoc signed with a fixed identifier and an explicit identifier-only
 # designated requirement, so a rebuild keeps its Full Disk Access grant. Rebuilt when the source hash or the signing
 # mode changes; a changed requirement queues the re-grant with ask-human before the swap. Afterwards: make tcc-probe.
@@ -2517,10 +2517,24 @@ herdr-core-setup: herdr-core-launcher
 		echo "$$LSHA" > "$$MARK"; \
 		echo "    ✓ com.jkrumm.herdr-core (installed + bootstrapped into gui/$$(id -u))"; \
 	fi; \
-	i=0; until launchctl print "$$TARGET" 2>/dev/null | grep -q "state = running"; do \
-		i=$$((i+1)); [ $$i -gt 40 ] && { echo "    ✗ com.jkrumm.herdr-core not running — ~/Library/Logs/herdr-core.log"; exit 1; }; sleep 0.5; done; \
-	echo "    ↳ running (KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"; \
+	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do \
+		i=$$((i+1)); [ $$i -gt 40 ] && { echo "    ✗ com.jkrumm.herdr-core not up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh") — ~/Library/Logs/herdr-core.log"; exit 1; }; sleep 0.5; done; \
+	echo "    ↳ up (launchd running + socket answers; KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"; \
 	$(MAKE) --no-print-directory herdr-core-update-setup
+# Terminal-preserving roll of a new launcher (or a new core binary): rebuild the launcher if its source changed, then
+# kickstart -k (never a bootout; holders keep every terminal) and wait until the core is up and launchd holds it stable.
+# The way to apply a launcher change while terminals are live; the plist itself still needs herdr-core-setup YES=1.
+herdr-core-relaunch: herdr-core-launcher
+	@TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; \
+	launchctl print "$$TARGET" >/dev/null 2>&1 || { echo "    ✗ com.jkrumm.herdr-core is not loaded: make herdr-core-setup"; exit 1; }; \
+	launchctl kickstart -k "$$TARGET" || { echo "    ✗ kickstart failed"; exit 1; }; \
+	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do \
+		i=$$((i+1)); [ $$i -gt 120 ] && { echo "    ✗ not up after 60 s: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; sleep 0.5; done; \
+	runs() { launchctl print "$$TARGET" | awk -F' = ' '/^[[:space:]]*runs = /{ print $$2; exit }'; }; \
+	r0=$$(runs); sleep 30; r1=$$(runs); \
+	[ "$$r0" = "$$r1" ] && bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null \
+		|| { echo "    ✗ launchd is respawning the job (runs $$r0 -> $$r1): docs/herdr-core.md §Core as a LaunchAgent"; exit 1; }; \
+	echo "    ✓ com.jkrumm.herdr-core relaunched: up, runs stable at $$r1 for 30 s"
 herdr-core-teardown: herdr-core-update-teardown
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
@@ -2545,8 +2559,8 @@ tcc-check-test: ## Hermetic test for tcc-check
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 
 .PHONY: herdr-core-guard-test
-herdr-core-guard-test: ## Hermetic tests: the client guard (hc/herdr-core refuse outside launchd) and the stray-core detection in core-health
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/herdr-core-guard.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
+herdr-core-guard-test: ## Hermetic tests: the core-up definition, the client guard (hc/herdr-core refuse outside launchd) and core-health (strays, detached cores, job parentage)
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/core-up.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh
 	@bash $(DOTFILES_DIR)/scripts/core-health.test.sh
 

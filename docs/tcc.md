@@ -55,6 +55,26 @@ grant from a pre-existing terminal (it produced a false "cannot read the unified
 `make tcc-probe` runs in a fresh `hc run` terminal by itself, and `scripts/op-tcc-probe.sh` re-execs itself through
 `hc run` when started anywhere else (and refuses when the core job is not running: it never lets `hc` start a core).
 
+## Core 0.1.17+: who macOS attributes terminals to (measured 2026-11-04, mini)
+
+Probe without a dialog: Full Disk Access never prompts, it only allows or denies, so `hc exec /usr/bin/sqlite3
+"/Library/Application Support/com.apple.TCC/TCC.db" "select 1"` (or the same in a fresh `hc run --bg --rm`) is safe on an
+unwatched screen. `log show --predicate 'process == "tccd" AND eventMessage CONTAINS "AUTHREQ_ATTRIBUTION"'` then names the
+`responsible_path`.
+
+| Core | Attribution of a fresh terminal/exec |
+|-|-|
+| 0.1.17 escaped (`serve` re-launched itself as a one-shot launchd job, the core an orphan) | `identifier=dev.herdr.core`, `responsible_path=/opt/homebrew/Cellar/herdr-core/0.1.17/bin/herdr-core`: the versioned core, **not** the launcher. Every core update would need a new grant |
+| 0.1.17 under the launcher with `HC_LAUNCHD_DIRECT` (scratch label, scratch launcher path) | `responsible_path=<the scratch launcher>` for `hc exec` and for a new `hc run` terminal: the launcher design holds again |
+| 0.1.18 (source only, not installed) | holders disclaim responsibility (`platform/macos_responsibility.rs`), so terminals are attributed to the holder, i.e. Herdr Core: the launcher's grant stops covering terminal programs (`docs/herdr-core.md` §Updates, 0.1.18) |
+
+On the mini, the launcher's grant was not effective on 2026-11-04 before this change: a terminal attributed to the launcher
+got `authValue=0, authReason=5` (default deny) for the system TCC.db. The launcher was then rebuilt with the
+identifier-only requirement (the pending Wave 8 migration), which queued the re-grant (`ask-human` `20261104T151124-20436`).
+The re-grant is still owed, and so is `make tcc-probe` afterwards. Whether tccd honours the re-grant before the job's next
+bootout ("launchd pins the code identity at bootstrap", above) is not proven yet; the Wave 8 cutover
+(`make herdr-core-setup YES=1`) does that bootout anyway.
+
 ## Per-program classification
 
 `make tcc-check` (read-only, in `make doctor`) reads every `~/Library/LaunchAgents/*.plist`, resolves the program, and
@@ -88,7 +108,7 @@ MacBook (different user home): LaunchAgent programs were read over ssh; the TCC 
 
 | Machine | Grant | Why |
 |-|-|-|
-| mini | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | every program in a core terminal; survives core upgrades and launcher rebuilds (stable requirement); re-grant once for the migration |
+| mini | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | every program in a core terminal; survives core upgrades and launcher rebuilds (stable requirement); re-grant once for the migration (queued 2026-11-04, §Core 0.1.17+). Holds for cores up to 0.1.17 only: 0.1.18 moves attribution to Herdr Core |
 | MacBook | Full Disk Access → `~/.local/libexec/herdr-core-launcher` | same; the app's terminals run in that core, and it is what spares `op` the AppData dialog (§1Password) |
 | MacBook | Full Disk Access → Ghostty.app (optional) | `op` and everything else started from a plain Ghostty tab |
 

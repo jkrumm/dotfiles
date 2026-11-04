@@ -35,6 +35,8 @@ echo a >"$TMP/co/f"; g -C "$TMP/co" add f; g -C "$TMP/co" commit -qm one; g -C "
 
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
+# the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
 cat >"$TMP/home/.local/bin/factory" <<'STUB'
 #!/usr/bin/env bash

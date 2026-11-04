@@ -271,22 +271,56 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
   (`scripts/herdr-core-launcher.c`, built once by `make herdr-core-setup`, ad-hoc signed with the fixed identifier
   `com.jkrumm.herdr-core-launcher`, rebuilt only when the source changes because a new binary needs a new grant). It
   resolves `/opt/homebrew/opt/herdr-core/bin/herdr-core` with `realpath()`, `posix_spawn`s it as a child (never
-  `exec`, no disclaim), forwards SIGTERM/SIGINT/SIGHUP and exits with it. The core is the `jkrumm/tap` formula
+  `exec`, no disclaim), forwards SIGTERM/SIGINT/SIGHUP and exits with it. It sets `HC_LAUNCHD_DIRECT=<its own pid>`
+  and reclaims the core lock (next bullet). The core is the `jkrumm/tap` formula
   `herdr-core`: the resolved path contains `/Cellar/`, so the core reports `installed_by: "homebrew"` and the app
   never updates it. `~/.local/bin/{herdr-core,hc}` are symlinks to `scripts/herdr-core-guard.sh` (next bullet), which execs the Cellar-resolved binary. **Cutover** (once per
   machine): `make herdr-core-setup YES=1`. Changing the job's program needs a `bootout`, and that ends every live
   terminal (a kickstart does not), so the target refuses without `YES=1` while terminals are live.
+- **0.1.17 moved `serve` out of launchd's sight; the launcher keeps it in (incident 2026-11-04).** Upstream
+  `platform/macos_launchd.rs` (`prepare_core`, read at tag `v0.1.17`): a macOS `serve` that is not under ssh
+  bootstraps a one-shot job `dev.herdr.core.<pid>.<ns>`, whose program re-execs as `herdr-core --hc-launchd
+  /tmp/hc-launchd-…/ready`, forks, `setsid`s, hands over over that socket, and the job is booted out; the starting
+  `serve` exits 0. Under our LaunchAgent that left the core an orphan (parent 1, its own coalition) and the job
+  respawning every `ThrottleInterval` forever: the nightly update to 0.1.17 ended `not ready after 60s`, the job stood at
+  `state = spawn scheduled`, `last exit code = 0`, `runs` ~3800 and climbing on the mini (~2750 on the MacBook), while
+  `hc ls` still answered. Every consumer that asks launchd refused (`rd`, the guard, relogin, doctor, heartbeat), and
+  `hc-events`/`hc-resume` stopped connecting. Not only a client's start detaches: under the LaunchAgent the launcher's own
+  `serve` did (reproduced with the old launcher under a scratch label); only an ssh-born `serve` stays direct. No plist
+  key fixes it: the escape is skipped only when `HC_LAUNCHD_DIRECT` equals the `serve`'s **parent pid** (scoped to its
+  immediate launcher on purpose), or under `SSH_CONNECTION` (which would leak into every terminal's env). The launcher
+  sets it to its own pid; the core removes it before spawning anything. It is an internal variable, so the updater's
+  post-restart assertion and the version pin (§Updates) are what catch a release that drops it.
+  **Holders restart cores too.** Each `hold` process supervises its core: gone for 3 s (`HC_HOLDER_GRACE_MS`), it starts
+  one itself, through the same escape (upstream `holder.rs`, `supervise`). After a `SIGTERM` to an orphan on the mini, a
+  0.1.17 holder won that race against the kickstart and became the next orphan. A `serve` that finds `core.lock` taken
+  returns 0 at once (`server.rs`), so the job loops again. So the launcher reclaims: when its `serve` child exits 0 and
+  another herdr-core process of this user has this session's `core.lock` open (libproc, no `hc` call), it `SIGTERM`s that
+  process (a core's planned stop: holders keep every terminal), waits for it to exit (≤ 30 s) and starts its own `serve`
+  at once, at most 3 times per launch. Each reclaim is one line in `~/Library/Logs/herdr-core.log`.
+  Verified 2026-11-04 on the mini: the bug was reproduced under a scratch label with the old launcher (`runs` 3, `spawn
+  scheduled`, an orphan `--hc-launchd`). With the new launcher, the binary was swapped under the bootstrapped job (no
+  bootout needed; launchd ran the new one on its next spawn). Then a scratch core started like a client's, and later one
+  started by a holder after a bootout, was reclaimed: `runs = 1`, the core the launcher's child, both scratch terminals on
+  the same pids. A `SIGKILL` of the core and two `kickstart -k` kept those pids. Live (30 terminals): `runs` 3872 held for
+  80 s, the core (`serve`) the launcher's child, 30/30 terminals on the same pids. Two further `kickstart -k`s (one through
+  `make herdr-core-relaunch`) kept every pid; `rd agents` answered.
+- **Applying a launcher change with terminals live:** `make herdr-core-relaunch` rebuilds the launcher if its source
+  changed (same code requirement: the grant holds), runs `kickstart -k`, and waits until the core is up and `runs` stays
+  flat for 30 s. A bootout is only needed when the plist itself changes (`make herdr-core-setup YES=1`).
 - **Client guard: no core outside launchd** (`scripts/herdr-core-guard.sh`, hermetic test `make herdr-core-guard-test`).
   Research 2026-11-01 (core 0.1.15): no upstream switch. `hc` and `herdr-core` are one multi-call binary (`hc` is a
   symlink to `herdr-core`), `hc --skill`/`--help`/`schema`, the `config.toml` keys and `strings` show no autostart flag,
   env var or setting, and a scratch `hc server status` boots a core (`<argv0> serve`, parent pid 1). So the guard is a
   wrapper at `~/.local/bin/{hc,herdr-core}`: help/version/skill/schema and scratch sessions (`HC_SESSION` other than
-  `default`, or `--session`) pass; everything else waits up to `HC_GUARD_WAIT` s (default 5) for `launchctl print` `state = running`
-  AND a connect to the default socket (`nc -U`, never an `hc` call), then execs the real binary, else exits 75 with what, why and
+  `default`, or `--session`) pass; everything else waits up to `HC_GUARD_WAIT` s (default 5) for the core to be up as
+  `scripts/lib/core-up.sh` defines it (`launchctl print` `state = running` AND a connect to the default socket, `nc -U`, never an `hc`
+  call; the same definition `rd`'s `require_core`, `claude-relogin`'s `hc_usable`, doctor and the heartbeat use), then execs the real binary, else exits 75 with what, why and
   the fix (`launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`, or `make herdr-core-setup` when not loaded). The LaunchAgent's
   launcher spawns the real binary directly, so only other callers see the guard. A caller that bypasses it
   (`/opt/homebrew/bin/hc`, a core terminal started before the swap) is still caught by detection: `make doctor` and the
-  heartbeat `core` FAIL when a default-session `herdr-core serve` has a parent other than the launcher (pid and fix named).
+  heartbeat `core` FAIL when a default-session `herdr-core serve` has a parent other than the launcher, when a detached
+  `herdr-core --hc-launchd` daemon runs, or when the core that answers is not the job's child (pid and fix named).
   Incidents 2026-11-01: (a) after the MacBook rebooted, the Herdr app's `herdr-core connect` started a core (no launcher, no
   Full Disk Access) before the LaunchAgent ran, and the job looped `runs = 42` on an empty log, unable to take the socket;
   (b) after the mini's macOS update the MacBook's machine link (`ssh <peer-host> … herdr-core connect`) started
@@ -298,17 +332,6 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
   also needs the plist bootout, so run it with `YES=1` at a chosen moment, or swap just the links by hand). The plist change needs a
   `bootout` (ends live terminals); until then the guard works without it. On the MacBook the app must start its core through
   `~/.local/bin/herdr-core`: confirm after the rollout that the app's connect is refused while the job is stopped.
-
-  **0.1.17 detach (incident 2026-11-04).** Release notes: "the core now runs apart from the app" — a core a client auto-starts in the
-  GUI session boots as its own transient launchd job (`dev.herdr.core.<pid>.<ns>`, argv `herdr-core --hc-launchd <ready>`, parent 1),
-  not as `serve`. When the daily update's `kickstart -k` (04:15) left a gap with no core, such a client won the race: the detached
-  core held `core.lock`, the job's `serve` found the lock, exited 0 and KeepAlive looped it every 10 s ("spawn scheduled",
-  `runs` in the thousands), `hc-events`/`hc-resume` saw "not running" and stopped connecting, and `kickstart -k` no longer reached
-  the core. Stray detection missed it (it matched `serve` only; now also `--hc-launchd`, checked before the job state). Fix: `kill
-  <pid>` (SIGTERM, terminals survive via their holders), then `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` at once;
-  `herdr-core-update` now asserts the new core's parent is the launcher. A scratch `serve` or ssh-born `hc server status` does not
-  detach (verified), so the trigger is a GUI-session client. 0.1.18 ("the core is now its own app, Herdr Core", new Local Network and
-  microphone prompts) changes the process model again: do not let the updater take it before a scratch check of launcher/FDA.
 - **Upgrades:** §Updates. Keep MacBook and mini on the same `hc` version (`hc machine ls` shows it).
 - State: `~/.local/state/herdr-core/` on the mini. Log: `~/Library/Logs/herdr-core.log`.
 

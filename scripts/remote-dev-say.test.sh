@@ -24,6 +24,8 @@ cat >"$TMP/bin/launchctl" <<'STUB'
 echo "state = running"
 STUB
 chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/hc"
+# the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
@@ -148,7 +150,7 @@ has "says the core has no agents" "$out" "no agents at all"
 echo "no core: error, hc is not called"
 hcreset; touch "$STATE/no_core"
 say "go on"; [ "$rc" -ne 0 ] && ok "refused" || bad "ran without a core"
-has "names the fix" "$out" "launchctl kickstart"
+has "names the fix" "$out" "make herdr-core-setup"
 [ ! -e "$STATE/hc-called" ] && ok "hc was not called" || bad "hc was called"
 
 echo; [ "$fails" -eq 0 ] && echo "remote-dev-say: all passed" || { echo "remote-dev-say: $fails failed"; exit 1; }

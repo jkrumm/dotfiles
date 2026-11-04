@@ -31,7 +31,7 @@ cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 cat >"$TMP/bin/launchctl" <<'STUB'
 #!/usr/bin/env bash
 [ -f "$STATE/no_core" ] && { echo "Could not find service" >&2; exit 113; }
-echo "state = running"
+echo "state = $(cat "$STATE/job_state" 2>/dev/null || echo running)"
 STUB
 # a MacBook's rd reaches the dev host over ssh; the stub runs the command locally
 printf '#!/usr/bin/env bash\nshift\nbash -c "$1"\n' >"$TMP/bin/ssh"
@@ -45,6 +45,10 @@ else
 fi
 STUB
 chmod +x "$TMP/bin/ssh" "$TMP/bin/launchctl" "$TMP/home/.local/bin/"* "$S/dotfiles/scripts/"*.sh
+# the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
+# off the dev host, require_core runs the dev host's own copy of the definition ($HOME/SourceRoot/dotfiles over ssh)
+mkdir -p "$S/dotfiles/scripts/lib" && cp "$HERE/lib/core-up.sh" "$S/dotfiles/scripts/lib/core-up.sh"
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
@@ -134,8 +138,34 @@ HC_SESSION=scratch wave "adhoc task"
 echo notcache >"$TMP/xdg/secrets/backend"
 HC_SESSION=scratch wave "adhoc task"
 [ "$rc" -ne 0 ] && ok "off the dev host, HC_SESSION is not forwarded: launchd is asked and says no" || bad "skipped the check: $out"
-has "names the fix" "$out" "launchctl kickstart"
+has "names the fix" "$out" "make herdr-core-setup"
 echo cache >"$TMP/xdg/secrets/backend"
+
+echo "a job launchd keeps respawning (the 0.1.17 incident: 'spawn scheduled') is not up"
+reset; echo "spawn scheduled" >"$STATE/job_state"
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "refused" || bad "spawned on a respawning job: $out"
+has "names the state" "$out" "'spawn scheduled', not running"
+has "names the fix" "$out" "launchctl kickstart gui/"
+[ ! -e "$STATE/hc-called" ] && ok "hc was not called" || bad "hc was called"
+
+echo "launchd running is not enough: the socket must answer (lib/core-up.sh), on the dev host and over ssh"
+reset; touch "$STATE/sock_down"
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "dev host: a running job whose socket does not answer refuses" || bad "spawned without a socket: $out"
+has "names the socket" "$out" "does not answer"
+[ ! -e "$STATE/hc-called" ] && ok "no hc call was made" || bad "hc was called: $(cat "$STATE/calls.log" 2>/dev/null)"
+echo notcache >"$TMP/xdg/secrets/backend"
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "off the dev host: the same definition over ssh refuses" || bad "spawned without a socket over ssh: $out"
+has "names the socket over ssh" "$out" "does not answer"
+echo cache >"$TMP/xdg/secrets/backend"
+rm -f "$STATE/sock_down"
+rm -f "$S/dotfiles/scripts/lib/core-up.sh"; echo notcache >"$TMP/xdg/secrets/backend"
+wave "adhoc task"
+[ "$rc" -ne 0 ] && ok "a dev host without lib/core-up.sh refuses" || bad "skipped the check: $out"
+has "says the checkout is behind" "$out" "git pull there"
+cp "$HERE/lib/core-up.sh" "$S/dotfiles/scripts/lib/core-up.sh"; echo cache >"$TMP/xdg/secrets/backend"
 
 echo "RD_WAVE_MAX counts a repo whose terminal names hc escapes (t<digit>…)"
 reset; mkdir -p "$S/t7app/.git"
@@ -178,7 +208,7 @@ echo "no core: an error, and hc is never called (any call would start a core)"
 reset; touch "$STATE/no_core"
 wave "adhoc task"
 [ "$rc" -ne 0 ] && ok "refused" || bad "ran without a core"
-has "names the fix" "$out" "launchctl kickstart -k gui/\$(id -u)/com.jkrumm.herdr-core"
+has "names the fix" "$out" "make herdr-core-setup"
 [ ! -e "$STATE/hc-called" ] && ok "hc was not called" || bad "hc was called: $(cat "$STATE/calls.log" "$STATE/rpc.log" 2>/dev/null)"
 for sub in agents "read x" "say x y" "close x" "work myrepo"; do
   rm -f "$STATE/hc-called"

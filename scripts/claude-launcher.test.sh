@@ -212,6 +212,8 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "$S/dotfiles/scripts/claude-pretrust.sh
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' > "$TMP/bin/launchctl"
 chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc" "$TMP/bin/launchctl"
+# the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 rd_spawn() { # $1 = pick line, $2 = id
   reset
   rm -rf "${HCSTATE:?}"/*; echo '[]' > "$HCSTATE/terminals.json"

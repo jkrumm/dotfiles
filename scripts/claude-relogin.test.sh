@@ -105,6 +105,8 @@ esac; exit 0'
 # `launchctl print …herdr-core` says whether the mini's core runs (default running; STUB_CORE="not running" for none);
 # anything else is `managername`
 mk launchctl 'case "$1" in print) echo "state = ${STUB_CORE:-running}" ;; *) echo "${STUB_SESSION:-Aqua}" ;; esac'
+# the core's socket answers (lib/core-up.sh's second half) unless STUB_SOCK=down
+mk nc '[ "${STUB_SOCK:-up}" = up ]'
 mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
 export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
@@ -113,12 +115,12 @@ export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_LSOF="$TMP/bin
 # workers run inline (never a stray detached process), no waits, a scratch log
 export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
 # Safety net: every external command the scripts reach must be one of our stubs, never the real hc/ssh/claude.
-for c in ssh open hc osascript claude claude-account launchctl; do
+for c in ssh open hc osascript claude claude-account launchctl nc; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
 done
 as() { printf '%s' "$([[ $1 == mini ]] && echo cache || echo op)" > "$TMP/xdg/secrets/backend"; }
 reset() { : > "$LOG"; : > "$TMP/msgs"; rm -f "$TMP/tunnel.pid" "$TMP/claude.runs" "$TMP/doc-sets.jsonl"; }
-calls() { grep -v -e "^lsof" -e "^launchctl\[print\]" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
+calls() { grep -v -e "^lsof" -e "^launchctl\[print\]" -e "^nc\[" "$LOG"; } # a watchdog left over from an earlier case may still poll lsof; that is noise here
 
 URL='https://claude.ai/oauth/authorize?code=true&client_id=abc&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A58876%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile&state=x%y'
 
@@ -440,8 +442,16 @@ export STUB_CORE="not running"; reset
 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
 assert_eq "core not running per launchd: refuses (rc 2)" 2 "$rc"
 assert_not_contains "...hc is never called (it would start a stray core)" "hc[" "$(calls)"
-assert_contains "...says how to start the core" "herdr-core is not running on the mini" "$(cat "$TMP/err")"
+assert_contains "...says how to start the core" "herdr-core is not up on the mini" "$(cat "$TMP/err")"
+assert_contains "...names launchd's state" "is 'not running', not running" "$(cat "$TMP/err")"
+assert_contains "...and the kickstart" "fix: launchctl kickstart gui/" "$(cat "$TMP/err")"
 unset STUB_CORE
+export STUB_SOCK=down; reset
+STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
+assert_eq "launchd running but the socket does not answer: refuses (rc 2)" 2 "$rc"
+assert_not_contains "...hc is never called" "hc[" "$(calls)"
+assert_contains "...says the socket does not answer" "does not answer" "$(cat "$TMP/err")"
+unset STUB_SOCK
 as mini; reset
 CLAUDE_RELOGIN_FOREGROUND=0 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null
 for _ in $(seq 1 20); do grep -q "hc\[rm\]" "$LOG" && break; sleep 1; done

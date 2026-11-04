@@ -147,7 +147,6 @@ host_run() {
 #  - A spawn goes over the API (`hc connect`, JSON-RPC `terminal.run`), because the CLI's `hc run` cannot pass `env`
 #    and a core's own environment is every terminal's environment (docs/herdr-core.md §Spawn contract).
 #  - `hc` runs on the dev host: the MacBook hops over ssh like for everything else.
-CORE_LABEL=com.jkrumm.herdr-core
 APP_DOC=herdr-app
 HC_PRE='PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH";'
 CORE_OK=""
@@ -163,18 +162,24 @@ hc_host() {
   host_run "$HC_PRE t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; \${t:+\"\$t\"} \${t:+${RD_HC_TIMEOUT_S:-30}} hc$args"
 }
 
-# Die unless launchd has the core running. HC_SESSION names another core (a scratch one in tests): the caller owns it,
-# but only on the dev host itself: a MacBook's HC_SESSION is not forwarded over ssh, so the mini's core is still the one.
+# Die unless the dev host's core is up as scripts/lib/core-up.sh defines it (launchd job running AND its socket answers;
+# never an hc call). HC_SESSION names another core (a scratch one in tests): the caller owns it, but only on the dev host
+# itself: a MacBook's HC_SESSION is not forwarded over ssh, so the mini's core is still the one.
 require_core() {
   [[ -z $CORE_OK ]] || return 0
   if [[ -z ${HC_SESSION:-} ]] || ! on_dev_host; then
     local out rc=0
-    out=$(host_run "launchctl print \"gui/\$(id -u)/$CORE_LABEL\" 2>&1") || rc=$?
+    if on_dev_host; then
+      out=$(bash "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/core-up.sh" 2>&1) || rc=$?
+    else
+      out=$(host_run 'bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh"' 2>&1) || rc=$?
+    fi
     (( rc == 255 )) \
       && die "no answer from $HOST — nothing ran there at all; check the ssh hop with 'make doctor'"
-    if (( rc != 0 )) || ! grep -q 'state = running' <<<"$out"; then
-      die "herdr-core is not running on $HOST (any hc call would start a stray one). Start it with: launchctl kickstart -k gui/\$(id -u)/$CORE_LABEL — or run 'make doctor'"
-    fi
+    (( rc == 127 )) \
+      && die "$HOST has no scripts/lib/core-up.sh: its dotfiles checkout is behind (git pull there)"
+    (( rc == 0 )) \
+      || die "herdr-core is not up on $HOST (any hc call would start a stray one): ${out:-no reason given} — or run 'make doctor'"
   fi
   CORE_OK=1
 }

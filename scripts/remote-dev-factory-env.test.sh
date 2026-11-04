@@ -25,6 +25,8 @@ printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
 chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
+# the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done

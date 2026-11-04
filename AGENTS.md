@@ -188,7 +188,12 @@ Facts to hold:
 - **A core restart keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
   shells, and `com.jkrumm.hc-resume` (mini only) types `claude --resume <id>` under the right account from the
   `jk.claude.*` labels (model, effort and the turn in flight are lost). Never `hc server restart|stop`, `hc update` or `hc machine
-  update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.
+  update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` (`make herdr-core-relaunch`
+  also rolls a rebuilt launcher and proves launchd holds it stable).
+- **"The core is up" has one definition**, `scripts/lib/core-up.sh`: the job is `state = running` AND its socket
+  answers. The guard, `rd`, `claude-relogin`, doctor and the heartbeat all use it; a core that answers while launchd
+  says `spawn scheduled` (runs climbing) is an orphan outside the launcher, not up (incident 2026-11-04,
+  `docs/herdr-core.md` §Core as a LaunchAgent).
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied

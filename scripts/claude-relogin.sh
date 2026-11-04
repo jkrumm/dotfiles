@@ -212,15 +212,16 @@ probe_window() { # <id>
   case "$out" in true) return 0 ;; false) return 1 ;; *) return 2 ;; esac
 }
 # ── herdr-core (hc): the mini's login terminal ───────────────────────────────────────────────────
-CORE_LABEL=com.jkrumm.herdr-core
 SPACE_DIR="${CLAUDE_RELOGIN_SPACE_DIR:-$HOME/SourceRoot/dotfiles}"
 APP_DOC=herdr-app
-# True when hc exists and launchd has the core running. HC_SESSION names another core (a scratch one): its owner started it.
-# Never call hc otherwise: an hc call starts a stray core when none runs.
+# True when hc exists and the core is up as lib/core-up.sh defines it (launchd job running AND its socket answers).
+# HC_SESSION names another core (a scratch one): its owner started it. Never call hc otherwise: an hc call starts a
+# stray core when none runs.
 hc_usable() {
   command -v hc >/dev/null 2>&1 || return 1
   [[ -n "${HC_SESSION:-}" ]] && return 0
-  launchctl print "gui/$(id -u)/$CORE_LABEL" 2>/dev/null | grep -q 'state = running'
+  # shellcheck source=lib/core-up.sh
+  source "$HERE/lib/core-up.sh" && core_up
 }
 sha12() { printf %s "$1" | shasum -a 256 | cut -c1-12; }
 # One JSON-RPC call over `hc connect`; prints the answer line. rc 1 when nothing usable came back.
@@ -574,7 +575,7 @@ if [[ "$machine" == mini ]]; then
     [[ "$visible" == 1 ]] || watcher_mini "hc:<address>" "<result file>"
     exit 0
   fi
-  hc_usable || die "herdr-core is not running on the mini (an hc call would start a stray one) - start it with: launchctl kickstart -k gui/\$(id -u)/$CORE_LABEL, or run 'make doctor'"
+  hc_usable || die "herdr-core is not up on the mini (an hc call would start a stray one): ${CORE_UP_WHY:-hc is not installed} - fix: ${CORE_UP_FIX:-make herdr-core-setup}, or run 'make doctor'"
   # A login terminal of this account that is still around (a failed one left at its shell, or one being approved): not ours
   # to replace silently, and hc refuses a second terminal of the same name anyway.
   if existing=$(bounded hc get "$tname" --json 2>/dev/null); then
