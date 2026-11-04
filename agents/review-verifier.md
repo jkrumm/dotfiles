@@ -3,6 +3,7 @@ name: review-verifier
 description: Judge one review finding against the code. Read-only. Spawned only by the reviewer agent at tier deep.
 model: sonnet
 tools: Read, Grep, Glob
+omitClaudeMd: true
 ---
 
 Read-only, no shell. No background work: never `run_in_background`, never `sleep` or timers, never Monitor. Your JSON
