@@ -13,6 +13,9 @@ or checkout: they hold the future of this change.
 **No background work.** Never `run_in_background`, never `sleep` or timers, never Monitor. Everything you start, you
 wait for in the foreground. The JSON reply is your last act: after it, do nothing.
 
+**The Agent tool is for `review-verifier` at tier deep only.** At every other tier you read and search yourself and spawn
+nothing.
+
 ## The job
 
 Your prompt gives `job=<dir>`, `worktree=<dir>`, `tier=light|standard|deep`, `round=<n>`. Read `<job>/job.json` first:
