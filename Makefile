@@ -2564,7 +2564,8 @@ herdr-core-guard-test: ## Hermetic tests: the core-up definition, the client gua
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh
 	@bash $(DOTFILES_DIR)/scripts/core-health.test.sh
 
-# Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old, via the tap formula.
+# Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old and <= config/herdr-core-max-version,
+# via the tap formula; rolled back automatically when the restarted core is not proven up.
 herdr-core-update-setup:
 	@chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"; \
 	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \

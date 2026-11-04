@@ -252,6 +252,9 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
 
 | herdr-core | Date | | herdr-app | Date |
 |-|-|-|-|-|
+| 0.1.18 (pinned out) | 2026-11-04 | | | |
+| 0.1.17 | 2026-11-02 | | | |
+| 0.1.16 | 2026-10-31 | | | |
 | 0.1.15 | 2026-10-30 | | 0.1.10 (`core_min` 0.1.11) | 2026-10-30 |
 | 0.1.14 | 2026-10-29 | | 0.1.9 | 2026-10-30 |
 | 0.1.13 | 2026-10-29 | | 0.1.8 | 2026-10-30 |
@@ -340,19 +343,67 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
 `com.jkrumm.herdr-core-update` (daily 04:15, both machines, `jobrun`, `scripts/herdr-core-update.ts`):
 
 1. The newest release whose manifest was published at least 24 h ago (HTTP `Last-Modified` of `core/<v>/manifest.json`,
-   walking down from `latest.json` over sequential patch versions), with the tarball's sha256 checked against the
-   index.
-2. Bump `Formula/herdr-core.rb` in the `jkrumm/tap` checkout (commit + push; whichever machine runs first bumps, the
-   other finds it done), `brew upgrade jkrumm/tap/herdr-core`.
-3. `launchctl kickstart -k gui/<uid>/com.jkrumm.herdr-core`.
-4. Assert: every terminal that was live keeps its pid, the core reports the new version and `installed_by: homebrew`,
-   and every linked machine (`hc machine ls`) shows the same version. The MacBook's run starts the mini's own update
-   job over ssh when the versions differ and waits for it, so they converge in one run.
+   walking down from `latest.json` over sequential patch versions) **and not above the pin** in
+   `config/herdr-core-max-version`. A newer release is named in the log (`latest X is above the pin Y … not installed
+   unattended`) and skipped. The tarball's sha256 is checked against the index.
+2. Preflight: the launcher in `~/.local/libexec` is built from this checkout's `scripts/herdr-core-launcher.c` (its
+   `.src-sha`); a stale one cannot keep a 0.1.17+ core in launchd, so the run stops with `make herdr-core-setup` before
+   anything changes. A version that failed here before (`~/.local/state/herdr-core-update/failed.json`) is not retried
+   until that file is removed.
+3. Set `Formula/herdr-core.rb` in the `jkrumm/tap` checkout (commit + push; whichever machine runs first bumps, the other
+   finds it done; a formula above the pin is refused), `brew upgrade jkrumm/tap/herdr-core`.
+4. `launchctl kickstart -k gui/<uid>/com.jkrumm.herdr-core`.
+5. Assert, within a deadline of 60 s × the 1-minute load average per core (60 s floor, 240 s cap: the mini ran at a load
+   of ~26-44 on 12 cores while waves ran, and a core start there is CPU-bound): launchd shows `state = running` on a new
+   pid; the core is up (`lib/core-up.sh`); it reports the new version and `installed_by: homebrew`; for 30 s the job stays
+   `running` on that pid with `runs` flat (launchd respawns an exiting job every 10 s, so a respawn loop shows twice);
+   the core is the job's child; every terminal that was live keeps its pid. Then every linked machine (`hc machine ls`)
+   shows the same version. The MacBook's run starts the mini's own update job over ssh when the versions differ and
+   waits for it, so they converge in one run.
 
-No idle gating: a kickstart keeps terminals. Anything failing before step 3 leaves the old core running, and any
-failure exits non-zero, so `jobs-grade` grades the job red. An unmanaged core (`installed_by` not `homebrew`) fails
-with the fix `make herdr-core-setup`. `make herdr-core-update-check` previews (dry), `make herdr-core-update` runs it
-now. The app cannot replace the core (fact 4); the app itself still updates hourly (herdr-app #207).
+**Any failure from step 3 on rolls back:** the formula goes back to the version that ran (commit + push, so the other
+machine does not install it either), `brew reinstall`, a kickstart when the core was restarted or is not healthy, and the
+same assertion. The log names what failed and how the rollback went (`ROLLBACK … FAILED: …` when it did not), the failed
+version lands in `failed.json`, and the job exits non-zero, so `jobs-grade` grades it red. The restart/rollback logic sits
+behind a `Host` port and is tested against a fake machine (`scripts/herdr-core-update.test.ts`): the 0.1.17 shape (job never
+`running`), a respawn flicker, a core that is not the job's child, lost terminals, a failed `brew reinstall` and a brew
+failure before the kickstart.
+
+`make herdr-core-update-check` previews (dry; `--max-version X` previews a promotion), `make herdr-core-update` runs it
+now. An unmanaged core (`installed_by` not `homebrew`) fails with the fix `make herdr-core-setup`. The app cannot replace
+the core (fact 4); the app itself still updates hourly (herdr-app #207).
+
+### Moving the pin
+
+The pin exists because a release can change how the core runs under launchd (0.1.17 did) or how macOS attributes its
+terminals (0.1.18 does), and the nightly job would otherwise install that on both machines at 04:15. To move it, on the
+mini, by hand: `bun scripts/herdr-core-update.ts --dry --max-version <v>` (plan and sha256), then
+`bun scripts/herdr-core-update.ts --max-version <v>` (installs, asserts, rolls back on failure), then check what the release
+notes change (TCC: `make tcc-probe` in a fresh terminal; anything else they name). Only then commit the new version to
+`config/herdr-core-max-version`; the MacBook follows on its next run. Read the release's source for anything that touches
+`platform/macos_*`, `holder.rs` or `server.rs` before.
+
+### 0.1.18: the core becomes its own app (pinned out, 2026-11-04)
+
+Release note: "On macOS, the core is now its own app, Herdr Core. macOS asks once to let Herdr Core reach your local
+network … and once for the microphone … Terminals opened before the update need to be reopened once to get this. (#100)"
+Read at tag `v0.1.18` (`platform/macos_bundle.rs`, `platform/macos_responsibility.rs`, `distribution/install.sh`,
+CHANGELOG) and the macOS tarball's listing:
+
+| Area | What 0.1.18 does | Effect here |
+|-|-|-|
+| Tarball | `herdr-core` plus `Herdr Core.app` (`Contents/MacOS/herdr-core`, Developer ID, `dev.herdr.core`, team `2W9652Q7QR`; 0.1.17's binary already had that signature) | The formula installs only `bin/herdr-core`; it must decide whether to install the bundle (`hc --hc-install-bundle`, versions under a `current` link), and `installed_by: homebrew` must survive that |
+| launchd | `prepare_core` unchanged: `HC_LAUNCHD_DIRECT` still skips the escape | The launcher keeps it in the job |
+| TCC | `hold` re-execs itself with `responsibility_spawnattrs_setdisclaim`: **every holder becomes the responsible process for its terminals**. The detached core disclaims too | The launcher's Full Disk Access no longer covers terminal programs. The grant has to move to `Herdr Core.app` (a Developer ID app keyed on its bundle id and team, so it would survive updates at a stable path) or to the holder binary, whose Cellar path moves on every version |
+| New prompts | Local network and microphone, attributed to Herdr Core, shown once on the machine's screen | Headless mini: someone has to answer them at the screen, else terminal programs that reach the LAN freeze or fail. Terminals from before the update keep the old attribution until reopened |
+| Updates | `hc update` may need to run twice; `--from 'Herdr Core.app'` | Irrelevant while brew manages the core |
+
+Before the pin moves to 0.1.18: decide where `Herdr Core.app` lives (stable path, so one grant survives updates) and teach
+the formula; grant Full Disk Access, local network and microphone to it on both machines (at the screen); prove with a
+scratch core under a scratch label that terminals are attributed to it (`hc exec sqlite3` against the system TCC.db, read
+`responsible_path` from `log show … tccd … AUTHREQ_ATTRIBUTION`, no dialog) and that `make tcc-probe` passes; then
+`--max-version 0.1.18` by hand on the mini as above; plan the reopening of pre-update terminals. Until then the launcher
+stays the grant holder for 0.1.17.
 
 ## Launcher evidence (2026-10-31, mini, core 0.1.14 → 0.1.15)
 

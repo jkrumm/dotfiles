@@ -1,0 +1,3 @@
+# The newest herdr-core the daily updater may install unattended (scripts/herdr-core-update.ts).
+# Raise it only after the release was verified on the mini by hand: docs/herdr-core.md §Updates, "Moving the pin".
+0.1.17

@@ -210,7 +210,9 @@ Facts to hold:
 - **Full Disk Access sits on the core launcher, not on the core.** A new core build keeps the grant
   (`~/.local/libexec/herdr-core-launcher`); a terminal born before a cutover keeps the old identity until it
   ends. A frozen agent at 0 % CPU = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
-  The core updates itself daily after a 24 h cooldown (`com.jkrumm.herdr-core-update`); the app never touches it.
+  The core updates itself daily after a 24 h cooldown, never above `config/herdr-core-max-version` (raised only after a
+  hand verification on the mini), and rolls itself back when the restarted core is not proven up
+  (`com.jkrumm.herdr-core-update`, `docs/herdr-core.md` §Updates); the app never touches it.
 
 **human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
 *present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
