@@ -142,6 +142,15 @@ function terminalPids(): Record<string, number> {
   return out
 }
 
+/** A core a client started (0.1.17+: as its own detached launchd job) is not the launcher's child, so `kickstart -k` can no longer restart it. */
+function assertUnderLauncher(pid: number): void {
+  const ppid = sh(["ps", "-o", "ppid=", "-p", String(pid)], { allowFail: true }).trim()
+  const parent = ppid ? sh(["ps", "-o", "command=", "-p", ppid], { allowFail: true }).trim() : ""
+  if (!parent.includes("herdr-core-launcher")) {
+    fail(`core ${pid} runs outside the launcher (parent ${ppid || "?"}: ${parent || "gone"}); kill it, then kickstart -k ${LABEL}`)
+  }
+}
+
 async function waitFor<T>(what: string, secs: number, probe: () => T | null): Promise<T> {
   const end = Date.now() + secs * 1000
   for (;;) {
@@ -266,6 +275,7 @@ async function main() {
     const s = coreStatus()
     return s.version === target && s.installed_by === "homebrew" ? s : null
   })
+  assertUnderLauncher(after.pid)
   say(`core restarted: pid ${status.pid} -> ${after.pid}, version ${after.version}`)
 
   const now = terminalPids()

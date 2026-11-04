@@ -298,6 +298,17 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
   also needs the plist bootout, so run it with `YES=1` at a chosen moment, or swap just the links by hand). The plist change needs a
   `bootout` (ends live terminals); until then the guard works without it. On the MacBook the app must start its core through
   `~/.local/bin/herdr-core`: confirm after the rollout that the app's connect is refused while the job is stopped.
+
+  **0.1.17 detach (incident 2026-11-04).** Release notes: "the core now runs apart from the app" — a core a client auto-starts in the
+  GUI session boots as its own transient launchd job (`dev.herdr.core.<pid>.<ns>`, argv `herdr-core --hc-launchd <ready>`, parent 1),
+  not as `serve`. When the daily update's `kickstart -k` (04:15) left a gap with no core, such a client won the race: the detached
+  core held `core.lock`, the job's `serve` found the lock, exited 0 and KeepAlive looped it every 10 s ("spawn scheduled",
+  `runs` in the thousands), `hc-events`/`hc-resume` saw "not running" and stopped connecting, and `kickstart -k` no longer reached
+  the core. Stray detection missed it (it matched `serve` only; now also `--hc-launchd`, checked before the job state). Fix: `kill
+  <pid>` (SIGTERM, terminals survive via their holders), then `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` at once;
+  `herdr-core-update` now asserts the new core's parent is the launcher. A scratch `serve` or ssh-born `hc server status` does not
+  detach (verified), so the trigger is a GUI-session client. 0.1.18 ("the core is now its own app, Herdr Core", new Local Network and
+  microphone prompts) changes the process model again: do not let the updater take it before a scratch check of launcher/FDA.
 - **Upgrades:** §Updates. Keep MacBook and mini on the same `hc` version (`hc machine ls` shows it).
 - State: `~/.local/state/herdr-core/` on the mini. Log: `~/Library/Logs/herdr-core.log`.
 

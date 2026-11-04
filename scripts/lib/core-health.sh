@@ -36,7 +36,8 @@ core_launchd_state() {
     | /usr/bin/awk -F' = ' '/^[[:space:]]*state = /{ print $2; exit }'
 }
 
-# Print "<pid> <parent command>" for every default-session `hc|herdr-core serve` whose parent is not
+# Print "<pid> <parent command>" for every default-session `hc|herdr-core serve` (or `--hc-launchd <ready>`:
+# 0.1.17+ clients start a core as their own detached launchd job, parent 1) whose parent is not
 # the launcher. ps only, no hc call. Scratch sessions (HC_SESSION other than "default" in the process
 # env, via `ps -E`) are not strays.
 core_strays() {
@@ -47,7 +48,7 @@ core_strays() {
   done < <("$ps" -U "$(id -u)" -xww -o pid=,ppid=,command= 2>/dev/null | /usr/bin/awk -v launcher="$launcher" '
     { pid=$1; ppid=$2; cmd0[pid]=$3; arg1[pid]=$4; par[pid]=ppid; ord[++n]=pid }
     END { for (i=1;i<=n;i++) { p=ord[i]; c=cmd0[p]; sub(".*/", "", c)
-      if ((c != "hc" && c != "herdr-core") || arg1[p] != "serve") continue
+      if ((c != "hc" && c != "herdr-core") || (arg1[p] != "serve" && arg1[p] != "--hc-launchd")) continue
       if (cmd0[par[p]] == launcher) continue
       print p, par[p], (cmd0[par[p]] == "" ? "?" : cmd0[par[p]]) } }')
   return 0
@@ -97,15 +98,15 @@ core_health_check() {
   state=$(core_launchd_state)
   [[ -n "$state" ]] \
     || { echo "$CORE_LABEL not loaded in launchd (fix: make herdr-core-setup)"; return 1; }
-  [[ "$state" == "running" ]] \
-    || { echo "$CORE_LABEL is '$state', not running (KeepAlive should restart it; see ~/Library/Logs/herdr-core.log)"; return 1; }
-
+  # A stray first: it holds the core lock, so the job loops "spawn scheduled" and the state below would hide it.
   stray=$(core_strays | head -1)
   if [[ -n "$stray" ]]; then
     read -r spid sppid sparent <<<"$stray"
-    echo "core pid $spid runs outside the launcher (parent $sppid: $sparent): a client started it, so it has no Full Disk Access and maybe no keychain (fix: kill $spid, then launchctl kickstart gui/$(id -u)/$CORE_LABEL; docs/herdr-core.md §Core as a LaunchAgent)"
+    echo "core pid $spid runs outside the launcher (parent $sppid: $sparent): a client started it, so it has no Full Disk Access and maybe no keychain (fix: kill $spid, then launchctl kickstart -k gui/$(id -u)/$CORE_LABEL; docs/herdr-core.md §Core as a LaunchAgent)"
     return 1
   fi
+  [[ "$state" == "running" ]] \
+    || { echo "$CORE_LABEL is '$state', not running (KeepAlive should restart it; see ~/Library/Logs/herdr-core.log)"; return 1; }
 
   status=$(_core_bounded 10 "$hc" server status --json 2>/dev/null) || status=""
   [[ -n "$status" ]] \

@@ -68,4 +68,17 @@ check; [ "$rc" = 0 ] || fail "connect client must not be flagged: rc=$rc $msg"
 printf '  900     1 /Users/x/.local/bin/herdr-core serve #other\n' > "$T/table"; : > "$T/env"
 check; [ "$rc" = 0 ] || fail "another user's serve must not be reported: rc=$rc $msg"
 
+# 7. a 0.1.17 detached core (`--hc-launchd <ready>`, parent launchd) is a stray, even while the job is not running
+printf '  100     1 /h/launcher /opt/homebrew/opt/herdr-core/bin/herdr-core serve\n  950     1 /opt/homebrew/Cellar/herdr-core/0.1.17/bin/herdr-core --hc-launchd /tmp/hc-launchd-1/ready\n' > "$T/table"; : > "$T/env"
+check; [ "$rc" = 1 ] || fail "detached --hc-launchd core must FAIL: rc=$rc $msg"
+case "$msg" in *"pid 950"*"kill 950"*) ;; *) fail "message must name the detached pid: $msg" ;; esac
+printf 'x = {\n\tstate = spawn scheduled\n}\n' > "$T/state"
+cat > "$T/bin/launchctl" <<'S'
+#!/bin/bash
+cat "$T_STATE"
+S
+chmod +x "$T/bin/launchctl"; export T_STATE="$T/state"
+check; [ "$rc" = 1 ] || fail "stray with a flapping job must FAIL: rc=$rc $msg"
+case "$msg" in *"pid 950"*) ;; *) fail "a flapping job must not hide the stray: $msg" ;; esac
+
 echo "core-health.test.sh: ok"
