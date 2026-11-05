@@ -22,7 +22,7 @@ Args: `[scope (default uncommitted; head, <ref>, <a>..<b>) | --pr N | --branch B
    REVIEW_REPLY_EOF
    ```
    Refused (bad JSON, schema, `files` differs from stat.txt): run the agent once more with the error appended to the prompt, submit with `--attempt 2`. Refused again: stop, needs-human.
-4. **Present REVIEW_OUTPUT v4** (`agw schema review`): `outcome` (`clean` / `actionable` / `needs-human`), `summary`, `tier` and `rule`, then `findings` by tag (`important`, `nit`, `pre-existing`) with `id`, `file:line`, `class`, `message`, `failureScenario`, `fix`, `votes`; `checked` when it explains a clean result; `stepBack` if set. Synthesize; don't echo raw JSON.
+4. **Present REVIEW_OUTPUT v4** (`agw schema review`): `outcome` (`clean` / `actionable` / `needs-human`), `summary`, `tier` and `rule`, then `findings` by tag (`important`, `nit`, `pre-existing`) with `id`, `file:line`, `class`, `message`, `failureScenario`, `fix`, `votes`; `criteria` as a met / not-met / unclear table when present; `checked` when it explains a clean result; `stepBack` if set. Synthesize; don't echo raw JSON.
 
 ## Fix loop
 
@@ -35,6 +35,7 @@ Every finding gets a disposition. Fix it, then `agw review dispose <jobId> <find
 
 - `agw review status --cwd <dir>` shows a running review and the newest jobs; with a `jobId` its thread findings.
 - `agw review cancel <jobId> --commit` abandons a `prepared` job nobody will submit: an in-session one at once; a hidden one only if the factory has not started it.
+- `agw review stats [--by tier|rule|prompt|repo] [--since <iso>]` has the ledger numbers: clean rate, findings, precision, anchoring, per reviewer prompt fingerprint.
 - `agw review covered --cwd <dir> --range a..b --format json`: is every first-parent commit of the range reviewed at its required tier with no open important finding. `uncovered` lists the shas.
 
 ## What the gates cannot catch — check these yourself
