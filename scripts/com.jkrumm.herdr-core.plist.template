@@ -3,29 +3,24 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.jkrumm.herdr-core</string>
-  <!-- herdr-core's server, in the GUI session (keychain reach for the Claude Max login).
-       Must always be up: any `hc` client call — the MacBook's `hc machine` link arrives
-       over ssh — auto-starts a core when none runs, and a core born in an ssh session
-       spawns Claude without the keychain (docs/herdr-core.md §Core as a LaunchAgent).
-       The job's program is the launcher, not the core: macOS attributes every file access in the core's
-       terminals to the job's program, and the Full Disk Access grant lives on the launcher's stable path.
-       The core (homebrew's herdr-core, versioned Cellar path) runs as its child and is swapped by upgrades
-       without a new grant (docs/tcc.md).
-       ProcessType Interactive: launchd spawns the job as `interactive (4)` instead of `daemon (3)` (the only
-       observable effect of the keys tried, `launchctl print` on a scratch label), so a login-time spawn is not
-       queued behind background work. `immediate reason = speculative` stays: the boot race is closed by the
-       client guard (~/.local/bin/hc, scripts/herdr-core-guard.sh), not by this key.
-       A rendered-plist change needs a bootout (owner-timed, ends live terminals): make herdr-core-setup YES=1. -->
+  <!-- A STARTER, not the core (mini only; the MacBook's core is started by the Herdr app). Outside ssh, `serve`
+       detaches into upstream's own one-shot launchd job (`herdr-core --hc-launchd …`, parent pid 1) and this
+       process exits 0; the detached process is the core, in the GUI session (keychain reach for Claude Max).
+       Re-running it while a core runs is harmless (`serve` finds the lock and exits). Never KeepAlive: it would
+       only relaunch an exiting starter. Booting it out does NOT stop the core.
+       The program is upstream's signed Herdr Core.app at its fixed path, so the core, its holders and the
+       programs in terminals are attributed to that bundle and one Full Disk Access grant on it covers them.
+       Any other core (a client-started one over ssh, a Homebrew one) is attributed to something else.
+       Details: docs/herdr-core.md §How the core runs now. A changed starter applies at the next login. -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/.local/libexec/herdr-core-launcher</string>
-    <string>/opt/homebrew/opt/herdr-core/bin/herdr-core</string>
+    <string>__HOME__/.local/share/herdr-core/active/Herdr Core.app/Contents/MacOS/herdr-core</string>
     <string>serve</string>
   </array>
   <key>ProcessType</key><string>Interactive</string>
-  <key>KeepAlive</key><true/>
   <key>RunAtLoad</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
+  <key>KeepAlive</key><false/>
+  <key>AbandonProcessGroup</key><true/>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>__HOME__/.local/bin:__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>

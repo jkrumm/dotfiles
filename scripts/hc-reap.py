@@ -73,11 +73,12 @@ def sh(*cmd: str, cwd: str | None = None, env: dict | None = None, timeout: floa
 
 
 def core_running() -> bool:
-    """True when it is safe to `hc connect`: a scratch HC_SESSION, or the launchd core is running."""
+    """True when it is safe to `hc connect`: a scratch HC_SESSION, or lib/core-up.sh says a launchd-born core answers."""
     if os.environ.get("HC_SESSION"):
         return True
-    rc, out = sh("launchctl", "print", f"gui/{os.getuid()}/{CORE_LABEL}", timeout=10)
-    return rc == 0 and re.search(r"^\s*state = running$", out, re.M) is not None
+    core_up = os.environ.get("CORE_UP_SH") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib", "core-up.sh")
+    rc, _ = sh("bash", core_up, timeout=10)
+    return rc == 0
 
 
 def hc_rpc(method: str, params: dict | None = None, timeout: float = NET_TIMEOUT_S) -> dict:

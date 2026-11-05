@@ -91,8 +91,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tailscale-cli.sh"
 # check_boot_path from "the boot path is intact" to "there is no file, skip".
 # shellcheck source=lib/brew-service.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
-# The herdr-core grader, shared with doctor.sh and brew-upgrade.sh (asks launchd before it
-# ever calls `hc`, which would auto-start a stray core).
+# The herdr-core grader, shared with doctor.sh (checks core_up before it ever calls `hc`, which would
+# auto-start a stray core).
+
 export HC_BIN="${HC_BIN:-$HOME/.local/bin/hc}"
 export LAUNCHCTL_BIN="${LAUNCHCTL_BIN:-/bin/launchctl}"
 # shellcheck source=lib/core-health.sh
@@ -425,8 +426,9 @@ check_sshd() {
 }
 
 # The herdr-core (`hc`) — the multiplexer every agent runs in.
-# FAIL when the LaunchAgent is down or `hc server status` does not answer; WARN (rc 2) when
-# the core is unmanaged or the other machine runs a different version. The peer version is
+# FAIL when core_up is false (nothing answers, or the core that answers was not started by launchd = stray) or
+# `hc server status` does not answer; WARN (rc 2) when the core or a holder is not attributed to Herdr Core.app
+# or the other machine runs a different version. The peer version is
 # cached 30 min in STATE_DIR so a 300 s heartbeat does not ssh to a laptop every run.
 check_core() {
   CORE_PEER_CACHE_FILE="$STATE_DIR/core-peer-version" core_health_check
@@ -843,8 +845,7 @@ $(brew_row colima "$COLIMA_START_WRAPPER")
 com.jkrumm.agent-workflows-host|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist
 com.jkrumm.agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist
 ai.hermes.gateway|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist
-com.jkrumm.collie|$HOME/Library/LaunchAgents/com.jkrumm.collie.plist
-com.jkrumm.herdr-core|$HOME/Library/LaunchAgents/com.jkrumm.herdr-core.plist"
+com.jkrumm.collie|$HOME/Library/LaunchAgents/com.jkrumm.collie.plist"
 
 # check_launchd_restarts lives in its own lib so the classification can be
 # driven hermetically (scripts/launchd-restarts.test.sh) — it reads

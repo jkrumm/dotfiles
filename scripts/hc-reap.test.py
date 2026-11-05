@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hermetic tests for hc-reap.py: fake `hc`, `launchctl` and `claude` on PATH, real throwaway git repos,
+"""Hermetic tests for hc-reap.py: fake `hc` and `claude` on PATH, a fake lib/core-up.sh (CORE_UP_SH), real throwaway git repos,
 HOME pointed at a tmpdir (transcripts, state, log). Run: python3 scripts/hc-reap.test.py"""
 import json
 import os
@@ -50,10 +50,10 @@ elif m in ("terminal.kill", "terminal.rm", "terminal.send"):
 else:
     fail("unknown")
 '''
-FAKE_LAUNCHCTL = '''#!/bin/sh
-echo "$@" >> "$FAKE_CALLS"
-if [ -f "$FAKE_CORE_DOWN" ]; then echo "gui/501/com.jkrumm.herdr-core = {"; echo "	state = not running"; exit 0; fi
-printf 'gui/501/com.jkrumm.herdr-core = {\\n\\tstate = running\\n}\\n'
+FAKE_CORE_UP = '''#!/bin/sh
+echo "core-up" >> "$FAKE_CALLS"
+[ -f "$FAKE_CORE_DOWN" ] && exit 1
+exit 0
 '''
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -82,7 +82,7 @@ class Reap(unittest.TestCase):
         self.bin = os.path.join(self.t, "bin")
         os.makedirs(self.bin)
         os.makedirs(os.path.join(self.home, ".claude/projects/p"))
-        for n, body in (("hc", FAKE_HC), ("claude", FAKE_CLAUDE), ("launchctl", FAKE_LAUNCHCTL)):
+        for n, body in (("hc", FAKE_HC), ("claude", FAKE_CLAUDE), ("core-up.sh", FAKE_CORE_UP)):
             with open(os.path.join(self.bin, n), "w") as f:
                 f.write(body)
             os.chmod(os.path.join(self.bin, n), 0o755)
@@ -127,7 +127,7 @@ class Reap(unittest.TestCase):
         if core_down:
             write(down, "")
         env = dict(os.environ, HOME=self.home, PATH=f"{self.bin}:{os.environ['PATH']}", FAKE_WORLD=self.world,
-                   FAKE_CALLS=self.calls, FAKE_CORE_DOWN=down, HC_TERMINAL_ID=own, REAP_IDLE_H="12")
+                   FAKE_CALLS=self.calls, FAKE_CORE_DOWN=down, CORE_UP_SH=os.path.join(self.bin, "core-up.sh"), HC_TERMINAL_ID=own, REAP_IDLE_H="12")
         env.pop("HC_SESSION", None)
         env.update(extra_env or {})
         r = subprocess.run([sys.executable, REAP, *flags], env=env, capture_output=True, text=True)
@@ -337,7 +337,7 @@ class Reap(unittest.TestCase):
         self.assertNotIn("connect", calls)
         self.assertNotIn("list", calls)
         self.assertIn("terminal pass skipped", self.last_out)
-        self.assertIn("print gui/", calls)  # launchctl was asked, hc was not
+        self.assertIn("core-up", calls)  # core-up.sh was asked, hc was not
 
     def test_scratch_core_skips_the_launchd_guard(self):
         r = self.repo("a")

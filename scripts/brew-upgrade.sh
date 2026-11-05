@@ -389,48 +389,15 @@ else
   echo "  · colima brew service not registered here — skipping boot-path assertion"
 fi
 
-# herdr-core: the invariants an upgrade can break. The job
-# is OUR plist (com.jkrumm.herdr-core, not a brew-service one), so brew cannot rewrite it;
-# what an upgrade can break is the chain under it. The program must stay the stable
-# launcher (the Full Disk Access holder — a new build needs a new grant, docs/tcc.md), the
-# launcher must resolve the formula's binary through a /Cellar/ path (that is what makes
-# the core report installed_by=homebrew and keeps the Herdr app from replacing it), and
-# tcc-check must still classify every LaunchAgent program. No `hc` call here: it would
-# auto-start a core, and the daily herdr-core-update owns the version/parity assertions.
-CORE_LAUNCHER="${CORE_LAUNCHER:-$HOME/.local/libexec/herdr-core-launcher}"
-CORE_LABEL=com.jkrumm.herdr-core
-CORE_PLIST="$HOME/Library/LaunchAgents/$CORE_LABEL.plist"
-if [[ ! -f "$CORE_PLIST" ]]; then
-  echo "  · herdr-core LaunchAgent not installed here — skipping core assertions"
+# tcc-check must still classify every LaunchAgent program: an upgrade can move a program onto a versioned
+# path or swap its signature, and the grant silently stops covering it (docs/tcc.md). The herdr-core is not part of
+# this script: it is upstream's Herdr Core.app, updated only by `make herdr-core-update`, never by Homebrew.
+if tcc_out=$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tcc-check.sh" 2>&1); then
+  echo "  ✓ tcc: tcc-check still classifies every LaunchAgent program"
 else
-  if [[ -x "$CORE_LAUNCHER" ]]; then
-    echo "  ✓ herdr-core: launcher present at the stable path"
-  else
-    echo "  ✗ herdr-core: launcher missing at $CORE_LAUNCHER (fix: make herdr-core-launcher, then grant Full Disk Access — docs/tcc.md)"
-    assertion_failed=1
-  fi
-  program=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$CORE_PLIST" 2>/dev/null) || program=""
-  loaded=$(launchctl print "gui/$(id -u)/$CORE_LABEL" 2>/dev/null | awk -F' = ' '/^[[:space:]]*program = /{ print $2; exit }') || loaded=""
-  if [[ "$program" == "$CORE_LAUNCHER" && ( -z "$loaded" || "$loaded" == "$CORE_LAUNCHER" ) ]]; then
-    echo "  ✓ herdr-core: job runs the launcher"
-  else
-    echo "  ✗ herdr-core: job program is '${loaded:-${program:-unreadable}}', not the launcher (fix: make herdr-core-setup YES=1)"
-    assertion_failed=1
-  fi
-  core_real=$(realpath /opt/homebrew/opt/herdr-core/bin/herdr-core 2>/dev/null) || core_real=""
-  if [[ "$core_real" == */Cellar/herdr-core/* ]]; then
-    echo "  ✓ herdr-core: formula installed, core binary resolves under /Cellar/ (managed)"
-  else
-    echo "  ✗ herdr-core: /opt/homebrew/opt/herdr-core/bin/herdr-core resolves to '${core_real:-nothing}' — the core would report itself unmanaged (fix: brew install jkrumm/tap/herdr-core, then make herdr-core-setup)"
-    assertion_failed=1
-  fi
-  if tcc_out=$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tcc-check.sh" 2>&1); then
-    echo "  ✓ herdr-core: tcc-check still classifies every LaunchAgent program"
-  else
-    echo "  ✗ herdr-core: tcc-check fails after the upgrade (docs/tcc.md):"
-    printf '%s\n' "$tcc_out" | sed 's/^/      /'
-    assertion_failed=1
-  fi
+  echo "  ✗ tcc: tcc-check fails after the upgrade (docs/tcc.md):"
+  printf '%s\n' "$tcc_out" | sed 's/^/      /'
+  assertion_failed=1
 fi
 
 # op, the same silent-revert class with no plist in it. macOS records a TCC

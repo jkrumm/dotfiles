@@ -1,7 +1,7 @@
 # herdr-core + Herdr app — the design we run
 
 herdr-core (`hc`) is a headless core that owns the PTYs; the Herdr desktop app is a native window on top of it.
-Both machines run a core under launchd; the MacBook runs the app and links the mini's core as machine `mini`.
+Both machines run a launchd-born core (§How the core runs now); the MacBook runs the app and links the mini's core as machine `mini`.
 Classic herdr 0.9 was removed in Wave 7 (2026-10-31); §Removal lists what it had and what replaced each part.
 This page is the design (§Port design, written when the port was decided), the facts it rests on (§Verified facts)
 and the upstream state. Operational how-to: the `herdr` skill.
@@ -24,9 +24,8 @@ and the upstream state. Operational how-to: the `herdr` skill.
   has no maintainer answer. We record the session ourselves (§Port design, resume).
 - **App auto-update has no off switch** (herdr-app #207, open). The updater checks hourly. It never updates a
   managed core (fact 4), which is what pins the part that matters.
-- **TCC is keyed on the job's program.** Every program in a launchd core is attributed to the job's own program. That
-  was the ad-hoc signed core, so a Full Disk Access grant did not survive a new binary (fact 5). The job's program is
-  now a launcher at a stable path that holds the grant once (§Core as a LaunchAgent, `docs/tcc.md`).
+- **TCC is keyed on the responsible process.** Since 0.1.17 that is the holder or core itself, and since 0.1.18 the
+  signed `Herdr Core.app`, which holds the Full Disk Access grant once (§How the core runs now, `docs/tcc.md`).
 - **Beta cadence, checksum-only manifests.** Six core and seven app releases between 2026-10-23 and 2026-10-30.
   `releases.herdr.dev` serves `core|app/latest.json` and `<kind>/<version>/manifest.json`. The SHA-256 comes from
   the same service, there is no index page, and the manifests carry no date. Dates come from the HTTP
@@ -53,7 +52,7 @@ Decided 2026-10-31 (Wave 1); all of it is done and classic herdr is gone (§Remo
 | `brain-note.sh` (prefix+e popup) | port (Wave 4, `jk-keys`, cmd-e) | a small mod: `keys.json` `"<key>": "jk-keys.brain-note"` reaches the mod's `nextCommand()`, which starts the script with `hc run --bg` and shows it with `terminal.peek` (fact 8) |
 | `herdr-agent-state.sh` SessionStart hook | retire | Claude reports to the core natively over OSC 7501 (fact 7) |
 | `herdr-server-start.py`, `_herdr-supervise`, `lib/herdr-ready.sh`, `herdr-upgrade.sh`, `herdr-wait-quiet.sh`, `herdr-skill-sync.sh`, `make herdr-{setup,upgrade,restart,status,launchd-status,server-start-test}` | retire | `com.jkrumm.herdr-core` + the Wave 8 upgrade target |
-| heartbeat herdr component, `doctor.sh`, `brew-upgrade.sh`, `architecture-check` `herdr.*` regex, `log-rotate` collie log, `mini-macos-update` pane snapshot | port | core LaunchAgent running + `hc server status` + MacBook/mini version parity; the resume labels are the pre-reboot snapshot |
+| heartbeat herdr component, `doctor.sh`, `brew-upgrade.sh`, `architecture-check` `herdr.*` regex, `log-rotate` collie log, `mini-macos-update` pane snapshot | port | core up (`lib/core-up.sh`) + `hc server status` + responsibility + MacBook/mini version parity; the resume labels are the pre-reboot snapshot |
 | `Brewfile` `herdr`, cask `penso/tap/herdr-gpui`, tinycast `so.pen.herdr-gpui` hotkey, `config/herdr/config.toml`, `config-gpui.local.toml` | retire | Herdr.app, bundle id `dev.herdr.app` (its `Info.plist`) |
 | agent-workflows `agw agents` collectors (+ argo `herdrStatus`) | **retired** | the factory reads hc and is the one producer of agent state; `agw agents` reads `factory fleet --format json` and adds only recommendations and the Max quota (agent-workflows Wave 8). argo's `herdrStatus` carries hc's word through the factory |
 | iris herdr destination (raw `herdr.sock`) | port | `terminal.list` (labels) + `terminal.send` over `hc connect`; the destination value stays `"herdr"` |
@@ -237,7 +236,7 @@ what replaced each part, from §Port design:
 | Classic had | Replaced by |
 |-|-|
 | Agents: the server hosting every pane, the `herdr-agent-state.sh` hook, `herdr agent list/wait`, `desk` (`herdr --remote mini`), `resume_agents_on_restore` | `hc` terminals under `com.jkrumm.herdr-core`, Claude's native OSC 7501 reports, `hc wait --children`, the Herdr app on the MacBook (`ssh -t mini hc` without it), `hc-resume` over the `jk.claude.*` labels |
-| Jobs: `herdr-reap`, `herdr-events`, the supervised `sh.brew.herdr` boot path (`herdr-server-start.py`), `herdr.collie` | `hc-reap`, `hc-events`, `com.jkrumm.herdr-core` + the launcher and `com.jkrumm.herdr-core-update`, `com.jkrumm.collie` on herdr-core |
+| Jobs: `herdr-reap`, `herdr-events`, the supervised `sh.brew.herdr` boot path (`herdr-server-start.py`), `herdr.collie` | `hc-reap`, `hc-events`, `com.jkrumm.herdr-core` (starter) and `make herdr-core-update`, `com.jkrumm.collie` on herdr-core |
 | Files: `~/.config/herdr`, `herdr/`, `config/herdr/config.toml`, the `herdr-*` scripts and `make herdr-*` targets, the heartbeat `herdr` component and its two `doctor.sh` checks, the overview pane, `make herdr-groups` | `config/herdr-app/` (layout, mods, themes, `groups.json`), `make herdr-core-setup` / `herdr-app-setup`, the `core` heartbeat component and `section_core`, the app's sidebar dots and agents list, `jk-spaces` folders |
 
 `~/.config/herdr` was archived to `~/.local/share/herdr-classic-archive/` rather than deleted.
@@ -252,7 +251,7 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
 
 | herdr-core | Date | | herdr-app | Date |
 |-|-|-|-|-|
-| 0.1.18 (pinned out) | 2026-11-04 | | | |
+| 0.1.18 (running) | 2026-11-04 | | | |
 | 0.1.17 | 2026-11-02 | | | |
 | 0.1.16 | 2026-10-31 | | | |
 | 0.1.15 | 2026-10-30 | | 0.1.10 (`core_min` 0.1.11) | 2026-10-30 |
@@ -262,162 +261,99 @@ in their docs. Ovis, Nenu and several web UIs are classic-era. Earlier runs: `01
 | 0.1.11 | 2026-10-26 | | 0.1.6 | 2026-10-29 |
 | 0.1.10 | 2026-10-23 | | 0.1.5 | 2026-10-27 |
 
-## Core as a LaunchAgent
+## How the core runs now
 
-`com.jkrumm.herdr-core` (`make herdr-core-setup`, **both machines**) runs `hc serve` as a KeepAlive LaunchAgent, **bootstrapped into `gui/<uid>`**. The MacBook links the mini's with `hc machine add mini --name mini` (once; ssh config host `mini`).
+Core 0.1.18 and later is upstream's own app. Everything below follows from that one fact; there is no wrapper, launcher,
+pin or nightly updater of ours around it any more (history at the end of this section).
 
-- **A core's environment is every terminal's environment.** `hc run` does not pass the caller's env on (verified 2026-10-31): terminals get the core's. A core started by hand from inside Claude passed `CLAUDECODE`/`CLAUDE_CODE_CHILD_SESSION` to every terminal, and every Claude in it ran as a non-persisting child session (no transcript, no `--resume`). launchd's clean env is the fix. Corollary: an account is chosen on the command (`env CLAUDE_CONFIG_DIR=… claude`), never inherited.
+**Install.** The official installer (`curl -fsSL https://releases.herdr.dev/core/install.sh | sh`, `HC_INSTALL_DIR` unset)
+puts `Herdr Core.app` (Developer ID team `2W9652Q7QR`, identifier `dev.herdr.core`, notarized and stapled) at the fixed
+path `~/.local/share/herdr-core/active/Herdr Core.app` (`~/.local/share/herdr-core/current` is a link to it) and the entry
+points `~/.local/bin/herdr-core` and `~/.local/bin/hc` (a link to `herdr-core`) pointing into the bundle. A fresh install
+starts no core. `make herdr-core-setup` (both machines, idempotent, safe with agents live) runs the installer only when the
+bundle is missing, after removing an entry link that points into this repo or into Homebrew so the installer cannot write
+through it. A Homebrew-installed core is "package-managed": `hc update` refuses it and it has no bundle identity. Upstream
+has no formula (herdr-core #109).
 
-- **Always up, on purpose.** Any `hc` client call auto-starts a core when none runs, including the MacBook's link arriving over ssh. A core born in an ssh session spawns Claude without the login keychain (the `ssh mini 'claude …'` trap). Under launchd, a terminal in the core reaches the keychain (verified 2026-10-31).
-- **Restart = `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`.** Terminals survive: a `sleep` kept its pid across the kickstart (verified). Don't use `hc server restart`, `hc update` or `hc machine update mini` on the mini. They restart the core outside launchd's view, and that combination is untested.
-- **Launcher and managed core (parallel track P1).** The job's program is `~/.local/libexec/herdr-core-launcher`
-  (`scripts/herdr-core-launcher.c`, built once by `make herdr-core-setup`, ad-hoc signed with the fixed identifier
-  `com.jkrumm.herdr-core-launcher`, rebuilt only when the source changes because a new binary needs a new grant). It
-  resolves `/opt/homebrew/opt/herdr-core/bin/herdr-core` with `realpath()`, `posix_spawn`s it as a child (never
-  `exec`, no disclaim), forwards SIGTERM/SIGINT/SIGHUP and exits with it. It sets `HC_LAUNCHD_DIRECT=<its own pid>`
-  and reclaims the core lock (next bullet). The core is the `jkrumm/tap` formula
-  `herdr-core`: the resolved path contains `/Cellar/`, so the core reports `installed_by: "homebrew"` and the app
-  never updates it. `~/.local/bin/{herdr-core,hc}` are symlinks to `scripts/herdr-core-guard.sh` (next bullet), which execs the Cellar-resolved binary. **Cutover** (once per
-  machine): `make herdr-core-setup YES=1`. Changing the job's program needs a `bootout`, and that ends every live
-  terminal (a kickstart does not), so the target refuses without `YES=1` while terminals are live.
-- **0.1.17 moved `serve` out of launchd's sight; the launcher keeps it in (incident 2026-11-04).** Upstream
-  `platform/macos_launchd.rs` (`prepare_core`, read at tag `v0.1.17`): a macOS `serve` that is not under ssh
-  bootstraps a one-shot job `dev.herdr.core.<pid>.<ns>`, whose program re-execs as `herdr-core --hc-launchd
-  /tmp/hc-launchd-…/ready`, forks, `setsid`s, hands over over that socket, and the job is booted out; the starting
-  `serve` exits 0. Under our LaunchAgent that left the core an orphan (parent 1, its own coalition) and the job
-  respawning every `ThrottleInterval` forever: the nightly update to 0.1.17 ended `not ready after 60s`, the job stood at
-  `state = spawn scheduled`, `last exit code = 0`, `runs` ~3800 and climbing on the mini (~2750 on the MacBook), while
-  `hc ls` still answered. Every consumer that asks launchd refused (`rd`, the guard, relogin, doctor, heartbeat), and
-  `hc-events`/`hc-resume` stopped connecting. Not only a client's start detaches: under the LaunchAgent the launcher's own
-  `serve` did (reproduced with the old launcher under a scratch label); only an ssh-born `serve` stays direct. No plist
-  key fixes it: the escape is skipped only when `HC_LAUNCHD_DIRECT` equals the `serve`'s **parent pid** (scoped to its
-  immediate launcher on purpose), or under `SSH_CONNECTION` (which would leak into every terminal's env). The launcher
-  sets it to its own pid; the core removes it before spawning anything. It is an internal variable, so the updater's
-  post-restart assertion and the version pin (§Updates) are what catch a release that drops it.
-  **Holders restart cores too.** Each `hold` process supervises its core: gone for 3 s (`HC_HOLDER_GRACE_MS`), it starts
-  one itself, through the same escape (upstream `holder.rs`, `supervise`). After a `SIGTERM` to an orphan on the mini, a
-  0.1.17 holder won that race against the kickstart and became the next orphan. A `serve` that finds `core.lock` taken
-  returns 0 at once (`server.rs`), so the job loops again. So the launcher reclaims: when its `serve` child exits 0 and
-  another herdr-core process of this user has this session's `core.lock` open (libproc, no `hc` call), it `SIGTERM`s that
-  process (a core's planned stop: holders keep every terminal), waits for it to exit (≤ 30 s) and starts its own `serve`
-  at once, at most 3 times per launch. Each reclaim is one line in `~/Library/Logs/herdr-core.log`.
-  Verified 2026-11-04 on the mini: the bug was reproduced under a scratch label with the old launcher (`runs` 3, `spawn
-  scheduled`, an orphan `--hc-launchd`). With the new launcher, the binary was swapped under the bootstrapped job (no
-  bootout needed; launchd ran the new one on its next spawn). Then a scratch core started like a client's, and later one
-  started by a holder after a bootout, was reclaimed: `runs = 1`, the core the launcher's child, both scratch terminals on
-  the same pids. A `SIGKILL` of the core and two `kickstart -k` kept those pids. Live (30 terminals): `runs` 3872 held for
-  80 s, the core (`serve`) the launcher's child, 30/30 terminals on the same pids. Two further `kickstart -k`s (one through
-  `make herdr-core-relaunch`) kept every pid; `rd agents` answered.
-- **Applying a launcher change with terminals live:** `make herdr-core-relaunch` rebuilds the launcher if its source
-  changed (same code requirement: the grant holds), runs `kickstart -k`, and waits until the core is up and `runs` stays
-  flat for 30 s. A bootout is only needed when the plist itself changes (`make herdr-core-setup YES=1`).
-- **Client guard: no core outside launchd** (`scripts/herdr-core-guard.sh`, hermetic test `make herdr-core-guard-test`).
-  Research 2026-11-01 (core 0.1.15): no upstream switch. `hc` and `herdr-core` are one multi-call binary (`hc` is a
-  symlink to `herdr-core`), `hc --skill`/`--help`/`schema`, the `config.toml` keys and `strings` show no autostart flag,
-  env var or setting, and a scratch `hc server status` boots a core (`<argv0> serve`, parent pid 1). So the guard is a
-  wrapper at `~/.local/bin/{hc,herdr-core}`: help/version/skill/schema and scratch sessions (`HC_SESSION` other than
-  `default`, or `--session`) pass; everything else waits up to `HC_GUARD_WAIT` s (default 5) for the core to be up as
-  `scripts/lib/core-up.sh` defines it (`launchctl print` `state = running` AND a connect to the default socket, `nc -U`, never an `hc`
-  call; the same definition `rd`'s `require_core`, `claude-relogin`'s `hc_usable`, doctor and the heartbeat use), then execs the real binary, else exits 75 with what, why and
-  the fix (`launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`, or `make herdr-core-setup` when not loaded). The LaunchAgent's
-  launcher spawns the real binary directly, so only other callers see the guard. A caller that bypasses it
-  (`/opt/homebrew/bin/hc`, a core terminal started before the swap) is still caught by detection: `make doctor` and the
-  heartbeat `core` FAIL when a default-session `herdr-core serve` has a parent other than the launcher, when a detached
-  `herdr-core --hc-launchd` daemon runs, or when the core that answers is not the job's child (pid and fix named).
-  Incidents 2026-11-01: (a) after the MacBook rebooted, the Herdr app's `herdr-core connect` started a core (no launcher, no
-  Full Disk Access) before the LaunchAgent ran, and the job looped `runs = 42` on an empty log, unable to take the socket;
-  (b) after the mini's macOS update the MacBook's machine link (`ssh <peer-host> … herdr-core connect`) started
-  `~/.local/bin/herdr-core serve` while launchd still held the job as `pended nondemand spawn = speculative`: a keychain-less core.
-  Both were fixed by hand (stop stray core and holder, `kickstart`). **Boot race:** `ProcessType Interactive` in the plist is the
-  only key with an observable effect (`launchctl print` of a scratch label: `spawn type = interactive (4)` instead of `daemon (3)`;
-  `immediate reason = speculative` stays whatever is set), so the race is closed by the guard waiting for the job, not by launchd.
-  **Rollout (owner-timed):** the wrapper is a file swap, safe live (`make herdr-core-setup` swaps the symlinks atomically; it
-  also needs the plist bootout, so run it with `YES=1` at a chosen moment, or swap just the links by hand). The plist change needs a
-  `bootout` (ends live terminals); until then the guard works without it. On the MacBook the app must start its core through
-  `~/.local/bin/herdr-core`: confirm after the rollout that the app's connect is refused while the job is stopped.
-- **Upgrades:** §Updates. Keep MacBook and mini on the same `hc` version (`hc machine ls` shows it).
-- State: `~/.local/state/herdr-core/` on the mini. Log: `~/Library/Logs/herdr-core.log`.
+**Identity.** The core, each holder (`herdr-core hold`) and the programs in terminals are attributed to the holder or the
+core itself (every holder re-execs with a responsibility disclaimer since 0.1.17), so macOS judges file access on the
+`Herdr Core.app` bundle. The owner grants Full Disk Access once per machine to that path (System Settings, a human step,
+`docs/tcc.md` §One-time grants); the grant is keyed on the signing identity and survives updates. Local Network and
+microphone prompts appear once on the machine's screen. Upstream still says session-scoped AppData consent on macOS 26 may
+prompt anyway, so nothing here promises "never again".
 
-## Updates
+**Starter (mini only).** `com.jkrumm.herdr-core` (`scripts/com.jkrumm.herdr-core.plist.template`) is a starter, not the
+core: `RunAtLoad`, never `KeepAlive`, program `Herdr Core.app/Contents/MacOS/herdr-core serve`, `ProcessType Interactive`,
+log `~/Library/Logs/herdr-core.log`. `serve` outside ssh detaches into upstream's own one-shot launchd job (the process
+shows as `herdr-core --hc-launchd /tmp/hc-launchd-…`, parent pid 1, in the GUI session, so the Claude Max keychain
+login is reachable) and the starter exits 0; the detached process is the core. Re-running the starter while a core runs is
+harmless (`serve` finds the lock and exits), booting it out does not stop the core, and `make herdr-core-setup`
+bootstraps it only when it is not loaded. The environment of the core is the environment of every terminal (`hc run`
+forwards nothing): a clean launchd env is why no Claude runs as a non-persisting child session; choose the Claude account
+on the command line, never by inheritance. A changed starter applies at the next login.
 
-`com.jkrumm.herdr-core-update` (daily 04:15, both machines, `jobrun`, `scripts/herdr-core-update.ts`):
+**MacBook.** No job of ours. The Herdr app starts the core through the same launchd path and links the mini with
+`hc machine add mini --name mini` (once; ssh config host `mini`). `herdr-core-setup` there only ensures the bundle and
+removes a stale `com.jkrumm.herdr-core` / `-update` LaunchAgent.
 
-1. The newest release whose manifest was published at least 24 h ago (HTTP `Last-Modified` of `core/<v>/manifest.json`,
-   walking down from `latest.json` over sequential patch versions) **and not above the pin** in
-   `config/herdr-core-max-version`. A newer release is named in the log (`latest X is above the pin Y … not installed
-   unattended`) and skipped. The tarball's sha256 is checked against the index.
-2. Preflight: the launcher in `~/.local/libexec` is built from this checkout's `scripts/herdr-core-launcher.c` (its
-   `.src-sha`); a stale one cannot keep a 0.1.17+ core in launchd, so the run stops with `make herdr-core-setup` before
-   anything changes. A version that failed here before (`~/.local/state/herdr-core-update/failed.json`) is not retried
-   until that file is removed.
-3. Set `Formula/herdr-core.rb` in the `jkrumm/tap` checkout (commit + push; whichever machine runs first bumps, the other
-   finds it done; a formula above the pin is refused), `brew upgrade jkrumm/tap/herdr-core`.
-4. `launchctl kickstart -k gui/<uid>/com.jkrumm.herdr-core`.
-5. Assert, within a deadline of 60 s × the 1-minute load average per core (60 s floor, 240 s cap: the mini ran at a load
-   of ~26-44 on 12 cores while waves ran, and a core start there is CPU-bound): launchd shows `state = running` on a new
-   pid; the core is up (`lib/core-up.sh`); it reports the new version and `installed_by: homebrew`; for 30 s the job stays
-   `running` on that pid with `runs` flat (launchd respawns an exiting job every 10 s, so a respawn loop shows twice);
-   the core is the job's child; every terminal that was live keeps its pid. Then every linked machine (`hc machine ls`)
-   shows the same version. The MacBook's run starts the mini's own update job over ssh when the versions differ and
-   waits for it, so they converge in one run.
+**Core up** is defined once, in `scripts/lib/core-up.sh`: the default socket answers (bare `nc -U`, never an `hc` call)
+**and** a launchd-born core exists (`ps`: `herdr-core --hc-launchd`, parent pid 1). Used by `lib/core-health.sh`
+(heartbeat component `core`, `doctor.sh`), `rd`'s `require_core`, `claude-relogin`, `hc-events`, `hc-resume`, `hc-reap`
+and `collie-setup`. Any `hc` call auto-starts a core when none answers, which is why every consumer asks `core_up` first.
 
-**Any failure from step 3 on rolls back:** the formula goes back to the version that ran (commit + push, so the other
-machine does not install it either), `brew reinstall`, a kickstart when the core was restarted or is not healthy, and the
-same assertion. The log names what failed and how the rollback went (`ROLLBACK … FAILED: …` when it did not), the failed
-version lands in `failed.json`, and the job exits non-zero, so `jobs-grade` grades it red. The restart/rollback logic sits
-behind a `Host` port and is tested against a fake machine (`scripts/herdr-core-update.test.ts`): the 0.1.17 shape (job never
-`running`), a respawn flicker, a core that is not the job's child, lost terminals, a failed `brew reinstall` and a brew
-failure before the kickstart.
+**Strays.** A core started by a client (`herdr-core connect` over ssh, upstream herdr-core #12; a `hc` call while no core
+runs) answers on the same socket but is attributed to sshd and has no keychain: Claude silently falls back to API
+billing. It fails `core_up`'s second clause, so heartbeat and doctor FAIL with the fix (stop it, `hc server stop` keeps
+every terminal, then `launchctl kickstart gui/<uid>/com.jkrumm.herdr-core`). Protection is structural: the mini's core is
+always started by launchd, the MacBook never starts it, and nothing wraps `~/.local/bin/hc` (the installer and `hc update`
+rewrite those links).
 
-`make herdr-core-update-check` previews (dry; `--max-version X` previews a promotion), `make herdr-core-update` runs it
-now. An unmanaged core (`installed_by` not `homebrew`) fails with the fix `make herdr-core-setup`. The app cannot replace
-the core (fact 4); the app itself still updates hourly (herdr-app #207).
+**Probes.**
+- `make tcc-probe`: a fresh `hc run` terminal lists `~/Documents ~/Desktop ~/Downloads` (MacBook: also the 1Password group
+  container), then `scripts/hc-responsible.py` asks `responsibility_get_pid_responsible_for_pid` for the core and every
+  holder and exits 1 listing any whose responsible process is not inside `Herdr Core.app` (a Homebrew Cellar herdr-core,
+  sshd, a launcher). Terminals born before the cutover keep their old holder until they end, so offenders shrink over time;
+  the heartbeat shows them as a WARN.
+- `make herdr-core-status`: version, `core_up`, responsibility.
+- `make op-tcc-probe` (MacBook): `op` in a Herdr terminal raises no AppData dialog; re-run after every core update.
 
-### Moving the pin
+**Updates.** `make herdr-core-update` runs the official `hc update` (it may ask to be run a second time; the target runs
+it again), then verifies `hc --version`, `core_up`, that the terminal count did not change and the responsibility check.
+Run it by hand in a quiet window (`hc ls` shows what is live), on each machine. Running terminals keep running, but an
+update can end the programs inside them (upstream herdr-core #133): `hc-resume` types `claude --resume <id>` into the
+login shells that remain, only where the foreground is positively a login shell. There is no unattended update job: the
+Herdr app also updates linked machines' cores, and a second updater would race it. Read the release notes first
+(`/upgrade-deps`, Machine mode: herdr-core).
 
-The pin exists because a release can change how the core runs under launchd (0.1.17 did) or how macOS attributes its
-terminals (0.1.18 does), and the nightly job would otherwise install that on both machines at 04:15. To move it, on the
-mini, by hand: `bun scripts/herdr-core-update.ts --dry --max-version <v>` (plan and sha256), then
-`bun scripts/herdr-core-update.ts --max-version <v>` (installs, asserts, rolls back on failure), then check what the release
-notes change (TCC: `make tcc-probe` in a fresh terminal; anything else they name). Only then commit the new version to
-`config/herdr-core-max-version`; the MacBook follows on its next run. Read the release's source for anything that touches
-`platform/macos_*`, `holder.rs` or `server.rs` before.
+**What breaks it.**
+- A wrapper at `~/.local/bin/{hc,herdr-core}` (the installer and `hc update` rewrite those links).
+- A Homebrew core (no bundle identity, `hc update` refuses it).
+- A core started over ssh or by the MacBook (stray, see above).
+- Clicking "Allow" on an AppData dialog as the fix: that consent is session-scoped on macOS 26 and returns.
+- A changed signing identifier or team on a future release: re-grant Full Disk Access then, and only then.
 
-### 0.1.18: the core becomes its own app (pinned out, 2026-11-04)
+**Do not.** Put a wrapper script at `~/.local/bin`. Install the core through Homebrew. Start the mini's core over ssh
+or from the MacBook (`hc` there when the core is down). Click Allow as a fix. Re-grant unless the signing identity
+changes. Run `hc server restart|stop` or `hc update` outside `make herdr-core-update`'s conditions (quiet window,
+verification).
 
-Release note: "On macOS, the core is now its own app, Herdr Core. macOS asks once to let Herdr Core reach your local
-network … and once for the microphone … Terminals opened before the update need to be reopened once to get this. (#100)"
-Read at tag `v0.1.18` (`platform/macos_bundle.rs`, `platform/macos_responsibility.rs`, `distribution/install.sh`,
-CHANGELOG) and the macOS tarball's listing:
+State: `~/.local/state/herdr-core/`. Log: `~/Library/Logs/herdr-core.log`.
 
-| Area | What 0.1.18 does | Effect here |
-|-|-|-|
-| Tarball | `herdr-core` plus `Herdr Core.app` (`Contents/MacOS/herdr-core`, Developer ID, `dev.herdr.core`, team `2W9652Q7QR`; 0.1.17's binary already had that signature) | The formula installs only `bin/herdr-core`; it must decide whether to install the bundle (`hc --hc-install-bundle`, versions under a `current` link), and `installed_by: homebrew` must survive that |
-| launchd | `prepare_core` unchanged: `HC_LAUNCHD_DIRECT` still skips the escape | The launcher keeps it in the job |
-| TCC | `hold` re-execs itself with `responsibility_spawnattrs_setdisclaim`: **every holder becomes the responsible process for its terminals**. The detached core disclaims too | The launcher's Full Disk Access no longer covers terminal programs. The grant has to move to `Herdr Core.app` (a Developer ID app keyed on its bundle id and team, so it would survive updates at a stable path) or to the holder binary, whose Cellar path moves on every version |
-| New prompts | Local network and microphone, attributed to Herdr Core, shown once on the machine's screen | Headless mini: someone has to answer them at the screen, else terminal programs that reach the LAN freeze or fail. Terminals from before the update keep the old attribution until reopened |
-| Updates | `hc update` may need to run twice; `--from 'Herdr Core.app'` | Irrelevant while brew manages the core |
+**Launcher (opbackup only).** `~/.local/libexec/herdr-core-launcher` (`scripts/herdr-core-launcher.c`, built by `make
+herdr-core-launcher`, a prerequisite of `opbackup-setup` only) is the Full Disk Access umbrella for LaunchAgent programs
+that call `op` (`docs/tcc.md` pattern "Launcher"). It was the core's program until 0.1.17 and still carries that name and
+path because the grant is keyed on them; its source still has the old comments, because editing the file changes the hash
+the build marker keys on and would trigger a rebuild that loses the grant.
 
-Before the pin moves to 0.1.18: decide where `Herdr Core.app` lives (stable path, so one grant survives updates) and teach
-the formula; grant Full Disk Access, local network and microphone to it on both machines (at the screen); prove with a
-scratch core under a scratch label that terminals are attributed to it (`hc exec sqlite3` against the system TCC.db, read
-`responsible_path` from `log show … tccd … AUTHREQ_ATTRIBUTION`, no dialog) and that `make tcc-probe` passes; then
-`--max-version 0.1.18` by hand on the mini as above; plan the reopening of pre-update terminals. Until then the launcher
-stays the grant holder for 0.1.17.
-
-## Launcher evidence (2026-10-31, mini, core 0.1.14 → 0.1.15)
-
-Scratch core under a scratch LaunchAgent (own `HC_SESSION`, scratch `XDG_*`), program = the launcher, core spawned as its child.
-
-- **Attribution (design held):** `hc run "ls ~/Documents"` raised `AUTHREQ_PROMPTING service=kTCCServiceSystemPolicyDocumentsFolder`
-  with `responsible_path=~/.local/libexec/herdr-core-launcher`. The chain launcher → core → holder → terminal → `ls`
-  is attributed to the launcher, so the holders do not disclaim and the fallback (stable self-signed identity) is not needed.
-- **Managed path:** a Cellar-shaped path under the launcher gave `installed_by: "homebrew"` (the launcher's `realpath()`
-  matters: the opt symlink alone hides `/Cellar/`).
-- **Swap:** `kickstart -k` after pointing `opt/herdr-core` at a differently signed copy: new core pid, old holder and
-  both `sleep` terminals kept their pids, no duplicate core.
-- **Not proven yet:** "no prompt after the swap" needs the Full Disk Access row on the launcher, which only the owner
-  can add (System Settings; no scripted grant). Queued (`ask-human`); `make tcc-probe` is the check once it is in.
+**History.** 0.1.15 (2026-10-31): the design held. A launcher as the job's program, the Homebrew formula's core as its
+child, terminals attributed to the launcher (scratch-core evidence: `responsible_path` was the launcher), one Full Disk
+Access grant that survived core swaps. 0.1.17 (2026-11-02): every holder re-execs with a responsibility disclaimer, so
+terminal programs take their holder's identity and the launcher's grant never covered them (the cause of the endless
+"herdr-core möchte auf Daten aus anderen Apps zugreifen" dialogs), and a macOS `serve` detaches into its own one-shot
+launchd job (incident 2026-11-04: the KeepAlive job looped `spawn scheduled`, `runs` in the thousands, while an orphan core
+answered; worked around with a launcher env variable, a lock-reclaiming launcher, a client guard and a version-pinned
+nightly updater). 0.1.18 (2026-11-04): the core ships its own identity, `Herdr Core.app`, the official installer and
+`hc update`; the workaround stack was deleted.
 
 ## Desktop layout (MacBook)
 

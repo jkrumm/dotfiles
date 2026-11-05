@@ -783,7 +783,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -2478,114 +2478,123 @@ jobrun-canary-teardown:
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.jobrun-canary.json"; \
 	echo "  ✓ jobrun-canary torn down (unloaded, plist and jobrun state removed)"
 
-# herdr-core (`hc`) server as a LaunchAgent, on both machines — docs/herdr-core.md §Core as a LaunchAgent.
-# launchd gives it a clean environment: a core started by any other process passes that process's env to
-# every terminal (one started from inside Claude made every Claude a non-persisting "child session").
-# bootstrap into gui/<uid> explicitly: a plain `launchctl load` from an ssh session lands outside the
-# GUI session, and a core there spawns Claude without the keychain (the `ssh mini 'claude …'` trap).
+# herdr-core (`hc`): upstream's own app, Herdr Core.app, installed by the OFFICIAL installer and updated only by
+# `hc update` (make herdr-core-update). Spec: docs/herdr-core.md §How the core runs now.
+#   mini    a STARTER LaunchAgent (com.jkrumm.herdr-core, RunAtLoad, never KeepAlive): `serve` outside ssh detaches into
+#           upstream's own one-shot launchd job and the starter exits 0; the detached process is the core. Bootstrapped only
+#           when not loaded; never bootout (ends nothing, but a reload buys nothing), never kickstarted.
+#   MacBook no job: the Herdr app starts the core through the same launchd path. setup only installs the bundle.
+# The launcher below is NOT the core's any more: it is the Full Disk Access umbrella for LaunchAgents that call `op`
+# (opbackup, docs/tcc.md pattern "Launcher"); the file name and path are kept because the grant is keyed on them.
 LAUNCHER_BIN := $(HOME)/.local/libexec/herdr-core-launcher
-CORE_FORMULA := jkrumm/tap/herdr-core
-.PHONY: herdr-core-setup herdr-core-relaunch herdr-core-teardown herdr-core-status herdr-core-launcher herdr-core-update-setup herdr-core-update-teardown herdr-core-update-check herdr-core-update
-# The LaunchAgent's own program (docs/tcc.md): ad-hoc signed with a fixed identifier and an explicit identifier-only
-# designated requirement, so a rebuild keeps its Full Disk Access grant. Rebuilt when the source hash or the signing
-# mode changes; a changed requirement queues the re-grant with ask-human before the swap. Afterwards: make tcc-probe.
+CORE_APP := $(HOME)/.local/share/herdr-core/active/Herdr Core.app
+CORE_INSTALLER := https://releases.herdr.dev/core/install.sh
+.PHONY: herdr-core-setup herdr-core-teardown herdr-core-status herdr-core-update herdr-core-launcher herdr-core-test
+# The opbackup launcher: ad-hoc signed with a fixed identifier and an explicit identifier-only designated requirement.
+# Rebuilt only when its source hash or signing mode changes (a rebuild may need a re-grant, so never run it casually).
 herdr-core-launcher:
 	@LAUNCHER_BIN="$(LAUNCHER_BIN)" DOTFILES_DIR="$(DOTFILES_DIR)" bash "$(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh"
-herdr-core-setup: herdr-core-launcher
-	@if ! { command -v brew >/dev/null && brew list --formula herdr-core >/dev/null 2>&1; }; then \
-		command -v brew >/dev/null && { git -C "$$(brew --repo jkrumm/tap)" pull --ff-only -q 2>/dev/null || echo "    · tap not refreshed (offline or diverged); installing from the local copy"; }; \
-		HOMEBREW_NO_AUTO_UPDATE=1 brew install $(CORE_FORMULA) || { echo "    ✗ brew install $(CORE_FORMULA) failed"; exit 1; }; \
-	fi; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/bin"; \
-	DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; MARK="$(LAUNCHER_BIN).bootstrapped"; \
-	sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
-		&& plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "    ✗ plist render failed"; exit 1; }; \
-	LSHA="$$(cat "$(LAUNCHER_BIN).src-sha" 2>/dev/null)"; \
-	if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null && launchctl print "$$TARGET" >/dev/null 2>&1 && [ "$$(cat "$$MARK" 2>/dev/null)" = "$$LSHA" ]; then NEED_BOOT=0; else NEED_BOOT=1; fi; \
-	if [ "$$NEED_BOOT" = 1 ] && launchctl print "$$TARGET" >/dev/null 2>&1 && [ "$(YES)" != "1" ]; then \
-		LIVE=$$("$(HOME)/.local/bin/hc" server status --json 2>/dev/null | jq -er '.live | select(type == "number")' 2>/dev/null); \
-		case "$$LIVE" in ""|*[!0-9]*) rm -f "$$TMP"; echo "    ✗ cannot tell how many terminals are live (hc server status failed); the job's program or launcher changed, which needs a bootout. Re-run with YES=1 once that is fine"; exit 1;; esac; \
-		if [ "$$LIVE" -gt 0 ]; then rm -f "$$TMP"; echo "    ✗ the job's program or launcher changed, which needs a bootout: that ends $$LIVE live terminal(s) (a kickstart does not). Re-run with YES=1 when that is fine"; exit 1; fi; \
-	fi; \
-	chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
+herdr-core-setup:
+	@mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs" "$(HOME)/.local/bin"; \
+	BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
 	for b in herdr-core hc; do \
-		L="$(HOME)/.local/bin/$$b"; G="$(DOTFILES_DIR)/scripts/herdr-core-guard.sh"; \
-		[ "$$(readlink "$$L")" = "$$G" ] || { ln -s "$$G" "$$L.new.$$$$" && mv -f "$$L.new.$$$$" "$$L" || { rm -f "$$L.new.$$$$"; echo "    ✗ could not link $$L"; exit 1; }; echo "    ✓ ~/.local/bin/$$b -> scripts/herdr-core-guard.sh (refuses a core start outside launchd; atomic swap, safe live)"; }; \
+		L="$(HOME)/.local/bin/$$b"; T=$$(readlink "$$L" 2>/dev/null); \
+		case "$$T" in "$(DOTFILES_DIR)"/*) rm -f "$$L"; echo "    ✓ removed ~/.local/bin/$$b (a link into this repo: the retired client guard)";; esac; \
 	done; \
-	if [ "$$NEED_BOOT" = 0 ]; then \
-		rm "$$TMP"; echo "    · com.jkrumm.herdr-core (up to date)"; \
+	if [ ! -d "$(CORE_APP)" ]; then \
+		for b in herdr-core hc; do \
+			L="$(HOME)/.local/bin/$$b"; T=$$(readlink "$$L" 2>/dev/null); \
+			case "$$T" in /opt/homebrew/*|*/Cellar/*) rm -f "$$L"; echo "    ✓ removed ~/.local/bin/$$b (a link into Homebrew: the installer must not write through it)";; esac; \
+		done; \
+		D="$$(mktemp -d)"; \
+		curl -fsSL "$(CORE_INSTALLER)" -o "$$D/install.sh" && env -u HC_INSTALL_DIR sh "$$D/install.sh"; rc=$$?; rm -rf "$$D"; \
+		{ [ "$$rc" = 0 ] && [ -d "$(CORE_APP)" ]; } || { echo "    ✗ the official installer failed or left no Herdr Core.app (rc=$$rc)"; exit 1; }; \
+		echo "    ✓ Herdr Core.app installed by the official installer (it starts no core)"; \
 	else \
-		mv "$$TMP" "$$DST" || { echo "    ✗ could not write $$DST"; exit 1; }; \
-		launchctl bootout "$$TARGET" 2>/dev/null || true; \
-		i=0; while launchctl print "$$TARGET" >/dev/null 2>&1; do \
-			i=$$((i+1)); [ $$i -gt 120 ] && { echo "    ✗ old herdr-core job never deregistered"; exit 1; }; sleep 0.5; done; \
-		launchctl bootstrap "gui/$$(id -u)" "$$DST" || { echo "    ✗ bootstrap failed — core is DOWN"; exit 1; }; \
-		echo "$$LSHA" > "$$MARK"; \
-		echo "    ✓ com.jkrumm.herdr-core (installed + bootstrapped into gui/$$(id -u))"; \
+		echo "    · Herdr Core.app present ($$("$(HOME)/.local/bin/hc" --version 2>/dev/null))"; \
 	fi; \
-	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do \
-		i=$$((i+1)); [ $$i -gt 40 ] && { echo "    ✗ com.jkrumm.herdr-core not up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh") — ~/Library/Logs/herdr-core.log"; exit 1; }; sleep 0.5; done; \
-	echo "    ↳ up (launchd running + socket answers; KeepAlive hc serve); log: ~/Library/Logs/herdr-core.log"; \
-	$(MAKE) --no-print-directory herdr-core-update-setup
-# Terminal-preserving roll of a new launcher (or a new core binary): rebuild the launcher if its source changed, then
-# kickstart -k (never a bootout; holders keep every terminal) and wait until the core is up and launchd holds it stable.
-# The way to apply a launcher change while terminals are live; the plist itself still needs herdr-core-setup YES=1.
-herdr-core-relaunch: herdr-core-launcher
-	@TARGET="gui/$$(id -u)/com.jkrumm.herdr-core"; \
-	launchctl print "$$TARGET" >/dev/null 2>&1 || { echo "    ✗ com.jkrumm.herdr-core is not loaded: make herdr-core-setup"; exit 1; }; \
-	launchctl kickstart -k "$$TARGET" || { echo "    ✗ kickstart failed"; exit 1; }; \
-	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do \
-		i=$$((i+1)); [ $$i -gt 120 ] && { echo "    ✗ not up after 60 s: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; sleep 0.5; done; \
-	runs() { launchctl print "$$TARGET" | awk -F' = ' '/^[[:space:]]*runs = /{ print $$2; exit }'; }; \
-	r0=$$(runs); sleep 30; r1=$$(runs); \
-	[ "$$r0" = "$$r1" ] && bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null \
-		|| { echo "    ✗ launchd is respawning the job (runs $$r0 -> $$r1): docs/herdr-core.md §Core as a LaunchAgent"; exit 1; }; \
-	echo "    ✓ com.jkrumm.herdr-core relaunched: up, runs stable at $$r1 for 30 s"
-herdr-core-teardown: herdr-core-update-teardown
+	UID_=$$(id -u); \
+	for old in com.jkrumm.herdr-core-update $$( [ "$$BACKEND" = cache ] || echo com.jkrumm.herdr-core ); do \
+		if [ -f "$(LAUNCHAGENTS)/$$old.plist" ] || launchctl print "gui/$$UID_/$$old" >/dev/null 2>&1; then \
+			launchctl bootout "gui/$$UID_/$$old" 2>/dev/null || true; \
+			rm -f "$(LAUNCHAGENTS)/$$old.plist"; \
+			echo "    ✓ $$old removed (retired here)"; \
+		fi; \
+	done; \
+	rm -f "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-core-update.json"; \
+	if [ "$$BACKEND" = cache ]; then \
+		DST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; TMP="$$(mktemp)"; TARGET="gui/$$UID_/com.jkrumm.herdr-core"; \
+		sed -e "s|__HOME__|$(HOME)|g" "$(DOTFILES_DIR)/scripts/com.jkrumm.herdr-core.plist.template" > "$$TMP" \
+			&& plutil -lint "$$TMP" >/dev/null || { rm -f "$$TMP"; echo "    ✗ plist render failed"; exit 1; }; \
+		if [ -f "$$DST" ] && diff -q "$$TMP" "$$DST" >/dev/null; then rm "$$TMP"; echo "    · com.jkrumm.herdr-core starter (up to date)"; \
+		else mv "$$TMP" "$$DST" || { echo "    ✗ could not write $$DST"; exit 1; }; echo "    ✓ com.jkrumm.herdr-core starter written (a changed starter applies at the next login; no bootout, the core keeps running)"; fi; \
+		if launchctl print "$$TARGET" >/dev/null 2>&1; then echo "    · starter already loaded (nothing started)"; \
+		else launchctl bootstrap "gui/$$UID_" "$$DST" || { echo "    ✗ bootstrap failed"; exit 1; }; echo "    ✓ starter bootstrapped into gui/$$UID_ (RunAtLoad: starts the core only if none runs)"; \
+			i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do i=$$((i+1)); [ $$i -gt 40 ] && break; sleep 0.5; done; fi; \
+	fi; \
+	if bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; then echo "    ↳ core up (launchd-born, socket answers)"; \
+	else \
+		echo "    ✗ core not up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; \
+		[ "$$BACKEND" = cache ] || echo "    · the MacBook's core is started by the Herdr app, never by us: open the app"; \
+		exit 1; \
+	fi
+	@bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null && $(MAKE) --no-print-directory tcc-probe || true
+# Removes the mini's starter. The core and its terminals keep running (the starter never supervised them).
+herdr-core-teardown:
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
-	for b in herdr-core hc; do [ "$$(readlink "$(HOME)/.local/bin/$$b")" = "$(DOTFILES_DIR)/scripts/herdr-core-guard.sh" ] && { ln -s "/opt/homebrew/bin/$$b" "$(HOME)/.local/bin/$$b.new.$$$$" && mv -f "$(HOME)/.local/bin/$$b.new.$$$$" "$(HOME)/.local/bin/$$b"; }; done; \
-	echo "  ✓ herdr-core torn down (its terminals end with it; on the MacBook: hc machine rm mini)"
+	echo "  ✓ herdr-core starter removed (a running core and its terminals are untouched; on the MacBook: hc machine rm mini)"
 herdr-core-status:
-	@launchctl print "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -E "state =|pid =|runs =" || { echo "  not loaded"; exit 1; }; \
-	"$(HOME)/.local/bin/hc" server status --json
+	@HC="$(HOME)/.local/bin/hc"; \
+	echo "  hc $$("$$HC" --version 2>/dev/null || echo 'not installed')"; \
+	if bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; then echo "  core_up: yes"; "$$HC" server status --json; \
+	else echo "  core_up: NO — $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; fi; \
+	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py"
+# The OFFICIAL updater (`hc update`), run by hand in a quiet window: `hc ls` shows what is live. A core update can end
+# programs inside terminals (upstream herdr-core #133); the terminals stay and hc-resume types `claude --resume` into them.
+# There is no unattended job: the Herdr app also updates the cores of linked machines, a second updater would race it.
+herdr-core-update:
+	@HC="$(HOME)/.local/bin/hc"; \
+	bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null || { echo "  ✗ core not up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; \
+	v0=$$("$$HC" --version); n0=$$("$$HC" ls | jq '.terminals | length'); \
+	echo "  before: $$v0, $$n0 live terminal(s)"; \
+	out=$$("$$HC" update 2>&1); rc=$$?; echo "$$out"; \
+	[ "$$rc" = 0 ] || { echo "  ✗ hc update failed (rc=$$rc)"; exit 1; }; \
+	if printf '%s' "$$out" | grep -qi 'again'; then echo "  · hc asked to run again"; "$$HC" update || { echo "  ✗ second hc update failed"; exit 1; }; fi; \
+	i=0; until bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null; do i=$$((i+1)); [ $$i -gt 120 ] && { echo "  ✗ core not up after the update: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; sleep 0.5; done; \
+	v1=$$("$$HC" --version); n1=$$("$$HC" ls | jq '.terminals | length'); \
+	echo "  after:  $$v1, $$n1 live terminal(s)"; \
+	[ "$$n0" = "$$n1" ] || { echo "  ✗ terminal count changed ($$n0 -> $$n1)"; exit 1; }; \
+	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || echo "  · some holders are not attributed to Herdr Core.app yet (old ones end with their terminals)"; \
+	echo "  ✓ core up, terminals kept. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed), make tcc-probe; the other machine: make herdr-core-update there"
 
 .PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
 tcc-check: ## Read-only: flag a LaunchAgent program (ad-hoc signed / versioned path) that has no durable file-access grant (docs/tcc.md)
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.sh
-tcc-probe: ## Live proof (fresh hc run terminal) that the launcher's grant holds; the step after EVERY launcher change (raises the dialog if it has none)
-	@out=$$(hc run --timeout 15 'ls ~/Documents ~/Desktop ~/Downloads >/dev/null && echo FDA_O""K' 2>&1); \
-	case "$$out" in *FDA_OK*) echo "  ✓ a core terminal reaches the protected folders (a Full Disk Access grant holds)";; \
-	*) echo "  ✗ blocked or failed: $$out"; echo "    grant Full Disk Access to $(LAUNCHER_BIN) (docs/tcc.md), then dismiss the dialog on the screen. The probe runs in a fresh terminal (hc run); a terminal born before a launcher cutover keeps the old identity"; exit 1;; esac
-op-tcc-probe: ## MacBook acceptance check: op read in a core terminal raises no AppData dialog (SWAP=1: also after a core swap). Run: hc run --timeout 900 'make op-tcc-probe SWAP=1'
-	@bash $(DOTFILES_DIR)/scripts/op-tcc-probe.sh $(if $(SWAP),--swap,)
+tcc-probe: ## Live proof (fresh hc run terminal) that Herdr Core.app's Full Disk Access grant holds, plus who is responsible for the core and holders
+	@HC="$(HOME)/.local/bin/hc"; \
+	bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh" >/dev/null || { echo "  ✗ no launchd-born core is up: $$(bash "$(DOTFILES_DIR)/scripts/lib/core-up.sh")"; exit 1; }; \
+	BACKEND=$$(tr -d '[:space:]' < "$(HOME)/.config/secrets/backend" 2>/dev/null || echo ""); \
+	CMD='ls ~/Documents ~/Desktop ~/Downloads >/dev/null'; \
+	[ "$$BACKEND" != op ] || CMD="$$CMD && ls ~/Library/Group\ Containers/2BUA8C4S2C.com.1password >/dev/null"; \
+	out=$$("$$HC" run --timeout 20 "$$CMD && echo FDA_O\"\"K" 2>&1); \
+	case "$$out" in *FDA_OK*) echo "  ✓ a core terminal reaches the protected folders$$([ "$$BACKEND" != op ] || echo ' and the 1Password container')";; \
+	*) echo "  ✗ blocked or failed: $$out"; \
+	   echo "    one-time human step on THIS machine (docs/tcc.md §One-time grants): System Settings > Privacy & Security > Full Disk Access > add"; \
+	   echo "    $(CORE_APP)"; \
+	   echo "    and answer the Local Network and microphone prompts at the machine's screen; the probe runs in a fresh terminal (hc run)"; exit 1;; esac; \
+	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || { echo "  ✗ responsibility check failed (docs/herdr-core.md §How the core runs now)"; exit 1; }
+op-tcc-probe: ## MacBook acceptance check: op read in a core terminal raises no AppData dialog (covered by the Herdr Core.app grant); re-run after make herdr-core-update
+	@bash $(DOTFILES_DIR)/scripts/op-tcc-probe.sh
 tcc-check-test: ## Hermetic test for tcc-check
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/tcc-check.sh $(DOTFILES_DIR)/scripts/tcc-check.test.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.sh $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 	@bash $(DOTFILES_DIR)/scripts/tcc-check.test.sh
 	@bash $(DOTFILES_DIR)/scripts/herdr-core-launcher-build.test.sh
 
-.PHONY: herdr-core-guard-test
-herdr-core-guard-test: ## Hermetic tests: the core-up definition, the client guard (hc/herdr-core refuse outside launchd) and core-health (strays, detached cores, job parentage)
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/core-up.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.sh $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
-	@bash $(DOTFILES_DIR)/scripts/herdr-core-guard.test.sh
+herdr-core-test: ## Hermetic tests: the core-up definition, core-health (stray, responsibility, version parity) and hc-responsible
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/lib/core-up.sh $(DOTFILES_DIR)/scripts/lib/core-health.sh $(DOTFILES_DIR)/scripts/core-health.test.sh
 	@bash $(DOTFILES_DIR)/scripts/core-health.test.sh
-
-# Daily automatic core updates (docs/herdr-core.md §Updates): newest release >= 24 h old and <= config/herdr-core-max-version,
-# via the tap formula; rolled back automatically when the restarted core is not proven up.
-herdr-core-update-setup:
-	@chmod +x "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"; \
-	mkdir -p "$(LAUNCHAGENTS)" "$(HOME)/Library/Logs"; \
-	$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.herdr-core-update" PLIST_DIR="$(DOTFILES_DIR)/scripts" || exit 1; \
-	echo "    ↳ daily 04:15 → newest herdr-core release >= 24 h old; log: ~/Library/Logs/herdr-core-update.log"
-herdr-core-update-teardown:
-	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.herdr-core-update.plist"; \
-	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.herdr-core-update.json"; \
-	echo "  ✓ herdr-core-update torn down (unloaded, plist and jobrun state removed)"
-herdr-core-update-check: ## Preview the core update: candidate, age, sha256 check, what would change (no change made)
-	@bun "$(DOTFILES_DIR)/scripts/herdr-core-update.ts" --dry
-herdr-core-update: ## Run the core update now, recorded like the daily job
-	@jobrun com.jkrumm.herdr-core-update --owner dotfiles --every 86400 --timeout 900 --lock herdr-core-update -- "$(DOTFILES_DIR)/scripts/herdr-core-update.ts"
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/hc-responsible.test.py
 
 # The herdr-core event record: `events.subscribe` over `hc connect`, appended raw to
 # ~/.local/share/herdr-events/YYYY-MM-DD.jsonl (data, never rotated). Dev host only; never starts a core.
@@ -2629,7 +2638,7 @@ hc-resume-status:
 	tail -3 "$(HOME)/Library/Logs/hc-resume.log" 2>/dev/null
 
 .PHONY: hc-reap-test
-hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/launchctl/claude, real throwaway git repos)
+hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/claude/core-up, real throwaway git repos)
 	@python3 -W ignore $(DOTFILES_DIR)/scripts/hc-reap.test.py
 
 # The herdr-core janitor (`rd reap`), every 30 min under jobrun. Dev host only; talks to the core through
@@ -3314,9 +3323,9 @@ help:
 	@echo "  make db-tunnel-status           MacBook: tunnel agent + listening ports (read-only)"
 	@echo "  make db-tunnel-teardown         MacBook: unload + remove the tunnel agent"
 	@echo "  make theme                      Apply the look (terminal + prompt) and reload live — run on BOTH machines"
-	@echo "  make herdr-core-setup           hc serve as a GUI-session LaunchAgent via the FDA-holding launcher (both machines, clean env)"
+	@echo "  make herdr-core-setup           Install the official Herdr Core.app; mini: bootstrap the starter LaunchAgent (both machines)"
 	@echo "  make tcc-check                  flag LaunchAgent programs without a durable file-access grant (docs/tcc.md; in make doctor)"
-	@echo "  make herdr-core-update-check    preview the daily core update (herdr-core-update runs it now)"
+	@echo "  make herdr-core-update          Official core updater (hc update) in a quiet window, then verify (both machines, by hand)"
 	@echo "  make herdr-app-setup            Herdr desktop app (core eval): jk layout, space folders, CPU/MEM bar, spaces"
 	@echo "  make devhost-health-setup       Load the 5-min herdr-core/sshd/tailscale heartbeat → Uptime Kuma"
 	@echo "  make devhost-health-check       Run the readiness check once on demand (for testing)"

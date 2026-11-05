@@ -171,9 +171,9 @@ ensure_env() {
 
 # --- launchd ------------------------------------------------------------------------------
 core_running() {
-  # A scratch session has its own core under its own job; the live one is checked by label.
+  # A scratch session has its own core under its own job; the live one is lib/core-up.sh (socket answers, launchd-born).
   [ -n "${COLLIE_HC_SESSION:-}" ] && return 0
-  launchctl print "$DOMAIN/$CORE_LABEL" 2>/dev/null | grep -Eq '^[[:space:]]+state = running'
+  bash "$(dirname "${BASH_SOURCE[0]}")/lib/core-up.sh" >/dev/null 2>&1
 }
 
 activate() {
@@ -208,7 +208,7 @@ cmd_setup() {
   : "${COLLIE_SOURCE:?run via make collie-setup}" "${COLLIE_REF:?run via make collie-setup}" "${COLLIE_VERSION:?run via make collie-setup}"
   dev_host_gate
   [ -f "$TEMPLATE" ] || die "missing $TEMPLATE"
-  core_running || die "$CORE_LABEL is not running — run: make herdr-core-setup (Collie never starts a core)"
+  core_running || die "no launchd-born core answers — run: make herdr-core-setup (Collie never starts a core)"
   local root
   root=$(build_root_for)
   ensure_build

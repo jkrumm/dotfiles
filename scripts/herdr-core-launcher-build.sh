@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -u -o pipefail
-# herdr-core-launcher-build — build + sign the LaunchAgent's own program (docs/tcc.md §The launcher).
+# herdr-core-launcher-build — build + sign the launcher: the Full Disk Access umbrella for LaunchAgent programs that
+# call `op` (opbackup; docs/tcc.md pattern "Launcher"). It is not the herdr-core's program any more (the core is Herdr
+# Core.app); the name and path are kept because the grant is keyed on them. Never rebuilt casually: `make opbackup-setup` runs it.
 # Signature: ad-hoc, with the fixed identifier AND an explicit designated requirement
 #   designated => identifier "com.jkrumm.herdr-core-launcher"
 # so the code requirement TCC stores no longer carries the cdhash and survives a rebuild. A self-signed

@@ -1,7 +1,6 @@
 {
-  "_doc": "LaunchAgents whose program is ad-hoc signed or sits on a versioned path, and why that is fine. docs/tcc.md. A label not listed here makes `make tcc-check` fail. class: launcher = file access is covered by herdr-core-launcher's Full Disk Access; no-grant = the job touches no TCC-protected folder (Desktop, Documents, Downloads, iCloud, other apps' data).",
+  "_doc": "LaunchAgents whose program is ad-hoc signed or sits on a versioned path, and why that is fine. docs/tcc.md. A label not listed here makes `make tcc-check` fail. class: launcher = file access is covered by herdr-core-launcher's Full Disk Access (the umbrella for LaunchAgents that call `op`; the herdr-core itself is Developer-ID signed Herdr Core.app and never listed); no-grant = the job touches no TCC-protected folder (Desktop, Documents, Downloads, iCloud, other apps' data).",
   "programs": {
-    "com.jkrumm.herdr-core": { "class": "launcher", "why": "program is herdr-core-launcher, which holds the Full Disk Access grant; the core is its child" },
     "com.iu.athena-postgres": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
     "sh.brew.postgresql@18": { "class": "no-grant", "why": "postgres data under /opt/homebrew/var" },
     "com.iu.prometheus-dashboard-autodeploy": { "class": "no-grant", "why": "python3 in a Cellar path; works in ~/IuRoot only" },

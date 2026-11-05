@@ -53,7 +53,7 @@ no error:
 |-|-|-|
 | `caddy` | replaces the xcaddy-built binary; `dns.providers.cloudflare` vanishes | ~60 days, when the wildcard cert fails to *renew* |
 | `colima` | regenerates the plist, restoring the inverted `KeepAlive {SuccessfulExit=true}` and the direct `colima start -f` | only after a *dirty* shutdown, when the failed start is never retried — i.e. the power cut this setup exists to survive |
-| `herdr-core` | not a brew-service plist, so nothing is regenerated; what can break is the chain under our own `com.jkrumm.herdr-core` job: the launcher (the Full Disk Access holder), the formula's `/Cellar/` path (what makes the core report `installed_by=homebrew`, so the Herdr app never replaces it) and `tcc-check`. `brew-upgrade` leaves the `jkrumm/tap` formula to `com.jkrumm.herdr-core-update` (`docs/herdr-core.md` §Updates); the app self-updates | a TCC dialog on the headless screen freezing every terminal, or an unmanaged core the app swaps out behind launchd |
+| `tcc-check` | not a package: `brew-upgrade.sh` asserts that every LaunchAgent program is still classified (`docs/tcc.md`). herdr-core is **not a brew package any more**: it is upstream's `Herdr Core.app`, installed by the official installer and updated only by `make herdr-core-update` (`docs/herdr-core.md`); a Homebrew core has no bundle identity and `hc update` refuses it | a program moved onto a versioned path or ad-hoc signed, its file-access grant silently gone |
 | `1password-cli` | moves op to a new versioned Caskroom path, orphaning the TCC grants keyed on the old one | the next `make secrets-seed`, as a macOS "op möchte auf Daten aus anderen Apps zugreifen" dialog blocking the reseal |
 
 The op row is the only one whose fix is **not** a make target: re-add
@@ -73,7 +73,7 @@ Homebrew 6 also **renames** what it regenerates — `homebrew.mxcl.<name>` →
 `sh.brew.<name>`, written on the next `brew services start|restart` (the old file
 is deleted then, not at upgrade time). Both names are therefore live across the
 two Macs, so nothing here hardcodes one: `scripts/lib/brew-service.sh` resolves
-plist/label/launchctl-target by service name and `brew-upgrade.sh`'s colima assertions go through it. The herdr-core assertions (launcher present, job runs it, formula resolves under `/Cellar/`, `tcc-check` green) make no `hc` call, which would auto-start a stray core. A hardcoded old path does not error — it reports
+plist/label/launchctl-target by service name and `brew-upgrade.sh`'s colima assertions go through it. The `tcc-check` assertion makes no `hc` call (which would auto-start a stray core). A hardcoded old path does not error — it reports
 "not registered here — skipping", which is the invariant silently unasserted.
 
 **A pin needs its dependencies pinned too, or it rots**: `mosh` sat pinned at a

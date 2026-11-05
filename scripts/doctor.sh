@@ -124,9 +124,9 @@ section_launchagents() {
 
 # --- herdr-core (both machines) ----------------------------------------------
 # The same grader the mini's heartbeat runs (scripts/lib/core-health.sh): the core is up
-# (lib/core-up.sh: launchd job running + socket answers) and is the job's child, `hc server
-# status` answers, managed install, version parity with the other machine. It asks launchd
-# before any `hc` call, because `hc` auto-starts a stray core.
+# (lib/core-up.sh: the socket answers AND a launchd-born core exists, else FAIL, a stray included), `hc server
+# status` answers, core and holders are attributed to Herdr Core.app (hc-responsible.py, WARN), version parity
+# with the other machine (WARN). core_up runs before any `hc` call, because `hc` auto-starts a stray core.
 section_core() {
   hdr "herdr-core"
   # shellcheck source=lib/core-health.sh

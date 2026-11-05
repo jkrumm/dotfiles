@@ -82,11 +82,8 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
      patches and restarts the gateway unpatched. Run it through the
      `hermes-update` skill in an agent in the mini's `hermes-agent` workspace
      (`rd work hermes-agent` + `rd say`); `make patch-check` must end green.
-   - **herdr-core and the Herdr app are not upgrade targets.** The core is the
-     `jkrumm/tap` formula `herdr-core`, bumped only by the daily
-     `com.jkrumm.herdr-core-update` (`docs/herdr-core.md` §Updates): skip it
-     when `brew-upgrade` lists it under third-party taps. The app self-updates
-     and never touches a managed core.
+   - **herdr-core** is its own subsection below (*herdr-core*): not Homebrew,
+     never part of `brew upgrade`. The Herdr app self-updates.
    - **collie:** `make collie-upgrade` (mini). Read the scope it prints;
      unattended needs `COLLIE_UPGRADE_YES=1`. A new pairing rule means
      `collie pair` on the phone.
@@ -99,6 +96,27 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
      `softwareupdate -l` (e.g. `Command Line Tools for Xcode 27.0-27.0`).
 7. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
    failures against their `persisted N runs` count before blaming the upgrade.
+
+### herdr-core
+
+Upstream's `Herdr Core.app`, installed by the official installer, **not Homebrew** (no formula; a brew core has no bundle
+identity and `hc update` refuses it). The Homebrew machine procedure is steps 1–7 above and never touches it; `caddy`
+stays the only pin.
+
+1. **Read the release notes first:** the CHANGELOG of herdrdev/herdr-core for the new version, the privacy lines in
+   particular (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or
+   responsibility.
+2. **Quiet window:** `hc ls` on each machine; few or no live agents. An update can end programs inside terminals
+   (upstream herdr-core #133); `hc-resume` then types `claude --resume <id>` into the surviving login shells.
+3. **Update:** `make herdr-core-update` on the mini, then on the MacBook (it runs the official `hc update`, runs it again
+   when hc asks, and checks version, core up, terminal count and responsibility). The Herdr app may update linked machines'
+   cores itself, so expect a version to have moved already; there is no unattended job.
+4. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
+   (old Cellar holders end with their terminals, nothing new); `make tcc-probe`; `make op-tcc-probe` (MacBook); the tail of
+   `~/Library/Logs/hc-resume.log` on the mini; `make doctor`.
+5. **Grants:** Full Disk Access on `Herdr Core.app` is re-granted only if the signing team or identifier changed
+   (`codesign -dv` on the bundle). New Local Network / microphone prompts are answered at the machine's screen. Never click
+   Allow on an AppData dialog as a fix.
 
 ---
 

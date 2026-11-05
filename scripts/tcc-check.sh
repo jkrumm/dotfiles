@@ -5,6 +5,8 @@ set -u -o pipefail
 # code requirement; an ad-hoc signature's requirement is its cdhash, so every new build silently loses the
 # grant, and a versioned path (Cellar, Caskroom, claude/versions, releases/<sha>) moves on every upgrade.
 # A flagged program must be classified in config/tcc-programs.json (launcher | no-grant) or the check fails.
+# The launcher (~/.local/libexec/herdr-core-launcher, name kept for its Full Disk Access grant) is only the FDA umbrella
+# for LaunchAgent programs that call `op`; the herdr-core runs as Herdr Core.app and is not this script's business.
 # BASH 3.2 (doctor runs it on the system bash).
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -45,19 +47,6 @@ for plist in "$LA_DIR"/*.plist; do
   fi
 done
 
-# The core job must run through the launcher, and the launcher must exist.
-core="$LA_DIR/com.jkrumm.herdr-core.plist"
-if [ -f "$core" ]; then
-  p0=$(/usr/libexec/PlistBuddy -c "Print :Program" "$core" 2>/dev/null || /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$core" 2>/dev/null)
-  if [ "$p0" != "$LAUNCHER" ]; then
-    printf '  ✗ com.jkrumm.herdr-core: program is %s, not the launcher (fix: make herdr-core-setup YES=1)\n' "$p0"
-    fail=$((fail + 1))
-  elif [ ! -x "$LAUNCHER" ]; then
-    printf '  ✗ com.jkrumm.herdr-core: %s is missing (fix: make herdr-core-setup)\n' "$LAUNCHER"
-    fail=$((fail + 1))
-  fi
-fi
-
 # Jobs that run `op` must go through the launcher (its Full Disk Access supersedes the AppData prompt op raises).
 OP_JOBS="com.jkrumm.opbackup"   # extend when another LaunchAgent starts calling op
 for opjob in $OP_JOBS; do
@@ -68,7 +57,7 @@ for opjob in $OP_JOBS; do
     printf '  ✗ %s: runs op but its program is %s, not the launcher (fix: make opbackup-setup)\n' "$opjob" "$p0"
     fail=$((fail + 1))
   elif [ ! -x "$LAUNCHER" ]; then
-    printf '  ✗ %s: the launcher %s is missing (fix: make herdr-core-launcher)\n' "$opjob" "$LAUNCHER"
+    printf '  ✗ %s: the launcher %s is missing (fix: make opbackup-setup)\n' "$opjob" "$LAUNCHER"
     fail=$((fail + 1))
   fi
 done
@@ -79,7 +68,7 @@ warn=""
 if [ -x "$LAUNCHER" ]; then
   ldr=$(codesign -dr- "$LAUNCHER" 2>/dev/null | sed -n 's/^# designated => //p; s/^designated => //p' | head -1)
   case "$ldr" in
-    *cdhash*) warn="; WARN launcher is still ad-hoc with a cdhash requirement (old state): re-sign pending (make herdr-core-launcher, then re-grant FDA and make tcc-probe; docs/tcc.md)" ;;
+    *cdhash*) warn="; WARN launcher is still ad-hoc with a cdhash requirement (old state): re-sign pending (informational: a rebuild loses the opbackup grant until it is re-granted; docs/tcc.md)" ;;
   esac
 fi
 

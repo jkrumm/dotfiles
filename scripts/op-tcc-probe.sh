@@ -1,49 +1,37 @@
 #!/usr/bin/env bash
 set -u -o pipefail
 # op-tcc-probe — acceptance check for "op in a Herdr terminal shows only the Touch ID prompt".
-# docs/tcc.md §1Password. MacBook only (secrets backend `op`), and it must run INSIDE a core terminal:
-#   hc run --timeout 900 'make op-tcc-probe'          # plain check
-#   hc run --timeout 900 'make op-tcc-probe SWAP=1'   # also after a core swap
+# docs/tcc.md §1Password. MacBook only (secrets backend `op`). A terminal program takes its holder's identity, so
+# `op` in a Herdr terminal is judged as Herdr Core.app and the Full Disk Access grant on that bundle covers it. The
+# probe re-runs itself in a fresh terminal (`hc run`), so it works from any shell:
+#   make op-tcc-probe
+# Run it again after `make herdr-core-update` (a new core build must keep the grant).
 #
 # One check = `op read <ref>` (desktop-app integration ON, biometric unlock untouched: no OP_* env switches),
 # then the unified log is searched for a kTCCServiceSystemPolicyAppData prompt since the read started. PASS
 # means the read worked and no AppData dialog was raised. "Exactly one Touch ID prompt" is the half only
 # a human sees: approve it when it appears and say if anything else showed up.
 #
-# --swap: points the core at a differently signed copy of the same core (a stand-in for a core update),
-# kickstarts it, and checks (1) from THIS terminal, which was born before the swap, and (2) from a terminal
-# created after it. The original build is restored on exit.
-#
 # BASH 3.2.
 
 DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 BACKEND=$(tr -d '[:space:]' < "${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend" 2>/dev/null || echo "")
-LABEL="com.jkrumm.herdr-core"
-DOMAIN="gui/$(id -u)/$LABEL"
-SWAP=0
-ONLY_CHECK=""
-for a in "$@"; do
-  case "$a" in
-    --swap) SWAP=1 ;;
-    --check) ONLY_CHECK=1 ;;   # internal: the fresh-terminal leg
-    *) echo "usage: $(basename "$0") [--swap]" >&2; exit 2 ;;
-  esac
-done
+[ "$#" -eq 0 ] || { echo "usage: $(basename "$0")" >&2; exit 2; }
 
 die() { echo "  ✗ $*" >&2; exit 1; }
 
 [ "$BACKEND" = "op" ] || die "secrets backend is '${BACKEND:-unset}', not 'op': this probe is for the MacBook (the mini has no desktop app)"
-if [ -z "$ONLY_CHECK" ] && [ -z "${OP_TCC_PROBE_FRESH:-}" ]; then
-  # never `hc` without a running job: it would auto-start a core outside launchd
-  launchctl print "$DOMAIN" 2>/dev/null | grep -q "state = running" || die "$LABEL is not running (make herdr-core-setup): not starting a core for a probe"
+if [ -z "${OP_TCC_PROBE_FRESH:-}" ]; then
+  # never `hc` unless a launchd-born core answers: hc would auto-start a stray one
+  bash "$DOTFILES_DIR/scripts/lib/core-up.sh" >/dev/null || die "no launchd-born core is up ($(bash "$DOTFILES_DIR/scripts/lib/core-up.sh")): not starting a core for a probe"
   q=$(printf '%q' "$DOTFILES_DIR/scripts/op-tcc-probe.sh")
   echo "  · re-running in a fresh core terminal (hc run)"
   # hc run starts in /, and the account is chosen from cwd: carry the caller's cwd and OP_PROBE_REF over
   qcwd=$(printf '%q' "$PWD")
   qref=""; [ -z "${OP_PROBE_REF:-}" ] || qref="OP_PROBE_REF=$(printf '%q' "$OP_PROBE_REF") "
-  exec hc run --timeout 900 "cd $qcwd && env ${qref}OP_TCC_PROBE_FRESH=1 bash $q $*"
+  exec hc run --timeout 900 "cd $qcwd && env ${qref}OP_TCC_PROBE_FRESH=1 bash $q"
 fi
-[ -n "${HC_TERMINAL_ID:-}" ] || die "not in a core terminal (HC_TERMINAL_ID unset): run it as  hc run --timeout 900 'make op-tcc-probe'"
+[ -n "${HC_TERMINAL_ID:-}" ] || die "not in a core terminal (HC_TERMINAL_ID unset): run  make op-tcc-probe"
 command -v op >/dev/null || die "op not on PATH"
 # the account comes from the workspace helper, never a bare `op` call (config/zsh/secrets.zsh; it guards on an unset SSH_CONNECTION)
 set +u; . "$DOTFILES_DIR/config/zsh/secrets.zsh"; set -u
@@ -71,7 +59,7 @@ check() {
   logout=$(/usr/bin/log show --start "$t0" --predicate 'process == "tccd" AND eventMessage CONTAINS "AUTHREQ_PROMPTING"' --style compact 2>&1) || lrc=$?
   case "$logout" in
     *"Operation not permitted"*|*"Could not open"*)
-      echo "  ✗ [$label] cannot read the unified log from here (no Full Disk Access for this terminal): the launcher has no grant, unless this terminal predates a launcher cutover (the probe normally runs in a fresh one: docs/tcc.md)"; rm -f "$errf"; return 1 ;;
+      echo "  ✗ [$label] cannot read the unified log from here (no Full Disk Access for this terminal): Herdr Core.app has no grant, unless this terminal's holder predates the bundle (docs/tcc.md)"; rm -f "$errf"; return 1 ;;
   esac
   if [ "$lrc" -ne 0 ] || ! printf '%s\n' "$logout" | grep -q '^Timestamp'; then
     echo "  ✗ [$label] the log query did not run cleanly (rc=$lrc): $(printf '%s' "$logout" | head -c 200)"; rm -f "$errf"; return 1
@@ -89,48 +77,6 @@ check() {
   echo "  ✓ [$label] op read ok, 0 AppData prompts since $t0"
 }
 
-if [ -n "$ONLY_CHECK" ]; then check "fresh terminal after the swap"; exit $?; fi
-
-fail=0
-check "this terminal" || fail=1
-
-if [ "$SWAP" = 1 ]; then
-  OPT="$(brew --prefix)/opt/herdr-core"
-  ORIG=$(readlink "$OPT") || die "$OPT is not a symlink (herdr-core not installed through brew?)"
-  CELLAR_DIR="$(cd "$(dirname "$OPT")" && cd "$ORIG" && pwd -P)"
-  COPY="${CELLAR_DIR}_swaptest.$$"   # unique per run: never touches another run's or brew's directory
-  mkdir "$COPY" || die "could not create $COPY"
-  mkdir -p "$COPY/bin"
-  restore() {
-    # only undo our own repoint: an upgrade that moved the link meanwhile is left alone
-    if [ "$(readlink "$OPT")" = "$(dirname "$ORIG")/$(basename "$COPY")" ]; then
-      if ln -sfn "$ORIG" "$OPT" && launchctl kickstart -k "$DOMAIN" >/dev/null 2>&1; then
-        rm -rf "$COPY"; echo "  · original core build restored"
-      else
-        echo "  ✗ could not restore the core: run  ln -sfn $ORIG $OPT && launchctl kickstart -k $DOMAIN  (swapped build kept at $COPY)"; fail=1
-      fi
-    else
-      rm -rf "$COPY"; echo "  · $OPT was moved by someone else; left as is"
-    fi
-  }
-  trap restore EXIT
-  cp "$CELLAR_DIR/bin/herdr-core" "$COPY/bin/herdr-core" && ln -s herdr-core "$COPY/bin/hc" \
-    && codesign -f -s - --identifier swapped.build "$COPY/bin/herdr-core" 2>/dev/null || die "could not stage the swapped build"
-  old_pid=$(launchctl print "$DOMAIN" 2>/dev/null | sed -n 's/^[[:space:]]*pid = \([0-9]*\).*/\1/p' | head -1)
-  ln -sfn "$(dirname "$ORIG")/$(basename "$COPY")" "$OPT"
-  [ "$(cd "$OPT" && pwd -P)" = "$(cd "$COPY" && pwd -P)" ] || die "could not repoint $OPT"
-  launchctl kickstart -k "$DOMAIN" || die "kickstart failed"
-  i=0; while :; do
-    new_pid=$(launchctl print "$DOMAIN" 2>/dev/null | sed -n 's/^[[:space:]]*pid = \([0-9]*\).*/\1/p' | head -1)
-    [ -n "$new_pid" ] && [ "$new_pid" != "$old_pid" ] && break
-    i=$((i + 1)); [ "$i" -gt 30 ] && die "core job did not restart"; sleep 1
-  done
-  sleep 3
-  core_cmd=$(ps -ww -o command= -p "$(hc server status --json | jq -r .pid)" 2>/dev/null)
-  case "$core_cmd" in *_swaptest*) echo "  · core swapped: $(echo "$core_cmd" | cut -c1-110)" ;; *) die "core did not move to the swapped build: $core_cmd" ;; esac
-  check "this terminal, born before the swap" || fail=1
-  hc run --timeout 600 "env OP_PROBE_REF='$REF' $DOTFILES_DIR/scripts/op-tcc-probe.sh --check" || fail=1
-fi
-
-[ "$fail" = 0 ] && echo "  ✓ op-tcc-probe: PASS" || echo "  ✗ op-tcc-probe: FAIL (docs/tcc.md §1Password)"
-exit "$fail"
+check "this terminal" && { echo "  ✓ op-tcc-probe: PASS"; exit 0; }
+echo "  ✗ op-tcc-probe: FAIL (docs/tcc.md §1Password)"
+exit 1

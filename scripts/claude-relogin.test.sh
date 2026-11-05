@@ -102,14 +102,15 @@ mk claude-account 'case "$1 $2" in
     echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":$ms},{\"id\":\"iu\",\"refresh_expires_at\":$ms}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
-# `launchctl print …herdr-core` says whether the mini's core runs (default running; STUB_CORE="not running" for none);
-# anything else is `managername`
-mk launchctl 'case "$1" in print) echo "state = ${STUB_CORE:-running}" ;; *) echo "${STUB_SESSION:-Aqua}" ;; esac'
+# `launchctl …` answers `managername`
+mk launchctl 'echo "${STUB_SESSION:-Aqua}"'
+# lib/core-up.sh's ps (PS_BIN): a launchd-born core by default; STUB_CORE="not running" shows a client-started stray instead
+mk ps 'if [ "${STUB_CORE:-running}" = running ]; then echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"; else echo "  4242 /x/Herdr Core.app/Contents/MacOS/herdr-core serve"; fi'
 # the core's socket answers (lib/core-up.sh's second half) unless STUB_SOCK=down
 mk nc '[ "${STUB_SOCK:-up}" = up ]'
 mk lsof 'case " $* " in *LISTEN*) [ "${STUB_LISTEN:-0}" = 1 ] && exit 0 ;; esac; exit 1'
 mk ask-human 'echo "hm=${HUMAN_QUEUE_MAC_HOST-unset}" >> "$LOG"; echo "20260101T000000-1"'
-export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH"
+export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH" PS_BIN="$TMP/bin/ps"
 mkdir -p "$TMP/space-repo"; export CLAUDE_RELOGIN_SPACE_DIR="$TMP/space-repo"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
 # workers run inline (never a stray detached process), no waits, a scratch log
@@ -440,17 +441,17 @@ reset; STUB_HC_ADDR='t9; rm -rf /' bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; r
 assert_eq "a malformed address is never passed on (rc 2)" 2 "$rc"
 export STUB_CORE="not running"; reset
 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
-assert_eq "core not running per launchd: refuses (rc 2)" 2 "$rc"
+assert_eq "a core that launchd did not start (a stray): refuses (rc 2)" 2 "$rc"
 assert_not_contains "...hc is never called (it would start a stray core)" "hc[" "$(calls)"
 assert_contains "...says how to start the core" "herdr-core is not up on the mini" "$(cat "$TMP/err")"
-assert_contains "...names launchd's state" "is 'not running', not running" "$(cat "$TMP/err")"
-assert_contains "...and the kickstart" "fix: launchctl kickstart gui/" "$(cat "$TMP/err")"
+assert_contains "...names the stray" "launchd did not start it" "$(cat "$TMP/err")"
+assert_contains "...and the kickstart" "launchctl kickstart gui/" "$(cat "$TMP/err")"
 unset STUB_CORE
 export STUB_SOCK=down; reset
 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null 2>"$TMP/err"; rc=$?
-assert_eq "launchd running but the socket does not answer: refuses (rc 2)" 2 "$rc"
+assert_eq "the socket does not answer: refuses (rc 2)" 2 "$rc"
 assert_not_contains "...hc is never called" "hc[" "$(calls)"
-assert_contains "...says the socket does not answer" "does not answer" "$(cat "$TMP/err")"
+assert_contains "...says no core answers" "no core answers" "$(cat "$TMP/err")"
 unset STUB_SOCK
 as mini; reset
 CLAUDE_RELOGIN_FOREGROUND=0 STUB_PANE_RESULT="ok 2027-01-01" bash "$RELOGIN" me >/dev/null

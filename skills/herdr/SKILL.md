@@ -39,11 +39,11 @@ name or `machine/tN`.
 - **The account is chosen on the command, never inherited.** A core's env is every terminal's env, and `hc run`
   forwards nothing: write `env CLAUDE_CONFIG_DIR=<dir> claude …` (no variable = the `iu` account). Through the API,
   `terminal.run` takes `env`.
-- **launchd owns the core** (`com.jkrumm.herdr-core`, both machines, through the launcher that holds Full Disk
-  Access). The only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`. Never `hc update`,
-  `hc server restart|stop` or `hc machine update`; never start a core from ssh (no keychain, Claude runs logged
-  out). Any `hc` call auto-starts a core when none runs, so scripts check `launchctl print` first. Updates are the
-  daily `com.jkrumm.herdr-core-update` job (`docs/herdr-core.md` §Updates).
+- **launchd owns the core**: the core is upstream's `Herdr Core.app` (Full Disk Access is granted to it once). On the mini
+  the `com.jkrumm.herdr-core` starter detaches into upstream's launchd job; the MacBook's Herdr app starts its own. Never
+  `hc server restart|stop` or `hc machine update`; never start a core from ssh (a stray: no keychain, Claude runs logged
+  out). Any `hc` call auto-starts a core when none runs, so scripts check `scripts/lib/core-up.sh` first. Updates are
+  `make herdr-core-update` by hand in a quiet window (`docs/herdr-core.md` §How the core runs now).
 - **Never stop or restart the owner's app or core**, and never experiment in them: use a scratch core (own
   `HC_SESSION`, scratch `XDG_*` and `HERDR_APP_HOME`), torn down afterwards.
 - **Read, never attach.** `hc read <t> --lines N`; `hc attach` is for a person (Ctrl+\ detaches). Never sleep or
@@ -95,4 +95,4 @@ Layout, mods, themes and folders are tracked in `config/herdr-app/`; edit there,
 the shipped mods under `~/.config/herdr-app/mods/` (clone them). After a mod change: `herdr-app check <mod dir>`,
 `herdr-app status`, `herdr-app shot` and look at the picture.
 
-Design, verified facts, launcher and updates: `docs/herdr-core.md`. Full Disk Access: `docs/tcc.md`.
+Design, verified facts, how the core runs and updates: `docs/herdr-core.md`. Full Disk Access: `docs/tcc.md`.

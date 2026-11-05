@@ -65,21 +65,21 @@ ssh/TCP, so a roam or lid-close ends the *link*, never a terminal: the app recon
 
 ## herdr-core on the mini
 
-`com.jkrumm.herdr-core` runs `hc serve` as a KeepAlive **LaunchAgent bootstrapped into `gui/<uid>`** (`make herdr-core-setup`,
-both machines; `make herdr-core-status` prints its state and `hc server status`). It holds state with no viewer attached.
-Design, launcher, updates, verified facts: `docs/herdr-core.md`.
+The core is upstream's `Herdr Core.app` (official installer; `make herdr-core-setup`, both machines). On the mini the
+`com.jkrumm.herdr-core` LaunchAgent is a one-shot **starter**: `serve` detaches into upstream's own launchd job and the starter
+exits; on the MacBook the Herdr app starts the core. `make herdr-core-status` prints version, core up and responsibility. It
+holds state with no viewer attached. How it runs, updates, grants: `docs/herdr-core.md` §How the core runs now.
 
 - **Never start a core from ssh.** Any `hc` call, `hc connect` and the MacBook's link included, auto-starts one when none runs,
   and a core born in an ssh session has no keychain (the `ssh mini 'claude …'` trap, below). Scripts check
-  `launchctl print gui/<uid>/com.jkrumm.herdr-core` first.
+  `scripts/lib/core-up.sh` first (the socket answers AND a launchd-born core exists).
 - **A core's environment is every terminal's**, and `hc run` forwards nothing: an account is chosen on the command
   (`env CLAUDE_CONFIG_DIR=… claude`, none = `iu`), never inherited. launchd's clean env also keeps `CLAUDECODE` out of every terminal.
-- **The only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`**; terminals keep their pids. Never `hc update`,
-  `hc server restart|stop` or `hc machine update mini` on the mini (they restart the core outside launchd's view). Updates are the
-  daily `com.jkrumm.herdr-core-update` job (`docs/herdr-core.md` §Updates); keep both machines on one `hc` version (`hc machine ls`).
-- **The job's program is a launcher** (`~/.local/libexec/herdr-core-launcher`) that holds Full Disk Access once, so no program in a
-  terminal freezes on a TCC dialog nobody sees. Changing the job's program needs a `bootout`, which ends every live terminal:
-  `make herdr-core-setup YES=1`, human-timed, and a rebuilt launcher needs a new grant. `make tcc-probe` proves it (`docs/tcc.md`).
+- **Updates are `make herdr-core-update`** (the official `hc update`), by hand in a quiet window on each machine; terminals keep
+  running, an update can end programs inside them (upstream #133) and `hc-resume` repairs those. No unattended job. Never
+  `hc server restart|stop` or `hc machine update mini` outside that; keep both machines on one `hc` version (`hc machine ls`).
+- **Full Disk Access sits on `Herdr Core.app`** (one human grant per machine), so no program in a terminal freezes on a TCC
+  dialog nobody sees. `make tcc-probe` proves it, including who macOS holds responsible for the core and every holder (`docs/tcc.md`).
 - **A core restart loses no process; a lost program is replaced by a shell.** `hooks/hc-session-label.ts` labels a Claude terminal
   (`jk.claude.session`, `jk.claude.config`) and `com.jkrumm.hc-resume` (`make hc-resume-setup`) types `claude --resume <id>`
   under that account into the kept shell. Model, effort and the `c` launcher's env are not restored; shells, servers and the
@@ -134,9 +134,8 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 **On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract). Three rules hold:
 
 - **`rd` never starts a core.** Any `hc` call, `hc connect` included, auto-starts one when none runs, and a core born in
-  an ssh session has no keychain. So every verb that touches terminals first asks `launchctl print gui/<uid>/com.jkrumm.herdr-core` and stops
-  with `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` in the error when launchd has no running core. No verb
-  calls `hc update` or `hc server restart|stop`. `HC_SESSION` (a scratch core in tests) skips the launchd check.
+  an ssh session has no keychain. So every verb that touches terminals first runs `scripts/lib/core-up.sh` and stops with its why and fix in the error when no
+  launchd-born core answers. No verb calls `hc update` or `hc server restart|stop`. `HC_SESSION` (a scratch core in tests) skips the check.
 - **A spawn goes over the API** (`hc connect`, `terminal.run`), because the CLI's `hc run` cannot pass `env` and a core's
   own environment is every terminal's. It always sets `cwd`, `keep`, a `name` (the agent name; `f-<hash>-…` when it would
   read like an address, `t7`), argv `["claude", flags…, "<prompt>"]` (the prompt is the last argument, nothing is typed
@@ -606,7 +605,7 @@ by looking fine.
 - **`check_boot_path` asserts, for every KeepAlive job, that the plist exists on
   disk and `launchctl print`'s path matches** — the gap where a job runs only
   from launchd's cache and the next power cut takes it down silently.
-  `make colima-status` asserts the same on demand; `make herdr-core-status` prints the core job's state and pid.
+  `make colima-status` asserts the same on demand; `make herdr-core-status` prints the core's version, core up and responsibility.
 - **Logs go to `~/Library/Logs/<name>.{log,err}`, never `/tmp`.** macOS deletes
   `/tmp` files untouched for 3+ days and launchd opens its stdio **once, at
   spawn**, so after a sweep a `KeepAlive` agent writes into an unlinked inode and
@@ -768,7 +767,7 @@ printf '%s\n' "$PW" | ssh mini 'read -r pw
 | `make doctor` | Read-only, self-routing. Both machines: LaunchAgent grading, core running + managed install + `hc` version parity, architecture-map check, brew pins/outdated. Mini: the drift report without pushing. MacBook: the remote path (Tailscale, ssh, ControlMaster reuse, agent forwarding, git push dry-run), Kuma monitor states, then the mini's doctor over ssh |
 | `make status` | Prerequisites + symlink health, then `doctor --local` |
 | `make devhost-health-check` | One heartbeat run, per-component (`docs/devhost-health.md`) |
-| `make colima-status` / `make herdr-core-status` | Colima's boot path asserted, not just "the process is up" / the core job's state, pid and `hc server status` |
+| `make colima-status` / `make herdr-core-status` | Colima's boot path asserted, not just "the process is up" / the core's version, core up, `hc server status` and who is responsible for it |
 | `make tailscale-serve-check` | Serve drift against the declared file |
 | `bash scripts/architecture-check.sh` | Every loaded/on-disk launchd label appears in `docs/architecture.md` |
 

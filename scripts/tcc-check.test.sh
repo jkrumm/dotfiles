@@ -21,13 +21,13 @@ case "$out" in *com.test.adhoc*"ad-hoc signed"*) ;; *) fail "message names label
 echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"test"}}}' > "$T/list.json"
 run >/dev/null || fail "a classified program must pass"
 
-mkplist com.jkrumm.herdr-core "$T/bin/adhoc-tool"
-if out=$(run); then fail "core job not on the launcher must fail"; fi
-case "$out" in *"not the launcher"*) ;; *) fail "core message: $out" ;; esac
 cp "$T/bin/adhoc-tool" "$T/bin/launcher"
-mkplist com.jkrumm.herdr-core "$T/bin/launcher"
-echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"t"},"com.jkrumm.herdr-core":{"class":"launcher","why":"t"}}}' > "$T/list.json"
-run >/dev/null || fail "core on the launcher must pass"
+echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"t"}}}' > "$T/list.json"
+# the core job is no longer the launcher's business: no "not the launcher" assertion for it
+mkplist com.jkrumm.herdr-core "$T/bin/adhoc-tool"
+echo '{"programs":{"com.test.adhoc":{"class":"no-grant","why":"t"},"com.jkrumm.herdr-core":{"class":"no-grant","why":"t"}}}' > "$T/list.json"
+run >/dev/null || fail "the core job must not be asserted to run through the launcher"
+rm -f "$T/la/com.jkrumm.herdr-core.plist"
 mkplist com.jkrumm.opbackup /bin/bash
 if out=$(run); then fail "an op job outside the launcher must fail"; fi
 case "$out" in *"com.jkrumm.opbackup"*"not the launcher"*) ;; *) fail "opbackup message: $out" ;; esac

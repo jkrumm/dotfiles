@@ -52,9 +52,9 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
 | `skills/img/scripts/imgcli` | `~/.local/bin/imgcli` | `/img` CLI |
 | `scripts/hl` | `~/.local/bin/hl` | HomeLab files over S3 — rclone with an env-defined `homelab:` remote + `presign`/`mount`; key per machine (see *HomeLab files*) |
-| `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-me`; `make claude-accounts-verify` (in `make doctor`) and `make claude-accounts-e2e` prove routing + attribution; the hourly keepalive agent keeps samples fresh and logins alive; `claude-account expiry` says when each login ends — `docs/claude-accounts.md` §Operate |
+| `scripts/claude-account.ts` | `~/.local/bin/claude-account` | Account picker + quota cache over `config/claude-accounts.json`; `make claude-accounts-setup` builds `~/.claude-me`; `make claude-accounts-verify` (in `make doctor`) and `make claude-accounts-e2e` prove routing + attribution; the hourly keepalive agent keeps logins alive; `claude-account expiry` says when each login ends — `docs/claude-accounts.md` §Operate |
 | `scripts/claude-relogin.sh` (+ `claude-login-browser.sh`) | `~/.local/bin/claude-relogin` | One-click re-login on the machine that owns the credential: `claude-relogin <id> [--machine mini\|macbook] [--ask] [--visible] [--dry-run]`; the owner only approves in the account's browser (never automated) — `docs/claude-accounts.md` §Re-login |
-| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; alert flow in `docs/ops-signals.md`); `bun test` via `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` (`scripts/jobrun-canary.ts` + `config/jobrun-canary.json`) is the chain probe; the five dotfiles jobs run under `jobrun` in their plists |
+| `scripts/jobrun.ts` · `scripts/lib/jobs-grade.ts` | `~/.local/bin/jobrun` · `~/.local/bin/jobs-grade` | bun/TS job recorder and the only job-grading logic (`docs/background-jobs.md` §Pattern; alerts in `docs/ops-signals.md`); `make jobs-test`; the 300 s `com.jkrumm.jobrun-canary` is the chain probe; the dotfiles jobs run under `jobrun` in their plists |
 | `scripts/wakeup.sh` | `~/.wakeup` | sleepwatcher hook — `caddy reload`, Colima socket heal, and (MacBook) `jobs-grade --notify` 2 min after wake, staleness judged against awake time |
 
 **Not symlinked:** `~/.codex/config.toml` (rendered by `_setup-codex` from
@@ -89,8 +89,7 @@ endpoint and diffs the live catalog against `models.txt`.
 `make doctor` on **both** machines: LaunchAgent grading, the architecture-map
 assertion, the brew report, a worktree-audit nudge. **Mini** adds drift (no push)
 and names the heartbeat rather than running it (it always pushes). **MacBook** adds the remote path
-(Tailscale, ssh, ControlMaster reuse, agent-free `mini` + `mini-fwd`, the core link `hc machine ls`, GitHub
-credential + `git push --dry-run`), Kuma monitor states, then recurses into the
+(Tailscale, ssh, the core link `hc machine ls`, GitHub credential), Kuma monitor states, then recurses into the
 mini's doctor over ssh — `--local` skips that. Read-only by construction.
 
 **Exit codes are graded.** `78` (EX_CONFIG) always fails — the job can never
@@ -107,9 +106,7 @@ in bypass, not manual); `permissions.allow` and
 
 **Hooks:** symlinked live, so a change applies on the *next tool call* — no
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
-`docker-makefile.ts` tokenizes and inspects only **command position** — a mention
-is not an invocation. `broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) — they reach other agents' sessions. `docker {builder,image,container} prune` is allowlisted
-(daemon-level, no Makefile target); `docker volume prune` stays blocked. Map: `docs/hooks.md`.
+`broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) — they reach other agents' sessions. Map: `docs/hooks.md`.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**
@@ -133,7 +130,7 @@ Keep this file **under 40k chars** (`wc -c AGENTS.md`; the agent context limit i
 
 ## Validate
 
-`make check` (architecture-check + secrets-lint + hooks-test + the four hermetic script suites). Any edit to
+`make check` (architecture-check, secrets-lint, hooks-test and the hermetic suites). Any edit to
 `hooks/` → `make hooks-test`; any edit to `scripts/secrets-run` → the full
 guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 
@@ -186,15 +183,17 @@ Commands take a repo **name, never a path** — resolution happens on the host.
 
 Facts to hold:
 
-- **A core restart keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
+- **A core restart or update keeps every terminal; a reboot or `kill -9` does not.** Kept terminals (`keep`) come back as
   shells, and `com.jkrumm.hc-resume` (mini only) types `claude --resume <id>` under the right account from the
-  `jk.claude.*` labels (model, effort and the turn in flight are lost). Never `hc server restart|stop`, `hc update` or `hc machine
-  update`: the only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` (`make herdr-core-relaunch`
-  also rolls a rebuilt launcher and proves launchd holds it stable).
-- **"The core is up" has one definition**, `scripts/lib/core-up.sh`: the job is `state = running` AND its socket
-  answers. The guard, `rd`, `claude-relogin`, doctor and the heartbeat all use it; a core that answers while launchd
-  says `spawn scheduled` (runs climbing) is an orphan outside the launcher, not up (incident 2026-11-04,
-  `docs/herdr-core.md` §Core as a LaunchAgent).
+  `jk.claude.*` labels, only where the foreground is positively a login shell (model, effort and the turn in flight are
+  lost). Core updates are `make herdr-core-update` (the official `hc update`, by hand in a quiet window; it can end programs
+  inside terminals, upstream #133, and hc-resume repairs them). Never `hc server restart|stop` or `hc machine update` outside it.
+- **"The core is up" has one definition**, `scripts/lib/core-up.sh`: the socket answers AND a launchd-born core exists
+  (`herdr-core --hc-launchd`, parent pid 1). `rd`, `claude-relogin`, doctor and the heartbeat use it; a core that answers
+  without being launchd-born is a stray (attributed to sshd, no keychain). The core is upstream's `Herdr Core.app`
+  (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
+  starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
+  §How the core runs now.
 - **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
   default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
   is unset and every `git@github.com:` remote there fails `Permission denied
@@ -208,31 +207,22 @@ Facts to hold:
   child) precisely to avoid this.
 - **A core's env is every terminal's env**, and `hc run` forwards nothing: choose the Claude account on the
   command (`CLAUDE_CONFIG_DIR`, unset = `iu`), never by inheritance.
-- **Full Disk Access sits on the core launcher, not on the core.** A new core build keeps the grant
-  (`~/.local/libexec/herdr-core-launcher`); a terminal born before a cutover keeps the old identity until it
-  ends. A frozen agent at 0 % CPU = a missing grant (`docs/tcc.md`, `make tcc-probe`/`tcc-check`).
-  The core updates itself daily after a 24 h cooldown, never above `config/herdr-core-max-version` (raised only after a
-  hand verification on the mini), and rolls itself back when the restarted core is not proven up
-  (`com.jkrumm.herdr-core-update`, `docs/herdr-core.md` §Updates); the app never touches it.
+- **Full Disk Access sits on `Herdr Core.app`** (one human grant per machine, survives updates; terminal programs take
+  their holder's identity). A terminal whose holder predates the bundle keeps the old identity until it ends. A frozen
+  agent at 0 % CPU = a missing grant or an AppData dialog (`docs/tcc.md`, `make tcc-probe`/`tcc-check`). The launcher
+  `~/.local/libexec/herdr-core-launcher` is now only the umbrella for `op` in the opbackup LaunchAgent.
 
-**human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a
-*present human* (biometric `op`, the ACL push, a person-only call) is enqueued on
-the mini with `ask-human ask "…" [--cmd …]`; `make
-human-queue` **walks** each one (r/already-done/deny/skip; `-run`, `-resolve`,
-`-deny ID=` one-shot; no TTY → a list). `resolve` closes one satisfied out of band. The mini only *proposes* a
-string; `run` needs a typed `yes` on a real TTY, per request. No poller — that
-means unattended Touch ID forever. **`ask-human ask …` pushes by default**
-(`--no-push` or `HUMAN_QUEUE_PUSH=0` enqueues only; `push <id>` pushes an
-existing request): it ssh's to `iumac` (the mini's own dedicated key — reach the
-mini already has) and runs `human-queue.sh gui-run` there, which shows the exact
-string in a native macOS dialog and only executes on a click. Only an
-unreachable MacBook or an unanswered dialog leaves the request queued (and fires
-the Slack notify). Still no path without a present human — the dialog is a second
-gate next to the typed-yes TTY gate, not a bypass of it.
+**human-queue** — ssh gives the mini reach, not a fingerprint. Work needing a *present human* (biometric `op`, the ACL
+push, a person-only call) is enqueued on the mini with `ask-human ask "…" [--cmd …]` (pushes to the MacBook by default;
+`--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only); `make human-queue` **walks** each one on the MacBook
+(r/already-done/deny/skip; `-run`, `-resolve`, `-deny ID=` one-shot; no TTY → a list). The mini only *proposes* a string;
+`run` needs a typed `yes` on a real TTY, and a push shows the exact string in a native dialog that executes only on a click.
+No poller, no path without a present human. An unreachable MacBook or unanswered dialog leaves it queued (and fires the
+Slack notify). Detail: `docs/remote-dev.md`.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
-**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a core under launchd on each machine). Design and facts: `docs/herdr-core.md`; the global `herdr` skill drives them.
+**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a launchd-born core on each machine). Design and facts: `docs/herdr-core.md`; the global `herdr` skill drives them.
 
 ## Dev-server doors
 
@@ -284,18 +274,10 @@ exactly the Brewfile's declared taps *before* bundling, or an untrusted tap abor
 the whole install), plus `NO_INSECURE_REDIRECT` / `NO_ANALYTICS`. Auto-*update*
 (metadata) stays on.
 
-**Auto-upgrade stays off because of silent config revert, not npm-style supply
-chain** — a homebrew/core formula is a reviewed PR built by Homebrew's CI.
-`make brew-upgrade` asserts rather than assumes: caddy's DNS module, colima's
-plist and op's TCC grant each silently revert on an
-unrelated brew upgrade, invisible until the failure mode it caused (cert
-renewal, a dirty shutdown, a macOS dialog mid-reseal).
-**`caddy` is the only pin, and a pin needs its dependencies pinned too or it
-rots** (mosh is why that rule is written down —
-deleted, not re-pinned). `colima` is deliberately unpinned (pinning the Docker
-runtime means an unpatched hypervisor) and asserted + health-checked instead.
-Casks and third-party taps are reported, never auto-upgraded — route them
-through `/upgrade-deps`. App removal: `mo uninstall`, `mo clean -n` (`docs/homebrew.md`). Full invariants table and rationale: `docs/homebrew.md`.
+**Auto-upgrade stays off because of silent config revert, not supply chain**: caddy's DNS module, colima's plist and
+op's TCC grant each revert on an unrelated brew upgrade, invisible until the failure it caused; `make brew-upgrade`
+asserts them. **`caddy` is the only pin** (its dependencies must be pinned too); `colima` is unpinned on purpose. herdr-core is not a brew package. Casks and third-party taps are reported,
+never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/homebrew.md`.
 
 ## Heartbeat, drift, doctor (mini only)
 
@@ -388,17 +370,13 @@ resolves every ref through 1Password in one biometric pass, and reseals.
 - **1Password authorizes per calling binary** — the first `op` call from a new
   parent (`make`, a LaunchAgent) raises a one-time dialog, so "it works when I run
   it by hand" proves less than it looks like.
-- **The second dialog is macOS, not 1Password** — *"op möchte auf Daten aus
-  anderen Apps zugreifen"* is TCC `SystemPolicyAppData`, raised because op reads
-  the desktop app's group container to handshake. macOS keys that grant on the
-  BINARY PATH, and the cask path carries the version
-  (`…/Caskroom/1password-cli/<ver>/op`), so **every `brew upgrade
-  1password-cli` drops it** and the dialog returns mid-reseal. Held by a Full
-  Disk Access grant on that exact path (FDA supersedes the AppData check; clicking "Allow" on the dialog does **not** stick — it re-prompts per `op` process),
-  asserted by `make brew-upgrade`. A grant earned through a Claude Code chain
-  never sticks: claude's TCC client is `~/.local/share/claude/versions/<ver>`,
-  a fresh client on every auto-update — run the seed from a plain terminal. MacBook route (docs/tcc.md §1Password): run `op` under the herdr-core launcher's FDA
-  (Herdr terminals, `hc run` for `ask-human --cmd`, the opbackup LaunchAgent) — `make op-tcc-probe SWAP=1` is the acceptance check.
+- **The second dialog is macOS, not 1Password** — *"op möchte auf Daten aus anderen Apps zugreifen"* is TCC
+  `SystemPolicyAppData`: op reads the desktop app's group container. The grant is keyed on the BINARY PATH, which carries
+  the version (`…/Caskroom/1password-cli/<ver>/op`), so **every `brew upgrade 1password-cli` drops it**. Held by Full Disk
+  Access on that exact path (FDA supersedes AppData; "Allow" does **not** stick), asserted by `make brew-upgrade`. A grant
+  earned through a Claude Code chain never sticks (its TCC client is a fresh `claude/versions/<ver>` per auto-update): run
+  the seed from a plain terminal. MacBook: `op` under the `Herdr Core.app` FDA (Herdr terminals, `hc run` for
+  `ask-human --cmd`) or the opbackup launcher; acceptance `make op-tcc-probe` (`docs/tcc.md` §1Password).
 - **`secrets-seed` never fans out on an access failure.** A batch/read that dies on
   authorization, a timeout or the desktop-app handshake aborts the run at once (no
   per-ref fallback, no retry) and prints the resolved `op` path to add to Full Disk
@@ -515,10 +493,7 @@ holds Apple and vendor logs).
 
 **File shuttle** — `smb://mini/jkrumm` on the MacBook, `~/Shuttle` the drop
 folder, for ad-hoc **human** file movement only (code → `rd`/git; vault pages →
-brain-sync; anything an agent reads must live on the mini). **A listening `:445`
-plus a running `smbd` is not a working SMB server** — macOS stores no NTLM
-(`SMB-NT`) hash by default and `smbd` then refuses every principal with what reads
-like a network fault; minting it is GUI-only. `docs/remote-dev.md`.
+brain-sync; anything an agent reads must live on the mini). **A running `smbd` is not a working SMB server** (no NTLM hash, GUI-only fix). `docs/remote-dev.md`.
 
 **Disk** — the mini's budget per owner, the daily `com.jkrumm.disk-sweep` (`make
 disk-sweep-run` runs it once), what moved to the HomeLab and how to

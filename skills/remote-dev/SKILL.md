@@ -46,8 +46,9 @@ API. Read `hc --skill` before a flag. What it does not know about this stack:
 
 - **The account is chosen on the command** (`env CLAUDE_CONFIG_DIR=… claude`, none = `iu`), never inherited: a core's env is
   every terminal's. `rd` and the factory do it for you.
-- **launchd owns the core** (`com.jkrumm.herdr-core`). The only restart is `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core`;
-  never `hc update`, `hc server restart|stop` or `hc machine update` on the mini, and never start a core from ssh (no keychain).
+- **launchd owns the core** (on the mini the `com.jkrumm.herdr-core` starter detaches into upstream's launchd job; the MacBook's
+  app starts its own). Updates are `make herdr-core-update` (the official `hc update`, quiet window); never
+  `hc server restart|stop` or `hc machine update` outside it, and never start a core from ssh (a stray: no keychain).
 - **Never `ssh mini 'claude …'`** (below). Reach a terminal through `rd` or the app.
 - **Placement is labels** (`herdr.space`, `herdr.tab`), set by `rd`/the factory; the app adopts them. A worker is an unlabelled child.
 - Address agents by name or terminal id, never by what the owner has focused. A non-empty input line in a terminal is the owner's
@@ -154,9 +155,9 @@ When something is red, in order:
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
 | Agent died when the lid closed | It did not — the lid ends the link only. A *lost* program (not a core kickstart) is replaced by a shell; `hc-resume` brings Claude back, not shells or the in-flight turn |
 | An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd work`) — never `ssh mini 'claude …'` |
-| `rd` says "herdr-core is not running" | `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` on the mini (terminals survive), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core |
+| `rd` says "herdr-core is not running" | `bash scripts/lib/core-up.sh` prints why and the fix (usually `launchctl kickstart gui/$(id -u)/com.jkrumm.herdr-core` on the mini), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core |
 | A `claude` in a core terminal has no transcript / `--resume` finds nothing | The core was started from inside a Claude session and passed `CLAUDECODE` to every terminal; launchd's clean env is the fix, so restart through launchd |
-| A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: the launcher lost its Full Disk Access (a rebuilt launcher is a new identity). `make tcc-probe`, `docs/tcc.md` |
+| A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: `Herdr Core.app` has no Full Disk Access (or the terminal's holder predates the bundle). `make tcc-probe`, `docs/tcc.md` |
 | A Claude terminal came back as a bare shell | Its program was lost and `hc-resume` has not typed yet (or the terminal had no `jk.claude.session` label). `hc read <t>`, `make hc-resume-status` |
 | The app shows no tab for an `rd` spawn | Placement is by label and adopted when the app next sees the core: `hc get <t>` for `herdr.space`/`herdr.tab`; a worker has none by design (listed under its parent) |
 | `claude: command not found` over non-interactive ssh | `make setup`'s `_setup-zshenv` puts Homebrew + `~/.local/bin` on the non-interactive PATH — re-run `make setup` if missing |
@@ -167,8 +168,7 @@ When something is red, in order:
 
 ## Rules
 
-- Restart the core only through launchd (`kickstart -k`); upgrades are the daily `com.jkrumm.herdr-core-update` job, never `hc update`.
-  A change to the job's program is `make herdr-core-setup YES=1` and ends every live terminal: human-timed.
+- Core updates only through `make herdr-core-update` (official `hc update`) in a quiet window; no unattended job, no wrapper at `~/.local/bin/hc`.
 - Never run a validation loop or an edit over files a running `@implementer`
   subagent owns — applies across terminals too.
 - Do not add `tailscale serve` bindings for dev servers; use Caddy.
