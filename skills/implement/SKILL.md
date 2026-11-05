@@ -7,7 +7,7 @@ description: Guided implementation with research, exploration, and validation. S
 
 Context-aware implementation flow. Scales its approach based on task complexity — from quick focused edits to multi-subagent orchestration, while keeping the main agent's context window lean.
 
-> **Delegation lanes.** `/check` and `/research` run on `agw`, synchronous with the exit-10 resume (`agw run wait <runId>`); `/review` runs `agw review` host commands around one reviewer agent on this session. Changes in a repo you are NOT working in, and N independent changes in ONE repo (disjoint files), go through `/wave` fan-out (`rd fan` / `rd merge`: a worktree + Claude tab per change; `rd wave <repo>` for a single change you want to watch). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. See the async-job contract in global CLAUDE.md.
+> **Delegation lanes.** `/check` and `/research` run on `agw`, synchronous with the exit-10 resume (`agw run wait <runId>`); `/review` runs `agw review` host commands around one reviewer agent on this session. Changes in a repo you are NOT working in, and N independent changes in ONE repo (disjoint files), go through factory Issues (`rd issue <repo> <title>`; `/wave` is the playbook for splitting a plan into Issues). The native `@implementer` Sonnet subagent (synchronous, on Max, its own prompt cache) is the path when the edit needs this session's **live** uncommitted tree or **tight iteration** — it can't reach the IU endpoint, so it can't run the cheap model. See the async-job contract in global CLAUDE.md.
 
 ## When to Use
 
@@ -36,7 +36,7 @@ Assess the task first and pick the appropriate tier:
 |-|-|-|
 | **Quick** | 1-2 files, clear pattern, no research needed | Skip tasks, skip explore subagent, implement inline, run `/check` |
 | **Standard** | 3-8 files, some unknowns, familiar libraries | Full process below — explore subagent, plan, inline impl, `/check` |
-| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation: `@implementer` when the edit needs the live tree or tight iteration; `/wave` fan-out (`rd fan`/`rd merge`) for N independent changes in one repo on **disjoint** file groups; an Opus subagent for novel-hard logic + runtime validation |
+| **Heavy** | 9+ files, multiple concerns, external libs, or high uncertainty | Full process + implementation: `@implementer` when the edit needs the live tree or tight iteration; factory Issues (`/wave`) for N independent changes on **disjoint** file groups; an Opus subagent for novel-hard logic + runtime validation |
 
 For Quick tasks: skip the formality, just implement and validate. State the tier upfront.
 
@@ -46,24 +46,24 @@ For Quick tasks: skip the formality, just implement and validate. State the tier
 
 **Primary goal: keep the orchestrator's context window small.**
 
-All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. The `@implementer` subagent runs the `sonnet` alias at medium effort. Fan out on **disjoint** file groups freely (same-repo groups via `/wave` fan-out, `@implementer` on the live-tree path); reserve Opus subagents for novel-hard reasoning. Note: parallel `@implementer` calls run N× Sonnet-on-Max (detachment, not free); `rd fan` tabs run on Max too.
+All subagent work uses the native `Agent` tool with an explicit `subagent_type`. Subagents have their own prompt cache — switching models inside a subagent does **not** invalidate the orchestrator's cache. The `@implementer` subagent runs the `sonnet` alias at medium effort. Fan out on **disjoint** file groups freely (independent changes as factory Issues via `/wave`, `@implementer` on the live-tree path); reserve Opus subagents for novel-hard reasoning. Note: parallel `@implementer` calls run N× Sonnet-on-Max (detachment, not free); factory-spawned agents run on Max too.
 
 | Phase | Quick | Standard | Heavy |
 |-|-|-|-|
 | Explore | Skip | `Agent` with `subagent_type: Explore` | `Agent` with `subagent_type: Explore` |
 | Research | Skip | `/research` if external libs | `/research` if external libs |
 | Plan | 1-liner inline | 3-5 bullets inline | `Agent` with `subagent_type: Plan` for non-trivial plans, else inline; wait for approval |
-| Implement | Inline | Inline, `@implementer` for live-tree work, or `rd wave <repo>` for one change in a repo you are not working in | `@implementer` when the edit needs the live tree; `/wave` fan-out (`rd fan`/`rd merge`) for independent file groups in one repo; `rd wave <repo>` for a change in a repo you are not working in; `Agent` with `subagent_type: general-purpose, model: opus` for novel-hard logic — see below |
+| Implement | Inline | Inline, `@implementer` for live-tree work, or `rd issue <repo>` for one change in a repo you are not working in | `@implementer` when the edit needs the live tree; factory Issues (`/wave`) for independent file groups; `rd issue <repo>` for a change in a repo you are not working in; `Agent` with `subagent_type: general-purpose, model: opus` for novel-hard logic — see below |
 | Validate (static) | `/check` | `/check` | `/check` |
 | Validate (runtime) | Only if obvious | Assess need | Always assess — via `@verifier` |
 
 **Heavy implementer choice (delegate to protect orchestrator CONTEXT and cost):**
-- **Edit in this session's live uncommitted tree, or tight iteration with the orchestrator**: **`@implementer`** (native `sonnet` alias, effort medium, on Max). It loads the CLAUDE.md rules automatically and has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, plus exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). **A change in a repo you are not working in** goes to `rd wave <repo> '<prompt>'` (a tab in the repo's Herdr space, `/wave` owns the contract); review its diff before merge.
-- **Independent file groups**: same-repo groups go through **`/wave` fan-out** (`rd fan` / `rd merge`: one worktree + Claude tab per change — no cross-talk); on the live-tree path, multiple `@implementer` calls. Parallelize **only on disjoint file sets** — never two workers on the same file.
+- **Edit in this session's live uncommitted tree, or tight iteration with the orchestrator**: **`@implementer`** (native `sonnet` alias, effort medium, on Max). It loads the CLAUDE.md rules automatically and has `Read`/`Grep`, so pass **file pointers, not pre-extracted snippets**, plus exact paths, the change/shape, acceptance criteria, intent, and explicit scope limits (no extra features, no refactoring untouched code). **A change in a repo you are not working in** goes to a factory Issue (`rd issue <repo> <title>`; `/wave` is the playbook); review its diff before merge.
+- **Independent file groups**: independent changes go through **factory Issues** (`/wave`: one lead and worktree per Issue — no cross-talk); on the live-tree path, multiple `@implementer` calls. Parallelize **only on disjoint file sets** — never two workers on the same file.
 - **Novel hard logic, complex decomposition, multi-system reasoning**: keep it on Opus — `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`. The worker is a literal executor, not a planner. State the one-clause reason Sonnet doesn't fit in the call's `description` as `[opus: <reason>]` — `hooks/model-discipline.ts` denies an Opus worker without it.
-- **Mass mechanical migration (codemod across many files)**: `/wave` fan-out on disjoint groups (`rd fan` / `rd merge`).
+- **Mass mechanical migration (codemod across many files)**: factory Issues (`/wave`) on disjoint groups.
 - **Mass parallel search across the repo**: spawn multiple `Explore` agents in parallel (single message, multiple `Agent` tool calls) — `Explore` already defaults to fast.
-- **Need branch isolation?** `rd wave`/`rd fan` give it by default (own worktree per tab). For `@implementer`'s live-tree path, decide isolation **up front, at the orchestrator level** — not mid-flow: create the worktree with Claude Code's native worktree feature and run the whole `/implement` flow there (or set `isolation: worktree` on a one-off `Agent` call for a single risky run). Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
+- **Need branch isolation?** A factory Issue gives it by default (own worktree per lead). For `@implementer`'s live-tree path, decide isolation **up front, at the orchestrator level** — not mid-flow: create the worktree with Claude Code's native worktree feature and run the whole `/implement` flow there (or set `isolation: worktree` on a one-off `Agent` call for a single risky run). Don't spawn a separate worktree-isolated background agent and reconcile trees afterward.
 
 Never do exploration or research inline in Standard/Heavy tiers.
 
@@ -114,7 +114,7 @@ State your approach in 3-5 bullets and **proceed**. Include:
 
 **Quick (≤2 files): implement inline.**
 
-**Standard / Heavy settled work: delegate** — **`@implementer`** (native `sonnet` alias, medium effort, on Max) when the edit needs the live tree or tight iteration; `/wave` fan-out (`rd fan`/`rd merge`) for N independent changes in one repo; `rd wave <repo>` for a change in a repo you are not working in. **Heavy novel-hard logic: `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`.** Either way the executor has zero prior context, so the brief must include:
+**Standard / Heavy settled work: delegate** — **`@implementer`** (native `sonnet` alias, medium effort, on Max) when the edit needs the live tree or tight iteration; factory Issues (`/wave`, `rd issue <repo>`) for N independent changes or a change in a repo you are not working in. **Heavy novel-hard logic: `Agent` with `subagent_type: general-purpose`, `model: opus, effort: high`.** Either way the executor has zero prior context, so the brief must include:
 - The full task description and acceptance criteria
 - Exploration findings (file paths + line numbers + patterns)
 - Research findings (if any)
@@ -187,5 +187,5 @@ If you discovered a gotcha, a constraint, or a reusable pattern:
 - Always ask for human sign-off at the end
 - **Action bias is the default**: small decisions are the agent's to make. Only escalate major uncertainty or user-owned decisions (see Default Stance section)
 - Implementation subagent must receive all context upfront (it has no prior conversation)
-- N independent same-repo changes go to `/wave` fan-out; `rd wave <repo>` takes a change in another repo; `@implementer` runs Sonnet at medium effort on Max for live-tree/tight-iteration work. Each loads CLAUDE.md → AGENTS.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
+- N independent changes, or a change in another repo, go to factory Issues (`rd issue <repo>`, `/wave`); `@implementer` runs Sonnet at medium effort on Max for live-tree/tight-iteration work. Each loads CLAUDE.md → AGENTS.md automatically — **do not re-specify the rules** in the brief; **do** specify exact paths, the change, acceptance criteria, intent, and scope limits
 - **A subjective goal needs a measurable acceptance criterion, or it comes back "done" unchanged.** "Make it less verbose", "tidy this up", "improve the naming" are unfalsifiable as written: the worker fixes something adjacent and reports success. Convert to a number the worker must measure and report (word count before/after, file count, the specific line that must be gone), or to the exact named sites that must change. A goal stated only in adjectives regressed twice in one project before the brief demanded a count

@@ -15,7 +15,7 @@ set -uo pipefail
 # keys off) so the two machines can share one command surface.
 #
 # The MacBook's sanctioned repos are dotfiles/dotfiles-private/brain —
-# no project repos. `repos` and `work` resolve paths ON the host, which
+# no project repos. `work` and `issue` resolve paths ON the host, which
 # is why none of them take a path — a MacBook-side project-repo path would be
 # meaningless.
 
@@ -50,11 +50,10 @@ rd_effort_flag() { # <model> [role-effort]
 # spawn keeps today's defaults. Only a factory that ANSWERS "no such role" (or a malformed role name)
 # is a usage error, exit 2.
 ROLE=""            # --role given on the command line
-CHILD=""           # --child: `wave` makes the wave a hidden child of the calling terminal (an orchestrator's wave, never a chain successor)
 ROLE_TIER=""       # resolved tier alias (haiku|sonnet|opus), empty when the lookup failed open
 ROLE_EFFORT=""     # resolved effort, empty when the lookup failed open
 ROLE_TIMEOUT_S=2
-SPAWN_MODEL=""; SPAWN_EFFORT=""; SPAWN_MODEL_FLAG=""; SPAWN_EFFORT_FLAG=""
+SPAWN_MODEL=""; SPAWN_EFFORT=""; SPAWN_EFFORT_FLAG=""
 PICK_ENV=()
 
 role_usage_error() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 2; }
@@ -100,8 +99,8 @@ factory_not_found() { # <text>
 }
 
 # Model and effort for a spawn: RD_WAVE_MODEL / RD_WAVE_EFFORT, then the --role (or the verb's default
-# role, $1), then today's defaults ($2: the fallback model, empty for `work`). Sets SPAWN_MODEL_FLAG
-# and SPAWN_EFFORT_FLAG (empty or " --model '<m>'" / " --effort '<l>'"). The lookup is skipped only when
+# role, $1), then today's defaults ($2: the fallback model, empty for `work`). Sets SPAWN_MODEL
+# and SPAWN_EFFORT (empty, or the bare model / level for claude's argv). The lookup is skipped only when
 # both env vars already decide everything and no --role was asked for.
 rd_spawn_flags() { # <default-role> <fallback-model>
   local role=${ROLE:-${1:-}} model
@@ -110,8 +109,7 @@ rd_spawn_flags() { # <default-role> <fallback-model>
     rd_role_resolve "$role"
   fi
   model=${RD_WAVE_MODEL:-${ROLE_TIER:-${2:-}}}
-  SPAWN_MODEL_FLAG=""; SPAWN_EFFORT_FLAG=""; SPAWN_MODEL=""; SPAWN_EFFORT=""
-  [[ -n $model ]] && { SPAWN_MODEL_FLAG=" --model '$model'"; SPAWN_MODEL=$model; }
+  SPAWN_EFFORT_FLAG=""; SPAWN_EFFORT=""; SPAWN_MODEL=$model
   if [[ -n $model || -n ${RD_WAVE_EFFORT:-} || -n $ROLE_EFFORT ]]; then
     SPAWN_EFFORT_FLAG=$(rd_effort_flag "$model" "$ROLE_EFFORT") || exit 1 # a bad RD_WAVE_EFFORT dies in the subshell: stop here too
     SPAWN_EFFORT=${SPAWN_EFFORT_FLAG#* \'}; SPAWN_EFFORT=${SPAWN_EFFORT%\'} # the bare level, for claude's argv
@@ -215,26 +213,6 @@ hc_roster() {
   HC_ROSTER_ALL=$(jq -c '.result.terminals' <<<"$resp")
   HC_ROSTER=$(jq -c '[.[] | select((.address | tostring | contains("/")) | not)]' <<<"$HC_ROSTER_ALL")
 }
-
-# True when the terminal record ($1) carries an rd/factory ownership marker: a `factory.key` label, or the name rd gives
-# an agent (a tab's `herdr.tab` label is `tb-<hash of its name>`; a hidden worker is a named child). A Claude somebody
-# started by hand has none of these, and rd never ends or types into what it did not start.
-hc_owned() {
-  local rec=$1 name key tab par
-  name=$(jq -r '.name // ""' <<<"$rec"); key=$(jq -r '.labels["factory.key"] // ""' <<<"$rec")
-  tab=$(jq -r '.labels["herdr.tab"] // ""' <<<"$rec"); par=$(jq -r '.parent // ""' <<<"$rec")
-  [[ -n $key ]] && return 0
-  [[ -n $name ]] || return 1
-  [[ -n $par ]] && return 0
-  [[ -n $tab && $tab == "tb-$(sha12 "$name")" ]]
-}
-
-# True in an owner's own session on the dev host: a calling terminal but no FACTORY_SESSION. Its children are its to
-# `hc wait --children` on, which a factory spawn (a parentless tab) would not be.
-owner_session() { on_dev_host && [[ -n ${HC_TERMINAL_ID:-} && -z ${FACTORY_SESSION:-} ]]; }
-
-# True when status $1 is a known finished one: idle or done. Null, unknown, starting, working and blocked are not.
-is_finished_status() { [[ $1 == "idle" || $1 == "done" ]]; }
 
 # An agent is a terminal that reports a status or runs claude itself: a plain shell is not.
 HC_JQ_DEFS='def prog: ((.foreground.argv // .argv // [])[0] // "") | split("/") | last;
@@ -364,60 +342,40 @@ spawn_env() { # <agent> <role> <usage lane>
   } | jq -Rn '[inputs | select(length > 0) | capture("^(?<k>[^=]+)=(?<v>.*)$") | {(.k): .v}] | add // {}'
 }
 
-# Start Claude in a new hc terminal (rd's hc-direct spawn, §Spawn contract). Sets SPAWNED_ADDR (and SPAWNED_SPACE for a tab);
-# returns 1 with HC_START_ERR set when it did not start (a timeout is "uncertain": never retried here).
+# Start Claude in a labelled tab of the repo's space (rd's hc-direct spawn, §Spawn contract), no parent. Sets SPAWNED_ADDR
+# and SPAWNED_SPACE; returns 1 with HC_START_ERR set when it did not start (a timeout is "uncertain": never retried here).
 #   $1 agent  $2 cwd  $3 role (FACTORY_ROLE, may be empty)  $4 usage lane (may be empty)  $5 skip-permissions 1|0  $6 prompt (may be empty)
-#   $7 placement: tab        a labelled tab of the repo's space, no parent (work, wave, a chain's next wave)
-#                 tab-child  the same, but a child of the caller (an orchestrated wave: the notes and `hc wait --children` need the parent)
-#                 child      a hidden child of the caller, no labels (a fan worker); a tab when there is no caller terminal
-#   $8 the repo whose space a tab goes in
+#   $7 the repo whose space the tab goes in
 hc_start_agent() {
-  local agent=$1 cwd=$2 role=$3 lane=$4 skip=$5 prompt=$6 where=$7 spath=$8
-  local argv env name labels place tab parent="" resp kind
+  local agent=$1 cwd=$2 role=$3 lane=$4 skip=$5 prompt=$6 spath=$7
+  local argv env name labels tab resp kind
   HC_START_ERR=""
   [[ $prompt != -* ]] || die "a prompt cannot start with '-' (claude would read it as an option)"
-  # The caller's terminal is a parent only on the dev host: a MacBook terminal's id is another core's.
-  if [[ $where != tab ]] && on_dev_host && [[ ${HC_TERMINAL_ID:-} =~ ^t[0-9a-z]+$ ]]; then parent=$HC_TERMINAL_ID; fi
-  [[ $where == tab-child && -z $parent ]] && where=tab
-  [[ $where == child && -z $parent ]] && where=tab
   argv=$(claude_argv "$skip" "$prompt") || { HC_START_ERR="could not build claude's argv"; return 1; }
   env=$(spawn_env "$agent" "$role" "$lane") || { HC_START_ERR="could not build the spawn environment"; return 1; }
   name=$(hc_terminal_name "$agent")
   hc_pretrust "$cwd"
 
-  while :; do
-    SPAWNED_SPACE=""; tab=""
-    if [[ $where == child ]]; then
-      labels='{}'; place=$(jq -nc --arg p "$parent" '{parent:$p,outlive_parent:true}')
-    else
-      SPAWNED_SPACE=$(hc_space_id "$spath") || { HC_START_ERR="could not resolve the space of $spath (above)"; return 1; }
-      hc_seed_space "$SPAWNED_SPACE" "$spath"
-      tab="tb-$(sha12 "$agent")"
-      labels=$(jq -nc --arg s "$SPAWNED_SPACE" --arg t "$tab" '{"herdr.space":$s,"herdr.tab":$t}')
-      place='{"no_parent":true}'
-      [[ $where == tab-child ]] && place=$(jq -nc --arg p "$parent" '{parent:$p,outlive_parent:true}')
-    fi
-    resp=$(hc_rpc terminal.run "$(jq -nc --arg name "$name" --arg cwd "$cwd" --argjson argv "$argv" --argjson env "$env" \
-      --argjson labels "$labels" --argjson place "$place" \
-      '{argv:$argv,cwd:$cwd,env:$env,labels:$labels,keep:true,name:$name} + $place')") \
-      || {
-        if (( HC_RPC_RC == 124 )); then
-          HC_START_ERR="uncertain — hc did not answer within ${RD_HC_TIMEOUT_S:-30} s while starting '$agent' on $HOST; 'rd agents' shows whether it exists. Not retrying"
-        else
-          HC_START_ERR="uncertain — no answer from hc while starting '$agent' on $HOST; 'rd agents' shows whether it exists. Not retrying"
-        fi
-        return 1
-      }
-    kind=$(rpc_kind "$resp")
-    # The parent is gone: this one becomes a tab instead.
-    if [[ $kind == not_found && $where == child ]]; then where=tab; continue; fi
-    [[ -z $kind ]] || { HC_START_ERR="hc could not start '$agent': $(rpc_message "$resp")"; return 1; }
-    break
-  done
-  SPAWNED_WHERE=$where # the placement that held: a child falls back to a tab when its parent is gone
+  SPAWNED_SPACE=$(hc_space_id "$spath") || { HC_START_ERR="could not resolve the space of $spath (above)"; return 1; }
+  hc_seed_space "$SPAWNED_SPACE" "$spath"
+  tab="tb-$(sha12 "$agent")"
+  labels=$(jq -nc --arg s "$SPAWNED_SPACE" --arg t "$tab" '{"herdr.space":$s,"herdr.tab":$t}')
+  resp=$(hc_rpc terminal.run "$(jq -nc --arg name "$name" --arg cwd "$cwd" --argjson argv "$argv" --argjson env "$env" \
+    --argjson labels "$labels" \
+    '{argv:$argv,cwd:$cwd,env:$env,labels:$labels,keep:true,name:$name,no_parent:true}')") \
+    || {
+      if (( HC_RPC_RC == 124 )); then
+        HC_START_ERR="uncertain — hc did not answer within ${RD_HC_TIMEOUT_S:-30} s while starting '$agent' on $HOST; 'rd agents' shows whether it exists. Not retrying"
+      else
+        HC_START_ERR="uncertain — no answer from hc while starting '$agent' on $HOST; 'rd agents' shows whether it exists. Not retrying"
+      fi
+      return 1
+    }
+  kind=$(rpc_kind "$resp")
+  [[ -z $kind ]] || { HC_START_ERR="hc could not start '$agent': $(rpc_message "$resp")"; return 1; }
   SPAWNED_ADDR=$(jq -r '.result.address // empty' <<<"$resp")
   [[ -n $SPAWNED_ADDR ]] || { HC_START_ERR="hc started '$agent' but returned no address: $resp"; return 1; }
-  [[ -z $tab ]] || hc_name_tab "$tab" "$agent"
+  hc_name_tab "$tab" "$agent"
 }
 
 # The folder-trust dialog blocks a fresh account's first start in a path; accept it everywhere first. Best effort.
@@ -452,22 +410,21 @@ agent_name() {
 
 # --- the factory ---------------------------------------------------------------
 #
-# `wave`, `fan` and `say` go through the software factory when it answers, and spawn onto hc directly
-# when it does not (docs/remote-dev.md §rd and the factory). A dead factory must never stop the waves
-# that would repair it, so every call is bounded and a spawn falls back only when the create certainly did not happen.
+# `issue`, `issues` and `say` go through the software factory (docs/remote-dev.md §rd and the factory); `say` falls back
+# to hc directly when it does not answer. Every call is bounded.
 FACTORY_HEALTH_S=3
 FACTORY_CALL_S=15
 FACTORY_UP=""
 
 # Run `factory <args…>` on the dev host, bounded by <secs>. rc 124 = timed out, 127 = not installed, 126 = the host
 # has no timeout binary (`timeout` or Homebrew's `gtimeout`; RD_TIMEOUT_CMDS overrides the names): an unbounded call
-# could hang a wave that would repair the factory, so without a bound there is no factory path.
+# could hang on a factory that is down, so without a bound there is no factory path.
 factory_host() { # <secs> <args…>
   local secs=$1 args="" a stdin='</dev/null'; shift
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
   # FACTORY_STDIN_B64 (base64, one line) is fed to the call's stdin instead of /dev/null (`rd issue --facts`).
   [[ -z ${FACTORY_STDIN_B64:-} ]] || stdin="<<<\"\$(printf %s '$FACTORY_STDIN_B64' | base64 -d)\""
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs ${FACTORY_NO_PARENT:+env -u FACTORY_SESSION }factory$args $stdin"
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs factory$args $stdin"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
@@ -478,160 +435,6 @@ factory_up() {
     [[ ${RD_NO_FACTORY:-} == 1 ]] || ! factory_host "$FACTORY_HEALTH_S" health >/dev/null 2>&1 || FACTORY_UP=1
   fi
   [[ $FACTORY_UP == 1 ]]
-}
-
-# jq over a `factory … --format json` body. Ids may come as strings or {id|name} objects.
-FACTORY_JQ_DEFS='def s: if type == "object" then (.id // .name // empty) else . end | tostring;'
-factory_field() { # <json> <jq expression>
-  jq -r "$FACTORY_JQ_DEFS $2" <<<"$1" 2>/dev/null
-}
-# Why a spawn failed: `.error` is a string, or an object with a message.
-factory_error() { # <json>
-  factory_field "$1" '(.error | strings) // (.error | objects | .message) // "no reason given"'
-}
-
-# The next key after a spent one: `<key>-r2`, `-r3`, … clipped at 32 like the terminal name (`wave_agent_name`), so the
-# agent name, which follows the key, still fits.
-spawn_retry_key() { # <key> <n>
-  local s="-r$2" room
-  room=$((32 - ${#s}))
-  (( ${#1} <= room )) && { printf '%s' "$1$s"; return; }
-  # Clipped: two long keys that differ only in their tail (…-w1, …-w2) must not share a retry key, so a digest of the whole key goes in.
-  printf '%s' "${1:0:$((room - 7))}-$(sha12 "$1" | cut -c1-6)$s"
-}
-
-# Create a spawn through the factory (idempotent by key while the key is live) and wait, bounded by RD_FACTORY_WAIT_S
-# (120 s), until it has started. The factory picks the account and starts the pane; it also delivers the prompt.
-# A key whose agent has ended is spent: the factory answers 409 `key_spent` and never revives the row, so the next key is
-# `<key>-r2`, `-r3`, … and FSPAWN_KEY says which one was used (the agent name follows it). A spawn this call makes is
-# `queued` or `waiting` in the create's own answer; any other status is a row that already existed. A factory from before
-# key_spent answers such a row with 200 instead of 409: `ended`, or `started` with a dead session, is spent too. A retry
-# key that already has a row (a live `-r2` from an earlier call, a failed one) is passed over, never replayed: its prompt
-# was not this call's (a queued one from an earlier call with the same intent is taken as it is: the create cannot tell, the
-# factory's 201 is not in the CLI's output). Once a key was spent, an error from the create is an error, not a fallback to hc under the old name.
-#   return 0  handled — FSPAWN_STATE = started | queued (held: FSPAWN_REASON) | starting (claimed, not
-#             started within the wait); FSPAWN_PANE / FSPAWN_ACCOUNT filled when the factory reports them
-#   return 1  the spawn failed (FSPAWN_ERR), ended, or the factory went silent after creating it
-#   return 2  the factory could not create the spawn: the caller falls back to hc directly (never for `key_spent`)
-#   placement (optional, `child`): a hidden child of the parent session's terminal, whatever the role. A factory from before
-#   `placement` either drops the field (its answer has none: this says so, the spawn is a tab) or, with an older
-#   CLI, refuses the flag with a usage error (exit 2) before anything is created: this retries once without it.
-factory_spawn() { # <key> <repo> <prompt> <role> [space] [placement]
-  local key0=$1 repo=$2 prompt=$3 role=$4 space=${5:-} placement=${6:-} out rc get="" state key n=1 tries=${RD_FACTORY_KEY_TRIES:-50}
-  local spent cstate sess deadline
-  local -a extra=()
-  [[ -n $space ]] && extra=(--space "$space")
-  [[ -n $placement ]] && extra+=(--placement "$placement")
-  FSPAWN_STATE=""; FSPAWN_PANE=""; FSPAWN_ACCOUNT=""; FSPAWN_REASON=""; FSPAWN_ERR=""; FSPAWN_KEY=$key0
-  key=$key0
-  while :; do
-    rc=0; spent=0
-    out=$(factory_host "$FACTORY_CALL_S" spawn create "$key" --repo "$repo" --prompt "$prompt" --role "$role" \
-      ${extra[@]+"${extra[@]}"} --format json 2>&1) || rc=$?
-    if (( rc == 2 )) && [[ -n $placement ]] && grep -qi 'placement' <<<"$out"; then
-      echo "rd: this factory CLI predates --placement - the spawn becomes a tab" >&2
-      placement=""; extra=(); [[ -n $space ]] && extra=(--space "$space")
-      continue
-    fi
-    if (( rc != 0 )) && jq -e '.error.code == "key_spent"' <<<"$out" >/dev/null 2>&1; then
-      spent=1
-    elif (( rc != 0 )); then
-      # hc takes over only when the create certainly did not happen: the call never ran (126/127) or the factory
-      # answered with a structured error. A dropped hop or a timeout may come after the factory recorded the spawn
-      # (or while it still does), so those look at `spawn get` and otherwise stop - a second pane under the same
-      # name is worse than a visible error.
-      if (( rc == 126 || rc == 127 )) || jq -e '.error | objects' <<<"$out" >/dev/null 2>&1; then
-        if (( n > 1 )); then
-          FSPAWN_ERR="'$key0' is spent and the create under '$key' failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - not starting an agent outside the factory under the old name"
-          return 1
-        fi
-        echo "rd: factory spawn create failed (exit $rc: $(head -c 200 <<<"$out" | tr '\n' ' ')) - using hc directly" >&2
-        return 2
-      fi
-      local gout
-      gout=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>&1) || true
-      if [[ -z $(factory_field "$gout" '.status // empty') ]]; then
-        FSPAWN_ERR="spawn create exited $rc without an answer and the factory did not say whether '$key' exists - 'factory spawn get $key' shows it; not starting a second pane under that name"
-        return 1
-      fi
-    else
-      cstate=$(factory_field "$out" '.status // empty')
-      if (( n > 1 )); then
-        # A row that existed before this call is no spawn of ours on a retry key.
-        case $cstate in started|ended|failed|starting) spent=1 ;; esac
-      else
-        case $cstate in
-          ended) spent=1 ;;
-          started)
-            sess=$(factory_host "$FACTORY_CALL_S" session get "$key" --format json 2>/dev/null) || sess=""
-            case $(factory_field "$sess" '.state // empty') in
-              dead) spent=1 ;;
-              "") FSPAWN_ERR="'$key' already has a started spawn and its session could not be read - 'factory session get $key' says whether its agent lives; not guessing, and not starting a second one"
-                  return 1 ;;
-            esac ;;
-        esac
-      fi
-    fi
-
-    if (( ! spent )); then
-      deadline=$((SECONDS + ${RD_FACTORY_WAIT_S:-120}))
-      while :; do
-        get=$(factory_host "$FACTORY_CALL_S" spawn get "$key" --format json 2>/dev/null) || get=""
-        state=$(factory_field "$get" '.status // empty')
-        case $state in
-          started|ended|failed|waiting) break ;;
-          queued) [[ -z $(factory_field "$get" '.hold // empty') ]] || break ;; # held; a plain queued spawn is claimed on the next tick
-        esac
-        (( SECONDS >= deadline )) && break
-        sleep "${RD_FACTORY_POLL_S:-2}"
-      done
-    fi
-
-    (( spent )) || break
-    # The key belongs to an ended agent: a rerun of a wave number, or a counter that only sees live terminals.
-    n=$((n + 1))
-    if (( n > tries )); then
-      FSPAWN_ERR="the keys '$key0' to '$key' are all spent (RD_FACTORY_KEY_TRIES=$tries) - 'factory spawn list' shows them"
-      return 1
-    fi
-    key=$(spawn_retry_key "$key0" "$n"); FSPAWN_KEY=$key
-    echo "rd: the previous key is spent (its agent ended) - using '$key'" >&2
-  done
-
-  if [[ -n $placement && -n $get ]]; then
-    if ! jq -e 'has("placement")' <<<"$get" >/dev/null 2>&1; then
-      echo "rd: the factory server predates placement - '$key' is a tab, not a hidden child" >&2
-    elif ! jq -e --arg p "$placement" '.placement == $p' <<<"$get" >/dev/null 2>&1; then
-      echo "rd: '$key' already existed with placement $(factory_field "$get" '.placement // "none (the role default)"') - not the $placement asked for" >&2
-    fi
-  fi
-  FSPAWN_PANE=$(factory_field "$get" '(.pane // empty) | s')
-  FSPAWN_ACCOUNT=$(factory_field "$get" '(.account // empty) | s')
-  # Past this point the spawn exists: nothing below falls back to hc, whatever the status is.
-  case $state in
-    started) FSPAWN_STATE=started ;;
-    ended) FSPAWN_ERR="spawn '$key' ended before it was seen running - 'factory spawn get $key' and 'rd read' show what became of it"; return 1 ;;
-    queued) FSPAWN_STATE=queued; FSPAWN_REASON=$(factory_field "$get" '.hold // empty'); FSPAWN_REASON=${FSPAWN_REASON:-not claimed yet} ;;
-    waiting) FSPAWN_STATE=queued
-             FSPAWN_REASON="no capacity$(factory_field "$get" '(.resumeAt // empty) | tostring | " until " + .')" ;;
-    starting) FSPAWN_STATE=starting ;;
-    failed) FSPAWN_ERR=$(factory_error "$get"); return 1 ;;
-    "") FSPAWN_ERR="the factory gave no status for spawn '$key' - 'factory spawn get $key' shows what became of it"; return 1 ;;
-    *) FSPAWN_ERR="the factory reported an unknown status '$state' for spawn '$key' - 'factory spawn get $key' shows it"; return 1 ;;
-  esac
-  return 0
-}
-
-# One line for a handled spawn. $1 = what started ("wave 4" / "fan <branch>"), $2 agent, $3 space, $4 path.
-factory_spawn_report() {
-  local what=$1 agent=${FSPAWN_KEY:-$2} space=$3 path=$4
-  case $FSPAWN_STATE in
-    started) echo "→ $what started: claude '$agent' via the factory, space $space${FSPAWN_PANE:+, pane $FSPAWN_PANE}  ($path)${FSPAWN_ACCOUNT:+  [account $FSPAWN_ACCOUNT]}" ;;
-    queued) echo "queued: $FSPAWN_REASON"
-            note "   the factory starts '$agent' when it releases the hold · 'factory spawn get $agent' to look" ;;
-    *) echo "→ $what claimed by the factory, not started yet: '$agent' in space $space  ($path)"
-       note "   'factory spawn get $agent' to look" ;;
-  esac
 }
 
 # --- agent resolution ----------------------------------------------------------
@@ -693,7 +496,7 @@ cmd_repos() {
     done' | if [[ -n $filter ]]; then grep -i -- "$filter"; else cat; fi
 }
 
-# `--kind claude` (opencode is rejected) for `work` and `wave`: sets AGENT_KIND and leaves the
+# `--kind claude` (opencode is rejected) for `work`: sets AGENT_KIND and leaves the
 # remaining words in REST. Flags are consumed only in the two slots the usage
 # lines allow — before the repo and right after it. The first word after that
 # starts the prompt, so a prompt that itself contains `--kind` stays intact.
@@ -708,7 +511,6 @@ parse_kind_flags() {
       --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       --role)   [[ -n ${2:-} ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; ROLE=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
       --role=*) ROLE=${1#--role=}; [[ -n $ROLE ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
-      --child)  CHILD=1; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       *)        break ;;
     esac
   done
@@ -771,7 +573,6 @@ cmd_work() {
   local name="${REST[0]:-}"
   local prompt="${REST[*]:1}"
   [[ -n $name ]] || die "usage: work <repo> [--kind claude] [--role R] [<prompt…>]   (see 'repos')"
-  [[ -z $CHILD ]] || die "--child is for 'rd wave' (an orchestrator's waves); 'work' is an owner's own tab"
   require_core
 
   local path
@@ -797,454 +598,16 @@ cmd_work() {
   if [[ -n $ROLE ]]; then rd_spawn_flags "" ""; fi
 
   # A human sits in front of this one, so no --dangerously-skip-permissions. An optional prompt is claude's last
-  # argument, its first message (as in `wave`).
+  # argument, its first message.
   pick_account interactive
   (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; work never spills to IU API tokens"
   if [[ -n ${RD_DRY_RUN:-} ]]; then
     echo "would start $AGENT_KIND '$agent' in a new tab of the space for $path${PICK_NOTE:+  [$PICK_NOTE]}"
     return 0
   fi
-  hc_start_agent "$agent" "$path" "$ROLE" "" 0 "$prompt" tab "$path" || die "$HC_START_ERR"
+  hc_start_agent "$agent" "$path" "$ROLE" "" 0 "$prompt" "$path" || die "$HC_START_ERR"
   echo "→ started $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
   note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
-}
-
-# The wave-chaining lane: near-twin of `work`, for an agent that has just
-# finished a wave and needs to hand off to a fresh one rather than continue in
-# its own (increasingly long) context. Four differences from `work`:
-#
-#   1. A TAB in the repo's existing space, not a new space: the labels
-#      `herdr.space` + `herdr.tab` place the terminal (docs/herdr-core.md §Spawn
-#      contract) and a wave reads as "wave N of this repo". The tab has no
-#      parent: a child would end with the wave that spawned it, so a chain's
-#      next wave must not be one. (An orchestrated wave keeps the caller as
-#      parent: its lead waits on it with `hc wait --children`.)
-#   2. Solo mode. `--dangerously-skip-permissions` is in claude's argv, because
-#      an unattended wave has no one to answer a permission prompt. `work`
-#      deliberately omits it — that terminal has a human sitting in front of it.
-#   3. It submits a prompt. `work` hands you an empty terminal; `wave` is the
-#      automated form of "open a tab, start claude solo, paste the handover" —
-#      the prompt is claude's last argument, so there is nothing to type later.
-#   4. It is bounded. See RD_WAVE_MAX below — a wave that can spawn its own
-#      successor is exactly the shape of a chain with no natural end.
-cmd_wave() {
-  parse_kind "$@"
-  local name="${REST[0]:-}"
-  local prompt="${REST[*]:1}"
-  [[ -n $name && -n $prompt ]] || die "usage: wave <repo> [--kind claude] [--role R] [--child] <prompt…>"
-  require_core
-
-  local path
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
-
-  # The green gate, mechanical half (scripts/wave-gate.py owns the rest of the
-  # rationale). A cross-repo chain's prompt names its shared plan by absolute
-  # path (the estate-review chain's own convention) — pull that out of the
-  # prompt if present, otherwise the plan lives at the default in-repo
-  # location the skill documents. Expansion of `~` and relative-to-$path both
-  # happen ON THE HOST inside wave-gate.py, since $HOME differs there.
-  local plan_ref
-  plan_ref=$(grep -oE '[~/][^[:space:]]*docs/waves/PLAN\.md' <<<"$prompt" | head -1)
-  [[ -n $plan_ref ]] || plan_ref="docs/waves/PLAN.md"
-  # plan_ref comes out of free-text prompt content, not a resolved path — unlike
-  # $path (a directory resolve_repo already proved exists), it is not safe to
-  # trust into a quoted string that host_run hands to a shell. Restricting it to
-  # a safe character set before it ever reaches host_run closes that off, rather
-  # than relying on the single-quoting alone.
-  [[ $plan_ref =~ ^[A-Za-z0-9~/_.-]+$ ]] \
-    || die "plan reference extracted from the wave prompt has unsafe characters: $plan_ref"
-  # Orchestrated only on exactly `=1` — `RD_ORCHESTRATED=0` or an empty-ish
-  # leftover must not silently drop the gate's outward-facing keyword stop.
-  local gate_out orch_flag=""
-  [[ ${RD_ORCHESTRATED:-} == 1 ]] && orch_flag="--orchestrated"
-  gate_out=$(host_run "python3 \"\$HOME/SourceRoot/dotfiles/scripts/wave-gate.py\" $orch_flag $(printf '%q' "$path") $(printf '%q' "$plan_ref")" 2>&1) \
-    || die "green gate failed for $path:"$'\n'"$gate_out"
-  [[ -z $gate_out ]] || echo "$gate_out" >&2 # a pass can still say a check was skipped (the factory queue)
-
-  # The roster: it is read ONCE and fails closed. An unreadable one must not read as "no live agents" and let a
-  # duplicate name through (hc_roster dies when the core does not answer).
-  hc_roster
-
-  # Wave numbers in use = live terminals whose name is the one `<repo>-w<n>` would get. Each candidate number is turned
-  # into its terminal name (hc_terminal_name hashes the FULL key, so a repo starting `t<digit>`, whose name hc makes
-  # unrecognisable, is still counted) and looked up among the live names, instead of parsing names back. depth (what
-  # RD_WAVE_MAX bounds) = the numbers in use + 1; n = the next free one. Numbers above 99 are not looked at.
-  wave_agent_name() { # <n> — `agent_name` clips at 32 (the terminal name cap); the wave suffix is clipped for first
-    local s="-w$1"
-    printf '%s' "${WAVE_BASE:0:$((32 - ${#s}))}${s}"
-  }
-  WAVE_BASE="$(agent_name "$name")"
-  wave_live() { # <n> — is that wave's terminal name a live one? (live_names: dynamic scope)
-    grep -qxF "$(hc_terminal_name "$(wave_agent_name "$1")")" <<<"$live_names"
-  }
-  local live_names num depth=1 n=1 max=0
-  live_names=$(jq -r '.[] | .name // empty' <<<"$HC_ROSTER")
-  for num in $(seq 1 99); do
-    wave_live "$num" || continue
-    depth=$((depth + 1)); max=$num
-  done
-  n=$((max + 1))
-
-  # The label and agent name carry the PLAN's wave number ("Execute the active wave (Wave 7)"),
-  # not the counter. No "(Wave N)" in the prompt (an ad-hoc spawn) falls back to the counter.
-  # RD_WAVE_MAX still bounds the counter (spawn depth), not the plan's numbering.
-  local wnum=$n explicit=0
-  if [[ $prompt =~ \(Wave\ ([0-9]+)\) ]]; then wnum=${BASH_REMATCH[1]}; explicit=1; fi
-
-  # An agent that can spawn its own successor is exactly the shape of a chain
-  # with no natural end. RD_WAVE_MAX is the backstop — the failure mode this
-  # guards against is not "one wave too many", it is "did not stop".
-  local wave_max=${RD_WAVE_MAX:-10}
-  (( depth <= wave_max )) \
-    || die "wave $depth would exceed RD_WAVE_MAX=$wave_max — refusing to keep an unbounded self-spawning chain going"
-
-  # Same hazard `work`'s comment describes: two agents editing one checkout race
-  # each other. But the CALLER is the orchestrator (or a finishing wave handing
-  # over) and hc still reports it `working` because it is mid-turn — so an
-  # unqualified check refuses the command's primary use case. The caller's own
-  # terminal is excluded (a Bash tool or subagent running inside it is the same
-  # operator, not a second editor). Any OTHER live agent in that checkout is still a
-  # hard stop; an idle or done predecessor is what a finished wave looks like.
-  local busy
-  local self_hc=""
-  if on_dev_host; then self_hc=${HC_TERMINAL_ID:-}; fi # another machine's ids are not ours
-  busy=$(jq -r --arg cwd "$path" --arg self "$self_hc" "$HC_JQ_DEFS"'[.[] | select(agent and .cwd == $cwd and .address != $self
-      and ((.status.state // "") | IN("idle", "done") | not))] | .[0] | select(. != null) | "\(.address) \(.status.state // "unknown")"' <<<"$HC_ROSTER" 2>/dev/null)
-  [[ -z $busy ]] \
-    || die "another agent in $path is ${busy#* } (${busy%% *}) — two agents editing one checkout race each other"
-
-  # Two agents on one name make `rd say/read` hit the wrong one, so the counter skips numbers whose name is live;
-  # the plan's explicit number is authoritative and dies.
-  local agent
-  if (( explicit )); then
-    wave_live "$wnum" \
-      && die "agent '$(wave_agent_name "$wnum")' is already live — 'rd read' it or 'rd close' it before respawning wave $wnum"
-  else
-    while wave_live "$wnum"; do wnum=$((wnum + 1)); done
-  fi
-  agent="$(wave_agent_name "$wnum")"
-
-  # Model and effort before anything is created: an unknown --role is a usage error. A wave is the `wave`
-  # role unless told otherwise; unattended work defaults to Sonnet when the role table is unreachable.
-  rd_spawn_flags wave sonnet
-
-  # The factory, when it answers, picks the account and queues what has no room; otherwise the account is
-  # picked once per spawn here, and no room means pause, never IU.
-  local use_factory=0
-  # An orchestrated wave from an owner's own session goes hc-direct, like fan: the lead must be its child to wait on it.
-  local orchestrated=""
-  [[ ${RD_ORCHESTRATED:-} == 1 || -n $CHILD ]] && orchestrated=1
-  [[ -z ${RD_DRY_RUN:-} ]] && ! { [[ -n $orchestrated ]] && owner_session; } && factory_up && use_factory=1
-  PICK_ENV=(); PICK_NOTE=""; PICK_SPILL=0
-  if [[ $AGENT_KIND == claude ]] && (( ! use_factory )); then
-    pick_account wave
-  fi
-  (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; waves never spill to IU API tokens"
-
-  # Everything above can be wrong before anything gets created — RD_DRY_RUN
-  # stops here for the same reason `say` stops before the send.
-  if [[ -n ${RD_DRY_RUN:-} ]]; then
-    [[ -n $PICK_NOTE ]] && echo "account pick (wave): $PICK_NOTE${PICK_ENV[*]:+ [${PICK_ENV[*]}]} -> kind $AGENT_KIND"
-    local dry_space
-    dry_space=$(hc_space_id "$path") || exit 1
-    echo "would add tab 'tb-$(sha12 "$agent")' ($agent) to space $dry_space ($name) at $path"
-    echo "would start agent '$agent' solo in it with the prompt as claude's argument${SPAWN_MODEL_FLAG}${SPAWN_EFFORT_FLAG}"
-    return 0
-  fi
-
-  if (( use_factory )); then
-    [[ -z ${RD_WAVE_MODEL:-}${RD_WAVE_EFFORT:-} ]] \
-      || echo "rd: RD_WAVE_MODEL / RD_WAVE_EFFORT do not reach a factory spawn - the role table decides" >&2
-    # A chain wave's successor is not its worker: with the caller as parent, the send-back would hold the finishing
-    # wave's Stop until its successor ends. Orchestrated waves are the orchestrator's workers and keep the parent.
-    local frc=0 no_parent=1
-    [[ -n $orchestrated ]] && no_parent=""
-    FACTORY_NO_PARENT=$no_parent factory_spawn "$agent" "$path" "$prompt" "${ROLE:-wave}" "" "${CHILD:+child}" || frc=$?
-    case $frc in
-      0) factory_spawn_report "wave $wnum" "$agent" "$path" "$path"; return 0 ;;
-      1) die "factory spawn '$FSPAWN_KEY' failed: $FSPAWN_ERR" ;;
-    esac
-    # The factory could not take it: hc directly, with the pick the factory would have made.
-    if [[ $AGENT_KIND == claude ]]; then pick_account wave; fi
-    (( PICK_SPILL )) && die "paused: $PICK_NOTE. Retry after a reset; waves never spill to IU API tokens"
-  fi
-
-  # Unattended work defaults to Sonnet (claude): the settings.json model is whatever `/model` last left the interactive
-  # session on (Fable today), and that is the wrong default exactly where no one is watching. A chain that wants another
-  # model says so per chain (`RD_WAVE_MODEL`).
-  local where="tab"
-  if [[ -n $CHILD ]]; then where="child"; elif [[ ${RD_ORCHESTRATED:-} == 1 ]]; then where="tab-child"; fi
-  hc_start_agent "$agent" "$path" "${ROLE:-wave}" wave 1 "$prompt" "$where" "$path" || die "$HC_START_ERR"
-  echo "→ wave $wnum started: $AGENT_KIND '$agent' as $SPAWNED_ADDR in space $SPAWNED_SPACE  ($path)${PICK_NOTE:+  [$PICK_NOTE]}"
-  note "   'rd read $agent' to watch · 'rd say $agent \"...\"' to steer"
-  [[ $where == tab-child ]] && note "   a child of this terminal: its notes arrive as input, 'hc wait --children all' waits for it"
-  [[ -n $CHILD && $SPAWNED_WHERE == child ]] && note "   a hidden child of this terminal (the app lists it under it, 'hc wait --children all' waits for it)"
-  [[ -n $CHILD && $SPAWNED_WHERE == tab ]] && note "   --child: no calling terminal on the dev host (or it is gone), so this wave is a tab"
-  return 0
-}
-
-# Fan-out: one worktree + one Claude per brief file, each a hidden child of the calling terminal ($HC_TERMINAL_ID:
-# no labels, so the app lists it as a sub-agent of the orchestrator, not as a tab; the orchestrator gets the workers'
-# notes and waits with `hc wait --children`). Without a calling terminal on the dev host a worker is a tab of the repo's space.
-# Each brief declares its branch on a `Branch: <name>` line (the brief template's "exact
-# branch" field). Worktrees are cut from FETCHED origin state by scripts/fan-worktree.sh and
-# the brief is prefixed with that base, so a stale or ahead local checkout cannot brief a
-# worker against the wrong tree. `rd fan --clean <repo>` reclaims merged worktrees rd fan
-# created (marked at creation); `--all` also judges worktrees without the marker.
-cmd_fan() {
-  parse_kind "$@"
-  local name="${REST[0]:-}"
-  [[ -n $name ]] || die "usage: fan <repo> [--kind K] [--role R] <brief-file…>   |   fan --clean <repo> [--all]"
-  if [[ $name == --clean ]]; then fan_clean "${REST[@]:1}"; return; fi
-  local briefs=("${REST[@]:1}")
-  (( ${#briefs[@]} )) || die "usage: fan <repo> [--kind K] [--role R] <brief-file…>"
-  require_core
-
-  local path
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
-
-  # Validate every brief before anything is created: a typo in the third must not leave
-  # two worktrees and two running agents behind.
-  local b branch seen=" "
-  for b in "${briefs[@]}"; do
-    [[ -r $b ]] || die "brief '$b' is not readable"
-    branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
-    [[ -n $branch ]] || die "brief '$b' has no 'Branch: <name>' line"
-    [[ $seen == *" $branch "* ]] && die "two briefs claim branch '$branch'"
-    seen+="$branch "
-  done
-
-  # One lookup per `rd fan`, before the first worktree: every worker is the `worker` role unless told otherwise.
-  rd_spawn_flags worker sonnet
-
-  # An owner's own session on the dev host (a calling terminal, no FACTORY_SESSION) fans out hc-direct: the workers are
-  # its hidden children, which it can `hc wait --children` on. The factory would make them parentless tabs.
-  local direct=0 n_factory=0 n_direct=0
-  local -a tab_addrs=()
-  if owner_session; then direct=1; fi
-  factory_ok() { (( ! direct )) && factory_up; }
-
-  local base_kind=$AGENT_KIND parent_note
-  parent_note="a hidden child of ${HC_TERMINAL_ID:-<no calling terminal: a tab>}"
-  if [[ -n ${RD_DRY_RUN:-} ]]; then
-    PICK_ENV=(); PICK_NOTE=""
-    [[ $base_kind == claude ]] && pick_account fan
-    for b in "${briefs[@]}"; do
-      echo "would fan '$b' -> worktree + $parent_note${SPAWN_MODEL_FLAG}${SPAWN_EFFORT_FLAG}${PICK_NOTE:+  [account pick (fan): $PICK_NOTE${PICK_ENV[*]:+ ${PICK_ENV[*]}}]}"
-    done
-    return 0
-  fi
-
-  local wt out base sha agent prompt fan_failed=0 frc
-  for b in "${briefs[@]}"; do
-    # One pick per spawn: each fan agent is a fresh context, so each is a re-pick point (invariant 1
-    # only forbids switching a live session). No room pauses the spawn. A factory that answers picks the
-    # account itself and queues what has no room, so the pick is only ours on the hc path.
-    AGENT_KIND=$base_kind; PICK_ENV=(); PICK_NOTE=""; PICK_SPILL=0
-    if [[ $AGENT_KIND == claude ]] && ! factory_ok; then
-      pick_account fan
-      if (( PICK_SPILL )); then
-        die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"
-      fi
-    fi
-    branch=$(sed -n 's/^Branch:[[:space:]]*\([A-Za-z0-9._/-]*\)[[:space:]]*$/\1/p' "$b" | head -1)
-    out=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-worktree.sh\" $(printf '%q' "$path") $(printf '%q' "$branch")" 2>&1) \
-      || die "worktree for '$branch' failed:"$'\n'"$out"
-    wt=$(sed -n 1p <<<"$out"); base=$(sed -n 2p <<<"$out"); sha=$(sed -n 3p <<<"$out")
-    host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" --mark $(printf '%q' "$path") $(printf '%q' "$wt")" >/dev/null 2>&1 \
-      || note "   could not mark $wt as fan-made — 'rd fan --clean $name' will keep it"
-
-    # The agent name is fixed before the terminal exists: FACTORY_SESSION rides the spawn.
-    local leaf plen
-    leaf=$(agent_name "${branch##*/}"); leaf=${leaf:0:20}
-    plen=$((31 - ${#leaf})); (( plen < 1 )) && plen=1
-    agent="$(agent_name "$name")"
-    agent="${agent:0:$plen}-${leaf}"
-
-    prompt="Base: $base @ $sha (fetched just now; your worktree is cut from it, ignore the live checkout's local state)."$'\n\n'"$(cat "$b")"
-
-    # Through the factory: the space is the main checkout's, the worktree is where the session works.
-    if factory_ok; then
-      [[ -z ${RD_WAVE_MODEL:-}${RD_WAVE_EFFORT:-} ]] \
-        || echo "rd: RD_WAVE_MODEL / RD_WAVE_EFFORT do not reach a factory spawn - the role table decides" >&2
-      frc=0
-      factory_spawn "$agent" "$wt" "$prompt" "${ROLE:-worker}" "$path" || frc=$?
-      case $frc in
-        0) factory_spawn_report "fan $branch" "$agent" "$path" "$wt"; n_factory=$((n_factory + 1)); continue ;;
-        1) note "   factory spawn '$FSPAWN_KEY' failed: $FSPAWN_ERR (worktree kept — 'factory spawn get $FSPAWN_KEY' first, then 'rd fan --clean $name' reclaims it)"
-           fan_failed=1; continue ;;
-      esac
-      pick_account fan
-      if (( PICK_SPILL )); then
-        die "paused: $PICK_NOTE. Not started: $b and every brief after it. fan never spills to IU API tokens"
-      fi
-    fi
-
-    # One failed spawn is reported and the next brief still goes; the exit code says so at the end.
-    if ! hc_start_agent "$agent" "$wt" "${ROLE:-worker}" fan 1 "$prompt" child "$path"; then
-      note "   $HC_START_ERR (worktree kept — 'rd agents' first, then 'rd fan --clean $name' reclaims it)"
-      fan_failed=1; continue
-    fi
-    if [[ $SPAWNED_WHERE == child ]]; then n_direct=$((n_direct + 1)); else tab_addrs+=("$SPAWNED_ADDR"); fi
-    echo "→ fan: $AGENT_KIND '$agent' on $branch as $SPAWNED_ADDR  ($wt)${PICK_NOTE:+  [$PICK_NOTE]}"
-  done
-  # The wait differs per group: a held factory spawn has no hc terminal yet, so hc would return before it starts.
-  # A worker that became a tab (no calling terminal, or its parent was gone) is nobody's child: `hc wait <addr>`.
-  local -a hints=()
-  (( n_factory )) && hints+=("'factory session wait --on workers' (factory spawns)")
-  (( n_direct )) && hints+=("'hc wait --children all' (hc-direct children)")
-  local ta
-  for ta in ${tab_addrs[@]+"${tab_addrs[@]}"}; do hints+=("'hc wait $ta' (a tab, not a child)"); done
-  local wait_hint="'rd agents'" h first=1
-  for h in ${hints[@]+"${hints[@]}"}; do
-    if (( first )); then wait_hint=$h; first=0; else wait_hint+=" · $h"; fi
-  done
-  note "   'rd agents' to watch · $wait_hint to wait · 'rd merge $name <branch…>' to land · 'rd fan --clean $name' after"
-  (( ! fan_failed )) || die "at least one spawn failed (above); the others were started"
-}
-
-# Reclaim fan worktrees whose branch is fully merged into origin's default and whose tree
-# is clean: end the agent's terminal, remove the worktree (through wtp when the repo has one),
-# delete the branch. Anything unmerged or dirty is listed and left alone, and so is every
-# worktree rd fan did not create (no marker) unless --all.
-fan_clean() {
-  local name="" all="" a
-  for a in "$@"; do
-    case $a in
-      --all) all=--all ;;
-      *) [[ -z $name ]] || die "usage: fan --clean <repo> [--all]"; name=$a ;;
-    esac
-  done
-  [[ -n $name ]] || die "usage: fan --clean <repo> [--all]"
-  require_core
-  local path
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
-  hc_roster
-  local rows wt br addr st prog qwt qbr verb reason
-  rows=$(host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/fan-list.sh\" $all $(printf '%q' "$path")" 2>&1) \
-    || die "could not list worktrees of $path: $rows"
-  [[ -n $rows ]] || { echo "no extra worktrees for $name"; return 0; }
-  while IFS=$'\t' read -r verb wt br reason; do
-    [[ -n $verb ]] || continue
-    if [[ $reason == no-marker ]]; then echo "keep  $br (not created by rd fan, or made before the marker; --all overrides)  $wt"; continue; fi
-    if [[ $verb == keep ]]; then echo "keep  $br ($reason)  $wt"; continue; fi
-    # EVERY agent in the worktree is judged, not the first one: finished means a known idle/done status. Null, unknown,
-    # starting, working and blocked all keep the worktree.
-    local -a addrs=()
-    local unfinished="" killfail=0
-    local rec
-    while IFS= read -r rec; do
-      [[ -n $rec ]] || continue
-      addr=$(jq -r .address <<<"$rec"); st=$(jq -r '.status.state // "unknown"' <<<"$rec"); prog=$(jq -r "$HC_JQ_DEFS"'prog' <<<"$rec")
-      # Only an rd/factory agent (claude is its own or its foreground program, with an ownership marker) may be ended;
-      # anything else in the worktree is somebody's shell or hand-started session and keeps it.
-      [[ $prog == claude ]] || unfinished+="${unfinished:+, }$addr runs ${prog:-nothing}, not claude"
-      if [[ $prog == claude ]] && ! hc_owned "$rec"; then unfinished+="${unfinished:+, }$addr is not an rd agent"; fi
-      is_finished_status "$st" || unfinished+="${unfinished:+, }$addr $st"
-      addrs+=("$addr")
-    done < <(jq -c --arg wt "$wt" '.[] | select(.cwd == $wt)' <<<"$HC_ROSTER" 2>/dev/null)
-    if [[ -n $unfinished ]]; then echo "keep  $br (agent not finished: $unfinished)  $wt"; continue; fi
-    [[ -n ${RD_DRY_RUN:-} ]] && { echo "would remove $br  $wt"; continue; }
-    # The worktree goes only once every terminal in it is gone: an already-finished one may refuse the kill, but its rm must work.
-    for addr in ${addrs[@]+"${addrs[@]}"}; do
-      hc_host kill -- "$addr" >/dev/null 2>&1
-      hc_host rm -- "$addr" >/dev/null 2>&1 || killfail=1
-    done
-    if (( killfail )); then echo "keep  $br (could not end every terminal in it — 'rd agents')  $wt"; continue; fi
-    qwt=$(printf '%q' "$wt"); qbr=$(printf '%q' "$br")
-    host_run "git -C $(printf '%q' "$path") worktree remove $qwt && git -C $(printf '%q' "$path") branch -D $qbr" >/dev/null 2>&1 \
-      && echo "removed $br  $wt" || echo "keep  $br (remove failed)  $wt"
-  done <<<"$rows"
-}
-
-# Merge train: scripts/merge-train.sh runs on the host (GitHub only, rebase/fast-forward only).
-cmd_merge() {
-  local name=${1:-}; shift || true
-  [[ -n $name && $# -gt 0 ]] || die "usage: merge <repo> [--check '<cmd>'|--no-check] <branch…>"
-  local path args="" a
-  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST"
-  for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  host_run "bash \"\$HOME/SourceRoot/dotfiles/scripts/merge-train.sh\" $(printf '%q' "$path")$args"
-}
-
-# Close a finished agent — the orchestrator's last step after reading a wave's close-out. Refuses unless it is provably
-# finished: started by rd or the factory (claude is the terminal's own program, not something typed into a shell), not
-# working/blocked, checkout clean, and nothing unpushed (a branch with no upstream counts as unpushed — the commits would
-# exist only in that checkout). Then `hc kill` + `hc rm`: the terminal goes, the repo's other terminals stay.
-# Host-side: what became of the branch of a worktree whose directory is gone. Finds the repo from the nearest existing
-# ancestor, the branch from the worktree's admin entry (not yet pruned) or else from a local branch named like the
-# directory (/ → -). Prints "merged <b>", "gone", "unmerged <b>" or "unknown".
-GONE_WORKTREE_SH='
-wt=$1; d=$wt
-while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
-real="$(cd "$d" && pwd -P)${wt#"$d"}"
-common=$(git -C "$d" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || { echo unknown; exit 0; }
-br=""
-for a in "$common"/worktrees/*/; do
-  [ -f "${a}gitdir" ] || continue
-  g=$(cat "${a}gitdir"); [ "$g" = "$wt/.git" ] || [ "$g" = "$real/.git" ] || continue
-  br=$(sed -n "s|^ref: refs/heads/||p" "${a}HEAD")
-done
-if [ -z "$br" ]; then
-  base=$(basename "$wt")
-  br=$(git --git-dir="$common" for-each-ref --format="%(refname:short)" refs/heads | while read -r b; do [ "${b//\//-}" = "$base" ] && echo "$b"; done | head -1)
-fi
-[ -n "$br" ] && git --git-dir="$common" show-ref --verify --quiet "refs/heads/$br" || { echo gone; exit 0; }
-def=$(git --git-dir="$common" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)
-for c in "$def" origin/master origin/main; do
-  [ -n "$c" ] && git --git-dir="$common" rev-parse --verify --quiet "$c" >/dev/null || continue
-  git --git-dir="$common" merge-base --is-ancestor "refs/heads/$br" "$c" && echo "merged $br" || echo "unmerged $br"
-  exit 0
-done
-echo "unmerged $br"
-'
-
-cmd_close() {
-  (( $# <= 1 )) || usage_die "usage: close <agent>   (one agent; got $# arguments)"
-  local name="${1:-}"
-  [[ -n $name ]] || die "usage: close <agent>   (a finished wave's terminal)"
-  require_core
-  resolve_target "$name"
-
-  local rec status cwd program
-  rec=$(jq -c --arg a "$TARGET" '.[] | select(.address == $a)' <<<"$HC_ROSTER")
-  status=$(jq -r '.status.state // ""' <<<"$rec")
-  cwd=$(jq -r '.cwd // ""' <<<"$rec")
-  program=$(jq -r "$HC_JQ_DEFS"'prog' <<<"$rec") # the foreground program where there is one: a resumed session sits in a kept login shell
-  [[ $program == claude ]] \
-    || die "$TARGET runs '${program:-nothing}', not claude itself - it was not started by rd or the factory; close it by hand"
-  hc_owned "$rec" || die "$TARGET is not an rd agent (no factory key, no rd name) — hc kill it yourself"
-  is_finished_status "$status" || die "agent $TARGET is '${status:-unknown}', not idle or done — not known to be finished"
-
-  # Fail closed: an unreadable checkout (ssh failure, no cwd) is not a clean one.
-  [[ -n $cwd ]] || die "agent $TARGET reports no cwd — cannot verify the checkout is clean, refusing to close"
-  local dirty unpushed status_out
-  local qcwd
-  qcwd=$(printf '%q' "$cwd")
-  if [[ $(host_run "[ -d $qcwd ] && echo yes || echo no") == no ]]; then
-    # The merge removed the worktree (gh pr merge --delete-branch): a missing directory holds no uncommitted work.
-    local verdict
-    verdict=$(host_run "bash -c $(printf '%q' "$GONE_WORKTREE_SH") _ $qcwd" 2>/dev/null) || verdict=unknown
-    case $verdict in
-      merged*|gone*) echo "→ $cwd is already gone and its branch is ${verdict%% *} — closing the terminal" ;;
-      unmerged*) die "$cwd is gone but its branch still holds unmerged commits (${verdict#unmerged }) — refusing to close" ;;
-      *) die "could not read git status of $cwd (directory gone, branch state unknown) — refusing to close" ;;
-    esac
-  else
-    status_out=$(host_run "git -C $qcwd status --porcelain") \
-      || die "could not read git status of $cwd — refusing to close"
-    dirty=$(printf '%s' "$status_out" | grep -c . || true)
-    (( dirty == 0 )) || die "$cwd has $dirty uncommitted path(s) — the agent's work is not committed"
-    unpushed=$(host_run "git -C $qcwd rev-list --count '@{u}..HEAD' 2>/dev/null || echo no-upstream")
-    [[ $unpushed == 0 ]] || die "$cwd has unpushed commits ($unpushed) — push before closing"
-  fi
-
-  [[ -n ${RD_DRY_RUN:-} ]] && { echo "would close $(jq -r '.name // .address' <<<"$rec") ($TARGET)"; return 0; }
-
-  local out
-  out=$(hc_host kill -- "$TARGET" 2>&1) || die "hc kill $TARGET failed: $out"
-  out=$(hc_host rm -- "$TARGET" 2>&1) || die "hc rm $TARGET failed (still live after the kill?): $out"
-  echo "→ closed $(jq -r '.name // .address' <<<"$rec") ($TARGET)"
 }
 
 # `claude agents --json` across every enabled Claude account, merged into one JSON array: a background
@@ -1354,7 +717,7 @@ else:
     if any(r[0] == "interactive" for r in rows):
         print()
         print("  \033[33mnote:\033[0m 'interactive' agents die with their connection.")
-        print("        Long work belongs in 'rd wave' (an hc terminal that outlives the connection).")
+        print("        Long work belongs in 'rd work' (an hc terminal that outlives the connection).")
 PY
 }
 
@@ -1567,30 +930,18 @@ cmd_issues() {
   printf '%s\n' "$out"
 }
 
-# One stderr line for a command the Issue path replaces; the command then works as it always did.
-deprecated() { echo "rd $1: deprecated, file an Issue (rd issue); goes with reset row 7 contract" >&2; }
-
 usage() {
   cat <<'EOF'
 
   rd — drive the mini's herdr-core agents from anywhere
 
-    rd repos [filter]         repos on the dev host, with branch + dirty count
     rd work <repo> [--kind K] [--role R] [<prompt…>]   labelled tab + claude for that repo (idempotent);
                               an optional prompt is claude's first message
+                              --role R: tier + effort from the factory role table
                               (a verb that takes no more arguments exits 2 on extras)
     rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]
                               file an Issue with the software factory (its lead builds, reviews, deploys, verifies);
                               no factory, no Issue (exit code passed through). rd issues lists them
-    rd wave <repo> [--kind K] [--role R] <prompt…>     (deprecated: file an Issue)
-                              fresh tab + solo agent, the prompt as claude's argument — claude
-    rd fan <repo> [--role R] <brief…>   (deprecated) worktree + hidden child terminal + Claude per brief file (fan-out)
-                              (fan --clean <repo> [--all] reclaims merged fan worktrees)
-                              --role R: tier + effort from the factory role table (mother|lead|wave|worker|mechanical);
-                              wave defaults to wave, fan to worker; RD_WAVE_MODEL / RD_WAVE_EFFORT win over it
-    rd merge <repo> <br…>     (deprecated) merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
-    rd close <agent>          end a finished agent's terminal (clean + pushed only)
-    rd reap [--dry-run]       janitor: close finished clean+pushed tabs (idle > REAP_IDLE_H, default 12; a merged fan tab at once), message dirty ones
     rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
     rd read <agent> [src]     read an agent's output without attaching (src: history lines, or 'visible')
     rd say <agent> <text…>    send a prompt to a running agent (refused while it is blocked on a dialog)
@@ -1598,19 +949,9 @@ usage() {
   <agent> is a repo name, an hc address or terminal name (t7, iris-w3) or a bg session id prefix —
   whichever of them 'agents' put in front of you. A name hc does not know is an error.
 
-  Workers started by 'rd fan' are children of the calling terminal: 'hc wait --children all' waits for them
-  and their notes arrive as input. A 'rd wave' tab has no parent (a chain's next wave must outlive its
-  predecessor); with RD_ORCHESTRATED=1 it keeps the caller as parent.
-
-  Shorthands (read/say stay subcommands — the bare names are a zsh
-  builtin, a zsh builtin and /usr/bin/say respectively):
-
-    repos · work · agents
-
   Lanes for starting agent work (docs/agent-platform.md):
     Issue         `rd issue <repo> <title>` — work for a repo that should ship on its own
     @implementer  native subagent — the edit must land in this session's live tree
-    wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
 
   Getting a terminal is a different layer:
     the Herdr app (MacBook) · `ssh -t mini hc` as a terminal-only fallback
@@ -1628,10 +969,6 @@ case "${1:-}" in
   work)   shift; cmd_work "$@" ;;
   issue)  shift; cmd_issue "$@" ;;
   issues) shift; cmd_issues "$@" ;;
-  wave)   shift; deprecated wave; cmd_wave "$@" ;;
-  fan)    shift; deprecated fan; cmd_fan "$@" ;;
-  merge)  shift; deprecated merge; cmd_merge "$@" ;;
-  close)  shift; cmd_close "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   reap)   shift; cmd_reap "$@" ;;
   read)   shift; cmd_read "$@" ;;

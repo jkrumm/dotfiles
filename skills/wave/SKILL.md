@@ -1,138 +1,53 @@
 ---
 name: wave
-description: Turn a plan into factory Issues (rd issue / factory issue new, ordered by --after and prio, followed with factory issue list|show and factory status). Legacy until reset row 7 contract - chain mode and orchestrated mode, a chain of fresh agent contexts on the mini via rd wave. Use for work too large for one context, staged migrations, plans saying "then in the next session"; also to author a plan, close out a wave, or continue a chain.
+description: Turn a plan into factory Issues - the lead's playbook for filing them (rd issue / factory issue new), splitting work into independent Issues, ordering with --after, and following them with factory issue list|show and factory status. Use for work too large for one context, staged migrations, plans saying "then in the next session", or N changes that should ship on their own.
 ---
 
 # Wave — turn a plan into Issues
 
-A plan's waves or steps become **Issues** in the software factory. The factory starts the lead of each Issue (its brief is software-factory `brief.ts`), so this skill never spawns a terminal: no `rd wave`, no `rd fan`.
+A plan's waves or steps become **Issues** in the software factory. The factory starts the lead of each Issue, which builds, reviews, deploys and verifies it, so this skill never spawns a terminal. File, order, follow.
 
-1. **File one Issue per wave or step:** `rd issue <repo> '<title>' --facts @facts.json` or `factory issue new --repo <path> --title <text> --facts @file|-`. The facts are JSON (up to 32 KiB): **what** to change, **why**, and the **acceptance** (the checks that prove it). A stable `--key <key>` makes a replay return the stored Issue. No factory, no Issue: `rd issue` has no hc fallback.
-2. **Order them:** `--after <id>` (repeatable) holds an Issue until those are closed; `factory issue prio <id> <n>` orders the ready ones (higher first, none is 0).
-3. **Follow:** `factory issue list`, `factory issue show <id>` (facts, timeline, evidence, questions) and `factory status` (asks, health).
-4. **Answer and steer:** `factory issue answer <id> <text>` for an ask, `factory issue note <id> <text>` for context; `factory issue stop|resume|reopen <id>` when a lead must stop or restart.
-5. **Done** is the Issue closing with its evidence (verify, review, ship); the plan's step is ticked from that, not from a report.
+## Split the plan
 
-Write the plan itself as in "Authoring a plan" below (goal, gate, three to six steps per wave), then file it.
+- **One Issue = one change that ships on its own** and is verifiable without the others. If it cannot be verified alone, merge it into its neighbour.
+- **Independent Issues** (disjoint files, no shared validation resource) carry no `--after`; the factory runs them in parallel.
+- **Dependent Issues** hold with `--after <id>` (repeatable, up to 20): the Issue waits until those are closed. Each id must exist and be open, else nothing is filed.
+- A step that needs the owner's decision (product, spend, outward-facing) is not an Issue; ask first.
+- Do not implement inside the filing session. Edits that must land in this session's live tree go to `@implementer`.
 
-# Legacy (until row 7 contract)
+## What each Issue carries
 
-Everything below is the chain and orchestrated modes on `rd wave` / `rd fan` / `rd merge` (deprecated, still working) and the `roles/{lead,mother,worker}.md` briefs. Use it only to continue a chain already running; new work is an Issue.
+`--facts` is JSON (up to 32 KiB) from a file or stdin. The lead cannot see this session, so the facts hold everything:
 
-# Wave — a chain of fresh contexts
+- **the ask** and **why**: the end state and the reason, one paragraph
+- **what** and **change**: exact paths, the behaviour to add or remove, existing code to match
+- **acceptance**: the checks that prove it (commands, tests, the live behaviour to verify)
+- **scope limits**: files and areas that stay untouched; which sibling Issue owns them
+- **research baked in**: versions, signatures, doc facts you already verified; the lead should not re-research them
 
-**Wave** = one agent context (one terminal, one fresh Claude). **Step** = work inside a wave; spawns nothing. Rename plan "round/phase/stage/milestone/iteration" at authoring time.
-
-## Pick the shape first
-
-| Shape | Use when | Mechanics |
-|-|-|-|
-| **sequential** (default) | One change stream, or a shared validation resource (app build, e2e lock). | One wave at a time, main checkout. |
-| **fan-out** | N independent changes, disjoint files, cheap independent validation. | Briefs from `roles/worker.md`; `rd fan <repo> <briefs…>` makes a worktree (from *fetched* origin) and a hidden Claude worker per brief (a child of the orchestrator's terminal: no tab, the app lists it under the orchestrator); the orchestrator waits (below), then `rd merge <repo> <branches…>` (`docs/remote-dev.md`). `rd fan --clean <repo>` after. |
-| **fleet** | Multi-phase work that outlives one context. | **mother** (`roles/mother.md`, never reads code), standing **lead** (`roles/lead.md`, owns review and merge), fresh **worker** per task (`roles/worker.md`). Rotation via `docs/waves/handoff/<name>.md`. |
-
-### Waiting on workers
-
-The spawner is the worker's parent (`rd fan`, and `rd wave --child` with `RD_ORCHESTRATED=1`; a plain chain `rd wave` is parentless), so the factory follows it. Never poll:
-
-1. Spawn, then `factory session wait --on workers` and end the turn.
-2. When the last child finishes, the factory types one note, `workers done: <child> <state>, …`; it starts the next turn.
-3. Look: `rd read <agent>`, `factory status`.
-
-- One wake per declaration: **declare `--on workers` again after each new spawn or `rd say` fix, before ending the turn.** A finished child counts as done even with an `rd say` fix note still queued: after a fix, check `factory status` in the foreground (bounded). Note delivered and worker `working`: declare the wait. Idle again after delivery: read its diff, no wait. Note still queued: `rd read`, then escalate.
-- Workers running, no wait declared: the Stop hook sends the turn back once. Declare it then.
-- Not a factory session (an owner's own session, or `rd` fell back to hc-direct): the factory does not wake you, but hc types a note into the parent when a child's turn ends. Wait in the foreground, bounded: `hc wait --children all --timeout <s>` (`any` for the next news). A held factory spawn has no hc terminal yet, so factory spawns always use `factory session wait --on workers`.
-- A held spawn (`queued: <reason>`) is a worker too: the wake waits for it. A failed spawn does not (`factory status`).
-
-### Fan-out rules
-
-- Brief from the `Base:` line `rd fan` prepends (fetched origin), never the local checkout; a worker idle after its one re-send: `rd read` it.
-- Gates: cheap check per change in the worker, full `make check` at merge (`roles/lead.md`).
-- Push a worktree's branch with `git -C <worktree>`, never from the orchestrator's cwd (`protect-branches` judges the right tree).
-- Probe LLM endpoints with `opencode-safe` and `timeout` (bare `opencode run` loops).
-
-## Two modes
-
-- **chain**: the finishing wave spawns the next; nobody looks between waves.
-- **orchestrated**: a visible orchestrator tab spawns each wave; for review points or a different model next.
-
-**"Do NOT spawn the next wave"** (or any mention of an orchestrator) in the brief means orchestrated: end at the committed close-out, spawn nothing. Otherwise chain.
-
-### Orchestrated mode — the loop
-
-PLAN.md is the state; the orchestrator holds none.
-
-1. Spawn: `RD_ORCHESTRATED=1 rd wave --child <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n>). Follow the /wave skill, but do NOT spawn the next wave — the orchestrator tab does that after reviewing your close-out.'` `RD_ORCHESTRATED=1` skips only the gate's outward-facing keyword stop and keeps you the parent; `--child` makes the wave a hidden child of your terminal (no tab; the app and `jk-board` list it under you). Use `--child` for the waves an orchestrator spawns, **never** for your own successor or a chain's next wave: those stay tabs (a child ends with its parent's terminal's work, a successor must outlive you). The caller's own tab does not block the spawn; any other working agent in the checkout does.
-2. Wait (above). `blocked` → `rd read` it before answering.
-3. Review the close-out: PLAN.md (**Left behind**, status flips), `git log`, the diff; the report is a claim, the diff the proof. Re-run `/check` if the gate result is not in Left behind.
-4. Red or incomplete → fix inline or `rd say` the wave. Green → `rd close <repo>-w<n>` (refuses unless the terminal runs claude itself, carries an rd/factory ownership marker, is idle or done, and its checkout is clean and pushed), then spawn the next. An outward-facing next step (merge, publish, release, deploy) stops at the owner.
-5. One active wave per repo; parallel only across repos.
-
-Chain mode leaves its tabs open.
-
-## The plan is the handover
-
-`docs/waves/PLAN.md` in the target repo, committed, so a chain survives a core restart.
-
-```markdown
-# <title>
-**Goal:** <end state>
-**Gate:** <the check/review command every wave must pass>
-
-## Wave 1 — <name>            <!-- status: done -->
-- [x] step
-**Repos:** <other repos the wave changes, comma-separated; optional>
-**Left behind:** <branch, decisions, known gaps wave 2 inherits>
-
-## Wave 2 — <name>            <!-- status: active -->
-- [ ] step
-```
-
-Exactly one wave is `active`. `rd wave` ignores the status comments; `(Wave <n>)` in the prompt names the tab and agent `<repo>-w<n>` (else the next free number).
-
-## Running a wave
-
-1. **Orient.** Read PLAN.md; your wave is the `active` one. None, or already complete: stop and say so.
-2. **Execute.** Delegate: `@implementer` (live tree), `rd fan` (independent same-repo changes), `Explore`, `/research`. The wave agent orchestrates; it does not grind.
-3. **Close out**, in order:
-   - `/check` (the plan's **Gate**), failures verbatim.
-   - `/review` non-trivial work; fixes via `@implementer`.
-   - `/commit` per concern.
-   - PLAN.md: tick steps, write **Left behind**, flip this wave `done`, the next `active`.
-   - Prune what the wave made stale (dead docs, obsolete TODOs, closed issues).
-   - Commit the plan, push (PR-required repo: the branch): `rd close` refuses an unpushed wave and the next starts from the remote.
-4. **Gate, then chain**, or stop at the committed close-out (orchestrated).
-
-## Ending the turn
-
-Ending the turn is right once a wait is declared; a background shell, monitor or agent still running at the end strands the chain.
-
-- Foreground work is bounded: `timeout <s> <cmd>` or a poll loop of ~10 minutes at most. No `Monitor` or `run_in_background` as the last act of a turn; collect (`TaskOutput`) or stop (`TaskStop`) background tasks before the close-out commit.
-- A close-out ends in exactly one of: the next wave spawned, or "stopped: <reason>" in **Left behind**. `queued: <reason>` from `rd wave` (a drain, no capacity) is a spawn.
-
-## The green gate
-
-**A wave spawns its successor only if its own close-out was green** (`/check` passed, review findings resolved: the wave's own judgment, `rd wave` trusts it). The rest is mechanical, `rd wave` → `scripts/wave-gate.py`:
-
-- An `active` wave with a done, fully-ticked predecessor: spawn it.
-- No `active` wave, or the predecessor isn't `done`/fully ticked: **stop.** Write the failure into the active wave's **Left behind**, commit, leave the tab open.
-- The finished wave's commits are not all reviewed at their required tier (`agw review covered` over wave start..HEAD, start = the commit that flipped the wave to `active` in PLAN.md's git history; each repo on the wave's **Repos:** line is checked too, from its newest commit at or before that start's time), or `agw` fails, or a named repo is not a git repo: **stop**, fail closed. Run `/review` over the range, then retry.
-- Next step outward-facing (merge, publish, release, deploy, ship): stop and hand back to the human; `/ship` is a human's call. The gate matches keywords only; notice subtler cases yourself.
-
-## Spawning the next wave (chain mode)
-
-Orchestrated mode skips this. From the finishing wave:
+## File
 
 ```bash
-rd wave <repo> 'Read docs/waves/PLAN.md. Execute the active wave (Wave <n+1>). Follow the /wave skill.'
+rd issue <repo> '<title>' --facts @facts.json [--after <id> …] [--key <key>]
+factory issue new --repo <path> --title <text> --facts @file|- [--after <id> …] [--key <key>]
 ```
 
-Keep the prompt to those two sentences.
+- A stable `--key` makes a replay return the stored Issue (and ignores `--after`); use one per plan step so a re-run files nothing twice.
+- No factory, no Issue: `rd issue` has no fallback. `factory health` says whether it is up.
+- File dependencies first and pass the returned ids to `--after`.
 
-`RD_WAVE_MAX` (default 10) bounds the chain; `RD_DRY_RUN=1` only prints. Model and effort come from the factory role table (`--role mother|lead|wave|worker|mechanical`; `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` override; `docs/remote-dev.md`). Fable: set per spawn.
+## Follow and steer
 
-**Never `rd wave` a repo whose live agent is `working`**: two Claudes in one checkout silently race each other's edits (it refuses).
+- `factory issue list`, `factory issue show <id>` (facts, timeline, evidence, questions), `factory status` (asks, health).
+- `factory issue prio <id> <n>` orders the ready ones (higher first, none is 0).
+- `factory issue answer <id> <text>` answers an ask; `factory issue note <id> <text>` adds context.
+- `factory issue stop|resume|reopen <id>` when a lead must stop or restart.
+- **Done** is the Issue closing with its evidence (verify, review, ship). Tick the plan from that, not from a report.
 
-## Authoring a plan
+## Waiting
 
-Write PLAN.md; do not implement. Three to six steps per wave. State the **Gate**: no gate, no green.
+Nothing polls. File the Issues, report their ids and end the turn; the factory's wake note and `factory status` bring the next step.
+
+## Plan document
+
+A plan too big for one message lives in `docs/waves/PLAN.md` of the target repo: **Goal**, **Gate** (the check every Issue must pass), three to six steps per wave. State the gate: no gate, no acceptance. Each step becomes one Issue; the Issue ids go next to the step.

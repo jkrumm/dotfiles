@@ -46,13 +46,13 @@ Six events call the `factory` CLI (software-factory repo) for sessions `rd` spaw
 ```
 
 with `<event>` = `session-start`, `user-prompt-submit`, `stop`, `stop-failure`, `notification`, `session-end`.
-`rd wave|fan|work` set `FACTORY_SESSION=<agent name>` at spawn (`docs/remote-dev.md`), so without it nothing runs and
+`rd work` sets `FACTORY_SESSION=<agent name>` at spawn (`docs/remote-dev.md`), so without it nothing runs and
 the owner's own sessions never see the hooks; without `factory` on `PATH`, or when it fails, the command still
 exits 0, so a session is never blocked. They live in the template's `hooks`, which `make setup` renders into
 `~/.claude` and into every account dir in `config/claude-accounts.json` (`claude-accounts-setup` →
 `_render-settings`). The template wins on merge, so a hand-added live hook is dropped on the next `make setup`.
 `factory hook` must print nothing to stdout on `SessionStart` and `UserPromptSubmit` (stdout becomes context).
-Tests: `scripts/factory-hooks.test.sh` (in `make fan-test`).
+Tests: `scripts/factory-hooks.test.sh`.
 
 Run `make hooks-test` (`bun test hooks/`) after any hook edit.
 

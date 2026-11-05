@@ -783,7 +783,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -2278,17 +2278,13 @@ opbackup-seed-test:
 # supervise/status/restart targets read and rewrite, so a bug here disarms a boot
 # path silently — the exact failure the resolver exists to end. Hermetic: it
 # drives the lib over a scratch dir and never touches a live LaunchAgent.
-# Hermetic suites for the rd fan / rd merge / rd wave / rd say host scripts (base-from-origin, worktree verdicts, train install + draft handling, agent-name collisions, say delivery verification, FACTORY_SESSION at spawn, which path rd takes when the factory answers, holds, fails or is absent, the wave gate) and the factory hooks in settings.template.json.
-.PHONY: fan-test
-fan-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/fan-worktree.sh $(DOTFILES_DIR)/scripts/fan-list.sh $(DOTFILES_DIR)/scripts/merge-train.sh $(DOTFILES_DIR)/scripts/fan.test.sh $(DOTFILES_DIR)/scripts/merge-train.test.sh $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/remote-dev-fake-hc.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
-	@/bin/bash $(DOTFILES_DIR)/scripts/fan.test.sh
-	@/bin/bash $(DOTFILES_DIR)/scripts/merge-train.test.sh
-	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-wave.test.sh
+# Hermetic suites for the rd work / rd say / rd issue host script (agent-name collisions, say delivery verification, FACTORY_SESSION at spawn, which path rd takes when the factory answers, holds, fails or is absent) and the factory hooks in settings.template.json.
+.PHONY: rd-test
+rd-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh $(DOTFILES_DIR)/scripts/remote-dev-fake-hc.sh $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-say.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-factory-env.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/remote-dev-factory.test.sh
-	@python3 -I $(DOTFILES_DIR)/scripts/wave-gate.test.py
 	@/bin/bash $(DOTFILES_DIR)/scripts/factory-hooks.test.sh
 
 # Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / hc), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
@@ -2633,7 +2629,7 @@ hc-resume-status:
 	tail -3 "$(HOME)/Library/Logs/hc-resume.log" 2>/dev/null
 
 .PHONY: hc-reap-test
-hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/launchctl/claude/gh, real throwaway git repos)
+hc-reap-test: ## Hermetic suite for hc-reap.py (fake hc/launchctl/claude, real throwaway git repos)
 	@python3 -W ignore $(DOTFILES_DIR)/scripts/hc-reap.test.py
 
 # The herdr-core janitor (`rd reap`), every 30 min under jobrun. Dev host only; talks to the core through
@@ -3273,7 +3269,7 @@ help:
 	@echo "  make opbackup-seed-test Hermetic reseed-guard regression suite"
 	@echo "  make brew-service-test  scripts/lib/brew-service.sh resolver suite"
 	@echo "  make human-queue-test   Hermetic gui-run + validate_id regression suite"
-	@echo "  make fan-test           rd fan / merge-train worktree + base-from-origin suite"
+	@echo "  make rd-test            rd work / say / issue host-script + factory-hook suites"
 	@echo "  make launchd-restarts-test Hermetic restart-classification + marker suite"
 	@echo "  make agent-refresh-test    Hermetic suite for the restart-if-program-changed helper"
 	@echo "  make caddy-registry-test   Hermetic Caddyfile registry suite (port rows, path restrictions, refusals)"

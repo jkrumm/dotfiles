@@ -1,6 +1,6 @@
 ---
 name: herdr
-description: "Run and steer terminals and agents through herdr-core (`hc`) and show them in the Herdr desktop app (`herdr-app`): hc run/read/send/wait/attach/kill, machines (mini), templates, labels, events, the OpenRPC API, and placing a terminal in a given space and tab. Use when the user names Herdr, hc, the app, a space or tab, or asks to run a program or agent in a persistent terminal, read or message another agent, or arrange what the window shows. Not for starting agent work in general: that is `@implementer` and `rd wave` (lane policy below)."
+description: "Run and steer terminals and agents through herdr-core (`hc`) and show them in the Herdr desktop app (`herdr-app`): hc run/read/send/wait/attach/kill, machines (mini), templates, labels, events, the OpenRPC API, and placing a terminal in a given space and tab. Use when the user names Herdr, hc, the app, a space or tab, or asks to run a program or agent in a persistent terminal, read or message another agent, or arrange what the window shows. Not for starting agent work in general: that is `@implementer` and the factory Issue (lane policy below)."
 ---
 
 # Herdr — herdr-core (`hc`) + the Herdr app
@@ -29,12 +29,12 @@ name or `machine/tN`.
 - **One space per project.** Work happens in tabs inside it. A new space only for genuinely separate work (a
   long-lived worktree), named so `config/herdr-app/groups.json` files it into the right sidebar folder; a new repo
   gets one line there. The sidebar stays clean.
-- **Orchestrator visible, workers hidden.** An orchestrator or a wave is a labelled tab (visible). A worker is an
-  unlabelled child (`--parent` = the orchestrator, `--outlive-parent` when it must survive it): no tab, and the jk
+- **Agents visible, helpers hidden.** An agent is a labelled tab (visible). A helper is an
+  unlabelled child (`--parent` = the spawner, `--outlive-parent` when it must survive it): no tab, and the jk
   layout replaces the agents mod, so it shows nowhere in the app. Find workers with `rd agents` or `hc ls --json`
   (a `parent` field; finished ones fold into `hidden_finished`). Don't add labels to a background worker.
 - **Lane policy wins over `hc --skill`.** The manual says to delegate through `hc run … claude`. Here only
-  `@implementer` and `rd wave` (incl. `rd fan`) start agents (`docs/agent-platform.md`). Use `hc run` for a
+  `@implementer` and the factory Issue (`rd issue`) start agents (`docs/agent-platform.md`). Use `hc run` for a
   non-agent program (tests, a watcher, a dev server), or for an agent only when the user asks for one.
 - **The account is chosen on the command, never inherited.** A core's env is every terminal's env, and `hc run`
   forwards nothing: write `env CLAUDE_CONFIG_DIR=<dir> claude …` (no variable = the `iu` account). Through the API,

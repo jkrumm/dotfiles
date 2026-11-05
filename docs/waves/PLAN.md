@@ -1,5 +1,7 @@
 # Retire classic herdr: everything on herdr-core + the Herdr app
 
+> Superseded: the old wave path (the wave, fan, merge and close verbs of `rd`, and their gate and merge scripts) was removed in reset 8b. This plan is history; its mentions of them are past tense. New work is a factory Issue (`/wave` skill).
+
 **Goal:** classic herdr is gone from both machines and from every live file an agent could follow. Each consumer
 is ported to the herdr-core API (`hc schema`, `hc events`, core docs) or to `herdr-app do …`, replaced by a native
 hc feature, or retired with the reason in its commit. One global `herdr` skill describes the hc world. Core
@@ -29,7 +31,7 @@ this file. Chain mode. A wave that cannot finish writes `stopped: <reason>` into
   inheritance.
 - **Experiments run in a scratch core:** their own `HC_SESSION`, scratch `XDG_*` paths and a scratch
   `HERDR_APP_HOME`, torn down afterwards. Never experiment in the owner's core or window.
-- **Lane policy holds** (`docs/agent-platform.md`): only `@implementer` and `rd wave` start agents.
+- **Lane policy holds** (`docs/agent-platform.md`): only `@implementer` and the wave spawner start agents.
 - **Other repos:** work in a worktree from fetched origin, never in a checkout another agent or the owner is
   committing in. Check `rd agents` or `hc ls` for a working agent in that repo first.
 - **`AGENTS.md` must end under 40k chars.** It is 39.97k after Wave 6. Every wave that touches it leaves it no
@@ -52,7 +54,7 @@ Classic herdr is still live until Wave 7: a consumer that has both worlds keeps 
 the hc one, and leaves a one-line `TODO(Wave 7): drop classic` where the classic path goes. End with a short
 report (done / deferred, one line each). The chain's Waves 4, 5 and 8 verify these and only do what is missing.
 
-- **P1 — dotfiles, `rd fan` worktree, role `lead`: automatic core updates and durable Full Disk Access.**
+- **P1 — dotfiles, the fan spawner worktree, role `lead`: automatic core updates and durable Full Disk Access.**
   - **TCC model** (research run above): an FDA row for a CLI is keyed by its **resolved path** plus a designated
     requirement. An ad-hoc signature's requirement is its cdhash, so every new build fails it silently. TCC judges
     the **responsible process**: for a LaunchAgent, the job's own program, inherited by every descendant unless a
@@ -226,7 +228,7 @@ Role `lead`. dotfiles.
   `remote-dev-*.test.sh` stubs to a fake `hc`.
   **CLI compatibility (owner's iris fleet depends on it):** iris `docs/waves/handoff/mother-watch.sh` greps the text
   of `rd agents` for agent names (`iris-w<n>`) and the word `blocked`; its `mother.md` spawns leads with
-  `RD_ORCHESTRATED=1 rd wave iris '…'` and workers with `rd fan` (and the train that lands them), `rd read`, `rd say`. Keep those
+  `RD_ORCHESTRATED=1 the wave spawner iris '…'` and workers with the fan spawner (and the train that lands them), `rd read`, `rd say`. Keep those
   verbs, flags and the `rd agents` text shape (name + status word per line) working, or update iris's scripts in
   the same wave.
 - [x] Resume: a SessionStart hook labels its own terminal (`hc label "$HC_TERMINAL_ID" jk.claude.session=<id>
@@ -238,7 +240,7 @@ Role `lead`. dotfiles.
 - [x] `skills/wave` (factory spawns keep `factory session wait --on workers`, since a held spawn has no hc
   terminal yet; hc-direct waits on the notes hc types into the parent plus `hc wait --children`), `skills/implement`,
   `docs/agent-platform.md`, `docs/remote-dev.md` §rd: hc semantics.
-- [x] Spawn Wave 4 through the new `rd wave`. That is the end-to-end proof that an orchestrator tab lands in the
+- [x] Spawn Wave 4 through the new the wave spawner. That is the end-to-end proof that an orchestrator tab lands in the
   dotfiles space on the mini core.
 **Left behind:**
 - `rd` runs on hc (`4161e0d`): the factory first, hc-direct (`hc connect` `terminal.run`, HcRunner's space rule) as the
@@ -291,7 +293,7 @@ Role `wave`.
   built by parallel track P2, verify it landed and fill gaps.
 - [x] Each repo: its gate, `/review`, commit, push.
 **Left behind:**
-- Five fan workers (`rd fan`, hidden children of this wave's terminal), cherry-picked onto master in order, integration fixes in
+- Five fan workers (the fan spawner, hidden children of this wave's terminal), cherry-picked onto master in order, integration fixes in
   `7075c73`, review fixes in `ddf5e8a`. `make -k check` green on the mini before the review fixes; the suites the fixes touch
   (`hc-reap-test`, `herdr-app-keys-test`, `architecture-check`, `hc-events` bun test, `collie-check`) re-run green after.
   AGENTS.md 42.36k (was 42.39k, no growth; Wave 6 brings it under 40k).
@@ -328,7 +330,7 @@ Role `wave`.
   `herdr.tab=tb-99ee0bf7fe6e`, `jk.claude.session`, no parent, and the app's `where` label `dotfiles / dotfiles-w4`.
 
 ## Wave 5 — the other repos            <!-- status: done -->
-Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
+Role `wave`. One worktree per repo; the fan spawner where the repos are independent.
 
 - [x] iris: the `herdr` destination adapter on hc (raw socket → `hc connect`); `/herd` lists labelled
   terminals; the e2e passes. Built by parallel track P3: verify and fill gaps.
@@ -339,7 +341,7 @@ Role `wave`. One worktree per repo; `rd fan` where the repos are independent.
   the open MR step in Left behind for the owner.
 - [x] The one-line comment fixes from the port map. List every remaining hit as history.
 **Left behind:**
-- Four `rd fan` workers (hidden children of this wave's terminal) verified and filled P3/P4 and did the rest; everything on
+- Four the fan spawner workers (hidden children of this wave's terminal) verified and filled P3/P4 and did the rest; everything on
   master except epx. I read the iris, shutterflow and epx code diffs, re-ran the gates myself (epx ruff + mypy + 124 tests, iris
   `bun test src/adapters` 351/0, shutterflow `test_hc.py` 9/0 + `bash -n`, hermes `make check` green) and dotfiles `make -k check`
   exit 0 (log `/private/tmp/w5-check.log`). AGENTS.md untouched (42.36k).
@@ -394,11 +396,11 @@ Role `wave`.
   product name or the history list.
 **Left behind:**
 - `skills/herdr/SKILL.md` is the one hc-world skill (all API areas checked against `hc --skill`/`--help`/`schema` 0.1.15 and `herdr-app --skill` read from the MacBook); `skills/herdr-core` deleted. `make herdr-setup` no longer calls `herdr-skill-sync.sh` (it would overwrite the hand-written skill); the script itself is Wave 7's.
-- Docs: two `rd fan` workers (remote-dev group, the rest), cherry-picked by hand because `rd merge` stops on a repo without PRs ("no PR — worker must open one"; it also pushed their branches, deleted again). I wrote AGENTS.md (**39.97k**, was 42.36k: the janitor and `rd wave` detail moved verbatim into `docs/remote-dev.md` §Janitor rules and `rd wave` detail) and `config/global.CLAUDE.md`. `make -k check` exit 0 (log `/private/tmp/w6-check.log`) before the last doc-only fixes; `architecture-check` re-run green.
-- `agw review` (`01a19324`): fixed a false "prompts are re-sent after 30 s" claim (argv prompts, `deliver_prompt` is dead code), `make theme` scope, `ssh -t mini hc` needing a running core, hc-resume mini-only. Dismissed: the `hc wait --children` wait claim (the doc already limits it to `rd fan`/orchestrated children), the truncated `rd wave` contract (moved, not lost), "keep a classic skill" (the plan retires it).
+- Docs: two the fan spawner workers (remote-dev group, the rest), cherry-picked by hand because the merge train stops on a repo without PRs ("no PR — worker must open one"; it also pushed their branches, deleted again). I wrote AGENTS.md (**39.97k**, was 42.36k: the janitor and the wave spawner detail moved verbatim into `docs/remote-dev.md` §Janitor rules and the wave spawner detail) and `config/global.CLAUDE.md`. `make -k check` exit 0 (log `/private/tmp/w6-check.log`) before the last doc-only fixes; `architecture-check` re-run green.
+- `agw review` (`01a19324`): fixed a false "prompts are re-sent after 30 s" claim (argv prompts, `deliver_prompt` is dead code), `make theme` scope, `ssh -t mini hc` needing a running core, hc-resume mini-only. Dismissed: the `hc wait --children` wait claim (the doc already limits it to the fan spawner/orchestrated children), the truncated the wave spawner contract (moved, not lost), "keep a classic skill" (the plan retires it).
 - **Remaining `herdr ` hits are code or history for Wave 7:** Makefile, `scripts/{remote-dev,herdr-*,devhost-health-check,claude-relogin,claude-appearance,brew-upgrade,doctor,...}`, `herdr/`, `config/herdr/config.toml`, `config/zsh/{remote-dev,claude-auth,claude}.zsh` comments and the classic `desk()`, Brewfile, `config/tcc-programs.json` (`herdr.collie`), plist templates, the ghostty theme headers (classic sidebar contrast history), `docs/herdr-core.md` (Wave 1 facts about classic), and the explicit "retires in Wave 7" lines in architecture, devhost-health, homebrew, macbook, theme, claude-accounts. Wave 7 must also remove `desk`, the `herdr` heartbeat component, the `herdr-*` architecture rows and the `make theme` classic step.
 - Found, not mine: the mini's `~/.local/bin/herdr-app` is a dangling symlink into `/tmp/w4ak/…` (Wave 4's scratch app); there is no `herdr-app` on the mini. Not removed.
-- The `rd` usage says `rd merge` for fan branches; on dotfiles (direct-to-master, no PRs) it needs a cherry-pick fallback or a flag. Not changed (out of scope).
+- The `rd` usage says the merge train for fan branches; on dotfiles (direct-to-master, no PRs) it needs a cherry-pick fallback or a flag. Not changed (out of scope).
 
 ## Wave 7 — remove classic herdr            <!-- status: done -->
 Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `working`. Otherwise write
@@ -419,11 +421,11 @@ Role `wave`. Gate first: `herdr agent list` on both machines shows nothing `work
 - Mini: `herdr-reap`, `herdr-events`, `homebrew.mxcl.herdr` booted out and their plists deleted, `brew services stop herdr`, formula `herdr` and cask
   `herdr-gpui` uninstalled, `penso/tap` untapped (nothing else from it installed), the classic server process killed, `~/.config/herdr` archived, the
   stale `~/.local/state/jobs/com.jkrumm.herdr-reap.json` removed (it kept `jobs-grade` WARN `unloaded`). MacBook: same, except see below.
-- Repo (three `rd fan` workers, cherry-picked, 20 commits + 2 comment fixes, `8fbbfdd` pushed): `herdr/`, `config/herdr/`, the classic scripts and plist
+- Repo (three the fan spawner workers, cherry-picked, 20 commits + 2 comment fixes, `8fbbfdd` pushed): `herdr/`, `config/herdr/`, the classic scripts and plist
   templates, the Makefile/Brewfile/settings-template entries, the collie plugin migration, `rd`'s 17 classic fallbacks, `desk`, the classic
   relogin/appearance/brain-note/herdr-app-setup legs, the `herdr` heartbeat component (20 → 19), doctor's classic checks, the map rows. `-3,201`/`-996`/`-153` lines.
   AGENTS.md 39.93k. `make -k check`: green except `architecture-check`, which was red only on the live classic jobs until the teardown; re-run green.
-- `agw review` (`01a19346`) triaged. Dismissed on purpose: classic jobs left registered by `make setup` (the teardown above is the migration), `rd fan --clean`
+- `agw review` (`01a19346`) triaged. Dismissed on purpose: classic jobs left registered by `make setup` (the teardown above is the migration), `the fan spawner --clean`
   ignoring classic occupancy and the dropped collie `.env` copy-once migration (classic is gone, collie migrated in Wave 4), `herdr-app-setup.sh` missing
   `~/IuRoot/worktrees/…` repos and treating a failed mini query as empty (both unchanged by this wave). Open, not fixed: Tinycast's live `so.pen.herdr-gpui`
   hotkey/app entry stays on the MacBook (`config/tinycast/defaults.json` dropped it; `make tinycast-check` may flag it; remove it in Tinycast).
@@ -526,7 +528,7 @@ behind origin/master (`make deploy` in argo once its owner's work is not mid-fli
   athena orchestrator runs there: coordinate through `rd say`); sy-serendipity `AGENTS.md:27-30`. **Dormant:** iris server `compose.ts` +
   `adapters/herdr.ts`, shutterflow `scripts/fleet/*`, basalt-ui `.claude/maturation/consumer-loop/watch.sh`, software-factory `cli/hook.ts`
   `HERDR_PANE_ID` fallback. **Orphans:** `~/.claude/hooks/herdr-agent-state.sh` (plain file), `~/.config/opencode/plugins/herdr-*.js` + `cli.json`
-  `herdr-opencode`, `~/.config/collie/.env` comments. **Stale docs here:** `skills/wave/SKILL.md:52` (`rd close` does not check a "wave <n>" tab
+  `herdr-opencode`, `~/.config/collie/.env` comments. **Stale docs here:** `skills/wave/SKILL.md:52` (the tab closer does not check a "wave <n>" tab
   name), the claim that hidden workers are listed under the orchestrator in the app (the jk layout replaces the agents mod, so they show nowhere),
   `docs/herdr-core.md:79-80` and `:197-201` still call the `herdr-app` doc shape a guess (the live doc v76 confirms it).
 - remove the `software-factory-w2` worktree, the dangling mini `~/.local/bin/herdr-app` symlink to `/tmp/w4ak`;
@@ -552,7 +554,7 @@ note).
 - Verified done by the owner's session (brew-upgrade both machines, Colima default 6 GiB live, tailscale, macOS 26.7.2, MacBook `make setup`). Teamchat 6 → 4 GiB: branch `chore/teamchat-vm-4g` pushed, **MR !296** open in prometheus-scripts (`not_approved`: the owner does not review, so an approver is needed; the profile restart waits for the merge and is owner-timed). prometheus-epx hc port `ep-xxxxx/chat-evals-hc` (`9a02bcd3`, `0c7b1993`) stays unpushed: it needs the real EP number.
 - Heartbeat WARNs fixed: `drift-check` (re-ran, green), `vps-pg-backup` (dev Postgres recreated with `max_locks_per_transaction=1024`, `vps` `88a1906`, manual run green incl. restore drill; the same `make up ENV=dev` also started the dev `redis` container, which was not running before), `usage-tracker` (the athena-teamchat query follows the new teamchat schema; a kicked run is ok), `disk-sweep` (busy uv lock is a skip, not a failure; **a real run was kicked at close-out, its record decides the grade**), `claude-accounts-keepalive` (recovered 14:47, ages out of "flapping"). Pre-existing: 3 `bun test` failures in usage-tracker (`cadence`, `parseAccountUsage`, `parsePick`) fail identically before this wave's commit.
 - Picker/Ultra (`714e9fd`, `2160c8c`, review follow-ups `c1fae39`): registry plans are `max`/`ultra` (legacy `maxNx` reads as `max`), Ultra (iu, Keychain `max_20x`) has no 5 h window and is never judged or shown on one, the statusline feed fires on a weekly-only payload (that was the `statusline/iu` WARN), `fetch_usage`, the heartbeat quota line, `claude-accounts-verify` and the jk mods follow. `agw review` (`01a197fe`) triaged: fixed the six real ones; **not done:** `agw quota-report` still needs a 5 h figure (a weekly-only report path is agent-workflows work), a malformed 5 h window parses as absent, an older `.claude.json` reading can merge back after a drop, the `hc-raw-input` recheck-to-send race is inherent. `quota/*` WARN "no cachedUsageUtilization" on all three accounts is Claude Code 2.1.316 behaviour, not this wave.
-- Classic herdr leftovers: agent-workflows `agents` collector (`agw agents` no longer calls `herdr`), shutterflow fleet scripts, sy-serendipity `AGENTS.md`, basalt-ui `watch.sh` (git-excluded local file), orphan opencode/Claude hooks (archived in `~/.local/share/herdr-classic-archive/orphans/`), collie `.env` comments, the dangling `herdr-app` symlink, the `software-factory-w2` worktree. Docs fixed: `rd close` preconditions, hidden workers show nowhere in the app, `herdr-app` doc shape verified (v86). `hc-raw-input` rechecks the agent before typing. **Still classic, deliberately:** software-factory `cli/hook.ts` `HERDR_PANE_ID` fallback and iris `compose.ts`/`adapters/herdr*` (live agents in both: coordinate through `rd say` in their own waves), prometheus-scripts teamchat `keepalive.sh`/`mother.md` (the athena orchestrator runs there), argo comments/fixtures (`source: 'herdr'` is an open string). `hc-resume` stays mini-only (the dev host; the MacBook is a client): not changed this wave.
+- Classic herdr leftovers: agent-workflows `agents` collector (`agw agents` no longer calls `herdr`), shutterflow fleet scripts, sy-serendipity `AGENTS.md`, basalt-ui `watch.sh` (git-excluded local file), orphan opencode/Claude hooks (archived in `~/.local/share/herdr-classic-archive/orphans/`), collie `.env` comments, the dangling `herdr-app` symlink, the `software-factory-w2` worktree. Docs fixed: the tab closer preconditions, hidden workers show nowhere in the app, `herdr-app` doc shape verified (v86). `hc-raw-input` rechecks the agent before typing. **Still classic, deliberately:** software-factory `cli/hook.ts` `HERDR_PANE_ID` fallback and iris `compose.ts`/`adapters/herdr*` (live agents in both: coordinate through `rd say` in their own waves), prometheus-scripts teamchat `keepalive.sh`/`mother.md` (the athena orchestrator runs there), argo comments/fixtures (`source: 'herdr'` is an open string). `hc-resume` stays mini-only (the dev host; the MacBook is a client): not changed this wave.
 - Gate: `make -k check` exit 0 on the final tree (log `/private/tmp/w9-check2.log`), `make doctor` 54 passed / 0 fail, AGENTS.md 39,996 B (untouched). Mini `jobs` WARN: `disk-sweep` (grade clears with its next run), `usage-tracker` (ages out). Launcher re-sign and the FDA re-grant from Wave 8 are still owner-timed (`tcc` WARN "ad-hoc cdhash").
 - Memory note `mini-maintenance-window` written (the classic upgrade step was never in it).
 
@@ -562,7 +564,7 @@ note).
 Role `wave`. The last wave: it spawns no further wave. Owner 2026-10-31: the mini macOS update happens **much later**,
 so nothing here waits for it.
 
-- [x] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If `rd wave`'s
+- [x] Start the owner's prompts from `docs/waves/handoff/post-migration/` (README: how), verbatim. If the wave spawner's
   gate refuses a repo's plan state, start the agent with `rd work <repo>` and deliver the prompt as its first message
   instead. Never edit the prompts. (`athena-orchestrator` was already resumed on 2026-10-31 by the owner's session.)
 - [x] Queue the macOS update for the owner and do not wait for it: `ask-human ask "Mini: make mini-macos-update,

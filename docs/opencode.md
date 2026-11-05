@@ -52,9 +52,9 @@ stack-agnostic lazy ones — the stack rules (`dockerfile`, `elysia`, `react-*`,
 because OpenCode ignores `paths:` and would load them on every turn of every repo;
 a repo that wants one ships it in its own `.claude/rules/`.
 
-**Waves on OpenCode (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old terminal setup evaluated `_oc_env` (claude.zsh) first so `IU_*`
-is in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`,
-`RD_WAVE_MODEL` overrides (`provider/id`).
+**OpenCode under `rd` (retired 2026-10-24):** `rd` no longer starts OpenCode — Herdr work is Max-only. The old terminal setup evaluated `_oc_env` (claude.zsh) first so `IU_*`
+is in its shell without touching argv. Default model is the `model` key in `config/opencode/opencode.json`.
+
 
 **The shared service needs the credentials too (2026-10-14).** OpenCode v2 attaches `oc` and
 `opencode run` to one per-user background service (`opencode serve --service`) that is started

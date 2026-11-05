@@ -28,5 +28,5 @@ CLAUDE.local.md
 *.log
 .env.local
 
-# Work only: personal planning artifacts (rd wave plans) stay on disk, never in team repos.
+# Work only: personal planning artifacts (wave plans) stay on disk, never in team repos.
 docs/waves/

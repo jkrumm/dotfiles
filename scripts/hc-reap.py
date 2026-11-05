@@ -4,13 +4,8 @@
 Closes terminals whose agents are finished, and nothing else. A terminal is an agent's when it reports a
 status (`terminal.list` `status`); shells, servers and finished terminals are not its business.
 
-  close    the agent is done/idle for longer than REAP_IDLE_H hours (default 12), the checkout is clean and
-           pushed, and no `active` wave in the repo's plan could own it
-  close    a fan terminal (agent in a linked worktree that `rd fan` marked) whose branch is merged into
-           origin's default branch (PR MERGED/CLOSED, or every commit patch-equal to the default, so a
-           rebase merge counts) or was deleted on origin, with a clean tree and nothing unpushed. The agent
-           must be done/idle; the idle age and an active wave in the repo's plan do not hold it back. Only
-           inside ~/SourceRoot and ~/IuRoot
+  close    the agent is done/idle for longer than REAP_IDLE_H hours (default 12), and the checkout is clean
+           and pushed
   message  the same terminal, but dirty or unpushed — the agent is told (once per 24 h), the terminal stays
   close    an orphaned shell: a live terminal with no status, no name, no `factory.key` and no Claude session label,
            whose program and foreground program are a login shell, with no children, whose `turn` (it rises as
@@ -21,11 +16,8 @@ status (`terminal.list` `status`); shells, servers and finished terminals are no
            planning tab), before any other rule, whatever their age or state (the one exception: the
            orphaned-shell rule above, which needs a shell whose `turn` has not moved for 7 days)
   never    working/blocked/unknown agents, a checkout a working agent also uses, a terminal with live
-           children, terminals whose cwd is not inside a git repo (the ~/SourceRoot design terminals), any
-           terminal in a repo whose docs/waves/PLAN.md has an `active` wave (mother/lead/wave terminals)
-           unless the merged-fan rule above applies, mother/lead/wave terminals (`wave <n>`, `*-mother`,
-           `*-w<n>`) even then, a never-pushed branch (a fresh worker is not "merged"), the caller's own
-           terminal (HC_TERMINAL_ID), terminals of a linked machine
+           children, terminals whose cwd is not inside a git repo (the ~/SourceRoot design terminals), the
+           caller's own terminal (HC_TERMINAL_ID), terminals of a linked machine
 
 Also stops `claude --bg` sessions older than 24 h whose state is blocked/idle/done (`claude stop` keeps the
 conversation). --dry-run prints the plan and writes nothing. Every live action is one line in
@@ -55,14 +47,9 @@ LOG = os.path.join(HOME, "Library/Logs/hc-reap.log")
 STATE = os.path.join(HOME, ".local/state/hc-reap/messaged.json")
 MESSAGE_EVERY_S = 24 * 3600
 BG_MAX_AGE_S = 24 * 3600
-ACTIVE_RE = re.compile(r"<!--\s*status:\s*active\b")
 FINISHED = {"done", "idle"}
 SHELLS = {"zsh", "bash", "sh", "dash", "fish"}
 SHELL_IDLE_S = 7 * 24 * 3600
-FLEET_ROOTS = [os.path.join(HOME, "SourceRoot"), os.path.join(HOME, "IuRoot")]
-# Terminals that own a wave or a fleet: never closed by the merged-fan rule, whatever their checkout says.
-LEAD_LABEL_RE = re.compile(r"^(wave \d+|mother|lead|orchestrator)$", re.I)
-LEAD_NAME_RE = re.compile(r"(-mother|-lead|-orchestrator|-w\d+)$", re.I)  # terminal names and tab names both
 NET_TIMEOUT_S = 30
 BG_STOPPABLE = {"blocked", "idle", "done"}
 SESSION_LABEL = "jk.claude.session"
@@ -139,16 +126,6 @@ def repo_roots(cwd: str) -> tuple[str, str] | None:
     return top.strip(), main
 
 
-def active_wave(root: str) -> bool:
-    try:
-        with open(os.path.join(root, "docs/waves/PLAN.md")) as f:
-            return any(ACTIVE_RE.search(line) for line in f)
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return True  # unreadable plan: unknown, so the terminal stays
-
-
 TS_RE = re.compile(rb'"timestamp":"(\d{4}-\d\d-\d\dT[\d:.]+Z)"')
 
 
@@ -182,147 +159,6 @@ def checkout_problem(cwd: str) -> str | None:
     if out.strip() != "0":
         return f"{out.strip()} unpushed commit(s)"
     return None
-
-
-def inside(path: str, root: str) -> bool:
-    path, root = os.path.realpath(path), os.path.realpath(root)
-    return path == root or path.startswith(root + os.sep)
-
-
-def is_fan_checkout(top: str, main: str) -> bool:
-    """A linked worktree `rd fan` made: it carries fan-list.sh's <git-dir>/rd-fan marker. The path alone
-    proves nothing - native Claude and review worktrees live under .claude/worktrees too."""
-    if os.path.realpath(top) == os.path.realpath(main):
-        return False
-    rc, gd = git(top, "rev-parse", "--absolute-git-dir")
-    return rc == 0 and os.path.exists(os.path.join(gd.strip(), "rd-fan"))
-
-
-def origin_default(cwd: str) -> str | None:
-    rc, out = git(cwd, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD")
-    if rc == 0 and out.strip():
-        return out.strip()
-    for b in ("origin/master", "origin/main"):
-        if git(cwd, "rev-parse", "-q", "--verify", b)[0] == 0:
-            return b
-    return None
-
-
-_fetched: dict[str, bool] = {}
-
-
-def fetch_origin(main: str) -> bool:
-    """One fetch attempt per repo per run, failures included (a dead remote costs one 90 s timeout, not one
-    per tab). Explicitly --no-prune (fetch.prune config must not change this): a branch deleted on origin
-    keeps its last-known remote-tracking tip, which 'nothing unpushed' is judged against."""
-    if main not in _fetched:
-        rc, _ = sh("git", "-C", main, "fetch", "-q", "--no-prune", "origin", timeout=90)
-        _fetched[main] = rc == 0
-    return _fetched[main]
-
-
-def pr_heads(cwd: str, branch: str) -> list[tuple[str, str, str]] | None:
-    """(state, head sha, base branch) of every PR ever opened from `branch` - MERGED/CLOSED/OPEN. [] when the remote is
-    not GitHub or gh has no answer; None when gh timed out (the caller keeps the tab)."""
-    rc, url = git(cwd, "config", "--get", "remote.origin.url")
-    if rc != 0 or "github.com" not in url:
-        return []
-    rc, out = sh("gh", "pr", "list", "--head", branch, "--state", "all", "--json", "state,headRefOid,baseRefName",
-                 cwd=cwd, timeout=NET_TIMEOUT_S)
-    if rc == 124:
-        return None
-    try:
-        return [(p["state"], p["headRefOid"], p["baseRefName"]) for p in json.loads(out)] if rc == 0 else []
-    except (ValueError, KeyError, TypeError):
-        return []
-
-
-def is_ancestor(cwd: str, a: str, b: str) -> bool:
-    """a is b or reachable from b (missing objects: False)."""
-    return git(cwd, "merge-base", "--is-ancestor", a, b)[0] == 0
-
-
-def patch_merged(cwd: str, default: str, ref: str) -> bool:
-    """Every commit of `ref` has a patch-equal twin on `default` (rebase and cherry-pick merges), and `ref`
-    adds no merge commit: cherry cannot see a merge commit's content."""
-    rc, cherry = git(cwd, "cherry", default, ref)
-    if rc != 0 or any(l.startswith("+") for l in cherry.splitlines()):
-        return False
-    rc, n = git(cwd, "rev-list", "--merges", "--count", f"{default}..{ref}")
-    return rc == 0 and n.strip() == "0"
-
-
-def commits_ahead(cwd: str, default: str) -> int:
-    rc, n = git(cwd, "rev-list", "--count", f"{default}..HEAD")
-    return int(n) if rc == 0 and n.strip().isdigit() else 0
-
-
-def merged_fan(cwd: str) -> tuple[str | None, str, str]:
-    """(reason this fan checkout's branch is finished on origin or None, why it is kept otherwise, the HEAD
-    sha judged). Cheap local checks first; the network is touched only for a clean, published fan branch."""
-    roots = repo_roots(cwd)
-    if not roots or not is_fan_checkout(*roots):
-        return None, "not a fan worktree", ""
-    top, main = roots
-    rc, br = git(top, "symbolic-ref", "-q", "--short", "HEAD")
-    branch = br.strip()
-    if rc != 0 or not branch:
-        return None, "detached HEAD", ""
-    rc, out = git(top, "status", "--porcelain")
-    if rc != 0 or out.strip():
-        return None, "uncommitted changes", ""
-    # Published = this branch once reached origin. A fresh worker's branch is at the base and was never
-    # pushed: it looks patch-merged and absent on origin, and is neither.
-    tip = f"refs/remotes/origin/{branch}"
-    has_tip = git(top, "rev-parse", "-q", "--verify", tip)[0] == 0
-    if not (has_tip or git(top, "config", f"branch.{branch}.merge")[0] == 0):
-        return None, "branch never pushed", ""
-    default = origin_default(top)
-    if not default:
-        return None, "no origin default branch", ""
-    if branch == default.split("/", 1)[1]:
-        return None, "on the default branch", ""
-    if not fetch_origin(main):
-        return None, "fetch failed", ""
-    has_tip = git(top, "rev-parse", "-q", "--verify", tip)[0] == 0  # the fetch may have created it
-    head = git(top, "rev-parse", "HEAD")[1].strip()
-    rc, ls = sh("git", "-C", top, "ls-remote", "--heads", "origin", f"refs/heads/{branch}", timeout=NET_TIMEOUT_S)
-    if rc != 0:
-        return None, "origin unreachable", ""
-    on_origin = bool(ls.strip())
-    prs = pr_heads(top, branch)
-    if prs is None:
-        return None, "gh timed out", ""
-
-    # A PR found by branch name counts only if HEAD is inside its head: a stale PR from an earlier use of
-    # the name never closes a fresh worker. A MERGED one must have landed on the default branch (a stacked
-    # PR merged into another feature branch has not). Then the branch must hold nothing beyond that head,
-    # and a PR closed unmerged does not retire a branch that is still live. A CLOSED PR whose branch is
-    # gone is abandonment: closing that tab is intended. No fallback on this path.
-    default_name = default.split("/", 1)[1]
-    for state, pr_head, base in prs:
-        if state not in ("MERGED", "CLOSED") or not is_ancestor(top, "HEAD", pr_head):
-            continue
-        if state == "MERGED" and base != default_name:
-            continue
-        if on_origin and (state != "MERGED" or not has_tip or not is_ancestor(top, tip, pr_head)):
-            return None, "branch is live on origin", ""
-        return f"PR {state.lower()}", "", head
-
-    # The patch-equal paths need a commit of the branch's own, like fan-list.sh's `fresh`: a worker that
-    # pushed at the base and sits idle is patch-equal to everything and merged into nothing.
-    own = commits_ahead(top, default) > 0
-    unpushed_zero = has_tip and git(top, "rev-list", "--count", f"{tip}..HEAD")[1].strip() == "0"
-    if not on_origin:
-        # Deleted on origin: nothing unpushed = HEAD within the last-known origin tip, else all patch-equal.
-        if unpushed_zero or (own and patch_merged(top, default, "HEAD")):
-            return "branch deleted on origin", "", head
-        return None, "unpushed commits", ""
-    if not own:
-        return None, "fresh: no commit of its own", ""
-    if unpushed_zero and patch_merged(top, default, "HEAD") and patch_merged(top, default, tip):
-        return f"merged into {default}", "", head
-    return None, "branch is live on origin", ""
 
 
 class Journal:
@@ -384,11 +220,10 @@ def protected_by_label(t: dict) -> str | None:
     return None
 
 
-def recheck(t: dict, tops: set[str], judged: dict[str, str] | None) -> str | None:
+def recheck(t: dict, tops: set[str]) -> str | None:
     """Why the terminal must NOT close after all, from one fresh roster read right before the close (the plan
     was made minutes ago), or None. It is still the same live terminal and still done/idle; no other live
-    agent has joined its checkout and nothing hangs under it; for a merged-fan close (`judged`: checkout ->
-    HEAD sha judged) the tree is still clean and HEAD has not moved. An unreadable roster is a reason to keep."""
+    agent has joined its checkout and nothing hangs under it. An unreadable roster is a reason to keep."""
     try:
         now = list_terminals()
     except HcError:
@@ -404,17 +239,12 @@ def recheck(t: dict, tops: set[str], judged: dict[str, str] | None) -> str | Non
         r = repo_roots(foreground_cwd(x))
         if x["address"] != me["address"] and is_agent(x) and tstate(x) not in FINISHED and r and r[0] in tops:
             return "another agent is working in the checkout"
-    for top, head in (judged or {}).items():
-        if git(top, "status", "--porcelain")[1].strip():
-            return "the checkout became dirty"
-        if git(top, "rev-parse", "HEAD")[1].strip() != head:
-            return "HEAD moved"
     return None
 
 
-def close_terminal(j: Journal, t: dict, tops: set[str], judged: dict[str, str] | None = None, **kv: str) -> None:
+def close_terminal(j: Journal, t: dict, tops: set[str], **kv: str) -> None:
     addr = t["address"]
-    if not j.dry and (why := recheck(t, tops, judged)):
+    if not j.dry and (why := recheck(t, tops)):
         j.line("close-skipped", terminal=addr, why=f'"{why} before the close"')
         return
     j.line("close", terminal=addr, **kv)
@@ -425,23 +255,6 @@ def close_terminal(j: Journal, t: dict, tops: set[str], judged: dict[str, str] |
         hc_rpc("terminal.rm", {"terminal": addr, "caller": "hc-reap"})
     except HcError as e:
         j.line("close-failed", terminal=addr, out=json.dumps(str(e)[:200]))
-
-
-def merged_terminal_reason(t: dict, busy_checkouts: set[str]) -> tuple[str | None, str, str]:
-    """(reason, kept-why, judged HEAD): why this done/idle terminal can close now because its fan branch is merged
-    or gone. Independent of idle age and of any active wave. The kept-why is empty for a terminal the rule never
-    applied to (not a fan worktree, a lead terminal, outside the fleets)."""
-    if LEAD_LABEL_RE.match(tab_name(t).strip()) or LEAD_NAME_RE.search(tab_name(t).strip()) \
-            or LEAD_NAME_RE.search(t.get("name") or ""):
-        return None, "", ""
-    cwd = foreground_cwd(t)
-    roots = repo_roots(cwd)
-    if not roots or not any(inside(roots[1], f) for f in FLEET_ROOTS):
-        return None, "", ""
-    if roots[0] in busy_checkouts:
-        return None, "", ""
-    reason, why, head = merged_fan(cwd)
-    return reason, ("" if why == "not a fan worktree" else why), head
 
 
 def reap_terminals(idle_h: float, j: Journal) -> None:
@@ -473,38 +286,29 @@ def reap_terminals(idle_h: float, j: Journal) -> None:
             kept.append(f"{name}: {why}")
             continue
 
-        done_reason, fan_why, fan_head = merged_terminal_reason(t, busy_checkouts)
         cwd = foreground_cwd(t)
         roots = repo_roots(cwd)
         tops = {roots[0]} if roots else set()
-        if done_reason:
-            close_terminal(j, t, tops, {roots[0]: fan_head}, repo=os.path.basename(cwd), why=f'"{done_reason}"',
-                           label=f'"{tab_name(t)}"')
-            continue
-        fan_note = f" [merged-fan rule: {fan_why}]" if fan_why else ""
 
         age = idle_hours((t.get("labels") or {}).get(SESSION_LABEL))
         if age is None:
-            kept.append(f"{name}: idle age unknown (no session label or transcript){fan_note}")
+            kept.append(f"{name}: idle age unknown (no session label or transcript)")
             continue
         if age <= idle_h:
-            kept.append(f"{name}: {tstate(t)} {age:.1f}h <= {idle_h:g}h{fan_note}")
+            kept.append(f"{name}: {tstate(t)} {age:.1f}h <= {idle_h:g}h")
             continue
 
         if roots and roots[0] in busy_checkouts:
-            kept.append(f"{name}: checkout shared with a working agent{fan_note}")
+            kept.append(f"{name}: checkout shared with a working agent")
             continue
         if not roots:
-            kept.append(f"{name}: cwd is not a git repo{fan_note}")
-            continue
-        if any(active_wave(r) for r in set(roots)):
-            kept.append(f"{name}: repo plan has an active wave{fan_note}")
+            kept.append(f"{name}: cwd is not a git repo")
             continue
         problem = checkout_problem(cwd)
         repo = os.path.basename(cwd)
         if problem:
             detail = f"{repo}: {problem}"
-            kept.append(f"{name}: {detail}{fan_note}")
+            kept.append(f"{name}: {detail}")
             key = f"{addr}:{t.get('created_ms')}"
             if now - messaged.get(key, 0) < MESSAGE_EVERY_S:
                 continue

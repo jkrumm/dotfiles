@@ -39,7 +39,7 @@ Decided 2026-10-31 (Wave 1); all of it is done and classic herdr is gone (§Remo
 | Classic consumer | Fate | hc-world replacement |
 |-|-|-|
 | software-factory `HerdrRunner` + witness | port | `HcRunner` over `hc connect` (spawn contract below). Witness on `events.subscribe`: `status`, `turn`, `lost`, `restarted`, `finished`, `removed`, `labels`; `missed` = replace state from the snapshot. A **core** restart is the stream ending (EOF), then reconnect and compare `server.status` `pid`. `restarted` is per terminal: a kept program was lost and replaced by a shell |
-| `rd work\|wave\|fan\|close\|read\|say\|agents` | port | factory first, hc direct as fallback. Space = the `herdr-app` doc entry whose `folder` is the repo root, else a new `sp-<repo>-<hash>` id (hash of the full root, so `~/SourceRoot/x` and `~/IuRoot/x` never share one); tab = a chosen `herdr.tab` id. `read` → `hc read`, `say` → `hc send` (refuses on `blocked`), `close` → `hc kill` + `hc rm` |
+| `rd work\|read\|say\|agents` | port | hc direct (`say`: factory first). Space = the `herdr-app` doc entry whose `folder` is the repo root, else a new `sp-<repo>-<hash>` id (hash of the full root, so `~/SourceRoot/x` and `~/IuRoot/x` never share one); tab = a chosen `herdr.tab` id. `read` → `hc read`, `say` → `hc send` (refuses on `blocked`) |
 | Waves: orchestrator tab, workers | port | orchestrator = labelled tab; workers = unlabelled children (`parent` = orchestrator): no pane, listed as the parent's `sub_agents`. Factory spawns keep `factory session wait --on workers`: a held (`queued:`) spawn has no hc terminal yet, so `hc wait --children` would return before it starts. `hc wait --children all\|any` and the notes hc types into the parent replace `herdr agent wait` on the hc-direct path |
 | `resume_agents_on_restore` | replace | Claude SessionStart hook sets labels on its own terminal: `jk.claude.session=<id>` and `jk.claude.config=<CLAUDE_CONFIG_DIR>`, or `jk.claude.config=` for `iu` (`key=` removes the label, so a reused terminal never keeps the previous account). `hc-resume` (on a `restarted` event, on its own start, after every reconnect and on a `missed` snapshot, since a `restarted` event can fall into a gap) types `env CLAUDE_CONFIG_DIR=… claude --resume <id>` (`env -u CLAUDE_CONFIG_DIR …` when the label is absent, i.e. `iu`) into each kept shell that carries the labels: one attempt at a time per terminal, and only while its foreground is still a login shell. Labels survived a `kill -9` of a kept program and a core restart, and `terminal.list {labels}` filters on them. They live and die with the terminal, so nothing needs pruning (a core doc was the seeded design) |
 | `herdr-reap.py` + `com.jkrumm.herdr-reap` | port | same rules over `terminal.list {all}` / `kill` / `rm` / `send` |
@@ -65,15 +65,15 @@ Decided 2026-10-31 (Wave 1); all of it is done and classic herdr is gone (§Remo
 | jkrumm.com published guide, weatherorb/basalt-ui/prometheus-stack plans, archives | history | untouched, listed in the final report |
 | comments: ghostty, starship, ssh_config, usage-tracker, modelpick, homelab monitors, linewatch, image-gateway | port | one-line fixes when the file is touched anyway, listed otherwise |
 
-### Spawn contract (HcRunner, `rd`, waves)
+### Spawn contract (HcRunner, `rd`)
 
 - **Always pass `cwd`.** Through the API the default is the core's cwd (`/`).
 - **Prompt as argv:** `["claude", …flags, "<prompt>"]`. Claude takes the first prompt as an argument (fact 7).
   `first_message` reports only template runs.
 - **Account in `env`:** `CLAUDE_CONFIG_DIR` set, or absent for `iu`. Never an empty string, never inherited.
-- **Parent:** a worker passes `parent` = the orchestrator's terminal and no labels. A tab (orchestrator, next wave,
-  `rd work`) passes `no_parent: true`. The CLI defaults `parent` to the calling terminal, and a child ends with its
-  parent's program, so a chain wave spawned without it would die with the wave that spawned it.
+- **Parent:** a hidden child passes `parent` = the spawner's terminal and no labels. A tab (`rd work`) passes
+  `no_parent: true`. The CLI defaults `parent` to the calling terminal, and a child ends with its
+  parent's program, so a tab spawned without it would die with the terminal that spawned it.
 - **Placement without a window:** labels `herdr.space=<id>` + `herdr.tab=<chosen id>`, plus `keep: true`. The app
   adopts them the next time it sees the core (fact 1). The tab enters the `herdr-app` doc only then (the app also
   writes the terminal's `where` label), so name it after that: set its `name` with `doc.set` against the version
@@ -448,7 +448,7 @@ A snapshot from agw research run `01a19165` (deep, partial: 22/34 citations grou
 | Folders over spaces | jankeesvw/herdr-space-folders (unlicensed), ejklock/herdr-workspaces | Done our way in `jk-spaces`, from `groups.json` |
 | One status bar with machine load and plan usage | DanielFGray/herdr-config, berkeatac/herdr-usage-bar, kvkenyon/herdr-quota | Done in `jk-status`. Ours reads `claude-account`'s cache; theirs read the keychain and call the API |
 | Click-through detail popup | DanielFGray (same mod, `props.panel`) | Done in `jk-details` (a separate mod). None of the public mods shows top processes |
-| Orchestrator visible, workers hidden | Workers as unlabelled children (fact 2) | Orchestrator is a tab; workers have none and show nowhere in the app (the jk layout replaces the agents mod). They are visible through `rd agents` / `hc ls --json` (`parent`, `hidden_finished`), and `jk-board` shows leads, waves and workers from the fleet model's sessions. Orchestrated waves (`rd wave --child`, factory `placement: child`) and fan workers are hidden children of the orchestrator's terminal; `jk-board` lists them as a tree under its row (the model's `parent`; name, state, and the turn from one `hc ls --json` per poll) and reads a child's last lines on click (`hc read` on the mini; the app's own `terminal.peek` is an overlay that returns no text and needs the app's address for a mini terminal, unverified). Chain waves and an orchestrator's successor stay tabs |
+| Agents visible, helpers hidden | Workers as unlabelled children (fact 2) | A visible agent is a tab; a hidden child has none and shows nowhere in the app (the jk layout replaces the agents mod). Children are visible through `rd agents` / `hc ls --json` (`parent`, `hidden_finished`), and `jk-board` shows leads and workers from the fleet model's sessions, lists children as a tree under their parent's row (the model's `parent`; name, state, and the turn from one `hc ls --json` per poll) and reads a child's last lines on click (`hc read` on the mini; the app's own `terminal.peek` is an overlay that returns no text and needs the app's address for a mini terminal, unverified) |
 | Light chrome as a design, not a palette | ritiksahni/herdr-linen | Basalt tokens in the theme `colors` |
 | Import classic workspaces into the app | CiprianSpiridon/herdr-migration (claims conversation resume; **unverified**) | Not used: classic sessions are not carried over |
 | Resume after a reboot | herdr-agent-resume stopgap in herdr-core #13 (SessionStart hook → labels, a key types `claude --resume`) | Same idea as ours, triggered by events instead of a key |

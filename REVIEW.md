@@ -19,7 +19,7 @@ What failure looks like here:
 - **Instructions contradict.** A global CLAUDE.md, rule, skill or AGENTS.md line that says the opposite of another, or
   of the code; a model id written in prose (they live in the route table only).
 - **A second copy.** A new script, helper or skill that repeats one that exists (search `scripts/`, `skills/`).
-  - admission belongs to the factory: a gate or script that re-implements the factory's drain/pace/admission logic is a second copy (`scripts/wave-gate.py`)
+  - admission belongs to the factory: a gate or script that re-implements the factory's drain/pace/admission logic is a second copy
 - **`homelab-private` leaks.** Any reference to its services or hosts.
 
 Skip: formatting, wording taste, lint-level remarks. Evidence is always `file:line`.

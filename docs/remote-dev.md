@@ -95,13 +95,12 @@ Design, launcher, updates, verified facts: `docs/herdr-core.md`.
   **Per repo, not per space.** A mini terminal edits the mini's checkout, where the brain-sync lane never commits — the note
   lands via the nightly `brain-backup` sweep.
 
-### Janitor rules and `rd wave` detail
+### Janitor rules and `rd` detail
 
 Moved verbatim from `AGENTS.md`.
 
-- **`rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]` / `rd issues`:** the Issue path, the preferred way to start work that should ship on its own. A thin `factory issue new --repo <path> --title … [--facts -] [--after …] [--key …]` on the host through `factory_host` (same bound, `FACTORY_CALL_S`, and path as `spawn create`); `--facts` is read on the calling machine (a file or stdin, JSON) and handed over on stdin. It prints the factory's line and passes its exit code through; there is **no hc fallback**: with no factory (not installed 127, timeout 124, error) nothing is filed and it says so in one line. `rd issues` is `factory issue list`. `rd wave`, `rd fan` and `rd merge` print `rd <cmd>: deprecated, file an Issue (rd issue); goes with reset row 7 contract` on stderr and otherwise work as before. Covered by `scripts/remote-dev-factory.test.sh`.
-- **`rd wave [--child] <repo> '<prompt>'`:** (`--child`: an orchestrator's wave is a hidden child of the calling terminal, not a tab: factory `placement: child`, or hc-direct a labelless child with `outlive_parent`; with no calling terminal, or a factory from before `placement`, it is a tab and says so; never for a chain successor) long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app (a space only if the repo has none), solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. With the factory answering, `rd wave
-- **`rd reap`:** `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes tabs whose agent was done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout and no `active` wave; closes an `rd fan` tab (worktree carries the `rd-fan` marker) as soon as its branch is merged (PR MERGED/CLOSED whose head contains HEAD, or patch-equal to the default) or deleted on origin, active wave or not, never with a working/unknown agent, a dirty/unpushed tree, or a mother/lead/`wave <n>`/`-w<n>` tab; first of all it leaves alone any terminal without a `factory.key` label (the owner's own sessions; the one exception is the 7-day orphaned-shell rule below) and any `factory.key=plan:<repo>` tab (the factory's planning tab); messages dirty/unpushed ones; stops `claude --bg` leftovers > 24 h; closes an orphaned login shell (live, no status, no name, no `factory.key` or Claude session label, program and foreground a shell, no children, its `turn` (rises as commands run) unchanged for 7 days of hc-reap observations, remembered per terminal in the state file, a first sighting starting the clock; never a `plan:` tab or a named terminal). Log: `~/Library/Logs/hc-reap.log`
+- **`rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]` / `rd issues`:** the Issue path, the preferred way to start work that should ship on its own. A thin `factory issue new --repo <path> --title … [--facts -] [--after …] [--key …]` on the host through `factory_host` (same bound, `FACTORY_CALL_S`, and path as `spawn create`); `--facts` is read on the calling machine (a file or stdin, JSON) and handed over on stdin. It prints the factory's line and passes its exit code through; there is **no hc fallback**: with no factory (not installed 127, timeout 124, error) nothing is filed and it says so in one line. `rd issues` is `factory issue list`. Covered by `scripts/remote-dev-factory.test.sh`.
+- **`rd reap`:** `rd reap [--dry-run]` — the janitor (`scripts/hc-reap.py`, `com.jkrumm.hc-reap` every 30 min): closes the terminal of a factory-spawned agent that is done/idle > `REAP_IDLE_H` (12) with a clean, pushed checkout; never a working/unknown agent or a dirty/unpushed tree (it messages those instead); first of all it leaves alone any terminal without a `factory.key` label (the owner's own sessions; the one exception is the 7-day orphaned-shell rule below) and any `factory.key=plan:<repo>` tab (the factory's planning tab); stops `claude --bg` leftovers > 24 h; closes an orphaned login shell (live, no status, no name, no `factory.key` or Claude session label, program and foreground a shell, no children, its `turn` (rises as commands run) unchanged for 7 days of hc-reap observations, remembered per terminal in the state file, a first sighting starting the clock; never a `plan:` tab or a named terminal). Log: `~/Library/Logs/hc-reap.log`
 
 ### Sidebar groups
 
@@ -125,15 +124,14 @@ never a path**; resolution happens on the far side across `~/SourceRoot` and
 | Command | Does |
 |-|-|
 | `repos [filter]` | repos on the host, branch + dirty count |
-| `work <repo> [<prompt…>]` | labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks); an optional prompt is claude's first message, as in `wave` (human-attended: no solo flag) |
-| `wave <repo> '<prompt>'` | tab + solo claude, the prompt as its argument; `fan <repo> <brief…>`: worktree + hidden child per brief |
+| `work <repo> [<prompt…>]` | the owner's own session: labelled tab + claude in the repo's space, **idempotent** (reports a running agent, never stacks); an optional prompt is claude's first message (human-attended: no solo flag) |
+| `issue <repo> <title>` / `issues` | file an Issue with the factory / list Issues (§Janitor rules and `rd` detail) |
 | `agents` | every roster, one line per agent (`SOURCE NAME STATUS CWD ID`), deduped on Claude session id |
-| `rd read <agent>` / `rd say <agent> '…'` / `rd close <agent>` | watch / steer / end without attaching; all take an address, a terminal name, a repo name or a cwd; `close` also ends a terminal whose worktree a merge already removed, unless that worktree's branch still holds unmerged commits |
+| `rd read <agent>` / `rd say <agent> '…'` | watch / steer without attaching; both take an address, a terminal name, a repo name or a cwd |
 
-**No silent drop.** A verb that takes no (more) arguments and gets extras (`repos a b`, `agents x`, `close a b`, `read a b c`, `reap x`) exits 2 with a `usage:` line and starts nothing. Covered by `scripts/remote-dev-wave.test.sh`.
+**No silent drop.** A verb that takes no (more) arguments and gets extras (`repos a b`, `agents x`, `read a b c`, `reap x`) exits 2 with a `usage:` line and starts nothing. Covered by `scripts/remote-dev-say.test.sh`.
 
-**On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract); the factory
-is tried first and hc-direct is the fallback (below). Four rules hold:
+**On herdr-core (`hc`).** Every verb runs on the core (`docs/herdr-core.md` §Port design, §Spawn contract). Three rules hold:
 
 - **`rd` never starts a core.** Any `hc` call, `hc connect` included, auto-starts one when none runs, and a core born in
   an ssh session has no keychain. So every verb that touches terminals first asks `launchctl print gui/<uid>/com.jkrumm.herdr-core` and stops
@@ -144,39 +142,29 @@ is tried first and hc-direct is the fallback (below). Four rules hold:
   read like an address, `t7`), argv `["claude", flags…, "<prompt>"]` (the prompt is the last argument, nothing is typed
   later; a prompt starting with `-` is refused) and `env`: `FACTORY_SESSION`, `FACTORY_ROLE` (when there is a role),
   `USAGE_LANE`, and the pick: `CLAUDE_CONFIG_DIR` for a Claude account, **absent for `iu`**, never empty, never
-  inherited, plus the `CLAUDE_ACCOUNT_PICKED` marker.
-- **Tabs and workers.** `work` and `wave` (a chain's next wave included) are tabs: labels `herdr.space=<id>` +
+  inherited, plus the `CLAUDE_ACCOUNT_PICKED` marker. `work` is a tab: labels `herdr.space=<id>` +
   `herdr.tab=tb-<hash of the agent name>` and `no_parent`, so the terminal outlives whoever spawned it; the tab is then
   named by compare-and-set `doc.set` on the `herdr-app` doc (retried on `conflict`, best effort). The space is the doc
   entry whose `folder` is the repo root, else `sp-<repo>-<hash of the full root>` — HcRunner's rule, so a factory spawn
-  and an `rd` spawn land in the same space. A fallback id is a new space: `rd` first seeds its doc entry (`name` = the main checkout's basename, `folder` = the main checkout root, never a linked worktree: git's common dir) by compare-and-set, because the app would otherwise adopt it with no name and the first terminal's cwd as the folder (a fan worker's worktree). `RD_ORCHESTRATED=1 rd wave` keeps the calling terminal as `parent`
-  (labelled tab, so the lead's notes and `hc wait --children` see it). `fan` workers are hidden children: `parent` =
-  `$HC_TERMINAL_ID`, no labels (the app shows them nowhere: `rd agents` / `hc ls --json` list them), and `outlive_parent: true` like the
-  orchestrated wave's tab, so losing or closing the orchestrator never kills a working child and its uncommitted work. Without a calling terminal on the dev host (a MacBook shell) a worker is a tab.
+  and an `rd` spawn land in the same space. A fallback id is a new space: `rd` first seeds its doc entry (`name` = the main checkout's basename, `folder` = the main checkout root, never a linked worktree: git's common dir) by compare-and-set, because the app would otherwise adopt it with no name and the first terminal's cwd as the folder.
 - **Bounded, and only ours.** Every `hc` call runs under the host's `timeout`/`gtimeout` (`RD_HC_TIMEOUT_S`, 30 s). A
-  spawn that gets no answer reports `uncertain` and points at `rd agents`; it is never retried. `close`, `read`, `say`
-  and the `wave` checks see only the dev host's own terminals (a linked machine's `mini/t3` is dropped; `rd agents`
-  lists them all). `close` and `fan --clean` treat only a known `idle`/`done` status as finished (`fan --clean` judges
-  every agent in the worktree and keeps it unless every terminal was ended). One refused `fan` spawn is reported and
-  the next brief still goes; the exit code is non-zero at the end. A `fan` from the owner's own terminal on the dev host
-  (`HC_TERMINAL_ID` set, no `FACTORY_SESSION`) goes hc-direct, so the workers are its children.
-- **Waiting.** hc types a note into the parent when a child finishes, blocks or exits, and `hc wait --children all|any`
-  waits for them. Factory spawns keep `factory session wait --on workers` (a held spawn has no terminal yet).
+  spawn that gets no answer reports `uncertain` and points at `rd agents`; it is never retried. `read` and `say`
+  see only the dev host's own terminals (a linked machine's `mini/t3` is dropped; `rd agents` lists them all).
+
+Waiting on a terminal: `hc wait <t>` (`--output X` for a program), never `sleep`. An agent the factory started is waited on with `factory session wait --on workers`.
 
 `rd agents` prints one line per agent: `SOURCE  NAME  STATUS  CWD  ID`, the status being hc's own word (`working`,
-`idle`, `done`, `blocked`). **That text is a contract**: iris' `mother-watch.sh` greps it for `iris-w<n>` and `blocked`
-(pinned by `scripts/remote-dev-wave.test.sh`). Sources: `hc` (an agent terminal: it reports a status or runs `claude`
+`idle`, `done`, `blocked`). **That text is a contract**: tooling greps it for agent names and `blocked`
+(pinned by the `scripts/remote-dev-*.test.sh` suites). Sources: `hc` (an agent terminal: it reports a status or runs `claude`
 itself — a plain shell is not one), `bg` and `interactive` (`claude agents --json`).
 
 `say` on an hc terminal is `hc send`: it pastes the text and presses Enter once nobody is typing. A **blocked** agent is
 refused (`NOT delivered: … blocked on a dialog`; the text would answer its dialog; `rd read` it and answer by hand),
-and a working one queues the message (`queued: agent busy`). `close` is `hc kill` + `hc rm` after the existing checks
-(agent not working or blocked, checkout clean, nothing unpushed) and one more: the terminal's own program must be
-`claude`, i.e. rd or the factory started it. `read` is `hc read --lines N` (`[src]`: a line count, `visible` for the
+and a working one queues the message (`queued: agent busy`). `read` is `hc read --lines N` (`[src]`: a line count, `visible` for the
 screen). Names resolve against the live agents' address, terminal name, `factory.key` label, cwd and the cwd's
 basename; two matches stop with the candidates listed.
 
-Hermetic suites: `scripts/remote-dev-{say,wave,factory,factory-env}.test.sh` against `scripts/remote-dev-fake-hc.sh`
+Hermetic suites: `scripts/remote-dev-*.test.sh` against `scripts/remote-dev-fake-hc.sh`
 (a fake core; never a real one).
 
 `work` is idempotent because two agents in one checkout is the file-ownership
@@ -184,14 +172,14 @@ hazard, except across terminals where you cannot see it happen. `agents` dedupes
 the Claude session id (hc: the `jk.claude.session` label; the daemon:
 `sessionId`) — otherwise one Claude in a terminal reads as two agents racing a tree.
 
-Lanes start agent work (`docs/agent-platform.md`): a factory Issue (`rd issue`, `rd issues` lists), `@implementer`, and an `rd wave` tab (deprecated; also `rd fan` for N independent changes). `agent-dispatch` and
+Lanes start agent work (`docs/agent-platform.md`): a factory Issue (`rd issue`, `rd issues` lists) and `@implementer`. `agent-dispatch` and
 `rd bg` were removed 2026-10-04.
 
 **Never `ssh mini 'claude …'`.** Claude Code's Max credential lives in the
 **login keychain**, unreachable from an ssh session, so that spelling comes up
 `Not logged in`, silently falls back to API billing, and still looks healthy in
 `claude agents`. The core is a LaunchAgent inside the GUI session, so
-anything it spawns (terminals, `rd wave`/`rd work`) has keychain access, and the mini's
+anything it spawns (terminals, `rd work`) has keychain access, and the mini's
 auto-login brings the keychain up unlocked at boot.
 
 **`config/zsh/claude-auth.zsh` is an armed fallback** (inside the one `claude()` zsh function, which also picks the account — `docs/claude-accounts.md`): it resolves `op://mini/claude/oauth-token` via `secrets-run` into
@@ -208,60 +196,30 @@ revocation. The token applies to the **default account only**
 (`CLAUDE_CONFIG_DIR` unset = `iu`); a non-default account dir never gets it, a dead
 login there just prints a `/login` hint.
 
-**Accounts on spawn** (`docs/claude-accounts.md`): `rd work`, `rd wave` and `rd fan` run
-`claude-account pick --lane interactive|wave|fan` on the host before creating the terminal and pass the
+**Accounts on spawn** (`docs/claude-accounts.md`): `rd work` runs
+`claude-account pick --lane interactive` on the host before creating the terminal and passes the
 result as `CLAUDE_CONFIG_DIR` in the spawn's `env` (absent for `iu`); the output line
 carries the pick reason. No Claude account with room pauses the spawn (`rd` refuses to spill to IU;
 `--kind opencode` is rejected). `rd agents` / `rd read` merge `claude agents --json` across every
 enabled account.
 
-**Factory session key.** `rd work`, `rd wave` and `rd fan` also pass `FACTORY_SESSION=<agent name>` in the spawn's `env`
-(`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name, e.g. `myrepo-w4`). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
-only when it is set, so the owner's own sessions never report. Covered by `scripts/remote-dev-factory-env.test.sh`.
+**Factory session key.** `rd work` also passes `FACTORY_SESSION=<agent name>` in the spawn's `env`
+(`spawn_env` in `scripts/remote-dev.sh`; the name is the terminal's name). The software-factory hooks in `config/settings.template.json` (`docs/hooks.md`) run
+only when it is set. Covered by `scripts/remote-dev-factory-env.test.sh`.
 
-**Role table (`--role`).** `rd wave|fan|work --role <role>` (`mother|lead|wave|worker|mechanical`) takes the
-tier and effort from the factory's role table: `factory role get <role> --format json` →
-`{"role","tier":"haiku|sonnet|opus","effort":"low|medium|high|xhigh|max"}`, no token needed. The tier goes to
-Claude as `--model <tier>` (the alias, never a model id), the effort as `--effort`. Precedence, per value:
-`RD_WAVE_MODEL` / `RD_WAVE_EFFORT` (explicit env) over `--role` over today's defaults (Sonnet, effort from
-`config/claude-effort.json`). Without `--role`, `rd wave` behaves as `--role wave` and `rd fan` as
-`--role worker`; `rd work` starts bare, as before, unless `--role` is given. **Fail open:** `factory` missing,
-non-zero exit, no answer within 2 s, or JSON off the schema costs one stderr line
-(`rd: factory role '<r>' unavailable (<why>) - using the default model and effort`) and the spawn keeps
-today's defaults — a dead factory never stops a spawn. Only a factory that answers the role does not exist
-(`error.kind` `not_found`, or an "unknown role" message) or a malformed role name is a usage error (exit 2),
-raised before anything is created. One lookup per `rd fan`, not per brief. Covered by
+**Role table (`--role`).** `rd work --role <role>` takes the tier and effort from the factory's role table:
+`factory role get <role> --format json` → `{"role","tier":"haiku|sonnet|opus","effort":"low|medium|high|xhigh|max"}`,
+no token needed. The tier goes to Claude as `--model <tier>` (the alias, never a model id), the effort as `--effort`.
+Without `--role`, `rd work` starts bare. **Fail open:** `factory` missing, non-zero exit, no answer within 2 s, or JSON
+off the schema costs one stderr line and the spawn keeps today's defaults. A role the factory says does not exist, or
+a malformed role name, is a usage error (exit 2), raised before anything is created. Covered by
 `scripts/remote-dev-factory-env.test.sh`.
 
-**`rd` and the factory (which path, when).** `wave`, `fan` and `say` ask `factory health` first
-(`timeout 3`, once per command; `RD_NO_FACTORY=1` skips it; a host with no `timeout`/`gtimeout` has no factory path, since an unbounded call could stall the repair). Answers → the factory path; anything else (not
-installed, down, slow, non-zero) → hc directly (above), and every terminal it makes carries
-`FACTORY_ROLE=<role>` next to `FACTORY_SESSION` (`rd work` only when `--role` is given). A dead factory
-never stops the waves that would repair it: every call is bounded, and a spawn falls back to hc only when the
-`create` certainly did not happen (table below); any other failure is an error, never a second terminal. An orchestrated
-wave (`--child`, `RD_ORCHESTRATED=1`) and every `fan` called from an owner's own session (no `FACTORY_SESSION`) skip the
-factory and go hc-direct, so the workers are the caller's children. `close` never asks the factory. `RD_DRY_RUN=1` never probes.
-
-| Verb | Factory answers | Falls back to hc when |
-|-|-|-|
-| `wave`, `fan` | `factory spawn create <agent> --repo <path> --prompt … --role <role> [--space <main checkout>]`, then poll `factory spawn get` (every `RD_FACTORY_POLL_S`, 2 s; up to `RD_FACTORY_WAIT_S`, 120 s) | `create` fails **certainly**: the call never ran (no `factory`, no `timeout` binary) or the factory answered with an `error` object. A silent failure (a dropped hop, a timeout) may come after the factory recorded the spawn: `spawn get` showing it is followed, anything else is an error (look at `factory spawn get <key>` before re-running), never a second terminal under the same name |
-| `say` | `factory session note <agent> <text>`: held while the agent works, typed at its next prompt, confirmed by its next turn | the factory answers `error.kind` `not_found` for the session, or the agent has no name. Any other failure (a timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent |
-| `close` | none (`hc kill` + `hc rm` after the safety checks) | not applicable |
-
-Spawn outcomes, from `factory spawn get` `.status`: `started` (`.pane`, `.tab`, `.workspace` set) prints today's
-line plus `via the factory` and the account; `queued` with `.hold` set (`drain|pace|wave`) prints `queued: <hold>`
-and `waiting` (no capacity) prints `queued: no capacity until <resumeAt>`, both exit 0 (the factory starts it later;
-the hc path dies with "paused"); a `queued` spawn without a hold is waited on like `starting` (claimed) until the
-wait ends, then reports `queued: not claimed yet`; `failed` exits non-zero with `.error`. An empty or unknown status
-after an answered create is an error. A spawn that
-fails after it exists never falls back to hc (two sessions on one name). `rd fan` keeps going after a
-failed or queued brief and exits non-zero at the end if any failed. On the factory path the factory picks
-the account and the model: `rd` runs no `claude-account pick`, and `RD_WAVE_MODEL` / `RD_WAVE_EFFORT` do
-not reach the spawn (one stderr line says so). `close` keeps its refusals on both paths (agent working,
-checkout dirty, anything unpushed). Under a `drain` the factory holds the
-spawn (`queued: drain`) and starts it when the drain lifts; `wave-gate.py` no longer asks the factory, so
-`rd wave` exits 0 and a chain wave counts it as its successor spawned. Covered by
-`scripts/remote-dev-factory.test.sh` and `scripts/wave-gate.test.py`.
+**`rd say` and the factory.** `say` asks `factory health` first (`timeout 3`, once per command; `RD_NO_FACTORY=1`
+skips it; a host with no `timeout`/`gtimeout` has no factory path). Answers → `factory session note <agent> <text>`:
+held while the agent works, typed at its next prompt, confirmed by its next turn. The factory answering
+`error.kind` `not_found` for the session, or an agent with no name, falls back to `hc send`. Any other failure (a
+timeout, a dropped hop) may have recorded the note: NOT delivered, never re-sent. `RD_DRY_RUN=1` never probes.
 
 ## Dev-server doors
 
@@ -822,30 +780,3 @@ succeeds** — the real `git push --dry-run` lives in `make doctor`, because at 
 300 s cadence a provider outage would page as "dev host down". That split earned
 itself once already: the credential resolved fine while the deployed helper still
 pointed at a read-only token, and only the dry-run saw it.
-
-## Fan-out and the merge train
-
-`rd fan <repo> <brief…>` cuts one worktree per brief from **fetched** `origin/<default>`
-(`scripts/fan-worktree.sh`; the repo's `.wtp.yml` hooks run when it has one), starts a
-hidden Claude child per brief in it (the spawn contract above) and delivers
-the brief with a `Base: origin/<default> @ <sha>` line prepended. Each brief names its
-branch on a `Branch:` line. `rd merge <repo> <branch…>` (`scripts/merge-train.sh`) rebases
-each onto the current origin default, installs from the lockfile present (`bun.lock`/`bun.lockb`,
-`pnpm-lock.yaml`, `package-lock.json`; a failed install is a red check; `--no-check` skips it),
-runs `make check`, pushes with lease, readies a draft PR (`gh pr ready`), waits for the PR's
-CI on the pushed sha, merges the PR by rebase and re-fetches before the next; GitHub only. The
-CI gate polls one `gh pr view --json headRefOid,statusCheckRollup` (every `RD_CI_POLL` s, default
-10; each gh call bounded by `timeout`) and trusts it only while the head equals the pushed sha.
-A failed or cancelled check dies at once with its name and run URL (the PR URL when the check
-has none). A pass is never declared before `RD_CI_GRACE` (30 s; a push's check suite exists 0–5 s
-after the push, measured over 11 pushes) has passed since the push, and needs one non-skipping
-check, so a partial or skipping-only list cannot merge early. None or skipping-only after the
-grace merges as no-CI; pending past `RD_CI_TIMEOUT` (1200 s) dies; `--no-ci` skips the gate.
-Needs `jq`. `rd fan --clean <repo>` removes
-clean, fully merged worktrees and their terminals, but only those `rd fan` created (a `rd-fan` marker in the worktree's git dir;
-others, and ones made before the marker, are kept); `--all` judges every extra worktree. A `rd wave` without `(Wave <n>)` takes the next
-free tab number whose `<repo>-w<n>` is not a live agent name; an explicit `(Wave <n>)` whose
-name is live is refused. Hermetic suites: `make fan-test`.
-Prompt delivery for `rd wave` and `rd fan`: the prompt travels in argv (the spawn contract), so there is no delivery check or re-send; a spawn that never reaches `working` shows in `rd agents` / `rd read`.
-
-**Waiting on spawned agents.** Nothing polls. The spawner is the worker's parent: `factory session wait --on workers`, then end the turn; the factory's wake note ("workers done: …") starts the next one, and a held `queued:` spawn is a worker too. One wake per declaration, so declare `--on workers` again after each new spawn or `rd say` fix. A finished child counts as done even while a fix note is still queued, so after `rd say` check `factory status` in the foreground, bounded by `timeout` (a few minutes): note delivered and worker `working` → declare; worker idle again after delivery → read its diff, no wait; note still queued (an idle worker is not proof the fix ran) → `rd read` it, then escalate to the owner. Only `rd fan` and `RD_ORCHESTRATED=1 rd wave` make the caller the parent (a plain chain `rd wave` is parentless by design), and a session without `FACTORY_SESSION`, or an `rd` that fell back to hc direct, has no factory wake: wait with `timeout <s> hc wait --children all` (`any` for the next news; it returns early on a note, then wait again). `rd read <agent>` and `factory status` are how a woken orchestrator looks.

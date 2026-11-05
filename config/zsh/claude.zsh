@@ -185,13 +185,12 @@ cs() {
 #
 # Creds resolve per call like `cx`: Keychain first, the time-boxed secrets shim
 # second (`_codex_secret`, codex.zsh), exported only inside `oc`'s subshell (or
-# a wave pane's own shell) — never `env VAR=…`, so they stay out of `ps auxww`.
+# a pane's own shell) — never `env VAR=…`, so they stay out of `ps auxww`.
 #
 # The machine-dependent bit is gated at launch, not committed into the shared
 # config: the light/dark re-theme (Herdr app terminals only).
 # The IU env opencode's `{env:…}` placeholders resolve against, as `export`
-# lines. `oc` evals it; `rd wave --kind opencode` evals it inside the wave pane,
-# so the key never rides argv or an ssh hop.
+# lines. `oc` evals it, so the key never rides argv or an ssh hop.
 #
 # Where the mini has a door token for caller `oc`, OpenCode goes through the local
 # inference gateway (same paths as IU, spends Claude credit first, records every

@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (the Herdr app on herdr-core), three lanes (factory Issue, `@implementer`, the deprecated `rd wave`), one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
+description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (the Herdr app on herdr-core), two lanes (factory Issue, `@implementer`), one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
 aliases:
   - agent-estate-model
 tags:
@@ -31,7 +31,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Lanes (Issue, `@implementer`, the deprecated `rd wave`), lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Lanes (Issue, `@implementer`), lean global CLAUDE.md, `/wave` as the Issue-filing playbook, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
 | Worker engine: model registry, review angles, one source for model ids | **landed**, now in agent-workflows (the predecessor service retired 2026-10-29, Wave 11) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |
@@ -40,12 +40,12 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 ```
  alerts                                front doors
- Kuma · HyperDX/OTel alerts            Herdr: orchestrator tab → wave tabs   (owner drives)
+ Kuma · HyperDX/OTel alerts            Herdr: the owner's tabs         (owner drives)
  jobs-grade (job failures)             Hermes: Slack/Argo chat               (narrate, answer)
         │                                   │
         ▼                                   │ opens a Herdr tab when asked
  Slack #alerts → a human reads and acts     ▼
-                                       @implementer · rd wave / rd fan
+                                       factory Issue · @implementer
 
  AGENT-WORKFLOWS (`agw`): check · review · research · prose · diagram · brain
            model ids live ONLY in `agw routes`
@@ -60,17 +60,15 @@ Before-the-rewrite design: [[agent-platform-history]].
 |-|-|-|
 | **agent-workflows (`agw`)** | `check`, `review`, `prose`, `diagram` and `brain` (`agw check`, `agw review`, `agw prose`, `agw diagram`, `agw brain`) | decide what to work on, merge |
 | **Hermes** | answers, narrates, opens Herdr tabs when asked | dispatch on its own, land PRs, author skills unattended |
-| **Herdr app + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and hidden workers, and waits on them | run unattended work |
+| **Herdr app + `rd`** | the owner's cockpit: his own `rd work` tabs and the factory's agents, side by side | run unattended work |
 | **Argo** | the status surface | hold state of its own |
 
-## The lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
+## The lanes — the only ways to start agent work
 
 | Lane | When | Engine |
 |-|-|-|
 | Issue (`rd issue` / `factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`rd issues` / `factory issue list` follow it); no factory, no Issue |
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
-| `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + hidden Claude worker per change (a child of the orchestrator's terminal), `rd merge` lands them |
-| `rd wave` tab (deprecated: file an Issue; goes with reset row 7 contract) | long work the owner wants to watch or steer | Claude Code in a herdr-core terminal, a tab in the repo's space (`--kind opencode` is rejected) |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.
@@ -129,20 +127,17 @@ research, Hermes and `oc`.
 
 ## Herdr — the cockpit
 
-The orchestrator is always a visible tab; workers are hidden children of its terminal (listed under it in the app).
-`/wave` has two modes: **chain** (each wave spawns the next) and **orchestrated** (the orchestrator spawns a tab, declares
-`factory session wait --on workers` and ends its turn; the factory's wake note starts the next one, then it reads
-`PLAN.md`, decides the next, closes the finished tab with `rd close`). Nothing polls. Waiting is one of three, by who spawned:
+The factory's agents show in the app as tabs; the owner steers his own with `rd work <repo>` (a session of his, not a lane an agent starts).
+Nothing polls. Waiting is one of three, by who spawned:
 
 | Spawned through | Wait with |
 |-|-|
-| The factory (the `rd` default) | `factory session wait --on workers`: a held `queued:` spawn has no terminal yet, so only the factory sees it |
+| The factory | `factory session wait --on workers`: a held spawn has no terminal yet, so only the factory sees it |
 | `hc run` / `rd` hc-direct, with the caller as parent | `hc wait --children all\|any`; hc also types a note into the parent when a child finishes, blocks or exits |
 | A single terminal | `hc wait <t>` (`--output X` for a program), never `sleep` |
 
 The factory babysits (resume after a quota wall, send-back, blocked notes, the wake); `hc-resume` restores Claude sessions after
-a lost program. One active wave per repo; parallel waves only in different repos. A pane-less supervisor (`claude --bg` mother)
-is not a pattern.
+a lost program.
 
 ## Notifications
 

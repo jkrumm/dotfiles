@@ -7,7 +7,7 @@
 #      resumed session in a kept login shell) picks its account with
 #      `claude-account pick --lane ${USAGE_LANE:-interactive}` (docs/claude-accounts.md), unless
 #      CLAUDE_ACCOUNT_PICKED is already set: every chooser that decided an account sets that
-#      variable (`c`/`cs`/`cf`, `rd wave|work|fan`), and it is inherited by children. The marker, not
+#      variable (`c`/`cs`/`cf`, `rd work`), and it is inherited by children. The marker, not
 #      CLAUDE_CONFIG_DIR, carries the decision because an iu pick is `unset CLAUDE_CONFIG_DIR` — it
 #      looks identical to "nobody chose". Non-interactive shells, `claude -p`, info flags and
 #      subcommands (auth, mcp, …) never pick. `--resume <id>` keeps the session's account.

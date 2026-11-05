@@ -46,7 +46,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
-| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|issue\|issues\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
+| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd work\|issue\|issues\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
@@ -172,14 +172,13 @@ substitutes for another.**
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists. Preferred over `rd wave` |
-| `rd wave <repo> '<prompt>'` (deprecated: prints a stderr line, works as before; goes with reset row 7 contract) | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app, solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. The factory queues the spawn (`queued: <reason>`); the spawner waits with `factory session wait --on workers` and ends its turn. `/wave` owns the contract and the green gate; queueing and `rd close`/`say` semantics: `docs/remote-dev.md` §Janitor rules and `rd wave` detail |
+| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists. |
 
 | Want | Command |
 |-|-|
 | A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
-| Work *placed on* the mini, no terminal | `rd repos\|work\|issue\|issues\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree, an unnamed login shell whose `turn` has not moved for 7 days of observations is closed (not a `plan:` tab), mother/lead/wave tab, `factory.key=plan:*` tab or a terminal without a `factory.key` label (bar an unnamed shell idle 7 days, above); rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
+| Work *placed on* the mini, no terminal | `rd work\|issue\|issues\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`) |
+| Housekeeping | the janitor (`com.jkrumm.hc-reap`, every 30 min; `scripts/hc-reap.py`): closes finished factory-spawned agent terminals (idle past the age limit, clean and pushed tree), messages a dirty one instead, closes orphan shells, stops old background sessions; never a working agent. Rules in `docs/remote-dev.md` §Janitor rules. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
 | What every agent is doing | the app's sidebar; the factory (software-factory, `factory fleet`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
 
@@ -205,7 +204,7 @@ Facts to hold:
   exists on the mini, where exporting it hangs.
 - **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
   keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
-  billing, and still looks healthy in `claude agents`. `rd wave` spawns *through* the launchd core (a GUI-session
+  billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session
   child) precisely to avoid this.
 - **A core's env is every terminal's env**, and `hc run` forwards nothing: choose the Claude account on the
   command (`CLAUDE_CONFIG_DIR`, unset = `iu`), never by inheritance.
@@ -444,7 +443,6 @@ startup — `source ~/.zshrc` after editing.
 | `cs` / `cf` | Max subscription | Sonnet high / Fable medium; the four fill the app's + menu |
 | `oc` | OpenCode — the local inference gateway on the mini (door token of caller `oc`), IU direct on the MacBook; OpenAI route (`iu/…`, `iu-responses/…`) + Anthropic route (`iu-anthropic/…`) | default per `docs/opencode.md` (`--variant max` / `none`); `-m <provider/model>` (e.g. an `iu-anthropic/…` id) |
 | `cx` / `cxa` | Codex on the IU endpoint (Responses API) | models per `docs/codex.md`; `astra '<q>'` = one `pro`-mode call — `docs/codex.md` |
-| `rd wave` | Max, via the core's keychain | `sonnet` default (`RD_WAVE_MODEL` overrides; a chain that needs Fable sets it per spawn) |
 
 Model-choice rationale for every row: `brain/wiki/engineering/model-routing.md`.
 

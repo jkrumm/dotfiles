@@ -202,12 +202,11 @@ case $out in *"picker failed"*) bad "spill is an answer, not a failure" "$out" ;
 reset; out=$(CLAUDE_CODE_OAUTH_TOKEN=leak STUB_PICK_LINE="export CLAUDE_CONFIG_DIR='$ME'" STUB_PICK_ID=me zrun interactive 'c')
 case $out in *tok=set*) bad "me pick must not inherit the IU token" "$out" ;; *) ok "me pick strips CLAUDE_CODE_OAUTH_TOKEN" ;; esac
 
-echo "rd spawn: one pick-log line (rd wave -> pick_account -> hc terminal.run env -> the agent's claude)"
-# The real `rd wave` against a fake hc (remote-dev-fake-hc.sh: a fake core, never a real one). The core starts the argv's
+echo "rd spawn: one pick-log line (rd work -> pick_account -> hc terminal.run env -> the agent's claude)"
+# The real `rd work` against a fake hc (remote-dev-fake-hc.sh: a fake core, never a real one). The core starts the argv's
 # claude directly, with exactly the spawn's `env`, so the replay runs the stub binary with that env and nothing else.
 S="$TMP/home/SourceRoot"; HCSTATE="$TMP/hcstate"
 mkdir -p "$S/dotfiles/scripts" "$S/myrepo/.git" "$TMP/home/.local/bin" "$HCSTATE"
-printf '#!/usr/bin/env python3\n' > "$S/dotfiles/scripts/wave-gate.py"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
 printf '#!/usr/bin/env bash\necho "state = running"\n' > "$TMP/bin/launchctl"
@@ -219,7 +218,7 @@ rd_spawn() { # $1 = pick line, $2 = id
   rm -rf "${HCSTATE:?}"/*; echo '[]' > "$HCSTATE/terminals.json"
   echo cache > "$TMP/xdg/secrets/backend"
   HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" STATE="$HCSTATE" RD_NO_FACTORY=1 \
-    STUB_PICK_LINE="$1" STUB_PICK_ID="$2" bash "$RD" wave myrepo "task" >/dev/null 2>&1
+    STUB_PICK_LINE="$1" STUB_PICK_ID="$2" bash "$RD" work myrepo "task" >/dev/null 2>&1
   echo "not-cache" > "$TMP/xdg/secrets/backend"
 }
 for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; do
@@ -228,7 +227,7 @@ for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; d
   spawn_env=$(sed -n 1p "$HCSTATE/runs.jsonl" | jq -r '.env')
   assert_eq "the spawn env carries the marker ($id)" "$id" "$(jq -r '.CLAUDE_ACCOUNT_PICKED // "missing"' <<<"$spawn_env")"
   assert_eq "the spawn env carries the routing reason ($id)" test "$(jq -r '.CLAUDE_ACCOUNT_REASON // "missing"' <<<"$spawn_env")"
-  assert_eq "the spawn env carries the lane tag ($id)" wave "$(jq -r '.USAGE_LANE // "missing"' <<<"$spawn_env")"
+  assert_eq "the spawn env carries no lane tag: work is an owner's own tab ($id)" missing "$(jq -r '.USAGE_LANE // "missing"' <<<"$spawn_env")"
   if [[ $id == iu ]]; then
     assert_eq "iu: CLAUDE_CONFIG_DIR absent from the spawn env, not empty" false "$(jq -r 'has("CLAUDE_CONFIG_DIR")' <<<"$spawn_env")"
   else
@@ -237,13 +236,13 @@ for case_ in "export CLAUDE_CONFIG_DIR='$ME':me" "unset CLAUDE_CONFIG_DIR:iu"; d
   # the core's terminal: the argv's claude, the spawn's env, nothing inherited from a picked session
   # shellcheck disable=SC2046
   out=$(cd "$TMP/work" && env -i HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" PATH="$TMP/bin:$PATH" \
-    $(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$spawn_env") claude --dangerously-skip-permissions --model sonnet 2>&1)
+    $(jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$spawn_env") claude 2>&1)
   assert_contains "rd terminal ($id): agent runs on the rd account" "picked=$id" "$out"
   assert_contains "rd terminal ($id): agent sees the reason" "reason=test" "$out"
   if [[ $id == iu ]]; then assert_contains "rd terminal ($id): no config dir" "cfg=unset" "$out"
   else assert_contains "rd terminal ($id): the account's config dir" "cfg=$ME" "$out"; fi
   assert_eq "rd terminal ($id): exactly ONE pick-log line (rd's), none from a wrapper" 1 "$(picks)"
-  assert_eq "rd pick lane" wave "$(head -1 "$PICKS")"
+  assert_eq "rd pick lane" interactive "$(head -1 "$PICKS")"
 done
 
 echo "mini token fallback composes with the pick (backend=cache)"

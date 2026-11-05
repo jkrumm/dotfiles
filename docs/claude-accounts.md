@@ -2,7 +2,7 @@
 
 Status: **W2 done** (2026-10-24); rule v1.4 (N accounts), the peer sample import and plan detection shipped 2026-10-27; W3 = tune from picks.jsonl and `quota_sample` after 2 weeks, and decide a 20x upgrade for `me` if its weekly stays > 80 %. Accounts are `iu` (the IU-paid Max 20x at the default `~/.claude`) and
 `me` (personal account, Max 5x at `~/.claude-me`), both enabled, plus `me2` (second personal Max 5x at `~/.claude-me2`, Safari), registered dark (`enabled: false`) until its logins exist. Shipped in W1: ids renamed from
-`a`/`b`, `c`/`ch`/`cs`/`cf` pick (`--account iu|me` override), `rd wave`/`rd fan` pick and inject
+`a`/`b`, `c`/`ch`/`cs`/`cf` pick (`--account iu|me` override), `rd work` picks and injects
 `CLAUDE_CONFIG_DIR` through the spawn's `env` (no room pauses the spawn, never
 IU), the token fallback in `claude-auth.zsh` applies to the default account only, per-account
 MCP registration / theme / pre-trust, `claude agents` merged across accounts, heartbeat grades `iu`
@@ -86,7 +86,7 @@ exists, so a new account ships dark (§Adding an account).
 - **User-scope MCP servers** (`chrome-devtools`) live in `.claude.json`, so the `make setup` registration
   loop runs once per enabled account (`CLAUDE_CONFIG_DIR=… claude mcp add-json …`).
 - Same for every other `~/.claude.json` writer: `_claude_theme_auto`
-  (`claude.zsh:40`) and `fan-worktree.sh:40` pre-trust. Both loop over the
+  (`claude.zsh:40`) pre-trusts; it loops over the
   registry.
 
 ## The picker
@@ -250,7 +250,7 @@ it expires. Upgrade `me` to 20x if its weekly stays > 80% two weeks running.
 |-|-|-|
 | bare `claude` in an interactive zsh (`claude()` in `claude-auth.zsh`; what a terminal in the core runs when you type `claude`) | the binary: always iu | `claude-account pick --lane ${USAGE_LANE:-interactive}` unless `CLAUDE_ACCOUNT_PICKED` is set (see Account marker); `--resume` and `--continue` pin; non-interactive shells, `-p`, info flags and subcommands (`auth`, `mcp`, …) never pick |
 | `c` / `ch` / `cs` / `cf` (`claude.zsh` `_claude_launch`) | default dir | `claude-account pick --lane interactive`; `--account <id>` override (strips the flag, runs in a subshell; a failing pick answers `iu` and says so on stderr); sets the marker for the `claude` it calls |
-| `rd wave` / `rd fan` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
+| `rd work` (`remote-dev.sh` `pick_account`, `spawn_env`) | terminal exports `USAGE_LANE` only | pick before spawn and pass `CLAUDE_CONFIG_DIR` (absent for iu) and `CLAUDE_ACCOUNT_PICKED=<id>` in the spawn's `env` (iu included; the core's own env is every terminal's, so nothing is inherited and no typed `export` can race the shell); `USAGE_LANE` rides along. When no account has room `rd` pauses the spawn (no IU spill) |
 | `claude-auth.zsh` token fallback (mini; `_claude_auth_run`, called by `claude()` after the pick) | one token `op://mini/claude/oauth-token` | `op://mini/claude/oauth-token` is injected **only** when `CLAUDE_CONFIG_DIR` is unset (`iu`) and its `claude auth status` fails. For any other dir the wrapper never injects a token: a dead login prints a `/login` hint on stderr and `claude` runs normally (the IU token on `me` ran the session on IU, verified live). Never export it otherwise (#37512: the env token deletes the Keychain entry on exit) |
 | `hc-reap.py`, `remote-dev.sh` `claude agents --json` | default dir | query once per enabled account and merge |
 
@@ -267,7 +267,7 @@ A running session never changes account: `CLAUDE_CONFIG_DIR` is fixed at spawn a
 **Account marker (`CLAUDE_ACCOUNT_PICKED=<id>`).** An iu pick is `unset CLAUDE_CONFIG_DIR`, indistinguishable
 from "nobody chose", so the decision travels in this variable instead:
 
-- every chooser sets it: `c`/`ch`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd wave`/`fan`
+- every chooser sets it: `c`/`ch`/`cs`/`cf` (in their subshell, with `--account`/resume pins), `rd work`
   (the spawn's `env`, from `pick_account`'s `# picked=` line). Children inherit it, so a nested `claude` never re-picks.
 - the routing reason rides with it as `CLAUDE_ACCOUNT_REASON=<reason>` (the picker's `reason=`, `forced` for `--account`, `resume`
   for a session pin; unset when unknown), set and unset together with the marker by `_claude_enter_account` and by `pick_account`'s
@@ -303,8 +303,7 @@ an account without a `.claude.json` is skipped): `scripts/claude-pretrust.sh "$H
 `scripts/claude-trust-sync.sh`, which copies `hasTrustDialogAccepted=true` from the default `~/.claude.json` into each
 extra account for exactly the project paths the default already trusts. It never loosens: it sets true only where the
 default says true (false or unknown paths are left alone; entries that are not JSON objects are ignored on both sides), touches no other key, writes one atomic replace per account
-(original mode kept) and nothing at all when the account is already in sync. An account dir it cannot write in prints a diagnostic and makes the run exit 1. `fan-worktree.sh` pre-trusts each new
-worktree. A folder the default has never opened still prompts once per account.
+(original mode kept) and nothing at all when the account is already in sync. An account dir it cannot write in prints a diagnostic and makes the run exit 1. A folder the default has never opened still prompts once per account.
 
 Known gaps:
 
@@ -321,7 +320,7 @@ Claude Code has one global `effortLevel` and no per-model default, so every laun
 `config/claude-effort.json` (decided 2026-10-27): **Sonnet high, Opus medium, Fable medium**, no `--model` = `default`
 (the account's default model, Opus or Fable) = medium. It applies on every account because it rides the launch, not
 the config dir: `c`/`ch`/`cs`/`cf` and a bare interactive `claude` (`_claude_effort_args` in `claude-auth.zsh`), and
-`rd wave`/`rd fan` (`rd_effort_flag` in `remote-dev.sh`, `RD_WAVE_EFFORT` overrides). An explicit `--effort` always
+`rd work` (`rd_effort_flag` in `remote-dev.sh`). An explicit `--effort` always
 wins; an unlisted family (Haiku) gets no flag. `settings.json` `effortLevel` stays `high` in all three accounts on
 purpose: it is what a spawn without the flag runs at, and those are the headless runs (the e2e). Custom
 subagents pin their own (`agents/*.md` `effort: high`). A mid-session `/model` switch keeps the session's effort.
@@ -337,7 +336,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini. Over plain ssh the login
 | `login/<id>` | `claude-account expiry`: the Keychain item's `claudeAiOauth.refreshTokenExpiresAt` (epoch ms; the refresh token ends 30 days after the login and rotation does not extend it). Only the two timestamps are read, never a token | PASS > 7 d left, WARN <= 7 d, FAIL <= 2 d or already past for the default account (`iu`); any other account is capped at WARN, like `auth/<id>`. An unreadable item (locked Keychain, foreign format) is a WARN, never a FAIL. Fix: `claude-relogin <id>` (§Re-login) |
 | `plan/<id>` | `claude-account expiry` `plan_detected` (parsed from the Keychain item's `rateLimitTier`) equals the registry's `plan`. The picker's default units hang on that plan | WARN only: a mismatch (fix: set `"plan"` in `config/claude-accounts.json`) or an undetectable tier |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
-| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` and the other retired IU launchers (`ca cap cdf cdp`) must stay gone; `rd wave`/`fan` call `pick_account` | someone rewired a launcher past the picker |
+| `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` and the other retired IU launchers (`ca cap cdf cdp`) must stay gone; `rd work` calls `pick_account` | someone rewired a launcher past the picker |
 | `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
@@ -627,6 +626,6 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | Wave | When | Contents | Done when |
 |-|-|-|-|
 | W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change (at W0 no `api/oauth/usage` calls from `claude-account`; source 3 now makes them, budgeted) |
-| W1 | after the `me` login | enable `me`; `rd wave`/`fan` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a wave lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
+| W1 | after the `me` login | enable `me`; `rd work` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a wave lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
 | W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
 | W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for `me` | written decision |

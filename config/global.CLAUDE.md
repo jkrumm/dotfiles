@@ -65,16 +65,14 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Work | Route |
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
-| N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
-| Work for a repo that should ship on its own | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies |
-| Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a tab in the Herdr app; `/wave` owns the contract |
+| Work for a repo that should ship on its own, incl. N independent changes | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies; `/wave` is the playbook for splitting a plan into Issues |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
 | Prove a change works (UI, traces, endpoints) | `@verifier` |
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
 
-The lanes — the factory's Issue (`rd issue`), `@implementer`, `rd wave` (incl. fan-out; deprecated, goes with reset row 7) — are the only ways
+The lanes — the factory's Issue (`rd issue`) and `@implementer` — are the only ways
 to start *another agent* (`docs/agent-platform.md`); `Explore`, `@verifier`,
 `/check`, `/research` and `/review` are in-session tools, not lanes. Brief a worker completely: exact
 paths, the change, acceptance criteria, scope limits, and any research baked in
@@ -87,7 +85,7 @@ inline.
 - **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
-- **Development runs on the Max subscriptions only** — Herdr sessions, `rd work|wave|fan`,
+- **Development runs on the Max subscriptions only** — Herdr sessions, `rd work`,
   every implementation session. Near the limit: the picker switches account, else pause
   (`rd` refuses to spill); never IU API tokens. The agw inference gateway holds the IU and Claude API tokens for
   `agw`, OpenCode, Hermes, `oc` and modelpick; Codex (`cx`/`cxa`/`astra`) keeps the IU key in its launcher; use the launchers, never hand-rolled Keychain creds. No headless `claude -p` anywhere

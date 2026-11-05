@@ -1,6 +1,6 @@
 ---
 name: remote-dev
-description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and closing Claude Code agents (`rd wave`, wave tabs, orchestrated waves) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
+description: Operate the Mac mini remote dev host — connecting from the MacBook through the Herdr app (or `ssh -t mini hc`), running, waiting on and reaping Claude Code agents (`rd work`, `rd issue`) in herdr-core terminals, the core under launchd and its resume/reap/events jobs, the Uptime Kuma readiness heartbeat, and the failure modes specific to a headless always-on Mac. Use when the user mentions herdr-core, hc, the Herdr app, the mini, "remote dev", "dev host", detaching or reattaching agents, "did my agent survive", sessions dying on lid-close, or asks how to reach a dev server running on the mini.
 ---
 
 # Remote dev — the mini as dev host
@@ -20,30 +20,23 @@ a path:
 ```bash
 repos [filter]                    # what's on the dev host, with branch + dirty count
 work <repo>                       # a tab with claude in the repo's space (idempotent)
-rd wave <repo> '<prompt>'   # a fresh `wave <n>` tab, solo agent, prompted
-rd close <agent>                  # close a finished wave tab (clean + pushed only)
-rd fan <repo> <brief…>            # fan-out: worktree (from fetched origin) + hidden Claude child per brief file
-rd fan --clean <repo>             # reclaim clean, merged worktrees rd fan made + their terminals (--all: any worktree)
-rd merge <repo> [--check cmd] <branch…>   # merge train: rebase, check, merge by rebase (GitHub only)
+rd issue <repo> <title> [--facts @file|-] [--after <id>] [--key <k>]   # file an Issue with the factory
+rd issues                            # list the factory's Issues
 agents                            # every agent on the host
 rd read <agent>                   # read its output without attaching
 rd say <agent> "…"                # hc send: refuses a blocked agent, queues for a working one
 ```
 
-Agents `rd` starts run on the Max subscriptions only (`sonnet` default, `RD_WAVE_MODEL`
-overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
+Agents `rd` starts run on the Max subscriptions only. `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists;
-the preferred path for work that should ship on its own), `@implementer`, `rd wave`
-(deprecated; a tab you watch; `rd fan` for N independent changes). `agent-dispatch` and
+Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists)
+and `@implementer`. `rd work` is the owner's own session. `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
-### Wave tabs and the orchestrator
+### Looking at an agent
 
-`/wave` owns the contract (chain vs orchestrated mode, the green gate). The
-mechanics this skill owns: `rd wave` adds a tab labelled `wave <n>` to the repo's
-space and prints the agent name (`<repo>-w<n>`); `<n>` is the plan's wave number from `(Wave <n>)` in the prompt (the live tab counter only when the prompt has none). The prompt travels in argv (no delivery check, no re-send). `rd fan` spawns one hidden child of the orchestrator per brief. An orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one (`/wave` documents both modes). To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
+The factory starts and babysits its agents; an orchestrator does not poll: `factory session wait --on workers`, end the turn, and the factory's wake note ("workers done: …") starts the next one. To look at one agent by hand: `rd read <agent>`, or `hc wait <t>` (returns when it stops working; `--children all|any`
 for helpers; `hc wait --help`). A wake can mean `blocked` (an approval/question UI): read it before answering.
 
 ### Scripting hc directly (stack rules on top of the `herdr` skill)
@@ -62,7 +55,7 @@ API. Read `hc --skill` before a flag. What it does not know about this stack:
   your own words. Pass the owner's brief verbatim when steering.
 - After steering an agent in a repo whose files are symlinked live (dotfiles, hermes-agent), restore its branch
   (`git -C <repo> switch master`): the branch *is* the running configuration.
-- Never close a terminal, tab or space you did not create. `rd close` enforces it for agents.
+- Never close a terminal, tab or space you did not create.
 
 ## Go look at the mini
 
@@ -77,7 +70,7 @@ A core restart (kickstart) keeps every terminal and its programs. A *lost* progr
 `com.jkrumm.hc-resume` types `claude --resume` into a Claude terminal, but shells, dev servers and loops are gone and a resumed
 agent lost its in-flight turn. Do not leave work that must not be interrupted in a bare shell. **Never `ssh mini 'claude …'`**: the session comes up
 logged out of Max and silently bills API credits while still looking healthy —
-a terminal spawned by the launchd core (`rd wave`/`rd work`) inherits the keychain.
+a terminal spawned by the launchd core (`rd work`) inherits the keychain.
 
 ## Reaching a dev server on the mini
 
@@ -160,7 +153,7 @@ When something is red, in order:
 | A direct `op read`/`op run` hangs on the mini | No biometric prompt to answer. Use `secrets-run` |
 | `op signin` "worked" but the next command says not signed in | Session lives in the shell that ran it — chain them |
 | Agent died when the lid closed | It did not — the lid ends the link only. A *lost* program (not a core kickstart) is replaced by a shell; `hc-resume` brings Claude back, not shells or the in-flight turn |
-| An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd wave`/`rd work`) — never `ssh mini 'claude …'` |
+| An agent runs but does nothing, shows `Not logged in` / API Usage Billing | Spawned over ssh, can't reach the login keychain. Spawn through the core (`rd work`) — never `ssh mini 'claude …'` |
 | `rd` says "herdr-core is not running" | `launchctl kickstart -k gui/$(id -u)/com.jkrumm.herdr-core` on the mini (terminals survive), or `make doctor`. Never an `hc` call to "wake" it: that starts a stray core |
 | A `claude` in a core terminal has no transcript / `--resume` finds nothing | The core was started from inside a Claude session and passed `CLAUDECODE` to every terminal; launchd's clean env is the fix, so restart through launchd |
 | A program in a terminal hangs at 0 % CPU on `~/Documents`, `~/Desktop`, `~/Downloads` | TCC dialog nobody sees: the launcher lost its Full Disk Access (a rebuilt launcher is a new identity). `make tcc-probe`, `docs/tcc.md` |
