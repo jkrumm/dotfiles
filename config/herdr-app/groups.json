@@ -22,9 +22,9 @@
         "linewatch",
         "usage-tracker",
         "rb",
-        "dispatch-scratch",
         "tinycast-extensions",
         "email-gateway",
+        "image-gateway",
         "ntfy-mac"
       ]
     },
@@ -48,13 +48,7 @@
         "basalt-ui",
         "weatherorb",
         "free-planning-poker",
-        "shutterflow",
-        "ShutterflowOps",
-        "shutterflow-wt",
-        "image-gateway",
-        "kobo-mods",
-        "ticktick-raycast",
-        "king-smith-walkingpad-mac"
+        "ticktick-raycast"
       ]
     },
     {
@@ -62,16 +56,11 @@
       "members": [
         "IuRoot",
         "epos-tool-athena",
-        "epos-ai-teamchat-athena",
         "epos-knowledge-athena",
         "prometheus-scripts",
         "prometheus-epx",
         "epos-studentenrolment-backend",
-        "epos.student-enrolment",
-        "epos-dam-backend",
-        "epos.dam",
-        "infra-pilot",
-        "epos-otf-workspaces"
+        "epos.student-enrolment"
       ]
     }
   ]
