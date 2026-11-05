@@ -28,7 +28,7 @@ Idle age comes from the last timestamped record of the agent's Claude session tr
 cannot be found has an unknown age and is never closed.
 
 Never starts a core: `hc connect` STARTS one when none runs, so unless HC_SESSION is set (a scratch core)
-com.jkrumm.herdr-core must be `state = running` in launchd, otherwise the terminal pass is skipped.
+scripts/lib/core-up.sh must say a launchd-born core answers, otherwise the terminal pass is skipped.
 """
 
 import argparse
@@ -55,7 +55,6 @@ BG_STOPPABLE = {"blocked", "idle", "done"}
 SESSION_LABEL = "jk.claude.session"
 FACTORY_KEY_LABEL = "factory.key"
 PLAN_KEY_PREFIX = "plan:"
-CORE_LABEL = "com.jkrumm.herdr-core"
 HC = os.environ.get("HC_BIN") or "hc"
 
 
@@ -84,7 +83,7 @@ def core_running() -> bool:
 def hc_rpc(method: str, params: dict | None = None, timeout: float = NET_TIMEOUT_S) -> dict:
     """One JSON-RPC request on a short-lived `hc connect`. Raises HcError (also for 'no core running')."""
     if not core_running():
-        raise HcError(f"{CORE_LABEL} is not running: not connecting (hc would start a core)")
+        raise HcError("no launchd-born core answers (scripts/lib/core-up.sh): not connecting (hc would start a core)")
     req = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}) + "\n"
     try:
         r = subprocess.run([HC, "connect"], input=req, capture_output=True, text=True, timeout=timeout)

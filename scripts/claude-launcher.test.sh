@@ -3,7 +3,7 @@
 # marker contract (config/zsh/claude-auth.zsh + claude.zsh, remote-dev.sh pick_account + the hc spawn env).
 #
 # Hermetic: HOME/XDG_CONFIG_HOME are scratch dirs, `claude`, `claude-account`, `secrets-run`,
-# `launchctl` and (for rd) a fake `hc` are stubs. The stub `claude-account pick` appends one line per call to a pick
+# `ps`, `nc` and (for rd) a fake `hc` are stubs. The stub `claude-account pick` appends one line per call to a pick
 # log, so "one pick-log line per spawn" is counted, not argued. Never starts a real agent.
 #
 # Usage: scripts/claude-launcher.test.sh   (exit 0 = all pass)
@@ -209,8 +209,9 @@ S="$TMP/home/SourceRoot"; HCSTATE="$TMP/hcstate"
 mkdir -p "$S/dotfiles/scripts" "$S/myrepo/.git" "$TMP/home/.local/bin" "$HCSTATE"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
-printf '#!/usr/bin/env bash\necho "state = running"\n' > "$TMP/bin/launchctl"
-chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc" "$TMP/bin/launchctl"
+chmod +x "$S/dotfiles/scripts/claude-pretrust.sh" "$TMP/home/.local/bin/hc"
+# a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
+printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
 # the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
 printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 rd_spawn() { # $1 = pick line, $2 = id

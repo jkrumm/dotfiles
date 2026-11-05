@@ -16,7 +16,7 @@
 //   {ts, event: "recorder.unparsed" | "recorder.subscribe_failed" | "recorder.other", ...}
 //
 // Never starts a core: `hc connect` STARTS one when none runs, so before every connect (with HC_SESSION
-// unset, i.e. the real core) com.jkrumm.herdr-core must be `state = running` in launchd; otherwise it counts
+// unset, i.e. the real core) lib/core-up.sh must say a launchd-born core answers; otherwise it counts
 // as "no core" and retries with backoff (the first retry already writes the gap).
 // Runs under launchd KeepAlive: com.jkrumm.hc-events.
 import { appendFileSync, mkdirSync } from "node:fs"
@@ -25,7 +25,6 @@ import { join } from "node:path"
 type Json = Record<string, unknown>
 
 export const EVENTS_DIR = process.env.HERDR_EVENTS_DIR || join(process.env.HOME ?? "", ".local/share/herdr-events")
-export const CORE_LABEL = "com.jkrumm.herdr-core"
 export const IDLE_MS = 60_000 // heartbeats come every 15 s
 
 export function dayFile(dir: string, d: Date): string {
@@ -177,7 +176,7 @@ export function coreAvailable(
 }
 
 export async function openHc(guard: () => boolean = coreAvailable): Promise<Link> {
-  if (!guard()) throw new Error(`${CORE_LABEL} is not running: not connecting (hc would start a core)`)
+  if (!guard()) throw new Error("no launchd-born core answers (scripts/lib/core-up.sh): not connecting (hc would start a core)")
   const proc = Bun.spawn([process.env.HC_BIN || "hc", "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: process.env })
   proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "events.subscribe", params: {} }) + "\n")
   proc.stdin.flush()

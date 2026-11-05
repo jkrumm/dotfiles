@@ -34,7 +34,7 @@ The Herdr app on the MacBook is the window. It links the mini's core as machine 
 once; ssh config host `mini`), so the mini's spaces and terminals sit next to the MacBook's (`herdr-app --skill`, MacBook
 only, is its manual; the `herdr` skill holds the rules). The core and every terminal run on the mini and the link is
 ssh/TCP, so a roam or lid-close ends the *link*, never a terminal: the app reconnects. Terminal-only fallback, no app:
-`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches; only while `launchctl print gui/$(id -u)/com.jkrumm.herdr-core` shows the core running, since an `hc` call with no core starts one without the keychain).
+`ssh -t mini hc` (pick a terminal and attach, Ctrl+\ detaches; only while `bash scripts/lib/core-up.sh` says the core is up, since an `hc` call with no core starts one without the keychain).
 
 - **No ssh to the mini needs a 1Password approval, and plain `ssh mini` never
   touches the 1Password agent.** `Host mini` authenticates with the dedicated

@@ -204,7 +204,7 @@ a terminal name that can read as an address (`t7`).
 SessionEnd; it only runs `hc` when `HC_TERMINAL_ID` is set. `scripts/hc-resume.ts` (LaunchAgent `com.jkrumm.hc-resume`,
 `make hc-resume-setup`) subscribes over `hc connect` and types `env CLAUDE_CONFIG_DIR='<dir>' claude
 --dangerously-skip-permissions --resume <id>` (`env -u CLAUDE_CONFIG_DIR …` without the label) into a terminal whose
-foreground (else its program) is a login shell. A subscribed `hc connect` connection answers no requests, so each send is
+foreground is positively a login shell (a `restarted` event, whose record has no foreground fact yet, may use the terminal's own program instead). A subscribed `hc connect` connection answers no requests, so each send is
 a `terminal.send` on its own short-lived `hc connect`. Proof in a scratch core (own `HC_SESSION`, scratch `XDG_*`, torn down):
 
 ```text
@@ -222,8 +222,9 @@ hc server stop; hc server start       → "stream ended, reconnecting"; the park
 
 SessionEnd clears the label only for `reason` `prompt_input_exit` or `logout` (SIGTERM fires `other`, which must stay
 resumable). A `restarted` event resets the per-terminal attempt (a new loss resumes again); snapshots need the foreground
-fact; each send re-reads the terminal (`terminal.get`) and skips unless it is still a login shell with the same session
-label, under a 15 s deadline. `hc connect` would start a core, so hc-resume checks `launchctl print gui/<uid>/com.jkrumm.herdr-core` for `state = running` before every connect (skipped when `HC_SESSION` is set): a stopped core means backoff retries, never an auto-start. Not mirrored on resume:
+fact; each send re-reads the terminal (`terminal.get`) and skips unless its foreground is still a login shell with the same
+session label (an unknown foreground, `null` or absent, is retried by the next snapshot and never typed into; only a
+`restarted`-triggered send lets the terminal's own program stand in for an absent key), under a 15 s deadline. `hc connect` would start a core, so hc-resume runs `scripts/lib/core-up.sh` (the socket answers AND a launchd-born core exists) before every connect (skipped when `HC_SESSION` is set): no such core means backoff retries, never an auto-start. Not mirrored on resume:
 model/effort flags and the `c` launcher's env (`ENABLE_TOOL_SEARCH`, lane vars). A terminal sitting at a shell prompt
 that carries a session label (the claude exited without SessionEnd, e.g. the shell was reused) is resumed too, once.
 

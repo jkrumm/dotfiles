@@ -30,8 +30,9 @@ export interface Link { messages: AsyncIterable<Msg>; close(): void }
 export interface Deps {
   /** Connect and subscribe; rejects when no core runs. */
   open: () => Promise<Link>
-  /** `session` is the id the line was built for: the real adapter re-checks it at send time. */
-  send: (address: string, text: string, session: string) => Promise<void>
+  /** `session` is the id the line was built for: the real adapter re-checks it at send time. `argvFallback` is set only
+   *  by a `restarted` trigger: the terminal's own argv may stand in for an ABSENT foreground fact. */
+  send: (address: string, text: string, session: string, argvFallback?: boolean) => Promise<void>
   log?: (line: string) => void
   backoffMs?: [number, number]
   signal?: AbortSignal
@@ -97,7 +98,7 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     if (!line) { log(`skip ${t.address}: unusable session label`); return }
     inflight.add(t.address)
     attempted.set(t.address, id)
-    const p = send(t.address, line, id)
+    const p = send(t.address, line, id, argvFallback)
       .then(() => log(`resume ${t.address} ${id} (${labels[CONFIG] || "iu"})`))
       .catch((e) => {
         // Nothing was typed: let the next snapshot try again. "skipped" and real send errors keep the attempt.
@@ -170,8 +171,6 @@ export class RetryLater extends Error {}
 /** The core guard refused before anything was typed. */
 export class NotConnecting extends RetryLater {}
 
-export const CORE_LABEL = "com.jkrumm.herdr-core"
-
 /** True when it is safe to `hc connect`: a scratch HC_SESSION, or lib/core-up.sh says a launchd-born core answers. */
 export function coreAvailable(
   env: Record<string, string | undefined> = process.env,
@@ -182,7 +181,7 @@ export function coreAvailable(
 }
 
 function spawnConnect(guard: () => boolean) {
-  if (!guard()) throw new NotConnecting(`${CORE_LABEL} is not running: not connecting (hc would start a core)`)
+  if (!guard()) throw new NotConnecting("no launchd-born core answers (scripts/lib/core-up.sh): not connecting (hc would start a core)")
   return Bun.spawn([process.env.HC_BIN || "hc", "connect"], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: process.env })
 }
 
@@ -234,7 +233,7 @@ async function call(proc: ReturnType<typeof Bun.spawn>, it: AsyncGenerator<strin
  * the same session label (the subscribed connection answers no requests). A hard deadline kills the
  * connect process and rejects, so the caller's `inflight` always clears.
  */
-export async function sendHc(address: string, text: string, session: string, deadlineMs = SEND_DEADLINE_MS, guard: () => boolean = coreAvailable): Promise<void> {
+export async function sendHc(address: string, text: string, session: string, deadlineMs = SEND_DEADLINE_MS, guard: () => boolean = coreAvailable, argvFallback = false): Promise<void> {
   const proc = spawnConnect(guard)
   let timedOut = false
   const timer = setTimeout(() => { timedOut = true; proc.kill() }, deadlineMs)
@@ -242,8 +241,9 @@ export async function sendHc(address: string, text: string, session: string, dea
     const it = lines(proc.stdout)
     const t = (await call(proc, it, 3, "terminal.get", { terminal: address })) as unknown as Terminal
     if (t.labels?.[SESSION] !== session) throw new Error(`skipped: ${address} no longer carries session ${session}`)
-    if (t.foreground === undefined || t.foreground === null) throw new RetryLater(`foreground of ${address} unknown: not typing, a later snapshot decides`)
-    if (!isLoginShell(t)) throw new Error(`skipped: ${address} is no longer at a login shell`)
+    // Unknown foreground (null, or absent without the `restarted` fallback) is never typed into: a later snapshot decides.
+    if (t.foreground === null || (t.foreground === undefined && !argvFallback)) throw new RetryLater(`foreground of ${address} unknown: not typing, a later snapshot decides`)
+    if (!isLoginShell(t, argvFallback)) throw new Error(`skipped: ${address} is no longer at a login shell`)
     await call(proc, it, 2, "terminal.send", { terminal: address, text, caller: "hc-resume" })
   } catch (e) {
     if (timedOut) throw new Error(`send to ${address} timed out after ${deadlineMs} ms`)
@@ -259,5 +259,5 @@ if (import.meta.main) {
   const ac = new AbortController()
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => { ac.abort(); setTimeout(() => process.exit(0), 200) })
   log(`hc-resume started pid=${process.pid}`)
-  await run({ open: openHc, send: sendHc, log, signal: ac.signal })
+  await run({ open: openHc, send: (a, t, s, fb) => sendHc(a, t, s, SEND_DEADLINE_MS, coreAvailable, fb), log, signal: ac.signal })
 }

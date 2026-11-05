@@ -339,7 +339,7 @@ class Reap(unittest.TestCase):
         self.assertIn("terminal pass skipped", self.last_out)
         self.assertIn("core-up", calls)  # core-up.sh was asked, hc was not
 
-    def test_scratch_core_skips_the_launchd_guard(self):
+    def test_scratch_core_skips_the_core_up_guard(self):
         r = self.repo("a")
         calls = self.run_reap([self.agent("p1", "t1", "idle", r)], core_down=True, extra_env={"HC_SESSION": "scratch"})
         self.assertIn("kill t1", calls)

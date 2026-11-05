@@ -228,11 +228,41 @@ test("sendHc revalidates: still a login shell with the same session -> sends", a
   })
 })
 
-test("sendHc types nothing when terminal.get carries no foreground; a login-shell argv is not enough", async () => {
+test("sendHc: unknown foreground is typed into only for a restarted trigger with the foreground key ABSENT", async () => {
+  // restarted + absent foreground -> the terminal's own login-shell argv stands in: types
   await withFake({ FAKE_TERMINAL: JSON.stringify(term()) }, async (log) => {
-    await expect(sendHc("t1", "line", ID, 5000, () => true)).rejects.toBeInstanceOf(RetryLater)
+    await sendHc("t1", "line", ID, 5000, () => true, true)
+    expect(log()).toEqual(["terminal.get", "terminal.send"])
+  })
+  // snapshot-triggered + absent foreground -> RetryLater, nothing typed
+  await withFake({ FAKE_TERMINAL: JSON.stringify(term()) }, async (log) => {
+    await expect(sendHc("t1", "line", ID, 5000, () => true, false)).rejects.toBeInstanceOf(RetryLater)
     expect(log()).toEqual(["terminal.get"])
   })
+  // foreground: null is unknown for every trigger, the fallback included
+  for (const fallback of [false, true]) {
+    await withFake({ FAKE_TERMINAL: JSON.stringify({ ...term(), foreground: null }) }, async (log) => {
+      await expect(sendHc("t1", "line", ID, 5000, () => true, fallback)).rejects.toBeInstanceOf(RetryLater)
+      expect(log()).toEqual(["terminal.get"])
+    })
+  }
+  // a claude foreground is skipped for every trigger, even with a login-shell argv
+  for (const fallback of [false, true]) {
+    await withFake({ FAKE_TERMINAL: JSON.stringify({ ...term(), foreground: { argv: ["claude"] } }) }, async (log) => {
+      await expect(sendHc("t1", "line", ID, 5000, () => true, fallback)).rejects.toThrow("no longer at a login shell")
+      expect(log()).toEqual(["terminal.get"])
+    })
+  }
+})
+
+test("createResumer passes argvFallback only for a restarted trigger", async () => {
+  const flags: (boolean | undefined)[] = []
+  const r = createResumer(async (_a, _l, _s, fb) => { flags.push(fb) })
+  r.handle(restarted(term()))
+  await r.settled()
+  r.handle(snap(term({ address: "t2" })))
+  await r.settled()
+  expect(flags).toEqual([true, false])
 })
 
 test("sendHc skips when the session label changed or the shell is gone", async () => {

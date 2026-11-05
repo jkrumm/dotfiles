@@ -31,7 +31,8 @@ g clone -q "$TMP/origin.git" "$TMP/co" 2>/dev/null
 echo a >"$TMP/co/f"; g -C "$TMP/co" add f; g -C "$TMP/co" commit -qm one; g -C "$TMP/co" push -q -u origin master 2>/dev/null
 
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
-printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
+# a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
+printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
 # the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
 printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
@@ -64,7 +65,7 @@ case "$1 $2" in
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
-chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/hc" "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
+chmod +x "$TMP/home/.local/bin/hc" "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/claude-account" "$S/dotfiles/scripts/"*.sh
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
 export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \

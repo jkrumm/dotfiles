@@ -60,10 +60,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The owner's core must be up under launchd before any hc call: an hc call with no core
+# The owner's core must be up (lib/core-up.sh) before any hc call: an hc call with no core
 # auto-starts one. (Our calls carry HC_SESSION and a scratch core, but the rule is cheap.)
 step "preflight"
-launchctl print "$DOMAIN/com.jkrumm.herdr-core" 2>/dev/null | grep -E '^[[:space:]]+state = ' | head -1 | sed 's/^[[:space:]]*/   live core: /'
+if bash "$(dirname "${BASH_SOURCE[0]}")/lib/core-up.sh" >/dev/null 2>&1; then echo "   live core: up (launchd-born, socket answers)"; else echo "   live core: NOT up"; fi
 echo "   pin: collie $COLLIE_VERSION ($COLLIE_REF)  scratch: $T  port: $PORT"
 
 step "scratch core (own session '$SESSION', own LaunchAgent)"

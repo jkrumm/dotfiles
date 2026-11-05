@@ -112,7 +112,7 @@ test("no core at the start: retries, then the first ack records the gap", async 
   const logs: string[] = []
   const done = run({
     dir, backoffMs: [10, 20], signal: ac.signal, log: (l) => logs.push(l),
-    open: async () => { if (++tries < 3) throw new Error("com.jkrumm.herdr-core is not running"); return link([ACK()], true) },
+    open: async () => { if (++tries < 3) throw new Error("no launchd-born core answers"); return link([ACK()], true) },
   })
   await Bun.sleep(200)
   ac.abort()

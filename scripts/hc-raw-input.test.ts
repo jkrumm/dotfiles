@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CLOSE, CREDIT, DATA, createFrameParser, encodeFrame, isAgent, typeInto } from "./hc-raw-input"
+import { CLOSE, CREDIT, DATA, coreIsRunning, createFrameParser, encodeFrame, isAgent, typeInto } from "./hc-raw-input"
 
 test("encodeFrame is channel u32le, type u8, length u32le, payload (bytes seen from `hc attach`)", () => {
   expect([...encodeFrame(1, DATA, "hello\r")]).toEqual([1, 0, 0, 0, 0, 6, 0, 0, 0, ...Buffer.from("hello\r")])
@@ -107,4 +107,17 @@ test("typeInto with explicit addresses still types into a non-agent terminal", a
   expect(r.reached).toEqual(["t1", "t2"])
   expect(r.skipped).toEqual([])
   expect(r.typed).toBe("\x1b[?997;2n\x1b[?997;2n")
+})
+
+test("coreIsRunning: a scratch HC_SESSION skips the check; else lib/core-up.sh must exit 0", () => {
+  const dir = mkdtempSync(join(tmpdir(), "core-up-"))
+  const up = join(dir, "up.sh"), down = join(dir, "down.sh")
+  writeFileSync(up, "exit 0\n")
+  writeFileSync(down, "echo 'no core' >&2; exit 1\n")
+  try {
+    expect(coreIsRunning({ HC_SESSION: "scratch", CORE_UP_SH: down })).toBe(true)
+    if (process.platform !== "darwin") return
+    expect(coreIsRunning({ CORE_UP_SH: up })).toBe(true)
+    expect(coreIsRunning({ CORE_UP_SH: down })).toBe(false)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 })

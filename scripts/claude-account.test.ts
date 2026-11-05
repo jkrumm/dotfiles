@@ -1258,7 +1258,7 @@ describe("CLI (isolated HOME)", () => {
     writeFileSync(hcStub, `#!/bin/sh\ncase "$1" in\n server) exit 0;;\n machine) echo '${machines}';;\n exec) cat "${okOut}";;\nesac\n`)
     chmodSync(hcStub, 0o755)
     // ssh: the remote command names `hc exec` when it goes through the peer's own core (ok payload unless STUB_PEER_CORE=down:
-    // launchd says the core is not running, exit 99); a plain script read answers the unreadable payload (no Keychain over ssh).
+    // lib/core-up.sh says the core is not up, exit 99); a plain script read answers the unreadable payload (no Keychain over ssh).
     const sshStub = join(bin, "ssh-peer")
     writeFileSync(sshStub, `#!/bin/sh\ncase "$*" in\n *"hc exec"*) [ "$STUB_PEER_CORE" = down ] && exit 99; cat "${okOut}";;\n *) cat "${unreadableOut}";;\nesac\n`)
     chmodSync(sshStub, 0o755)

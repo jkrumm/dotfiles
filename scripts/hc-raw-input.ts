@@ -14,9 +14,10 @@
 //
 // The attach asks for the terminal's own size, so it never resizes it. It sends no `display`.
 // Never starts a core: `hc connect` STARTS one when none runs, so with HC_SESSION unset the real core must be
-// `state = running` in launchd, else this exits 3 and types nothing.
+// be up as scripts/lib/core-up.sh defines it (the socket answers AND a launchd-born core exists), else this exits 3 and
+// types nothing.
 import { spawnSync } from "node:child_process"
-import { basename } from "node:path"
+import { basename, join } from "node:path"
 
 export const DATA = 0
 export const CREDIT = 1
@@ -69,13 +70,12 @@ export function isAgent(t: Terminal): boolean {
   return /^(claude|opencode)$/.test(basename(head))
 }
 
-/** The real core must be up in launchd before any connect; a scratch core (HC_SESSION) is the caller's. */
+/** The real core must be up (lib/core-up.sh) before any connect; a scratch core (HC_SESSION) is the caller's. CORE_UP_SH overrides the script (tests). */
 export function coreIsRunning(env = process.env): boolean {
   if (env.HC_SESSION) return true
   if (process.platform !== "darwin") return true
-  const uid = process.getuid?.() ?? 501
-  const r = spawnSync("launchctl", ["print", `gui/${uid}/com.jkrumm.herdr-core`], { encoding: "utf8" })
-  return r.status === 0 && /state = running/.test(r.stdout)
+  const script = env.CORE_UP_SH ?? join(import.meta.dir, "lib", "core-up.sh")
+  return spawnSync("bash", [script], { stdio: "ignore" }).status === 0
 }
 
 /** One framed hc connection. */

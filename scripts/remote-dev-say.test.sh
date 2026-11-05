@@ -17,15 +17,11 @@ expect_calls() { [ "$(calls "$2")" -eq "$3" ] && ok "$1" || bad "$1 — '$2' cal
 mkdir -p "$TMP/bin" "$TMP/state" "$TMP/home/.local/bin" "$TMP/xdg/secrets"
 echo cache >"$TMP/xdg/secrets/backend"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
-# launchd runs the core unless $STATE/no_core exists
-cat >"$TMP/bin/launchctl" <<'STUB'
-#!/usr/bin/env bash
-[ -f "$STATE/no_core" ] && exit 113
-echo "state = running"
-STUB
-chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/hc"
+chmod +x "$TMP/home/.local/bin/hc"
+# a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
+printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
 # the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
-printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
+printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ] && [ ! -f "${STATE:-/nonexistent}/no_core" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
 clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
@@ -150,7 +146,8 @@ has "says the core has no agents" "$out" "no agents at all"
 echo "no core: error, hc is not called"
 hcreset; touch "$STATE/no_core"
 say "go on"; [ "$rc" -ne 0 ] && ok "refused" || bad "ran without a core"
-has "names the fix" "$out" "make herdr-core-setup"
+has "names why and the fix" "$out" "no core answers"
+has "names the fix" "$out" "launchctl kickstart"
 [ ! -e "$STATE/hc-called" ] && ok "hc was not called" || bad "hc was called"
 
 echo; [ "$fails" -eq 0 ] && echo "remote-dev-say: all passed" || { echo "remote-dev-say: $fails failed"; exit 1; }

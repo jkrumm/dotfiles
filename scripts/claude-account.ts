@@ -210,7 +210,6 @@ function pendingFrom(text: string, nowMs: number): PendingAsk[] {
 const hcBin = () => process.env.CLAUDE_ACCOUNTS_HC ?? "hc" // test seam, like CLAUDE_ACCOUNTS_SSH
 const hcOk = (args: string[]) => spawnSync(hcBin(), args, { encoding: "utf8", timeout: 5_000 })
 const shq = (v: string) => `'${v.replaceAll("'", `'\\''`)}'`
-const CORE_LABEL = "com.jkrumm.herdr-core"
 /**
  * Why a core and not ssh: an ssh session cannot read the mini's login Keychain (rc=36); the core is a launchd GUI-session
  * child and can. Two ways to reach the peer's: (1) this machine's core lists the peer connected (`hc exec --on`), else
@@ -229,10 +228,10 @@ function peerViaCore(name: string, nowMs: number) {
   if (r.error || !r.stdout.includes("@@\n")) return null
   return parseSnapshot(r.stdout, nowMs)
 }
-/** (2) of the above: ssh to the peer, then its own core. null when the hop, the core (not running under launchd) or the read fails. */
+/** (2) of the above: ssh to the peer, then its own core. null when the hop, the core (lib/core-up.sh: not up) or the read fails. */
 function peerViaItsCore(ssh: string[], nowMs: number) {
   const script = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; ${PEER_SCRIPT}`
-  const remote = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; launchctl print "gui/$(id -u)/${CORE_LABEL}" 2>/dev/null | grep -q "state = running" || exit 99; hc exec --timeout 30 sh -c ${shq(script)}`
+  const remote = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; export PATH; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 99; hc exec --timeout 30 sh -c ${shq(script)}`
   const r = spawnSync(sshBin(), [...SSH_OPTS, ...ssh, remote], { encoding: "utf8", timeout: 40_000 })
   if (r.error || r.status !== 0 || !r.stdout.includes("@@\n")) return null
   return parseSnapshot(r.stdout, nowMs)

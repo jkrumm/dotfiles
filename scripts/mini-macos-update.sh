@@ -107,16 +107,15 @@ fi
 # Terminals survive a core restart but not a reboot. hc-resume revives Claude from the resume labels
 # (jk.claude.session / jk.claude.config, hooks/hc-session-label.ts) once the core is back, and this
 # file is the human-readable record of what it should find. Best effort: never block on it, and
-# `launchctl print` first because any `hc` call auto-starts a stray core.
+# `lib/core-up.sh` first because any `hc` call auto-starts a stray core.
 stamp="$(date +%Y%m%d-%H%M)"
 core_snap="\$HOME/Library/Logs/herdr-core-resume-pre-reboot-$stamp.tsv"
 core_n=""
 # shellcheck disable=SC2029  # $core_snap is built here on purpose; \$HOME expands on the mini
 if core_n=$(ssh "${SSH_OPTS[@]}" "$HOST" "/usr/bin/python3 - $core_snap" <<'PY' 2>/dev/null
 import json, os, subprocess, sys
-uid = os.getuid()
-job = subprocess.run(["/bin/launchctl", "print", f"gui/{uid}/com.jkrumm.herdr-core"], capture_output=True, text=True).stdout
-if not any(l.strip() == "state = running" for l in job.splitlines()):
+up = subprocess.run(["/bin/bash", os.path.expanduser("~/SourceRoot/dotfiles/scripts/lib/core-up.sh")], capture_output=True)
+if up.returncode != 0:
     sys.exit(3)
 hc = os.path.expanduser("~/.local/bin/hc")
 def run(*a):

@@ -19,8 +19,8 @@ import { exec, theme, home, machines, shared, setShared, run, terminals } from "
 const FLEET = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory fleet --format json`;
 const HC_MARK = "@@HC@@";
 const HC_SPLIT = `\n${HC_MARK}\n`;
-// hc starts a stray core (no keychain) when none runs: ask launchd first, as rd's require_core does. Bounded when the host has a timeout.
-const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; launchctl print "gui/$(id -u)/com.jkrumm.herdr-core" 2>/dev/null | grep -q 'state = running' || exit 1; t=$(command -v timeout || command -v gtimeout)`;
+// hc starts a stray core (no keychain) when none runs: ask lib/core-up.sh first (socket answers AND a launchd-born core), as rd's require_core does. Bounded when the host has a timeout.
+const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
 const CMD = `{ ${FLEET}; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.

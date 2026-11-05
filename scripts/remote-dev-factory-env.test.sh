@@ -19,8 +19,9 @@ echo cache >"$TMP/xdg/secrets/backend"
 printf '#!/usr/bin/env bash\necho "unset CLAUDE_CONFIG_DIR"\n' >"$TMP/home/.local/bin/claude-account"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$S/dotfiles/scripts/claude-pretrust.sh"
 cp "$HERE/remote-dev-fake-hc.sh" "$TMP/home/.local/bin/hc"
-printf '#!/usr/bin/env bash\necho "state = running"\n' >"$TMP/bin/launchctl"
-chmod +x "$TMP/bin/launchctl" "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
+chmod +x "$TMP/home/.local/bin/claude-account" "$TMP/home/.local/bin/hc" "$S/dotfiles/scripts/"*.sh
+# a launchd-born core exists (lib/core-up.sh's first half) unless $STATE/no_core exists; PS_BIN keeps the real ps out
+printf '#!/usr/bin/env bash\n[ -f "${STATE:-/nonexistent}/no_core" ] || echo "    1 /x/Herdr Core.app/Contents/MacOS/herdr-core --hc-launchd /tmp/hc-launchd-1/ready"\n' >"$TMP/bin/ps"; chmod +x "$TMP/bin/ps"; export PS_BIN="$TMP/bin/ps"
 # the core's socket answers (lib/core-up.sh's second half; no real nc may probe a socket)
 printf '#!/usr/bin/env bash\n[ ! -f "${STATE:-/nonexistent}/sock_down" ]\n' >"$TMP/bin/nc"; chmod +x "$TMP/bin/nc"
 # No real `factory` may answer (the mini has one in ~/.local/bin): drop every PATH dir that holds one.
