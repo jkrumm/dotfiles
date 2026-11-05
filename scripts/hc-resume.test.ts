@@ -255,6 +255,33 @@ test("sendHc: unknown foreground is typed into only for a restarted trigger with
   }
 })
 
+test("a live agent (status.app from its own hook) is never typed into, whatever the foreground fact says", async () => {
+  const live = { app: "claude-code", state: "done" }
+  // snapshot: a stale login-shell foreground with a reporting Claude -> nothing; without status -> resumes
+  const a = harness()
+  a.r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: shell }, status: live })] })
+  await a.r.settled()
+  expect(a.sent).toEqual([])
+  const b = harness()
+  b.r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: shell }, status: null })] })
+  await b.r.settled()
+  expect(b.sent).toHaveLength(1)
+  // restarted: the event proves the program ended, a leftover status does not block
+  const c = harness()
+  c.r.handle(restarted(term({ foreground: { argv: shell }, status: live })))
+  await c.r.settled()
+  expect(c.sent).toHaveLength(1)
+  // sendHc re-read: same rule per trigger
+  await withFake({ FAKE_TERMINAL: JSON.stringify({ ...term(), foreground: { argv: shell }, status: live }) }, async (log) => {
+    await expect(sendHc("t1", "line", ID, 5000, () => true, false)).rejects.toThrow("live claude-code session")
+    expect(log()).toEqual(["terminal.get"])
+  })
+  await withFake({ FAKE_TERMINAL: JSON.stringify({ ...term(), foreground: { argv: shell }, status: live }) }, async (log) => {
+    await sendHc("t1", "line", ID, 5000, () => true, true)
+    expect(log()).toEqual(["terminal.get", "terminal.send"])
+  })
+})
+
 test("createResumer passes argvFallback only for a restarted trigger", async () => {
   const flags: (boolean | undefined)[] = []
   const r = createResumer(async (_a, _l, _s, fb) => { flags.push(fb) })

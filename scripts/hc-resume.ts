@@ -21,6 +21,8 @@ export type Terminal = {
   address: string
   argv?: string[]
   foreground?: { argv?: string[] } | null
+  /** Set by a running agent's own hook (`app: "claude-code"`); null on a bare shell. The foreground fact can be stale. */
+  status?: { app?: string } | null
   labels?: Record<string, string>
 }
 /** What a link yields: a full snapshot (subscribe result, `missed`) or one restarted terminal. */
@@ -76,6 +78,15 @@ export function modelFlags(argv: string[] = []): string[] {
 }
 
 /** The line typed into the shell; null when the labels carry no usable session id. */
+/**
+ * A live agent has reported itself through its own hook (`status.app`). Only a `restarted` record, which proves the
+ * program ended, may type regardless: a snapshot's or terminal.get's `foreground` can still name the login shell while a
+ * Claude runs in it (seen live: the resume line landed in running sessions as a user message).
+ */
+export function hasLiveAgent(t: Terminal): boolean {
+  return Boolean(t.status?.app)
+}
+
 export function resumeLine(labels: Record<string, string>, argv?: string[]): string | null {
   const id = labels[SESSION]
   if (!id || !/^[0-9a-f-]{8,64}$/i.test(id)) return null
@@ -93,6 +104,7 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
     const labels = t.labels ?? {}
     const id = labels[SESSION]
     if (!id || !isLoginShell(t, argvFallback)) return
+    if (!argvFallback && hasLiveAgent(t)) return
     if (inflight.has(t.address) || attempted.get(t.address) === id) return
     const line = resumeLine(labels, t.argv)
     if (!line) { log(`skip ${t.address}: unusable session label`); return }
@@ -243,6 +255,7 @@ export async function sendHc(address: string, text: string, session: string, dea
     if (t.labels?.[SESSION] !== session) throw new Error(`skipped: ${address} no longer carries session ${session}`)
     // Unknown foreground (null, or absent without the `restarted` fallback) is never typed into: a later snapshot decides.
     if (t.foreground === null || (t.foreground === undefined && !argvFallback)) throw new RetryLater(`foreground of ${address} unknown: not typing, a later snapshot decides`)
+    if (!argvFallback && hasLiveAgent(t)) throw new Error(`skipped: ${address} runs a live ${t.status?.app} session`)
     if (!isLoginShell(t, argvFallback)) throw new Error(`skipped: ${address} is no longer at a login shell`)
     await call(proc, it, 2, "terminal.send", { terminal: address, text, caller: "hc-resume" })
   } catch (e) {
