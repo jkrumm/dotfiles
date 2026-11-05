@@ -34,8 +34,9 @@ Agents `rd` starts run on the Max subscriptions only (`sonnet` default, `RD_WAVE
 overrides). `--kind opencode` is rejected, and with no account room `rd` pauses
 instead of spilling to IU.
 
-Two lanes start agent work: `@implementer`, `rd wave` (a tab you watch; `rd fan`
-for N independent changes). `agent-dispatch` and
+Lanes start agent work: a factory Issue (`rd issue <repo> <title>`, `rd issues` lists;
+the preferred path for work that should ship on its own), `@implementer`, `rd wave`
+(deprecated; a tab you watch; `rd fan` for N independent changes). `agent-dispatch` and
 `rd bg` no longer exist, and `claude --bg` is not a lane.
 
 ### Wave tabs and the orchestrator

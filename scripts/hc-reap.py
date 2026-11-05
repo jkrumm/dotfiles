@@ -18,7 +18,8 @@ status (`terminal.list` `status`); shells, servers and finished terminals are no
            sighting starts the clock, so nothing closes in the first 7 days).
            Never a `plan:` tab, a named terminal, one running a program, or the caller's own
   never    a terminal with no `factory.key` label (the owner's own sessions) and a `plan:<repo>` one (the factory's
-           planning tab), before any other rule, whatever their age or state
+           planning tab), before any other rule, whatever their age or state (the one exception: the
+           orphaned-shell rule above, which needs a shell whose `turn` has not moved for 7 days)
   never    working/blocked/unknown agents, a checkout a working agent also uses, a terminal with live
            children, terminals whose cwd is not inside a git repo (the ~/SourceRoot design terminals), any
            terminal in a repo whose docs/waves/PLAN.md has an `active` wave (mother/lead/wave terminals)
@@ -566,6 +567,8 @@ def reap_shells(j: Journal) -> None:
         if not is_orphan_shell(t):
             continue
         key, turn = shell_key(t), t.get("turn")
+        if not isinstance(turn, int):
+            continue  # no turn reported: idleness is unknown, never close it and never start a clock
         prev = state.get(key)
         if not isinstance(prev, dict) or prev.get("turn") != turn:
             seen[key] = {"turn": turn, "at": now}  # first sighting, or it moved: the clock starts over

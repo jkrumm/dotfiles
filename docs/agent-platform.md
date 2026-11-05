@@ -1,7 +1,7 @@
 ---
 type: Concept
 title: The agent platform
-description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (the Herdr app on herdr-core), two lanes, one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
+description: One worker engine (agent-workflows), one conversational front door (Hermes), one human cockpit (the Herdr app on herdr-core), three lanes (factory Issue, `@implementer`, the deprecated `rd wave`), one repo contract — the design and its status table. Alerts go to Slack and nothing auto-heals; the autonomous remediation loop is archived. The page a new agent reads first.
 aliases:
   - agent-estate-model
 tags:
@@ -31,7 +31,7 @@ Before-the-rewrite design: [[agent-platform-history]].
 
 | Part | State |
 |-|-|
-| Lanes (now two), lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
+| Lanes (Issue, `@implementer`, the deprecated `rd wave`), lean global CLAUDE.md, `rd close`, `/wave` orchestrated mode, OpenCode parity | **landed** (dotfiles W1–W2) |
 | Repo contract (`check`/`deploy`/`verify`/`logs` + AGENTS.md sections) | **landed** across the repos in dotfiles W3; commits in direct-to-master repos not yet pushed, PRs open for PR-required ones |
 | Worker engine: model registry, review angles, one source for model ids | **landed**, now in agent-workflows (the predecessor service retired 2026-10-29, Wave 11) |
 | Hermes: loop stopped, one reporting voice, ~20 skills | **landed** (hermes-agent W1–W3) |

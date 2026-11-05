@@ -28,7 +28,7 @@ Six boxes, each with one job; the *why* only — depth lives behind the links.
 - **Gateways — outsourced work** as submit-then-poll HTTP services: email-gateway. Detail: brain `gateways`.
 
 **The agent platform** — one engine (agent-workflows),
-one front door (Hermes), one cockpit (the Herdr app over herdr-core), two lanes, one repo contract —
+one front door (Hermes), one cockpit (the Herdr app over herdr-core), the lanes (factory Issue, `@implementer`, the deprecated `rd wave`), one repo contract —
 is specified in [`agent-platform.md`](agent-platform.md), which wins over any
 older doc on that topic. This map only places its parts on machines.
 

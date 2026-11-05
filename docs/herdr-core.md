@@ -163,7 +163,7 @@ every 15 s. The first line is the snapshot `{"seq":5,"terminals":[…]}`. Shapes
 |-|-|
 | `created`, `restarted` | the full terminal record |
 | `status` | `{"records":{},"reported":true,"status":{"app":"claude-code","state":"working"}}` |
-| `turn` | `{"state":"done","turn":1}` |
+| `turn` | `{"state":"done","turn":1}` (a plain login shell has a `turn` too, and it rises as commands run: on the live core on 2026-11-05 `hc ls` showed unnamed zsh terminals at turn 8 (hermes-agent), 14 (home) and 15 (an IuRoot shell) while fresh ones were at 0; hc-reap's orphaned-shell rule reads it as the activity signal) |
 | `title` | `{"title":"✳ Claude Code"}` |
 | `foreground` | `{"argv":[…],"cwd":…,"name":"zsh","pid":12654}` |
 | `labels` | `{"labels":{…}}` (the full set) |

@@ -305,6 +305,13 @@ class Reap(unittest.TestCase):
         with open(os.path.join(self.home, ".local/state/hc-reap/messaged.json")) as f:
             self.assertIn("shell:s1:1000", json.load(f))
 
+    def test_shell_without_a_turn_is_kept_and_gets_no_clock(self):
+        rec = self.shell("s1")
+        del rec["turn"]
+        self.assertNotIn("kill", self.run_reap([rec]))
+        with open(os.path.join(self.home, ".local/state/hc-reap/messaged.json")) as f:
+            self.assertNotIn("shell:s1:5000", json.load(f))
+
     def test_plan_tab_shell_is_kept(self):
         self.seed_shell("s1")
         self.assertNotIn("kill", self.run_reap([self.shell("s1", labels={"factory.key": "plan:a"})]))
