@@ -157,9 +157,9 @@ and Kuma's own missed-heartbeat is untouched, which is the property
   excluded by name — PPID 1 with a SourceRoot cwd is their design. It reports and
   never kills.
 
-### One scheduler, three monitors
+### One scheduler, four monitors
 
-Collie and secrets freshness are pushed by this same agent to their **own**
+Collie, the software factory and secrets freshness are pushed by this same agent to their **own**
 monitors. A second LaunchAgent would be pure duplication; only the push target
 differs, and each URL file's absence is silent by design, so a machine without
 collie or without a seeded cache never fails the script.
@@ -170,6 +170,14 @@ collie or without a seeded cache never fails the script.
   healthy guard as broken. The second assertion is the point: collie's hardening
   lives in a `.env` launchd does not load on its own, so a mis-started bridge
   passes every liveness probe with its DNS-rebinding guard silently gone.
+- **The factory** (`Software Factory - Push`, URL file `~/.config/uptime-kuma/factory-push-url`,
+  override `FACTORY_PUSH_URL_FILE`) relays the factory's own verdict: `GET
+  http://127.0.0.1:7793/health` (loopback, no token) carries `heartbeat: { ok, reason,
+  tickAt, queueMovedAt }`, `ok` meaning the tick advanced and the queue moved within 30
+  minutes. `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
+  false` → down with the factory's `reason` (else the curl failure), and the script
+  fails like collie's. No URL file, no push. The monitor and the file are made from
+  `homelab`, not here.
 - **Secrets-cache freshness** replaced a weekly agent (Mon 09:15) under which a
   cache going stale on a Tuesday was invisible for six days — six days of
   services potentially coming up credential-less. It runs in the 300 s script and

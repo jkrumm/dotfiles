@@ -12,11 +12,13 @@ const block = (name: string) => {
 }
 // The constants above the blocks (CMD reads HC_MARK at load) run first, so a misordered declaration throws here as it would in the app.
 const head = src.slice(src.indexOf('from "herdr";\n') + 'from "herdr";\n'.length, src.indexOf("// <tree>"))
-const lib = new Function(`${head}\n${block("tree")}\n${block("fleet")}; return { CMD, parse, parseFleet, sortAsks, oneLine, age, assemble, sessionKind }`)() as {
+const lib = new Function(`${head}\n${block("tree")}\n${block("fleet")}; return { CMD, parse, parseFleet, sortAsks, sortHealth, askBadge, oneLine, age, assemble, sessionKind }`)() as {
   CMD: string
   parse: (stdout: string) => { fleet: Fleet | null; hc: { address: string }[] | null }
   parseFleet: (text: string) => Fleet | null
   sortAsks: (asks: Ask[]) => Ask[]
+  sortHealth: (lines: Health[]) => Health[]
+  askBadge: (fleet: Fleet | null) => { count: number; urgent: boolean }
   oneLine: (text: string, max?: number) => string
   age: (iso: string, now?: number) => string
   assemble: (fleet: Fleet, hc: { address: string; turn?: number }[] | null) => Assembled
@@ -25,9 +27,10 @@ const lib = new Function(`${head}\n${block("tree")}\n${block("fleet")}; return {
 
 interface Sess { id: string; state: string; terminal: string | null; parent: string | null; wait: string | null; role: string | null }
 interface Ask { id: string; at: string; tier?: string }
+interface Health { id: string; kind: string; text: string; repo: string | null; since: string; session?: string }
 interface Wave { n: number; status: string; title: string }
 interface Repo { name: string; space: string; sessions: Sess[]; plan: { state: string; waves: Wave[] } | null }
-interface Fleet { repos: Repo[]; asks: Ask[]; unplaced?: Sess[]; queue?: { spawns: { key: string; status: string; space: string }[] } }
+interface Fleet { repos: Repo[]; asks: Ask[]; health?: Health[]; unplaced?: Sess[]; queue?: { spawns: { key: string; status: string; space: string }[] } }
 interface Card { name: string; kind: string | null; sessions: Sess[]; all: Sess[]; spawns: unknown[] }
 interface Assembled { shown: Card[]; paused: Card[]; planned: Card[]; kids: Map<string, { address: string; turn?: number }[]> }
 
@@ -42,6 +45,28 @@ test("parseFleet reads the model and refuses anything else", () => {
   expect(lib.parseFleet(JSON.stringify({ error: "not_ready" }))).toBeNull()
   expect(lib.parseFleet('{"repos": [')).toBeNull()
   expect(lib.parseFleet("")).toBeNull()
+})
+
+test("health: a body without it reads as none, one with it keeps its lines", () => {
+  expect(lib.parseFleet(JSON.stringify({ repos: [], asks: [] }))?.health).toEqual([]) // an older server
+  const line = { id: "h1", kind: "park", text: "Issue 49 parked", repo: "/r/x", since: "2026-11-05T02:56:18Z" }
+  expect(lib.parseFleet(JSON.stringify({ repos: [], asks: [], health: [line] }))?.health).toEqual([line])
+  expect(lib.parseFleet(JSON.stringify({ repos: [], asks: [], health: "nope" }))?.health).toEqual([])
+})
+
+test("health lines sort oldest first and never count toward the tab badge", () => {
+  const lines: Health[] = [
+    { id: "b", kind: "machine", text: "m", repo: null, since: "2026-11-05T05:00:00Z" },
+    { id: "a", kind: "park", text: "p", repo: "/r/x", since: "2026-11-05T02:00:00Z" },
+  ]
+  expect(lib.sortHealth(lines).map((h) => h.id)).toEqual(["a", "b"])
+  const asks: Ask[] = [{ id: "x", at: "2026-11-02T10:00:00Z", tier: "one_click" }]
+  const base = { repos: [], asks: [] as Ask[] }
+  expect(lib.askBadge({ ...base, health: lines })).toEqual({ count: 0, urgent: false }) // health alone: no badge
+  expect(lib.askBadge({ ...base, asks, health: lines })).toEqual({ count: 1, urgent: false }) // asks only, same with or without health
+  expect(lib.askBadge({ ...base, asks })).toEqual(lib.askBadge({ ...base, asks, health: lines }))
+  expect(lib.askBadge({ ...base, asks: [{ id: "y", at: "2026-11-02T10:00:00Z" }], health: lines }).urgent).toBe(true)
+  expect(lib.askBadge(null)).toEqual({ count: 0, urgent: false })
 })
 
 test("the module's constants load and the command reads the fleet, then the marker, then hc", () => {

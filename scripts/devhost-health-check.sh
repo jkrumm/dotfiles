@@ -1509,6 +1509,42 @@ if [[ -f "$COLLIE_PUSH_URL_FILE" ]]; then
   fi
 fi
 
+# --- Software factory: its OWN monitor, same scheduler -----------------------
+# The factory judges its own liveness: GET /health on loopback (no token) carries
+# heartbeat.ok = "the tick advanced and the queue moved within 30 minutes". This
+# only relays that verdict. Opt-in like collie: no URL file, no monitor, silent
+# skip (the monitor and the file are made elsewhere, never here).
+factory_push_rc=0
+FACTORY_PUSH_URL_FILE="${FACTORY_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/factory-push-url}"
+FACTORY_HEALTH_URL="${FACTORY_HEALTH_URL:-http://127.0.0.1:7793/health}"
+if [[ -f "$FACTORY_PUSH_URL_FILE" ]]; then
+  factory_url=$(kuma_resolve_push_url "${FACTORY_PUSH_URL:-}" "$FACTORY_PUSH_URL_FILE") || factory_url=""
+  if [[ -n "$factory_url" ]]; then
+    factory_ok=0
+    # A 503 still carries a body; only a transport failure leaves it empty.
+    if factory_body=$("$CURL_BIN" -s -m 5 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$factory_body" ]]; then
+      if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$factory_body" 2>/dev/null)" == "true" ]]; then
+        factory_ok=1
+        factory_detail=$("$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$factory_body" 2>/dev/null) \
+          || factory_detail="heartbeat ok"
+      else
+        factory_detail=$("$JQ_BIN" -r '.heartbeat.reason // "no heartbeat in the factory health answer"' <<<"$factory_body" 2>/dev/null) \
+          || factory_detail="factory health answer is not JSON"
+      fi
+    else
+      factory_detail="factory not answering at $FACTORY_HEALTH_URL"
+    fi
+    if (( factory_ok )); then
+      kuma_push "$factory_url" up "$factory_detail" || factory_push_rc=$?
+      echo "✓ factory monitor: $factory_detail"
+    else
+      kuma_push "$factory_url" down "$factory_detail" || factory_push_rc=$?
+      echo "✗ factory monitor: $factory_detail" >&2
+      failure="${failure:-$factory_detail}"
+    fi
+  fi
+fi
+
 # --- Secrets freshness: also its OWN monitor, same scheduler -----------------
 # Moved here from com.jkrumm.secrets-freshness, which ran ONCE A WEEK (Mon
 # 09:15). A cache going stale on a Tuesday was therefore invisible for six
@@ -1557,4 +1593,4 @@ if [[ -f "$SECRETS_FRESHNESS_PUSH_URL_FILE" ]]; then
   fi
 fi
 
-[[ -z "$failure" && $push_rc -eq 0 && $collie_push_rc -eq 0 && $secrets_push_rc -eq 0 ]] || exit 1
+[[ -z "$failure" && $push_rc -eq 0 && $collie_push_rc -eq 0 && $factory_push_rc -eq 0 && $secrets_push_rc -eq 0 ]] || exit 1

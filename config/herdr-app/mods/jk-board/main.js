@@ -117,7 +117,8 @@ function sessionKind(s) {
 function parseFleet(text) {
   try {
     const d = JSON.parse(text);
-    return d && Array.isArray(d.repos) && Array.isArray(d.asks) ? d : null;
+    if (!d || !Array.isArray(d.repos) || !Array.isArray(d.asks)) return null;
+    return { ...d, health: Array.isArray(d.health) ? d.health : [] }; // an older server sends no health: none
   } catch {
     return null;
   }
@@ -129,6 +130,17 @@ const time = (iso) => Date.parse(iso) || 0;
 // The owner's own asks first, then the rest; each group by time, oldest first.
 function sortAsks(asks) {
   return [...asks].sort((a, b) => Number(!isYours(a)) - Number(!isYours(b)) || time(a.at) - time(b.at) || String(a.id).localeCompare(String(b.id)));
+}
+
+// The Waves tab badge: asks only. A health line never asks for the owner, so it is never counted here.
+function askBadge(fleet) {
+  const asks = fleet?.asks ?? [];
+  return { count: asks.length, urgent: asks.some(isYours) };
+}
+
+// Health lines (parks, a silent lead, regressions, machine failures) never ask the owner: oldest first, below the asks.
+function sortHealth(lines) {
+  return [...lines].sort((a, b) => time(a.since) - time(b.since) || String(a.id).localeCompare(String(b.id)));
 }
 
 // An ask's text on one line.
@@ -435,6 +447,24 @@ export default class Board extends View {
     return [this.header(t, "asks", "ASKS", asks.length, folded, urgent), ...(folded ? [] : asks.map((a) => this.askRow(t, a)))];
   }
 
+  // One health line, dimmer than an ask and with no urgency dot: text, repo (else its kind), age; a click jumps to its session when it has one.
+  healthRow(t, h) {
+    const address = this.jumpTo(this.bySession.get(h.session));
+    return h_flex().id(`wv-hl-${h.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(oneLine(h.text, 600))
+      .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
+        .on_click((_e, cx) => run("agent.focus", { terminal: address })))
+      .child(this.dot(t, "idle", 5, false))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(oneLine(h.text)))
+      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(h.repo ? base(h.repo) : h.kind))
+      .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(h.since)));
+  }
+
+  health(t, lines) {
+    if (!lines.length) return [];
+    const folded = this.folded.has("health");
+    return [this.header(t, "health", "HEALTH", lines.length, folded, null), ...(folded ? [] : lines.map((h) => this.healthRow(t, h)))];
+  }
+
   header(t, id, label, count, folded, urgent) {
     return h_flex().id(id).h(20).mt(4).flex_none().px(8).gap(7).items_center().rounded(6)
       .text_size(10.5).font_bold().text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover))
@@ -499,8 +529,7 @@ export default class Board extends View {
 
   tabs(t) {
     const down = this.upStats().down.length;
-    const asks = this.fleet?.asks ?? [];
-    const urgent = asks.some(isYours);
+    const { count, urgent } = askBadge(this.fleet);
     return h_flex().flex_none().px(8).pt(8).pb(2)
       .child(h_flex().flex_1().gap(2).p(2).rounded(8).bg(t.hover)
         .children(TABS.map(([id, label]) => {
@@ -512,7 +541,7 @@ export default class Board extends View {
             .on_click((_e, cx) => this.setTab(id, cx))
             .child(label)
             .when(id === "uptime" && down > 0, (el) => el.child(div().text_color(t.blocked).child(String(down))))
-            .when(id === "waves" && asks.length > 0, (el) => el.child(div().text_color(urgent ? t.blocked : t.dim).child(String(asks.length))));
+            .when(id === "waves" && count > 0, (el) => el.child(div().text_color(urgent ? t.blocked : t.dim).child(String(count))));
         })));
   }
 
@@ -537,6 +566,7 @@ export default class Board extends View {
     this.byTerminal = byTerminal;
     this.bySession = bySession;
     const asks = fleet ? sortAsks(fleet.asks) : [];
+    const health = fleet ? sortHealth(fleet.health ?? []) : [];
     const errors = fleet?.errors ?? [];
     const note = errors.length ? `fleet: ${oneLine(errors[0], 90)}${errors.length > 1 ? ` (+${errors.length - 1})` : ""}` : null;
     return v_flex().flex_1().min_h(0).text_size(13)
@@ -549,6 +579,7 @@ export default class Board extends View {
         .when(!fleet, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.tried ? "No answer from the factory" : "Loading…")))
         .when(Boolean(fleet) && !shown.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No waves running")))
         .children(this.asks(t, asks))
+        .children(this.health(t, health))
         .children(this.folders(t, shown))
         .children(this.parked(t, "PAUSED", paused))
         .children(this.parked(t, "PLANNED", planned)))
