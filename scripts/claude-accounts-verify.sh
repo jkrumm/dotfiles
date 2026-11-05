@@ -189,7 +189,7 @@ else
   done
 fi
 if [[ -r "$RD_SCRIPT" ]]; then
-  for lane in wave fan; do
+  for lane in interactive; do
     if grep -q "pick_account $lane" "$RD_SCRIPT"; then
       row PASS "launcher/rd-$lane" "remote-dev.sh calls pick_account $lane"
     else
