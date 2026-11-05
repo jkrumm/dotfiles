@@ -18,10 +18,11 @@ class Spaces(unittest.TestCase):
         self.groups = os.path.join(self.home, "groups.json")
         self.out = os.path.join(self.home, ".config", "factory", "spaces.json")
         with open(self.groups, "w") as f:
-            json.dump({"groups": [{"label": "A", "members": ["beta", "alpha", "work", "ghost"]},
+            json.dump({"noFactorySpace": ["skipped"],
+                       "groups": [{"label": "A", "members": ["beta", "alpha", "work", "ghost", "skipped"]},
                                   {"label": "B", "members": ["gamma", "beta"]}]}, f)
         for root, name in (("SourceRoot", "alpha"), ("SourceRoot", "beta"), ("SourceRoot", "gamma"),
-                           ("IuRoot", "work"), ("IuRoot", "alpha")):
+                           ("SourceRoot", "skipped"), ("IuRoot", "work"), ("IuRoot", "alpha")):
             os.makedirs(os.path.join(self.home, root, name))
 
     def run_script(self):
@@ -34,14 +35,13 @@ class Spaces(unittest.TestCase):
         with open(self.out) as f:
             return json.load(f)["spaces"]
 
-    def test_order_kept_missing_skipped_duplicates_once_iuroot_fallback(self):
+    def test_order_kept_missing_iuroot_and_listed_skipped_duplicates_once(self):
         self.run_script()
-        p = lambda r, n: os.path.join(self.home, r, n)
+        p = lambda n: os.path.join(self.home, "SourceRoot", n)
         self.assertEqual(self.spaces(), [
-            {"name": "beta", "path": p("SourceRoot", "beta")},
-            {"name": "alpha", "path": p("SourceRoot", "alpha")},  # SourceRoot wins over IuRoot
-            {"name": "work", "path": p("IuRoot", "work")},        # IuRoot fallback; "ghost" skipped
-            {"name": "gamma", "path": p("SourceRoot", "gamma")},  # second "beta" dropped
+            {"name": "beta", "path": p("beta")},
+            {"name": "alpha", "path": p("alpha")},  # "work" is IuRoot only, "ghost" missing, "skipped" listed
+            {"name": "gamma", "path": p("gamma")},  # second "beta" dropped
         ])
 
     def test_mode_and_idempotent(self):

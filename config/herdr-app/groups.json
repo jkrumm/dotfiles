@@ -1,6 +1,9 @@
 {
-  "$comment": "Declared folder taxonomy for the Herdr app's sidebar: the jk-spaces mod files each space under the group naming its repo (worktrees follow their repo), the rest go to `fallback`; jk-board groups its repo cards the same way. Order here IS the sidebar order. Members that are not open are skipped, so listing a repo early costs nothing. `make herdr-app-setup` links this file to ~/.config/herdr-app/groups.json.",
+  "$comment": "Declared folder taxonomy for the Herdr app's sidebar: the jk-spaces mod files each space under the group naming its repo (worktrees follow their repo), the rest go to `fallback`; jk-board groups its repo cards the same way. Order here IS the sidebar order. Members that are not open are skipped, so listing a repo early costs nothing. `make herdr-app-setup` links this file to ~/.config/herdr-app/groups.json. `noFactorySpace`: members that keep their sidebar place but get no factory space or `plan:` tab on the mini (scripts/factory-spaces.py).",
   "fallback": "OTHER",
+  "noFactorySpace": [
+    "tinycast-extensions"
+  ],
   "groups": [
     {
       "label": "INFRA",
@@ -23,9 +26,7 @@
         "usage-tracker",
         "rb",
         "tinycast-extensions",
-        "email-gateway",
-        "image-gateway",
-        "ntfy-mac"
+        "email-gateway"
       ]
     },
     {
@@ -44,7 +45,6 @@
       "label": "APPS",
       "members": [
         "rollhook",
-        "rollhook-action",
         "basalt-ui",
         "weatherorb",
         "free-planning-poker",
@@ -57,7 +57,6 @@
         "IuRoot",
         "epos-tool-athena",
         "epos-knowledge-athena",
-        "prometheus-scripts",
         "prometheus-epx",
         "epos-studentenrolment-backend",
         "epos.student-enrolment"

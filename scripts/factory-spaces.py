@@ -3,8 +3,9 @@
 
 software-factory keeps one space per listed repo and never reorders them; the sidebar order is groups.json
 (the jk-spaces mod), which stays the one list. Every group's `members`, in order, resolves to
-~/SourceRoot/<name> if that directory exists, else ~/IuRoot/<name>, else is skipped. A name listed twice
-appears once. The file is written atomically (temp + rename), mode 0644; a run that would write the same
+~/SourceRoot/<name> if that directory exists, else is skipped: IuRoot repos get no factory space or `plan:` tab
+(RS11), and neither does a name in groups.json's `noFactorySpace` (a repo kept only for the sidebar's order on
+another machine). A name listed twice appears once. The file is written atomically (temp + rename), mode 0644; a run that would write the same
 bytes leaves it untouched.
 
     factory-spaces.py [--groups PATH] [--out PATH]
@@ -16,22 +17,22 @@ import os
 import sys
 
 HOME = os.path.expanduser("~")
-ROOTS = [os.path.join(HOME, "SourceRoot"), os.path.join(HOME, "IuRoot")]
+ROOT = os.path.join(HOME, "SourceRoot")
 DEFAULT_GROUPS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "herdr-app", "groups.json")
 DEFAULT_OUT = os.path.join(HOME, ".config", "factory", "spaces.json")
 
 
 def render(groups_path: str) -> str:
     with open(groups_path) as f:
-        groups = json.load(f)["groups"]
-    spaces, seen = [], set()
-    for group in groups:
+        doc = json.load(f)
+    spaces, seen = [], set(doc.get("noFactorySpace", []))
+    for group in doc["groups"]:
         for name in group["members"]:
             if name in seen:
                 continue
             seen.add(name)
-            path = next((p for r in ROOTS if os.path.isdir(p := os.path.join(r, name))), None)
-            if path:
+            path = os.path.join(ROOT, name)
+            if os.path.isdir(path):
                 spaces.append({"name": name, "path": path})
     return json.dumps({"spaces": spaces}, indent=2) + "\n"
 

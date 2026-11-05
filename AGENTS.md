@@ -33,7 +33,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
 | `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
-| `config/herdr-app/groups.json` | `~/.config/factory/spaces.json` — **rendered** by `scripts/factory-spaces.py` (`make setup`) | software-factory's space list, same order, missing repos skipped |
+| `config/herdr-app/groups.json` | `~/.config/factory/spaces.json` — **rendered** by `scripts/factory-spaces.py` (`make setup`) | software-factory's space list, same order; `~/SourceRoot` only, missing repos and `noFactorySpace` skipped |
 | `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json` (sidebar folders, one line per repo); link per item, never the dir (it holds the app's shipped mods) |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
