@@ -167,14 +167,13 @@ export async function run(deps: Deps): Promise<void> {
 
 // --- real hc adapter ---------------------------------------------------------------------------
 
-/** True when it is safe to `hc connect`: a scratch HC_SESSION, or the launchd core is running. */
+/** True when it is safe to `hc connect`: a scratch HC_SESSION, or lib/core-up.sh says a launchd-born core answers. */
 export function coreAvailable(
   env: Record<string, string | undefined> = process.env,
-  launchctl: (label: string) => string = (label) =>
-    Bun.spawnSync(["launchctl", "print", `gui/${process.getuid?.() ?? 501}/${label}`], { stdout: "pipe", stderr: "ignore" }).stdout.toString()
+  coreUp: () => number = () => Bun.spawnSync(["bash", join(import.meta.dir, "lib", "core-up.sh")], { stdout: "ignore", stderr: "ignore" }).exitCode ?? 1
 ): boolean {
   if (env.HC_SESSION) return true
-  try { return /^\s*state = running$/m.test(launchctl(CORE_LABEL)) } catch { return false }
+  try { return coreUp() === 0 } catch { return false }
 }
 
 export async function openHc(guard: () => boolean = coreAvailable): Promise<Link> {

@@ -219,12 +219,11 @@ test("sendHc has a hard deadline: an unanswered connection is killed and rejects
   })
 })
 
-test("coreAvailable: scratch HC_SESSION skips the check; else the launchd core must be running", () => {
-  const never = () => { throw new Error("launchctl must not run") }
+test("coreAvailable: scratch HC_SESSION skips the check; else lib/core-up.sh must exit 0", () => {
+  const never = () => { throw new Error("core-up must not run") }
   expect(coreAvailable({ HC_SESSION: "scr1" }, never)).toBe(true)
-  expect(coreAvailable({}, () => "gui/501/com.jkrumm.herdr-core = {\n\tstate = running\n\tpid = 4\n}")).toBe(true)
-  expect(coreAvailable({}, () => "{\n\tstate = waiting\n}")).toBe(false)
-  expect(coreAvailable({}, () => "")).toBe(false)
+  expect(coreAvailable({}, () => 0)).toBe(true)
+  expect(coreAvailable({}, () => 1)).toBe(false)
   expect(coreAvailable({}, never)).toBe(false)
 })
 

@@ -128,13 +128,11 @@ test("a stream that goes silent past idleMs is dropped and reconnected", async (
   expect(lines[2].why).toBe("idle")
 })
 
-test("coreAvailable: a scratch HC_SESSION skips launchd, else the job must be running", () => {
-  const down = () => "gui/501/com.jkrumm.herdr-core = {\n\tstate = not running\n}"
-  const up = () => "gui/501/com.jkrumm.herdr-core = {\n\tstate = running\n\tpid = 1\n}"
-  expect(coreAvailable({ HC_SESSION: "x" }, down)).toBe(true)
-  expect(coreAvailable({}, down)).toBe(false)
-  expect(coreAvailable({}, up)).toBe(true)
-  expect(coreAvailable({}, () => { throw new Error("launchctl failed") })).toBe(false)
+test("coreAvailable: a scratch HC_SESSION skips the check, else lib/core-up.sh must exit 0", () => {
+  expect(coreAvailable({ HC_SESSION: "x" }, () => 1)).toBe(true)
+  expect(coreAvailable({}, () => 1)).toBe(false)
+  expect(coreAvailable({}, () => 0)).toBe(true)
+  expect(coreAvailable({}, () => { throw new Error("bash failed") })).toBe(false)
 })
 
 test("openHc refuses without a core and otherwise talks to `hc connect`", async () => {

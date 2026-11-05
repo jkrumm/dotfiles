@@ -12,6 +12,7 @@
 // unset, i.e. the real core) com.jkrumm.herdr-core must be `state = running` in launchd; otherwise it counts
 // as "no core" and retries with backoff.
 // Runs under launchd KeepAlive: com.jkrumm.hc-resume.
+import { join } from "node:path"
 import { splitLines } from "./hc-events"
 
 type Json = Record<string, unknown>
@@ -166,14 +167,13 @@ export class NotConnecting extends Error {}
 
 export const CORE_LABEL = "com.jkrumm.herdr-core"
 
-/** True when it is safe to `hc connect`: a scratch HC_SESSION, or the launchd core is running. */
+/** True when it is safe to `hc connect`: a scratch HC_SESSION, or lib/core-up.sh says a launchd-born core answers. */
 export function coreAvailable(
   env: Record<string, string | undefined> = process.env,
-  launchctl: (label: string) => string = (label) =>
-    Bun.spawnSync(["launchctl", "print", `gui/${process.getuid?.() ?? 501}/${label}`], { stdout: "pipe", stderr: "ignore" }).stdout.toString()
+  coreUp: () => number = () => Bun.spawnSync(["bash", join(import.meta.dir, "lib", "core-up.sh")], { stdout: "ignore", stderr: "ignore" }).exitCode ?? 1
 ): boolean {
   if (env.HC_SESSION) return true
-  try { return /^\s*state = running$/m.test(launchctl(CORE_LABEL)) } catch { return false }
+  try { return coreUp() === 0 } catch { return false }
 }
 
 function spawnConnect(guard: () => boolean) {
