@@ -112,6 +112,8 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.herdr-core-update` | 04:15 daily (both machines) | `jobrun` job: bumps `jkrumm/tap` `herdr-core` to the newest release ≥ 24 h old, `brew upgrade`, kickstarts the core, asserts terminals kept their pids and `hc machine ls` versions match; `make herdr-core-update-check` previews, `docs/herdr-core.md` §Updates |
 | `com.jkrumm.kuma-door` | KeepAlive | the Kuma door: `GET /h/<name>` on `127.0.0.1:8795` relays the loopback health URLs in `kuma-door/registry.json` for the homelab's Uptime Kuma (log `~/Library/Logs/kuma-door.{out,err}.log`) |
 | `com.jkrumm.home-climate` | 600s | Eve Room climate → ntfy topic `home` (humidity, cold, heat, silent sensor; urgent when the dog is alone); owner repo `home`, `make climate-setup` |
+| `com.jkrumm.home-nacht` | KeepAlive | follows the Homebridge `Nacht` switch: mirrors it into Do Not Disturb (`shortcuts run`), pushes the day's weather on the first morning off; owner repo `home` (`tools/climate/watch.ts`, via `secrets-run`) |
+| `com.jkrumm.soloist-speaker` | KeepAlive | connects the Bluetooth speaker whenever the mini plays audio (Soloist or AirPlay); owner repo `home`, `make audio-setup` |
 | `com.jkrumm.hc-reap` | 1800s | the herdr-core janitor (`rd reap`, `scripts/hc-reap.py` over `hc connect`, only while the core runs): the janitor rules on `terminal.list` — closes (`terminal.kill` + `rm`) finished agents with a clean, pushed checkout (`REAP_IDLE_H`, 12; idle age from the `jk.claude.session` label's transcript) (never a terminal without a `factory.key` label or a `plan:<repo>` one, a working agent, a dirty/unpushed tree or a terminal with live children), messages dirty ones, closes orphan shells, stops `claude --bg` leftovers > 24 h; `make hc-reap-setup`, actions in `~/Library/Logs/hc-reap.log` |
 | `com.jkrumm.claude-accounts-keepalive` | 3600s (also on the MacBook) | quota + login keepalive: `claude-account refresh --all` (OAuth usage endpoint sample, renewing an expired token via `claude auth status` on a 401, else the `auth status` verdict, per enabled Claude account, 0 tokens) so an idle account stays inside the picker's 6 h window and its login verified; feeds the quota cache; log `~/Library/Logs/claude-accounts-keepalive.log` |
 | `com.jkrumm.obsidian-autostart` | RunAtLoad | Obsidian app |
@@ -196,6 +198,7 @@ the weatherorb session workflow.
 | `com.iu.prometheus-artefact-daily` | IuRoot | 07:30 daily |
 | `com.iu.prometheus-dashboard-autodeploy` | IuRoot | 600s — deploys the public dashboard from origin/main |
 | `com.iu.tool-checkout-deploy` | IuRoot (tool-checkout) | 600s — `prometheus-deploy-gate/gate.py` for the tool-checkout dashboard worktree |
+| `com.iu.athena-repo-sync` | IuRoot (epos-tool-athena) | 600s — `bash/repo-sync.sh run`: keeps epos-tool-athena and epos-knowledge-athena current, pushes committed knowledge notes |
 | `com.iu.teamchat-vm-watch` | IuRoot (teamchat) | 120s |
 | `com.iu.prometheus-stack-dashboard` | IuRoot (prometheus-scripts) | KeepAlive — local stack dashboard |
 | `com.iu.athena-postgres` | IuRoot (chat) | KeepAlive — Athena's own Postgres 18 for teamchat, Unix socket only (no TCP), data under `~/.local/state/athena`; rendered by `make -C chat pg-setup` |
