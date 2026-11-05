@@ -63,13 +63,14 @@ Before-the-rewrite design: [[agent-platform-history]].
 | **Herdr app + `rd`** | the owner's cockpit: orchestrator tab spawns wave tabs and hidden workers, and waits on them | run unattended work |
 | **Argo** | the status surface | hold state of its own |
 
-## Two lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
+## The lanes — the only ways to start agent work (`rd fan` is the fan-out form of the `rd wave` lane)
 
 | Lane | When | Engine |
 |-|-|-|
+| Issue (`rd issue` / `factory issue new`) | work for a repo that should ship on its own | the software factory: its lead builds, reviews, deploys and verifies (`rd issues` / `factory issue list` follow it); no factory, no Issue |
 | `@implementer` | edit must land in this session's live tree | native subagent, Sonnet |
 | `rd fan` (via `/wave`) | N independent changes in one repo, disjoint files | one worktree + hidden Claude worker per change (a child of the orchestrator's terminal), `rd merge` lands them |
-| `rd wave` tab | long work the owner wants to watch or steer | Claude Code in a herdr-core terminal, a tab in the repo's space (`--kind opencode` is rejected) |
+| `rd wave` tab (deprecated: file an Issue; goes with reset row 7 contract) | long work the owner wants to watch or steer | Claude Code in a herdr-core terminal, a tab in the repo's space (`--kind opencode` is rejected) |
 
 Deleted: `agent-dispatch`, `rd bg`, the "colleague" lane, raw `claude --bg`,
 Hermes kanban/delegation, Hermes hand-merging PRs.

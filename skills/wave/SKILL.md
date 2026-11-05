@@ -1,7 +1,23 @@
 ---
 name: wave
-description: Run a long implementation as a chain of fresh agent contexts on the mini — chain mode or orchestrated mode. Use for work too large for one context, staged migrations, plans saying "then in the next session"; also to author a plan, close out a wave, or continue a chain.
+description: Turn a plan into factory Issues (rd issue / factory issue new, ordered by --after and prio, followed with factory issue list|show and factory status). Legacy until reset row 7 contract - chain mode and orchestrated mode, a chain of fresh agent contexts on the mini via rd wave. Use for work too large for one context, staged migrations, plans saying "then in the next session"; also to author a plan, close out a wave, or continue a chain.
 ---
+
+# Wave — turn a plan into Issues
+
+A plan's waves or steps become **Issues** in the software factory. The factory starts the lead of each Issue (its brief is software-factory `brief.ts`), so this skill never spawns a terminal: no `rd wave`, no `rd fan`.
+
+1. **File one Issue per wave or step:** `rd issue <repo> '<title>' --facts @facts.json` or `factory issue new --repo <path> --title <text> --facts @file|-`. The facts are JSON (up to 32 KiB): **what** to change, **why**, and the **acceptance** (the checks that prove it). A stable `--key <key>` makes a replay return the stored Issue. No factory, no Issue: `rd issue` has no hc fallback.
+2. **Order them:** `--after <id>` (repeatable) holds an Issue until those are closed; `factory issue prio <id> <n>` orders the ready ones (higher first, none is 0).
+3. **Follow:** `factory issue list`, `factory issue show <id>` (facts, timeline, evidence, questions) and `factory status` (asks, health).
+4. **Answer and steer:** `factory issue answer <id> <text>` for an ask, `factory issue note <id> <text>` for context; `factory issue stop|resume|reopen <id>` when a lead must stop or restart.
+5. **Done** is the Issue closing with its evidence (verify, review, ship); the plan's step is ticked from that, not from a report.
+
+Write the plan itself as in "Authoring a plan" below (goal, gate, three to six steps per wave), then file it.
+
+# Legacy (until row 7 contract)
+
+Everything below is the chain and orchestrated modes on `rd wave` / `rd fan` / `rd merge` (deprecated, still working) and the `roles/{lead,mother,worker}.md` briefs. Use it only to continue a chain already running; new work is an Issue.
 
 # Wave — a chain of fresh contexts
 

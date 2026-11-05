@@ -66,6 +66,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 |-|-|
 | Edit that must land in this session's live uncommitted tree, or needs tight iteration | `@implementer` |
 | N independent changes in one repo (disjoint files) | `/wave` fan-out — `rd fan` / `rd merge`, a worktree and Claude tab per change |
+| Work for a repo that should ship on its own | `rd issue <repo> <title>` / `factory issue new` — the factory's lead builds, reviews, deploys and verifies |
 | Long work Johannes watches or steers | `rd wave <repo> '<prompt>'` — a tab in the Herdr app; `/wave` owns the contract |
 | Search across many files | `Agent` → `Explore` |
 | format / lint / tsc / test loops | `/check` — never inline |
@@ -73,7 +74,7 @@ The main session holds the plan, decisions and verdicts — not the raw material
 | Library / API / version facts | `/research` — never from memory |
 | Code review | `/review` |
 
-The two lanes — `@implementer`, `rd wave` (incl. fan-out) — are the only ways
+The lanes — the factory's Issue (`rd issue`), `@implementer`, `rd wave` (incl. fan-out; deprecated, goes with reset row 7) — are the only ways
 to start *another agent* (`docs/agent-platform.md`); `Explore`, `@verifier`,
 `/check`, `/research` and `/review` are in-session tools, not lanes. Brief a worker completely: exact
 paths, the change, acceptance criteria, scope limits, and any research baked in

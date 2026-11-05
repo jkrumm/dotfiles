@@ -46,7 +46,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
-| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
+| `scripts/remote-dev.sh` | `~/.local/bin/rd` | Place work on the mini — `rd repos\|work\|issue\|issues\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (see Machines) |
 | `scripts/ask-human.sh` | `~/.local/bin/ask-human` | Queue / push a request that needs a present human (see human-queue) |
 | `scripts/astra.sh` | `~/.local/bin/astra` | One-shot Responses call at `reasoning.mode="pro"` — `docs/codex.md` |
 | `scripts/keyprobe.py` | `~/.local/bin/keyprobe` | Raw-byte key probe — the only unambiguous test that Caps-Lock-as-Hyper works. Run it in a **bare** terminal. |
@@ -167,18 +167,19 @@ Agents run on the mini and outlive the MacBook. Stack: Tailscale (reachability) 
 herdr-core on the mini (persistence; the Herdr app is the UI) → Caddy (service exposure). **No layer
 substitutes for another.**
 
-**Two lanes start agent work** (spec: `docs/agent-platform.md` §Two lanes):
+**Lanes start agent work** (spec: `docs/agent-platform.md` §The lanes):
 
 | Lane | Use for |
 |-|-|
 | `@implementer` | the edit must land in this session's live tree |
-| `rd wave <repo> '<prompt>'` | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app, solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. The factory queues the spawn (`queued: <reason>`); the spawner waits with `factory session wait --on workers` and ends its turn. `/wave` owns the contract and the green gate; queueing and `rd close`/`say` semantics: `docs/remote-dev.md` §Janitor rules and `rd wave` detail |
+| `rd issue <repo> <title>` | work for a repo that should ship on its own: a thin `factory issue new` (`--facts @file\|-`, `--after <id>`, `--key`); the factory's lead builds, reviews, deploys and verifies; no factory, no Issue (exit code passed through); `rd issues` lists. Preferred over `rd wave` |
+| `rd wave <repo> '<prompt>'` (deprecated: prints a stderr line, works as before; goes with reset row 7 contract) | long work the owner watches or steers; adds a `wave <n>` **tab** to the repo's space in the Herdr app, solo Claude (Max subscriptions only, never IU), bounded by `RD_WAVE_MAX`. The factory queues the spawn (`queued: <reason>`); the spawner waits with `factory session wait --on workers` and ends its turn. `/wave` owns the contract and the green gate; queueing and `rd close`/`say` semantics: `docs/remote-dev.md` §Janitor rules and `rd wave` detail |
 
 | Want | Command |
 |-|-|
 | A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
-| Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree, mother/lead/wave tab, `factory.key=plan:*` tab or a terminal without a `factory.key` label; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
+| Work *placed on* the mini, no terminal | `rd repos\|work\|issue\|issues\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree, an unnamed login shell untouched 7 days is closed (not a `plan:` tab), mother/lead/wave tab, `factory.key=plan:*` tab or a terminal without a `factory.key` label; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
 | What every agent is doing | the app's sidebar; the factory (software-factory, `factory fleet`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
 
