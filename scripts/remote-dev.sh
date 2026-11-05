@@ -463,9 +463,11 @@ FACTORY_UP=""
 # has no timeout binary (`timeout` or Homebrew's `gtimeout`; RD_TIMEOUT_CMDS overrides the names): an unbounded call
 # could hang a wave that would repair the factory, so without a bound there is no factory path.
 factory_host() { # <secs> <args…>
-  local secs=$1 args="" a; shift
+  local secs=$1 args="" a stdin='</dev/null'; shift
   for a in "$@"; do args+=" $(printf '%q' "$a")"; done
-  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs ${FACTORY_NO_PARENT:+env -u FACTORY_SESSION }factory$args </dev/null"
+  # FACTORY_STDIN_B64 (base64, one line) is fed to the call's stdin instead of /dev/null (`rd issue --facts`).
+  [[ -z ${FACTORY_STDIN_B64:-} ]] || stdin="<<<\"\$(printf %s '$FACTORY_STDIN_B64' | base64 -d)\""
+  host_run "PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:\$HOME/.bun/bin:\$PATH\"; t=''; for c in ${RD_TIMEOUT_CMDS:-timeout gtimeout}; do t=\$(command -v \$c) && break; done; [ -n \"\$t\" ] || exit 126; \$t $secs ${FACTORY_NO_PARENT:+env -u FACTORY_SESSION }factory$args $stdin"
 }
 
 # True when the factory answers `factory health` within FACTORY_HEALTH_S. Asked once per command; RD_NO_FACTORY=1
@@ -1519,6 +1521,55 @@ cmd_reap() {
     python3 \"\$d/hc-reap.py\"$args"
 }
 
+# File an Issue with the software factory: the Issue path (docs/remote-dev.md §rd issue). A thin `factory issue new`
+# on the host, bounded like every factory call. No hc fallback: without the factory there is no Issue, and the
+# factory's exit code is ours. --facts is read here (the file may be on this machine) and handed over on stdin.
+cmd_issue() {
+  local name=${1:-} title=${2:-} key="" facts="" have_facts=0 usage="usage: issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]"
+  [[ -n $name && -n $title ]] || die "$usage"
+  shift 2
+  local -a fargs=()
+  while (( $# )); do
+    case $1 in
+      --facts) [[ $# -ge 2 ]] || die "$usage"; have_facts=1; facts=$2; shift 2 ;;
+      --after) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || die "rd issue: --after takes an Issue id"; fargs+=(--after "$2"); shift 2 ;;
+      --key)   [[ $# -ge 2 ]] || die "$usage"; key=$2; shift 2 ;;
+      *) die "$usage" ;;
+    esac
+  done
+  local path
+  path=$(resolve_repo "$name") || die "no git repo named '$name' on $HOST — try 'repos $name'"
+  [[ -z $key ]] || fargs+=(--key "$key")
+  local b64="" out rc=0
+  if (( have_facts )); then
+    if [[ $facts == - ]]; then b64=$(base64 | tr -d '\n')
+    elif [[ $facts == @* && -f ${facts#@} ]]; then b64=$(base64 <"${facts#@}" | tr -d '\n')
+    else die "rd issue: --facts takes @file (an existing file) or -"; fi
+    fargs+=(--facts -)
+  fi
+  FACTORY_STDIN_B64=$b64 out=$(factory_host "$FACTORY_CALL_S" issue new --repo "$path" --title "$title" ${fargs[@]+"${fargs[@]}"} 2>&1) || rc=$?
+  if (( rc != 0 )); then
+    [[ -z $out ]] || printf '%s\n' "$out" >&2
+    echo "rd issue: no Issue filed - the factory answered exit $rc (no hc fallback; 'factory health' says whether it is up)" >&2
+    exit "$rc"
+  fi
+  printf '%s\n' "$out"
+}
+
+cmd_issues() {
+  local out rc=0
+  out=$(factory_host "$FACTORY_CALL_S" issue list "$@" 2>&1) || rc=$?
+  if (( rc != 0 )); then
+    [[ -z $out ]] || printf '%s\n' "$out" >&2
+    echo "rd issues: the factory answered exit $rc (no hc fallback)" >&2
+    exit "$rc"
+  fi
+  printf '%s\n' "$out"
+}
+
+# One stderr line for a command the Issue path replaces; the command then works as it always did.
+deprecated() { echo "rd $1: deprecated, file an Issue (rd issue); goes with reset row 7 contract" >&2; }
+
 usage() {
   cat <<'EOF'
 
@@ -1528,13 +1579,16 @@ usage() {
     rd work <repo> [--kind K] [--role R] [<prompt…>]   labelled tab + claude for that repo (idempotent);
                               an optional prompt is claude's first message
                               (a verb that takes no more arguments exits 2 on extras)
-    rd wave <repo> [--kind K] [--role R] <prompt…>
+    rd issue <repo> <title> [--facts @file|-] [--after <id> …] [--key <key>]
+                              file an Issue with the software factory (its lead builds, reviews, deploys, verifies);
+                              no factory, no Issue (exit code passed through). rd issues lists them
+    rd wave <repo> [--kind K] [--role R] <prompt…>     (deprecated: file an Issue)
                               fresh tab + solo agent, the prompt as claude's argument — claude
-    rd fan <repo> [--role R] <brief…>   worktree + hidden child terminal + Claude per brief file (fan-out)
+    rd fan <repo> [--role R] <brief…>   (deprecated) worktree + hidden child terminal + Claude per brief file (fan-out)
                               (fan --clean <repo> [--all] reclaims merged fan worktrees)
                               --role R: tier + effort from the factory role table (mother|lead|wave|worker|mechanical);
                               wave defaults to wave, fan to worker; RD_WAVE_MODEL / RD_WAVE_EFFORT win over it
-    rd merge <repo> <br…>     merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
+    rd merge <repo> <br…>     (deprecated) merge train: rebase, check, merge by rebase, re-rebase (GitHub only)
     rd close <agent>          end a finished agent's terminal (clean + pushed only)
     rd reap [--dry-run]       janitor: close finished clean+pushed tabs (idle > REAP_IDLE_H, default 12; a merged fan tab at once), message dirty ones
     rd agents                 every agent on the host: SOURCE NAME STATUS CWD ID (hc, bg, interactive)
@@ -1553,7 +1607,8 @@ usage() {
 
     repos · work · agents
 
-  Two lanes for starting agent work (docs/agent-platform.md):
+  Lanes for starting agent work (docs/agent-platform.md):
+    Issue         `rd issue <repo> <title>` — work for a repo that should ship on its own
     @implementer  native subagent — the edit must land in this session's live tree
     wave tab      `rd wave <repo> '<prompt>'` — long work you watch or steer
 
@@ -1571,9 +1626,11 @@ EOF
 case "${1:-}" in
   repos)  shift; cmd_repos "$@" ;;
   work)   shift; cmd_work "$@" ;;
-  wave)   shift; cmd_wave "$@" ;;
-  fan)    shift; cmd_fan "$@" ;;
-  merge)  shift; cmd_merge "$@" ;;
+  issue)  shift; cmd_issue "$@" ;;
+  issues) shift; cmd_issues "$@" ;;
+  wave)   shift; deprecated wave; cmd_wave "$@" ;;
+  fan)    shift; deprecated fan; cmd_fan "$@" ;;
+  merge)  shift; deprecated merge; cmd_merge "$@" ;;
   close)  shift; cmd_close "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   reap)   shift; cmd_reap "$@" ;;

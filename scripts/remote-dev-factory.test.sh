@@ -62,6 +62,8 @@ case "$1 $2" in
     total=$(wc -l <"$f"); [ "$n" -gt "$total" ] && n=$total
     sed -n "${n}p" "$f" ;;
   "session get") if [ -f "$STATE/session-reply-$3" ]; then cat "$STATE/session-reply-$3"; exit 0; fi; cat "$STATE/session-reply" 2>/dev/null; exit "$(cat "$STATE/session-rc" 2>/dev/null || echo 0)" ;;
+  "issue new") [ -t 0 ] || cat >"$STATE/issue-stdin" 2>/dev/null; cat "$STATE/issue-reply" 2>/dev/null || echo "issue 7 queued"; exit "$(cat "$STATE/issue-rc" 2>/dev/null || echo 0)" ;;
+  "issue list") echo "7 queued myrepo"; exit 0 ;;
   "session note") cat "$STATE/note-reply" 2>/dev/null || echo noted; exit "$(cat "$STATE/note-rc" 2>/dev/null || echo 0)" ;;
 esac
 STUB
@@ -652,5 +654,45 @@ lacks "so not --children" "$out" "hc wait --children"
 reset; echo 1 >"$STATE/health-rc"
 HC_TERMINAL_ID=t4 rd fan myrepo "$TMP/brief1.md"
 has "a calling terminal: a child" "$out" "hc wait --children all"
+
+echo "issue: rd issue files through the factory, never through hc"
+reset; printf '{"what":"x"}\n' >"$TMP/facts.json"
+rd issue myrepo "Do the thing" --facts "@$TMP/facts.json" --after 3 --after 4 --key k1
+is "filed: exit 0" "$rc" 0
+has "prints the factory's line" "$out" "issue 7 queued"
+has "repo resolved to its path" "$fcalls" "issue new --repo $S/myrepo --title Do the thing"
+has "after + key + facts passed" "$fcalls" "--after 3 --after 4 --key k1 --facts -"
+is "facts reach the factory on stdin" "$(cat "$STATE/issue-stdin")" '{"what":"x"}'
+is "no hc call" "$hcalls" ""
+reset; echo 5 >"$STATE/issue-rc"; echo '{"error":{"message":"nope"}}' >"$STATE/issue-reply"
+rd issue myrepo "T"
+is "the factory's exit code is passed through" "$rc" 5
+has "one-line message" "$out" "no Issue filed"
+is "no hc fallback on a refusal" "$hcalls" ""
+reset; rm -f "$TMP/home/.local/bin/factory.off"; mv "$TMP/home/.local/bin/factory" "$TMP/home/.local/bin/factory.off"
+rd issue myrepo "T"
+mv "$TMP/home/.local/bin/factory.off" "$TMP/home/.local/bin/factory"
+is "factory not installed: exit 127" "$rc" 127
+has "says no Issue was filed" "$out" "no Issue filed"
+is "and starts nothing on hc" "$hruns" ""
+reset
+rd issue nosuchrepo "T"
+[ "$rc" -ne 0 ] && ok "unknown repo refused" || bad "unknown repo accepted"
+reset; rd issues
+has "issues lists" "$out" "7 queued myrepo"
+
+echo "deprecation: wave|fan|merge say so on stderr only"
+reset; echo 1 >"$STATE/health-rc"
+stdout=$(timeout 90 bash "$HERE/remote-dev.sh" fan myrepo "$TMP/brief1.md" 2>"$TMP/err" </dev/null)
+has "fan: deprecation on stderr" "$(cat "$TMP/err")" "rd fan: deprecated, file an Issue (rd issue); goes with reset row 7 contract"
+lacks "fan: not on stdout" "$stdout" "deprecated"
+reset; echo 1 >"$STATE/health-rc"
+stdout=$(timeout 90 bash "$HERE/remote-dev.sh" wave myrepo "do it" 2>"$TMP/err" </dev/null)
+has "wave: deprecation on stderr" "$(cat "$TMP/err")" "rd wave: deprecated, file an Issue (rd issue); goes with reset row 7 contract"
+lacks "wave: not on stdout" "$stdout" "deprecated"
+reset
+stdout=$(timeout 90 bash "$HERE/remote-dev.sh" merge myrepo 2>"$TMP/err" </dev/null)
+lacks "merge: usage error has no deprecation on stdout" "$stdout" "deprecated"
+has "merge: deprecation on stderr" "$(cat "$TMP/err")" "rd merge: deprecated"
 
 [ "$fails" -eq 0 ] && { echo "all passed"; exit 0; } || { echo "$fails failed"; exit 1; }
