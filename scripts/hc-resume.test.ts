@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { NotConnecting, createResumer, isLoginShell, modelFlags, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
+import { NotConnecting, RetryLater, createResumer, isLoginShell, modelFlags, coreAvailable, isSubscribeError, openHc, parseLine, resumeLine, run, sendHc, type Link, type Msg, type Terminal } from "./hc-resume"
 
 const ID = "0d6f3a52-1c1e-4a55-9d0e-aaaaaaaaaaaa"
 const ID2 = "1e7a4b63-2d2f-4b66-8e1f-bbbbbbbbbbbb"
@@ -30,6 +30,34 @@ test("login shell detection: foreground wins, else the terminal's program", () =
   // a snapshot must carry the foreground fact: the terminal's own argv is not enough
   expect(isLoginShell(term())).toBe(false)
   expect(isLoginShell(term({ foreground: null }))).toBe(false)
+  // foreground null is unknown, the fallback never applies to it
+  expect(isLoginShell(term({ foreground: null }), true)).toBe(false)
+})
+
+test("snapshot: missing foreground sends nothing, login-shell foreground sends, claude foreground sends nothing", async () => {
+  const missing = harness()
+  missing.r.handle({ kind: "snapshot", terminals: [term(), term({ address: "t2", foreground: null })] })
+  await missing.r.settled()
+  expect(missing.sent).toEqual([])
+  const login = harness()
+  login.r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: shell } })] })
+  await login.r.settled()
+  expect(login.sent).toHaveLength(1)
+  const live = harness()
+  live.r.handle({ kind: "snapshot", terminals: [term({ foreground: { argv: ["claude", "--resume", ID] } })] })
+  await live.r.settled()
+  expect(live.sent).toEqual([])
+  // the foreground arrives in a later snapshot: re-evaluated, now sends
+  missing.r.handle(snap(term()))
+  await missing.r.settled()
+  expect(missing.sent).toHaveLength(1)
+})
+
+test("a restarted record without a foreground fact still resumes (its replacement shell is the terminal's argv)", async () => {
+  const { sent, r } = harness()
+  r.handle(restarted(term()))
+  await r.settled()
+  expect(sent).toHaveLength(1)
 })
 
 test("resume line: account dir quoted, iu uses env -u", () => {
@@ -197,6 +225,13 @@ test("sendHc revalidates: still a login shell with the same session -> sends", a
   await withFake({ FAKE_TERMINAL: JSON.stringify(fg(term())) }, async (log) => {
     await sendHc("t1", "line", ID, 5000, () => true)
     expect(log()).toEqual(["terminal.get", "terminal.send"])
+  })
+})
+
+test("sendHc types nothing when terminal.get carries no foreground; a login-shell argv is not enough", async () => {
+  await withFake({ FAKE_TERMINAL: JSON.stringify(term()) }, async (log) => {
+    await expect(sendHc("t1", "line", ID, 5000, () => true)).rejects.toBeInstanceOf(RetryLater)
+    expect(log()).toEqual(["terminal.get"])
   })
 })
 

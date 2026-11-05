@@ -6,10 +6,11 @@
 //
 // Triggers: its own start (the subscribe snapshot), every reconnect (stream EOF = core restart), a
 // `restarted` event, a `missed` snapshot. Rules: one attempt at a time per terminal, at most one
-// attempt per (terminal, session id), only into a login shell.
+// attempt per (terminal, session id), only into a terminal whose foreground is POSITIVELY a login shell
+// (an unknown foreground is skipped and re-evaluated by the next snapshot).
 //
 // Never starts a core: `hc connect` STARTS one when none runs, so before every connect (with HC_SESSION
-// unset, i.e. the real core) com.jkrumm.herdr-core must be `state = running` in launchd; otherwise it counts
+// unset, i.e. the real core) lib/core-up.sh must say a launchd-born core answers; otherwise it counts
 // as "no core" and retries with backoff.
 // Runs under launchd KeepAlive: com.jkrumm.hc-resume.
 import { join } from "node:path"
@@ -41,12 +42,14 @@ const CONFIG = "jk.claude.config"
 const SHELLS = new Set(["sh", "bash", "zsh", "fish", "dash", "ksh"])
 
 /**
- * Whatever is in the foreground is a login shell. With `argvFallback` (a `restarted` record or a fresh
- * terminal.get, where the foreground fact may not be there yet) the terminal's own program stands in;
- * a snapshot must carry the foreground fact.
+ * The foreground is POSITIVELY a login shell. Only a `restarted` record (`argvFallback`: the core just replaced
+ * the program with the terminal's own login shell, the foreground fact is not there yet) may fall back to the
+ * terminal's own argv, and only when the foreground key is absent. A snapshot or terminal.get without the
+ * foreground fact, or with `foreground: null`, is unknown and never counts: the terminal's own argv says nothing
+ * about what runs in it now (a live Claude session sits in a terminal whose argv is `/bin/zsh -l`).
  */
 export function isLoginShell(t: Terminal, argvFallback = false): boolean {
-  const argv = t.foreground ? t.foreground.argv : argvFallback ? t.argv : undefined
+  const argv = t.foreground ? t.foreground.argv : argvFallback && t.foreground === undefined ? t.argv : undefined
   if (!argv?.length) return false
   const head = argv[0]
   const name = head.replace(/^-/, "").split("/").pop() ?? ""
@@ -98,7 +101,7 @@ export function createResumer(send: Deps["send"], log: (l: string) => void = () 
       .then(() => log(`resume ${t.address} ${id} (${labels[CONFIG] || "iu"})`))
       .catch((e) => {
         // Nothing was typed: let the next snapshot try again. "skipped" and real send errors keep the attempt.
-        if (e instanceof NotConnecting && attempted.get(t.address) === id) attempted.delete(t.address)
+        if (e instanceof RetryLater && attempted.get(t.address) === id) attempted.delete(t.address)
         log(`resume ${t.address} failed: ${(e as Error).message}`)
       })
       .finally(() => { inflight.delete(t.address); pending.delete(p) })
@@ -162,8 +165,10 @@ export function isSubscribeError(line: string): boolean {
   try { const o = JSON.parse(line) as Json; return o.id === 1 && o.error !== undefined } catch { return false }
 }
 
-/** The core guard refused before anything was typed: the attempt does not count. */
-export class NotConnecting extends Error {}
+/** Nothing was typed and the terminal may qualify later: the attempt does not count. */
+export class RetryLater extends Error {}
+/** The core guard refused before anything was typed. */
+export class NotConnecting extends RetryLater {}
 
 export const CORE_LABEL = "com.jkrumm.herdr-core"
 
@@ -225,7 +230,7 @@ async function call(proc: ReturnType<typeof Bun.spawn>, it: AsyncGenerator<strin
 }
 
 /**
- * Re-read the terminal on a short-lived connection and send only if it is still a login shell carrying
+ * Re-read the terminal on a short-lived connection and send only if its foreground is positively a login shell carrying
  * the same session label (the subscribed connection answers no requests). A hard deadline kills the
  * connect process and rejects, so the caller's `inflight` always clears.
  */
@@ -237,7 +242,8 @@ export async function sendHc(address: string, text: string, session: string, dea
     const it = lines(proc.stdout)
     const t = (await call(proc, it, 3, "terminal.get", { terminal: address })) as unknown as Terminal
     if (t.labels?.[SESSION] !== session) throw new Error(`skipped: ${address} no longer carries session ${session}`)
-    if (!isLoginShell(t, true)) throw new Error(`skipped: ${address} is no longer at a login shell`)
+    if (t.foreground === undefined || t.foreground === null) throw new RetryLater(`foreground of ${address} unknown: not typing, a later snapshot decides`)
+    if (!isLoginShell(t)) throw new Error(`skipped: ${address} is no longer at a login shell`)
     await call(proc, it, 2, "terminal.send", { terminal: address, text, caller: "hc-resume" })
   } catch (e) {
     if (timedOut) throw new Error(`send to ${address} timed out after ${deadlineMs} ms`)
