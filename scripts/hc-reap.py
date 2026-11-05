@@ -13,8 +13,9 @@ status (`terminal.list` `status`); shells, servers and finished terminals are no
            inside ~/SourceRoot and ~/IuRoot
   message  the same terminal, but dirty or unpushed — the agent is told (once per 24 h), the terminal stays
   close    an orphaned shell: a live terminal with no status, no name, no `factory.key` and no Claude session label,
-           whose program and foreground program are a login shell, with no children, untouched for 7 days
-           (hc exposes no output time for a shell: the age is the later of `created_ms` and `status_ms`).
+           whose program and foreground program are a login shell, with no children, whose `turn` (it rises as
+           commands run) hc-reap has seen unchanged for 7 days (remembered per terminal in its state file; a first
+           sighting starts the clock, so nothing closes in the first 7 days).
            Never a `plan:` tab, a named terminal, one running a program, or the caller's own
   never    a terminal with no `factory.key` label (the owner's own sessions) and a `plan:<repo>` one (the factory's
            planning tab), before any other rule, whatever their age or state
@@ -524,42 +525,53 @@ def reap_terminals(idle_h: float, j: Journal) -> None:
         close_terminal(j, t, tops, repo=repo, idle=f"{age:.0f}h", label=f'"{tab_name(t)}"')
 
     if not j.dry:
-        save_messaged({k: v for k, v in messaged.items() if k.startswith('bg:') or now - v < 7 * 86400})
+        save_messaged({k: v for k, v in messaged.items() if k.startswith('bg:') or k.startswith('shell:') or now - v < 7 * 86400})
     print(f"kept {len(kept)} terminal(s) of {len(agents)} agent(s):")
     for k in kept:
         print(f"  keep {k}")
 
 
-def is_orphan_shell(t: dict, now_ms: float) -> str | None:
-    """The idle age (e.g. "8d") of a terminal the shell rule may close, or None. Everything must hold: live, no
-    agent status, no name, no label that makes it the factory's or an agent's (`factory.key`, so `plan:` tabs too;
-    the Claude session label), program and foreground program both a shell, untouched for SHELL_IDLE_S."""
+def is_orphan_shell(t: dict) -> bool:
+    """Whether a terminal is the shell rule's kind: live, no agent status, no name, no label that makes it the
+    factory's or an agent's (`factory.key`, so `plan:` tabs too; the Claude session label), and its program and
+    foreground program both a shell. Idleness is judged separately, from `turn` (see `reap_shells`)."""
     if t.get("state") != "live" or t.get("status") is not None or "/" in t["address"] or t.get("name"):
-        return None
+        return False
     labels = t.get("labels") or {}
     if labels.get(FACTORY_KEY_LABEL) or labels.get(SESSION_LABEL):
-        return None
+        return False
     argv = t.get("argv") or []
     if not argv or os.path.basename(argv[0]).lstrip("-") not in SHELLS:
-        return None
-    if ((t.get("foreground") or {}).get("name") or "") not in SHELLS:
-        return None
-    active_ms = max(t.get("created_ms") or 0, t.get("status_ms") or 0)
-    if not active_ms or now_ms - active_ms < SHELL_IDLE_S * 1000:
-        return None
-    return f"{(now_ms - active_ms) / 86400000:.0f}d"
+        return False
+    return ((t.get("foreground") or {}).get("name") or "") in SHELLS
+
+
+def shell_key(t: dict) -> str:
+    return f"shell:{t['address']}:{t.get('created_ms')}"
 
 
 def reap_shells(j: Journal) -> None:
-    """The orphaned-shell rule, a pass of its own: `is_agent` never sees a shell. The close is re-judged from a
-    fresh roster (same terminal, still an orphan shell, no children, not the caller's)."""
+    """The orphaned-shell rule, a pass of its own: `is_agent` never sees a shell. hc reports no output time for a
+    shell, but its `turn` rises as commands run. hc-reap remembers, per terminal, the last `turn` it saw and when
+    that changed (in the state file, `shell:<address>:<created_ms>`); a shell closes only when the `turn` has been
+    unchanged for SHELL_IDLE_S of observations. A first sighting starts the clock. A dry run reads that state and
+    writes none. The close is re-judged from a fresh roster (same terminal, still an orphan shell, same turn)."""
     terminals = list_terminals()
     own = os.environ.get("HC_TERMINAL_ID", "")
     parents = {t["parent"] for t in terminals if t.get("parent") and t.get("state") == "live"}
-    now_ms = time.time() * 1000
+    state = load_messaged()
+    now = time.time()
+    seen: dict = {}
     for t in terminals:
-        age = is_orphan_shell(t, now_ms)
-        if age is None or t["address"] == own or t["address"] in parents:
+        if not is_orphan_shell(t):
+            continue
+        key, turn = shell_key(t), t.get("turn")
+        prev = state.get(key)
+        if not isinstance(prev, dict) or prev.get("turn") != turn:
+            seen[key] = {"turn": turn, "at": now}  # first sighting, or it moved: the clock starts over
+            continue
+        seen[key] = prev
+        if now - prev.get("at", now) < SHELL_IDLE_S or t["address"] == own or t["address"] in parents:
             continue
         addr = t["address"]
         if not j.dry:
@@ -567,10 +579,12 @@ def reap_shells(j: Journal) -> None:
                 fresh = next((x for x in list_terminals() if x["address"] == addr), None)
             except HcError:
                 continue
-            if not fresh or fresh.get("created_ms") != t.get("created_ms") or is_orphan_shell(fresh, time.time() * 1000) is None:
+            if not fresh or fresh.get("created_ms") != t.get("created_ms") or not is_orphan_shell(fresh) \
+                    or fresh.get("turn") != turn:
                 j.line("close-skipped", terminal=addr, why='"the terminal changed before the close"')
                 continue
-        j.line("close", terminal=addr, why='"orphaned shell"', idle=age, cwd=json.dumps(t.get("cwd") or ""))
+        j.line("close", terminal=addr, why='"orphaned shell"', idle=f"{(now - prev['at']) / 86400:.0f}d",
+               cwd=json.dumps(t.get("cwd") or ""))
         if j.dry:
             continue
         try:
@@ -578,6 +592,8 @@ def reap_shells(j: Journal) -> None:
             hc_rpc("terminal.rm", {"terminal": addr, "caller": "hc-reap"})
         except HcError as e:
             j.line("close-failed", terminal=addr, out=json.dumps(str(e)[:200]))
+    if not j.dry:
+        save_messaged({**{k: v for k, v in load_messaged().items() if not k.startswith("shell:")}, **seen})
 
 
 def account_envs() -> list[dict]:

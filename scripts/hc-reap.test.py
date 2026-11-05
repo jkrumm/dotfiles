@@ -255,52 +255,82 @@ class Reap(unittest.TestCase):
         self.assertNotIn("kill t1", calls)
         self.assertIn("kill t2", calls)
 
-    def shell(self, addr, age_d=8, **kw):
-        """A live login shell as `terminal.list` returns it: no status, no name, no labels, `age_d` days old."""
-        rec = {"address": addr, "state": "live", "created_ms": int((time.time() - age_d * 86400) * 1000), "pid": 1,
+    def shell(self, addr, **kw):
+        """A live login shell as `terminal.list` returns it: no status, no name, no labels, `turn` 3."""
+        rec = {"address": addr, "state": "live", "created_ms": 5000, "pid": 1, "turn": 3,
                "name": None, "parent": None, "keep": True, "cwd": "/", "argv": ["/bin/zsh", "-l"],
                "foreground": {"argv": ["zsh"], "cwd": "/", "name": "zsh", "pid": 1}, "status": None, "labels": {"where": "proj / 1"}}
         rec.update(kw)
         return rec
 
-    def test_orphaned_shell_after_seven_days_is_closed(self):
+    def seed_shell(self, addr, turn=3, days_ago=8):
+        """hc-reap's state file as an earlier run left it: this terminal's `turn` last changed `days_ago` ago."""
+        path = os.path.join(self.home, ".local/state/hc-reap/messaged.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            with open(path) as f:
+                st = json.load(f)
+        except OSError:
+            st = {}
+        st[f"shell:{addr}:5000"] = {"turn": turn, "at": time.time() - days_ago * 86400}
+        with open(path, "w") as f:
+            json.dump(st, f)
+
+    def test_shell_with_turn_unchanged_for_seven_days_is_closed(self):
+        self.seed_shell("s1")
         calls = self.run_reap([self.shell("s1")])
         self.assertIn("kill s1", calls)
         self.assertIn("rm s1", calls)
         self.assertIn("close terminal=s1", self.log())
 
-    def test_orphaned_shell_dry_run_lists_and_changes_nothing(self):
+    def test_dry_run_lists_the_shell_and_changes_nothing(self):
+        self.seed_shell("s1")
         calls = self.run_reap([self.shell("s1")], (), "--dry-run")
         self.assertNotIn("kill", calls)
         self.assertIn("close terminal=s1", self.last_out)
         self.assertEqual(self.log(), "")
 
-    def test_young_shell_is_kept(self):
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", age_d=6)]))
+    def test_shell_whose_turn_moved_a_day_ago_is_kept(self):
+        self.seed_shell("s1", turn=2, days_ago=1)
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", turn=3)]))
+        self.seed_shell("s2", turn=3, days_ago=1)
+        self.assertNotIn("kill", self.run_reap([self.shell("s2", turn=3)]))
 
-    def test_recent_status_ms_keeps_an_old_shell(self):
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", status_ms=int(time.time() * 1000))]))
+    def test_turn_that_moved_restarts_the_clock_even_after_eight_days(self):
+        self.seed_shell("s1", turn=2, days_ago=8)
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", turn=3)]))
+
+    def test_first_sighting_of_an_old_terminal_is_kept_and_remembered(self):
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", created_ms=1000)]))
+        with open(os.path.join(self.home, ".local/state/hc-reap/messaged.json")) as f:
+            self.assertIn("shell:s1:1000", json.load(f))
 
     def test_plan_tab_shell_is_kept(self):
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", age_d=30, labels={"factory.key": "plan:a"})]))
+        self.seed_shell("s1")
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", labels={"factory.key": "plan:a"})]))
 
     def test_named_shell_is_kept(self):
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", age_d=30, name="relogin-me")]))
+        self.seed_shell("s1")
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", name="relogin-me")]))
 
     def test_shell_with_a_claude_label_is_kept(self):
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", age_d=30, labels={"jk.claude.session": "abc"})]))
+        self.seed_shell("s1")
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", labels={"jk.claude.session": "abc"})]))
 
     def test_shell_running_a_program_is_kept(self):
+        self.seed_shell("s1")
         fg = {"argv": ["vim"], "cwd": "/", "name": "vim", "pid": 2}
-        self.assertNotIn("kill", self.run_reap([self.shell("s1", age_d=30, foreground=fg)]))
+        self.assertNotIn("kill", self.run_reap([self.shell("s1", foreground=fg)]))
 
     def test_shell_with_a_child_and_the_callers_own_are_kept(self):
-        calls = self.run_reap([self.shell("s1", age_d=30), self.shell("s2", age_d=30, parent="s1"),
-                               self.shell("own", age_d=30)])
+        for a in ("s1", "s2", "own"):
+            self.seed_shell(a)
+        calls = self.run_reap([self.shell("s1"), self.shell("s2", parent="s1"), self.shell("own")])
         self.assertNotIn("kill s1", calls)
         self.assertNotIn("kill own", calls)
 
     def test_shell_changing_before_the_close_is_kept(self):
+        self.seed_shell("s1")
         calls = self.run_reap([self.shell("s1")], replace_after=2, replace_addr="s1")
         self.assertNotIn("kill", calls)
 
