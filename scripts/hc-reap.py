@@ -12,6 +12,10 @@ status (`terminal.list` `status`); shells, servers and finished terminals are no
            must be done/idle; the idle age and an active wave in the repo's plan do not hold it back. Only
            inside ~/SourceRoot and ~/IuRoot
   message  the same terminal, but dirty or unpushed — the agent is told (once per 24 h), the terminal stays
+  close    an orphaned shell: a live terminal with no status, no name, no `factory.key` and no Claude session label,
+           whose program and foreground program are a login shell, with no children, untouched for 7 days
+           (hc exposes no output time for a shell: the age is the later of `created_ms` and `status_ms`).
+           Never a `plan:` tab, a named terminal, one running a program, or the caller's own
   never    a terminal with no `factory.key` label (the owner's own sessions) and a `plan:<repo>` one (the factory's
            planning tab), before any other rule, whatever their age or state
   never    working/blocked/unknown agents, a checkout a working agent also uses, a terminal with live
@@ -51,6 +55,8 @@ MESSAGE_EVERY_S = 24 * 3600
 BG_MAX_AGE_S = 24 * 3600
 ACTIVE_RE = re.compile(r"<!--\s*status:\s*active\b")
 FINISHED = {"done", "idle"}
+SHELLS = {"zsh", "bash", "sh", "dash", "fish"}
+SHELL_IDLE_S = 7 * 24 * 3600
 FLEET_ROOTS = [os.path.join(HOME, "SourceRoot"), os.path.join(HOME, "IuRoot")]
 # Terminals that own a wave or a fleet: never closed by the merged-fan rule, whatever their checkout says.
 LEAD_LABEL_RE = re.compile(r"^(wave \d+|mother|lead|orchestrator)$", re.I)
@@ -524,6 +530,56 @@ def reap_terminals(idle_h: float, j: Journal) -> None:
         print(f"  keep {k}")
 
 
+def is_orphan_shell(t: dict, now_ms: float) -> str | None:
+    """The idle age (e.g. "8d") of a terminal the shell rule may close, or None. Everything must hold: live, no
+    agent status, no name, no label that makes it the factory's or an agent's (`factory.key`, so `plan:` tabs too;
+    the Claude session label), program and foreground program both a shell, untouched for SHELL_IDLE_S."""
+    if t.get("state") != "live" or t.get("status") is not None or "/" in t["address"] or t.get("name"):
+        return None
+    labels = t.get("labels") or {}
+    if labels.get(FACTORY_KEY_LABEL) or labels.get(SESSION_LABEL):
+        return None
+    argv = t.get("argv") or []
+    if not argv or os.path.basename(argv[0]).lstrip("-") not in SHELLS:
+        return None
+    if ((t.get("foreground") or {}).get("name") or "") not in SHELLS:
+        return None
+    active_ms = max(t.get("created_ms") or 0, t.get("status_ms") or 0)
+    if not active_ms or now_ms - active_ms < SHELL_IDLE_S * 1000:
+        return None
+    return f"{(now_ms - active_ms) / 86400000:.0f}d"
+
+
+def reap_shells(j: Journal) -> None:
+    """The orphaned-shell rule, a pass of its own: `is_agent` never sees a shell. The close is re-judged from a
+    fresh roster (same terminal, still an orphan shell, no children, not the caller's)."""
+    terminals = list_terminals()
+    own = os.environ.get("HC_TERMINAL_ID", "")
+    parents = {t["parent"] for t in terminals if t.get("parent") and t.get("state") == "live"}
+    now_ms = time.time() * 1000
+    for t in terminals:
+        age = is_orphan_shell(t, now_ms)
+        if age is None or t["address"] == own or t["address"] in parents:
+            continue
+        addr = t["address"]
+        if not j.dry:
+            try:
+                fresh = next((x for x in list_terminals() if x["address"] == addr), None)
+            except HcError:
+                continue
+            if not fresh or fresh.get("created_ms") != t.get("created_ms") or is_orphan_shell(fresh, time.time() * 1000) is None:
+                j.line("close-skipped", terminal=addr, why='"the terminal changed before the close"')
+                continue
+        j.line("close", terminal=addr, why='"orphaned shell"', idle=age, cwd=json.dumps(t.get("cwd") or ""))
+        if j.dry:
+            continue
+        try:
+            hc_rpc("terminal.kill", {"terminal": addr, "caller": "hc-reap"})
+            hc_rpc("terminal.rm", {"terminal": addr, "caller": "hc-reap"})
+        except HcError as e:
+            j.line("close-failed", terminal=addr, out=json.dumps(str(e)[:200]))
+
+
 def account_envs() -> list[dict]:
     """One process env per enabled Claude account (config/claude-accounts.json): the background daemon
     is bound to one identity, so `claude agents` / `claude stop` run once per account."""
@@ -603,6 +659,10 @@ def main() -> None:
         reap_terminals(idle_h, j)
     except HcError as e:  # a stopped core is the health check's to report, not a reason to fail this job
         print(f"terminal pass skipped: {e}")
+    try:
+        reap_shells(j)
+    except HcError as e:
+        print(f"shell pass skipped: {e}")
     reap_bg(j)
     if not args.dry_run:
         j.line("run-complete", idle_h=f"{idle_h:g}")
