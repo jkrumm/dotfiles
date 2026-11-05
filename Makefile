@@ -104,6 +104,7 @@ setup:
 	@$(MAKE) --no-print-directory _setup-rules
 	@$(MAKE) --no-print-directory _setup-agents
 	@$(MAKE) --no-print-directory _setup-output-styles
+	@$(MAKE) --no-print-directory _setup-factory-spaces
 	@$(MAKE) --no-print-directory claude-accounts-setup
 	@$(MAKE) --no-print-directory claude-accounts-keepalive-setup
 	@$(MAKE) --no-print-directory _setup-usage-tracker
@@ -116,6 +117,15 @@ setup:
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
 	@echo ""
+
+.PHONY: _setup-factory-spaces
+_setup-factory-spaces:
+	@echo "  Factory spaces..."
+	@python3 $(DOTFILES_DIR)/scripts/factory-spaces.py | sed 's/^/    · /'
+
+.PHONY: factory-spaces-test
+factory-spaces-test: ## Hermetic suite for factory-spaces.py (temp HOME, fixture groups.json)
+	@python3 -W ignore $(DOTFILES_DIR)/scripts/factory-spaces.test.py
 
 .PHONY: _check-prereqs
 _check-prereqs:
@@ -773,7 +783,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test fan-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-guard-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD

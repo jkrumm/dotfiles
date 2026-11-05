@@ -33,6 +33,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `config/opencode/themes/` | `~/.config/opencode/themes/` (dir symlink) | `one-zinc.json` — the dark/light palette shared with Ghostty + the Herdr app |
 | `config/opencode/plugins/protect-branches.js` | `~/.config/opencode/plugins/` (the **file**) | Runs `hooks/protect-branches.ts` on every bash call: one branch-protection policy for both harnesses |
 | `agents/*.md` | `~/.config/opencode/agent/*.md` — **rendered**, not linked | `scripts/opencode-agents.py` rewrites Claude's frontmatter (OpenCode rejects `tools: A, B` and `color: green`, and one bad file fails the whole config) |
+| `config/herdr-app/groups.json` | `~/.config/factory/spaces.json` — **rendered** by `scripts/factory-spaces.py` (`make setup`) | software-factory's space list, same order, missing repos skipped |
 | `config/herdr-app/` | `~/.config/herdr-app/` (per item, by `make herdr-app-setup`) | Layout `jk`, mods, themes `one-zinc-*`, `groups.json` (sidebar folders, one line per repo); link per item, never the dir (it holds the app's shipped mods) |
 | `config/ghostty/config` | `~/.config/ghostty/config` | The one terminal config. Themes under `config/ghostty/themes/` are **copied**, not symlinked (Ghostty theme names are exact filenames) |
 | `config/Caddyfile` | `$(brew --prefix)/etc/Caddyfile` | Local HTTPS proxy + the single app registry — edit here, then `caddy reload` |
@@ -177,7 +178,7 @@ substitutes for another.**
 |-|-|
 | A terminal *on* the mini | the Herdr app on the MacBook (the mini is machine `mini`, its terminals appear in the sidebar); terminal-only: `ssh -t mini hc` (core up only; else it starts one keychain-less) picks a terminal and attaches (Ctrl+\ detaches). A roam or lid-close ends only the view. |
 | Work *placed on* the mini, no terminal | `rd repos\|work\|wave\|fan\|merge\|close\|reap\|agents\|read\|say` (`scripts/remote-dev.sh`; shorthands `work`/`agents`/`repos`) |
-| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree or mother/lead/wave tab; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
+| Housekeeping | `rd reap [--dry-run]` — the janitor (`com.jkrumm.hc-reap`, every 30 min): closes finished agents' tabs and merged `rd fan` tabs, never a working agent, dirty/unpushed tree, mother/lead/wave tab, `factory.key=plan:*` tab or a terminal without a `factory.key` label; rules in `docs/remote-dev.md` §Janitor rules and `rd wave` detail. Log: `~/Library/Logs/hc-reap.log` |
 | The raw record | `com.jkrumm.hc-events` appends every core event to `~/.local/share/herdr-events/YYYY-MM-DD.jsonl` (data, never rotated; `recorder.gap` marks holes). `make hc-events-status` |
 | What every agent is doing | the app's sidebar; the factory (software-factory, `factory fleet`) is the one producer of agent state. `agw agents` is its client for Hermes, brain and Argo and adds only recommendations and the Max quota. |
 

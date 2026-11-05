@@ -12,6 +12,8 @@ status (`terminal.list` `status`); shells, servers and finished terminals are no
            must be done/idle; the idle age and an active wave in the repo's plan do not hold it back. Only
            inside ~/SourceRoot and ~/IuRoot
   message  the same terminal, but dirty or unpushed — the agent is told (once per 24 h), the terminal stays
+  never    a terminal with no `factory.key` label (the owner's own sessions) and a `plan:<repo>` one (the factory's
+           planning tab), before any other rule, whatever their age or state
   never    working/blocked/unknown agents, a checkout a working agent also uses, a terminal with live
            children, terminals whose cwd is not inside a git repo (the ~/SourceRoot design terminals), any
            terminal in a repo whose docs/waves/PLAN.md has an `active` wave (mother/lead/wave terminals)
@@ -56,6 +58,8 @@ LEAD_NAME_RE = re.compile(r"(-mother|-lead|-orchestrator|-w\d+)$", re.I)  # term
 NET_TIMEOUT_S = 30
 BG_STOPPABLE = {"blocked", "idle", "done"}
 SESSION_LABEL = "jk.claude.session"
+FACTORY_KEY_LABEL = "factory.key"
+PLAN_KEY_PREFIX = "plan:"
 CORE_LABEL = "com.jkrumm.herdr-core"
 HC = os.environ.get("HC_BIN") or "hc"
 
@@ -361,6 +365,17 @@ def tab_name(t: dict) -> str:
     return (t.get("labels", {}).get("where") or "").split(" / ", 1)[-1]
 
 
+def protected_by_label(t: dict) -> str | None:
+    """Why the factory's labels put this terminal out of the janitor's reach, or None. Only terminals the factory
+    spawned (a `factory.key` label) are reaped; `plan:<repo>` tabs are its planning tabs, never closed."""
+    key = (t.get("labels") or {}).get(FACTORY_KEY_LABEL)
+    if not key:
+        return "no factory.key label (not factory-spawned)"
+    if key.startswith(PLAN_KEY_PREFIX):
+        return f"plan tab ({key})"
+    return None
+
+
 def recheck(t: dict, tops: set[str], judged: dict[str, str] | None) -> str | None:
     """Why the terminal must NOT close after all, from one fresh roster read right before the close (the plan
     was made minutes ago), or None. It is still the same live terminal and still done/idle; no other live
@@ -439,12 +454,12 @@ def reap_terminals(idle_h: float, j: Journal) -> None:
     for t in agents:
         addr = t["address"]
         name = f"{addr} '{t.get('name') or tab_name(t)}'"
-        why = None
-        if addr == own:
+        why = protected_by_label(t)  # first: before any other rule
+        if why is None and addr == own:
             why = "caller's own terminal"
-        elif addr in parents:
+        elif why is None and addr in parents:
             why = "has live child terminals"
-        elif tstate(t) not in FINISHED:
+        elif why is None and tstate(t) not in FINISHED:
             why = "agent " + tstate(t)
         if why:
             kept.append(f"{name}: {why}")

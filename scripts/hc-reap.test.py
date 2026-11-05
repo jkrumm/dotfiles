@@ -183,8 +183,9 @@ class Reap(unittest.TestCase):
                 git(r, "fetch", "-q", "--prune", "origin")
         return wt
 
-    def agent(self, pane, addr, status, cwd, idle_h=30):
-        """A live Claude terminal record as `terminal.list` returns it; `pane` only makes the session id unique."""
+    def agent(self, pane, addr, status, cwd, idle_h=30, key="fan:test"):
+        """A live Claude terminal record as `terminal.list` returns it; `pane` only makes the session id unique.
+        `key` is the `factory.key` label (None = a keyless terminal, the owner's own session)."""
         tab, sid = addr, f"sid-{pane}"
         ts = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - idle_h * 3600))
         with open(os.path.join(self.home, ".claude/projects/p", f"{sid}.jsonl"), "w") as f:
@@ -192,7 +193,7 @@ class Reap(unittest.TestCase):
         return {"address": addr, "state": "live", "created_ms": 1000, "pid": 1, "name": None, "parent": None, "keep": True,
                 "cwd": cwd, "foreground": {"argv": ["claude"], "cwd": cwd, "name": "claude", "pid": 1},
                 "status": {"app": "claude-code", "state": status},
-                "labels": {"jk.claude.session": sid, "where": f"proj / {tab}"}}
+                "labels": {"jk.claude.session": sid, "where": f"proj / {tab}", **({"factory.key": key} if key else {})}}
 
     def run_reap(self, terminals, bg=(), *flags, prs=None, flip_after=None, flip_terminals=None, child_after=None,
                  child_of="t1", recheck_cmd=None, replace_after=None, replace_addr="t1", core_down=False,
@@ -229,6 +230,30 @@ class Reap(unittest.TestCase):
         calls = self.run_reap([self.agent("p1", "t1", "idle", r)])
         self.assertIn("kill t1", calls)
         self.assertIn("close terminal=t1", self.log())
+
+    def test_plan_tab_idle_for_days_is_kept(self):
+        r = self.repo("a")
+        calls = self.run_reap([self.agent("p1", "t1", "idle", r, idle_h=96, key="plan:a")])
+        self.assertNotIn("kill", calls)
+        self.assertIn("plan tab (plan:a)", self.last_out)
+
+    def test_keyless_terminal_idle_is_kept(self):
+        r = self.repo("a")
+        calls = self.run_reap([self.agent("p1", "t1", "idle", r, idle_h=96, key=None)])
+        self.assertNotIn("kill", calls)
+        self.assertIn("no factory.key label", self.last_out)
+
+    def test_keyless_dirty_terminal_is_not_messaged(self):
+        r = self.repo("a", dirty=True)
+        calls = self.run_reap([self.agent("p1", "t1", "idle", r, idle_h=96, key=None)])
+        self.assertNotIn("send", calls)
+
+    def test_keyed_idle_terminal_beside_a_plan_tab_is_still_reaped(self):
+        r = self.repo("a")
+        calls = self.run_reap([self.agent("p1", "t1", "idle", r, key="plan:a"),
+                               self.agent("p2", "t2", "idle", r, key="fan:x")])
+        self.assertNotIn("kill t1", calls)
+        self.assertIn("kill t2", calls)
 
     def test_dry_run_changes_nothing(self):
         r = self.repo("a")
@@ -292,7 +317,7 @@ class Reap(unittest.TestCase):
     def test_unlabelled_agent_has_unknown_age_and_is_kept(self):
         r = self.repo("a")
         t = self.agent("p1", "t1", "idle", r)
-        t["labels"] = {}
+        t["labels"] = {"factory.key": "fan:x"}  # keyed, but no session label
         self.assertNotIn("kill", self.run_reap([t]))
         self.assertIn("idle age unknown", self.last_out)
 
