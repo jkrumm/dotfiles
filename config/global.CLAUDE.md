@@ -133,6 +133,7 @@ remote dev. The Herdr app (MacBook) shows the mini's terminals; `rd` puts work o
 bare `op`. **Never `op read`/`op run` on the mini** — it hangs on a biometric
 prompt; use `secrets-run`. Model and guardrails: `AGENTS.md` §Secrets; ops via
 `/secrets`.
+Apple developer team (certificates, ASC/APNs keys, App Groups, a new app's portal steps): skill `apple-signing`.
 
 ## Workflow
 
