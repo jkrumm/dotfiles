@@ -107,7 +107,7 @@ Moved verbatim from `AGENTS.md`.
 The Herdr app's `jk-spaces` mod draws the folders: `config/herdr-app/groups.json`
 declares the taxonomy (linked to `~/.config/herdr-app/groups.json` by `make
 herdr-app-setup`), a space joins the group naming its repo, the rest land in
-`OTHER`, and `jk-board` files its repo cards under the same folders. Adding a
+`OTHER`. Adding a
 repo is one line in the JSON; an unopened space is skipped, so listing one early
 costs nothing.
 

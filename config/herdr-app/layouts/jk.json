@@ -112,7 +112,7 @@
                   },
                   "header": {
                     "content": {
-                      "mod": "pane"
+                      "mod": "jk-pane"
                     },
                     "height": 30,
                     "position": "top",

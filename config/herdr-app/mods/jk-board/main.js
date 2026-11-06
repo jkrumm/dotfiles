@@ -1,28 +1,31 @@
-// jk-board — the right-hand sidebar, two tabs. Waves (default): the fleet view of the mini's agent work.
+// jk-board — the right-hand sidebar, two tabs. Issues (default): the factory's work as a human reads it.
 // Uptime: an Uptime Kuma overview from Argo's /uptime-kuma/monitors, read on the mini with secrets-run (the
 // token never reaches argv), grouped by parent group. jk-status switches it to Uptime through
 // shared("jk.board.tab"). Read-only.
-// Waves:  Every 30 s one call on the mini reads software-factory's fleet model (`factory fleet`, token only:
-// the socket never serves it) and hc's turn counts. The model holds the repos with their plan and sessions
-// and everything waiting on the owner; this file collects nothing of its own. Asks sit on top (count in the
-// tab badge; the owner's own first, then by time), then the repos that have a live session or a queued spawn
-// under the left sidebar's folders (config/herdr-app/groups.json). A plan nobody works with an active wave waits in a collapsed
-// "Paused" section, one with only waves ahead in "Planned"; finished plans are hidden. Click a card to
-// open it, an ask or a session to jump to its agent.
-// Hidden children: a tab row lists the terminals that hang under it (the model's `parent`) as a tree: name,
-// state, turn (hc's, one `hc ls` per poll). Click a child for its last lines (`hc read`, on demand).
+// Issues: every 15 s one call on the mini reads software-factory's read API (`factory read overview|issues|sessions`,
+// token through secrets-run) and hc's terminal list. Each part parses on its own and keeps its last good answer.
+// Top to bottom: the summary line, ASKS (the owner's own first), HUMAN QUEUE (stale ones folded), HEALTH, then the
+// Issues: RUNNING, QUEUED (folded), RECENT (folded), and the live sessions that belong to no Issue. An Issue card
+// shows its human title, phase and summary; a click opens facts, its sessions, the hidden-child tree and the last
+// timeline lines (`read issue <id>`, only while open). All text from the API is data.
+// Header feed: after each good sessions answer the board publishes shared("jk.factory.terminals") (app terminal
+// address -> what that agent is about) for the jk-pane header, and only when it changed.
+// Hidden children: a session row lists the terminals that hang under it (hc's `parent`) as a tree: name,
+// state, turn. Click a child for its last lines (`hc read`, on demand).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, home, machines, shared, setShared, run, terminals } from "herdr";
+import { exec, theme, machines, shared, setShared, run, terminals, focused } from "herdr";
 
-// The token comes from the factory's own env template through secrets-run, never argv; `factory fleet` exits 3 without one.
-const FLEET = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl -- factory fleet --format json`;
+// The token comes from the factory's own env template through secrets-run, never argv.
+const SECRETS = `PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH"; cd ~/SourceRoot/software-factory && secrets-run run --env-file=.env.tpl --`;
+// `--format json` goes before the subcommand. One secrets-run, three reads, split on a line holding only @@.
+const READS = "factory --format json read overview; echo; echo @@; factory --format json read issues --state all --limit 40; echo; echo @@; factory --format json read sessions --live";
 const HC_MARK = "@@HC@@";
 const HC_SPLIT = `\n${HC_MARK}\n`;
 // hc starts a stray core (no keychain) when none runs: ask lib/core-up.sh first (socket answers AND a launchd-born core), as rd's require_core does. Bounded when the host has a timeout.
 const HC_GUARD = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; bash "$HOME/SourceRoot/dotfiles/scripts/lib/core-up.sh" >/dev/null 2>&1 || exit 1; t=$(command -v timeout || command -v gtimeout)`;
 const HC_LS = `${HC_GUARD}; \${t:+"$t"} \${t:+8} hc ls --json`;
-const CMD = `{ ${FLEET}; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
+const CMD = `{ ${SECRETS} sh -c '${READS}'; } 2>/dev/null; echo; echo '${HC_MARK}'; ( ${HC_LS} ) 2>/dev/null`;
 // A child's last lines: the screen, blank lines dropped. The address is checked (ADDR) before it reaches the shell.
 const PEEK_LINES = 8;
 const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${addr} 2>&1) || { echo "(hc read failed)"; exit 1; }; printf '%s\\n' "$out" | grep -v '^[[:space:]]*$' | tail -n ${PEEK_LINES}`;
@@ -31,11 +34,12 @@ const peekCmd = (addr) => `${HC_GUARD}; out=$(\${t:+"$t"} \${t:+8} hc read ${add
 const UPTIME = `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; t=$(secrets-run read op://common/api/SECRET) && printf 'Authorization: Bearer %s\\n' "$t" | curl -s -m 8 -H @- http://127.0.0.1:7737/api/uptime-kuma/monitors`;
 const UPTIME_MS = 30000; // while the Uptime tab shows
 const UPTIME_BG_MS = 60000; // otherwise, for the tab badge
-const TABS = [["waves", "Waves"], ["uptime", "Uptime"]];
+const TABS = [["issues", "Issues"], ["uptime", "Uptime"]];
 
-const POLL_MS = 30000;
+const POLL_MS = 15000;
 const STALE_MS = 2 * 60000;
-const GROUPS = ".config/herdr-app/groups.json";
+const RECENT_MAX = 8;
+const TIMELINE_LINES = 5;
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 
 // <tree> pure helpers (scripts/jk-board-tree.test.ts runs this block on its own: no imports, no gpui)
@@ -101,9 +105,8 @@ function nestedPanes(panes, terminals) {
 }
 // </tree>
 
-// <fleet> pure helpers over the fleet model (scripts/jk-board-fleet.test.ts runs this block after the tree block: no imports, no gpui)
-const PENDING_SPAWN = new Set(["queued", "waiting", "starting"]);
 
+// <issues> pure helpers over the read API (scripts/jk-board-issues.test.ts runs this block after the tree block: no imports, no gpui)
 // Most urgent first. wait=owner means the session needs a person.
 const RANK = { needs: 0, working: 1, waiting: 2, idle: 3 };
 function sessionKind(s) {
@@ -113,16 +116,45 @@ function sessionKind(s) {
   return "idle";
 }
 
-// `factory fleet --format json` -> the model, or null when it is not that (an error body, a cut line, a 503).
-function parseFleet(text) {
+const ISSUE_STATES = new Set(["settling", "queued", "working", "waiting", "watching", "closed"]);
+const ISSUE_REASONS = new Set(["wait", "blocked", "decision", "wall", "dependency", "parked", "unreported", "lead_gone"]);
+const SESSION_STATES = new Set(["starting", "working", "idle", "waiting", "walled", "blocked", "stuck", "dead"]);
+const SESSION_WAITS = new Set(["workers", "deploy", "owner"]);
+// The API is additive within /v1: a value this file does not know reads as "other", never as a crash.
+const known = (value, set) => (set.has(value) ? value : value == null ? null : "other");
+
+const asArray = (v) => (Array.isArray(v) ? v : []);
+const parseJson = (text) => {
   try {
-    const d = JSON.parse(text);
-    if (!d || !Array.isArray(d.repos) || !Array.isArray(d.asks)) return null;
-    return { ...d, health: Array.isArray(d.health) ? d.health : [] }; // an older server sends no health: none
+    const d = JSON.parse(String(text ?? ""));
+    return d && typeof d === "object" ? d : null;
   } catch {
     return null;
   }
+};
+
+// `read overview` -> the overview, or null when it is not that (an error body, a cut line).
+function parseOverview(text) {
+  const d = parseJson(text);
+  if (!d || !Array.isArray(d.asks) || !d.counts || typeof d.counts !== "object") return null;
+  return { ...d, humanQueue: asArray(d.humanQueue), health: asArray(d.health), accounts: asArray(d.accounts),
+    queue: { effective: d.queue?.effective ?? null, spawns: asArray(d.queue?.spawns) } };
 }
+
+const parseIssues = (text) => { const d = parseJson(text); return Array.isArray(d?.issues) ? d.issues.filter((c) => c && Number.isInteger(c.id)) : null; };
+const parseSessions = (text) => { const d = parseJson(text); return Array.isArray(d?.sessions) ? d.sessions.filter((s) => s && typeof s.id === "string") : null; };
+
+// The poll's stdout: three reads split on a line holding only @@, then hc's list behind a marker line. A JSON string cannot hold a
+// raw newline, so no text from the API can equal either marker line.
+function parse(stdout) {
+  const cut = stdout.indexOf(HC_SPLIT);
+  const [overview, issues, sessions] = (cut < 0 ? stdout : stdout.slice(0, cut)).split(/^@@$/m);
+  return { overview: parseOverview(overview), issues: parseIssues(issues), sessions: parseSessions(sessions),
+    hc: cut < 0 ? null : parseHc(stdout.slice(cut + HC_SPLIT.length)) };
+}
+
+// The Issue's id reaches the shell: an integer or no command at all.
+const issueCmd = (id) => (Number.isInteger(id) && id > 0 ? `${SECRETS} factory --format json read issue ${id}` : null);
 
 const isYours = (a) => (a.tier ?? "yours") === "yours";
 const time = (iso) => Date.parse(iso) || 0;
@@ -132,15 +164,41 @@ function sortAsks(asks) {
   return [...asks].sort((a, b) => Number(!isYours(a)) - Number(!isYours(b)) || time(a.at) - time(b.at) || String(a.id).localeCompare(String(b.id)));
 }
 
-// The Waves tab badge: asks only. A health line never asks for the owner, so it is never counted here.
-function askBadge(fleet) {
-  const asks = fleet?.asks ?? [];
-  return { count: asks.length, urgent: asks.some(isYours) };
+// The Issue an ask or a health line is about: its `issue` field, else the id of a decision ask (`decision:<issue>:…`).
+function askIssue(a) {
+  if (Number.isInteger(a?.issue)) return a.issue;
+  const m = /^decision:(\d+):/.exec(String(a?.id ?? ""));
+  return m ? Number(m[1]) : null;
+}
+
+// The human queue: the open ones, then the stale (listed, counted nowhere); each oldest first.
+function splitQueue(items) {
+  const byTime = (a, b) => time(a.at) - time(b.at) || String(a.id).localeCompare(String(b.id));
+  const list = asArray(items);
+  return { fresh: list.filter((q) => !q.stale).sort(byTime), stale: list.filter((q) => q.stale).sort(byTime) };
+}
+
+// The Issues tab badge: asks plus the open human queue. A health line never asks for the owner, so it is never counted here.
+function askBadge(overview) {
+  if (!overview) return { count: 0, urgent: false };
+  const asks = asArray(overview.asks);
+  const queue = Number.isInteger(overview.counts?.humanQueue) ? overview.counts.humanQueue : splitQueue(overview.humanQueue).fresh.length;
+  return { count: asks.length + queue, urgent: asks.some(isYours) };
 }
 
 // Health lines (parks, a silent lead, regressions, machine failures) never ask the owner: oldest first, below the asks.
 function sortHealth(lines) {
   return [...lines].sort((a, b) => time(a.since) - time(b.since) || String(a.id).localeCompare(String(b.id)));
+}
+
+// `3 working · 1 waiting · 6 queued · queue: run`
+function summaryLine(overview) {
+  const n = overview?.counts ?? {};
+  const parts = [`${n.working ?? 0} working`, `${n.waiting ?? 0} waiting`];
+  if (n.watching) parts.push(`${n.watching} watching`);
+  parts.push(`${n.queued ?? 0} queued`);
+  if (overview?.queue?.effective) parts.push(`queue: ${overview.queue.effective}`);
+  return parts.join(" · ");
 }
 
 // An ask's text on one line.
@@ -159,53 +217,132 @@ function age(iso, now = Date.now()) {
   return h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`;
 }
 
-// The model's repos -> cards, in the shown ones (a live session, a queued spawn, a running plan), the paused ones (an active wave
-// nobody works) and the planned ones. A finished plan nobody works is dropped. `hc` is hc's terminal list, for the turn counts only.
-// kids / byTerminal feed the child tree: the model's `parent` names the parent session, hc's addresses link them.
-function assemble(fleet, hc) {
-  const everyone = [...fleet.repos.flatMap((r) => r.sessions ?? []), ...(fleet.unplaced ?? [])];
-  const byId = new Map(everyone.map((s) => [s.id, s]));
-  const turns = new Map((hc ?? []).map((t) => [t.address, t.turn]));
-  const terms = everyone.filter((s) => ADDR.test(String(s.terminal)))
-    .map((s) => ({ address: s.terminal, parent: byId.get(s.parent)?.terminal ?? null, name: s.id, turn: turns.get(s.terminal) }));
-  const byTerminal = new Map(everyone.filter((s) => s.terminal).map((s) => [s.terminal, { ...s, kind: sessionKind(s) }]));
-  const spawns = new Map();
-  for (const q of fleet.queue?.spawns ?? []) {
-    if (PENDING_SPAWN.has(q.status)) spawns.set(q.space, [...(spawns.get(q.space) ?? []), q]);
-  }
-  const shown = [], paused = [], planned = [];
-  for (const repo of fleet.repos) {
-    // Nested only under a parent in the same repo's card; a child of another repo's session keeps its own card too.
-    const all = (repo.sessions ?? []).map((s) => ({ ...s, kind: sessionKind(s) }))
-      .sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));
-    const nested = nestedPanes(all.map((s) => s.terminal).filter(Boolean), terms);
-    const waves = repo.plan?.waves ?? [];
-    const active = waves.find((w) => w.status === "active") ?? null;
-    const r = {
-      name: repo.name, plan: repo.plan, waves, active, all,
-      focus: active ?? waves.find((w) => w.status === "scheduled") ?? null,
-      done: waves.filter((w) => w.status === "done").length,
-      sessions: all.filter((s) => !s.terminal || !nested.has(s.terminal)),
-      spawns: spawns.get(repo.space) ?? [],
-      kind: all[0]?.kind ?? null,
-    };
-    const state = repo.plan?.state;
-    if (all.length || r.spawns.length || state === "running") shown.push(r);
-    else if (state === "stale" || (active && state !== "done")) paused.push(r);
-    else if (state === "planned" || state === "scheduled") planned.push(r);
-  }
-  const order = (a, b) => (RANK[a.kind] ?? 4) - (RANK[b.kind] ?? 4) || a.name.localeCompare(b.name);
-  const byName = (a, b) => a.name.localeCompare(b.name);
-  return { shown: shown.sort(order), paused: paused.sort(byName), planned: planned.sort(byName), kids: childMap(terms), byTerminal, bySession: byId };
+// Working time: 38m, 2h 5m, 26h.
+function duration(ms) {
+  if (!(ms > 0)) return "";
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h >= 10 || m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
 }
 
-// The poll's stdout: the fleet JSON, then hc's list behind a marker line. A JSON string cannot hold a raw newline, so no line of the
-// fleet part (an ask's text, a session title) can equal the marker line.
-function parse(stdout) {
-  const cut = stdout.indexOf(HC_SPLIT);
-  return { fleet: parseFleet(cut < 0 ? stdout : stdout.slice(0, cut)), hc: cut < 0 ? null : parseHc(stdout.slice(cut + HC_SPLIT.length)) };
+// 940, 1.2k, 61k, 3.4M
+function compact(n) {
+  if (!(n >= 0)) return "0";
+  if (n < 1000) return String(Math.round(n));
+  if (n < 10000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1e6) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1e6).toFixed(1)}M`;
 }
-// </fleet>
+
+// claude-sonnet-5-5 -> sonnet
+function modelShort(name) {
+  const m = /(opus|sonnet|haiku|fable)/i.exec(String(name ?? ""));
+  return m ? m[1].toLowerCase() : String(name ?? "").replace(/^claude-/, "");
+}
+
+// `feature · l · sonnet · 20 turns · 112 tools · 10 subagents · 61k out`, "partial" when the insights are incomplete.
+function factsLine(c) {
+  const i = c.insights ?? {};
+  const parts = [c.kind, c.size, asArray(i.models).map(modelShort).join("+") || null,
+    Number.isFinite(i.turns) ? `${i.turns} turns` : null, Number.isFinite(i.toolCalls) ? `${i.toolCalls} tools` : null,
+    Number.isFinite(i.subagents) ? `${i.subagents} subagents` : null, Number.isFinite(i.tokens?.output) ? `${compact(i.tokens.output)} out` : null,
+    i.partial ? "partial" : null];
+  return parts.filter(Boolean).join(" · ");
+}
+
+// `me2 5h 1% · 7d 83%`; nothing without a quota.
+function quotaLine(q) {
+  if (!q?.account) return "";
+  const parts = [Number.isFinite(q.fiveHourUsed) ? `5h ${Math.round(q.fiveHourUsed)}%` : null, Number.isFinite(q.weeklyUsed) ? `7d ${Math.round(q.weeklyUsed)}%` : null];
+  return [q.account, parts.filter(Boolean).join(" · ")].filter(Boolean).join(" ");
+}
+
+// Line 2 of a card: repo · phase (else state, with its reason or outcome: "waiting: decision") · account.
+function metaLine(c) {
+  const state = known(c.state, ISSUE_STATES) ?? "other";
+  const why = known(c.reason, ISSUE_REASONS) ?? (c.state === "closed" ? oneLine(c.outcome, 24) || null : null);
+  const stage = c.phase ? oneLine(c.phase, 40) : why ? `${state}: ${why}` : state;
+  return [c.repoName, stage, c.account].filter(Boolean).join(" · ");
+}
+
+// The dot of an Issue: needs when it waits on the owner (or its lead does), else its lead's state; queued and closed ones are idle.
+function issueKind(c, lead) {
+  if (c.waitingOnOwner || c.reason === "decision" || c.reason === "blocked" || c.reason === "wall") return "needs";
+  if (lead && sessionKind(lead) === "needs") return "needs";
+  if (c.state === "queued" || c.state === "closed") return "idle";
+  if (lead) return sessionKind(lead);
+  return c.state === "working" ? "working" : c.state === "waiting" || c.state === "watching" || c.state === "settling" ? "waiting" : "idle";
+}
+
+// The Issues in their three sections. Running: open with a live lead or an active state, needs first, then the most recent
+// activity. Queued: oldest first (the queue's order). Recent: closed, newest first, RECENT_MAX of them.
+function sections(cards, sessionsById) {
+  const byId = sessionsById ?? new Map();
+  const live = (c) => (c.lead ? byId.get(c.lead) ?? null : null);
+  const recency = (a, b) => time(b.updatedAt) - time(a.updatedAt) || b.id - a.id;
+  const running = [], queued = [], recent = [];
+  for (const c of asArray(cards)) {
+    if (c.state === "closed") recent.push(c);
+    else if (c.state === "queued" && !live(c)) queued.push(c);
+    else running.push(c);
+  }
+  const rank = (c) => RANK[issueKind(c, live(c))];
+  return {
+    running: running.sort((a, b) => rank(a) - rank(b) || recency(a, b)),
+    queued: queued.sort((a, b) => time(a.createdAt) - time(b.createdAt) || a.id - b.id),
+    recent: recent.sort((a, b) => time(b.closedAt) - time(a.closedAt) || b.id - a.id).slice(0, RECENT_MAX),
+  };
+}
+
+// The queue's hold reason for an Issue's spawn (its key is `lead-<issue>-<n>`), or null.
+function holdFor(spawns, c) {
+  const q = asArray(spawns).find((s) => String(s.key).startsWith(`lead-${c.id}-`) && s.hold);
+  return q ? String(q.hold) : null;
+}
+
+// A repo's name from a session's working folder (a factory worktree resolves to its repo).
+function repoOf(path) {
+  const p = String(path ?? "").replace(/\/\.claude\/worktrees\/.*$/, "").replace(/\/+$/, "");
+  return p.split("/").pop() || null;
+}
+
+// What the pane header shows per terminal: app terminal address (`mini/<id>`) -> the Issue's words plus the session's own role.
+// Only these fields are shared (shared is persisted and every mod re-renders on a change): no insights, no elapsed time.
+function terminalsMap(issues, sessions) {
+  const byId = new Map(asArray(issues).map((c) => [c.id, c]));
+  const out = {};
+  const rows = asArray(sessions).filter((s) => s.terminal && ADDR.test(String(s.terminal.id)))
+    .sort((a, b) => String(a.terminal.id).localeCompare(String(b.terminal.id)));
+  for (const s of rows) {
+    const c = Number.isInteger(s.issue) ? byId.get(s.issue) : null;
+    out[`mini/${s.terminal.id}`] = {
+      issue: Number.isInteger(s.issue) ? s.issue : null,
+      title: c?.filedTitle ?? s.title ?? null,
+      short: c?.title ?? s.title ?? null,
+      summary: c?.summary ?? s.summary ?? null,
+      phase: c?.phase ?? null,
+      role: s.role ?? null,
+      state: s.state ?? null,
+      repo: c?.repoName ?? repoOf(s.repo),
+    };
+  }
+  return out;
+}
+
+// `read issue <id>` -> its last n timeline lines [{ at, text }], or null when it is not that.
+function timelineTail(text, n = TIMELINE_LINES) {
+  const d = parseJson(text);
+  if (!Array.isArray(d?.timeline)) return null;
+  return d.timeline.slice(-n).map((e) => ({ at: e.at, text: oneLine(e.text, 200) }));
+}
+
+const clock = (iso) => (Date.parse(iso) ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+
+// A stored or shared tab name: "waves" (the old tab) reads as "issues".
+const normTab = (v) => (v === "uptime" ? "uptime" : "issues");
+// </issues>
 
 // Hover text and the footer legend; the left sidebar's dots use the same colors.
 const MEANING = {
@@ -215,31 +352,35 @@ const MEANING = {
   idle: "Idle",
 };
 
-const shortId = (id, repo) => (id.startsWith(repo) ? id.slice(repo.length).replace(/^-/, "") : id) || id;
+// hc's own status word for a terminal the factory does not list.
+const hcKind = (status) => ({ working: "working", blocked: "needs" }[status] ?? "idle");
 
 export default class Board extends View {
   init(_props, cx) {
-    this.fleet = null; // last good fleet model
-    this.at = 0; // when it was read
+    this.overview = null; // last good answers, one per read
+    this.issues = null;
+    this.sessions = null;
+    this.at = 0; // when the overview was read
     this.tried = false; // a poll has ended, good or not
     this.polling = false;
-    this.hc = null; // hc's terminals, for the turn counts
-    this.hcAt = 0; // when hc last answered: turns of an old answer are not shown
+    this.hc = null; // hc's terminals, for the child tree
+    this.hcAt = 0; // when hc last answered: an old answer is not shown
     this.peeks = new Map(); // child address -> { lines, at } once opened; absent = closed
-    this.byTerminal = new Map(); // terminal address -> fleet session, for the names and states in a tree
-    this.bySession = new Map(); // session id -> fleet session, for an ask's jump
+    this.details = new Map(); // Issue id -> { lines } its last timeline lines, read while the card is open
+    this.detailBusy = new Set();
+    this.byTerminal = new Map(); // terminal id -> live session, for the names and states in a tree
+    this.bySession = new Map(); // session id -> live session, for a jump
+    this.cards = new Map(); // Issue id -> card
     this.kids = new Map(); // parent terminal -> its children
-    this.tab = localStorage.getItem("board.tab") === "uptime" ? "uptime" : "waves";
+    this.published = JSON.stringify(shared("jk.factory.terminals") ?? null);
+    this.tab = normTab(localStorage.getItem("board.tab"));
     this.seenTab = null; // last shared("jk.board.tab") adopted
     this.uptime = null; // last good Argo answer
     this.uptimeAt = 0;
     this.uptimeBusy = false;
     this.upOpen = JSON.parse(localStorage.getItem("board.uptime.open") ?? "{}"); // group -> shown?
-    this.open = new Set(JSON.parse(localStorage.getItem("waves.open") ?? "[]"));
-    this.folded = new Set(JSON.parse(localStorage.getItem("waves.folded") ?? "[]"));
-    this.groups = { list: [], fallback: "OTHER" };
-    this.loadGroups(cx);
-    cx.timer.every(60000, (cx) => this.loadGroups(cx));
+    this.open = new Set(JSON.parse(localStorage.getItem("issues.open") ?? "[]")); // expanded Issue cards
+    this.folded = new Set(JSON.parse(localStorage.getItem("issues.folded") ?? "[]"));
     this.refresh(cx);
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
     this.refreshUptime(cx);
@@ -262,21 +403,6 @@ export default class Board extends View {
     });
   }
 
-  loadGroups(cx) {
-    cx.spawn(async (cx) => {
-      try {
-        const r = await exec("cat", [`${home()}/${GROUPS}`]);
-        if (r.code !== 0) throw new Error(r.stderr);
-        const d = JSON.parse(r.stdout);
-        this.groups = { list: (d.groups ?? []).map((g) => ({ label: g.label, members: new Set(g.members ?? []) })), fallback: d.fallback ?? "OTHER" };
-      } catch (e) {
-        console.log(`jk-board: no folders from ~/${GROUPS}: ${e?.message ?? e}`);
-        return;
-      }
-      cx.notify();
-    });
-  }
-
   refresh(cx) {
     if (this.polling || machines().find((m) => m.name === "mini")?.layout !== "ready") {
       cx.notify(); // the stale dimming follows the clock
@@ -288,16 +414,48 @@ export default class Board extends View {
       this.polling = false;
       this.tried = true;
       const next = r?.stdout ? parse(r.stdout) : null;
-      // hc and the fleet model are separate answers: each keeps its last good one.
-      if (next?.fleet) {
-        this.fleet = next.fleet;
+      // The reads and hc are separate answers: each keeps its last good one.
+      if (next?.overview) {
+        this.overview = next.overview;
         this.at = Date.now();
       }
+      if (next?.issues) {
+        this.issues = next.issues;
+        this.cards = new Map(next.issues.map((c) => [c.id, c]));
+      }
+      if (next?.sessions) this.sessions = next.sessions;
+      // Both from this poll, or a new Issue's header would flicker through its session's words.
+      if (next?.issues && next?.sessions) this.publish();
       if (next?.hc) {
         this.hc = next.hc;
         this.hcAt = Date.now();
       }
       for (const addr of this.peeks.keys()) this.readPeek(addr, cx);
+      for (const id of this.open) if (this.cards.has(id)) this.readDetail(id, cx); // an aged-out Issue stays remembered, unread
+      cx.notify();
+    });
+  }
+
+  // The header feed, only when it changed.
+  publish() {
+    const json = JSON.stringify(terminalsMap(this.issues, this.sessions));
+    if (json === this.published) return;
+    this.published = json;
+    setShared("jk.factory.terminals", JSON.parse(json));
+  }
+
+  // An open Issue's last timeline lines, with every poll. One read after it closed is final.
+  readDetail(id, cx) {
+    const cmd = issueCmd(id);
+    if (!cmd || this.detailBusy.has(id)) return;
+    if (this.details.get(id)?.final) return;
+    const final = this.cards.get(id)?.state === "closed";
+    this.detailBusy.add(id);
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", cmd], { on: "mini" }).catch(() => null);
+      this.detailBusy.delete(id);
+      const lines = timelineTail(r?.stdout);
+      if (lines) this.details.set(id, { lines, final });
       cx.notify();
     });
   }
@@ -328,6 +486,11 @@ export default class Board extends View {
     cx.notify();
   }
 
+  toggleIssue(id, cx) {
+    this.toggle(this.open, id, "issues.open", cx);
+    if (this.open.has(id)) this.readDetail(id, cx);
+  }
+
   tone(t, kind) {
     return { needs: t.blocked, working: t.working, waiting: t.working, idle: t.dim }[kind] ?? t.dim;
   }
@@ -342,37 +505,40 @@ export default class Board extends View {
 
   // Jump to a session's agent; null while the app does not list its terminal (a row without one is not clickable).
   jumpTo(s) {
-    const address = s?.terminal ? `mini/${s.terminal}` : null;
+    const address = s?.terminal?.id ? `mini/${s.terminal.id}` : null;
     return address && terminals().some((x) => x.address === address) ? address : null;
   }
 
-  // The digest's one line of where a session stands; nothing while the model has none (IuRoot's never do).
-  headline(t, s, indent) {
-    if (!s.headline) return [];
-    return [div().id(`wv-h-${s.id}`).pl(indent).pr(4).truncate().text_size(10.5).text_color(t.dim).tooltip(s.headline).child(s.headline)];
+  // Where an ask or a health line leads: its session, else the lead of its Issue.
+  jumpFor(item) {
+    const s = this.bySession.get(item.session) ?? this.bySession.get(this.cards.get(askIssue(item))?.lead);
+    return this.jumpTo(s);
   }
 
   stateOf(s) {
-    return s.wait ? `${s.state} · ${s.wait}` : s.state;
+    const state = known(s.state, SESSION_STATES) ?? "other";
+    const wait = known(s.wait, SESSION_WAITS);
+    return wait ? `${state} · ${wait}` : state;
   }
 
-  sessionRow(t, r, s) {
+  // A session of an Issue (or of none): role, title, state. `tip` replaces the jump hint.
+  sessionRow(t, s, tip = "Jump to this agent") {
     const address = this.jumpTo(s);
-    return h_flex().id(`wv-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5)
-      .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected)).tooltip("Jump to this agent")
+    const kind = sessionKind(s);
+    return h_flex().id(`is-s-${s.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+      .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: address }); }))
-      .child(this.dot(t, s.kind, 5))
+      .child(this.dot(t, kind, 5))
       .child(div().flex_shrink(0).text_color(t.muted).child(s.role ?? "?"))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(shortId(s.id, r.name)))
-      .child(div().flex_none().text_color(s.kind === "needs" ? this.tone(t, "needs") : t.dim).child(this.stateOf(s)))
-      .when(Boolean(s.account), (el) => el.child(div().flex_none().text_color(t.dim).child(s.account)));
+      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(s.title || s.id))
+      .child(div().flex_none().text_color(kind === "needs" ? this.tone(t, "needs") : t.dim).child(this.stateOf(s)));
   }
 
-  // A hidden child under its tab row: name, state, turn. The model knows every one of them (its `parent` built the tree).
+  // A hidden child under its session row: name, state, turn. The state is the factory's when it lists the terminal, else hc's.
   childRow(t, { t: c, depth }) {
     const s = this.byTerminal.get(c.address);
-    const kind = s ? s.kind : "idle";
-    const what = `${s ? this.stateOf(s) : "?"}${c.turn ? ` · t${c.turn}` : ""}`;
+    const kind = s ? s.kind : hcKind(c.status);
+    const what = `${s ? this.stateOf(s) : c.status ?? "?"}${c.turn ? ` · t${c.turn}` : ""}`;
     const peek = this.peeks.get(c.address);
     const row = h_flex().id(`wv-c-${c.address}`).h(18).flex_none().gap(6).items_center().pl(10 + 12 * depth).text_size(11).cursor_pointer()
       .hover((e) => e.bg(t.hover))
@@ -381,57 +547,83 @@ export default class Board extends View {
       .tooltip("Click for its last lines")
       .child(this.dot(t, kind, 5))
       .when(Boolean(s?.role), (el) => el.child(div().flex_shrink(0).text_color(t.muted).child(s.role)))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(c.name))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(c.name ?? c.address))
       .child(div().flex_none().text_color(kind === "needs" ? this.tone(t, "needs") : t.dim).child(what));
-    const head = s ? this.headline(t, s, 10 + 12 * depth + 11) : [];
-    if (!peek) return [row, ...head];
+    if (!peek) return [row];
     const lines = peek.lines ?? ["…"];
-    return [row, ...head, v_flex().id(`wv-cp-${c.address}`).flex_none().pl(10 + 12 * depth + 11).pr(4).py(2)
+    return [row, v_flex().id(`wv-cp-${c.address}`).flex_none().pl(10 + 12 * depth + 11).pr(4).py(2)
       .children(lines.map((l, i) => div().id(`wv-cp-${c.address}-${i}`).truncate().text_size(10.5).text_color(t.dim).child(l)))];
   }
 
-  spawnRow(t, q) {
-    return h_flex().id(`wv-q-${q.key}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11)
-      .child(div().flex_shrink(0).text_color(t.dim).child("queued"))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(q.key))
-      .child(div().flex_none().text_color(t.dim).child(String(q.hold ?? q.status)));
+  // A session row with the hidden children under its terminal.
+  sessionWithTree(t, s, tip) {
+    const tree = s.terminal?.id ? treeRows(this.kids, s.terminal.id).flatMap((row) => this.childRow(t, row)) : [];
+    return [this.sessionRow(t, s, tip), ...tree];
   }
 
-  card(t, r) {
-    const open = this.open.has(r.name);
-    const total = r.waves.length;
-    const current = r.active ? r.waves.indexOf(r.active) + 1 : r.done;
-    const pending = r.waves.filter((w) => w.status === "pending");
-    const title = r.plan ? r.plan.short ?? r.plan.title : null;
-    return v_flex().id(`wv-${r.name}`).flex_none().px(8).py(5).gap(2).rounded(8).cursor_pointer()
+  // The expanded part of an Issue card.
+  issueBody(t, c) {
+    const lead = this.bySession.get(c.lead) ?? null;
+    const mine = [...this.bySession.values()].filter((s) => s.issue === c.id)
+      .sort((a, b) => RANK[sessionKind(a)] - RANK[sessionKind(b)] || a.id.localeCompare(b.id));
+    const nested = nestedPanes(mine.map((s) => s.terminal?.id).filter(Boolean), this.hcList);
+    const shown = mine.filter((s) => !s.terminal?.id || !nested.has(s.terminal.id));
+    const facts = factsLine(c);
+    const quota = quotaLine(c.quota);
+    const lines = this.details.get(c.id)?.lines ?? [];
+    const jump = this.jumpTo(lead);
+    const note = (id, text, tip) => div().id(`is-${c.id}-${id}`).truncate().text_size(11).text_color(t.dim).tooltip(tip ?? text).child(text);
+    return v_flex().mt(3).gap(2)
+      .when(Boolean(c.filedTitle) && c.filedTitle !== c.title, (el) => el.child(div().pl(14).text_size(11).text_color(t.dim).child(c.filedTitle)))
+      .when(Boolean(facts), (el) => el.child(div().pl(14).child(note("facts", facts))))
+      .when(Boolean(quota), (el) => el.child(div().pl(14).child(note("quota", quota))))
+      .children(shown.flatMap((s) => this.sessionWithTree(t, s)))
+      .children(lines.map((l, i) => h_flex().id(`is-${c.id}-tl-${i}`).pl(14).gap(6).text_size(10.5).text_color(t.dim)
+        .child(div().flex_none().child(clock(l.at))).child(div().flex_1().min_w(0).truncate().tooltip(l.text).child(l.text))))
+      .when(Boolean(jump), (el) => el.child(h_flex().id(`is-${c.id}-jump`).h(18).pl(10).items_center().rounded(5).text_size(11).text_color(t.muted)
+        .cursor_pointer().hover((st) => st.bg(t.selected).text_color(t.foreground))
+        .on_click((_e, cx) => { cx.stop_propagation(); run("agent.focus", { terminal: jump }); })
+        .child("Jump to agent")));
+  }
+
+  // A running or closed Issue: dot, human title, working time; repo · phase · account; the summary, all of it; the rest on click.
+  issueCard(t, c) {
+    const open = this.open.has(c.id);
+    const lead = this.bySession.get(c.lead) ?? null;
+    const kind = issueKind(c, lead);
+    const meta = metaLine(c);
+    const worked = duration(c.insights?.workingMs);
+    return v_flex().id(`is-${c.id}`).flex_none().px(8).py(5).gap(2).rounded(8).cursor_pointer()
+      .when(this.focusIssue === c.id, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => this.toggle(this.open, r.name, "waves.open", cx))
-      .child(h_flex().gap(7).items_center()
-        .child(this.dot(t, r.kind))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).font_semibold().child(r.name))
-        .when(Boolean(r.plan), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(r.plan.state)))
-        .when(total > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(`Wave ${current}/${total}`)))
-        .when(total === 0 && r.all.length > 0, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(`${r.all.length} sessions`))))
-      .when(Boolean(title), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(title)))
-      .when(total > 0, (el) => el.child(div().ml(14).h(3).rounded(2).bg(t.hover).overflow_hidden()
-        .child(div().h(3).rounded(2).bg(t.muted).w(`${Math.round((r.done / total) * 100)}%`))))
-      .when(Boolean(r.focus), (el) => el.child(h_flex().pl(14).gap(6).text_size(11)
-        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(`${r.focus.n} · ${r.focus.short ?? r.focus.title}`))
-        .child(div().flex_none().text_color(t.dim).child(r.focus.statusDate ? `${r.focus.status} ${r.focus.statusDate}` : r.focus.status))))
-      .when(open, (el) => el.child(v_flex().mt(3).gap(1)
-        .children(pending.slice(0, 4).map((w) => div().id(`wv-w-${r.name}-${w.n}`).pl(10).truncate().text_size(11).text_color(t.dim).child(`${w.n} · ${w.short ?? w.title}`)))
-        .children(r.sessions.flatMap((s) => [this.sessionRow(t, r, s), ...this.headline(t, s, 21),
-          ...treeRows(this.kids, s.terminal).flatMap((row) => this.childRow(t, row))]))
-        .children(r.spawns.map((q) => this.spawnRow(t, q)))));
+      .on_click((_e, cx) => this.toggleIssue(c.id, cx))
+      .child(h_flex().gap(7).items_start()
+        .child(div().h(18).flex_none().flex().items_center().child(this.dot(t, kind)))
+        .child(div().flex_1().min_w(0).text_color(t.foreground).font_semibold().child(c.title))
+        .when(Boolean(worked), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).tooltip("Working time").child(worked))))
+      .when(Boolean(meta), (el) => el.child(div().pl(14).truncate().text_size(11).text_color(t.dim).child(meta)))
+      .when(Boolean(c.summary), (el) => el.child(div().pl(14).text_size(11).text_color(t.muted).child(c.summary)))
+      .when(open, (el) => el.child(this.issueBody(t, c)));
   }
 
-  // One ask: the owner's own in the blocked tone, the rest muted. Text, repo (or where it came from), age; the tooltip has the rest.
+  // A queued Issue: title and repo, plus the queue's hold reason when it has one.
+  queuedCard(t, c, spawns) {
+    const hold = holdFor(spawns, c);
+    return v_flex().id(`is-${c.id}`).flex_none().px(8).py(3).gap(1).rounded(8).hover((s) => s.bg(t.hover))
+      .tooltip(c.summary || c.filedTitle || c.title)
+      .child(h_flex().gap(7).items_center()
+        .child(this.dot(t, "idle"))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(c.title)))
+      .child(div().pl(14).truncate().text_size(11).text_color(t.dim).child([c.repoName, hold ? `held: ${hold}` : null].filter(Boolean).join(" · ")));
+  }
+
+  // One ask: the owner's own in the blocked tone, the rest muted. Short, repo (or where it came from), age; the tooltip has the rest.
   askRow(t, a) {
     const yours = isYours(a);
-    const address = this.jumpTo(this.bySession.get(a.session));
-    const tip = [oneLine(a.text, 600), a.suggestion ? `Suggested: ${a.suggestion.verb} — ${a.suggestion.why} (${a.suggestion.evidence})` : null]
-      .filter(Boolean).join("\n\n");
-    return h_flex().id(`wv-a-${a.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+    const address = this.jumpFor(a);
+    const hint = a.suggestion ? `Suggested: ${a.suggestion.verb} — ${a.suggestion.why} (${a.suggestion.evidence})` : null;
+    const tip = [a.summary, oneLine(a.text, 600), hint].filter(Boolean).join("\n\n");
+    return h_flex().id(`is-a-${a.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
       .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
         .on_click((_e, cx) => run("agent.focus", { terminal: address })))
       .child(this.dot(t, yours ? "needs" : "idle", 5, false))
@@ -440,67 +632,45 @@ export default class Board extends View {
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(a.at)));
   }
 
-  asks(t, asks) {
-    if (!asks.length) return [];
-    const folded = this.folded.has("asks");
-    const urgent = asks.some(isYours) ? "needs" : null;
-    return [this.header(t, "asks", "ASKS", asks.length, folded, urgent), ...(folded ? [] : asks.map((a) => this.askRow(t, a)))];
+  // A human-queue item: nothing to jump to. Stale ones are dim.
+  queueRow(t, q, stale) {
+    const tip = [q.summary, oneLine(q.text, 600)].filter(Boolean).join("\n\n");
+    return h_flex().id(`is-q-${q.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
+      .when(stale, (el) => el.opacity(0.55))
+      .child(this.dot(t, "idle", 5, false))
+      .child(div().flex_1().min_w(0).truncate().text_color(stale ? t.dim : t.foreground).child(oneLine(q.short ?? q.text)))
+      .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(q.repo ? base(q.repo) : q.source))
+      .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(q.at)));
   }
 
-  // One health line, dimmer than an ask and with no urgency dot: text, repo (else its kind), age; a click jumps to its session when it has one.
+  // One health line, dimmer than an ask and with no urgency dot: short, repo (else its kind), age; a click jumps to its session or Issue's lead.
   healthRow(t, h) {
-    const address = this.jumpTo(this.bySession.get(h.session));
-    return h_flex().id(`wv-hl-${h.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(oneLine(h.text, 600))
+    const address = this.jumpFor(h);
+    const tip = [h.summary, oneLine(h.text, 600)].filter(Boolean).join("\n\n");
+    return h_flex().id(`is-hl-${h.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(tip)
       .when(Boolean(address), (el) => el.cursor_pointer().hover((st) => st.bg(t.selected))
         .on_click((_e, cx) => run("agent.focus", { terminal: address })))
       .child(this.dot(t, "idle", 5, false))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(oneLine(h.text)))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(oneLine(h.short ?? h.text)))
       .child(div().flex_shrink(0).max_w(76).truncate().text_color(t.dim).child(h.repo ? base(h.repo) : h.kind))
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(h.since)));
   }
 
-  health(t, lines) {
-    if (!lines.length) return [];
-    const folded = this.folded.has("health");
-    return [this.header(t, "health", "HEALTH", lines.length, folded, null), ...(folded ? [] : lines.map((h) => this.healthRow(t, h)))];
+  // A section: its header, then the rows (a thunk) unless folded. `fold` sections start folded and open on a click.
+  section(t, id, label, count, rows, { fold = false, urgent = null } = {}) {
+    const key = fold ? `open:${id}` : id;
+    const folded = fold ? !this.folded.has(key) : this.folded.has(key);
+    return [this.header(t, key, label, count, folded, urgent), ...(folded ? [] : rows())];
   }
 
   header(t, id, label, count, folded, urgent) {
     return h_flex().id(id).h(20).mt(4).flex_none().px(8).gap(7).items_center().rounded(6)
       .text_size(10.5).font_bold().text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => this.toggle(this.folded, id, "waves.folded", cx))
+      .on_click((_e, cx) => this.toggle(this.folded, id, "issues.folded", cx))
       .child(div().flex_1().truncate().child(label))
       .when(folded && urgent, (el) => el.child(div().flex_none().text_color(this.tone(t, urgent)).child("●")))
       .child(div().flex_none().child(String(count)))
       .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none());
-  }
-
-  folders(t, repos) {
-    const buckets = new Map();
-    for (const r of repos) {
-      const g = this.groups.list.find((x) => x.members.has(r.name));
-      const label = g?.label ?? this.groups.fallback;
-      if (!buckets.has(label)) buckets.set(label, []);
-      buckets.get(label).push(r);
-    }
-    const order = [...this.groups.list.map((g) => g.label), this.groups.fallback];
-    return order.filter((l) => buckets.has(l)).flatMap((label) => {
-      const rows = buckets.get(label);
-      const id = `f/${label}`;
-      const folded = this.folded.has(id);
-      const urgent = rows.map((r) => r.kind).filter(Boolean).sort((a, b) => RANK[a] - RANK[b])[0];
-      return [this.header(t, id, label, rows.length, folded, urgent === "needs" || urgent === "working" ? urgent : null),
-        ...(folded ? [] : rows.map((r) => this.card(t, r)))];
-    });
-  }
-
-  summary(fleet) {
-    const n = fleet.summary;
-    const queued = (fleet.queue?.spawns ?? []).filter((q) => PENDING_SPAWN.has(q.status)).length;
-    const parts = n ? [`${n.working ?? 0} working`, `${(n.working ?? 0) + (n.idle ?? 0) + (n.done ?? 0)} live`] : ["no summary"];
-    if (queued) parts.push(`${queued} queued`);
-    if (fleet.queue?.effective) parts.push(`queue: ${fleet.queue.effective}`);
-    return parts.join(" · ");
   }
 
   // Honor a switch another mod asked for (jk-status' Kuma counter) once per change.
@@ -508,7 +678,7 @@ export default class Board extends View {
     const want = shared("jk.board.tab");
     if (want === this.seenTab) return;
     this.seenTab = want;
-    if (want === "waves" || want === "uptime") this.setTab(want, null);
+    if (want === "issues" || want === "waves" || want === "uptime") this.setTab(normTab(want), null);
   }
 
   setTab(tab, cx) {
@@ -529,7 +699,7 @@ export default class Board extends View {
 
   tabs(t) {
     const down = this.upStats().down.length;
-    const { count, urgent } = askBadge(this.fleet);
+    const { count, urgent } = askBadge(this.overview);
     return h_flex().flex_none().px(8).pt(8).pb(2)
       .child(h_flex().flex_1().gap(2).p(2).rounded(8).bg(t.hover)
         .children(TABS.map(([id, label]) => {
@@ -541,7 +711,7 @@ export default class Board extends View {
             .on_click((_e, cx) => this.setTab(id, cx))
             .child(label)
             .when(id === "uptime" && down > 0, (el) => el.child(div().text_color(t.blocked).child(String(down))))
-            .when(id === "waves" && count > 0, (el) => el.child(div().text_color(urgent ? t.blocked : t.dim).child(String(count))));
+            .when(id === "issues" && count > 0, (el) => el.child(div().text_color(urgent ? t.blocked : t.dim).child(String(count))));
         })));
   }
 
@@ -550,39 +720,57 @@ export default class Board extends View {
     const t = theme();
     return v_flex().size_full().min_h(0).bg(t.chrome)
       .child(this.tabs(t))
-      .child(this.tab === "uptime" ? this.uptimeView(t) : this.wavesView(t));
+      .child(this.tab === "uptime" ? this.uptimeView(t) : this.issuesView(t));
   }
 
-  wavesView(t) {
-    const fleet = this.fleet;
+  issuesView(t) {
+    const ov = this.overview;
     // Stale after STALE_MS without a good poll, or when the factory's own snapshot is that old.
-    const since = fleet ? Math.max(Date.now() - this.at, Date.now() - (Date.parse(fleet.builtAt) || this.at)) : 0;
-    const stale = fleet && since > STALE_MS;
-    const fresh = this.hcAt && Date.now() - this.hcAt <= STALE_MS;
-    const { shown, paused, planned, kids, byTerminal, bySession } = fleet
-      ? assemble(fleet, fresh ? this.hc : [])
-      : { shown: [], paused: [], planned: [], kids: new Map(), byTerminal: new Map(), bySession: new Map() };
-    this.kids = kids;
-    this.byTerminal = byTerminal;
-    this.bySession = bySession;
-    const asks = fleet ? sortAsks(fleet.asks) : [];
-    const health = fleet ? sortHealth(fleet.health ?? []) : [];
-    const errors = fleet?.errors ?? [];
-    const note = errors.length ? `fleet: ${oneLine(errors[0], 90)}${errors.length > 1 ? ` (+${errors.length - 1})` : ""}` : null;
+    const since = ov ? Math.max(Date.now() - this.at, Date.now() - (Date.parse(ov.builtAt) || this.at)) : 0;
+    const stale = ov && since > STALE_MS;
+    const hcFresh = this.hcAt && Date.now() - this.hcAt <= STALE_MS;
+    const live = this.sessions ?? [];
+    this.bySession = new Map(live.map((s) => [s.id, s]));
+    this.byTerminal = new Map(live.filter((s) => s.terminal?.id).map((s) => [s.terminal.id, { ...s, kind: sessionKind(s) }]));
+    this.hcList = hcFresh ? this.hc ?? [] : [];
+    this.kids = childMap(this.hcList);
+    const at = focused();
+    const here = at?.terminal ?? at?.agent ?? null;
+    this.focusIssue = here ? live.find((s) => s.terminal?.id && `mini/${s.terminal.id}` === here)?.issue ?? null : null;
+
+    const asks = ov ? sortAsks(ov.asks) : [];
+    const { fresh, stale: older } = splitQueue(ov?.humanQueue);
+    const health = ov ? sortHealth(ov.health) : [];
+    const { running, queued, recent } = this.issues ? sections(this.issues, this.bySession) : { running: [], queued: [], recent: [] };
+    const nestedLoose = nestedPanes(live.filter((s) => s.issue == null).map((s) => s.terminal?.id).filter(Boolean), this.hcList);
+    const loose = live.filter((s) => s.issue == null && !nestedLoose.has(s.terminal?.id)).sort((a, b) => RANK[sessionKind(a)] - RANK[sessionKind(b)] || a.id.localeCompare(b.id));
+    const spawns = ov?.queue?.spawns ?? [];
+    const queueCount = Number.isInteger(ov?.counts?.humanQueue) ? ov.counts.humanQueue : fresh.length;
+    const olderOpen = this.folded.has("open:hq-older");
     return v_flex().flex_1().min_h(0).text_size(13)
       .child(v_flex().flex_none().px(16).pt(8).pb(4).gap(1)
-        .child(div().text_size(11.5).text_color(t.dim).child("Waves"))
-        .when(Boolean(fleet), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(this.summary(fleet))))
-        .when(Boolean(note), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).tooltip(errors.map((e) => oneLine(e, 300)).join("\n")).child(note))))
+        .child(div().text_size(11.5).text_color(t.dim).child("Issues"))
+        .when(Boolean(ov), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(summaryLine(ov)))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .when(Boolean(stale), (el) => el.opacity(0.5))
-        .when(!fleet, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.tried ? "No answer from the factory" : "Loading…")))
-        .when(Boolean(fleet) && !shown.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No waves running")))
-        .children(this.asks(t, asks))
-        .children(this.health(t, health))
-        .children(this.folders(t, shown))
-        .children(this.parked(t, "PAUSED", paused))
-        .children(this.parked(t, "PLANNED", planned)))
+        .when(!ov, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child(this.tried ? "No answer from the factory" : "Loading…")))
+        .when(Boolean(ov) && Boolean(this.issues) && !running.length, (el) => el.child(div().px(8).py(6).text_size(12).text_color(t.dim).child("No Issue running")))
+        .children(asks.length ? this.section(t, "asks", "ASKS", asks.length, () => asks.map((a) => this.askRow(t, a)), { urgent: asks.some(isYours) ? "needs" : null }) : [])
+        .children(fresh.length || older.length ? this.section(t, "hq", "HUMAN QUEUE", queueCount, () => [
+          ...fresh.map((q) => this.queueRow(t, q, false)),
+          ...(older.length ? [h_flex().id("is-hq-older").h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).cursor_pointer()
+            .hover((s) => s.bg(t.hover)).text_color(t.dim)
+            .on_click((_e, cx) => this.toggle(this.folded, "open:hq-older", "issues.folded", cx))
+            .child(div().flex_1().child(`older (${older.length})`))
+            .child(svg(`mods/workspace-chrome/chevron-${olderOpen ? "down" : "right"}.svg`).size(11).flex_none().mr(8))] : []),
+          ...(older.length && olderOpen ? older.map((q) => this.queueRow(t, q, true)) : []),
+        ]) : [])
+        .children(health.length ? this.section(t, "health", "HEALTH", health.length, () => health.map((h) => this.healthRow(t, h))) : [])
+        .children(running.length ? this.section(t, "running", "RUNNING", running.length, () => running.map((c) => this.issueCard(t, c))) : [])
+        .children(queued.length ? this.section(t, "queued", "QUEUED", queued.length, () => queued.map((c) => this.queuedCard(t, c, spawns)), { fold: true }) : [])
+        .children(recent.length ? this.section(t, "recent", "RECENT", recent.length, () => recent.map((c) => this.issueCard(t, c)), { fold: true }) : [])
+        .children(loose.length ? this.section(t, "sessions", "SESSIONS", loose.length,
+          () => loose.flatMap((s) => this.sessionWithTree(t, s, [s.title, s.summary].filter(Boolean).join("\n\n")))) : []))
       .child(this.legend(t));
   }
 
@@ -703,11 +891,4 @@ export default class Board extends View {
       ]));
   }
 
-  // A section folded by default: open only once clicked.
-  parked(t, label, repos) {
-    if (!repos.length) return [];
-    const id = `open:f/${label}`;
-    const folded = !this.folded.has(id);
-    return [this.header(t, id, label, repos.length, folded, null), ...(folded ? [] : repos.map((r) => this.card(t, r)))];
-  }
 }
