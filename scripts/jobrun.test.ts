@@ -24,6 +24,8 @@ async function jobrunAsync(args: string[], env: Record<string, string> = {}) {
   const p = Bun.spawn(["bun", SCRIPT, ...args], { env: { ...process.env, JOBRUN_STATE_DIR: dir, JOBRUN_SOURCEROOT: join(dir, "src"), ...env }, stdout: "ignore", stderr: "ignore" })
   return { rc: await p.exited }
 }
+// Short TERM -> KILL grace and pipe drain; production defaults are 10 s and 2 s.
+const FAST = { JOBRUN_KILL_GRACE_MS: "300", JOBRUN_DRAIN_MS: "200" }
 const state = (label: string) => JSON.parse(readFileSync(join(dir, `${label}.json`), "utf8")) as JobState
 
 describe("parseArgs", () => {
@@ -127,6 +129,7 @@ describe("lock", () => {
     for (const n of ["../x", "a/b", "..", ".", "/etc"]) expect(() => acquireLock(dir, n)).toThrow(/bad lock name/)
   })
   test("an unwritable state dir throws instead of reading as 'held'", () => {
+    if (process.getuid?.() === 0) return console.log("skipped: root writes into a 0500 dir, the permission-denied path cannot be exercised")
     const ro = mkdtempSync(join(tmpdir(), "jobrun-ro-"))
     mkdirSync(join(ro, "locks"))
     chmodSync(join(ro, "locks"), 0o500)
@@ -163,14 +166,14 @@ describe("jobrun end to end", () => {
   })
   test("deadline: TERM kills the whole group, rc 124, state recorded", () => {
     const t = Date.now()
-    const r = jobrun(["slow", "--owner", "o", "--timeout", "1", "--", "sh", "-c", "sleep 30 & sleep 30"])
+    const r = jobrun(["slow", "--owner", "o", "--timeout", "1", "--", "sh", "-c", "sleep 30 & sleep 30"], FAST)
     expect(r.rc).toBe(124)
     expect(Date.now() - t).toBeLessThan(8000)
     expect(state("slow").rc).toBe(124)
   })
   test("deadline escalates to KILL when TERM is ignored", () => {
     const t = Date.now()
-    const r = jobrun(["stubborn", "--owner", "o", "--timeout", "1", "--", "sh", "-c", "trap '' TERM; while :; do sleep 1; done"])
+    const r = jobrun(["stubborn", "--owner", "o", "--timeout", "1", "--", "sh", "-c", "trap '' TERM; while :; do sleep 1; done"], FAST)
     expect(r.rc).toBe(124)
     expect(Date.now() - t).toBeLessThan(20000)
   }, 30000)
@@ -184,7 +187,7 @@ describe("jobrun end to end", () => {
   })
   test("a grandchild holding the pipes open does not block the finish", () => {
     const t = Date.now()
-    const r = jobrun(["gc", "--owner", "o", "--", "sh", "-c", "sleep 30 & echo started"])
+    const r = jobrun(["gc", "--owner", "o", "--", "sh", "-c", "sleep 30 & echo started"], FAST)
     expect(r.rc).toBe(0)
     expect(Date.now() - t).toBeLessThan(10000)
     expect(state("gc").rc).toBe(0)

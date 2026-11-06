@@ -30,7 +30,9 @@ old 5 "$T/old-dir/f" "$T/old-dir" "$T/old-file" "$T/held" "$T/com.apple.keep"
 sleep 60 > "$T/held/f" &
 holder=$!
 
-out=$(bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc=$?
+# The real lsof, asked only about the fixture file: a machine-wide scan costs ~10 s and adds nothing here.
+printf '#!/bin/sh\nexec /usr/sbin/lsof -Fn -- "%s"\n' "$T/held/f" > "$FAKE/lsof-scoped"; chmod +x "$FAKE/lsof-scoped"
+out=$(DISK_SWEEP_LSOF="$FAKE/lsof-scoped" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc=$?
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 printf '%s\n' "$out" | sed 's/^/    | /'
 
@@ -63,7 +65,8 @@ T3="$TMP/tmproot3"; mkdir -p "$T3/locked" "$T3/gone"
 echo x > "$T3/locked/f"
 old 5 "$T3/locked/f" "$T3/locked" "$T3/gone"
 chflags uchg "$T3/locked/f"
-out6=$(DISK_SWEEP_TMPDIR="$T3" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc6=$?
+printf '#!/bin/sh\necho p1; echo "n/not/under/root"; exit 0\n' > "$FAKE/lsof-none"; chmod +x "$FAKE/lsof-none"
+out6=$(DISK_SWEEP_TMPDIR="$T3" DISK_SWEEP_LSOF="$FAKE/lsof-none" bash "$HERE/disk-sweep.sh" tmpdir 2>&1); rc6=$?
 check "unremovable entry: step fails and says so" sh -c '[ "$1" -ne 0 ] && printf "%s" "$2" | grep -q "1 could not be"' _ "$rc6" "$out6"
 check "unremovable entry: the removable one still went" test ! -e "$T3/gone"
 chflags nouchg "$T3/locked/f"

@@ -32,7 +32,7 @@ JSON
 export CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
 
 # ── stubs: record argv as `name[a][b]…`, behaviour by STUB_* env ───────────────────────────────
-rec='printf "%s" "$(basename "$0")" >> "$LOG"; for a in "$@"; do printf "[%s]" "$a" >> "$LOG"; done; printf "\n" >> "$LOG"'
+rec='l=${0##*/}; for a in "$@"; do l="$l[$a]"; done; printf "%s\n" "$l" >> "$LOG"'
 mk() { printf '#!/bin/bash\n%s\n%s\n' "$rec" "$2" > "$TMP/bin/$1"; chmod +x "$TMP/bin/$1"; }
 mk ssh 'case " $* " in
   *" -N "*) echo $$ > "$TMP_DIR/tunnel.pid"; [ "${STUB_TUNNEL:-ok}" = fail ] && exit 1
@@ -92,7 +92,7 @@ case "$1" in
 esac
 STUB
 chmod +x "$TMP/bin/hc"
-mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 6; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
+mk claude 'echo x >> "$TMP_DIR/claude.runs"; [ "${STUB_CLAUDE_BROWSER:-0}" = 1 ] && "$BROWSER" "$STUB_URL"; [ -n "${STUB_CLAUDE_OUT:-}" ] && echo "$STUB_CLAUDE_OUT"; echo $$ > "$TMP_DIR/claude.pid"; [ "${STUB_CLAUDE_HANG:-0}" = 1 ] && exec sleep 30; [ "${STUB_CLAUDE_HANG:-0}" = trap ] && { trap "" TERM; sleep 10; }; echo "ENV cfg=${CLAUDE_CONFIG_DIR-unset} browser=${BROWSER-unset} acc=${CLAUDE_LOGIN_ACCOUNT-unset} machine=${CLAUDE_LOGIN_MACHINE-unset} owner=${CLAUDE_LOGIN_OWNER_PID:+set} key=${ANTHROPIC_API_KEY-unset} tok=${CLAUDE_CODE_OAUTH_TOKEN-unset}" >> "$LOG"; exit "${STUB_LOGIN_RC:-0}"'
 # expiry --json answers STUB_EXPIRY_BEFORE until the claude stub has run since the last reset(), then STUB_EXPIRY_AFTER
 # (epoch ms; "none" = the Keychain item is unreadable: refresh_expires_at null; "fail" = the CLI itself fails). The default login moves forward 30 days.
 mk claude-account 'case "$1 $2" in
@@ -102,6 +102,15 @@ mk claude-account 'case "$1 $2" in
     echo "{\"accounts\":[{\"id\":\"me\",\"refresh_expires_at\":$ms},{\"id\":\"iu\",\"refresh_expires_at\":$ms}]}" ;;
   usage*|expiry*) echo "me max5x usage-line"; echo "iu max20x usage-line" ;;
 esac; exit 0'
+# Time compression: every `sleep` the scripts and stubs reach lasts 15% of its nominal seconds. The scripts count their waits
+# in whole nominal seconds (POLL_S, idle, grace), so a window keeps its meaning and the suite runs ~6x faster.
+cat > "$TMP/bin/sleep" <<'STUB'
+#!/bin/bash
+v=${1%%.*}; f=${1#*.}; [ "$f" = "$1" ] && f=0   # whole seconds and one decimal (0.5) are all the scripts use
+ms=$(( (${v:-0} * 10 + ${f:0:1}) * 15 ))
+exec /bin/sleep "$((ms / 1000)).$(printf %03d $((ms % 1000)))"
+STUB
+chmod +x "$TMP/bin/sleep"
 # `launchctl …` answers `managername`
 mk launchctl 'echo "${STUB_SESSION:-Aqua}"'
 # lib/core-up.sh's ps (PS_BIN): a launchd-born core by default; STUB_CORE="not running" shows a client-started stray instead
@@ -114,7 +123,7 @@ export TMP_DIR="$TMP" PATH="$TMP/bin:$PATH" PS_BIN="$TMP/bin/ps"
 mkdir -p "$TMP/space-repo"; export CLAUDE_RELOGIN_SPACE_DIR="$TMP/space-repo"
 export CLAUDE_RELOGIN_ASK_HUMAN="$TMP/bin/ask-human" CLAUDE_LOGIN_LSOF="$TMP/bin/lsof" CLAUDE_LOGIN_MSG_FILE="$TMP/msgs" CLAUDE_LOGIN_POLL_S=1 CLAUDE_LOGIN_FORWARD_GRACE_S=1
 # workers run inline (never a stray detached process), no waits, a scratch log
-export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=2 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
+export CLAUDE_RELOGIN_FOREGROUND=1 CLAUDE_RELOGIN_POLL_S=1 CLAUDE_RELOGIN_CLOSE_DELAY_S=0 CLAUDE_RELOGIN_BG_IDLE_S=6 CLAUDE_RELOGIN_LOG="$TMP/relogin.log" CLAUDE_RELOGIN_ABSENT_N=2 CLAUDE_RELOGIN_MAX_WAIT_S=4 CLAUDE_RELOGIN_TERM_GRACE_S=1
 # Safety net: every external command the scripts reach must be one of our stubs, never the real hc/ssh/claude.
 for c in ssh open hc osascript claude claude-account launchctl nc; do
   [[ "$(PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:$HOME/.bun/bin" command -v "$c")" == "$TMP/bin/$c" ]] || { echo "✗ $c does not resolve to the test stub"; exit 2; }
@@ -185,7 +194,7 @@ reset
 owner_sh=$(sleep 3 & echo $!)   # a login process that ends shortly
 CLAUDE_LOGIN_ACCOUNT=me CLAUDE_LOGIN_MACHINE=mini CLAUDE_LOGIN_OWNER_PID=$owner_sh bash "$BROWSER_SH" "$URL"; rc=$?
 assert_eq "rc 0" 0 "$rc"
-tunnel_line=$(sed -n 1p "$LOG"); open_line=$(sed -n 2p "$LOG")
+tunnel_line=$(grep -m1 '^ssh.*\[-N\]' "$LOG"); open_line=$(grep -v '\[-N\]' "$LOG" | grep -m1 '^ssh')   # by content: the two stubs start concurrently
 assert_contains "tunnel forwards the callback port back to the mini" "[-N][-R][127.0.0.1:58876:localhost:58876]" "$tunnel_line"
 assert_contains "tunnel: own connection, fails loudly" "[ExitOnForwardFailure=yes]" "$tunnel_line"
 assert_contains "tunnel: no shared control master" "[ControlPath=none]" "$tunnel_line"
