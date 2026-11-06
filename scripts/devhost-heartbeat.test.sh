@@ -78,34 +78,36 @@ assert_eq "exit 0" 0 "$RC"
 assert_contains "composite pushed up" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
 
 echo "a hung tool fails only its own component, the push still goes out"
-run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=2 STUB_OBSIDIAN_HANG=1
+run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=1 STUB_OBSIDIAN_HANG=1
 composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
 assert_contains "push is down" "status=down" "$composite"
-assert_contains "msg names the component and the timeout" "check_obsidian timed out after 2s" "$composite"
+assert_contains "msg names the component and the timeout" "check_obsidian timed out after 1s" "$composite"
 assert_eq "a DOWN verdict that was delivered exits 0" 0 "$RC"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
-sleep 1
+# side monitors push independently, before the composite, even when a composite component hangs (same run)
+assert_eq "collie + factory + composite = 3 pushes" 3 "$(pushes)"
+order=$(/usr/bin/grep -o 'push/[a-z]*' "$TMP/curl.log" | /usr/bin/tr '\n' ' ')
+assert_eq "side monitors first, composite last" "push/collie push/factory push/composite " "$order"
+assert_contains "factory relayed up" "status=up" "$(/usr/bin/grep 'push/factory' "$TMP/curl.log")"
 left=0
-if [[ -f "$TMP/sleeper.pids" ]]; then
-  while read -r p; do kill -0 "$p" 2>/dev/null && left=$((left + 1)); done < "$TMP/sleeper.pids"
-fi
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  left=0
+  if [[ -f "$TMP/sleeper.pids" ]]; then
+    while read -r p; do kill -0 "$p" 2>/dev/null && left=$((left + 1)); done < "$TMP/sleeper.pids"
+  fi
+  (( left == 0 )) && break
+  sleep 0.1
+done
 assert_eq "no grandchild sleeper survives the group kill" 0 "$left"
 
 echo "budget exhaustion: remaining components are not run, still graded, the push still goes out"
-run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=30 DEVHOST_HEARTBEAT_BUDGET=2 STUB_OBSIDIAN_HANG=1
+run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=30 DEVHOST_HEARTBEAT_BUDGET=1 STUB_OBSIDIAN_HANG=1
 composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
 assert_contains "push is down" "status=down" "$composite"
 assert_contains "later component not run" "check_agents_md_flag not run (heartbeat budget spent)" "$composite"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_HEARTBEAT_BUDGET=0
 assert_contains "zero budget runs nothing" "check_obsidian not run (heartbeat budget spent)" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
-
-echo "side monitors push independently, before the composite, even when a composite component hangs"
-run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_COMPONENT_TIMEOUT=2 STUB_OBSIDIAN_HANG=1
-assert_eq "collie + factory + composite = 3 pushes" 3 "$(pushes)"
-order=$(/usr/bin/grep -o 'push/[a-z]*' "$TMP/curl.log" | /usr/bin/tr '\n' ' ')
-assert_eq "side monitors first, composite last" "push/collie push/factory push/composite " "$order"
-assert_contains "factory relayed up" "status=up" "$(/usr/bin/grep 'push/factory' "$TMP/curl.log")"
 
 echo "exit 1 only when a push was not delivered"
 run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_FAIL=1
@@ -129,15 +131,42 @@ assert_eq "an old stamp runs drift again" 2 "$(runs)"
 
 echo "drift: a hung script is killed at its timeout, the heartbeat still exits 0, the retry comes in ~1 h"
 rm -f "$TMP/state/drift-last-run"
-run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=2 STUB_DRIFT_HANG=1
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=1 STUB_DRIFT_HANG=1
 assert_eq "hung drift: heartbeat exits 0" 0 "$RC"
-assert_contains "timeout is logged" "drift-check timed out after 2s" "$(cat "$TMP/out.log")"
+assert_contains "timeout is logged" "drift-check timed out after 1s" "$(cat "$TMP/out.log")"
 assert_contains "composite still pushed" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
 (( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
 age=$(( $(date +%s) - $(stat -f %m "$TMP/state/drift-last-run") ))
 (( age >= 68000 && age <= 69000 )) && ok "timed-out run is stamped to retry in ~1 h" || bad "retry stamp" "age ${age}s"
 run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=2
 assert_eq "no retry before the hour is up" 3 "$(runs)"
+
+echo "check_claude_auth wired through the real script: composite verdict and message"
+cat > "$TMP/claude" <<'STUB'
+#!/bin/sh
+if [ "${STUB_CLAUDE_DEAD:-0}" = 1 ]; then echo '{"loggedIn":false}'; else echo '{"loggedIn":true,"subscriptionType":"max"}'; fi
+STUB
+printf '#!/bin/sh\nexit 1\n' > "$TMP/secrets-run"
+printf '#!/bin/sh\necho %s\n' "'{\"accounts\":[{\"id\":\"iu\",\"severity\":\"PASS\",\"detail\":\"login valid\"}]}'" > "$TMP/ca"
+echo '{"accounts":{"iu":{"dir":null,"enabled":true}}}' > "$TMP/registry.json"
+chmod +x "$TMP/claude" "$TMP/secrets-run" "$TMP/ca"
+run_script DEVHOST_COMPONENTS="check_claude_auth" CLAUDE_BIN="$TMP/claude" SECRETS_RUN_BIN="$TMP/secrets-run" \
+  DEVHOST_CLAUDE_ACCOUNT_BIN="$TMP/ca" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json"
+composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+assert_contains "logged in: push is up" "status=up" "$composite"
+assert_contains "logged in: message" "claude auth ok (max)" "$composite"
+run_script DEVHOST_COMPONENTS="check_claude_auth" CLAUDE_BIN="$TMP/claude" SECRETS_RUN_BIN="$TMP/secrets-run" \
+  DEVHOST_CLAUDE_ACCOUNT_BIN="$TMP/ca" DEVHOST_CLAUDE_ACCOUNTS_REGISTRY="$TMP/registry.json" STUB_CLAUDE_DEAD=1
+composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+assert_contains "dead login, dead token: push is down" "status=down" "$composite"
+assert_contains "dead login: message" "billing API credits" "$composite"
+
+echo "the default component list only names functions the script or its libs define"
+list=$(/usr/bin/awk '/^components="\$\{DEVHOST_COMPONENTS:-/{f=1} f{print} f&&/\}"$/{exit}' "$HERE/devhost-health-check.sh" | /usr/bin/sed -e 's/^components="${DEVHOST_COMPONENTS:-//' -e 's/}"$//' -e 's/\\$//')
+[[ -n "$list" ]] && ok "default list found" || bad "default list found"
+for name in $list; do
+  if /usr/bin/grep -q "^${name}()" "$HERE/devhost-health-check.sh" "$HERE"/lib/*.sh; then ok "$name is defined"; else bad "$name is defined" "no ^${name}() in the script or lib/*.sh"; fi
+done
 
 echo
 echo "passed: $pass, failed: $fail"

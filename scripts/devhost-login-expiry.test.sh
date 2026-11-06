@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # devhost-login-expiry.test.sh — check_claude_auth's login-expiry grading in the heartbeat (devhost-health-check.sh),
-# with stub claude / claude-account / secrets-run binaries and a scratch registry. The functions are cut out of the
-# script (it runs its whole main at load), so nothing else of the heartbeat executes.
+# with stub claude / claude-account / secrets-run binaries and a scratch registry. The functions come from
+# lib/claude-auth-check.sh, sourced alone, so nothing else of the heartbeat executes.
 # Usage: scripts/devhost-login-expiry.test.sh   (exit 0 = all pass)
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,8 +13,6 @@ assert_contains() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "[$3] does not c
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/devhost-login-test.XXXXXX")" || exit 2
 trap 'rm -rf "$TMP"' EXIT
-sed -n '/^claude_token_works()/,/^# Claude Code auto-updates/p' "$HERE/devhost-health-check.sh" > "$TMP/fn.sh"
-[[ -s "$TMP/fn.sh" ]] || { echo "✗ could not cut the functions out of devhost-health-check.sh"; exit 2; }
 echo '{"accounts":{"iu":{"dir":null,"enabled":true},"me":{"dir":"~/.claude-me","enabled":true}}}' > "$TMP/registry.json"
 
 # claude: logged in when CLAUDE_CONFIG_DIR is set (extra account) or the cached token is injected; the default
@@ -48,7 +46,7 @@ grade() { # <case> [env…] -> "rc|message" and stderr in $TMP/err
   env -u CLAUDE_CONFIG_DIR -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_ACCOUNT_PICKED "$@" STUB_CA="$c" bash -c '
     JQ_BIN=/usr/bin/jq; CLAUDE_BIN="${T_CLAUDE_BIN:-'"$TMP"'/claude}"; CLAUDE_ACCOUNT_BIN="${T_CA_BIN:-'"$TMP"'/ca}"
     CLAUDE_ACCOUNTS_REGISTRY='"$TMP"'/registry.json; SECRETS_RUN_BIN='"$TMP"'/secrets-run
-    source '"$TMP"'/fn.sh
+    source '"$HERE"'/lib/claude-auth-check.sh
     rc=0; msg=$(check_claude_auth) || rc=$?; echo "$rc|$msg"' 2>"$TMP/err"
 }
 
