@@ -457,9 +457,11 @@ def reap_bg_account(j: Journal, env: dict) -> None:
         if j.dry:
             j.line("bg-stop", **desc)
             continue
-        rc, _ = sh("claude", "stop", a["id"], env=env)
+        rc, _ = sh("claude", "stop", a["id"], env=env, timeout=NET_TIMEOUT_S)
         if rc == 0:
             j.line("bg-stop", **desc)
+        elif rc == 124:
+            j.line("bg-stop-timeout", **desc, why='"claude stop timed out; retried on the next run"')
         else:
             j.line("bg-stop-failed", **desc, why='"claude stop could not reach the background daemon; record left in place"')
             seen[key] = now

@@ -223,7 +223,7 @@ function shellAlias(
   subcommand: string | null,
   args: string[]
 ): { subcommand: string | null; args: string[] } {
-  return shellAliasPush(body) ?? { subcommand, args };
+  return shellAliasPush(body, args) ?? { subcommand, args };
 }
 
 function expandAliasWords(
@@ -251,11 +251,11 @@ function aliasWords(body: string): string[] {
   return words;
 }
 
-/** A `!` alias runs through the shell: judge the first push among its nested commands. */
-function shellAliasPush(body: string): { subcommand: string; args: string[] } | undefined {
+/** A `!` alias runs through the shell and git appends what the caller typed after the alias name. */
+function shellAliasPush(body: string, typed: string[]): { subcommand: string; args: string[] } | undefined {
   const nested = splitIntoCommands(body).map(inspectGit);
   const push = nested.find((git) => git?.subcommand === "push");
-  return push ? { subcommand: "push", args: push.args } : undefined;
+  return push ? { subcommand: "push", args: [...push.args, ...typed] } : undefined;
 }
 
 function nextWord(words: string[]): string | null {

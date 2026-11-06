@@ -203,6 +203,10 @@ describe("inspectPush — bypasses that used to classify as allowed", () => {
     });
   });
 
+  test("arguments typed after a shell alias are appended to its push", () => {
+    expect(inspectPush("git -c 'alias.pm=!git push origin' pm main")).toEqual({ kind: "protected-ref" });
+  });
+
   test("a shell alias body is judged as a shell command", () => {
     expect(inspectPush(`git -c 'alias.p=!sh -c "git push origin main"' p`)).toEqual({
       kind: "protected-ref",
