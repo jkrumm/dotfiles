@@ -22,14 +22,12 @@ Analyze, validate, upgrade npm/bun dependencies, run validation, and commit chan
 
 **ALWAYS delegate:**
 - Major version research → `/research` skill
-- OpenSpec migration research (major/minor changes) → `/research` skill
 - Post-upgrade validation → `/check` skill
 
 **Keep in main thread:**
 - Git operations (status, add, commit)
 - npm-check-updates commands
 - Package manager install commands
-- OpenSpec CLI commands (update, version checks)
 - User communication and approval flows
 
 ### Token Savings
@@ -170,87 +168,6 @@ grep -q '"workspaces"' package.json && echo "WORKSPACE"
 2. **Single bun project**: No workspaces, has bun.lock
 3. **Bun workspace**: Has workspaces + bun.lock → use `--deep`
 4. **npm workspace**: Has workspaces + package-lock.json → use `--deep`
-
----
-
-## Phase 1.5: OpenSpec Update (If Installed)
-
-Check if OpenSpec is installed and update instruction files.
-
-**1. Detection:**
-```bash
-# Check if OpenSpec CLI is available
-command -v openspec >/dev/null 2>&1 && echo "OPENSPEC_INSTALLED"
-
-# Check current version
-openspec --version 2>/dev/null
-```
-
-**2. Check for updates:**
-```bash
-# Get current installed version
-CURRENT=$(openspec --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-
-# Get latest version from npm
-LATEST=$(npm view openspec version 2>/dev/null)
-
-echo "Current: $CURRENT"
-echo "Latest: $LATEST"
-```
-
-**3. If update available:**
-```bash
-# Update OpenSpec globally
-npm update -g openspec
-```
-
-**4. Update instruction files:**
-```bash
-# Update OpenSpec templates and instruction files in project
-openspec update
-```
-
-**5. Version change analysis:**
-
-If there's a **major or minor version change**, delegate research:
-
-```
-/research OpenSpec CLI migration [old-version] to [new-version] Claude Code setup changes
-```
-
-Research should cover:
-- Breaking changes in CLI commands
-- Changes to instruction file formats
-- Updates to Claude Code integration patterns
-- New features relevant for spec-driven development
-
-**Present results:**
-
-```markdown
-## 🔧 OpenSpec Update
-
-| Item | Value |
-|------|-------|
-| Previous version | X.Y.Z |
-| New version | A.B.C |
-| Instruction files | Updated ✅ |
-
-### Version Changes (if major/minor)
-**Breaking changes:** [via /research skill]
-- [Change 1]
-- [Change 2]
-
-**New features for Claude Code:**
-- [Feature 1]
-- [Feature 2]
-
-**⏸️ Continue with npm/bun dependency upgrades?**
-```
-
-**Skip OpenSpec phase if:**
-- `openspec` command not found
-- No `.openspec/` directory in project
-- User explicitly skips with `--skip-openspec`
 
 ---
 
@@ -421,12 +338,6 @@ Base branch: main
 Package manager: bun
 Project type: workspace
 
-🔧 OpenSpec Update
-------------------
-Status: ✅ Updated (1.2.0 → 1.3.0)
-Instruction files: ✅ Refreshed
-Migration research: ✅ (via /research skill - new Claude Code patterns)
-
 📊 Outdated Dependencies
 ------------------------
 🟢 Patch: 3 packages
@@ -467,8 +378,6 @@ git commit -m "chore: upgrade dependencies"
 |-------|-----------|-------|
 | Pre-flight | Git checks | Main thread |
 | Phase 1 | Project detection | Main thread |
-| Phase 1.5 | OpenSpec update | Main thread |
-| Phase 1.5 | OpenSpec migration research | `/research` (if major/minor) |
 | Phase 2 | Check outdated | Main thread |
 | Phase 3 | Research majors | `/research` |
 | Phase 4 | Execute upgrades | Main thread |

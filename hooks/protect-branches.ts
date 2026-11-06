@@ -337,7 +337,7 @@ if (import.meta.main) {
         "All changes must go through a pull request:",
         "  1. Work on a feature branch",
         "  2. git push origin <feature-branch>",
-        "  3. /pr create",
+        "  3. gh pr create",
         "",
         "To push directly: run the command in your terminal (admin bypass).",
       ].join("\n")

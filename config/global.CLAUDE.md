@@ -53,7 +53,7 @@ Non-negotiable. Tone lives in `output-styles/Direct.md`; this is the behaviour.
 2. **Read the diff you produced**, including a subagent's — a worker's report is a
    claim, the diff is the proof.
 3. **Review** — `/review` on anything non-trivial, security-adjacent or on a shared
-   path. `/ship` chains all three.
+   path.
 
 Never claim "done" for something you did not run.
 
@@ -135,7 +135,7 @@ Apple developer team (certificates, ASC/APNs keys, App Groups, a new app's porta
 
 ## Workflow
 
-`/commit` per logical concern → `/git-cleanup` if ≥3 noisy commits → `/ship`.
+`/commit` per logical concern → `/check` → `/review` → push, or `gh pr create` on a PR-required repo.
 Commit format and the amend rule: `rules/commit-conventions.md`.
 
 - Check `package.json` or the Makefile (`make check`, `make verify`) first.

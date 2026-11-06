@@ -39,8 +39,8 @@ Everything routed through `agw` exists only on the mini.
 |-|-|
 | `agw` CLI (sync, exit-10 resume `agw run wait <runId>`) | `/research` · `/otel` (`agw otel`, `agw hdx`) · `/check` · `/review` (`agw review prepare|submit|dispose|covered`, reviewer agent in-session) · `/prose` (`agw prose` + `agw prose-gate`, rewrite in-session) · `/podcast` (`agw podcast`) · `/img` (`agw image`) · `/excalidraw-diagram` (`agw diagram`) · `/brain` lookups (`agw brain`) |
 | MCP · subagent | `/browse` (chrome-devtools, haiku) · `/analyze` (fallow in a native subagent) |
-| inline — git | `/commit` (`--split`/`--amend`) · `/pr` · `/ship` · `/git-cleanup` |
-| inline — build | `/wave` · `/implement` · `/upgrade-deps` · `/archify` |
+| inline — git | `/commit` (`--split`/`--amend`) |
+| inline — build | `/wave` · `/upgrade-deps` · `/archify` |
 | inline — ops | `/secrets` · `/cloudflare` · `/remote-dev` · `/herdr` (hc + the Herdr app) · `/router` (`routerctl`) |
 | inline — writing | `/brain` · `/distill` |
 

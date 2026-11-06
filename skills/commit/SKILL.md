@@ -1,11 +1,11 @@
 ---
 name: commit
-description: Smart git commit with conventional commits, OpenSpec awareness, and intelligent splitting for GitHub
+description: Smart git commit with conventional commits and intelligent splitting for GitHub
 ---
 
 # Smart Commit Skill (GitHub)
 
-Generate conventional commit messages with intelligent analysis of changes, OpenSpec awareness, and automatic splitting when appropriate.
+Generate conventional commit messages with intelligent analysis of changes and automatic splitting when appropriate.
 
 **Platform:** GitHub (SourceRoot projects)
 
@@ -24,11 +24,6 @@ Read `~/.claude/rules/commit-conventions.md` first (format, amend rule) — it i
 
 If a SourceRoot scope ever needs a ticket reference (e.g. cross-linking an upstream issue), put it in the body as plain text — not in the scope, not as `Refs:` footer. The `Refs:` convention is for ticketed IuRoot work only.
 
-**OpenSpec context** (if `.openspec/changes/` directory exists):
-- Match changed files to any spec that might be relevant
-- Extract the change purpose if found
-- Do NOT extract a ticket reference for SourceRoot — even if a proposal contains one
-
 **Special Handling:**
 - `basalt-ui` package changes → ALWAYS separate commit(s) (NPM published)
 - Full-stack feature changes → Keep together (don't split by frontend/backend)
@@ -46,18 +41,13 @@ Analyze git changes for commit preparation:
 3. Run `git diff --cached` for full staged diff content
 4. If unstaged changes exist, run `git diff` to understand full context
 
-5. Check for OpenSpec context (if `.openspec/changes/` directory exists):
-   - Look in `.openspec/changes/` for active specifications
-   - Match changed files to any spec that might be relevant
-   - Extract the change purpose (not a ticket — SourceRoot has none)
-
-6. Analyze the changes:
+5. Analyze the changes:
    - Identify the primary purpose (feat/fix/refactor/docs/test/chore/build/ci/perf/style)
    - Determine appropriate scope (module/component name only — never a ticket ID)
    - Check if changes span multiple logical concerns
    - Identify if basalt-ui package is involved (check file paths)
 
-7. Evaluate splitting need:
+6. Evaluate splitting need:
    - Multiple unrelated features/fixes?
    - basalt-ui changes mixed with app code?
    - Refactoring mixed with new features?
@@ -187,31 +177,7 @@ if [[ "$current_branch" != "$default_branch" ]]; then
 fi
 ```
 
-**PR Suggestion Logic:**
-- On feature branch with commits ahead → check count:
-  - `commits_ahead >= 3` → Suggest:
-    ```
-    Branch '$current_branch' is $commits_ahead commits ahead of $default_branch.
-    Consider '/git-cleanup' to group commits before creating a PR.
-    Run '/git-cleanup' or '/pr create'?
-    ```
-  - `commits_ahead == 1 or 2` → Suggest:
-    ```
-    Branch '$current_branch' is $commits_ahead commit(s) ahead of $default_branch.
-    Run '/pr create' to open a PR?
-    ```
-- On main/master with small fix → No suggestion (direct commit workflow)
-- If in worktree → Note: "Working in worktree - /pr merge will suggest cleanup"
-
-**Example output:**
-```
-Commit created successfully.
-
-Branch 'feat/user-auth' is 3 commits ahead of main.
-📂 Working in worktree
-
-Run `/pr create` to create a PR?
-```
+**After the commit:** on a feature branch with commits ahead, state the count; a PR is `gh pr create`. On main/master, nothing further.
 
 ## basalt-ui Splitting Rules
 
@@ -306,7 +272,5 @@ When `--dry-run` is passed:
 
 ## Integration Notes
 
-- Works with OpenSpec: Reads `.openspec/changes/*/proposal.md` for context (if directory exists)
 - Works with /check: Does NOT auto-run validation (user's preference)
 - Respects git hooks: Never uses `--no-verify`
-- Works with `/pr`: Suggests PR creation after commit
