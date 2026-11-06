@@ -13,7 +13,7 @@ REAP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hc-reap.py")
 
 FAKE_HC = r'''#!/usr/bin/env python3
 # A fake core: `hc connect` answers JSON-RPC from FAKE_WORLD and records every call (list/kill/rm/send) in FAKE_CALLS.
-import json, os, subprocess, sys
+import json, os, sys
 if sys.argv[1:2] != ["connect"]:
     sys.exit(2)
 req = json.loads(sys.stdin.readline())
@@ -384,5 +384,27 @@ class Reap(unittest.TestCase):
             self.assertNotIn(f"claude stop {x}", calls)
 
 
+def run_parallel() -> bool:
+    """Each test builds its own tmpdir world and spends its time waiting on spawned fakes, so the cases
+    run in a thread pool: the wall time is the slowest case, not the sum."""
+    from concurrent.futures import ThreadPoolExecutor
+    cases = [t for suite in unittest.defaultTestLoader.loadTestsFromTestCase(Reap) for t in [suite]]
+
+    def one(case):
+        res = unittest.TestResult()
+        case.run(res)
+        return case, res
+
+    failed = []
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as pool:
+        for case, res in pool.map(one, cases):
+            for _, tb in res.failures + res.errors:
+                failed.append(f"{case.id()}\n{tb}")
+    for f in failed:
+        print("FAIL", f, file=sys.stderr)
+    print(f"Ran {len(cases)} tests, {len(failed)} failed")
+    return not failed
+
+
 if __name__ == "__main__":
-    unittest.main()
+    sys.exit(0 if run_parallel() else 1)

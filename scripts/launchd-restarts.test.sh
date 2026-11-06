@@ -104,13 +104,17 @@ rc=0; out=$(check_launchd_restarts) || rc=$?
 # State write fails → the marker must NOT be consumed, or next run re-sees the
 # same bump with its marker gone and pages it.
 rm -rf "$STATE_DIR" "$DEVHOST_DELIBERATE_RESTART_DIR"; mkdir -p "$STATE_DIR" "$DEVHOST_DELIBERATE_RESTART_DIR"
-printf '%s 5\n' "$LABEL" > "$STATE_DIR/launchd-runs"; date +%s > "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL"
-fake_print 6 "" 0; chmod 555 "$STATE_DIR"
-rc=0; out=$(check_launchd_restarts) || rc=$?
-chmod 755 "$STATE_DIR"
-[ "$rc" = 0 ] && [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] \
-  && ok "state write failed → marker kept for the re-seen bump" \
-  || bad "state write failed → rc=$rc, marker $( [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] && echo kept || echo CONSUMED)"
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  skip state write failed → marker kept (root bypasses a read-only dir)"
+else
+  printf '%s 5\n' "$LABEL" > "$STATE_DIR/launchd-runs"; date +%s > "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL"
+  fake_print 6 "" 0; chmod 555 "$STATE_DIR"
+  rc=0; out=$(check_launchd_restarts) || rc=$?
+  chmod 755 "$STATE_DIR"
+  [ "$rc" = 0 ] && [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] \
+    && ok "state write failed → marker kept for the re-seen bump" \
+    || bad "state write failed → rc=$rc, marker $( [ -e "$DEVHOST_DELIBERATE_RESTART_DIR/$LABEL" ] && echo kept || echo CONSUMED)"
+fi
 
 echo "malformed markers never excuse (a crash loop must still page)"
 # raw_case NAME PREV RUNS MARKER_CONTENT_CMD — exit-0 bump, marker file written by the cmd.
@@ -131,7 +135,11 @@ raw_case "partial/garbage line"         5 6 "printf '17905' > $M; echo abc >> $M
 raw_case "ISO date instead of epoch"    5 6 "date -u +%Y-%m-%dT%H:%M:%SZ > $M"
 raw_case "marker 1h in the future (clock stepped back)" 5 6 "echo \$((\$(date +%s) + 3600)) > $M"
 raw_case "marker dir missing"           5 6 "rm -rf \"\$DEVHOST_DELIBERATE_RESTART_DIR\""
-raw_case "marker file unreadable"       5 6 "date +%s > $M; chmod 000 $M"
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  skip marker file unreadable (root reads a chmod 000 file)"
+else
+  raw_case "marker file unreadable"       5 6 "date +%s > $M; chmod 000 $M"
+fi
 raw_case "marker for another label"     5 6 "date +%s > \"\$DEVHOST_DELIBERATE_RESTART_DIR/com.example.else\""
 
 # bootout + bootstrap: runs falls back to 1 — no bump, no page, and a marker

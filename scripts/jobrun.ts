@@ -16,9 +16,10 @@ import { type JobState, defaultStateDir } from "./lib/jobs-grade.ts"
 const TAIL_LINES = 40
 const RUN_HISTORY = 5
 const DAY_MS = 86_400_000
-const KILL_GRACE_MS = 10_000
+// Test-only knobs: the env override lets the suite exercise TERM -> KILL and the pipe drain in milliseconds.
+const KILL_GRACE_MS = Number(process.env.JOBRUN_KILL_GRACE_MS) || 10_000
 const MAX_FAIL_TIMES = 100
-const DRAIN_MS = 2_000
+const DRAIN_MS = Number(process.env.JOBRUN_DRAIN_MS) || 2_000
 
 export interface Args {
   label: string
