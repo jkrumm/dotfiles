@@ -57,9 +57,11 @@ if [ -S "$OP_AGENT_SOCK" ]; then
 fi
 
 # Belt to that braces: bound the network calls themselves. `timeout` is
-# coreutils, not macOS base, so degrade to running them bare when it is absent.
+# coreutils, not macOS base (Homebrew installs it as `gtimeout`), so degrade to
+# running them bare when neither exists — loudly, see warn below.
 NET=()
-command -v timeout >/dev/null 2>&1 && NET=(timeout 120)
+_to=$(command -v timeout || command -v gtimeout || true)
+[ -n "$_to" ] && NET=("$_to" 120)
 
 # Resolved BEFORE the cd into the vault, because $BASH_SOURCE is relative when
 # the script is invoked by a relative path and dirname would then point at the
@@ -70,6 +72,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # timestamp — unlike the nightly backup, "which run was this?" is a real question here.
 log()  { printf '%s brain-sync: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"; }
 warn() { log "$*" >&2; }
+[ "${#NET[@]}" -gt 0 ] || warn "neither timeout nor gtimeout found — network calls run unbounded"
 
 # --- arguments ---------------------------------------------------------------
 

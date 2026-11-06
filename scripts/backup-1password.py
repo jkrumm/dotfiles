@@ -77,6 +77,7 @@ Known duplicates / gotchas:
 import json, subprocess, sys, os, re, tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+from pathlib import Path
 
 RECIPIENT = "age1eg6cypgrjv48urgvmxe9wua9d8a7x9e6jxt6w2phcfg46gxzpqdq9f3jke"  # public key — not a secret
 OP_ACCOUNT = ["--account", "tkrumm"]
@@ -97,8 +98,47 @@ BACKUP_RE = re.compile(r"^1password-(\d{4})-(\d{2})-(\d{2})\.json\.age$")
 # To exclude a vault entirely, add its name here.
 SKIP_VAULTS: set[str] = {"Shared"}
 
+# Network hang guards (seconds). Deliberately not on `op` / `age`: `op` may wait on a human's Touch ID.
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
+SSH_TIMEOUT = 60
+RSYNC_IO_TIMEOUT = 60
+RSYNC_TIMEOUT = 900
+CURL_MAX_TIME = 30
+
+# A backup whose item count fell by more than this versus the previous one is
+# treated as a partial export: it is not published, pruned over, or reported green.
+MAX_ITEM_DROP = 0.20
+STATE_DIR = Path(os.environ.get("OPBACKUP_STATE_DIR", str(Path.home() / ".local/state/opbackup")))
+COUNT_FILE = STATE_DIR / "last_item_count"
+
 # Max parallel op item get calls — 1Password desktop app handles concurrency well
 WORKERS = 8
+
+def item_count_dropped(previous: int | None, current: int, max_drop: float = MAX_ITEM_DROP) -> bool:
+    """True when `current` is more than `max_drop` below `previous`. No previous count passes."""
+    if previous is None or previous <= 0:
+        return False
+    return current < previous * (1 - max_drop)
+
+def upload_size_ok(local_size: int, remote_size: int | None) -> bool:
+    return remote_size is not None and remote_size == local_size
+
+def read_last_count() -> int | None:
+    try:
+        return int(COUNT_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+def write_last_count(count: int) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    COUNT_FILE.write_text(f"{count}\n")
+
+def remote_size(filename: str) -> int | None:
+    out = subprocess.check_output(
+        ["ssh", *SSH_OPTS, REMOTE_HOST, f"wc -c < {REMOTE_DIR}/{filename}"],
+        timeout=SSH_TIMEOUT,
+    ).decode().strip()
+    return int(out) if out.isdigit() else None
 
 def op_json(cmd: list[str]) -> ...:
     return json.loads(subprocess.check_output(["op"] + cmd + OP_ACCOUNT))
@@ -116,7 +156,7 @@ def prune_remote() -> None:
     metacharacter can survive into the remote command.
     """
     listing = subprocess.check_output(
-        ["ssh", "-o", "BatchMode=yes", REMOTE_HOST, f"ls -1 {REMOTE_DIR}"]
+        ["ssh", *SSH_OPTS, REMOTE_HOST, f"ls -1 {REMOTE_DIR}"], timeout=SSH_TIMEOUT
     ).decode().split()
 
     names = sorted(n for n in listing if BACKUP_RE.match(n))
@@ -134,9 +174,9 @@ def prune_remote() -> None:
         return
 
     subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", REMOTE_HOST,
+        ["ssh", *SSH_OPTS, REMOTE_HOST,
          f"cd {REMOTE_DIR} && rm -f -- " + " ".join(doomed)],
-        check=True
+        check=True, timeout=SSH_TIMEOUT
     )
     print(f"  Pruned {len(doomed)}: {', '.join(doomed)}")
 
@@ -177,6 +217,13 @@ def main():
         total += len(vault_items)
         print(f"  {vname}: {len(vault_items)} items")
 
+    previous = read_last_count()
+    if item_count_dropped(previous, total):
+        raise RuntimeError(
+            f"item count fell from {previous} to {total} (>{int(MAX_ITEM_DROP * 100)}%) — "
+            "treating as a partial export; nothing uploaded, pruned or reported"
+        )
+
     # Encrypt → temp file (JSON never on disk unencrypted)
     json_bytes = json.dumps(backup, indent=2, ensure_ascii=False).encode()
     filename = f"1password-{date.today().isoformat()}.json.age"
@@ -188,16 +235,23 @@ def main():
             ["age", "--encrypt", "--recipient", RECIPIENT, "-o", tmp_path],
             input=json_bytes, check=True
         )
-        # rsync to homelab
+        # rsync to homelab, then prove the remote file is the whole thing
         subprocess.run(
-            ["rsync", "-az", tmp_path, f"homelab:~/backups/1password/{filename}"],
-            check=True
+            ["rsync", "-az", f"--timeout={RSYNC_IO_TIMEOUT}", "-e", "ssh " + " ".join(SSH_OPTS),
+             tmp_path, f"{REMOTE_HOST}:{REMOTE_DIR}/{filename}"],
+            check=True, timeout=RSYNC_TIMEOUT
         )
+        local_size = os.path.getsize(tmp_path)
+        remote = remote_size(filename)
+        if not upload_size_ok(local_size, remote):
+            raise RuntimeError(f"upload size mismatch: local {local_size} B, remote {remote} B")
         # Push to Uptime Kuma
         push_url = subprocess.check_output(
             ["op", "read", "op://homelab/config/1PASSWORD_BACKUP_PUSH_URL"] + OP_ACCOUNT
         ).decode().strip()
-        subprocess.run(["curl", "-fsS", push_url], capture_output=True, check=True)
+        subprocess.run(["curl", "-fsS", "--max-time", str(CURL_MAX_TIME), push_url],
+                       capture_output=True, check=True, timeout=CURL_MAX_TIME + 10)
+        write_last_count(total)
 
         size_kb = os.path.getsize(tmp_path) // 1024
         print(f"  Done: {total} items from {len(backup)} vaults ({size_kb} KB) → homelab")

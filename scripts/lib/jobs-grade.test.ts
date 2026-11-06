@@ -104,6 +104,11 @@ describe("jobs-grade", () => {
     expect(summarize([ok])).toEqual({ line: "jobs ok (1)", code: 0 })
     expect(summarize([ok, bad])).toEqual({ line: "jobs WARN (2): b=failing", code: 2 })
   })
+  test("an older state file without runs and fails_24h >= 3 grades flapping instead of throwing", () => {
+    const { runs: _runs, ...old } = job({ fails_24h: 3 })
+    const g = gradeOne(old as JobState, { now: NOW, loaded })
+    expect(g.grade).toBe("flapping")
+  })
   test("gradeAll reads the state dir, skipping torn files", () => {
     const dir = mkdtempSync(join(tmpdir(), "jg-"))
     writeFileSync(join(dir, "a.json"), JSON.stringify(job({ label: "a" })))

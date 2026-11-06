@@ -205,8 +205,9 @@ DRIFT_CHECK_BIN="${DEVHOST_DRIFT_CHECK_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")
 # 08:54:24, and agent-gateway + linewatch-collector did not come up until 08:56:08 —
 # ~2m48s after boot, both at the same second, i.e. a deferred launchd bootstrap
 # pass rather than a fault. Everything was healthy by the next run. With
-# `maxretries 0` on the Kuma side (deliberate — it keeps time-to-DOWN at 10min
-# rather than 40), that single failed push is a full DOWN alert on EVERY reboot.
+# `maxretries 1` on the Kuma side (retry_interval 600 s: one failed push is retried
+# once, so two failed pushes in a row page), a boot-time stall that outlasted a run or two
+# would still be a DOWN alert on EVERY reboot.
 #
 # A monitor that cries wolf after every power blip does not make you better
 # informed, it trains you to ignore it — and then the one real outage looks like
@@ -581,7 +582,7 @@ check_git_push() {
   #
   # Deliberately NO network call to GitHub. Validating the token upstream would
   # make a GitHub outage or a flaky link page as "dev host down", and the
-  # monitor runs with maxretries 0.
+  # monitor allows only one retry (maxretries 1).
   #
   # So this asserts RESOLVABILITY, not push rights, and the message says
   # "credential ready" rather than "push ready" on purpose — a check that claims
@@ -661,7 +662,7 @@ check_dev_vhosts() {
 
   # 2. Cert lifetime, probed LOCALLY. Deliberately no outbound call to
   # Cloudflare or Let's Encrypt — same restraint as check_git_push's comment
-  # above: at a 300s cadence with maxretries 0, a third-party API wobble must
+  # above: at a 300s cadence with maxretries 1, a third-party API wobble must
   # not page "dev host down". `health.$DEV_DOMAIN` need not resolve to
   # anything real; SNI alone is enough for the wildcard cert to be served.
   local ip

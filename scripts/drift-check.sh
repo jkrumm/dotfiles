@@ -26,7 +26,7 @@ set -euo pipefail
 # WHY IT RIDES THE HEARTBEAT, ONCE A DAY. It had its own LaunchAgent (retired
 # 2026-11-06) because every check in here is a NETWORK call — GitHub for the pins,
 # Apple's own scan results for the OS — and devhost-health-check.sh runs every 300s
-# with maxretries 0 and deliberately refuses to call GitHub itself (see its
+# with maxretries 1 and deliberately refuses to call GitHub itself (see its
 # check_git_push comment): a GitHub outage must not page as "dev host down". Now every
 # heartbeat run is bounded, so the heartbeat runs this script as a side job AFTER its
 # composite push, at most once per 20 h, capped at DEVHOST_DRIFT_TIMEOUT (60 s), and its
@@ -72,6 +72,9 @@ BREW_BIN="${BREW_BIN:-/opt/homebrew/bin/brew}"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 DATE_BIN="${DATE_BIN:-/bin/date}"
 DEFAULTS_BIN="${DEFAULTS_BIN:-/usr/bin/defaults}"
+PMSET_BIN="${PMSET_BIN:-/usr/bin/pmset}"
+SYSADMINCTL_BIN="${SYSADMINCTL_BIN:-/usr/sbin/sysadminctl}"
+BACKEND_FILE="${BACKEND_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/secrets/backend}"
 
 STATE_DIR="${DRIFT_STATE_DIR:-$HOME/.local/state/drift-check}"
 FIRST_SEEN_FILE="$STATE_DIR/first-seen"
@@ -269,6 +272,27 @@ check_tailscale() {
   done
 }
 
+# Power/boot posture of the dev host (secrets backend `cache`; the MacBook is not unattended).
+# After a power cut the mini only comes back by itself with `autorestart` on, and only
+# serves anything after a reboot with automatic login on (`make lock-at-boot-setup`).
+# Both are plain host settings that nothing else asserts, so a reset is otherwise silent.
+# A command that cannot be read is skipped, never drift.
+check_power_posture() {
+  local backend ar al
+  backend=$(/usr/bin/tr -d '[:space:]' < "$BACKEND_FILE" 2>/dev/null || true)
+  [[ "$backend" == "cache" ]] || return 0
+  ar=$("$PMSET_BIN" -g custom 2>/dev/null | /usr/bin/awk '/^ *autorestart /{print $2; exit}') || ar=""
+  if [[ -z "$ar" ]]; then skip_add "autorestart (pmset unreadable)"
+  elif [[ "$ar" != "1" ]]; then drift_add "autorestart" "pmset autorestart is $ar, the mini will not power itself on after a power cut (fix: sudo pmset -a autorestart 1)"
+  else info_add "autorestart on"
+  fi
+  al=$("$SYSADMINCTL_BIN" -autologin status 2>&1) || al=""
+  if [[ -z "$al" ]]; then skip_add "autologin (sysadminctl unreadable)"
+  elif [[ "$al" == *"login user:"* ]]; then info_add "autologin on"
+  else drift_add "autologin" "automatic login is off, a reboot leaves the mini at the login window (fix: make lock-at-boot-setup)"
+  fi
+}
+
 # --- Run ---------------------------------------------------------------------
 check_pinned_commit  collie       AltanS/collie             "$(makefile_var COLLIE_REF)"      "bump COLLIE_REF + COLLIE_VERSION, then make collie-setup"
 check_pinned_version xcaddy       caddyserver/xcaddy        "$(makefile_var XCADDY_VERSION)"  "bump XCADDY_VERSION, then make caddy-dns-build"
@@ -276,6 +300,7 @@ check_pinned_version caddy-dns    caddy-dns/cloudflare      "$(makefile_var CADD
 check_brew
 check_macos
 check_tailscale
+check_power_posture
 
 # --- Age grace ---------------------------------------------------------------
 # first-seen is rewritten each run: entries for keys that are no longer drifted

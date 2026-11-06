@@ -63,7 +63,13 @@ PLIST_DIR="${LOG_ROTATE_PLIST_DIR:-$HOME/Library/LaunchAgents}"
 #   the only record of what Hermes did unattended. Rotated, not deleted.
 # - claude-relogin.log: the windowless MacBook relogin worker's output (redacted, owner-only), written by
 #   scripts/claude-relogin.sh, no plist names it.
+# - Homebrew service logs under /opt/homebrew/var/log (launchd-written, user-owned, O_APPEND like any plist
+#   stream): only the ones that grow without bound. Measured 2026-11-06 on the mini: tailscaled.log 121 MB,
+#   postgresql@18.log 60 MB; colima/herdr/caddy are under 250 KB, and the caddy logs are root-owned and
+#   rotated by caddy itself.
 EXTRA=(
+  /opt/homebrew/var/log/tailscaled.log
+  /opt/homebrew/var/log/postgresql@18.log
   "$HOME/.hermes/logs/gateway.error.log"
   "$HOME/.hermes/logs/gateway.log"
   hermes-ops.log

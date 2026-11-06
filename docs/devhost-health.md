@@ -114,7 +114,7 @@ booted 08:53:20, the agent ran 08:54:24, and two agents did not start until
 08:56:08 — **+2m48s, both at the same second**, a deferred launchd bootstrap pass
 rather than a fault. (An earlier diagnosis said those agents "never load" and
 blamed Background Task Management — wrong, they were late. Don't re-engineer two
-working plists.) At `maxretries 0` that is a DOWN alert on *every* reboot.
+working plists.) With `maxretries 1` (retry 600 s) two failed pushes in a row page, so a stall past one run is a DOWN alert on *every* reboot.
 
 | Knob | Default | Effect |
 |-|-|-|
@@ -135,7 +135,7 @@ Two things that were got wrong first:
 
 **None of this relaxes "the machine died"** — a dead host emits no push at all
 and Kuma's own missed-heartbeat is untouched, which is the property
-`maxretries 0` exists to protect.
+the low `maxretries` exists to protect.
 
 ### Checks whose obvious implementation is wrong
 
@@ -235,9 +235,8 @@ into a chmod-600 file).
   otherwise were stale and believed for months.
 - **The push token lives in a chmod-600 file, not 1Password**, so monitoring
   never depends on the secrets cache being seeded.
-- **`maxretries` must be 0** — time-to-DOWN is
-  `interval + maxretries × retry_interval`, so the default 3 turns 10 minutes
-  into 40. Kuma's interval (600 s) stays longer than the agent's cadence (300 s)
+- **`maxretries` is 1 with `retry_interval` 600 s** (`homelab/uptime-kuma/monitors.yaml`) — time-to-DOWN is
+  `interval + maxretries × retry_interval` ≈ 20 minutes; the default 3 would turn it into 40. Kuma's interval (600 s) stays longer than the agent's cadence (300 s)
   so one skipped run does not page.
 - Traps: `set -o pipefail` + `grep -q` turns a SIGPIPE into a false failure;
   `op run` masks injected secrets in its own stdout, so a remote script printing
@@ -246,7 +245,7 @@ into a chmod-600 file).
   absolute path.
 
 **The heartbeat asserts resolvability, not push rights** — it makes no network
-call to GitHub, because at 300 s with `maxretries 0` a provider outage would page
+call to GitHub, because at 300 s with `maxretries 1` a provider outage would page
 as "dev host down". The stronger `git push --dry-run` lives in `make doctor`.
 That split earned itself: the credential resolved fine on the mini while the
 deployed helper still pointed at a read-only token, and only the dry-run saw it.

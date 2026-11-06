@@ -48,12 +48,14 @@ OP_SIGNED_IN_TIMEOUT="${OP_SIGNED_IN_TIMEOUT:-20}"
 
 command -v "$OP_BIN" >/dev/null 2>&1 || exit 1
 
-# `timeout` is coreutils, i.e. Homebrew — present on both Macs but not something
+# `timeout` (Homebrew installs it as `gtimeout`) is coreutils — present on both Macs but not something
 # to hard-require, since this probe is called from `make setup` on a machine that
 # may not have finished installing anything yet. Degrade to an unbounded call
 # rather than reporting "locked" on a perfectly good app.
-if command -v timeout >/dev/null 2>&1; then
-  timeout -k 5 "$OP_SIGNED_IN_TIMEOUT" "$OP_BIN" account get --account "$acct" </dev/null >/dev/null 2>&1
+TO_BIN=$(command -v timeout || command -v gtimeout || true)
+if [ -n "$TO_BIN" ]; then
+  "$TO_BIN" -k 5 "$OP_SIGNED_IN_TIMEOUT" "$OP_BIN" account get --account "$acct" </dev/null >/dev/null 2>&1
 else
+  echo "op-signed-in: neither timeout nor gtimeout found — probe runs unbounded" >&2
   "$OP_BIN" account get --account "$acct" </dev/null >/dev/null 2>&1
 fi

@@ -294,7 +294,7 @@ export function gradeOne(s: JobState, o: GradeOpts): Graded {
 }
 
 function recovered(s: JobState): boolean {
-  const last = s.runs.slice(-RECOVERED_RUNS)
+  const last = (s.runs ?? []).slice(-RECOVERED_RUNS)
   return last.length === RECOVERED_RUNS && last.every((r) => r.rc === 0)
 }
 

@@ -94,6 +94,20 @@ out=$(FAKE_LAUNCHCTL="$TMP/launchctl-core" run cache); expect "a fresh unmapped 
 rm "$TMP/agents/com.jkrumm.herdr-core.plist" "$TMP/agents/com.jkrumm.hc-resume.plist"
 write_map "" ""
 
+# A label present only in prose, or only as the prefix of another label's row, is NOT mapped.
+: > "$TMP/agents/com.jkrumm.prose.plist"; touch -t 202001010000 "$TMP/agents/com.jkrumm.prose.plist"
+write_map "" ""
+printf 'Prose mentions com.jkrumm.prose without a row.\n' >> "$TMP/docs/architecture.md"
+out=$(run cache); rc=$?; expect "a label only in prose is unmapped" 1 "on-disk-but-unmapped: com.jkrumm.prose" "$rc" "$out"
+write_map '| `com.jkrumm.prose-liveness` | sibling row only |' ""
+out=$(run cache); rc=$?; expect "a label that is only the prefix of another row is unmapped" 1 "on-disk-but-unmapped: com.jkrumm.prose" "$rc" "$out"
+: > "$TMP/agents/com.jkrumm.prose-liveness.plist"
+write_map '| `com.jkrumm.prose` | real row |
+| `com.jkrumm.prose-liveness` | sibling |' ""
+out=$(run cache); rc=$?; expect "both rows present pass" 0 "mapped mini labels exist" "$rc" "$out"
+rm "$TMP/agents/com.jkrumm.prose.plist" "$TMP/agents/com.jkrumm.prose-liveness.plist"
+write_map "" ""
+
 # Fail closed: a renamed section heading must not read as a green pass.
 sed -i '' 's/^## LaunchAgents — mini/## Agents — mini/' "$TMP/docs/architecture.md"
 out=$(run cache); rc=$?; expect "renamed heading fails closed" 1 "heading renamed?" "$rc" "$out"

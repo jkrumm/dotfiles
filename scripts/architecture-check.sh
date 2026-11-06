@@ -97,7 +97,9 @@ mapped() {
   if [[ -n "$name" ]]; then
     grep -qE "(sh\.brew|homebrew\.mxcl)\.${name//./\\.}([^A-Za-z0-9@._-]|$)" "$MAP"
   else
-    grep -qF "$label" "$MAP"
+    # The backticked whole token, the shape the reverse check extracts: a bare substring would
+    # match prose, and a deleted row `X` would still match a surviving `X-liveness`.
+    grep -qF "\`$label\`" "$MAP"
   fi
 }
 
