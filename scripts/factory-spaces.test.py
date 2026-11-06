@@ -19,7 +19,7 @@ class Spaces(unittest.TestCase):
         self.out = os.path.join(self.home, ".config", "factory", "spaces.json")
         with open(self.groups, "w") as f:
             json.dump({"noFactorySpace": ["skipped"],
-                       "groups": [{"label": "A", "members": ["beta", "alpha", "work", "ghost", "skipped"]},
+                       "groups": [{"label": "A", "members": ["IuRoot", "beta", "alpha", "work", "ghost", "skipped"]},
                                   {"label": "B", "members": ["gamma", "beta"]}]}, f)
         for root, name in (("SourceRoot", "alpha"), ("SourceRoot", "beta"), ("SourceRoot", "gamma"),
                            ("SourceRoot", "skipped"), ("IuRoot", "work"), ("IuRoot", "alpha")):
@@ -35,12 +35,15 @@ class Spaces(unittest.TestCase):
         with open(self.out) as f:
             return json.load(f)["spaces"]
 
-    def test_order_kept_missing_iuroot_and_listed_skipped_duplicates_once(self):
+    def test_order_kept_both_roots_missing_and_listed_skipped_duplicates_once(self):
         self.run_script()
         p = lambda n: os.path.join(self.home, "SourceRoot", n)
+        work = os.path.join(self.home, "IuRoot")
         self.assertEqual(self.spaces(), [
+            {"name": "IuRoot", "path": work},  # the work root itself, for the cross-repo planner
             {"name": "beta", "path": p("beta")},
-            {"name": "alpha", "path": p("alpha")},  # "work" is IuRoot only, "ghost" missing, "skipped" listed
+            {"name": "alpha", "path": p("alpha")},  # in both roots: SourceRoot wins
+            {"name": "work", "path": os.path.join(work, "work")},  # "ghost" missing, "skipped" listed
             {"name": "gamma", "path": p("gamma")},  # second "beta" dropped
         ])
 
