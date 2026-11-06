@@ -39,7 +39,7 @@ interface HookInput {
   tool_input?: { command?: string; [key: string]: unknown };
 }
 
-interface Invocation {
+export interface Invocation {
   name: string;
   args: string[];
   /** Arguments arrive on stdin (`… | xargs kill`) and cannot be inspected. */
@@ -170,7 +170,7 @@ function shellScript(args: string[]): string | undefined {
  * `bash -c '<script>'` and `eval` — quoted text is data, except where it is
  * handed to a shell.
  */
-function collect(command: string, depth = 0): Invocation[] {
+export function collect(command: string, depth = 0): Invocation[] {
   const out: Invocation[] = [];
   if (depth > 4) return out;
 

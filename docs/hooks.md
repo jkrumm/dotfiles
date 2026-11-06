@@ -22,7 +22,7 @@ persistent change.
 
 The hook receives a JSON payload on stdin describing the event and its context.
 
-The template registers seven more of this repo's hooks alongside it — symlinked
+The template registers eight more of this repo's hooks alongside it — symlinked
 live from `dotfiles/hooks/`, so an edit takes effect on the next tool call (a *new* hook needs one `make setup` to link it and merge its template entry into `settings.json`):
 
 | Hook | Event | Does |
@@ -30,6 +30,7 @@ live from `dotfiles/hooks/`, so an edit takes effect on the next tool call (a *n
 | `protect-branches.ts` | PreToolUse (Bash) | blocks pushes to protected branches (`config/pr-required-repos.json`) |
 | `docker-makefile.ts` | PreToolUse (Bash) | blocks raw `docker` where a Makefile exists; tokenizes the command so a *mention* is not an invocation |
 | `broad-kill-guard.ts` | PreToolUse (Bash) | denies pattern kills: `pkill -f`, `pkill` without `-P`/`-g`, `killall`, and `kill`/`xargs kill`/`pkill -P` fed by `pgrep -f` (incident 2026-11-01: one `pgrep -f` loop SIGTERMed eight agent sessions) |
+| `review-bypass-guard.ts` | PreToolUse (Bash) | factory sessions only (`FACTORY_SESSION` set): denies `gh pr merge --admin`, `gh api` writes to merge endpoints (`pulls/<n>/merge`, `merges`) and to rulesets / branch protection, and GraphQL merge / ruleset / protection mutations (or a query / non-GET endpoint a shell variable completes; `$name` in a single-quoted GraphQL query is denied too). The denial says the bypass is the owner's to do by hand; the owner's own sessions are untouched, a plain `gh pr merge --squash` stays allowed (incident 2026-11-05: a lead admin-merged a work repo's PR past its required review). Not covered: `curl` at api.github.com, `gh alias set` |
 | `model-discipline.ts` | PreToolUse (Agent) | denies a worker on `model: fable` outright, and `subagent_type: fork` whenever the caller (read from its own transcript) is Fable/Opus — `model: opus` is denied unless the call's `description` carries `[opus: <reason>]` |
 | `iu-model-guard.ts` | UserPromptSubmit + PreToolUse (Agent) | on a metered `ANTHROPIC_BASE_URL` (IU), blocks an Opus/Fable main model (resolved from the process's `--model` → `ANTHROPIC_MODEL` → settings, aliases through `ANTHROPIC_DEFAULT_*`) and an Opus/Fable worker — runs inside every child `claude` process too, so a hand-rolled IU runner is caught (no launcher sets IU any more; this is the backstop) |
 | `machine-role.ts` | SessionStart | injects this machine's secrets backend + outbound-access routing |

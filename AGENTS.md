@@ -42,7 +42,7 @@ monitors what. Anything running on a machine appears there or gets deleted:
 | `agents/` | `~/.claude/agents/` (dir symlink) | Global subagents — `implementer.md`, `verifier.md`, and the read-only `reviewer.md` + `review-verifier.md` that `/review` calls (`Agent(type)` restrictions are ignored in subagents, so "spawn only review-verifier" is prose). Frontmatter carries `model`/`effort`/`color`/`permissionMode`. |
 | `config/output-styles/` | `~/.claude/output-styles/` (dir symlink) | `Direct.md`, activated by `outputStyle` in settings.json |
 | `skills/{name}/` | `~/.claude/skills/{name}/` | **Global skills** — load in every session, symlinked individually |
-| `hooks/{session-env,protect-branches,docker-makefile,broad-kill-guard,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
+| `hooks/{session-env,protect-branches,docker-makefile,broad-kill-guard,review-bypass-guard,machine-role,model-discipline,iu-model-guard}.ts` | `~/.claude/hooks/` | Live symlinks — an edit applies on the next tool call |
 | `config/settings.template.json` | merged into `~/.claude/settings.json` | Never edit the live file (below) |
 | `scripts/statusline.sh` · `scripts/fetch_usage.py` | `~/.claude/` | Statusline · usage adapter over `claude-account` (uv script, no API calls) — `docs/statusline.md` |
 | `scripts/secrets-run` | `~/.local/bin/secrets-run` | Drop-in `op` shim (see Secrets) |
@@ -107,6 +107,7 @@ in bypass, not manual); `permissions.allow` and
 **Hooks:** symlinked live, so a change applies on the *next tool call* — no
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
 `broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) — they reach other agents' sessions. Map: `docs/hooks.md`.
+`review-bypass-guard.ts` denies review bypasses (`gh pr merge --admin`, `gh api` merge / ruleset / branch-protection writes) in factory sessions (`FACTORY_SESSION`) — the owner does those by hand.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**
