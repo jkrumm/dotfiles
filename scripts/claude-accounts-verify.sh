@@ -189,6 +189,7 @@ else
   done
 fi
 if [[ -r "$RD_SCRIPT" ]]; then
+  # shellcheck disable=SC2043  # a one-lane list on purpose: a new lane is one more word here
   for lane in interactive; do
     if grep -q "pick_account $lane" "$RD_SCRIPT"; then
       row PASS "launcher/rd-$lane" "remote-dev.sh calls pick_account $lane"

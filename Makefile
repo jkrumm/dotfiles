@@ -768,11 +768,23 @@ _setup-git-headless:
 	fi; \
 	echo "    ✓ ~/.gitconfig-headless written — forges over HTTPS via the secrets cache"
 
-.PHONY: check verify logs deploy version
+.PHONY: check check-linux shellcheck-all verify logs deploy version
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
+
+# `make check` stops at the first failing prerequisite; `make -k check` runs every suite and lists all
+# the failures (~5 min, dominated by the relogin and human-queue suites).
+#
+# The Linux-safe subset, run by .github/workflows/check.yml on a hosted ubuntu-latest runner (the repo is
+# public). Everything here is hermetic and free of macOS-only tools; the rest stays in `check`.
+check-linux: shellcheck-all hooks-test kuma-door-test swapout-rate-test brew-service-test caddy-registry-test backup-1password-test herdr-core-test factory-spaces-test hc-reap-test launchd-restarts-test caddy-tailnet-test ## Linux-safe subset of `check` (CI)
+
+shellcheck-all: ## shellcheck -S warning over every tracked bash script (zsh scripts excluded)
+	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle'"; exit 1; }
+	@cd $(DOTFILES_DIR) && git ls-files '*.sh' | while read -r f; do head -n1 "$$f" | grep -q zsh || echo "$$f"; done | xargs shellcheck -S warning
+	@echo "  ✓ shellcheck clean (every tracked bash script)"
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -2289,7 +2301,7 @@ rd-test:
 # Hermetic suites for the `claude` function's account marker (stubbed claude / claude-account / hc), the folder-trust sync, the verify suite's login/<id> grading, the heartbeat's login-expiry grading and the claude-relogin scripts.
 .PHONY: claude-launcher-test
 claude-launcher-test:
-	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh $(DOTFILES_DIR)/scripts/statusline.sh $(DOTFILES_DIR)/scripts/statusline.test.sh
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/claude-launcher.test.sh $(DOTFILES_DIR)/scripts/claude-pretrust.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.sh $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh $(DOTFILES_DIR)/scripts/claude-relogin.sh $(DOTFILES_DIR)/scripts/claude-login-browser.sh $(DOTFILES_DIR)/scripts/lib/claude-login.sh $(DOTFILES_DIR)/scripts/lib/claude-auth-check.sh $(DOTFILES_DIR)/scripts/claude-relogin.test.sh $(DOTFILES_DIR)/scripts/devhost-login-expiry.test.sh $(DOTFILES_DIR)/scripts/statusline.sh $(DOTFILES_DIR)/scripts/statusline.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-launcher.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-trust-sync.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/claude-accounts-verify.test.sh
@@ -2353,6 +2365,30 @@ devhost-heartbeat-test:
 	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
 	@chmod +x $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+
+# Hermetic suites for the scripts whose logic guards real invariants: the brew upgrade invariants, the drift
+# classification, the ruleset tiers, the secrets-rotate rollback ordering and the opbackup run/skip gating.
+# Stubbed tools on PATH and sandbox copies; never real brew, launchd, op, Keychain, GitHub or network.
+.PHONY: brew-upgrade-test drift-check-test github-config-test secrets-rotate-test opbackup-auto-test
+brew-upgrade-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/brew-upgrade.sh $(DOTFILES_DIR)/scripts/brew-upgrade.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/brew-upgrade.test.sh
+
+drift-check-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/drift-check.sh $(DOTFILES_DIR)/scripts/drift-check.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/drift-check.test.sh
+
+github-config-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/github-config.sh $(DOTFILES_DIR)/scripts/github-config.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/github-config.test.sh
+
+secrets-rotate-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/secrets-rotate.sh $(DOTFILES_DIR)/scripts/secrets-rotate.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/secrets-rotate.test.sh
+
+opbackup-auto-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/opbackup-auto.sh $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/opbackup-auto.test.sh
 
 # human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
 # osascript failure), the AppleScript-injection and control-byte safety
