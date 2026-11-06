@@ -79,34 +79,51 @@ const DURATION_WRAPPERS = new Set(["timeout", "gtimeout"]);
  * values) and return the tokens of the command they wrap.
  */
 export function unwrapWrappers(tokens: string[]): string[] {
+  const state: WrapperState = { wrapper: null, needsDuration: false };
   let i = 0;
-  let wrapper: string | null = null;
-  let needsDuration = false;
   while (i < tokens.length) {
-    const t = tokens[i];
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
-      i++;
-      continue;
-    }
-    if (wrapper !== null && t.startsWith("-")) {
-      i += WRAPPER_VALUE_FLAGS[wrapper]?.has(t) ? 2 : 1;
-      continue;
-    }
-    if (wrapper !== null && needsDuration) {
-      needsDuration = false;
-      i++;
-      continue;
-    }
-    const name = basename(t);
-    if (WRAPPERS.has(name)) {
-      wrapper = name;
-      needsDuration = DURATION_WRAPPERS.has(name);
-      i++;
-      continue;
-    }
-    break;
+    const skip = wrapperSkip(tokens[i], state);
+    if (skip === 0) break;
+    i += skip;
   }
   return tokens.slice(i);
+}
+
+interface WrapperState {
+  wrapper: string | null;
+  needsDuration: boolean;
+}
+
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/** How many tokens the prefix at `t` occupies; 0 when `t` starts the wrapped command. */
+function wrapperSkip(t: string, state: WrapperState): number {
+  if (ENV_ASSIGNMENT.test(t)) return 1;
+  if (state.wrapper !== null) {
+    const skip = wrapperOperandSkip(t, state, state.wrapper);
+    if (skip > 0) return skip;
+  }
+  return enterWrapper(t, state);
+}
+
+/** A flag (with its value, if the wrapper's flag takes one) or the duration operand. */
+function wrapperOperandSkip(t: string, state: WrapperState, wrapper: string): number {
+  if (t.startsWith("-")) return flagWidth(wrapper, t);
+  if (!state.needsDuration) return 0;
+  state.needsDuration = false;
+  return 1;
+}
+
+function flagWidth(wrapper: string, flag: string): number {
+  return WRAPPER_VALUE_FLAGS[wrapper]?.has(flag) ? 2 : 1;
+}
+
+function enterWrapper(t: string, state: WrapperState): number {
+  const name = basename(t);
+  if (!WRAPPERS.has(name)) return 0;
+  state.wrapper = name;
+  state.needsDuration = DURATION_WRAPPERS.has(name);
+  return 1;
 }
 
 /**
@@ -115,17 +132,25 @@ export function unwrapWrappers(tokens: string[]): string[] {
  * commands, which may themselves nest.
  */
 function nestedShellCommands(tokens: string[]): string[][] {
-  const rest = unwrapWrappers(tokens);
-  if (rest.length === 0) return [];
-  const name = basename(rest[0]);
-  if (name === "eval") return splitIntoCommands(rest.slice(1).join(" "));
-  if (name !== "sh" && name !== "bash" && name !== "zsh") return [];
-  for (let i = 1; i < rest.length && rest[i].startsWith("-"); i++) {
-    if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(rest[i]) && rest[i + 1] !== undefined) {
-      return splitIntoCommands(rest[i + 1]);
-    }
-  }
-  return [];
+  const script = nestedScript(unwrapWrappers(tokens));
+  return script === undefined ? [] : splitIntoCommands(script);
+}
+
+const SHELLS = new Set(["sh", "bash", "zsh"]);
+const SHELL_C_FLAG = /^-[a-zA-Z]*c[a-zA-Z]*$/;
+
+/** The shell text a wrapped command executes: an `eval` body or a `-c` script. */
+function nestedScript(rest: string[]): string | undefined {
+  const name = basename(rest[0] ?? "");
+  if (name === "eval") return rest.slice(1).join(" ");
+  return SHELLS.has(name) ? shellCommandString(rest) : undefined;
+}
+
+function shellCommandString(rest: string[]): string | undefined {
+  const flagIndexes: number[] = [];
+  for (let i = 1; i < rest.length && rest[i].startsWith("-"); i++) flagIndexes.push(i);
+  const at = flagIndexes.find((i) => SHELL_C_FLAG.test(rest[i]) && rest[i + 1] !== undefined);
+  return at === undefined ? undefined : rest[at + 1];
 }
 
 /**
@@ -272,206 +297,276 @@ function collectSubstitutions(src: string, sink: string[][]): void {
 }
 
 export function splitIntoCommands(input: string): string[][] {
-  const commands: string[][] = [];
-  let current: string[] = [];
-  let token = "";
-  let hasToken = false;
+  return new CommandSplitter(input).run();
+}
 
-  const endToken = () => {
-    if (hasToken) {
-      current.push(token);
-      token = "";
-      hasToken = false;
-    }
-  };
-  const endCommand = () => {
-    endToken();
-    if (current.length > 0) {
-      commands.push(current);
-      for (const nested of nestedShellCommands(current)) commands.push(nested);
-      current = [];
-    }
-  };
-  const add = (text: string) => {
-    token += text;
-    hasToken = true;
-  };
+interface Span {
+  start: number;
+  end: number;
+}
 
-  const findClose = (start: number, open: string, close: string): number =>
-    findClosing(input, start, open, close);
+/** The `$(...)` or backtick substitution starting at `i`, or null. */
+function substitutionSpan(src: string, i: number): Span | null {
+  if (src[i] === "$" && src[i + 1] === "(") {
+    return { start: i + 2, end: findClosing(src, i + 2, "(", ")") };
+  }
+  if (src[i] === "`") return { start: i + 1, end: findClosing(src, i + 1, "", "`") };
+  return null;
+}
 
-  /** Parse a nested command substitution and fold its commands into ours. */
-  const recurse = (body: string) => {
-    for (const cmd of splitIntoCommands(body)) commands.push(cmd);
-    // The substitution itself yields a value in the outer token.
-    add("\0");
-  };
+/** Index of the next `quote` at or after `from`, or end of string. */
+function quoteEnd(src: string, from: number, quote: string): number {
+  const close = src.indexOf(quote, from);
+  return close === -1 ? src.length : close;
+}
 
-  let i = 0;
-  while (i < input.length) {
-    const ch = input[i];
+/** `<<` heredoc opener; `<<<` is a herestring (a word), so it is excluded. */
+function isHeredocStart(src: string, i: number): boolean {
+  return src[i] === "<" && src[i + 1] === "<" && src[i + 2] !== "<";
+}
 
-    // Escape outside quotes — next character is literal.
-    if (ch === "\\") {
-      // Backslash-newline is a line continuation: the shell drops both.
-      if (i + 1 < input.length && input[i + 1] !== "\n") add(input[i + 1]);
-      i += 2;
-      continue;
-    }
+interface HeredocHeader {
+  word: string;
+  /** Any part of the delimiter was quoted: the body has no substitution. */
+  literal: boolean;
+  /** `<<-` strips leading tabs from the terminator line. */
+  dashed: boolean;
+  /** Index just past the delimiter word. */
+  end: number;
+}
 
-    // Single quotes: pure data, no substitution of any kind.
-    if (ch === "'") {
-      const close = input.indexOf("'", i + 1);
-      const end = close === -1 ? input.length : close;
-      add(input.slice(i + 1, end));
-      i = end + 1;
-      continue;
-    }
+const DELIMITER_END = /[\s;&|<>()]/;
 
-    // Double quotes: data, but $(...) and `...` still run.
-    if (ch === '"') {
-      i++;
-      while (i < input.length && input[i] !== '"') {
-        if (input[i] === "\\") {
-          if (i + 1 < input.length && input[i + 1] !== "\n") add(input[i + 1]);
-          i += 2;
-          continue;
-        }
-        if (input[i] === "$" && input[i + 1] === "(") {
-          const end = findClose(i + 2, "(", ")");
-          recurse(input.slice(i + 2, end));
-          i = end + 1;
-          continue;
-        }
-        if (input[i] === "`") {
-          const end = findClose(i + 1, "", "`");
-          recurse(input.slice(i + 1, end));
-          i = end + 1;
-          continue;
-        }
-        add(input[i]);
-        i++;
-      }
-      i++; // past closing quote
-      hasToken = true; // "" is still a token
-      continue;
-    }
+function skipBlanks(src: string, from: number): number {
+  let j = from;
+  while (src[j] === " " || src[j] === "\t") j++;
+  return j;
+}
 
-    // Command substitution outside quotes.
-    if (ch === "$" && input[i + 1] === "(") {
-      const end = findClose(i + 2, "(", ")");
-      recurse(input.slice(i + 2, end));
-      i = end + 1;
-      continue;
-    }
-    if (ch === "`") {
-      const end = findClose(i + 1, "", "`");
-      recurse(input.slice(i + 1, end));
-      i = end + 1;
-      continue;
-    }
+function readHeredocHeader(src: string, opener: number): HeredocHeader {
+  let j = opener + 2;
+  const dashed = src[j] === "-";
+  if (dashed) j++;
+  const header: HeredocHeader = { word: "", literal: false, dashed, end: skipBlanks(src, j) };
+  while (header.end < src.length && !DELIMITER_END.test(src[header.end])) {
+    readDelimiterPart(src, header);
+  }
+  return header;
+}
 
-    // Heredoc. The body is stdin data, never commands — a commit message or a
-    // doc written with `<<'EOF'` routinely *mentions* docker. `<<<` is a
-    // herestring (a word, not a heredoc), so it falls through to normal parsing.
-    if (ch === "<" && input[i + 1] === "<" && input[i + 2] !== "<") {
-      let j = i + 2;
-      const dashed = input[j] === "-";
-      if (dashed) j++;
-      while (input[j] === " " || input[j] === "\t") j++;
+function readDelimiterPart(src: string, header: HeredocHeader): void {
+  const c = src[header.end];
+  if (c === "'" || c === '"') return readQuotedDelimiterPart(src, header, c);
+  if (c === "\\") return readEscapedDelimiterPart(src, header);
+  header.word += c;
+  header.end++;
+}
 
-      // Read the delimiter word. Quoting it (any part of it) disables
-      // substitution inside the body — the `<<'EOF'` form.
-      let delimiter = "";
-      let literal = false;
-      while (j < input.length && !/[\s;&|<>()]/.test(input[j])) {
-        const c = input[j];
-        if (c === "'" || c === '"') {
-          literal = true;
-          const close = input.indexOf(c, j + 1);
-          const end = close === -1 ? input.length : close;
-          delimiter += input.slice(j + 1, end);
-          j = end + 1;
-          continue;
-        }
-        if (c === "\\") {
-          literal = true;
-          if (j + 1 < input.length) delimiter += input[j + 1];
-          j += 2;
-          continue;
-        }
-        delimiter += c;
-        j++;
-      }
+function readQuotedDelimiterPart(src: string, header: HeredocHeader, quote: string): void {
+  const end = quoteEnd(src, header.end + 1, quote);
+  header.literal = true;
+  header.word += src.slice(header.end + 1, end);
+  header.end = end + 1;
+}
 
-      if (delimiter === "") {
-        // Not a heredoc we understand — treat as ordinary redirection chars.
-        add("<<");
-        i += 2;
-        continue;
-      }
+function readEscapedDelimiterPart(src: string, header: HeredocHeader): void {
+  header.literal = true;
+  if (header.end + 1 < src.length) header.word += src[header.end + 1];
+  header.end += 2;
+}
 
-      // The body runs from the next newline to a line equal to the delimiter.
-      const newline = input.indexOf("\n", j);
-      if (newline === -1) {
-        endCommand();
-        i = input.length;
-        continue;
-      }
+/** The body runs from `start` to a line equal to the delimiter. */
+function readHeredocBody(src: string, start: number, header: HeredocHeader): { body: string; bodyEnd: number } {
+  let pos = start;
+  let body = "";
+  while (pos <= src.length) {
+    const newline = src.indexOf("\n", pos);
+    const lineEnd = newline === -1 ? src.length : newline;
+    const line = src.slice(pos, lineEnd);
+    if (isHeredocTerminator(line, header)) return { body, bodyEnd: lineEnd };
+    body += line + "\n";
+    pos = lineEnd + 1;
+  }
+  return { body, bodyEnd: src.length };
+}
 
-      let pos = newline + 1;
-      let body = "";
-      let bodyEnd = input.length;
-      while (pos <= input.length) {
-        let lineEnd = input.indexOf("\n", pos);
-        if (lineEnd === -1) lineEnd = input.length;
-        const line = input.slice(pos, lineEnd);
-        if ((dashed ? line.replace(/^\t+/, "") : line) === delimiter) {
-          bodyEnd = lineEnd;
-          break;
-        }
-        body += line + "\n";
-        if (lineEnd === input.length) break;
-        pos = lineEnd + 1;
-      }
+function isHeredocTerminator(line: string, { word, dashed }: HeredocHeader): boolean {
+  return (dashed ? line.replace(/^\t+/, "") : line) === word;
+}
 
-      // An unquoted delimiter still expands substitutions inside the body.
-      if (!literal) collectSubstitutions(body, commands);
+const OPERATOR_CHARS = new Set(["|", ";", "&", "\n"]);
+/** Operators that double up (`&&`, `||`) and are consumed as one. */
+const DOUBLED_OPERATORS = new Set(["|", "&"]);
+const GROUP_CHARS = new Set(["(", ")", "{", "}"]);
+const BLANK_CHARS = new Set([" ", "\t", "\r"]);
 
-      // The newline after the delimiter word ended this simple command.
-      endCommand();
-      i = bodyEnd;
-      continue;
-    }
+/**
+ * Single-pass shell tokenizer. Each handler claims the character at the cursor
+ * (returning true after consuming it) or declines; an unclaimed character is
+ * plain token text.
+ */
+class CommandSplitter {
+  private readonly commands: string[][] = [];
+  private current: string[] = [];
+  private token = "";
+  private hasToken = false;
+  private i = 0;
 
-    // Unquoted operators end the current simple command.
-    if (ch === "|" || ch === ";" || ch === "&" || ch === "\n") {
-      endCommand();
-      // Consume the doubled forms (&&, ||) as one operator.
-      if ((ch === "|" || ch === "&") && input[i + 1] === ch) i++;
-      i++;
-      continue;
-    }
+  private readonly handlers = [
+    this.escape,
+    this.singleQuote,
+    this.doubleQuote,
+    this.substitution,
+    this.heredoc,
+    this.operator,
+    this.group,
+    this.blank,
+  ];
 
-    // Subshell / group boundaries also start a fresh command position.
-    if (ch === "(" || ch === ")" || ch === "{" || ch === "}") {
-      endCommand();
-      i++;
-      continue;
-    }
+  constructor(private readonly input: string) {}
 
-    if (ch === " " || ch === "\t" || ch === "\r") {
-      endToken();
-      i++;
-      continue;
-    }
-
-    add(ch);
-    i++;
+  run(): string[][] {
+    while (this.i < this.input.length) this.step();
+    this.endCommand();
+    return this.commands;
   }
 
-  endCommand();
-  return commands;
+  private get ch(): string {
+    return this.input[this.i];
+  }
+
+  private step(): void {
+    if (this.handlers.some((handle) => handle.call(this))) return;
+    this.add(this.ch);
+    this.i++;
+  }
+
+  private add(text: string): void {
+    this.token += text;
+    this.hasToken = true;
+  }
+
+  private endToken(): void {
+    if (!this.hasToken) return;
+    this.current.push(this.token);
+    this.token = "";
+    this.hasToken = false;
+  }
+
+  private endCommand(): void {
+    this.endToken();
+    if (this.current.length === 0) return;
+    this.commands.push(this.current);
+    for (const nested of nestedShellCommands(this.current)) this.commands.push(nested);
+    this.current = [];
+  }
+
+  /** The next character is literal; backslash-newline is a continuation the shell drops. */
+  private addEscaped(): void {
+    const next = this.input[this.i + 1];
+    if (next !== undefined && next !== "\n") this.add(next);
+    this.i += 2;
+  }
+
+  private escape(): boolean {
+    if (this.ch !== "\\") return false;
+    this.addEscaped();
+    return true;
+  }
+
+  /** Single quotes: pure data, no substitution of any kind. */
+  private singleQuote(): boolean {
+    if (this.ch !== "'") return false;
+    const end = quoteEnd(this.input, this.i + 1, "'");
+    this.add(this.input.slice(this.i + 1, end));
+    this.i = end + 1;
+    return true;
+  }
+
+  /** Double quotes: data, but $(...) and `...` still run. */
+  private doubleQuote(): boolean {
+    if (this.ch !== '"') return false;
+    this.i++;
+    while (this.i < this.input.length && this.ch !== '"') this.doubleQuotedChar();
+    this.i++; // past closing quote
+    this.hasToken = true; // "" is still a token
+    return true;
+  }
+
+  private doubleQuotedChar(): void {
+    if (this.ch === "\\") return this.addEscaped();
+    if (this.substitution()) return;
+    this.add(this.ch);
+    this.i++;
+  }
+
+  /** Parse a nested command substitution and fold its commands into ours. */
+  private substitution(): boolean {
+    const span = substitutionSpan(this.input, this.i);
+    if (!span) return false;
+    for (const cmd of splitIntoCommands(this.input.slice(span.start, span.end))) this.commands.push(cmd);
+    // The substitution itself yields a value in the outer token.
+    this.add("\0");
+    this.i = span.end + 1;
+    return true;
+  }
+
+  /**
+   * Heredoc. The body is stdin data, never commands: a commit message or a doc
+   * written with `<<'EOF'` routinely *mentions* docker.
+   */
+  private heredoc(): boolean {
+    if (!isHeredocStart(this.input, this.i)) return false;
+    const header = readHeredocHeader(this.input, this.i);
+    if (header.word === "") {
+      // Not a heredoc we understand — treat as ordinary redirection chars.
+      this.add("<<");
+      this.i += 2;
+      return true;
+    }
+    const newline = this.input.indexOf("\n", header.end);
+    if (newline === -1) {
+      this.endCommand();
+      this.i = this.input.length;
+      return true;
+    }
+    this.consumeHeredocBody(header, newline + 1);
+    return true;
+  }
+
+  private consumeHeredocBody(header: HeredocHeader, start: number): void {
+    const { body, bodyEnd } = readHeredocBody(this.input, start, header);
+    // An unquoted delimiter still expands substitutions inside the body.
+    if (!header.literal) collectSubstitutions(body, this.commands);
+    // The newline after the delimiter word ended this simple command.
+    this.endCommand();
+    this.i = bodyEnd;
+  }
+
+  /** Unquoted operators end the current simple command. */
+  private operator(): boolean {
+    const ch = this.ch;
+    if (!OPERATOR_CHARS.has(ch)) return false;
+    this.endCommand();
+    if (DOUBLED_OPERATORS.has(ch) && this.input[this.i + 1] === ch) this.i++;
+    this.i++;
+    return true;
+  }
+
+  /** Subshell / group boundaries also start a fresh command position. */
+  private group(): boolean {
+    if (!GROUP_CHARS.has(this.ch)) return false;
+    this.endCommand();
+    this.i++;
+    return true;
+  }
+
+  private blank(): boolean {
+    if (!BLANK_CHARS.has(this.ch)) return false;
+    this.endToken();
+    this.i++;
+    return true;
+  }
 }
 
 /** Strip a leading path so `/usr/local/bin/docker` reads as `docker`. */
@@ -768,7 +863,8 @@ function getMakeTargets(dir: string): string[] {
   return [...new Set(targets)].sort();
 }
 
-function deny(reason: string): never {
+/** Shared PreToolUse deny: print the permission decision and exit 0. */
+export function deny(reason: string): never {
   const output = JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

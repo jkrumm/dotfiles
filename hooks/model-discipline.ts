@@ -52,6 +52,8 @@
  * why this hook fires on the tool call instead.
  */
 
+import { deny } from "./docker-makefile";
+
 interface HookInput {
   tool_name: string;
   tool_input?: { subagent_type?: string; model?: string; [key: string]: unknown };
@@ -108,18 +110,6 @@ async function callerModel(transcriptPath: string | undefined): Promise<string |
   return undefined;
 }
 
-function block(reason: string): never {
-  const output = JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason,
-    },
-  });
-  process.stdout.write(output);
-  process.exit(0);
-}
-
 if (import.meta.main) {
   let input: HookInput;
   try {
@@ -135,7 +125,7 @@ if (import.meta.main) {
   const { subagent_type, model, description } = input.tool_input ?? {};
 
   if (isFable(model)) {
-    block(
+    deny(
       [
         "A worker on Fable is blocked in Claude Code.",
         "",
@@ -147,7 +137,7 @@ if (import.meta.main) {
   }
 
   if (isUnjustifiedOpus(model, description)) {
-    block(
+    deny(
       [
         "An Opus worker needs a stated reason.",
         "",
@@ -161,7 +151,7 @@ if (import.meta.main) {
   if (subagent_type === "fork") {
     const caller = await callerModel(input.transcript_path);
     if (isFableOrOpus(caller)) {
-      block(
+      deny(
         [
           `A fork from ${caller} is blocked in Claude Code.`,
           "",

@@ -57,7 +57,7 @@
  * which is how writing this very file got blocked once.
  */
 
-import { effectiveCwd, expandPath, isDirectory, splitIntoCommands } from "./docker-makefile";
+import { deny, effectiveCwd, expandPath, isDirectory, splitIntoCommands } from "./docker-makefile";
 
 interface HookInput {
   tool_name: string;
@@ -84,23 +84,33 @@ function warnFallback(why: string): void {
   process.stderr.write(`protect-branches: pr-required-repos.json ${why} — using built-in fallback list\n`);
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((r) => typeof r === "string");
+}
+
+function stringArrayOr(value: unknown, fallback: string[]): string[] {
+  return isStringArray(value) ? value : fallback;
+}
+
+function parseRepoConfig(data: { repos?: unknown; directToMain?: unknown }): RepoConfig {
+  if (!isStringArray(data.repos)) warnFallback("has no valid `repos` string array");
+  return {
+    prRequired: stringArrayOr(data.repos, PR_REQUIRED_FALLBACK),
+    directToMain: stringArrayOr(data.directToMain, []),
+  };
+}
+
+function describeError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function loadRepoConfig(): Promise<RepoConfig> {
   try {
     const f = Bun.file(`${process.env.HOME}/.claude/pr-required-repos.json`);
-    if (await f.exists()) {
-      const data = (await f.json()) as { repos?: unknown; directToMain?: unknown };
-      const reposValid = Array.isArray(data.repos) && data.repos.every((r) => typeof r === "string");
-      if (!reposValid) warnFallback("has no valid `repos` string array");
-      const prRequired = reposValid ? (data.repos as string[]) : PR_REQUIRED_FALLBACK;
-      const directToMain =
-        Array.isArray(data.directToMain) && data.directToMain.every((r) => typeof r === "string")
-          ? (data.directToMain as string[])
-          : [];
-      return { prRequired, directToMain };
-    }
+    if (await f.exists()) return parseRepoConfig((await f.json()) as { repos?: unknown; directToMain?: unknown });
     warnFallback("is missing");
   } catch (err) {
-    warnFallback(`is unreadable (${err instanceof Error ? err.message : String(err)})`);
+    warnFallback(`is unreadable (${describeError(err)})`);
   }
   return { prRequired: PR_REQUIRED_FALLBACK, directToMain: [] };
 }
@@ -145,35 +155,76 @@ export interface GitInvocation {
  * alias.p=push p origin main` reads as the push it is.
  */
 export function inspectGit(tokens: string[]): GitInvocation | null {
-  const g = tokens.findIndex((t) => basename(t) === "git");
+  const g = gitIndex(tokens);
   if (g === -1) return null;
 
-  const cDirs: string[] = [];
-  const aliases = new Map<string, string>();
-  let i = g + 1;
-  while (i < tokens.length) {
-    const token = tokens[i];
-    if (!token.startsWith("-")) break;
-    if (GIT_VALUE_FLAGS.has(token)) {
-      if (token === "-C" && tokens[i + 1] !== undefined) cDirs.push(tokens[i + 1]);
-      const alias = token === "-c" ? tokens[i + 1]?.match(/^alias\.([^=]+)=(.*)$/s) : null;
-      if (alias) aliases.set(alias[1], alias[2]);
-      i += 2;
-      continue;
-    }
-    i++;
-  }
+  const flags = readGlobalFlags(tokens, g + 1);
+  const { subcommand, args } = expandAliases(
+    tokens[flags.end] ?? null,
+    tokens.slice(flags.end + 1),
+    flags.aliases
+  );
+  return { subcommand, args, cDirs: flags.cDirs };
+}
 
-  let subcommand = tokens[i] ?? null;
-  let args = tokens.slice(i + 1);
-  for (let depth = 0; subcommand !== null && aliases.has(subcommand) && depth < 5; depth++) {
-    const words = (aliases.get(subcommand) ?? "").replace(/^!/, "").trim().split(/\s+/);
-    if (basename(words[0]) === "git") words.shift();
-    subcommand = words.shift() ?? null;
-    args = [...words, ...args];
-  }
+function gitIndex(tokens: string[]): number {
+  return tokens.findIndex((t) => basename(t) === "git");
+}
 
-  return { subcommand, args, cDirs };
+interface GlobalFlags {
+  cDirs: string[];
+  aliases: Map<string, string>;
+  /** Index of the first token after git's global flags. */
+  end: number;
+}
+
+function readGlobalFlags(tokens: string[], from: number): GlobalFlags {
+  const flags: GlobalFlags = { cDirs: [], aliases: new Map(), end: from };
+  while (flags.end < tokens.length && tokens[flags.end].startsWith("-")) {
+    flags.end += readGlobalFlag(tokens, flags.end, flags);
+  }
+  return flags;
+}
+
+/** Record one global flag's value; returns how many tokens it occupied. */
+function readGlobalFlag(tokens: string[], i: number, flags: GlobalFlags): number {
+  const token = tokens[i];
+  if (!GIT_VALUE_FLAGS.has(token)) return 1;
+  recordGlobalValue(token, tokens[i + 1], flags);
+  return 2;
+}
+
+function recordGlobalValue(token: string, value: string | undefined, flags: GlobalFlags): void {
+  if (token === "-C" && value !== undefined) flags.cDirs.push(value);
+  else if (token === "-c") recordAlias(value, flags.aliases);
+}
+
+function recordAlias(value: string | undefined, aliases: Map<string, string>): void {
+  const alias = value?.match(/^alias\.([^=]+)=(.*)$/s);
+  if (alias) aliases.set(alias[1], alias[2]);
+}
+
+const MAX_ALIAS_DEPTH = 5;
+
+function expandAliases(
+  subcommand: string | null,
+  args: string[],
+  aliases: Map<string, string>,
+  depth = 0
+): { subcommand: string | null; args: string[] } {
+  const body = depth < MAX_ALIAS_DEPTH ? aliasBody(subcommand, aliases) : undefined;
+  if (body === undefined) return { subcommand, args };
+  const words = body.replace(/^!/, "").trim().split(/\s+/);
+  if (basename(words[0]) === "git") words.shift();
+  return expandAliases(nextWord(words), [...words, ...args], aliases, depth + 1);
+}
+
+function aliasBody(subcommand: string | null, aliases: Map<string, string>): string | undefined {
+  return subcommand === null ? undefined : aliases.get(subcommand);
+}
+
+function nextWord(words: string[]): string | null {
+  return words.shift() ?? null;
 }
 
 /**
@@ -182,19 +233,32 @@ export function inspectGit(tokens: string[]): GitInvocation | null {
  * from these, not from the cwd.
  */
 export function gitDirsOf(tokens: string[]): string[] {
-  const dirs: string[] = [];
-  const g = tokens.findIndex((t) => basename(t) === "git");
+  const g = gitIndex(tokens);
   const isExport = tokens[0] === "export";
-  if (g === -1 && !isExport) return dirs;
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t.startsWith("GIT_DIR=") && (isExport || i < g)) dirs.push(t.slice("GIT_DIR=".length));
-    else if (g !== -1 && i > g && t.startsWith("--git-dir=")) dirs.push(t.slice("--git-dir=".length));
-    else if (g !== -1 && i > g && t === "--git-dir" && tokens[i + 1] !== undefined) {
-      dirs.push(tokens[i + 1]);
-    }
-  }
-  return dirs;
+  if (g === -1 && !isExport) return [];
+  return tokens.flatMap((_, i) => gitDirAt(tokens, i, g, isExport));
+}
+
+function gitDirAt(tokens: string[], i: number, g: number, isExport: boolean): string[] {
+  const assigned = gitDirAssignment(tokens[i], i < g || isExport);
+  return assigned.length > 0 ? assigned : gitDirFlag(tokens, i, g);
+}
+
+/** `--git-dir` only counts after the `git` token. */
+function gitDirFlag(tokens: string[], i: number, g: number): string[] {
+  if (g === -1 || i <= g) return [];
+  return gitDirValue(tokens, i);
+}
+
+function gitDirAssignment(t: string, counts: boolean): string[] {
+  return counts && t.startsWith("GIT_DIR=") ? [t.slice("GIT_DIR=".length)] : [];
+}
+
+function gitDirValue(tokens: string[], i: number): string[] {
+  const t = tokens[i];
+  if (t.startsWith("--git-dir=")) return [t.slice("--git-dir=".length)];
+  const value = tokens[i + 1];
+  return t === "--git-dir" && value !== undefined ? [value] : [];
 }
 
 /** A path the static parse cannot resolve: shell expansion or a substitution. */
@@ -214,16 +278,20 @@ function isDynamic(value: string): boolean {
 export function repoDirectories(command: string, sessionCwd: string): string[] {
   const cwd = effectiveCwd(command, sessionCwd);
 
-  const explicit: string[] = [];
-  for (const tokens of splitIntoCommands(command)) {
-    const git = inspectGit(tokens);
-    if (git) for (const dir of git.cDirs) explicit.push(expandPath(dir, cwd));
-    for (const dir of gitDirsOf(tokens)) explicit.push(repoOfGitDir(expandPath(dir, cwd)));
-  }
+  const explicit = splitIntoCommands(command).flatMap((tokens) => explicitDirs(tokens, cwd));
   if (cwd !== sessionCwd) explicit.push(cwd);
 
   const resolved = [...new Set(explicit)].filter(isDirectory);
   return resolved.length > 0 ? resolved : [sessionCwd];
+}
+
+/** Directories one command names itself: `git -C <dir>`, `--git-dir`, `GIT_DIR`. */
+function explicitDirs(tokens: string[], cwd: string): string[] {
+  const cDirs = inspectGit(tokens)?.cDirs ?? [];
+  return [
+    ...cDirs.map((dir) => expandPath(dir, cwd)),
+    ...gitDirsOf(tokens).map((dir) => repoOfGitDir(expandPath(dir, cwd))),
+  ];
 }
 
 /** `<repo>/.git` belongs to `<repo>`; a bare git dir is its own repo. */
@@ -275,47 +343,74 @@ export function inspectPush(command: string): PushKind {
   let verdict: PushKind = { kind: "none" };
 
   for (const tokens of splitIntoCommands(command)) {
-    const git = inspectGit(tokens);
-    if (!git || git.subcommand !== "push") continue;
-
-    const { args } = git;
-    if (args.includes("--all") || args.includes("--mirror")) return { kind: "all-refs" };
-
-    const lease = args.some((a) => a.startsWith("--force-with-lease"));
-    const positional: string[] = [];
-    let force = false;
-    for (let j = 0; j < args.length; j++) {
-      const arg = args[j];
-      if (PUSH_VALUE_FLAGS.has(arg)) {
-        j++;
-        continue;
-      }
-      if (arg === "--force") force = true;
-      // Short-flag cluster (`-fu`): scan up to `o`, whose value is the rest.
-      if (/^-[^-]/.test(arg) && arg.slice(1).split("o")[0].includes("f")) force = true;
-      if (arg.startsWith("-")) continue;
-      positional.push(arg);
-    }
-    if (force && !lease) return { kind: "hard-force" };
-
-    // positional: [] bare, [remote], [remote, ...refspecs]
-    const refspecs = positional.slice(1);
-    if (refspecs.some((spec) => PROTECTED.includes(destinationBranch(spec)))) {
-      verdict = { kind: "protected-ref" };
-      continue;
-    }
-    // A leading `+` forces that one ref whatever the flags say.
-    if (refspecs.some((spec) => spec.startsWith("+"))) return { kind: "hard-force" };
-    // A refspec the parse cannot resolve (`$BRANCH`, `$(git branch --show-current)`)
-    // is judged as the current branch.
-    if (
-      refspecs.length === 0 ||
-      refspecs.every((spec) => spec === "HEAD" || isDynamic(destinationBranch(spec)))
-    ) {
-      if (verdict.kind === "none") verdict = { kind: "current-branch" };
-    }
+    const push = pushKindOf(tokens);
+    if (IMMEDIATE_KINDS.has(push.kind)) return push;
+    verdict = mergeVerdict(verdict, push);
   }
 
+  return verdict;
+}
+
+/** Kinds that decide the whole command on their own. */
+const IMMEDIATE_KINDS = new Set<PushKind["kind"]>(["all-refs", "hard-force"]);
+
+const ALL_REF_FLAGS = ["--all", "--mirror"];
+
+function pushKindOf(tokens: string[]): PushKind {
+  const git = inspectGit(tokens);
+  if (!git || git.subcommand !== "push") return { kind: "none" };
+  return classifyPush(git.args);
+}
+
+function classifyPush(args: string[]): PushKind {
+  if (ALL_REF_FLAGS.some((flag) => args.includes(flag))) return { kind: "all-refs" };
+  const { positional, hardForce } = scanPushArgs(args);
+  if (hardForce) return { kind: "hard-force" };
+  // positional: [] bare, [remote], [remote, ...refspecs]
+  return classifyRefspecs(positional.slice(1));
+}
+
+/** Split a push's arguments into positionals and the force verdict. */
+function scanPushArgs(args: string[]): { positional: string[]; hardForce: boolean } {
+  const operands = withoutFlagValues(args);
+  const lease = args.some((a) => a.startsWith("--force-with-lease"));
+  return {
+    positional: operands.filter((a) => !a.startsWith("-")),
+    hardForce: operands.some(isForceFlag) && !lease,
+  };
+}
+
+function withoutFlagValues(args: string[]): string[] {
+  const out: string[] = [];
+  for (let j = 0; j < args.length; j++) {
+    if (PUSH_VALUE_FLAGS.has(args[j])) j++;
+    else out.push(args[j]);
+  }
+  return out;
+}
+
+/** `--force`, or a short-flag cluster (`-fu`) scanned up to `o`, whose value is the rest. */
+function isForceFlag(arg: string): boolean {
+  return arg === "--force" || (/^-[^-]/.test(arg) && arg.slice(1).split("o")[0].includes("f"));
+}
+
+function classifyRefspecs(refspecs: string[]): PushKind {
+  if (refspecs.some((spec) => PROTECTED.includes(destinationBranch(spec)))) {
+    return { kind: "protected-ref" };
+  }
+  // A leading `+` forces that one ref whatever the flags say.
+  if (refspecs.some((spec) => spec.startsWith("+"))) return { kind: "hard-force" };
+  return refspecs.every(isCurrentBranchSpec) ? { kind: "current-branch" } : { kind: "none" };
+}
+
+/** A refspec the parse cannot resolve (`$BRANCH`) is judged as the current branch. */
+function isCurrentBranchSpec(spec: string): boolean {
+  return spec === "HEAD" || isDynamic(destinationBranch(spec));
+}
+
+function mergeVerdict(verdict: PushKind, push: PushKind): PushKind {
+  if (push.kind === "protected-ref") return push;
+  if (push.kind === "current-branch" && verdict.kind === "none") return push;
   return verdict;
 }
 
@@ -365,18 +460,6 @@ export function requiresPR(dir: string, { prRequired, directToMain }: RepoConfig
   return (repoName !== null && prRequired.includes(repoName)) || isIuRootRepo(dir);
 }
 
-function block(reason: string): never {
-  const output = JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason,
-    },
-  });
-  process.stdout.write(output);
-  process.exit(0);
-}
-
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 if (import.meta.main) {
@@ -390,7 +473,7 @@ if (import.meta.main) {
 
   const cwd = input.cwd ?? process.cwd();
   if (hasUnresolvableGitDir(command, cwd)) {
-    block(
+    deny(
       [
         "git push with an unresolvable --git-dir / GIT_DIR is blocked in Claude Code.",
         "",
@@ -407,7 +490,7 @@ if (import.meta.main) {
   if (!enforceDir) process.exit(0);
 
   if (push.kind === "hard-force") {
-    block(
+    deny(
       [
         "git push --force is blocked in Claude Code.",
         "",
@@ -419,7 +502,7 @@ if (import.meta.main) {
   }
 
   if (push.kind === "all-refs") {
-    block(
+    deny(
       [
         "git push --all / --mirror is blocked in Claude Code.",
         "",
@@ -430,7 +513,7 @@ if (import.meta.main) {
   }
 
   if (push.kind === "protected-ref") {
-    block(
+    deny(
       [
         `Pushing to a protected branch is blocked in Claude Code — ${enforceDir} requires a PR.`,
         "",
@@ -446,7 +529,7 @@ if (import.meta.main) {
 
   const current = getCurrentBranch(enforceDir);
   if (current && PROTECTED.includes(current)) {
-    block(
+    deny(
       [
         `Pushing to protected branch '${current}' is blocked in Claude Code — ${enforceDir} requires a PR.`,
         "",
