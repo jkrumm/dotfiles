@@ -208,3 +208,44 @@ describe("hook I/O", () => {
     expect(await run("Edit", "gh pr merge 12 --admin", true)).toEqual({ code: 0, stdout: "" });
   });
 });
+
+describe("the owner's admin-merge exception", () => {
+  const TOOL = "IU-Group-Engineering/epos-tool-athena";
+  const TEAMCHAT = "IU-Group-Engineering/epos-ai-teamchat-athena";
+
+  test("allowed only when the command names a listed repo", () => {
+    allowed(`gh pr merge 64 -R ${TOOL} --squash --admin`);
+    allowed(`gh -R ${TEAMCHAT} pr merge 72 --admin`);
+    allowed(`gh pr merge 72 --repo=${TEAMCHAT} --admin`);
+    allowed(`gh pr merge https://github.com/${TOOL}/pull/64 --admin --delete-branch`);
+    allowed(`GH_CONFIG_DIR=/x gh pr merge 64 -R ${TOOL} --admin`);
+  });
+
+  test("no repo named: denied, the working directory is not trusted", () => {
+    denied("gh pr merge 64 --admin");
+    denied(`cd ~/IuRoot/epos-tool-athena && gh pr merge 64 --admin`);
+  });
+
+  test("another repo, or one name near a listed repo: denied", () => {
+    denied("gh pr merge 1 -R IU-Group-Engineering/other --admin");
+    denied(`gh pr merge 1 -R ${TOOL}-fork --admin`);
+    denied("gh pr merge 1 -R someone/epos-tool-athena --admin");
+    denied("gh pr merge https://github.com/IU-Group-Engineering/other/pull/1 --admin");
+    denied(`gh pr merge https://evil.example/${TOOL}/pull/1 --admin`);
+    denied(`gh pr merge https://github.com/IU-Group-Engineering/other/pull/1 -R ${TOOL} --admin`);
+  });
+
+  test("a listed repo's URL in a message is text, not a target", () => {
+    denied(`gh pr merge 12 --admin --body https://github.com/${TOOL}/pull/64`);
+    denied(`gh pr merge 12 --admin -t https://github.com/${TOOL}/pull/64`);
+  });
+
+  test("a chain is judged call by call", () => {
+    denied(`gh pr merge 64 -R ${TOOL} --admin && gh pr merge 1 --admin`);
+  });
+
+  test("gh api stays denied on the listed repos", () => {
+    denied(`gh api -X PUT repos/${TOOL}/pulls/64/merge`);
+    denied(`gh api -X DELETE repos/${TOOL}/rulesets/1`);
+  });
+});

@@ -107,7 +107,7 @@ in bypass, not manual); `permissions.allow` and
 **Hooks:** symlinked live, so a change applies on the *next tool call* — no
 install step. Run **`make hooks-test`** (`bun test hooks/`) after any edit.
 `broad-kill-guard.ts` denies pattern kills (`pkill -f`, `killall`, `kill` fed by `pgrep -f`) — they reach other agents' sessions. Map: `docs/hooks.md`.
-`review-bypass-guard.ts` denies review bypasses (`gh pr merge --admin`, `gh api` merge / ruleset / branch-protection writes) in factory sessions (`FACTORY_SESSION`) — the owner does those by hand.
+`review-bypass-guard.ts` denies review bypasses (`gh pr merge --admin`, except on the owner's `ADMIN_MERGE_REPOS` when the command names the repo; `gh api` merge / ruleset / branch-protection writes) in factory sessions (`FACTORY_SESSION`) — the owner does those by hand.
 
 **Adding a global skill:** `skills/{name}/SKILL.md` → `make setup`. **Per-repo
 skill:** `.claude/skills/{name}/SKILL.md`, committed, no symlink. **Global rule:**

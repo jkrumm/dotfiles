@@ -31,6 +31,11 @@
  * Allowed: `gh pr merge --squash|--rebase|--merge|--auto`, `gh api` reads of the
  * same endpoints, and every word above inside quotes (a commit message, a grep).
  *
+ * The owner's exception (2026-11-06): `gh pr merge --admin` on the repos in
+ * ADMIN_MERGE_REPOS, and only when the command names the repo itself (`-R` or the
+ * PR's URL). The working directory is never read: a `cd` could point it anywhere.
+ * `gh api` stays denied on them too.
+ *
  * Not covered (same hazard class): `curl`/`wget` straight at api.github.com,
  * `gh alias set` wrapping `--admin`, and other forges' CLIs.
  */
@@ -50,6 +55,35 @@ const OWNER =
 
 /** `--admin` or `--admin=true`; `--admin=false` is a no-op. */
 const isAdminFlag = (a: string): boolean => a === "--admin" || (a.startsWith("--admin=") && a.slice(8) !== "false");
+
+/** The owner allowed these and no others (2026-11-06); both already merge past review from his account. */
+const ADMIN_MERGE_REPOS = new Set(["IU-Group-Engineering/epos-ai-teamchat-athena", "IU-Group-Engineering/epos-tool-athena"]);
+
+const PR_URL = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+\/?$/;
+const MERGE_VALUE_FLAGS = new Set(["-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email", "--match-head-commit"]);
+
+/** Every repo the command itself names: `-R`, `--repo`, and the target PR's URL. Values of other flags are text, not targets. */
+function namedRepos(args: string[]): string[] {
+  const repos: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "-R" || a === "--repo") repos.push(args[++i] ?? "");
+    else if (a.startsWith("--repo=")) repos.push(a.slice(7));
+    else if (a.startsWith("-R") && !a.startsWith("--")) repos.push(a.slice(2));
+    else if (MERGE_VALUE_FLAGS.has(a)) i++;
+    else if (!a.startsWith("-")) {
+      const url = PR_URL.exec(a);
+      if (url) repos.push(url[1]);
+      else if (a.includes("://")) repos.push(a); // another host or shape: never on the list
+    }
+  }
+  return repos;
+}
+
+const adminMergeAllowed = (args: string[]): boolean => {
+  const repos = namedRepos(args);
+  return repos.length > 0 && repos.every((r) => ADMIN_MERGE_REPOS.has(r));
+};
 
 // ── gh api ───────────────────────────────────────────────────────────────────
 
@@ -171,7 +205,7 @@ export function findViolation(command: string): string | null {
     if (inv.name !== "gh") continue;
     const positionals = subcommands(inv.args);
 
-    if (positionals[0] === "pr" && positionals[1] === "merge" && inv.args.some(isAdminFlag)) {
+    if (positionals[0] === "pr" && positionals[1] === "merge" && inv.args.some(isAdminFlag) && !adminMergeAllowed(inv.args)) {
       return `\`gh pr merge --admin\` merges past required reviews and checks. ${OWNER}`;
     }
     if (positionals[0] === "api") {
