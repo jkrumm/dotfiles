@@ -206,7 +206,7 @@ else
 fi
 
 # ── d. pick table (dry: no picks.jsonl line, no refresh) ──────────────────────
-for lane in interactive wave fan headless; do
+for lane in interactive bulk headless; do
   rc=0
   out=$("${CA[@]}" pick --lane "$lane" --dry --why 2>/dev/null) || rc=$?
   why=$(grep '^# ' <<<"$out" | head -1)

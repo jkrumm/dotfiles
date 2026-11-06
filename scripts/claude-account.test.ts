@@ -13,7 +13,7 @@ const H = 3600
 const reg = (bEnabled = true): Registry => ({
   accounts: {
     iu: { dir: null, plan: "max20x", units: { session: 4, weekly: 2 }, homeLanes: ["interactive", "headless"], enabled: true },
-    me: { dir: "/home/x/.claude-me", plan: "max5x", units: { session: 1, weekly: 1 }, homeLanes: ["wave", "fan"], enabled: bEnabled },
+    me: { dir: "/home/x/.claude-me", plan: "max5x", units: { session: 1, weekly: 1 }, homeLanes: ["bulk"], enabled: bEnabled },
   },
 })
 const sample = (s: number, w: number, o: { age?: number; wReset?: number } = {}): Sample => ({
@@ -42,10 +42,10 @@ describe("pick rule v1.1 pace guard", () => {
     expect(pick(reg(), cacheOf({ ...sample(10, 88), w_reset: null }, meCalm), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
   })
   test("bulk lane already on me is unaffected", () => {
-    expect(pick(reg(), cacheOf(iuOver, meCalm), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" })
+    expect(pick(reg(), cacheOf(iuOver, meCalm), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" })
   })
   test("expiring capacity still wins for bulk lanes", () => {
-    expect(pick(reg(), cacheOf(iuOver, sample(10, 2, { wReset: NOW / 1000 + 5 * H })), "wave", NOW)).toMatchObject({ picked: "me", reason: "expiring-capacity" })
+    expect(pick(reg(), cacheOf(iuOver, sample(10, 2, { wReset: NOW / 1000 + 5 * H })), "bulk", NOW)).toMatchObject({ picked: "me", reason: "expiring-capacity" })
   })
 })
 
@@ -53,8 +53,8 @@ describe("pick rule v1.1 pace guard", () => {
 const reg3 = (): Registry => ({
   accounts: {
     iu: { dir: null, plan: "max20x", homeLanes: ["interactive", "headless"], enabled: true },
-    me: { dir: "/home/x/.claude-me", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true },
-    me2: { dir: "/home/x/.claude-me2", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true },
+    me: { dir: "/home/x/.claude-me", plan: "max5x", homeLanes: ["bulk"], enabled: true },
+    me2: { dir: "/home/x/.claude-me2", plan: "max5x", homeLanes: ["bulk"], enabled: true },
   },
 })
 const cache3 = (iu?: Sample, me?: Sample, me2?: Sample): Cache => ({ ...emptyCache(), samples: { ...(iu ? { iu } : {}), ...(me ? { me } : {}), ...(me2 ? { me2 } : {}) } })
@@ -75,40 +75,40 @@ describe("pick rule v1.4: N accounts", () => {
     rmSync(d, { recursive: true })
   })
   test("home: of several accounts claiming the lane, the one with the most weekly headroom", () => {
-    expect(pick(reg3(), cache3(iu, sample(10, 80), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 80)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" })
-    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 10)), "fan", NOW)).toMatchObject({ picked: "me", reason: "home" }) // tie: registry order
+    expect(pick(reg3(), cache3(iu, sample(10, 80), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 80)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" })
+    expect(pick(reg3(), cache3(iu, sample(10, 10), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" }) // tie: registry order
   })
   test("an exhausted or ineligible home hands over to its sibling before iu", () => {
     const c = { ...cache3(iu, sample(10, 10), sample(10, 30)), exhausted: { me: NOW / 1000 + 600 } }
-    expect(pick(reg3(), c, "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), { ...c, exhausted: { me: NOW / 1000 + 600, me2: NOW / 1000 + 600 } }, "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), c, "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), { ...c, exhausted: { me: NOW / 1000 + 600, me2: NOW / 1000 + 600 } }, "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), { ...cache3(iu, sample(95, 10), sample(10, 30)) }, "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
   })
   test("headroom is scaled by the weekly units: a 20x account with the same percent has twice the room", () => {
     // lane without a home -> step 5, the most headroom: iu (95-50)*2 = 90, me (95-30)*1 = 65, me2 (95-40)*1 = 55
     expect(pick(reg3(), cache3(sample(10, 50), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg3(), cache3(sample(10, 70), sample(10, 30), sample(10, 40)), "nope", NOW)).toMatchObject({ picked: "me", reason: "spill" }) // iu (95-70)*2 = 50
   })
-  test("5h boundary: wave leaves a sibling at SESSION_SOFT_MAX for iu and returns once a fresh sample shows the new window", () => {
+  test("5h boundary: a bulk lane leaves a sibling at SESSION_SOFT_MAX for iu and returns once a fresh sample shows the new window", () => {
     const calm = (s: number) => cache3(sample(70, 10), sample(10, 96), sample(s, 5)) // me over WEEKLY_MAX; iu's 5h within SESSION_MARGIN of me2, so no session move
-    expect(pick(reg3(), calm(SESSION_SOFT_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), calm(SESSION_SOFT_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), calm(SESSION_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), calm(100), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg3(), calm(2), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" }) // window reset: back home
+    expect(pick(reg3(), calm(SESSION_SOFT_MAX - 1), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), calm(SESSION_SOFT_MAX), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), calm(SESSION_MAX), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), calm(100), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), calm(2), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" }) // window reset: back home
   })
   test("past SESSION_SOFT_MAX an account is still used when it is the last one open", () => {
     const hotAll = (me2: number) => cache3(sample(85, 10), sample(10, 96), sample(me2, 5))
-    expect(pick(reg3(), hotAll(SESSION_MAX - 1), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), hotAll(SESSION_MAX), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg3(), hotAll(SESSION_MAX - 1), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), hotAll(SESSION_MAX), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
   })
   test("a missing weekly window counts as full headroom", () => {
     const noWeekly: Sample = { ...sample(10, 0), w: null, w_reset: null, w_ts: null }
     const full = (w: number) => sample(10, w, { wReset: NOW / 1000 + 7 * D }) // a missing window is weighed as a full week away
-    expect(pick(reg3(), cache3(iu, noWeekly, full(5)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 > 90
-    expect(pick(reg3(), cache3(iu, full(5), noWeekly), "wave", NOW)).toMatchObject({ picked: "me2", reason: "home" })
-    expect(pick(reg3(), cache3(iu, noWeekly, full(0)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 = 95: registry order
+    expect(pick(reg3(), cache3(iu, noWeekly, full(5)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 > 90
+    expect(pick(reg3(), cache3(iu, full(5), noWeekly), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, noWeekly, full(0)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" }) // 95 = 95: registry order
   })
   test("pace step: the calm alternative with the most headroom", () => {
     const iuOver = sample(10, 88, { wReset: NOW / 1000 + 3.9 * D }) // pace 44
@@ -138,13 +138,13 @@ describe("pick rule v1.5: expiry-weighted sharing", () => {
   const me = sample(10, 11, { wReset: NOW / 1000 + 7 * D })
   const me2 = sample(10, 67, { wReset: NOW / 1000 + 3 * D })
   test("deterministic mode takes the account whose spare capacity is most urgent", () => {
-    expect(pick(reg3(), cache3(iu, me, me2), "fan", NOW)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(iu, me, me2), "bulk", NOW)).toMatchObject({ picked: "me2", reason: "home" })
     // same spare, later reset: the sooner one still wins
-    expect(pick(reg3(), cache3(iu, sample(10, 40, { wReset: NOW / 1000 + 6 * D }), sample(10, 40, { wReset: NOW / 1000 + 2 * D })), "fan", NOW).picked).toBe("me2")
+    expect(pick(reg3(), cache3(iu, sample(10, 40, { wReset: NOW / 1000 + 6 * D }), sample(10, 40, { wReset: NOW / 1000 + 2 * D })), "bulk", NOW).picked).toBe("me2")
   })
   test("with an rng the siblings share the work in proportion to their weights, not winner-takes-all", () => {
     const n = 2000
-    const picks = Array.from({ length: n }, (_, i) => pick(reg3(), cache3(iu, me, me2), "fan", NOW, () => (i + 0.5) / n).picked)
+    const picks = Array.from({ length: n }, (_, i) => pick(reg3(), cache3(iu, me, me2), "bulk", NOW, () => (i + 0.5) / n).picked)
     const share = picks.filter((p) => p === "me2").length / n
     expect(share).toBeGreaterThan(0.4)
     expect(share).toBeLessThan(0.65)
@@ -153,21 +153,21 @@ describe("pick rule v1.5: expiry-weighted sharing", () => {
   test("a session-hot sibling drops out of the draw, the cool sibling is home, not an outsider", () => {
     const hot = sample(85, 11, { wReset: NOW / 1000 + 7 * D })
     const calm = sample(15, 67, { wReset: NOW / 1000 + 3 * D })
-    expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "fan", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "home" })
+    expect(pick(reg3(), cache3(sample(2, 10), hot, calm), "bulk", NOW, () => 0)).toMatchObject({ picked: "me2", reason: "home" })
   })
   test("N accounts: a fourth subscription joins from the registry alone", () => {
-    const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["wave", "fan"], enabled: true } } }
+    const r: Registry = { accounts: { ...reg3().accounts, me3: { dir: "/home/x/.claude-me3", plan: "max5x", homeLanes: ["bulk"], enabled: true } } }
     const c: Cache = { ...cache3(iu, me, me2), samples: { ...cache3(iu, me, me2).samples, me3: sample(10, 30, { wReset: NOW / 1000 + 1.5 * D }) } }
-    expect(pick(r, c, "fan", NOW)).toMatchObject({ picked: "me3" })
-    const seen = new Set(Array.from({ length: 200 }, (_, i) => pick(r, c, "fan", NOW, () => (i + 0.5) / 200).picked))
+    expect(pick(r, c, "bulk", NOW)).toMatchObject({ picked: "me3" })
+    const seen = new Set(Array.from({ length: 200 }, (_, i) => pick(r, c, "bulk", NOW, () => (i + 0.5) / 200).picked))
     expect(seen).toEqual(new Set(["me", "me2", "me3"]))
   })
   test("weight edge cases: no weekly reset, a reset already past, plan spelling", () => {
     const wk = (o: Partial<Sample>) => ({ ...sample(10, 50, { wReset: NOW / 1000 + 7 * D }), ...o })
     // 168 h fallback: w set, w_reset null weighs like a reset a full week away
-    expect(pick(reg3(), cache3(iu, wk({ w_reset: null }), wk({})), "fan", NOW).picked).toBe("me")
+    expect(pick(reg3(), cache3(iu, wk({ w_reset: null }), wk({})), "bulk", NOW).picked).toBe("me")
     // reset passed: judged as a fresh week (95 spare), not as the stale 50 %-used sample nor a 1 h rush
-    expect(pick(reg3(), cache3(iu, wk({ w: 90, w_reset: NOW / 1000 - 60 }), wk({ w: 60 })), "fan", NOW).picked).toBe("me")
+    expect(pick(reg3(), cache3(iu, wk({ w: 90, w_reset: NOW / 1000 - 60 }), wk({ w: 60 })), "bulk", NOW).picked).toBe("me")
     const a = (plan: string) => accountUnits({ dir: null, plan, homeLanes: [], enabled: true })
     expect(a(" Max10x ")).toEqual(a("max10x"))
     expect(a("max40x")).toEqual({ session: 8, weekly: 1 + 7 / 3 })
@@ -398,7 +398,7 @@ describe("re-login asks", () => {
 describe("pick rule v1.2 session balance", () => {
   test("home 5h much fuller than the other -> the emptier window", () => {
     expect(pick(reg(), cacheOf(sample(60, 10), sample(5, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "session" })
-    expect(pick(reg(), cacheOf(sample(5, 10), sample(60, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "session" })
+    expect(pick(reg(), cacheOf(sample(5, 10), sample(60, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "session" })
   })
   test("a stale 5h reading never triggers the move", () => {
     const old = { ...sample(5, 10), s_ts: NOW - 7 * H * 1000 }
@@ -420,73 +420,73 @@ describe("pick rule v1.2 session balance", () => {
 describe("pick rule v1", () => {
   test("home eligible", () => {
     const c = cacheOf(sample(10, 10), sample(10, 10))
-    expect(pick(reg(), c, "wave", NOW)).toEqual({ picked: "me", reason: "home", stale: false })
+    expect(pick(reg(), c, "bulk", NOW)).toEqual({ picked: "me", reason: "home", stale: false })
     expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home" })
     expect(pick(reg(), c, "headless", NOW).picked).toBe("iu")
-    expect(pick(reg(), c, "wave", NOW).picked).toBe("me")
+    expect(pick(reg(), c, "bulk", NOW).picked).toBe("me")
   })
   test("expiring capacity beats home for bulk lanes only", () => {
     const a = sample(10, 40, { wReset: NOW / 1000 + 5 * H })
-    expect(pick(reg(), cacheOf(a, sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
+    expect(pick(reg(), cacheOf(a, sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
     expect(pick(reg(), cacheOf(a, sample(10, 10)), "interactive", NOW).reason).toBe("home")
   })
   test("expiring capacity needs weekly < 70, and a reset still ahead", () => {
-    expect(pick(reg(), cacheOf(sample(10, 75, { wReset: NOW / 1000 + 5 * H }), sample(10, 10)), "wave", NOW).picked).toBe("me")
-    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 - 60 }), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "me", reason: "home" })
-    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 + 60 }), sample(10, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
+    expect(pick(reg(), cacheOf(sample(10, 75, { wReset: NOW / 1000 + 5 * H }), sample(10, 10)), "bulk", NOW).picked).toBe("me")
+    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 - 60 }), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home" })
+    expect(pick(reg(), cacheOf(sample(10, 40, { wReset: NOW / 1000 + 60 }), sample(10, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "expiring-capacity" })
   })
   test("spill to the other account when home is over a threshold", () => {
-    expect(pick(reg(), cacheOf(sample(10, 10), sample(90, 10)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg(), cacheOf(sample(10, 10), sample(90, 10)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
     expect(pick(reg(), cacheOf(sample(10, 95), sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "spill" })
   })
   test("interactive falls back to a, bulk goes to iu", () => {
     const c = cacheOf(sample(99, 99), sample(99, 99))
     expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "iu", reason: "interactive-fallback" })
-    expect(pick(reg(), c, "wave", NOW)).toMatchObject({ picked: "spill", reason: "no-eligible-account" })
+    expect(pick(reg(), c, "bulk", NOW)).toMatchObject({ picked: "spill", reason: "no-eligible-account" })
   })
   test("disabled b is never picked", () => {
-    expect(pick(reg(false), cacheOf(sample(10, 10), sample(0, 0)), "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg(false), cacheOf(sample(10, 10), sample(0, 0)), "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
   })
   test("a stale sample (10 min - 6 h) is used with stale: true, never sends bulk to iu", () => {
     const c = cacheOf(sample(10, 10, { age: 11 * 60_000 }), sample(10, 10))
     expect(pick(reg(), c, "interactive", NOW)).toMatchObject({ picked: "iu", reason: "home", stale: true })
-    expect(pick(reg(false), c, "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill", stale: true })
-    expect(pick(reg(), cacheOf(sample(10, 10, { age: 5 * H * 1000 }), sample(10, 10, { age: 5 * H * 1000 })), "wave", NOW)).toMatchObject({ picked: "me", reason: "home", stale: true })
+    expect(pick(reg(false), c, "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill", stale: true })
+    expect(pick(reg(), cacheOf(sample(10, 10, { age: 5 * H * 1000 }), sample(10, 10, { age: 5 * H * 1000 })), "bulk", NOW)).toMatchObject({ picked: "me", reason: "home", stale: true })
   })
   test("stale sample over a threshold, or older than 6 h, is ineligible", () => {
-    expect(pick(reg(false), cacheOf(sample(95, 10, { age: 60 * 60_000 })), "wave", NOW).picked).toBe("spill")
-    expect(pick(reg(false), cacheOf(sample(10, 10, { age: 7 * H * 1000 })), "wave", NOW).picked).toBe("spill")
+    expect(pick(reg(false), cacheOf(sample(95, 10, { age: 60 * 60_000 })), "bulk", NOW).picked).toBe("spill")
+    expect(pick(reg(false), cacheOf(sample(10, 10, { age: 7 * H * 1000 })), "bulk", NOW).picked).toBe("spill")
   })
   test("never-sampled account is ineligible", () => {
     expect(pick(reg(), cacheOf(undefined, sample(10, 10)), "interactive", NOW)).toMatchObject({ picked: "me", reason: "spill" })
-    expect(pick(reg(), cacheOf(), "wave", NOW).picked).toBe("spill")
+    expect(pick(reg(), cacheOf(), "bulk", NOW).picked).toBe("spill")
     expect(pick(reg(), cacheOf(), "interactive", NOW)).toMatchObject({ picked: "iu", reason: "interactive-fallback", stale: false })
   })
   test("exhausted mark holds until resets_at", () => {
     const c = { ...cacheOf(sample(10, 10), sample(10, 10)), exhausted: { me: NOW / 1000 + 600 } }
-    expect(pick(reg(), c, "wave", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
-    expect(pick(reg(), c, "wave", NOW + 601_000)).toMatchObject({ picked: "me", reason: "home", stale: true })
+    expect(pick(reg(), c, "bulk", NOW)).toMatchObject({ picked: "iu", reason: "spill" })
+    expect(pick(reg(), c, "bulk", NOW + 601_000)).toMatchObject({ picked: "me", reason: "home", stale: true })
   })
   test("auth_failed account is skipped", () => {
-    expect(pick(reg(), { ...cacheOf(sample(10, 10), sample(10, 10)), auth_failed: { me: true } }, "wave", NOW).picked).toBe("iu")
+    expect(pick(reg(), { ...cacheOf(sample(10, 10), sample(10, 10)), auth_failed: { me: true } }, "bulk", NOW).picked).toBe("iu")
   })
   test("each window is judged by its own timestamp", () => {
     // s is 7 h old (ignored: unknown), w is fresh and under the threshold -> eligible, stale
     const x: Sample = { ...sample(99, 10), s_ts: NOW - 7 * H * 1000 }
-    expect(pick(reg(false), cacheOf(x), "wave", NOW)).toMatchObject({ picked: "iu", stale: true })
+    expect(pick(reg(false), cacheOf(x), "bulk", NOW)).toMatchObject({ picked: "iu", stale: true })
     // w is 7 h old, s fresh and over the threshold -> ineligible
-    expect(pick(reg(false), cacheOf({ ...sample(95, 10), w_ts: NOW - 7 * H * 1000 }), "wave", NOW).picked).toBe("spill")
+    expect(pick(reg(false), cacheOf({ ...sample(95, 10), w_ts: NOW - 7 * H * 1000 }), "bulk", NOW).picked).toBe("spill")
     // a fresh s next to a 1 h old w: the sample is only as fresh as its stalest window
-    expect(pick(reg(false), cacheOf({ ...sample(10, 10), w_ts: NOW - 3_600_000 }), "wave", NOW).stale).toBe(true)
+    expect(pick(reg(false), cacheOf({ ...sample(10, 10), w_ts: NOW - 3_600_000 }), "bulk", NOW).stale).toBe(true)
   })
   test("home lanes: only accounts claiming the lane are home; headless spills to b rather than counting it home", () => {
     expect(homeIds(reg(), "headless")).toEqual(["iu"])
-    expect(homeIds(reg(), "wave")).toEqual(["me"])
+    expect(homeIds(reg(), "bulk")).toEqual(["me"])
     expect(homeIds(reg(), "nope")).toEqual([])
     expect(pick(reg(), cacheOf(sample(99, 10), sample(10, 10)), "headless", NOW)).toMatchObject({ picked: "me", reason: "spill" })
   })
   test("home lanes: a `lane:*` wildcard counts only when no account matches exactly", () => {
-    const r: Registry = { accounts: { ...reg().accounts, me: { ...reg().accounts.me, homeLanes: ["wave", "batch:*"] } } }
+    const r: Registry = { accounts: { ...reg().accounts, me: { ...reg().accounts.me, homeLanes: ["bulk", "batch:*"] } } }
     expect(homeIds(r, "batch:nightly")).toEqual(["me"])
     expect(homeIds({ accounts: { ...r.accounts, iu: { ...r.accounts.iu, homeLanes: ["batch:nightly"] } } }, "batch:nightly")).toEqual(["iu"])
   })
@@ -514,7 +514,7 @@ describe("helpers", () => {
   test("pickLine accounts come from the registry", () => {
     const r = reg()
     r.accounts.c = { ...r.accounts.me }
-    const l = pickLine(r, cacheOf(sample(1, 2)), "wave", { picked: "iu", reason: "home", stale: true }, NOW)
+    const l = pickLine(r, cacheOf(sample(1, 2)), "bulk", { picked: "iu", reason: "home", stale: true }, NOW)
     expect(Object.keys(l).filter((k) => !["ts", "lane", "picked", "reason", "stale"].includes(k))).toEqual(["iu", "me", "c"])
     expect(l).toMatchObject({ stale: true, iu: { s: 1, w: 2 }, me: { s: null, w: null } })
   })
@@ -539,7 +539,7 @@ describe("helpers", () => {
     expect(dueIds(reg(), stale(NOW - 31 * 60_000), NOW)).toEqual(["iu", "me"]) // cooldown over: due again
     expect(dueIds(reg(), stale(NOW - 60_000), NOW, true)).toEqual(["iu", "me"]) // manual retry
     const calls = { sync: [] as string[][], detach: [] as string[][] }
-    const run = (c: Cache) => refreshBeforePick({ reg: reg(), lane: "wave", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => { calls.sync.push(ids) }, detach: (ids) => { calls.detach.push(ids) } })
+    const run = (c: Cache) => refreshBeforePick({ reg: reg(), lane: "bulk", now: NOW, cache: c, claim: (ids) => ids, runSync: (ids) => { calls.sync.push(ids) }, detach: (ids) => { calls.detach.push(ids) } })
     expect(await run(stale(NOW - 31 * 60_000))).toEqual({ sync: [], background: ["iu", "me"] }) // a retry never blocks a pick
     expect(await run(stale(NOW - 60_000))).toEqual({ sync: [], background: ["iu"] })
   })
@@ -1085,7 +1085,7 @@ describe("statusline record proves the login", () => {
 })
 
 describe("refreshBeforePick", () => {
-  async function run(cache: Cache, lane = "wave", enabledB = false) {
+  async function run(cache: Cache, lane = "bulk", enabledB = false) {
     const dir = tmp()
     const calls = { sync: [] as string[][], detach: [] as string[][] }
     const r = await refreshBeforePick({
@@ -1107,7 +1107,7 @@ describe("refreshBeforePick", () => {
     expect((await run(cacheOf(sample(10, 10)))).r).toEqual({ sync: [], background: [] })
   })
   test("no usable sample on a bulk lane: synchronous; a stale neighbour in the background", async () => {
-    const { r, calls } = await run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "wave", true)
+    const { r, calls } = await run(cacheOf(undefined, sample(10, 10, { age: 11 * 60_000 })), "bulk", true)
     expect(r).toEqual({ sync: ["iu"], background: ["me"] })
     expect(calls).toEqual({ sync: [["iu"]], detach: [["me"]] })
   })
@@ -1329,38 +1329,38 @@ describe("CLI (isolated HOME)", () => {
     seed(20 * 60_000) // stale sample: the pick claims iu and refreshes it in a detached child
     const log = join(home, "Library", "Logs", "claude-accounts-keepalive.log")
     rmSync(log, { force: true })
-    const r = cli(["pick", "--lane", "wave"])
+    const r = cli(["pick", "--lane", "bulk"])
     expect(r.out).toBe("unset CLAUDE_CONFIG_DIR") // the child's output never reaches the pick's stdout
     for (let i = 0; i < 100 && !(existsSync(log) && readFileSync(log, "utf8").includes("no Keychain token")); i++) await Bun.sleep(50)
     expect(readFileSync(log, "utf8")).toContain("refresh iu: no Keychain token")
     seed(60_000)
   })
-  test("pick prints the line; interactive and wave both give unset", () => {
+  test("pick prints the line; interactive and bulk both give unset", () => {
     seed(60_000)
-    expect(cli(["pick", "--lane", "wave"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
+    expect(cli(["pick", "--lane", "bulk"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
     expect(cli(["pick", "--lane", "interactive"])).toMatchObject({ rc: 0, out: "unset CLAUDE_CONFIG_DIR" })
   })
   test("pick --dry answers like pick but writes no picks line and refreshes nothing", () => {
     seed(20 * 60_000) // stale: a real pick would spawn a background refresh
     const picks = join(home, "picks.jsonl")
     rmSync(picks, { force: true })
-    expect(cli(["pick", "--lane", "wave", "--dry", "--why"])).toMatchObject({ rc: 0 })
+    expect(cli(["pick", "--lane", "bulk", "--dry", "--why"])).toMatchObject({ rc: 0 })
     expect(existsSync(picks)).toBe(false)
     expect(existsSync(marker)).toBe(false)
     seed(60_000) // fresh: the real pick must not leave a detached refresh behind for the next test
-    expect(cli(["pick", "--lane", "wave"]).rc).toBe(0)
+    expect(cli(["pick", "--lane", "bulk"]).rc).toBe(0)
     expect(existsSync(picks)).toBe(true)
   })
   test("pick with an unreadable registry still answers, and says why on stderr", () => {
-    const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
+    const r = cli(["pick", "--lane", "bulk"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") })
     expect(r).toMatchObject({ rc: 4, out: "unset CLAUDE_CONFIG_DIR" })
     expect(r.err).toContain("registry unreadable")
-    expect(cli(["pick", "--lane", "wave", "--why"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") }).out).toContain("reason=registry-error")
+    expect(cli(["pick", "--lane", "bulk", "--why"], { CLAUDE_ACCOUNTS_REGISTRY: join(home, "missing.json") }).out).toContain("reason=registry-error")
   })
   test("a pick with an unwritable cache dir still prints a line", () => {
     seed(20 * 60_000)
     writeFileSync(join(home, "notadir"), "")
-    const r = cli(["pick", "--lane", "wave"], { CLAUDE_ACCOUNTS_CACHE_DIR: join(home, "notadir") })
+    const r = cli(["pick", "--lane", "bulk"], { CLAUDE_ACCOUNTS_CACHE_DIR: join(home, "notadir") })
     expect(r.out).toBe("spill") // nothing readable -> the bulk spill signal, never silence
     expect(r.rc).toBe(3)
     expect(r.err).toContain("refresh skipped")
@@ -1461,7 +1461,7 @@ describe("type guards", () => {
   test("loadRegistry accepts a good registry and rejects malformed accounts", () => {
     expect(Object.keys(loadRegistry(regFile({ iu: good })).accounts)).toEqual(["iu"])
     expect(() => loadRegistry(regFile({ iu: { ...good, enabled: "yes" } }))).toThrow(/malformed/)
-    expect(() => loadRegistry(regFile({ iu: { ...good, homeLanes: "wave" } }))).toThrow(/malformed/)
+    expect(() => loadRegistry(regFile({ iu: { ...good, homeLanes: "bulk" } }))).toThrow(/malformed/)
     expect(() => loadRegistry(regFile({ iu: { ...good, units: {} } }))).toThrow(/malformed/)
     expect(() => loadRegistry(regFile({ "a/b": good }))).toThrow(/bad account id/)
     expect(() => loadRegistry(regFile({ spill: good }))).toThrow(/bad account id/) // the pick's no-headroom signal
@@ -1505,7 +1505,7 @@ describe("plan tiers: Max has a 5 h window, Ultra only a weekly one", () => {
   const ultraReg = (): Registry => ({
     accounts: {
       iu: { dir: null, plan: "ultra", homeLanes: ["interactive", "headless"], enabled: true },
-      me: { dir: "/home/x/.claude-me", plan: "max", homeLanes: ["wave", "fan"], enabled: true },
+      me: { dir: "/home/x/.claude-me", plan: "max", homeLanes: ["bulk"], enabled: true },
     },
   })
   const acct = (plan: string) => ({ dir: null, plan, homeLanes: [], enabled: true })
@@ -1544,8 +1544,8 @@ describe("plan tiers: Max has a 5 h window, Ultra only a weekly one", () => {
   })
   test("Ultra takes no part in the session move, as home or as the alternative", () => {
     const meFull = sample(75, 10)
-    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "wave", NOW).picked).not.toBe("iu") // me is home for wave, iu's 5% is no emptier window
-    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "wave", NOW).reason).not.toBe("session")
+    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "bulk", NOW).picked).not.toBe("iu") // me is home for bulk, iu's 5% is no emptier window
+    expect(pick(ultraReg(), cacheOf(sample(5, 10), meFull), "bulk", NOW).reason).not.toBe("session")
   })
   test("withoutSessionWindows strips only the plans without a session limit", () => {
     const c = withoutSessionWindows(ultraReg(), cacheOf(sample(50, 20), sample(50, 20)))

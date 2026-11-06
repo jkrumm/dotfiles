@@ -24,13 +24,13 @@ HOST="${REMOTE_DEV_HOST:-mini}"
 usage_die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 2; } # a malformed command line: exit 2, nothing started
 die()  { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 note() { printf '\033[2m%s\033[0m\n' "$*"; }
-# " --effort '<level>'" for a spawned agent: RD_WAVE_EFFORT wins, then the factory role's effort ($2),
+# " --effort '<level>'" for a spawned agent: RD_EFFORT wins, then the factory role's effort ($2),
 # else the per-model default from config/claude-effort.json (Sonnet high, Opus/Fable medium); empty
 # when none applies.
 rd_effort_flag() { # <model> [role-effort]
   local level
-  if [[ -n "${RD_WAVE_EFFORT:-}" ]]; then
-    level=$RD_WAVE_EFFORT
+  if [[ -n "${RD_EFFORT:-}" ]]; then
+    level=$RD_EFFORT
   elif [[ -n "${2:-}" ]]; then
     level=$2
   else
@@ -40,7 +40,7 @@ rd_effort_flag() { # <model> [role-effort]
   fi
   case "$level" in
     low|medium|high|xhigh|max) printf " --effort '%s'" "$level" ;;
-    *) die "RD_WAVE_EFFORT must be low|medium|high|xhigh|max (got '$level')" ;;
+    *) die "RD_EFFORT must be low|medium|high|xhigh|max (got '$level')" ;;
   esac
 }
 
@@ -68,7 +68,7 @@ role_not_found() { # <text>
 rd_role_resolve() { # <role>
   local role=$1 out err efile rc=0 why=""
   ROLE_TIER=""; ROLE_EFFORT=""
-  [[ $role =~ ^[a-z][a-z0-9_-]*$ ]] || role_usage_error "invalid role name '$role' — mother|lead|wave|worker|mechanical"
+  [[ $role =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || role_usage_error "invalid role name '$role' — see factory role list (lead|implementer|verifier|reviewer|Explore)"
   efile=$(mktemp "${TMPDIR:-/tmp}/rd-role.XXXXXX") || efile=/dev/null
   # The timeout binary is resolved on the host (coreutils is `timeout` or Homebrew's `gtimeout`); without one the
   # lookup runs unbounded rather than failing.
@@ -83,7 +83,7 @@ rd_role_resolve() { # <role>
     fi
     why="its answer did not match the role schema"
   elif role_not_found "$out" || role_not_found "$err"; then
-    role_usage_error "unknown role '$role' — mother|lead|wave|worker|mechanical"
+    role_usage_error "unknown role '$role' — see factory role list (lead|implementer|verifier|reviewer|Explore)"
   elif (( rc == 124 )); then why="no answer within ${ROLE_TIMEOUT_S} s"
   elif (( rc == 127 )); then why="factory is not installed"
   else why="factory exited $rc"
@@ -98,20 +98,20 @@ factory_not_found() { # <text>
   jq -e '(try (.error | objects) catch null // {}) | .kind == "not_found"' <<<"$1" >/dev/null 2>&1
 }
 
-# Model and effort for a spawn: RD_WAVE_MODEL / RD_WAVE_EFFORT, then the --role (or the verb's default
+# Model and effort for a spawn: RD_MODEL / RD_EFFORT, then the --role (or the verb's default
 # role, $1), then today's defaults ($2: the fallback model, empty for `work`). Sets SPAWN_MODEL
 # and SPAWN_EFFORT (empty, or the bare model / level for claude's argv). The lookup is skipped only when
 # both env vars already decide everything and no --role was asked for.
 rd_spawn_flags() { # <default-role> <fallback-model>
   local role=${ROLE:-${1:-}} model
   ROLE_TIER=""; ROLE_EFFORT=""
-  if [[ -n $role ]] && { [[ -n $ROLE ]] || [[ -z ${RD_WAVE_MODEL:-} || -z ${RD_WAVE_EFFORT:-} ]]; }; then
+  if [[ -n $role ]] && { [[ -n $ROLE ]] || [[ -z ${RD_MODEL:-} || -z ${RD_EFFORT:-} ]]; }; then
     rd_role_resolve "$role"
   fi
-  model=${RD_WAVE_MODEL:-${ROLE_TIER:-${2:-}}}
+  model=${RD_MODEL:-${ROLE_TIER:-${2:-}}}
   SPAWN_EFFORT_FLAG=""; SPAWN_EFFORT=""; SPAWN_MODEL=$model
-  if [[ -n $model || -n ${RD_WAVE_EFFORT:-} || -n $ROLE_EFFORT ]]; then
-    SPAWN_EFFORT_FLAG=$(rd_effort_flag "$model" "$ROLE_EFFORT") || exit 1 # a bad RD_WAVE_EFFORT dies in the subshell: stop here too
+  if [[ -n $model || -n ${RD_EFFORT:-} || -n $ROLE_EFFORT ]]; then
+    SPAWN_EFFORT_FLAG=$(rd_effort_flag "$model" "$ROLE_EFFORT") || exit 1 # a bad RD_EFFORT dies in the subshell: stop here too
     SPAWN_EFFORT=${SPAWN_EFFORT_FLAG#* \'}; SPAWN_EFFORT=${SPAWN_EFFORT%\'} # the bare level, for claude's argv
   fi
 }
@@ -509,8 +509,8 @@ parse_kind_flags() {
     case $1 in
       --kind)   [[ -n ${2:-} ]] || die "--kind needs a value (claude)"; AGENT_KIND=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
       --kind=*) AGENT_KIND=${1#--kind=}; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
-      --role)   [[ -n ${2:-} ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; ROLE=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
-      --role=*) ROLE=${1#--role=}; [[ -n $ROLE ]] || die "--role needs a value (mother|lead|wave|worker|mechanical)"; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
+      --role)   [[ -n ${2:-} ]] || die "--role needs a value (lead|implementer|verifier|reviewer|Explore; factory role list)"; ROLE=$2; shift 2; FLAGS_USED=$((FLAGS_USED+2)) ;;
+      --role=*) ROLE=${1#--role=}; [[ -n $ROLE ]] || die "--role needs a value (lead|implementer|verifier|reviewer|Explore; factory role list)"; shift; FLAGS_USED=$((FLAGS_USED+1)) ;;
       *)        break ;;
     esac
   done
@@ -644,7 +644,7 @@ PY'
 
 # One view over every lane, because "is my work still running" should not depend
 # on remembering which lane you started it in. One line per agent: name and status word
-# (`working`, `idle`, `done`, `blocked`, …). Tooling greps this text (iris' mother-watch.sh looks for the
+# (`working`, `idle`, `done`, `blocked`, …). Tooling greps this text (a watcher looks for the
 # agent names and the word `blocked`), so the shape is a contract: tests pin it.
 cmd_agents() {
   (( $# == 0 )) || usage_die "usage: agents   (takes no arguments; got '$*')"

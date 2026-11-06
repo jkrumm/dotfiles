@@ -31,8 +31,7 @@
         "weekly": 1
       },
       "homeLanes": [
-        "wave",
-        "fan"
+        "bulk"
       ],
       "loginBrowser": "Helium",
       "enabled": true,
@@ -49,8 +48,7 @@
       "dir": "~/.claude-me2",
       "plan": "max",
       "homeLanes": [
-        "wave",
-        "fan"
+        "bulk"
       ],
       "loginBrowser": "Safari",
       "enabled": true,

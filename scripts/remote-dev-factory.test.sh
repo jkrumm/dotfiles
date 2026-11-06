@@ -70,7 +70,7 @@ clean_path=""; IFS=: read -ra dirs <<<"$PATH"
 for d in "${dirs[@]}"; do [ -x "$d/factory" ] || clean_path+="${clean_path:+:}$d"; done
 export PATH="$TMP/bin:$clean_path" STATE="$TMP/state" HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/xdg" \
   RD_FACTORY_POLL_S=0
-unset RD_DRY_RUN RD_NO_FACTORY FACTORY_SESSION HC_TERMINAL_ID HC_SESSION RD_WAVE_MODEL RD_WAVE_EFFORT
+unset RD_DRY_RUN RD_NO_FACTORY FACTORY_SESSION HC_TERMINAL_ID HC_SESSION RD_MODEL RD_EFFORT
 export CLAUDE_EFFORT_TABLE="$HERE/../config/claude-effort.json"
 
 reset() { rm -f "$STATE"/* ; : >"$STATE/calls.log"; : >"$STATE/factory-calls"; echo '[]' >"$STATE/terminals.json"; }

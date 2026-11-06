@@ -104,11 +104,11 @@ OTHER=$(printf '%s\n' $ENABLED | grep -vx "$DEFAULT_ID" | head -1)
 if [[ -z "$OTHER" ]]; then
   res 1 "break/exhausted" "no second enabled account in the registry"
 else
-  out=$("${CAENV[@]}" "${CA[@]}" pick --lane wave); expect "break/wave-home" "$OTHER home" "$(last_pick)" "wave -> $OTHER (home)"
+  out=$("${CAENV[@]}" "${CA[@]}" pick --lane bulk); expect "break/bulk-home" "$OTHER home" "$(last_pick)" "bulk -> $OTHER (home)"
   "${CAENV[@]}" "${CA[@]}" exhausted --account "$OTHER" --until $(( $(date +%s) + 3600 ))
-  out=$("${CAENV[@]}" "${CA[@]}" pick --lane wave); expect "break/exhausted-spill" "$DEFAULT_ID spill" "$(last_pick)" "$OTHER exhausted -> wave picks $DEFAULT_ID (spill), $out"
+  out=$("${CAENV[@]}" "${CA[@]}" pick --lane bulk); expect "break/exhausted-spill" "$DEFAULT_ID spill" "$(last_pick)" "$OTHER exhausted -> bulk picks $DEFAULT_ID (spill), $out"
   rm -f "$T/cache/$OTHER.exhausted.json"
-  out=$("${CAENV[@]}" "${CA[@]}" pick --lane wave); expect "break/mark-removed" "$OTHER home" "$(last_pick)" "mark removed -> wave back on $OTHER"
+  out=$("${CAENV[@]}" "${CA[@]}" pick --lane bulk); expect "break/mark-removed" "$OTHER home" "$(last_pick)" "mark removed -> bulk back on $OTHER"
 fi
 
 # unregistered CLAUDE_CONFIG_DIR: no account, and the SessionStart hook logs null (run under a throw-away HOME)
@@ -120,7 +120,7 @@ logged=$(cat "$T"/home/.claude/logs/*.jsonl 2>/dev/null | jq -c 'select(.event==
 expect "break/hook-null" '"null"' "$logged" "session-env hook logs account null"
 
 # registry moved away: the pick still answers (iu), exit 4, never silently
-rc=0; out=$(CLAUDE_ACCOUNTS_REGISTRY="$T/no-such-registry.json" "${CA[@]}" pick --lane wave 2>/dev/null) || rc=$?
+rc=0; out=$(CLAUDE_ACCOUNTS_REGISTRY="$T/no-such-registry.json" "${CA[@]}" pick --lane bulk 2>/dev/null) || rc=$?
 expect "break/registry-missing" "4 unset CLAUDE_CONFIG_DIR" "$rc $out" "pick exit 4 + unset"
 
 # a me login that does not exist: a config dir with no credentials (its Keychain service has no entry; the real keychain is never touched)
@@ -132,8 +132,8 @@ if [[ -n "$OTHER" ]]; then
   rm -f "$T/cache/$OTHER".*.json
   NL=(env CLAUDE_ACCOUNTS_REGISTRY="$T/registry-nologin.json" CLAUDE_ACCOUNTS_CACHE_DIR="$T/cache" CLAUDE_ACCOUNTS_PICKS="$T/picks.jsonl")
   "${NL[@]}" "${CA[@]}" refresh --ids "$OTHER" >/dev/null 2>&1
-  "${NL[@]}" "${CA[@]}" pick --lane wave >/dev/null 2>&1
-  expect "break/no-login-ineligible" "$DEFAULT_ID spill" "$(last_pick)" "$OTHER without a login is never picked; wave goes to $DEFAULT_ID"
+  "${NL[@]}" "${CA[@]}" pick --lane bulk >/dev/null 2>&1
+  expect "break/no-login-ineligible" "$DEFAULT_ID spill" "$(last_pick)" "$OTHER without a login is never picked; bulk goes to $DEFAULT_ID"
   usage=$("${NL[@]}" "${CA[@]}" usage --json | jq -r --arg id "$OTHER" '.accounts[] | select(.id == $id) | .auth_ok')
   expect "break/no-login-auth-mark" false "$usage" "refresh marked $OTHER auth failed"
 fi

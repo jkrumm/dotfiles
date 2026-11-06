@@ -172,7 +172,7 @@ cs() {
   _claude_launch "sonnet" "$@"
 }
 
-# `ca`, `cap`, `cdf`, `cdp` are gone (2026-10-24): Herdr sessions and waves run on the
+# `ca`, `cap`, `cdf`, `cdp` are gone (2026-10-24): Herdr sessions and factory agents run on the
 # Max subscriptions only (`c`/`cs`/`cf`, account from `claude-account pick`). IU API tokens
 # stay for `agw`, OpenCode and Hermes (`oc`) — never for development sessions. `claude_iu`
 # (headless `claude -p` on IU) is gone too: no headless claude (docs/agent-platform.md).

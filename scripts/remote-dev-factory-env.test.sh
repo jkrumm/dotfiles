@@ -75,68 +75,68 @@ spawn() {
 lacks() { grep -qF -- "$3" <<<"$2" && bad "$1 — '$3' unexpectedly in: $2" || ok "$1"; }
 
 echo "role: the table decides tier and effort"
-reply 0 "$(role_json worker opus xhigh)"
-spawn work myrepo --role worker
-has "work --role worker: asks the factory for that role" "$asked" "role get worker --format json"
-has "work --role worker: --model is the tier alias" "$start" "--model opus"
-has "work --role worker: effort from the table" "$start" "--effort xhigh"
-reply 0 "$(role_json mechanical haiku low)"
-spawn work myrepo --role mechanical
-has "work --role mechanical: tier" "$start" "--model haiku"
-has "work --role mechanical: effort" "$start" "--effort low"
+reply 0 "$(role_json implementer opus xhigh)"
+spawn work myrepo --role implementer
+has "work --role implementer: asks the factory for that role" "$asked" "role get implementer --format json"
+has "work --role implementer: --model is the tier alias" "$start" "--model opus"
+has "work --role implementer: effort from the table" "$start" "--effort xhigh"
+reply 0 "$(role_json Explore haiku low)"
+spawn work myrepo --role Explore
+has "work --role Explore: tier" "$start" "--model haiku"
+has "work --role Explore: effort" "$start" "--effort low"
 reply 0 "$(role_json lead opus high)"
 spawn work myrepo --role=lead
 has "work --role=lead: tier and effort ride in argv" "$start" "claude --model opus --effort high"
 
 echo "role: work without --role"
-reply 0 "$(role_json wave opus max)"
+reply 0 "$(role_json lead opus max)"
 spawn work myrepo
 is "work without --role never asks the factory" "$asked" ""
 lacks "work without --role starts bare (no model, no effort)" "$start" "--model"
 is "work without --role: bare claude" "$start" "claude"
 
 echo "role: explicit env beats the role"
-reply 0 "$(role_json worker opus xhigh)"
-RD_WAVE_MODEL=sonnet spawn work myrepo --role worker
-has "RD_WAVE_MODEL wins over the tier" "$start" "--model sonnet"
+reply 0 "$(role_json implementer opus xhigh)"
+RD_MODEL=sonnet spawn work myrepo --role implementer
+has "RD_MODEL wins over the tier" "$start" "--model sonnet"
 has "the role's effort still applies when only the model is set" "$start" "--effort xhigh"
-RD_WAVE_EFFORT=low spawn work myrepo --role worker
-has "RD_WAVE_EFFORT wins over the role's effort" "$start" "--effort low"
+RD_EFFORT=low spawn work myrepo --role implementer
+has "RD_EFFORT wins over the role's effort" "$start" "--effort low"
 has "the role's tier still applies when only the effort is set" "$start" "--model opus"
-RD_WAVE_MODEL=sonnet RD_WAVE_EFFORT=max spawn work myrepo
-RD_WAVE_MODEL=sonnet RD_WAVE_EFFORT=max spawn work myrepo
+RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo
+RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo
 is "both env vars set, no --role: work stays bare and the factory is not asked" "$asked$start" "claude"
-RD_WAVE_MODEL=sonnet RD_WAVE_EFFORT=max spawn work myrepo --role worker
-has "both env vars set, explicit --role: still asked (an unknown role stays an error)" "$asked" "role get worker"
+RD_MODEL=sonnet RD_EFFORT=max spawn work myrepo --role implementer
+has "both env vars set, explicit --role: still asked (an unknown role stays an error)" "$asked" "role get implementer"
 
 echo "role: fail open to today's defaults (work: a bare claude)"
 failopen() { # <label> <expected reason fragment>
   [ "$rc" -eq 0 ] && ok "$1: the spawn still succeeds" || bad "$1: rc=$rc — $out"
   is "$1: falls back to a bare claude" "$start" "claude"
-  has "$1: one stderr line says so" "$out" "rd: factory role 'worker' unavailable ($2)"
+  has "$1: one stderr line says so" "$out" "rd: factory role 'implementer' unavailable ($2)"
   [ "$(grep -c "rd: factory role" <<<"$out")" -eq 1 ] && ok "$1: exactly one line" || bad "$1: not exactly one line: $out"
 }
 # today's table: the repo has no claude-effort.json under the scratch HOME, so point at the real one
 export CLAUDE_EFFORT_TABLE="$HERE/../config/claude-effort.json"
 reply 3 ""
-spawn work myrepo --role worker; failopen "non-zero exit" "factory exited 3"
+spawn work myrepo --role implementer; failopen "non-zero exit" "factory exited 3"
 reply 0 "not json"
-spawn work myrepo --role worker; failopen "garbage output" "its answer did not match the role schema"
-reply 0 "$(role_json worker gpt-5 high)"
-spawn work myrepo --role worker; failopen "tier outside haiku|sonnet|opus" "its answer did not match the role schema"
-reply 0 "$(role_json worker opus extreme)"
-spawn work myrepo --role worker; failopen "effort outside the enum" "its answer did not match the role schema"
+spawn work myrepo --role implementer; failopen "garbage output" "its answer did not match the role schema"
+reply 0 "$(role_json implementer gpt-5 high)"
+spawn work myrepo --role implementer; failopen "tier outside haiku|sonnet|opus" "its answer did not match the role schema"
+reply 0 "$(role_json implementer opus extreme)"
+spawn work myrepo --role implementer; failopen "effort outside the enum" "its answer did not match the role schema"
 reply 0 "$(role_json lead opus high)"
-spawn work myrepo --role worker; failopen "answer for another role" "its answer did not match the role schema"
-reply 2 '{"error":{"kind":"usage","code":null,"message":"unknown command: role get worker","hint":"factory --help lists the commands","details":{}}}'
-spawn work myrepo --role worker; failopen "factory without the verb yet" "factory exited 2"
+spawn work myrepo --role implementer; failopen "answer for another role" "its answer did not match the role schema"
+reply 2 '{"error":{"kind":"usage","code":null,"message":"unknown command: role get implementer","hint":"factory --help lists the commands","details":{}}}'
+spawn work myrepo --role implementer; failopen "factory without the verb yet" "factory exited 2"
 mv "$TMP/home/.local/bin/factory" "$TMP/factory.away"
-spawn work myrepo --role worker; failopen "factory missing" "factory is not installed"
+spawn work myrepo --role implementer; failopen "factory missing" "factory is not installed"
 mv "$TMP/factory.away" "$TMP/home/.local/bin/factory"
 if command -v timeout >/dev/null || command -v gtimeout >/dev/null; then
-  reply 0 "$(role_json worker opus high)"; touch "$STATE/factory-sleep"
+  reply 0 "$(role_json implementer opus high)"; touch "$STATE/factory-sleep"
   t0=$SECONDS
-  spawn work myrepo --role worker; failopen "timeout" "no answer within 2 s"
+  spawn work myrepo --role implementer; failopen "timeout" "no answer within 2 s"
   (( SECONDS - t0 < 20 )) && ok "timeout: gave up at the limit, not after the stub's 30 s" || bad "timeout: took $((SECONDS - t0)) s"
   rm -f "$STATE/factory-sleep"
 fi

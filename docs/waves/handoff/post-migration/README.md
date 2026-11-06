@@ -6,7 +6,6 @@ is done and the mini is back from its macOS update. Do not edit the prompt files
 | File | Repo | How to start |
 |-|-|-|
 | `software-factory.md` | software-factory | A planning/review lead (started by the old wave path, removed in reset 8b; now a factory Issue or the owner's `rd work software-factory`) |
-| `iris.md` | iris | The fleet mother (started by the old wave path, removed in reset 8b; now a factory Issue or the owner's `rd work iris`) |
 
 ## Also resume (not a new agent)
 

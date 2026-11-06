@@ -172,7 +172,7 @@ best(S)     = the member of S with the highest weight (registry order breaks tie
 share(S)    = a draw from S with probability ∝ weight   # what the CLI uses; `pick --dry` and tests use best(S)
 home(lane)  = share(eligible x whose homeLanes claim the lane)
               iu for interactive, headless
-              me and me2 for wave, fan
+              me and me2 for bulk (any non-interactive lane that is not headless; the factory labels its spawns USAGE_LANE=wave but picks no account through it)
 coolSet      = eligible accounts with session% < 80 (SESSION_SOFT_MAX), else all eligible   # a hot 5h window is the last choice, not excluded
                  every step below reads coolSet as "eligible"
 pick(lane):
@@ -198,7 +198,7 @@ spare per hour to the account's own reset (a reset already past counts as a fres
 Why v1.5 (2026-10-29): the pick log showed `me2` at 67 % weekly with three days to its reset taking about a tenth
 of the bulk picks while `iu` and `me` (resets 6-7 days out) took the rest. v1.4's best-headroom pick looked at spare
 points only, so an account that expires sooner was no more attractive than one that expires next week, and
-argmax sends a whole fan burst to one account. v1.5 weighs each account's spare capacity per hour to *its own*
+argmax sends a whole burst of spawns to one account. v1.5 weighs each account's spare capacity per hour to *its own*
 reset (sharpened ×1.5, so a window closing sooner counts for more), and the CLI draws among the home accounts in
 proportion to the weights, so a burst spreads instead of landing on one account. Nothing names an account or a plan:
 a new subscription is a registry entry, its reset time and quota come from the sample. With `me` and `me2` at
@@ -206,7 +206,7 @@ similar 5h load the split at the time was about 49/51; the 5h-balance step (3) s
 window and keeps overriding the weekly weighting while the 5h loads differ by more than 20 points.
 
 Why v1.6 (2026-10-30): all three accounts sat over weekly pace (`iu` 41 % vs 27 % elapsed, `me` 42 vs 18, `me2` 94 vs 68),
-so step 3 had no candidate and `me` (5h window a quarter of `iu`'s) took every wave from 3 % to 99 % in 75 minutes while
+so step 3 had no candidate and `me` (5h window a quarter of `iu`'s) took every bulk spawn from 3 % to 99 % in 75 minutes while
 `iu` idled at 5 %. A full 5h window is a wall; an over-pace week is a preference (it recovers over a weekend). So (a) the
 session move ignores the other's pace once the home 5h is at 60 % (`SESSION_PRESSURE`), and (b) from 80 %
 (`SESSION_SOFT_MAX`) an account only takes work when no cooler one is eligible; `SESSION_MAX` 90 stays the hard stop.
@@ -230,11 +230,11 @@ picks run (the MacBook) nothing ever refreshed `me`. The refresh itself is cheap
 never waits: the pick answers from the cache it has, the next one sees the new sample. The rule itself is unchanged.
 The periodic keepalive (§Operate) is the guarantee; the pick-time refresh is the opportunistic second path.
 
-Why these homes: the waves are steady, unattended and start a fresh context
-per wave, so each wave is a free re-pick point. Together they are 63% of Max
+Why these homes: bulk work is steady, unattended and starts a fresh context
+per spawn, so each spawn is a free re-pick point. Together they are 63% of Max
 spend, which fits `me`'s small session window better than bursty interactive work
 does. `me` cannot hold all of it (its weekly is about half of `iu`'s); `me2` takes the share
-`me` cannot, and step 5 spills the rest to `iu`, which gains headroom because the waves left it.
+`me` cannot, and step 5 spills the rest to `iu`, which gains headroom because the bulk work left it.
 
 Every decision is appended as JSONL (`ts, lane, picked, reason, a{s,w}, b{s,w}`)
 to `~/.claude/logs/`. That pick log is the dataset for v2 tuning.
@@ -337,7 +337,7 @@ exits 1 on any FAIL; `make doctor` runs it on the mini. Over plain ssh the login
 | `plan/<id>` | `claude-account expiry` `plan_detected` (parsed from the Keychain item's `rateLimitTier`) equals the registry's `plan`. The picker's default units hang on that plan | WARN only: a mismatch (fix: set `"plan"` in `config/claude-accounts.json`) or an undetectable tier |
 | `quota/<id>`, `statusline/<id>` | the `cachedUsageUtilization` the binary keeps in `.claude.json` still has `five_hour`/`seven_day` `utilization` + `resets_at` (its age is informational: only sessions refresh it now); the statusline fed the cache in the last 24 h if sessions ran | field renamed by an update (quota); WARN for a silent statusline |
 | `launcher/*` | static: `c cs cf` reach `claude-account pick --lane interactive` and set the marker; bare `claude` picks unless the marker is set; `rd` exports the marker; `claude_iu` and the other retired IU launchers (`ca cap cdf cdp`) must stay gone; `rd work` calls `pick_account` | someone rewired a launcher past the picker |
-| `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, wave, fan, headless: account + reason | the picker errors or stops explaining itself |
+| `pick/<lane>` | `claude-account pick --dry` (no pick-log line, no refresh) for interactive, bulk, headless: account + reason | the picker errors or stops explaining itself |
 | `attribution/*` | last 24 h: every Claude `session_env` line carries a registered account; no `billing='max'` usage row without an account; `account='me'` rows exist once `me` sessions ran (WARN for the first 2 h: ingest lag) | the hook or the usage-tracker join lost the account |
 | `version` | compares `claude --version` with the stamp in `~/.local/state/claude-accounts/verified-version` | (never FAIL; WARN when unstamped) |
 
@@ -353,10 +353,10 @@ no tokens and run against a throw-away copy of the cache, pick log and registry 
 
 | Break | Expected |
 |-|-|
-| exhausted mark on `me` | `wave` picks `iu` (reason `spill`; `rd` then pauses only if iu has no room either); removing the mark restores `me` (`home`) |
+| exhausted mark on `me` | `bulk` picks `iu` (reason `spill`; `rd` then pauses only if iu has no room either); removing the mark restores `me` (`home`) |
 | `CLAUDE_CONFIG_DIR` at an unregistered dir | `claude-account account` -> `?`, the session-env hook logs `account: null` |
 | registry unreadable | `pick` exits 4 and answers `unset CLAUDE_CONFIG_DIR` |
-| `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `wave` never picks it |
+| `me` dir without credentials | `claude auth status` loggedIn=false; `refresh` marks it auth-failed; `bulk` never picks it |
 
 **Quota + login keepalive.** `com.jkrumm.claude-accounts-keepalive` (**hourly, on both machines**, under jobrun with
 `--every 3600`, `RunAtLoad`) runs `claude-account refresh --all`. Decision 2026-10-25: it was daily 06:30 on the mini only, so
@@ -626,6 +626,6 @@ Cache keep-alive is redundant; Claude Code ships its own `cache_touch`.
 | Wave | When | Contents | Done when |
 |-|-|-|-|
 | W0 | now, B absent | registry (`me` disabled), `claude-accounts-setup`, `claude-account` with tests, quota cache with the three feeds (`iu` only), fetch_usage as a cache reader, session-env `account`, usage-tracker column + backfill, statusline badge, pick log | `make check` green; every pick returns `iu`; no behaviour change (at W0 no `api/oauth/usage` calls from `claude-account`; source 3 now makes them, budgeted) |
-| W1 | after the `me` login | enable `me`; `rd work` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a wave lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
+| W1 | after the `me` login | enable `me`; `rd work` + agw workers pick; MCP registration per account; claude-auth token fallback `iu`-only | a bulk spawn lands on `me`, its rows say `account=me`, cache-read share on `me` > 90% |
 | W2 | after W1 | `/api/usage` multi-account, overview pane, Tinycast, heartbeat, Argo split | both accounts visible on every surface |
 | W3 | +2 weeks | read the pick log and usage rows; tune thresholds or move to v2 pace; decide on a 20x upgrade for `me` | written decision |
