@@ -443,8 +443,7 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
           .when(!tree, el => el.child(div().id(`dot-${w.id}`).p(3).m(-3).flex_none().when(Boolean(status), (d) => d.tooltip(MEANING[status]))
             .child(div().size(7).rounded(4).when(live, (d) => d.bg(fill)).when(status === "idle", (d) => d.border_1().border_color(t.dim)))))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
-          .child(div().flex_1()),
+          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(w.name)),
       );
   }
 
