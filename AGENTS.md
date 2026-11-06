@@ -81,6 +81,8 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
 | `make check` | Every target in `check:` in the Makefile: hermetic suites only (secrets lint, hook tests, script and bun tests, the architecture-check generator test). No side effects, no live probes; the live architecture-map assertion runs in `make doctor` (= `make verify`). |
+| `make -k check` | `check` stops at the first failing prerequisite; `-k` runs every suite and lists all failures. |
+| `make check-linux` | The Linux-safe subset (shellcheck over every tracked bash script + the portable suites): what `.github/workflows/check.yml` runs on a hosted ubuntu runner for every PR and master push. A suite joins it only after it passes there. |
 | `make verify` | `make doctor`, under the repo-contract name. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. |

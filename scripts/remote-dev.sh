@@ -299,8 +299,8 @@ hc_seed_space() { # <space id> <repo path>
 # never failing the spawn (HcRunner's nameTab): the app adopts a tab only after it has seen the terminal, so often there
 # is no entry yet and the tab stays numbered.
 hc_name_tab() { # <tab id> <name>
-  local i doc version value resp
-  for i in 1 2 3; do
+  local doc version value resp
+  for _ in 1 2 3; do
     doc=$(hc_rpc doc.get "$(jq -nc --arg n "$APP_DOC" '{name:$n}')") || return 0
     [[ -z $(rpc_kind "$doc") ]] || return 0
     version=$(jq -r '.result.version // empty' <<<"$doc")
