@@ -44,7 +44,7 @@ const FALLBACK = 60000;
 
 
 // Folders: groups.json's groups in order; a space joins the
-// group naming its repo (worktrees follow their repo), the rest land in the fallback.
+// group naming its repo (worktrees follow their repo) or living under one of its `paths`, the rest land in the fallback.
 // Linked into the app home by make herdr-app-setup.
 const GROUPS = ".config/herdr-app/groups.json";
 const URGENT = (status) => status === "blocked" || status === "done";
@@ -161,7 +161,7 @@ export default class Spaces extends View {
         const r = await exec("cat", [`${home()}/${GROUPS}`]);
         if (r.code !== 0) throw new Error(r.stderr);
         const d = JSON.parse(r.stdout);
-        const list = (d.groups ?? []).map((g) => ({ label: g.label, members: new Set(g.members ?? []) }));
+        const list = (d.groups ?? []).map((g) => ({ label: g.label, members: new Set(g.members ?? []), paths: g.paths ?? [] }));
         const next = { list, fallback: d.fallback ?? "OTHER" };
         if (JSON.stringify(next, (_k, v) => (v instanceof Set ? [...v] : v)) === JSON.stringify(this.groups, (_k, v) => (v instanceof Set ? [...v] : v))) return;
         this.groups = next;
@@ -207,8 +207,12 @@ export default class Spaces extends View {
 
   // The folder a row belongs to: its repo's name, else its folder's name.
   folderOf(r, ps) {
-    const name = r.g?.name ?? base(place(r.w, ps) ?? "");
-    return this.groups.list.find((g) => g.members.has(name)) ?? null;
+    const where = place(r.w, ps) ?? "";
+    const name = r.g?.name ?? base(where);
+    // A named member wins; else a group's `paths` (a root dir name, any machine) claims everything under it.
+    return this.groups.list.find((g) => g.members.has(name))
+      ?? this.groups.list.find((g) => g.paths.some((p) => `${where}/`.includes(`/${p}/`)))
+      ?? null;
   }
 
   // One machine's rows under folder headers, groups.json order, the fallback last.

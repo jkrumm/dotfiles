@@ -1,5 +1,5 @@
 {
-  "$comment": "Declared folder taxonomy for the Herdr app's sidebar: the jk-spaces mod files each space under the group naming its repo (worktrees follow their repo), the rest go to `fallback`; jk-board groups its repo cards the same way. Order here IS the sidebar order. Members that are not open are skipped, so listing a repo early costs nothing. `make herdr-app-setup` links this file to ~/.config/herdr-app/groups.json. `noFactorySpace`: members that keep their sidebar place but get no factory space or `plan:` tab on the mini (scripts/factory-spaces.py).",
+  "$comment": "Declared folder taxonomy for the Herdr app's sidebar: the jk-spaces mod files each space under the group naming its repo (worktrees follow their repo), the rest go to `fallback`; jk-board groups its repo cards the same way. Order here IS the sidebar order. `paths` (WORK: IuRoot) is a root dir name, so every repo under it files into the group without being listed. Members that are not open are skipped, so listing a repo early costs nothing. `make herdr-app-setup` links this file to ~/.config/herdr-app/groups.json. `noFactorySpace`: members that keep their sidebar place but get no factory space or `plan:` tab on the mini (scripts/factory-spaces.py).",
   "fallback": "OTHER",
   "noFactorySpace": [
     "tinycast-extensions"
@@ -54,6 +54,9 @@
     },
     {
       "label": "WORK",
+      "paths": [
+        "IuRoot"
+      ],
       "members": [
         "IuRoot",
         "epos-tool-athena",
