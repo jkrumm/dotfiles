@@ -30,8 +30,17 @@ def process_table() -> list[tuple[int, str]]:
 
 
 def executable(pid: int) -> str:
-    """Path of the process's executable ('' when it is gone)."""
-    return subprocess.run(["/bin/ps", "-o", "comm=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    """Real path of the process's executable ('' when it is gone). `ps comm` prints argv[0], here the ~/.local/bin symlink."""
+    buf = ctypes.create_string_buffer(4096)
+    n = ctypes.CDLL("/usr/lib/libSystem.B.dylib").proc_pidpath(pid, buf, 4096)
+    return buf.value.decode() if n > 0 else ""
+
+
+def inherited_agent_env(pid: int) -> bool:
+    """The process carries an agent's session marker: a core's environment becomes every terminal's (upstream #86), and
+    a Claude started under this marker saves no transcript."""
+    out = subprocess.run(["/bin/ps", "eww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+    return "CLAUDE_CODE_CHILD_SESSION=" in out
 
 
 def responsible_pid(pid: int) -> int:
@@ -81,10 +90,12 @@ def main(argv: list[str]) -> int:
         print("no herdr-core process found")
         return 0
     print("\n".join(lines))
+    tainted = [str(pid) for pid, _, _ in targets(process_table(), pids) if inherited_agent_env(pid)]
+    if tainted:
+        print(f"agent environment inherited by {', '.join(tainted)}: every terminal gets it and Claude saves no transcript (fix: make herdr-core-clean-restart)")
     if bad:
         print(f"offenders: {len(bad)} of {len(lines)} not attributed to Herdr Core.app")
-        return 1
-    return 0
+    return 1 if bad or tainted else 0
 
 
 if __name__ == "__main__":

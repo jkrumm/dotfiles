@@ -48,6 +48,9 @@ class Responsible(unittest.TestCase):
         self.assertIn("unknown", lines[0])
 
     def test_main_exit_codes(self):
+        hcr_env = mock.patch.object(hcr, "inherited_agent_env", lambda pid: False)
+        hcr_env.start()
+        self.addCleanup(hcr_env.stop)
         orig = hcr.check
         out = contextlib.redirect_stdout(io.StringIO())
         out.__enter__()
@@ -63,6 +66,12 @@ class Responsible(unittest.TestCase):
             out.__exit__(None, None, None)
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(hcr.main(["x"]), 2)
+
+    def test_inherited_agent_env_fails_main(self):
+        table = lambda: [(1, "herdr-core hold --socket x")]
+        with mock.patch.object(hcr, "process_table", table), mock.patch.object(hcr, "check", lambda pids: (["ok"], [])), \
+                mock.patch.object(hcr, "inherited_agent_env", lambda pid: True):
+            self.assertEqual(hcr.main([]), 1)
 
 
 if __name__ == "__main__":

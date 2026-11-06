@@ -251,11 +251,20 @@ check_tailscale() {
   if [[ "$installed" == "$latest" ]]; then
     info_add "tailscale current (daemon $installed, $TAILSCALE_VARIANT)"
   else
-    # tailscale is HELD in brew-upgrade.sh (it is the dev host's only door —
-    # see that script's HELD comment), so `make brew-upgrade` deliberately
+    # tailscale is HELD in brew-upgrade.sh, so `make brew-upgrade` deliberately
     # skips it. Naming it here would be a fix that does nothing.
-    drift_add "tailscale" "tailscale daemon $installed → $latest (fix: brew unpin tailscale && brew upgrade tailscale && sudo launchctl kickstart -k system/homebrew.mxcl.tailscale && brew pin tailscale)"
+    drift_add "tailscale" "tailscale daemon $installed → $latest (fix, from the MacBook: make tailscale-upgrade HOST=mini)"
   fi
+
+  # The servers auto-update, but late or never without a word (2026-11: a release behind four security bulletins).
+  local host v
+  for host in homelab vps; do
+    v=$(/usr/bin/ssh -o ConnectTimeout=8 -o BatchMode=yes "$host" 'tailscale version --daemon' </dev/null 2>/dev/null \
+      | /usr/bin/awk -F': ' '/^Daemon:/{print $2}' | /usr/bin/cut -d- -f1)
+    if [[ -z "$v" ]]; then skip_add "tailscale on $host (unreachable)"
+    elif [[ "$v" != "$latest" ]]; then drift_add "tailscale-$host" "tailscale on $host $v → $latest (fix, from the MacBook: make tailscale-upgrade HOST=$host)"
+    fi
+  done
 }
 
 # --- Run ---------------------------------------------------------------------

@@ -779,3 +779,13 @@ succeeds** — the real `git push --dry-run` lives in `make doctor`, because at 
 300 s cadence a provider outage would page as "dev host down". That split earned
 itself once already: the credential resolved fine while the deployed helper still
 pointed at a read-only token, and only the dry-run saw it.
+
+## ssh iumac identity
+
+- **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
+  default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
+  is unset and every `git@github.com:` remote there fails `Permission denied
+  (publickey)`. That reads like a broken tunnel and is not one. `ssh-agent.zsh`
+  (loaded from `~/.zshenv`, gated on the `op` backend) fixes it; the gate is the
+  backend and **not** the socket's existence, because the same socket path
+  exists on the mini, where exporting it hangs.

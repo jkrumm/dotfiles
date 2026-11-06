@@ -35,3 +35,19 @@ by design.
   starts before login), never the macsys app; consumers resolve the CLI through
   `scripts/lib/tailscale-cli.sh` — a leftover app-bundle CLI answers with a stopped
   tunnel and a stale IP, a wrong answer rather than an error.
+
+## Updates
+
+`make tailscale-status` compares each daemon with the latest stable; `make tailscale-upgrade [HOST=homelab|vps|mini]`
+(`scripts/tailscale-upgrade.sh`, from the MacBook) upgrades one node at a time and waits for the new daemon to answer on a
+fresh connection. Measured 2026-11-06: 8 s (homelab), 11 s (VPS), 12 s (mini); containers, agents and the mini's Funnel and
+serve config untouched. Restarting tailscaled ends every ssh session over it, so nothing depends on the session surviving:
+
+| Machine | Install | How it updates |
+|-|-|-|
+| homelab, VPS | apt, `Check`+`Apply` auto-update on | apt runs in its own systemd unit, or a Tailscale SSH child dies mid-upgrade (upstream #21021: dpkg locked for days). Auto-update stays on, but starts about a week after a release and defers around activity: both sat a release behind four security bulletins, so the mini's daily drift check names a behind server |
+| mini | Homebrew `tailscaled` as a system daemon, pinned in `brew-upgrade.sh` | Formula first (the old daemon keeps its inode), then a detached root watchdog restarts it and relinks the previous keg if it does not reach `Running` in 90 s. Refuses without a LAN path unless `FORCE=1`; the log is `~/Library/Logs/tailscale-upgrade.log` |
+| MacBook, iPhone | App Store (`io.tailscale.ipn.macos`) | App Store only; `tailscale update` just opens it. The store can trail the stable feed |
+
+The mini's LAN address answers from the MacBook at home (verified 2026-11-06), so at home it has a second door. Away, the
+watchdog is the only net, and a person at the screen the last one.

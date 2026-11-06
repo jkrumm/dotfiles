@@ -71,9 +71,9 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
    `brew unpin caddy && brew upgrade caddy </dev/null` over ssh, then
    `op read "op://Private/mac-mini-server/password" --account tkrumm | ssh mini 'cd ~/SourceRoot/dotfiles && make caddy-dns-build'`,
    then `brew pin caddy`.
-5. **Never unattended on the mini:** the `tailscale` follow-up (its restart is
-   the ssh session you are using — run it only with a human able to reach the
-   mini another way), macOS majors.
+5. **Tailscale, every machine:** `make tailscale-status`, then `make tailscale-upgrade`
+   from the MacBook, at home (subsection below). **Never unattended on the mini:**
+   macOS majors.
 6. **Agent tooling, and what is *running*.** Installed ≠ running; check both.
    - **Cooldown override** only on the owner's explicit ask for "recent agent
      tooling" — per command (`brew upgrade --cask <name>`), never by editing
@@ -97,11 +97,20 @@ project, skip Phases 1–6 and run this instead, on **both** Macs (the mini over
 7. **Verify:** `make doctor` from the MacBook (recurses into the mini). Compare
    failures against their `persisted N runs` count before blaming the upgrade.
 
+### Tailscale
+
+Not `make brew-upgrade`: held on the mini, and its restart ends the ssh session doing it. `make tailscale-status` shows each
+daemon (never the CLI: a poured package advances the CLI while the old daemon serves) against the latest stable. `make
+tailscale-upgrade [HOST=homelab|vps|mini]` runs one node at a time and proves the daemon came back (measured 2026-11-06: 8 to
+12 s, containers and Funnel untouched); homelab and the mini take one Touch ID each. The mechanism and the fallbacks:
+`docs/tailnet.md` §Updates. Linux auto-update stays on but lags by a week or more, so the daily drift check names a behind server.
+The MacBook and iPhone update through the App Store, which can trail the stable feed.
+
 ### herdr-core
 
 Upstream's `Herdr Core.app`, installed by the official installer, **not Homebrew** (no formula; a brew core has no bundle
 identity and `hc update` refuses it). The Homebrew machine procedure is steps 1–7 above and never touches it; `caddy`
-stays the only pin.
+and `tailscale` stay the pins.
 
 1. **Read the release notes first:** the CHANGELOG of herdrdev/herdr-core for the new version, the privacy lines in
    particular (new prompts: Local Network, microphone, file access) and anything on holders, `serve`, launchd or
@@ -114,7 +123,10 @@ stays the only pin.
 4. **Verify, both machines:** `hc --version` equal; `bash scripts/lib/core-up.sh` silent; `python3 scripts/hc-responsible.py`
    (old Cellar holders end with their terminals, nothing new); `make tcc-probe`; `make op-tcc-probe` (MacBook); the tail of
    `~/Library/Logs/hc-resume.log` on the mini; `make doctor`.
-5. **Grants:** Full Disk Access on `Herdr Core.app` is re-granted only if the signing team or identifier changed
+5. **An agent never starts a core or opens the app.** A core's environment becomes every terminal's, and `open` passes the
+   caller's: one `open -a Herdr` from a Claude session put `CLAUDE_CODE_CHILD_SESSION` in every terminal ("Transcript saving
+   is off"). `hc-responsible.py` flags it; `make herdr-core-clean-restart` cures it (MacBook, ends the terminals' programs).
+6. **Grants:** Full Disk Access on `Herdr Core.app` is re-granted only if the signing team or identifier changed
    (`codesign -dv` on the bundle). New Local Network / microphone prompts are answered at the machine's screen. Never click
    Allow on an AppData dialog as a fix.
 

@@ -8,7 +8,7 @@ set -euo pipefail
 DOTFILES_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$DOTFILES_DIR/config/herdr-app"
 HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
-MODS=(jk-spaces jk-status jk-details jk-board jk-keys jk-tabs jk-new)
+MODS=(jk-spaces jk-status jk-details jk-board jk-keys jk-tabs jk-new jk-pane)
 
 # name|folder — the spaces this machine opens. A space already working in the folder is kept.
 SPACES=(

@@ -98,34 +98,23 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/brew-service.sh"
 # above) — this array only drives what this script reports and asserts.
 #
 # tailscale is held for a DIFFERENT reason than caddy, and it is not silent
-# config revert. On the dev host Tailscale is not one network path among
-# several, it is the ONLY one: `ssh mini` resolves to the tailnet address and
-# the LAN address does not answer — measured 2026-09-20, ARP for the mini's
-# 192.168.1.x never completes from the MacBook, the two Macs are not on the
-# same L2 despite both showing a 192.168.1.0/24 address. So the formula whose
-# daemon carries every inbound connection must not ride an unattended batch
-# that nobody is watching: 2026-08-05 already cost an outage by forcing a
-# Tailscale update on this host (drift-check.sh's check_tailscale header says
-# so, and then told you to fix the drift with `make brew-upgrade` — which, up
-# to here, would have done exactly the forcing that incident warned about).
-#
-# Upgrading the FORMULA is in fact harmless on its own: the running daemon
-# keeps its old inode until something restarts it, so the door stays open. It
-# is the restart that is the risk, and the restart is what the repair command
-# below makes explicit and human-timed. The post-assertion further down
-# reports the in-between state (new binary on disk, old daemon serving) rather
-# than letting it pass for "upgraded".
+# config revert. Its daemon carries every inbound connection to the dev host, so
+# it must not ride an unattended batch nobody is watching: 2026-08-05 cost an
+# outage by forcing a Tailscale update on this host. The formula alone is harmless
+# (the running daemon keeps its old inode until something restarts it); the restart
+# is the risk. `make tailscale-upgrade HOST=mini` from the MacBook is the one path:
+# LAN fallback checked first, the restart in a detached watchdog that rolls back.
+# The post-assertion further down reports new-binary-old-daemon rather than letting
+# it pass for "upgraded".
 HELD=(caddy tailscale)
 
 # The command that repairs a held package after a deliberate manual upgrade:
 #   brew unpin X && brew upgrade X && <this> && brew pin X
-# It is a COMMAND, not a make target — `make caddy-dns-build` is a target and
-# tailscale's repair is a launchctl call, and printing a half-line the reader
-# has to assemble is how a follow-up gets skipped.
+# Printing a half-line the reader has to assemble is how a follow-up gets skipped.
+# tailscale has its own target (`make tailscale-upgrade`), printed at the call site.
 fixup_for() {
   case "$1" in
     caddy) printf '%s' "make caddy-dns-build" ;;
-    tailscale) printf '%s' "sudo launchctl kickstart -k system/homebrew.mxcl.tailscale" ;;
     *) printf '%s' "" ;;
   esac
 }
@@ -260,6 +249,7 @@ done
 if (( ${#held_outdated[@]} > 0 )); then
   echo "  ! held & outdated — deliberate follow-up, not run automatically:"
   for pkg in "${held_outdated[@]}"; do
+    if [[ "$pkg" == tailscale ]]; then echo "      from the MacBook: make tailscale-upgrade HOST=mini"; continue; fi
     fixup=$(fixup_for "$pkg")
     echo "      brew unpin $pkg && brew upgrade $pkg && $fixup && brew pin $pkg"
   done

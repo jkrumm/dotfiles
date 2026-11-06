@@ -78,7 +78,7 @@ plist/label/launchctl-target by service name and `brew-upgrade.sh`'s colima asse
 
 **A pin needs its dependencies pinned too, or it rots**: `mosh` sat pinned at a
 working version while `protobuf` upgraded underneath it and the dylib link broke,
-which is why it was deleted rather than re-pinned. `caddy` is the only pin.
+which is why it was deleted rather than re-pinned. Pinned: `caddy` and `tailscale` (`make tailscale-upgrade`, `docs/tailnet.md` §Updates).
 
 **`colima` is asserted but deliberately not pinned.** Pinning caddy costs
 nothing — it is stable and its local machinery is rebuilt by a named target.

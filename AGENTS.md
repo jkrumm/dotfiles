@@ -195,13 +195,7 @@ Facts to hold:
   (`~/.local/share/herdr-core/active/`, official installer); on the mini `com.jkrumm.herdr-core` is only a one-shot
   starter, the MacBook's Herdr app starts its own. No wrapper at `~/.local/bin`, no Homebrew core: `docs/herdr-core.md`
   §How the core runs now.
-- **`ssh iumac '<cmd>'` reaches the MacBook but carries no SSH identity by
-  default** — `.zshrc` is not read by a remote command shell, so `SSH_AUTH_SOCK`
-  is unset and every `git@github.com:` remote there fails `Permission denied
-  (publickey)`. That reads like a broken tunnel and is not one. `ssh-agent.zsh`
-  (loaded from `~/.zshenv`, gated on the `op` backend) fixes it; the gate is the
-  backend and **not** the socket's existence, because the same socket path
-  exists on the mini, where exporting it hangs.
+- **`ssh iumac '<cmd>'` carries no SSH identity by default**: `git@github.com:` there fails `Permission denied (publickey)` and reads like a broken tunnel. `docs/remote-dev.md` §ssh iumac identity.
 - **Never `ssh mini 'claude …'`**, and never start a core from ssh. The Max credential lives in the login
   keychain, unreachable from an ssh session: the daemon comes up `Not logged in`, silently falls back to API
   billing, and still looks healthy in `claude agents`. `rd work` spawns *through* the launchd core (a GUI-session
@@ -277,7 +271,7 @@ the whole install), plus `NO_INSECURE_REDIRECT` / `NO_ANALYTICS`. Auto-*update*
 
 **Auto-upgrade stays off because of silent config revert, not supply chain**: caddy's DNS module, colima's plist and
 op's TCC grant each revert on an unrelated brew upgrade, invisible until the failure it caused; `make brew-upgrade`
-asserts them. **`caddy` is the only pin** (its dependencies must be pinned too); `colima` is unpinned on purpose. herdr-core is not a brew package. Casks and third-party taps are reported,
+asserts them. Pins: **`caddy`** (its dependencies too) and **`tailscale`** (`make tailscale-upgrade`, below); `colima` is unpinned on purpose. herdr-core is not a brew package. Casks and third-party taps are reported,
 never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/homebrew.md`.
 
 ## Heartbeat, drift, doctor (mini only)
@@ -459,7 +453,7 @@ refresh and no reliable revocation.
   Everything else: `docs/opencode.md`.
 - **Tailnet ACL and serve** are declared in `dotfiles-private` and apply **from
   the MacBook**: `make tailscale-acl-diff` (always first) · `-acl-pull` ·
-  `-acl-push` · `make tailscale-serve` / `-check`. Every listening port needs a
+  `-acl-push` · `make tailscale-serve` / `-check`. **Updates, every machine:** `make tailscale-status` / `make tailscale-upgrade [HOST=]`. Every listening port needs a
   grant and the failure is silent; `:8443` is the machine's entire public surface
   (Funnel). Everything else: `docs/tailnet.md`.
 

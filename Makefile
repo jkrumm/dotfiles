@@ -2208,6 +2208,10 @@ secrets-rotate:
 # (tailscale-serve.<machine>.conf), applied here. Serve config pins the machine's
 # MagicDNS name, so a device rename orphans every binding; re-applying is the fix.
 .PHONY: tailscale-serve tailscale-serve-check
+tailscale-status: ## Read-only: every machine's Tailscale daemon against the latest stable (from the MacBook)
+	@bash scripts/tailscale-upgrade.sh status
+tailscale-upgrade: ## Upgrade Tailscale one node at a time from the MacBook, proving each daemon came back: HOST=homelab|vps|mini, default all three (docs/tailnet.md §Updates)
+	@for h in $(or $(HOST),homelab vps mini); do bash scripts/tailscale-upgrade.sh $$h || exit 1; done
 tailscale-serve:
 	@chmod +x $(DOTFILES_DIR)/scripts/tailscale-serve.sh
 	@SECRETS_PRIVATE_REPO="$(SECRETS_PRIVATE_REPO)" $(DOTFILES_DIR)/scripts/tailscale-serve.sh
@@ -2548,6 +2552,8 @@ herdr-core-teardown:
 	@launchctl bootout "gui/$$(id -u)/com.jkrumm.herdr-core" 2>/dev/null || true; \
 	rm -f "$(LAUNCHAGENTS)/com.jkrumm.herdr-core.plist"; \
 	echo "  ✓ herdr-core starter removed (a running core and its terminals are untouched; on the MacBook: hc machine rm mini)"
+herdr-core-clean-restart: ## MacBook: restart the core and holder with a clean environment; ends the programs in every terminal
+	@zsh scripts/herdr-core-clean-restart.sh
 herdr-core-status:
 	@HC="$(HOME)/.local/bin/hc"; \
 	echo "  hc $$("$$HC" --version 2>/dev/null || echo 'not installed')"; \
