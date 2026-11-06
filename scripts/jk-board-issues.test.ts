@@ -12,7 +12,7 @@ const block = (name: string) => {
 }
 // The constants above the blocks (CMD reads HC_MARK at load) run first, so a misordered declaration throws here as it would in the app.
 const head = src.slice(src.indexOf('from "herdr";\n') + 'from "herdr";\n'.length, src.indexOf("// <tree>"))
-const names = "CMD, pollCmd, byProject, kanban, cardLines, clock, stamp, tip, parse, parseOverview, parseIssues, parseSessions, issueCmd, sortAsks, sortHealth, splitQueue, askIssue, askBadge, summaryLine, oneLine, age, duration, compact, modelShort, factsLine, quotaLine, metaLine, issueKind, sections, holdFor, terminalsMap, timelineTail, normTab, sessionKind, known"
+const names = "CMD, pollCmd, byProject, kanban, cardLines, clock, stamp, tip, parse, parseOverview, parseIssues, parseSessions, issueCmd, queueItemId, clearCmd, sortAsks, sortHealth, splitQueue, askIssue, askBadge, summaryLine, oneLine, age, duration, compact, modelShort, factsLine, quotaLine, metaLine, issueKind, sections, holdFor, terminalsMap, timelineTail, normTab, sessionKind, known"
 const lib = new Function(`${head}\n${block("tree")}\n${block("issues")}; return { ${names} }`)() as Lib
 
 type Fn<A extends unknown[], R> = (...args: A) => R
@@ -30,6 +30,8 @@ interface Lib {
   parseIssues: Fn<[string], Card[] | null>
   parseSessions: Fn<[string], Sess[] | null>
   issueCmd: Fn<[unknown], string | null>
+  queueItemId: Fn<[unknown], string | null>
+  clearCmd: Fn<[unknown, unknown], string | null>
   sortAsks: Fn<[Ask[]], Ask[]>
   sortHealth: Fn<[{ id: string; since: string }[]], { id: string }[]>
   splitQueue: Fn<[Ask[]], { fresh: Ask[]; stale: Ask[] }>
@@ -368,4 +370,25 @@ test("kanban: each column's rule, the repo filter, DONE capped and newest first,
   expect(ids(other, "queued")).toEqual([8])
   expect(ids(other, "done")).toEqual([])
   expect(lib.kanban([], new Map()).every((c) => c.cards.length === 0)).toBe(true)
+})
+
+test("queue item id: bare or queue:-prefixed ask-human ids only, nothing else reaches a shell", () => {
+  expect(lib.queueItemId("queue:20261106T230519-25755")).toBe("20261106T230519-25755")
+  expect(lib.queueItemId("20261106T230519-25755")).toBe("20261106T230519-25755")
+  expect(lib.queueItemId("queue:foo; rm -rf /")).toBeNull()
+  expect(lib.queueItemId("queue:20261106T230519-25755; rm -rf /")).toBeNull()
+  expect(lib.queueItemId("queue:")).toBeNull()
+  expect(lib.queueItemId(undefined)).toBeNull()
+})
+
+test("clear command: ask-human resolve on a validated id, done or denied only", () => {
+  expect(lib.clearCmd("queue:20261106T230519-25755", "done")).toBe(
+    'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; ask-human resolve 20261106T230519-25755 --as done --note "cleared from the board: done"',
+  )
+  expect(lib.clearCmd("20261106T230519-25755", "denied")).toBe(
+    'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; ask-human resolve 20261106T230519-25755 --as denied --note "cleared from the board: dropped"',
+  )
+  expect(lib.clearCmd("queue:20261106T230519-25755", "superseded")).toBeNull()
+  expect(lib.clearCmd("queue:20261106T230519-25755", "done; id")).toBeNull()
+  expect(lib.clearCmd("queue:foo; rm -rf /", "done")).toBeNull()
 })

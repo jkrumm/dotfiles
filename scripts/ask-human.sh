@@ -37,8 +37,20 @@ set -euo pipefail
 # No `jq` hard dependency (this machine's cache-backend allowlist is narrow and
 # must not gain a package requirement for a queue file) — used opportunistically
 # when present, hand-rolled JSON otherwise.
+#
+# Self-cleaning: `ask --key K` supersedes every older pending request with key K,
+# a producer's success path calls `clear K`, and every request expires (default 3d
+# without a waiter, 14d when FACTORY_SESSION is set; `--expires`). `reap` (also
+# run quietly by ask/list/status) writes expired ones off as denied/expired and
+# logs them to events.log. A request enqueued under FACTORY_SESSION is reported
+# back to that lead once, via `factory session note`, when its result lands.
 
 QUEUE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/human-queue"
+ID_RE='^[0-9]{8}T[0-9]{6}-[0-9]+$'
+KEY_RE='^[A-Za-z0-9._:/@-]{1,80}$'
+DEFAULT_TTL="${HUMAN_QUEUE_DEFAULT_TTL:-3d}"
+WAITER_TTL=14d
+NOTIFY_MAX_TRIES=5
 
 # The MacBook-side ssh alias `push` targets — see `Host iumac` in
 # config/ssh_config (port 2222, IdentityAgent none, no agent forwarding).
@@ -128,15 +140,26 @@ poll_for_result() {
 # MacBook unreachable, dialog unanswered — or pushing was turned off; a request
 # the owner clicked through never reaches ntfy. --push is still accepted.
 cmd_ask() {
-  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--wait <seconds>] [--no-push]"
+  [[ $# -ge 1 ]] || die "ask requires <text> [--cmd <command>] [--key <key>] [--expires <dur|never>] [--wait <seconds>] [--no-push]"
   local text="$1"; shift
-  local cmd="" wait_seconds=0 push_after="$PUSH_DEFAULT"
+  local cmd="" wait_seconds=0 push_after="$PUSH_DEFAULT" key="" expires_arg=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --cmd)
         [[ $# -ge 2 ]] || die "--cmd requires a value"
         cmd="$2"
+        shift 2
+        ;;
+      --key)
+        [[ $# -ge 2 ]] || die "--key requires a value"
+        [[ "$2" =~ $KEY_RE ]] || die "invalid --key: $2 (allowed: A-Za-z0-9._:/@- , 1-80 chars)"
+        key="$2"
+        shift 2
+        ;;
+      --expires)
+        [[ $# -ge 2 ]] || die "--expires requires a value"
+        expires_arg="$2"
         shift 2
         ;;
       --wait)
@@ -164,7 +187,30 @@ cmd_ask() {
     esac
   done
 
+  # A lead (FACTORY_SESSION) that enqueues without waiting will not come back to
+  # collect the answer: the notify sweep tells it. Only a safe-charset session
+  # name is recorded (it reaches an argv and json_field).
+  local session=""
+  if [[ -n "${FACTORY_SESSION:-}" ]] && (( wait_seconds <= 0 )) && [[ "$FACTORY_SESSION" =~ $KEY_RE ]]; then
+    session="$FACTORY_SESSION"
+  fi
+
+  # Validate the duration before anything is written.
+  local expires_json="null" ttl_secs
+  if [[ "$expires_arg" != never ]]; then
+    local ttl="$DEFAULT_TTL"
+    [[ -n "$session" ]] && ttl="$WAITER_TTL"
+    [[ -n "$expires_arg" ]] && ttl="$expires_arg"
+    ttl_secs="$(parse_dur "$ttl")" || exit 1
+    expires_json="$(json_escape "$(date -u -r "$(( $(date +%s) + ttl_secs ))" +%Y-%m-%dT%H:%M:%SZ)")"
+  fi
+
   ensure_queue_dir
+  reap_quiet
+
+  local key_json="null" session_json="null"
+  [[ -n "$key" ]] && key_json="$(json_escape "$key")"
+  [[ -n "$session" ]] && session_json="$(json_escape "$session")"
 
   local id created host cwd
   id="$(date +%Y%m%dT%H%M%S)-$RANDOM"
@@ -187,19 +233,34 @@ cmd_ask() {
     printf '"host":%s,' "$(json_escape "$host")"
     printf '"cwd":%s,' "$(json_escape "$cwd")"
     printf '"text":%s,' "$(json_escape "$text")"
-    printf '"cmd":%s' "$cmd_json"
+    printf '"cmd":%s,' "$cmd_json"
+    printf '"key":%s,' "$key_json"
+    printf '"expires":%s,' "$expires_json"
+    printf '"session":%s' "$session_json"
     printf '}\n'
   } > "$tmp_file"
   chmod 600 "$tmp_file"
   mv "$tmp_file" "$req_file"
 
+  if [[ -n "$key" ]]; then
+    local old
+    while IFS= read -r old; do
+      resolve_one "$old" superseded "replaced by $id" 1 || true
+    done < <(pending_with_key "$key" "$id")
+  fi
+
   printf '%s\n' "$id"
 
   if (( push_after )); then
     local rc=0
+    # A synchronous answer reaches the caller as the exit code, so the lead needs
+    # no note: mark it notified up front (the push's own result write sweeps),
+    # and take the marker off again when the request stays pending.
+    [[ -n "$session" ]] && : > "$QUEUE_DIR/$id.notified"
     push_request "$id" || rc=$?
     # 75 unanswered / 69 unreachable: still pending, so fall back to the hook.
     if (( rc == 75 || rc == 69 )); then
+      rm -f "$QUEUE_DIR/$id.notified"
       fire_notify_hook "$id" "$text"
     fi
     return "$rc"
@@ -227,6 +288,7 @@ write_local_result() {
   chmod 600 "$tmp_file"
   mv "$tmp_file" "$res_file"
   rm -f "$QUEUE_DIR/$id.queued"
+  notify_sweep || true
 }
 
 # Triggers the approval itself: ssh to the MacBook (its own dedicated,
@@ -334,6 +396,7 @@ iso_to_epoch() {
 # BSD date/stat only (macOS), like the rest of this script.
 cmd_list_json() {
   ensure_queue_dir
+  reap_quiet
   local f now rows="" sep=""
   now="$(date +%s)"
   for f in "$QUEUE_DIR"/*.req; do
@@ -342,8 +405,13 @@ cmd_list_json() {
     id="$(basename "$f" .req)"
     [[ -f "$QUEUE_DIR/$id.res" ]] && continue
     local json text cmd_value created asked_epoch asked_at age state cmd_json="null"
+    local key_value expires_value key_json="null" expires_json="null"
     json="$(cat "$f")"
     text="$(json_field "$json" text)" || return 1
+    key_value="$(json_field "$json" key)" || return 1
+    expires_value="$(json_field "$json" expires)" || return 1
+    [[ -n "$key_value" ]] && key_json="$(json_escape "$key_value")"
+    [[ -n "$expires_value" ]] && expires_json="$(json_escape "$expires_value")"
     cmd_value="$(json_field "$json" cmd)" || return 1
     created="$(json_field "$json" created)" || return 1
     asked_epoch="$(iso_to_epoch "$created")"
@@ -358,9 +426,10 @@ cmd_list_json() {
     state=pending
     [[ -e "$QUEUE_DIR/$id.queued" ]] && state=queued
     [[ -n "$cmd_value" ]] && cmd_json="$(json_escape "$cmd_value")"
-    rows+="$sep{\"id\":$(json_escape "$id"),\"text\":$(json_escape "$text"),\"cmd\":$cmd_json,\"askedAt\":$(json_escape "$asked_at"),\"ageSeconds\":$age,\"state\":\"$state\"}"
+    rows+="$sep{\"id\":$(json_escape "$id"),\"text\":$(json_escape "$text"),\"cmd\":$cmd_json,\"askedAt\":$(json_escape "$asked_at"),\"ageSeconds\":$age,\"state\":\"$state\",\"key\":$key_json,\"expires\":$expires_json}"
     sep=","
   done
+  notify_sweep || true
   printf '[%s]\n' "$rows"
 }
 
@@ -377,6 +446,7 @@ cmd_list() {
     return
   fi
   ensure_queue_dir
+  reap_quiet
   local f found=0
   for f in "$QUEUE_DIR"/*.req; do
     [[ -e "$f" ]] || continue
@@ -407,6 +477,7 @@ cmd_status() {
   local id="${1:-}"
   [[ -n "$id" ]] || die "status requires <id>"
   ensure_queue_dir
+  reap_quiet
   local req="$QUEUE_DIR/$id.req"
   local res="$QUEUE_DIR/$id.res"
   [[ -f "$req" ]] || die "no such request: $id"
@@ -447,12 +518,22 @@ cmd_resolve() {
     done|denied|superseded) ;;
     *) note "error: resolve requires --as done|denied|superseded"; exit 2 ;;
   esac
-  [[ "$id" =~ ^[0-9]{8}T[0-9]{6}-[0-9]+$ ]] || { note "error: invalid request id: $id"; exit 2; }
+  [[ "$id" =~ $ID_RE ]] || { note "error: invalid request id: $id"; exit 2; }
 
   ensure_queue_dir
   [[ -f "$QUEUE_DIR/$id.req" ]] || { note "error: no such request: $id"; exit 2; }
   [[ -f "$QUEUE_DIR/$id.res" ]] && { note "error: request $id already has a result"; exit 2; }
 
+  resolve_one "$id" "$as" "$note_text" "$have_note" || { note "error: request $id already has a result"; exit 2; }
+  printf 'resolved %s as %s\n' "$id" "$as"
+}
+
+# Writes <id>.res without running anything. as = done|denied|superseded|expired.
+# Returns 1 (silently) when the result already exists — the hard-link publish
+# fails then, so racing resolvers cannot both win. Per-call temp, removed here:
+# an EXIT trap would be clobbered when this runs in a loop.
+resolve_one() {
+  local id="$1" as="$2" note_text="${3:-}" have_note="${4:-0}"
   local status="done" exit_json="0" tail_text="resolved as done without running the command"
   if [[ "$as" != "done" ]]; then
     status="denied"
@@ -462,11 +543,8 @@ cmd_resolve() {
   local note_json="null"
   (( have_note )) && note_json="$(json_escape "$note_text")"
 
-  local res_file="$QUEUE_DIR/$id.res"
-  # Global, not local: the EXIT trap runs after this function has returned.
-  tmp_file=""
-  tmp_file="$(mktemp "$QUEUE_DIR/.${id}.res.XXXXXX")"
-  trap 'rm -f "${tmp_file:-}"' EXIT
+  local res_file="$QUEUE_DIR/$id.res" tmp
+  tmp="$(mktemp "$QUEUE_DIR/.${id}.res.XXXXXX")"
   {
     printf '{'
     printf '"id":%s,' "$(json_escape "$id")"
@@ -477,14 +555,143 @@ cmd_resolve() {
     printf '"resolvedAs":"%s",' "$as"
     printf '"resolvedNote":%s' "$note_json"
     printf '}\n'
-  } > "$tmp_file"
-  chmod 600 "$tmp_file"
-  if ! ln "$tmp_file" "$res_file" 2>/dev/null; then
-    note "error: request $id already has a result"
-    exit 2
+  } > "$tmp"
+  chmod 600 "$tmp"
+  if ! ln "$tmp" "$res_file" 2>/dev/null; then
+    rm -f "$tmp"
+    return 1
   fi
-  rm -f "$QUEUE_DIR/$id.queued"
-  printf 'resolved %s as %s\n' "$id" "$as"
+  rm -f "$tmp" "$QUEUE_DIR/$id.queued"
+  notify_sweep || true
+  return 0
+}
+
+# Seconds from "90", "90s", "5m", "2h", "3d" on stdout; dies on anything else.
+parse_dur() {
+  local s="$1" n unit
+  [[ "$s" =~ ^([0-9]+)([smhd]?)$ ]] || die "invalid duration: $s (seconds, Ns/Nm/Nh/Nd, or never)"
+  n="${BASH_REMATCH[1]}"; unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    m) echo $(( n * 60 )) ;;
+    h) echo $(( n * 3600 )) ;;
+    d) echo $(( n * 86400 )) ;;
+    *) echo "$n" ;;
+  esac
+}
+
+# Ids of pending requests carrying <key>, optionally skipping one id.
+pending_with_key() {
+  local key="$1" skip="${2:-}" f id
+  for f in "$QUEUE_DIR"/*.req; do
+    [[ -e "$f" ]] || continue
+    id="$(basename "$f" .req)"
+    [[ "$id" == "$skip" || -f "$QUEUE_DIR/$id.res" ]] && continue
+    [[ "$(json_field "$(cat "$f")" key 2>/dev/null || true)" == "$key" ]] && printf '%s\n' "$id"
+  done
+  return 0
+}
+
+# A producer's success path: resolve everything it still has pending. Idempotent.
+cmd_clear() {
+  local key="" as="done" note_text="cleared by a later success of the same producer"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as)
+        [[ $# -ge 2 ]] || { note "error: --as requires done|superseded"; exit 2; }
+        as="$2"; shift 2 ;;
+      --note)
+        [[ $# -ge 2 ]] || { note "error: --note requires a value"; exit 2; }
+        note_text="$2"; shift 2 ;;
+      --*) note "error: unknown argument to clear: $1"; exit 2 ;;
+      *)
+        [[ -z "$key" ]] || { note "error: clear takes one <key> (got extra: $1)"; exit 2; }
+        key="$1"; shift ;;
+    esac
+  done
+  [[ -n "$key" ]] || { note "error: clear requires <key> [--as done|superseded] [--note <text>]"; exit 2; }
+  [[ "$key" =~ $KEY_RE ]] || { note "error: invalid key: $key"; exit 2; }
+  case "$as" in
+    done|superseded) ;;
+    *) note "error: clear --as takes done|superseded"; exit 2 ;;
+  esac
+  ensure_queue_dir
+  local id n=0
+  while IFS= read -r id; do
+    resolve_one "$id" "$as" "$note_text" 1 && n=$(( n + 1 ))
+  done < <(pending_with_key "$key")
+  printf 'cleared %d\n' "$n"
+}
+
+# Writes off every pending request whose "expires" is past: denied/expired, the
+# command never runs, one line each to events.log and stdout. Idempotent (the
+# hard-link publish lets only one reaper win).
+reap_expired() {
+  [[ -d "$QUEUE_DIR" ]] || return 0
+  local f id expires epoch now text key line
+  now="$(date +%s)"
+  for f in "$QUEUE_DIR"/*.req; do
+    [[ -e "$f" ]] || continue
+    id="$(basename "$f" .req)"
+    [[ -f "$QUEUE_DIR/$id.res" ]] && continue
+    local json
+    json="$(cat "$f")"
+    expires="$(json_field "$json" expires 2>/dev/null || true)"
+    [[ -n "$expires" ]] || continue
+    epoch="$(iso_to_epoch "$expires")"
+    [[ -n "$epoch" ]] && (( epoch <= now )) || continue
+    resolve_one "$id" expired "expired $expires" 1 || continue
+    text="$(printable "$(json_field "$json" text 2>/dev/null || true)" | tr '\n\t' '  ')"
+    key="$(json_field "$json" key 2>/dev/null || true)"
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) expired $id ${key:--} ${text:0:80}"
+    printf '%s\n' "$line" >> "$QUEUE_DIR/events.log"
+    printf '%s\n' "$line"
+  done
+  return 0
+}
+
+reap_quiet() { ( reap_expired ) >/dev/null 2>&1 || true; }
+
+cmd_reap() {
+  ensure_queue_dir
+  reap_expired
+  notify_sweep || true
+}
+
+# Tells the lead (FACTORY_SESSION at enqueue) once that its request resolved.
+# Recent results only; a <id>.notified marker ends it, a failing note is retried
+# on later sweeps and given up after NOTIFY_MAX_TRIES. Never fails or blocks the
+# caller: bounded by timeout, every error swallowed.
+notify_sweep() {
+  [[ -d "$QUEUE_DIR" ]] || return 0
+  local factory="${HUMAN_QUEUE_FACTORY:-factory}" to=() res id req_json session res_json
+  local text status as note_text msg tries
+  if command -v timeout >/dev/null 2>&1; then to=(timeout 15)
+  elif command -v gtimeout >/dev/null 2>&1; then to=(gtimeout 15); fi
+  while IFS= read -r res; do
+    id="$(basename "$res" .res)"
+    [[ "$id" =~ $ID_RE ]] || continue
+    [[ -e "$QUEUE_DIR/$id.notified" ]] && continue
+    req_json="$(cat "$QUEUE_DIR/$id.req" 2>/dev/null)" || continue
+    session="$(json_field "$req_json" session 2>/dev/null)" || continue
+    [[ -n "$session" ]] || continue
+    res_json="$(cat "$res" 2>/dev/null)" || continue
+    text="$(printable "$(json_field "$req_json" text 2>/dev/null || true)" | tr '\n\t' '  ')"
+    status="$(json_field "$res_json" status 2>/dev/null || true)"
+    as="$(json_field "$res_json" resolvedAs 2>/dev/null || true)"
+    note_text="$(json_field "$res_json" resolvedNote 2>/dev/null || true)"
+    msg="human queue: \"${text:0:80}\" was $status (${as:-$status})"
+    [[ -n "$note_text" ]] && msg+=" - $(printable "$note_text" | tr '\n\t' '  ')"
+    if ${to[@]+"${to[@]}"} "$factory" session note "$session" "$msg" --id "ask-human-$id" </dev/null >/dev/null 2>&1; then
+      : > "$QUEUE_DIR/$id.notified"
+      continue
+    fi
+    tries="$(cat "$QUEUE_DIR/$id.notify-tries" 2>/dev/null || echo 0)"
+    [[ "$tries" =~ ^[0-9]+$ ]] || tries=0
+    tries=$(( tries + 1 ))
+    printf '%d\n' "$tries" > "$QUEUE_DIR/$id.notify-tries"
+    (( tries >= NOTIFY_MAX_TRIES )) && : > "$QUEUE_DIR/$id.notified"
+  done < <(find "$QUEUE_DIR" -maxdepth 1 -name '*.res' -mtime -2 2>/dev/null)
+  return 0
 }
 
 usage() {
@@ -492,8 +699,15 @@ usage() {
 ask-human.sh — enqueue present-human work from the mini (or any machine)
 
 Usage:
-  ask-human.sh ask <text> [--cmd <command>] [--wait <seconds>] [--no-push]
+  ask-human.sh ask <text> [--cmd <command>] [--key <key>] [--expires <dur|never>]
+                          [--wait <seconds>] [--no-push]
                               Enqueue a request. Prints the request id.
+                              --key replaces: older pending requests with the same
+                              key are resolved as superseded. --expires <dur>
+                              (seconds, Ns/Nm/Nh/Nd, never) sets when it is
+                              written off; default 3d ($HUMAN_QUEUE_DEFAULT_TTL),
+                              14d when FACTORY_SESSION is set (that lead is told
+                              of the result via `factory session note`).
                               --cmd proposes a shell command for the human to
                               review and run on the MacBook (never auto-run).
                               --wait <seconds> polls for a result and exits
@@ -526,6 +740,14 @@ Usage:
                               superseded read as "not run" (a waiting caller
                               exits 1, like a dialog Deny). Exit 2 and one line
                               when the id is unknown or already has a result.
+  ask-human.sh clear <key> [--as done|superseded] [--note <text>]
+                              A producer's success path: resolve every pending
+                              request with that key (default done). Always exit 0;
+                              prints `cleared N`.
+  ask-human.sh reap           Write off expired requests (denied, resolvedAs
+                              expired; the command never runs), log them to
+                              events.log, and send due factory notes. ask, list and
+                              status do the write-off quietly.
   ask-human.sh help           This message.
 
 Queue root: ${XDG_STATE_HOME:-$HOME/.local/state}/human-queue/
@@ -543,6 +765,8 @@ main() {
     list) shift; cmd_list "$@" ;;
     status) shift; cmd_status "$@" ;;
     resolve) shift; cmd_resolve "$@" ;;
+    clear) shift; cmd_clear "$@" ;;
+    reap) shift; cmd_reap "$@" ;;
     help|-h|--help) usage ;;
     *) die "unknown subcommand: $sub (see: ask-human.sh help)" ;;
   esac

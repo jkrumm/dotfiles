@@ -51,6 +51,8 @@ mkdir -p "$STATE"
 export XDG_STATE_HOME="$STATE"
 # ask pushes by default (ssh iumac) — never from a test.
 export HUMAN_QUEUE_PUSH=0
+# A factory session running this suite must not leak into ask-human's notify sweep.
+unset FACTORY_SESSION
 
 # json_field/validate_id call die() on a malformed value — only used below to
 # build assertion inputs, so a plain stderr message is enough.
@@ -436,6 +438,132 @@ else
     assert_contains "waiting ask prints the result line ($as)" "\"resolvedAs\":\"$as\"" "$(cat "$outf")"
   done
   assert_eq "waiting callers: command never ran" "no" "$([[ -e "$marker" ]] && echo yes || echo no)"
+fi
+
+echo ""
+echo "ask-human.sh — keys, clear, expiry, factory notes"
+rm -rf "$QDIR"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "  (jq missing — skipping key/expiry assertions)"
+else
+  has_res() { [[ -e "$QDIR/$1.res" ]] && echo yes || echo no; }
+
+  # Replace by key.
+  a="$(bash "$AH" ask "deploy gate old" --key deploy:x)"; sleep 1
+  other="$(bash "$AH" ask "other key" --key deploy:y)"
+  b="$(bash "$AH" ask "deploy gate new" --key deploy:x)"
+  assert_eq "key: older same-key request resolved" "yes" "$(has_res "$a")"
+  assert_eq "key: resolvedAs superseded" "superseded" "$(jq -r .resolvedAs "$QDIR/$a.res")"
+  assert_eq "key: note names the new id" "replaced by $b" "$(jq -r .resolvedNote "$QDIR/$a.res")"
+  assert_eq "key: different key untouched" "no" "$(has_res "$other")"
+  assert_eq "key: new request pending" "no" "$(has_res "$b")"
+  assert_eq "key: stored in the .req" "deploy:x" "$(jq -r .key "$QDIR/$b.req")"
+  out="$(bash "$AH" list --json)"
+  assert_eq "key: list --json shows only the new one for the key" "1" "$(jq --arg k deploy:x '[.[] | select(.key == $k)] | length' <<<"$out")"
+  assert_eq "key: list --json fields stay (state)" "pending" "$(jq -r --arg id "$b" '.[] | select(.id == $id) | .state' <<<"$out")"
+  bash "$AH" ask "bad key" --key 'a b' >/dev/null 2>&1
+  assert_eq "key: invalid chars die" "1" "$?"
+  nk="$(bash "$AH" ask "no key")"
+  assert_eq "no key: stored as null" "null" "$(jq -c .key "$QDIR/$nk.req")"
+
+  # clear <key>.
+  out="$(bash "$AH" clear deploy:x)"; rc=$?
+  assert_eq "clear: rc 0" "0" "$rc"
+  assert_eq "clear: prints cleared 1" "cleared 1" "$out"
+  assert_eq "clear: resolved done" "done" "$(jq -r .resolvedAs "$QDIR/$b.res")"
+  assert_contains "clear: default note" "later success" "$(jq -r .resolvedNote "$QDIR/$b.res")"
+  assert_eq "clear: other key untouched" "no" "$(has_res "$other")"
+  assert_eq "clear again: idempotent cleared 0" "cleared 0" "$(bash "$AH" clear deploy:x)"
+  assert_eq "clear unknown key: rc 0" "0" "$(bash "$AH" clear nothing:here >/dev/null 2>&1; echo $?)"
+  bash "$AH" clear deploy:y --as superseded --note "gone" >/dev/null
+  assert_eq "clear --as/--note" "superseded:gone" "$(jq -r '"\(.resolvedAs):\(.resolvedNote)"' "$QDIR/$other.res")"
+  bash "$AH" resolve "$nk" --as "done" >/dev/null
+
+  # Default expiry, never, malformed.
+  d="$(bash "$AH" ask "default ttl")"
+  assert_eq "expiry: default present (ISO)" "true" "$(jq '.expires | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T")' "$QDIR/$d.req")"
+  assert_eq "expiry: default is ~3d" "true" "$(jq --argjson now "$(date +%s)" '(.expires | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) as $e | ($e - $now) | (. > 259000 and . < 259300)' "$QDIR/$d.req")"
+  n="$(bash "$AH" ask "never expires" --expires never)"
+  assert_eq "expiry: never -> null" "null" "$(jq -c .expires "$QDIR/$n.req")"
+  bash "$AH" ask "bad ttl" --expires soon >/dev/null 2>&1
+  assert_eq "expiry: malformed duration dies" "1" "$?"
+  assert_eq "expiry: malformed leaves no request" "0" "$(bash "$AH" list --json | jq '[.[] | select(.text == "bad ttl")] | length')"
+  bash "$AH" resolve "$d" --as "done" >/dev/null; bash "$AH" resolve "$n" --as "done" >/dev/null
+
+  # Expiry: --expires 1s and a hand-edited past date.
+  # e1 is enqueued last: any later `ask` would reap it quietly before `reap` runs.
+  e2="$(bash "$AH" ask "hand edited")"
+  e1="$(bash "$AH" ask "short lived" --expires 1s --key exp:k --cmd "touch $TMP/expired-ran")"
+  sed -i '' 's/"expires":"[^"]*"/"expires":"2020-01-01T00:00:00Z"/' "$QDIR/$e2.req"
+  sleep 2
+  out="$(bash "$AH" reap)"
+  assert_eq "reap: prints one line per expired request" "2" "$(printf '%s\n' "$out" | grep -c .)"
+  assert_eq "reap: .res resolvedAs expired" "expired" "$(jq -r .resolvedAs "$QDIR/$e1.res")"
+  assert_eq "reap: status denied" "denied" "$(jq -r .status "$QDIR/$e1.res")"
+  assert_contains "reap: note says expired" "expired " "$(jq -r .resolvedNote "$QDIR/$e1.res")"
+  assert_eq "reap: command never ran" "no" "$([[ -e "$TMP/expired-ran" ]] && echo yes || echo no)"
+  assert_eq "reap: events.log has one line for it" "1" "$(grep -c " expired $e1 exp:k short lived" "$QDIR/events.log")"
+  assert_eq "reap: events.log has two lines total" "2" "$(grep -c . "$QDIR/events.log")"
+  assert_eq "reap again: no output" "" "$(bash "$AH" reap)"
+  assert_eq "reap again: no new event line" "2" "$(grep -c . "$QDIR/events.log")"
+
+  e3="$(bash "$AH" ask "expires on list" --expires 1s)"; sleep 2
+  out="$(bash "$AH" list --json)"
+  assert_eq "list --json drops an expired item" "0" "$(jq --arg id "$e3" '[.[] | select(.id == $id)] | length' <<<"$out")"
+  assert_eq "list --json reap wrote the result" "expired" "$(jq -r .resolvedAs "$QDIR/$e3.res")"
+  assert_eq "list --json reap logged it" "1" "$(grep -c " expired $e3 " "$QDIR/events.log")"
+
+  # Notify sweep via a stub factory.
+  CALLS="$TMP/factory-calls"; : > "$CALLS"
+  FSTUB="$TMP/factory-stub.sh"
+  cat > "$FSTUB" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FACTORY_CALLS"
+[[ -n "${FACTORY_FAIL:-}" ]] && exit 1
+exit 0
+STUB
+  chmod +x "$FSTUB"
+  export HUMAN_QUEUE_FACTORY="$FSTUB" FACTORY_CALLS="$CALLS"
+
+  s1="$(FACTORY_SESSION=lead-x bash "$AH" ask "needs the owner")"
+  assert_eq "session: recorded in the .req" "lead-x" "$(jq -r .session "$QDIR/$s1.req")"
+  assert_eq "session: 14d default expiry" "true" "$(jq --argjson now "$(date +%s)" '(.expires | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) as $e | ($e - $now) | (. > 1209000 and . < 1209700)' "$QDIR/$s1.req")"
+  s0="$(bash "$AH" ask "no lead")"
+  assert_eq "session: absent -> null" "null" "$(jq -c .session "$QDIR/$s0.req")"
+  assert_eq "notify: nothing before a result" "0" "$(grep -c . "$CALLS")"
+  bash "$AH" resolve "$s1" --as "done" --note "by hand" >/dev/null
+  bash "$AH" resolve "$s0" --as "done" >/dev/null
+  bash "$AH" list --json >/dev/null; bash "$AH" reap >/dev/null; bash "$AH" list >/dev/null
+  assert_eq "notify: exactly one call across repeated sweeps" "1" "$(grep -c . "$CALLS")"
+  call="$(cat "$CALLS")"
+  assert_contains "notify: session note to the lead" "session note lead-x " "$call"
+  assert_contains "notify: --id ask-human-<id>" "--id ask-human-$s1" "$call"
+  assert_contains "notify: names the request text" '"needs the owner" was done' "$call"
+  assert_contains "notify: carries the note" "by hand" "$call"
+  assert_not_contains "notify: no lead -> never called for it" "$s0" "$call"
+
+  # A request that expires notifies too, and a superseded one.
+  FACTORY_SESSION=lead-x bash "$AH" ask "will expire" --expires 1s >/dev/null; sleep 2
+  bash "$AH" reap >/dev/null
+  assert_contains "notify: expiry reported" '"will expire" was denied (expired)' "$(cat "$CALLS")"
+
+  # A synchronous push answer is not re-notified.
+  : > "$CALLS"
+  s3="$(FACTORY_SESSION=lead-x PATH="$TMP/fakebin:$PATH" HUMAN_QUEUE_PUSH=1 HUMAN_QUEUE_MAC_HOST=local HUMAN_QUEUE_TEST_BUTTON=Deny bash "$AH" ask "pushed" --cmd "echo nope" 2>/dev/null)"; s3="${s3%%$'\n'*}"
+  bash "$AH" list --json >/dev/null
+  assert_eq "notify: synchronous push result not announced" "0" "$(grep -c . "$CALLS")"
+  assert_eq "notify: marker set for it" "yes" "$([[ -e "$QDIR/$s3.notified" ]] && echo yes || echo no)"
+
+  # A failing factory: retried, then given up after 5.
+  : > "$CALLS"
+  s4="$(FACTORY_SESSION=lead-x bash "$AH" ask "fails to notify")"
+  export FACTORY_FAIL=1
+  bash "$AH" resolve "$s4" --as denied >/dev/null
+  for _ in 1 2 3 4 5 6 7 8; do bash "$AH" reap >/dev/null; done
+  unset FACTORY_FAIL
+  assert_eq "notify: failing stub gives up after 5 tries" "5" "$(grep -c "ask-human-$s4" "$CALLS")"
+  assert_eq "notify: marker set after giving up" "yes" "$([[ -e "$QDIR/$s4.notified" ]] && echo yes || echo no)"
+  unset HUMAN_QUEUE_FACTORY FACTORY_CALLS
 fi
 
 echo ""

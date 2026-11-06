@@ -508,7 +508,9 @@ hook only fires when that push could not resolve the request.
 
 | Side | Command | Runs on |
 |-|-|-|
-| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--wait <seconds>] [--no-push]` | mini |
+| Enqueue | `ask-human.sh ask "<text>" [--cmd <command>] [--key <key>] [--expires <dur\|never>] [--wait <seconds>] [--no-push]` | mini |
+| A producer's success path: resolve everything pending under its key | `ask-human.sh clear <key> [--as done\|superseded] [--note <text>]` | mini |
+| Write off expired requests (also run quietly by ask/list/status) | `ask-human.sh reap` | mini |
 | Trigger the dialog for an already-enqueued request | `ask-human.sh push <id>` | mini |
 | Inspect own request | `ask-human.sh list [--json]` / `status <id>` | mini |
 | Answer a request without the MacBook (the fleet view's resolve / deny); never runs its command | `ask-human.sh resolve <id> --as done\|denied\|superseded [--note <text>]` | mini |
@@ -525,6 +527,17 @@ takes precedence over `--wait`: it already resolves synchronously over one ssh
 round trip, so there is nothing left to poll for. An unreachable MacBook (69)
 or an unanswered dialog (75) leaves the request pending and fires the notify
 hook; `--no-push` / `HUMAN_QUEUE_PUSH=0` enqueues only.
+
+The queue cleans itself. `--key <key>` replaces: a new request resolves every older
+pending one with the same key as `superseded`, and the producer's success path calls
+`clear <key>` so nothing it asked for lingers. Every request expires (`--expires`, seconds
+or `Ns/Nm/Nh/Nd` or `never`; default 3d, `HUMAN_QUEUE_DEFAULT_TTL`; 14d when
+`FACTORY_SESSION` is set): `reap` writes it off as `denied` with `resolvedAs: expired`
+(its command never runs) and logs one line to `events.log`. A request enqueued under
+`FACTORY_SESSION` records that lead; when its result lands the lead hears it once via
+`factory session note <session> … --id ask-human-<id>` (retried, given up after 5
+tries). The Herdr sidebar's human-queue rows carry ✓ (done) and × (drop), which run
+`ask-human resolve` on the mini.
 
 - **The transport is the existing MacBook→mini ssh hop** for a manual drain, and
   the mini's own **`ssh iumac`** reach (see *mini → iumac*, below) for `--push` —

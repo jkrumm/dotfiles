@@ -4,7 +4,8 @@
 // shared("jk.board.tab"). Read-only.
 // Issues: every 15 s (every 5 s in hot mode, see below) one call on the mini reads software-factory's read API (`factory read overview|issues|sessions`,
 // token through secrets-run) and hc's terminal list. Each part parses on its own and keeps its last good answer.
-// Top to bottom: the summary line, ASKS (the owner's own first), HUMAN QUEUE (stale ones folded), HEALTH, then the
+// Top to bottom: the summary line, ASKS (the owner's own first), HUMAN QUEUE (stale ones folded; a row's ✓ / × resolves it
+// through `ask-human resolve` on the mini, done or dropped, and hides it at once), HEALTH, then the
 // Issues: RUNNING, QUEUED (folded), RECENT (folded), and the live sessions that belong to no Issue. A Status | Project
 // switch (localStorage board.group) regroups the Issues as one foldable section per repo (running, then queued).
 // An Issue card shows its repo, human title, phase, what it is about and its status; a click opens facts, its sessions,
@@ -168,6 +169,19 @@ function parse(stdout) {
 
 // The Issue's id reaches the shell: an integer or no command at all.
 const issueCmd = (id) => (Number.isInteger(id) && id > 0 ? `${SECRETS} factory --format json read issue ${id}` : null);
+
+// A human-queue item's request id (`queue:<id>` or bare), only in ask-human's own shape: it reaches a shell.
+const QUEUE_ID = /^[0-9]{8}T[0-9]{6}-[0-9]+$/;
+function queueItemId(qid) {
+  const id = String(qid ?? "").replace(/^queue:/, "");
+  return QUEUE_ID.test(id) ? id : null;
+}
+// The owner's answer from the board, run on the mini: `done` = handled by other means, `denied` = not wanted. Never runs the request's command.
+function clearCmd(qid, as) {
+  const id = queueItemId(qid);
+  if (!id || (as !== "done" && as !== "denied")) return null;
+  return `PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; ask-human resolve ${id} --as ${as} --note "cleared from the board: ${as === "done" ? "done" : "dropped"}"`;
+}
 
 const isYours = (a) => (a.tier ?? "yours") === "yours";
 const time = (iso) => Date.parse(iso) || 0;
@@ -508,6 +522,7 @@ export default class Board extends View {
     this.polledAt = 0;
     this.group = localStorage.getItem("board.group") === "project" ? "project" : "status";
     this.fastUntil = 0; // hot mode until then (an ask was clicked)
+    this.cleared = new Set(); // human-queue items the owner cleared here, hidden until a poll stops listing them
     this.focusIssue = null; // the Issue of the focused terminal, set in render
     this.refresh(cx);
     cx.timer.every(HOT_POLL_MS, (cx) => { if (this.hot()) this.refresh(cx, true); });
@@ -564,6 +579,7 @@ export default class Board extends View {
       if (next?.overview) {
         this.overview = next.overview;
         this.at = Date.now();
+        this.pruneCleared(next.overview);
       }
       if (next?.issues) {
         this.issues = next.issues;
@@ -788,15 +804,52 @@ export default class Board extends View {
       .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(a.at)));
   }
 
-  // A human-queue item: nothing to jump to. Stale ones are dim.
+  // Forget a cleared id once a poll no longer lists it.
+  pruneCleared(ov) {
+    const listed = new Set(asArray(ov.humanQueue).map((q) => q.id));
+    for (const id of this.cleared) if (!listed.has(id)) this.cleared.delete(id);
+  }
+
+  // The human queue without what the owner just cleared, split open / stale.
+  queueSplit(ov) {
+    return splitQueue(asArray(ov?.humanQueue).filter((q) => !this.cleared.has(q.id)));
+  }
+
+  // Resolve a queue item from the board (ask-human on the mini, the command never runs); hidden at once, shown again if it failed.
+  clearQueue(q, as, cx) {
+    const cmd = clearCmd(q.id, as);
+    if (!cmd) return;
+    this.cleared.add(q.id);
+    this.fastUntil = Date.now() + HOT_MS;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = await exec("sh", ["-c", cmd], { on: "mini" }).catch(() => null);
+      if (!r || r.code !== 0) this.cleared.delete(q.id);
+      this.refresh(cx, true);
+      cx.notify();
+    });
+  }
+
+  // A human-queue item: nothing to jump to. Stale ones are dim. The two small buttons at the end clear it.
   queueRow(t, q, stale) {
     const text = [q.summary, q.text].map((x) => tip(x)).filter(Boolean).join("\n\n");
+    const button = (kind, glyph, as, hint) => div().id(`is-q-${kind}-${q.id}`).w(16).h(16).flex_none().flex().items_center().justify_center().rounded(4)
+      .cursor_pointer().text_color(t.muted).hover((s) => s.bg(t.selected).text_color(t.foreground)).tooltip(hint)
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        this.clearQueue(q, as, cx);
+      })
+      .child(glyph);
+    const clearable = Boolean(queueItemId(q.id));
     return h_flex().id(`is-q-${q.id}`).h(18).flex_none().gap(6).items_center().pl(10).text_size(11).rounded(5).tooltip(text)
       .when(stale, (el) => el.opacity(0.55))
       .child(this.dot(t, "idle", 5, false))
       .child(div().flex_1().min_w(0).truncate().text_color(stale ? t.dim : t.foreground).child(oneLine(q.short ?? q.text)))
       .child(div().flex_shrink(0).max_w(96).truncate().text_color(t.muted).child(q.repo ? base(q.repo) : q.source))
-      .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(q.at)));
+      .child(div().w(26).flex_none().text_right().text_color(t.dim).child(age(q.at)))
+      .when(clearable, (el) => el
+        .child(button("done", "✓", "done", "Done: handled by other means"))
+        .child(button("drop", "×", "denied", "Drop: not wanted")));
   }
 
   // One health line, dimmer than an ask and with no urgency dot: short, repo (else its kind), age; a click jumps to its session or Issue's lead.
@@ -921,7 +974,7 @@ export default class Board extends View {
   issuesView(t) {
     const { ov, stale, live } = this.derive();
     const asks = ov ? sortAsks(ov.asks) : [];
-    const { fresh, stale: older } = splitQueue(ov?.humanQueue);
+    const { fresh, stale: older } = this.queueSplit(ov);
     const health = ov ? sortHealth(ov.health) : [];
     const { running, queued, recent } = this.issues ? sections(this.issues, this.bySession) : { running: [], queued: [], recent: [] };
     const nestedLoose = nestedPanes(live.filter((s) => s.issue == null).map((s) => s.terminal?.id).filter(Boolean), this.hcList);
@@ -1005,7 +1058,7 @@ export default class Board extends View {
     const cards = this.issues ?? [];
     const repos = [...new Set([...cards.filter((c) => c.state !== "closed").map((c) => c.repoName), this.repoFilter].filter(Boolean))].sort((a, b) => a.localeCompare(b));
     const asks = ov ? sortAsks(ov.asks) : [];
-    const { fresh } = splitQueue(ov?.humanQueue);
+    const { fresh } = this.queueSplit(ov);
     const attention = asks.length + fresh.length;
     const columns = kanban(cards, this.bySession, this.repoFilter);
     const chip = (id, label, on, repo) => h_flex().id(id).h(22).px(10).flex_none().items_center().rounded(6).cursor_pointer().text_size(11.5)
