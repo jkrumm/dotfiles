@@ -431,7 +431,11 @@ def reap_bg(j: Journal) -> None:
 
 
 def reap_bg_account(j: Journal, env: dict) -> None:
-    r = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, env=env)
+    try:
+        r = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, env=env, timeout=NET_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        print(f"claude agents --json timed out after {NET_TIMEOUT_S}s ({env.get('CLAUDE_CONFIG_DIR', 'default account')}); skipping its bg leftovers")
+        return
     if r.returncode != 0:
         print(f"claude agents --json failed ({env.get('CLAUDE_CONFIG_DIR', 'default account')}, rc={r.returncode}): "
               f"{(r.stderr or r.stdout).strip()[:160]!r}; skipping its bg leftovers")
