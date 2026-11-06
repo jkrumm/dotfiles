@@ -35,6 +35,11 @@ describe("runners that are wrapped", () => {
     "yarn check",
     "make check",
     "make -j4 test",
+    "make -j 4 test",
+    "make -C packages/app check",
+    "npx -y vitest",
+    "uv run --with x pytest",
+    "uv run --python 3.12 pytest -x",
     "gmake test-unit",
     "go test ./...",
     "cargo test",
@@ -73,6 +78,8 @@ describe("commands left alone", () => {
     const dir = mkdtempSync(`${tmpdir()}/slot-`);
     writeFileSync(`${dir}/Makefile`, "test:\n\tfactory slot run -- bun test\n");
     left("make test", { cwd: dir });
+    writeFileSync(`${dir}/Makefile`, "check:\n\tagw check\n");
+    left("make check", { cwd: dir });
     writeFileSync(`${dir}/Makefile`, "test:\n\tbun test\n");
     expect(run("make test", { cwd: dir })).not.toBeNull();
   });
@@ -150,7 +157,7 @@ describe("hook process", () => {
     );
     expect(code).toBe(0);
     const o = JSON.parse(out).hookSpecificOutput;
-    expect(o.permissionDecision).toBe("allow");
+    expect(o.permissionDecision).toBeUndefined();
     expect(o.updatedInput.timeout).toBe(5000);
     expect(o.updatedInput.command).toContain("factory slot run");
   });

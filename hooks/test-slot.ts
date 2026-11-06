@@ -22,8 +22,8 @@
  * each hold one and wait on the other until the 45-minute limit):
  *   - the session is already inside a slot (`FACTORY_SLOT_ACTIVE`);
  *   - the command already calls `factory slot run` or `agw` (`agw check` takes its own slot);
- *   - the project's Makefile or package.json already says `slot run` (software-factory's
- *     `make test` and the like).
+ *   - the project's Makefile or package.json already says `slot run` or `agw check`
+ *     (software-factory's `make test` and the like).
  *
  * Fail open: no `factory` binary on PATH (the MacBook, CI) or an unparseable payload means
  * the command runs as written. A factory server that is down is handled by `factory slot run`
@@ -47,6 +47,8 @@ const WRAPPERS = new Set(["sudo", "env", "command", "nice", "nohup", "stdbuf", "
 
 /** Package runners whose next token is the program (`npx vitest`). */
 const RUNNERS = new Set(["npx", "bunx", "pnpx"]);
+
+const UV_VALUE_FLAGS = new Set(["--with", "--python", "-p", "--project", "--directory", "--extra", "--group", "--with-requirements", "--env-file"]);
 
 const JS_TEST_BINARIES = new Set(["vitest", "jest", "pytest", "py.test", "mocha"]);
 
@@ -83,7 +85,7 @@ export function testRunner(simple: string[]): string | null {
   const positional = args.filter((a) => !a.startsWith("-"));
 
   if (JS_TEST_BINARIES.has(name)) return name;
-  if (RUNNERS.has(name)) return args.length ? testRunner(args) : null;
+  if (RUNNERS.has(name)) return testRunner(args.filter((a) => !a.startsWith("-")));
 
   switch (name) {
     case "playwright":
@@ -103,8 +105,9 @@ export function testRunner(simple: string[]): string | null {
       return null;
     case "make":
     case "gmake": {
-      const target = positional.find((a) => !a.includes("="));
-      return target && MAKE_TARGET.test(target) ? `make ${target}` : null;
+      // Every positional, not the first: `make -C dir check` and `make -j 4 test` carry flag values.
+      const target = positional.find((a) => MAKE_TARGET.test(a));
+      return target ? `make ${target}` : null;
     }
     case "python":
     case "python3": {
@@ -112,8 +115,15 @@ export function testRunner(simple: string[]): string | null {
       return m !== -1 && ["pytest", "unittest"].includes(args[m + 1] ?? "") ? `python -m ${args[m + 1]}` : null;
     }
     case "uv":
-    case "poetry":
-      return positional[0] === "run" ? testRunner(positional.slice(1)) : null;
+    case "poetry": {
+      const run = args.indexOf("run");
+      if (run === -1) return null;
+      // Skip flags after `run`, and the value of the ones that take one (`uv run --with x pytest`).
+      const rest = args.slice(run + 1);
+      let k = 0;
+      while (k < rest.length && rest[k].startsWith("-")) k += UV_VALUE_FLAGS.has(rest[k]) ? 2 : 1;
+      return testRunner(rest.slice(k));
+    }
     case "cargo":
     case "go":
       return positional[0] === "test" ? `${name} test` : null;
@@ -132,11 +142,11 @@ function takesOwnSlot(simple: string[]): boolean {
   return name === "factory" && tokens[1] === "slot";
 }
 
-/** Does the project's Makefile or package.json already run its tests through `slot run`? */
+/** Does the project's Makefile or package.json already take a slot itself (`slot run`, or `agw check`, which does)? */
 function projectHasSlot(dir: string): boolean {
   for (const file of ["Makefile", "package.json"]) {
     try {
-      if (readFileSync(`${dir}/${file}`, "utf8").includes("slot run")) return true;
+      if (readFileSync(`${dir}/${file}`, "utf8").match(/slot run|agw check/)) return true;
     } catch {
       // no such file: nothing to find
     }
@@ -219,8 +229,6 @@ if (import.meta.main) {
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: `test runner (${result.runner}) runs in the factory test slot`,
           updatedInput: { ...input.tool_input, command: result.command },
         },
       }),
