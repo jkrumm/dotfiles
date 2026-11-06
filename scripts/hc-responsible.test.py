@@ -5,6 +5,7 @@ import importlib.util
 import io
 import os
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("hcr", os.path.join(os.path.dirname(os.path.abspath(__file__)), "hc-responsible.py"))
 hcr = importlib.util.module_from_spec(spec)

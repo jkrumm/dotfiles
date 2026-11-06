@@ -217,7 +217,7 @@ Slack notify). Detail: `docs/remote-dev.md`.
 
 **`/remote-dev`** for anything touching this stack; model in `docs/remote-dev.md`.
 
-**herdr-core (`hc`) + the Herdr app** are the terminal layer (app on the MacBook, a launchd-born core on each machine). Design and facts: `docs/herdr-core.md`; the global `herdr` skill drives them.
+**herdr-core (`hc`) + the Herdr app**, the terminal layer: `docs/herdr-core.md`; the global `herdr` skill drives them.
 
 ## Dev-server doors
 
