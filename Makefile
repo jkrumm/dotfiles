@@ -2943,10 +2943,10 @@ devhost-health-setup:
 	@if [ ! -r "$(DEVHOST_PUSH_URL_FILE)" ]; then \
 		echo "  ✗ no push URL at $(DEVHOST_PUSH_URL_FILE)"; \
 		echo "    1. Declare the monitor in homelab/uptime-kuma/monitors.yaml"; \
-		echo "       (group 'Local', interval 600, maxretries 0), then from"; \
+		echo "       (group 'Local', interval 600, retry_interval 600, maxretries 1), then from"; \
 		echo "       ~/SourceRoot/homelab run: make uk-sync"; \
 		echo "       600s must exceed the agent's 300s cadence so one skipped"; \
-		echo "       run does not page; maxretries 0 keeps time-to-DOWN at 10min."; \
+		echo "       run does not page; time-to-DOWN is about 20 min."; \
 		echo "    2. mkdir -p $(dir $(DEVHOST_PUSH_URL_FILE))"; \
 		echo "    3. Read the monitor's pushToken back off the Kuma API and write"; \
 		echo "       <base>/api/push/<token> to $(DEVHOST_PUSH_URL_FILE), chmod 600."; \
@@ -3060,7 +3060,7 @@ drift-check-setup:
 	else \
 		echo "    · no push URL at $(DRIFT_PUSH_URL_FILE) — installing report-only"; \
 		echo "      to wire the monitor: declare it in homelab/uptime-kuma/monitors.yaml"; \
-		echo "      (group 'Local', interval 172800, maxretries 0 — 2d must exceed the"; \
+		echo "      (group 'Local', interval 172800, maxretries 1 — 2d must exceed the"; \
 		echo "      agent's daily cadence), make uk-sync, then write <base>/api/push/<token>"; \
 		echo "      to that path, chmod 600."; \
 	fi

@@ -16,6 +16,7 @@ it is a prompt at a sane moment, on a machine with a human in front of it.
 
 ## The backup guard
 
+- **Item-count guard.** `scripts/backup-1password.py` keeps the last item count in `~/.local/state/opbackup/last_item_count` and refuses to upload, prune or push the heartbeat when the new count is more than 20% lower (a partial `op` export). After a real clean-up, delete that file once. The upload is also size-checked against the remote copy before anything is pruned.
 - **Hourly via `StartCalendarInterval`**, never `RunAtLoad`/`StartInterval` — only
   calendar intervals coalesce a fire missed while asleep into one wake-up run.
 - **Every decision lives in `scripts/opbackup-auto.sh`**, cheapest-first, each

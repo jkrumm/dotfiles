@@ -212,15 +212,50 @@ function expandAliases(
   aliases: Map<string, string>,
   depth = 0
 ): { subcommand: string | null; args: string[] } {
-  const body = depth < MAX_ALIAS_DEPTH ? aliasBody(subcommand, aliases) : undefined;
+  const body = aliasBody(subcommand, aliases, depth);
   if (body === undefined) return { subcommand, args };
-  const words = body.replace(/^!/, "").trim().split(/\s+/);
-  if (basename(words[0]) === "git") words.shift();
+  if (body.startsWith("!")) return shellAlias(body.slice(1), subcommand, args);
+  return expandAliasWords(aliasWords(body), args, aliases, depth);
+}
+
+function shellAlias(
+  body: string,
+  subcommand: string | null,
+  args: string[]
+): { subcommand: string | null; args: string[] } {
+  return shellAliasPush(body) ?? { subcommand, args };
+}
+
+function expandAliasWords(
+  words: string[],
+  args: string[],
+  aliases: Map<string, string>,
+  depth: number
+): { subcommand: string | null; args: string[] } {
   return expandAliases(nextWord(words), [...words, ...args], aliases, depth + 1);
 }
 
-function aliasBody(subcommand: string | null, aliases: Map<string, string>): string | undefined {
-  return subcommand === null ? undefined : aliases.get(subcommand);
+/** git ignores an alias that shadows a built-in, so a `push` is never expanded. */
+function aliasBody(
+  subcommand: string | null,
+  aliases: Map<string, string>,
+  depth: number
+): string | undefined {
+  if (depth >= MAX_ALIAS_DEPTH || subcommand === null || subcommand === "push") return undefined;
+  return aliases.get(subcommand);
+}
+
+function aliasWords(body: string): string[] {
+  const words = body.trim().split(/\s+/);
+  if (basename(words[0]) === "git") words.shift();
+  return words;
+}
+
+/** A `!` alias runs through the shell: judge the first push among its nested commands. */
+function shellAliasPush(body: string): { subcommand: string; args: string[] } | undefined {
+  const nested = splitIntoCommands(body).map(inspectGit);
+  const push = nested.find((git) => git?.subcommand === "push");
+  return push ? { subcommand: "push", args: push.args } : undefined;
 }
 
 function nextWord(words: string[]): string | null {
@@ -400,7 +435,12 @@ function classifyRefspecs(refspecs: string[]): PushKind {
   }
   // A leading `+` forces that one ref whatever the flags say.
   if (refspecs.some((spec) => spec.startsWith("+"))) return { kind: "hard-force" };
-  return refspecs.every(isCurrentBranchSpec) ? { kind: "current-branch" } : { kind: "none" };
+  return followsCurrentBranch(refspecs) ? { kind: "current-branch" } : { kind: "none" };
+}
+
+/** A bare push, or any `HEAD`/dynamic refspec, writes to the current branch. */
+function followsCurrentBranch(refspecs: string[]): boolean {
+  return refspecs.length === 0 || refspecs.some(isCurrentBranchSpec);
 }
 
 /** A refspec the parse cannot resolve (`$BRANCH`) is judged as the current branch. */

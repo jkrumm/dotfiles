@@ -288,7 +288,7 @@ check_power_posture() {
   fi
   al=$("$SYSADMINCTL_BIN" -autologin status 2>&1) || al=""
   if [[ -z "$al" ]]; then skip_add "autologin (sysadminctl unreadable)"
-  elif [[ "$al" == *"login user:"* ]]; then info_add "autologin on"
+  elif [[ "$al" == *"Automatic login user"* ]]; then info_add "autologin on"
   else drift_add "autologin" "automatic login is off, a reboot leaves the mini at the login window (fix: make lock-at-boot-setup)"
   fi
 }

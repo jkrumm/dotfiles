@@ -197,6 +197,26 @@ describe("inspectPush — bypasses that used to classify as allowed", () => {
     expect(inspectPush("git -c alias.p=status p")).toEqual({ kind: "none" });
   });
 
+  test("an alias shadowing push is ignored, as git ignores it", () => {
+    expect(inspectPush("git -c alias.push=status push origin main")).toEqual({
+      kind: "protected-ref",
+    });
+  });
+
+  test("a shell alias body is judged as a shell command", () => {
+    expect(inspectPush(`git -c 'alias.p=!sh -c "git push origin main"' p`)).toEqual({
+      kind: "protected-ref",
+    });
+    expect(inspectPush(`git -c 'alias.p=!sh -c "git status"' p`)).toEqual({ kind: "none" });
+  });
+
+  test("a dynamic or HEAD refspec next to a literal one is a current-branch push", () => {
+    expect(inspectPush("git push origin feat/x $BRANCH")).toEqual({ kind: "current-branch" });
+    expect(inspectPush("git push origin feat/x HEAD")).toEqual({ kind: "current-branch" });
+    expect(inspectPush("git push origin feat/x")).toEqual({ kind: "none" });
+    expect(inspectPush("git push -u origin HEAD")).toEqual({ kind: "current-branch" });
+  });
+
   test("a backslash-newline between git and push is a continuation", () => {
     expect(inspectPush("git \\\npush origin main")).toEqual({ kind: "protected-ref" });
     expect(inspectPush("git \\\npush --force origin x")).toEqual({ kind: "hard-force" });

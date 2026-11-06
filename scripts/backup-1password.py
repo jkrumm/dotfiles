@@ -221,7 +221,8 @@ def main():
     if item_count_dropped(previous, total):
         raise RuntimeError(
             f"item count fell from {previous} to {total} (>{int(MAX_ITEM_DROP * 100)}%) — "
-            "treating as a partial export; nothing uploaded, pruned or reported"
+            "treating as a partial export; nothing uploaded, pruned or reported. "
+            f"If the drop is real, delete {COUNT_FILE} to reset the guard"
         )
 
     # Encrypt → temp file (JSON never on disk unencrypted)
