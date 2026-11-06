@@ -140,8 +140,8 @@ brain drift audit, project narratives; the agents-overview digest was paused
 
 | Label | Schedule | What |
 |-|-|-|
-| `com.jkrumm.modelpick-refresh` | 06:00 daily | bun run refresh: probe → collect → recommend (make refresh-setup) |
-| `com.jkrumm.modelpick-web` | KeepAlive | always-on dashboard on :7727 behind the Caddy `modelpick.test` entry; a LaunchAgent, not a container, because its SQLite file is shared with host-side writers (`make web-setup`) |
+| `com.jkrumm.modelpick-refresh` | 06:00 daily | bun run refresh: probe → collect → release alerts (ntfy `models`) → recommend (make refresh-setup) |
+| `com.jkrumm.modelpick-web` | KeepAlive | data server for Argo `/models` (`/api/efficiency`) and the TTS playground on :7727 behind the Caddy `modelpick.test` entry; a LaunchAgent, not a container, because its SQLite file is shared with host-side writers (`make web-setup`) |
 
 ### weatherorb
 
