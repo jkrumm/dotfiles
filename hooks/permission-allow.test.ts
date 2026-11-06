@@ -19,6 +19,12 @@ describe("deny: rm on / or home", () => {
     "sudo rm -rf /",
     "cd /tmp && rm -rf ~",
     "echo hi; rm -rf /",
+    "/bin/rm -rf /",
+    'bash -c "rm -rf ~"',
+    "sh -c 'rm -rf /'",
+    'rm -rf "$HOME"/*',
+    "rm -rf /.",
+    "\\rm -rf /",
     "echo rm -rf /", // conservative: a mention is denied too
   ]) {
     test(cmd, () => expect(bash(cmd)).toBe("deny"));

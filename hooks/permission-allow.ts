@@ -24,12 +24,19 @@ interface HookInput {
   tool_input?: { command?: string; [key: string]: unknown };
 }
 
+/**
+ * `rm` aimed at `/` or the home directory. Matched on the command with quotes and
+ * backslashes removed, so `bash -c "rm -rf ~"`, `rm -rf "$HOME"/*` and `\rm -rf /`
+ * read like the plain form; `rm` may follow a path (`/bin/rm`) as well as a
+ * separator. The target must end at the path itself (`/`, `/*`, `/.`, `~/`), so
+ * `rm -rf /tmp/x` and `rm -rf ~/x` stay allowed.
+ */
 const DANGEROUS_RM =
-  /(?:^|[\s;&|(])(?:sudo\s+)?rm\s+(?:-\S+\s+)*["']?(?:\/|~|\$HOME|\$\{HOME\})\/?\*?["']?(?=\s|$|[;&|)])/;
+  /(?:^|[\s;&|(\/`])rm\s+(?:-\S+\s+)*(?:\/|~|\$HOME|\$\{HOME\})(?:\/?\*|\.|\/\.?)?(?=\s|$|[;&|)`])/;
 
 export function decide(input: HookInput): { behavior: "allow" } | { behavior: "deny"; message: string } {
   const command = input.tool_input?.command ?? "";
-  if (input.tool_name === "Bash" && DANGEROUS_RM.test(command)) {
+  if (input.tool_name === "Bash" && DANGEROUS_RM.test(command.replace(/['"\\]/g, ""))) {
     return {
       behavior: "deny",
       message:
