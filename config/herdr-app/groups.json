@@ -47,6 +47,7 @@
         "rollhook",
         "basalt-ui",
         "weatherorb",
+        "ntfy-mac",
         "free-planning-poker",
         "ticktick-raycast"
       ]
@@ -56,6 +57,7 @@
       "members": [
         "IuRoot",
         "epos-tool-athena",
+        "epos-ai-teamchat-athena",
         "epos-knowledge-athena",
         "prometheus-epx",
         "epos-studentenrolment-backend",
