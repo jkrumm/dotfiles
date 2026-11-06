@@ -1164,6 +1164,9 @@ _setup-hooks:
 		SRC="$(DOTFILES_DIR)/hooks/test-slot.ts" \
 		DST="$(CLAUDE_DIR)/hooks/test-slot.ts"
 	@$(MAKE) --no-print-directory _link \
+		SRC="$(DOTFILES_DIR)/hooks/permission-allow.ts" \
+		DST="$(CLAUDE_DIR)/hooks/permission-allow.ts"
+	@$(MAKE) --no-print-directory _link \
 		SRC="$(DOTFILES_DIR)/hooks/machine-role.ts" \
 		DST="$(CLAUDE_DIR)/hooks/machine-role.ts"
 	@$(MAKE) --no-print-directory _link \
@@ -1727,6 +1730,7 @@ status:
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/broad-kill-guard.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/review-bypass-guard.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/test-slot.ts"
+	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/permission-allow.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/machine-role.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/model-discipline.ts"
 	@$(MAKE) --no-print-directory _check DST="$(CLAUDE_DIR)/hooks/iu-model-guard.ts"
