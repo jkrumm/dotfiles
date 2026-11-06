@@ -29,6 +29,7 @@ cat "$PS_TABLE"   # ppid command, as core-up.sh asks
 S
 cat > "$T/bin/resp" <<'S'
 #!/bin/bash
+if [ -n "${RESP_TAINT:-}" ]; then echo "agent environment inherited by 100: every terminal gets it"; exit 1; fi
 if [ -n "${RESP_OFFENDERS:-}" ]; then echo "   300 holder responsible=300 (/opt/homebrew/Cellar/herdr-core/0.1.17/bin/herdr-core) NOT Herdr Core.app"; echo "offenders: $RESP_OFFENDERS of 4 not attributed to Herdr Core.app"; exit 1; fi
 echo "   100 core   responsible=100 (/x/Herdr Core.app/Contents/MacOS/herdr-core) ok"
 S
@@ -64,6 +65,11 @@ born > "$T/table"; STATUS_DOWN=1 check
 born > "$T/table"; RESP_OFFENDERS=2 check
 [ "$rc" = 2 ] || fail "offending holder must WARN: rc=$rc $msg"
 case "$msg" in *"offenders: 2 of 4"*) ;; *) fail "offender message: $msg" ;; esac
+
+# 5b. a core that inherited an agent's environment -> WARN naming it, though its identity is right
+born > "$T/table"; RESP_TAINT=1 check
+[ "$rc" = 2 ] || fail "inherited agent env must WARN: rc=$rc $msg"
+case "$msg" in *"agent environment inherited"*) ;; *) fail "taint message: $msg" ;; esac
 
 # 6. the other machine runs another version -> WARN; the same version is quiet
 born > "$T/table"; PEER=0.1.17 check

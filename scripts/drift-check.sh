@@ -243,9 +243,9 @@ check_tailscale() {
     return
   fi
 
-  # `Version` is the cross-platform headline the brew formula tracks.
+  # The same field as tailscale-upgrade.sh, the script this check's fix names.
   latest=$(/usr/bin/curl -fsS --max-time 8 "https://pkgs.tailscale.com/stable/?mode=json" 2>/dev/null \
-    | "$PYTHON_BIN" -c "import json,sys; d=json.load(sys.stdin); print(d.get('Version') or '')" 2>/dev/null) || latest=""
+    | "$PYTHON_BIN" -c "import json,sys; d=json.load(sys.stdin); print(d.get('TarballsVersion') or d.get('Version') or '')" 2>/dev/null) || latest=""
   [[ -n "$latest" ]] || { skip_add "tailscale (pkgs.tailscale.com unreachable)"; return; }
 
   if [[ "$installed" == "$latest" ]]; then

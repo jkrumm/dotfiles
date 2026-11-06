@@ -71,7 +71,7 @@ upgrade_linux() {
 }
 
 upgrade_mini() {
-  local want="$1" lan old new log rc
+  local want="$1" cur="$2" lan old new log rc
   log='$HOME/Library/Logs/tailscale-upgrade.log'
   lan=$("${SSH[@]}" mini 'ipconfig getifaddr en0' </dev/null 2>/dev/null) || lan=""
   if [[ -n "$lan" ]] && "${SSH[@]}" -o ConnectTimeout=4 -o IdentitiesOnly=yes -o IdentityAgent=none -i "$HOME/.ssh/id_ed25519_mini" "jkrumm@$lan" true </dev/null 2>/dev/null; then
@@ -83,13 +83,15 @@ upgrade_mini() {
   fi
 
   "${SSH[@]}" mini "$MINI_TS serve status --json" </dev/null >/tmp/ts-serve-before.$$ 2>/dev/null
-  old=$("${SSH[@]}" mini 'basename "$(readlink /opt/homebrew/opt/tailscale)"' </dev/null)
-  [[ -n "$old" ]] || die "mini: no linked tailscale keg"
+  # The rollback target is what RUNS, not what is linked: a rerun after a failed attempt has the new keg linked already.
+  old=$("${SSH[@]}" mini "ls /opt/homebrew/Cellar/tailscale | grep -E '^$cur(_[0-9]+)?\$' | tail -1" </dev/null)
+  [[ -n "$old" ]] || die "mini: no keg on disk for the running daemon $cur, so no rollback; the daemon was not touched"
 
   # Old inode keeps serving. No install cleanup: the rollback needs the previous keg on disk.
   "${SSH[@]}" mini 'export PATH=/opt/homebrew/bin:$PATH HOMEBREW_NO_INSTALL_CLEANUP=1; brew unpin tailscale; brew upgrade tailscale; rc=$?; brew pin tailscale; exit $rc' </dev/null 2>&1 | tail -3 | cut -c1-140
   new=$("${SSH[@]}" mini 'basename "$(readlink /opt/homebrew/opt/tailscale)"' </dev/null)
   [[ "$new" == "$want"* ]] || die "mini: the keg is '$new', wanted $want; the daemon was not touched"
+  [[ "$new" != "$old" ]] || die "mini: the rollback keg equals the new one ($new); the daemon was not touched"
   "${SSH[@]}" mini "/opt/homebrew/opt/tailscale/bin/tailscaled --version" </dev/null >/dev/null 2>&1 || die "mini: the new tailscaled does not run; the daemon was not touched"
 
   "${SSH[@]}" mini "mkdir -p \$HOME/.local/state; cat > \$HOME/.local/state/tailscale-watchdog.sh; touch $log" <<WATCHDOG
@@ -143,7 +145,7 @@ cmd_upgrade() {
   [[ "$cur" == "$want" ]] && { echo "  · $host: already $want"; return 0; }
   echo "  $host: $cur -> $want"
   case "$host" in
-    mini) upgrade_mini "$want" ;;
+    mini) upgrade_mini "$want" "$cur" ;;
     *) upgrade_linux "$host" "$want" ;;
   esac
 }

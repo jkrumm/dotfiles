@@ -2211,7 +2211,7 @@ secrets-rotate:
 # Tailscale serve/funnel bindings — declared in dotfiles-private per machine
 # (tailscale-serve.<machine>.conf), applied here. Serve config pins the machine's
 # MagicDNS name, so a device rename orphans every binding; re-applying is the fix.
-.PHONY: tailscale-serve tailscale-serve-check
+.PHONY: tailscale-serve tailscale-serve-check tailscale-status tailscale-upgrade herdr-core-clean-restart
 tailscale-status: ## Read-only: every machine's Tailscale daemon against the latest stable (from the MacBook)
 	@bash scripts/tailscale-upgrade.sh status
 tailscale-upgrade: ## Upgrade Tailscale one node at a time from the MacBook, proving each daemon came back: HOST=homelab|vps|mini, default all three (docs/tailnet.md §Updates)
@@ -2579,7 +2579,7 @@ herdr-core-update:
 	v1=$$("$$HC" --version); n1=$$("$$HC" ls | jq '.terminals | length'); \
 	echo "  after:  $$v1, $$n1 live terminal(s)"; \
 	[ "$$n0" = "$$n1" ] || { echo "  ✗ terminal count changed ($$n0 -> $$n1)"; exit 1; }; \
-	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || echo "  · some holders are not attributed to Herdr Core.app yet (old ones end with their terminals)"; \
+	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || echo "  · see the lines above: old holders end with their terminals, an inherited environment needs make herdr-core-clean-restart"; \
 	echo "  ✓ core up, terminals kept. Next: ~/Library/Logs/hc-resume.log (programs the update ended are resumed), make tcc-probe; the other machine: make herdr-core-update there"
 
 .PHONY: tcc-check tcc-check-test tcc-probe op-tcc-probe
@@ -2597,7 +2597,7 @@ tcc-probe: ## Live proof (fresh hc run terminal) that Herdr Core.app's Full Disk
 	   echo "    one-time human step on THIS machine (docs/tcc.md §One-time grants): System Settings > Privacy & Security > Full Disk Access > add"; \
 	   echo "    $(CORE_APP)"; \
 	   echo "    and answer the Local Network and microphone prompts at the machine's screen; the probe runs in a fresh terminal (hc run)"; exit 1;; esac; \
-	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || { echo "  ✗ responsibility check failed (docs/herdr-core.md §How the core runs now)"; exit 1; }
+	python3 "$(DOTFILES_DIR)/scripts/hc-responsible.py" || { echo "  ✗ core or holder identity check failed, lines above (docs/herdr-core.md §How the core runs now)"; exit 1; }
 op-tcc-probe: ## MacBook acceptance check: op read in a core terminal raises no AppData dialog (covered by the Herdr Core.app grant); re-run after make herdr-core-update
 	@bash $(DOTFILES_DIR)/scripts/op-tcc-probe.sh
 tcc-check-test: ## Hermetic test for tcc-check

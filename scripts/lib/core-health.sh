@@ -82,9 +82,9 @@ d=json.load(sys.stdin)
 print(d.get("version") or "?", int((d.get("uptime_ms") or 0)/1000))' <<<"$status" 2>/dev/null) \
     || { echo "hc server status is not JSON"; return 1; }
 
-  resp=$(_core_bounded 20 "$responsible" 2>/dev/null) && resp="" || resp=$(printf '%s\n' "$resp" | /usr/bin/grep '^offenders:' | head -1)
+  resp=$(_core_bounded 20 "$responsible" 2>/dev/null) && resp="" || resp=$(printf '%s\n' "$resp" | /usr/bin/grep -E '^(offenders:|agent environment inherited)' | head -1)
   if [[ -n "$resp" ]]; then
-    echo "core $version: $resp (docs/herdr-core.md §How the core runs now: old holders end with their terminals; list them with scripts/hc-responsible.py)"
+    echo "core $version: $resp (docs/herdr-core.md §How the core runs now: an inherited environment needs make herdr-core-clean-restart, old holders end with their terminals; list them with scripts/hc-responsible.py)"
     return 2
   fi
 
