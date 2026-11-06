@@ -80,7 +80,7 @@ endpoint and diffs the live catalog against `models.txt`.
 | `make status` | Prerequisites + symlink health, then `doctor --local`. |
 | `make doctor` | Read-only health. Self-routes on the backend marker (below). |
 | `make help` | Every target, one line each. |
-| `make check` | All local validation: architecture-check + secrets-lint + hooks-test + jobs-test + the hermetic suites (opbackup-seed, brew-service, launchd-restarts, human-queue). No side effects. |
+| `make check` | Every target in `check:` in the Makefile: hermetic suites only (secrets lint, hook tests, script and bun tests, the architecture-check generator test). No side effects, no live probes; the live architecture-map assertion runs in `make doctor` (= `make verify`). |
 | `make verify` | `make doctor`, under the repo-contract name. |
 | `make logs` | Bounded tail of `~/Library/Logs/{devhost-health,…}.log`, then exits. |
 | `make deploy` | `make setup` under the repo-contract name; prints what it does. |
@@ -131,7 +131,7 @@ Keep this file **under 40k chars** (`wc -c AGENTS.md`; the agent context limit i
 
 ## Validate
 
-`make check` (architecture-check, secrets-lint, hooks-test and the hermetic suites). Any edit to
+`make check` (every target in `check:`, all hermetic). Any edit to
 `hooks/` → `make hooks-test`; any edit to `scripts/secrets-run` → the full
 guardrail under *Secrets*. Contract: `docs/agents-md.md`.
 
@@ -481,8 +481,8 @@ spawn** — after a sweep a `KeepAlive` agent writes into an unlinked inode and
 nothing reports it. `make log-rotate-setup` bounds them: hourly, **copytruncate**
 (a rename follows the inode, exactly like the sweep), 16 MB cap, one `.1`
 generation, safe because launchd's fds are `O_APPEND`. The list in
-`scripts/log-rotate.sh` is **declared, never globbed** (`~/Library/Logs` also
-holds Apple and vendor logs).
+`scripts/log-rotate.sh` derives its list from the `com.jkrumm.*`/`com.iu.*` plists' log paths plus
+a short declared `EXTRA` list; it never globs `~/Library/Logs` (which also holds Apple and vendor logs).
 
 **File shuttle** — `smb://mini/jkrumm` on the MacBook, `~/Shuttle` the drop
 folder, for ad-hoc **human** file movement only (code → `rd`/git; vault pages →

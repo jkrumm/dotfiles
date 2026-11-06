@@ -59,12 +59,12 @@ CADDY_DNS_MODULE_VERSION ?= v0.2.4
 # steps. npm-global (needs Node on PATH, so not Brewfile-managed); pinned so an
 # upgrade is a reviewed diff of this line, never whatever `npm install -g`
 # resolves to on the day it runs.
-FALLOW_VERSION := 3.33.1
+FALLOW_VERSION := 3.38.1
 
 # pymobiledevice3 — physical-iPhone screenshots/syslog without Xcode's GUI (`developer
 # core-device screen-capture screenshot`); not in Homebrew. A uv tool, pinned like fallow.
 # xcodes (Xcode manager) ships from scripts/install-xcodes.sh (pinned, sha256 + signature).
-PYMOBILEDEVICE3_VERSION := 11.45.0
+PYMOBILEDEVICE3_VERSION := 11.50.0
 
 # ============================================================================
 # Setup — idempotent, safe to run on a fresh machine or re-run after changes
@@ -93,7 +93,6 @@ setup:
 	@$(MAKE) --no-print-directory _setup-caddy
 	@$(MAKE) --no-print-directory _setup-browser
 	@$(MAKE) --no-print-directory _setup-opencode
-	@$(MAKE) --no-print-directory _setup-pnpm
 	@$(MAKE) --no-print-directory _setup-op-token
 	@$(MAKE) --no-print-directory _setup-secrets
 	@$(MAKE) --no-print-directory _setup-sdk-keys
@@ -349,17 +348,6 @@ _setup-caddy:
 		SRC="$(DOTFILES_DIR)/scripts/wakeup.sh" \
 		DST="$(HOME)/.wakeup"
 	@chmod +x $(DOTFILES_DIR)/scripts/wakeup.sh
-
-.PHONY: _setup-pnpm
-_setup-pnpm:
-	@echo "  pnpm..."
-	@if command -v pnpm >/dev/null 2>&1; then \
-		echo "    · pnpm $$(pnpm --version) (ok)"; \
-	else \
-		echo "    Installing pnpm..."; \
-		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
-		echo "    ✓ pnpm installed"; \
-	fi
 
 .PHONY: _setup-op-token
 # Biometric sign-in has no meaning on the cache backend: `op` is not signed in
@@ -784,7 +772,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-1password-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test ## All local validation: hermetic suites only (the live architecture-map probe runs in `make doctor` / `verify`)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -792,7 +780,7 @@ version: ## Print the deployed commit sha: the mini runs this checkout, so its H
 verify: doctor ## Probe the live system — alias of doctor (exit 0 = healthy)
 
 logs: ## Bounded tail of the dotfiles-owned agent logs, then exit
-	@for f in $(HOME)/Library/Logs/devhost-health.log $(HOME)/Library/Logs/devhost-health.err; do \
+	@for f in $(HOME)/Library/Logs/devhost-health.log; do \
 		[ -f "$$f" ] && { echo "== $$f"; tail -n 40 "$$f"; } || true; \
 	done
 
@@ -1784,12 +1772,6 @@ status:
 	@brew list sleepwatcher &>/dev/null && echo "    ✓ sleepwatcher" || echo "    ✗ sleepwatcher [not installed — run make setup]"
 	@brew services list | grep sleepwatcher | grep -q started && echo "    ✓ sleepwatcher service started" || echo "    ✗ sleepwatcher service [not started — run make setup]"
 	@$(MAKE) --no-print-directory _check DST="$(HOME)/.wakeup"
-	@echo "  pnpm"
-	@if command -v pnpm >/dev/null 2>&1; then \
-		echo "    ✓ pnpm $$(pnpm --version)"; \
-	else \
-		echo "    ✗ pnpm [not installed — run make setup]"; \
-	fi
 	@echo "  Browser debugging"
 	@$(call CLAUDE_MCP_CHECK,chrome-devtools)
 	@echo "  Colima (Docker runtime)"
@@ -2329,6 +2311,11 @@ brew-service-test:
 .PHONY: caddy-registry-test
 caddy-registry-test:
 	@python3 -I $(DOTFILES_DIR)/scripts/lib/caddy-registry.test.py
+
+# backup-1password.py: the remote-size check and the item-count drop guard that gate the prune (hermetic).
+.PHONY: backup-1password-test
+backup-1password-test:
+	@python3 -I $(DOTFILES_DIR)/scripts/backup-1password.test.py
 
 # caddy-tailnet.sh extra FQDN doors: block shape, validation refusals, missing file (hermetic; scratch overrides only).
 .PHONY: caddy-tailnet-test
@@ -3108,8 +3095,8 @@ drift-check-teardown:
 # (scripts/beszel-agent-install.sh); the Homebrew tap route
 # (henrygd/beszel/beszel-agent) hung twice in build.rb on pthread_once.
 # ----------------------------------------------------------------------------
-BESZEL_AGENT_VERSION ?= 0.19.0
-BESZEL_AGENT_SHA256  ?= a5a8ba46a88610f5da4eaaa32f184642e06f20885f7e6e1ea3607596aef9cb1b
+BESZEL_AGENT_VERSION ?= 0.21.1
+BESZEL_AGENT_SHA256  ?= 9246065f680cdb0af2885b7bf5876dc45b754019f2c90eb28550cf45db978eb8
 BESZEL_ENV_FILE      := $(HOME)/.config/beszel/beszel-agent.env
 
 .PHONY: beszel-agent-setup beszel-agent-status beszel-agent-teardown

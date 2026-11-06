@@ -35,7 +35,7 @@ older doc on that topic. This map only places its parts on machines.
 ## Diagrams
 
 No diagram is current. The estate, agent-platform, dispatch-path and episode-lifecycle diagrams
-described the warden-era platform and are archived in `docs/archive/diagrams/`; the text above and
+described the warden-era platform; only `docs/archive/diagrams/agent-platform.html` is kept (see `docs/archive/README.md`); the text above and
 [`agent-platform.md`](agent-platform.md) are the current map. A new one is a self-contained HTML
 compiled from a `.json` spec with the vendored `archify` skill
 (`node skills/archify/bin/archify.mjs deliver <type> <spec.json> <out.html> --quality showcase`),
@@ -80,8 +80,8 @@ which validates geometry before it delivers.
 
 ## LaunchAgents — mini (gui/501 unless noted)
 
-Every label here is asserted by `scripts/architecture-check.sh`, and the
-KeepAlive subset also by the heartbeat's `check_boot_path`. Homebrew 6 writes
+Every label here is asserted by `scripts/architecture-check.sh`, and a short fixed list of
+boot-critical labels (six of about 25 KeepAlive jobs; the list is in `check_boot_path`) also by the heartbeat. Homebrew 6 writes
 `sh.brew.<name>` on the next start/restart and deletes `homebrew.mxcl.<name>`
 (both still `homebrew.mxcl.*` on the mini today); both names map to the same
 row and `scripts/lib/brew-service.sh` resolves whichever exists.
