@@ -4,16 +4,34 @@
 <dict>
   <key>Label</key><string>com.jkrumm.devhost-health</string>
   <!-- Remote-dev readiness heartbeat for the Mac mini (herdr-core + sshd +
-       tailscaled), pushed to the `MacMini Dev Host - Push` monitor.
+       tailscaled), pushed to the `MacMini Dev Host - Push` monitor (plus the
+       collie, factory and secrets-freshness side monitors).
        Push rather than probe: the ACL has no tag:homelab → tag:mac grant, so
-       Uptime Kuma cannot reach the mini. See scripts/devhost-health-check.sh. -->
+       Uptime Kuma cannot reach the mini. See scripts/devhost-health-check.sh.
+       Runs under jobrun: the script exits non-zero only when a Kuma push was not
+       delivered, and that is a recorded job failure graded by jobs-grade (ntfy). -->
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/SourceRoot/dotfiles/scripts/devhost-health-check.sh</string>
+    <string>__HOME__/.local/bin/jobrun</string>
+    <string>com.jkrumm.devhost-health</string>
+    <string>--owner</string><string>dotfiles</string>
+    <string>--every</string><string>300</string>
+    <string>--timeout</string><string>270</string>
+    <string>--</string>
+    <string>__DOTFILES_DIR__/scripts/devhost-health-check.sh</string>
   </array>
+  <!-- jobrun is a bun script (`#!/usr/bin/env bun`); launchd's minimal PATH has no bun.
+       System dirs come FIRST so the script (absolute /usr/bin paths, Apple's bash 3.2)
+       and anything it resolves by name hits the same binary as under the old no-PATH plist. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin:__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin</string>
+  </dict>
   <!-- Every 5 minutes. The Kuma monitor's interval must be LONGER than this
        (600s is the paired value) so a single skipped run — laptop lid, a slow
-       boot, a Tailscale reconnect — does not page on its own. -->
+       boot, a Tailscale reconnect — does not page on its own. The jobrun timeout
+       (270) stays under the interval; the script's own bounds (per-component
+       40 s, composite budget 150 s) keep a hung tool from ever reaching it. -->
   <key>StartInterval</key><integer>300</integer>
   <!-- Fire on load so a reboot re-establishes the heartbeat immediately rather
        than leaving a 5-minute hole that reads as an outage. -->

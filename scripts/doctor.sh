@@ -192,7 +192,7 @@ section_worktrees() {
 }
 
 # --- Drift (mini only, no push) -----------------------------------------------
-# scripts/drift-check.sh --no-push: same report the daily agent would push to
+# scripts/drift-check.sh --no-push: same report the daily heartbeat side job pushes to
 # Uptime Kuma, without touching Kuma. Never applies anything — see that
 # script's header for why an unattended upgrader on this host is the wrong
 # trade.

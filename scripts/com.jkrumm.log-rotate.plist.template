@@ -17,6 +17,7 @@
     <string>com.jkrumm.log-rotate</string>
     <string>--owner</string><string>dotfiles</string>
     <string>--every</string><string>3600</string>
+    <string>--timeout</string><string>120</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/scripts/log-rotate.sh</string>
   </array>

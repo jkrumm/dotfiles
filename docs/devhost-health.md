@@ -6,7 +6,7 @@ one-line gotchas live in `AGENTS.md`.
 ## The heartbeat
 
 `scripts/devhost-health-check.sh` runs every 300 s via the
-`com.jkrumm.devhost-health` LaunchAgent and pushes **three** Uptime Kuma
+`com.jkrumm.devhost-health` LaunchAgent, wrapped in `jobrun` (below), and pushes **three** Uptime Kuma
 monitors. `MacMini Dev Host - Push` is the composite, covering **nineteen**
 components:
 
@@ -22,7 +22,7 @@ components:
 | kernel panics | newest `panic-full-*.panic` / `panic-full-*.ips` / `Kernel-*.panic` / `Kernel_*.panic` in `/Library/Logs/DiagnosticReports` younger than `DEVHOST_PANIC_MAX_AGE_DAYS` (3) — **WARN**, never FAIL |
 | launchd restarts | delta on `runs` for every KeepAlive job, **excluding a marked restart and `Terminated: 15`** (both deliberate) |
 | boot path | plist on disk + `launchctl print` path match for every KeepAlive job (brew services resolved under either name — `homebrew.mxcl.<x>` / `sh.brew.<x>`, see `scripts/lib/brew-service.sh`) |
-| services | agent-workflows host (`/health`: 200 `ok`, 503 `degraded` names the reason), agent-workflows audio process (`:7792/health`, unauthenticated; FAILs when its `version` differs from the host's), hermes gateway, colima, caddy, dnsmasq, brain-web (`:7733/`), walkingpad (`:7706/status`), the Kuma door (`:8795/healthz`) — each gated on its plist |
+| services | hermes gateway, colima, caddy, dnsmasq, postgres, the Kuma door (`:8795/healthz`) — each gated on its plist. agent-workflows (host + audio), brain-web and walkingpad are **not** probed here: Kuma pulls them through the door (`kuma-door/registry.json`), so a second probe would be a duplicate signal. The audio-vs-host version-mismatch comparison went with the probe on purpose: the door proves liveness only, and agent-workflows' own `make verify` covers release parity |
 | claude auth | keychain credential, then the token fallback |
 | claude version | `claude --version` matches the last version `make claude-accounts-verify` verified — **WARN** when unverified |
 | AGENTS.md flag | the cached GrowthBook flag `tengu_agents_md_mod` in `~/.claude.json` is true (else Claude Code may not load AGENTS.md) — **WARN** |
@@ -41,8 +41,37 @@ page) or anything else (FAIL — subject to the boot grace and streak rules belo
 | `make devhost-health-check` | Run once, print per-component status. |
 | `make devhost-health-teardown` | Unload + remove. |
 
-**It is a bash 3.2 script and must stay one.** The plist sets no `PATH`, so
-launchd hands it `/usr/bin:/bin:/usr/sbin:/sbin` and `/usr/bin/env bash` is
+**One hung tool fails only its own component.** On 2026-11-06 `obsidian version` hung
+~28 h inside the script; launchd never starts a second instance of a running job, so the
+one pusher behind three monitors froze and all three went DOWN. Now:
+
+- Every component, and every side-monitor detail, runs through `run_bounded <secs> <cmd>`:
+  a background subshell in its **own process group** with stdout captured to a temp file under
+  the state dir. Past the deadline the whole group gets `TERM`, 3 s later `KILL`
+  (`kill -- -<pgid>`, never a pattern kill), and the component reports
+  `<name> timed out after <secs>s (hung tool; killed)` (rc 124). That is an ordinary FAIL, with
+  the same boot-grace and streak rules as any other. A normal finish leaves no watchdog behind
+  (the parent polls). The eager `tailscale status` snapshot at load is bounded the same way.
+- `DEVHOST_COMPONENT_TIMEOUT` (default 40 s) bounds one component; `DEVHOST_HEARTBEAT_BUDGET`
+  (default 200 s, measured from script start, so the snapshot and side monitors count) bounds the
+  composite loop, and each component gets at most the budget that is left. Once it is spent the remaining components are not run: each contributes
+  `FAIL: <component> not run (heartbeat budget spent)` through the normal grading, so the
+  composite push is always reached. Side monitors: `DEVHOST_SIDE_MONITOR_TIMEOUT` (20 s).
+- **Order:** the three side monitors (collie, factory, secrets freshness) run and push
+  **first**, each independently, then the composite loop, then the composite push. A composite
+  hang can no longer starve them.
+- **Under `jobrun`** (`--every 300 --timeout 270`, owner `dotfiles`; state
+  `~/.local/state/jobs/com.jkrumm.devhost-health.json`, removed by `make devhost-health-teardown`):
+  a non-zero exit is a recorded job failure that `jobs-grade --ntfy` alerts. So the script exits
+  **0 whenever every Kuma push was delivered** (a DOWN verdict is a delivered state, and Kuma
+  alerts on it) and **1 only when a push failed or no push URL resolved**.
+- `DEVHOST_COMPONENTS` replaces the component list (space-separated function names); it exists
+  for `make devhost-heartbeat-test`, which drives the timeout, budget, order and exit paths
+  against a stub `curl`.
+
+**It is a bash 3.2 script and must stay one.** The plist sets a `PATH` only so `jobrun` finds
+bun, with the system dirs **first** (`/usr/bin:/bin:/usr/sbin:/sbin:~/.local/bin:/opt/homebrew/bin:/usr/local/bin`),
+so `/usr/bin/env bash` is still
 Apple's 3.2 — no `mapfile`, no `${var,,}`, no `"${arr[@]}"` on a possibly-empty
 array under `set -u`, which is why checks accumulate into newline-delimited
 strings. A `brew install bash` would make the interactive run silently start
@@ -160,7 +189,7 @@ and Kuma's own missed-heartbeat is untouched, which is the property
 ### One scheduler, four monitors
 
 Collie, the software factory and secrets freshness are pushed by this same agent to their **own**
-monitors. A second LaunchAgent would be pure duplication; only the push target
+monitors, before the composite (each bounded at 20 s, each pushing independently). A second LaunchAgent would be pure duplication; only the push target
 differs, and each URL file's absence is silent by design, so a machine without
 collie or without a seeded cache never fails the script.
 
@@ -175,8 +204,8 @@ collie or without a seeded cache never fails the script.
   http://127.0.0.1:7793/health` (loopback, no token) carries `heartbeat: { ok, reason,
   tickAt, queueMovedAt }`, `ok` meaning the tick advanced and the queue moved within 30
   minutes. `ok` → up (`tick …, queue moved …`); no answer, a 503, no `heartbeat` or `ok:
-  false` → down with the factory's `reason` (else the curl failure), and the script
-  fails like collie's. No URL file, no push. The monitor and the file are made from
+  false` → down with the factory's `reason` (else the curl failure); the DOWN push is
+  delivered and the script still exits 0. No URL file, no push. The monitor and the file are made from
   `homelab`, not here.
 - **Secrets-cache freshness** replaced a weekly agent (Mon 09:15) under which a
   cache going stale on a Tuesday was invisible for six days — six days of
@@ -227,14 +256,24 @@ deployed helper still pointed at a read-only token, and only the dry-run saw it.
 `make brew-upgrade` asserts its own invariants and the heartbeat fails loudly on
 a broken host, but neither ever says *a pin has drifted* — so the collie plugin
 sat five releases behind (two security fixes on a shell-equivalent surface) and
-was found by accident, months later. `com.jkrumm.drift-check` (daily 09:40,
-`scripts/drift-check.sh`) closes that; the on-demand run is part of `make doctor`.
+was found by accident, months later. `scripts/drift-check.sh` closes that: the
+heartbeat runs it once a day as a bounded side job after its composite push (the
+`com.jkrumm.drift-check` agent was retired 2026-11-06); the on-demand run is part of `make doctor`.
 
 | Command | Does |
 |-|-|
 | `make doctor` | Includes the drift report (read-only, no push) |
-| `make drift-check-setup` | Dev-host gated: install the daily agent |
-| `make drift-check-teardown` | Unload + remove |
+| `make drift-check-setup` | Dev-host gated, run by `make setup`: seeds the brew-upgrade stamp, removes the retired agent |
+| `make drift-check-teardown` | Unload + remove the retired agent (idempotent) |
+
+Side-job rules (`devhost-health-check.sh`): runs when `$STATE_DIR/drift-last-run`
+is older than 20 h or absent, through `run_bounded` with `DEVHOST_DRIFT_TIMEOUT`
+(60 s); a completed run stamps now, a timed-out run stamps backdated so it retries
+in about 1 h, not every 5 min. It is skipped when the heartbeat already used more
+than 200 s: the composite push is reached by ~218 s (200 s budget from script start + kill grace
++ a 15 s push) and drift adds at most 60 s from a start at or under 200 s, inside jobrun's 270 s. Its exit code never touches the heartbeat's; it pushes to
+`MacMini Drift - Push` itself (2-day Kuma interval, valid while a push arrives
+daily). `DEVHOST_DRIFT_CHECK_BIN` overrides the script path for tests.
 
 It watches the collie commit pin (`COLLIE_REF`), the versions compiled into caddy
 (`XCADDY_VERSION`, `CADDY_DNS_MODULE_VERSION`), brew-upgrade recency and pending
@@ -260,10 +299,11 @@ after the reboot; the tsv is what it should find.
 
 Four decisions that are not arbitrary:
 
-- **Its own scheduler**, breaking the one-scheduler rule collie and
-  secrets-freshness follow: every check here is a **network call**, and the 300 s
-  agent at `maxretries 0` deliberately refuses to touch GitHub. Drift moves in
-  days, so daily is the cadence — and that needs its own agent.
+- **A daily side job of the heartbeat, no agent of its own.** Every check here
+  is a **network call** and the 300 s composite deliberately refuses to touch
+  GitHub, so drift runs after the composite push, at most once per 20 h and
+  bounded (60 s), with its own monitor. That is safe because every heartbeat run
+  is bounded; a network failure degrades to `skipped`, never to a page.
 - **Age grace, not bare "is it behind".** A drifted pin is named in the msg
   immediately but FAILs only after `DRIFT_GRACE_DAYS` (14), keyed on the
   **component, never the version** — keying on the version lets a fast-releasing

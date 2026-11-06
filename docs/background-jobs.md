@@ -56,6 +56,7 @@ Job state dir, grading and the heartbeat `jobs` component: see Pattern below.
 | Labels and plists | `com.jkrumm.<repo>-<job>` for new jobs; no renames. The plist template lives in the owner repo, installed by its `make <x>-setup` |
 | Logs | `~/Library/Logs/<label-suffix>.{log,err}`. `log-rotate.sh` derives its list from our plists' `Standard{Out,Error}Path`, so it is declared but never hand-kept |
 | Map | `architecture-check.sh` also asserts map ⊆ live. Five stale weatherorb rows pass today |
+| Deadline | Every dotfiles `jobrun` plist sets `--timeout` (heartbeat 270, brain-sync 240, brain-web-refresh 600, brain-backup 1800, log-rotate 120, ...): a hung job otherwise makes launchd skip every later run silently. Other repos' pushers without one are listed in `docs/architecture.md` §Watchers |
 | Step rc | A job with steps exits non-zero when any step fails. `jobrun` can't see inside a script that swallows errors; that bug belongs to the owner repo (hermes-backup, modelpick-refresh) |
 
 ## Canary

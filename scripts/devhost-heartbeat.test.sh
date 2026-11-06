@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# devhost-heartbeat.test.sh — the bounded run, the composite budget, the side-monitors-first order and the
+# exit semantics of devhost-health-check.sh, end to end with a stub `curl` first on PATH (records every
+# push) and stub tool binaries. DEVHOST_COMPONENTS narrows the composite to the components under test.
+# Usage: scripts/devhost-heartbeat.test.sh   (exit 0 = all pass)
+set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+pass=0; fail=0
+ok()  { printf '  \033[32mok\033[0m   %s\n' "$1"; pass=$((pass + 1)); }
+bad() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; [[ -n "${2:-}" ]] && printf '         %s\n' "$2"; fail=$((fail + 1)); }
+assert_eq() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1" "expected [$2] got [$3]"; fi; }
+assert_contains() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "[$3] does not contain [$2]" ;; esac; }
+
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/devhost-heartbeat-test.XXXXXX")" || exit 2
+cleanup() {
+  # Only the sleepers this test's stub recorded, by pid; never a pattern kill.
+  [[ -f "$TMP/sleeper.pids" ]] && while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$TMP/sleeper.pids"
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+mkdir -p "$TMP/bin" "$TMP/state"
+
+# curl stub: records the full arg list of every call; STUB_CURL_FAIL=1 fails like a refused push.
+cat > "$TMP/bin/curl" <<STUB
+#!/bin/sh
+echo "\$*" >> "$TMP/curl.log"
+case "\$*" in *7793*) echo '{"heartbeat":{"ok":true,"tickAt":"t","queueMovedAt":"q"}}'; exit 0 ;; esac
+[ "\${STUB_CURL_FAIL:-0}" = 1 ] && exit 22
+exit 0
+STUB
+# obsidian stub: version answers, or hangs (and leaves a grandchild sleeper) when STUB_OBSIDIAN_HANG=1.
+cat > "$TMP/obsidian" <<STUB
+#!/bin/sh
+if [ "\${STUB_OBSIDIAN_HANG:-0}" = 1 ]; then
+  sh -c 'echo \$\$ >> "$TMP/sleeper.pids"; exec sleep 300' &
+  sleep 300
+fi
+echo 1.0.0
+STUB
+# drift stub: counts its runs; STUB_DRIFT_HANG=1 hangs (with a grandchild sleeper) like a stuck network call.
+cat > "$TMP/drift-stub.sh" <<STUB
+#!/bin/bash
+echo run >> "$TMP/drift.runs"
+if [ "\${STUB_DRIFT_HANG:-0}" = 1 ]; then
+  sh -c 'echo \$\$ >> "$TMP/sleeper.pids"; exec sleep 300' &
+  sleep 300
+fi
+exit 0
+STUB
+chmod +x "$TMP/bin/curl" "$TMP/obsidian"
+printf 'http://kuma.invalid/api/push/composite\n' > "$TMP/composite-url"
+printf 'http://kuma.invalid/api/push/collie\n' > "$TMP/collie-url"
+printf 'http://kuma.invalid/api/push/factory\n' > "$TMP/factory-url"
+
+# run_script <env assignments...> — runs the real script; sets RC and ELAPSED (output in $TMP/out.log).
+run_script() {
+  : > "$TMP/curl.log"
+  local t0=$SECONDS
+  env PATH="$TMP/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    DEVHOST_HEALTH_STATE_DIR="$TMP/state" \
+    DEVHOST_PUSH_URL_FILE="$TMP/composite-url" \
+    COLLIE_PUSH_URL_FILE="$TMP/collie-url" COLLIE_PLIST="$TMP/none.plist" \
+    FACTORY_PUSH_URL_FILE="$TMP/factory-url" FACTORY_HEALTH_URL="http://127.0.0.1:7793/health" \
+    SECRETS_FRESHNESS_PUSH_URL_FILE="$TMP/none-secrets-url" \
+    CURL_BIN="$TMP/bin/curl" JQ_BIN=/usr/bin/jq \
+    DEVHOST_DRIFT_CHECK_BIN="$TMP/none-drift.sh" \
+    OBSIDIAN_BIN="$TMP/obsidian" TAILSCALE_BIN=/usr/bin/false \
+    DEVHOST_TRANSIENT_FAILS=1 DEVHOST_BOOT_GRACE_SECONDS=0 \
+    "$@" /bin/bash "$HERE/devhost-health-check.sh" >"$TMP/out.log" 2>&1
+  RC=$?
+  ELAPSED=$(( SECONDS - t0 ))
+}
+pushes() { /usr/bin/grep -c 'api/push/' "$TMP/curl.log"; }
+
+echo "healthy components: one up push, exit 0"
+run_script DEVHOST_COMPONENTS="check_obsidian"
+assert_eq "exit 0" 0 "$RC"
+assert_contains "composite pushed up" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+
+echo "a hung tool fails only its own component, the push still goes out"
+run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=2 STUB_OBSIDIAN_HANG=1
+composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+assert_contains "push is down" "status=down" "$composite"
+assert_contains "msg names the component and the timeout" "check_obsidian timed out after 2s" "$composite"
+assert_eq "a DOWN verdict that was delivered exits 0" 0 "$RC"
+(( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
+sleep 1
+left=0
+if [[ -f "$TMP/sleeper.pids" ]]; then
+  while read -r p; do kill -0 "$p" 2>/dev/null && left=$((left + 1)); done < "$TMP/sleeper.pids"
+fi
+assert_eq "no grandchild sleeper survives the group kill" 0 "$left"
+
+echo "budget exhaustion: remaining components are not run, still graded, the push still goes out"
+run_script DEVHOST_COMPONENTS="check_obsidian check_agents_md_flag" DEVHOST_COMPONENT_TIMEOUT=30 DEVHOST_HEARTBEAT_BUDGET=2 STUB_OBSIDIAN_HANG=1
+composite=$(/usr/bin/grep 'push/composite' "$TMP/curl.log")
+assert_contains "push is down" "status=down" "$composite"
+assert_contains "later component not run" "check_agents_md_flag not run (heartbeat budget spent)" "$composite"
+(( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_HEARTBEAT_BUDGET=0
+assert_contains "zero budget runs nothing" "check_obsidian not run (heartbeat budget spent)" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+
+echo "side monitors push independently, before the composite, even when a composite component hangs"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_COMPONENT_TIMEOUT=2 STUB_OBSIDIAN_HANG=1
+assert_eq "collie + factory + composite = 3 pushes" 3 "$(pushes)"
+order=$(/usr/bin/grep -o 'push/[a-z]*' "$TMP/curl.log" | /usr/bin/tr '\n' ' ')
+assert_eq "side monitors first, composite last" "push/collie push/factory push/composite " "$order"
+assert_contains "factory relayed up" "status=up" "$(/usr/bin/grep 'push/factory' "$TMP/curl.log")"
+
+echo "exit 1 only when a push was not delivered"
+run_script DEVHOST_COMPONENTS="check_obsidian" STUB_CURL_FAIL=1
+assert_eq "failed push exits 1" 1 "$RC"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_PUSH_URL_FILE="$TMP/missing-url"
+assert_eq "no push URL exits 1" 1 "$RC"
+assert_eq "...and pushes nothing" 0 "$(pushes)"
+
+echo "drift: runs once after the composite, the stamp holds it back for 20 h"
+rm -f "$TMP/drift.runs" "$TMP/state/drift-last-run"
+runs() { if [[ -f "$TMP/drift.runs" ]]; then /usr/bin/wc -l < "$TMP/drift.runs" | /usr/bin/tr -d ' '; else echo 0; fi; }
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh"
+assert_eq "first run executes drift" 1 "$(runs)"
+assert_eq "exit 0" 0 "$RC"
+[[ -f "$TMP/state/drift-last-run" ]] && ok "stamp written" || bad "stamp written"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh"
+assert_eq "second run within 20 h skips drift" 1 "$(runs)"
+touch -t 200001010000 "$TMP/state/drift-last-run"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh"
+assert_eq "an old stamp runs drift again" 2 "$(runs)"
+
+echo "drift: a hung script is killed at its timeout, the heartbeat still exits 0, the retry comes in ~1 h"
+rm -f "$TMP/state/drift-last-run"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=2 STUB_DRIFT_HANG=1
+assert_eq "hung drift: heartbeat exits 0" 0 "$RC"
+assert_contains "timeout is logged" "drift-check timed out after 2s" "$(cat "$TMP/out.log")"
+assert_contains "composite still pushed" "status=up" "$(/usr/bin/grep 'push/composite' "$TMP/curl.log")"
+(( ELAPSED < 20 )) && ok "bounded runtime (${ELAPSED}s)" || bad "bounded runtime" "took ${ELAPSED}s"
+age=$(( $(date +%s) - $(stat -f %m "$TMP/state/drift-last-run") ))
+(( age >= 68000 && age <= 69000 )) && ok "timed-out run is stamped to retry in ~1 h" || bad "retry stamp" "age ${age}s"
+run_script DEVHOST_COMPONENTS="check_obsidian" DEVHOST_DRIFT_CHECK_BIN="$TMP/drift-stub.sh" DEVHOST_DRIFT_TIMEOUT=2
+assert_eq "no retry before the hour is up" 3 "$(runs)"
+
+echo
+echo "passed: $pass, failed: $fail"
+(( fail == 0 ))

@@ -280,19 +280,18 @@ never auto-upgraded — route them through `/upgrade-deps`. Invariants: `docs/ho
 |-|-|
 | `make devhost-health-setup` / `-check` / `-teardown` | The 300 s composite heartbeat. `-check` runs it once, per-component. |
 | `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` | The Kuma door (below): one tailnet port Kuma pulls service health through; `-gen` writes the monitors from the registry |
-| `make drift-check-setup` / `-teardown` | The daily 09:40 upstream-drift agent (collie pin, caddy modules, brew-upgrade recency, pending macOS updates) |
+| `make drift-check-setup` / `-teardown` | Retires the old drift agent (run by `make setup`); drift is now a daily bounded side job of the heartbeat |
 | `make beszel-agent-setup` / `-status` / `-teardown` | Push-mode system-metrics agent → the homelab Beszel hub, pinned-release install (not Homebrew) |
 | `make doctor` | The on-demand read-only view, including drift without pushing |
 
-`scripts/devhost-health-check.sh` pushes **three** Uptime Kuma monitors.
+`scripts/devhost-health-check.sh` (`jobrun --timeout 270`) pushes **three** Uptime Kuma monitors.
 `MacMini Dev Host - Push` is the composite over **19 components**: tailscale,
 sshd, core, git push credential, dev vhosts, memory, swapouts, kernel panics (WARN), launchd restarts, boot path,
-services (10), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
+services (6), claude auth, claude version, AGENTS.md flag, obsidian, disk, runaways,
 jobs (WARN-only, `jobs-grade`), quota (in every msg; WARN never pages). The composite and
-the jobs push, no ACL grant runs `tag:homelab → tag:mac`; service health is the
-exception, pulled through the Kuma door (below) — full rationale, transient-tolerance knobs, and the
-paired `make mini-macos-update` applier: `docs/devhost-health.md`,
-[[mac-host-monitoring]].
+the jobs push (no ACL grant runs `tag:homelab → tag:mac`); service health is pulled
+through the Kuma door (below). Every watcher in one table: `docs/architecture.md` §Watchers.
+Rationale, knobs, applier: `docs/devhost-health.md`, [[mac-host-monitoring]].
 
 **Kuma door** (`kuma-door/`, `com.jkrumm.kuma-door`, `127.0.0.1:8795`) — the one
 tailnet port through which the homelab's Uptime Kuma pulls the mini's service
@@ -306,8 +305,7 @@ GET/HEAD only, nothing from the request reaches the upstream. Reachable by
   `sync.py --extra-config`. Monitors are generated, never hand-edited.
 - `make kuma-door-setup` / `-restart` / `-teardown` / `-gen` / `-check` / `-test`;
   `-check` proves the door, the serve row and that the generated file is current.
-- Push stays for jobs and the composite — the door carries service health only.
-  Door liveness is a `services` component of the heartbeat (`/healthz`).
+- Push stays for jobs and the composite; the door carries service health only. Its liveness is a heartbeat `services` component.
 
 ## Collie — the phone control surface
 

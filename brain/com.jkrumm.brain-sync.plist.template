@@ -17,6 +17,7 @@
     <string>com.jkrumm.brain-sync</string>
     <string>--owner</string><string>dotfiles</string>
     <string>--every</string><string>300</string>
+    <string>--timeout</string><string>240</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/brain/brain-sync.sh</string>
   </array>

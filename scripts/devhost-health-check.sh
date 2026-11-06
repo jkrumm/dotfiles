@@ -2,6 +2,10 @@
 set +x
 set -euo pipefail
 
+# Wall-clock origin for HEARTBEAT_BUDGET: everything below (the load-time tailscale snapshot, the side
+# monitors, the composite loop) counts against it.
+script_start=$SECONDS
+
 # devhost-health-check — remote-dev readiness HEARTBEAT for the Mac mini,
 # reported to an Uptime Kuma push monitor (`MacMini Dev Host - Push`, group
 # `Local`).
@@ -43,7 +47,7 @@ set -euo pipefail
 #
 # Collie is NOT in the loop below for that reason turned around: it genuinely
 # does not fail with the other five, so it got its own monitor rather than an
-# exception. See the block after the composite push at the bottom. Secrets
+# exception. See the side-monitor block above the composite loop at the bottom. Secrets
 # freshness is the second such case, folded in here from its own weekly
 # LaunchAgent — see that block for why weekly was the wrong cadence.
 #
@@ -63,8 +67,8 @@ set -euo pipefail
 # monitor that silently stops reporting is worse than no monitor.
 #
 # bash 3.2 ONLY. launchd hands a user agent PATH=/usr/bin:/bin:/usr/sbin:/sbin
-# unless the plist says otherwise, and this one does not — so `/usr/bin/env
-# bash` resolves to Apple's /bin/bash 3.2, not Homebrew's 5.x, even though
+# unless the plist says otherwise; this one sets a PATH (for jobrun's bun) with the
+# system dirs FIRST, so `/usr/bin/env bash` still resolves to Apple's /bin/bash 3.2, not Homebrew's 5.x, even though
 # `make devhost-health-check` from an interactive shell gets 5.x. No mapfile,
 # no ${var,,}, and no "${arr[@]}" on a possibly-empty array (3.2 calls that an
 # unbound variable under `set -u`). New accumulators here are strings for
@@ -132,11 +136,7 @@ COLIMA_PLIST="${COLIMA_PLIST:-$(brew_service_plist colima 2>/dev/null || brew_se
 COLIMA_START_WRAPPER="${COLIMA_START_WRAPPER:-$HOME/SourceRoot/dotfiles/colima/colima-start.sh}"
 CADDY_ADMIN_URL="${CADDY_ADMIN_URL:-http://127.0.0.1:2019}"
 HERMES_PORT="${HERMES_PORT:-8642}"
-AGENT_WORKFLOWS_URL="${AGENT_WORKFLOWS_URL:-http://127.0.0.1:7791}"
-AGENT_WORKFLOWS_AUDIO_URL="${AGENT_WORKFLOWS_AUDIO_URL:-http://127.0.0.1:7792}"
 GIT_BIN="${GIT_BIN:-/usr/bin/git}"
-BRAIN_WEB_URL="${BRAIN_WEB_URL:-http://127.0.0.1:7733}"
-WALKINGPAD_URL="${WALKINGPAD_URL:-http://127.0.0.1:7706}"
 KUMA_DOOR_URL="${KUMA_DOOR_URL:-http://127.0.0.1:8795}"
 
 # Thresholds, every one overridable so a check can be driven to its failing
@@ -180,6 +180,24 @@ SECRETS_CACHE_FILE="${SECRETS_CACHE_FILE:-$HOME/SourceRoot/dotfiles-private/cach
 # reading. ~/.local/state, not /tmp: /tmp is world-writable and this file
 # decides whether a page fires.
 STATE_DIR="${DEVHOST_HEALTH_STATE_DIR:-$HOME/.local/state/devhost-health}"
+
+# --- Bounded runs ------------------------------------------------------------
+# One hung tool must fail only its own component. 2026-11-06 `obsidian version`
+# hung ~28 h in here; launchd never starts a second instance of a running job, so
+# the single pusher behind three Kuma monitors froze and all three went DOWN.
+COMPONENT_TIMEOUT="${DEVHOST_COMPONENT_TIMEOUT:-40}"
+# Seconds from SCRIPT START (snapshot + side monitors + composite loop). Past it the remaining
+# components are not run (each is a FAIL line), so the composite push is always reached.
+HEARTBEAT_BUDGET="${DEVHOST_HEARTBEAT_BUDGET:-200}"
+SIDE_MONITOR_TIMEOUT="${DEVHOST_SIDE_MONITOR_TIMEOUT:-20}"
+# Daily drift sweep (scripts/drift-check.sh), a side job AFTER the composite push. Worst case inside
+# jobrun's 270 s: the composite push is reached by <= 200 s (budget, measured from script start, so the
+# snapshot and side monitors are inside it) + one 3 s kill grace + a 15 s push (~218 s). Drift only
+# starts when SECONDS is <= DRIFT_START_LIMIT (200) and is capped at 60 s (+ grace), so the whole run
+# ends by ~263 s at worst.
+DRIFT_TIMEOUT="${DEVHOST_DRIFT_TIMEOUT:-60}"
+DRIFT_START_LIMIT=200
+DRIFT_CHECK_BIN="${DEVHOST_DRIFT_CHECK_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/drift-check.sh}"
 
 # --- Transient tolerance -----------------------------------------------------
 # WHY THIS EXISTS. The first real power-cut test (2026-08-01) produced a DOWN
@@ -267,6 +285,47 @@ push_url=$(kuma_resolve_push_url "${DEVHOST_PUSH_URL:-}" "$PUSH_URL_FILE") || ex
 
 push() { kuma_push "$push_url" "$1" "$2"; }
 
+/bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+# run_bounded <secs> <cmd...> — run a command (a function of this script is fine)
+# with its stdout captured and a deadline. The command gets its OWN process group
+# (`set -m`), so on timeout the whole tree dies: TERM, a short grace, then KILL to
+# the group (`kill -- -<pgid>`, never a pattern kill). Exit 124 + a one-line msg on
+# timeout; otherwise the captured output and the command's own exit code (0 / 2
+# semantics unchanged). Polled from the parent: no watchdog process to outlive it.
+# bash 3.2: no `wait -n`, no fractional $SECONDS, so the poll is a 0.2 s sleep.
+run_bounded() {
+  local secs="$1" name pid out start rc=0 i
+  shift
+  name="$1"
+  out=$(/usr/bin/mktemp "$STATE_DIR/bounded.XXXXXX") || { echo "$name: cannot create a capture file in $STATE_DIR"; return 1; }
+  set -m
+  "$@" >"$out" &
+  pid=$!
+  set +m
+  start=$SECONDS
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( SECONDS - start >= secs )); then
+      kill -TERM -- "-$pid" 2>/dev/null || true
+      i=0
+      while (( i < 15 )) && kill -0 "$pid" 2>/dev/null; do
+        /bin/sleep 0.2
+        i=$(( i + 1 ))
+      done
+      kill -KILL -- "-$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f "$out"
+      echo "$name timed out after ${secs}s (hung tool; killed)"
+      return 124
+    fi
+    /bin/sleep 0.2
+  done
+  wait "$pid" 2>/dev/null || rc=$?
+  cat "$out"
+  rm -f "$out"
+  return "$rc"
+}
+
 # --- Shared helpers -----------------------------------------------------------
 
 # `tailscale status --json` is wanted by three checks (backend state + key
@@ -317,7 +376,9 @@ print("%s|%s|%s" % (d.get("BackendState", ""), (me.get("TailscaleIPs") or [""])[
 # The one call. `|| _TS_SELF=""` because `set -e` would abort the whole run on an
 # unreachable tailscaled — which is a condition check_tailscale exists to REPORT,
 # not a reason to stop reporting.
-_TS_SELF=$(_ts_snapshot) || _TS_SELF=""
+# Bounded like every component: a hung tailscale CLI must not stall the script before the
+# first push (a timeout is rc 124, so the snapshot stays empty and check_tailscale says so).
+_TS_SELF=$(run_bounded "$COMPONENT_TIMEOUT" _ts_snapshot) || _TS_SELF=""
 
 tailscale_self() {
   [[ -n "$_TS_SELF" ]] || return 1
@@ -860,53 +921,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/launchd-restarts.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/swapout-rate.sh"
 
 # name|gate path whose absence means "not installed here"|probe function
+# agent-workflows (host + audio), brain-web and walkingpad are NOT here: Kuma pulls their health
+# through the Kuma door (kuma-door/registry.json), so probing them again would be a second,
+# louder copy of the same signal. Only door liveness (probe_kuma_door) and what the door does
+# not cover are probed.
 DEVHOST_SERVICES="\
-agent-workflows|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-host.plist|probe_agent_workflows
-agent-workflows-audio|$HOME/Library/LaunchAgents/com.jkrumm.agent-workflows-audio.plist|probe_agent_workflows_audio
 hermes|$HOME/Library/LaunchAgents/ai.hermes.gateway.plist|probe_hermes
 colima|$COLIMA_PLIST|probe_colima
 caddy|$(brew_service_plist caddy system 2>/dev/null || brew_service_expected_plist caddy system)|probe_caddy
 dnsmasq|$(brew_service_plist dnsmasq system 2>/dev/null || brew_service_expected_plist dnsmasq system)|probe_dnsmasq
-brain-web|$HOME/Library/LaunchAgents/com.jkrumm.brain-web-refresh.plist|probe_brain_web
-walkingpad|$HOME/Library/LaunchAgents/com.jkrumm.walkingpad.plist|probe_walkingpad
 kuma-door|$HOME/Library/LaunchAgents/com.jkrumm.kuma-door.plist|probe_kuma_door
 postgres|$HOME/Library/LaunchAgents/com.jkrumm.vps-pg-backup.plist|probe_postgres"
-
-probe_agent_workflows() {
-  # 200 {"status":"ok"} or 503 {"status":"degraded","reason":…} — healthy needs both the
-  # code and the body, and the body carries the reason, so it is echoed on failure.
-  local excerpt_max=160 out code body
-  out=$("$CURL_BIN" -s --max-time 8 -w '\n%{http_code}' "$AGENT_WORKFLOWS_URL/health" 2>/dev/null || true)
-  code=${out##*$'\n'}
-  body=${out%$'\n'*}
-  [[ "$code" =~ ^[0-9]{3}$ && "$code" != "000" ]] || { echo "agent-workflows host not answering on $AGENT_WORKFLOWS_URL"; return 1; }
-  if [[ "$code" == "200" ]] && grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$body"; then
-    return 0
-  fi
-  echo "agent-workflows host not ok (HTTP $code: ${body:0:excerpt_max})"
-  return 1
-}
-
-# The audio process: unauthenticated GET /health = 200 {"status":"ok","version":<sha>}. It runs from the
-# same release dir as the host, so a version that differs from the host's means one of the two did not
-# restart onto the new release.
-probe_agent_workflows_audio() {
-  local out code body ver host_ver
-  out=$("$CURL_BIN" -s --max-time 8 -w '\n%{http_code}' "$AGENT_WORKFLOWS_AUDIO_URL/health" 2>/dev/null || true)
-  code=${out##*$'\n'}
-  body=${out%$'\n'*}
-  [[ "$code" =~ ^[0-9]{3}$ && "$code" != "000" ]] || { echo "agent-workflows audio process not answering on $AGENT_WORKFLOWS_AUDIO_URL"; return 1; }
-  if [[ "$code" != "200" ]] || ! grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$body"; then
-    echo "agent-workflows audio process not ok (HTTP $code: ${body:0:160})"
-    return 1
-  fi
-  ver=$("$JQ_BIN" -r '.version // empty' <<<"$body" 2>/dev/null) || ver=""
-  host_ver=$("$CURL_BIN" -s --max-time 8 "$AGENT_WORKFLOWS_URL/health" 2>/dev/null | "$JQ_BIN" -r '.version // empty' 2>/dev/null) || host_ver=""
-  if [[ -n "$ver" && -n "$host_ver" && "$ver" != "$host_ver" ]]; then
-    echo "agent-workflows audio process runs ${ver:0:7} but the host runs ${host_ver:0:7} — one did not restart onto the release"
-    return 1
-  fi
-}
 
 probe_hermes() {
   # Hermes binds the TAILNET address, not loopback, so unlike every other probe
@@ -1007,20 +1032,6 @@ probe_dnsmasq() {
   answer=$("$DIG_BIN" +short +time=2 +tries=1 @127.0.0.1 devhost-health-probe.test 2>/dev/null | tail -1) || true
   [[ "$answer" == "127.0.0.1" ]] \
     || { echo "dnsmasq not resolving *.test (got ${answer:-nothing}) — every .test name on this machine is dead"; return 1; }
-}
-
-probe_brain_web() {
-  # The reader behind brain.<dev domain>; its refresh agent is the gate, the
-  # served page is the probe — a rebuilt dist/ nothing serves is still down.
-  local code
-  code=$(http_code "$BRAIN_WEB_URL/")
-  [[ "$code" == "200" ]] || { echo "brain-web not answering on $BRAIN_WEB_URL (got ${code:-000})"; return 1; }
-}
-
-probe_walkingpad() {
-  local code
-  code=$(http_code "$WALKINGPAD_URL/status")
-  [[ "$code" == "200" ]] || { echo "walkingpad not answering on $WALKINGPAD_URL (got ${code:-000})"; return 1; }
 }
 
 probe_kuma_door() {
@@ -1382,7 +1393,112 @@ check_jobs() {
   esac
 }
 
+# --- Side monitors: their OWN Kuma monitors, same scheduler -------------------
+# They run BEFORE the composite on purpose: the composite is the long, many-tool
+# part, and a hang there must never starve a monitor that is one cheap probe.
+# Each produces its detail through run_bounded and pushes independently; a side
+# monitor's verdict never touches the composite's.
+
+# Collie.
+# Collie is deliberately NOT a component of the composite below. It does not
+# fail with the other five — it is opt-in per machine and can be absent, down or
+# mis-hardened while the dev host is perfectly healthy — so folding it in would
+# mark the dev host DOWN and implicate the core/sshd/tailscaled when nothing is
+# wrong with them. That is the same reasoning that keeps the composite composite,
+# applied in the other direction.
+#
+# One SCHEDULER, two monitors: this agent already runs every 300s, so a second
+# LaunchAgent would be pure duplication. Only the push target differs.
+#
+# The push URL file is optional and its absence is silent by design: a machine
+# that never ran `make collie-setup` has no collie and no monitor, and must not
+# fail this script. Kuma's own missed-heartbeat covers the case where the
+# monitor exists but this stops running.
+
+factory_health_detail() {
+  # A 503 still carries a body; only a transport failure leaves it empty.
+  local body
+  if body=$("$CURL_BIN" -s -m 5 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$body" ]]; then
+    if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$body" 2>/dev/null)" == "true" ]]; then
+      "$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$body" 2>/dev/null \
+        || echo "heartbeat ok"
+      return 0
+    fi
+    "$JQ_BIN" -r '.heartbeat.reason // "no heartbeat in the factory health answer"' <<<"$body" 2>/dev/null \
+      || echo "factory health answer is not JSON"
+    return 1
+  fi
+  echo "factory not answering at $FACTORY_HEALTH_URL"
+  return 1
+}
+
+# Software factory.
+# The factory judges its own liveness: GET /health on loopback (no token) carries
+# heartbeat.ok = "the tick advanced and the queue moved within 30 minutes". This
+# only relays that verdict. Opt-in like collie: no URL file, no monitor, silent
+# skip (the monitor and the file are made elsewhere, never here).
+
+# Secrets freshness.
+# Moved here from com.jkrumm.secrets-freshness, which ran ONCE A WEEK (Mon
+# 09:15). A cache going stale on a Tuesday was therefore invisible for six
+# days — and the cache is what every headless secret on this machine resolves
+# through, so those six days are six days of a service coming up
+# credential-less with nothing reporting it. The 300s agent already exists;
+# only the push target differs. Same "one scheduler, two monitors" argument
+# already made and accepted for collie.
+#
+# It keeps its OWN monitor for the same reason collie does, not as an
+# afterthought: a stale cache does not fail with tailscaled/sshd/the core, so
+# folding it into the composite would mark the dev host DOWN and implicate
+# healthy components for a reseed reminder.
+#
+# Threshold unchanged at 8 days — one day of slack past a weekly ritual.
+# Reads MTIME only, never decrypts: a health check must not touch a secret
+# value. The seed writes atomically (temp + mv), so mtime is the seed time.
+secrets_freshness_detail() {
+  [[ -f "$SECRETS_CACHE_FILE" ]] \
+    || { echo "no secrets cache at $SECRETS_CACHE_FILE — run make secrets-seed from the MacBook"; return 1; }
+  local mtime age
+  mtime=$("$STAT_BIN" -f %m "$SECRETS_CACHE_FILE" 2>/dev/null) || mtime=0
+  (( mtime > 0 )) || { echo "secrets cache mtime unreadable at $SECRETS_CACHE_FILE"; return 1; }
+  age=$(( ($("$DATE_BIN" -u +%s) - mtime) / 86400 ))
+  (( age <= SECRETS_FRESHNESS_MAX_AGE_DAYS )) \
+    || { echo "secrets cache ${age}d old (max ${SECRETS_FRESHNESS_MAX_AGE_DAYS}d) — reseed with make secrets-seed"; return 1; }
+  echo "secrets cache ${age}d old"
+}
+
+
+# side_monitor <label> <push-url-file> <push-url-env-value> <detail-fn>
+# Opt-in: no URL file (or an unresolvable URL), no monitor, silent skip. The detail
+# function is bounded; a timeout is a DOWN with the timeout message. Sets
+# side_push_rc to the last failed push's rc (never reset to 0 by a later success).
+side_push_rc=0
+side_monitor() {
+  local label="$1" url_file="$2" env_url="$3" fn="$4" url detail rc=0 prc=0
+  [[ -f "$url_file" ]] || return 0
+  url=$(kuma_resolve_push_url "$env_url" "$url_file") || return 0
+  detail=$(run_bounded "$SIDE_MONITOR_TIMEOUT" "$fn") || rc=$?
+  if (( rc == 0 )); then
+    kuma_push "$url" up "$detail" || prc=$?
+    echo "✓ $label monitor: $detail"
+  else
+    kuma_push "$url" down "$detail" || prc=$?
+    echo "✗ $label monitor: $detail" >&2
+  fi
+  (( prc == 0 )) || side_push_rc=$prc
+  return 0
+}
+
+COLLIE_PUSH_URL_FILE="${COLLIE_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/collie-push-url}"
+FACTORY_PUSH_URL_FILE="${FACTORY_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/factory-push-url}"
+FACTORY_HEALTH_URL="${FACTORY_HEALTH_URL:-http://127.0.0.1:7793/health}"
+SECRETS_FRESHNESS_PUSH_URL_FILE="${SECRETS_FRESHNESS_PUSH_URL_FILE:-$HOME/.config/secrets/freshness-push-url}"
+
 # --- Run --------------------------------------------------------------------
+
+side_monitor collie "$COLLIE_PUSH_URL_FILE" "${COLLIE_PUSH_URL:-}" check_collie
+side_monitor factory "$FACTORY_PUSH_URL_FILE" "${FACTORY_PUSH_URL:-}" factory_health_detail
+side_monitor secrets "$SECRETS_FRESHNESS_PUSH_URL_FILE" "${SECRETS_FRESHNESS_PUSH_URL:-}" secrets_freshness_detail
 
 details=()
 failure=""
@@ -1399,12 +1515,15 @@ if (( uptime_s < BOOT_GRACE_SECONDS )); then in_boot_grace=1; fi
 # arguably worth more than the grace window itself.
 (( uptime_s >= REBOOT_NOTE_SECONDS )) || details+=("host rebooted ${uptime_s}s ago")
 
-/bin/mkdir -p "$STATE_DIR" 2>/dev/null || true
-
-for component in check_tailscale check_sshd check_core check_git_push check_dev_vhosts \
+# DEVHOST_COMPONENTS overrides the list (space-separated function names) so the bounded-run
+# and budget paths can be driven hermetically (scripts/devhost-heartbeat.test.sh).
+components="${DEVHOST_COMPONENTS:-check_tailscale check_sshd check_core check_git_push check_dev_vhosts \
                  check_memory check_swapouts check_kernel_panics check_launchd_restarts check_boot_path check_services check_claude_auth check_claude_version check_agents_md_flag \
                  check_obsidian check_disk check_runaways \
-                 check_jobs check_quota; do
+                 check_jobs check_quota}"
+# Word-splitting is the point: $components is a list of function names.
+# shellcheck disable=SC2086
+for component in $components; do
   # Substring match on space-padded strings — bash 3.2 has no associative
   # arrays, and this script must stay 3.2 (launchd hands it Apple's /bin/bash).
   is_transient=1
@@ -1415,8 +1534,20 @@ for component in check_tailscale check_sshd check_core check_git_push check_dev_
   # page, no streak), anything else FAIL (subject to the grace and streak
   # rules below). `|| rc=$?` rather than `if cmd`: the status of an if-compound
   # whose branch did not run is 0, which would read every failure as healthy.
+  # Bounded: a hung tool is this component's FAIL (rc 124, graded like any other),
+  # and once the budget is spent the rest are not run but still graded, so the
+  # push below is always reached. Each run gets at most the budget that is left.
   rc=0
-  detail=$("$component") || rc=$?
+  elapsed=$(( SECONDS - script_start ))
+  if (( elapsed >= HEARTBEAT_BUDGET )); then
+    detail="$component not run (heartbeat budget spent)"
+    rc=1
+  else
+    budget_left=$(( HEARTBEAT_BUDGET - elapsed ))
+    component_timeout=$COMPONENT_TIMEOUT
+    (( budget_left >= component_timeout )) || component_timeout=$budget_left
+    detail=$(run_bounded "$component_timeout" "$component") || rc=$?
+  fi
   if (( rc == 0 )); then
     details+=("$detail")
     rm -f "$streak_file" 2>/dev/null || true
@@ -1479,119 +1610,41 @@ if (( push_rc != 0 )); then
   echo "✗ push to Uptime Kuma failed (rc=$push_rc) — Kuma will alert on the missed heartbeat" >&2
 fi
 
-# --- Collie: its OWN monitor, driven by this same agent ----------------------
-# Collie is deliberately NOT a component of the composite above. It does not
-# fail with the other five — it is opt-in per machine and can be absent, down or
-# mis-hardened while the dev host is perfectly healthy — so folding it in would
-# mark the dev host DOWN and implicate the core/sshd/tailscaled when nothing is
-# wrong with them. That is the same reasoning that keeps the composite composite,
-# applied in the other direction.
-#
-# One SCHEDULER, two monitors: this agent already runs every 300s, so a second
-# LaunchAgent would be pure duplication. Only the push target differs.
-#
-# The push URL file is optional and its absence is silent by design: a machine
-# that never ran `make collie-setup` has no collie and no monitor, and must not
-# fail this script. Kuma's own missed-heartbeat covers the case where the
-# monitor exists but this stops running.
-collie_push_rc=0
-COLLIE_PUSH_URL_FILE="${COLLIE_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/collie-push-url}"
-if [[ -f "$COLLIE_PUSH_URL_FILE" ]]; then
-  collie_url=$(kuma_resolve_push_url "${COLLIE_PUSH_URL:-}" "$COLLIE_PUSH_URL_FILE") || collie_url=""
-  if [[ -n "$collie_url" ]]; then
-    if collie_detail=$(check_collie); then
-      kuma_push "$collie_url" up "$collie_detail" || collie_push_rc=$?
-      echo "✓ collie monitor: $collie_detail"
+# --- Daily drift sweep --------------------------------------------------------
+# Rides this scheduler instead of its own LaunchAgent (retired 2026-11-06): every run here is
+# bounded now, so drift's network calls cannot freeze the pusher, and a network failure inside
+# drift-check.sh degrades to "skipped" on its own. It pushes to its OWN monitor (MacMini Drift -
+# Push), so its rc never touches this heartbeat's verdict or exit code; a timeout is a stderr line.
+# Stamp: a run that completes stamps "now" and waits 20 h; a timed-out run ALSO stamps, but
+# backdated so it retries after 1 h (19 h old of the 20 h window) instead of hammering every 5 min.
+DRIFT_STAMP="$STATE_DIR/drift-last-run"
+DRIFT_INTERVAL=72000   # 20 h
+DRIFT_RETRY=3600       # 1 h
+drift_due=1
+if [[ -f "$DRIFT_STAMP" ]]; then
+  stamp_mtime=$(stat -f %m "$DRIFT_STAMP" 2>/dev/null || echo 0)
+  case "$stamp_mtime" in ''|*[!0-9]*) stamp_mtime=0 ;; esac
+  (( $(date +%s) - stamp_mtime >= DRIFT_INTERVAL )) || drift_due=0
+fi
+if (( drift_due )) && [[ -f "$DRIFT_CHECK_BIN" ]]; then
+  if (( SECONDS > DRIFT_START_LIMIT )); then
+    echo "drift-check skipped: heartbeat already used ${SECONDS}s (limit ${DRIFT_START_LIMIT}s), retries next cycle" >&2
+  else
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+    drift_rc=0
+    run_bounded "$DRIFT_TIMEOUT" /bin/bash "$DRIFT_CHECK_BIN" >/dev/null 2>&1 || drift_rc=$?
+    if (( drift_rc == 124 )); then
+      echo "drift-check timed out after ${DRIFT_TIMEOUT}s, retrying in ~1 h" >&2
+      : > "$DRIFT_STAMP" 2>/dev/null || true
+      touch -t "$(date -v-$(( DRIFT_INTERVAL - DRIFT_RETRY ))S '+%Y%m%d%H%M.%S')" "$DRIFT_STAMP" 2>/dev/null || true
     else
-      kuma_push "$collie_url" down "$collie_detail" || collie_push_rc=$?
-      echo "✗ collie monitor: $collie_detail" >&2
-      failure="${failure:-$collie_detail}"
+      : > "$DRIFT_STAMP" 2>/dev/null || true
     fi
   fi
 fi
 
-# --- Software factory: its OWN monitor, same scheduler -----------------------
-# The factory judges its own liveness: GET /health on loopback (no token) carries
-# heartbeat.ok = "the tick advanced and the queue moved within 30 minutes". This
-# only relays that verdict. Opt-in like collie: no URL file, no monitor, silent
-# skip (the monitor and the file are made elsewhere, never here).
-factory_push_rc=0
-FACTORY_PUSH_URL_FILE="${FACTORY_PUSH_URL_FILE:-$HOME/.config/uptime-kuma/factory-push-url}"
-FACTORY_HEALTH_URL="${FACTORY_HEALTH_URL:-http://127.0.0.1:7793/health}"
-if [[ -f "$FACTORY_PUSH_URL_FILE" ]]; then
-  factory_url=$(kuma_resolve_push_url "${FACTORY_PUSH_URL:-}" "$FACTORY_PUSH_URL_FILE") || factory_url=""
-  if [[ -n "$factory_url" ]]; then
-    factory_ok=0
-    # A 503 still carries a body; only a transport failure leaves it empty.
-    if factory_body=$("$CURL_BIN" -s -m 5 "$FACTORY_HEALTH_URL" 2>/dev/null) && [[ -n "$factory_body" ]]; then
-      if [[ "$("$JQ_BIN" -r '.heartbeat.ok // false' <<<"$factory_body" 2>/dev/null)" == "true" ]]; then
-        factory_ok=1
-        factory_detail=$("$JQ_BIN" -r '"tick \(.heartbeat.tickAt // "?"), queue moved \(.heartbeat.queueMovedAt // "?")"' <<<"$factory_body" 2>/dev/null) \
-          || factory_detail="heartbeat ok"
-      else
-        factory_detail=$("$JQ_BIN" -r '.heartbeat.reason // "no heartbeat in the factory health answer"' <<<"$factory_body" 2>/dev/null) \
-          || factory_detail="factory health answer is not JSON"
-      fi
-    else
-      factory_detail="factory not answering at $FACTORY_HEALTH_URL"
-    fi
-    if (( factory_ok )); then
-      kuma_push "$factory_url" up "$factory_detail" || factory_push_rc=$?
-      echo "✓ factory monitor: $factory_detail"
-    else
-      kuma_push "$factory_url" down "$factory_detail" || factory_push_rc=$?
-      echo "✗ factory monitor: $factory_detail" >&2
-      failure="${failure:-$factory_detail}"
-    fi
-  fi
-fi
-
-# --- Secrets freshness: also its OWN monitor, same scheduler -----------------
-# Moved here from com.jkrumm.secrets-freshness, which ran ONCE A WEEK (Mon
-# 09:15). A cache going stale on a Tuesday was therefore invisible for six
-# days — and the cache is what every headless secret on this machine resolves
-# through, so those six days are six days of a service coming up
-# credential-less with nothing reporting it. The 300s agent already exists;
-# only the push target differs. Same "one scheduler, two monitors" argument
-# already made and accepted for collie.
-#
-# It keeps its OWN monitor for the same reason collie does, not as an
-# afterthought: a stale cache does not fail with tailscaled/sshd/the core, so
-# folding it into the composite would mark the dev host DOWN and implicate
-# healthy components for a reseed reminder.
-#
-# Threshold unchanged at 8 days — one day of slack past a weekly ritual.
-# Reads MTIME only, never decrypts: a health check must not touch a secret
-# value. The seed writes atomically (temp + mv), so mtime is the seed time.
-secrets_freshness_detail() {
-  [[ -f "$SECRETS_CACHE_FILE" ]] \
-    || { echo "no secrets cache at $SECRETS_CACHE_FILE — run make secrets-seed from the MacBook"; return 1; }
-  local mtime age
-  mtime=$("$STAT_BIN" -f %m "$SECRETS_CACHE_FILE" 2>/dev/null) || mtime=0
-  (( mtime > 0 )) || { echo "secrets cache mtime unreadable at $SECRETS_CACHE_FILE"; return 1; }
-  age=$(( ($("$DATE_BIN" -u +%s) - mtime) / 86400 ))
-  (( age <= SECRETS_FRESHNESS_MAX_AGE_DAYS )) \
-    || { echo "secrets cache ${age}d old (max ${SECRETS_FRESHNESS_MAX_AGE_DAYS}d) — reseed with make secrets-seed"; return 1; }
-  echo "secrets cache ${age}d old"
-}
-
-# The push URL file is optional and its absence is silent, exactly as for
-# collie: a machine that never seeded a cache has no monitor to report to and
-# must not fail this script over it.
-secrets_push_rc=0
-SECRETS_FRESHNESS_PUSH_URL_FILE="${SECRETS_FRESHNESS_PUSH_URL_FILE:-$HOME/.config/secrets/freshness-push-url}"
-if [[ -f "$SECRETS_FRESHNESS_PUSH_URL_FILE" ]]; then
-  secrets_url=$(kuma_resolve_push_url "${SECRETS_FRESHNESS_PUSH_URL:-}" "$SECRETS_FRESHNESS_PUSH_URL_FILE") || secrets_url=""
-  if [[ -n "$secrets_url" ]]; then
-    if secrets_detail=$(secrets_freshness_detail); then
-      kuma_push "$secrets_url" up "$secrets_detail" || secrets_push_rc=$?
-      echo "✓ secrets monitor: $secrets_detail"
-    else
-      kuma_push "$secrets_url" down "$secrets_detail" || secrets_push_rc=$?
-      echo "✗ secrets monitor: $secrets_detail" >&2
-      failure="${failure:-$secrets_detail}"
-    fi
-  fi
-fi
-
-[[ -z "$failure" && $push_rc -eq 0 && $collie_push_rc -eq 0 && $factory_push_rc -eq 0 && $secrets_push_rc -eq 0 ]] || exit 1
+# Exit semantics (this runs under jobrun, where non-zero is a recorded job failure
+# that jobs-grade alerts via ntfy): a DOWN verdict is a DELIVERED state and Kuma
+# alerts on it, so it exits 0. Non-zero means a push did not go out (or, above,
+# no push URL resolved) — the one case Kuma cannot see for itself.
+(( push_rc == 0 && side_push_rc == 0 )) || exit 1

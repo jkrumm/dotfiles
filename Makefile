@@ -113,6 +113,7 @@ setup:
 	@$(MAKE) --no-print-directory hc-events-setup
 	@$(MAKE) --no-print-directory hc-resume-setup
 	@$(MAKE) --no-print-directory hc-reap-setup
+	@$(MAKE) --no-print-directory drift-check-setup
 	@$(MAKE) --no-print-directory _setup-colima
 	@echo ""
 	@echo "  Done. Reload your shell: source ~/.zshrc"
@@ -783,7 +784,7 @@ _setup-git-headless:
 
 # The repo contract (docs/agents-md.md): check = all local validation, no side
 # effects; verify = probe the live system; logs = bounded tail; deploy = converge.
-check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
+check: architecture-check architecture-check-test secrets-lint hooks-test claude-launcher-test opbackup-seed-test brew-service-test launchd-restarts-test agent-refresh-test caddy-registry-test caddy-tailnet-test human-queue-test rd-test jobs-test log-rotate-test disk-sweep-test hc-reap-test factory-spaces-test herdr-app-keys-test kuma-door-test tcc-check-test herdr-core-test devhost-heartbeat-test ## All local validation (architecture map, secrets lint, hook tests, hermetic script suites)
 
 version: ## Print the deployed commit sha: the mini runs this checkout, so its HEAD (the factory checks a shipped commit against it)
 	@git -C "$(DOTFILES_DIR)" rev-parse HEAD
@@ -2357,6 +2358,15 @@ swapout-rate-test:
 	@chmod +x $(DOTFILES_DIR)/scripts/swapout-rate.test.sh
 	@/bin/bash $(DOTFILES_DIR)/scripts/swapout-rate.test.sh
 
+# Heartbeat bounded-run suite: a hung tool fails only its own component, the composite budget,
+# side monitors push first and independently, exit 0 unless a push failed. Hermetic: stub curl
+# on PATH, DEVHOST_COMPONENTS narrows the composite. Runs on either machine.
+.PHONY: devhost-heartbeat-test
+devhost-heartbeat-test:
+	@shellcheck -S warning $(DOTFILES_DIR)/scripts/devhost-health-check.sh $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+	@chmod +x $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+	@/bin/bash $(DOTFILES_DIR)/scripts/devhost-heartbeat.test.sh
+
 # human-queue regression suite: gui-run's dialog outcomes (Run/Deny/timeout/
 # osascript failure), the AppleScript-injection and control-byte safety
 # properties, the over-long-command refusal, the dev-host guard, and the
@@ -2976,8 +2986,8 @@ devhost-health-setup:
 devhost-health-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.devhost-health.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
-	rm -f "$$PLIST"; \
-	echo "  ✓ devhost-health torn down (unloaded + plist removed)"
+	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.devhost-health.json"; \
+	echo "  ✓ devhost-health torn down (unloaded, plist and jobrun state removed)"
 devhost-health-check:
 	@bash $(DOTFILES_DIR)/scripts/devhost-health-check.sh
 
@@ -3022,10 +3032,14 @@ human-queue-deny:
 # scripts/drift-check.sh's header, and it is the same one that keeps the runaway
 # reaper report-only.
 #
-# Its OWN scheduler, unlike collie and secrets-freshness which ride the 300s
-# devhost-health agent: every check here is a network call, and that agent runs
-# with maxretries 0 and deliberately refuses to touch GitHub so a provider
-# outage cannot page as "dev host down". Drift moves in days, so: daily.
+# No scheduler of its own any more (the com.jkrumm.drift-check agent was retired
+# 2026-11-06): once a day the 300s devhost-health heartbeat runs scripts/drift-check.sh
+# as a bounded side job after its composite push (20 h stamp, 60 s timeout, skipped when
+# the heartbeat is already late; see devhost-health-check.sh). That is safe now because
+# every heartbeat run is bounded, so drift's network calls cannot freeze the pusher, and
+# drift-check.sh degrades a network failure to "skipped", never to a page. It still pushes
+# to its own monitor, MacMini Drift - Push. `drift-check-setup` below is the one-time
+# migration (boots the old agent out on deploy) plus the brew-upgrade stamp seed.
 # ----------------------------------------------------------------------------
 DRIFT_PUSH_URL_FILE ?= $(HOME)/.config/uptime-kuma/drift-push-url
 .PHONY: drift-check-setup drift-check-teardown
@@ -3074,15 +3088,15 @@ drift-check-setup:
 		mkdir -p "$$(dirname "$$STAMP")" && : > "$$STAMP" \
 			&& echo "    ✓ brew-upgrade stamp seeded (clock starts now, not at 'never')"; \
 	fi
-	@mkdir -p "$(LAUNCHAGENTS)"
-	@$(MAKE) --no-print-directory _render-plists PLISTS="com.jkrumm.drift-check" PLIST_DIR="$(DOTFILES_DIR)/drift"
-	@echo "    ↳ daily 09:40 → report pin/brew/macOS drift (reports only, never upgrades)"
+	@$(MAKE) --no-print-directory drift-check-teardown
+	@echo "    ↳ drift now rides the devhost-health heartbeat once a day (bounded, reports only, never upgrades)"
 
+# Removes the retired com.jkrumm.drift-check agent: unload + plist + jobrun state. Idempotent.
 drift-check-teardown:
 	@PLIST="$(LAUNCHAGENTS)/com.jkrumm.drift-check.plist"; \
 	launchctl unload "$$PLIST" 2>/dev/null || true; \
 	rm -f "$$PLIST" "$(JOBRUN_STATE_DIR)/com.jkrumm.drift-check.json"; \
-	echo "  ✓ drift-check torn down (unloaded, plist and jobrun state removed)"
+	echo "    ✓ retired drift-check agent removed (unloaded, plist and jobrun state)"
 
 # ----------------------------------------------------------------------------
 # Beszel agent (dev host only)
@@ -3302,6 +3316,7 @@ help:
 	@echo "  make caddy-registry-test   Hermetic Caddyfile registry suite (port rows, path restrictions, refusals)"
 	@echo "  make caddy-tailnet-test    Hermetic tailnet generator suite (extra FQDN doors, refusals, missing file)"
 	@echo "  make swapout-rate-test  Hermetic swapout-rate delta/reset suite"
+	@echo "  make devhost-heartbeat-test  Hermetic heartbeat bounded-run / budget / side-monitor suite"
 	@echo ""
 	@echo "  make colima-start    Start the Docker runtime service (auto-starts at login)"
 	@echo "  make colima-stop     Stop the Docker runtime service"
@@ -3371,8 +3386,8 @@ help:
 	@echo "  make kuma-door-setup           Dev-host only: load the Kuma door (:8795, KeepAlive); -restart / -teardown / -gen (monitors for homelab) / -check / -test"
 	@echo "  make obsidian-autostart         Dev-host only: start Obsidian at login (agent door for /brain + Hermes)"
 	@echo "  make obsidian-autostart-teardown  Unload + remove the autostart agent"
-	@echo "  make drift-check-setup          Dev-host only: load the daily 09:40 upstream-drift agent → Uptime Kuma"
-	@echo "  make drift-check-teardown       Unload + remove the drift agent"
+	@echo "  make drift-check-setup          Dev-host only: seed the drift stamps, retire the old drift agent (drift now rides the heartbeat daily)"
+	@echo "  make drift-check-teardown       Unload + remove the retired drift agent"
 	@echo "  make beszel-agent-setup         Dev-host only: pinned-release install + push-mode agent → homelab Beszel hub"
 	@echo "  make beszel-agent-status        LaunchAgent + WebSocket-connected state (read-only)"
 	@echo "  make beszel-agent-teardown      Unload + remove the agent (leaves env file + binary alone)"

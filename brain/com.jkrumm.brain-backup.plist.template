@@ -16,6 +16,7 @@
     <string>com.jkrumm.brain-backup</string>
     <string>--owner</string><string>dotfiles</string>
     <string>--every</string><string>86400</string>
+    <string>--timeout</string><string>1800</string>
     <string>--</string>
     <string>__DOTFILES_DIR__/brain/brain-backup.sh</string>
   </array>

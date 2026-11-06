@@ -23,14 +23,16 @@ set -euo pipefail
 # human applies — the same trade the caddy pin already makes, and the same one
 # the runaway reaper in devhost-health-check.sh makes when it refuses to kill.
 #
-# WHY ITS OWN SCHEDULER, when "one scheduler, N monitors" is the house rule that
-# gave collie and secrets-freshness their monitors without a second LaunchAgent:
-# every check in here is a NETWORK call — GitHub for the pins, Apple's own scan
-# results for the OS. devhost-health-check.sh runs every 300s with maxretries 0
-# and deliberately refuses to call GitHub for exactly this reason (see its
-# check_git_push comment): a GitHub outage or a flaky link would page as "dev
-# host down". Drift moves on a scale of days, so it gets a daily agent instead,
-# and a network failure here degrades to "skipped", never to a page.
+# WHY IT RIDES THE HEARTBEAT, ONCE A DAY. It had its own LaunchAgent (retired
+# 2026-11-06) because every check in here is a NETWORK call — GitHub for the pins,
+# Apple's own scan results for the OS — and devhost-health-check.sh runs every 300s
+# with maxretries 0 and deliberately refuses to call GitHub itself (see its
+# check_git_push comment): a GitHub outage must not page as "dev host down". Now every
+# heartbeat run is bounded, so the heartbeat runs this script as a side job AFTER its
+# composite push, at most once per 20 h, capped at DEVHOST_DRIFT_TIMEOUT (60 s), and its
+# exit code never touches the heartbeat's. It still pushes to its own monitor. Drift
+# moves on a scale of days, and a network failure here degrades to "skipped", never to
+# a page.
 #
 # WHY AGE GRACE RATHER THAN A BARE "IS IT BEHIND". A monitor that goes red the
 # day upstream tags a release, for something you will look at next week, is a
@@ -48,8 +50,8 @@ set -euo pipefail
 # instead of arrays throughout.
 
 # --no-push: for an on-demand caller (scripts/doctor.sh) that wants the same
-# report without touching Kuma — the daily agent is still the only thing that
-# pushes on a schedule. No other flags exist; anything else is a usage error.
+# report without touching Kuma — the daily heartbeat side job is still the only
+# thing that pushes on a schedule. No other flags exist; anything else is a usage error.
 NO_PUSH=0
 for arg in "$@"; do
   case "$arg" in

@@ -100,8 +100,7 @@ row and `scripts/lib/brew-service.sh` resolves whichever exists.
 | `com.jkrumm.brain-sync` | 300s | vault reconcile via GitHub |
 | `com.jkrumm.brain-backup` | 03:30 daily | vault backup |
 | `com.jkrumm.brain-web-refresh` | 300s | brain-web rebuild |
-| `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma |
-| `com.jkrumm.drift-check` | 09:40 daily | upstream drift notice |
+| `com.jkrumm.devhost-health` | 300s | the composite heartbeat → Kuma, under `jobrun --timeout 270` (bounded); also pushes the collie, factory and secrets monitors and runs the daily drift sweep as a side job |
 | `com.jkrumm.beszel-agent` | KeepAlive | push-mode system metrics → the homelab Beszel hub |
 | `com.jkrumm.lock-at-boot` | RunAtLoad | screen lock at login |
 | `com.jkrumm.log-rotate` | 3600s | copytruncate, 16 MB cap; list derived from our plists |
@@ -293,6 +292,38 @@ longer read. Claude Code (subscription logins) and Athena Teamchat (its own team
 never pass through it. The Codex lane (`cx`, `cxa`, `astra`) is the other holder of the personal IU key: its launcher (`config/zsh/codex.zsh`) resolves it for codex. Money flow and pool picking: agent-workflows `docs/gateway.md`;
 the registry the pools come from: `docs/claude-accounts.md` §Platform.
 
+## Watchers
+
+One table of everything that watches something. Alert paths and the "nothing auto-heals"
+rule: `docs/ops-signals.md`. Kuma alerts post to Slack today; job failures go to ntfy topic `alerts`.
+
+| Watcher | Mechanism | Watches | Alerts to | Who acts | Owner repo | Verdict |
+|-|-|-|-|-|-|-|
+| `com.jkrumm.devhost-health` composite (`MacMini Dev Host - Push`) | push | 19 mini components (tailscale, sshd, core, services, disk, memory, auth, jobs WARN, quota, ...) | Kuma, Slack `Slack - Alerts` | the owner reads Slack and fixes by hand | dotfiles | kept; bounded (`jobrun --timeout 270`, per-component timeouts, 150 s budget) |
+| Heartbeat side monitors: `MacMini Collie - Push`, `MacMini Secret Seed - Push`, factory monitor | push (same scheduler, own monitors, pushed before the composite) | collie bridge, secrets-cache freshness, the factory's `GET /health` relay (tick and queue movement) | Kuma, Slack | the owner | dotfiles / software-factory (the `/health` source) | kept |
+| `MacMini Drift - Push` | push | pins, brew-upgrade recency, pending macOS update | Kuma, Slack (2-day interval) | the owner applies by hand (`make collie-upgrade`, `make brew-upgrade`, `make mini-macos-update`) | dotfiles | merged into the heartbeat as a daily bounded side job, 2026-11-06 (`com.jkrumm.drift-check` retired) |
+| Kuma door monitors (`Local / Mac mini door`) | pull (Kuma through `:8795`) | mini service health: agent-workflows host and audio, brain-web, walkingpad, argo, ... from `kuma-door/registry.json` | Kuma, Slack | the owner | dotfiles (door, registry) / homelab (monitors) | kept; replaces the heartbeat's four duplicated service probes (agw host/audio, brain-web, walkingpad), retired 2026-11-06; the audio-vs-host version-mismatch comparison was dropped with them on purpose (the door proves liveness only; agent-workflows' own `make verify` covers release parity) |
+| Beszel agent (`com.jkrumm.beszel-agent`) | push (outbound WebSocket) | mini CPU, RAM, disk, network | the Beszel hub on homelab | unspecified (no alert route in these docs) | dotfiles | kept |
+| `jobrun` + `jobs-grade` | in-process record, then grading | every `jobrun` job: failure, absence, flapping, unloaded | ntfy topic `alerts` on a change of the not-ok set; a WARN in the composite message; MacBook: a native notification on wake | the owner reads ntfy; nothing auto-heals | dotfiles | kept; the only grader |
+| `com.jkrumm.jobrun-canary` | in-process probe | the job, then ntfy chain, end to end | jobs-grade, so ntfy | the owner | dotfiles | kept |
+| `make doctor` | on demand | LaunchAgents, architecture map, brew, drift (no push), remote path | the terminal | whoever runs it | dotfiles | kept; read-only |
+| `com.jkrumm.factory-door` | alert door (inbound, `:8796`) | receives alerts from outside | files a factory Issue over the socket | the factory's lead is the Issue consumer; ops-signals.md does not cover it, so the exact flow is unspecified here | software-factory | kept |
+| `brain-sync`, `brain-backup` own pushes (`Brain Sync - Push`, `Brain Backup - Push`) | push (dead-man) | vault reconcile, nightly vault backup | Kuma, Slack | the owner (backup failures are tickets, not pages) | dotfiles | kept; both jobs now under a `jobrun` deadline |
+| `1Password Backup - Push` (opbackup, MacBook) | push | the weekly backup left the box | Kuma, Slack | the owner | dotfiles | kept |
+| `com.jkrumm.hermes-liveness`, `Hermes Backup - Push` | push | Hermes gateway (and the inference gateway door token), the 03:00 backup | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
+| `com.jkrumm.hermes-serve-liveness` | push (backstop 4 h) | `hermes serve` (:9119) | Kuma, Slack | the owner | hermes-agent | kept; see Open below |
+| `com.jkrumm.weatherorb.watchdog` | push (`Push` and `Degraded` beats) | WeatherOrb service health, `overdue_after` dead-man | Kuma, Slack | the owner | weatherorb | kept; see Open below |
+| `com.jkrumm.linewatch-watchdog`, `com.jkrumm.linewatch-heartbeat` | push (`Home Line - Push`, `Home Line - Watchdog` latch) | the home internet line, the collector | Kuma, Slack | the owner | linewatch | kept; see Open below |
+| `com.iu.teamchat-vm-watch` | unspecified | teamchat VM (IuRoot, read-only mention) | unspecified | unspecified | IuRoot (teamchat) | not reviewed here |
+| `com.iu.prometheus-vpn-watcher` | in-process self-heal ladder (IuRoot, read-only mention) | the VPN | a desktop notification per the archived note `docs/archive/background-jobs-2026-10-warden-era.md` | unspecified | IuRoot | not reviewed here |
+
+Not a watcher: `com.jkrumm.hc-reap` is the janitor. It closes finished factory agent terminals and messages a dirty one; it grades nothing.
+
+**Open: other repos' pushers** (their scripts run without a bounded wrapper; not fixable from dotfiles, owner-repo follow-ups):
+- `hermes-liveness` and `hermes-serve-liveness` (hermes-agent)
+- the weatherorb watchdog (weatherorb)
+- the linewatch heartbeat and watchdog (linewatch)
+
 ## Monitoring (Uptime Kuma on homelab)
 
 Push for the composite and the jobs — the ACL grants `tag:homelab → tag:vps` but
@@ -309,10 +340,10 @@ Uptime Kuma.
 | Monitor | Pusher | Cadence |
 |-|-|-|
 | `Local / Mac mini door` (group, one `<service> - Door` monitor each) | Kuma **pulls** `https://<mini MagicDNS host>:8795/h/<name>`; generated by `make kuma-door-gen` | 120 s, 2 retries |
-| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (20 components, incl. the herdr-core, Max quota, kernel panics) | 10 min, 1 retry |
+| `MacMini Dev Host - Push` | `devhost-health-check.sh` composite (19 components, incl. the herdr-core, Max quota, kernel panics; bounded, 270 s `jobrun` deadline) | 10 min, 1 retry |
 | `MacMini Collie - Push` | collie behavioural check | 4 h backstop, 1 retry |
 | `MacMini Secret Seed - Push` | cache-freshness check | 8 days, 1 retry |
-| `MacMini Drift - Push` | drift-check agent | 2 days, 1 retry |
+| `MacMini Drift - Push` | `drift-check.sh`, a daily side job of the heartbeat (no agent of its own) | 2 days, 1 retry |
 | `Brain Sync - Push` | brain-sync agent | 4 h backstop, 1 retry |
 | `Brain Backup - Push` | brain-backup agent | 25 h |
 | `Hermes Agent - Push` | hermes-liveness | 6 min |
