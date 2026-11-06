@@ -779,7 +779,7 @@ check: architecture-check-test secrets-lint hooks-test swapout-rate-test backup-
 #
 # The Linux-safe subset, run by .github/workflows/check.yml on a hosted ubuntu-latest runner (the repo is
 # public). Everything here is hermetic and free of macOS-only tools; the rest stays in `check`.
-check-linux: shellcheck-all hooks-test kuma-door-test swapout-rate-test brew-service-test caddy-registry-test backup-1password-test herdr-core-test factory-spaces-test hc-reap-test launchd-restarts-test caddy-tailnet-test ## Linux-safe subset of `check` (CI)
+check-linux: shellcheck-all hooks-test kuma-door-test swapout-rate-test brew-service-test caddy-registry-test backup-1password-test herdr-core-test factory-spaces-test hc-reap-test launchd-restarts-test ## Linux-safe subset of `check` (CI)
 
 shellcheck-all: ## shellcheck -S warning over every tracked bash script (zsh scripts excluded)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "  ✗ shellcheck not installed — run 'brew bundle'"; exit 1; }
