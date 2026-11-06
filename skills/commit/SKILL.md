@@ -59,7 +59,7 @@ Based on analysis and options, decide:
 
 **Amend Commit** (when `--amend` passed):
 - ONLY on feature branches (never on main/master)
-- For small follow-up fixes (CodeRabbit, SonarQube, linting, formatting)
+- For small follow-up fixes (review, SonarQube, linting, formatting)
 - Amends the previous commit instead of creating a new one
 - Force pushes to update the PR
 
@@ -76,7 +76,7 @@ Based on analysis and options, decide:
 
 ### Amend Workflow (`--amend`)
 
-**Use case:** Small fixes after CodeRabbit/SonarQube feedback on an open PR.
+**Use case:** Small fixes after review or SonarQube feedback on an open PR.
 
 **Requirements:**
 - MUST be on a feature branch (not main/master)

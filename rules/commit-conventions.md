@@ -28,4 +28,4 @@ This applies to: CI failures, lint fixes, export order, missing deps, config twe
 ## Iteration
 
 - Multiple logical changes → `/commit --split`
-- CodeRabbit/SonarQube fixes → `/commit --amend`
+- Review or SonarQube fixes → `/commit --amend`
