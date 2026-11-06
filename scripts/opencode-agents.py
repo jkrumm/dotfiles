@@ -16,7 +16,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent.parent / "agents"
 DST = Path.home() / ".config" / "opencode" / "agent"
 # Claude Code only (Agent tool, review-job protocol): never rendered, and pruned if an earlier run did.
-SKIP = {"reviewer.md", "review-verifier.md"}
+SKIP = {"reviewer.md", "review-verifier.md", "Explore.md"}
 MARK = "<!-- rendered from dotfiles/agents by scripts/opencode-agents.py — edit the source -->"
 
 

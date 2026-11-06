@@ -1,7 +1,7 @@
 ---
 name: verifier
 description: Prove a change actually works by exercising it — browser screenshots, OTel traces and logs, HTTP probes, running test output — and return a verdict with evidence. Delegate when confirming behaviour would drag screenshots, trace dumps or log tails into the orchestrator's context. Not a code reviewer and not a fixer; it observes a running system and reports.
-model: sonnet
+model: haiku
 effort: high
 color: cyan
 tools: Read, Grep, Glob, Bash, Skill

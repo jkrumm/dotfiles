@@ -82,7 +82,7 @@ inline.
 
 - **Model ids live only in the route table** — `agw routes`. Rationale
   `brain/wiki/engineering/model-routing.md`, `dotfiles/docs/agent-platform.md`. Never write one in prose.
-- **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`);
+- **Subagents are pinned off the orchestrator's model** (`CLAUDE_CODE_SUBAGENT_MODEL`, which skips Explore: `agents/Explore.md` pins it, and `verifier` too, to Haiku high);
   `hooks/model-discipline.ts` denies a Fable worker and any `fork` from Fable/Opus.
   Raise a worker only for novel hard logic, and say why.
 - **Development runs on the Max subscriptions only** — Herdr sessions, `rd work`,
